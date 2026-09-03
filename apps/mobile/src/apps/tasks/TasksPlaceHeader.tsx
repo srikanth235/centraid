@@ -1,5 +1,3 @@
-// The back control names the DESTINATION it returns to, never "Back".
-
 import React from "react";
 import { Pressable, View } from "react-native";
 
@@ -10,7 +8,6 @@ import type { TasksStyles } from "./TasksHome.styles";
 
 export interface TasksPlaceHeaderProps {
   title: string;
-  /** The return target's own name — the accessible label. */
   backTo: string;
   onBack: () => void;
   styles: TasksStyles;

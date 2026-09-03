@@ -30,9 +30,6 @@ const REF_A_OTHER_SCOPE = { contentId: "content-a", scopeId: "scope-2" };
 
 describe("pin/unpin", () => {
   beforeEach(async () => {
-    // Start every test from an empty pinned set: hydrate clears the Store's
-    // in-memory cache to the fallback since the mocked AsyncStorage always
-    // resolves `getItem` to null.
     await hydratePinnedContent();
     for (const ref of listPinnedContent()) unpinContent(ref);
   });
@@ -71,5 +68,3 @@ describe("pin/unpin", () => {
     expect(listPinnedContent()).toHaveLength(2);
   });
 });
-
-// Pinned-BYTE accounting is `content-store.ts`, pinned by its own suite.

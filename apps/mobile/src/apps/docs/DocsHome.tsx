@@ -1,16 +1,3 @@
-// The Docs stack's home (Binding Layer v12 handoff Part 2; #821).
-//
-// The claimed band's shelf destinations — All, Folders, Starred, Search, plus
-// Coming due off the More sheet — all live on this one screen, so a band tap
-// from a pushed route navigates here with the destination named rather than
-// pushing a second copy (`DocsScreen.tsx`'s `popTo`). React Navigation updates
-// params on a mounted screen WITHOUT remounting it, so the param is mirrored
-// into state through an effect, exactly as `PhotosHome` does.
-//
-// The All shelf is the drive: filter chips that COMPOSE (each axis its own
-// menu, `Clear` only once something is filtered), a sort menu, and the
-// list/grid pair remembered together with the sort (`docs-view-prefs.ts`).
-
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
@@ -80,16 +67,12 @@ export default function DocsHome({
 
   const [filters, setFilters] = useState<DriveFilters>(NO_FILTERS);
   const [prefs, updatePrefs] = useDriveViewPrefs();
-  // Owned here, not in `DriveList`: the control that turns it on is the app
-  // bar's, and the app bar belongs to the screen.
   const [selecting, setSelecting] = useState(false);
 
   const active = useMemo(
     () => drive.documents.filter((doc) => !doc.trashed),
     [drive.documents]
   );
-  // `applyFilters` only ever narrows the array it was given (a chain of
-  // `filter` calls), so the mobile row type survives the pass.
   const filtered = useMemo(
     () => applyFilters(active, filters) as typeof active,
     [active, filters]
@@ -99,9 +82,6 @@ export default function DocsHome({
     [filtered, prefs.sortKey, prefs.sortDir]
   );
 
-  // §2's Title column via the shared table: All and Folders title "Docs";
-  // Search and Starred title themselves; Coming due and Shared are their own
-  // places, and neither has a shelf in the shared table to be titled from.
   const headTitle =
     destination === "due"
       ? "Coming due"
@@ -190,10 +170,6 @@ export default function DocsHome({
   );
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// The All shelf's controls + rows
-// ───────────────────────────────────────────────────────────────────────────
-
 function AllShelf({
   drive,
   docs,
@@ -213,7 +189,6 @@ function AllShelf({
   activeCount: number;
   filters: DriveFilters;
   onFilters: (next: DriveFilters) => void;
-  /** The unfiltered active set — the People axis derives its options from it. */
   rows: ReturnType<typeof useDocs>["documents"];
   view: "list" | "grid";
   sortKey: (typeof SORT_OPTIONS)[number]["key"];
@@ -231,9 +206,6 @@ function AllShelf({
   const [openAxis, setOpenAxis] = useState<FilterAxis["id"] | "sort" | null>(
     null
   );
-  // The card hangs off the press point itself: several chips share one menu
-  // host, and a ref can only be attached to one control at a time. The touch's
-  // window coordinates are the one rectangle every chip can report.
   const [anchor, setAnchor] = useState<MenuAnchor | undefined>(undefined);
   const openFrom = useCallback(
     (
@@ -251,10 +223,6 @@ function AllShelf({
     []
   );
 
-  // `source` is dropped HERE, not from the shared axis table: the web drive
-  // still offers it, and this seat's three custody options ("On this device",
-  // "Gateway only", "In the backup") ask the member to reason about where
-  // bytes live before they have reason to care.
   const axes = liveAxes(rows).filter((axis) => axis.id !== "source");
   const anyFilter = filtersActive(filters);
   const sortNow =
@@ -287,8 +255,6 @@ function AllShelf({
           key: option,
           label: option,
           checked: filters[axis.id] === option,
-          // Choosing the chosen option again clears the axis — the chip is a
-          // toggle over one selection, never a second control.
           onSelect: () =>
             onFilters({
               ...filters,

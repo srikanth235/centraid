@@ -1,17 +1,3 @@
-// ITEMS — `locker` (README-Locker §1, §4, §6).
-//
-// THE LIST IS METADATA AND IT SAYS SO. `ITEMS_STATUS` is the app bar's ambient
-// sentence (`LockerScreen.tsx` draws it from `ROUTE_STATUS`), and every row
-// here is the secret-free shape the `items` query returns. There is no path by
-// which a `LockerDetail` becomes one of these.
-//
-// THE WINDOW HAS AN HONEST END. `windowEndCopy` states what it is showing and
-// that older items exist beyond it; *Show more* widens the ask by one page,
-// capped at the query's own ceiling of 2,000. The design's exact "300 of 312"
-// needs a total the items payload does not carry — see `lockerWindowFoot`.
-//
-// LOADING IS SKELETON ROWS at the list's own geometry, never a spinner.
-
 import React, { useMemo } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
@@ -60,9 +46,6 @@ export interface LockerItemsViewProps {
   lastReadAt: string | null;
   loaded: boolean;
   truncated: boolean;
-  /** The device-credential offer, present only where this phone can hold one
-   *  and does not yet. Enrolling needs an open session, which is why the offer
-   *  cannot live on the lock wall that asks for one. */
   offerDevice: boolean;
   onEnrolDevice: () => void;
   onShowMore: () => void;
@@ -71,9 +54,6 @@ export interface LockerItemsViewProps {
   onImport: () => void;
 }
 
-/** The filter chips: the rail's three rows, then every `TYPE_ORDER` type with
- *  its count — never a list of types kept here.
- *  A zero is drawn as a zero — a type with nothing in it is a fact. */
 function filterChips(
   rows: readonly LockerRowData[],
   filter: ItemFilter,
@@ -187,8 +167,6 @@ export default function LockerItemsView(
           </View>
         ) : null
       }
-      // A 56pt row means ~12 fill the viewport below the app bar; ±3 viewports
-      // of retained cells absorbs a fast flick without keeping 300 mounted.
       initialNumToRender={12}
       maxToRenderPerBatch={12}
       renderItem={renderItem}

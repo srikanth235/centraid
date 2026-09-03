@@ -1,38 +1,15 @@
-// THE WORDS THIS SEAT ADDS, and only those.
-//
-// Every sentence Locker shares across seats lives in the blueprint's §6/§7
-// tables (`view-copy.ts`, `route-copy.ts`) and is imported verbatim. What is
-// here is what is TRUE ON A PHONE AND NOWHERE ELSE — the device credential,
-// the camera, the enrolment offer — because "a surface never teaches a
-// different fact about the same control" governs facts, and where the fact
-// differs by seat the words must differ with it
-// (docs/blueprint-seats.md, "search is not one behaviour").
-//
-// THE REGISTER IS §7's. Words: item, reveal, conceal, permit, receipt,
-// passphrase, device credential, alias, review, verdict, window. Never
-// "master password", never "secure", never a reassurance adjective, and never
-// a lock icon standing in for a sentence.
-
-/** The lock wall's second way in, where one has been enrolled. */
 export const DEVICE_UNLOCK = "Unlock with this device";
 
-/** Enrolling and revoking. Both name the §7 word for what they act on. */
 export const DEVICE_ENROL = "Enrol a device credential";
 export const DEVICE_REVOKE = "Revoke it";
 
-/** Why a device credential is a second way in rather than a replacement. */
 export const DEVICE_NOTE =
   "A device credential is revocable and the passphrase is not · this phone holds a random secret, and the vault holds a verifier for it.";
 
-/** The enrolment offer, on the list, once a session is open — enrolling needs
- *  one, so the offer cannot stand on the lock wall that asks for it. */
 export const DEVICE_OFFER = "This phone can hold a device credential.";
 
-/** The switcher mask. A hidden window ends the session at once; this is what
- *  the OS screenshots instead of a list of titles. */
 export const MASKED_LABEL = "Locker is hidden while Centraid is away";
 
-/** The camera, the one Locker act only the origin seat can perform. */
 export const SCAN_SEED = "Scan a code";
 export const SCAN_TITLE = "Point at the one-time-code square.";
 export const SCAN_NOTE =
@@ -43,31 +20,20 @@ export const SCAN_REFUSED =
 export const SCAN_UNREADABLE = "That square is not an otpauth code.";
 export const SCAN_GRANT = "Allow the camera";
 
-/** The item screen's own words. On this seat the item is a ROUTE rather than a
- *  pane beside the list, so arriving on it is itself the gesture a permit
- *  authorises — the desktop's item pane has no equivalent moment to name. */
 export const OPEN_ITEM_ACT = "Open it";
 export const OPEN_ITEM_BODY = "This item is sealed until you ask for it.";
 export const OUTSIDE_WINDOW =
   "This item is not in the window this device read.";
 export const BACK_TO_ITEMS = "Items";
 
-/** The two metadata verbs the item screen puts beside Edit. Both queue like
- *  any other metadata write; neither can carry a secret. */
 export const STAR_ITEM = "Star";
 export const UNSTAR_ITEM = "Remove the star";
 export const TRASH_ITEM = "Move to trash";
 
-/** The two ways a picked import file is refused before it is ever sent. Both
- *  are facts about a PHONE — the whole file becomes one string in this
- *  device's memory — so neither belongs in the shared table. */
 export const IMPORT_TOO_LARGE =
   "That file is too large to read on this phone · export a smaller file, or import it on the desktop.";
 export const IMPORT_UNREADABLE =
   "That file could not be read as text · a password-manager export is a CSV.";
 
-/** Where an export lands on a phone. The shared table says the file is written
- *  on this device and never sent; this says which door it leaves through, which
- *  is the fact a browser tab has no equivalent of. */
 export const EXPORT_HANDOFF =
   "Written here, then handed to the system sheet · this phone keeps no copy once you have chosen where it goes.";

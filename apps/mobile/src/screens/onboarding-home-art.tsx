@@ -1,16 +1,3 @@
-// #686: illustration art, exempt from token contract
-// The onboarding hero: "it lives at home."
-//
-// A house whose front door is the gateway mark, four blueprint apps as lit
-// windows (Docs, Photos, Agenda, Tasks), this phone and a laptop paired in with
-// green ticks, and a struck-through cloud — nobody's servers in the picture.
-// It portrays the product rather than any one step, so the same art carries all
-// three onboarding steps.
-//
-// Motion: the intro plays ONCE on mount and settles. Only the sync dashes keep
-// marching, because this art sits above a form the person is reading and typing
-// into — a looping cartoon would compete with the pairing code for attention.
-
 import React, { useEffect } from "react";
 import {
   createAnimatedComponent,
@@ -39,21 +26,12 @@ import Svg, {
 const AnimatedG = createAnimatedComponent(G);
 const AnimatedPath = createAnimatedComponent(Path);
 
-/**
- * Natural size of {@link HomeArt}, in points — what it draws at when a screen
- * has room to spare. Exported so callers cap the art at its own proportions
- * instead of keeping a second copy of them.
- */
 export const HOME_ART = { width: 350, height: 196 } as const;
 
-/** Length of the roof path, for the draw-on stroke. */
 const ROOF_LEN = 190;
-/** Length of the cloud's strike-through, for its draw-on stroke. */
 const STRIKE_LEN = 54;
-/** Sync-dash pattern; the ants march by one full period. */
 const ANT_PERIOD = 12;
 
-/** Dim state of a window before its device pairs. */
 const WINDOW_DIM = 0.45;
 
 export function HomeArt({
@@ -63,24 +41,15 @@ export function HomeArt({
   width: number;
   height: number;
 }): React.JSX.Element {
-  // Fit inside BOTH axes at one uniform scale: an SVG sized on height alone
-  // overflows sideways on a 320pt-wide device.
   const scale = Math.max(
     0,
     Math.min(width / HOME_ART.width, height / HOME_ART.height)
   );
 
   const reduceMotion = useReducedMotion();
-  /** 0 → 1 once on mount: the whole arrival sequence. */
   const intro = useSharedValue(reduceMotion ? 1 : 0);
-  /** 0 → 1 forever: marching ants on the sync links. */
   const ants = useSharedValue(0);
 
-  // Driving a mount animation means assigning shared values from an effect —
-  // reanimated's documented pattern, and the only place the "once, on mount"
-  // timing can come from. react-compiler reads the assignment as mutating a
-  // hook result; a SharedValue is a mutable box by design, so the warning does
-  // not apply. Not a deferral: there is nothing here to un-mute later.
   /* oxlint-disable react/react-compiler -- #643 SharedValue.value assignment is reanimated's mount-animation API, not a React state mutation */
   useEffect(() => {
     if (reduceMotion) {
@@ -98,9 +67,6 @@ export function HomeArt({
   }, [reduceMotion, intro, ants]);
   /* oxlint-enable react/react-compiler */
 
-  // Each element reads one window of the single intro clock, so the beats stay
-  // in a fixed order however long the animation runs: roof → house → devices →
-  // links → ticks → windows → the cloud being ruled out.
   const roof = useAnimatedProps(() => ({
     strokeDashoffset: interpolate(
       intro.value,

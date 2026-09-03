@@ -114,13 +114,10 @@ describe(stableBucketId, () => {
   });
 
   it("differs across distinct ids (usually)", () => {
-    // Extremely unlikely collision for these two strings.
     expect(stableBucketId("alpha")).not.toBe(stableBucketId("beta"));
   });
 });
 
-// Titled in prose, not `describe(ROLLOUT_WINDOW_MS)`: the constant is a number,
-// and `describe` only accepts a string or a function.
 describe("the rollout window", () => {
   it("is 72 hours", () => {
     expect(ROLLOUT_WINDOW_MS).toBe(72 * 60 * 60 * 1000);

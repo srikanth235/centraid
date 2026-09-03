@@ -1,16 +1,3 @@
-// The info rail as a phone sheet: 64% of the screen, grabber (§7.2). Every
-// row is a *write* (succeed, queue, refuse, undo), so a refusal renders as
-// its own panel — what was tried, why, what to do — with typed text kept on
-// device (§13). Facts are mono; numerics pin RTL direction. Last: one
-// paragraph on where the original actually is (§12).
-//
-// OWNER RULING (#711, 2a/2c) — do not "fix" this back:
-//  - PAPER, not stage ground, like the web rail; amends the prototype's
-//    `vInfoStyle`, which seated the panel on the stage.
-//  - NO destructive control here, ever — Trash lives only on the viewer bar
-//    (PhotoLightboxToolbar.tsx); a second destructive path in a facts panel
-//    is a misfire waiting to happen.
-
 import * as Clipboard from "expo-clipboard";
 import React, { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
@@ -47,22 +34,16 @@ export interface PhotoInfoSheetProps {
   onClose: () => void;
   asset: PhotoAsset;
   screenHeight: number;
-  /** Linked place's STORED name — may be a bare coordinate, which the phrase
-   *  ladder refuses to print. Undefined when no place is linked. */
   placeName?: string;
-  /** Settlement name from the opt-in gazetteer automation, when one exists. */
   placeGazetteer?: string;
-  /** Where taken: relative-ladder rung and copy action only, never a name. */
   placeLat?: number;
   placeLng?: number;
-  /** Member's named places, anchors for "3.4 km NE of Home". */
   namedPlaces?: readonly NamedPlace[];
   placeSetByYou: boolean;
   onRemovePlace: () => void;
   tags: readonly InfoChip[];
   onAddTag: (label: string) => Promise<string | undefined>;
   people: readonly InfoChip[];
-  /** Whether the vault is the member's OWN; undefined → row not drawn. */
   vaultPersonal?: boolean;
   vaultLabel: string;
   gatewayName: string;
@@ -71,7 +52,6 @@ export interface PhotoInfoSheetProps {
   onCaption: (caption: string) => Promise<string | undefined>;
 }
 
-/** A write the vault would not take, kept on screen with the text intact. */
 interface Refusal {
   tried: string;
   because: string;
@@ -87,8 +67,6 @@ export function PhotoInfoSheet(
   const [pendingTag, setPendingTag] = useState("");
   const [refusal, setRefusal] = useState<Refusal>();
   const [copiedLocation, setCopiedLocation] = useState(false);
-  // Page to another photograph and the sheet is about that one instead.
-  // Derived during render so the field never shows the previous caption.
   if (captionAssetId !== asset.id) {
     setCaptionAssetId(asset.id);
     setCaption(asset.filename ?? "");
@@ -97,9 +75,6 @@ export function PhotoInfoSheet(
     setCopiedLocation(false);
   }
 
-  // WHERE IT WAS TAKEN IS A PHRASE: same ladder the web panel renders, so the
-  // surfaces cannot drift. Own name, else gazetteer, else relative to a named
-  // place, else "A place with no name yet". Coordinate: clipboard only, on ask.
   const place = placePhrase({
     placeName: props.placeName,
     gazetteerName: props.placeGazetteer,
@@ -121,8 +96,6 @@ export function PhotoInfoSheet(
     props.vaultPersonal === undefined
       ? undefined
       : vaultLine(props.vaultPersonal, props.vaultLabel);
-  // No timestamp from the media store means no capture date to print — not
-  // "Invalid Date" dressed as a fact.
   const capture = useMemo(
     () =>
       asset.capturedAt === undefined
@@ -143,7 +116,6 @@ export function PhotoInfoSheet(
     tried: string
   ): void => {
     void write().then((because) => {
-      // The typed text stays exactly where it is; only the reason is new.
       setRefusal(because === undefined ? undefined : { because, tried });
     });
   };

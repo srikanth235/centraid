@@ -1,10 +1,3 @@
-// The grant transport over the NATIVE seat's addressing: the law under test is
-// shared with the browser seat, and what this file supplies is a phone's base
-// URL and credential (#825, #883).
-//
-// A REFUSAL IS NOT AN OUTAGE — `fetch` rejecting means the request never left
-// the phone and the gateway said nothing; a 4xx/5xx means it said something.
-// Two facts, two sentences (docs/mobile-offline.md).
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -19,7 +12,6 @@ import { grantWireCalls } from "@centraid/blueprints/apps/_shared/grant-transpor
 
 import { nativeGrantDoor, nativeGrantHttp } from "./grant-seat";
 
-/** The shared wire law over THIS seat's addressed, credentialed requests. */
 const nativeWire = (baseUrl: string) =>
   grantWireCalls(nativeGrantHttp(baseUrl));
 
@@ -105,8 +97,6 @@ describe("the native grant transport", () => {
     });
 
     test("a person the vault has no record of is an answer, not a read failure", async () => {
-      // The primary read is `?partyId=`. Throwing here would make "we do not
-      // know this person" arrive wearing "shares could not be read".
       stubFetch(() => ({
         status: 404,
         body: {
@@ -156,9 +146,6 @@ describe("the native grant transport", () => {
     });
 
     test("the revoke sentence and its locus promise are the route's, verbatim", async () => {
-      // Two sentences, and neither is derivable from the other: `message` says
-      // where the removal stands, `promise` says what this revoke can actually
-      // keep for THIS principal kind (ruling V-locus).
       const message =
         "a vault holding a copy has been asked to remove it and has not yet confirmed";
       const promise =
@@ -188,9 +175,6 @@ describe("the native grant transport", () => {
     });
 
     test("a standing grant at another capability is REFUSED, in the vault's words", async () => {
-      // #883 (ruling V-table): an answer is never edited in place, so the pack
-      // refuses the second verb rather than reading the first one back. The
-      // refusal names the fix, and nothing here may soften it into a success.
       const message =
         "this is already shared for view; withdraw that first — an answer changed in place could not be audited";
       stubFetch(() => ({
@@ -236,7 +220,6 @@ describe("the native grant transport", () => {
         capability: "view",
       });
       expect(outcome).toMatchObject({ ok: true, outcome: "exists" });
-      // The wire's phrase and reason ride through the door untouched.
       expect(outcome).toMatchObject({
         grant: {
           phrase: "on its way",
@@ -246,7 +229,6 @@ describe("the native grant transport", () => {
     });
 
     test("a grant the vault parked is neither a landed grant nor a refusal", async () => {
-      // 202. It is a 2xx, so only the body tells this from a share that stood.
       const message = "this needs your confirmation";
       stubFetch(() => ({
         status: 202,
@@ -294,8 +276,6 @@ describe("the native grant transport", () => {
     });
 
     test("a withdrawal that did not land stops there — the old answer still stands", async () => {
-      // Granting after a failed withdrawal would post the same answer twice and
-      // be refused as a conflict, printing the wrong sentence at the member.
       const message = "the withdrawal could not be recorded";
       const calls = stubFetch(() => ({
         status: 500,
@@ -311,7 +291,6 @@ describe("the native grant transport", () => {
   });
 
   describe("a gateway that never answered is not a gateway that said no", () => {
-    /** What `fetch` does on a phone with no route to the host. */
     function offline(): void {
       vi.stubGlobal("fetch", () =>
         Promise.reject(new TypeError("Network request failed"))
@@ -331,7 +310,6 @@ describe("the native grant transport", () => {
       await expect(nativeWire(BASE).create(REQUEST)).rejects.toSatisfy(
         isGrantUnreachable
       );
-      // A gateway that ANSWERED is never marked, however unhappy the answer.
       stubFetch(() => ({ status: 500, body: { error: "boom" } }));
       await expect(nativeWire(BASE).create(REQUEST)).rejects.not.toSatisfy(
         isGrantUnreachable
@@ -346,7 +324,6 @@ describe("the native grant transport", () => {
         message: GRANT_UNREACHABLE,
         reach: "unreachable",
       });
-      // The two sentences are actually different words, not one string reused.
       expect(GRANT_UNREACHABLE).not.toBe(GRANT_FAILED);
     });
 
@@ -369,8 +346,6 @@ describe("the native grant transport", () => {
         offers: [],
         reach: "unreachable",
       });
-      // Both are `readable: false`; only `reach` tells the surface which
-      // sentence to print, and REGISTRY_UNREADABLE is not the offline one.
       expect(REGISTRY_UNREADABLE).not.toContain("out of reach");
     });
 

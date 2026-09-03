@@ -1,8 +1,3 @@
-/**
- * Extension transport pure helpers (#545) — failure classification
- * and byte codecs without WASM / chrome.storage.
- */
-
 export function encodeBytes(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -29,10 +24,6 @@ export function isDeviceRevoked(
   return message.includes(deviceRevokedMarker);
 }
 
-/**
- * Whether a failed companion request should retry. Device-revoked is never
- * retried; non-idempotent methods only retry clear connect failures.
- */
 export function shouldRetryCompanionRequest(input: {
   attempt: number;
   maxAttempts: number;
@@ -51,7 +42,6 @@ export function shouldRetryCompanionRequest(input: {
   return isConnectFailure(input.error, input.connectFailureMarker);
 }
 
-/** Map a gateway HTTP failure into the companionJson error message. */
 export function companionHttpError(status: number, bodyText: string): string {
   if (status === 401)
     return "This device was revoked — pair it again in Centraid Settings.";

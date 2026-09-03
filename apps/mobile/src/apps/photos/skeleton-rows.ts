@@ -1,6 +1,3 @@
-// The grid IS the loading state (§14): same `justify()`, same rung, `--skel`.
-// Sequence is FIXED — random aspects would flicker the placeholder.
-
 import { justify } from "./justify";
 import type { JustifiedTile } from "./justify";
 import type { PhotoAsset } from "./timeline-model";
@@ -25,7 +22,6 @@ export function skeletonTileCount(
   targetHeight: number,
   viewportHeight: number
 ): number {
-  // Both halves round UP: too few reads as "the library ends here".
   const perRow = Math.max(1, Math.floor(containerWidth / targetHeight)) + 1;
   const rows = Math.max(1, Math.ceil(viewportHeight / targetHeight) + 1);
   return perRow * rows;

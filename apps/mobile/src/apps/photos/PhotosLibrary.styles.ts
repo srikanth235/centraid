@@ -1,18 +1,8 @@
-// Library's layout, kept out of the screen so the screen reads as data + routes.
-//
-// This sheet is COLOURLESS on purpose: every colour on Library comes from
-// `useTheme()` at the call site, so one sheet serves light and dark without a
-// second copy. What lives here is geometry (the spacing scale) and type (the
-// ramp's roles via `t()`), neither of which changes with the scheme.
-
 import { StyleSheet } from "react-native";
 
 import { borders, spacing, t, radii } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
-  // The grid is two FlashList columns, so each cell already owns half the
-  // width; the 4pt inset on both sides is what produces the 8pt gutter between
-  // them and, with `content`'s 12pt page padding, the 16pt page margin.
   albumCard: { paddingBottom: spacing[3], paddingHorizontal: spacing[1] },
   albumCover: { aspectRatio: 1.35, borderRadius: radii.lg, width: "100%" },
   albumInput: {
@@ -64,7 +54,6 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     width: 44,
   },
-  /** Header/footer bands, inset to line up with the album cells' 4pt gutter. */
   pageSection: { paddingHorizontal: spacing[1] },
   row: {
     alignItems: "center",
@@ -73,7 +62,6 @@ export const styles = StyleSheet.create({
     minHeight: 64,
   },
   rowCopy: { flex: 1, marginStart: spacing[3], minWidth: 0 },
-  /** Metas count things, and a numeral is mono everywhere in this system. */
   rowMeta: t("mono"),
   rowTitle: t("body"),
   section: {

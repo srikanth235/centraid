@@ -1,11 +1,3 @@
-/*
- * Pure core for GATEWAY_TEST_CONNECTION (#382) — the ConnectFlow handshake
- * ladder. Raw signals fold into `ConnectivityStage`s here;
- * `gateway-connectivity.ts` owns the network calls, folding in sequence,
- * skipping stages once one fails. Same electron-free split as
- * `gateway-pairing-core.ts`.
- */
-
 import {
   decodePairingTicket,
   isTicketExpired,
@@ -57,7 +49,6 @@ export interface ConnectivityReport {
   gateway?: ConnectivityGatewayInfo;
   vaults?: ConnectivityVaultEntry[];
   ticket?: ConnectivityTicketInfo;
-  /** Stable code for the FIRST failing stage — absent when `ok`. */
   error?: string;
 }
 
@@ -86,8 +77,6 @@ function s(
   return stage(id, STAGE_LABEL[id], status, detail);
 }
 
-/** Assemble the report: `ok` iff no stage failed; `error` carries the
- *  caller-supplied code for the first failure (undefined when `ok`). */
 export function assembleReport(
   stages: ConnectivityStage[],
   extra: {
@@ -108,15 +97,6 @@ export function assembleReport(
   };
 }
 
-// ── url / gateway kind: reach → identify → auth ─────────────────────────
-
-/**
- * Fold a `handshakeGateway` result into reach/identify/auth. It collapses all
- * non-2xx into `reason: 'unreachable'` but its `detail` still carries
- * `HTTP <status>` when a response DID arrive — the thread pulled here to split
- * no-response (reach) from 401/403 (auth) from other bad responses (identify).
- * Exceptions never match `HTTP <digits>` → true reach-failure.
- */
 export function foldUrlIdentityStages(handshake: HandshakeResult): {
   stages: ConnectivityStage[];
   gateway?: ConnectivityGatewayInfo;
@@ -142,7 +122,6 @@ export function foldUrlIdentityStages(handshake: HandshakeResult): {
       : Number(statusMatch.groups.status);
 
   if (status === undefined) {
-    // No HTTP response reached us (unparseable body reads the same way here).
     if (handshake.reason === "unreachable") {
       return {
         stages: [
@@ -182,7 +161,6 @@ export function foldUrlIdentityStages(handshake: HandshakeResult): {
   };
 }
 
-/** The `vaults` stage — shared by the `url` and `gateway` kinds. */
 export function foldVaultsStageFromHttp(result: ListGatewayVaultsResult): {
   stage: ConnectivityStage;
   vaults?: ConnectivityVaultEntry[];
@@ -208,8 +186,6 @@ export function foldVaultsStageFromHttp(result: ListGatewayVaultsResult): {
   };
 }
 
-/** A `reach` failure before any fetch — the `assertDirectUrlAllowed`
- *  guardrail rejecting plain-http-to-public-host. */
 export function reachGuardFailureStages(message: string): ConnectivityStage[] {
   return [
     s("reach", "fail", message),
@@ -218,14 +194,6 @@ export function reachGuardFailureStages(message: string): ConnectivityStage[] {
   ];
 }
 
-// ── ticket kind: decode only ────────────────────────────────────────────
-
-/**
- * Pure client-side decode + expiry check — no dial ("the redemption itself is
- * the live test"). `gatewayEndpointId` is the raw iroh EndpointTicket string,
- * not a parsed EndpointId: that needs the iroh native binding this check has
- * no other reason to load; the raw string already serves as the stable id.
- */
 export function buildTicketReport(
   rawTicket: string,
   now = Date.now()

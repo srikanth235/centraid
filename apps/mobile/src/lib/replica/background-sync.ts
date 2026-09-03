@@ -35,24 +35,11 @@ const REPLICA_BACKGROUND_TASK = "centraid-replica-background-sync";
 const REPLICA_PUSH_TASK = "centraid-replica-push-wake";
 const REGISTRATION_STATUS_KEY = "centraid:replica-background-registration";
 
-/**
- * Wall-clock budget for one background pass.
- *
- * iOS gives a `BGAppRefreshTask` on the order of 30 seconds before it expires
- * the task and suspends the process; WorkManager is far more generous, so the
- * tighter platform sets the number. 20 seconds leaves roughly ten for closing
- * sessions, flushing cursors and detaching feeds — the work that must not be
- * cut in half. Stopping early is safe by construction: every queue this pass
- * touches is durable, and the next wake or the next foreground pull resumes
- * exactly where this stopped (docs/mobile-offline.md, "Background work").
- */
 const BACKGROUND_PASS_BUDGET_MS = 20_000;
 
-/** Remaining-budget view of one background pass; also the OS expiration hook. */
 export interface BackgroundPassDeadline {
   remainingMs: () => number;
   expired: () => boolean;
-  /** The platform says time is up NOW (iOS `addExpirationListener`). */
   expire: () => void;
 }
 
@@ -73,15 +60,10 @@ export function backgroundPassDeadline(
   };
 }
 
-/** What one pass actually managed, for the task result and for tests. */
 export interface BackgroundSyncOutcome {
-  /** Scopes selected for this pass. */
   scopes: number;
-  /** Scopes whose pull, intent flush and notification sync all completed. */
   synced: number;
-  /** Per-scope failures; one bad scope never cancels the others. */
   failures: Array<{ vaultId: string; reason: string }>;
-  /** A stage was skipped because the pass ran out of budget. */
   timedOut: boolean;
 }
 
@@ -89,12 +71,10 @@ export interface RunBackgroundReplicaSyncOptions {
   deadline?: BackgroundPassDeadline;
 }
 
-/** Registration outcome the settings/status surface can read back. */
 export interface ReplicaBackgroundRegistrationStatus {
   at: string;
   backgroundTask: { registered: boolean; reason?: string };
   pushTask: { registered: boolean; reason?: string };
-  /** expo-background-task's own verdict; `restricted` means Background App Refresh is off. */
   availability: "available" | "restricted" | "unknown";
 }
 
@@ -115,24 +95,14 @@ function reason(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * The same reachability primitive the foreground uses (`ReplicaProvider`'s
- * `refreshReachability`): the device radio plus a resolvable gateway base. A
- * headless pass has no provider listening for network changes, so it samples
- * once per stage instead of once per event — hardcoding `true` made every
- * queued write look sendable to a session with no radio behind it.
- */
 async function deviceOnline(): Promise<boolean> {
   try {
     return (await Network.getNetworkStateAsync()).isConnected === true;
   } catch {
-    // A platform that cannot answer is treated as offline: the durable queues
-    // lose nothing by waiting for the next wake.
     return false;
   }
 }
 
-/** BGTaskScheduler (iOS) / WorkManager (Android) bounded pull. */
 export async function runBackgroundReplicaSync(
   options: RunBackgroundReplicaSyncOptions = {}
 ): Promise<BackgroundSyncOutcome> {
@@ -161,12 +131,10 @@ export async function runBackgroundReplicaSync(
     );
     if (raw) scopes = JSON.parse(raw) as CachedBackgroundScope[];
   } catch {
-    // Active scope below remains enough for a bounded recovery pass.
+    // Intentionally empty.
   }
   const selectedScopes = selectBackgroundScopes(scopes, active.vaultId);
   outcome.scopes = selectedScopes.length;
-  // Resolving the base above proved the gateway answered; the radio is the
-  // other half, and both are re-sampled at the placement/upload boundary.
   let connected = await deviceOnline();
   const sessions = new Map<
     string,
@@ -180,9 +148,6 @@ export async function runBackgroundReplicaSync(
   let facade: MultiVaultReplicaSession | undefined;
   let looseReader: { close: () => void } | undefined;
   try {
-    // Per-scope isolation, not `Promise.all` (#880): one vault whose bootstrap
-    // or pull throws used to reject the whole pass, so placements and uploads
-    // never drained for ANY vault. Each scope now settles on its own.
     await Promise.all(
       selectedScopes.map(async (scope) => {
         if (deadline.expired()) {
@@ -295,7 +260,7 @@ export async function runBackgroundReplicaSync(
         try {
           scopeDrivers.get(scope.vaultId)?.close();
         } catch {
-          // A handle the purge already tore down is one less thing to close.
+          // Intentionally empty.
         }
         scopeDrivers.delete(scope.vaultId);
         deleteReplicaDatabaseFamily(scope.databaseName);
@@ -363,7 +328,7 @@ TaskManager.defineTask(REPLICA_PUSH_TASK, async () => {
   try {
     await runBackgroundReplicaSync({ deadline });
   } catch {
-    // The OS scheduler and next foreground remain the retry path.
+    // Intentionally empty.
   }
 });
 
@@ -399,7 +364,7 @@ export async function registerReplicaBackgroundTasks(): Promise<ReplicaBackgroun
         ? "restricted"
         : "available";
   } catch {
-    // Leave `unknown`: an unavailable status API is not a refused registration.
+    // Intentionally empty.
   }
   await AsyncStorage.setItem(
     REGISTRATION_STATUS_KEY,

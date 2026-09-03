@@ -1,7 +1,3 @@
-// Mobile's READ half of enrichment policy (#807): `enrich/effective`
-// is vault-scoped (apiHeaders), `_enrich/profiles` uses the host bearer.
-// Nothing here writes policy or folds a cascade of its own.
-
 import {
   apiHeaders,
   authHeader,
@@ -33,7 +29,6 @@ export interface EngineProfile {
   builtIn: boolean;
 }
 
-/** `effective: null` is fail-closed, never "off by default". */
 export interface EnrichCapabilityState {
   domain: EnrichDomain;
   capability: string;
@@ -54,7 +49,6 @@ export const MOBILE_ENRICH_DOMAINS: readonly EnrichDomain[] = [
 ];
 
 function profileKey(capability: string, id: string): string {
-  // A built-in id repeats across capabilities: identity is the PAIR.
   return `${capability}\n${id}`;
 }
 
@@ -79,7 +73,6 @@ async function readProfiles(base: string): Promise<EngineProfile[]> {
   return body.profiles ?? [];
 }
 
-/** Throws when unreachable; callers may not invent a policy. */
 export async function readEnrichmentPolicy(): Promise<EnrichCapabilityState[]> {
   const base = await requireGatewayBase();
   const asked = MOBILE_ENRICH_DOMAINS.flatMap((domain) =>

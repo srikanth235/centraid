@@ -1,12 +1,3 @@
-// The picker, phone-shaped (Photos v4 §10). Pushed screen, not a modal card.
-//
-// 1. ITS SELECTION IS ITS OWN SET — no `selection` to `PhotosScreen`; the
-//    five-target bar belongs to the library, not "add these to an album".
-// 2. ADDING REFERS, copies nothing — the web picker's sentence, verbatim.
-//
-// No search field: phone search is gateway-only (`PhotosSearch.tsx`) and
-// has a genuine unreachable state. A silent miss is pretence (§9).
-
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -68,7 +59,6 @@ export default function PhotoPicker({
       ),
     [albumId, entries.rows]
   );
-  // Trashed photographs are not offered: adding would put a deleted reference into a curated album.
   const candidates = useMemo(
     () =>
       timeline.assets.filter(
@@ -99,7 +89,6 @@ export default function PhotoPicker({
   const add = (): void => {
     if (!canAdd || !session) return;
     setAdding(true);
-    // New references land after existing ones so the member's ordering is preserved.
     const firstPosition = entries.rows.filter(
       (row) => String(row.collection_id) === albumId
     ).length;
@@ -113,7 +102,6 @@ export default function PhotoPicker({
   };
 
   return (
-    // No `selection` to the shell — this picked set is its own (proto:3963).
     <PhotosScreen current="collections">
       <View style={styles.header}>
         <Tappable
@@ -174,7 +162,6 @@ export default function PhotoPicker({
           sections={sections}
           selection={picked}
           onSelectionChange={setPicked}
-          // Tap toggles; `PhotoTimeline` opens on tap only while nothing is selected.
           onOpen={(asset) =>
             setPicked((current) => new Set([...current, asset.id]))
           }

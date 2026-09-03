@@ -1,28 +1,9 @@
-/*
- * Task/event reminder monitor (main process).
- *
- * Neither Tasks nor Agenda had any time-based alert — a `remind_before_min`
- * or `reminders_json` field the owner set was silently inert. This module
- * closes that gap the same way gateway-monitor.ts already closes the
- * downtime-alert gap: poll a cheap gateway route, fire an OS notification
- * on what's new. The gateway's `/centraid/_reminders/due` is deliberately
- * stateless (recomputed live from `remind_before_min`/`reminders_json` each
- * call — see packages/server/src/reminders/due-reminders.ts); THIS module
- * owns "have I already notified for this one" — an in-memory, per-launch
- * Set of reminder keys, pruned so a long-running process doesn't grow it
- * forever.
- *
- * Lives in main, not the renderer, so reminders still fire while the window
- * is backgrounded or on another screen.
- */
-
 import { Notification } from "electron";
 
 import { loadSettings } from "./settings.js";
 
 export const REMINDER_POLL_MS = 30_000;
 const PROBE_TIMEOUT_MS = 8000;
-/** Notified keys older than this are forgotten — bounds memory, not a re-fire risk (the gateway itself stops surfacing a reminder once it goes stale). */
 const SEEN_TTL_MS = 48 * 60 * 60 * 1000;
 
 interface DueReminder {
@@ -100,8 +81,6 @@ async function tick(): Promise<void> {
   try {
     due = await fetchDueReminders(settings.gatewayUrl, settings.gatewayToken);
   } catch {
-    // A probe failure here is silent — gateway-monitor.ts already owns
-    // surfacing "the gateway is unreachable" to the owner.
     return;
   }
   for (const reminder of due) {
@@ -126,7 +105,6 @@ function runTick(): Promise<void> {
   return inFlight;
 }
 
-/** Start the reminder poller. Called once from main.ts after app ready. */
 export function startReminderMonitor(): void {
   if (timer) return;
   timer = setInterval(() => void runTick(), REMINDER_POLL_MS);

@@ -1,6 +1,3 @@
-// Places, cards first (Photos v4 handoff §14, §18); the count is PLACES,
-// never "N of M geotagged photographs".
-
 import { Image } from "expo-image";
 import React, { useMemo } from "react";
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
@@ -18,9 +15,6 @@ import { noLocationCard, placeCards } from "./places-model";
 import { tileGround } from "./tile-overlays";
 import { usePhotoTimeline } from "./timeline-source";
 
-// Cards group by one-decimal rounding (~11km) — the `PlaceDetail` key;
-// places-model.ts differs from the map on purpose.
-
 export default function PlacesView({
   navigation,
 }: PhotosScreenProps<"PlacesView">): React.JSX.Element {
@@ -35,16 +29,12 @@ export default function PlacesView({
     () => placeCards(assets, places.rows),
     [assets, places.rows]
   );
-  // THE TRAILING CARD (#816): photos with no place; reachable, NOT counted
-  // as a place.
   const shelf = useMemo(() => {
     const bucket = noLocationCard(assets);
     return bucket ? [...cards, bucket] : cards;
   }, [assets, cards]);
 
   return (
-    // The band via the shell (#712): a bare SafeAreaView leaves the OS
-    // gesture as the only exit. current="more" = arrived via More.
     <PhotosScreen current="more">
       <View style={styles.header} testID={TEST_IDS.places.shelf}>
         {/* No back chevron: two exits already; a third breaks §F's rule. */}
@@ -136,7 +126,6 @@ const makeStyles = (colors: ThemeColors) =>
     count: { ...t("mono"), color: colors.textSoft, marginEnd: spacing[3] },
     cover: {
       aspectRatio: 4 / 3,
-      // radii.lg (7): the shelf-card radius the handoff states.
       borderRadius: radii.lg,
       overflow: "hidden",
     },

@@ -1,7 +1,3 @@
-// Share-target ingest routing and lifecycle. The hook wires real producers and
-// Expo modules; the core is exercised here with fakes, so no React renderer
-// or native module is loaded.
-
 import { describe, expect, it, vi } from "vitest";
 
 import type { NativeReplicaSession } from "../../lib/replica/native-session";

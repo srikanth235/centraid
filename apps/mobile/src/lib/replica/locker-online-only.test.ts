@@ -1,25 +1,3 @@
-// THE ONLINE-ONLY LAW, ON THE PHONE.
-//
-// The sibling of `packages/blueprints/src/locker-online-only.test.ts`: that one
-// proves the WRITE BUILDER stamps the rule on the two secret-bearing actions;
-// this one proves the SEAT honours it. Both are needed, because the builder's
-// flag is inert unless the transport reads it, and until this change the
-// native session had no branch that did — `screens/Scan.tsx` put a card number
-// through `session.write("locker", { action: "add-item" })` and it landed in
-// the durable SQLite outbox.
-//
-// Three claims:
-//
-//  1. An online-only write goes STRAIGHT to the app's action handler and
-//     leaves no durable trace — no intent, nothing in `pendingChanges`.
-//  2. It FAILS rather than queueing when the gateway cannot be reached. There
-//     is deliberately no fallback: falling back to the queue is precisely what
-//     the flag forbids.
-//  3. The one origin-seat caller that carries a secret — the card scanner —
-//     passes the flag. Asserted over the source of `screens/scan-locker.ts`,
-//     because a payload builder that quietly dropped it would be green
-//     everywhere else.
-
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -56,9 +34,6 @@ function sequentialIds(): ReplicaIdFactory {
 
 const CURSOR: ReplicaCursor = { epoch: "replica-1", seq: 1 };
 
-/** One complete windowed bootstrap page, with an empty catalog: this test
- *  never reads a row, and an empty catalog is also the honest first-open
- *  state a secret write must survive. */
 function bootstrapPage(): Record<string, unknown> {
   return {
     protocolVersion: 1,
@@ -81,12 +56,8 @@ function feed(): NativeChangeFeed {
         listener = undefined;
       };
     },
-    async setShapeIds() {
-      /* nothing to track */
-    },
-    async resume() {
-      /* the coordinator only needs this to resolve */
-    },
+    async setShapeIds() {},
+    async resume() {},
     setActive() {
       void listener;
     },
@@ -162,7 +133,6 @@ describe("Locker's online-only write door", () => {
       expect(action).toBeDefined();
       expect(action?.body).toContain("card_number");
 
-      // The secret never travelled the intent rail.
       const intents = calls.filter((call) =>
         call.pathname.includes("/replica/intents")
       );
@@ -183,7 +153,6 @@ describe("Locker's online-only write door", () => {
           input: { type: "card", title: "Card", card_number: SECRET },
         })
       ).rejects.toThrow(/refused|unreachable/u);
-      // The whole point: a refusal, not a durable row waiting for a connection.
       await expect(session.pendingChanges()).resolves.toStrictEqual([]);
     } finally {
       await session.close();

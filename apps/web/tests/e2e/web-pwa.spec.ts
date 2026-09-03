@@ -43,12 +43,8 @@ test("boots as a PWA and establishes a cookie control session", async ({
     return { status: response.status, text: await response.text() };
   }, API_URL);
   expect(appsProbe.status, appsProbe.text).toBe(200);
-  // The proxied listing is the gateway's own, not a canned body: every vault
-  // mounts the eight bundled system apps, so `tasks` must be in it.
   expect(appsProbe.text).toContain('"tasks"');
 
-  // Home is the content springboard (#708) — custom apps open via the command
-  // palette, not a library card on Home.
   await expect(
     page.locator('nav[aria-label="Apps"]').first(),
     JSON.stringify(gatewayResponses, null, 2)
@@ -61,9 +57,6 @@ test("boots as a PWA and establishes a cookie control session", async ({
 
   const manifest = await page.request.get("/manifest.webmanifest");
   expect(manifest.ok()).toBeTruthy();
-  // There is no quick capture on this seat — the assistant is the one place a
-  // stray thought goes, so the manifest declares neither a share target nor a
-  // capture shortcut and no `?capture=` URL opens anything.
   const manifestBody = (await manifest.json()) as {
     share_target?: unknown;
     shortcuts?: Array<{ name?: string; url?: string }>;

@@ -1,11 +1,3 @@
-/**
- * SPRINGBOARD POLICY — sizing, grading, and which apps the grid shows (#712,
- * #905). Split out of `tile-model.test.ts`, which crossed the god-file ceiling
- * when #905 added the membership cases; the policy module had no test file of
- * its own, which is part of how that defect stayed invisible.
- *
- * Pure by construction, so nothing here needs a renderer or a replica.
- */
 import { describe, expect, it } from "vitest";
 
 import {
@@ -48,8 +40,6 @@ describe(tileEarnsGrid, () => {
   });
 });
 
-// The COMPOSITION of the rules above: #905, where an all-`unknown` springboard
-// rendered a launcher with no tiles at all.
 describe(everyTileUnreadable, () => {
   const status = (value: TileStatus): Pick<TileData, "status"> => ({
     status: value,
@@ -148,7 +138,6 @@ describe(countThings, () => {
       countThings([
         tile({ count: 8000 }),
         tile({ count: 432 }),
-        // Locker withholds its count — omitted, never counted as zero.
         tile({ count: undefined, status: "unknown" }),
       ])
     ).toStrictEqual({ capped: false, settled: true, total: 8432 });
@@ -184,8 +173,6 @@ describe(springboardState, () => {
   });
 
   it("calls first run only when every readable tile settled empty", () => {
-    // Locker is permanently `unknown` (sealed, online-only) — it must not
-    // veto a genuine day one.
     expect(springboardState(tiles("empty", "empty", "unknown"))).toBe(
       "first-run"
     );

@@ -1,11 +1,3 @@
-// The panel's two claims (#765, spec §9):
-//
-//  - a FACT has a key column of a fixed width (the touch value, 110), so the
-//    values line up down the list instead of stepping in and out; the key is
-//    uppercase micro and the value carries tabular figures
-//  - `tone` colours the EDGE. `net` is a border, never a fill — the one
-//    chromatic ink in the system does not get to own a rectangle
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -76,9 +68,6 @@ describe(PanelBlock, () => {
   it("carries at most one filled commit beside one quiet verb", () => {
     const container = render(
       <PanelBlock
-        // `filled` is explicit, and that is the point: a panel verb is
-        // outlined unless the panel carries the view's ONE commit. The shell's
-        // twin of this panel passes the same flag.
         action={{ filled: true, label: "Approve and send", onPress: noop }}
         action2={{ label: "Edit and approve", onPress: noop }}
         title="The survey came back"
@@ -110,7 +99,6 @@ describe(PanelBlock, () => {
       "sweeps",
       "2 passes",
     ]);
-    // The caveat is a sentence and leaves the numeric register.
     expect(styleOf(spans[2] ?? null).color).toBe(colors.textFaint);
     expect(styleOf(spans[2] ?? null).fontVariant).toBeUndefined();
   });
@@ -131,11 +119,8 @@ describe(PanelBlock, () => {
       "$3.40",
       "1 unpriced.",
     ]);
-    // The display rung is the whole mechanism — the same string at the fact
-    // rung is one 13pt value among thirty.
     const factRung = styleOf(spans[0] ?? null).fontSize as number;
     expect(styleOf(spans[1] ?? null).fontSize).toBeGreaterThan(factRung);
-    // …and it is still a number: tabular figures, from the numeric role.
     expect(styleOf(spans[1] ?? null).fontVariant).toStrictEqual([
       "tabular-nums",
     ]);
@@ -156,3 +141,4 @@ describe(PanelBlock, () => {
     expect(nodesOf(container, "button")).toHaveLength(0);
   });
 });
+// @vitest-environment jsdom

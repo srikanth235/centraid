@@ -1,7 +1,3 @@
-// What the Data place SAYS, from what the gateway actually sent (#765, §6). A
-// clause appears only when the payload carries it: the phone's read surface has
-// no write timestamps, so `12 written today` is absent, never approximated.
-
 import { formatBytes, formatRelativeTime } from "@centraid/design";
 
 import type { DocRecord } from "../../kit/components/doc-table-model";
@@ -19,7 +15,6 @@ export interface KindRow {
   sub: string;
   rows: number;
   bytes: number | null;
-  /** Engine bookkeeping, not an app's write. */
   machinery: boolean;
 }
 
@@ -40,10 +35,8 @@ export const FULL_AT = 8;
 
 export const RECORD_PAGE = 6;
 
-/** `Largest` keeps a top slice, never a threshold. */
 const LARGEST_KEEP = 5;
 
-/** Best first; with no match the id is shown, never an invented label. */
 const TITLE_COLUMNS = [
   "title",
   "name",
@@ -74,14 +67,12 @@ export function recordCount(n: number): string {
   return `${count(n)} ${n === 1 ? "record" : "records"}`;
 }
 
-/** `bytes: null` (the `estimate` method) drops the size clause. */
 export function kindSub(kind: Pick<AtlasKind, "rows" | "bytes">): string {
   return kind.bytes === null
     ? recordCount(kind.rows)
     : `${recordCount(kind.rows)} · ${formatBytes(kind.bytes)}`;
 }
 
-/** Only POPULATED kinds: an empty table is a schema shape, not a write. */
 export function censusKinds(census: AtlasCensus): KindRow[] {
   const out: KindRow[] = [];
   for (const pack of census.packs) {
@@ -111,7 +102,6 @@ export const KIND_FILTERS: readonly { id: KindFilter; label: string }[] = [
   { id: "machinery", label: "The engine's own" },
 ];
 
-/** By size where measured, by record count where estimated. */
 export function filterKinds(rows: KindRow[], filter: KindFilter): KindRow[] {
   if (filter === "machinery") return rows.filter((row) => row.machinery);
   if (filter === "largest") {
@@ -131,8 +121,6 @@ function friendlyName(graph: AtlasGraph, logical: string): string {
   return node?.friendly ?? node?.label ?? logical;
 }
 
-/** Authored links lead; FK edges are the fallback for a vault that has linked
- * nothing yet. */
 export function relationRows(graph: AtlasGraph): RelationRow[] {
   if (graph.authoredLinks.length > 0) {
     return [...graph.authoredLinks]
@@ -154,7 +142,6 @@ export function relationRows(graph: AtlasGraph): RelationRow[] {
     .map((edge) => ({
       browse: edge.fromLogical,
       key: `${edge.fromTable}:${edge.col}:${edge.toTable}`,
-      // `fill`: the share of child rows that actually carry the reference.
       sub: `${edge.col} · ${Math.round(edge.fill * 100)}% of ${recordCount(edge.childRows)}`,
       title: `${friendlyName(graph, edge.fromLogical)} → ${
         edge.toLogical === null
@@ -184,7 +171,6 @@ function firstOf(
   return "";
 }
 
-/** ISO string or epoch NUMBER — stringify first and `Date.parse` fails. */
 function timeOf(row: Record<string, unknown>): string | number | undefined {
   for (const column of TIME_COLUMNS) {
     const value = row[column];
@@ -220,7 +206,6 @@ export function browseRecords(page: BrowseRowsPage): RecordView[] {
   });
 }
 
-/** `newest first` claims an ORDER: say it only when the page has one. */
 export function tableCaption(
   shown: number,
   total: number,

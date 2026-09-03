@@ -85,8 +85,6 @@ async function requestWithRetry(
   headers: Record<string, string>,
   body: Uint8Array
 ): Promise<BrowserResponse> {
-  // Retry state carries the attempt budget and a per-attempt timeout; preserve
-  // that sequence rather than issuing overlapping gateway requests.
   const requestAttempt = async (attempt: number): Promise<BrowserResponse> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {

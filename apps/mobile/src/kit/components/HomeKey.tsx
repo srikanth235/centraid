@@ -6,14 +6,6 @@ import { borders, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
 
-// Shared app-exit: ink GRID on a plate = leave to the springboard. Never a
-// house (ambiguous as app-home vs launcher). Up-one-level stays the caller's
-// chevron. Opaque paper plate — no blur/tint/shadow/teal: glass would float
-// over the page and glyph contrast would depend on whatever sits underneath.
-//
-// Caller owns dismissal. `floating`: bottom-centered, `box-none` wrap so taps
-// beside the plate fall through. `leave`: leading header control.
-
 const FLOAT_SIZE = 54;
 const HEADER_SIZE = 40;
 const PLATE_RADIUS = 12;
@@ -78,7 +70,6 @@ const makeStyles = (colors: ThemeColors) =>
       height: HEADER_SIZE,
       width: HEADER_SIZE,
     },
-    // Opaque paper, hairline, 12px. Anything else is glass creeping back.
     plate: {
       alignItems: "center",
       backgroundColor: colors.bg,

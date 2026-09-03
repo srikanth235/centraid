@@ -1,10 +1,3 @@
-// Collections — the landing surface of Photos, and NOT "Albums": every shelf
-// gets a named section over a horizontal rail. The section model is pure, in
-// `photos-collections.ts`.
-//
-// AN EMPTY SECTION STILL RENDERS: its sentence names what would appear there and
-// why it has not — the product explaining itself, not a placeholder.
-
 import { Image } from "expo-image";
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -32,7 +25,6 @@ import { usePhotoTimeline } from "./timeline-source";
 
 type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
 
-/** Two-and-a-bit tiles on the narrowest phone: the cut third says it scrolls. */
 const TILE = 132;
 
 function RailTile({
@@ -44,7 +36,6 @@ function RailTile({
   onPress: () => void;
   styles: Styles;
 }): React.JSX.Element {
-  // `?variant=thumb` 404s until the gateway's preview backstop has run.
   const media = useImageFallback(tile.uri ?? "", tile.originalUri, tile.id);
   return (
     <Pressable
@@ -115,8 +106,6 @@ function Section({
           }
           onPress={() => onOpen()}
           style={styles.headOpen}
-          // The shelf's own key — the label is copy and the count moves with the
-          // vault, so `Open Places, 7` is a locator that changes every seed.
           testID={`${TEST_ID_PREFIXES.photosShelf}${section.key}`}
         >
           <Text style={styles.headTitle}>{section.title}</Text>
@@ -180,8 +169,6 @@ export default function PhotosCollectionsView({
   onToggleSection,
 }: {
   navigation: Nav;
-  /** SESSION state, and a display fold — never a filter. Owned by
-   *  `PhotosHome.tsx` (#712); this file keeps no `useState` for it. */
   collapsed: ReadonlySet<CollectionSectionKey>;
   onToggleSection: (key: CollectionSectionKey) => void;
 }): React.JSX.Element {
@@ -205,16 +192,12 @@ export default function PhotosCollectionsView({
     "photos",
     useMemo(() => ({ entity: "media.face_region" }), [])
   );
-  // A face row carries a party ID, never a name; `PhotosPeopleView` must
-  // resolve it the same way.
   const parties = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.party" }), [])
   );
 
   const sections = useMemo(() => {
-    // `target_id`, not `asset_id`: collection entries are polymorphic, and the
-    // photographs-only column yields every album empty.
     const albums = collections.rows.map((row) => ({
       collectionId: String(row.collection_id),
       name: String(row.name ?? "Album"),
@@ -223,13 +206,10 @@ export default function PhotosCollectionsView({
           (entry) => String(entry.collection_id) === String(row.collection_id)
         )
         .map((entry) => String(entry.target_id)),
-      // The member's own key-photo choice, preferred over the newest member (#721).
       ...(row.cover_content_id
         ? { coverContentId: String(row.cover_content_id) }
         : {}),
     }));
-    // Only CONFIRMED faces make a person — a proposed region is the enricher's
-    // candidate, not somebody the member has named.
     const facesByParty = new Map<string, string[]>();
     for (const face of faces.rows) {
       if (!face.confirmed_by_party_id) continue;
@@ -266,8 +246,6 @@ export default function PhotosCollectionsView({
     places.rows,
   ]);
 
-  /** Closed key union: a section with no destination fails to typecheck.
-   *  Absent `tile` means the HEADING was pressed. */
   const open = (key: CollectionSectionKey, tile?: CollectionTile): void => {
     switch (key) {
       case "memories":
@@ -299,7 +277,6 @@ export default function PhotosCollectionsView({
         navigation.navigate("PhotoStateView", { mode: "favorites" });
         break;
       case "videos":
-        // A filter over the same shelf screen, never a bespoke grid (#721).
         navigation.navigate("PhotoStateView", { mode: "videos" });
         break;
       case "duplicates":
@@ -316,8 +293,6 @@ export default function PhotosCollectionsView({
   };
 
   return (
-    // No header row of its own (#712): the Show All / Collapse All menu lives in
-    // `PhotosHome.tsx`'s header slot. Only the per-section chevrons stay here.
     <ScrollView
       contentContainerStyle={styles.scroll}
       showsVerticalScrollIndicator={false}
@@ -389,7 +364,6 @@ const makeStyles = (colors: ThemeColors) =>
     headCount: { ...t("mono"), color: colors.textFaint },
     headOpen: { alignItems: "center", flexDirection: "row", gap: spacing[1] },
     headSpacer: { flex: 1 },
-    // No primary section: choosing one would choose for the member.
     headTitle: { ...t("title"), color: colors.text },
     label: { ...t("smallStrong"), color: colors.onStage },
     labelUnder: {

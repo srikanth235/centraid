@@ -1,5 +1,3 @@
-// Device-only (native modules) — nothing under test may import this file (#419.4).
-
 import { File, Paths, UploadType } from "expo-file-system";
 
 import type { FileSource, FileSourceOpener } from "./file-source";
@@ -26,10 +24,8 @@ export const expoFileSource: FileSourceOpener = async (
   };
 };
 
-/** Native background PUT; part spooled to cache (upload streams from a path), raw bytes — no base64 cap. */
 export function expoPartPutter(scope: BackgroundTransferScope): PartPutter {
   return async ({ url, body, transferId }) => {
-    // Defence in depth: the drainer already pinned this URL.
     const target = await assertGatewayMintedUploadUrl(url, scope);
     const spool = new File(Paths.cache, `centraid-upload-${transferId}.cbsf`);
     if (spool.exists) spool.delete();
@@ -52,7 +48,7 @@ export function expoPartPutter(scope: BackgroundTransferScope): PartPutter {
       try {
         spool.delete();
       } catch {
-        // Reclaimed by the OS cache sweeper.
+        // Intentionally empty.
       }
     }
   };

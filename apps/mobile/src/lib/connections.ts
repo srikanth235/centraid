@@ -1,6 +1,3 @@
-// Connectors read path (#765). Map snake_case at this boundary; never
-// re-implement authorize — re-export `lib/connection-reauth.ts` instead.
-
 import { apiHeaders, fetchJson, requireGatewayBase } from "./gateway";
 
 export {
@@ -40,7 +37,6 @@ export interface ConnectionEntry {
   trust: ConnectionTrust;
   createdAt: string;
   lastRunAt: string | null;
-  /** `null` = harness-ambient; no broker credential attached. */
   credKind: "oauth2" | "api_key" | null;
   oauthMode: "byo" | "assist" | null;
   provider: string | null;
@@ -62,7 +58,6 @@ function fromWireRow(r: ConnectionWireRow): ConnectionEntry {
     kind: r.kind,
     label: r.label,
     lastRunAt: r.last_run_at,
-    // Missing `oauth_mode` on an OAuth credential is BYO (pre-Assist wire).
     oauthMode: r.oauth_mode ?? (r.cred_kind === "oauth2" ? "byo" : null),
     principal: r.principal,
     provider: r.provider,
@@ -82,7 +77,6 @@ export async function listConnections(): Promise<ConnectionEntry[]> {
   return (body.connections ?? []).map(fromWireRow);
 }
 
-/** Pause/resume only — `needs-auth`/`failing` are broker-reported, not settable. */
 export async function setConnectionStatus(
   connectionId: string,
   status: "active" | "paused",

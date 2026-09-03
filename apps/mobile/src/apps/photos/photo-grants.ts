@@ -1,6 +1,3 @@
-// Grant-sheet host seam (#825): kit owns the write door; this says who is in
-// the room and where refusals land. Addressing law lives in grantAudiencesFrom.
-
 import { useMemo, useState } from "react";
 
 import {
@@ -23,10 +20,8 @@ export const NO_GATEWAY_TO_SHARE_THROUGH =
   "Not connected to a gateway, so nothing can be shared from here.";
 
 export interface PhotoGrantEntry {
-  /** Read on request, never held open. */
   audiences: readonly GrantAudienceOption[];
   visible: boolean;
-  /** Refusals land on the status line BEFORE any sheet opens. */
   request: () => void;
   dismiss: () => void;
 }
@@ -43,7 +38,6 @@ export function usePhotoGrantEntry(
     "people",
     useMemo(() => ({ entity: "core.vault", limit: 1 }), [])
   );
-  // Only an owned, group-decorated circle is a deliberate audience.
   const circles = useReplicaQuery(
     "tally",
     useMemo(() => ({ entity: "social.circle", limit: 500 }), [])
@@ -81,7 +75,6 @@ export function usePhotoGrantEntry(
         try {
           links = await listLinks(base);
         } catch {
-          // A failed link read is not an empty roster — see refusal below.
           links = [];
           linksUnread = true;
         }
@@ -107,8 +100,6 @@ export function usePhotoGrantEntry(
           setVisible(true);
           return;
         }
-        // A link is the WHOLE address (#903), so a failed link read answers
-        // nothing at all — never say "you know nobody" off a read that broke.
         refuse(linksUnread ? ROSTER_UNREADABLE : NOBODY_TO_SHARE_WITH);
       })();
     },

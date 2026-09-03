@@ -37,7 +37,6 @@ describe(coalesceWork, () => {
 
     for (let index = 0; index < 50; index += 1) work.signal();
     await clock.advance(1_000);
-    // Still exactly one: the follow-up cannot start until the run settles.
     expect(runs).toBe(1);
 
     release!();

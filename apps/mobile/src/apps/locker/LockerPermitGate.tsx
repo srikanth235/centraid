@@ -1,15 +1,3 @@
-// THE PERMIT GATE (README-Locker §2).
-//
-// A FULL-STOP OVERLAY, not an inline confirm — the sanctioned divergence this
-// app argues for, and the phone keeps it: a modal that covers the item is the
-// only way to make a reveal a decision rather than a tap. It names the ITEM,
-// the FIELD, the permit's ~30-second life, and the receipt it writes, in four
-// separate sentences because those are four separate facts.
-//
-// A REFUSAL IS RECEIPTED TOO, so the gate says so rather than silently
-// re-arming: `permits.permitFromAuth` turns a wrong passphrase or a backed-off
-// attempt into the message shown here.
-
 import React, { useMemo, useState } from "react";
 import { Modal, StyleSheet, View } from "react-native";
 
@@ -30,12 +18,9 @@ import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 export interface LockerPermitGateProps {
-  /** The field the permit would be minted for; `null` closes the gate. */
   field: string | null;
-  /** The item the gate is about, in the member's own words. */
   itemTitle: string;
   busy: boolean;
-  /** The refusal, in the host's own words — backoff sentence included. */
   error: string;
   onConfirm: (secret: string) => void;
   onCancel: () => void;

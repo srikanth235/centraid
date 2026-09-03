@@ -1,6 +1,3 @@
-// Mount policy — identity, scope selection, freshness, revocation — all
-// answerable offline. `ReplicaProvider` holds only the lifecycle.
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { File } from "expo-file-system";
 
@@ -24,14 +21,12 @@ import { Store } from "../../storage";
 export const REPLICA_UNPAIRED_MESSAGE =
   "Pair this phone with your Centraid desktop to work offline.";
 
-/** Must match `addActiveGatewayVault`'s `"manual"` id; not shared. */
 const MANUAL_GATEWAY_FALLBACK = "manual";
 
 interface ScopeWire {
   vaultId: string;
   label: string;
   canWrite: boolean;
-  /** Derive "not my vault" from this, never `label`. Older caches omit it. */
   personal?: boolean;
 }
 
@@ -44,7 +39,6 @@ export function fetcher(vaultId?: string): ReplicaFetcher {
     const method = init.method ?? "GET";
     const url = new URL(pathname, `${baseUrl}/`);
     try {
-      // Deadlined: the tunnel accepts after its peer is gone (#903).
       const response = await fetchWithinReplyDeadline(
         (signal) => fetch(url, { ...init, headers, signal } as RequestInit),
         init.signal ?? undefined
@@ -55,7 +49,6 @@ export function fetcher(vaultId?: string): ReplicaFetcher {
         );
       return response;
     } catch (error) {
-      // Died on this device, so no gateway trace can show it (#905).
       console.error(
         `[centraid] replica: ${method} ${pathname} never left the phone — ${error instanceof Error ? error.message : String(error)}`
       );
@@ -64,8 +57,6 @@ export function fetcher(vaultId?: string): ReplicaFetcher {
   };
 }
 
-/** `undefined` on failure, so the ladder below falls through instead of taking
- *  a namespace that moves under the next launch. */
 async function fetchEndpointId(baseUrl: string): Promise<string | undefined> {
   try {
     const response = await fetch(new URL("/centraid/_gateway/info", baseUrl), {
@@ -100,8 +91,6 @@ export async function resolveIdentity(vault: VaultLink | undefined): Promise<{
   }
   const liveBase = await resolveGatewayBase().catch(() => undefined);
   if (!liveBase) throw new Error(REPLICA_UNPAIRED_MESSAGE);
-  // Ladder: endpoint id, carried vault, literal — never the display name,
-  // which demotes a durable id to a renameable one.
   const [probe, endpointId] = await Promise.all([
     fetchReplicaBootstrapPage(
       { baseUrl: liveBase },
@@ -119,8 +108,6 @@ export async function resolveIdentity(vault: VaultLink | undefined): Promise<{
   };
 }
 
-/** Separate so an offline-mounted session primes the cache without
- *  remounting. */
 export async function refreshCachedScopes(
   gatewayId: string,
   baseUrl: string
@@ -137,13 +124,10 @@ export async function refreshCachedScopes(
       }
     }
   } catch {
-    // The cache stays authoritative until the gateway answers.
+    // Intentionally empty.
   }
 }
 
-/** Refresh BEFORE the read, never instead of it. A scope granted mid-session
- *  reaches the mounted four only when the provider re-plans the mount —
- *  activating it does that; otherwise it waits for the next launch. */
 export async function mountedScopes(
   identity: Awaited<ReturnType<typeof resolveIdentity>>,
   storageLocation?: string
@@ -157,7 +141,7 @@ export async function mountedScopes(
     const raw = await AsyncStorage.getItem(key);
     if (raw) scopes = JSON.parse(raw) as ScopeWire[];
   } catch {
-    // Fall through to the active scope.
+    // Intentionally empty.
   }
   const active = identity.auth.vaultId!;
   const ordered = [
@@ -205,8 +189,6 @@ export async function loadFreshness(
   );
 }
 
-/** Must match `NativeVaultChangeFeed`'s and `NativeMultiplexChangeFeed`'s own
- *  private key builders; neither is exported, and both are owned elsewhere. */
 function restoredCacheKeys(gatewayId: string, vaultId: string): string[] {
   const suffix = encodeURIComponent(`${gatewayId} ${vaultId}`);
   return [
@@ -216,32 +198,15 @@ function restoredCacheKeys(gatewayId: string, vaultId: string): string[] {
   ];
 }
 
-/** An absent or zero-byte database is a container this replica never wrote. */
 function replicaFileHasData(databaseName: string): boolean {
   try {
-    // A path, not a URI — `File` throws on a scheme-less one (#905).
     const file = new File(pathToFileUri(databaseName));
     return file.exists && (file.size ?? 0) > 0;
   } catch {
-    // An unreadable path is not evidence of a restore; keep the cursor.
     return true;
   }
 }
 
-/**
- * Drop cursors and stamps a restored container inherited (#880).
- *
- * The replica databases sit in the module-owned durable directory and never
- * ride Auto Backup, D2D transfer, or an iCloud restore. The SSE resume cursors
- * and freshness stamps beside them are ordinary app storage, so a restored
- * device wakes up holding another phone's cursor over an empty replica: the
- * feed resumes at a sequence for rows this device never had and every change
- * before it is missing without a word. The Android manifest excludes that store
- * outright; this is the same rule enforced from inside the app, which is also
- * where an iOS restore and any future backup-rule change pass.
- *
- * Returns the vaults whose cache was discarded, so bootstrap starts clean.
- */
 export async function discardRestoredReplicaCache(
   gatewayId: string,
   scopes: readonly MountedReplicaScope[],
@@ -254,8 +219,6 @@ export async function discardRestoredReplicaCache(
       const cached = await Promise.all(
         keys.map((key) => AsyncStorage.getItem(key).catch(() => null))
       );
-      // A first launch after pairing has no database and no cache either —
-      // that is a cold start, not a restore, and it must stay silent.
       if (cached.every((value) => value === null)) return undefined;
       await Promise.all(
         keys.map((key) => AsyncStorage.removeItem(key).catch(() => undefined))
@@ -266,7 +229,6 @@ export async function discardRestoredReplicaCache(
   return cleared.filter((vaultId): vaultId is string => vaultId !== undefined);
 }
 
-/** Live SQLite family: the main file plus every rollback/WAL sidecar. */
 const SQLITE_SIDECARS = ["-journal", "-wal", "-shm"] as const;
 
 export function replicaDatabaseFamily(databaseName: string): string[] {
@@ -276,16 +238,6 @@ export function replicaDatabaseFamily(databaseName: string): string[] {
   ];
 }
 
-/**
- * Reclaim one revoked scope's bytes.
- *
- * A purge empties the tables in place, so the file stays at full size for a
- * vault this phone may never see again. Only a REVOKED scope reaches here: a
- * vault merely evicted by the four-scope cap is still enrolled and its replica
- * is an asset, not garbage. A bare database name means op-sqlite's own default
- * location, which this module cannot address — the storage screen reports those
- * bytes rather than this deleting the wrong file.
- */
 export function deleteReplicaDatabaseFamily(databaseName: string): void {
   if (!databaseName.includes("/")) return;
   for (const path of replicaDatabaseFamily(databaseName)) {
@@ -293,7 +245,7 @@ export function deleteReplicaDatabaseFamily(databaseName: string): void {
       const file = new File(pathToFileUri(path));
       if (file.exists) file.delete();
     } catch {
-      // A sidecar the OS already removed is the outcome asked for.
+      // Intentionally empty.
     }
   }
 }
@@ -313,7 +265,7 @@ export async function removeCachedScope(
       );
     }
   } catch {
-    // A malformed cache must not retain revoked freshness.
+    // Intentionally empty.
   }
   await AsyncStorage.removeItem(freshnessKey(gatewayId, vaultId));
 }

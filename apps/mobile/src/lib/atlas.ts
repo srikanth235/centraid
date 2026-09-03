@@ -1,10 +1,5 @@
-// Mobile Vault Atlas client (#765). Never derive, cache or estimate here: a
-// count shown is a count the gateway counted. The interfaces are a lean local
-// mirror — mobile may not depend on `@centraid/vault` or `@centraid/client`.
-
 import { apiHeaders, fetchJson, requireGatewayBase } from "./gateway";
 
-/** `machinery` packs are the engine's own bookkeeping. */
 export type PackKind = "ontology" | "machinery";
 
 export interface AtlasKind {
@@ -28,7 +23,6 @@ export interface AtlasPack {
 
 export interface AtlasCensus {
   generatedAt: string;
-  /** `estimate` means every `bytes` is null. */
   method: "dbstat" | "estimate";
   fileBytesTotal: number;
   packs: AtlasPack[];
@@ -46,13 +40,10 @@ export interface AtlasGraphNode {
   label: string;
   pack: string;
   packKind: PackKind;
-  /** The name to show ("People", not "core_party"). */
   friendly?: string;
-  /** Absent means none exists; never fabricate one. */
   blurb?: string;
 }
 
-/** Keep separate from `AtlasAuthoredLink`: schema rule vs. authored claim. */
 export interface AtlasFkEdge {
   fromTable: string;
   fromLogical: string;
@@ -61,7 +52,6 @@ export interface AtlasFkEdge {
   toLogical: string | null;
   notnull: boolean;
   childRows: number;
-  /** Share of child rows carrying the reference, 0–1. */
   fill: number;
   selfRef: boolean;
 }
@@ -91,17 +81,14 @@ export interface BrowseTable {
   label: string;
   rows: number;
   machinery: boolean;
-  /** False for composite-key tables, whose ids are JSON arrays. */
   singlePk: boolean;
 }
 
-/** Render `columns` in the order sent. */
 export interface BrowseRowsPage {
   logical: string;
   physical: string;
   rows: Record<string, unknown>[];
   columns: string[];
-  /** Pass back as `after`; null at the end. */
   nextCursor: string | null;
   orderBy: string;
   dir: "asc" | "desc";
@@ -132,7 +119,6 @@ export async function fetchBrowseTables(): Promise<BrowseTable[]> {
   return body.tables ?? [];
 }
 
-/** `limit` is clamped gateway-side: over-asking is answered, not refused. */
 export async function fetchBrowseRows(input: {
   table: string;
   limit?: number;

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-// The band's rules, asserted without a renderer. What this guards: the phone's
-// band and the pointer seats' band are ONE table, so a blueprint change that
-// did not reach here fails as a mismatch rather than shipping two vocabularies.
 import { BAND_DESTINATIONS } from "@centraid/blueprints/apps/agenda/views";
 
 import {

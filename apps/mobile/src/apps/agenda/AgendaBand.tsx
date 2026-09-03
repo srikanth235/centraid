@@ -1,11 +1,3 @@
-// The band Agenda has claimed, rendered.
-//
-// Anatomy and shared plate geometry: `PhotosBand.tsx` and
-// `kit/band-surface.ts`. This file renders `agenda-band.ts` and adds nothing.
-//
-// When the member has handed the band back (`owner === "host"`) the tab group
-// goes and the capsule STAYS.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -77,9 +69,6 @@ export default function AgendaBand({
               key={destination.key}
               accessibilityRole="tab"
               accessibilityLabel={destination.label}
-              // The DESTINATION KEY, never the label: the label is copy a v-next
-              // handoff may re-word, and a flow that tapped it would then tap
-              // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.agenda}${destination.key}`}
               accessibilityState={{ selected: active }}
               onPress={() => onSelect(destination.key)}

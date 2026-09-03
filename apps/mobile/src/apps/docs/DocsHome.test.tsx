@@ -1,21 +1,3 @@
-// Docs' RNTL tier (#890 W5). ONE cold renderer for the app: the RN host tree
-// is expensive to boot, so every Docs claim that needs a real accessibility
-// tree, a real responder, or real style resolution is consolidated in this one
-// file (TESTING.md, "React Native component tests").
-//
-// WHAT ONLY THIS TIER CAN FALSIFY here:
-//  - the band as a real `tablist` with exactly one `selected` tab, and the
-//    filter/sort chips as real `button`s carrying their own state traits;
-//  - a press that must reach a real `Pressable` — including the row menu,
-//    which the DOM stub fires as a plain click on a `<button>`;
-//  - `FlashList` slot behaviour: the empty state renders INSTEAD of rows, and
-//    only when the drive really is empty;
-//  - real `StyleSheet` flattening across the frame's array styles.
-//
-// Device seams are the project's (`src/test/native-device-seams.ts`). Every
-// Docs component, blueprint filter and copy table stays real; only the replica
-// read layer — the device database — and the navigator are substituted.
-
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { StyleSheet } from "react-native";
@@ -58,8 +40,6 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
   })),
 }));
 
-// The device database seam. `useDocs`, `applyFilters`, `sortDocuments` and
-// every copy table above them stay real.
 vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -74,7 +54,6 @@ vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
   };
 });
 
-/** A document plus the content row the drive projection joins it to. */
 function seedDocuments(rows: readonly { id: string; title: string }[]): void {
   replicaRows.byEntity.set(
     "core.document",
@@ -107,7 +86,6 @@ function mountDocs(destination?: string) {
   );
 }
 
-/** Every node RNTL exposes under one role, with its accessibility state. */
 function statesOf(
   nodes: readonly { props: Record<string, unknown> }[]
 ): (boolean | undefined)[] {
@@ -127,11 +105,6 @@ describe("Docs, on the real React Native host tree", () => {
   it("draws the band as one native tablist with exactly one selected tab", () => {
     const screen = mountDocs();
 
-    // Five real `tab` nodes, resolved through RN's accessibility tree. The
-    // GROUP around them declares `accessibilityRole="tablist"` but no
-    // `accessible`, so RN never promotes it to an accessibility element and no
-    // assistive technology sees a tab list — visible only from here, since the
-    // DOM stub writes `data-role` onto its `div` unconditionally (#890 W5).
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((tab) => tab.props.accessibilityLabel)).toStrictEqual([
       "All",
@@ -140,8 +113,6 @@ describe("Docs, on the real React Native host tree", () => {
       "Shared",
       "More",
     ]);
-    // EXACTLY ONE lit place. Two lit tabs is precisely the defect a props-echo
-    // stub cannot see, because it never renders the band as one tree.
     expect(statesOf(tabs).filter((selected) => selected === true)).toHaveLength(
       1
     );
@@ -160,7 +131,6 @@ describe("Docs, on the real React Native host tree", () => {
     const screen = mountDocs();
 
     fireEvent.press(screen.getByRole("tab", { name: "More" }));
-    // A sheet, not a route: nothing was pushed and nothing was popped to.
     expect(navigated.calls).toStrictEqual([]);
   });
 
@@ -180,10 +150,6 @@ describe("Docs, on the real React Native host tree", () => {
     ]);
     const screen = mountDocs();
 
-    // Accessible NAMES, read off RN's own accessibility tree. The row's
-    // overflow is its own control with its own name, so a screen reader can
-    // tell two rows' menus apart; the DOM stub can only confirm the prop was
-    // handed over, never that RN made an accessibility node of it.
     const names = new Set(
       screen
         .getAllByRole("button")
@@ -211,9 +177,6 @@ describe("Docs, on the real React Native host tree", () => {
       { id: "d2", title: "Boiler warranty" },
       { id: "d3", title: "My own notes" },
     ]);
-    // Two placements and one ordinary document: only what ARRIVED is a row
-    // here, and the one whose origin vault no binding names stays unnamed
-    // rather than wearing a truncated id.
     replicaRows.byEntity.set("core.share_origin", [
       {
         __rowId: "o1",
@@ -252,7 +215,6 @@ describe("Docs, on the real React Native host tree", () => {
     expect(rows).toContain("Boiler warranty");
     expect(rows).not.toContain("My own notes");
 
-    // The lead line names the sender, and the unnamed vault says so plainly.
     const said = screen.root.findAll(
       (node) => typeof node.props.children === "string"
     );
@@ -265,10 +227,6 @@ describe("Docs, on the real React Native host tree", () => {
   });
 
   it("draws its own empty, never the drive's — a full drive with nothing shared", () => {
-    // The seam answers an unseeded entity with zero rows and no error, which
-    // is a genuine "nothing arrived". The shelf must say THAT and not inherit
-    // All's sentences, which would tell a member with four documents that
-    // their drive is empty.
     seedDocuments([{ id: "d1", title: "Lease agreement" }]);
     const screen = mountDocs("shared");
     const texts = screen.root
@@ -279,9 +237,6 @@ describe("Docs, on the real React Native host tree", () => {
   });
 
   it("gives the frame a real flex-1 body so the band cannot overlap the drive", () => {
-    // Real `StyleSheet.flatten` over the registered sheet and its array styles.
-    // The stub tier reads back the JSON it was handed and would pass whatever
-    // the component wrote, registered or not.
     const screen = mountDocs();
     const framed = screen.UNSAFE_root.findAll(
       (node) =>

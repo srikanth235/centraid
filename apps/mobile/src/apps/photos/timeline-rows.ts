@@ -1,11 +1,7 @@
-// Row list for the timeline: month headers, day sub-labels, justified rows.
-
 import { justify } from "./justify";
 import type { JustifiedTile } from "./justify";
 import type { PhotoAsset, PhotoSection } from "./timeline-model";
 
-// NO COUNTS ON THE TIMELINE (#712): headers state no tally. Counts belong to
-// period cards and Collections shelves. A day's place is not a tally.
 export type TimelineRow =
   | {
       type: "month";
@@ -43,7 +39,6 @@ export function describeCounts(assets: readonly PhotoAsset[]): string {
   return parts.join(" · ") || "0 photographs";
 }
 
-/** Empty unless one place covers the whole day — never a guess or a hedge. */
 export function dayPlace(
   assets: readonly PhotoAsset[],
   placeNames: ReadonlyMap<string, string>
@@ -108,9 +103,6 @@ export function rowTops(rows: readonly TimelineRow[]): number[] {
   return tops;
 }
 
-/** Month headers carry no day, so step BACK first: a sticky header spans its
- *  whole month and would report day one however far in the member scrolled.
- *  Forward only at the top of the list. */
 export function dayAtOffset(
   rows: readonly TimelineRow[],
   tops: readonly number[],

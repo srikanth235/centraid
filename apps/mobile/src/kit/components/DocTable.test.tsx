@@ -1,9 +1,3 @@
-// The record table is ALWAYS collapsed on this surface (#765, spec §9/§11):
-// no column header, no Kind column, no Written column — one annotation line
-// under the title carrying both, and a 52pt row to hold it. The trailing
-// control is a 44×44 overflow button, and the delete item sits in its own
-// group so the rule above it is the separation the reference draws.
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -160,3 +154,4 @@ describe(DocTable, () => {
     expect(nodesOf(without, "span")).toHaveLength(4);
   });
 });
+// @vitest-environment jsdom

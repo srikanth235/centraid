@@ -1,13 +1,3 @@
-// The mobile.contracts owner: what shape the app DEMANDS of a gateway that is
-// the right age — which capability keys must be present, how an absent optional
-// key reads, and that the wall copy names the gateway rather than the app.
-//
-// Version SKEW — what happens when the two sides are different ages — is a
-// different question and lives in mobile-gateway-skew.test.ts, which owns
-// mobile.compat. This file used to carry both, so the matrix reported two green
-// cells over one body of evidence; #890 split them, and the judge test that used
-// to sit at the bottom of this file moved there rather than being duplicated.
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -49,9 +39,6 @@ describe("mobile gateway compatibility", () => {
     ).toBe(false);
   });
 
-  // The v0 experimental gates ride the SAME answer as the wall above. The
-  // keys are optional on the wire, so their absence is what a gateway that
-  // predates them says — and it must read as off, never as malformed.
   test("reads the experimental feature flags off the same capability map", () => {
     const supported = {
       ...base,

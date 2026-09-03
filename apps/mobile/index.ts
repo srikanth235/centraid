@@ -7,8 +7,6 @@ import App from "./App";
 import { registerReplicaBackgroundTasks } from "./src/lib/replica/background-sync";
 import { drainUploadQueueInBackground } from "./src/lib/upload/boot";
 
-// Supply Hermes with native JSI SHA-256 plus WebCrypto AES-GCM/HMAC before
-// the upload queue is evaluated (#419).
 installQuickCrypto();
 
 AppRegistry.registerHeadlessTask(

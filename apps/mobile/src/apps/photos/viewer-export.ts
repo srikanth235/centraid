@@ -12,12 +12,10 @@ import { resolveLocalOriginal } from "./photo-edit-save";
 import { LocationNotRemovableError, shareOriginal } from "./photo-share";
 import type { PhotoAsset } from "./timeline-model";
 
-// Same original bytes the editor resolves.
 export async function saveToCameraRoll(asset: PhotoAsset): Promise<void> {
   await MediaLibrary.Asset.create(await resolveLocalOriginal(asset));
 }
 
-// Post the receipt EVERY time; silence reads as safety.
 export async function sendCopy(
   asset: PhotoAsset,
   precision: SharePlacePrecision,
@@ -33,7 +31,6 @@ export async function sendCopy(
   postStatus(sharePlaceReceipt(precision, place));
 }
 
-// Unremovable location refuses the share, loudly.
 export function surfaceExportFailure(error: unknown): void {
   postStatus(
     error instanceof LocationNotRemovableError

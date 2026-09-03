@@ -1,7 +1,3 @@
-// An offline add is a SUCCESS, not a failure (#880). QUALITY.md recorded
-// People closing its add form only on `executed`, so a durable queued row
-// read as nothing having happened.
-// @vitest-environment jsdom
 import React, { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -46,7 +42,6 @@ vi.mock(import("react-native"), async () => {
 
 const { usePeopleWrites } = await import("./people-writes");
 
-/** Read from a real render; the handoff runs in an effect. */
 function Probe({
   onReady,
 }: {
@@ -108,3 +103,4 @@ describe("adding a person while the gateway is out of reach", () => {
     probe.unmount();
   });
 });
+// @vitest-environment jsdom

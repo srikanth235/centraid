@@ -1,8 +1,3 @@
-// Search dispatches the app's own `search` query rather than grepping the
-// replica: a second matcher here would rank differently from every other
-// seat. That makes it a GATEWAY read, so out of reach the surface says what
-// it is missing instead of an empty set reading as "nothing matches".
-
 import React, { useEffect, useRef, useState } from "react";
 import { FlatList, View } from "react-native";
 
@@ -38,11 +33,9 @@ export default function TasksSearch({
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Task[] | null>(null);
   const [unreachable, setUnreachable] = useState(false);
-  // Monotonic ticket: a slow older answer may never overwrite a newer one.
   const ticket = useRef(0);
   const term = query.trim();
 
-  // Typing clears the previous answer in the HANDLER, never inside the effect.
   const onChangeQuery = (text: string): void => {
     ticket.current += 1;
     setQuery(text);

@@ -1,5 +1,3 @@
-// Backup screen's gateway numbers (#712): custody rollup + free-up offer. Phone-side lives in BackupHealth.tsx.
-
 import React from "react";
 import { Pressable, View } from "react-native";
 
@@ -21,7 +19,6 @@ import type { FreeUpOffer } from "../kit/storage/free-up-space";
 import { useTheme } from "../kit/theme";
 import { styles } from "./BackupHealth.styles";
 
-// Locker and record-only apps are absent: locker bytes ARE the secret; record-only hold no originals.
 export const FREE_UP_APPS: readonly string[] = ["photos", "docs"];
 
 const CUSTODY_ROWS: ReadonlyArray<{

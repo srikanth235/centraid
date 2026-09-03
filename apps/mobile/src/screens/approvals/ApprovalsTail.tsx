@@ -1,6 +1,3 @@
-// The reference tail of the Notifications page (#765): standing grants, the
-// updates that are news rather than demands, and the archive.
-
 import React from "react";
 import { View } from "react-native";
 
@@ -20,12 +17,6 @@ import {
 import { NoticeVerbs } from "./RowParts";
 import type { BodyProps } from "./view-types";
 
-/**
- * The page's reference material: standing grants, the updates that are news
- * rather than demands, and the archive. It renders in EVERY state including
- * empty — a consent surface that hides the record of what it already
- * consented to is not a record.
- */
 export default function Tail(props: BodyProps): React.JSX.Element {
   const { page } = props;
   const notices = page.data ? page.data.notices : [];

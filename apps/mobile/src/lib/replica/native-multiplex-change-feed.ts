@@ -26,7 +26,6 @@ interface ScopeState {
   listener?: (message: VaultChangeMessage) => void;
   active: boolean;
   rebootstrapRequired: boolean;
-  /** Newest cursor not yet written to durable storage. */
   pendingCursor?: VaultChangeCursor;
   persistTimer?: ReturnType<typeof setTimeout>;
 }
@@ -37,13 +36,6 @@ interface ScopeFrame {
   data: unknown;
 }
 
-/**
- * Quiet window before a scope's resume cursor is written, matching the
- * single-vault feed (native-change-feed.ts). The multiplex feed missed it: a
- * 1,000-change frame wrote the cursor 1,000 times AND rebuilt the replica
- * context 1,000 times, because both were driven from the per-change cursor
- * advance rather than from the frame.
- */
 const CURSOR_PERSIST_DEBOUNCE_MS = 1_000;
 
 export interface NativeMultiplexChangeFeedOptions {
@@ -57,11 +49,6 @@ export interface NativeMultiplexChangeFeedOptions {
   onStreamOutcome?: (reachable: boolean) => void;
 }
 
-/**
- * Radio owner for all mounted replica sessions. `scope(vaultId)` returns the
- * ordinary feed adapter a `NativeReplicaSession` expects; the adapters share
- * this one stream and keep independent durable cursors.
- */
 export class NativeMultiplexChangeFeed {
   readonly #gatewayAuth: GatewayAuth;
   readonly #storage: AsyncStorageLike;
@@ -123,7 +110,6 @@ export class NativeMultiplexChangeFeed {
       },
       setActive: (active) => {
         state.active = active;
-        // Backgrounding is the last reliable moment to land the resume cursor.
         if (!active) void this.flush(state);
         this.reconnect();
       },
@@ -138,13 +124,10 @@ export class NativeMultiplexChangeFeed {
 
   close(): void {
     this.stop();
-    // Teardown flushes: a debounced cursor lost on kill costs a replay, but
-    // only if it is written at all — dropping it silently regresses the cursor.
     void this.flushAll();
     this.#states.clear();
   }
 
-  /** Land every debounced cursor now (teardown, or an explicit background). */
   async flushAll(): Promise<void> {
     await Promise.all(
       [...this.#states.values()].map((state) => this.flush(state))
@@ -195,7 +178,6 @@ export class NativeMultiplexChangeFeed {
         abort.signal
       );
     } catch {
-      // Swallowing this hid a dead vault (docs/traps/unreachable-vault.md).
       if (!abort.signal.aborted) this.#onStreamOutcome?.(false);
     } finally {
       if (this.#abort === abort) this.#abort = undefined;
@@ -216,8 +198,6 @@ export class NativeMultiplexChangeFeed {
     if (!state) return;
     if (scopeFrame.event === "revoked") {
       state.rebootstrapRequired = true;
-      // Drop the debounced write too, or it lands after the removal and
-      // resurrects the cursor of a scope this phone no longer holds.
       this.clearPending(state);
       void this.#storage.removeItem(this.storageKey(state.vaultId));
       this.#onScopeRevoked?.(state.vaultId);
@@ -244,9 +224,6 @@ export class NativeMultiplexChangeFeed {
       | undefined;
     const pageCursor = parseCursor(page?.cursor);
     const values = Array.isArray(page?.changes) ? page.changes : [];
-    // ONE frame, ONE settle. Advancing the in-memory cursor is free; the disk
-    // write and the freshness callback behind it are not, and a page of a
-    // thousand changes has exactly one newest cursor to report.
     let advanced = false;
     for (const value of values) {
       const change = parseChange(value, pageCursor ?? state.cursor);
@@ -259,7 +236,6 @@ export class NativeMultiplexChangeFeed {
     if (advanced) this.settleFrame(state);
   }
 
-  /** In-memory only: returns whether the cursor actually moved forward. */
   private advanceCursor(state: ScopeState, cursor: VaultChangeCursor): boolean {
     if (cursor.epoch === state.cursor.epoch && cursor.seq < state.cursor.seq)
       return false;
@@ -267,7 +243,6 @@ export class NativeMultiplexChangeFeed {
     return true;
   }
 
-  /** The per-frame cost: one freshness signal, one debounced durable write. */
   private settleFrame(state: ScopeState): void {
     this.#onScopeUpdated?.(state.vaultId);
     state.pendingCursor = state.cursor;

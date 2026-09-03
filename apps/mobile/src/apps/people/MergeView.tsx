@@ -1,12 +1,3 @@
-// Merge (v12 handoff § 10) — one person kept, one folded into them.
-//
-// THREE BLOCKS AND ONE SENTENCE: `Keep` is the person this screen was opened
-// from, `Merge in` is the duplicate picked from every other person (the
-// contract's own suspected duplicates first), and `Result` says what survives.
-// The commit does not merge — it opens the modal confirm, the rule for the
-// acts no reverse write can undo. After merging, the button becomes a
-// disabled `Merged` and the sentence becomes `Merged.`
-
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -41,8 +32,6 @@ import {
 import PeopleScreen from "./PeopleScreen";
 import { usePeople, usePerson } from "./usePeople";
 
-/** One `Result` row: the surviving value, and what it replaced where the
- *  duplicate held something else. */
 function resultRow(
   field: string,
   kept: string,
@@ -69,8 +58,6 @@ export default function MergeView({
   const [confirming, setConfirming] = useState(false);
   const [merged, setMerged] = useState(false);
 
-  // Everyone except the person on screen, with the contract's own suspected
-  // duplicates first — a person the vault already suspects belongs at the top.
   const candidates = useMemo(() => {
     const duplicates = new Set(
       (keep?.contact ?? []).flatMap(
@@ -142,9 +129,6 @@ export default function MergeView({
                       avatar={candidate}
                       name={candidate.name}
                       {...(candidate.role ? { sub: candidate.role } : {})}
-                      // Selection is the row's own meta word — a weight change
-                      // alone does not survive the phone's smaller rungs, and
-                      // the shared row carries no selected state to borrow.
                       {...(candidate.party_id === sourceId
                         ? { meta: "✓" }
                         : {})}

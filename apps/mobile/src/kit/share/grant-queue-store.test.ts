@@ -1,14 +1,7 @@
-/*
- * The queue's law is tested once in `@centraid/blueprints`; only durability,
- * order, and a value that came back corrupt are this seat's to get wrong, so
- * that is what is pinned here (#883).
- */
-
 import { describe, expect, it } from "vitest";
 
 import { nativeGrantIntentQueue } from "./grant-queue-store";
 
-/** Stands in for the phone's store: the bytes outlive the process. */
 function storage(initial: Record<string, string> = {}) {
   const cells = { ...initial };
   return {
@@ -35,7 +28,6 @@ describe("the native seat's grant queue", () => {
     await before.append(intent("a", "revoke"));
     await before.append(intent("b"));
 
-    // A relaunch is a new queue over the same bytes.
     const after = nativeGrantIntentQueue(disk);
     expect((await after.list()).map((held) => held.intentId)).toStrictEqual([
       "a",

@@ -1,12 +1,6 @@
-// The words and numbers the Analytics place puts on screen (#765, spec §5).
-// Rendering is tested next door; this pins the arithmetic and the copy.
-
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports follow */
 import { describe, expect, it, vi } from "vitest";
 
-// The formatters this module uses live beside the gateway client, and that
-// module reaches react-native. Mocking the transport (never the formatters)
-// keeps this test pure — the same one-liner `lib/insights.test.ts` writes.
 vi.mock(import("../../lib/gateway") as Promise<unknown>, () => ({
   apiHeaders: () => ({}),
   authHeader: () => ({}),
@@ -46,8 +40,6 @@ import {
   windowChips,
 } from "./insights-model";
 
-// The rollup rules are shared with the desktop seat (#883); binding this seat's
-// words once keeps the assertions below about the sentence, not the plumbing.
 const words = PHONE_INSIGHT_WORDS;
 const peakNote = (s: InsightsSummary): string | undefined =>
   insightPeakNote(s, words);
@@ -63,14 +55,9 @@ const harnessBreakdown = (s: InsightsSummary): InsightBreakdown =>
   insightBreakdowns(s, words).harness;
 
 const DAY_MS = 86_400_000;
-/** `BarsBlock.styles.MAX_COLUMNS`, copied because that module pulls the
- *  renderer in. The screen passes the real constant. */
 const COLUMNS = 31;
-/** A fixed anchor so the fold's arithmetic is readable: 2026-08-13T00:00:00Z. */
 const ANCHOR = Date.parse("2026-08-13T00:00:00.000Z");
 
-/** One rollup day. A day with no failure states that as ZERO, not as absence —
- *  the rollup always knows how many of its runs failed. */
 function dayPoint(
   over: Partial<InsightsDailyPoint> & { costUsd: number; date: string }
 ): InsightsDailyPoint {
@@ -127,7 +114,6 @@ function runOf(over: Partial<InsightsActivityRow> = {}): InsightsActivityRow {
   };
 }
 
-/** `YYYY-MM-DD` for a day offset from the anchor. */
 function dayAt(daysAgo: number): string {
   return new Date(ANCHOR - daysAgo * DAY_MS).toISOString().slice(0, 10);
 }
@@ -149,8 +135,6 @@ describe("the window picker", () => {
   });
 
   it("marks the axis with real dates rather than relative words", () => {
-    // A column is a day, and a day has a name: "30 days ago · halfway" gave a
-    // reader nothing they could check a spike against (#775).
     expect(insightAxisMarks(summaryOf(), 7, ANCHOR)).toStrictEqual([
       "7 Aug",
       "10 Aug",
@@ -162,15 +146,12 @@ describe("the window picker", () => {
 
 describe("the runs chart", () => {
   it("draws ONE COLUMN PER DAY up to the plot's ceiling (#775)", () => {
-    // The chart never samples a window to ten columns: one expensive afternoon
-    // must not be averaged across three ordinary days.
     expect(
       phoneBars(summaryOf(), 7, ANCHOR, insightColumnCount(7, COLUMNS))
     ).toHaveLength(7);
     expect(
       phoneBars(summaryOf(), 30, ANCHOR, insightColumnCount(30, COLUMNS))
     ).toHaveLength(30);
-    // Only the window the plot genuinely cannot carry still folds.
     expect(
       phoneBars(
         summaryOf({ windowDays: 90 }),
@@ -201,17 +182,14 @@ describe("the runs chart", () => {
       COLUMNS
     );
     const today = bars.at(-1);
-    // A quarter of the day's SPEND failed, so a quarter of its column does.
     expect(today?.failed).toBe(25);
     expect(today?.succeeded).toBe(75);
-    // The two segments still add up to the column the cost share earned.
     expect((today?.failed ?? 0) + (today?.succeeded ?? 0)).toBe(100);
   });
 
   it("splits by SPEND, not by run count — a cheap failure stays a cheap one", () => {
     const bars = phoneBars(
       summaryOf({
-        // Nine of ten runs failed, but they cost a tenth of the day.
         daily: [
           dayPoint({
             costUsd: 1,
@@ -297,7 +275,6 @@ describe("the runs chart", () => {
         })
       )
     ).toBe("failed");
-    // No failure anywhere in the window: the whole legend row is dropped.
     expect(
       failedLegendKey(
         summaryOf({
@@ -308,8 +285,6 @@ describe("the runs chart", () => {
   });
 
   it("folds by calendar offset, so a quiet stretch stays quiet", () => {
-    // Two days of the ten-day window did work; the eight silent days sit
-    // between them and must not collapse.
     const bars = phoneBars(
       summaryOf({
         daily: [
@@ -338,7 +313,6 @@ describe("the runs chart", () => {
       ANCHOR,
       2
     );
-    // …and a day that cost something is never drawn as nothing.
     expect(bars.map((bar) => bar.succeeded)).toStrictEqual([100, 1]);
   });
 
@@ -389,7 +363,6 @@ describe("the runs chart", () => {
         })
       )
     ).toBe("Busiest 11 Aug: $2.40 · 12k tokens · mostly Tidy downloads");
-    // A window with no peak says nothing rather than inventing one.
     expect(peakNote(summaryOf())).toBeUndefined();
   });
 });
@@ -455,16 +428,12 @@ describe("the by-source facts", () => {
   });
 
   it("puts no duration on a SOURCE row — the rollup times runs, not sources", () => {
-    // The window's typical run is a spend-panel fact; per-source timings are
-    // not rolled up, so a duration here would have nothing behind it.
     expect(
       sourceFacts(busy).some((fact) => fact.key.includes("duration"))
     ).toBe(false);
   });
 
   it("calls spend a floor when a run in the window could not be priced", () => {
-    // The figure is promoted out of the fact list (#775) — the floor is stated
-    // in its LABEL, where a member reading only the big number still sees it.
     const priced = spendFigure(summaryOf({ kpis: busy.kpis }), 30);
     expect(priced.label).toBe("Spend · 30 days");
     expect(priced.value).toBe("$3.00");
@@ -492,7 +461,6 @@ describe("the by-source facts", () => {
     expect(value("runs")).toBe("100 · 3 retried");
     expect(value("failed")).toBe("2 · $0.40 spent");
     expect(facts.find((fact) => fact.key === "failed")?.net).toBe(true);
-    // A window with no failures says nothing about them.
     expect(
       spendFacts(summaryOf({ kpis: busy.kpis })).some(
         (fact) => fact.key === "failed"
@@ -507,7 +475,6 @@ describe("the by-source facts", () => {
     expect(timed.find((fact) => fact.key === "typical run")?.value).toBe(
       "1m 35s"
     );
-    // An old vault whose window timed no run shows no row — never "0s".
     expect(
       spendFacts(summaryOf({ kpis: busy.kpis })).some(
         (fact) => fact.key === "typical run"
@@ -527,8 +494,6 @@ describe("the by-source facts", () => {
     expect(spend.unit).toBe("of spend");
     expect(spend.rows.map((row) => row.weight)).toStrictEqual([1, 3]);
     expect(spend.rows[1]?.value).toBe("$3.00 · 900 · 6 runs");
-    // A window where nothing could be priced measures the WHOLE breakdown in
-    // tokens rather than mixing two units inside one set of bars.
     const unpriced = harnessBreakdown(
       summaryOf({
         byHarness: [{ costUsd: 0, harness: "codex", runs: 2, tokens: 100 }],

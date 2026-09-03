@@ -1,15 +1,11 @@
-// Both file doors carry plaintext; no copy may outlive the act.
-
 import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
 import { IMPORT_TOO_LARGE, IMPORT_UNREADABLE } from "./locker-seat-copy";
 
-/** Cache, never documents. */
 const LOCKER_FILES = "locker-files";
 
-/** One JSON string in a phone's heap: refuse by size, not by OOM. */
 export const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 
 export interface PickedImportFile {
@@ -54,7 +50,7 @@ function discardPickedFile(uri: string): void {
     const file = new File(uri);
     if (file.exists) file.delete();
   } catch {
-    // Best effort.
+    // Intentionally empty.
   }
 }
 
@@ -71,11 +67,10 @@ export async function handOffLockerExport(
       mimeType: "text/csv",
     });
   } finally {
-    // A cancelled share sheet does not leave the vault's plaintext in cache.
     try {
       if (file.exists) file.delete();
     } catch {
-      // Best effort.
+      // Intentionally empty.
     }
   }
 }

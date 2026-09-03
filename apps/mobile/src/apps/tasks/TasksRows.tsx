@@ -1,7 +1,3 @@
-// A place's rows, its group heads and its foot (Tasks spec §4, §5). A
-// FLATLIST, NOT A SCROLLVIEW — no upper bound on rows — and a SKELETON at the
-// row geometry rather than a spinner while the first read lands.
-
 import React, { useCallback } from "react";
 import { FlatList, Pressable, View } from "react-native";
 
@@ -31,10 +27,8 @@ export interface TasksRowsProps {
   now: string;
   styles: TasksStyles;
   loading: boolean;
-  /** Nothing has ever been added, as opposed to nothing being due. */
   dayOne: boolean;
   moving: Task | null;
-  /** The row's ONE act where the place gives it one. */
   act?: { label: string; run: (task: Task) => void };
   projectName: (id: string | null | undefined) => string | null;
   onToggle: (task: Task) => void;
@@ -59,8 +53,6 @@ export default function TasksRows(props: TasksRowsProps): React.JSX.Element {
     }): React.JSX.Element => {
       if (item.kind === "header") {
         return (
-          // `attention` is the overdue group and nothing else — the label
-          // ("Overdue") is copy, the flag is the arithmetic.
           <View
             style={styles.groupHead}
             testID={
@@ -97,8 +89,6 @@ export default function TasksRows(props: TasksRowsProps): React.JSX.Element {
       return (
         <TaskRow
           task={item.task}
-          // Position in the FLATTENED list — group headers occupy a slot too,
-          // which is what makes it a stable address rather than a row count.
           testID={`${TEST_ID_PREFIXES.tasksRow}${index}`}
           now={now}
           styles={styles}
@@ -131,7 +121,6 @@ export default function TasksRows(props: TasksRowsProps): React.JSX.Element {
 
   const foot = ((): React.JSX.Element | null => {
     if (props.place === "logbook") {
-      // The Logbook here has no denominator; the foot says so.
       return <Text style={styles.num}>{logbookShown(props.shown)}</Text>;
     }
     if (props.shown >= props.total) return null;

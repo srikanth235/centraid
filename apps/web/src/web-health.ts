@@ -3,25 +3,7 @@ import { gatewayJson, loadConnection, webGatewayId } from "./web-state.js";
 
 export const HEALTH_POLL_INTERVAL_MS = 15000;
 
-/**
- * THE WEB SEAT REMEMBERS ITS OWN HEARTBEATS.
- *
- * Every field on `CentraidGatewayRuntime` that describes a WINDOW rather than
- * an instant — `checksTotal`, `checksFailed`, `samples`, `outages`,
- * `statusSince`, `trackingSince` — must survive across polls. Rebuilt from
- * nothing on each poll, this seat reports `1 checks this session · 100.0%`
- * forever, the Heartbeats row reads `1 run · 0 failed` after an hour of
- * running, and the sample ring the System page draws its availability strip
- * from stays permanently empty. Desktop keeps this state in the main process
- * (`gateway-monitor-core.ts`); the browser has no main process, so it keeps it
- * here.
- *
- * Deliberately IN MEMORY and per-tab, matching desktop's per-launch posture:
- * this is the session's own record of what it observed, not a durable history
- * of the gateway. The System page says "this session" for exactly that reason.
- */
 interface Tracked {
-  /** Which gateway this history belongs to — a switch resets it. */
   gatewayId: string;
   trackingSince: number;
   status: CentraidGatewayRuntime["status"];
@@ -32,8 +14,6 @@ interface Tracked {
   outages: CentraidGatewayRuntime["outages"];
 }
 
-/** Same ring size as the desktop monitor's `SAMPLE_CAP`, so both seats fold
- *  the same amount of evidence into the strip. */
 const SAMPLE_CAP = 240;
 const OUTAGE_CAP = 50;
 
@@ -54,9 +34,6 @@ function trackerFor(gatewayId: string, now: number): Tracked {
   return tracked;
 }
 
-/** Fold one probe into the tracked window. Mirrors `applyProbe`'s transition
- *  rules: an outage opens on the edge into `down` and closes on the edge back
- *  out, so a stretch of failures is one outage rather than one per probe. */
 function record(
   state: Tracked,
   probe: { at: number; ok: boolean; latencyMs?: number }
@@ -87,7 +64,6 @@ function record(
   state.status = next;
 }
 
-/** The window fields, spread onto whichever snapshot the probe produced. */
 function observed(
   state: Tracked
 ): Pick<
@@ -169,7 +145,6 @@ export async function healthSnapshot(): Promise<CentraidGatewayRuntime> {
   }
 }
 
-/** Test seam: forget this seat's observed window. */
 export function resetHealthTracking(): void {
   tracked = null;
 }

@@ -1,15 +1,9 @@
-/**
- * Content-script pure helpers (#545) — password generation and
- * message-envelope unwrapping without DOM / chrome APIs.
- */
-
 export interface CompanionEnvelope<T> {
   readonly ok: boolean;
   readonly value?: T;
   readonly error?: string;
 }
 
-/** Unwrap a chrome.runtime.sendMessage envelope or throw. */
 export function unwrapCompanionEnvelope<T>(
   envelope: CompanionEnvelope<T> | undefined
 ): T {
@@ -18,10 +12,6 @@ export function unwrapCompanionEnvelope<T>(
   return envelope.value as T;
 }
 
-/**
- * Unbiased charset sampling (rejection sampling over crypto.getRandomValues).
- * Exported for unit tests; content.ts uses the same alphabet + length.
- */
 export function randomPassword(
   length = 20,
   randomValues: (size: number) => Uint32Array = (size) => {
@@ -45,7 +35,6 @@ export function randomPassword(
   return out.join("");
 }
 
-/** Build a page capture from tab/context-menu inputs (worker context-menu path). */
 export function pageCaptureFromTab(input: {
   title?: string;
   url: string;

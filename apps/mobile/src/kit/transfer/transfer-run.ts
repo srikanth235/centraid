@@ -1,7 +1,5 @@
 /* oxlint-disable no-await-in-loop -- serial BY CONTRACT: parallelising breaks
    the memory bound, the truthful "N of M", and clean-row resume. */
-// App-agnostic run (#711): owns ORDER, counting and failure shape, nothing else.
-// Durability must not move here — the producer enqueues before a byte moves.
 
 export type TransferAppId = "photos" | "docs" | "notes" | "tally";
 
@@ -20,14 +18,10 @@ export interface TransferSend<Record_> {
 export interface TransferEntryRef {
   id: string;
   app: TransferAppId;
-  /** Persisted on the queue row so a background drain cannot mis-file into the
-   *  focused vault. */
   targetVaultId?: string;
 }
 
 export interface TransferEntry<Record_> extends TransferEntryRef {
-  /** Resolves LATE, at the head of the run; may yield several sends. A thrown
-   * {@link TransferSourceUnavailableError} must not stop the run. */
   open: () => Promise<Array<TransferSend<Record_>>>;
 }
 
@@ -47,11 +41,9 @@ export interface TransferRunDeps<Record_> {
 export interface TransferRunOutcome {
   sent: number;
   deferred: Set<string>;
-  /** Raw reason; the CALLER owns the member-facing sentence. */
   pausedReason?: string;
 }
 
-/** The message is member-facing — callers quote it. */
 export class TransferSourceUnavailableError extends Error {
   constructor(message: string) {
     super(message);

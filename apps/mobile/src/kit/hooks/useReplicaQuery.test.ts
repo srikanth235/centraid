@@ -64,10 +64,6 @@ describe("replica query connection state", () => {
   });
 
   test("a sync the member's transfer rules paused reads as stale, not current", () => {
-    // #880 W2.2. The apps do not need a sixth connection value to learn about
-    // transfer rules — they need to know the rows may be behind, which is
-    // exactly what `offline` already tells them. The reason is the status
-    // bar's sentence.
     expect(
       replicaQueryConnection({
         ready: true,
@@ -79,10 +75,6 @@ describe("replica query connection state", () => {
 });
 
 describe("how much of the library a query is speaking for", () => {
-  // #880 W2.4. An app killed mid-backfill and relaunched offline renders the
-  // rows it has. Dropping `coverage` on the floor let that truncated library
-  // present itself as the whole thing — against docs/mobile-offline.md, where
-  // a partial preview is readable and searchable but is labeled partial.
   test("one partial entity keeps the combined screen partial", () => {
     expect(
       combineReplicaQueryStates([

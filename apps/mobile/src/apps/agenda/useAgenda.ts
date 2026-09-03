@@ -1,5 +1,3 @@
-// Agenda read layer over this device's replica, within `agenda`'s read scopes.
-
 import { useMemo } from "react";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
@@ -103,7 +101,7 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
                     if (parsed && typeof parsed === "object")
                       override = parsed as typeof override;
                   } catch {
-                    // One bad replicated override must not blank the Agenda.
+                    // Intentionally empty.
                   }
                 }
                 return {

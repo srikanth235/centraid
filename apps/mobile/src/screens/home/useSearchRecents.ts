@@ -1,8 +1,3 @@
-// Search overlay empty state: RECENTS + suggestion chips from real replica
-// rows (#708), following the useSpringboardTiles idiom — bounded `limit`,
-// `orderBy` only where "newest" is the actual claim, one memoized request per
-// read. Locker is absent: no mobile replica shape at all.
-
 import { useMemo } from "react";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
@@ -14,10 +9,8 @@ import type { NativeReadRequest } from "../../lib/replica/native-session";
 import { selectSearchRecents, selectSuggestionChips } from "./search-model";
 import type { RecentSourceRow } from "./search-model";
 
-/** Per-kind read ceiling — only the newest handful survives the capped list. */
 const READ_LIMIT = 20;
 const RECENTS_SHOWN = 8;
-// ONE line of three short terms (v4 :6012), never a wrapping rail.
 const SUGGESTIONS_SHOWN = 3;
 
 const appMetaById = new Map(apps.map((meta) => [meta.id, meta]));
@@ -109,8 +102,6 @@ export function useSearchRecents(): SearchRecentsResult {
       []
     )
   );
-  // Chips only: `core.party` has no edit timestamp, so people never enter
-  // RECENTS. Read directly (not profiles) to keep it one bounded read.
   const parties = useReplicaQuery(
     "people",
     useMemo(

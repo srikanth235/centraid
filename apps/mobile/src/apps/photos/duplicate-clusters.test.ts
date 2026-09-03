@@ -39,9 +39,6 @@ describe(duplicateClusters, () => {
   });
 
   it("excludes trashed copies, and the cluster with them", () => {
-    // A trashed copy has already been decided about. Counting it would offer
-    // the member a choice they have made — and a hash whose only survivor is
-    // one photograph is not a cluster at all.
     const clusters = duplicateClusters([
       asset({ id: "a", phash: "h1" }),
       asset({ id: "b", phash: "h1", deleted: true }),
@@ -77,7 +74,6 @@ describe(clusterSize, () => {
   });
 
   it("prints nothing when any copy recorded no size", () => {
-    // A mean over a partial set claims to describe copies it never measured.
     expect(clusterSize([asset({ fileSize: 1024 }), asset()])).toBeNull();
   });
 });

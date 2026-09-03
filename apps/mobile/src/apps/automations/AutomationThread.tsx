@@ -109,10 +109,6 @@ export default function AutomationThread(props: {
           />
         }
         ListEmptyComponent={<Empty state={state} styles={styles} />}
-        // No getItemLayout and no windowing overrides: `listAutomationTurns`
-        // caps the thread at 50 turns, and a card's height varies with the
-        // summary wrap and the optional error line, so any fixed height would
-        // mis-place cells for no gain on a bounded list.
         renderItem={renderTurn}
       />
     </TopSafeArea>

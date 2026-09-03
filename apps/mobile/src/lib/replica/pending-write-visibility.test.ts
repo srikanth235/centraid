@@ -1,11 +1,3 @@
-/*
- * What a queued write looks like on the phone before the gateway answers
- * (#883). Two failures on `NativeReplicaSession.write`, and both show up as
- * SILENCE rather than as a wrong answer: a write into a vault the member does
- * not steward carries no `stewardLabel` and falls through to the shell's
- * generic sentence, and a first-open write admitted before this vault ever
- * bootstrapped is durable with an EMPTY projection nothing goes back for.
- */
 import path from "node:path";
 
 import { describe, expect, test, vi } from "vitest";
@@ -82,7 +74,6 @@ let readerSeq = 0;
 async function phone(options: {
   online: boolean;
   steward?: { displayName?: string };
-  /** Reuse a previous phone's durable files: the relaunch case. */
   root?: string;
 }): Promise<Phone> {
   const root = options.root ?? tempDirSync("centraid-pending-visibility-");
@@ -135,7 +126,6 @@ function documents(
 }
 
 describe("the steward a queued write is waiting for", () => {
-  // The gateway's own rule (`commonsStewardDeviceLabel`), which this mirrors.
   test.each([
     ["Priya", "Priya's device"],
     ["Priya  Menon\n", "Priya Menon's device"],
@@ -154,7 +144,6 @@ describe("the steward a queued write is waiting for", () => {
       steward: { displayName: "Priya Menon" },
     });
     try {
-      // Bootstrapped, then out of reach: admitted locally, gateway unasked.
       setOnline(false);
       const queued = await session.write("docs", {
         action: "upload",
@@ -165,10 +154,8 @@ describe("the steward a queued write is waiting for", () => {
       const [row] = await documents(reader);
       const pending = readPendingOverlay(row!.values);
       expect(pending?.stewardLabel).toBe("Priya Menon's device");
-      // Queued still says the true thing about a queued row.
       expect(pendingOverlayCopy(pending!)).toBe("Waiting for a connection.");
 
-      // The phone already carried the label; no round trip supplies it.
       await session.coordinator.applyIntentOutcome({
         intentId: queued.intentId,
         status: "parked",
@@ -210,12 +197,10 @@ describe("a write admitted before this vault ever synced", () => {
         action: "upload",
         input: { title: "First open" },
       });
-      // NOT "waiting for a connection": that row is on screen; this one is not.
       expect(admitted.status).toBe("queued");
       expect("reason" in admitted && admitted.reason).toBe(NOT_YET_SYNCED);
       const [pending] = await session.pendingChanges();
       expect(pending?.reason).toBe(NOT_YET_SYNCED);
-      // Durable, and drawing nothing — which is exactly what it said.
       await expect(documents(reader)).resolves.toHaveLength(0);
 
       setOnline(true);
@@ -230,7 +215,6 @@ describe("a write admitted before this vault ever synced", () => {
       const overlay = readPendingOverlay(row!.values);
       expect(overlay?.key).toBe(admitted.intentId);
       expect(overlay?.action).toBe("upload");
-      // What is asserted is that the stand-in went, not that the row fell silent.
       const [settled] = await session.pendingChanges();
       expect(settled?.intentId).toBe(admitted.intentId);
       expect(settled?.reason).not.toBe(NOT_YET_SYNCED);
@@ -250,7 +234,6 @@ describe("a write admitted before this vault ever synced", () => {
       });
       await expect(documents(first.reader)).resolves.toHaveLength(0);
 
-      // The catalog lands, and the process dies before anything redraws.
       first.setOnline(true);
       first.session.notifyReachable();
       await vi.waitFor(() => {
@@ -259,7 +242,6 @@ describe("a write admitted before this vault ever synced", () => {
       first.reader.close();
       await first.session.close();
 
-      // New process, no bootstrap: `start()` finishes from the catalog on disk.
       relaunched = await phone({ online: false, root: first.root });
       const [row] = await documents(relaunched.reader);
       expect(row?.values.title).toBe("Killed mid-first-open");

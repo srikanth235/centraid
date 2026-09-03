@@ -1,7 +1,3 @@
-// The grant sheet, native seat (#825). The parity claim: the SAME core answers
-// here — one write door, `edit` only where the registry declares it, an
-// unaccepted invitation reading as pending rather than error, and revoking
-// asking first before reporting the route's own sentence verbatim.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -15,7 +11,6 @@ import type {
   GrantSubjectOffer,
 } from "@centraid/blueprints/apps/_shared/grant-plane";
 
-// @vitest-environment jsdom
 import GrantSheet from "./GrantSheet";
 
 (
@@ -88,8 +83,6 @@ vi.mock(
   () => ({ useReplica: () => ({ gatewayBase: "" }) }) as never
 );
 
-// The default door pulls the Expo module runtime into a plain jsdom project,
-// so every test injects its own and stubs transport at the seam.
 vi.mock(
   import("./grant-seat"),
   () => ({ nativeGrantDoor: () => undefined }) as never
@@ -120,7 +113,6 @@ vi.mock(
     }) as never
 );
 
-// Registry truth (G-edit): only tally.group carries edit in v1.
 const OFFERS: GrantSubjectOffer[] = [
   { subjectType: "tally.group", capabilities: ["view", "edit"] },
   { subjectType: "core.document", capabilities: ["view"] },
@@ -157,7 +149,6 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
         detail: null,
       },
     ],
-    // The vault's own words for where it stands (ruling V-phrases).
     phrase: "shared",
     reason: "the vault it addresses is holding it",
     ...overrides,
@@ -167,9 +158,6 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
 function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
   return {
     subjects: () => Promise.resolve({ readable: true, offers: OFFERS }),
-    // A LINKED person is the baseline, because since #903 that is the only
-    // person who can be granted at all; `channel: null` is the exception the
-    // never-reached tests opt into, not the default every other test inherits.
     forParty: () =>
       Promise.resolve({
         known: true,
@@ -201,7 +189,6 @@ describe("the grant sheet, native seat", () => {
     document.body.replaceChildren();
   });
 
-  /** Record what the sheet SAYS, not which functions ran: status is the seam. */
   async function render(
     props: Partial<React.ComponentProps<typeof GrantSheet>> = {}
   ): Promise<string[]> {
@@ -301,8 +288,6 @@ describe("the grant sheet, native seat", () => {
       expect(container?.textContent).toContain(
         "Link their account in People to share with them."
       );
-      // #903: the sheet does not grow a control naming an act it cannot
-      // perform — the reach line above already says what would work.
       expect(press("Share").getAttribute("aria-disabled")).toBe("true");
     });
 
@@ -317,8 +302,6 @@ describe("the grant sheet, native seat", () => {
     });
 
     test("changing a standing capability asks first, then withdraws and grants again", async () => {
-      // The plane refuses an answer edited in place (V-table), so the sheet
-      // names the consequence first, then runs withdraw-then-grant.
       const standing = standingGrant({
         subjectType: "tally.group",
         subjectId: "group-1",
@@ -345,13 +328,11 @@ describe("the grant sheet, native seat", () => {
         }),
       });
       await act(async () => press("Can edit").click());
-      // The primary action is worded as the change, not as the mechanism.
       expect(has("Share")).toBe(false);
       await act(async () => press("Change access").click());
       expect(container?.textContent).toContain(
         "asked to remove its copy and is sent a fresh one"
       );
-      // Nothing has been written yet: the question is still open.
       expect(changed).toStrictEqual([]);
       await act(async () => press("Change access").click());
       expect(changed).toStrictEqual([
@@ -367,7 +348,6 @@ describe("the grant sheet, native seat", () => {
           },
         ],
       ]);
-      // Never the plain create door: that post is the one the route refuses.
       expect(created).toStrictEqual([]);
       expect(status).toStrictEqual(["Priya can now edit it"]);
     });
@@ -398,7 +378,6 @@ describe("the grant sheet, native seat", () => {
       await act(async () => press("Leave it as it is").click());
       expect(changed).toStrictEqual([]);
       expect(status).toStrictEqual([]);
-      // The sheet is back, still offering the change.
       expect(has("Change access")).toBe(true);
     });
 
@@ -541,3 +520,4 @@ describe("the grant sheet, native seat", () => {
     });
   });
 });
+// @vitest-environment jsdom

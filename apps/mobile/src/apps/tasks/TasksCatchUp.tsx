@@ -1,11 +1,3 @@
-// CATCH UP — the pressure valve (Tasks spec §3, ruling 2).
-//
-// NOTHING HERE IS A FAILURE. The head states two numbers, the leads say nothing
-// was deleted and nothing repeated itself into a pile, and each bucket carries
-// exactly ONE bulk verb. A row belongs to exactly one bucket, so no verb acts
-// on the same task twice — `reentryBuckets` guarantees that, and this surface
-// never re-partitions what it was handed.
-
 import React from "react";
 import { FlatList, Pressable, View } from "react-native";
 
@@ -58,8 +50,6 @@ export default function TasksCatchUp({
   const away = absence(tasks, now);
   const buckets = reentryBuckets(tasks, now, REENTRY_BUCKETS);
 
-  /** The bucket's own verb, resolved to the writes it actually fires. A
-   *  read-only row is skipped rather than dispatched and refused. */
   const runBulk = (bucket: ReentryBucket): void => {
     const rows = bucket.rows.filter((row) => rowCanWrite(row));
     for (const entry of catchUpWrites(bucket.key, rows, now.slice(0, 10))) {

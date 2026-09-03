@@ -1,19 +1,4 @@
-// Search on the phone (Photos v4 handoff §9, §14, §18, proto:4256-4276).
 // governance: allow-repo-hygiene file-size-limit The #712 search destination remains one cohesive query/results state machine; #716 extracts its reusable empty states.
-//
-// Search is a BAND DESTINATION, never a pushed screen: proto:4953-4954's
-// `appBandOn` excludes only the viewer, zoom, video, slideshow and the editor,
-// so the band must stay up with Search current.
-//
-// ONE query box (proto:4257), no chip rail and no date fields, over five
-// states — resting, searching, results, no results, and unreachable, which is
-// deliberately not one of the four because search will not pretend to have
-// looked. Copy is the web shell's verbatim wherever the handoff gives a string;
-// where it does not, see `SEARCH_SCOPE`.
-//
-// The field docks at the BOTTOM (#712) — the surface's only control, sitting
-// above the keyboard. `PhotosHome` sizes this view as a flex sibling above
-// `PhotosBand`, so the field lands flush against the band.
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -48,8 +33,6 @@ import type { SearchHit } from "./search-hits";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
-/** Verbatim proto:4269, and the same five the web shell offers — examples that
- *  differ per surface teach that the surfaces search different things. */
 const SEARCH_EXAMPLES: readonly string[] = [
   "ana at the coast",
   "videos from June",
@@ -58,16 +41,10 @@ const SEARCH_EXAMPLES: readonly string[] = [
   "photographs with no place",
 ];
 
-/** Diverges from proto:3961's "the live library" on purpose: `session.search`
- *  resolves against the replica's eager-metadata surface (`REPLICA_LOCAL_SEARCH`)
- *  and every group below comes from replica rows, so the live-library claim is
- *  a sentence this code does not keep. */
 const SEARCH_SCOPE = "searched the whole replica on this device";
 
 const UNREACHABLE_EYEBROW = "Cannot reach the vault";
 const UNREACHABLE_TITLE = "Search needs the gateway";
-/** proto:4274, gateway name generalised — this client does not know it is
- *  talking to `home-gateway`. */
 const UNREACHABLE_BODY =
   "The index lives on the gateway, which is unreachable. The timeline still browses from this device; search does not, and will not pretend to have looked.";
 const UNREACHABLE_FACTS: readonly (readonly [string, string])[] = [
@@ -75,7 +52,6 @@ const UNREACHABLE_FACTS: readonly (readonly [string, string])[] = [
   ["what does not", "search, people, places"],
 ];
 
-/** One hit off `POST …/enrich/semantic-search` (#721). */
 interface SemanticHit {
   assetId: string;
   contentId: string;
@@ -84,8 +60,6 @@ interface SemanticHit {
 
 type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
 
-/** Dead registration: nothing pushes this route — the band renders
- *  `PhotosSearchView` in place. Kept only so `App.tsx` does not dangle. */
 export default function PhotosSearch({
   navigation,
 }: PhotosScreenProps<"PhotosSearch">): React.JSX.Element {
@@ -113,12 +87,7 @@ export function PhotosSearchView({
   const [contentIds, setContentIds] = useState<Set<string>>();
   const [searching, setSearching] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
-  // Derived data enriches, never gates (#721): `undefined` covers every reason
-  // there is nothing to show, and this state must never feed `unreachable` or
-  // `searching` — the FTS grid stays as capable if the fetch never lands.
   const [semanticHits, setSemanticHits] = useState<SemanticHit[]>();
-  // Bumped by Retry; the query effect depends on it, so Retry re-runs the SAME
-  // query rather than navigating the member away.
   const [attempt, setAttempt] = useState(0);
 
   const collections = useReplicaQuery(
@@ -146,8 +115,6 @@ export function PhotosSearchView({
     useMemo(() => ({ entity: "core.content_item" }), [])
   );
 
-  // `searching` is set in the handler, never in the effect, so no effect writes
-  // state synchronously during a render commit.
   const onTerm = (text: string): void => {
     setTerm(text);
     if (text.trim() && session) setSearching(true);
@@ -190,8 +157,6 @@ export function PhotosSearchView({
     };
   }, [attempt, session, term]);
 
-  // Separate from the FTS effect on purpose: a different gateway route, whose
-  // outcome must never touch `searching`/`unreachable` (#721).
   useEffect(() => {
     let cancelled = false;
     const trimmed = term.trim();
@@ -220,7 +185,6 @@ export function PhotosSearchView({
           setSemanticHits(body.status === "ok" ? (body.hits ?? []) : undefined);
         })
         .catch(() => {
-          // A failure and an "unavailable" model read the same: no group.
           if (!cancelled) setSemanticHits(undefined);
         });
     }, 180);
@@ -280,11 +244,6 @@ export function PhotosSearchView({
     ]
   );
 
-  // Title matches PLUS everything reachable through a group the query hit
-  // (#712) — typing "Tahoe" must return the album's photographs, not an empty
-  // grid under a row saying the album exists. Filter the library ONCE rather
-  // than append to `matches`: that is what keeps the union deduplicated and in
-  // the newest-first order `sectionPhotoAssets` expects.
   const reached = useMemo(() => reachableAssetIds(hits), [hits]);
   const shown = useMemo(() => {
     if (!reached.size) return matches;
@@ -297,36 +256,27 @@ export function PhotosSearchView({
   }, [assets, matches, reached]);
   const sections = useMemo(() => sectionPhotoAssets(shown), [shown]);
 
-  /** Every row on the screen, hits included — never `matches.length`, which
-   *  draws `RESULTS 0` above a real album row. */
   const resultCount = hits.length + shown.length;
 
   const openHit = (hit: SearchHit): void => {
     const target = hit.target;
-    // One branch per screen: a dynamic `navigate(target.screen, target.params)`
-    // typechecks against the union, not the pair.
     if (target.screen === "PhotoStateView")
       navigation.navigate("PhotoStateView", target.params);
     else if (target.screen === "AlbumDetail")
       navigation.navigate("AlbumDetail", target.params);
     else if (target.screen === "PhotoLightbox")
       navigation.navigate("PhotoLightbox", target.params);
-    // The no-location bucket (#816) has no pin to send the member to a map for.
     else if (target.screen === "PlaceDetail")
       navigation.navigate("PlaceDetail", target.params);
     else navigation.navigate("PlacesMap");
   };
 
   const asked = Boolean(term.trim());
-  // Only before anything is typed: an example while the vault is unreachable
-  // would start a search that cannot run.
   const showExamples = !asked && !unreachable;
 
   return (
     <KeyboardAvoidingView
       style={styles.fill}
-      // iOS only: Android resizes the window itself, so a behavior there would
-      // double-count the keyboard.
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       {/* NO `<ReplicaStatusBar/>` here: `PhotosHome` renders one above every
@@ -354,8 +304,6 @@ export function PhotosSearchView({
           </ScrollView>
         ) : asked ? (
           searching ? (
-            // Determinate: the library's size is known, so state it. No spinner
-            // anywhere in this product (§18).
             <View style={styles.center}>
               <Text style={styles.status}>
                 Searching {assets.length}{" "}
@@ -451,8 +399,6 @@ export function PhotosSearchView({
             style={styles.input}
           />
           {term ? (
-            // Mono underlined TEXT (proto:4146-4147), never an ✕ — ambiguous
-            // between "clear this" and "close this".
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Clear the query"
@@ -468,8 +414,6 @@ export function PhotosSearchView({
   );
 }
 
-/** `net` draws the unreachable border — the one colour in this app that means
- *  "the network said no". */
 function Panel({
   styles,
   eyebrow,
@@ -573,7 +517,6 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing[1],
       paddingTop: spacing[2],
     },
-    // §9's field: 34px tall, 7px radius (proto:4140-4152).
     field: {
       alignItems: "center",
       backgroundColor: colors.bgSunken,
@@ -617,9 +560,6 @@ const makeStyles = (colors: ThemeColors) =>
     hitOpen: { ...t("control"), color: colors.link },
     hitSub: { ...t("small"), color: colors.textSoft },
     hitText: { flex: 1, minWidth: 0 },
-    // Exactly one line's height, no vertical padding, Android font padding off
-    // (#712). A TextInput stretched to the field's 34px centres against the
-    // iOS control box, not the glyph box, and drops off the magnifier's line.
     input: {
       ...t("body"),
       color: colors.text,

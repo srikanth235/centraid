@@ -1,7 +1,3 @@
-// The row's own two omissions (#882): overdue reached the row as one faint
-// colour because every part was flattened to `.text`, and priority never
-// reached it at all.
-
 import { describe, expect, it } from "vitest";
 
 import type { Task } from "@centraid/blueprints/apps/tasks/types";

@@ -1,8 +1,3 @@
-// Stage chrome — `PhotoLightbox` owns viewer STATE; this is a pure view.
-// NO TOP BAR: a full-width strip is a second ground. Head is three FLOATING elements (`chevron-left`, not `✕` — this viewer is stacked).
-// NO TAP-TO-TOGGLE: hiding every control hides the way back (§15).
-// Token rule, not a look: `--on-stage` / `--stage-line` / `--stage-sunken`. Plates are OPAQUE — glass makes contrast a property of the photograph.
-
 import React from "react";
 import { Pressable, View } from "react-native";
 import type { View as RNView } from "react-native";
@@ -16,7 +11,6 @@ import type { ThemeColors } from "../../kit/theme";
 import { styles } from "./PhotoLightbox.styles";
 import { SLIDESHOW_ACTION, VIEWER_CHROME_INSET } from "./viewer-model";
 
-/** One plate shape for chip and capsule. `forwardRef` so `useMenuAnchor.measureInWindow` can see the `···` node. */
 export const ViewerChromePlate = React.forwardRef<
   RNView,
   { colors: ThemeColors; children: React.ReactNode }
@@ -33,7 +27,6 @@ export const ViewerChromePlate = React.forwardRef<
 ));
 ViewerChromePlate.displayName = "ViewerChromePlate";
 
-/** Icon-only only because `label` is still the accessible name (WCAG 4.1.2). A label carrying a REASON stays on screen. */
 export function ViewerChromeTarget({
   colors,
   icon,
@@ -42,7 +35,6 @@ export function ViewerChromeTarget({
   hint,
   selected,
   tone,
-  /** 56 inside a capsule (neighbours at 44 mis-tap). A lone chip IS its plate — 44 floor. */
   wide,
   testID,
   onPress,
@@ -55,11 +47,9 @@ export function ViewerChromeTarget({
   selected?: boolean;
   tone?: "ink" | "net";
   wide?: boolean;
-  /** A handle from `kit/test-ids`, never a hand-spelled string (#890 W2). */
   testID?: string;
   onPress: () => void;
 }): React.JSX.Element {
-  // `--on-stage-soft`, NOT `--text-disabled`: page-ramp disabled ink vanishes on the stage, so the control would read as absent.
   const ink = disabled
     ? colors.onStageSoft
     : tone === "net" || selected === true
@@ -81,13 +71,11 @@ export function ViewerChromeTarget({
   );
 }
 
-/** `box-none` so the photograph keeps every touch that misses a plate. */
 export function ViewerTopChrome({
   colors,
   insets,
   title,
   meta,
-  /** Never drawn: stamp's accessible name so a reader still hears the caption the eye now reads as a date. */
   name,
   editing,
   slideshow,
@@ -183,7 +171,6 @@ export function ViewerTopChrome({
   );
 }
 
-/** Drop the name when it IS the first line — a reader saying it twice is a stutter. */
 function stampName(name: string, title: string, meta: string): string {
   return [name, title === name ? "" : title, meta].filter(Boolean).join(" · ");
 }
@@ -196,7 +183,6 @@ export function ViewerStatusLine({
 }: {
   colors: ThemeColors;
   text: string;
-  /** The one offer to spend the bytes, or null — two controls for one fetch is two states to keep in step. */
   actionLabel: string | null;
   onAction: () => void;
 }): React.JSX.Element {

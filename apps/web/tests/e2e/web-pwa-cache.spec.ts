@@ -9,10 +9,6 @@ const ASSET_CACHE = `centraid-tunnel-assets-${SERVICE_WORKER_VERSION}`;
 const BLOB_CACHE = `centraid-tunnel-blobs-${SERVICE_WORKER_VERSION}`;
 const SHELL_CACHE = `centraid-shell-${SERVICE_WORKER_VERSION}`;
 
-// These tests drive the service worker's tunnel cache directly. The SW asks a
-// window client to fulfil `/__centraid_iroh__/...` requests over the
-// `centraid:iroh-request` bridge; here the page itself plays that role with a
-// synthetic gateway, so the real caching code runs without the Iroh WASM.
 async function installFakeBridge(page: TypeImport_11i4z7t.Page): Promise<void> {
   await page.evaluate(() => {
     interface Call {
@@ -114,9 +110,6 @@ async function installFakeBridge(page: TypeImport_11i4z7t.Page): Promise<void> {
         return;
       }
 
-      // A gzip-encoded asset: the gateway compressed it because the request
-      // advertised `accept-encoding: gzip`. The SW must decode it before the
-      // page (and the cache) see the body.
       if (msg.target.includes("/gzip-fixture")) {
         if (ifNoneMatch === '"gz-etag-1"') {
           port.postMessage({ type: "head", status: 304, headers: {} });
@@ -153,7 +146,6 @@ async function installFakeBridge(page: TypeImport_11i4z7t.Page): Promise<void> {
         isBlob ? "BLOBDATA" : "asset-body"
       );
       if (!isBlob && ifNoneMatch === '"etag-1"') {
-        // Asset revalidation: unchanged.
         port.postMessage({ type: "head", status: 304, headers: {} });
         port.postMessage({ type: "end" });
         return;
@@ -183,12 +175,6 @@ async function installFakeBridge(page: TypeImport_11i4z7t.Page): Promise<void> {
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
-  // The shell registers the worker lazily on first app use; register it up
-  // front so these worker-focused tests have a controller to talk to. Register
-  // the SAME script URL the shell itself uses (`iroh-transport.ts` stamps the
-  // generation token): a bare `/sw.js` is a DIFFERENT script URL for the same
-  // scope, so the shell's own lazy registration would replace this worker mid
-  // test — and a registration swapped under an in-flight navigation aborts it.
   await page.evaluate(async (url) => {
     await navigator.serviceWorker.register(url);
     await navigator.serviceWorker.ready;
@@ -208,8 +194,6 @@ test("immutable blobs serve from cache and revalidate authorization in the backg
   const first = await page.evaluate((u) => fetch(u).then((r) => r.text()), url);
   expect(first).toBe("BLOBDATA");
 
-  // Second fetch paints from the immutable cache immediately, then checks
-  // that the app session is still authorized in the background.
   const second = await page.evaluate(
     (u) => fetch(u).then((r) => r.text()),
     url
@@ -265,8 +249,6 @@ test("a remote 403 revalidation evicts cached blobs for the revoked device", asy
     (window as unknown as { __bridgeRevoked: boolean }).__bridgeRevoked = true;
   });
 
-  // The already-held offline byte may paint once; its online authorization
-  // check must then remove the whole device-scoped tunnel bucket.
   expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe(
     "BLOBDATA"
   );
@@ -294,8 +276,6 @@ test("prewarmed query bundles replay in airplane mode and revalidate with If-Non
     )
   ).toEqual({ body: "asset-body", cors: "null" });
 
-  // Second fetch is served immediately from cache; a background conditional
-  // request is issued via the bridge.
   expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe(
     "asset-body"
   );
@@ -311,8 +291,6 @@ test("prewarmed query bundles replay in airplane mode and revalidate with If-Non
     })
     .toBe(true);
 
-  // A 304 keeps the cached bytes intact, and the next (first user-visible)
-  // search can import it after the relay disappears.
   await page.evaluate(() => {
     (window as unknown as { __bridgeOffline: boolean }).__bridgeOffline = true;
   });
@@ -326,13 +304,10 @@ test("gzip-encoded tunnel responses are decoded before caching", async ({
 }) => {
   const url = "/__centraid_iroh__/d-bridge-a/centraid/gzip-fixture/asset.js";
 
-  // The page receives the decoded body, not the still-gzipped bytes.
   expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe(
     "gzip-decoded-body"
   );
 
-  // The forwarded request advertised gzip (browsers hide Accept-Encoding, so
-  // the SW must add it explicitly for the gateway to compress at all).
   const firstCall = await page.evaluate(
     () =>
       (window as unknown as { __calls: { acceptEncoding: string | null }[] })
@@ -340,9 +315,6 @@ test("gzip-encoded tunnel responses are decoded before caching", async ({
   );
   expect(firstCall.acceptEncoding).toBe("gzip");
 
-  // The cached copy is stored decoded (plain bytes, no content-encoding) —
-  // proving decode happened BEFORE the caching layer, so the SWR bucket and
-  // its If-None-Match revalidation both operate on plain bytes.
   await expect
     .poll(() =>
       page.evaluate(async (cacheName) => {
@@ -361,7 +333,6 @@ test("gzip-encoded tunnel responses are decoded before caching", async ({
     )
     .toEqual({ body: "gzip-decoded-body", encoding: null, length: "17" });
 
-  // Second fetch is served from that cache entry — still decoded.
   expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe(
     "gzip-decoded-body"
   );
@@ -432,8 +403,6 @@ test("parent-fetched app bundle runs in an opaque document without shell access"
     const scripts = Array.from(
       parsed.querySelectorAll<HTMLScriptElement>("script[src]")
     );
-    // Module evaluation observes document order, including side-effect imports.
-    // Inline the next fetched script only after the previous one is installed.
     const inlineNextScript = async (index: number): Promise<void> => {
       const script = scripts[index];
       if (!script) return;
@@ -517,7 +486,6 @@ test("unpair purges the tunnel caches but keeps the shell cache", async ({
   await expect
     .poll(() => page.evaluate((cache) => caches.has(cache), ASSET_CACHE))
     .toBe(false);
-  // The generic shell cache is not gateway-specific and survives an unpair.
   expect(await page.evaluate((cache) => caches.has(cache), SHELL_CACHE)).toBe(
     true
   );
@@ -533,8 +501,6 @@ test("a fresh worker install purges stale-version caches", async ({ page }) => {
     true
   );
 
-  // Register a distinct script URL so the browser treats it as a new worker
-  // and re-runs install/activate (a byte-identical URL would be a no-op).
   await page.evaluate(async () => {
     const regs = await navigator.serviceWorker.getRegistrations();
     await Promise.all(regs.map((r) => r.unregister()));

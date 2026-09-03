@@ -1,15 +1,3 @@
-// "More in Locker" — the band's fifth slot (README-Locker §1).
-//
-// Five rows, in the shared sheet's own order, with the shared table's labels
-// and meta (`route-copy.ts` `SURFACE_TITLE` / `SURFACE_META`), so the sheet
-// cannot drift from what the desktop rail calls the same surfaces.
-//
-// FOUR OF THEM ARE ROUTES HERE AND ONE IS NOT, and the sheet says which.
-// Companion runs in a browser extension, beside the page, so its row says
-// `elsewhere` in place of a count — and still leads somewhere, to a screen that
-// states what the surface is and where the act happens, because a greyed row
-// teaches that Companion is broken rather than that it lives in the browser.
-
 import React, { useMemo } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,7 +15,6 @@ import type { ThemeColors } from "../../kit/theme";
 import { LOCKER_MORE_ROWS } from "./locker-band";
 import type { LockerMoreRowKey } from "./locker-band";
 
-/** What a row whose act lives on another seat says instead of a count. */
 const ELSEWHERE = "elsewhere";
 
 export interface LockerMoreSheetProps {

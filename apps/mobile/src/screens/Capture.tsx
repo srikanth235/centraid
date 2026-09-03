@@ -75,7 +75,7 @@ export default function CaptureScreen({
           setPreview(applyDelegateCaptureKind(local, body.preview));
         }
       } catch {
-        // The deterministic preview and explicit destination picker remain.
+        // Intentionally empty.
       }
     }
     setBusy(false);

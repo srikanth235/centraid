@@ -1,9 +1,3 @@
-// "Open elsewhere" (#821 §7–§8): hand ONE document's bytes, exactly as
-// stored, to the operating system's own opener — the honest answer for a kind
-// Docs cannot set, and the stage's Download sibling. The bytes are staged in
-// the cache the same way Photos' share path stages its copy; nothing is
-// converted and nothing extra rides along.
-
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
@@ -21,10 +15,6 @@ export class DocumentBytesUnavailableError extends Error {
   }
 }
 
-/**
- * Stage the document's bytes as a readable cache file: inline `data:` text is
- * written directly; anything else downloads off the gateway's blob route.
- */
 async function stageBytes(
   doc: MobileDriveDoc,
   gatewayBase: string | undefined,
@@ -47,8 +37,6 @@ async function stageBytes(
   return downloaded.uri;
 }
 
-/** Hand the file to the OS sheet. Throws with a member-readable message when
- *  the bytes cannot be had — the caller states it, never swallows it. */
 export async function openElsewhere(
   doc: MobileDriveDoc,
   gatewayBase: string | undefined,

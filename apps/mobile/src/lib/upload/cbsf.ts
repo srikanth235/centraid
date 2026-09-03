@@ -1,16 +1,3 @@
-// Device-side CBSF v2 edge sealing (#419.4) — the SECOND writer of the format
-// owned by `packages/vault/src/blob/seal-frames.ts`; `cbsf.test.ts` unseals
-// this output with the vault's own `unsealFrame`/`openDirectory`. Big-endian:
-// header(37) | frames[nonce 12 | algo+ct | tag 16] | directory | trailer(13).
-//
-// Frames are ALWAYS store-only (algo 0x00): the id rides inside the seal, so
-// this interops with a compressing reader and `sealedSize` is computable
-// before a byte is read — the gateway needs it at `begin`.
-//
-// Nonces are HMAC-derived, not random (seal-frames.ts `nonceFor`), so a
-// re-seal after a crash is BYTE-IDENTICAL and replaying a multipart PUT is a
-// true no-op.
-
 import { concatBytes, hexToBytes, u32be, u64be, utf8 } from "./bytes";
 import type { UploadCrypto } from "./crypto";
 
@@ -21,9 +8,7 @@ export const TRAILER_BYTES = 13;
 const NONCE_BYTES = 12;
 const ALGO_STORE = 0x00;
 
-/** Must equal seal-frames.ts `DEFAULT_FRAME_SIZE`. */
 export const FRAME_BYTES = 4 * 1024 * 1024;
-/** Gives the repo's fixed 16 MiB plaintext part. */
 export const FRAMES_PER_PART = 4;
 export function frameCountFor(plaintextSize: number): number {
   return plaintextSize === 0 ? 0 : Math.ceil(plaintextSize / FRAME_BYTES);
@@ -33,7 +18,6 @@ export function partCountFor(frameCount: number): number {
   return Math.max(1, Math.ceil(frameCount / FRAMES_PER_PART));
 }
 
-/** header(37) + [plain + 29/frame] + [directory 44 + 4/frame] + trailer(13). */
 export function sealedSizeFor(
   plaintextSize: number,
   frameCount: number
@@ -41,7 +25,6 @@ export function sealedSizeFor(
   return plaintextSize + 94 + 33 * frameCount;
 }
 
-/** nonce(12) + algo(1) + plaintext + tag(16). */
 export function frameSealedLengths(
   plaintextSize: number,
   frameCount: number
@@ -61,7 +44,6 @@ function directoryAad(sha: string, frameCount: number): Uint8Array {
   return utf8(`blobdir:${sha}:v${SEAL_VERSION}:n${frameCount}`);
 }
 
-/** Mirrors seal-frames.ts `nonceFor`. */
 async function nonceFor(
   crypto: UploadCrypto,
   key: Uint8Array,
@@ -132,16 +114,11 @@ export interface SealPartInput {
   sha256: string;
   plaintextSize: number;
   frameCount: number;
-  /** 1-based, matching the gateway's part numbering. */
   partNumber: number;
-  /** Identical for every part — seal it once per drain. */
   directory: Uint8Array;
   read: (offset: number, length: number) => Promise<Uint8Array>;
 }
 
-/** Header rides part 1, directory + trailer the last, so parts are NOT uniform
- *  16 MiB — only their plaintext spans are. Frame indices are global (bound
- *  into each frame's AAD), so `frameCount` precedes any sealing. */
 export async function sealPart(input: SealPartInput): Promise<Uint8Array> {
   const {
     crypto,

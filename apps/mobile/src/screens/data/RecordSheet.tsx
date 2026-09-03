@@ -1,16 +1,3 @@
-// One record, opened (#765).
-//
-// The record table's overflow offers `Open the record`, and on this surface
-// there is nowhere else for a raw store row to go: the phone has no row editor
-// and no per-record route. So opening one shows what the store holds — every
-// column the browse route sent, in the order it sent them — on the same fact
-// plate the rest of the place uses (`PanelBlock`, whose key column is the
-// reason the values line up instead of stepping in and out).
-//
-// Read only, and it says so: `lib/atlas.ts` exposes the four owner census
-// READS and nothing else, because a row edit on this gateway is a journalled
-// operator command, not a PATCH the phone can make.
-
 import React, { useMemo } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
 
@@ -22,13 +9,10 @@ import { styles } from "./Data.styles";
 
 export interface RecordSheetProps {
   record: RecordView | undefined;
-  /** The kind the record belongs to, for the plate's eyebrow. */
   kindLabel: string;
   onClose: () => void;
 }
 
-/** A cell, as one line of text. Structured columns (JSON blobs) are shown as
- *  the store wrote them rather than parsed and re-worded here. */
 function cellText(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "string") return value || "—";

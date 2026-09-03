@@ -1,16 +1,3 @@
-// Add to Docs (Docs handoff Part 2 §13; #821) — four ways in on a
-// phone: Upload, a blank document, a folder, and Scan. Drag and paste are
-// pointer-only and absent here, deliberately.
-//
-// The two composing rows (blank document, folder) open their one field
-// inline and dispatch through the one write door (`useDocsWrite`): a blank
-// document is a real `upload` of an empty markdown body (the vault mints
-// empty bytes like any other; two blanks legitimately share them), and a
-// folder is the same `create-folder` the Folders shelf dispatches. Upload
-// and Scan are their own screens; this shelf's status sentence — "Nothing is
-// uploading" — is true here because uploads run on Bulk upload, never
-// behind this screen's back.
-
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -28,7 +15,6 @@ import DocsScreen from "./DocsScreen";
 import DocsShelfHeader from "./DocsShelfHeader";
 import { useDocsWrite } from "./useDocs";
 
-/** An empty markdown body — a blank document is blank, not a template. */
 const BLANK_BODY_URI = "data:text/markdown;charset=utf-8,";
 
 type Composer = "document" | "folder" | null;
@@ -61,8 +47,6 @@ export default function AddToDocs({
         });
         if (result) {
           setComposer(null);
-          // The command's output bag — flat on most seats; some pipelines
-          // keep the vault outcome's own `output` nesting.
           const bag = nativeWriteOutput(result);
           const nested = bag?.["output"] as Record<string, unknown> | undefined;
           const documentId = [
@@ -75,8 +59,6 @@ export default function AddToDocs({
           if (documentId) {
             navigation.navigate("DocumentEditor", { documentId });
           } else {
-            // Queued offline: the wrapper has no id on this device yet —
-            // the queued sentence already said it will land.
             postStatus(`"${name}" will appear in the drive when it lands.`);
           }
         }

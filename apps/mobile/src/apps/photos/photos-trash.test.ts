@@ -1,7 +1,3 @@
-// Empty trash: the two pure facts (apps/photos/photos-trash.ts). Order is the
-// one a member would feel — the vault refuses to destroy a photograph an
-// edited copy still names as its source, so a wrong order silently leaves
-// originals behind — and the summary must never say Undo.
 import { describe, expect, it } from "vitest";
 
 import type { VaultAsset } from "./photos-selection-writes";

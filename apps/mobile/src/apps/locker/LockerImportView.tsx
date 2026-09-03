@@ -1,18 +1,3 @@
-// IMPORT — `locker/import` (README-Locker §1, §6 "Import verdicts").
-//
-// DRAFT → REVIEW → PUBLISH. Nothing reaches the vault until a draft is
-// published, and a discarded draft writes nothing at all. The three verdicts
-// are drawn whether or not this draft uses all three, because a member reading
-// a review needs the vocabulary before the rows.
-//
-// THE VAULT WINS. `held` is not "we could not decide" — it is the promise that
-// an import never overwrites a secret the vault already holds.
-//
-// WITHHELD OFFLINE, NEVER DISABLED. An import payload is the file itself,
-// secrets and all, so the doors refuse offline by construction; the reason
-// stands where the control would be rather than a grey button that teaches that
-// Import is broken.
-
 import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -61,12 +46,9 @@ import type { ThemeColors } from "../../kit/theme";
 const VERDICTS = ["new", "gapfill", "held"] as const;
 
 export interface LockerImportViewProps {
-  /** `null` before the list has landed — a draft shelf is not empty until a
-   *  read says so. */
   batches: readonly StagedBatch[] | null;
   rows: readonly StagedRow[] | null;
   openBatchId: string | null;
-  /** Staged, published, discarded, or the refusal that stopped it. */
   note: string;
   offline: boolean;
   busy: boolean;
@@ -161,8 +143,6 @@ export default function LockerImportView(
               {props.rows === null ? (
                 <SkeletonRows accessibilityLabel="Reading the staged rows" />
               ) : rows.length === 0 ? (
-                // A draft that parsed nothing is a refusal, not an empty
-                // review — and discarding it still writes nothing.
                 <Text style={styles.note}>{IMPORT_NO_ROWS}</Text>
               ) : (
                 rows.map((row) => {

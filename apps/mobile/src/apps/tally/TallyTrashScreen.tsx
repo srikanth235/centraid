@@ -1,13 +1,3 @@
-// TRASH — thirty days, restorable whole, and the purge DATE stated.
-//
-// THERE IS NO EMPTY BUTTON. Purge happens on the date, never on a press, so
-// the row carries the day it will go rather than a control that would make the
-// countdown a decision. A row whose purge date the query did not carry says
-// the rule instead of inventing a day.
-//
-// RESTORE IS THE ONE TRUE REVERSE WRITE in this list, so it is the one verb
-// here — the expense comes back whole, with its splits, revisions and receipt.
-
 import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
 

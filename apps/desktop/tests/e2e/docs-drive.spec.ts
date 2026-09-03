@@ -13,8 +13,6 @@ import {
   waitForHome,
 } from "./fixtures";
 
-// Docs north-star journey (#781): real upload against the REAL embedded gateway; bytes survive an Electron reload. Nothing mocked.
-
 const DOC_TITLE = "lease-notes.txt";
 const DOC_BODY =
   "Lease renewal notes: the deposit clause moved to §4.\n\nKeep the signed copy with the 2026 tax folder.";
@@ -35,7 +33,6 @@ async function foundDesktop(page: Page): Promise<void> {
     .getByTestId("first-run-choice")
     .getByRole("button", { name: /start fresh on this mac/iu })
     .click();
-  // Onboarding founds Personal directly; identity lives in Settings — no name gate.
   const onboarding = page.getByTestId("onboarding-view");
   await onboarding.waitFor({ state: "visible" });
   await expect(page.getByRole("textbox", { name: "Your name" })).toHaveCount(0);
@@ -51,8 +48,6 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
     await foundDesktop(page);
     await openFirstParty(page, "Docs");
 
-    // Probe the write rail with a vault-refused unstaged sha before the
-    // one-shot UI upload.
     await expect
       .poll(
         () =>
@@ -75,7 +70,6 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
       )
       .not.toBe("replica-not-ready");
 
-    // Upload via the toolbar-driven hidden input; staging runs for real.
     await page.locator('input[aria-label="Upload files"]').setInputFiles({
       name: DOC_TITLE,
       mimeType: "text/plain",
@@ -85,14 +79,12 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
       page.getByRole("button", { name: `Select ${DOC_TITLE}` })
     ).toBeVisible({ timeout: 30_000 });
 
-    // Vault row, not renderer state: must survive a full reload.
     await page.reload({ waitUntil: "domcontentloaded" });
     await openFirstParty(page, "Docs");
     await expect(
       page.getByRole("button", { name: `Select ${DOC_TITLE}` })
     ).toBeVisible({ timeout: 30_000 });
 
-    // Byte proof: exact uploaded bytes return through the authed blob door.
     type DriveDoc = {
       title: string;
       content_uri?: string | null;
@@ -107,7 +99,6 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
     const uploaded = drive.documents.filter(
       (d: DriveDoc) => d.title === DOC_TITLE
     );
-    // Exactly one document: the upload path must not have minted two.
     expect(uploaded).toHaveLength(1);
     expect(uploaded[0]!.byte_size).toBe(Buffer.byteLength(DOC_BODY, "utf8"));
     const contentUri = uploaded[0]!.content_uri;
@@ -121,7 +112,6 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
           ? atob(payload)
           : decodeURIComponent(payload);
       }
-      // The same bearer transport the desktop gateway client uses.
       const { baseUrl, token } = await window.CentraidApi.getGatewayAuth();
       const response = await fetch(new URL(uri, baseUrl).toString(), {
         headers: { authorization: `Bearer ${token}` },
@@ -130,7 +120,6 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
     }, contentUri!);
     expect(roundTrip).toBe(DOC_BODY);
 
-    // Reading view renders on paper (§1.8) under the document title.
     await page
       .getByRole("button", { name: `Preview ${DOC_TITLE}` })
       .first()

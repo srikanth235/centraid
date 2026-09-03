@@ -1,5 +1,3 @@
-// Full-screen Home search (#498, #711). Objects, not apps. Scrim dismisses; content is `box-none`.
-
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

@@ -3,19 +3,13 @@ import { BRAND } from "@centraid/design";
 const PREFIX = "centraid.web.v1.";
 
 export interface WebConnection {
-  /** Refreshable iroh dial cache; never used as connection identity. */
   endpointTicket?: string;
-  /** Stable sovereign gateway EndpointId and connection identity. */
   endpointId?: string;
   vaultId?: string;
-  /** All vaults enrolled by the last ticket redemption; vaultId is the focus. */
   vaultIds?: string[];
   label: string;
   displayName: string;
   avatarColor: string;
-  /** Offline-copy consent from pairing: encrypted replica, queued changes and
-   *  cached previews. It does NOT govern whether the pairing itself survives —
-   *  the enrollment is always durable (see `saveConnection`). */
   rememberDevice?: boolean;
 }
 
@@ -28,9 +22,6 @@ const DEFAULT_CONNECTION: WebConnection = {
 
 export function loadConnection(): WebConnection {
   try {
-    // localStorage first: it is where every write now lands. The sessionStorage
-    // read is migration only, for a tab that paired before the enrollment
-    // became unconditionally durable.
     const raw =
       localStorage.getItem(`${PREFIX}connection`) ??
       sessionStorage.getItem(`${PREFIX}connection`) ??
@@ -42,14 +33,6 @@ export function loadConnection(): WebConnection {
   }
 }
 
-/**
- * The connection is ALWAYS durable — it does NOT follow `rememberDevice`.
- * Putting the enrollment in sessionStorage would silently unpair an
- * already-paired device on browser close, with a fresh ticket the only route
- * back. `rememberDevice` governs the offline copy (replica, queued changes,
- * cached previews) and nothing else; dropping this device is an explicit act
- * (`removeGateway`), not a side effect of quitting the browser.
- */
 export function saveConnection(patch: Partial<WebConnection>): WebConnection {
   const next = { ...loadConnection(), ...patch };
   const key = `${PREFIX}connection`;
@@ -58,7 +41,6 @@ export function saveConnection(patch: Partial<WebConnection>): WebConnection {
   return next;
 }
 
-/** Stable replica identity for the sovereign gateway behind a web transport. */
 export function webGatewayId(connection: WebConnection): string | undefined {
   return connection.endpointId;
 }
@@ -73,9 +55,6 @@ export function loadSettingsPatch(): Record<string, unknown> {
   }
 }
 
-/** Fired after every settings write, carrying the merged result. The chrome
- *  listens so surfaces gated on onboarding state react the moment it flips,
- *  without polling (#603). */
 export const SETTINGS_EVENT = "settings-saved";
 
 export function saveSettingsPatch(

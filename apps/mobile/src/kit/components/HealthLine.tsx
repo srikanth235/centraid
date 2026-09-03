@@ -1,6 +1,3 @@
-// HEALTH LINE (#765): a standing per-route sentence — deliberately its own
-// component, not a `StatusLine` mode (one line, never stacked, no posting).
-
 import React, { useMemo } from "react";
 import { Pressable, View } from "react-native";
 
@@ -14,7 +11,6 @@ export interface HealthLineProps {
   text: string;
   action?: string;
   onAction?: () => void;
-  /** `seam` = the page about other people's machines reaching this one. */
   tone?: HealthTone;
   accessibilityLabel?: string;
 }

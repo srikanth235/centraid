@@ -1,20 +1,3 @@
-// Notes' RNTL tier (#890 W5). ONE cold renderer for the app: the RN host tree
-// is expensive to boot, so every Notes claim that needs a real accessibility
-// tree, a real responder, or real style resolution is consolidated here
-// (TESTING.md, "React Native component tests").
-//
-// WHAT ONLY THIS TIER CAN FALSIFY here:
-//  - the band's real `tab` nodes and their `selected` traits, and the fact that
-//    exactly one place is lit at a time;
-//  - accessible NAMES built by RN, including the one `promote` derives for a
-//    note with no title of its own — the row's only handle for a screen reader;
-//  - a press that must reach a real `Pressable` before a place changes;
-//  - `FlashList`'s slot behaviour: the empty line renders INSTEAD of rows.
-//
-// Device seams are the project's (`src/test/native-device-seams.ts`), FlashList
-// included. Every Notes component, blueprint projection and copy table is real;
-// only the replica read layer — the device database — is substituted.
-
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,7 +37,6 @@ vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
   };
 });
 
-/** A note plus the content row `buildNotes` joins its body from. */
 function seedNotes(
   rows: readonly { body: string; id: string; title: string }[]
 ) {
@@ -111,8 +93,6 @@ describe("Notes, on the real React Native host tree", () => {
 
     const tabs = screen.getAllByRole("tab");
     expect(tabs.length).toBeGreaterThan(1);
-    // Two lit places is the defect: the stub tier renders each tab as its own
-    // `div` and never sees them as one tree, so it cannot count them.
     expect(selectedTabNames(tabs)).toHaveLength(1);
 
     const other = tabs.find(
@@ -125,9 +105,6 @@ describe("Notes, on the real React Native host tree", () => {
   });
 
   it("gives an untitled note a spoken handle rather than an empty name", () => {
-    // `promote` derives the heading from the first line when the note has no
-    // title. The accessible NAME is the only handle a screen reader has, so an
-    // empty one is a row nobody can reach — and only RN builds that name.
     seedNotes([
       { body: "Milk, bread, a new kettle", id: "n1", title: "" },
       { body: "Body text", id: "n2", title: "Kitchen list" },
@@ -157,11 +134,6 @@ describe("Notes, on the real React Native host tree", () => {
     expect(screen.queryByLabelText("Search notes")).toBeNull();
 
     fireEvent.press(screen.getByRole("tab", { name: "Search" }));
-    // A `TextInput` is a native host component: the label below is the one RN
-    // publishes for it, not a DOM `aria-label` the stub wrote onto an `<input>`.
-    // Asserted as the LABEL rather than `props.accessible`, because RN makes a
-    // text input an accessibility element implicitly and never sets that prop —
-    // asserting it would have been asserting `undefined === true`.
     expect(screen.getByLabelText("Search notes").props.accessibilityLabel).toBe(
       "Search notes"
     );

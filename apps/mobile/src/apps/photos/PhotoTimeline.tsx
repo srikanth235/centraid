@@ -1,7 +1,3 @@
-// The justified timeline (§4): rows packed from real aspect ratios and scaled to
-// fill the width — nothing is cropped to a square. Grouping and packing live in
-// `timeline-rows.ts` and `justify.ts`; this file is the view and the gestures.
-
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListRef, ListRenderItemInfo } from "@shopify/flash-list";
 import * as Haptics from "expo-haptics";
@@ -44,16 +40,6 @@ import type { PhotoAsset, PhotoSection } from "./timeline-source";
 
 const RAIL_TOP = 8;
 
-/**
- * Positional handles for the FIRST few tiles — `photos-tile-0` … — so a flow can
- * open a photograph without keying on a filename the seed owns.
- *
- * BOUNDED BY CONSTRUCTION. This grid is the frame-drop surface
- * (`tests/agent-e2e-mobile/flows/scroll-frames.mjs`), so the walk stops as soon
- * as `PHOTO_TILE_HANDLES` ids exist: the cost is the same on a 90-photograph
- * library and a 90,000-photograph one, which is the rule for anything that runs
- * beside a render (CONSTITUTION "nothing whose cost scales with vault size").
- */
 function tileHandles(
   rows: readonly TimelineRow[]
 ): ReadonlyMap<string, string> {
@@ -71,8 +57,6 @@ function tileHandles(
   return handles;
 }
 
-/** `x` is already row-relative because the row is full-bleed. If the row regains
- *  an inset, subtract it here or every tap resolves one tile to the left. */
 function assetAt(
   rows: readonly TimelineRow[],
   tops: readonly number[],
@@ -112,15 +96,12 @@ function toggleSelection(current: Set<string>, id: string): Set<string> {
   return next;
 }
 
-// Outside any component: the builder chain MUTATES the object, which the React
-// compiler rejects in a render body.
 function buildTimelineGestures(
   rung: Rung,
   onRung: (next: Rung) => void,
   onTap: (x: number, y: number) => void,
   onDrag: (x: number, y: number) => void
 ): ReturnType<typeof Gesture.Simultaneous> {
-  // Pinch resolves to a STEPPER PRESS, not a continuous zoom (§4.2).
   const pinch = Gesture.Pinch().onEnd(({ scale }) => {
     const next = pinchRung(rung, scale);
     if (next !== rung) runOnJS(onRung)(next);
@@ -165,11 +146,7 @@ export interface PhotoTimelineProps {
   placeNames?: ReadonlyMap<string, string>;
   refreshing?: boolean;
   onRefresh?: () => void;
-  /** Applied once per distinct value, so a member who scrolls away is not
-   *  yanked back on the next render. */
   scrollToDay?: string;
-  /** Reported on scroll END, never `onScroll`: a per-frame state bump would
-   *  re-render the screen sixty times a second. */
   onVisibleDay?: (day: string) => void;
   footerInset?: number;
 }
@@ -186,7 +163,6 @@ export default function PhotoTimeline({
   onVisibleDay,
   footerInset = 0,
 }: PhotoTimelineProps): React.JSX.Element {
-  // Read here, not passed in: every shelf is the same timeline (§5).
   const [rung, onRungChange] = usePhotosRung();
   const vaults = useVaultFacts();
   const { colors } = useTheme();
@@ -203,7 +179,6 @@ export default function PhotoTimeline({
   }, [selection]);
 
   const target = rungHeight(rung, "phone");
-  // Full STAGE width: only the month and day HEADERS keep `pageMargin`.
   const contentWidth = Math.max(1, width);
   const rows = useMemo(
     () => buildRows(sections, contentWidth, target, placeNames),
@@ -235,7 +210,6 @@ export default function PhotoTimeline({
     if (!asset || selectionRef.current.has(asset.id)) return;
     void Haptics.selectionAsync();
     const next = addDragSelection(selectionRef.current, asset.id);
-    // Written straight through so the next onUpdate of the same drag sees it.
     selectionRef.current = next;
     onSelectionChange(next);
   };
@@ -247,8 +221,6 @@ export default function PhotoTimeline({
     else handleOpen(asset);
   };
 
-  // The MOUNT landing takes FlashList's own `initialScrollIndex`: an effect's
-  // `scrollToIndex` runs before the list has measured and silently no-ops.
   const initialLanding = useMemo(() => {
     if (!scrollToDay) return undefined;
     const monthKey = `m:${scrollToDay.slice(0, 7)}`;
@@ -257,8 +229,6 @@ export default function PhotoTimeline({
     );
     return index < 0 ? undefined : index;
   }, [rows, scrollToDay]);
-  // NOT pre-marked as landed: `initialScrollIndex` uses ESTIMATED heights and
-  // drifts by years; the effect below corrects it.
   const landedDay = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!scrollToDay || landedDay.current === scrollToDay) return;
@@ -268,7 +238,6 @@ export default function PhotoTimeline({
     );
     if (index < 0) return;
     landedDay.current = scrollToDay;
-    // A frame later: a synchronous `scrollToIndex` on mount no-ops.
     const frame = requestAnimationFrame(() => {
       void list.current?.scrollToIndex({
         animated: false,
@@ -285,10 +254,6 @@ export default function PhotoTimeline({
     if (day !== undefined) onVisibleDay(day);
   };
 
-  // Stable across every render this list does NOT depend on — a scrub label, a
-  // refresh flag, a scroll offset. Inline in the JSX, `renderItem` was a new
-  // function each time, which is FlashList's signal that every mounted cell
-  // needs re-rendering, and `PhotoTile`'s memo never got to bail out.
   const renderRow = useCallback(
     ({ item }: ListRenderItemInfo<TimelineRow>): React.JSX.Element =>
       item.type === "month" ? (
@@ -441,8 +406,6 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 2,
       marginBottom: 2,
-      // No horizontal padding: the tiles are full-bleed. Never share the
-      // headers' style.
     },
     selectDay: { ...t("control"), color: colors.text },
     selectDayTarget: { justifyContent: "center", minHeight: 44 },

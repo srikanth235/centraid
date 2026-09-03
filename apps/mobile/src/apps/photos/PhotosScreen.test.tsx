@@ -1,5 +1,3 @@
-// Every non-lightbox Photos surface renders the band with the Home capsule
-// (`popTo`, never `goBack()`). A live selection replaces the band.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -7,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildSelectionActions } from "@centraid/blueprints/apps/_shared/selection-engine";
 
-// @vitest-environment jsdom
 import PhotosScreen from "./PhotosScreen";
 
 (
@@ -19,10 +16,6 @@ const mocks = vi.hoisted(() => ({
   popTo: vi.fn<(...args: unknown[]) => void>(),
 }));
 
-// The vault lockup every app frame draws. Stubbed because this file's claim is
-// PhotosScreen's own composition, not the header's: mounting the real one pulls
-// the active-vault read and its native storage into a project that has no setup
-// file to seam them (unlike the RNTL tier's `native-device-seams.ts`).
 vi.mock(import("../../screens/home/VaultBar"), () => ({
   default: (): React.JSX.Element => React.createElement("view"),
 }));
@@ -194,7 +187,6 @@ describe("the band is on every Photos surface", () => {
     render(<PhotosScreen current="collections">{null}</PhotosScreen>);
     press("Home");
     expect(mocks.popTo).toHaveBeenCalledWith("Home");
-    // `navigate` PUSHES a second Home; UIKit then presents it as a card sheet.
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
@@ -244,7 +236,6 @@ describe("the bar sits BESIDE the content, never over it", () => {
     const slot = container!.querySelector(
       '[data-testid="shelf"]'
     )!.parentElement!;
-    // Absolute ancestor takes the band out of flow; slot padding cannot fix it.
     expect(positionsUpFrom(band)).not.toContain("absolute");
     expect(positionsUpFrom(slot)).not.toContain("absolute");
   });
@@ -298,3 +289,4 @@ describe("a live selection replaces the band", () => {
     );
   });
 });
+// @vitest-environment jsdom

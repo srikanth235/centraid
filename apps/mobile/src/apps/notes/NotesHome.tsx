@@ -1,14 +1,4 @@
 /*! governance: allow-repo-hygiene file-size-limit — the native Notes cover keeps its places, its list and its one write door in a single focus-contained screen so a write outcome cannot be silently orphaned. */
-// Notes, the native cover (Notes spec §1, §2; #882).
-//
-// WHAT THIS SEAT IS. A native cover over the SAME replica the web app reads,
-// drawn to the same spec and sharing its pure logic: `promote`, `probeAt`, the
-// shelf table, the notebook and tag projections and the version walk are all
-// imported, so no rule means two things on two seats.
-//
-// NOTES CLAIMS THE BAND (#882): its four places are `BAND_DESTINATIONS`, and
-// Capture, Voice, Tags, Trash and Version history are ACTS behind More. The
-// navigator has ONE Notes route, so a destination is state, not a pushed entry.
 import { FlashList } from "@shopify/flash-list";
 import React, { useMemo, useState } from "react";
 import { Alert, Pressable, RefreshControl, View } from "react-native";
@@ -103,15 +93,12 @@ const PLACE_FOR_TAB: Readonly<Record<NotesBandDestinationKey, NotesPlace>> = {
   more: NOTES_MORE_SHEET,
 };
 
-/** One row of the reading room. The heading is `promote`'s — a note with no
- *  title of its own shows its first line, and the preview picks up below. */
 function NoteRow({
   note,
   first,
   onOpen,
 }: {
   note: NativeNote;
-  /** The leading row of the reading room; only it carries a handle. */
   first: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
@@ -179,13 +166,8 @@ export default function NotesHome({
   const shelf: ShelfId = place === NOTES_MORE_SHEET ? null : place;
   const notebookId = notebookIdFrom(shelf);
   const term = query.trim().toLowerCase();
-  // The LIVE row, never a captured copy: after a restore the chain has a new
-  // head, and a held snapshot would keep History walking the old one.
   const selected = state.notes.find((note) => note.id === selectedId);
 
-  // JOURNAL IS A PLACE, NEVER AN INTERLEAVE (R-journal): the marker set leaves
-  // the library, the search and the trash, and the Journal place is the only
-  // surface that shows it. Opening one by id still works.
   const visible = useMemo(() => {
     const journal = state.journalNoteIds;
     return state.notes.filter((note) => {
@@ -270,11 +252,6 @@ export default function NotesHome({
     }
   };
 
-  /**
-   * Save. The vault will not take a nameless note, so an untitled one is
-   * named by its own first line — which is exactly what `promote` reads back
-   * out, so the member never sees the derivation.
-   */
   const save = async (): Promise<void> => {
     const typed = title.trim();
     const text = body.trim();
@@ -305,8 +282,6 @@ export default function NotesHome({
 
   const confirmTrash = (): void => {
     if (!selected) return;
-    // The one place the 30-day reassurance is allowed, in the words the spec
-    // gives it — shared with the web seat so the two cannot drift.
     Alert.alert(DELETE_NOTE_TITLE, DELETE_NOTE_BODY, [
       { text: "Keep it", style: "cancel" },
       {
@@ -323,8 +298,6 @@ export default function NotesHome({
     ]);
   };
 
-  /** A notebook is pure structure: its notes are unfiled, never destroyed,
-   *  and the confirm says how many before it happens. */
   const confirmDeleteNotebook = (book: NotebookShelf): void => {
     const orphaned = book.noteIds.length;
     Alert.alert(
@@ -358,8 +331,6 @@ export default function NotesHome({
       line,
       text,
     });
-    // MINTED IN TASKS AND LINKED BACK, never copied: nothing about the line is
-    // stored here afterwards — the point of the gesture is that it LEAVES.
     const done = await write("send-to-tasks", {
       title: payload.title,
       ...(payload.due_at ? { due_at: payload.due_at } : {}),
@@ -502,7 +473,6 @@ export default function NotesHome({
             state.error !== undefined || state.connection === "unavailable"
           }
           onRestore={(contentId) => {
-            // RESTORING APPENDS: the chain grows a head, nothing is rewritten.
             void write("restore-note-version", {
               note_id: selected.rawId,
               content_id: contentId,
@@ -638,7 +608,6 @@ export default function NotesHome({
         }}
         onMove={(target) => {
           if (!selected) return;
-          // `move-note` with no notebook is the vault's way of saying unfiled.
           void write("move-note", {
             note_id: selected.rawId,
             ...(target ? { notebook_id: target } : {}),
@@ -652,7 +621,6 @@ export default function NotesHome({
           });
         }}
         onRemoveTag={(tagId) => {
-          // ONE EDGE, never the concept: other notes keep the tag.
           void write("remove-tag", { tag_id: tagId });
         }}
         onSendToTasks={(line, text) => void sendToTasks(line, text)}

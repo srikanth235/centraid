@@ -18,7 +18,6 @@ import {
 
 describe("the claimed band (handoff §3.1, CHANGELOG §F)", () => {
   test("Photos claims exactly Library · Collections · Search · More", () => {
-    // Library leads (#712). Collections ≠ Albums. People is off the band.
     expect(PHOTOS_BAND_DESTINATIONS.map((d) => d.label)).toStrictEqual([
       "Library",
       "Collections",
@@ -35,7 +34,6 @@ describe("the claimed band (handoff §3.1, CHANGELOG §F)", () => {
   });
 
   test("the More sheet carries only what Collections does not", () => {
-    // One More row (#726). Backup is Backup health, not a Collections shelf (#712).
     expect(PHOTOS_MORE_ROWS.map((row) => row.label)).toStrictEqual(["Backup"]);
     expect(PHOTOS_MORE_ROWS.map((row) => row.label)).not.toContain("Storage");
     expect(PHOTOS_MORE_ROWS.map((row) => row.label)).not.toContain(
@@ -50,7 +48,6 @@ describe("the claimed band (handoff §3.1, CHANGELOG §F)", () => {
     expect(claimed.owner).toBe("app");
     expect(handedBack.owner).toBe("host");
 
-    // Host branch has no destinations/capsule — no dual-band state.
     expect("destinations" in handedBack).toBe(false);
     expect("capsule" in handedBack).toBe(false);
   });
@@ -93,7 +90,6 @@ describe("the band's PLATE (CHANGELOG §G)", () => {
   });
 
   test("carries no shadow and no elevation", () => {
-    // No hover plane — contrast would depend on the photo.
     expect(style).not.toHaveProperty("shadowOpacity");
     expect(style).not.toHaveProperty("shadowRadius");
     expect(style).not.toHaveProperty("shadowColor");
@@ -104,7 +100,6 @@ describe("the band's PLATE (CHANGELOG §G)", () => {
     expect(style.marginHorizontal).toBe(BAND_INSET);
     expect(style.marginBottom).toBe(BAND_INSET);
     expect(style.borderRadius).toBe(BAND_RADIUS);
-    // Top gap 8 on both bands; 0 sits flush.
     expect(style.marginTop).toBe(BAND_TOP_GAP);
     expect(BAND_TOP_GAP).toBe(8);
     expect(style.borderWidth).toBe(0.5);
@@ -112,7 +107,6 @@ describe("the band's PLATE (CHANGELOG §G)", () => {
   });
 
   test("the frame's band and a claimed band draw the SAME plate", () => {
-    // Same plate geometry; composition lives in PhotosBand.tsx.
     const framePaper = "#FFFFFF";
     const frame = bandSurfaceStyle(framePaper, LINE, 0.5);
     expect(frame.marginHorizontal).toBe(style.marginHorizontal);

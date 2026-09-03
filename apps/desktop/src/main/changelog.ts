@@ -1,9 +1,3 @@
-/*
- * "What's new" changelog — electron wiring around changelog-core.ts: TTL-
- * cached GitHub Releases (unauth limit 60 req/hr/IP); failure serves the
- * last good list, `error` only when nothing cached.
- */
-
 import { app } from "electron";
 
 import { normalizeReleases } from "./changelog-core.js";

@@ -1,5 +1,3 @@
-// "What's new" changelog — pure normalization. Fetch + cache live in changelog.ts.
-
 export interface ChangelogRelease {
   version: string;
   title: string;
@@ -27,7 +25,6 @@ interface RawRelease {
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
-/** Drop no-tag and drafts; non-array → `[]`. */
 export function normalizeReleases(raw: unknown): ChangelogRelease[] {
   if (!Array.isArray(raw)) return [];
   const out: ChangelogRelease[] = [];

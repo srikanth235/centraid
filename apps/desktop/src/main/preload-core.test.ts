@@ -1,12 +1,3 @@
-/**
- * The renderer/main privilege boundary (#656, Layer 1F).
- *
- * These tests pin the things a bridge regression would silently change: the
- * exact key set exposed to the renderer, the channel every member reaches
- * for, the arguments it forwards, and the fact that nothing Electron-ish
- * (least of all `ipcRenderer` itself) escapes into the exposed objects.
- */
-
 import { describe, expect, it } from "vitest";
 
 import * as designTokens from "@centraid/design";
@@ -20,7 +11,6 @@ import type {
 } from "./preload-core.js";
 import { createCentraidApi, createCentraidTokens } from "./preload-core.js";
 
-/** One recorded `invoke` crossing: channel plus the forwarded arguments. */
 interface InvokeRecord {
   channel: string;
   args: unknown[];
@@ -29,11 +19,8 @@ interface InvokeRecord {
 interface FakeBridge {
   bridge: PreloadBridge;
   invokes: InvokeRecord[];
-  /** Live listeners per channel, in attach order. */
   listeners: Map<string, BridgeListener[]>;
-  /** Deliver a broadcast the way Electron would: sender event, then payload. */
   emit: (channel: ChannelName, payload: unknown) => void;
-  /** Resolution served to the next `invoke` on a channel. */
   results: Map<string, unknown>;
 }
 
@@ -71,12 +58,6 @@ function fakeBridge(): FakeBridge {
   };
 }
 
-/**
- * The complete `window.CentraidApi` surface. A bridge that silently grows is
- * a privilege-boundary regression, so this list is the contract — adding a
- * member without adding it here (and to the renderer typings in
- * `@centraid/client`'s `centraid-api.d.ts`) fails the build.
- */
 const EXPECTED_API_KEYS = [
   "beginPhonePairing",
   "cancelPhonePairing",
@@ -122,13 +103,6 @@ const EXPECTED_API_KEYS = [
   "updateProfileMetadata",
 ];
 
-/**
- * Members that reach no bridge channel at all. `getHostCapabilities` is a pure
- * synchronous snapshot — the desktop carries no on-device file-ASR adapter
- * (#724) — so it cannot sit in `REQUEST_SURFACE`, which asserts every entry
- * reaches exactly its declared channel. It is listed here so the coverage
- * check below still counts it.
- */
 const PURE_SURFACE = ["getHostCapabilities"];
 
 const EXPECTED_TOKEN_KEYS = [
@@ -145,11 +119,6 @@ const EXPECTED_TOKEN_KEYS = [
   "type",
 ];
 
-/**
- * Every request member, with the channel it must reach and the single
- * argument it must forward (`undefined` = the call takes no argument, so
- * nothing may be forwarded).
- */
 const REQUEST_SURFACE: Array<[string, ChannelName, unknown]> = [
   ["getSettings", Channel.SETTINGS_GET, undefined],
   ["saveSettings", Channel.SETTINGS_SAVE, { launchAtLogin: true }],
@@ -198,7 +167,6 @@ const REQUEST_SURFACE: Array<[string, ChannelName, unknown]> = [
   ["getChangelog", Channel.CHANGELOG_GET, undefined],
 ];
 
-/** Every subscription member, with the broadcast channel it listens on. */
 const EVENT_SURFACE: Array<[string, ChannelName]> = [
   ["onPublishEvent", Channel.PUBLISH_EVENT],
   ["onGatewayRuntime", Channel.GATEWAY_RUNTIME_EVENT],
@@ -244,8 +212,6 @@ describe("CentraidApi exposed surface", () => {
 describe("CentraidApi channel allowlisting", () => {
   it("reaches only channels that are members of the shared Channel map", async () => {
     const { api, fake } = makeApi();
-    // Sequential on purpose: the assertions compare the recorded invocation
-    // log positionally, and Promise.all would reorder it.
     for (const [name, , arg] of REQUEST_SURFACE) {
       // oxlint-disable-next-line no-await-in-loop -- deterministic log order
       await (arg === undefined ? api[name]!() : api[name]!(arg));
@@ -264,8 +230,6 @@ describe("CentraidApi channel allowlisting", () => {
 
   it("invokes each request member's declared channel with only its argument", async () => {
     const { api, fake } = makeApi();
-    // Sequential on purpose: the assertions compare the recorded invocation
-    // log positionally, and Promise.all would reorder it.
     for (const [name, , arg] of REQUEST_SURFACE) {
       // oxlint-disable-next-line no-await-in-loop -- deterministic log order
       await (arg === undefined ? api[name]!() : api[name]!(arg));
@@ -285,7 +249,6 @@ describe("CentraidApi channel allowlisting", () => {
       .filter(([, list]) => list.length > 0)
       .map(([channel]) => channel)
       .sort();
-    // DEEP_LINK is attached at construction, before any subscription.
     expect(attached).toStrictEqual(
       [Channel.DEEP_LINK, ...EVENT_SURFACE.map(([, channel]) => channel)].sort()
     );
@@ -349,7 +312,6 @@ describe("CentraidApi host capabilities", () => {
       compute: { transcript: boolean };
     };
     expect(caps.compute.transcript).toBe(false);
-    // No bridge channel is reached at all: this is a pure snapshot now.
     expect(fake.invokes).toStrictEqual([]);
   });
 });
@@ -377,7 +339,6 @@ describe("CentraidApi leak containment", () => {
   });
 });
 
-/** The same relative base `preload.ts` passes for the file:// renderer. */
 const FONT_FACE_CSS = toFontFaceCss("fonts");
 
 describe("CentraidTokens", () => {
@@ -419,9 +380,6 @@ describe("CentraidTokens", () => {
     expect(exposed.cssText).toBe(`${FONT_FACE_CSS}\n${designTokens.toCss()}`);
   });
 
-  // The faces have to be DECLARED before the first `var(--font-sans)` lookup,
-  // and they have to point at the app's own bundle — a remote src would make
-  // the shell's typography depend on a network the desktop never promised.
   it("declares the bundled faces ahead of the tokens, from relative paths", () => {
     const { cssText } = createCentraidTokens(designTokens, FONT_FACE_CSS);
     expect(cssText.indexOf("@font-face")).toBeLessThan(
@@ -430,8 +388,6 @@ describe("CentraidTokens", () => {
     const sources = [...cssText.matchAll(/src: url\((?<href>[^)]+)\)/gu)].map(
       (match) => match.groups?.href
     );
-    // FOUR: v8 leaves one Instrument Sans face at 400/600, each in latin +
-    // latin-ext. The platform code stack has no `@font-face` rule at all.
     expect(sources).toHaveLength(4);
     expect(
       sources.filter((src) => src?.startsWith("fonts/") === true)

@@ -3,31 +3,17 @@ import { pendingOverlayCopy } from "@centraid/blueprints/apps/_shared/pending-ov
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import { postStatus } from "../components/status-line";
 
-/** Where a conflicted write waits, and what can be done to it there. */
 const CONFLICT_ROUTE = "Open Pending changes to retry or discard.";
 
 export interface SurfaceWriteOutcomeOptions {
   failureTitle?: string;
-  /** Replaces the default parked Alert (e.g. navigate to Approvals). */
   onParked?: () => void;
-  /** Replaces the default conflict status line (e.g. reopen the editor). */
   onConflict?: () => void;
   queuedMessage?: string;
-  /** Replaces the default queued Alert (e.g. an in-line pending banner). */
   onQueued?: () => void;
-  /** Replaces the default in-flight Alert. */
   onInFlight?: () => void;
 }
 
-/**
- * Turns every native intent admission outcome into an immediate user-visible
- * result. Executed writes are already visible through their optimistic
- * mutation; every other state needs an explicit affordance.
- *
- * News uses the app-wide status line; decisions remain with the caller's
- * dialog. Returns whether the caller may continue an optimistic success flow
- * (for example, close a modal, extract `output`, or navigate away).
- */
 export function surfaceWriteOutcome(
   result: NativeWriteResult,
   options: SurfaceWriteOutcomeOptions = {}
@@ -49,11 +35,6 @@ export function surfaceWriteOutcome(
     return true;
   }
   if (result.status === "conflict") {
-    // A conflict is NOT a failure to report and forget: the change is retained
-    // with both versions until the member edits, retries or discards it
-    // (docs/mobile-offline.md), so this says which row moved under the write
-    // and where the row that can undo it lives. Collapsing it into "Change not
-    // applied" told a member their work was gone when it was still on the phone.
     if (options.onConflict) options.onConflict();
     else
       postStatus(
@@ -93,7 +74,6 @@ export function surfaceWriteFailure(
   );
 }
 
-/** Extract the executed/queued command output bag when present. */
 export function nativeWriteOutput(
   result: NativeWriteResult | undefined
 ): Record<string, unknown> | undefined {

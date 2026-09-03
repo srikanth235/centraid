@@ -94,18 +94,10 @@ export type {
 
 const ReplicaContext = createContext<ReplicaContextValue>(REPLICA_LOADING);
 
-/** Long enough for a wifi/cellular handoff to settle, short enough to feel live. */
 const NETWORK_FLAP_WINDOW_MS = 1_500;
 
-/**
- * Quiet window before a freshness stamp reaches AsyncStorage and the context.
- * Only the newest stamp matters and losing an unwritten one costs a replay,
- * not data, so a busy frame pays one disk write and one rebuild, not one per
- * advancing scope (matches native-change-feed.ts).
- */
 const FRESHNESS_COMMIT_WINDOW_MS = 1_000;
 
-/** RN's scheduler owns "the UI is usable now" — never substitute a timeout. */
 function afterInteractions(): Promise<void> {
   return new Promise((resolve) => {
     InteractionManager.runAfterInteractions(() => resolve());
@@ -144,10 +136,6 @@ export function ReplicaProvider({
     value: ReplicaContextValue;
   }>();
 
-  // Activating a vault outside the mounted four RE-PLANS the mount: a bare
-  // re-key of the write target leaves the Space just opened unreadable until
-  // relaunch. The four-scope cap (docs/mobile-offline.md) bounds what is open
-  // at once, not which vaults a member may open.
   const remountedFor = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (
@@ -160,13 +148,8 @@ export function ReplicaProvider({
       remountedFor.current = undefined;
       return;
     }
-    // One attempt per vault. A scope the gateway will not hand back — revoked
-    // mid-mount, or gone from the manifest — must not spin the mount forever.
     if (remountedFor.current === activeVaultId) return;
     remountedFor.current = activeVaultId;
-    // Retract the published session BEFORE the teardown: consumers read
-    // `ready` and stop, so no read lands on a closing facade. Outboxes are
-    // per-vault SQLite files, so no queued write is at risk.
     setBuilt(undefined);
     setMountNonce((current) => current + 1);
   }, [activeVaultId, built, gatewayKey]);
@@ -181,9 +164,6 @@ export function ReplicaProvider({
     let freshnessWork: CoalescedWork | undefined;
     let flushFreshness = async (): Promise<void> => undefined;
     const looseDrivers: Array<{ close: () => void }> = [];
-    // Every mid-mount update goes through here: a torn-down mount publishes
-    // nothing, and a mount whose gateway key has moved on never overwrites its
-    // successor.
     const publish: PublishReplicaValue = (patch) => {
       if (cancelled) return;
       setBuilt((current) =>
@@ -195,13 +175,8 @@ export function ReplicaProvider({
 
     void (async () => {
       try {
-        // Opening a replica per scope runs migrations synchronously — yield first.
         await afterInteractions();
         if (cancelled) return;
-        // PHASE A decides what to open from disk alone (`planMount`): a device
-        // holding a (gateway, vault) tuple opens that replica offline, with no
-        // await on the network. `resolveIdentity` is for a fresh install only.
-        // "unpaired" is a DISK fact, never a network verdict — keep it that way.
         const [cachedBase, lastGatewayId, lastVaultId] = await Promise.all([
           Store.hydrate(LAST_BASE, "http://127.0.0.1"),
           Store.hydrate(LAST_GATEWAY, ""),
@@ -225,20 +200,13 @@ export function ReplicaProvider({
               }
             : await resolveIdentity(activeRef.current);
         if (cancelled) return;
-        // One `/info` read raises the wall and settles the flags, not one per surface.
         let features = await requireMobileOfflineGateway({
           baseUrl: identity.auth.baseUrl,
           online: identity.online,
         });
         const storageLocation = replicaStorageDirectory();
         const scopes = await mountedScopes(identity, storageLocation);
-        // BEFORE any stamp or cursor is read. A restored container carries the
-        // previous device's resume cursors over an empty replica; resuming from
-        // one loses every change beneath it, silently.
         await discardRestoredReplicaCache(identity.gatewayId, scopes);
-        // At most ONCE per mount, from whichever moment first sees the gateway
-        // reachable: gating on `identity.online` alone leaves a device that
-        // mounted offline unregistered for push until it relaunches online.
         let sentEventualWork = false;
         const sendEventualWork = (baseUrl: string): void => {
           if (sentEventualWork) return;
@@ -256,22 +224,18 @@ export function ReplicaProvider({
         if (identity.online) sendEventualWork(identity.auth.baseUrl);
         if (cancelled) return;
         let connected = identity.online;
-        // Reports, never decides (docs/traps/unreachable-vault.md).
         const noteGatewayOutcome = (reachable: boolean): void => {
           if (cancelled || reachable === connected) return;
           reachabilityWork?.signal();
         };
         const sessions = new Map<string, NativeReplicaSession>();
-        // Kept per vault, not just until the session takes over: a revoked
-        // scope's file cannot be deleted while its handle is still open, and
-        // `purge()` deliberately leaves that handle alive.
         const scopeDrivers = new Map<string, { close: () => void }>();
         const revokedScopeIds = new Set<string>();
         const reclaimRevokedReplica = (scope: MountedReplicaScope): void => {
           try {
             scopeDrivers.get(scope.vaultId)?.close();
           } catch {
-            // A handle the purge already tore down is one less thing to close.
+            // Intentionally empty.
           }
           scopeDrivers.delete(scope.vaultId);
           deleteReplicaDatabaseFamily(scope.databaseName);
@@ -291,8 +255,6 @@ export function ReplicaProvider({
           freshness.stamp(vaultId);
           freshnessWork?.signal();
         };
-        // Teardown is the last reliable moment to land a stamp, exactly as
-        // backgrounding is for the feed's resume cursor.
         flushFreshness = freshness.commit;
         const revoked = createRevokedNoticeStore({
           storage: AsyncStorage,
@@ -314,7 +276,6 @@ export function ReplicaProvider({
               try {
                 if (facade) await facade.revokeScope(vaultId);
                 else {
-                  // Revoked before the facade exists: the same trace is owed.
                   const scope = scopes.find(
                     (candidate) => candidate.vaultId === vaultId
                   );
@@ -364,17 +325,10 @@ export function ReplicaProvider({
               isRowSyncAllowed: nativeRowSyncAllowed,
               bootstrapWindow: MOBILE_REPLICA_BOOTSTRAP_WINDOW,
               progressiveBootstrap: true,
-              // A vault the member does not steward is one a queued write may
-              // have to wait for somebody at, so its pending rows carry a
-              // steward label from admission (`steward-label.ts`). `personal`
-              // is the founding marker; an older cache omits it and reads as
-              // their own, which is the answer that promises nothing.
               ...(scope.personal === false ? { steward: {} } : {}),
               onBootstrapProgress: (progress) =>
                 bootstrap.report(scope, progress),
               onGatewayOutcome: noteGatewayOutcome,
-              // Out of room parks this scope's feed; the phone, not the vault,
-              // is what ran out, so one paused scope raises the state for all.
               onStorageFull: () =>
                 publish((value) => ({ ...value, storageFull: true })),
             });
@@ -420,10 +374,6 @@ export function ReplicaProvider({
           await facade.close();
           return;
         }
-        // Durable coverage, read at mount and after every pull. Without it a
-        // relaunch after a kill mid-backfill renders a truncated library with
-        // nothing saying so: the in-process bootstrap that would have reported
-        // pages died with the old process (docs/mobile-offline.md).
         const refreshCoverage = async (): Promise<void> => {
           const status = await facade?.status().catch(() => undefined);
           if (!status) return;
@@ -457,10 +407,6 @@ export function ReplicaProvider({
             multiplex?.updateGatewayBase(liveBase);
             facade?.updateGatewayBase(liveBase);
             facade?.notifyReachable();
-            // THE WALL, RE-RAISED. The mount fails open offline, so this is the
-            // one moment skew is provable: a gateway just answered. Incompatible
-            // flips to the blocking disposition rather than pulling against a
-            // contract this build cannot speak; the same answer settles the flags.
             try {
               features =
                 (await requireMobileOfflineGateway({
@@ -477,12 +423,7 @@ export function ReplicaProvider({
               }
               throw wallError;
             }
-            // Phase A asks the gateway nothing, so only this pass notices a scope
-            // granted since launch. Priming does not remount — `mountedScopes`
-            // picks it up next mount.
             void refreshCachedScopes(identity.gatewayId, liveBase);
-            // The other trigger: a device that mounted offline can only register
-            // for push here.
             sendEventualWork(liveBase);
           }
           publish((value) => ({
@@ -490,8 +431,6 @@ export function ReplicaProvider({
             ...(liveBase ? { gatewayBase: liveBase } : {}),
             ...(features ? { features } : {}),
             online: value.online === true && connected,
-            // The one pass that runs whatever the radio said: re-read the
-            // pause so a resume from the storage screen clears the state.
             storageFull: facade?.storageFull === true,
             reachability: attemptedReachability(
               deviceOnline,
@@ -501,13 +440,6 @@ export function ReplicaProvider({
           }));
           if (liveBase) {
             const outcome = await facade?.pullScopes().catch(() => undefined);
-            // `syncing` above is set OPTIMISTICALLY, so every pass reaching here
-            // MUST settle: an unconditional settle is what stops a pull that
-            // never lands from pinning "Syncing recent changes…" on screen.
-            //
-            // A pull the transfer rules refused is NOT a landed pull: reading
-            // the refusal as freshness paints a settled, silent `current` over
-            // data that was never fetched.
             const policyBlocked = outcome?.policyBlocked === true;
             const landed = outcome !== undefined && !policyBlocked;
             connected = landed || policyBlocked;
@@ -518,8 +450,6 @@ export function ReplicaProvider({
             await refreshCoverage();
             publish((value) => ({
               ...value,
-              // The gateway answered `/info`; the rules, not the radio,
-              // stopped the pull, so connectivity stands.
               online: policyBlocked ? connected : landed,
               reachability: settledReachability(landed, policyBlocked),
             }));
@@ -548,15 +478,10 @@ export function ReplicaProvider({
             ready: true,
             ...(features ? { features } : {}),
             online: connected,
-            // `device-offline`, not `gateway-asleep`: phase A has read only disk,
-            // so no verdict about the gateway exists yet. `gateway-asleep` here
-            // flashes a red "Wake help" row on every cold start; silence wins.
             reachability: connected ? "current" : "device-offline",
             refresh,
           },
         });
-        // A handoff emits several states in a row and only the settled one is
-        // actionable, so they collapse into one pass. Manual refresh stays direct.
         let latestNetwork: Network.NetworkState | undefined;
         reachabilityWork = coalesceWork(async () => {
           const network =
@@ -599,7 +524,6 @@ export function ReplicaProvider({
       cancelled = true;
       reachabilityWork?.cancel();
       freshnessWork?.cancel();
-      // Cancel drops the timer, not the stamps: land them before the mount goes.
       void flushFreshness();
       networkSubscription?.remove();
       void facade?.close();

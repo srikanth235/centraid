@@ -41,20 +41,12 @@ import {
   styles,
 } from "./onboarding-styles";
 
-// First-run onboarding — always-dark, rendered ahead of the tab shell
-// (App.tsx gates on `profile.onboarded`). One way in: a pair ticket (#603);
-// the phone never creates/restores vaults, it enrolls as a device. Enrollment
-// collects display name + accent (the Settings → You fields), then hands off.
-
 type Step = "connect" | "profile" | "done";
 
 function defaultDeviceName(): string {
   return Platform.OS === "ios" ? "iPhone" : "Android phone";
 }
 
-// Every step must fit the device: the primary action never sits below the
-// fold. The decorative hero yields leftover space, shrinking and — past
-// HERO_MIN — going away, re-measured as steps grow. ScrollView = last resort.
 const HERO_NATURAL = HOME_ART.height;
 const HERO_MIN = 96;
 
@@ -67,7 +59,6 @@ export default function Onboarding({
   const [deviceName, setDeviceName] = useState(defaultDeviceName());
   const [displayName, setDisplayName] = useState("");
 
-  // Measured blocks are siblings of the art — one pass, no oscillation.
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [chromeHeight, setChromeHeight] = useState(0);
@@ -97,10 +88,6 @@ export default function Onboarding({
     setStep("done");
   };
 
-  /**
-   * CONDITIONAL step: it exists to learn a name nobody has given yet. If the
-   * roster already names this person (self-pair), adopt it and skip to Done.
-   */
   const afterPaired = (memberName: string | undefined): void => {
     const known = (memberName ?? "").trim();
     if (!known) return setStep("profile");
@@ -161,7 +148,6 @@ function ConnectionStep({
 }: {
   deviceName: string;
   onDeviceName: (value: string) => void;
-  /** The roster's name for this person, when it has one. */
   onPaired: (memberName: string | undefined) => void;
 }): React.JSX.Element {
   const available = isTunnelAvailable();
@@ -173,12 +159,6 @@ function ConnectionStep({
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
 
-  /**
-   * Open the scanner, asking for the camera if we may — the decision stays
-   * where the person initiated it, and a refusal has somewhere to go: when
-   * access is permanently off, hand over the paste fallback instead of a
-   * primary button that silently does nothing.
-   */
   const startScan = (): void => {
     if (pairing) return;
     if (permission?.granted) return setScanning(true);
@@ -208,8 +188,6 @@ function ConnectionStep({
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
-        // Never re-ask a member the roster knows. Undefined means "ask",
-        // never "assume".
         onPaired(await readSelfMemberName());
       } catch (caughtError) {
         scannedRef.current = false;
@@ -300,10 +278,6 @@ function ConnectionStep({
         showPaste ? (
           <>
             <PrimaryButton
-              // Maestro must tap the Pressable, not its TextView child
-              // (run 30708832841).
-              // Spelled through the vocabulary now; the STRING is unchanged,
-              // because renaming it would break every flow that pastes a ticket.
               testID={TEST_IDS.onboarding.connect}
               label={pairing ? "Connecting…" : "Connect"}
               onPress={() => (pairing ? undefined : submit(code))}
@@ -347,7 +321,6 @@ function ConnectionStep({
   );
 }
 
-/** Unified profile step (#603): same fields/palette as Settings → You. */
 function ProfileStep({
   onSave,
 }: {
@@ -450,8 +423,6 @@ function Done({
     </View>
   );
 }
-
-// --- shared pieces ---
 
 function PrimaryButton({
   label,

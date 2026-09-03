@@ -1,10 +1,3 @@
-// The four-scope cap has a UX now (#880 W3.4). The mounted read plane holds
-// four vaults (docs/mobile-offline.md); the switcher is where a member with
-// more than four saved Vaults finds out which ones this phone is carrying.
-//
-// react-native is mocked to plain DOM elements so this runs under jsdom, the
-// same approach ReplicaStatusBar.test.tsx takes.
-// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -128,9 +121,6 @@ vi.mock(
     }) as unknown as Partial<NativeTextModule>
 );
 
-// STABLE identity, deliberately: the sheet's open effect lists both animated
-// values in its dependency array, so a fresh object per render re-runs it, and
-// the registry sync inside it re-renders — a loop with no exit.
 vi.mock(import("../../kit/hooks/useAnimatedValue"), () => {
   const value = { setValue: (): void => undefined };
   return {
@@ -280,15 +270,12 @@ describe("what the switcher says about the four-vault cap (#880)", () => {
       "Four vaults stay on this phone at a time."
     );
     const subs = rowSubs();
-    // Four mounted, so two of the five switchable rows say so and three do not.
     expect(subs.filter((text) => text === "On this phone")).toHaveLength(3);
     expect(
       subs.filter((text) => text === "Over the four-vault limit")
     ).toHaveLength(2);
   });
 
-  // Sabotage target: drop the `> MAX_MOUNTED_NATIVE_SCOPES` guard and every
-  // ordinary two- or three-vault household grows a limit notice it never hits.
   it("says nothing about a limit a household is nowhere near", async () => {
     enrol(3);
     replicaMock.scopes = ["vault-1", "vault-2", "vault-3"].map((vaultId) => ({
@@ -301,8 +288,6 @@ describe("what the switcher says about the four-vault cap (#880)", () => {
     expect(container.textContent).not.toContain("On this phone");
   });
 
-  // A replica still mounting has no mounted set to report. Labelling from an
-  // empty one would paint every saved Vault as evicted on every cold start.
   it("stays silent while the mounted set is still unknown", async () => {
     enrol(6);
     replicaMock.scopes = [];
@@ -312,8 +297,6 @@ describe("what the switcher says about the four-vault cap (#880)", () => {
     expect(container.textContent).not.toContain("four-vault limit");
   });
 
-  // A Vault on another desktop is absent for a different reason entirely, and
-  // this gateway's mounted set says nothing about it.
   it("judges only the active gateway's own saved Vaults", async () => {
     enrol(6);
     registry.links = [
@@ -339,3 +322,4 @@ describe("what the switcher says about the four-vault cap (#880)", () => {
     ).toHaveLength(2);
   });
 });
+// @vitest-environment jsdom

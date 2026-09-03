@@ -1,11 +1,3 @@
-// The Library index's head counts (#880).
-//
-// Five of these numbers are folds over the MERGED timeline — every device
-// photo and every replica row the phone knows about. Written inline in the
-// head's JSX they were five separate passes over that array on every render of
-// the screen, including renders caused by nothing more than the refresh
-// spinner turning or the create-album dialog opening. One pass, computed here
-// so the screen can memoize it against the array identity.
 import type { PhotoAsset } from "./timeline-model";
 
 type CountableAsset = Pick<
@@ -39,7 +31,6 @@ export function photoLibraryCounts(
 }
 
 export interface FaceReviewCounts {
-  /** Distinct named parties; an unnamed region belongs to nobody yet. */
   people: number;
   proposals: number;
 }

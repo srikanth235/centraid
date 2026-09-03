@@ -1,8 +1,3 @@
-// LOCATION TAKEN OUT OF THE BYTES (#816): omitting a place from the UI while
-// handing the OS the original discloses it anyway. A walk, not a re-encode —
-// re-encoding loses capture time and ORIENTATION. Maker notes and non-JPEG
-// containers are out of reach; the caller re-encodes or refuses.
-
 export type RemovedLocation = "exif-gps" | "xmp" | "iptc";
 
 export interface LocationStrip {
@@ -40,7 +35,6 @@ const TYPE_BYTES: Readonly<Record<number, number>> = {
   12: 8,
 };
 
-/** A cyclic `next` pointer must not hang a share. */
 const MAX_IFD_HOPS = 8;
 
 export function isJpeg(bytes: Uint8Array): boolean {
@@ -84,12 +78,10 @@ function tiffBlock(
       ? ((a << 24) | (b << 16) | (c << 8) | d) >>> 0
       : ((d << 24) | (c << 16) | (b << 8) | a) >>> 0;
   };
-  // 42: TIFF byte-order check.
   if (u16(start + 2) !== 42) return null;
   return { start, end, u16, u32 };
 }
 
-/** Zero in place: TIFF offsets are absolute, so excising would shift every tag. */
 function zeroIfd(bytes: Uint8Array, tiff: TiffBlock, at: number): boolean {
   if (at < tiff.start + 8 || at + 2 > tiff.end) return false;
   const count = tiff.u16(at);
@@ -99,7 +91,6 @@ function zeroIfd(bytes: Uint8Array, tiff: TiffBlock, at: number): boolean {
     const entry = at + 2 + k * 12;
     const size = TYPE_BYTES[tiff.u16(entry + 2)] ?? 0;
     const total = size * tiff.u32(entry + 4);
-    // Values over 4 bytes sit elsewhere and need their own zeroing.
     if (total > 4) {
       const valueAt = tiff.start + tiff.u32(entry + 8);
       if (valueAt >= tiff.start && valueAt + total <= tiff.end) {
@@ -138,7 +129,6 @@ function standalone(marker: number): boolean {
   );
 }
 
-/** Null means not walkable — never fall back to the original. */
 export function stripJpegLocation(bytes: Uint8Array): LocationStrip | null {
   if (!isJpeg(bytes)) return null;
   const out = bytes.slice();
@@ -153,7 +143,6 @@ export function stripJpegLocation(bytes: Uint8Array): LocationStrip | null {
       i += 2;
       continue;
     }
-    // Past SOS there is no metadata.
     if (marker === SOS) break;
     if (i + 3 >= out.length) break;
     const length = ((out[i + 2] ?? 0) << 8) | (out[i + 3] ?? 0);

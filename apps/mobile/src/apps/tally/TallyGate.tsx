@@ -1,16 +1,3 @@
-// THE DENIED GATE (§6, "Denied gate"), and the rule it exists to keep.
-//
-// DAY ONE AND DENIED LOOK NOTHING ALIKE (STATES.md, rule 1). Day one offers a
-// first move; denied shows an absence with a RECEIPT behind it — when the
-// grant went, what it covered, that nothing was deleted, and that the other
-// members still hold their own copies of the facts. An app that drew one
-// emptiness for both would be telling a member their ledger was empty when it
-// was merely out of reach.
-//
-// THE CLOCK IS A FACT THE DENIAL CARRIED, so it is stated; a denial that
-// carried none says so instead of inventing a time. Both sentences are §6's,
-// and the choice between them is the only decision this file makes.
-
 import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -36,7 +23,6 @@ export interface TallyGateProps {
   denied: VaultDenied;
 }
 
-/** The receipt line: when the grant went, or that the time went with it. */
 export function revocationLine(denied: VaultDenied): string {
   const at = denied.revoked_at ? clockAt(denied.revoked_at) : null;
   return at === null ? REVOKED_UNKNOWN : revokedAt(at);

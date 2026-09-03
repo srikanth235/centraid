@@ -1,9 +1,3 @@
-// Two empty states, two registers (#765, spec §8). The routine form is the
-// everyday state of a populated screen — an empty consent surface is the
-// HEALTHY state — so it is quieter than the first meeting in every way that
-// counts: title rung instead of display, body instead of reading, an outlined
-// verb instead of the one filled commit.
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -89,3 +83,4 @@ describe(EmptyBlock, () => {
     expect(nodesOf(container, "button")).toHaveLength(0);
   });
 });
+// @vitest-environment jsdom

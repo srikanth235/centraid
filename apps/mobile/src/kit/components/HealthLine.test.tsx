@@ -1,9 +1,3 @@
-// The per-route standing line (#765, spec §11) — one sentence, one NEUTRAL
-// dot, and an inline verb that only ever appears when there is something to
-// act on. The dot is the rule most likely to be "improved": red on an ambient
-// line teaches a member to fear the ordinary state, and `net` means "this
-// leaves the device", which a status line never does.
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -101,8 +95,6 @@ describe(HealthLine, () => {
     expect(styleOf(text ?? null).color).toBe(colors.textFaint);
   });
 
-  // Stub tier: the style OBJECT plus the callback the stubbed `Pressable`
-  // fires. Neither is the device's hit area or RN's responder tree.
   it("declares the 44pt touch-floor minHeight on the inline verb and runs its onPress", () => {
     const calls: string[] = [];
     const container = render(
@@ -124,3 +116,4 @@ describe(HealthLine, () => {
     void noop;
   });
 });
+// @vitest-environment jsdom

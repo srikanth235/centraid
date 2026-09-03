@@ -6,7 +6,6 @@ import {
 } from "./mobile-gateway-compatibility-core";
 import type { MobileGatewayFeatures } from "./mobile-gateway-compatibility-core";
 
-/** C1(b) wall: missing capability → update, never 404-retry. Offline fails open. */
 export async function requireMobileOfflineGateway(input: {
   baseUrl: string;
   online: boolean;
@@ -18,11 +17,9 @@ export async function requireMobileOfflineGateway(input: {
       headers: authHeader(),
     });
   } catch {
-    // Transport error is offline; fail open.
     return undefined;
   }
   if (!response.ok) {
-    // 404 is a judgment: this gateway is too old to serve /info.
     if (response.status === 404)
       throw new MobileGatewayCompatibilityError("update-gateway");
     return undefined;

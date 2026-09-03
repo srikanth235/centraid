@@ -1,17 +1,3 @@
-/*
- * `GATEWAYS_LIST_VAULTS` (#376) — read the vault list of a gateway the
- * client is not (necessarily) addressing right now, without flipping the
- * active gateway. Powers the flat (gateway, vault) switcher: the renderer
- * can preview every vault on every profile before committing to one.
- *
- * Resolution mirrors `resolveGateway` (`gateway-store.ts`) but this module
- * never writes `settings.json` — it's a read, not a switch. `local` still
- * needs the in-process runtime up to have a URL/token, exactly like
- * `settings.ts`'s `resolveEffective` boots it on demand; `direct` and
- * `iroh` resolve straight through `resolveGateway` (keychain token / loopback
- * proxy respectively).
- */
-
 import { resolveGateway } from "./gateway-store.js";
 import { fetchGatewayVaults } from "./gateway-vaults-core.js";
 import type { ListGatewayVaultsResult } from "./gateway-vaults-core.js";

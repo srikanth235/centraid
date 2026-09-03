@@ -1,12 +1,3 @@
-// The eleven places (the Binding Layer, v4 handoff — PLACES table).
-//
-// Four things worth asserting rather than trusting a comment for: the table
-// really has eleven rows, Home is the only one pinned by law, the default pin
-// set is exactly the six the handoff ships pinned, and the band derivation
-// (`bandPlaces`) never lets a member's pin count push the compact band past
-// its cap. Every one of these is a rule a well-meaning table edit — adding a
-// twelfth place, or flipping a `pin` — could break silently.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -49,9 +40,6 @@ describe("the eleven places", () => {
   });
 
   it("uses the exact short labels a 61px band tab needs", () => {
-    // Two names do not fit a 61px tab (:3480): Notifications reads Alerts,
-    // Automations reads Rules. Every other place's short label is its own
-    // name — Connectors is short enough to stand as both.
     expect(getPlace("notifs").short).toBe("Alerts");
     expect(getPlace("autos").short).toBe("Rules");
     expect(getPlace("conn").short).toBe("Connectors");
@@ -84,8 +72,6 @@ describe("the eleven places", () => {
     const band = bandPlaces(allIds);
     expect(band).toHaveLength(1 + BAND_PLACE_SLOTS);
     expect(band[0]?.id).toBe("home");
-    // The first four pinned places in table order, exactly what the compact
-    // band spec calls out by name (:3480).
     expect(band.slice(1).map((p) => p.id)).toStrictEqual([
       "notifs",
       "stats",
@@ -110,9 +96,6 @@ describe("the eleven places", () => {
     expect(searchPlaces("nothing matches this")).toHaveLength(0);
   });
 
-  // The v0 experimental gates. Two places are surfaces the gateway may not be
-  // serving at all, and a band tab onto an unmounted route is the failure this
-  // filter exists to prevent.
   it("drops a place whose gateway feature is switched off", () => {
     const off = { automations: false, connectors: false };
     expect(enabledPlaces(off).map((p) => p.id)).not.toContain("autos");
@@ -120,8 +103,6 @@ describe("the eleven places", () => {
     expect(enabledPlaces(off)).toHaveLength(PLACE_COUNT - 3);
     expect(
       bandPlaces(enabledPlacePins(DEFAULT_PLACE_PINS, off)).map((p) => p.id)
-      // The freed band slots are taken by the next pinned places in table
-      // order — a gated place leaves no hole behind.
     ).toStrictEqual(["home", "notifs", "stats", "data"]);
   });
 
@@ -145,9 +126,6 @@ describe("the eleven places", () => {
     expect(isPlaceEnabled("stats", halfOn)).toBe(true);
   });
 
-  // The rule the whole gate hangs on: no gateway has answered yet, which is
-  // not the same as a gateway that answered "off". Hiding on silence would
-  // reshuffle the band on every offline cold start.
   it("keeps capability-unknown places while applying the Origin seat", () => {
     expect(enabledPlaces(undefined)).toStrictEqual(
       PLACES.filter((place) => place.id !== "gateway")

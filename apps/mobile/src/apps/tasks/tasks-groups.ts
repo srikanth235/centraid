@@ -1,7 +1,3 @@
-// Which rows each place shows. THE ARITHMETIC IS THE WEB APP'S: every group
-// comes back from `apps/tasks/logic.ts`. `null` means the place draws a
-// surface of its own, so a new one cannot fall through to Today's rows.
-
 import { weekdayName } from "@centraid/blueprints/apps/tasks/format";
 import {
   allGroups,
@@ -55,8 +51,6 @@ export type TasksListItem =
   | { kind: "header"; key: string; group: TaskGroup }
   | { kind: "task"; key: string; task: Task; child?: boolean };
 
-/** A header whose rows all fell past the edge is dropped — a group name over
- *  nothing is a claim the list is not making. */
 export function windowItems(
   items: readonly TasksListItem[],
   window: number

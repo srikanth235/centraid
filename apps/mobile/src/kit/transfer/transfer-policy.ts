@@ -1,10 +1,5 @@
-// One transfer record for every byte-bearing app (#711); never copy it into an
-// app or into the drain loop, which reaches up into `kit/`.
-
 import { Store } from "../../storage";
 
-/** Never rename: a tidier key migrates nothing and silently resets every
- * member's answer. */
 export const TRANSFER_POLICY_KEY = "photos.backupRules";
 
 export interface TransferPolicy {
@@ -12,12 +7,9 @@ export interface TransferPolicy {
   allowMetered: boolean;
   allowRoaming: boolean;
   chargerOnly: boolean;
-  /** The floor (#712): `canTransfer()` refuses before asking a radio. The
-   * consent latch gates what is ENQUEUED; this gates draining at all. */
   never: boolean;
 }
 
-/** Defaults stay conservative: unasked cellular spend is a bill. */
 export const DEFAULT_TRANSFER_POLICY: TransferPolicy = {
   wifiOnly: true,
   allowMetered: false,
@@ -42,17 +34,13 @@ export interface TransferPolicySwitch {
   key: keyof TransferPolicy;
   label: string;
   inert: (policy: TransferPolicy) => boolean;
-  /** Required: an inapplicable rule is shown disabled and explained, never
-   * hidden (§18); `lint-engine-conformance.mjs` gates the render. */
   inertReason: (policy: TransferPolicy) => string | undefined;
-  /** `--net` ink, never a fill and never red (§18); only where ON stops it. */
   net?: true;
 }
 
 const NEVER_REASON =
   "“Never move bytes off this device” is on, so no transfer rule applies.";
 
-/** Rendered in this order (§12); `never` last, as the floor. */
 export const TRANSFER_POLICY_SWITCHES: readonly TransferPolicySwitch[] = [
   {
     key: "wifiOnly",

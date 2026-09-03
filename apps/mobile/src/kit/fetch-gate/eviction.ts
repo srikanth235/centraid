@@ -1,10 +1,6 @@
-// EVICTION NEVER TOUCHES A PIN: pins never enter the candidate list at all —
-// a structural exclusion, not a filter at the end that gets forgotten (#883).
-
 export interface StoredContentEntry {
   key: string;
   bytes: number;
-  /** Epoch ms. */
   lastUsedAt: number;
   pinned: boolean;
 }

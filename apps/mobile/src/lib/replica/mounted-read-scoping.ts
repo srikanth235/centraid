@@ -1,10 +1,3 @@
-/*
- * Mounted provenance (`__centraidScopeId` and its siblings) is composed onto
- * the envelope AFTER SQL runs, so `payload_json` holds nothing for it: an
- * ORDER BY or range over a badge is refused and rerun canonically, while
- * `eq`/`in`/`ne` and the null tests are answered by choosing which databases
- * join the union at all (#883).
- */
 import {
   OnlineOnlyError,
   ReplicaProtocolError,
@@ -32,7 +25,6 @@ export type MountedReadFallback =
   | "provenance-order"
   | "provenance-comparison";
 
-/** The cost fallbacks ride on the result; the refusals escalate. */
 export const MOUNTED_READ_FALLBACKS: Readonly<
   Record<MountedReadFallback, string>
 > = {
@@ -51,7 +43,6 @@ export interface MountedReadDegradation {
   reason: string;
 }
 
-/** An absent `degraded` means the read cost what it returned. */
 export interface MountedReadResult extends ReplicaReadWireResult {
   degraded?: readonly MountedReadDegradation[];
 }
@@ -68,7 +59,6 @@ const PROVENANCE_SCALARS: Readonly<Record<string, true>> = {
   [REPLICA_CAN_WRITE]: true,
 };
 
-/** Arrays on a pre-dedupe row; the grammar has no array ops. */
 const PROVENANCE_ARRAYS: Readonly<Record<string, true>> = {
   [REPLICA_SCOPE_IDS]: true,
   [REPLICA_SCOPE_LABELS]: true,
@@ -98,7 +88,6 @@ export function selectMountedScopes(
       continue;
     }
     if (clause.column in PROVENANCE_ARRAYS) {
-      // `scalar()`'s words for an array value, verbatim.
       throw new ReplicaProtocolError(
         `filter ${clause.op} requires scalar values`
       );
@@ -121,7 +110,6 @@ function scopeMatches(
   scope: MountedReplicaScope,
   clause: ReplicaFilterClause
 ): boolean {
-  // A badge is always present, so the null tests need no value.
   if (clause.op === "is-null") return false;
   if (clause.op === "not-null") return true;
   const value = provenanceValue(scope, clause.column);
@@ -135,11 +123,9 @@ function scopeMatches(
   }
   if (clause.op === "eq") return sameValue(value, clause.value);
   if (clause.op === "ne") return !sameValue(value, clause.value);
-  // lt/lte/gt/gte and the day ranges: an ORDER over a badge, by another name.
   throw new OnlineOnlyError(MOUNTED_READ_FALLBACKS["provenance-comparison"]);
 }
 
-/** Booleans compare as 1/0; mixed classes escalate rather than guess. */
 function sameValue(
   value: string | boolean,
   candidate: ReplicaValue | undefined

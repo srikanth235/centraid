@@ -1,13 +1,7 @@
-// Home's springboard COMPOSITION (#905). Both units stayed green through the
-// defect; only the composition saw it. Seam: `useReplicaQuery` alone, so the
-// real tiles, grading and catalog run. Rationale: receipts/issue-905-*.md.
-// Also the conformance sweep; see scripts/lint-app-conformance.mjs.
-
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import manifest from "../../app-conformance.json";
-// @vitest-environment jsdom
 import { mountBlock, nodesOf, press } from "../test/react-native-stub";
 import HomeScreen from "./Home";
 import {
@@ -16,7 +10,6 @@ import {
   orderForSpringboard,
 } from "./home/catalog";
 
-// `Partial<...>` per this repo's other stub-tier tests.
 type ReactNative = typeof import("react-native");
 type AsyncStorageModule =
   typeof import("@react-native-async-storage/async-storage");
@@ -32,7 +25,6 @@ type OriginHealthModule = typeof import("./home/useOriginHealth");
 type LauncherGridModule = typeof import("./home/LauncherGrid");
 type FirstMovesModule = typeof import("./home/FirstMoves");
 
-/** Flipped per test; read by the seam on every call. */
 const reads = vi.hoisted(() => ({ readable: true, synced: true }));
 
 vi.mock(import("react-native"), async () => {
@@ -59,7 +51,6 @@ vi.mock(
     }) as unknown as Partial<SafeAreaContext>
 );
 
-// Focus effects run once, as mount effects.
 vi.mock(import("@react-navigation/native"), async () => {
   const ReactModule = await import("react");
   return {
@@ -123,7 +114,6 @@ vi.mock(
     }) as unknown as Partial<ReplicaProviderModule>
 );
 
-// THE SEAM: `unavailable` is what a phone with no replica session reports.
 vi.mock(import("../kit/hooks/useReplicaQuery"), async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -149,8 +139,6 @@ vi.mock(
     }) as unknown as Partial<OriginHealthModule>
 );
 
-// Publishes the ids it was handed (the #905 claim) and one pressable each,
-// under the grid's own handle expression.
 vi.mock(import("./home/LauncherGrid"), async () => {
   const ReactModule = await import("react");
   const { TEST_ID_PREFIXES } = await import("../kit/test-ids");
@@ -189,8 +177,6 @@ vi.mock(import("./home/FirstMoves"), async () => {
   } as unknown as Partial<FirstMovesModule>;
 });
 
-// Chrome this file makes no claim about. `vi.hoisted`: `vi.mock` lifts above
-// ordinary bindings.
 const blank = vi.hoisted(() => async () => {
   const ReactModule = await import("react");
   return { default: () => ReactModule.createElement("div") };
@@ -227,14 +213,12 @@ function renderHome(): HTMLElement {
   return mountHome().container;
 }
 
-/** Ids off the launcher, or `undefined` if it never mounted. */
 function gridItems(container: HTMLElement): string[] | undefined {
   const [grid] = nodesOf(container, '[data-testid="launcher-grid"]');
   const items = grid?.dataset.items;
   return items === undefined ? undefined : items.split(",").filter(Boolean);
 }
 
-/** Every app pre-grading; derived so adding one cannot narrow the claim. */
 const everyLauncherId = orderByPins(
   orderForSpringboard(buildLauncherItems()),
   []
@@ -247,19 +231,15 @@ describe("Home springboard composition", () => {
   });
 
   it("keeps every app on the grid when no tile can be read", () => {
-    // #905: no replica session, so the per-tile rule demoted every tile.
     reads.readable = false;
 
     const container = renderHome();
 
-    // EVERY app: Locker's body is a state, so it earned the grid even under
-    // the old rule and would keep a laxer check green.
     expect(gridItems(container)).toStrictEqual(everyLauncherId);
     expect(nodesOf(container, '[data-testid="day-one"]')).toHaveLength(0);
   });
 
   it("still routes a genuinely empty vault to day one", () => {
-    // The complement a careless fix breaks: `empty` is not `unknown`.
     const container = renderHome();
 
     expect(nodesOf(container, '[data-testid="day-one"]')).toHaveLength(1);
@@ -276,8 +256,6 @@ describe("Home springboard composition", () => {
   });
 });
 
-// GENERATED: app #9 fails here, in the PR that registers it.
-
 const CONFORMANCE = Object.entries(manifest.apps);
 
 describe("shell↔app conformance", () => {
@@ -286,7 +264,6 @@ describe("shell↔app conformance", () => {
   });
 
   it("sweeps exactly the apps the launcher builds", () => {
-    // No-op guard: a drifted manifest sweeps the wrong set, greenly.
     expect(CONFORMANCE.map(([id]) => id).sort()).toStrictEqual(
       [...everyLauncherId].sort()
     );
@@ -301,7 +278,6 @@ describe("shell↔app conformance", () => {
     });
 
     it("opens its own cover when the tile is pressed", () => {
-      // The claim no unit sees. The sequence: one, to this cover.
       const { container, routed } = mountHome();
 
       press(nodesOf(container, `[data-testid="${row.tile}"]`)[0]);
@@ -315,3 +291,4 @@ describe("shell↔app conformance", () => {
     });
   });
 });
+// @vitest-environment jsdom

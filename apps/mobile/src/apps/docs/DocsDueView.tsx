@@ -1,18 +1,3 @@
-// Coming due (handoff Part 2 §4; #821) — rendered HONESTLY ABSENT.
-//
-// Obligations are dates read out of documents by the `due` capability, staged
-// as tentative appointments each carrying the passage it was read from — "the
-// evidence is the feature. A date with no passage is a guess, and a guess
-// must not enter the member's calendar."
-//
-// That capability is a consent that is OFF and has no runner in this wave
-// (blueprints/apps/docs/capabilities.ts: "the only answer this wave can give
-// is `off` — not because the app decided, but because there is no consent
-// record to read and inventing one would be the exact failure"). There is no
-// replica source for obligations, so this shelf shows nothing staged, says
-// why in the capability's own words, and routes to the one place the consent
-// can be given. Nothing is mocked; see INTEGRATION-NOTES.md → Withholdings.
-
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";

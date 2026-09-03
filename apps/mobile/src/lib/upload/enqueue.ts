@@ -1,6 +1,3 @@
-// Sha computed HERE and persisted — resume, dedupe, and seal AAD all key on
-// it. A crash mid-hash left nothing enqueued; the next pass re-hashes.
-
 import { partCountFor, frameCountFor, sealedSizeFor } from "./cbsf";
 import type { FileSourceOpener } from "./file-source";
 import { IncrementalSha256 } from "./incremental-sha256";
@@ -10,7 +7,6 @@ import type {
   UploadQueueStore,
 } from "./store";
 
-/** Must match the seal frame size. */
 const HASH_CHUNK_BYTES = 4 * 1024 * 1024;
 
 export interface EnqueueInput {
@@ -18,9 +14,7 @@ export interface EnqueueInput {
   targetVaultId?: string;
   mediaType?: string;
   filename?: string;
-  /** Verified against the opened file. */
   plaintextSize: number;
-  /** Precomputed digest avoids hashing a 4 GB file twice (F11 probe); verified like a fresh hash. */
   digest?: { sha256: string; size: number };
 }
 
@@ -36,7 +30,6 @@ export interface EnqueueDeps {
   createDigest?: () => StreamingDigest;
 }
 
-/** Flat-memory streaming SHA-256; the JS default is slow (~12 MB/s on Hermes) — inject a native digest. */
 export async function sha256OfFile(
   openFile: FileSourceOpener,
   localUri: string,

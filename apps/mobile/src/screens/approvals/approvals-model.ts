@@ -1,10 +1,3 @@
-// What the Notifications place SAYS (#765, spec §2). Pure — no React, gateway
-// or renderer — so the copy contract is under test without mounting anything.
-// Three standing rules: kind badges are WORDS, never coloured pills (the one
-// chromatic ink means "this leaves the device"); notices fold into the queue by
-// what they NEED, never behind a source-type filter; and a busy control loses
-// its verb entirely, so a second tap cannot stage a second decision.
-
 import {
   APPROVALS_CANNOT_EDIT_KEY as CANNOT_EDIT_KEY,
   APPROVALS_CANNOT_EDIT_VALUE as CANNOT_EDIT_VALUE,
@@ -28,12 +21,6 @@ import type {
   MobileOutboxRow,
   ParkedInvocation,
 } from "../../lib/gateway";
-
-// ─── copy that states a rule ───────
-//
-// Any sentence desktop also renders comes from `@centraid/client/approvals-copy`
-// (#805) — one promise written twice can be broken on one surface. Re-exported
-// under this file's own names.
 
 export {
   APPROVALS_ALWAYS_TITLE as ALWAYS_TITLE,
@@ -71,7 +58,6 @@ export const WAITING_CHIPS = [
 
 export type WaitingFilter = (typeof WAITING_CHIPS)[number]["key"];
 
-/** One item, one chip: matching two makes "showing 3 of 12" a lie. */
 export type WaitingKind = "staged" | "auth" | "risk";
 
 export function matchesFilter(
@@ -80,8 +66,6 @@ export function matchesFilter(
 ): boolean {
   return filter === "all" || filter === kind;
 }
-
-// ─── phrasing ───────
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -112,8 +96,6 @@ export function agoPhrase(at: number, now: number): string {
   });
 }
 
-/** Nothing when the stamp is unreadable: an invented time on a consent surface
- *  is worse than a missing one. */
 export function stampPhrase(
   iso: string | null | undefined,
   now: number,
@@ -137,8 +119,6 @@ export function callerPhrase(kind: string, caller: string | null): string {
   }
 }
 
-/** Never guesses past verb and connection kind: an unrecognised verb is
- * "Outbound write", true of every item here. */
 export function outboundLabel(row: {
   verb: string;
   connection: { kind: string };
@@ -174,7 +154,6 @@ function spanWords(ms: number): string {
   return countWord(Math.max(1, Math.round(ms / MINUTE)), "minute");
 }
 
-/** `undefined` for an uncollapsed notice, which has no span to tell. */
 export function noticeSpanPhrase(
   row: Pick<MobileNotice, "count" | "firstAt" | "lastAt" | "severity">
 ): string | undefined {
@@ -195,8 +174,6 @@ export function noticeSub(notice: MobileNotice, now: number): string {
     noticeSpanPhrase(notice),
   ]);
 }
-
-// ─── the queue ───────
 
 export function isAttention(notice: MobileNotice): boolean {
   return notice.archivedAt === null && notice.severity !== "info";
@@ -219,7 +196,6 @@ export function waitingTotal(data: MobileNotifications): number {
   );
 }
 
-/** Where `ready` becomes `full`: four chips over four items is furniture. */
 export const FULL_AT = WAITING_CHIPS.length;
 
 export function opsStateFor(
@@ -237,7 +213,6 @@ export function waitingMeta(shown: number, total: number): string {
     : `${String(total)} waiting`;
 }
 
-/** No inline verb, ever: the page's content IS the thing to act on. */
 export function approvalsHealth(waiting: number): HealthCopy {
   return {
     detail: HEALTH_DETAIL,
@@ -247,8 +222,6 @@ export function approvalsHealth(waiting: number): HealthCopy {
     loadingText: READING_HEALTH,
   };
 }
-
-// ─── the staged write ───────
 
 const TITLE_KEYS = ["subject", "title", "name"];
 const BODY_KEYS = ["body", "text", "message"];
@@ -265,7 +238,6 @@ function readString(
   return undefined;
 }
 
-/** Never `[object Object]`. */
 export function factValue(value: unknown): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value))
@@ -289,8 +261,6 @@ export function stagedEyebrow(row: MobileOutboxRow, now: number): string {
   ]);
 }
 
-/** Nothing staged is hidden from the approver. The irreversibility fact stays
- * last and `net`: it changes what approving MEANS. */
 export function stagedFacts(row: MobileOutboxRow): PanelFact[] {
   const facts: PanelFact[] = [];
   const used = new Set([
@@ -327,21 +297,16 @@ export function stagedFacts(row: MobileOutboxRow): PanelFact[] {
   return facts;
 }
 
-// ─── waiting rows ───────
-
 export interface WaitingRowCopy {
   key: string;
   kind: WaitingKind;
   title: string;
   sub: string;
   meta: string;
-  /** `net` only for bytes leaving the device or an outside link that failed. */
   net: boolean;
   action: string;
 }
 
-/** `action` stays a bare word: the screen owns the handler. `hint` keeps ten
- * identical "Open" controls distinct to a screen reader (#708 B.4). */
 export function rowVerb(
   copy: { title: string; action?: string },
   onPress: () => void,

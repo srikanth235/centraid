@@ -1,18 +1,3 @@
-// SKELETON — the loading state, at the geometry of the thing that is loading
-// (#765, spec §10).
-//
-// Never a spinner. A spinner says "I don't know how long", which on a gateway
-// running on the member's own machine is almost never true, and it says
-// nothing at all about what is arriving. A skeleton at the row block's exact
-// geometry says both: this is a list, of rows this tall, and nothing will
-// reflow when the words land.
-//
-// The breath is one `Animated.Value` per row on the native driver, staggered
-// 90ms down the list, and it is GATED by the app's existing reduced-motion
-// hook — when a member has asked for less motion the rows are pinned at the
-// rest opacity rather than animated to a shorter duration, because a 1ms
-// breath is a flicker, which is the thing the setting exists to prevent.
-
 import React, { useEffect, useMemo } from "react";
 import { Animated, View } from "react-native";
 
@@ -30,15 +15,10 @@ import { useReducedMotion } from "../hooks/useReducedMotion";
 import { useTheme } from "../theme";
 import { styles } from "./SkeletonRows.styles";
 
-/** A bone's width, in the one form a native style accepts. The shared model
- *  counts in shares of the row; this is the unit that share is drawn in. */
 type BoneWidth = `${number}%`;
 
 export interface SkeletonRowsProps {
-  /** How many rows. Six is the reference's own count. */
   rows?: number;
-  /** What is being read, in one sentence — the only thing a screen reader
-   *  can be told about a surface that has no content yet. */
   accessibilityLabel: string;
 }
 

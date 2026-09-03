@@ -1,6 +1,3 @@
-// Frame-drop probe (#659). Self-calibrate Hz from observed intervals
-// (hardcoded 60 is wrong on ProMotion). No ambient timer (D5).
-
 export interface FrameSample {
   frames: number;
   expectedFrames: number;
@@ -15,14 +12,9 @@ export interface FrameSamplerDeps {
   now: () => number;
 }
 
-/** Real display rates; a p10 interval near one of these snaps to it. */
 const KNOWN_REFRESH_HZ = [120, 90, 60, 30] as const;
 const SNAP_TOLERANCE = 0.12;
 
-/**
- * Count frames for `durationMs` against the rate the device demonstrated.
- * Window starts at the first callback — scheduling cost is not a drop.
- */
 export async function sampleFrames(
   durationMs: number,
   deps: FrameSamplerDeps
@@ -73,10 +65,6 @@ export async function sampleFrames(
   };
 }
 
-/**
- * Display rate for this sample. p10 interval = best sustained pace (a min
- * would follow one short delta; drops only lengthen). Snap to a real Hz.
- */
 export function resolveTargetHz(intervals: readonly number[]): number {
   const positive = intervals
     .filter((interval) => interval > 0)
@@ -90,10 +78,6 @@ export function resolveTargetHz(intervals: readonly number[]): number {
   return snapped ?? observedHz;
 }
 
-/**
- * One Maestro `copyTextFrom` line. Shape is pinned by this module's test —
- * `scroll-frames.mjs` parses `dropped=<number>%`. No parser here (probe is `.mjs`).
- */
 export function formatFrameSample(sample: FrameSample): string {
   return [
     `frames=${sample.frames}`,

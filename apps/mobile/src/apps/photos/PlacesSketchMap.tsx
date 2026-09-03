@@ -1,6 +1,3 @@
-// THE PRIVATE SKETCH (#816): place-map.ts arithmetic over vault coordinates — graticule, scale bar,
-// north, photos as pins. No basemap: opening Places requests nothing of anyone.
-
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { G, Line, Text as SvgText } from "react-native-svg";
@@ -31,7 +28,6 @@ export default function PlacesSketchMap({
       projectPlaces(points, {
         width,
         height,
-        // Padding clears half the largest pin; merge = widest pin.
         padding: PIN_MAX / 2 + 6,
         mergeDistance: PIN_MAX,
       }),
@@ -127,7 +123,6 @@ export default function PlacesSketchMap({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // Sunken surface — read INTO, not a card lying on the page.
     plate: {
       backgroundColor: colors.bgSunken,
       borderRadius: radii.lg,

@@ -1,8 +1,3 @@
-// Which rows a place asks for (#834). Every group is the blueprint's own
-// answer, so what is asserted here is the ROUTING: a place either names one of
-// those answers or declares that it draws a surface of its own — never falls
-// through to Today's rows.
-
 import { describe, expect, it } from "vitest";
 
 import {

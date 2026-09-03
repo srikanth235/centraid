@@ -1,9 +1,3 @@
-/*
- * Pure crash-record formatting + rotation-decision logic (#351).
- * Electron-free so it unit-tests as plain logic; `crash-log.ts` wires in
- * `app.getPath('userData')` + real filesystem writes.
- */
-
 export type CrashKind =
   | "uncaughtException"
   | "unhandledRejection"
@@ -11,14 +5,12 @@ export type CrashKind =
   | "child-process-gone";
 
 export interface CrashRecord {
-  /** ISO timestamp. */
   at: string;
   kind: CrashKind;
   message: string;
   stack?: string;
 }
 
-/** Normalize whatever `process.on('uncaughtException' | 'unhandledRejection', ...)` hands us. */
 export function toCrashRecord(
   kind: CrashKind,
   err: unknown,
@@ -37,12 +29,10 @@ export function toCrashRecord(
   };
 }
 
-/** One newline-delimited JSON line — the crash log is NDJSON, cheap to `tail`/parse. */
 export function formatCrashLine(record: CrashRecord): string {
   return `${JSON.stringify(record)}\n`;
 }
 
-/** True once the log has grown past the cap and should rotate before the next append. */
 export function shouldRotate(
   currentSizeBytes: number,
   maxBytes: number

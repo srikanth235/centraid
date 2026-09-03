@@ -1,6 +1,3 @@
-// One page of the lightbox pager. Layout comes from the record's aspect ratio,
-// so the frame does not move when the bytes land (§7.1, §14).
-
 import { Image } from "expo-image";
 import { VideoView, useVideoPlayer } from "expo-video";
 import React, { useEffect, useState } from "react";
@@ -59,7 +56,6 @@ function VideoAsset({
   );
 }
 
-/** Preview plus the one tap that spends the bytes — never a spinner or a broken frame. */
 function MeteredPlaceholder({
   asset,
   width,
@@ -94,8 +90,6 @@ function MeteredPlaceholder({
   );
 }
 
-/** Live photo or audio scan only. VIDEO DOES NOT GET ONE: `VideoView` draws the
- *  platform's own scrubber. */
 function Transport({
   variantLabel,
   durationS,
@@ -105,7 +99,6 @@ function Transport({
   variantLabel: string;
   durationS: number;
   onPlay: () => void;
-  /** An empty strip renders NOTHING, not a placeholder box (#724). */
   scrubFrames?: readonly ScrubFrame[];
 }): React.JSX.Element {
   const { colors } = useTheme();
@@ -174,9 +167,7 @@ export function MediaPage({
   asset: PhotoAsset;
   companionUri?: string;
   networkType: string | undefined;
-  /** The stage's status line is the ONE place that offer lives (proto 4645). */
   originalRequested?: boolean;
-  /** The status line has to print the LIVE percentage. */
   onZoom?: (scale: number) => void;
   width: number;
   height: number;
@@ -188,8 +179,6 @@ export function MediaPage({
   );
   const [fullQualityUnlocked, setFullQualityUnlocked] = useState(false);
   const [zoom, setZoom] = useState(1);
-  // Derived during render, not in an effect: the reset lands before paint, so a
-  // new asset never flashes the previous one's source.
   const [qualityAssetId, setQualityAssetId] = useState(asset.id);
   if (qualityAssetId !== asset.id) {
     setQualityAssetId(asset.id);
@@ -197,19 +186,14 @@ export function MediaPage({
     setFullQualityUnlocked(false);
     setZoom(1);
   }
-  // Metered: nothing reaches for the original until the member asks, and the
-  // status-line action states the cost before it counts as that ask.
   const access = fetchAccess(
     networkType,
     fullQualityUnlocked || originalRequested
   );
   const unlockFullQuality = (): void => setFullQualityUnlocked(true);
-  // Once per Live Photo companion, never for an ordinary video (#724).
   const [scrubFrames, setScrubFrames] = useState<ScrubFrame[]>([]);
   useEffect(() => {
     let cancelled = false;
-    // Scheduled: the compiler's EffectSetState rule forbids a synchronous
-    // effect-body setState.
     const reset = setTimeout(() => {
       if (!cancelled) setScrubFrames([]);
       if (!companionUri || cancelled) return;
@@ -229,13 +213,10 @@ export function MediaPage({
   const startScale = useSharedValue(1);
   const panX = useSharedValue(0);
   const panY = useSharedValue(0);
-  // A shared value cannot be written from a render body, so the transform reset
-  // is the one effect here; without it a recycled row opens magnified.
   useEffect(() => {
     applyZoom(scale, ZOOM_FIT, { x: panX, y: panY });
   }, [asset.id, panX, panY, scale]);
   const zoomStyle = useAnimatedStyle(() => ({
-    // Translate BEFORE scale: the offset is in the frame's own pixels.
     transform: [
       { translateX: panX.value },
       { translateY: panY.value },
@@ -261,10 +242,8 @@ export function MediaPage({
     applyZoom(scale, next, { x: panX, y: panY });
     settleZoom(next);
   };
-  // The status line's ask escalates the rung from OUTSIDE this component.
   const rung = originalRequested ? "original" : quality;
 
-  // A video streams the original on mount — on cellular it waits behind the tap.
   if (asset.kind === "video" || (playingLive && companionUri))
     return access === "granted" ? (
       <View style={{ width }}>

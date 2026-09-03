@@ -11,7 +11,6 @@ function encodeGwPair(payload: {
   exp: number;
 }): string {
   const json = JSON.stringify({ v: 1, kind: "centraid-gw-pair", ...payload });
-  // Node Buffer is available under vitest; mirrors gateway encodePairingTicket.
   return Buffer.from(json, "utf8").toString("base64url");
 }
 
@@ -68,8 +67,6 @@ describe(parsePairingInput, () => {
   });
 
   it("rejects unknown gateway ticket kinds — the pair ticket is the only ticket (#603)", () => {
-    // The founding-ticket kind lands in this bucket too: the parser
-    // special-cases no kind, so any non-pair kind is refused the same way.
     const token = Buffer.from(
       JSON.stringify({
         v: 1,

@@ -12,7 +12,6 @@ function mountForm(html: string): HTMLFormElement {
   return document.body.querySelector("form")!;
 }
 
-/** jsdom reports 0×0 boxes; paint a non-zero box so visibility matches real pages. */
 function paintVisible(root: ParentNode = document): void {
   for (const input of root.querySelectorAll("input")) {
     vi.spyOn(input, "getBoundingClientRect").mockReturnValue({
@@ -30,9 +29,7 @@ function paintVisible(root: ParentNode = document): void {
 }
 
 describe("page-fields", () => {
-  beforeEach(() => {
-    // Default computed style is visible in jsdom; keep getComputedStyle real.
-  });
+  beforeEach(() => {});
 
   afterEach(() => {
     document.body.innerHTML = "";
@@ -62,8 +59,6 @@ describe("page-fields", () => {
       </form>
     `);
       paintVisible(form);
-      // Override computed style for the hidden one via a display:none style already set.
-      // jsdom getComputedStyle honors style="display:none".
       const fields = findFields();
       expect(fields.password?.name).toBe("vis-pw");
     });

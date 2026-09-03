@@ -1,7 +1,3 @@
-// The loading state (#765, spec §10). A skeleton breathes; it never spins —
-// and it is drawn at the ROW BLOCK's own geometry, because the whole promise
-// is that nothing reflows when the words arrive.
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -71,3 +67,4 @@ describe(SkeletonRows, () => {
     ).toHaveLength(3);
   });
 });
+// @vitest-environment jsdom

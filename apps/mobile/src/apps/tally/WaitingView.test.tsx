@@ -1,18 +1,3 @@
-// WAITING, RENDERED — and the honesty this seat owes about its own doors.
-//
-// What this pins:
-//
-//  - THERE IS NO APPROVE AND NO DECLINE. No mobile transport reaches the
-//    gateway's per-intent decide door, so neither verb is drawn — and the
-//    surface says whose rows it IS showing rather than implying it shows
-//    everybody's. A future edit that adds the buttons without adding the door
-//    fails here.
-//  - EMPTY IS THE HEALTHY STATE, in three different sentences, so a screen
-//    with nothing on it still says which nothing.
-//  - A NUDGE IS PREPARED, NEVER SENT, in any tense.
-//  - A queued row takes the 2px leading rule of an unsettled write.
-
-// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -130,8 +115,6 @@ describe("a reminder", () => {
     );
     expect(container.textContent).toContain(NUDGE_PARKED);
     expect(container.textContent).toContain("Ana");
-    // The two shared lines that use the word both DENY it ("never sent",
-    // "nothing is sent from here"). What must never appear is the claim.
     expect(container.textContent).not.toMatch(/\bwas sent\b|\bSent\b/u);
     unmount();
   });
@@ -147,3 +130,4 @@ describe("an unsettled write", () => {
     unmount();
   });
 });
+// @vitest-environment jsdom

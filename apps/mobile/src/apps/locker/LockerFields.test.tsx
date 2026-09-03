@@ -1,18 +1,3 @@
-// The field row and the permit gate, rendered (README-Locker §2, §5, §6).
-//
-// The §6 sentences are VERBATIM here on purpose: this app's whole claim is
-// that it states its own boundary in words rather than implying it with a
-// lock icon, so a paraphrase is a defect and this is where it fails.
-//
-//  - a sealed row shows a FIXED dot run whose length never tracks the
-//    secret's, and offers Reveal and Copy
-//  - a revealed row offers Copy and Conceal, states the remaining time, and
-//    says the receipt is ALREADY written — the cost has been paid
-//  - the permit gate is a full-stop overlay that names the item, the field,
-//    the ~30-second life and the receipt, as four separate sentences
-//  - a refusal is shown, because a refusal is receipted too
-
-// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -192,3 +177,4 @@ describe("the permit gate", () => {
     unmount();
   });
 });
+// @vitest-environment jsdom

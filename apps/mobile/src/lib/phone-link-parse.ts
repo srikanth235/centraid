@@ -1,24 +1,13 @@
-/*
- * Pure pairing-ticket parsers for mobile (no React Native imports).
- *
- * Desktop QR: JSON `{v:1, kind:'centraid-pair', ticket, code}`
- * Headless VPS: base64url JSON `{v:1, kind:'centraid-gw-pair', gw, t, s, …}`
- * from `centraid-gateway pair` / `pair --qr`.
- */
-
 import { base64ToBytes } from "./upload/bytes";
 
-/** Desktop "Connect phone" QR payload (#263). */
 export type DesktopPairPayload = {
   kind: "centraid-pair";
   ticket: string;
   code: string;
 };
 
-/** Headless gateway ticket from `centraid-gateway pair` (#289 / #376). */
 export type GatewayPairPayload = {
   kind: "centraid-gw-pair";
-  /** Gateway iroh EndpointTicket (identity + relay hint). */
   gw: string;
   t: string;
   s: string;
@@ -28,10 +17,6 @@ export type GatewayPairPayload = {
 
 export type PairingInput = DesktopPairPayload | GatewayPairPayload;
 
-/**
- * Parse the desktop's pairing QR payload. Local mirror of
- * `parsePairQrPayload` in packages/tunnel/src/protocol.ts.
- */
 export function parsePairQr(
   raw: string
 ): { ticket: string; code: string } | undefined {
@@ -40,17 +25,10 @@ export function parsePairQr(
   return { ticket: parsed.ticket, code: parsed.code };
 }
 
-/**
- * Accept a desktop QR JSON string or a headless pairing ticket (scan or paste).
- * The pair ticket is the only ticket shape there is (#603) — gateways
- * found themselves on first start, so nothing else is redeemable here.
- * Whitespace-tolerant.
- */
 export function parsePairingInput(raw: string): PairingInput | undefined {
   const trimmed = raw.trim();
   if (!trimmed) return undefined;
 
-  // Desktop QR is plain JSON.
   try {
     const obj = JSON.parse(trimmed) as Partial<{
       v: number;
@@ -64,10 +42,9 @@ export function parsePairingInput(raw: string): PairingInput | undefined {
       return { kind: "centraid-pair", ticket: obj.ticket, code: obj.code };
     }
   } catch {
-    /* not JSON — try gw-pair token */
+    // Intentionally empty.
   }
 
-  // One-line gateway ticket (base64url of JSON).
   try {
     const json = utf8FromBase64Url(trimmed);
     const obj = JSON.parse(json) as Partial<{

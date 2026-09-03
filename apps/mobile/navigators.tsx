@@ -1,9 +1,3 @@
-// The nested app-stack navigators: each cover's screens wired into its stack.
-//
-// It lives beside `App.tsx`, not under `src/`, because it names screens from
-// every app and only the composition root may do that
-// (`scripts/check-import-boundaries.ts`).
-
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 
@@ -161,13 +155,6 @@ export function DocsNavigator(): React.JSX.Element {
   );
 }
 
-/**
- * Locker's own stack. Ten surfaces on the design's route table, six routes
- * here: the four band PLACES share `LockerHome` (a band tap swaps what is
- * drawn, never pushes), and the two gates are not routes at all — every
- * surface wraps `LockerScreen.tsx`, which withdraws the children and the band
- * while the vault is locked, at setup or denied.
- */
 export function LockerNavigator(): React.JSX.Element {
   const { colors } = useTheme();
   return (
@@ -187,13 +174,6 @@ export function LockerNavigator(): React.JSX.Element {
   );
 }
 
-/**
- * Tally's own stack. Fifteen surfaces on the design's route table, twelve
- * routes here: the four band PLACES share `TallyHome` (a band tap swaps what is
- * drawn, never pushes), and the denied gate is not a route at all — every
- * surface wraps `TallyScreen.tsx`, which withdraws the children and the band
- * while the grant is gone.
- */
 export function TallyNavigator(): React.JSX.Element {
   const { colors } = useTheme();
   return (

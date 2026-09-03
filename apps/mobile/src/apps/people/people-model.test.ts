@@ -1,14 +1,8 @@
-// The view-model projection, asserted where it can lie: the roster shaping,
-// the tri-state link facts, the overdue/Never arithmetic THROUGH the shared
-// format module, the search scope, and the stored-hue round trip.
-
 import { describe, expect, it } from "vitest";
 
 import { isOverdue } from "@centraid/blueprints/apps/people/format";
 import type { PersonRow } from "@centraid/blueprints/apps/people/types";
 
-// The pure module, not the component: this suite runs in the node environment
-// and `PersonAvatar.tsx` pulls React Native's Flow-typed entry.
 import { avatarFill } from "../../kit/components/person-avatar-fill";
 import {
   applyRosterFilter,
@@ -98,7 +92,6 @@ describe("[law:people-link-tristate] the link fact is linked, unlinked or ABSENT
     expect(ana?.linked).toBe(true);
     expect(ana?.vault_count).toBe(1);
     expect(tom?.linked).toBe(false);
-    // Newest profile first — the query's own order.
     expect(roster.people[0]?.party_id).toBe("p2");
   });
 
@@ -106,7 +99,6 @@ describe("[law:people-link-tristate] the link fact is linked, unlinked or ABSENT
     const roster = rosterRows(null);
     expect(roster.linksAvailable).toBe(false);
     for (const row of roster.people) expect(row.linked).toBeNull();
-    // Unknown answers NEITHER link chip.
     expect(applyRosterFilter(roster.people, "linked")).toStrictEqual([]);
     expect(applyRosterFilter(roster.people, "unlinked")).toStrictEqual([]);
   });
@@ -176,7 +168,6 @@ describe("[law:people-search-scope] search covers name, role and notes", () => {
     expect(searchRoster(people, notes, "GARDEN")).toHaveLength(1);
     const byNote = searchRoster(people, notes, "coast");
     expect(byNote).toHaveLength(1);
-    // The matched passage rides as the snippet.
     expect(byNote[0]?.snippet).toBe("Met at the coast in June");
   });
 
@@ -202,7 +193,6 @@ describe("[law:people-avatar-hue] the stored hue round-trips across surfaces", (
     );
     const derived = avatarFill({ party_id: "p1", avatar_color: null }, ring);
     expect(derived.startsWith("ring:")).toBe(true);
-    // Keyed by the id, so a rename never moves them.
     expect(avatarFill({ party_id: "p1" }, ring)).toBe(derived);
   });
 });

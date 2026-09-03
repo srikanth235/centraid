@@ -85,8 +85,6 @@ describe("web-host", () => {
       deviceName: expect.stringMatching(/^Web browser · [A-F0-9]{4}$/u),
       rememberDevice: false,
     });
-    // Durable even though `rememberDevice` defaulted to false: the enrollment
-    // must survive closing the browser, or the device silently unpairs.
     const persisted = JSON.parse(
       localStorage.getItem("centraid.web.v1.connection") ?? "{}"
     ) as Record<string, unknown>;
@@ -144,9 +142,6 @@ describe("web-host", () => {
     });
     await window.CentraidApi.redeemGatewayPairing({ ticket: ticket() });
 
-    // A browser restart drops sessionStorage and nothing else. Declining the
-    // offline copy must NOT put the enrollment there, or the next launch asks
-    // an already-paired device for a fresh pairing ticket.
     sessionStorage.clear();
 
     await expect(window.CentraidApi.getGatewayAuth()).resolves.toMatchObject({
@@ -265,9 +260,6 @@ describe("web-host", () => {
     });
   });
 
-  // Pairing stopped asking about the offline copy, so Settings → This device
-  // is the only place it is answered — and turning it off has to actually
-  // take the replica with it, not just flip a stored flag.
   test("turning the offline copy off persists it and asks the shell to purge the replica", async () => {
     await window.CentraidApi.addGateway({
       label: "Home",

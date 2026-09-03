@@ -2,12 +2,6 @@ import React from "react";
 import { Pressable } from "react-native";
 import type { AccessibilityRole, StyleProp, ViewStyle } from "react-native";
 
-/**
- * The kit's bare tap target, not a second `Button`: the caller owns what is
- * visible, the kit what surrounds it. Invariant 4's 44px floor is bought with
- * SLOP, never a `minWidth` box that would move every header (#883).
- */
-
 const PRESSED_OPACITY = 0.85;
 
 const TARGET_SLOP = 10;
@@ -22,7 +16,6 @@ export interface TappableProps {
   onPressIn?: () => void;
   onPressOut?: () => void;
   style?: StyleProp<ViewStyle>;
-  /** A handle from `kit/test-ids`, never a hand-spelled string (#890 W2). */
   testID?: string;
   children?: React.ReactNode;
 }

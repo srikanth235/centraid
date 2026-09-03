@@ -10,7 +10,6 @@ export async function loadPairing(): Promise<PairingState | undefined> {
   const value = values[PAIRING_KEY];
   if (!value || typeof value !== "object") return undefined;
   const raw = value as Record<string, unknown>;
-  // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
   const vaults = normalizePairingVaults(raw);
   if (vaults.length === 0) return undefined;
   const activeId =
@@ -31,7 +30,6 @@ export async function savePairing(pairing: PairingState): Promise<void> {
   await chrome.storage.local.set({ [PAIRING_KEY]: pairing });
 }
 
-/** Change only the active vault; the device enrollment remains shared. */
 export async function selectPairingVault(
   vaultId: string
 ): Promise<PairingState | undefined> {

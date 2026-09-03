@@ -1,7 +1,3 @@
-// A cluster is a read-time view over already-loaded rows keyed by the phash
-// behind `duplicateHint` — nothing is stored, so there is no dismiss to un-set.
-// Both meta halves return `null` unless EVERY copy carries the datum.
-
 import { formatBytes } from "@centraid/design";
 
 import type { PhotoAsset } from "./timeline-model";
@@ -28,7 +24,6 @@ export function duplicateClusters(
   return clusters;
 }
 
-/** Mirrors `fmtClusterWindow` in the web's `components/Duplicates.tsx`. */
 export function clusterWindow(assets: readonly PhotoAsset[]): string | null {
   if (assets.length < 2) return null;
   if (assets.some((asset) => asset.capturedAt === undefined)) return null;

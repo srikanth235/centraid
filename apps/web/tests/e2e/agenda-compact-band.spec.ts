@@ -7,12 +7,6 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// Agenda's compact band (#882): UI-impact evidence, and the regression test for
-// the defect behind it. Month drew the DAY grid and lit the DAY tab; Search
-// holds that slot now, load-bearing because the bar withdraws its own Search on
-// compact BELIEVING the band carries it. The shipped `Root` and shell `AppBand`
-// mount here — no band or view is reimplemented.
-
 const here = import.meta.dirname;
 const REPO_ROOT = path.resolve(here, "../../../..");
 const KIT_CSS = path.join(REPO_ROOT, "packages/design/src/elements/kit.css");
@@ -27,12 +21,10 @@ const APP_BAND = path.join(
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-882-agenda-compact-band.png";
 
-/** Agenda's own copy (`agenda/view-copy.ts`), quoted where it is asserted. */
 const BAND_TABS = ["Day", "Schedule", "Waiting on", "Search", "More"];
 const SEARCH_LABEL = "Search agenda";
 const AWAITING = "No answer yet";
 
-/** The seat the shell gives an inline app: bar, app, claimed band. */
 const entry = (compact: boolean): string => `
 import { Component, createElement, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -160,7 +152,6 @@ async function bundle(
     define: { "process.env.NODE_ENV": '"production"' },
     format: "iife",
     jsx: "automatic",
-    // Never written (`write: false`); esbuild needs a path to name CSS output.
     outdir: path.join(here, `.${name}-bundle`),
     platform: "browser",
     target: "es2022",
@@ -174,8 +165,6 @@ async function bundle(
   };
 }
 
-/** The pane is the only column that gives width back — what Agenda's own
- *  width observer measures. */
 const HARNESS_CSS = `
   body { margin: 0; background: var(--bg); color: var(--text); }
   .seat { display: flex; flex-direction: column; height: 100vh; }
@@ -204,9 +193,6 @@ async function mount(
       `<body><div id="root"></div></body>`
   );
   await page.addScriptTag({ content: js });
-  // Each layout has its OWN arrival signal: compact claims the band, pointer
-  // draws the rail. Waiting for the band in both hangs the pointer mount —
-  // that layout never claims one, which is the very swap this test asserts.
   await page.waitForSelector(
     compact ? 'nav[data-band="app"]' : 'aside[aria-label="Agenda rail"]',
     { timeout: 15_000 }
@@ -230,14 +216,10 @@ test("Agenda's compact band offers Search, never Month, and lands where it says"
     `#appbar button[aria-label="${SEARCH_LABEL}"]`
   );
 
-  // Four destinations plus the frame's More. Month is absent BY TYPE: a tab
-  // that draws another view is worse than a tab that is not there.
   await expect(band).toBeVisible({ timeout: 60_000 });
   await expect(band.locator("fieldset button")).toHaveText(BAND_TABS);
   await expect(tab("Month")).toHaveCount(0);
 
-  // A destination lands on the view it NAMES, canvas and lit tab agreeing;
-  // only Day draws a grid.
   await expect(current).toHaveText("Day");
   await expect(grid).toHaveAttribute("data-columns", "1");
 
@@ -263,8 +245,6 @@ test("Agenda's compact band offers Search, never Month, and lands where it says"
     path: path.join(EVIDENCE_DIR, EVIDENCE_PNG),
   });
 
-  // The bar withdrew Search here, so the band's is the only way in — and it
-  // opens a FIELD, not a fifth view: canvas and lit tab stay put.
   await expect(barSearch).toHaveCount(0);
   await expect(page.getByRole("searchbox")).toHaveCount(0);
   await tab("Search").click();
@@ -274,11 +254,9 @@ test("Agenda's compact band offers Search, never Month, and lands where it says"
   await expect(current).toHaveText("Day");
   await expect(grid).toHaveAttribute("data-columns", "1");
 
-  // A closed field that still filters would be a hidden filter.
   await page.getByRole("button", { exact: true, name: "Close" }).click();
   await expect(page.getByRole("searchbox")).toHaveCount(0);
 
-  // A SWAP, not a loss: off compact the bar carries Search and no band exists.
   await mount(page, false, 1280);
   await expect(barSearch).toHaveCount(1);
   await expect(page.locator('nav[data-band="app"]')).toHaveCount(0);

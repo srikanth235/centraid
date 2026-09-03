@@ -4,9 +4,6 @@ import { useReplicaQuery } from "../hooks/useReplicaQuery";
 import type { NativeShareTarget } from "./share-targets";
 import { nativeNamedShareCircles } from "./share-targets";
 
-/** Native host adapter for the shipped named-audience source. The generic
- * ShareSheet consumes only the resulting circles and never branches on an
- * app or container type. */
 export function useNamedShareCircles(
   targets: readonly NativeShareTarget[],
   ownerPartyId?: string

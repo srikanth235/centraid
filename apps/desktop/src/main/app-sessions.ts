@@ -1,5 +1,3 @@
-/* Per-app editing sessions: app code lives in the gateway git store, not on disk. */
-
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -62,9 +60,6 @@ export async function assertActiveGatewayLocal(action: string): Promise<void> {
 }
 
 export async function ensureAppSessionDir(appId: string): Promise<string> {
-  // Issue #865: the id is joined into an on-disk path below (and handed to
-  // external binaries by the AGENT_* builders), so grammar-check it before
-  // any join — a traversal id must never build a filesystem path.
   assertRevealableAppId(appId);
   await assertActiveGatewayLocal(`editing app "${appId}"`);
   const settings = await loadSettings();
@@ -83,8 +78,6 @@ export async function ensureAppSessionDir(appId: string): Promise<string> {
 }
 
 export async function resolveAppRevealDir(appId: string): Promise<string> {
-  // Backstop for the grammar gate the APPS_OPEN handler already applies
-  // (issue #865) — this path reaches shell.openPath verbatim.
   assertRevealableAppId(appId);
   await assertActiveGatewayLocal(`revealing app "${appId}"`);
   const settings = await loadSettings();

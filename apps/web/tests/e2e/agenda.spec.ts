@@ -3,20 +3,6 @@ import type { Page } from "@playwright/test";
 
 import { installHarnessControlTransport } from "./control-transport.js";
 
-// Agenda on the VIEWER seat (matrix `appSeats`, umbrella #864).
-//
-// The viewer's claim is not "the app renders": it is that what the member sees
-// is a replica of MEANING that survives the seat being thrown away. So this
-// journey mints an event through the app's own write rail against the real
-// harness gateway, watches it paint as a schedule row, reloads the whole PWA —
-// service worker, replica session and React tree all gone — and requires the
-// row to come back and open to the event's own screen.
-//
-// The harness gateway, vault and inline Agenda bundle are all real; only the
-// iroh wire is adapted (control-transport.ts). Agenda declares
-// `seats.byteBearing: false`, so there is nothing about custody to prove here —
-// the custodian seat (apps/desktop/tests/e2e/agenda.spec.ts) owns that.
-
 const API_URL = "http://127.0.0.1:48765";
 const ADMIN_TOKEN = "centraid-web-e2e-token";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
@@ -27,9 +13,6 @@ const EVENT_TITLE = "Roof survey";
 const PROPOSE_INTENT = "agenda-e2e-propose-event";
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
-  // Re-click until the palette actually opens: right after a reload the Search
-  // button can paint before its React listener attaches, and a click that
-  // lands in that window is silently lost.
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect
     .poll(
@@ -125,8 +108,6 @@ async function connectPwa(page: Page): Promise<void> {
   await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
 }
 
-/** Schedule is the view whose window is unbounded forward, so it is the one
- *  that can be asserted on without pinning the test to a calendar month. */
 async function showSchedule(page: Page): Promise<void> {
   const schedule = page.getByRole("button", { name: "Schedule", exact: true });
   await expect
@@ -148,12 +129,6 @@ test("Agenda paints a proposed event and it survives a PWA reload", async ({
   await connectPwa(page);
   await openFirstParty(page, "Agenda");
 
-  // The inline replica session bootstraps asynchronously after the app mounts;
-  // a write issued before that throws ReplicaRebootstrapRequired. Prove write
-  // readiness with the event this journey is about — the intent id makes the
-  // retries idempotent, so the poll can never mint two of it. The calendar is
-  // read rather than named: the vault founds exactly one "Personal" calendar,
-  // and addressing whatever it hands back is what the app itself does.
   await expect
     .poll(
       () =>
@@ -190,11 +165,6 @@ test("Agenda paints a proposed event and it survives a PWA reload", async ({
     )
     .toBe("executed");
 
-  // The write lands as a schedule row through the app's own change-stream
-  // refresh, with window focus as the sanctioned recovery re-read while the
-  // replica is still bootstrapping (`onFocusRefresh` never gates behind a
-  // consent banner). A row is addressed by its stable `data-event-id`, which
-  // is what the row IS — never by a class name, which is presentation.
   await showSchedule(page);
   const eventRow = page
     .locator("[data-event-id]")
@@ -211,18 +181,12 @@ test("Agenda paints a proposed event and it survives a PWA reload", async ({
     .toBe(true);
   await expect(eventRow.first()).toBeVisible();
 
-  // An event is a vault row, not browser state: it must come back after a full
-  // reload of the PWA shell.
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
   await openFirstParty(page, "Agenda");
   await showSchedule(page);
   await expect(eventRow.first()).toBeVisible({ timeout: 30_000 });
 
-  // Opening the row lands on the event's own panel, with the cancellation ask
-  // the vault parks for the owner rather than a destructive verb that fires.
-  // Re-click until the panel answers — right after a reload the row can paint
-  // before its React listener attaches, and a click in that window is lost.
   const detail = page.locator(`aside[aria-label="${EVENT_TITLE}"]`);
   await expect
     .poll(

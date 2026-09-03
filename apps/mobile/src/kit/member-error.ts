@@ -1,7 +1,3 @@
-/**
- * Lower transport/architecture vocabulary before an error reaches a member.
- * Status codes, refusal reasons, filenames and recovery advice remain intact.
- */
 export function memberFacingError(message: string): string {
   return message
     .replace(/\bgateway\s+daemons\b/giu, "vault services")

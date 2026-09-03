@@ -25,8 +25,6 @@ describe(buildQueue, () => {
         confirmed_by_party_id: "p-ana",
         review_state: "confirmed",
       },
-      // A second region for "p-ana" on the SAME asset as r1 must not double
-      // count that photograph.
       {
         region_id: "r4",
         asset_id: "a1",
@@ -61,9 +59,6 @@ describe(buildQueue, () => {
   });
 
   it("a rejected or dismissed region never comes back to the queue (issue 712)", () => {
-    // The whole point of `review_state`. Before it, a rejection deleted the
-    // row and a "keep it, do not name it" could not be expressed at all — so
-    // the only faces a member could get rid of were the ones they named.
     const faces = [
       {
         region_id: "r1",

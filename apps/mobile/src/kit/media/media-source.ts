@@ -1,8 +1,3 @@
-// Remote media (thumbs, previews, videos) is served by the gateway, which in
-// manual-URL dev mode expects the same Authorization header `exportAsset` and
-// every replica fetch already send. Device `file://` URIs need none. Keeping
-// this in one place stops thumbnails from silently 401ing while downloads work.
-
 import type { ImageSource } from "expo-image";
 import type { VideoSource } from "expo-video";
 

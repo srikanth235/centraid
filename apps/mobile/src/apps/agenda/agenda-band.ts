@@ -1,13 +1,9 @@
-// The phone's bottom band: `BAND_DESTINATIONS` plus More (frame cap, five).
-// ONE table, so the seats cannot disagree over Search or over Month.
-
 import { BAND_DESTINATIONS } from "@centraid/blueprints/apps/agenda/views";
 
 import { BAND_CAPSULE } from "../../kit/band/band-capsule";
 import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
 
-// The frame's capsule lives in `kit/band/band-capsule.ts` (#883 B5).
 export { BAND_CAPSULE } from "../../kit/band/band-capsule";
 export type { BandCapsule } from "../../kit/band/band-capsule";
 

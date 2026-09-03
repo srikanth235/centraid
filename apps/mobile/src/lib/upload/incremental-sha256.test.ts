@@ -1,7 +1,3 @@
-// Pins the Hermes-safe SHA-256 against node:crypto. It is not a new algorithm
-// and must never behave like one — a drifted digest would re-address every
-// blob in the CAS.
-
 import { createHash, randomBytes } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
@@ -13,8 +9,6 @@ function nodeSha(bytes: Uint8Array): string {
 }
 
 describe(IncrementalSha256, () => {
-  // Sizes chosen around the 64-byte block and the 55/56/64 padding boundaries,
-  // where a hand-rolled SHA-256 goes wrong if it goes wrong at all.
   it.each([0, 1, 55, 56, 57, 63, 64, 65, 119, 120, 127, 128, 1000, 100_000])(
     "matches node:crypto for %i bytes",
     (size) => {

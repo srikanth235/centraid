@@ -1,17 +1,3 @@
-// THE CALL SITE, not the ladder (#816).
-//
-// `share-place.test.ts` proves the phrase module suppresses the Home-relative
-// rung. That is a claim about a function; the acceptance criterion is a claim
-// about what leaves the phone. So this file drives the real share path with
-// the real seams mocked at the edge — the file system, the system sheet, React
-// Native's `Share` — and asserts on the payload the operating system was
-// actually handed.
-//
-// It fails if a future caller builds the message with the private ladder
-// (the phrase would come back as "3.5 km NE of Home"), if the strip is skipped
-// for any precision below `exact` (the payload would point at the original
-// file), or if a container that cannot be scrubbed is sent anyway.
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { placePhrase } from "@centraid/blueprints/apps/photos/place-phrase";
@@ -91,13 +77,11 @@ vi.mock(
 const { LocationNotRemovableError, shareOriginal } =
   await import("./photo-share");
 
-/** A NUL without a literal zero byte in the source. */
 const NUL = String.fromCharCode(0);
 
 const ORIGINAL = "file:///photos/IMG_4021.jpg";
 const HEIC = "file:///photos/IMG_4022.heic";
 
-/** A JPEG whose XMP packet names the coordinate in plain ASCII. */
 function locatedJpeg(): Uint8Array {
   const packet = `http://ns.adobe.com/xap/1.0/${NUL}<x:xmpmeta exif:GPSLatitude="37,26.514000N"/>`;
   const payload = [...packet].map((character) => character.charCodeAt(0));
@@ -121,7 +105,6 @@ function locatedJpeg(): Uint8Array {
   ]);
 }
 
-/** Not a JPEG: the first bytes of an ISO base-media file, as HEIC opens. */
 const NOT_A_JPEG = new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 104, 101]);
 
 const HOME: NamedPlace = {
@@ -132,7 +115,6 @@ const HOME: NamedPlace = {
   isHome: true,
 };
 
-/** Up the valley from Home, and nobody has named it. */
 const UNNAMED_NEAR_HOME: SharePlaceInput = {
   lat: 37.4635,
   lng: -122.1145,
@@ -141,7 +123,6 @@ const UNNAMED_NEAR_HOME: SharePlaceInput = {
 
 const RELATIVE_SHAPE = /\d\s?(?:m|km)\s(?:N|NE|E|SE|S|SW|W|NW)\sof\s/u;
 
-/** What the copy the OS was handed actually contains. */
 function handedBytes(uri: string): Uint8Array {
   return mocks.files.get(uri) ?? new Uint8Array();
 }
@@ -150,7 +131,6 @@ function text(bytes: Uint8Array): string {
   return String.fromCharCode(...bytes);
 }
 
-/** A cache holding one original, one HEIC and one re-encode, and no calls. */
 function freshDevice(): void {
   mocks.files.clear();
   mocks.files.set(ORIGINAL, locatedJpeg());
@@ -185,7 +165,6 @@ describe("what the operating system is handed", () => {
       ...stripJpegLocation(locatedJpeg())!.bytes,
     ]);
     expect(text(handedBytes(payload.uri))).not.toContain("GPSLatitude");
-    // The file on disk is untouched: a share is a copy, not an edit.
     expect([...handedBytes(ORIGINAL)]).toStrictEqual([...locatedJpeg()]);
   });
 
@@ -228,16 +207,12 @@ describe("a photograph taken near a place the member named", () => {
   beforeEach(freshDevice);
 
   it("would have been phrased against Home on the member's own screen", () => {
-    // Keeps the assertion below honest: it is only evidence of suppression
-    // while the private ladder still produces the phrase for this input.
     expect(placePhrase({ ...UNNAMED_NEAR_HOME, context: "private" }).text).toBe(
       "3.5 km NE of Home"
     );
   });
 
   it("leaves with no phrase at all, at every precision", async () => {
-    // One at a time, in the order the sheet offers them — a share is a
-    // deliberate act and the mocked cache holds one copy at a time.
     const payloads = [
       await shareOriginal(request("none", UNNAMED_NEAR_HOME)),
       await shareOriginal(request("name", UNNAMED_NEAR_HOME)),

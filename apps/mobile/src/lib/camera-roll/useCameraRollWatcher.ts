@@ -1,6 +1,3 @@
-// The platform half of the frame camera-roll watcher; whether a sweep MAY run
-// is `watcher.ts`. Mount this ONCE, at the frame root (#883).
-
 import * as MediaLibrary from "expo-media-library";
 import { useEffect } from "react";
 import { AppState } from "react-native";

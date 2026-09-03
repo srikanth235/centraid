@@ -13,8 +13,6 @@ import {
 
 describe("tile size on the phone (handoff §4.2, CHANGELOG §D)", () => {
   test("all four rungs survive on the phone", () => {
-    // Dropping rungs here would make a member preference surface-specific —
-    // the member sets one tile size and it means the same thing everywhere.
     expect(RUNG_LABELS).toStrictEqual(["XS", "S", "M", "L"]);
     expect(RUNGS).toHaveLength(4);
     expect(RUNGS.every((rung) => rung.phone > 0)).toBe(true);
@@ -27,8 +25,6 @@ describe("tile size on the phone (handoff §4.2, CHANGELOG §D)", () => {
   });
 
   test("the desktop column is unchanged, so one index means one preference", () => {
-    // Identical to packages/blueprints/apps/photos/layout.ts. A member who set
-    // M on the desktop gets M on the phone, not "whatever the phone calls M".
     expect(
       [0, 1, 2, 3].map((r) => rungHeight(r as 0 | 1 | 2 | 3, "desktop"))
     ).toStrictEqual([92, 128, 176, 248]);

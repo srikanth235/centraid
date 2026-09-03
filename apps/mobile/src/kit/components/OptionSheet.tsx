@@ -16,9 +16,7 @@ import { Text } from "./NativeText";
 export interface SheetOption {
   id: string;
   label: string;
-  /** Secondary line — e.g. a runner's readiness hint. */
   detail?: string;
-  /** Listed but not choosable (a runner that failed its preflight). */
   disabled?: boolean;
 }
 
@@ -31,14 +29,6 @@ export interface OptionSheetProps {
   onClose: () => void;
 }
 
-/**
- * A single-choice list presented the way each platform presents one: the system
- * action sheet on iOS, a bottom sheet built from RN core `Modal` on Android
- * (RN's `Alert` renders at most three buttons there, so it cannot list agents).
- *
- * A list, never a tap-to-cycle chip (#567): cycling walks the member
- * through every dead runner — one preflight each — to reach the one they want.
- */
 export default function OptionSheet({
   visible,
   title,
@@ -50,11 +40,7 @@ export default function OptionSheet({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const ios = Platform.OS === "ios";
-  // The iOS sheet is imperative and fire-once: read the current props through a
-  // ref so a re-render mid-sheet cannot stack a second one.
   const latest = useRef({ title, options, onSelect, onClose });
-  // Declared BEFORE the presenting effect, so on any commit the sheet reads
-  // this render's props (effects run in declaration order).
   useEffect(() => {
     latest.current = { title, options, onSelect, onClose };
   });

@@ -1,11 +1,3 @@
-/**
- * J6 — single-source native build numbers from semver.
- * major*1e6 + minor*1e3 + patch — reproducible from source, no remote counter.
- *
- * Plain CJS so Expo's config evaluator (Node require-from-string) can load it
- * from app.config.ts. Keep in lockstep with version-core.ts.
- */
-
 function nativeBuildNumber(version) {
   const m = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)/u.exec(
     String(version).trim()

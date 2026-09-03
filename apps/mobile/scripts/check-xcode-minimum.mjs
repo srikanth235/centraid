@@ -21,12 +21,6 @@ const expoModulesJsiPackagePath = path.join(
   "Package.swift"
 );
 
-/**
- * Expo SDK 56+/57 ship expo-modules-jsi with `swift-tools-version: 6.2` and
- * document Xcode 26.4+ (Swift 6.3). Older hosts fail the JSI xcframework
- * build with a misleading empty "Could not resolve package dependencies"
- * footer (see #620 / run 30417451436 on Xcode 16.4).
- */
 export const EXPO_MODULES_JSI_MIN_XCODE = "26.4";
 
 export function requiredXcodeVersion(helpers) {
@@ -53,10 +47,6 @@ export function expoModulesJsiSwiftToolsVersion(packageSwift) {
   return match.groups.version;
 }
 
-/**
- * When expo-modules-jsi declares Swift tools ≥ 6.2, require Expo's documented
- * Xcode floor. Absent / older Package.swift falls back to React Native alone.
- */
 export function expoModulesJsiMinXcode(packageSwift) {
   const tools = expoModulesJsiSwiftToolsVersion(packageSwift);
   if (versionAtLeast(tools, "6.2")) return EXPO_MODULES_JSI_MIN_XCODE;

@@ -1,10 +1,3 @@
-// The `[[` powerbox on the phone. Same kinds and exclusions as the pointer
-// seats, because both read `link-targets-table.ts`: the probe is handed the
-// journal set (R-journal) and LOCKER IS NOT A KIND AT ALL, which the sheet's
-// foot says rather than leaving the absence to be noticed. One probe per kind,
-// each isolated, so a scope this replica was never granted leaves its column
-// ABSENT instead of emptying the sheet.
-
 import React, { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
 
@@ -24,14 +17,12 @@ import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { useTheme } from "../../kit/theme";
 import { styles } from "./NotesHome.styles";
 
-/** Long enough that a typed word is one probe, short enough to feel live. */
 const PROBE_DELAY_MS = 120;
 const PER_KIND = 8;
 
 export interface NotesPowerboxProps {
   open: boolean;
   term: string;
-  /** Journal note ids: an entry is never a link target. */
   excluded: ReadonlySet<string>;
   onTerm: (term: string) => void;
   onPick: (target: LinkTarget) => void;
@@ -50,8 +41,6 @@ export default function NotesPowerbox({
   const { session } = useReplica();
   const [targets, setTargets] = useState<LinkTarget[]>([]);
 
-  // An emptied query shows nothing without clearing state from the effect
-  // body: the last answers stay in hand for the next probe to replace.
   const shown = open && term.trim() ? targets : [];
 
   useEffect(() => {

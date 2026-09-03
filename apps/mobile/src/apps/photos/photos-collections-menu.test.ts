@@ -3,8 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { MenuActionRow } from "../../kit/components/AnchoredMenu";
 import { collectionsMenuGroups } from "./photos-collections-menu";
 
-/** Both rows this module builds are plain action rows, never submenus — one
- *  narrowing helper rather than repeating the type guard in every test. */
 function actionRow(
   groups: ReturnType<typeof collectionsMenuGroups>,
   key: string
@@ -47,9 +45,6 @@ describe("the Collections header menu's model", () => {
   });
 
   it("never marks either command as the current answer", () => {
-    // Neither row is a persisted preference (see the module's own header
-    // comment) — a `checked` mark here would claim a state that resets the
-    // moment a member expands one section by hand.
     const groups = collectionsMenuGroups({
       onCollapseAll: vi.fn<() => void>(),
       onShowAll: vi.fn<() => void>(),

@@ -38,7 +38,6 @@ export interface MobileNotificationRow {
   body: string;
 }
 
-/** Private Notifications content becomes notification text only on the paired device. */
 export function composeMobileNotifications(
   notifications: MobileNotificationsPull,
   delivered: ReadonlySet<string>
@@ -83,22 +82,14 @@ export function composeMobileNotifications(
   ].filter((row) => !delivered.has(row.key));
 }
 
-/** What one `syncNotifications` pass should do. */
 export interface NotificationPlan {
   notifications: MobileNotificationRow[];
   nextDelivered?: string[];
   seeded: boolean;
 }
 
-/** Device-side delivery ledger bound; oldest keys fall off first. */
 const LEDGER_LIMIT = 2_000;
 
-/**
- * Decide what a sync pass does, with no I/O (#647). Two rules, easy to lose:
- * seed silently (first pass records the baseline, notifies nothing); never
- * notify over the owner's shoulder (foreground passes leave the ledger alone,
- * so on-screen arrivals still notify on the next background wake).
- */
 export function planNotifications(input: {
   notifications: MobileNotificationsPull;
   delivered: readonly string[];

@@ -1,17 +1,3 @@
-// PEOPLE ON THE PHONE — the three band destinations, on one screen
-// (Binding Layer v12 handoff Part 1, #821).
-//
-// `People` (the roster), `Touch` (the keep-in-touch summary) and `Search` all
-// live here, switched by the band exactly the way `PhotosHome` switches its
-// shelves: the `destination` route param names where a band tap on a PUSHED
-// screen lands, and the effect below keeps a mounted Home following it.
-//
-// WHAT THE ROSTER ROW WITHHOLDS: the handoff's trailing `Link` verb on an
-// unlinked row. A link is made from a container and People owns none
-// (decisions.md #821 L-write), so the ring and the sub-line SAY the link state
-// and no control here pretends to change it. The full register is
-// `INTEGRATION-NOTES.md`.
-
 import { FlashList } from "@shopify/flash-list";
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
@@ -95,10 +81,6 @@ export default function PeopleHome({
     navigation.navigate("Settings", { screen: "Approvals" })
   );
 
-  // The band on a pushed People screen navigates here with the destination it
-  // wants; React Navigation updates params without remounting, so the effect
-  // is what makes the band work from a pushed screen at all (PhotosHome's own
-  // pattern, stated there in full).
   const [destination, setDestination] = useState<PeopleBandKey>(
     route.params?.destination === "touch"
       ? "touch"
@@ -163,11 +145,6 @@ export default function PeopleHome({
               navigation.navigate("PersonLog", { personId: partyId })
             }
             onTile={(tile) => {
-              // Each tile filters or navigates (handoff § Screens 2): the
-              // people-counting tiles land on the roster with the matching
-              // chip; Reconnect lands on the `Overdue` chip the copy table
-              // carries for exactly this tap; Upcoming stays here, where the
-              // Upcoming section is one screen inch below.
               if (tile === "upcoming" || tile === "reconnect") {
                 if (tile === "reconnect") {
                   setFilter("due");
@@ -243,8 +220,6 @@ function RosterBody({
       </View>
     );
   }
-  // Past the loading gate an empty roster is a fact: the first run, the one
-  // screen in the app with a display head and a filled commit of its own.
   if (data.people.length === 0) {
     return (
       <View style={styles.body}>
@@ -296,15 +271,12 @@ function RosterRow({
   onStar,
 }: {
   person: MobilePersonRow;
-  /** The roster's leading row; only it carries a handle. */
   first: boolean;
   onOpen: (partyId: string) => void;
   onStar: (person: MobilePersonRow) => void;
 }): React.JSX.Element {
   const overdue = isOverdue(person);
   const sub = rosterSub(person);
-  // Until #880 the roster had no pending marker, so an offline add read as a
-  // failure while its row was durable (QUALITY.md).
   const overlay = readPendingOverlay(person.raw);
   const pending = overlay ? pendingChangeLabel(overlay) : "";
   return (
@@ -358,9 +330,6 @@ function TouchBody({
   }
   const dashboard = data.dashboard;
   const counts = dashboard.counts;
-  // Two tile sets, one row: the handoff's own four while the sharing plane
-  // answers, the people-counting four while it cannot — a `Vaults` tile
-  // reading 0 over a denied read would be a count nobody took.
   const tiles =
     counts.linked === null || counts.to_link === null
       ? TOUCH_TILES.map((tile) => ({
@@ -454,11 +423,6 @@ function TouchBody({
   );
 }
 
-// THIS SHELF SEARCHES THE WINDOW IN HAND — name, role and notes,
-// case-insensitive substring (handoff § Screens 3) — and draws NO link facts:
-// the web search query returns none, and the same person must not read two
-// different ways on two screens, so its rows carry no ring and the two link
-// chips are not offered.
 const SEARCH_CHIPS = filterChips(false);
 
 function SearchBody({
@@ -486,7 +450,6 @@ function SearchBody({
       applyRosterFilter(
         searchRoster(data.people, data.notesByParty, term).map((person) => ({
           ...person,
-          // No link facts on this shelf — see the head of this block.
           linked: undefined,
         })),
         active
@@ -549,10 +512,6 @@ function SearchBody({
         />
       )}
       {term.trim() ? (
-        // The web frame's ambient status sentence; the phone has no ambient
-        // status surface (`kit/components/StatusLine.tsx` is quiet until a
-        // write posts), so the one sentence a query earns sits as the
-        // screen's own closing line instead.
         <Caption
           text={STATUS.searchResults(results.length, data.people.length)}
         />
@@ -571,8 +530,6 @@ function SearchRow({
   onStar: (person: MobilePersonRow) => void;
 }): React.JSX.Element {
   const overdue = isOverdue(person);
-  // The snippet answers "why is this row here" better than the role the
-  // member already knows.
   const sub = person.snippet ?? person.role;
   const overlay = readPendingOverlay(person.raw);
   const pending = overlay ? pendingChangeLabel(overlay) : "";

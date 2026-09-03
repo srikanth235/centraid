@@ -1,12 +1,3 @@
-// Anchored menu — a card hanging off the control, never a sheet (#712).
-// Kit-owned plate (`band-surface.ts`). Opaque, never glass: contrast cannot
-// depend on what was photographed. One nesting level in the same card
-// (leading ‹ row), no stacked second card. It DOES carry a shadow: DESIGN.md
-// § Depth reserves `--shadow-md` for exactly three surfaces — a dialog, a
-// sheet and a popover — and this is the third. The earlier "no shadow, surfaces
-// separate by edge" note held while the card's ground differed from the page's;
-// it opens over `bgElev` containers, where edge alone left it invisible.
-
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Modal,
@@ -25,7 +16,6 @@ import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
 
-/** Window coords (`measureInWindow` / Modal root). Screen coords fail under a status-bar inset. */
 export interface MenuAnchor {
   x: number;
   y: number;
@@ -33,7 +23,6 @@ export interface MenuAnchor {
   height: number;
 }
 
-/** `checked` is the group's current answer; the row is never a switch. */
 export interface MenuActionRow {
   key: string;
   label: string;
@@ -41,7 +30,6 @@ export interface MenuActionRow {
   checked?: boolean;
   destructive?: boolean;
   disabled?: boolean;
-  /** Keep the card up — repeated steps. A choice about the surface underneath dismisses. */
   staysOpen?: boolean;
   onSelect: () => void;
 }
@@ -62,7 +50,6 @@ export interface MenuGroup {
 
 export interface AnchoredMenuProps {
   visible: boolean;
-  /** Unmeasured → top trailing corner, never refuse to open. */
   anchor: MenuAnchor | undefined;
   groups: readonly MenuGroup[];
   onClose: () => void;
@@ -70,9 +57,7 @@ export interface AnchoredMenuProps {
 
 const CARD_WIDTH = 280;
 const ANCHOR_GAP = 6;
-/** Floor: below this the scroll region has no room to scroll in. */
 const MIN_CARD_HEIGHT = 132;
-/** Reserved on every row so labels do not dance as the checkmark moves. */
 const CHECK_SLOT = 22;
 
 interface CardPlacement {
@@ -82,10 +67,6 @@ interface CardPlacement {
   maxHeight: number;
 }
 
-/**
- * Flip on space each side actually has, never a guessed card height.
- * Trailing-aligned, then clamped into the 12pt inset.
- */
 function cardPlacement(
   anchor: MenuAnchor | undefined,
   screen: { width: number; height: number }
@@ -123,10 +104,6 @@ function isSubmenu(row: MenuRow): row is MenuSubmenuRow {
   return Array.isArray((row as MenuSubmenuRow).rows);
 }
 
-/**
- * Never `onLayout` (parent-relative — the card would land at the top of the
- * screen). `measureInWindow` is the modal root; call on press, never cache.
- */
 export function useMenuAnchor(): {
   anchorRef: React.RefObject<RNView | null>;
   anchor: MenuAnchor | undefined;
@@ -136,7 +113,6 @@ export function useMenuAnchor(): {
   const [anchor, setAnchor] = useState<MenuAnchor | undefined>(undefined);
   const measureAnchor = useCallback(() => {
     const node = anchorRef.current;
-    // Unlaid-out / non-native hosts have no measure — open unanchored, never throw.
     if (!node || typeof node.measureInWindow !== "function") return;
     node.measureInWindow((x, y, width, height) => {
       setAnchor({ height, width, x, y });
@@ -155,7 +131,6 @@ function ActionRowView({
   onChoose,
 }: {
   row: MenuActionRow;
-  /** Does any row in THIS list carry a `checked`? See `styles.slot`. */
   reserveCheck: boolean;
   colors: ThemeColors;
   styles: MenuStyles;
@@ -170,7 +145,6 @@ function ActionRowView({
   return (
     <Pressable
       accessibilityRole="menuitem"
-      // `selected` alone is announced inconsistently across the two platforms.
       accessibilityLabel={
         row.checked === true ? `${row.label}. Selected` : row.label
       }
@@ -193,7 +167,6 @@ function ActionRowView({
       <Text
         style={[
           styles.label,
-          // Leaf takes the state's token; never a container opacity (§18).
           disabled ? styles.labelDisabled : undefined,
           !disabled && row.destructive === true
             ? styles.labelDestructive
@@ -300,9 +273,6 @@ function MenuBody({
     );
   }
 
-  // Across ALL groups, not per group: the column is what lines the card's
-  // labels up with each other, so one checkable group makes it real for every
-  // row on the card.
   const reserveCheck = groups.some((group) =>
     group.rows.some((row) => !isSubmenu(row) && row.checked !== undefined)
   );
@@ -350,7 +320,6 @@ export default function AnchoredMenu({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const screen = useWindowDimensions();
-  // Unmount on close so MenuBody's submenu path is plain state, never stale.
   if (!visible) return null;
   const placement = cardPlacement(anchor, screen);
   return (
@@ -362,9 +331,6 @@ export default function AnchoredMenu({
         accessibilityLabel="Close menu"
         onPress={onClose}
         style={styles.backdrop}
-        // The backdrop sits OUTSIDE the modal's accessibility subtree, which is
-        // why a flow could only reach it by tapping a fixed screen fraction
-        // (`10%,50%` in flows/photos-viewer.mjs). `testID` reaches it directly.
         testID={TEST_IDS.shell.menuBackdrop}
       />
       {/* Two views, not one: the card clips its rows to the radius with
@@ -400,11 +366,6 @@ const makeStyles = (colors: ThemeColors) =>
     },
     backdrop: { ...StyleSheet.absoluteFill },
     card: {
-      // `bg`, not `bgElev`. In this palette the "elevated" rung is DARKER than
-      // the page (#F5F4F2 against #FDFDFC), and the containers this card opens
-      // over — a drive's row container, a shelf's panel — are themselves
-      // `bgElev`. Card and page were the same value, so the menu had no edge
-      // against what sat behind it.
       backgroundColor: colors.bg,
       borderColor: colors.lineStrong,
       borderRadius: BAND_RADIUS,

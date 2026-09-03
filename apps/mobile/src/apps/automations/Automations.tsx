@@ -1,8 +1,3 @@
-// Automations (#765, spec §3). No `New automation` — authoring is a
-// blueprint act with no mobile route. `Templates` scrolls to `Worth
-// setting up` on this page. Trailing slot is `Open`; Pause lives in the
-// row expansion.
-
 import React, { useCallback, useMemo, useRef } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
@@ -64,7 +59,6 @@ export default function AutomationsScreen({
   route,
 }: AutomationsScreenProps): React.JSX.Element {
   const focusedRef = route.params?.automationRef;
-  // Gate above both branches so a switched-off gateway never mounts those hooks.
   const { features } = useReplica();
   if (features && !features.automations)
     return (
@@ -289,7 +283,6 @@ function AutomationsPlace({
 
   const open = useCallback(
     (ref: string): void => {
-      // `push`, not `navigate`: leaving the thread must return here, not Home.
       navigation.push("Automations", { automationRef: ref });
     },
     [navigation]

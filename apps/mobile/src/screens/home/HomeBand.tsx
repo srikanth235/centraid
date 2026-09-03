@@ -1,9 +1,3 @@
-// Binding Layer invariant 1: one band, never app-themed, never scrolled
-// away. Frame destinations only (Home, pinned places, More) — never installed
-// apps. Bare ink, no tinted chip. No active bar: `band`→`control` + full ink
-// is the state; inactive icon is `textFaint`. Native-stack chrome, never
-// bottom-tabs: apps are covers pushed from Home.
-
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -38,7 +32,6 @@ export default function HomeBand({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const pins = usePlacePins();
-  // Capability from the session's `/info`, never a probe from here.
   const { features } = useReplica();
   const tabs = useMemo(
     () => bandTabs(enabledPlacePins(pins, features)),
@@ -46,7 +39,6 @@ export default function HomeBand({
   );
 
   return (
-    // Home-indicator inset lifts the float — never padding inside the band.
     <View
       style={[styles.wrap, { marginBottom: BAND_INSET + insets.bottom }]}
       testID={TEST_IDS.home.band}
@@ -106,8 +98,6 @@ function Tab({
       accessibilityState={{ selected: active }}
       onPress={onPress}
       style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
-      // Keyed on the tab's own id, never its label: the label is copy the pin
-      // model may re-word, the id is what `bandTabs()` already keys on.
       testID={`${TEST_ID_PREFIXES.band.home}${tab.id}`}
     >
       <View style={styles.mark}>
@@ -132,17 +122,13 @@ function Tab({
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     label: {
-      // Inactive half of `band`/`control`. Same 11/15 rung so a tap cannot
-      // reflow. No `fontFamily` override — roles carry their own faces.
       ...t("band"),
-      // `stretch` makes `numberOfLines={1}` ellipsize inside the tab.
       alignSelf: "stretch",
       color: colors.textSoft,
       marginTop: 3,
       textAlign: "center",
     },
     labelActive: { ...t("control"), color: colors.text },
-    // 30pt slot, not the 26pt launcher glyph.
     mark: {
       alignItems: "center",
       borderRadius: radii.md,
@@ -152,7 +138,6 @@ const makeStyles = (colors: ThemeColors) =>
     },
     moreGlyph: {
       alignItems: "center",
-      // `lineStrong`, never the lighter `line`.
       borderColor: colors.lineStrong,
       borderRadius: radii.md,
       borderWidth: borders.hairline,
@@ -178,7 +163,6 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       minHeight: metrics.row,
       overflow: "hidden",
-      // Gutter on the tab, not the label, so the 44pt target is unchanged.
       paddingBottom: 3,
       paddingHorizontal: 4,
       paddingTop: 7,
@@ -187,9 +171,6 @@ const makeStyles = (colors: ThemeColors) =>
     wrap: {
       flexDirection: "row",
       paddingHorizontal: 4,
-      // Floats (§G), never a flush bar. Ground is `bgElev`, not `bg` (page
-      // colour does not float) and not `bgChrome` (sinks on dark). Edge is
-      // `lineStrong`.
       ...bandSurfaceStyle(colors.bgElev, colors.lineStrong, BAND_BORDER),
     },
   });

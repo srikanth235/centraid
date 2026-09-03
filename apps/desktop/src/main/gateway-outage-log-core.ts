@@ -1,9 +1,3 @@
-/*
- * Pure outage/alert log logic (Electron-free; `gateway-outage-log.ts` wires the
- * filesystem). The ONLY durable home for gateway health (#665) — never
- * dual-write it into vault Notifications: health is STATUS, not a decision.
- */
-
 import type {
   GatewayComponentAlertAction,
   GatewayRuntimeState,
@@ -23,13 +17,11 @@ export interface OutageLogEvent {
   gatewayId: string;
   gatewayLabel: string;
   detail?: string;
-  /** Downtime for `recovered`; time-at-error for `component-error`. */
   durationMs?: number;
 }
 
 export const OUTAGE_LOG_CAP = 500;
 
-/** Never write a `projection-mark` line again (#665); old ones stay readable. */
 const OUTAGE_LOG_SCHEMA = 4;
 
 interface OutageLogHeaderLine {
@@ -71,7 +63,6 @@ function isOutageLogEvent(value: unknown): value is OutageLogEvent {
   );
 }
 
-/** Non-event lines (header, legacy marks) are skipped, so older files stay readable. */
 export function parseOutageLogFile(raw: string): OutageLogEvent[] {
   const events: OutageLogEvent[] = [];
   for (const line of raw.split("\n")) {
@@ -81,7 +72,7 @@ export function parseOutageLogFile(raw: string): OutageLogEvent[] {
       const parsed: unknown = JSON.parse(trimmed);
       if (isOutageLogEvent(parsed)) events.push(parsed);
     } catch {
-      // Best-effort read: skip torn lines.
+      // Intentionally empty.
     }
   }
   return events;
@@ -103,7 +94,6 @@ export interface DeriveOutageEventsInput {
   now: number;
 }
 
-/** Latency detail only when `latencyDegraded`: a 4ms sample disproves it (#647). */
 function degradedDetail(state: GatewayRuntimeState): string | undefined {
   if (state.latencyDegraded && state.latencyMs !== undefined)
     return `${state.latencyMs}ms latency`;

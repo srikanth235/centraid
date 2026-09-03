@@ -1,15 +1,12 @@
-// First-run camera-roll import as data (#724): vault staging spine, sha256 dedupe.
 import type { PhotoAsset } from "./timeline-model";
 
 export interface ImportCandidate {
-  /** Never the localId. */
   id: string;
   localId: string;
   filename: string;
   kind: "photo" | "video";
 }
 
-/** Do not import `automaticBackupCandidates`: it pulls React in. */
 export function selectImportCandidates(
   assets: readonly PhotoAsset[]
 ): ImportCandidate[] {
@@ -30,11 +27,9 @@ export function selectImportCandidates(
 export type ImportOutcome = "imported" | "skipped" | "failed";
 
 export interface ImportProgress {
-  /** An id here is never retried. */
   done: readonly string[];
   imported: number;
   skipped: number;
-  /** Candidate id → failure sentence. */
   failed: Readonly<Record<string, string>>;
 }
 
@@ -70,7 +65,6 @@ export function recordOutcome(
   };
 }
 
-/** SERIAL: rejections recorded as `failed`, never abort; resumable via `onProgress`. */
 export async function runCameraRollImport(
   candidates: readonly ImportCandidate[],
   progress: ImportProgress,
@@ -87,7 +81,6 @@ export async function runCameraRollImport(
       // oxlint-disable-next-line no-await-in-loop -- serial by contract, see above.
       outcome = await deps.attempt(candidate);
     } catch (error) {
-      // Record and move on.
       outcome = "failed";
       reason = error instanceof Error ? error.message : String(error);
     }
@@ -97,7 +90,6 @@ export async function runCameraRollImport(
   return current;
 }
 
-/** Honest counts (§18); failures named. */
 export function importSummary(progress: ImportProgress): string {
   const failedCount = Object.keys(progress.failed).length;
   const parts = [`${progress.imported} imported`];

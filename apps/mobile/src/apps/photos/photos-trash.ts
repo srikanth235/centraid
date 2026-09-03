@@ -1,10 +1,5 @@
-// Emptying trash on the phone (v4 §4.5). `source_asset_id` is a real FK
-// (#711): copies must leave before the originals they name. The summary
-// must never offer undo.
-
 import type { VaultAsset } from "./photos-selection-writes";
 
-/** Copies before sources. A lineage cycle must terminate, not hang. */
 export function emptyTrashOrder(
   targets: readonly VaultAsset[],
   sourceOf: (assetId: string) => string | undefined

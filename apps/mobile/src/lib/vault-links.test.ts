@@ -1,6 +1,3 @@
-/**
- * Vaults owner (#545) — device-local (gateway, vault) registry.
- */
 import { describe, expect, it, vi } from "vitest";
 
 const storeMem = new Map<string, unknown>();
@@ -133,11 +130,6 @@ describe("Vaults registry", () => {
     expect(vaults.getActiveVaultId()).toBe("");
   });
   it("notifies subscribers when hydration finds a registry on disk", async () => {
-    // The boot race Home lost: `getActiveVaultLink()` reads in-memory state that
-    // only exists after the async hydrate, so a screen that mounts and
-    // subscribes FIRST must still be told once the registry lands. Without the
-    // emit at the end of hydration it waits forever and renders "No vault yet"
-    // over a fully populated replica.
     const seed = await loadVaultLinks();
     const added = await seed.addVaultLink({
       gatewayId: "gw-1",
@@ -148,7 +140,6 @@ describe("Vaults registry", () => {
       vaultName: "Personal",
     });
 
-    // A fresh module over the SAME storage — a cold boot with links on disk.
     vi.resetModules();
     const booted = await import("./vault-links");
     expect(booted.getActiveVaultLink()).toBeUndefined();

@@ -1,19 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit The #712 face-review handoff remains one cohesive stateful screen; #716 only adds its testability contract.
-//
-// WHAT THIS SCREEN MAY NOT DO (#711). Web twin: blueprints' FaceReview.tsx.
-//   1. Titled "Face review", never "People review"; say "photographs".
-//   2. Crop and photograph are the evidence; bytes come from the local
-//      timeline (`usePhotoTimeline`), never the faces query.
-//   3. Every proposal carries reject/rename/dismiss/skip even when no name
-//      was proposed — unmatched is the primary case a detector produces.
-//   4. Confidence is in matches, never a percentage.
-//   5. No confirmed-people carousel; the roster is `PhotosPeopleView.tsx`.
-//   6. One face at a time (`buildQueue`), never a list over every region.
-//
-// Every control but Skip is a real `answer-face` write (#712). Dismiss means
-// "reviewed, deliberately unnamed" — without it declined strangers return on
-// the next pull. "Someone else" picks people already confirmed here; no
-// command mints a new one. Progress arithmetic is `triage-session`.
 import { Image } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, View } from "react-native";
@@ -70,7 +55,6 @@ export default function FaceReview({
     "photos",
     useMemo(() => ({ entity: "core.party" }), [])
   );
-  // Metadata only — no bytes over the replica.
   const assetsQuery = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "media.asset" }), [])
@@ -112,8 +96,6 @@ export default function FaceReview({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  // Frozen at first non-empty load: the numerator counts up as the member
-  // works, rather than the denominator sliding as new proposals land.
   const [sessionStartTotal, setSessionStartTotal] = useState<number | null>(
     null
   );
@@ -125,9 +107,6 @@ export default function FaceReview({
       );
   }, [sessionStartTotal, queue.length]);
 
-  // Built per render, never held in state: the queue derives from live replica
-  // rows that re-resolve on every pull, so a stateful session would need a
-  // refill effect whose setState produces the next render.
   const session = useMemo(
     () => ({
       queue,
@@ -149,16 +128,12 @@ export default function FaceReview({
     sourceAsset && bbox
       ? faceCropStyle(bbox, sourceAsset.width, sourceAsset.height, CROP_PX)
       : null;
-  // Crop and photograph are the same asset, whose derivative may not exist
-  // yet, so both ride one retry ladder. Called unconditionally: it is a hook.
   const media = useImageFallback(
     sourceAsset?.uri ?? "",
     sourceAsset?.originalUri,
     sourceAsset?.assetId ?? "none"
   );
 
-  /** An upsert for all three answers: a rejection deletes nothing, so the row
-   *  must land answered or the queue rebuilds with the face in it (#712). */
   async function answer(
     kind: "confirm" | "reject" | "dismiss",
     partyId?: string
@@ -203,8 +178,6 @@ export default function FaceReview({
     }
   }
 
-  /** Reviewed, kept, deliberately unnamed — unlike Skip it does not come back
-   *  on the next pull. */
   async function dismiss(): Promise<void> {
     setNote(null);
     if (await answer("dismiss")) {

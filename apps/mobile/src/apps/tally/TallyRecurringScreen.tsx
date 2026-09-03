@@ -1,17 +1,3 @@
-// RECURRING — templates, their schedules as sentences, and what is due.
-//
-// A SCHEDULE IS A SENTENCE, AND WHERE IT CANNOT BE THERE IS NO PREVIEW AT ALL
-// (§6). `RRULE:FREQ=WEEKLY;BYDAY=TU,TH` on screen is not a preview — it is a
-// leak of the storage format, and a member cannot check it. The row says the
-// §6 line instead, and says why.
-//
-// DUE NEXT CARRIES THE ONE EXCEPTION. Every other act in Tally has an
-// optimistic pending projection and records offline; materialising an
-// occurrence does not, because its id is minted by the canonical recurrence
-// engine. So the row states that fact where the member is standing, and the
-// verb is WITHHELD while the gateway is out of reach rather than offered and
-// then refused — the same rule the app's offline notice names.
-
 import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
 
@@ -74,9 +60,6 @@ export default function TallyRecurringScreen({
         >
           {templates.map((template) => {
             const sentence = scheduleSentence(template);
-            // The acts are WITHHELD where the row is missing a field the save
-            // command requires: a save that dropped one would be refused at
-            // the far end of a press.
             const base = templateSaveBase(template);
             const paused = template.status === "paused";
             return (
@@ -147,9 +130,6 @@ export default function TallyRecurringScreen({
                 text: money(occurrence.amountMinor, occurrence.currency),
                 tone: "settled",
               }}
-              // THE ONE WRITE WITH NO OPTIMISTIC COPY. Offline the verb is
-              // Skip — which DOES project — and the row's own sentence and the
-              // note below say why Materialise is not offered.
               act={
                 replica.online
                   ? {

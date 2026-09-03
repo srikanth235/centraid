@@ -1,5 +1,3 @@
-/* Power-context push (#528 D): courtesy-only live power state, never a durable mode flip. */
-
 import { powerMonitor } from "electron";
 
 const POWER_CONTEXT_PATH = "/centraid/_gateway/resource/power-context";
@@ -7,7 +5,6 @@ const PUSH_TIMEOUT_MS = 3000;
 
 type ThermalPressure = "nominal" | "fair" | "serious" | "critical";
 
-/** Thermal state → wire vocab; else null. */
 function currentThermalPressure(): ThermalPressure | null {
   const get = (powerMonitor as { getCurrentThermalState?: () => string })
     .getCurrentThermalState;
@@ -47,14 +44,12 @@ export async function pushPowerContext(
         signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
       }
     );
-    // Drain body for socket reuse.
     void res.body?.cancel().catch(() => {});
   } catch {
-    /* heartbeat tick retries */
+    // Intentionally empty.
   }
 }
 
-/* `thermal-state-change` is macOS-only. */
 export function registerPowerContextListeners(onChange: () => void): void {
   powerMonitor.on("on-battery", onChange);
   powerMonitor.on("on-ac", onChange);

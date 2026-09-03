@@ -1,14 +1,3 @@
-// ONE EXPENSE, as this seat draws it.
-//
-// `LedgerRow` is the SHAPE and `entry-facts.ts` is the SENTENCE — the shared
-// pure module both seats compose the meta line out of, so a group ledger, a
-// friend's shared expenses, the feed, Trash and Search cannot each say a
-// slightly different thing about the same expense.
-//
-// A PENDING ROW TAKES THE 2px LEADING RULE and says "not in the vault yet" in
-// its own meta (§5, and STATES.md's Activity / pending cell). Both come off
-// the overlay the query decorated the row with; neither is guessed here.
-
 import React from "react";
 
 import { entryMeta } from "@centraid/blueprints/apps/tally/entry-facts";
@@ -28,7 +17,6 @@ export interface TallyEntryRowProps {
   me: string | null;
   groupName?: string;
   extra?: string;
-  /** The ONE quiet trailing verb a touch row carries. */
   act?: { label: string; onPress: () => void };
   onPress?: () => void;
 }

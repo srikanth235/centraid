@@ -3,10 +3,6 @@ import { StyleSheet } from "react-native";
 import { radii, spacing, t } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
-// makeStyles(colors) + useMemo per scheme (matches Settings). The composer row
-// stays clear of the floating Home key via its own bottom padding; the bubbles
-// read as a two-sided transcript — user on the right in the system accent,
-// assistant on the left on an elevated card.
 export const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     assistantBubble: {
@@ -103,8 +99,6 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[6],
     },
     errorText: { ...t("body"), color: colors.danger },
-    // Conversation-style header: the back key leads a name + status column,
-    // vertically centered against the two lines (back · name · status).
     header: {
       alignItems: "center",
       flexDirection: "row",
@@ -129,8 +123,6 @@ export const makeStyles = (colors: ThemeColors) =>
     pendingText: { ...t("body"), color: colors.textFaint, fontStyle: "italic" },
     rowLeft: { alignItems: "flex-start" },
     rowRight: { alignItems: "flex-end" },
-    // There is one page for the shell and every app in it — no per-app
-    // surface tone (docs/traps/design-tokens.md).
     safe: { backgroundColor: colors.bg, flex: 1 },
     sendButton: {
       alignItems: "center",

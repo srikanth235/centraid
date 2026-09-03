@@ -1,17 +1,3 @@
-// The drive's row set, shared by every shelf that paints documents
-// (#821): All, one folder, Recently changed, Starred, Trash and the
-// Search results all draw THIS — rows in one container (1px rule, 12 radius,
-// `bgElev` ground, per the handoff's row-container recipe), the quick-actions
-// menu on `···` and press-and-hold, the honest loading/empty/error states,
-// and the caption + status sentences under the set.
-//
-// The menu's WRITES live here too — star/unstar, rename, refile, trash,
-// restore — one implementation with one Undo grammar (`showUndoStatus` + the
-// reverse write, only where a reverse write exists), so five shelves cannot
-// drift on what a verb does. The Undo is BOUNDED (#903). Outcomes surface through the kit's
-// `surfaceWriteOutcome` (parked → Approvals; queued → the one queued
-// sentence).
-
 import { useNavigation } from "@react-navigation/native";
 import { FlashList } from "@shopify/flash-list";
 import React, { useMemo, useState } from "react";
@@ -55,12 +41,8 @@ export interface DriveListProps {
   offline: boolean;
   refresh: () => Promise<void>;
   view?: "list" | "grid";
-  /** The sentence under the set (view-copy `captionFor`), said once. */
   caption?: string | null;
-  /** The shelf's standing status sentence, at the foot. */
   status?: string | null;
-  /** The row's lead line per document id — the matched passage on Search, the
-   *  sender on Shared. See `DocRow`'s `reason` for why there is only one. */
   reasons?: Readonly<Record<string, string>>;
   empty?: {
     query?: string;
@@ -68,19 +50,9 @@ export interface DriveListProps {
     folderName?: string;
     driveIsEmpty?: boolean;
   };
-  /** What to say instead, for a shelf the shared empty-copy table does not
-   *  carry. Without it such a shelf silently inherits All's sentences, which
-   *  would tell a member with nothing shared that their DRIVE is empty. */
   emptyCopy?: { title: string; body: string };
-  /** Whatever the shelf draws above the rows (filter chips, a search field). */
   header?: React.ReactNode;
-  /** Render plain rows instead of a virtualized list — for a short section
-   *  embedded in a screen that already scrolls (Folders' deleted-folder
-   *  block). A virtualized list inside a ScrollView measures nothing. */
   embedded?: boolean;
-  /** The shelf's own `Select` control owns the mode, so the flag is
-   *  CONTROLLED: the button that turns it on lives in the app bar, which is
-   *  the shelf's chrome and not this list's. */
   selecting?: boolean;
   onSelectingChange?: (active: boolean) => void;
 }
@@ -116,24 +88,17 @@ export default function DriveList({
   const navigation = useNavigation<DocsShellNavigation>();
   const write = useDocsWrite(navigation);
   const { gatewayBase, vaultId } = useReplica();
-  // `null` while the People roster is not an answer at all — the row draws no
-  // Share verb then, rather than one that fails when pressed.
   const audiences = useDocsGrantAudiences();
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [sharing, setSharing] = useState<MobileDriveDoc | null>(null);
   const [renaming, setRenaming] = useState<MobileDriveDoc | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [picked, setPicked] = useState<readonly string[]>([]);
-  // Where the bulk Move-to card hangs from; `undefined` sends it to the top
-  // trailing corner rather than refusing to open (AnchoredMenu's own rule).
   const [moveAnchor, setMoveAnchor] = useState<MenuAnchor | undefined>(
     undefined
   );
   const [movingOpen, setMovingOpen] = useState(false);
 
-  // DERIVED, not cleared by an effect: leaving the mode empties the choice by
-  // definition, and an effect that reset state on a prop change would be the
-  // same fact stored twice with a frame's disagreement between them.
   const pickedSet = useMemo(
     () => new Set(selecting ? picked : []),
     [picked, selecting]
@@ -154,8 +119,6 @@ export default function DriveList({
         : [...current, doc.document_id]
     );
 
-  // One write, one sentence, one reverse write where one exists (§11's
-  // `actionStatus` grammar; Undo is an underlined action on the status line).
   const act = async (
     action: string,
     input: Record<string, string>,
@@ -172,15 +135,6 @@ export default function DriveList({
     showUndoStatus(sentence, () => void write(undo.action, undo.input));
   };
 
-  /**
-   * The same verb over a chosen set. Serial rather than `Promise.all`: the
-   * write door is one queue and the drain lock single-files intents anyway, so
-   * a burst buys nothing and costs the ability to report how far it got.
-   *
-   * The status counts what SETTLED, never what was asked. A write that parked
-   * for a steward or was refused returns nothing from the door, so it is not
-   * in the sentence and not in the Undo.
-   */
   const actMany = async (
     action: string,
     targets: readonly MobileDriveDoc[],
@@ -192,9 +146,6 @@ export default function DriveList({
     }
   ): Promise<void> => {
     const settled: MobileDriveDoc[] = [];
-    // Serial BY CONTRACT: the sentence afterwards counts what actually
-    // landed, so a failure partway has to stop counting rather than race the
-    // rest of the batch.
     for (const doc of targets) {
       // oxlint-disable-next-line no-await-in-loop -- see above
       const result = await write(action, input(doc));
@@ -211,8 +162,6 @@ export default function DriveList({
       sentence,
       () =>
         void (async () => {
-          // Serial for the same reason the forward pass is: an Undo that races
-          // can reorder writes the member made in one gesture.
           for (const doc of settled) {
             const step = undo(doc);
             // oxlint-disable-next-line no-await-in-loop -- see above
@@ -222,17 +171,9 @@ export default function DriveList({
     );
   };
 
-  /**
-   * The row's Download. Stages the EXACT stored bytes and hands them to the
-   * OS — the same `docs-export` path the facts panel's "Open elsewhere" uses,
-   * because they are one act with two names, and the phone's file space is the
-   * share sheet. Nothing is converted.
-   */
   const handOver = async (doc: MobileDriveDoc): Promise<void> => {
     try {
       await openElsewhere(doc, gatewayBase, vaultId);
-      // The name shadows the `error` PROP on purpose: inside this handler the
-      // only error that matters is the one the hand-over threw.
       // oxlint-disable-next-line no-shadow -- see above
     } catch (error) {
       postStatus(
@@ -248,9 +189,6 @@ export default function DriveList({
     anchor: MenuAnchor | undefined
   ): void => setMenu({ doc, anchor });
 
-  // Rebuilt per render rather than memoized: the groups close over `act`,
-  // and a menu is open for exactly one gesture — the rebuild is cheaper than
-  // a dependency list that would have to lie about it.
   const buildMenuGroups = (): ReturnType<typeof buildDocMenu> => {
     if (!menu) return [];
     const doc = menu.doc;
@@ -304,11 +242,6 @@ export default function DriveList({
   };
   const menuGroups = buildMenuGroups();
 
-  // The bulk Move-to card. The same label set the per-row submenu offers, from
-  // the same `folders` prop — a folder is a label on a document, so moving a
-  // chosen set is retagging each of them. No `checked` rung: a set can straddle
-  // several folders, and a tick would be answering "which folder is this in?"
-  // for documents that disagree.
   const bulkMoveGroups: MenuGroup[] = [
     {
       key: "move",
@@ -343,9 +276,6 @@ export default function DriveList({
                 document_id: doc.document_id,
                 folder_id: folder.folder_id,
               }),
-              // Each document goes back to ITS OWN folder, not to one shared
-              // origin: an Undo that filed the whole set under wherever the
-              // first one came from would be a second move wearing the word.
               (doc) => ({
                 action: "move",
                 input: {
@@ -370,9 +300,6 @@ export default function DriveList({
     });
   };
 
-  // Choosing from a set is a LIST act: a tile is a preview, and a tick over a
-  // preview reads as a fact about the document rather than a pick. The
-  // remembered grid preference is untouched — it comes back on the way out.
   const arrangement = selecting ? "list" : view;
 
   const readOnlyReason = readOnlyRouteReason(docs);

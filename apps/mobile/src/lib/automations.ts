@@ -1,9 +1,3 @@
-// Mobile automations client (#263). Wire shapes are mirrored locally — mobile
-// does not depend on `@centraid/server/automation`.
-//
-// Every call goes out with `apiHeaders()` — auth *and* `x-centraid-vault`
-// (#289). Bearer-only let the gateway fall back to its implied default vault,
-// so "Run now" fired in the wrong vault.
 import { apiHeaders, fetchJson, requireGatewayBase } from "./gateway";
 
 type WireTrigger =
@@ -64,7 +58,6 @@ const V0_TEMPLATE_IDS = new Set([
   "renewal-reminders",
 ]);
 
-/** Not a full cron humanizer — exotic schedules stay the raw expression. */
 function describeCron(expr: string): string {
   const fields = expr.trim().split(/\s+/u);
   if (fields.length !== 5) return `Cron ${expr}`;
@@ -199,10 +192,6 @@ export async function listAutomationTurns(
   return body.turns ?? [];
 }
 
-/**
- * `publish: true` lands on `main` and reconciles the scheduler — without it the
- * toggle only stages in a throwaway session.
- */
 export async function setAutomationEnabled(
   ref: string,
   enabled: boolean

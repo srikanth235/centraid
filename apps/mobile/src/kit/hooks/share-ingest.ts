@@ -1,5 +1,3 @@
-// React-free share-ingest core; `ShareIntentIngest.tsx` wires real producers.
-
 import type { MobileReplicaSession } from "../../lib/replica/native-session";
 import type { DeviceMediaInput } from "../../lib/upload/media-producer";
 
@@ -19,7 +17,6 @@ export interface SharedIntentLike {
   webUrl?: string | null;
 }
 
-// #431: optional until the upload-queue agent's input carries the flag.
 type MediaProducerInput = DeviceMediaInput & {
   deleteSourceAfterSettle?: boolean;
 };
@@ -36,7 +33,6 @@ export const SHARE_UNPAIRED_TITLE = "Can’t receive shares yet";
 export const SHARE_UNPAIRED_MESSAGE =
   "Pair this phone with your Centraid desktop, then share again.";
 
-/** Older than this, a staged copy was abandoned by a crash, not a member. */
 export const SHARE_STAGING_STALE_MS = 24 * 60 * 60 * 1000;
 
 export const SHARE_STAGING_SWEEP_LIMIT = 200;
@@ -48,7 +44,6 @@ export interface ShareStagingEntry {
 }
 
 export interface ShareStagingPorts {
-  /** `undefined` when the app-group staging root is absent. */
   stagedEntries: () => readonly ShareStagingEntry[] | undefined;
   deleteStaged: (uri: string) => void;
   now: () => number;
@@ -83,7 +78,6 @@ function mediaKind(mimeType: string): DeviceMediaInput["kind"] {
 }
 
 function isDeviceMedia(mimeType: string): boolean {
-  // #431: shared audio goes through the media producer.
   return (
     mimeType.startsWith("image/") ||
     mimeType.startsWith("video/") ||
@@ -91,10 +85,6 @@ function isDeviceMedia(mimeType: string): boolean {
   );
 }
 
-/**
- * Route each confirmed file to its producer, then ALWAYS reset — the durable
- * queue owns anything enqueued, so resetting on error only prevents re-fire.
- */
 export async function processShareIntent(
   ports: ShareIngestPorts,
   session: MobileReplicaSession,
@@ -151,11 +141,6 @@ export async function processShareIntent(
   }
 }
 
-/**
- * Only the settle path deletes, so a share nobody confirmed leaves plaintext in
- * the app group at its default protection class, outside the durable directory
- * (docs/mobile-offline.md, "Durable path and at-rest decision").
- */
 export function discardShareIntentFiles(
   deleteStaged: (path: string) => void,
   shareIntent: SharedIntentLike
@@ -163,10 +148,6 @@ export function discardShareIntentFiles(
   for (const file of shareIntent.files ?? []) deleteStaged(file.path);
 }
 
-/**
- * A crash between staging and ingest must not leak forever. Files only: the
- * app group also carries the extension's `Library` tree, which is not staging.
- */
 export function sweepStaleShareStaging(ports: ShareStagingPorts): number {
   const entries = ports.stagedEntries();
   if (!entries) return 0;
@@ -175,7 +156,6 @@ export function sweepStaleShareStaging(ports: ShareStagingPorts): number {
   for (const entry of entries) {
     if (swept >= SHARE_STAGING_SWEEP_LIMIT) break;
     if (!entry.isFile) continue;
-    // Unreadable is not evidence of stale.
     if (entry.lastModifiedMs === undefined || entry.lastModifiedMs > cutoff)
       continue;
     ports.deleteStaged(entry.uri);
@@ -184,10 +164,6 @@ export function sweepStaleShareStaging(ports: ShareStagingPorts): number {
   return swept;
 }
 
-/**
- * Empty means no chooser: one writable vault is not a choice. Text and links
- * never ask — Quick capture is speed-first and takes the focused vault.
- */
 export function shareTargetChoices(
   scopes: readonly ShareTargetScope[]
 ): readonly ShareTargetScope[] {
@@ -195,7 +171,6 @@ export function shareTargetChoices(
   return writable.length > 1 ? writable : [];
 }
 
-/** Re-entrancy guard (#431 test): no second pass while ingest is in flight. */
 export class ShareIntentGate {
   private running = false;
   async run(task: () => Promise<void>): Promise<void> {

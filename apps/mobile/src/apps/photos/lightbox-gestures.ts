@@ -1,6 +1,3 @@
-// Builders live outside components: the chain mutates the factory, which the
-// React compiler rejects in a render body (also `applyZoom`).
-
 import { Gesture } from "react-native-gesture-handler";
 import { runOnJS, withTiming } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
@@ -22,7 +19,6 @@ function clamp(value: number, extent: number): number {
   return Math.max(-extent, Math.min(extent, value));
 }
 
-/** The drag is a contract: the readout prints `drag to pan`. */
 export function buildZoomGesture({
   scale,
   startScale,
@@ -35,7 +31,6 @@ export function buildZoomGesture({
   startScale: SharedValue<number>;
   offset: PanOffset;
   frame: { width: number; height: number };
-  /** Only while zoomed: live at fit, it kills the pager swipe. */
   panEnabled: boolean;
   onSettle?: (scale: number) => void;
 }): ReturnType<typeof Gesture.Simultaneous> {
@@ -75,7 +70,6 @@ export function buildZoomGesture({
     });
   const pan = Gesture.Pan()
     .enabled(panEnabled)
-    // One finger: the second belongs to the simultaneous pinch.
     .maxPointers(1)
     .onStart(() => {
       start.x = offset.x.value;
@@ -106,7 +100,6 @@ export function applyZoom(
   }
 }
 
-/** One recogniser for both directions: two Pans here would race. */
 export function buildDismissGesture(
   onDismiss: () => void,
   onInfo?: () => void

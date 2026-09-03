@@ -1,22 +1,3 @@
-// The Analytics place, rendered (#765, spec §5). Five states, one screen.
-//
-// What this pins is what a future edit is likeliest to undo quietly:
-//
-//  - loading draws the ROW GEOMETRY plus the sentence that explains why, and
-//    never a spinner
-//  - empty still shows the WINDOW CHIPS, unlike every other page's filter row:
-//    an empty 7 days is a reason to ask about 90, not a dead end
-//  - error is the net panel with the reference's exact copy and an honest verb
-//  - the window is one question asked once: changing it re-reads, and the count
-//    line, the chart's label, the axis and the facts move together
-//  - the window is remembered under the key the desktop leg uses
-//  - Export CSV is offered only when there is something to export, and it
-//    reaches the real share sheet
-//
-// The bar's filled verb is ABSENT by decision — a page that counts what already
-// happened writes nothing — and the last test holds that absence in place.
-
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -54,9 +35,6 @@ vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
 
-// Each mock takes the REAL function's signature, so a wire shape that drifts is
-// a typecheck failure here rather than a test that passes against a module the
-// app no longer has.
 type Insights = typeof import("../../lib/insights");
 type Gateway = typeof import("../../lib/gateway");
 type FileSystem = typeof import("expo-file-system");
@@ -73,8 +51,6 @@ const wire = vi.hoisted(() => ({
 }));
 
 vi.mock(import("../../lib/insights"), async (importOriginal) => ({
-  // The formatters are the real ones: a fixture of them would pass whatever the
-  // screen happened to render.
   ...(await importOriginal()),
   fetchGatewayHealth: wire.health,
   fetchInsightsSummary: wire.summary,
@@ -83,8 +59,6 @@ vi.mock(
   import("../../lib/gateway"),
   () =>
     ({
-      // `instanceof` is all the hook asks of it; a second class in this file
-      // would be one more than the linter allows, and this one has no behaviour.
       GatewayError: Error,
       apiHeaders: () => ({}),
       fetchJson: wire.prefs,
@@ -199,16 +173,12 @@ const navigation = {
 
 let dispose: (() => void) | undefined;
 
-/** One macrotask turn: every microtask queued before it has drained by the
- *  time the timer callback runs. */
 async function tick(): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
   });
 }
 
-/** Let the effects' reads — and anything they chained — finish. Three turns:
- *  the preference read, the summary read it can re-trigger, and a write. */
 async function settle(): Promise<void> {
   await tick();
   await tick();
@@ -261,11 +231,7 @@ describe(InsightsScreen, () => {
   });
 
   it("draws the row geometry while it reads, and says why", async () => {
-    wire.summary.mockReturnValue(
-      new Promise<InsightsSummary>(() => {
-        // Never settles: this is what "still reading" looks like.
-      })
-    );
+    wire.summary.mockReturnValue(new Promise<InsightsSummary>(() => {}));
     const container = await render();
     const skeleton = nodesOf(container, "div").find(
       (node) => node.dataset.role === "progressbar"
@@ -275,7 +241,6 @@ describe(InsightsScreen, () => {
       "A row knows its shape before its content arrives, so nothing reflows when it does."
     );
     expect(textOf(container)).toContain("Reading vault activity");
-    // The quiet verb is withdrawn while loading — there is nothing to export.
     expect(labelled(container, "Export CSV")).toBeNull();
   });
 
@@ -294,7 +259,6 @@ describe(InsightsScreen, () => {
     expect(spans).toContain(
       "Once automations and the assistant start doing work, their volume and outcomes appear here."
     );
-    // The one page whose chip row survives its own empty state.
     expect(spans).toContain("7 days");
     expect(spans).toContain("90 days");
     expect(spans).toContain("Nothing to attend to");
@@ -319,8 +283,6 @@ describe(InsightsScreen, () => {
     expect(spans).toContain(
       "Activity could not load · your vault contents are unaffected."
     );
-    // Chips are withheld here: the window is a question about data, and there
-    // is none.
     expect(spans).not.toContain("30 days");
   });
 
@@ -331,11 +293,9 @@ describe(InsightsScreen, () => {
     expect(ariaLabels(container)).toContain(
       "Spend per day over the last 30 days"
     );
-    // Real dates on the axis, and the promoted figure the page opens with.
     expect(spans).toContain("15 Jul");
     expect(spans).toContain("Spend · 30 days");
     expect(spans).toContain("$2.00");
-    // The breakdowns the vault was already computing (#775).
     expect(ariaLabels(container)).toContain("Spend by harness");
     expect(ariaLabels(container)).toContain("Spend by effort");
     expect(spans).toContain("claude-code");
@@ -394,7 +354,6 @@ describe(InsightsScreen, () => {
     expect(ariaLabels(container)).toContain(
       "Spend per day over the last 7 days"
     );
-    // And it is remembered, under the key the desktop leg reads.
     expect(wire.prefs).toHaveBeenCalledWith(
       expect.stringContaining("/_centraid-user/prefs"),
       expect.objectContaining({
@@ -446,3 +405,4 @@ describe(InsightsScreen, () => {
     expect(filled).toHaveLength(0);
   });
 });
+// @vitest-environment jsdom

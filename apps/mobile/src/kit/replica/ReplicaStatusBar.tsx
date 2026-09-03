@@ -25,41 +25,8 @@ import { useReplica } from "./ReplicaProvider";
 
 const DIVERGENCE_MS = 24 * 60 * 60 * 1_000;
 
-/**
- * Where the switch that would un-pause sync actually is.
- *
- * `sync-paused` is the member's own transfer rules refusing the radio, so
- * pulling again re-hits the same rule and a Refresh here would be a control
- * that cannot work (replica-status.ts). The rules live on Backup health, and
- * saying so is the whole action this state can honestly offer.
- */
 const TRANSFER_RULES_HINT = "Change these under Backup health in Settings.";
 
-/**
- * Human status only: no cursor, epoch, replica, or internal storage jargon.
- *
- * **It says nothing when there is nothing wrong.** This bar mounts on roughly
- * twenty app screens, and in the settled case it drew a permanent row reading
- * `Updated 10m ago` with a `Refresh` button on the other end — above Photos'
- * own count, above the first photograph. Neither half earned that row:
- *
- *  - **Refresh** is the third way to do the same thing. Every screen carrying
- *    this bar scrolls, and pull-to-refresh is the gesture a phone already has;
- *    a labelled button for it is a control that exists because the desktop had
- *    one. The action label is kept for the states where the gesture would NOT
- *    help — a sleeping gateway needs waking, not pulling — and those states are
- *    the only ones that still render it.
- *  - **Updated 10m ago** is a fact about the vault, not about Photos, and the
- *    vault has one screen: Home already carries an ambient line saying how much
- *    is in it and whether the gateway is answering
- *    (screens/home/HomeStatusLine.tsx). Repeating a per-route copy of it made
- *    freshness look like something each app owns separately.
- *
- * So `current` renders no row at all. Everything that is genuinely worth
- * interrupting a member for — offline, asleep, syncing, first-sync progress,
- * sources disagreeing by a day, pending changes, out of room — still renders
- * exactly as before, and now has the row to itself.
- */
 export default function ReplicaStatusBar(): React.JSX.Element {
   const { colors } = useTheme();
   const {
@@ -74,8 +41,6 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     storageFull,
   } = useReplica();
   const [open, setOpen] = useState(false);
-  // One AppState-gated ticker serves every mounted status bar; see
-  // ./pending-changes.
   const { pending, refresh: refreshPending } = usePendingChanges(session);
   const updatedTimes = scopes.flatMap((scope) =>
     scope.updatedAt ? [Date.parse(scope.updatedAt)] : []
@@ -86,21 +51,16 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     newest !== undefined &&
     oldest !== undefined &&
     newest - oldest >= DIVERGENCE_MS;
-  // The replica bar's copy lives in a pure module, tested independently.
   const { label, action, actionable } = useMemo(
     () => replicaStatusRow(reachability),
     [reachability]
   );
-  // The durable partial-library label, for the relaunch where no in-process
-  // bootstrap survives to report pages (replica-status.ts).
   const coverageLabel = replicaCoverageRow({
     ...(coverage ? { coverage } : {}),
     bootstrapping: bootstrapProgress.length > 0,
   }).label;
-  // Red when the member can act on it, neutral when they are waiting.
   const tint = actionable ? colors.danger : colors.textFaint;
   const refreshReplica = (): void => {
-    // Wake-help is gated to gateway-asleep; other actions use pull-to-refresh.
     if (reachability !== "gateway-asleep") {
       void refresh?.();
       return;
@@ -114,10 +74,6 @@ export default function ReplicaStatusBar(): React.JSX.Element {
       ]
     );
   };
-  // `pages` and the source count are real numerics — mono and tabular, per
-  // the ramp's "numerics are mono and tabular in every app, without
-  // exception" — so the sentence is split around the number rather than
-  // interpolated into one plain string.
   const bootstrap:
     | { prefix: string; count?: number; suffix: string }
     | undefined =
@@ -140,10 +96,6 @@ export default function ReplicaStatusBar(): React.JSX.Element {
             suffix: " sources: recent items ready; older history syncing",
           };
 
-  // `out of room` pre-empts the normal status row: the reachability/bootstrap
-  // language above ("Offline", "Syncing…") is about network state, not disk
-  // state, and would be a second, contradicting explanation for the same
-  // paused sync.
   if (storageFull) {
     return (
       <View style={styles.outOfRoomWrap}>
@@ -153,9 +105,6 @@ export default function ReplicaStatusBar(): React.JSX.Element {
           actionLabel={STORAGE_FULL_ACTION_LABEL}
           onAction={() => {
             clearPinnedThumbnailPacks();
-            // Freeing the packs is only half of it: the coordinator parked the
-            // feed when the disk filled and stays parked until it is told the
-            // room exists (coordinator.ts `resumeAfterStorageFull`).
             session?.resumeAfterStorageFull();
             void refresh?.();
           }}
@@ -179,8 +128,6 @@ export default function ReplicaStatusBar(): React.JSX.Element {
               </Text>
             </>
           ) : (
-            // Nothing to say, but something to show: the chip keeps the
-            // trailing edge it has whenever a label is present.
             <View style={styles.spacer} />
           )}
           {action ? (

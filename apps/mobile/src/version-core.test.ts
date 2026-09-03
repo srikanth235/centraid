@@ -36,7 +36,6 @@ describe("nativeBuildNumber (J6)", () => {
   });
 
   it("matches the shipped native project numbers for 0.1.0", () => {
-    // Formula is the single source; app.config.ts + android/ios must track it.
     const expected = nativeBuildNumber("0.1.0");
     expect(expected).toBe(1_000);
 
@@ -51,7 +50,6 @@ describe("nativeBuildNumber (J6)", () => {
       path.join(mobileRoot, "ios/Centraid.xcodeproj/project.pbxproj"),
       "utf8"
     );
-    // Every CURRENT_PROJECT_VERSION must equal the formula (no leftover "1").
     const versions = [
       ...pbx.matchAll(/CURRENT_PROJECT_VERSION = (?<version>\d+);/gu),
     ]
@@ -61,7 +59,6 @@ describe("nativeBuildNumber (J6)", () => {
     for (const v of versions) {
       expect(Number(v)).toBe(expected);
     }
-    // MARKETING_VERSION must be the app semver everywhere (no leftover "1.0").
     const marketing = [
       ...pbx.matchAll(/MARKETING_VERSION = (?<version>[^;]+);/gu),
     ]
@@ -73,7 +70,6 @@ describe("nativeBuildNumber (J6)", () => {
       expect(v).toBe("0.1.0");
     }
 
-    // Info.plist CFBundleVersion must match the formula (not a stale 1000000).
     const infoPlist = readFileSync(
       path.join(mobileRoot, "ios/Centraid/Info.plist"),
       "utf8"
@@ -92,14 +88,12 @@ describe("nativeBuildNumber (J6)", () => {
       "utf8"
     );
     expect(configSrc).toContain("nativeBuildNumber(VERSION)");
-    // Version is single-sourced from package.json (#501), not hardcoded.
     expect(configSrc).toContain("readMobilePackageVersion");
     expect(configSrc).toContain("@centraid/mobile");
     const pkgVersion = JSON.parse(
       readFileSync(path.join(mobileRoot, "package.json"), "utf8")
     ).version as string;
     expect(pkgVersion).toBe("0.1.0");
-    // Expo CJS resolve — must import the .cjs twin, not extensionless TS.
     expect(configSrc).toMatch(/from ['"]\.\/src\/version-core\.cjs['"]/u);
   });
 });

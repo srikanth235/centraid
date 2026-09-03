@@ -13,7 +13,6 @@ describe("SERVICE_WORKER_VERSION (K8 single source)", () => {
     const sw = readFileSync(path.join(root, "public/sw.js"), "utf8");
     const m = sw.match(/const VERSION = ['"](?<version>[^'"]+)['"]/u);
     expect(m?.[1]).toBe(SERVICE_WORKER_VERSION);
-    // Stamp script is what keeps them in lockstep on build.
     const stamp = readFileSync(
       path.join(root, "scripts/stamp-sw-version.mjs"),
       "utf8"

@@ -1,22 +1,3 @@
-// THE FRAME EVERY TALLY SURFACE SITS IN.
-//
-// It owns three things no screen should own twice: the spine read, the DENIED
-// GATE, and the band with its More sheet.
-//
-// THE GATE IS THE POINT. A refused grant is asked about once, here, and when
-// it answers the children are not rendered at all — not dimmed, WITHDRAWN —
-// and neither is the band. Fifteen routes therefore cannot each forget to
-// check: a Tally surface that wraps itself in this frame cannot paint a ledger
-// over a vault it was refused, because there is nothing behind the gate.
-//
-// The band, on the other hand, STAYS while the gate stands is the wrong shape
-// too — a navigation spine over a refused grant advertises destinations that
-// would each refuse in turn. So it is withdrawn with the children, exactly as
-// Locker withdraws it behind a lock.
-//
-// `routeStatus` is asked for the ambient sentence, so the app bar carries the
-// same line as the desktop's status row and neither seat can invent one.
-
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -49,19 +30,10 @@ const META = resolveAppMeta({
 });
 
 export interface TallyScreenProps {
-  /** Which band tab this surface belongs under. A More destination is `more`:
-   *  the sheet is how the member got here, and lighting one of the other four
-   *  would point at a place they are not looking at. */
   current: TallyBandDestinationKey;
-  /** The shelf this route IS, for its name and its ambient sentence. */
   shelf: ShelfId;
-  /** A group shared for co-contribution says which acts stay with the steward;
-   *  one the member keeps alone says what sharing it would cost. Only the
-   *  group ledger passes it. */
   shared?: boolean;
-  /** Back to the list, or nothing where the surface IS the list. */
   onBack?: () => void;
-  /** A route that is a SUBJECT rather than a place draws no band. */
   hideBand?: boolean;
   children: React.ReactNode;
 }
@@ -88,13 +60,11 @@ export default function TallyScreen({
       setMoreOpen(true);
       return;
     }
-    // popTo, never navigate: navigate would push a second copy of the list.
     navigation.popTo("TallyHome", { destination: key });
   };
 
   const onMoreRow = (key: TallyMoreRowKey): void => {
     setMoreOpen(false);
-    // Literal screen name per call: navigate's tuple overloads need one.
     const screen = resolveTallyMoreRoute(key);
     switch (screen) {
       case "TallyRecurring":

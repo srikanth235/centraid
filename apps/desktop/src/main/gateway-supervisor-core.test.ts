@@ -51,7 +51,6 @@ describe(recordFailure, () => {
         T0 + i * (CRASH_LOOP_WINDOW_MS + 1000),
         `fail-${i}`
       );
-      // Each failure lands long after the window elapsed for every prior one.
       expect(state.failures).toHaveLength(1);
       expect(state.loopBroken).toBe(false);
     }
@@ -61,7 +60,6 @@ describe(recordFailure, () => {
     let state = initialSupervisorState();
     state = recordFailure(state, T0, "old-1");
     state = recordFailure(state, T0 + 1000, "old-2");
-    // Past the window relative to the first two — they should be pruned.
     state = recordFailure(state, T0 + CRASH_LOOP_WINDOW_MS + 2000, "new-1");
     expect(state.failures).toStrictEqual([T0 + CRASH_LOOP_WINDOW_MS + 2000]);
     expect(state.loopBroken).toBe(false);
@@ -105,13 +103,9 @@ describe(claimRevival, () => {
     const first = claimRevival(undefined, T0);
     const tooSoon = claimRevival(first.next, T0 + MIN_REVIVAL_INTERVAL_MS - 1);
     expect(tooSoon.allowed).toBe(false);
-    // A refusal must not consume a slot, or a chatty monitor would burn the
-    // whole budget in one second of ticks.
     expect(tooSoon.next).toStrictEqual(first.next);
   });
 
-  // The hot-restart-loop bound: a daemon that dies instantly every time stops
-  // being respawned instead of being restarted on every 5s heartbeat.
   it("stops after MAX_REVIVALS inside the window", () => {
     let budget = claimRevival(undefined, T0).next;
     let at = T0;
@@ -154,8 +148,6 @@ describe(claimManualRetry, () => {
       T0 + MANUAL_RETRY_FLOOR_MS - 1
     );
     expect(tooSoon.allowed).toBe(false);
-    // A refusal must not slide the floor forward, or holding the button down
-    // would keep pushing the next real attempt out of reach.
     expect(tooSoon.next).toBe(T0);
   });
 
@@ -166,9 +158,6 @@ describe(claimManualRetry, () => {
     expect(later.next).toBe(T0 + MANUAL_RETRY_FLOOR_MS);
   });
 
-  // The floor is the ONLY bound on an explicit retry: unlike the revival
-  // budget there is no exhaustion, because a person who has just fixed the
-  // cause must never be told they are out of tries.
   it("never runs out of tries", () => {
     let at = T0;
     let last: number | undefined;

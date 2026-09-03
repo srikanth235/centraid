@@ -204,8 +204,6 @@ export async function handleCompanionRequest(
           { method: "DELETE" }
         );
       } catch (error) {
-        // A lost success response can surface as the server's subsequent 401;
-        // companionJson already purged that now-revoked identity.
         if (!(await loadPairing())) return { ok: true };
         throw error;
       }
@@ -237,7 +235,6 @@ export async function handleCompanionRequest(
           await chrome.action.setBadgeBackgroundColor({ color: "#b42318" });
           await chrome.action.setBadgeText({ text: "W", tabId: sender.tab.id });
         } else {
-          // Clear a prior Watchtower badge when this tab no longer has warnings.
           await chrome.action.setBadgeText({ text: "", tabId: sender.tab.id });
         }
       }

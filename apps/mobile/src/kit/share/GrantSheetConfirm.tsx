@@ -1,4 +1,3 @@
-// Copy is passed in: confirms withdrawal and change-of-answer (#883).
 import React from "react";
 import { Pressable, View } from "react-native";
 

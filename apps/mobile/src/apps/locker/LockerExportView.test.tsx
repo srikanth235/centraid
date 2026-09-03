@@ -1,18 +1,3 @@
-// The export surface, rendered (#882) — and the confirmation path in
-// particular, because it is the one thing between a tap and every secret in the
-// vault sitting in a file.
-//
-// What this pins:
-//
-//  - the consequence is stated ABOVE every control, and the confirm NAMES it
-//    rather than asking whether the member is sure
-//  - the commit control never runs the export: it opens the gate, and only the
-//    gate's own verb writes
-//  - the two options that make the file worse are off unless asked for
-//  - offline the control is WITHHELD and the reason stands in its place — never
-//    a grey button
-
-// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -48,7 +33,6 @@ interface ExportOptions {
   trashed: boolean;
 }
 
-/** Driven as its screen drives it, so a press is judged by what is DRAWN. */
 function Seat({
   offline = false,
   onRun,
@@ -81,7 +65,6 @@ function Seat({
 
 const textOf = (container: HTMLElement): string => container.textContent ?? "";
 
-/** The button whose visible word is `label`. */
 function control(container: HTMLElement, label: string): HTMLElement {
   const found = nodesOf(container, "button").find((node) =>
     (node.textContent ?? "").includes(label)
@@ -112,7 +95,6 @@ describe("the export surface", () => {
     const { container, unmount } = mountBlock(
       <Seat onRun={(options) => runs.push(options)} />
     );
-    // Nothing that could write is on screen until the gate stands.
     expect(textOf(container)).not.toContain(EXPORT_CONFIRM_TITLE);
     press(control(container, EXPORT_COMMIT));
     expect(textOf(container)).toContain(EXPORT_CONFIRM_TITLE);
@@ -140,7 +122,6 @@ describe("the export surface", () => {
     );
     press(control(container, EXPORT_COMMIT));
     press(control(container, "Cancel"));
-    // The gate is struck, and the file it guarded was never made.
     expect(textOf(container)).not.toContain(EXPORT_CONFIRM_TITLE);
     expect(runs).toStrictEqual([]);
     unmount();
@@ -169,10 +150,10 @@ describe("the export surface", () => {
     expect(chip(container, "Trashed").getAttribute("aria-selected")).toBe(
       "true"
     );
-    // And the option the member turned on is the one the run carries.
     press(control(container, EXPORT_COMMIT));
     press(control(container, EXPORT_CONFIRM_LABEL));
     expect(runs).toStrictEqual([{ history: false, trashed: true }]);
     unmount();
   });
 });
+// @vitest-environment jsdom

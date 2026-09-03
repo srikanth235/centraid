@@ -1,7 +1,3 @@
-/**
- * Main-process allowlist for OAuth courier links. Keep this module free of
- * Electron imports so malformed/unbounded protocol input is unit-testable.
- */
 export function isOAuthFinishDeepLink(rawUrl: string): boolean {
   if (rawUrl.length === 0 || rawUrl.length > 7_000) return false;
   try {
@@ -40,12 +36,6 @@ export function isOAuthFinishDeepLink(rawUrl: string): boolean {
   }
 }
 
-/**
- * Preload-side handoff queue. Electron may deliver a warm deep link after the
- * document loads but before the renderer bundle subscribes. Registering the
- * IPC listener in preload and buffering here closes that race without ever
- * persisting the code-bearing URL.
- */
 export function createDeepLinkBuffer(limit = 4): {
   enqueue: (...urls: string[]) => void;
   subscribe: (listener: (url: string) => void) => () => void;

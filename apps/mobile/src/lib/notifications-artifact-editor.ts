@@ -5,7 +5,6 @@ export interface EditableArtifactField {
   multiline: boolean;
 }
 
-/** Mobile edits only scalar text fields; structured values stay read-only. */
 export function editableArtifactFields(
   artifact: Readonly<Record<string, unknown>>
 ): EditableArtifactField[] {

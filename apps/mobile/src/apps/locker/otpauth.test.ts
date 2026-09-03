@@ -1,9 +1,3 @@
-// The otpauth grammar — the half of the camera scan a test can hold.
-//
-// The failure this exists to catch is a scanner that SALVAGES: a QR code that
-// is not an otpauth code producing a seed anyway, which would write codes no
-// server accepts and look like the vault's fault.
-
 import { describe, expect, it } from "vitest";
 
 import { base32Decode } from "@centraid/blueprints/apps/locker/totp";

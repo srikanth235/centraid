@@ -45,11 +45,6 @@ describe("recurrence", () => {
     expect(allDay.recurrence_semantics).toBe("all-day");
   });
 
-  // Shared parity fixtures — the SAME rules + windows are asserted against the
-  // server projection in packages/vault recurrence/rrule.test.ts, and the
-  // expected occurrence sets below are exactly what that server projection
-  // (packages/blueprints agenda/queries/upcoming.js → expandRrule) emits. If
-  // either side drifts, its suite fails against this shared ground truth.
   const PARITY: readonly {
     name: string;
     rrule: string;
@@ -201,8 +196,6 @@ describe("recurrence", () => {
   );
 
   test("an exhausted series terminates the walk instead of spinning to the guard", () => {
-    // An anchored-far-past COUNT=1 series must return immediately once its
-    // single occurrence is consumed, never spin out a 10k-step outer walk.
     const formatToParts = vi.spyOn(
       Intl.DateTimeFormat.prototype,
       "formatToParts"
@@ -222,10 +215,6 @@ describe("recurrence", () => {
           new Date("2026-08-01T00:00:00Z")
         )
       ).toStrictEqual([]);
-      // One start conversion plus the consumed occurrence and the next
-      // candidate needed to observe COUNT exhaustion. The former bug reached
-      // the 10k guard; this bound is deterministic even under a saturated CI
-      // host, unlike an elapsed-time assertion.
       expect(formatToParts.mock.calls.length).toBeLessThanOrEqual(12);
     } finally {
       formatToParts.mockRestore();

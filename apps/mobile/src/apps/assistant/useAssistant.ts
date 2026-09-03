@@ -50,16 +50,10 @@ interface PendingTurn {
   text: string;
   assistantKey: string;
   idempotencyKey: string;
-  /** Every provider approved so far for THIS turn (#567). */
   providerConsent?: string[];
   attachments: AssistantAttachment[];
 }
 
-/**
- * Approvals accumulate. A turn can need consent for provider A, fail over to B,
- * and need consent for B too — resending only B drops A's approval and the
- * gateway asks for A again, forever.
- */
 export function nextProviderConsent(
   current: string[] | undefined,
   provider: string
@@ -99,7 +93,6 @@ function withHarness(
   };
 }
 
-/** Apply a freshly probed harness choice without mutating the prior selection on failure. */
 export function preflightedHarnessSelection(
   current: AssistantConfig,
   fresh: AssistantConfig,
@@ -119,7 +112,6 @@ export function preflightedHarnessSelection(
   return { config: withHarness(fresh, harnessKind) };
 }
 
-/** Convert a fallible prefs write into an explicit UI result. */
 export async function persistAssistantSelection(
   harnessKind: string,
   kind: "model" | "effort",
@@ -152,7 +144,6 @@ export function useAssistant(): AssistantController {
   const conversationId = useRef<string | undefined>(undefined);
   const abort = useRef<AbortController | undefined>(undefined);
   const pendingTurn = useRef<PendingTurn | undefined>(undefined);
-  /** Synchronous twin of `sending` — closes the double-tap window state leaves open. */
   const inFlight = useRef(false);
 
   useEffect(() => {
@@ -190,8 +181,6 @@ export function useAssistant(): AssistantController {
       const controller = new AbortController();
       abort.current = controller;
       let finalText = "";
-      // The turn is not over when it parks on consent — the send guard has to
-      // stay closed until the owner answers the prompt.
       let awaitingConsent = false;
       try {
         const outcome = await streamAssistantTurn(
@@ -290,8 +279,6 @@ export function useAssistant(): AssistantController {
   const send = useCallback(
     (text: string, pageContext?: string): void => {
       const trimmed = text.trim();
-      // `sending` is React state — it only flips a render later, so two taps in
-      // the same frame both got past it. The ref closes synchronously.
       if (!trimmed || sending || inFlight.current || !conversationId.current)
         return;
       inFlight.current = true;

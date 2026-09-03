@@ -1,19 +1,4 @@
 #!/usr/bin/env node
-/**
- * Native recipe + identity ratchet for apps/mobile (#587 E23, #646).
- *
- * Layers (fail-closed; L1-L3 must pass before fingerprints may be written):
- *   L1 recipe completeness — every local modules/<name>/ios/<Name>.podspec in Podfile.lock;
- *     Android: expo-module.config.json declares platforms its directories imply
- *   L2 pod version coherence — Expo / React-Core / Hermes vs node_modules
- *   L3 path hygiene — no absolute / wrong-depth REACT_NATIVE_PATH
- *   L4 identity ratchet — committed native-fingerprints.json vs @expo/fingerprint
- *
- * CLI (sole entry \`ci:native-state\`; no alias):
- *   bun run --cwd apps/mobile ci:native-state           # verify
- *   bun run --cwd apps/mobile ci:native-state --status  # L1 vs L4 why
- *   bun run --cwd apps/mobile ci:native-state --write   # refresh hashes after L1-L3
- */
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -33,7 +18,6 @@ import {
   FIX_RECIPE_HINT,
 } from "./verify-native-state-lib.mjs";
 
-// Re-export pure API for existing tests and external importers.
 export {
   attachRemediation,
   classifyNativeStateError,
@@ -144,9 +128,6 @@ async function dirExists(dir) {
   }
 }
 
-/**
- * Collect L1–L3 errors (recipe + coherence + paths). Does not touch fingerprints.
- */
 export async function collectRecipeErrors(inputs) {
   const {
     lock,

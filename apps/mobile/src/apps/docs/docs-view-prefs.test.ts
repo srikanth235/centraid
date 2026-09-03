@@ -1,4 +1,3 @@
-// The remembered view — one key holding view AND sort together (#821).
 import { describe, expect, it } from "vitest";
 
 import { asDrivePrefs, DEFAULT_DRIVE_PREFS } from "./docs-view-prefs";

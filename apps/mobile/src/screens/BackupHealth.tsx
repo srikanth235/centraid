@@ -1,14 +1,3 @@
-// THE BACKUP SURFACE — a FRAME screen, beside Phone storage (#712).
-// NOTHING PHOTOS-SHAPED BELONGS HERE: no `useAutomaticPhotoBackup` (the
-// enqueue sweep belongs to Photos; mounting it here too would double-sweep one
-// queue) and no Photos custody-mark legend (`kit`/`screens` may not import an
-// app — scripts/check-import-boundaries.ts). Reached by deep link from the
-// More sheet: exactly ONE Backup surface on the phone.
-// EVERY NUMBER IS READ, NEVER INVENTED (#712): the DURABLE QUEUE
-// (kit/transfer/transfer-queue.ts — fail-closed; an unreadable ledger is its
-// own verdict, never "healthy") and the gateway CUSTODY ROLLUP
-// (kit/storage/custody-status.ts — "not yet computed" until the sweep runs).
-
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -74,8 +63,6 @@ const EMPTY_QUEUE: TransferQueueCounts = {
   readable: true,
 };
 
-// One-shot external read, kept outside the component so the effect stays a
-// plain read rather than an in-body state update.
 function readQueueInto(
   gatewayBase: string,
   apply: (counts: TransferQueueCounts) => void
@@ -93,8 +80,6 @@ export default function BackupHealth({
   const [policy, setPolicy] = useState<TransferPolicy>(DEFAULT_TRANSFER_POLICY);
   const [consent, setConsent] = useState<BackupConsentRecord>();
   const [queue, setQueue] = useState<TransferQueueCounts>(EMPTY_QUEUE);
-  // `undefined` while nothing has been read; `null` when the read FAILED —
-  // different sentences, neither a zeroed fold.
   const [custody, setCustody] = useState<CustodyStatus | null>();
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string>();
   const [backingUp, setBackingUp] = useState(false);
@@ -130,8 +115,6 @@ export default function BackupHealth({
     if (!online) return;
     void readCustodyStatus(gatewayBase)
       .then(setCustody)
-      // A failed read is `null`, stated as "could not be read" — never a
-      // fold of zeroes, which would read as an empty library.
       .catch(() => setCustody(null));
   }, [gatewayBase, online]);
   useEffect(reread, [reread]);
@@ -150,8 +133,6 @@ export default function BackupHealth({
     ]);
   };
 
-  // THE ONE COMMIT ON THIS SURFACE (§18): drains the durable queue through the
-  // frame's own lock + policy gate and reports the exact count.
   const backUpNow = (): void => {
     setBackingUp(true);
     void drainUploadQueueNow(session)
@@ -364,8 +345,6 @@ export default function BackupHealth({
                 style={[
                   styles.fact,
                   { borderBottomColor: colors.line },
-                  // The egress fact takes a 2px `net` rule on its leading edge
-                  // and nothing else — never a fill.
                   fact.net
                     ? { borderLeftColor: colors.net, ...styles.factFlagged }
                     : null,
@@ -423,9 +402,6 @@ export default function BackupHealth({
         </Text>
         {TRANSFER_POLICY_SWITCHES.map((rule) => {
           const inert = rule.inert(policy);
-          // THE REFUSAL GRAMMAR, RENDERED (#712): four of the five switches go
-          // inert depending on the other four; transfer-policy.ts owns the
-          // inertReason words, this only places them.
           const inertReason = inert ? rule.inertReason(policy) : undefined;
           return (
             <View

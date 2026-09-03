@@ -1,5 +1,3 @@
-// Geometry for the operational page's own bar (#765, spec §11 `appAll`).
-
 import { StyleSheet } from "react-native";
 
 import { spacing, t } from "../theme";

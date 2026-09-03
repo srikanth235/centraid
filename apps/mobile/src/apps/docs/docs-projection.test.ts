@@ -1,4 +1,3 @@
-// The phone's drive projection and the row's one state slot (#821).
 import { describe, expect, it } from "vitest";
 
 import {
@@ -63,7 +62,6 @@ function fixtureRows(
         target_id: "doc-lease",
         target_type: "core.document",
       },
-      // A folder tag whose concept no longer exists — the deleted folder.
       {
         tag_id: "t5",
         concept_id: "c-gone",
@@ -172,7 +170,6 @@ describe(projectDrive, () => {
     const orphan = byId.get("doc-orphan");
     expect(orphan?.folderGone).toBe(true);
     expect(orphan?.folder_id).toBeNull();
-    // A gone folder is not "unfiled" — the member filed it somewhere.
     expect(byId.get("doc-scan")?.folderGone).toBe(false);
   });
 
@@ -189,8 +186,6 @@ describe(projectDrive, () => {
   });
 
   it("says it does not KNOW what was shared when the origin read is absent", () => {
-    // The Shared shelf reads this flag before it draws a set: an unanswered
-    // read and an empty inbox are different facts and must not look alike.
     expect(projection.sharedFromKnown).toBe(false);
     for (const doc of projection.documents) {
       expect(doc.shared_from).toBeNull();
@@ -230,7 +225,6 @@ describe(projectDrive, () => {
       party_id: "party-alice",
       name: "Alice",
     });
-    // A shelf built on "has an origin row" must leave every other row alone.
     expect(
       answered.documents.filter((doc) => doc.shared_from !== null)
     ).toHaveLength(1);
@@ -267,8 +261,6 @@ describe(originsByDocument, () => {
   });
 
   it("leaves the vault unnamed rather than wearing its id as a name", () => {
-    // No binding is the ordinary case for a share that arrived before the
-    // link was made, or after it was taken back.
     const noBinding = originsByDocument({
       origins: [origin],
       bindings: [],
@@ -295,8 +287,6 @@ describe(originsByDocument, () => {
   });
 
   it("ignores placements of anything that is not a document", () => {
-    // The table is shared with Photos and every other placed kind; Docs may
-    // only ever claim its own rows out of it.
     const map = originsByDocument({
       origins: [
         { ...origin, target_type: "media.asset", target_id: "asset-1" },
@@ -329,7 +319,6 @@ describe(sharesByDocument, () => {
         revoked_at: null,
         implicit_circle: 1,
       },
-      // Revoked — never listed.
       {
         grant_id: "g-revoked",
         circle_id: "circle-family",
@@ -385,23 +374,18 @@ describe(sharesByDocument, () => {
       "g-folder",
     ]);
     const [docShare, folderShare] = entries ?? [];
-    // A named circle keeps the owner's word; a refused member is absent.
     expect(docShare?.label).toBe("Family");
     expect(docShare?.members.map((member) => member.label)).toStrictEqual([
       "Ana",
     ]);
     expect(docShare?.pending_count).toBe(0);
-    // The implicit circle's machine name never prints — the roster does.
     expect(folderShare?.label).toBe("Ana");
     expect(folderShare?.via).toBe("folder");
-    // No state row yet means invited, not current.
     expect(folderShare?.pending_count).toBe(1);
-    // A document outside every container matches nothing.
     expect(byDoc.has("doc-scan")).toBe(false);
   });
 });
 
-// The one state slot, fixed precedence.
 describe(docRowState, () => {
   const base = {
     media_type: "application/pdf",
@@ -457,7 +441,6 @@ describe(docRowState, () => {
     expect(
       docRowState({ ...base, custody_state: "remote-only" }, { offline: true })
     ).toStrictEqual({ kind: "text", text: "will not open", net: true });
-    // Unknown custody is unknown — never a fabricated refusal.
     expect(docRowState(base, { offline: true })).toBeNull();
   });
 

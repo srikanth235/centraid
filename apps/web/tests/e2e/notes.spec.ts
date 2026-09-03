@@ -3,20 +3,6 @@ import type { Page } from "@playwright/test";
 
 import { installHarnessControlTransport } from "./control-transport.js";
 
-// Notes on the VIEWER seat (matrix `appSeats`, umbrella #864).
-//
-// The viewer's claim is not "the app renders": it is that what the member sees
-// is a replica of MEANING that survives the seat being thrown away. A passage
-// written through the app's own write rail against the real harness gateway
-// lands as a library row, the whole PWA is reloaded — service worker, replica
-// session and React tree all gone — and the row must come back AND still be
-// carrying its body when the editor opens on it. A library row ships a preview
-// and never a body (the body is a second read on open), so surviving that
-// second read is the half of this claim a row check alone would miss.
-//
-// The harness gateway, vault and inline Notes bundle are all real; only the
-// iroh wire is adapted (control-transport.ts).
-
 const API_URL = "http://127.0.0.1:48765";
 const ADMIN_TOKEN = "centraid-web-e2e-token";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
@@ -28,9 +14,6 @@ const NOTE_BODY = "The deposit clause moved to §4 and the notice runs 60 days."
 const CREATE_INTENT = "notes-e2e-create-note";
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
-  // Re-click until the palette actually opens: right after a reload the Search
-  // button can paint before its React listener attaches, and a click that
-  // lands in that window is silently lost.
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect
     .poll(
@@ -133,10 +116,6 @@ test("Notes keeps a passage's heading, preview and body across a PWA reload", as
   await connectPwa(page);
   await openFirstParty(page, "Notes");
 
-  // The inline replica session bootstraps asynchronously after the app mounts;
-  // a write issued before that throws ReplicaRebootstrapRequired. Prove write
-  // readiness with the note this journey is about — the intent id makes the
-  // retries idempotent, so the poll can never mint two of it.
   await expect
     .poll(
       () =>
@@ -159,11 +138,6 @@ test("Notes keeps a passage's heading, preview and body across a PWA reload", as
     )
     .toBe("executed");
 
-  // The write lands as a library row through the app's own change-stream
-  // refresh, with window focus as the sanctioned recovery re-read while the
-  // replica is still bootstrapping (`onFocusRefresh` never gates behind a
-  // consent banner). The row carries BOTH halves the library promises: the
-  // heading the member typed, and the preview the projection flattened.
   const heading = page.getByText(NOTE_TITLE, { exact: true });
   await expect
     .poll(
@@ -180,17 +154,11 @@ test("Notes keeps a passage's heading, preview and body across a PWA reload", as
     page.getByText(NOTE_BODY, { exact: true }).first()
   ).toBeVisible();
 
-  // A passage is a vault row, not browser state: it must come back after a
-  // full reload of the PWA shell.
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
   await openFirstParty(page, "Notes");
   await expect(heading.first()).toBeVisible({ timeout: 30_000 });
 
-  // Opening the row lands in the editor with the BODY — a second read the
-  // library row never carried. Re-click until the editor answers: right after
-  // a reload the row can paint before its React listener attaches, and a click
-  // in that window is silently lost.
   const body = page.getByRole("textbox", { name: "Note body" });
   await expect
     .poll(

@@ -1,6 +1,4 @@
 import { rmSync } from "node:fs";
-// Drainer behaviour: the URL gate, dedupe, resume reconciliation, retry
-// classification, and the network-policy seam.
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -103,7 +101,6 @@ describe("uploader", () => {
       it("refuses to PUT to a URL the gateway did not mint", async () => {
         enqueue();
         const putPart = vi.fn<PartPutter>(async () => '"etag"');
-        // A gateway that hands back an attacker-controlled destination.
         const evil: DirectTransferClient = {
           begin: async (input) => ({
             ...(await gateway.begin(input)),
@@ -179,7 +176,6 @@ describe("uploader", () => {
       enqueue();
       await drainer().drainOnce();
 
-      // A second item for the same sha, forced past the store's own dedupe.
       driver.run(
         `UPDATE upload_item SET state = 'pending', receipt_json = NULL WHERE sha256 = ?`,
         [SHA]
@@ -192,7 +188,6 @@ describe("uploader", () => {
         putPart,
         "alreadyPresent must skip the transfer entirely"
       ).toHaveBeenCalledTimes(0);
-      // The receipt is the gateway's, verbatim — casAck came from the server.
       expect(store.bySha(SHA)?.receipt).toMatchObject({
         alreadyPresent: true,
         casAck: "replicated",
@@ -202,8 +197,6 @@ describe("uploader", () => {
 
     it("persists an unreplicated settlement verbatim instead of fabricating a casAck", async () => {
       enqueue();
-      // A gateway that dedupes a blob it holds only locally: the honest receipt
-      // says casAck `receipt`, which must NOT be rewritten to `replicated`.
       const localOnly: DirectTransferClient = {
         begin: async (input) => ({
           ...(await gateway.begin(input)),
@@ -238,7 +231,6 @@ describe("uploader", () => {
 
     it("reconciles gateway-completed parts into the queue and skips re-uploading them", async () => {
       enqueue();
-      // The gateway already holds part 1 from a previous life.
       const item = store.bySha(SHA)!;
       const plan = await gateway.begin({
         sha256: SHA,
@@ -306,14 +298,6 @@ describe("uploader", () => {
       expect(store.bySha(SHA)?.state).toBe("failed");
     });
 
-    // The drain loop's shape, at a depth the old form could not hold cheaply:
-    // it read every non-terminal row up front and tail-called itself once per
-    // item, so both its live rows and its chain of pending promises tracked
-    // the backlog. What is observable — and gated here — is that no read
-    // materializes more than a page, that the walk still covers the whole
-    // queue, and that the progress total is not lost to paging. (Async frames
-    // do not accumulate on V8's stack, so a stack-depth probe would pass under
-    // the recursive form too and is deliberately not asserted.)
     it("drains a queue deeper than one page, one bounded read at a time", async () => {
       const DEPTH = 1_000;
       for (let index = 0; index < DEPTH; index += 1) {
@@ -329,8 +313,6 @@ describe("uploader", () => {
           partCount: partCountFor(frameCount),
         });
       }
-      // A transport that settles without transferring: this test is about the
-      // shape of the drain loop, not about the bytes.
       const totals: number[] = [];
       const settling: DirectTransferClient = {
         begin: async (input) => ({
@@ -396,7 +378,6 @@ describe("uploader", () => {
 
     it("refuses a local file that changed under the queue", async () => {
       enqueue();
-      // The sha addressed 2048 bytes; the file on disk is now something else.
       driver.run(
         "UPDATE upload_item SET plaintext_size = 999 WHERE sha256 = ?",
         [SHA]
@@ -408,7 +389,6 @@ describe("uploader", () => {
   });
 });
 
-/** Seal part 1 the way the drainer would, for the resume fixture above. */
 async function sealedPartOne(sealedSize: number): Promise<Uint8Array> {
   const { sealDirectory, sealPart } = await import("./cbsf");
   const key = gateway.keyFor(SHA);

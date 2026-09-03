@@ -105,12 +105,6 @@ describe(NativeMultiplexChangeFeed, () => {
   });
 
   test("a thousand-change frame costs one cursor write and one freshness signal", async () => {
-    // THE REGRESSION THIS PINS (#880 W3.2). The single-vault feed debounces its
-    // resume cursor (native-change-feed.ts); this one did not. Every change
-    // wrote the cursor AND called `onScopeUpdated`, which in ReplicaProvider is
-    // a second AsyncStorage write plus a context rebuild — so one busy frame
-    // meant ~2,000 disk writes and 1,000 re-renders of every `useReplica()`
-    // consumer. Only the newest cursor of a frame has ever mattered.
     const storage = memoryStorage();
     const updated: string[] = [];
     const changes: string[] = [];
@@ -131,16 +125,12 @@ describe(NativeMultiplexChangeFeed, () => {
     personal.setActive(true);
     await settle();
 
-    // Every change still reaches the session — the batching is about the
-    // cursor's cost, never about dropping a row.
     expect(
       changes.filter((type) => type === "centraid:vault-change")
     ).toHaveLength(1_000);
     expect(updated).toStrictEqual(["personal"]);
     expect(storage.writes).toStrictEqual([]);
 
-    // Teardown flushes: a debounced cursor that is never written would regress
-    // the resume point on the next cold start.
     feed.close();
     await settle();
     expect(storage.writes).toHaveLength(1);
@@ -179,8 +169,6 @@ describe(NativeMultiplexChangeFeed, () => {
   });
 
   test("a revoked scope's debounced cursor never lands after the purge", async () => {
-    // The removal and the pending write race otherwise, and the loser is the
-    // removal: a cursor for a scope this phone no longer holds comes back.
     const storage = memoryStorage();
     const feed = new NativeMultiplexChangeFeed({
       gatewayAuth: { baseUrl: "http://gateway", gatewayId: "gateway-1" },
@@ -211,8 +199,6 @@ describe(NativeMultiplexChangeFeed, () => {
     expect([...storage.values.keys()]).toStrictEqual([]);
   });
   test("reports the gateway going silent, so a still-connected phone is told", async () => {
-    // THE REGRESSION THIS PINS (#903): killing a gateway moves no radio, so
-    // the feed is the only thing that can notice.
     const outcomes: boolean[] = [];
     let answer = true;
     const feed = new NativeMultiplexChangeFeed({

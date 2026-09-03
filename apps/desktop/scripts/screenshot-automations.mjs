@@ -5,18 +5,6 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-/**
- * One-off visual capture of the redesigned Automations surfaces, driven
- * through the real Electron renderer via Playwright's `_electron` driver
- * against an in-process MOCK gateway that returns seeded automations + runs.
- *
- * Captures: overview (health strip + identity rows), detail (trigger hero),
- * run viewer (Direction-A timeline + KPI rail), templates gallery. Dark is
- * primary; also grabs the overview in light to prove token theming.
- *
- * Not part of CI — a visual aid. Run with:
- *   bun run apps/desktop/scripts/screenshot-automations.mjs
- */
 import { _electron } from "playwright";
 
 const __filename = import.meta.filename;
@@ -93,8 +81,6 @@ const rowFor = (a) => ({
 
 const ROWS = AUTOS.map(rowFor);
 
-// Runs feed — daily-digest has several (one failed → "need attention"),
-// pr-watcher has one success; monthly-archive has none (→ draft).
 const RUNS = [
   {
     runId: "run_001",
@@ -294,11 +280,6 @@ const TEMPLATES = [
   },
 ];
 
-// The renderer is a file:// (null-origin) page, so Playwright `fulfill`
-// responses get CORS-masked to status 0. Instead we run a real local server
-// that sets `access-control-allow-origin: *` (mirroring the in-process
-// gateway) and rewrite just the automation/template requests to it via
-// `route.continue({ url })`. Boot-time calls keep hitting the real gateway.
 function json(res, body, status = 200) {
   res.statusCode = status;
   res.setHeader("access-control-allow-origin", "*");
@@ -306,9 +287,7 @@ function json(res, body, status = 200) {
   res.end(JSON.stringify(body));
 }
 
-/** Fixture run → native turn record (the ledger's `turnId` naming). */
 const asTurn = (run) => ({ ...run, turnId: run.runId });
-/** Fixture node → native turn item. */
 const itemsFor = (turnId) =>
   (NODES[turnId] ?? []).map((node) => ({
     ...node,
@@ -325,10 +304,6 @@ async function startSeedServer() {
       const ref = url.searchParams.get("ref");
       return json(res, { row: ROWS.find((r) => r.ref === ref) ?? null });
     }
-    // The client speaks the native turn ledger (`turns` / `turn` /
-    // `turn/items` / `turn/events`); the fixtures above still use the older
-    // `runId`/`nodeId` field names, so map them here rather than rewriting
-    // every literal (#541).
     if (p.endsWith("/_automations/turns")) {
       const ref = url.searchParams.get("ref");
       const rows = ref ? RUNS.filter((r) => r.automationId === ref) : RUNS;
@@ -337,8 +312,6 @@ async function startSeedServer() {
     if (p.endsWith("/_automations/turn/items")) {
       return json(res, { items: itemsFor(url.searchParams.get("turnId")) });
     }
-    // SSE — return a non-event 404 so the renderer falls back to a one-shot
-    // ledger read. Every fixture turn is settled, so nothing rejoins.
     if (p.endsWith("/_automations/turn/events"))
       return json(res, { error: "no stream" }, 404);
     if (p.endsWith("/_automations/turn")) {
@@ -423,7 +396,6 @@ async function main() {
   await page.waitForLoadState("domcontentloaded");
   await page.setViewportSize({ width: 1280, height: 860 });
 
-  // Sidebar → Automations.
   const navItem = page
     .locator(".cd-sb-item", { hasText: "Automations" })
     .first();
@@ -434,20 +406,16 @@ async function main() {
     .waitFor({ state: "visible", timeout: 15000 });
   await shot(page, "overview-dark");
 
-  // Light theme overview (token check).
   await page.evaluate(() => (document.documentElement.dataset.theme = "light"));
   await shot(page, "overview-light");
   await page.evaluate(() => (document.documentElement.dataset.theme = "dark"));
 
-  // Detail (trigger hero) — open the first automation.
   await page.locator(".cd-au-ov-row").first().click();
   await page
     .locator(".cd-au-hero")
     .waitFor({ state: "visible", timeout: 15000 });
   await shot(page, "detail-dark");
 
-  // Run viewer — open a run from the detail's run history. Expand the delegate
-  // node so the capture shows a node card's response body.
   await page.locator(".cd-au-run").first().click();
   await page.locator(".cd-au-tl").waitFor({ state: "visible", timeout: 15000 });
   await page
@@ -457,20 +425,17 @@ async function main() {
     .catch(() => undefined);
   await shot(page, "runviewer-dark");
 
-  // Direction B — flip to the single-column Log via the header toggle.
   await page.locator(".cd-au-rv-seg-b").nth(1).click();
   await page
     .locator(".cd-au-log")
     .waitFor({ state: "visible", timeout: 10000 });
   await shot(page, "runviewer-log");
-  // Flip back to Timeline so the persisted pref doesn't leak into later runs.
   await page
     .locator(".cd-au-rv-seg-b")
     .nth(0)
     .click()
     .catch(() => undefined);
 
-  // Templates gallery — back to Automations, then Browse templates.
   await page.locator(".cd-sb-item", { hasText: "Automations" }).first().click();
   await page
     .locator(".cd-au-health")
@@ -484,16 +449,12 @@ async function main() {
     .waitFor({ state: "visible", timeout: 15000 });
   await shot(page, "templates-dark");
 
-  // Preview drawer.
   await page.locator(".cd-au-tpl-card").first().click();
   await page
     .locator(".cd-au-drawer")
     .waitFor({ state: "visible", timeout: 10000 });
   await shot(page, "templates-drawer");
 
-  // Builder Direction B — open an automation in the builder, switch to the
-  // Flow tab. Best-effort: the builder boot makes extra gateway calls the
-  // mock only stubs, so don't fail the run if it can't settle.
   try {
     await page.keyboard.press("Escape");
     await page

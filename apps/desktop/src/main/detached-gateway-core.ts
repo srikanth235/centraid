@@ -1,9 +1,3 @@
-/*
- * Pure detached-gateway decisions (#468, H2–H7); impure glue lives in
- * `detached-gateway.ts`. Crash-loop bookkeeping: `gateway-supervisor-core.ts`.
- */
-
-/** Fixed port (H4) — pairing and the service unit need one. */
 export const DEFAULT_GATEWAY_PORT = 17832;
 
 export type ControlDecision =
@@ -12,7 +6,6 @@ export type ControlDecision =
   | "stale-reclaim"
   | "probe-failed-refuse";
 
-/** Kernel lock + credentialed probe only; no pid or stale-file heuristics (H3). */
 export function decideControl(input: {
   lockHeld: boolean;
   credentialedProbeOk: boolean;
@@ -24,7 +17,6 @@ export function decideControl(input: {
   return "probe-failed-refuse";
 }
 
-/** Keep the kinds distinct — each earns its own refusal. */
 export type LockProbe =
   | { kind: "reported"; held: boolean; answering: boolean; holderPid?: number }
   | { kind: "custody-mismatch"; detail: string }
@@ -35,7 +27,6 @@ export interface LockStatusRun {
   stdout: string;
   stderr: string;
   status: number | null;
-  /** The CLI was killed, not finished. */
   timedOut: boolean;
 }
 
@@ -88,7 +79,6 @@ function parseLockStatusLine(stdout: string): LockProbe | undefined {
 }
 
 export function classifyLockStatus(run: LockStatusRun): LockProbe {
-  // Written as the CLI's last act — authoritative even if killed.
   const reported = parseLockStatusLine(run.stdout);
   if (reported) return reported;
   if (CUSTODY_ERROR_PATTERN.test(run.stderr)) {
@@ -97,7 +87,6 @@ export function classifyLockStatus(run: LockStatusRun): LockProbe {
       detail: stderrDetail(run.stderr, run.status, CUSTODY_ERROR_PATTERN),
     };
   }
-  // After custody: a timeout only says the CLI never finished.
   if (run.timedOut) return { kind: "holder-unresponsive" };
   return {
     kind: "cli-failed",
@@ -105,7 +94,6 @@ export function classifyLockStatus(run: LockStatusRun): LockProbe {
   };
 }
 
-/** Fail-closed: an unreadable lock never permits a second writer. */
 export function lockViewFor(probe: LockProbe): {
   held: boolean;
   answering: boolean;
@@ -154,7 +142,6 @@ export function describeLockRefusal(input: {
   }
 }
 
-/** No stored wrapping key + existing envelopes = lost device credentials (E2). */
 export function deviceCustodyGap(input: {
   hasStoredWrappingKey: boolean;
   gatewayKeysPresent: boolean;
@@ -172,7 +159,6 @@ export function describeDeviceCustodyGap(dataDir: string): string {
   );
 }
 
-/** Detached children use `stdio: 'ignore'` (H2) — EADDRINUSE is invisible. */
 export function describePortConflict(input: {
   host: string;
   port: number;
@@ -208,9 +194,7 @@ export function buildDetachedSpawnOptions(): DetachedSpawnConfig {
   return { detached: true, stdio: "ignore", unref: true };
 }
 
-/** Fresh installs only (H5); silent install is forbidden. */
 export function shouldOfferServiceInstall(settings: {
-  /** Absent = not asked yet. */
   offerGatewayService?: boolean;
   onboardingCompletedAt?: string;
 }): boolean {

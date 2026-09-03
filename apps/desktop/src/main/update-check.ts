@@ -1,5 +1,3 @@
-// Unpackaged relaunch-to-update: announce once a new dist fingerprint holds two polls (build settled).
-
 export const WATCHED_DIST_FILES = [
   "main.js",
   "preload.cjs",

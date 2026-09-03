@@ -1,13 +1,3 @@
-// @vitest-environment jsdom
-// Pins the share-in lifecycle the core cannot see (#880 W4.6/W4.7):
-//
-//  - Cancel deletes the copies the OS extension staged in the app group, and
-//    the same is true of abandoning the vault chooser
-//  - an unpaired phone says so once, cleans up and resets — text and files
-//    behave identically, and "still mounting" is not "not paired"
-//  - one writable vault keeps the zero-friction path; several stop to ask, with
-//    the focused vault preselected
-//  - a start-up sweep collects staged copies a crash orphaned
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -70,8 +60,6 @@ const state = vi.hoisted(() => ({
   sheet: undefined as SheetPropsLike | undefined,
 }));
 
-// Only `File` is a class here: the sweep asks the runtime "is this a file?" and
-// anything else — a directory the app group also holds — answers no.
 vi.mock(import("expo-file-system"), () => {
   class MockFile {
     readonly uri: string;
@@ -148,8 +136,6 @@ vi.mock(
   () => ({ useReplica: () => replica.value }) as unknown as ReplicaModule
 );
 
-// The producers record what reached them, so the tests below assert the ingest
-// that happened rather than that a mock ran.
 const producer = vi.hoisted(() => ({
   media: [] as Array<{
     gatewayBase: string;
@@ -403,3 +389,4 @@ describe(ShareIntentIngest, () => {
     });
   });
 });
+// @vitest-environment jsdom

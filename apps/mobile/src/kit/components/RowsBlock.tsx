@@ -1,5 +1,3 @@
-// Rows (#765, §9): outlined trailing verb, `off`/`struck` recede on the leaf.
-
 import React, { useMemo } from "react";
 import { View } from "react-native";
 
@@ -11,7 +9,6 @@ import Button from "./Button";
 import { Text } from "./NativeText";
 import { styles } from "./RowsBlock.styles";
 
-// Object, not a flat `action` string: the flat pair had nowhere to put `hint`.
 export interface RowsBlockAction extends ActionData {
   onPress: () => void;
 }
@@ -95,7 +92,6 @@ export default function RowsBlock({
               ) : null}
               {rowAction ? (
                 <Button
-                  // Hint, not label: the control already renders its visible word (#708 B.4).
                   accessibilityHint={rowAction.hint}
                   disabled={row.off === true}
                   label={rowAction.label}

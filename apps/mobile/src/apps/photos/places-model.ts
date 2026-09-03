@@ -1,6 +1,3 @@
-// Places arithmetic. `placeCards` keys by 0.1° (durable); `placePoints` by
-// pixel distance (`projectPlaces`) — grouping differs on purpose.
-
 import type {
   MapPin,
   PlacePoint,
@@ -14,7 +11,6 @@ import {
 
 import type { PhotoAsset } from "./timeline-model";
 
-/** `core.place` row as the replica hands it over: RAW column names. */
 export type PlaceRow = Record<string, unknown>;
 
 export interface PlaceCard {
@@ -38,7 +34,6 @@ function newestRowAt(
   return null;
 }
 
-/** Printable name, or null (#816). Read at render — never a route parameter. */
 export function placeNameAt(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[],
@@ -48,7 +43,6 @@ export function placeNameAt(
   return row ? readableName(row.name ? String(row.name) : null) : null;
 }
 
-/** Place id to ask a name for, or null (#816). Coordinate placeholders are not names. */
 export function unnamedPlaceAt(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[],
@@ -68,15 +62,10 @@ function placeRowsById(rows: readonly PlaceRow[]): Map<string, PlaceRow> {
   return new Map(rows.map((row) => [String(row.place_id), row]));
 }
 
-/** Number column or nothing — never coerce (the `readPlaces` NaN guard). */
 function coordOf(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/**
- * Shelf key: 0.1° rounded, or null. Column contract (#787): `geo_lat`/`geo_lng`
- * first; `latitude`/`lat` are fixture fallbacks. `placePoints` reads the same chain.
- */
 export function placeCardKey(row: PlaceRow | undefined): string | null {
   if (!row) return null;
   const latitude = coordOf(row.geo_lat ?? row.latitude ?? row.lat);
@@ -125,7 +114,6 @@ export function placeCards(
     const row = placeById.get(asset.placeId);
     const key = placeCardKey(row);
     if (!row || key === null) continue;
-    // Both surfaces use `readableName`; else digits print as a typed name (#816).
     const name =
       readableName(row.name ? String(row.name) : null) ?? PLACE_UNNAMED;
     const current = groups.get(key);
@@ -145,18 +133,14 @@ export function placeCards(
     .sort((a, b) => b.count - a.count);
 }
 
-/** Reserved shelf key (#816). Cannot collide with a `placeCardKey`. */
 export const NO_LOCATION_KEY = "no-location";
 
-/** Unlocated photo — not a located place with no label (`PLACE_UNNAMED`). */
 export const NO_LOCATION_NAME = PLACE_NO_LOCATION;
 
-/** No place id — not "no card". Unplottable ≠ unlocated. Trash excluded. */
 export function assetsWithNoPlace(assets: readonly PhotoAsset[]): PhotoAsset[] {
   return assets.filter((asset) => !asset.deleted && !asset.placeId);
 }
 
-/** Not a place — kept out of `placeCards` on purpose (#816). */
 export function noLocationCard(
   assets: readonly PhotoAsset[]
 ): PlaceCard | null {
@@ -171,7 +155,6 @@ export function noLocationCard(
   };
 }
 
-/** Same key as `placeCards`, minus trash. `NO_LOCATION_KEY` resolves here (#816). */
 export function assetsAtPlace(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[],
@@ -185,7 +168,6 @@ export function assetsAtPlace(
   });
 }
 
-/** Group by place id, never by rounded coordinates (`projectPlaces` uses pixels). */
 export function placePoints(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[]

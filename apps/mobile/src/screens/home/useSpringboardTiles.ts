@@ -1,15 +1,3 @@
-// Per-app data plumbing for the Home springboard (#708 A).
-//
-// Home has no grant of its own: every read goes out under the OWNING app's id,
-// so a tile shows only what its app may already read offline. The requests
-// themselves — and the reasons each one is bounded in WORK and not merely in
-// rows returned — live in ./home-tile-reads, where they are pinned against the
-// mounted reader's SQL. Locker issues NO read: its items sit behind an online,
-// session-gated RPC. A request handed to `useReplicaQuery` must keep a stable
-// identity across renders or the tile re-reads on every one: the module
-// constants already do, and the two that depend on render state (the month's
-// expenses, the body lookups) are memoized here.
-
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useMemo, useState } from "react";
 
@@ -62,14 +50,9 @@ function topIds(rows: readonly ReplicaRow[], column: string): string[] {
 
 const str = (value: unknown): string => (value == null ? "" : String(value));
 
-/** The selection logic lives in ./tile-model, where it is tested. */
 export function useSpringboardTiles(): Map<string, TileData> {
   const { gatewayBase, online } = useReplica();
-  // `gatewayBase` stays cached while the tunnel is down; it is not proof the
-  // bytes can be fetched, so remote-only photos wait rather than fail to load.
   const photoGatewayBase = online ? gatewayBase : undefined;
-  // One clock reading per visit: reading the clock in a render body is impure,
-  // and a ticker would re-render the springboard while nobody is looking.
   const [now, setNow] = useState(new Date());
   useFocusEffect(
     useCallback(() => {
@@ -234,8 +217,6 @@ export function useSpringboardTiles(): Map<string, TileData> {
       },
     });
 
-    // No read, by design: `count` stays undefined so the header shows the
-    // withheld glyph, and `unknown` keeps Locker from voting the vault empty.
     tiles.set("locker", {
       appId: "locker",
       status: "unknown",
@@ -301,8 +282,6 @@ function expandOccurrences(
   });
 }
 
-/** `Wed 11 · 08:15`. Weekday AND day-of-month, because a bare weekday is
- *  ambiguous past a week out; today drops the date half. */
 function formatEventTime(iso: string): string {
   const when = new Date(iso);
   if (Number.isNaN(when.getTime())) return "";

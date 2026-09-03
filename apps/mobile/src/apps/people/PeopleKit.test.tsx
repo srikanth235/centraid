@@ -1,12 +1,3 @@
-// Does the People row actually DRAW the link ring and the consequence meta?
-//
-// The same harness as `kit/components/blockParity.test.tsx`: the shared
-// react-native stub, the REAL lowered theme tokens, style read back off the
-// serialized `data-style`. The ring is invisible to a type checker — only an
-// assertion protects "solid ink where linked, dashed line where not, NOTHING
-// where the sharing plane could not be read".
-// @vitest-environment jsdom
-
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -45,7 +36,6 @@ function render(node: React.ReactNode): HTMLElement {
 
 const ana = { party_id: "p1", name: "Ana Whitcombe", avatar_color: null };
 
-/** The ring wrapper is the avatar's outermost View. */
 function ringStyle(el: HTMLElement): Record<string, unknown> {
   return styleOf(nodesOf(el, "div")[0]);
 }
@@ -75,8 +65,6 @@ describe("[law:people-link-ring] the avatar ring states the link, and only the l
     const linked = render(<PersonAvatar person={ana} link="linked" />);
     const ring = ringStyle(unknown);
     expect(ring.borderColor).toBe("transparent");
-    // The outer rectangle is identical in every state, so a row cannot
-    // reflow when the link facts arrive.
     expect(ring.width).toBe(ringStyle(linked).width);
     expect(ring.height).toBe(ringStyle(linked).height);
   });
@@ -151,9 +139,6 @@ describe("[law:people-readonly-star] a person in a read-only source withholds th
     dispose = undefined;
   });
 
-  // Stub tier: the component WITHHOLDS its own callback and carries the reason
-  // as a prop. That a disabled RN `Pressable` also refuses at the responder is
-  // the RNTL project's claim (`TasksHome.test.tsx` holds the twin).
   it("withholds its own callback when disabled, and carries the reason", () => {
     let toggled = 0;
     const el = render(
@@ -211,3 +196,4 @@ describe("[law:people-row-pending] a queued People change says so on its own row
     ).toBe(false);
   });
 });
+// @vitest-environment jsdom

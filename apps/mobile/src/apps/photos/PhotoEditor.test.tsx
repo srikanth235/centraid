@@ -1,25 +1,8 @@
-// THE EDITOR'S ONE PROMISE, ASSERTED (v4 handoff §7.4, #711).
-//
-// The editor is only defensible because it is non-destructive: the original is
-// never touched, and NOTHING IS WRITTEN until the member presses `Save as a new
-// photograph`. That is a claim about behaviour, not about copy, so it is
-// asserted by driving every other control in the surface — rotate, straighten,
-// each ratio, reset, cancel, and a crop drag — and proving the save port was
-// never reached. A future refactor that made `Rotate 90°` render server-side,
-// or that pre-staged bytes "to make Save feel fast", fails here.
-//
-// The second assertion is the commit's refusal: a read-only vault does not hide
-// the control, it disables it and states why on screen (§6, §18).
-//
-// Assertions read the rendered tree through mocked primitives rather than the
-// source text, so a rename or a restyle cannot fake them.
-
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// @vitest-environment jsdom
 import { PhotoEditor } from "./PhotoEditor";
 import type { PhotoAsset } from "./timeline-model";
 
@@ -43,8 +26,6 @@ const mocks = vi.hoisted(() => ({
     textDisabled: "#mock-text-disabled",
     textSoft: "#mock-text-soft",
   },
-  /** The drag / pinch handlers the surface hands to the gesture builder. The
-   *  test drives them directly — a gesture is still a control here. */
   crop: {} as { move?: (dx: number, dy: number) => void },
 }));
 
@@ -67,9 +48,6 @@ vi.mock(import("react-native"), async () => {
       ReactModule.createElement(
         "button",
         {
-          // As in the consent suite: the mock does NOT swallow the press when
-          // `disabled` is set, because a live handler hiding behind a disabled
-          // flag is exactly the regression worth catching.
           "aria-disabled": accessibilityState?.disabled ? "true" : undefined,
           "aria-label": accessibilityLabel,
           "aria-pressed": accessibilityState?.selected ? "true" : undefined,
@@ -265,9 +243,8 @@ describe("the phone's photo editor", () => {
     );
     expect(commit?.getAttribute("aria-disabled")).toBe("true");
     expect(host.textContent).toContain("This vault is read-only for you.");
-    // Sabotage: the control is disabled AND the handler refuses. A press that
-    // slipped past the flag still writes nothing.
     act(() => commit?.click());
     expect(onSave).not.toHaveBeenCalled();
   });
 });
+// @vitest-environment jsdom

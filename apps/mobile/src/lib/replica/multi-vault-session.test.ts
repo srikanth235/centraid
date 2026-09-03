@@ -35,7 +35,6 @@ function fakeSession(input: {
   pulls?: boolean;
   coverage?: "partial" | "complete";
   onPurge?: () => void;
-  /** Rows this scope's outbox is holding, in the native session's own shape. */
   pending?: unknown[];
   storageFull?: boolean;
 }): FakeSession {
@@ -127,10 +126,6 @@ function build(
 
 describe("what a multi-vault pull actually obtained", () => {
   test("a pull the transfer rules refused is reported as blocked, not landed", async () => {
-    // THE REGRESSION THIS PINS (#880 W2.2). The facade returned `Promise<void>`,
-    // so the provider's `.then(() => true)` read a refusal as a landed pull:
-    // reachability settled to `current`, the status bar said nothing, and the
-    // screen asserted a freshness the phone never obtained.
     const home = fakeSession({ pulls: true });
     const pulled: string[] = [];
     const { facade } = build({
@@ -147,14 +142,11 @@ describe("what a multi-vault pull actually obtained", () => {
       stalled: ["home"],
       policyBlocked: true,
     });
-    // Nothing was asked of the gateway, and nothing may stamp freshness:
-    // docs/mobile-offline.md — freshness advances only after a successful pull.
     expect(home.pullNow).not.toHaveBeenCalled();
     expect(pulled).toStrictEqual([]);
   });
 
   test("pulls rows the BYTE rules refuse (#905 O)", async () => {
-    // Rows are metadata, not bytes (#905 O).
     const home = fakeSession({ pulls: true });
     const pulled: string[] = [];
     const { facade } = build({
@@ -193,7 +185,6 @@ describe("what a multi-vault pull actually obtained", () => {
     expect(outcome.pulled).toStrictEqual(["home"]);
     expect(outcome.stalled).toStrictEqual(["family"]);
     expect(outcome.policyBlocked).toBe(false);
-    // A stalled source keeps its old stamp; only `home` may claim freshness.
     expect(pulled).toStrictEqual(["home"]);
   });
 
@@ -282,15 +273,10 @@ describe("what a revoked scope leaves behind", () => {
     expect(facade.scopes().map((entry) => entry.vaultId)).toStrictEqual([
       "home",
     ]);
-    // The notice carries the label the purge is about to take with it.
     expect(noticed.map((entry) => entry.label)).toStrictEqual(["family vault"]);
     expect(order).toStrictEqual(["notice", "purge"]);
   });
 
-  // #880 W3.5. The purge empties the tables in place and keeps the handle open,
-  // so before this the file stayed at full size forever for a vault the phone
-  // may never see again — invisible to every per-vault card, since the scope it
-  // belonged to was gone.
   test("reclaims the revoked scope's replica file, and only that one", async () => {
     const order: string[] = [];
     const family = fakeSession({ onPurge: () => order.push("purge") });
@@ -313,14 +299,10 @@ describe("what a revoked scope leaves behind", () => {
     await facade.revokeScope("family");
 
     expect(reclaimed).toStrictEqual(["/replica/family.sqlite3"]);
-    // Deleting before the purge would race a live writer holding the handle.
     expect(order).toStrictEqual(["purge", "reclaim"]);
   });
 
   test("a scope the four-vault cap merely unmounted keeps its file", async () => {
-    // Closing the mounted set is not revocation. An evicted vault is still
-    // enrolled and its replica is an asset — deleting it would cost the member
-    // a full re-bootstrap the next time they switch back to that Space.
     const reclaimed: string[] = [];
     const { facade } = build({
       sessions: new Map([["home", fakeSession({}).session]]),
@@ -393,8 +375,6 @@ describe("how a cross-vault placement settles", () => {
         thrown: Object.assign(new Error("gone"), { placementStatus: "failed" }),
         expected: "failed",
       },
-      // A transport fault is not a verdict: parked keeps it retryable and
-      // visible instead of inventing a refusal nobody issued.
       { thrown: new Error("network unreachable"), expected: "parked" },
     ] as const;
     for (const entry of cases) {
@@ -426,7 +406,6 @@ describe("how a cross-vault placement settles", () => {
     const record = await facade.place(intent);
 
     expect(sendPlacement).not.toHaveBeenCalled();
-    // Durable and waiting, never lost: the queue is what offline placement is.
     expect(record.status).toBe("queued");
     expect(reader.records.get("link-1")?.status).toBe("queued");
   });
@@ -451,10 +430,6 @@ describe("how a cross-vault placement settles", () => {
 
 describe("what a pending row carries to the surface (#880 W2.3)", () => {
   test("threads attempts, the queue stamp and both conflict versions", async () => {
-    // THE REGRESSION THIS PINS. The facade rebuilt each row by hand and kept
-    // four fields, so the sheet could not tell a slow write from a stuck one
-    // and a conflict arrived without the two versions it was retained WITH
-    // (docs/mobile-offline.md).
     const { facade } = build({
       sessions: new Map([
         [
@@ -485,7 +460,6 @@ describe("what a pending row carries to the surface (#880 W2.3)", () => {
         vaultId: "home",
         vaultLabel: "home vault",
         status: "conflict",
-        // The seats parse this; the presented act travels beside it.
         label: "tally: add_expense",
         appId: "tally",
         action: "add_expense",
@@ -522,8 +496,6 @@ describe("what a pending row carries to the surface (#880 W2.3)", () => {
 
     const [row] = await facade.pendingChanges();
 
-    // No invented attempt count: the sheet reads its absence as "the outbox no
-    // longer holds this", which is exactly what an attention row is.
     expect(row).not.toHaveProperty("attempts");
     expect(row).not.toHaveProperty("enqueuedAt");
     expect(row).toMatchObject({ status: "failed", label: "docs: rename" });
@@ -542,14 +514,10 @@ describe("out of room, across the mounted plane (#880 W2.10)", () => {
       scopes: [scope("home"), scope("family")],
     });
 
-    // The disk is the phone's, not the vault's: one parked scope is the whole
-    // device out of room, and the screens draw that state once.
     expect(facade.storageFull).toBe(true);
 
     facade.resumeAfterStorageFull();
 
-    // Every scope is unparked, not only the one that noticed first: the next
-    // scope to write would otherwise park again on the same full disk.
     expect(home.session.storageFull).toBe(false);
     expect(family.session.storageFull).toBe(false);
     expect(facade.storageFull).toBe(false);

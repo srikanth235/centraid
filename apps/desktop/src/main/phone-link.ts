@@ -1,16 +1,3 @@
-// Phone link (#263): the desktop side of the iroh tunnel.
-//
-// One iroh endpoint per desktop install — its secret key persists under
-// `<userData>/phone-link/key.bin`, so the desktop's EndpointId (what paired
-// phones dial) is stable across launches. Paired phones live in
-// `devices.json` next to it: named, EndpointId-keyed, revocable — the
-// transport-level replacement for bearer-token pairing.
-//
-// Tunneled requests forward to the ACTIVE gateway when it is local; while a
-// remote gateway is active the phone gets 503s (the phone pairs with this
-// desktop, not with remote gateways). The gateway keeps binding 127.0.0.1
-// and its HTTP surface is untouched.
-
 import os from "node:os";
 import path from "node:path";
 
@@ -31,16 +18,13 @@ export const PHONE_PAIRED_CHANNEL = "centraid:phone:paired";
 
 export interface PhoneLinkStatus {
   running: boolean;
-  /** Base32 EndpointId phones dial — stable for this install. */
   endpointId?: string;
   error?: string;
   devices: PairedDevice[];
 }
 
 export interface PhonePairingInfo {
-  /** JSON payload also encoded into the QR (manual fallback). */
   payload: string;
-  /** PNG data URL for the Settings panel. */
   qrDataUrl: string;
   expiresAt: number;
 }
@@ -59,11 +43,6 @@ function deviceStore(): DeviceStore {
   return store;
 }
 
-/**
- * Start the tunnel endpoint (idempotent). Called on app ready so the
- * "Connect phone" panel opens with the endpoint already listening, and so
- * previously paired phones can reconnect without any UI open.
- */
 export async function ensurePhoneLink(): Promise<DesktopTunnelHandle> {
   if (handle) return handle;
   if (starting) return starting;
@@ -108,8 +87,6 @@ export async function ensurePhoneLink(): Promise<DesktopTunnelHandle> {
 }
 
 export async function phoneLinkStatus(): Promise<PhoneLinkStatus> {
-  // Surface bind failures (e.g. an unsupported-platform NAPI binding) as a
-  // status string rather than a rejected IPC — the panel renders it inline.
   if (!handle && !startError) await ensurePhoneLink().catch(() => undefined);
   return {
     running: Boolean(handle),
@@ -139,8 +116,6 @@ export function cancelPhonePairing(): void {
 }
 
 export function revokePhoneDevice(deviceId: string): PairedDevice | undefined {
-  // The tunnel handle also drops the device's live connections; fall back
-  // to a plain store removal if the endpoint never came up.
   if (handle) return handle.revokeDevice(deviceId);
   return deviceStore().remove(deviceId);
 }

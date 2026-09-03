@@ -1,18 +1,3 @@
-// The document row (handoff Part 2 §"The document row"; #821).
-//
-// One row recipe, one STATE SLOT, and at most one thing in it — the
-// precedence is fixed and lives in `docs-projection.ts` → the shared
-// `rowStateMark` ladder, never inline here where three of its rungs could be
-// true at once. On mobile the Kind, Size and Changed COLUMNS do not render (a
-// 390px canvas cannot carry five columns and a title); those three facts ride
-// a stacked sub-line instead (`docRowMeta` carries why a column's absence is
-// not the fact's absence). What the row draws: the kind icon, the title, the
-// meta line — led by the state slot's text rung — plus a matched passage under
-// search, the device mark, the star, and the 44×44 `···`.
-//
-// Press-and-hold opens the same quick-actions menu the `···` opens — the
-// mobile affordance the All shelf's status line names.
-
 import React, { useMemo, useRef } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { View as RNView } from "react-native";
@@ -33,23 +18,11 @@ import type { MobileDriveDoc } from "./docs-projection";
 
 export interface DocRowProps {
   doc: MobileDriveDoc;
-  /** The replica's own verdict, passed down — never invented per row. */
   offline: boolean;
-  /** The ONE line that outranks the row's facts: the matched passage on a
-   *  search result, the sender on the Shared shelf. Both answer the same
-   *  question — why is this document in this set — which is worth more than
-   *  its size, and why there is one slot rather than two. */
   reason?: string;
-  /** The first row of its container draws no top hairline. */
   first?: boolean;
   onOpen: (doc: MobileDriveDoc) => void;
-  /** Both doors — the `···` and press-and-hold — open the same menu; the
-   *  anchor is the `···`'s own frame so the card hangs off something real. */
   onMenu: (doc: MobileDriveDoc, anchor: MenuAnchor | undefined) => void;
-  /** The set is being chosen from, not read: the kind mark becomes a box, a
-   *  press picks rather than opens, and the `···` stands down (one verb at a
-   *  time — a per-row menu inside a multi-row choice is two answers to
-   *  "which documents"). */
   selecting?: boolean;
   selected?: boolean;
   onToggleSelect?: (doc: MobileDriveDoc) => void;
@@ -71,8 +44,6 @@ export default function DocRow({
   const moreRef = useRef<RNView | null>(null);
   const mark = docRowState(doc, { offline });
   const meta = docRowMeta(doc, mark);
-  // Where a queued write is, on the row it changed (#880) — its own line, as
-  // the one state slot's ladder is a fact about the document.
   const overlay = readPendingOverlay(doc.raw);
   const pending = overlay ? pendingChangeLabel(overlay) : "";
 
@@ -93,18 +64,11 @@ export default function DocRow({
       accessibilityLabel={doc.title}
       {...(selecting ? { accessibilityState: { checked: selected } } : {})}
       onPress={() => (selecting ? onToggleSelect?.(doc) : onOpen(doc))}
-      // Press-and-hold keeps its meaning inside a choice: it PICKS, because the
-      // menu it would otherwise open is stood down here.
       onLongPress={() => (selecting ? onToggleSelect?.(doc) : openMenu())}
-      // The drive's leading row — a deterministic "open a document" target that
-      // does not key on a title the demo seed owns.
       testID={first ? TEST_IDS.docs.rowFirst : undefined}
       style={[styles.row, first ? undefined : styles.rowRule]}
     >
       {selecting ? (
-        // The box stands WHERE THE KIND MARK STOOD rather than beside it: a
-        // column that appears only in selection would shift every title
-        // sideways the moment the mode is entered.
         <View style={[styles.box, selected ? styles.boxOn : undefined]}>
           {selected ? (
             <Icon name="Check" size={12} color={colors.onAccent} />
@@ -127,8 +91,6 @@ export default function DocRow({
         ) : (
           <Text numberOfLines={1} style={styles.meta}>
             {meta.lead ? (
-              // Its own span, so the state rung keeps `--net` where it has one
-              // and stays exactly quotable for the row's one-state test.
               <Text style={meta.leadNet ? { color: colors.net } : undefined}>
                 {meta.lead}
               </Text>
@@ -144,8 +106,6 @@ export default function DocRow({
         ) : null}
       </View>
       {mark?.kind === "glyph" ? (
-        // The device mark — a glyph, never a sentence; the caption under the
-        // set carries the prose, once (§4.1).
         <View accessibilityLabel={mark.text} accessible>
           <Icon name="Smartphone" size={14} color={colors.textSoft} />
         </View>
@@ -170,12 +130,6 @@ export default function DocRow({
   );
 }
 
-/**
- * The grid's tile — the same set as a grid. "The preview is a title and a
- * kind, never a fabricated page image" (§1); the state slot survives the
- * arrangement because a fact about a document does not depend on how the set
- * is drawn.
- */
 export function DocGridTile({
   doc,
   offline,
@@ -188,8 +142,6 @@ export function DocGridTile({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const mark = docRowState(doc, { offline });
-  // The tile carries the same facts as the row's meta line: a grid is an
-  // arrangement, not a different set of truths about a document.
   const meta = docRowMeta(doc, mark);
   const overlay = readPendingOverlay(doc.raw);
   const pending = overlay ? pendingChangeLabel(overlay) : "";
@@ -236,8 +188,6 @@ const makeStyles = (colors: ThemeColors) =>
     box: {
       alignItems: "center",
       borderColor: colors.lineStrong,
-      // Fully round: a square box reads as one of the app's own containers,
-      // which all carry a radius from the ramp.
       borderRadius: radii.pill,
       borderWidth: borders.hairline,
       height: 18,
@@ -256,10 +206,6 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       flexDirection: "row",
       gap: 12,
-      // `metrics.row` (44) is a FLOOR, not a height — density.ts says so in as
-      // many words. With a second line the content alone nearly fills it, so
-      // without this padding the rows sat tighter than the handoff draws them
-      // (measured: 57px there against 47 here) and the text ran edge to edge.
       minHeight: 44,
       paddingStart: 12,
       paddingVertical: spacing[2],

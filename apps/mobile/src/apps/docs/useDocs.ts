@@ -1,7 +1,3 @@
-// Docs read layer (#821): the drive from this device's replica, same shape
-// as `usePeople`. SHARES ARE DECORATION, NEVER A FAILED DRIVE — denied share
-// reads resolve to `shared_with: null` per row; CUSTODY likewise decorates.
-
 import { useCallback, useMemo } from "react";
 
 import type { ReplicaValue } from "@centraid/client/replica/native";
@@ -45,16 +41,12 @@ export function useDocs(): UseDocsResult {
   const tags = useDocsEntity("core.tag");
   const concepts = useDocsEntity("core.concept");
   const schemes = useDocsEntity("core.concept_scheme");
-  // Decoration reads — never fail the drive; see header.
   const custody = useDocsEntity("blob.custody_state");
   const grants = useDocsEntity("share.circle_grant");
   const circles = useDocsEntity("social.circle");
   const members = useDocsEntity("social.circle_member");
   const states = useDocsEntity("share.commons_member_state");
   const parties = useDocsEntity("core.party");
-  // Where a projected row came from, and whose vault that is. Decoration on
-  // every other shelf; on Shared it IS the shelf, which is why its read has to
-  // answer separately from the outbound share join above.
   const origins = useDocsEntity("core.share_origin");
   const bindings = useDocsEntity("share.party_vault_binding");
 
@@ -128,8 +120,6 @@ export function useDocs(): UseDocsResult {
     ]
   );
 
-  // Plain function: react-compiler memoizes the hook result; a manual
-  // dependency list over eleven query objects would only go stale.
   const refresh = async (): Promise<void> => {
     await Promise.all([
       documents.refresh(),
@@ -161,7 +151,6 @@ export function useDocs(): UseDocsResult {
   };
 }
 
-/** One document = a selector over the list-shaped drive; siblings take this. */
 export interface UseDocumentResult {
   doc: MobileDriveDoc | undefined;
   loading: boolean;
@@ -187,7 +176,6 @@ export function useDocument(documentId: string): UseDocumentResult {
   };
 }
 
-/** Sole Docs write door (`session.write` + outcome surfacing); result only on continuable outcomes. */
 export type DocsWrite = (
   action: string,
   input: Record<string, ReplicaValue>

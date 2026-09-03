@@ -1,14 +1,3 @@
-// NOTIFICATIONS — consent surface (#765, spec §2): staged writes, lapsed
-// connections, parked high-risk acts, scope requests, automation notices —
-// the one place an owner sees all of it and decides. V9 shape = single BLOCK
-// LIST; nothing behind a filter, nothing dropped:
-//   • chips narrow by what a thing NEEDS; non-demands sit in always-present
-//     `Updates`/`Archived` sections
-//   • staged write = panel + edit row + always-allow row (`StagedWrite.tsx`)
-//   • lapsed connection = `Also waiting` row running the OAuth ceremony
-//   • `no-gateway` = error panel + pairing sentence + `Open Settings`
-// Data half `useApprovals.ts`; words `approvals-model.ts`.
-
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 
@@ -71,7 +60,6 @@ export default function ApprovalsScreen({
     []
   );
 
-  /** Not navigation: drops the active filter and re-promotes the queue head. */
   const reviewAll = useCallback(() => {
     setFocus({
       alwaysAllow: false,
@@ -87,7 +75,6 @@ export default function ApprovalsScreen({
     scroller.current?.scrollTo({ animated: true, y: grantsY.current });
   }, []);
 
-  /** Alert history is the Gateway page's Alerts tab — one implementation, two entries. */
   const openNotice = useCallback(
     (notice: MobileNotice): void => {
       const parent = navigation.getParent();
@@ -128,7 +115,6 @@ export default function ApprovalsScreen({
           <HomeKey onPress={() => navigation.goBack()} variant="leave" />
           <View style={styles.headBar}>
             <PlaceHeader
-              // Filled commit hidden while loading AND errored; quiet verb only while loading.
               primary={
                 showCommit
                   ? { label: "Review all", onPress: reviewAll }
@@ -211,7 +197,6 @@ function ApprovalsBody(props: BodyProps): React.JSX.Element {
             : undefined
         }
         action={{ label: ERROR_RETRY, onPress: page.retry }}
-        // The one way forward an unpaired phone has.
         action2={
           page.load.kind === "error" && page.load.unpaired
             ? { label: "Open Settings", onPress: props.onOpenSettings }

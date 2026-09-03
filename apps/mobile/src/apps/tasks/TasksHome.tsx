@@ -1,13 +1,3 @@
-// Tasks on the phone (Tasks spec §1–§7; #834). EVERY destination — the four
-// band places, the six lenses behind More, the detail place, one project — is a
-// value this file switches on (`tasks-places.ts`); the navigator gives Tasks
-// ONE route.
-// THE ARITHMETIC IS THE WEB APP'S: groups, rules and strings come from
-// `@centraid/blueprints/apps/tasks/*`; this file draws and dispatches.
-// FILING IS A LONG-PRESS AND A DESTINATION; the row's own `sort_order` is
-// carried through `organize-task`, not reset behind manual order.
-// A CHECK-OFF LANDS ON THE ONE STATUS LINE with Undo, never a toast.
-
 import React, { useCallback, useMemo, useState } from "react";
 
 import {
@@ -91,13 +81,11 @@ export default function TasksHome({
   const [place, setPlace] = useState<TasksPlaceKey>("today");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [openProjectId, setOpenProjectId] = useState<string | null>(null);
-  // ONE CLOCK PER MOUNT, so headers and rows cannot straddle midnight.
   const [now, setNow] = useState(() => new Date().toISOString());
   const [draft, setDraft] = useState<QuickAddDraft>(QUICK_ADD_EMPTY);
   const [lenses, setLenses] = useState<readonly TasksLensKey[]>([]);
   const [sort, setSort] = useState<TasksSortKey>("priority");
   const [limit, setLimit] = useState(WINDOW_STEP);
-  /** The task a long-press picked up, waiting for somewhere to land. */
   const [moving, setMoving] = useState<Task | null>(null);
 
   const scopes = useMemo(
@@ -117,8 +105,6 @@ export default function TasksHome({
   );
 
   const shelf = shelfForPlace(place) ?? null;
-  // THE TOOLBAR REACHES ONLY WHERE IT IS DRAWN: off the board a lens is a
-  // hidden filter, and the sort would overrule the Logbook's own order.
   const rows = useMemo(
     () => (showsBoard(shelf) ? lensedRows(board.tasks, lenses) : board.tasks),
     [board.tasks, lenses, shelf]
@@ -164,7 +150,6 @@ export default function TasksHome({
         return;
       }
       setStatus(task, "completed");
-      // Undo IS reopening — the same door the box offers, said in words.
       postStatus(DONE, {
         action: { label: UNDO, run: () => setStatus(task, "needs-action") },
       });
@@ -206,13 +191,11 @@ export default function TasksHome({
     [moving, write]
   );
 
-  // After midnight, "today" changed: a refresh re-reads the clock too.
   const handleRefresh = useCallback(async (): Promise<void> => {
     setNow(new Date().toISOString());
     await board.refresh();
   }, [board]);
 
-  // RefreshControl neither awaits nor catches; a rejection would be unseen.
   const onRefresh = useCallback((): void => {
     void handleRefresh();
   }, [handleRefresh]);
@@ -231,7 +214,6 @@ export default function TasksHome({
     [now, write]
   );
 
-  /** The Inbox's ONE gesture per undecided task; elsewhere the long-press. */
   const inboxAct = useMemo(
     () =>
       place === "inbox"

@@ -1,26 +1,8 @@
-// THE CAPTURE-TIME OCR CONSENT GATE (#712) — the second instance of
-// the §8 consent gate, after Photos' face detection.
-//
-// `Scan.tsx` must never call `extract()` unconditionally the moment a
-// photograph is captured or chosen. This file pins the consent moment:
-//
-//   1. THE GATE SHOWS BEFORE THE FIRST EXTRACTION on a device that has
-//      never answered — `recognizeText` must not be called until the
-//      question is answered.
-//   2. DECLINING STILL SAVES THE SCAN. The destination flow appears with no
-//      extracted text and a stated inline explanation, never a dead field.
-//   3. THE ON-DEVICE ANSWER TRIGGERS EXTRACTION, and latches so the gate
-//      does not return on a later render.
-//
-// Every dependency outside the gate itself (camera, replica, uploads,
-// receipt parsing) is stubbed — this file is about the consent wiring, not
-// about scanning or saving.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// @vitest-environment jsdom
 import ScanScreen from "./Scan";
 
 type ReactNative = typeof import("react-native");
@@ -66,10 +48,6 @@ const mocks = vi.hoisted(() => ({
     engine: "apple-vision",
     lines: [],
   })),
-  // The latch's own durable store — mirrors transfer-consent.test.ts /
-  // scan-consent.test.ts's stand-in, shared across this file's tests so the
-  // real `scan-consent.ts` module (not mocked — its own suite covers it) can
-  // be exercised through Scan.tsx unmodified.
   storeCache: new Map<string, unknown>(),
 }));
 
@@ -175,10 +153,6 @@ vi.mock(import("../kit/components/NativeText"), async () => {
   return {
     Text: ({ children }: { children?: React.ReactNode }) =>
       ReactModule.createElement("span", null, children),
-    // Deliberately ignores every RN-only prop (style arrays, multiline,
-    // placeholderTextColor, …) — these tests never assert on a field's
-    // rendered value, only that the destination flow renders at all once
-    // extraction is answered.
     TextInput: ({ value }: { value?: string }) =>
       ReactModule.createElement("input", {
         readOnly: true,
@@ -249,8 +223,6 @@ vi.mock(
     }) as unknown as Partial<MediaProducerModule>
 );
 
-// The latch's real module, with only its AsyncStorage-backed store swapped
-// for an in-memory one — same technique scan-consent.test.ts uses.
 vi.mock(
   import("../storage"),
   () =>
@@ -349,7 +321,6 @@ describe("the capture-time OCR consent gate", () => {
     await flush();
     expect(container!.textContent).not.toContain("Extract on this phone");
     expect(mocks.recognizeText).not.toHaveBeenCalled();
-    // Stated inline, never a dead control — the destination flow still shows.
     expect(container!.textContent).toContain(
       "Text extraction declined — this scan saves without extracted text."
     );
@@ -370,3 +341,4 @@ describe("the capture-time OCR consent gate", () => {
     expect(container!.textContent).not.toContain("Extract on this phone");
   });
 });
+// @vitest-environment jsdom

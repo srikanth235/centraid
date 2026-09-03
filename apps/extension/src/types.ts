@@ -13,7 +13,6 @@ export interface PairingState {
   readonly gatewayName?: string;
   readonly vaultId: string;
   readonly vaultName?: string;
-  /** Every vault enrolled by the one-time ticket; `vaultId` is the focus. */
   readonly vaults: readonly CompanionVault[];
   readonly pairedAt: string;
   readonly relayUrls?: readonly string[];

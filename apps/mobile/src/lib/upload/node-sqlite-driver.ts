@@ -1,10 +1,3 @@
-// Test-only stand-in for the op-sqlite driver, mirroring
-// `../replica/node-sqlite-driver.ts`. Two differences, both required by the
-// crash tests: this one is FILE-backed (a simulated process death must be able
-// to reopen the same database and find exactly what was committed, which
-// `:memory:` cannot express) and it opens an existing path rather than always
-// creating a fresh database. Never imported by app code, so Metro never
-// bundles it.
 import { DatabaseSync } from "node:sqlite";
 
 import type {

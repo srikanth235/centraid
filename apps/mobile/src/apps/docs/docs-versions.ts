@@ -1,7 +1,3 @@
-// Version chain over THIS DEVICE'S replica (#821). Follow live `revises` OUT
-// (NEW → OLD); a restore can cycle. Date is the edge's assertion time.
-// No provenance on this replica — withhold rather than guess. No diff.
-
 import type { EntityRow } from "./docs-projection";
 
 const RELATIONS_SCHEME_URI = "urn:duaility:relations";
@@ -19,13 +15,11 @@ const num = (row: EntityRow, key: string): number | null => {
 };
 
 export interface MobileVersionEntry {
-  /** 1 is the original; the current version is `versionCount`. */
   n: number;
   content_id: string;
   media_type: string | null;
   byte_size: number | null;
   current: boolean;
-  /** The revises edge's own valid_from; the oldest entry dates from its mint. */
   asserted_at: string;
 }
 
@@ -67,7 +61,6 @@ export function projectVersionChain(
             : []
         )[0] ?? null);
 
-  // Live revises edges out of a content item, newest assertion first.
   const edgesFrom = new Map<string, { to: string; valid_from: string }[]>();
   if (revisesConceptId !== null) {
     for (const link of rows.links) {

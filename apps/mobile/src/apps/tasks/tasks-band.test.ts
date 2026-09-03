@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-// The band's rules, asserted without a renderer (#834).
-//
-// `tasks-band.ts` is deliberately free of `react-native` imports so the CAP,
-// the ownership latch and the sheet can be checked as values. What this really
-// guards is that the phone's band and the pointer seats' band are one table:
-// a blueprint rename that did not reach here fails as a mismatch rather than
-// shipping as two vocabularies.
 import {
   BAND_DESTINATIONS,
   MORE_SHELVES,

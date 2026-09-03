@@ -1,8 +1,3 @@
-// The headless pass, with every native module and every collaborator injected
-// as a mock: what is under test is the pass's CONTROL FLOW — per-scope
-// isolation, the time budget, the connectivity answer it hands its sessions,
-// and the registration outcome it records.
-
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 type CreateSessionOptions = Parameters<
@@ -58,8 +53,6 @@ const createNativeReplicaSession = vi.fn<
     close: async () => undefined,
   };
 });
-// The device outboxes, in the order the pass drained them: a stage that ran
-// twice, ran out of order, or ran past the budget shows up here as state.
 const outboxStages: string[] = [];
 const facade = {
   flushPlacements: vi.fn<() => Promise<void>>(async () => {
@@ -83,9 +76,6 @@ const backgroundTask = {
 const definedTasks = new Map<string, () => Promise<unknown>>();
 const expirationListeners: Array<() => void> = [];
 
-// `as Promise<unknown>` on the module specifier, as elsewhere in this suite:
-// these stand-ins implement only the members the pass touches, and the real
-// module types (enums, 50-member surfaces) are not reconstructible by hand.
 vi.mock(
   import("@react-native-async-storage/async-storage") as Promise<unknown>,
   () => ({
@@ -147,8 +137,6 @@ vi.mock(import("../vault-links") as Promise<unknown>, () => ({
 vi.mock(import("./mobile-gateway-compatibility") as Promise<unknown>, () => ({
   requireMobileOfflineGateway: async () => undefined,
 }));
-// Constructor FUNCTIONS, not classes and not arrows: `new` on a function that
-// returns an object yields that object, and these modules are only ever `new`ed.
 vi.mock(import("./multi-vault-reader") as Promise<unknown>, () => ({
   MultiVaultReplicaReader: function MultiVaultReplicaReader() {
     return {};
@@ -219,7 +207,6 @@ describe("background replica sync", () => {
       { vaultId: "vault-b", reason: "bootstrap refused" },
     ]);
     expect(outcome.timedOut).toBe(false);
-    // The whole point: placements and uploads still drained, once each.
     expect(outboxStages).toStrictEqual(["placements", "uploads"]);
   });
 
@@ -229,8 +216,6 @@ describe("background replica sync", () => {
     await runBackgroundReplicaSync();
 
     expect(sessionOptions).toHaveLength(2);
-    // Hardcoding `true` told a session with no radio that its queued writes
-    // were sendable.
     expect(sessionOptions[0]?.isConnected?.()).toBe(false);
   });
 
@@ -250,7 +235,6 @@ describe("background replica sync", () => {
     let now = 0;
     const deadline = backgroundPassDeadline(20_000, () => now);
     createNativeReplicaSession.mockImplementationOnce(async (options) => {
-      // The scopes consumed the whole window.
       now = 25_000;
       sessionOptions.push(options);
       return {
@@ -290,9 +274,7 @@ describe("background replica sync", () => {
     sessionFailures.set("vault-a", new Error("gone"));
     sessionFailures.set("vault-b", new Error("gone"));
 
-    // 2 = BackgroundTaskResult.Failed, 1 = Success.
     await expect(task?.()).resolves.toBe(2);
-    // The pass subscribed to iOS's own expiration warning.
     expect(expirationListeners.length).toBeGreaterThan(0);
 
     sessionFailures.clear();

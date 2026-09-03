@@ -1,7 +1,3 @@
-// Direct sub-paths: the barrel re-exports weights Metro cannot resolve.
-// Stay at Instrument Sans 400/600: an unnamed face diverges from the registry.
-// The 600 rung comes straight from upstream; the 400 rung's FILE is bundled
-// (see the `useFonts` call and kit/theme/native.ts).
 import InstrumentSans_600SemiBold from "@expo-google-fonts/instrument-sans/600SemiBold/InstrumentSans_600SemiBold.ttf";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -21,7 +17,6 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
-// The 400 rung, bundled rather than upstream — see the `useFonts` call.
 import InstrumentSans_470Book from "./assets/fonts/InstrumentSans_470Book.ttf";
 import {
   AssistantScreen,
@@ -47,7 +42,6 @@ import {
   SettingsNavigator,
   TallyNavigator,
 } from "./navigators";
-// Side-effect import: registers Photos as the frame's camera-roll target.
 import "./src/apps/photos/camera-roll-target";
 import { configurePhotoImageCache } from "./src/apps/photos/image-cache";
 import { LINKING } from "./src/deep-links";
@@ -92,11 +86,8 @@ import HomeScreen from "./src/screens/Home";
 import VaultChromeProvider from "./src/screens/home/VaultChrome";
 import OnboardingScreen from "./src/screens/Onboarding";
 
-SplashScreen.preventAutoHideAsync().catch(() => {
-  /* noop */
-});
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
-// Foregrounded notifications must still surface; the OS swallows them (#14).
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
@@ -108,7 +99,6 @@ Notifications.setNotificationHandler({
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 
-// `fullScreenModal`, not `modal`: the iOS card sheet never fills.
 const COVER_OPTIONS = {
   animation: "fade",
   presentation: "fullScreenModal",
@@ -117,15 +107,11 @@ const COVER_OPTIONS = {
 function UploadReconciliation(): null {
   const { session, gatewayBase, vaultId } = useReplica();
   useUploadReconciliation(session);
-  // Watcher lives beside the drain, not in Photos (#883 C6): what a sweep does
-  // is Photos'; when one may run is the frame's.
   useCameraRollWatcher(
     session && gatewayBase
       ? { session, gatewayBase, ...(vaultId ? { vaultId } : {}) }
       : undefined
   );
-  // The frame, not a screen, tells the member about a re-sync: it outlives
-  // whichever screen started it (#883 C6).
   useEffect(
     () =>
       subscribeResyncNotice((notice) => {
@@ -138,7 +124,6 @@ function UploadReconciliation(): null {
   return null;
 }
 
-/** Only a genuine open failure raises the bar. */
 function ReplicaErrorBanner(): React.JSX.Element | null {
   const { compatibility, error, ready } = useReplica();
   const { colors } = useTheme();
@@ -237,36 +222,22 @@ export default function App(): React.JSX.Element | null {
   const scheme = resolveScheme(useAppearance(), useColorScheme());
   const { colors } = resolveTheme(scheme);
   const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
-  // Tuple dropped: splash does not wait on fonts (see `onReady`).
-  //
-  // The 400 rung's FILE is a 470, which is a LOWERING and not a third weight:
-  // the ramp still names two weights and nothing may ask for a 470
-  // (kit/theme/native.ts carries why the phone needs it). The upstream 400
-  // static is deliberately absent — no role renders it on a touch surface, so
-  // loading it would ship a face nothing can reach.
   useFonts({
     InstrumentSans_470Book,
     InstrumentSans_600SemiBold,
   });
 
   useEffect(() => {
-    // Not sequenced behind profile: first paint would wait on two trips.
     void hydrateAppearance();
     void hydrateProfile().then(() => setOnboarded(isOnboarded()));
-    // Both are read synchronously on the render path (#883 C6).
     void hydratePinnedContent();
     void hydrateOfflineContent();
-    // From an effect: touches a native module; first paint does not need it.
     configurePhotoImageCache();
   }, []);
 
-  // Lift splash on profile hydrate, not fonts: a `!fontsLoaded` gate blanks
-  // every cold start (#659).
   const onReady = useCallback(async () => {
     if (onboarded !== null) {
-      await SplashScreen.hideAsync().catch(() => {
-        /* noop */
-      });
+      await SplashScreen.hideAsync().catch(() => {});
     }
   }, [onboarded]);
 
@@ -321,7 +292,6 @@ export default function App(): React.JSX.Element | null {
                           >
                             <RootStack.Navigator
                               screenOptions={{ headerShown: false }}
-                              // Haptic on cover open only — not dismissal.
                               screenListeners={{
                                 transitionStart: (e) => {
                                   if (!e.data.closing)

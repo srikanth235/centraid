@@ -1,4 +1,3 @@
-// The home capsule, rendered; its model is `band-capsule.ts` (#883).
 import React, { useMemo } from "react";
 import { StyleSheet } from "react-native";
 
@@ -24,7 +23,6 @@ export default function BandCapsuleControl({
   return (
     <Tappable
       accessibilityLabel={capsule.label}
-      // Already 52 square: the kit's default slop would reach into the tabs.
       hitSlop={0}
       onPress={onPress}
       style={[styles.capsule, { width: capsule.size }]}
@@ -38,7 +36,6 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     capsule: {
       alignItems: "center",
-      // The frame's page colour, never the app's mat.
       backgroundColor: colors.bg,
       borderColor: colors.lineStrong,
       borderRadius: BAND_RADIUS,

@@ -1,6 +1,3 @@
-// Not the replica's SQLite outbox: that dispatches with the APP's credential,
-// which `share.grant`'s `confirm: true` parks (#883).
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type {
@@ -28,7 +25,6 @@ function parse(raw: string | null): QueuedGrantIntent[] {
   }
 }
 
-/** Let a throwing `AsyncStorage` out: a store that cannot answer is not empty. */
 export function nativeGrantIntentQueue(
   storage: Pick<typeof AsyncStorage, "getItem" | "setItem"> = AsyncStorage
 ): GrantIntentQueue {

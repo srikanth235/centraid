@@ -1,6 +1,3 @@
-// Nothing is written until `Save as a new photograph`. Mode, not a page —
-// the photograph stays mounted. Commit and consequence share the tool bar.
-
 import { Image } from "expo-image";
 import React, { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
@@ -37,7 +34,6 @@ import { assetAspectRatio, fitMedia } from "./viewer-model";
 
 const SAVING = "Rendering the new photograph · the original is not touched";
 
-/** Alpha on the colour, never `opacity` on the box (DESIGN.md: opacity is state). */
 function maskFill(stage: string): string {
   return /^#[0-9a-f]{6}$/iu.test(stage) ? `${stage}8C` : stage;
 }
@@ -105,7 +101,6 @@ export function PhotoEditor({
 
   function rotateQuarter(): void {
     setQuarters((turns) => (turns + 1) % 4);
-    // Rotation must not silently re-crop against the old orientation.
     setCrop(FULL_CROP);
     setRatio("Original");
   }
@@ -187,7 +182,6 @@ export function PhotoEditor({
                 left: (frame.width - sourceRatio * scale) / 2,
                 position: "absolute",
                 top: (frame.height - scale) / 2,
-                // Flip mirrors content, not the frame — crop fractions stay valid.
                 transform: [
                   { scaleX: flip === "horizontal" ? -1 : 1 },
                   { scaleY: flip === "vertical" ? -1 : 1 },
@@ -316,7 +310,6 @@ export function PhotoEditor({
             onPress={() => void save()}
             style={[
               styles.commit,
-              // A disabled commit is outlined, never a dimmed fill.
               commitBlocked
                 ? { borderColor: colors.stageLine }
                 : {

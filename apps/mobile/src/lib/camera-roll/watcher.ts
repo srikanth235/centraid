@@ -1,6 +1,3 @@
-// Owns WHETHER a camera-roll sweep may run and nothing else — framework-free
-// so it tests under node; the platform listeners are next door (#883).
-
 import type { MobileReplicaSession } from "../replica/native-session";
 
 export type CameraRollSweepReason =
@@ -15,7 +12,6 @@ export interface CameraRollTrigger {
   cannot: string;
 }
 
-/** The honest trigger table — read it before promising anything. */
 export const CAMERA_ROLL_TRIGGERS: readonly CameraRollTrigger[] = [
   {
     reason: "app-start",
@@ -43,7 +39,6 @@ export const CAMERA_ROLL_TRIGGERS: readonly CameraRollTrigger[] = [
   },
 ];
 
-/** Handed in per pass, so a vault switch cannot enqueue into a stale session. */
 export interface CameraRollScope {
   session: MobileReplicaSession;
   gatewayBase: string;
@@ -57,7 +52,6 @@ let scope: CameraRollScope | undefined;
 let running = false;
 let lastRunAt = 0;
 
-/** Debounces the library listener alone; bursts would thrash a full pass. */
 export const CAMERA_ROLL_MIN_INTERVAL_MS = 60_000;
 
 export function registerCameraRollSweep(sweep: CameraRollSweep): () => void {
@@ -67,7 +61,6 @@ export function registerCameraRollSweep(sweep: CameraRollSweep): () => void {
   };
 }
 
-/** Only library bursts are rate-limited: the member or OS asked for the rest. */
 export function mayRunSweep(
   reason: CameraRollSweepReason,
   state: { running: boolean; lastRunAt: number },

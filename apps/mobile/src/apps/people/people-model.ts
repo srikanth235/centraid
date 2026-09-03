@@ -1,12 +1,3 @@
-// People's read-side projection: pure functions over replica rows.
-//
-// THE WEB QUERY EMITTERS ARE THE CONTRACT — restate the joins of
-// `blueprints/apps/people/queries/*.ts` and invent no column.
-//
-// THE SHARING PLANE DEGRADES TO ABSENT, NEVER TO EMPTY (decisions.md #821
-// L-read): a failed share read arrives as `null` rows, so `linked` is null,
-// never a false "unlinked".
-
 import {
   daysSinceContact,
   daysUntilMonthDay,
@@ -33,11 +24,8 @@ import type { ColorKey } from "@centraid/design";
 import { rowCanWrite, rowScopeLabels } from "../../kit/replica/row-provenance";
 import type { PersonShareLinks } from "./people-share-model";
 
-/** A replica row, untyped — every reader narrows per column. */
 export type Row = Record<string, unknown>;
 
-/** A projected person plus the PROFILE row's provenance and pending stamps
- *  (#880) — the canonical role a star or trash takes. */
 export type MobilePersonRow = PersonRow & {
   canWrite: boolean;
   scopeLabels: readonly string[];
@@ -60,8 +48,6 @@ const truthy = (row: Row, key: string): boolean => Boolean(row[key]);
 const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
 const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 
-/** The web editor's spelling, RESOLVED through `colors.c<Key>`. Built in
- *  halves so the design gate does not read it as a style consumption. */
 const CSS_VAR_OPEN = "var(";
 
 export function storedHueValue(key: ColorKey): string {
@@ -78,16 +64,13 @@ export function storedHueKey(
     : null;
 }
 
-// Mirrors `queries/people.ts` and `queries/trash.ts`.
 export interface RosterInput {
-  /** Every `people.profile` row in the replica, trashed ones included. */
   profiles: readonly Row[];
   parties: readonly Row[];
   tags: readonly Row[];
   concepts: readonly Row[];
   schemes: readonly Row[];
   dates: readonly Row[];
-  /** Live `share.party_vault_binding` rows; null = ABSENT, not empty. */
   bindings: readonly Row[] | null;
 }
 
@@ -191,7 +174,6 @@ export function projectRoster(input: RosterInput): RosterProjection {
         raw: profile,
       };
     })
-    // Newest first — the query's order (`orderBy created_at desc`).
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   const trash: TrashedPerson[] = gone
@@ -219,9 +201,6 @@ export function projectRoster(input: RosterInput): RosterProjection {
   return { people, trash, lists, linksAvailable };
 }
 
-// Filter and subtitle restate `components/RosterRoute.tsx` (unimportable).
-
-/** A row whose link fact is unknown answers NEITHER chip: unknown ≠ unlinked. */
 export function applyRosterFilter<T extends PersonRow>(
   people: readonly T[],
   filter: RosterFilter,
@@ -237,14 +216,11 @@ export function applyRosterFilter<T extends PersonRow>(
   return [...people];
 }
 
-/** `Linked · architect`, or the role alone: a binding carries only an id. */
 export function rosterSub(person: PersonRow): string {
   if (person.linked !== true) return person.role;
   return person.role ? `${LINK.linked} · ${person.role}` : LINK.linked;
 }
 
-/** The replica exposes no People search shape, so the window in hand is the
- *  whole corpus — a divergence logged in `INTEGRATION-NOTES.md`. */
 export function searchRoster<T extends PersonRow>(
   people: readonly T[],
   notesByParty: ReadonlyMap<string, readonly string[]>,
@@ -263,15 +239,11 @@ export function searchRoster<T extends PersonRow>(
   });
 }
 
-// The keep-in-touch summary (`queries/dashboard.ts`), judged over the roster
-// window so Touch and the roster cannot disagree.
 export interface DashboardInput {
   people: readonly PersonRow[];
   linksAvailable: boolean;
-  /** `core.link` rows joining activities to parties. */
   activityLinks: readonly Row[];
   activities: readonly Row[];
-  /** `knowledge.annotation` rows on activities. */
   activityNotes: readonly Row[];
   concepts: readonly Row[];
   now?: number;
@@ -375,18 +347,11 @@ export function projectDashboard(input: DashboardInput): DashboardData {
   };
 }
 
-// One person (`queries/person.ts`), down to channels, dates, notes,
-// interactions, sharing plane. Lists, tasks, gifts, debts and relationships
-// are excluded; their placeholders are banned.
 export interface PersonDetailInput {
   person: MobilePersonRow;
-  /** ALL `social.contact_channel` rows — other parties' rows feed the
-   *  duplicate-value warning. */
   channels: readonly Row[];
-  /** `party_id → display_name`, for naming a duplicate's holder. */
   partyNames: ReadonlyMap<string, string>;
   dates: readonly Row[];
-  /** `knowledge.annotation` rows targeting this party. */
   notes: readonly Row[];
   activityLinks: readonly Row[];
   activities: readonly Row[];

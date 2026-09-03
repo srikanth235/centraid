@@ -1,11 +1,3 @@
-// Real map: iOS MapKit via `expo-maps`; Android MapLibre over OpenFreeMap.
-// Split because `expo-maps` on Android is Google Maps. This file owns camera
-// and clustering — two SDKs deciding merge separately are two products.
-// MapLibre's GeoJSON clusterer is unused (`place-map.ts` tier-floored merge).
-// Providers load lazily: evaluating either registers native views.
-// Tap does NOT ride SDK marker events: `onAnnotationClick` is iOS 18+ while
-// the target is 17.5 (`app.config.ts`); click → pixel → `pinAtPoint`.
-
 import React, { Suspense, useMemo, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
@@ -29,7 +21,6 @@ import { PIN_MAX } from "./places-model";
 export interface PlacesBasemapProps {
   camera: MapCamera;
   pins: readonly MapPin[];
-  /** Busiest pin's count — every provider sizes the ramp identically. */
   largest: number;
   width: number;
   height: number;
@@ -50,8 +41,6 @@ export default function PlacesRealMap({
 }: PlacesMapSurfaceProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  // Null until the member moves: opening viewport is the photographs' own,
-  // not the SDK's default centre.
   const [moved, setMoved] = useState<MapCamera | null>(null);
   const fitted = useMemo(
     () => fitCamera(points, { width, height, padding: PIN_MAX / 2 + 6 }),
@@ -66,9 +55,6 @@ export default function PlacesRealMap({
             width,
             height,
             camera,
-            // Two photographs cannot overlap the way two dots could; pin width
-            // is the drawing's threshold. `projectPlaces` floors it with the
-            // tier's ground distance once zoomed past what the ledger resolves.
             mergeDistance: PIN_MAX,
           }),
     [points, width, height, camera]
@@ -116,7 +102,6 @@ export default function PlacesRealMap({
   );
 }
 
-/** Tap radius: half a pin. Shared by both providers so hit tests cannot drift. */
 export const PIN_TAP_RADIUS = PIN_MAX / 2;
 
 const makeStyles = (colors: ThemeColors) =>

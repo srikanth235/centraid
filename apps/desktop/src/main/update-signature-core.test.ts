@@ -1,13 +1,3 @@
-/*
- * W6.1 refusal proof (umbrella #842).
- *
- * These tests sign with REAL Ed25519 keys — deterministic ones, built from
- * fixed seeds so a failure replays exactly — and then verify with the shipping
- * verifier. Nothing is stubbed on the crypto path, so a verifier that stopped
- * verifying cannot pass this file: the paired sabotage cases (unsigned,
- * wrong-signed, tampered payload) only go green when a real signature check
- * actually rejects them.
- */
 import {
   createPrivateKey,
   createPublicKey,
@@ -31,13 +21,8 @@ import type {
   TrustedReleaseKey,
 } from "./update-signature-core.js";
 
-/** PKCS#8 DER prefix for an Ed25519 private key holding a raw 32-byte seed. */
 const PKCS8_ED25519_PREFIX = "302e020100300506032b657004220420";
 
-/**
- * A deterministic keypair. `seedByte` fills all 32 bytes, so "the release key"
- * and "some other key" are two literals and the test replays byte-identically.
- */
 function keypair(seedByte: number) {
   const seed = Buffer.alloc(32, seedByte);
   const privateKey = createPrivateKey({
@@ -88,7 +73,6 @@ function signManifest(manifest: ReleaseManifest, signer = release) {
   });
 }
 
-/** The happy shape every refusal case below mutates exactly one field of. */
 function trustedInput() {
   const manifest = manifestFor();
   return {
@@ -252,11 +236,6 @@ describe("verifyManifestSignature — real Ed25519", () => {
 });
 
 describe("cross-implementation golden vector (W6.2 signer → W6.1 verifier)", () => {
-  // Produced by `scripts/security/supply-chain-core.mjs`'s signDocument() from
-  // a fixed 32-byte seed (0x77 repeated). Two independent implementations of
-  // canonical JSON have to agree byte-for-byte or this signature does not
-  // verify — which is the whole point: the release tooling signs, the shipped
-  // updater verifies, and nothing tests the pair except this vector.
   const GOLDEN_MANIFEST =
     '{"schema":"centraid.release-manifest/1","version":"0.6.0","artifacts":[{"name":"Centraid-0.6.0.dmg","sha512":"Z29sZGVuLXZlY3Rvci1kaWdlc3Q="}]}';
   const GOLDEN_PUBLIC_KEY = "yFOtDwzSthmuqSzuxP1Wok1kmdWEznklfkXP2BObYKc=";

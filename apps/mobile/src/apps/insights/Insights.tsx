@@ -1,19 +1,3 @@
-// ANALYTICS — what has run, and what it cost (#765, spec §5).
-//
-// The page has ONE parameter (the window) and NO commit: it counts what
-// already happened, so its bar carries a single quiet verb and nothing filled.
-// The window chips are shown in EVERY state that has a page (ready and empty),
-// unlike every other operational screen's filter row, because the window is
-// not a filter over rows — it is the question the page is answering, and a
-// member who lands on an empty 7 days has to be able to ask about 90.
-//
-// WHAT IS ABSENT IS VISIBLE HERE RATHER THAN PAPERED OVER, on the same terms
-// the desktop leg carries (`insights-model.ts` states each one where it bites):
-// a day with no failure gets no failed segment and no legend key, and a window
-// with no finished run gets no `typical run` fact — withheld, never zeroed. The
-// Origin also never presents machine health here: that belongs to System on the
-// Custodian seat; Activity on this phone is only the member's run history.
-
 import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 
@@ -70,30 +54,18 @@ import { styles } from "./Insights.styles";
 import { useInsights } from "./useInsights";
 import type { InsightsController } from "./useInsights";
 
-/** The error state: what failed, what is safe, one way forward. The rollup
- *  rebuilds on its own schedule and nothing here can trigger it, so the verb
- *  is the honest one — ask again. */
 const ERROR_EYEBROW = "THIS PAGE COULD NOT LOAD";
 const ERROR_TITLE = INSIGHTS_ERROR_TITLE;
 const ERROR_BODY = INSIGHTS_ERROR_BODY;
 const ERROR_RETRY = RETRY_ACTION;
 
-/** The empty state, in the routine register. No action: nothing on this page
- *  makes work happen, so an empty read has nothing to offer but the reason. */
 const EMPTY_TITLE = INSIGHTS_EMPTY_TITLE;
 const EMPTY_BODY = INSIGHTS_EMPTY_BODY;
 
-/** Why a skeleton, said once, under the skeleton. */
 const LOADING_NOTE = SKELETON_NOTE;
 
-/** The chart's colour key. The failed word is supplied by the model and comes
- *  back EMPTY for a window whose days hold no failure, which drops the whole
- *  legend row: a legend naming a colour the chart cannot draw would be the
- *  page's one dishonest sentence. */
 const LEGEND_RUNS = "runs";
 
-/** A breakdown, or nothing at all: an empty distribution is an absence, and a
- *  section head over no rows reads as a failed load. */
 function Distribution({
   label,
   breakdown,
@@ -249,8 +221,6 @@ function AnalyticsBody({
           <RowsBlock
             accessibilityLabel="Recent runs"
             rows={recent.map((run) => ({
-              // A run with no automation behind it has nowhere to go on this
-              // surface, so it carries no verb rather than a dead one.
               ...(run.automationRef
                 ? {
                     action: {

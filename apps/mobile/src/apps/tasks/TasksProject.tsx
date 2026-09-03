@@ -1,10 +1,3 @@
-// One project's own place (Tasks spec §5): its sections, the member's manual
-// order inside each, and an add that lands in the section it was pressed on.
-//
-// A NEW ROW IS TWO WRITES. `add_task` takes no project (app.json), so the row
-// is created first and `organize-task` files it — which is why filing waits
-// for an id and never fires against a queued write.
-
 import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
 
@@ -91,8 +84,6 @@ export default function TasksProject({
       const taskId = landedTaskId(outcome);
       if (!taskId) return;
       const section = own.find((entry) => entry.section_id === sectionKey);
-      // Last in the section's own manual order — never zero, which would put
-      // every new row at the top of a list the member arranged.
       const group = groups.find((entry) => entry.key === sectionKey);
       await write("organize-task", {
         task_id: taskId,

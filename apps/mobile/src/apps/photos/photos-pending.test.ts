@@ -1,4 +1,3 @@
-// The shelf's one pending sentence (#880).
 import { describe, expect, it } from "vitest";
 
 import type { PendingChange } from "../../kit/replica/pending-changes";

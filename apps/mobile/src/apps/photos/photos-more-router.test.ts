@@ -1,5 +1,3 @@
-// Pins the More-sheet router (#711): mostly what must NOT return as a row,
-// since Collections already carries every shelf as a section (#712, #726).
 import { describe, expect, it } from "vitest";
 
 import { PHOTOS_MORE_ROWS, resolveMoreRowRoute } from "./photos-band";
@@ -27,7 +25,6 @@ describe("resolveMoreRowRoute (the More sheet's router)", () => {
   });
 
   it("backup deep-links ACROSS stacks to frame Settings, not to a Photos route", () => {
-    // Backup stays a row because it is a policy screen, not a shelf (#712).
     expect(resolveMoreRowRoute("backup")).toStrictEqual({
       screen: "Settings",
       params: { screen: "BackupHealth" },

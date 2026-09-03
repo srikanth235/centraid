@@ -1,15 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit #526 Keep the reviewed security boundary cohesive.
-/**
- * Centraid Assist OAuth courier (#526, Model B).
- *
- * Stateless by construction: no KV, D1, Durable Object, or cache. The only
- * cookie is a signed, short-lived browser-binding envelope with no OAuth
- * material or identity. Google secrets are Worker bindings; authorization
- * codes and refresh tokens exist only in request memory and are never logged.
- * A refresh token is redeemable at /refresh only with the HMAC capability
- * minted for it at /exchange (issue #865) — possession of a stolen token
- * alone proves nothing.
- */
 // governance: allow-repo-hygiene file-size-limit #526 Keep the reviewed security boundary cohesive.
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -42,7 +31,6 @@ interface PreparedGrant {
   expectedScopes?: readonly string[];
 }
 
-/** A refusal minted before any upstream call carries its own status. */
 interface GrantRefusal {
   error: string;
   status: number;
@@ -180,12 +168,6 @@ async function callbackResponse(
   );
 }
 
-/**
- * The gateway returns this page as the browser entry point. Its fragment
- * carries a one-ceremony binding that is absent from Google's authorization
- * URL. The page scrubs the fragment before I/O, seals the binding into an
- * HttpOnly same-site cookie, then navigates to the validated Google URL.
- */
 function startPage(env: Env): Response {
   const nonce = base64UrlEncode(crypto.getRandomValues(new Uint8Array(18)));
   const clientId = JSON.stringify(env.GOOGLE_CLIENT_ID).replace(
@@ -411,7 +393,6 @@ async function tokenProxy(
       : await refreshForm(body, env);
   if ("error" in grant) {
     metric(env, route, grant.error, grant.status);
-    // Only the error code leaves; the status is transport, not body.
     return responseJson(grant.status, { error: grant.error });
   }
   let upstream: Response;
@@ -464,16 +445,11 @@ async function tokenProxy(
   }
   const result: Record<string, unknown> = {
     access_token: accessToken,
-    // OAuth access tokens from Assist are Bearer-only; do not echo untrusted
-    // token_type strings from the upstream body.
     token_type: "Bearer",
   };
   const refreshToken = bounded(payload.refresh_token, 16 * 1024);
   if (refreshToken) {
     result.refresh_token = refreshToken;
-    // Issue #865: the capability travels with the token it authenticates —
-    // on first mint at /exchange and re-minted whenever Google rotates the
-    // refresh token, so the gateway always holds a matching pair.
     result.refresh_capability = await mintRefreshCapability(
       refreshToken,
       env.CALLBACK_RECEIPT_SECRET
@@ -576,13 +552,6 @@ async function exchangeForm(
   };
 }
 
-/**
- * Issue #865: a stolen Google refresh token must not be redeemable here by an
- * anonymous caller. The gateway can only obtain a refresh token through
- * /exchange, so /exchange mints a deterministic HMAC capability over the
- * refresh token (domain-separated from the receipt/browser-binding MACs) and
- * /refresh requires it back — verified timing-safely BEFORE any Google call.
- */
 const REFRESH_CAPABILITY_DOMAIN = "centraid/oauth-refresh-capability/v1";
 
 async function refreshCapabilityMessage(refreshToken: string): Promise<string> {
@@ -604,9 +573,6 @@ async function refreshForm(
     return { error: "unsupported_provider", status: 400 };
   const refreshToken = bounded(body.refresh_token, 16 * 1024);
   if (!refreshToken) return { error: "invalid_body", status: 400 };
-  // The capability check gates the client secret: without it the presented
-  // token was never minted by this Worker's /exchange. Refusal is 401-class
-  // and precedes every upstream side effect (no token-validity oracle).
   const capability = bounded(body.refresh_capability, 128);
   if (!capability) return { error: "missing_capability", status: 401 };
   const valid = await verifyHmac(
@@ -814,8 +780,6 @@ function corsPreflight(request: Request): Response {
   if (!origin || !ALLOWED_BROWSER_ORIGINS.has(origin)) {
     return responseJson(403, { error: "origin_not_allowed" });
   }
-  // Token proxy POSTs are deliberately not browser-CORS enabled: permitting
-  // them would allow a compromised shell to read Google tokens.
   return withSecurityHeaders(
     new Response(null, {
       status: 204,
@@ -882,7 +846,7 @@ function metric(
       doubles: [status, 1],
     });
   } catch {
-    // Authentication must not fail because aggregate telemetry is unavailable.
+    // Intentionally empty.
   }
 }
 

@@ -1,23 +1,16 @@
-// Springboard tile payload from replica rows (#708 A). KEEP PURE; `useSpringboardTiles` owns reads.
-// Honesty: never invent content (withheld count, not 0); empty ≠ not-loaded (`springboardState` refuses first-run on unsettled/unknown).
-
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
 export type TileStatus = "loading" | "unknown" | "empty" | "content";
 
 export interface TilePhoto {
   id: string;
-  /** Thumb/pinned path. `undefined` when the asset exists but bytes are not addressable yet — still a CELL; dropping the row reflows ten photos as one blank under a "10". */
   uri?: string;
-  /** Undownscaled bytes when `uri` is a derivative (thumb lands after the record; `uri` 404s in between). Absent for a pinned thumbnail. */
   originalUri?: string;
 }
 
 export interface TileFace {
-  /** `party_id`, never display name — hue is derived from this; a rename must not repaint. */
   id: string;
   initials: string;
-  /** Stored colour wins. Blank/`""` is not a choice (seeded vault leaves `avatar_color` empty) — fall through to derivation. */
   color?: string;
 }
 
@@ -39,7 +32,6 @@ export type TileBody =
   | { kind: "agenda"; title: string; at: string; after: string }
   | { kind: "people"; faces: TileFace[]; more: number }
   | { kind: "tasks"; rows: TileTaskRow[] }
-  // `after` optional: rolling-comparison read is not built; render when supplied, else silent.
   | { kind: "tally"; figure: string; caption: string; after?: string }
   | { kind: "locker"; locked: boolean }
   | { kind: "notes"; title: string; excerpt: string };
@@ -47,9 +39,7 @@ export type TileBody =
 export interface TileData {
   appId: string;
   status: TileStatus;
-  /** `undefined` = withheld glyph, never a fabricated 0. */
   count?: number;
-  /** True when `count` hit the read ceiling (`N+`). */
   countCapped?: boolean;
   countLabel: string;
   body: TileBody;
@@ -62,7 +52,6 @@ export interface TileReadState {
   lastSyncedAt?: string;
 }
 
-/** May this app be called EMPTY. Only a LANDED pull writes `lastSyncedAt`; an empty read lacking one is the CLONE missing, not the vault (#905 N). */
 export function combineTileStatus(
   states: readonly TileReadState[],
   hasContent: boolean
@@ -92,7 +81,6 @@ function byDescending(
     text(left, idColumn).localeCompare(text(right, idColumn));
 }
 
-/** Re-sort here: replica reads merge N scopes. Unaddressable bytes still yield a CELL with no `uri` — fewer cells reflow; none draws an empty box under "10". */
 export function selectPhotoMosaic(
   rows: readonly ReplicaRow[],
   gatewayBase: string | undefined,
@@ -124,13 +112,10 @@ export function mosaicAwaitingBytes(photos: readonly TilePhoto[]): boolean {
   return photos.length > 0 && photos.every((photo) => !photo.uri);
 }
 
-/** One row, fixed count — no-reflow: only cell contents change. Mobile never draws desktop's second row. */
 export const MOSAIC_SLOTS = 4;
 
-/** Stated, never from `aspectRatio`: a % width cell can resolve to 0 height and read as a blank rectangle. */
 export const MOSAIC_CELL_HEIGHT = 88;
 
-/** `R.gap.m`, shared with `LauncherGrid` padding and `TileBody` negative margins — bleed cancels that padding exactly. */
 export const TILE_PAD = 12;
 
 export function mosaicCells(
@@ -139,7 +124,6 @@ export function mosaicCells(
   return Array.from({ length: MOSAIC_SLOTS }, (_, index) => photos[index]);
 }
 
-/** `core.content_item` bodies are `data:` URIs; anything else has no prose — return "". */
 export function decodeProse(contentUri: unknown): string {
   if (typeof contentUri !== "string" || !contentUri.startsWith("data:"))
     return "";
@@ -147,7 +131,6 @@ export function decodeProse(contentUri: unknown): string {
   if (comma < 0) return "";
   const meta = contentUri.slice(0, comma);
   const payload = contentUri.slice(comma + 1);
-  // Editors write percent-encoded; skip base64 (`atob`) — show the title instead.
   if (meta.includes(";base64")) return "";
   try {
     return decodeURIComponent(payload);
@@ -156,7 +139,6 @@ export function decodeProse(contentUri: unknown): string {
   }
 }
 
-/** Skip headings (title is already shown); strip quote/list markers from what survives. */
 export function firstProseLine(body: string, maxChars = 220): string {
   for (const raw of body.split("\n")) {
     if (raw.trimStart().startsWith("#")) continue;
@@ -183,7 +165,6 @@ export function selectNoteExcerpt(
 
 const BYTE_UNITS = ["bytes", "KB", "MB", "GB", "TB"] as const;
 
-/** One decimal above the byte rung; missing/nonsensical → "", never fabricated 0 bytes. */
 export function formatBytes(bytes: unknown): string {
   const value = Number(bytes);
   if (!Number.isFinite(value) || value < 0) return "";
@@ -197,7 +178,6 @@ export function formatBytes(bytes: unknown): string {
   return `${rounded.toLocaleString()} ${BYTE_UNITS[unit]}`;
 }
 
-/** Name + size, never a prose excerpt — Docs and Notes would otherwise look the same. */
 export function selectDocRows(
   documents: readonly ReplicaRow[],
   contents: readonly ReplicaRow[],
@@ -221,7 +201,6 @@ export interface AgendaOccurrence {
   start: string;
 }
 
-/** After-line is required: blank reads as a missing render; with nothing after, say so. */
 export function selectNextEvent(
   occurrences: readonly AgendaOccurrence[],
   now: Date,
@@ -279,7 +258,6 @@ export function selectFaces(
     }));
 }
 
-/** One initial (30px disc); unnamed still gets a circle, not a hole. */
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/u).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -292,7 +270,6 @@ export function openTasks(rows: readonly ReplicaRow[]): ReplicaRow[] {
   return rows.filter((row) => OPEN_STATUSES.has(text(row, "status")));
 }
 
-/** At most one struck row (most recent completion), appended last — else this is just a list of short strings. */
 export function selectTaskRows(
   rows: readonly ReplicaRow[],
   limit = 4

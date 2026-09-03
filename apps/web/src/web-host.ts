@@ -59,7 +59,6 @@ export function installWebHost(): void {
         pdfText: true,
         ocr: false,
         embedding: false,
-        // Web Speech cannot transcribe an existing audio/video Blob.
         transcript: false,
         edgeSeal: globalThis.crypto?.subtle !== undefined,
         backgroundTransfer: false,
@@ -98,12 +97,6 @@ export function installWebHost(): void {
         : [];
     },
     setActiveGateway: async () => settings(),
-    // Settings → This device's offline-copy switch. Pairing does not ask
-    // (it defaults ON), so the enable/disable semantics live here alone:
-    // turning it OFF drops the tunnel caches and asks the shell to purge this
-    // gateway's replica, turning it ON asks the browser for durable storage.
-    // The pairing itself is untouched — the connection stays durable either
-    // way (`web-state.ts`).
     setGatewayRememberDevice: async (input: { rememberDevice: boolean }) => {
       const next = saveConnection({
         rememberDevice: input.rememberDevice === true,
@@ -168,8 +161,6 @@ export function installWebHost(): void {
         endpointId: undefined,
         rememberDevice: false,
       });
-      // The tunnel caches may hold this gateway/vault's assets and blobs; drop
-      // them so a later pairing to a different vault can't serve stale bytes.
       purgeTunnelCaches();
       purgeIrohDeviceState();
       publish(GATEWAY_EVENT, {
@@ -229,9 +220,6 @@ export function installWebHost(): void {
           rememberDevice: input.rememberDevice ?? false,
         });
         if (!response.ok || !response.vaultId || !response.gatewayId) {
-          // A REFUSAL is not an outage: the gateway answered. Surfacing its
-          // code keeps "that ticket was already used" from reading as
-          // "your gateway is down" (scenario B5).
           const refusal = response.error ?? "";
           return {
             ok: false as const,
@@ -242,12 +230,10 @@ export function installWebHost(): void {
             message: refusal || "Gateway rejected the pairing ticket.",
           };
         }
-        // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
         const next = saveConnection({
           endpointTicket: decoded.gw,
           endpointId: response.gatewayId,
           vaultId: response.vaultId,
-          // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
           vaultIds: [
             response.vaultId,
             ...(response.vaultIds ?? []),
@@ -261,7 +247,6 @@ export function installWebHost(): void {
           label: response.gatewayName ?? "Web gateway",
           rememberDevice: input.rememberDevice ?? false,
         });
-        // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
         const vaults = response.vaults ?? [
           {
             vaultId: response.vaultId,
@@ -294,7 +279,6 @@ export function installWebHost(): void {
           gatewayId: response.gatewayId,
           vaultId: response.vaultId,
           vaultName: response.vaultName ?? decoded.vaultName ?? "Vault",
-          // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
           vaultIds: next.vaultIds ?? [response.vaultId],
           vaults,
         };
@@ -430,9 +414,6 @@ export function installWebHost(): void {
     onGatewayRuntime: (
       callback: (snapshot: CentraidGatewayRuntime) => void
     ) => {
-      // Each poll is a full tunnel round trip. Consumers (status pill, Gateway
-      // page) only need up/down, so pause polling while the tab is hidden and
-      // refresh immediately on return. Nothing depends on sub-15s freshness.
       const poll = async (): Promise<void> => callback(await healthSnapshot());
       let timer: number | undefined;
       const stop = (): void => {
@@ -488,9 +469,6 @@ export function installWebHost(): void {
       ok: false as const,
       error: "Use the gateway CLI to export the recovery kit.",
     }),
-    // No `createVault`: the browser is not any gateway's landlord. Callers
-    // gate on `typeof window.CentraidApi.createVault === 'function'` and hide
-    // the affordance rather than offering a button that always fails.
     deleteVault: async () => {
       throw new Error("Delete vaults on the gateway host.");
     },

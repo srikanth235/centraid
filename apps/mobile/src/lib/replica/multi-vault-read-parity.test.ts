@@ -1,15 +1,3 @@
-/*
- * GOLDEN PARITY FOR THE MOUNTED READ, across SEVERAL vaults (#883). The
- * composed plan moves the cross-vault merge into SQLite's own collation, so
- * what is shown is that the MERGE did not change: same rows, same order, over
- * three vaults with colliding order keys, nulls in the ordered column, a
- * read-only source and a pending offline write.
- *
- * THE ORACLE IS THE REAL ENGINE, never a transcription: the expectation comes
- * from `evaluateReplicaRead` over per-vault rows composed, badged and deduped
- * exactly as the reader hands them. The six ruled divergences are asserted in
- * the client suite, not here.
- */
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -51,14 +39,12 @@ const SCHEMA: ReplicaEntitySchema = {
   columns: COLUMNS,
 };
 
-/** Two writable, one shared read-only. */
 const VAULTS = [
   { vaultId: "personal", label: "Personal", canWrite: true },
   { vaultId: "family", label: "Family", canWrite: true },
   { vaultId: "school", label: "School", canWrite: false },
 ] as const;
 
-/** UTF-8 bytes ordering differently from UTF-16 units: BINARY, not `localeCompare`. */
 const TITLES = ["Doc", "Éclair", "école", "日記", "Zebra", "𝟙 unit"];
 
 interface DocumentSeed {
@@ -69,12 +55,10 @@ interface DocumentSeed {
   archived_at: string | null;
 }
 
-/** Deliberately COLLIDING, so the primary-key tie-break has to decide. */
 function seeds(vaultId: string, count: number): DocumentSeed[] {
   return Array.from({ length: count }, (_unused, index) => ({
     document_id: `${vaultId}-${String(index).padStart(3, "0")}`,
     title: TITLES[index % TITLES.length]!,
-    // Nulls land where the evaluator sorts absent values first ASC.
     size: index % 4 === 0 ? null : index % 6,
     created_at: `2026-01-0${(index % 9) + 1}T0${index % 8}:00:00.000Z`,
     archived_at: index % 5 === 0 ? "2026-02-01T00:00:00.000Z" : null,
@@ -114,7 +98,6 @@ function seedVault(file: string, vaultId: string, rows: DocumentSeed[]): void {
   database.close();
 }
 
-/** One durable offline write, so the overlay is covered too. */
 async function queueOfflineRename(
   file: string,
   vaultId: string,
@@ -148,7 +131,6 @@ async function queueOfflineRename(
   await session.close();
 }
 
-/** The oracle: per-vault rows in `row_id` order, composed, badged, deduped. */
 function oracle(
   scopes: readonly MountedReplicaScope[],
   request: NativeReadRequest
@@ -234,7 +216,6 @@ async function household(): Promise<{
       seeds(scope.vaultId, depths[index]!)
     )
   );
-  // A queued rename sits inside the ordered set: the new title re-sorts its row.
   await queueOfflineRename(
     scopes[0]!.databaseName,
     "personal",
@@ -253,7 +234,6 @@ async function household(): Promise<{
   };
 }
 
-/** Every shape both engines answer, over the same three vaults. */
 const REQUESTS: Array<{ name: string; request: NativeReadRequest }> = [
   { name: "unfiltered page", request: { entity: ENTITY, limit: 10 } },
   { name: "unfiltered whole", request: { entity: ENTITY } },
@@ -373,7 +353,6 @@ describe("[golden] the composed mounted plan answers what the evaluator answered
     const reader = mount();
     try {
       for (const entry of REQUESTS) {
-        // Sequential on purpose: each case meets its own oracle run.
         // oxlint-disable-next-line no-await-in-loop
         const answered = await reader.read(APP_ID, entry.request);
         expect({
@@ -384,22 +363,17 @@ describe("[golden] the composed mounted plan answers what the evaluator answered
           rows: shapeOf(oracle(scopes, entry.request)),
         });
       }
-      // The fixture has to be big enough for a limit to actually cut.
       expect(oracle(scopes, { entity: ENTITY })).toHaveLength(58);
     } finally {
       reader.close();
     }
   });
 
-  // DEMONSTRATED RED: the two ways a cross-vault merge breaks — a source left
-  // out of the union, and a comparator that orders it the wrong way.
   test("SABOTAGE: dropping a vault from the merge, or flipping its order, fails parity", async () => {
     const { scopes, mount } = await household();
     const whole = mount();
     const sabotaged = mount(["personal", "family"]);
     try {
-      // `size` descending puts rows from all three vaults inside one page, so
-      // a vault missing from the union has to change the answer.
       const request: NativeReadRequest = {
         entity: ENTITY,
         orderBy: { column: "size", dir: "desc" },
@@ -410,7 +384,6 @@ describe("[golden] the composed mounted plan answers what the evaluator answered
         expected
       );
 
-      // One scope dropped: every assertion above would fail on it.
       const missing = shapeOf((await sabotaged.read(APP_ID, request)).rows);
       expect(missing).toHaveLength(9);
       expect(missing).not.toStrictEqual(expected);
@@ -419,7 +392,6 @@ describe("[golden] the composed mounted plan answers what the evaluator answered
         "the dropped vault must actually reach the page, or dropping it proves nothing"
       ).toBe(true);
 
-      // Comparator flipped: the merge key decides the page.
       const flipped = shapeOf(
         (
           await whole.read(APP_ID, {

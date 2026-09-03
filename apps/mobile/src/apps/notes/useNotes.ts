@@ -20,9 +20,6 @@ export function useNotes() {
     "notes",
     useMemo(() => ({ entity: "knowledge.note" }), [])
   );
-  // Bound the content_item read to the note body ids. An unbounded read is
-  // capped at 1000 rows server-side, so at photo-scale vaults most note bodies
-  // fall outside the window and render blank.
   const bodyIds = useMemo(() => {
     const ids = new Set<string>();
     for (const row of notes.rows) {
@@ -58,10 +55,6 @@ export function useNotes() {
     "notes",
     useMemo(() => ({ entity: "core.link_anchor" }), [])
   );
-  // The People-journal marker, resolved on this seat exactly as the web
-  // queries resolve it: the scheme by URI, its `entry` concept, then the note
-  // ids that concept tags. Journal is a PLACE and never an interleave, so the
-  // library below is filtered by this set rather than merged with it.
   const schemes = useReplicaQuery(
     "notes",
     useMemo(() => ({ entity: "core.concept_scheme" }), [])
@@ -91,7 +84,6 @@ export function useNotes() {
       )
     );
   }, [concepts.rows, schemes.rows, tags.rows]);
-  // Notebooks are collections (#274); the spine must name every one of them.
   const collections = useReplicaQuery(
     "notes",
     useMemo(() => ({ entity: "core.collection" }), [])
@@ -110,8 +102,6 @@ export function useNotes() {
     () => buildNotes(notes.rows, contents.rows, links.rows, anchors.rows),
     [anchors.rows, contents.rows, links.rows, notes.rows]
   );
-  // COUNTS PROMISE ONLY WHAT A PLACE CAN OPEN: a journal entry (R-journal) and
-  // a trashed note count into no notebook and no tag.
   const visible = useMemo(
     () =>
       new Set(

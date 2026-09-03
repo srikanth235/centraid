@@ -10,7 +10,6 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
-  // Repo root per #535.
   reporter: process.env.CI
     ? [
         ["list"],
@@ -26,7 +25,6 @@ export default defineConfig({
       ]
     : "list",
   timeout: 60_000,
-  // Backstop: job cancel kills the reporter mid-flush (run 29694615676).
   globalTimeout: process.env.CI ? 22 * 60_000 : undefined,
   expect: { timeout: 5_000 },
   use: {

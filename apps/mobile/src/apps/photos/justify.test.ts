@@ -21,7 +21,6 @@ function asset(id: string, width: number, height: number): PhotoAsset {
   };
 }
 
-// A realistic mixture: landscape, portrait, square, panorama.
 const shapes: readonly [number, number][] = [
   [4032, 3024],
   [3024, 4032],
@@ -40,8 +39,6 @@ const library = (count: number): PhotoAsset[] =>
 describe("justified packing (handoff §4.1)", () => {
   test("full rows fill the content width exactly, edge to edge", () => {
     const rows = justify(library(60), 390, 120);
-    // The trailing partial row is allowed to fall short; every row before it
-    // must land on the container width to the pixel.
     for (const row of rows.slice(0, -1)) {
       const used =
         row.reduce((total, tile) => total + tile.width, 0) +
@@ -55,8 +52,6 @@ describe("justified packing (handoff §4.1)", () => {
     for (const row of rows.slice(0, -1)) {
       for (const tile of row) {
         const packed = tile.width / tile.height;
-        // Only the last tile in a row absorbs the rounding remainder, so allow
-        // a pixel of slack rather than demanding exact float equality.
         expect(Math.abs(packed - aspectRatio(tile.asset))).toBeLessThan(0.06);
       }
     }
@@ -71,9 +66,6 @@ describe("justified packing (handoff §4.1)", () => {
   });
 
   test("rows land around the target height rather than on it", () => {
-    // A row that closes on a panorama is legitimately shorter than the target
-    // — the target is what the packer aims at, not a height it enforces. What
-    // must hold is that the aim lands: the mean row height tracks the rung.
     const rows = justify(library(60), 390, 120).slice(0, -1);
     const mean =
       rows.reduce((total, row) => total + row[0]!.height, 0) / rows.length;
@@ -85,8 +77,6 @@ describe("justified packing (handoff §4.1)", () => {
     const list = library(60);
     const small = justify(list, 390, 64);
     const large = justify(list, 390, 168);
-    // Fewer tiles per row means MORE rows for the same library — that is what
-    // "bigger tiles" means on a fixed-width surface.
     expect(large.length).toBeGreaterThan(small.length);
     expect(large[0]!.length).toBeLessThan(small[0]!.length);
     expect(large[0]![0]!.height).toBeGreaterThan(small[0]![0]!.height);
@@ -112,8 +102,6 @@ describe("justified packing (handoff §4.1)", () => {
   });
 
   test("packing 50k assets stays inside the cold-grid budget", () => {
-    // The house scale test (`timeline-50k.test.ts`) covers grouping and
-    // merging; packing is now on the same hot path and must not regress it.
     const list = library(50_000);
     const started = process.cpuUsage();
     const rows = justify(list, 390, 120);

@@ -1,11 +1,3 @@
-/**
- * The Data place's copy, as a function of what the gateway sent (#765).
- *
- * Behaviour under test is the honesty rule, not the formatting: a clause the
- * payload cannot support must not appear (no size when the census only
- * estimated, no "newest first" when the page was not ordered by a write time,
- * no fabricated record title), and a clause it does support must.
- */
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -110,7 +102,6 @@ describe(censusKinds, () => {
   });
 
   it("puts the engine's own bookkeeping after what apps wrote", () => {
-    // `audit` has ten times the rows of `documents` and still sorts last.
     expect(censusKinds(census()).map((row) => row.logical)).toStrictEqual([
       "documents",
       "people",

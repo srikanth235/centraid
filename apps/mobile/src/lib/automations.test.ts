@@ -10,15 +10,10 @@ import {
 } from "./automations";
 
 const { fetchJson } = vi.hoisted(() => ({
-  // `fetchJson` is generic (`<T>(href, init?) => Promise<T>`); a typed mock erases
-  // the type parameter, so `Mock<...>` stops being assignable to the export.
   fetchJson: vi.fn<(href: string, init?: RequestInit) => Promise<unknown>>(),
 }));
 
 vi.mock(import("./gateway") as Promise<unknown>, () => ({
-  // Mirrors the real `apiHeaders()`: bearer + the active Vault's vault. Every
-  // automation call must carry BOTH, or a deep link from a Notifications notice runs
-  // in whichever vault the gateway happens to consider default (#647 review).
   apiHeaders: (extra?: Record<string, string>) => ({
     authorization: "Bearer paired",
     "x-centraid-vault": "vault-active",
@@ -128,9 +123,6 @@ describe("automations", () => {
     );
   });
 
-  // Regression for the #647 review: a failure notice raised in one Vault used
-  // to deep-link into another vault's thread, and "Run now" fired there,
-  // because those two calls sent only the bearer.
   test("every automation call is scoped to the active vault", async () => {
     const calls: Array<[string, Record<string, string>]> = [];
     fetchJson.mockImplementation(async (href, init) => {

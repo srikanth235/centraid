@@ -3,7 +3,6 @@ import { AccessibilityInfo } from "react-native";
 
 export { motionDuration } from "./reduced-motion";
 
-/** Native counterpart to prefers-reduced-motion for every animated surface. */
 export function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
 

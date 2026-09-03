@@ -1,29 +1,6 @@
-// THE SCANNER'S TALLY DESTINATION — the origin seat's half of Receipt.
-//
-// SURFACES.md gives Receipt to `origin (read on others)`: the camera and the
-// OCR pass live on this phone and nowhere else, so this is where a photographed
-// bill becomes a receipt-backed expense. What Tally then owns is the
-// ALLOCATION — who had what — and that is `apps/tally/receipt-model.ts`, shared
-// by every seat.
-//
-// THE PAYLOAD IS BUILT HERE, NOT IN THE SCREEN, for the same reason
-// `scan-consent.ts`, `scan-ui.tsx` and `scan-locker.ts` sit beside `Scan.tsx`:
-// the screen is a FLOW, and each destination's payload is a table. The frame
-// may not import an app (`scripts/check-import-boundaries.ts`), so the shares
-// are folded from the per-line allocations here, out of the client's own
-// `allocateMinorUnits` — the same tie-break `line-model.ts` applies, so a
-// receipt cut on the phone and one cut in Tally agree to the penny.
-//
-// THIS WRITE IS NOT ONLINE-ONLY. Unlike a scanned card, a receipt carries no
-// secret: Tally is record-only and fully offline-capable, so the expense takes
-// the ordinary replica path, projects optimistically and queues when the
-// gateway is out of reach. The one Tally write with no optimistic copy is
-// materialising a recurring occurrence, and it is nowhere near this flow.
-
 import { allocateMinorUnits } from "@centraid/client/receipt-capture";
 import type { ReceiptDraft } from "@centraid/client/receipt-capture";
 
-/** One reviewed line, with the people the member pressed onto it. */
 export interface ScannedLine {
   kind: "item" | "tax" | "tip";
   description: string;
@@ -31,9 +8,6 @@ export interface ScannedLine {
   allocations: { party_id: string; share_minor: number }[];
 }
 
-/** A line nobody was pressed onto falls back to everyone in the group, which
- *  is what the capture flow's chips start from — never to nobody, because a
- *  line allocated to nobody would make the reconciliation lie. */
 export function scannedLines(
   receipt: ReceiptDraft,
   allocations: Readonly<Record<string, readonly string[]>>,
@@ -52,9 +26,6 @@ export function scannedLines(
   });
 }
 
-/** Per-person shares, folded from the line allocations. The lines are the
- *  facts; the splits are their sum, and the command re-validates that they
- *  come to the expense. */
 export function scannedSplits(
   lines: readonly ScannedLine[]
 ): { party_id: string; share_minor: number }[] {
@@ -71,9 +42,6 @@ export function scannedSplits(
   }));
 }
 
-/** The default category a scanned receipt lands under. Nine, closed — and a
- *  bill photographed at a table is food until the member edits it, which the
- *  expense's own Edit route is for. */
 export const SCANNED_RECEIPT_CATEGORY = "food";
 
 export interface ScannedReceiptInput {
@@ -88,7 +56,6 @@ export interface ScannedReceiptInput {
   line_items: ScannedLine[];
 }
 
-/** Everything `add-receipt-expense` declares, out of one reviewed capture. */
 export function scannedReceiptExpense(input: {
   receipt: ReceiptDraft;
   allocations: Readonly<Record<string, readonly string[]>>;

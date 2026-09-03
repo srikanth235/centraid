@@ -1,5 +1,3 @@
-// Thin Electron shell over gateway-outage-log-core.ts's pure logic.
-
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -32,10 +30,6 @@ export function loadOutageLog(): OutageLogEvent[] {
   }
 }
 
-/**
- * Append, cap, persist atomically (temp + rename); no-op when empty.
- * Drops legacy `projection-mark` lines (#665) — never write one.
- */
 export function persistOutageEvents(
   existing: readonly OutageLogEvent[],
   events: OutageLogEvent[]

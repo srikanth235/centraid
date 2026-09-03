@@ -10,11 +10,6 @@ function roleField(value: unknown): CompanionVault["role"] {
     : undefined;
 }
 
-/**
- * Fold a pairing response into ordered, device-local vault bindings.
- * Authorization has already happened on the gateway; this only normalizes
- * response metadata and keeps the primary vault first.
- */
 export function normalizePairingVaults(
   response: Record<string, unknown>
 ): CompanionVault[] {
@@ -40,7 +35,6 @@ export function normalizePairingVaults(
   }
   const rawIds = response["vaultIds"];
   const ids = [
-    // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
     stringField(response["vaultId"]),
     ...(Array.isArray(rawIds) ? rawIds.map(stringField) : []),
     ...metadata.keys(),

@@ -1,8 +1,3 @@
-// What Docs may read (#821, spec §12), asserted against the rendered tree:
-// four capabilities, four separate consents, ALL off, the switch withheld
-// with the withholding said out loud, and the status sentence built from the
-// real on-count (zero on this wave — there is no consent record to read).
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -27,8 +22,6 @@ vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");
 });
-// The shell and the head need a navigation tree; this test is about the
-// screen's own honesty, so both collapse to their content.
 vi.mock(import("./DocsScreen"), () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -82,3 +75,4 @@ describe(DocsCapabilities, () => {
     );
   });
 });
+// @vitest-environment jsdom

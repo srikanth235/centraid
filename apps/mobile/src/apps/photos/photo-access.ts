@@ -1,6 +1,3 @@
-// PERMISSION IS A SURFACE, NOT AN ERROR (§13); LIMITED makes this a state
-// machine, not a boolean. Never pretend to have looked (§14). No RN imports.
-
 export type PhotoAccessState =
   | "granted"
   | "limited"
@@ -9,7 +6,6 @@ export type PhotoAccessState =
 
 export interface PhotoAccessPermission {
   status: "granted" | "denied" | "undetermined";
-  /** iOS 14+ only. */
   accessPrivileges?: "all" | "limited" | "none";
   canAskAgain: boolean;
 }
@@ -17,16 +13,11 @@ export interface PhotoAccessPermission {
 export function photoAccessState(
   permission: PhotoAccessPermission
 ): PhotoAccessState {
-  // BEFORE `status`: limited reports granted on iOS.
   if (permission.accessPrivileges === "limited") return "limited";
   if (permission.status === "granted") return "granted";
   return permission.status === "denied" ? "denied" : "undetermined";
 }
 
-/**
- * Permission content REPLACES the grid (#712) only when nothing readable hides
- * behind it (replica photos need no OS grant); re-asking then means Settings.
- */
 export function photoAccessTakesOverTimeline({
   state,
   deviceReadableCount,
@@ -34,9 +25,7 @@ export function photoAccessTakesOverTimeline({
   loading,
 }: {
   state: PhotoAccessState | null;
-  /** Photographs Photos reads off THIS device right now. */
   deviceReadableCount: number;
-  /** Already here via replica — no OS grant involved. */
   vaultReadableCount?: number;
   loading: boolean;
 }): boolean {
@@ -54,10 +43,7 @@ export interface PhotoAccessRow {
   net?: true;
 }
 
-/** NO "choose more" action: the Next API (#573) only throws it; Settings instead. */
-export type PhotoAccessAction =
-  /** Only while the OS will still prompt. */
-  "ask" | "settings";
+export type PhotoAccessAction = "ask" | "settings";
 
 export interface PhotoAccessControl {
   action: PhotoAccessAction;
@@ -67,9 +53,7 @@ export interface PhotoAccessControl {
 export interface PhotoAccessCopy {
   headline: string;
   lede: string;
-  /** The one filled control (§18); null when nothing to ask. */
   primary: PhotoAccessControl | null;
-  /** Plain, never filled. */
   secondary: PhotoAccessControl | null;
   rows: PhotoAccessRow[];
 }
@@ -92,7 +76,6 @@ const OPEN_SETTINGS: PhotoAccessControl = {
   label: "Open Settings",
 };
 
-/** Null blanks the meta rather than an unfinished zero. */
 export function photoAccessCopy(
   state: PhotoAccessState,
   {
@@ -150,7 +133,6 @@ export function photoAccessCopy(
     return {
       headline: "Photos cannot reach your camera roll",
       lede: "The grant that let Photos read the photographs on this device has been refused. Nothing has been lost: the photographs are still here, and the app goes dark rather than showing you a stale copy.",
-      // Once the OS stops asking, "Allow access" cannot fire.
       primary: canAskAgain
         ? { action: "ask", label: "Allow access" }
         : OPEN_SETTINGS,

@@ -1,9 +1,3 @@
-// The Notifications place's data half (#765): read (`getNotifications(true)`),
-// SSE doorbell, poll, push permission, replica wake, and all five writes —
-// all load-bearing. Standing grants ride here too (`/centraid/_vault/
-// outbox-grants`, #308): a gateway without them leaves the section absent
-// rather than failing the page — the queue is what the page is FOR.
-
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -33,19 +27,16 @@ import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { NOT_PAIRED, opsStateFor, waitingTotal } from "./approvals-model";
 import type { OutboxGrant } from "./approvals-model";
 
-/** How often the page re-reads while it is open, between doorbells. */
 const POLL_MS = 60_000;
 
 export type ApprovalsLoad =
   | { kind: "loading" }
-  /** `at` anchors every relative phrase — never a render-time clock read. */
   | {
       at: number;
       kind: "ready";
       data: MobileNotifications;
       grants: OutboxGrant[];
     }
-  /** `reason` is the error panel's one fact; its body never changes. */
   | { kind: "error"; reason: string; unpaired: boolean };
 
 export interface ApprovalsController {
@@ -56,13 +47,10 @@ export interface ApprovalsController {
   now: number;
   waiting: number;
   refreshing: boolean;
-  /** Id of the decision mid-flight; its verb is withdrawn. */
   busyId: string | undefined;
   actionError: string | undefined;
   refresh: () => Promise<void>;
   retry: () => void;
-  /** Run one write, then re-read. Never patches a row in place: what is
-   *  waiting is the gateway's to report. */
   act: (id: string, write: () => Promise<void>) => void;
   approveOutbox: (
     itemId: string,
@@ -84,7 +72,6 @@ function describe(error: unknown): string {
     : "The gateway did not answer.";
 }
 
-/** Standing grants, or none — never an exception that takes the queue down. */
 async function readGrants(): Promise<OutboxGrant[]> {
   try {
     const base = await requireGatewayBase();
@@ -104,7 +91,6 @@ async function read(apply: (next: ApprovalsLoad) => void): Promise<void> {
       apply({ kind: "error", reason: NOT_PAIRED, unpaired: true });
       return;
     }
-    // Archived notices ride the same read; their section needs no second fetch.
     const data = await getNotifications(true);
     apply({ at: Date.now(), data, grants: await readGrants(), kind: "ready" });
   } catch (error) {
@@ -112,9 +98,6 @@ async function read(apply: (next: ApprovalsLoad) => void): Promise<void> {
   }
 }
 
-/** In-app reconnection: the host app must stay active so the phone-local
- *  tunnel serves the gateway's OAuth callback and the Assist return resolves
- *  into THIS process. See `lib/connection-reauth.ts`. */
 async function reauthorize(connectionId: string): Promise<void> {
   const authUrl = await beginNotificationsConnectionAuthorization(connectionId);
   const outcome = classifyAuthSession(
@@ -124,7 +107,6 @@ async function reauthorize(connectionId: string): Promise<void> {
   if (failure) throw new Error(failure);
   if (outcome.kind === "assist-handoff")
     await completeNotificationsConnectionAuthorization(outcome.handoff);
-  // `closed` needs nothing: BYO finishes at the gateway; caller re-reads.
 }
 
 async function revoke(grantId: string): Promise<void> {
@@ -140,8 +122,6 @@ export function useApprovals(): ApprovalsController {
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string | undefined>();
   const [actionError, setActionError] = useState<string | undefined>();
-  // A ref, not state: the guard must hold WITHIN a tick — two taps before a
-  // re-render would otherwise stage two decisions about one item.
   const inFlight = useRef(false);
 
   useEffect(() => {
@@ -225,7 +205,6 @@ export function useApprovals(): ApprovalsController {
       act(itemId, () => decideNotificationsOutbox(itemId, "discard")),
     grants: load.kind === "ready" ? load.grants : [],
     load,
-    // Nothing not `ready` shows a time; epoch keeps clocks out of render.
     now: load.kind === "ready" ? load.at : 0,
     readNotice: (noticeId) =>
       act(noticeId, () => updateMobileNotice(noticeId, "read")),

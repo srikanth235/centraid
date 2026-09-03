@@ -1,16 +1,8 @@
-// Pins the More sheet's anatomy (#711, #712): exactly the one row
-// `PHOTOS_MORE_ROWS` names (shelf Collections are sections of Collections, so
-// a row here would be a second hidden door — a stray reintroduction is caught
-// here and in `photos-more-router.test.ts`); Backup carries no meta; tapping a
-// row calls `onSelect` with that row's OWN key; the foot line is exact spec
-// copy with no "More" eyebrow. Tile size is NOT covered here: it lives in
-// `photos-library-menu.test.ts` / `PhotosMoreSheet.tsx`'s header.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// @vitest-environment jsdom
 import type { PhotosMoreRowKey } from "./photos-band";
 import PhotosMoreSheet from "./PhotosMoreSheet";
 
@@ -149,7 +141,6 @@ describe("the More sheet's rows, meta and foot", () => {
     renderSheet();
     const labels = Array.from(container!.querySelectorAll("button"))
       .map((button) => button.getAttribute("aria-label") ?? "")
-      // Close is a CONTROL, not a destination.
       .filter((label) => label !== "Close");
     expect(labels).toStrictEqual(["Backup"]);
     for (const shelf of [
@@ -165,8 +156,6 @@ describe("the More sheet's rows, meta and foot", () => {
   });
 
   it("omits Backup's meta rather than inventing a number", () => {
-    // The row is labelled "Backup" now (#712) and its meta is still absent:
-    // a placeholder number is the lie the whole meta map exists to avoid.
     renderSheet();
     expect(rowButton("Backup").getAttribute("aria-label")).toBe("Backup");
   });
@@ -191,14 +180,12 @@ describe("the More sheet's rows, meta and foot", () => {
     const closeButtons = Array.from(
       container!.querySelectorAll("button")
     ).filter((button) => button.getAttribute("aria-label") === "Close");
-    // The sheet has no grabber, so a real ✕ control must exist.
     expect(closeButtons.length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders the exact spec foot copy, and no invented eyebrow", () => {
     renderSheet();
     expect(container!.textContent).toContain("Everything Photos can show.");
-    // Also guards against a bare "More" eyebrow creeping back in.
     expect(
       Array.from(container!.querySelectorAll("span")).some(
         (span) => span.textContent === "More"
@@ -217,3 +204,4 @@ describe("the More sheet's rows, meta and foot", () => {
     ).toBeNull();
   });
 });
+// @vitest-environment jsdom

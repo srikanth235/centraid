@@ -1,6 +1,3 @@
-// The frame every Notes surface sits in, so no screen forgets the band, the
-// capsule, or reserving the band's height.
-
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,7 +23,6 @@ export default function NotesScreen({
 }: NotesScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  // Per app: a handback on one Notes surface is a handback on all of them.
   const { bandOwner } = useBandOwner("notes");
 
   return (

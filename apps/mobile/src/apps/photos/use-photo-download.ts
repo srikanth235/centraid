@@ -1,6 +1,3 @@
-// TWO-TAP ON A METERED CONNECTION: consent is remembered for exactly the
-// selection that produced it — four photographs is not four hundred (#883).
-
 import { useRef, useState } from "react";
 
 import type { SelectionHandler } from "@centraid/blueprints/apps/_shared/selection-engine";
@@ -21,7 +18,6 @@ const OFFLINE_REASON =
 const RUNNING_STATUS = "Downloading originals…";
 
 export interface SelectionDownloadInput {
-  /** Evaluated on press, so a stale selection never downloads the wrong set. */
   targets: () => readonly VaultAsset[];
   online: boolean;
 }
@@ -39,7 +35,6 @@ export function useSelectionDownload({
       postStatus(NOTHING_TO_DOWNLOAD_REASON);
       return;
     }
-    // NUL-joined so two selections cannot collapse into one signature.
     const signature = candidates
       .map((asset) => asset.contentId)
       .sort()

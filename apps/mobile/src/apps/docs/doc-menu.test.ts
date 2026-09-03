@@ -1,5 +1,3 @@
-// The quick-actions menu's composition (#821): which verbs a row
-// offers is a fact about the document, asserted here as plain data.
 import { describe, expect, it, vi } from "vitest";
 
 import type {
@@ -51,8 +49,6 @@ describe(buildDocMenu, () => {
       folders,
       handlers()
     );
-    // The order and wording `blueprints/apps/docs/popovers.ts` gives the same
-    // menu on the web — this seat used to invent shorter labels of its own.
     expect(labels(groups)).toStrictEqual([
       ["Open", "Download"],
       ["Rename", "Move to…", "Star", "Version history", "Details"],
@@ -115,8 +111,6 @@ describe("the Share verb", () => {
       folders,
       on
     );
-    // Grouped by consequence: the one verb that reaches another person stands
-    // above the rule, alone.
     expect(labels(groups)).toStrictEqual([
       ["Share"],
       ["Open", "Download"],
@@ -168,8 +162,6 @@ describe("a read-only source's row", () => {
       handlers()
     );
     expect(labels(groups)[0]).toStrictEqual(["Open", "Download"]);
-    // The two reads now sit in the acts group, after the verbs; they still
-    // carry no refusal, which is the claim this test actually owns.
     const acts = (groups[1]?.rows ?? []) as MenuActionRow[];
     const reads = [
       ...(groups[0]?.rows ?? []),

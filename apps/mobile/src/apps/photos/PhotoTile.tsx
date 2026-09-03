@@ -1,13 +1,3 @@
-// One tile in the justified timeline (Photos v4 handoff §4.4, §14).
-//
-// A content-led surface with no chrome, its own aspect ratio, and four overlay
-// slots — selection, vault, kind, state. Nothing else goes on a tile.
-//
-// The tile knows its shape and its colour BEFORE its bytes arrive: the box
-// comes from the asset record's width/height, and the ground is `--skel` until
-// the photograph decodes. That is why nothing reflows when bytes land, and why
-// a terminal failure keeps its geometry instead of vanishing.
-
 import { Image } from "expo-image";
 import React, { memo, useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -34,7 +24,6 @@ import {
 import type { VaultFacts } from "./tile-overlays";
 import type { PhotoAsset } from "./timeline-model";
 
-/** The vault rule's thickness (§4.4): a 2px rule on the LEADING edge. */
 const VAULT_RULE = 2;
 
 export interface PhotoTileProps {
@@ -45,7 +34,6 @@ export interface PhotoTileProps {
   selected: boolean;
   selecting: boolean;
   vaults: ReadonlyMap<string, VaultFacts>;
-  /** A positional handle from `kit/test-ids`, on the leading tiles only. */
   testID?: string;
   onOpen: (asset: PhotoAsset) => void;
   onSelect: (asset: PhotoAsset) => void;
@@ -65,9 +53,6 @@ function PhotoTileImpl({
 }: PhotoTileProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  // A missing DERIVATIVE is not a missing PHOTOGRAPH: the tile asks for
-  // `?variant=thumb`, falls back to the original once, and only then is the
-  // failure terminal (`use-image-fallback.ts` carries the full reasoning).
   const media = useImageFallback(asset.uri, asset.originalUri, asset.id);
   const { failed, decoded } = media;
 
@@ -83,9 +68,6 @@ function PhotoTileImpl({
 
   return (
     <Pressable
-      // The custody mark is a glyph, and the icon contract makes every glyph
-      // decorative (DESIGN.md:449) — so its meaning has to reach a screen
-      // reader through the control that owns it, not through the mark.
       accessibilityLabel={
         state?.form === "custody" ? `${name}, ${CUSTODY_LABEL}` : name
       }
@@ -93,7 +75,6 @@ function PhotoTileImpl({
       accessibilityState={{ selected }}
       onPress={() => (selecting ? onSelect(asset) : onOpen(asset))}
       testID={testID}
-      // The box is fixed from the record. Every state below paints INSIDE it.
       style={{ height, width }}
     >
       <View
@@ -102,7 +83,6 @@ function PhotoTileImpl({
           {
             backgroundColor: tileGround(decoded, colors.skel, colors.bgSunken),
           },
-          // A terminal failure takes a 1px --net border on the tile.
           state?.form === "line" &&
             state.tone === "net" && {
               borderColor: colors.net,
@@ -233,11 +213,6 @@ export default PhotoTile;
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // `insetInlineStart` / `insetInlineEnd`, NEVER `start` / `end`, in every
-    // positioned style below. React Native still TYPES the legacy pair, so the
-    // old spelling type-checked and lint-passed while contributing no
-    // horizontal constraint at all — these overlays sized to their content and
-    // drifted off the tile. `scripts/lint-logical-insets.mjs` is the gate.
     dot: {
       alignItems: "center",
       borderRadius: SELECTION_DOT,
@@ -256,8 +231,6 @@ const makeStyles = (colors: ThemeColors) =>
       bottom: 4,
       insetInlineEnd: 5,
       position: "absolute",
-      // The stage's own ink over an unpredictable photograph needs a carrier;
-      // a text shadow is the one that costs no layout and no container.
       textShadowColor: colors.stage,
       textShadowRadius: 3,
     },
@@ -280,8 +253,6 @@ const makeStyles = (colors: ThemeColors) =>
       position: "absolute",
     },
     state: {
-      // proto:4019 — `inset-inline:4px; bottom:4px; padding:1px 3px;
-      // border-radius:2px`. A chip on the photograph, not a bar across it.
       borderRadius: radii.sm,
       bottom: 4,
       insetInlineEnd: 4,

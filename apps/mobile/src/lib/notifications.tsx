@@ -73,8 +73,6 @@ async function handleNotificationResponse(
         });
       return;
     }
-    // A birthday is ABOUT a person, so the tap lands on that person. The
-    // calendar holds no row for it and never will (#834).
     if (plan.kind === "open-person") {
       if (rootNavigationRef.isReady())
         rootNavigationRef.navigate("People", {
@@ -84,10 +82,6 @@ async function handleNotificationResponse(
       return;
     }
     if (plan.kind === "open-home") {
-      // `StackActions.popTo`, not `navigate`: the notification can arrive with
-      // an app cover open, and React Navigation 7's `navigate` would push a
-      // SECOND Home above that cover — which UIKit then presents as an inset
-      // card sheet rather than returning the member to the springboard.
       if (rootNavigationRef.isReady())
         rootNavigationRef.dispatch(StackActions.popTo("Home"));
       return;
@@ -99,8 +93,6 @@ async function handleNotificationResponse(
     }
     if (plan.kind === "open-app") {
       if (!rootNavigationRef.isReady()) return;
-      // Tally is a STACK now, so its cover is addressed by screen. Literal
-      // names per branch: navigate's tuple overloads need one.
       if (plan.appId === "tasks") rootNavigationRef.navigate("Tasks");
       else rootNavigationRef.navigate("Tally", { screen: "TallyHome" });
     }

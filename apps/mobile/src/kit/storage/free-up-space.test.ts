@@ -1,8 +1,3 @@
-// The eligibility predicate, the delete-time revalidation, and the rollup-fed
-// OFFER (#712). The fixture is built from the structural `FreeUpAsset` this
-// module declares, not from Photos' `PhotoAsset`, because `kit/` may not
-// import an app — and the shape is exactly what an app has to satisfy to take
-// part.
 import { describe, expect, test } from "vitest";
 
 import {
@@ -124,9 +119,6 @@ describe("free-up-space eligibility", () => {
   });
 
   test("an offer needs a computed rollup — an unrun sweep is not 'nothing'", () => {
-    // The whole reason `computedAt` travels as null on the wire: zeroes from
-    // an unrun sweep read as "you have nothing to free" when the truth is
-    // "nobody has looked". A surface must be able to say those differently.
     expect(
       freeUpOffer({ computedAt: null, freeable: { count: 0, bytes: 0 } }, [
         "photos",
@@ -157,9 +149,6 @@ describe("free-up-space eligibility", () => {
   });
 
   test("no participating app means no offer — the exclusion lives in the CALLER's list", () => {
-    // Locker (bytes are the secret) and record-only apps are excluded by never
-    // appearing in the list a caller passes. This module enumerates no apps, so
-    // an empty list must be a real answer rather than a vacuous "everything".
     expect(
       freeUpOffer(
         {

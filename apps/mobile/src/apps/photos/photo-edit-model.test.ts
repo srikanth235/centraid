@@ -1,11 +1,3 @@
-// The editor's arithmetic, and the promises made out of it (v4 handoff §7.4).
-//
-// These are not styling assertions. The editor's entire argument is that it is
-// non-destructive and says so; the sentence that says so is generated here, the
-// geometry that decides what "Save" would write is computed here, and the copy
-// is pinned against the web editor's own words. If any of the three drifts, a
-// member is being promised something the code does not do.
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -83,7 +75,6 @@ describe("the frame", () => {
   });
 
   test("levelling grows the box rather than swapping it", () => {
-    // 3:2 turned 2° is still landscape, but no longer exactly 1.5.
     const ratio = rotatedFrameRatio(1.5, -2);
     expect(ratio).toBeLessThan(1.5);
     expect(ratio).toBeGreaterThan(1.3);
@@ -138,7 +129,6 @@ describe("the crop box", () => {
         { height: 200, width: 400 }
       )
     ).toStrictEqual({ height: 100, originX: 200, originY: 100, width: 200 });
-    // A rounding error at the far edge is absorbed, not passed to native.
     const edge = cropPixels(
       { h: 1, w: 1, x: 0.999, y: 0.999 },
       { height: 3, width: 3 }
@@ -164,9 +154,6 @@ describe("what the editor promises", () => {
           );
   });
 
-  // The web editor's own strings, now imported rather than copied (#805). The
-  // assertion stays: it is what catches a rewrite of the shared constant that
-  // nobody meant to apply to this surface too.
   test("the commit and its explanation are the web editor's own words", () => {
     expect(SAVE_AS_NEW).toBe("Save as a new photograph");
     expect(SAVE_AS_NEW_EXPLANATION).toBe(

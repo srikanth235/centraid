@@ -1,5 +1,3 @@
-// Home status line (Binding Layer invariant 5). A capped count is a floor.
-
 export interface HomeStatusFacts {
   total: number;
   capped: boolean;
@@ -22,7 +20,6 @@ export function statusSentence(facts: HomeStatusFacts): string {
   if (!facts.gatewayName)
     return `${things} No gateway is paired with this phone.`;
   if (facts.offline)
-    // Offline is a schedule, not a fault: the replica is the promise.
     return `${things} Offline — changes sync when ${facts.gatewayName} is back.`;
   return `${things} Backups run on ${facts.gatewayName}.`;
 }

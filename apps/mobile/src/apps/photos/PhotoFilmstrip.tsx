@@ -1,11 +1,3 @@
-// The filmstrip, kept on the phone at 58px.
-//
-// Swipe and the strip are the same control approached from two directions:
-// the swipe is fast, the strip is the one that shows you where you are and lets
-// you jump. Dropping it here would leave the phone a slideshow with no sense of
-// position (CHANGELOG §D). It is also the pointer equivalent of the swipe, so
-// next/previous is never reachable by gesture alone (§15).
-
 import { Image } from "expo-image";
 import React, { useCallback, useEffect, useRef } from "react";
 import { FlatList, Pressable } from "react-native";
@@ -33,12 +25,8 @@ export function PhotoFilmstrip({
   const list = useRef<FlatList<PhotoAsset>>(null);
   const index = assets.findIndex((asset) => asset.id === currentId);
 
-  // Paging by swipe must move the strip too, or the two controls disagree
-  // about where the member is. `viewPosition: 0.5` centres the current frame.
   useEffect(() => {
     if (index < 0) return;
-    // A frame that has not been laid out yet cannot be scrolled to; the strip
-    // simply stays where it is rather than throwing.
     try {
       list.current?.scrollToIndex({
         animated: true,
@@ -46,7 +34,7 @@ export function PhotoFilmstrip({
         viewPosition: 0.5,
       });
     } catch {
-      // Out of the rendered window — the next data pass will bring it in.
+      // Intentionally empty.
     }
   }, [index]);
 

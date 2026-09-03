@@ -1,10 +1,5 @@
-// Pin state and its bytes are both durable (#883 C6). `unavailable` is not a
-// stand-in for zero: a device with no durable directory reporting 0 bytes
-// reads as a budget.
-
 import { Store } from "../../storage";
 
-/** Scoped because content ids are minted per vault and collide across vaults. */
 export interface ContentRef {
   scopeId: string;
   contentId: string;
@@ -21,7 +16,6 @@ function refKey(ref: ContentRef): string {
   return `${ref.scopeId}:${ref.contentId}`;
 }
 
-/** Call once at app start, alongside the rest of `Store.hydrate` calls. */
 export async function hydratePinnedContent(): Promise<void> {
   await Store.hydrate<PinRecord[]>(STORE_KEY, []);
 }

@@ -7,11 +7,6 @@ const CACHED_BASE = "http://127.0.0.1:51890";
 const GATEWAY = "2315e0468b58adbbf0411da619288dbbb334b40d14ff4ca51cf32a069336";
 
 describe("what the phone opens on a cold start", () => {
-  // THE ONE THIS MODULE EXISTS FOR. A returning device holds the whole vault
-  // in a SQLite file it wrote itself. Make mounting it wait on a tunnel with no
-  // timeout and a launch with the desktop asleep never opens the database at
-  // all — observed on device: the replica file's mtime did not move across an
-  // entire launch while it held 528 rows.
   it("opens the replica this device already has without asking the network", () => {
     const plan = planMount({
       link: { gatewayId: GATEWAY, vaultId: "vault-1" },
@@ -27,9 +22,6 @@ describe("what the phone opens on a cold start", () => {
   });
 
   it("falls back to the persisted active slot when the registry row is incomplete", () => {
-    // A freshly paired row carries `vaultId: ''` until the first probe fills it
-    // in, but a device that has completed that probe before has the answer in
-    // the slot vault-links projects beside the registry.
     const plan = planMount({
       link: { gatewayId: GATEWAY, vaultId: "" },
       cachedBase: CACHED_BASE,
@@ -40,7 +32,6 @@ describe("what the phone opens on a cold start", () => {
   });
 
   it("prefers the registry row over the slot when the two disagree", () => {
-    // Switching a VaultLink writes the row first, so the row is the newer fact.
     const plan = planMount({
       link: { gatewayId: GATEWAY, vaultId: "vault-new" },
       cachedBase: CACHED_BASE,
@@ -51,8 +42,6 @@ describe("what the phone opens on a cold start", () => {
   });
 
   it("probes only when this device has no persisted identity at all", () => {
-    // The one honest reason to touch the network before opening anything: the
-    // gateway holds the only copy of the answer. This is a fresh install.
     expect(planMount({ cachedBase: CACHED_BASE })).toStrictEqual({
       kind: "probe",
     });
@@ -102,10 +91,6 @@ describe("the plan a mount is allowed to produce", () => {
     )
   );
 
-  // THE PIN. Phase A has two answers and neither of them is "wait". If a third
-  // shape ever appears — a `pending`, a promise, a "resolve the base first" —
-  // this fails, and it should: that shape IS the defect — a cold start that
-  // withholds local data because a tunnel never answered.
   it("never answers a mount with wait-for-the-network", () => {
     for (const input of matrix) {
       const plan = planMount(input);

@@ -1,8 +1,3 @@
-// The band's tables, asserted without rendering (Tasks' `tasks-band.test.ts`
-// is the exemplar). What a re-edit is likeliest to undo quietly: the shared
-// table's order and cap, the capsule surviving a handback, labels and meta
-// coming from the shared surface table, and EVERY More row leading somewhere.
-
 import { describe, expect, it } from "vitest";
 
 import {

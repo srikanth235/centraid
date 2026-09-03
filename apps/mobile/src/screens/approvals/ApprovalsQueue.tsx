@@ -1,6 +1,3 @@
-// WAITING ON YOU — the head of the queue as a panel, its two controls, and
-// everything else that is waiting as rows (#765, spec §2 blocks 1-5).
-
 import React from "react";
 
 import ChipsBlock from "../../kit/components/ChipsBlock";
@@ -35,8 +32,6 @@ import { Detail, NoticeVerbs } from "./RowParts";
 import { AlwaysAllow, StagedEditForm } from "./StagedWrite";
 import type { BodyProps } from "./view-types";
 
-/** The head of the queue as a panel, its two controls, and everything else
- *  that is waiting as rows. */
 export default function Queue(props: BodyProps): React.JSX.Element | null {
   const { focus, page, patch } = props;
   const data = page.data;
@@ -154,15 +149,10 @@ export default function Queue(props: BodyProps): React.JSX.Element | null {
           body={stagedBody(staged)}
           eyebrow={stagedEyebrow(staged, page.now)}
           facts={stagedFacts(staged)}
-          // Busy WITHDRAWS the verb rather than dimming it: a commit that is
-          // already in flight must not read as one more tap away.
           action={
             stagedBusy
               ? undefined
               : {
-                  // The one filled control on this view: approving IS the act.
-                  // Every other panel verb on the phone is outlined, the same
-                  // way the shell draws its twin of this panel.
                   filled: true,
                   label: "Approve and send",
                   onPress: () =>

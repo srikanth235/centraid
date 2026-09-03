@@ -1,6 +1,4 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
-// Gateway fetch helpers are mocked so vitest never loads react-native
-// (same pattern as lib/insights.test.ts).
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 vi.mock(import("../gateway") as Promise<unknown>, () => ({
@@ -72,8 +70,6 @@ describe(postPlacement, () => {
       itemIds: ["asset-1"],
       verbs: "read",
     });
-    // The outbox's PlacementRecord shape is unchanged: one item, and the
-    // edge's terminal 'completed' translates back to the old 'executed'.
     expect(record).toStrictEqual({
       ...INTENT,
       status: "executed",

@@ -21,14 +21,6 @@ import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import SettingsSection from "./SettingsSection";
 
-/**
- * Settings → Access: the phone's lens on the ONE dashboard, rendering
- * `@centraid/client/access-lens` (#883). The authority table comes from this
- * phone's own replica, so it answers offline; the per-locus revoke sentences
- * are the VAULT's, so an unreachable gateway leaves them absent rather than
- * invented. ABSENT IS NEVER EMPTY — a refused read says so, and is never drawn
- * as "nobody has any access".
- */
 export default function AccessSection(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -48,7 +40,6 @@ export default function AccessSection(): React.JSX.Element {
       .then((body) => {
         if (!cancelled) setLoci(parseLociBody(body));
       })
-      // The vault said nothing, so this seat says nothing in its place.
       .catch(() => undefined);
     return () => {
       cancelled = true;

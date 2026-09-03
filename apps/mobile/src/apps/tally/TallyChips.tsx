@@ -1,11 +1,3 @@
-// A CHOICE FROM A SET IS A CHIP (§3). Two typed fields in the whole of Add
-// expense — description and amount — and everything else is one of these.
-//
-// One leaf, two shapes: a single-choice row (payer, group, category, date,
-// currency, division) and a multi-choice row (who was on a receipt line). The
-// difference is one prop, because they are the same control with a different
-// number of marks lit.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
@@ -20,9 +12,7 @@ export interface ChipOption {
 
 export interface ChipsProps {
   options: readonly ChipOption[];
-  /** Single choice: the one lit. */
   value?: string;
-  /** Several choices: every one lit. */
   values?: readonly string[];
   onSelect: (id: string) => void;
   label: string;
@@ -68,8 +58,6 @@ export interface TypedFieldProps {
   numeric?: boolean;
 }
 
-/** One of the two typed fields — or one cell of an allocation table, which is
- *  the same control with a number in it. */
 export function TypedField({
   label,
   placeholder,

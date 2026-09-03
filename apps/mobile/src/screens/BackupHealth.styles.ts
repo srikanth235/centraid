@@ -3,8 +3,6 @@ import { StyleSheet } from "react-native";
 import { borders, spacing, t, radii } from "../kit/theme";
 
 export const styles = StyleSheet.create({
-  // The consent moment's geometry mirrors EnrichmentConsent.styles.ts on
-  // purpose: one consent grammar, whichever surface is asking (#711).
   action: {
     alignItems: "center",
     borderRadius: radii.lg,
@@ -26,9 +24,6 @@ export const styles = StyleSheet.create({
   eyebrow: t("eyebrow"),
   fact: {
     borderBottomWidth: borders.hairline,
-    // A transparent leading edge on EVERY fact, so flagging one with the `net`
-    // rule changes its colour and not the row's width — the table must not
-    // reflow around the most important line on the screen.
     borderLeftColor: "transparent",
     borderLeftWidth: 2,
     minHeight: 44,
@@ -37,7 +32,6 @@ export const styles = StyleSheet.create({
   factFlagged: { paddingLeft: spacing[3] },
   factLabel: t("mono"),
   factValue: { ...t("mono"), marginTop: spacing[1] },
-  /** The one filled element on the surface (§18). */
   filled: { borderColor: "transparent" },
   header: {
     alignItems: "center",
@@ -53,9 +47,6 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     padding: spacing[5] + 2,
   },
-  // The failing hero takes a 2px `net` rule on its leading edge and NOTHING
-  // else — never a fill, never a red plate (§18). The other two states leave
-  // this edge transparent so the card does not reflow between verdicts.
   heroFlagged: { borderLeftWidth: 2, paddingLeft: spacing[5] },
   heroValue: { ...t("bodyStrong"), marginTop: spacing[3] },
   meta: { ...t("control"), marginTop: spacing[1] + 1 },
@@ -78,14 +69,9 @@ export const styles = StyleSheet.create({
     justifyContent: "space-between",
     minHeight: 52,
   },
-  // The `never` switch's row, flagged the same way a `net` fact is.
   ruleFlagged: { borderLeftWidth: 2, paddingLeft: spacing[3] },
   ruleLabel: { ...t("body") },
-  // The label and its inert reason stack; the switch stays on the trailing
-  // edge of the row. `flex: 1` belongs here rather than on `ruleLabel` so the
-  // reason wraps against the switch rather than under it.
   ruleText: { flex: 1, paddingRight: spacing[3], paddingVertical: spacing[2] },
-  // The one sentence that says why a switch is grey (#712).
   ruleReason: { ...t("small"), marginTop: 2 },
   safe: { flex: 1 },
   section: {
@@ -105,6 +91,5 @@ export const styles = StyleSheet.create({
   settingsText: t("smallStrong"),
   subtitle: { ...t("small"), marginTop: 2 },
   title: t("bodyStrong"),
-  /** Why something cannot happen right now, beside the control it is about. */
   unavailable: { ...t("small"), marginTop: spacing[3] },
 });

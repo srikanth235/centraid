@@ -1,5 +1,3 @@
-// The one notification day context earns (#834): an inner-circle person's
-// birthday. Starred is the whole permission model. Pure; `notifications-core.ts` schedules this.
 import {
   BIRTHDAY_LEAD_DEFAULT_DAYS,
   BIRTHDAY_LEADS,
@@ -15,14 +13,11 @@ export {
 export interface BirthdayPerson {
   partyId: string;
   name: string;
-  /** `YYYY-MM-DD` or year-less `--MM-DD`. */
   birthDate: string;
-  /** Owner starred them — the only reason a birthday notifies. */
   inner: boolean;
 }
 
 export interface BirthdayNotification {
-  /** Stable per person per year — a re-run never notifies twice. */
   key: string;
   title: string;
   body: string;
@@ -34,7 +29,6 @@ export interface BirthdayNotification {
 
 const DAY_MS = 86_400_000;
 const HORIZON_DAYS = 400;
-/** Local hour. A whole-day fact has no moment; 09:00 is when a member can act. */
 const NOTIFY_HOUR = 9;
 
 const WEEKDAYS = [
@@ -67,26 +61,17 @@ export function leadLabel(days: number): string {
   );
 }
 
-/**
- * Next `MM-DD` on or after `from`. 29 February is absent in a non-leap year
- * rather than rounded onto 1 March.
- */
 export function nextOccurrence(monthDay: string, from: Date): Date | null {
   const month = Number(monthDay.slice(0, 2)) - 1;
   const day = Number(monthDay.slice(3));
   for (const year of [from.getFullYear(), from.getFullYear() + 1]) {
     const candidate = new Date(year, month, day);
-    // Rolled date (31 April → 1 May, 29 Feb → 1 Mar) is not this birthday.
     if (candidate.getMonth() !== month || candidate.getDate() !== day) continue;
     if (dayKeyOf(candidate) >= dayKeyOf(from)) return candidate;
   }
   return null;
 }
 
-/**
- * NEVER anyone but the inner circle. A lead that would land in the past is
- * dropped, not fired late.
- */
 export function planBirthdayNotifications(input: {
   people: readonly BirthdayPerson[];
   leadDays?: number;

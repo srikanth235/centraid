@@ -1,16 +1,8 @@
-/*
- * Pure settings-patch merge (no `electron` import here — settings.ts loads it
- * at module scope). Per field: `undefined` preserves the value, a value sets it.
- * Chat-model selection lives in the gateway prefs store, not here.
- */
-
 import { clampAlertSeconds } from "./gateway-monitor-core.js";
 import type { PersistedSettings } from "./settings.js";
 
 export interface PersistedSettingsPatch {
   activeGatewayId?: string;
-  /** Client-owned vault per gateway (#289); carried through so a plain
-   *  `saveSettings` never wipes it. */
   activeVaultByGateway?: Record<string, string>;
   onboardingCompletedAt?: string;
   gatewayAlertSeconds?: number;
@@ -49,7 +41,6 @@ export function mergePersistedSettings(
       current.onboardingCompletedAt
     ),
     ...(() => {
-      // Clamped on write; garbage falls back to the current value.
       const next =
         clampAlertSeconds(patch.gatewayAlertSeconds) ??
         current.gatewayAlertSeconds;

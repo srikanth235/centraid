@@ -1,17 +1,10 @@
-// Onboarding palette/styles (screens/Onboarding). Always dark: "dark-fixed"
-// pins the *scheme* (#686).
-
 import { StyleSheet } from "react-native";
 
 import { borders, family, radii, t } from "../kit/theme";
-// Pure resolver, not barrel: runs at module scope; barrel drags RN-only
-// surfaces that tests mock.
 import { resolveTheme } from "../kit/theme/resolve";
 
 const dark = resolveTheme("dark").colors;
 
-// #686 waiver (no token answer exists): `viewfinder` must be true black —
-// tint would halo the camera preview.
 const WAIVED = {
   viewfinder: "#000",
 } as const;
@@ -24,7 +17,6 @@ export const C = {
   textSoft: dark.textSoft,
   textFaint: dark.textFaint,
   textGhost: dark.textGhost,
-  /** Ink that sits on `brand` / on a profile swatch. */
   onBrand: dark.textInv,
   danger: dark.danger,
   brand: dark.accent,
@@ -33,12 +25,9 @@ export const C = {
 export const AVATAR = 52;
 const SWATCH = 34;
 
-// Hero-fitting arithmetic (see Onboarding) subtracts this.
-/** `styles.scroll` padding. */
 export const PAD_TOP = 20;
 export const PAD_BOTTOM = 34;
 export const PAD_H = 26;
-/** `styles.hero` paddingVertical; caller counts both sides. */
 export const HERO_GAP = 18;
 
 export const styles = StyleSheet.create({
@@ -142,7 +131,6 @@ export const styles = StyleSheet.create({
     fontSize: t("body").fontSize,
   },
   safe: { backgroundColor: C.bg, flex: 1 },
-  /** Pairing step's primary action — taller than `primary`. */
   scanBtn: {
     alignItems: "center",
     backgroundColor: C.brand,

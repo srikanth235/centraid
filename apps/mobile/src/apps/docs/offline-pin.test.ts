@@ -1,7 +1,3 @@
-// Docs' "available offline" nouns (#883 C6). The React half is not exercised
-// here; what is pinned is which documents even HAVE a pin, and that a stored
-// one reads without the gateway.
-
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { MobileDriveDoc } from "./docs-projection";
@@ -102,8 +98,6 @@ describe("Docs offline pins", () => {
 
   describe("the case a pin would not change", () => {
     test("an inline body is already offline, and the copy says so", () => {
-      // The control must not offer to "make available offline" something the
-      // replica already carries: a toggle that changes nothing is the defect.
       expect(INLINE_REASON).toContain("already opens offline");
     });
   });

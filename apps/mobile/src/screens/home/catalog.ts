@@ -1,7 +1,3 @@
-// Home launcher catalog (#498). Eight first-party apps always. All eight
-// ship in the binary and read the encrypted replica — no WebView cover, no
-// served-app plane (#799). Pure.
-
 import { apps as BUILTIN_APPS } from "@centraid/design";
 import type { AppMetaResolved } from "@centraid/design";
 
@@ -55,10 +51,6 @@ export function orderForSpringboard(
     .map((entry) => entry.item);
 }
 
-/**
- * Pinned first, in pin order. An unpinned app is never hidden. A pinned id
- * that does not resolve is skipped, not repaired.
- */
 export function orderByPins(
   items: readonly LauncherItem[],
   pinnedIds: readonly string[]

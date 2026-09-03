@@ -1,7 +1,3 @@
-// The editor's seven write outcomes (Docs handoff Part 2 §9; #821).
-// QUEUED ≠ WAITING FOR APPROVAL: queued is in order on this phone; parked
-// waits for owner consent. A byte-identical save writes nothing.
-
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 
 export type EditorPostureId =

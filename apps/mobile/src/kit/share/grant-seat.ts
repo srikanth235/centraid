@@ -1,6 +1,3 @@
-// The native seat's half of the grant transport — only the base URL and this
-// phone's own device credential differ from the browser seat's (#883).
-
 import { grantDoor } from "@centraid/blueprints/apps/_shared/grant-door";
 import type { GrantDoor } from "@centraid/blueprints/apps/_shared/grant-door";
 import {
@@ -31,7 +28,6 @@ export function nativeGrantHttp(baseUrl: string): GrantHttp {
   };
 }
 
-/** The offline queue sits in front of the two writes. */
 export function nativeGrantDoor(
   baseUrl: string,
   queue: GrantIntentQueue = nativeGrantIntentQueue()

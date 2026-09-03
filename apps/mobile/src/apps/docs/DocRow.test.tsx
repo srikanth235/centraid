@@ -1,6 +1,3 @@
-// The document row renders AT MOST ONE state (#821, handoff Part 2 §"The
-// document row") — asserted against the rendered tree, not just the ladder.
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -96,15 +93,11 @@ describe(DocRow, () => {
       />
     );
     expect(texts(container)).toContain("cannot be shown");
-    // The custody glyph must NOT also render — two states in one row is a bug.
     expect(
       container.querySelector('[aria-label="on this device only"]')
     ).toBeNull();
   });
 
-  // Stub tier: this owns the PROP and the absence of the sentence. Whether
-  // React Native publishes an accessibility node from that label is
-  // `DocsHome.test.tsx`'s claim, on the real tree (#890 W5).
   it("hands the device mark an accessibilityLabel and draws no sentence", () => {
     const container = render(
       <DocRow
@@ -190,3 +183,4 @@ describe(DocRow, () => {
     expect(texts(container)).toContain("Pending change: Waiting for Ravi.");
   });
 });
+// @vitest-environment jsdom

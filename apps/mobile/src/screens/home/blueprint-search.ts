@@ -2,15 +2,9 @@ import type { ReplicaValue } from "@centraid/client/replica/native";
 import { apps } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
-/**
- * One matched vault OBJECT (#708), never "open app X": the app is context.
- * `meta` is a raw ISO instant formatted by the caller — pure data fetch, no
- * locale/date logic here.
- */
 export interface BlueprintSearchHit {
   appId: string;
   appLabel: string;
-  /** Absent when not in the design registry; renderer supplies a neutral token. */
   appColor: string | undefined;
   appIconKey: IconName;
   entity: string;
@@ -40,14 +34,11 @@ interface SearchTarget {
   idField: string;
   labelFields: string[];
   detailFields: string[];
-  /** Date column verified against an existing repo read; undefined = none. */
   metaField?: string;
 }
 
 const appMetaById = new Map(apps.map((meta) => [meta.id, meta]));
 
-// Locker excluded: RPC-backed items have no replica shape on mobile; a shapeless
-// target silently returns zero hits forever.
 export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
   {
     appId: "agenda",
@@ -57,7 +48,6 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "event_id",
     labelFields: ["summary"],
     detailFields: ["description"],
-    // dtstart: confirmed via useSpringboardTiles' events query.
     metaField: "dtstart",
   },
   {
@@ -87,7 +77,6 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "note_id",
     labelFields: ["title"],
     detailFields: ["body", "_snippet"],
-    // updated_at: confirmed via useSpringboardTiles' notes query.
     metaField: "updated_at",
   },
   {
@@ -98,7 +87,6 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "document_id",
     labelFields: ["title"],
     detailFields: ["_snippet"],
-    // updated_at: confirmed via useSpringboardTiles' documents query.
     metaField: "updated_at",
   },
   {
@@ -109,7 +97,6 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "content_id",
     labelFields: ["title"],
     detailFields: ["_snippet", "media_type"],
-    // No confirmed date column (captured_at lives on media.asset).
   },
   {
     appId: "tally",
@@ -119,7 +106,6 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "expense_id",
     labelFields: ["description"],
     detailFields: ["category"],
-    // spent_on: filtered on by useSpringboardTiles' expenses query.
     metaField: "spent_on",
   },
 ] as const;

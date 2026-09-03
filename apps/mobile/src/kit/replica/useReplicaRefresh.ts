@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 
 import { useReplica } from "./ReplicaProvider";
 
-/** Shared pull-to-refresh state for replica-backed native screens. */
 export function useReplicaRefresh(): {
   refreshing: boolean;
   refreshNow: () => void;

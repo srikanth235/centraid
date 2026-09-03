@@ -16,9 +16,6 @@ import {
   isReplicaStorageFullError,
 } from "./replica-storage-error";
 
-// Two live handles per vault file (per-vault writer, gateway-scoped
-// multi-ATTACH reader) under `journal_mode=DELETE`, where a reader's SHARED
-// lock blocks the writer; SQLite's default busy timeout is zero.
 const BUSY_TIMEOUT_MS = 5000;
 
 export class OpSqliteDriver implements ReplicaSqliteDriver {
@@ -32,7 +29,6 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
           ? {}
           : { location: options.location }),
       });
-      // The store core's own PRAGMA block is a write — set this first.
       db.executeSync(`PRAGMA busy_timeout=${BUSY_TIMEOUT_MS}`);
       return new OpSqliteDriver(db);
     } catch (error) {
@@ -59,7 +55,6 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
     }
   }
 
-  /** Off-thread read. Reads only — the write path stays synchronous. */
   async allAsync<T extends object>(
     sql: string,
     bind: readonly ReplicaBindValue[] = []
@@ -73,7 +68,6 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
   }
 
   exec(sql: string): void {
-    // op-sqlite's sync path runs one statement per call.
     try {
       for (const statement of splitStatements(sql))
         this.db.executeSync(statement);
@@ -98,8 +92,6 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
     }
   }
 
-  /** NOT wired into `open()`/`assertCapabilities()`: a build without sqlite-vec
-   *  must still open. Probe right before needing a vector table (#721). */
   probeSqliteVec(): void {
     try {
       this.db.executeSync(

@@ -1,5 +1,3 @@
-// Band owner per app (#712), keyed `shell.bandOwner.<appId>` — never by vault.
-
 import { useCallback, useEffect, useState } from "react";
 
 import { Store } from "../../storage";
@@ -24,7 +22,6 @@ export interface BandClaimingApp {
   name: string;
 }
 
-/** Hand-maintained: the frame cannot enumerate claims; a new band adds a row. */
 export const BAND_CLAIMING_APPS: readonly BandClaimingApp[] = [
   { id: "photos", name: "Photos" },
   { id: "docs", name: "Docs" },
@@ -42,7 +39,6 @@ export interface BandOwnerState {
 }
 
 export function useBandOwner(appId: string): BandOwnerState {
-  // Default first, hydrate after — no flicker.
   const [owner, setOwner] = useState<BandOwner>(DEFAULT_BAND_OWNER);
   useEffect(() => {
     let live = true;

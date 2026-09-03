@@ -39,7 +39,6 @@ function nativeSet(input: HTMLInputElement, value: string): void {
 function installCompanion(): void {
   let mountedFor: HTMLInputElement | undefined;
   let host: HTMLElement | undefined;
-  // Closed shadow keeps page script from inspecting titles/usernames.
   let shadow: ShadowRoot | undefined;
 
   const remove = (): void => {
@@ -83,7 +82,6 @@ function installCompanion(): void {
     anchor.after(host);
     trigger?.addEventListener("click", (event) => {
       if (!isTrustedCredentialGesture(event)) return;
-      // Re-resolve fields at gesture time — SPA re-renders detach mount-time nodes.
       void showMenu(wrap);
     });
   };
@@ -120,7 +118,6 @@ function installCompanion(): void {
         });
         menu.append(button);
       }
-      // Re-check live fields for save/generate affordances (SPA may have swapped inputs).
       const live = findFields();
       if (passwordForSave(live)) {
         const save = document.createElement("button");
@@ -195,7 +192,6 @@ function installCompanion(): void {
       pageUrl: location.href,
     });
     try {
-      // Gesture-time re-resolution: never write into mount-time detached nodes.
       applyFillToLiveFields(findFields(), material, nativeSet);
       menu.remove();
     } finally {

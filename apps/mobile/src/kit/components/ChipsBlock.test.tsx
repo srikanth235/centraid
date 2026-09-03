@@ -1,8 +1,3 @@
-// The chip row's one invariant (#765, spec §8): choosing a chip CANNOT reflow
-// the row. The label bolds through the held pair — same size, same leading,
-// different weight — and the pill's height is fixed at the touch floor, so a
-// label that grew would break out of the pill rather than grow it.
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -61,8 +56,6 @@ describe(ChipsBlock, () => {
     expect(onStyle.fontFamily).not.toBe(offStyle.fontFamily);
   });
 
-  // Stub tier: the computed style OBJECT and the state prop. A 44pt height in
-  // a style is not a 44pt hit area on a device — that is a Maestro claim.
   it("declares the 44pt touch-floor height on every pill and marks the chosen one", () => {
     const container = render(
       <ChipsBlock
@@ -105,3 +98,4 @@ describe(ChipsBlock, () => {
     expect(picked).toStrictEqual(["b"]);
   });
 });
+// @vitest-environment jsdom

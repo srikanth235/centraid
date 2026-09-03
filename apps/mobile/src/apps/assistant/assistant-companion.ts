@@ -2,7 +2,6 @@ export const ASSISTANT_COMPANION_PRESENTATION = "bottom-sheet" as const;
 export const ASSISTANT_COMPANION_HEIGHT = "86%" as const;
 export const ASSISTANT_COMPANION_TOUCH_TARGET = 44;
 
-/** A compact turn needs real text before it can enter the shared ledger. */
 export function companionSubmitText(
   draft: string,
   sending: boolean

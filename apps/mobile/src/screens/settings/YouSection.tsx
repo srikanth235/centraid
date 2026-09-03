@@ -1,9 +1,3 @@
-// Settings → You (#498) — the local profile: a display name and an accent
-// colour for the avatar + Home greeting. The phone is a client of a desktop
-// gateway, so this is a light device-local preference (see lib/profile), not the
-// vault identity (that is Settings → Vault). Edits persist as you type / tap and
-// the avatar previews the colour + initials live.
-
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 

@@ -1,7 +1,3 @@
-// The Wi-Fi-only / metered / charger transfer policy matrix. The native
-// battery/network modules and the durable rule store are injected via mocks so
-// the pure decision logic runs under node.
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { nativeRowSyncAllowed, nativeUploadPolicy } from "./native-policy";
@@ -25,11 +21,6 @@ const connectivity = {
 
 vi.mock(import("expo-network") as Promise<unknown>, () => ({
   getNetworkStateAsync: () => network.getNetworkStateAsync(),
-  // Real string-enum members (`NetworkStateType.WIFI`, …) are a distinct
-  // literal type per member — a plain string like `'WIFI'` is never
-  // assignable to an enum-typed property without going through the actual
-  // enum, so this partial stand-in (only the members native-policy.ts
-  // reads) is asserted to the real type rather than reconstructed.
   NetworkStateType: {
     WIFI: "WIFI",
     CELLULAR: "CELLULAR",
@@ -53,9 +44,6 @@ vi.mock(
 );
 vi.mock(import("../../storage") as Promise<unknown>, () => ({
   Store: {
-    // Only `hydrate` is exercised here; `get`/`set` are implemented with the
-    // real generic signatures (not asserted) since they're trivial to
-    // satisfy honestly.
     get: <T>(_key: string, fallback: T): T => fallback,
     hydrate: (key: string, fallback: Rules) => store.hydrate(key, fallback),
     set: <T>(_key: string, _value: T): void => undefined,

@@ -1,11 +1,3 @@
-// Every word the Analytics place says about the run rollup (#765, spec §5).
-// Pure — no React, no gateway — so the copy contract is testable unmounted.
-// The arithmetic under it is `@centraid/design/blocks`, shared with the desktop
-// seat (#883); this file lends the phone's number words.
-//
-// Failed segments, durations, the disk figure and the shared-compute roster are
-// WITHHELD where absent, never zeroed (#883).
-
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 import {
   INSIGHTS_FORECAST_NOTE,
@@ -54,7 +46,6 @@ export function windowChips(
   }));
 }
 
-/** Seat-named: the desktop mapper returns a different row type. */
 export function phoneBars(
   summary: InsightsSummary,
   windowDays: number,
@@ -81,7 +72,6 @@ function phoneBar(column: InsightColumn): BarDatum {
   };
 }
 
-/** "" where no column draws that colour: the view then drops the legend. */
 export function failedLegendKey(summary: InsightsSummary): string {
   return summary.daily.some((day) => day.failedRuns > 0) ? "failed" : "";
 }
@@ -108,14 +98,10 @@ export interface RecentRunRow {
   title: string;
   sub: string;
   meta: string;
-  /** The run failed — its METADATA takes `net`; the run's name does not. */
   net: boolean;
-  /** Present only when the phone can open this run's automation. */
   automationRef?: string;
 }
 
-/** Automation-backed runs only: mobile has no single-run view, so anything
- *  else would carry a dead button. */
 export function recentRows(summary: InsightsSummary): RecentRunRow[] {
   return summary.recent.map((run) => recentRow(run));
 }
@@ -139,16 +125,12 @@ function recentRow(run: InsightsActivityRow): RecentRunRow {
   };
 }
 
-/** `undefined` when all are well: "3 of 4 healthy" is bad news with no
- *  subject, so there is nothing to do with it. */
 export function unhealthyComponents(health: GatewayHealth): string | undefined {
   const bad = health.components.filter((c) => c.status !== "ok");
   if (bad.length === 0) return undefined;
   return bad.map((c) => c.component).join(", ");
 }
 
-/** The gateway's own vitals. The desktop seat's same-named function reads its
- *  resource-usage receipt instead — two facts, not one computed twice. */
 export function mobileGatewayFacts(health: GatewayHealth): PanelFact[] {
   const { metrics } = health;
   const healthy = health.components.filter((c) => c.status === "ok").length;
@@ -164,8 +146,6 @@ export function mobileGatewayFacts(health: GatewayHealth): PanelFact[] {
     },
     {
       key: "components",
-      // The one fact that can be bad news, so the one that may take `net` —
-      // and it names its subject rather than leaving the member guessing.
       net: unwell !== undefined,
       ...(unwell ? { note: `Not healthy: ${unwell}.` } : {}),
       value: `${String(healthy)} of ${String(health.components.length)} healthy`,
@@ -188,7 +168,6 @@ export function mobileGatewayFacts(health: GatewayHealth): PanelFact[] {
   return facts;
 }
 
-/** The coarsest unit that is still true. */
 export function uptimeSentence(uptimeMs: number | undefined): string {
   if (uptimeMs === undefined || !Number.isFinite(uptimeMs) || uptimeMs < 0)
     return "This gateway did not report how long it has been up.";
@@ -205,8 +184,6 @@ function succeededPercent(summary: InsightsSummary): number {
   return generations === 0 ? 100 : Math.round((succeeded / generations) * 100);
 }
 
-/** The success share and the host's uptime; the typical run duration is a
- *  spend fact. No inline verb — this page has nothing to act on. */
 export function insightsHealth(
   summary: InsightsSummary | undefined,
   uptimeMs: number | undefined
@@ -216,7 +193,6 @@ export function insightsHealth(
     errorText: ERROR_HEALTH,
     loadingText: READING_HEALTH,
   };
-  // Nothing read: `healthLineFor` picks the generic sentence for the state.
   if (!summary) return { ...generic, detail: "", label: "" };
   return {
     ...generic,
@@ -225,7 +201,6 @@ export function insightsHealth(
   };
 }
 
-/** Only the run rollup — no machine-health clause. */
 export function originActivityHealth(
   summary: InsightsSummary | undefined
 ): HealthCopy {
@@ -243,7 +218,6 @@ export function originActivityHealth(
   };
 }
 
-/** The one thing that empties this page. */
 export function nothingRan(summary: InsightsSummary): boolean {
   return summary.kpis.generations === 0 && summary.recent.length === 0;
 }

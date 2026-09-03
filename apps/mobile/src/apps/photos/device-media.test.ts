@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 
-// `device-media.ts` also imports `expo-media-library` and `react-native` for
-// the functions that resolve real bytes off the device — neither is touched
-// by `capturedAtIso`, but both load native setup code that this plain "node"
-// vitest project has no runtime for. Stand-ins only; this file asserts pure
-// date logic, not device access.
 vi.mock(import("expo-media-library"), () => ({}) as never);
 vi.mock(import("react-native"), () => ({ Platform: { OS: "ios" } }) as never);
 
@@ -30,17 +25,12 @@ describe(capturedAtIso, () => {
   });
 
   it("is undefined, never 1970, when neither timestamp is recorded", () => {
-    // The defect this guards: `new Date(null ?? null ?? 0).toISOString()`
-    // files the photo under 1970-01-01, an invented capture date.
     expect(
       capturedAtIso({ creationTime: null, modificationTime: null })
     ).toBeUndefined();
   });
 
   it("treats a recorded 0 as absent, the same as null", () => {
-    // This media store has been seen substituting 0 for "not recorded" —
-    // reading it as a literal 1970 capture would file the same defect back
-    // in under a different value.
     expect(
       capturedAtIso({ creationTime: 0, modificationTime: 0 })
     ).toBeUndefined();

@@ -1,8 +1,3 @@
-// Docs' "available offline": the engine is the frame's (`kit/fetch-gate`) and
-// this file owns only the Docs nouns. A document whose body is an inline
-// `data:` URI is already on this phone, so it gets a stated reason rather than
-// a live toggle that would change nothing (#883).
-
 import { useState } from "react";
 
 import {
@@ -56,7 +51,6 @@ export interface DocumentOfflinePin {
   pinned: boolean;
   busy: boolean;
   label: string;
-  /** Present when `available` is false, or after a refused attempt. */
   reason?: string;
   toggle: () => void;
 }
@@ -77,7 +71,6 @@ export function useDocumentOfflinePin({
   onStatus,
 }: UseDocumentOfflinePinInput): DocumentOfflinePin {
   const [busy, setBusy] = useState(false);
-  /** Bumped on every settled toggle: the row re-reads durable pin state. */
   const [, setRevision] = useState(0);
   const [reason, setReason] = useState<string | undefined>(undefined);
 
@@ -86,7 +79,6 @@ export function useDocumentOfflinePin({
   const url = doc ? docBytesUrl(doc, gatewayBase, vaultId) : null;
   const pinned = ref ? isPinned(ref) : false;
 
-  // Not memoised: handed straight to a Pressable, so identity buys nothing.
   const toggle = (): void => {
     if (!ref) return;
     if (pinned) {
@@ -104,7 +96,6 @@ export function useDocumentOfflinePin({
           url,
           headers: authHeader(),
           networkType: await currentNetworkType(),
-          // A second tap on a metered connection is what spends the bytes.
           consented: reason === PIN_METERED_REASON,
           online,
           pin: true,
@@ -144,7 +135,6 @@ export function useDocumentOfflinePin({
       reason: "This document has no stored bytes on the gateway to keep.",
       toggle: () => {},
     };
-  // Releasing a pin needs no gateway; taking one does.
   if (!pinned && !online)
     return {
       available: false,

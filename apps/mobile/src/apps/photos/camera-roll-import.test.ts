@@ -1,14 +1,3 @@
-// The first-run camera-roll import's batching/resume logic (#724).
-//
-// The vault-side publisher is untouched here — `mediaAssetPublisher`
-// (`packages/vault/src/ingest/publishers.ts`) already carries its own
-// resumability proof in the `takeout-photos.test.ts` mold (kill-mid-publish,
-// re-import skips every already-published row). What this file proves is the
-// MOBILE half: that a kill mid-import, modelled as persisted `ImportProgress`
-// handed back into a fresh call, resumes past everything already finished —
-// exactly once each, with per-candidate failures isolated rather than
-// aborting the run — without needing a live device or a live vault.
-
 import { describe, expect, test, vi } from "vitest";
 
 import {
@@ -130,9 +119,6 @@ describe("resumable import run", () => {
   });
 
   test("a kill mid-run, resumed, never re-attempts an already-done candidate", async () => {
-    // Model the kill: only "a" finished before the process died, and its
-    // outcome was PERSISTED (the whole point of `ImportProgress` being plain,
-    // serialisable state rather than in-memory-only).
     const afterKill: ImportProgress = recordOutcome(
       EMPTY_IMPORT_PROGRESS,
       "a",
@@ -144,7 +130,6 @@ describe("resumable import run", () => {
     const resumed = await runCameraRollImport(candidates, afterKill, {
       attempt,
     });
-    // "a" is never attempted again — only "b" and "c", the genuine remainder.
     expect(attempt).toHaveBeenCalledTimes(2);
     expect(attempt.mock.calls.map(([c]) => c.id).sort()).toStrictEqual([
       "b",
@@ -191,8 +176,6 @@ describe("resumable import run", () => {
     expect(attempt).toHaveBeenCalledTimes(3);
     expect(progress.imported).toBe(2);
     expect(progress.failed).toStrictEqual({ b: "stage failed: 500" });
-    // The failed candidate is DONE — a resumed run does not retry it forever
-    // on its own; a member (or a future retry affordance) decides that.
     expect([...progress.done].sort()).toStrictEqual(["a", "b", "c"]);
   });
 

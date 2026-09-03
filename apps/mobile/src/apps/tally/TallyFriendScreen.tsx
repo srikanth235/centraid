@@ -1,15 +1,3 @@
-// ONE FRIEND — every part of one net, openable.
-//
-// THE PART FIGURES ARE THE QUERY'S. `queries/friend.ts` folds them with the
-// same `pairwise` engine that produced the net, scoped per group, and returns
-// `parts[]` — so the parts sum to the net BY CONSTRUCTION rather than by a
-// second balance engine here adding up whichever expenses this route happened
-// to load. The section says so in its own foot, which is what makes the claim
-// checkable: a member can add the rows up.
-//
-// THE IOU IS READ-ONLY. A standing obligation lives in People; Tally reads it
-// into the net above and never writes one, and the row says which.
-
 import React, { useEffect } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 

@@ -34,7 +34,6 @@ function asset(overrides: Partial<PhotoAsset> = {}): PhotoAsset {
 const vaults = (...facts: VaultFacts[]): ReadonlyMap<string, VaultFacts> =>
   new Map(facts.map((f) => [f.vaultId, f]));
 
-// Hues are stand-ins; only WHICH vaults get a mark is under test, never colour.
 const FALLBACK_HUE = "#B07C2E";
 const VAULT_HUE = "#3E6B57";
 const SKEL = "#E4E3E0";
@@ -126,9 +125,6 @@ describe("the state slot", () => {
   const M = 2; // a mid rung
 
   test("SABOTAGE: the steady state says NOTHING — no line under every tile", () => {
-    // Regression pin: `remote-only` is the DESIGNED steady state, so captioning
-    // it marked every tile in an all-gateway vault. An unconditional
-    // `on the gateway` branch must not come back; it fails right here.
     expect(
       stateOverlay(asset({ backupState: "remote-only" }), M)
     ).toBeUndefined();
@@ -138,8 +134,6 @@ describe("the state slot", () => {
   });
 
   test("an unreachable gateway adds nothing to any tile", () => {
-    // Pins the over-announcement: with the gateway down, `on the gateway`
-    // must not render per-tile; the replica bar states reachability once.
     for (const backupState of [
       "remote-only",
       "local-only",
@@ -151,15 +145,12 @@ describe("the state slot", () => {
   });
 
   test("bytes on this device keep their MARK regardless of the gateway", () => {
-    // `local-only` paints without a gateway; the mark tracks the photo's own bytes.
     expect(stateOverlay(asset({ backupState: "local-only" }), M)).toStrictEqual(
       { form: "custody" }
     );
   });
 
   test("bytes here and nowhere else take the MARK, never a caption", () => {
-    // The one losable state: worth a glyph, not a caption fired on every
-    // photograph in a fresh camera roll (§18).
     expect(stateOverlay(asset({ backupState: "local-only" }), M)).toStrictEqual(
       {
         form: "custody",
@@ -198,8 +189,6 @@ describe("the state slot", () => {
   });
 
   test("SABOTAGE: a line and a mark can never both be drawn", () => {
-    // STRUCTURAL exclusion — one return, two shapes; a tile can never stack
-    // a glyph under a caption.
     const resolved = stateOverlay(asset({ backupState: "local-only" }), M, {
       decodeFailed: true,
     });
@@ -207,7 +196,6 @@ describe("the state slot", () => {
   });
 
   test("the seconds in between say nothing — no flickering mark", () => {
-    // queued/uploading are transient; a blinking mark is chrome.
     expect(stateOverlay(asset({ backupState: "queued" }), M)).toBeUndefined();
     expect(
       stateOverlay(asset({ backupState: "uploading" }), M)
@@ -224,8 +212,6 @@ describe("a tile holds its geometry from record to bytes to failure (§14)", () 
   ];
 
   test("the skeleton occupies the exact box the photograph will", () => {
-    // Packing reads width/height off the RECORD, known before bytes arrive —
-    // skeleton box = decoded box, nothing reflows.
     const beforeBytes = justify(list, 390, 120);
     const afterBytes = justify(list, 390, 120);
     expect(afterBytes).toStrictEqual(beforeBytes);
@@ -237,7 +223,6 @@ describe("a tile holds its geometry from record to bytes to failure (§14)", () 
   });
 
   test("a failed tile keeps the geometry rather than vanishing", () => {
-    // Failure is a slot on the same rectangle, not a removal (§14).
     const rows = justify(list, 390, 120);
     const failed = stateOverlay(list[0]!, 2, { decodeFailed: true });
     expect(failed).toStrictEqual({

@@ -1,11 +1,3 @@
-// People's native recipes — the phone mirror of blueprints' people Shared.tsx;
-// ONE ROW AND ONE SECTION for the whole app, every string the caller's.
-//
-// The avatar and its link ring are the KIT's (`components/PersonAvatar`): the
-// share sheet draws the same people, and a face that differs between the two
-// screens reads as two people. Re-exported here so this file stays People's
-// one import.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
@@ -29,11 +21,9 @@ export type {
   LinkRing,
 } from "../../kit/components/PersonAvatar";
 
-/** Star mark: 17px on a 24 grid, stroke 1.5 (the handoff's path). */
 const STAR_PATH =
   "M12 3.8l2.6 5.2 5.7.9-4.1 4 1 5.7-5.2-2.8-5.2 2.8 1-5.7-4.1-4 5.7-.9z";
 
-/** Its own 44×44 target — pressing never opens the person. */
 export function StarButton({
   name,
   starred,
@@ -96,18 +86,14 @@ export interface PersonRowProps {
   meta?: string;
   metaNet?: boolean;
   pending?: string;
-  /** Wrap the name instead of ellipsising (notes row). */
   wrap?: boolean;
   onOpen?: () => void;
   trailing?: React.ReactNode;
   star?: React.ReactNode;
-  /** No bottom rule — the section's last row. */
   last?: boolean;
-  /** A handle from `kit/test-ids`, on the rows a flow has to find. */
   testID?: string;
 }
 
-/** THE ROW: avatar · main · meta · verbs · star, everywhere. */
 export function PersonRow(props: PersonRowProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -172,7 +158,6 @@ export function PersonRow(props: PersonRowProps): React.JSX.Element {
   );
 }
 
-/** A trailing verb, or its quiet twin for a removal. */
 export function Verb({
   label,
   quiet = false,
@@ -183,7 +168,6 @@ export function Verb({
   label: string;
   quiet?: boolean;
   disabled?: boolean;
-  /** Supply where the visible word does not name its object ("✕"). */
   accessibilityLabel?: string;
   onPress: () => void;
 }): React.JSX.Element {
@@ -228,17 +212,14 @@ export function Verb({
 
 export interface PeopleSectionProps {
   title: string;
-  /** Rows inside; omitted rather than shown as an invented zero. */
   count?: number;
   collapsible?: boolean;
   open?: boolean;
   onToggle?: () => void;
-  /** The head's own `Add`, for in-place adds. */
   add?: React.ReactNode;
   children: React.ReactNode;
 }
 
-/** THE SECTION: head (title, count, collapse, Add) then rows or empty state. */
 export function PeopleSection(props: PeopleSectionProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -281,7 +262,6 @@ export function PeopleSection(props: PeopleSectionProps): React.JSX.Element {
   );
 }
 
-/** A section's one-sentence empty state. */
 export function EmptyLine({ text }: { text: string }): React.JSX.Element {
   const { colors } = useTheme();
   return (
@@ -296,7 +276,6 @@ export function EmptyLine({ text }: { text: string }): React.JSX.Element {
   );
 }
 
-/** A screen's closing sentence — the trash's purge line. */
 export function Caption({ text }: { text: string }): React.JSX.Element {
   const { colors } = useTheme();
   return (
@@ -311,7 +290,6 @@ export function Caption({ text }: { text: string }): React.JSX.Element {
   );
 }
 
-/** Commit row: both controls grow to fill on touch. */
 export function Commits({
   children,
 }: {
@@ -327,7 +305,6 @@ export function Commits({
       }}
     >
       {cells.map((cell, index) => (
-        // Position is identity: a fixed pair, never reordered.
         <View key={index} style={{ flex: 1 }}>
           {cell}
         </View>
@@ -336,7 +313,6 @@ export function Commits({
   );
 }
 
-/** Labelled input — the handoff's `field` at control height. */
 export function FieldRow({
   label,
   value,
@@ -385,7 +361,6 @@ export function FieldRow({
   );
 }
 
-/** Vault tag under the hero: `<name> · <label>` on sunken paper. */
 export function VaultTag({ label }: { label: string }): React.JSX.Element {
   const { colors } = useTheme();
   return (
@@ -405,7 +380,6 @@ export function VaultTag({ label }: { label: string }): React.JSX.Element {
   );
 }
 
-/** Back row: chevron + the DESTINATION's name, never "Back". */
 export function BackRow({
   destination,
   onPress,
@@ -434,7 +408,6 @@ export function BackRow({
   );
 }
 
-/** Count tiles: two-up; each filters or navigates — never a bare badge. */
 export function CountTiles({
   tiles,
   onSelect,

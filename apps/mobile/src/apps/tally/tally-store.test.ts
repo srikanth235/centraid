@@ -1,18 +1,3 @@
-// THE READ PLANE, EXERCISED.
-//
-// Four claims a plausible refactor could undo silently:
-//
-//  1. NOTHING IS EMPTY UNTIL A READ HAS LANDED. `loaded` is false before the
-//     first answer and stays false when the answer was a failure, so no view
-//     can call the ledger empty on the strength of an outage.
-//  2. A DENIED READ IS DATA. It becomes a screen, not an error, and the
-//     denial is carried whichever query reported it — the grant is on the app.
-//  3. A SLOWER ANSWER TO AN OLDER QUERY NEVER OVERWRITES A NEWER ONE, and a
-//     cleared field drops the previous results rather than leaving them
-//     standing under a query nobody typed.
-//  4. FORGETTING IS REAL. Navigating away drops the payload, so the next
-//     group's ledger cannot paint under the previous group's name.
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -33,9 +18,6 @@ const answers = {
   search: vi.fn<(term: string) => Promise<unknown>>(),
 };
 
-// The gateway door, replaced wholesale. The cast is the mock's: every handler
-// answers `unknown` here because each test supplies the shape it needs, and a
-// factory typed to the real payloads would make every fixture a full payload.
 vi.mock(
   import("./tally-gateway"),
   () =>

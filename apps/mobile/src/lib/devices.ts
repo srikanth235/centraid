@@ -1,8 +1,3 @@
-// Devices roster client (#765). Gateway-plane: authorization is the iroh
-// forwarder's proved caller identity, so `apiHeaders()` rides along inert.
-// Scope is ownership (#726) — no person or role is typed here. Wire shapes are
-// lean local mirrors; mobile imports no server or client package.
-
 import {
   apiHeaders,
   fetchJson,
@@ -27,7 +22,6 @@ export interface DeviceComputeProfile {
 }
 
 export interface DeviceRow {
-  /** The revocation handle — the enrollment row, not the hardware. */
   deviceId: string;
   endpointId: string;
   ownerId: string;
@@ -38,7 +32,6 @@ export interface DeviceRow {
   vaultName?: string;
   addedAt?: string;
   current?: boolean;
-  /** A tombstone, never a role; revoked rows stay so attribution resolves. */
   revoked: boolean;
   rememberDevice: boolean;
   compute?: DeviceComputeProfile;
@@ -65,8 +58,6 @@ export interface DeviceTicket {
   expiresAt: string;
 }
 
-/** No device plane 404s as a `GatewayError`; never soften that into an empty
- * roster. */
 export async function listDevices(): Promise<DeviceRow[]> {
   const base = await requireGatewayBase();
   const body = await fetchJson<{ devices?: DeviceRow[] }>(
@@ -76,14 +67,10 @@ export async function listDevices(): Promise<DeviceRow[]> {
   return body.devices ?? [];
 }
 
-/** `undefined` (not `[]`) when no vault plane is mounted; `[]` would say
- * "you own none". */
 export async function listOwnedVaults(): Promise<VaultRow[] | undefined> {
   return listVaults();
 }
 
-/** No argument carries every vault the owner owns; `vaultId` narrows to one.
- * 409 `no_iroh_endpoint` means the gateway cannot be paired into. */
 export async function mintDeviceTicket(input?: {
   vaultId?: string;
   ttlMinutes?: number;
@@ -112,9 +99,6 @@ export async function renameDevice(
   return body.device;
 }
 
-/** Revoking the LAST live device strands the vault behind filesystem-only
- * recovery, so the gateway 409s unless `confirmVaultName` echoes the vault
- * name — which the member must type, never the screen. */
 export async function revokeDevice(
   deviceId: string,
   confirmVaultName?: string

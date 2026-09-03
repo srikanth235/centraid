@@ -1,8 +1,3 @@
-/*
- * Application menu, tray, and deep-link scaffolding (#468).
- * Registers centraid:// as the default protocol; tray shows gateway status.
- */
-
 import path from "node:path";
 
 import { app, BrowserWindow, Menu, Tray, nativeImage } from "electron";
@@ -102,15 +97,6 @@ export function installApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-/**
- * The tray image. On macOS the menu bar wants a monochrome **template** image
- * so the OS tints it to the bar (light/dark, active-highlight) — exactly how
- * the other status items render. A colored icon ignores that and looks out of
- * place, so we load the black-on-transparent `iconTemplate.png` (its sibling
- * `iconTemplate@2x.png` is auto-picked for Retina) and flag it as a template
- * rather than resizing the full-color app icon. Windows/Linux trays are not
- * auto-tinted, so they keep the color icon.
- */
 function loadTrayImage(colorIconPath: string): NativeImage {
   if (process.platform === "darwin") {
     const templatePath = path.join(
@@ -122,7 +108,6 @@ function loadTrayImage(colorIconPath: string): NativeImage {
       templ.setTemplateImage(true);
       return templ;
     }
-    // Fall through to the color icon if the template asset is missing.
   }
   const image = nativeImage.createFromPath(colorIconPath);
   return image.isEmpty() ? image : image.resize({ width: 16, height: 16 });
@@ -137,7 +122,6 @@ export function installTray(iconPath?: string): void {
   tray.on("click", () => focusMainWindow());
 }
 
-/** Register centraid:// (and hand off second-instance deep links). */
 export function installDeepLinkProtocol(): void {
   if (process.defaultApp) {
     if (process.argv.length >= 2) {
@@ -176,13 +160,11 @@ export function installDeepLinkProtocol(): void {
     handleUrl(url);
   });
 
-  // Windows/Linux: protocol URL arrives as a process argv on second-instance.
   app.on("second-instance", (_event, argv) => {
     const url = argv.find((a) => a.startsWith("centraid://"));
     if (url) handleUrl(url);
   });
 
-  // Cold-start protocol launches arrive in the first instance's argv.
   const initialUrl = process.argv.find((argument) =>
     isOAuthFinishDeepLink(argument)
   );

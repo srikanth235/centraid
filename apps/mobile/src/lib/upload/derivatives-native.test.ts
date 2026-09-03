@@ -1,18 +1,9 @@
-// dhash is pure arithmetic over an RGBA thumbnail. The module also imports the
-// native imaging/file stack at the top level, so those are stubbed to let it
-// load under node; only the perceptual hash is exercised here.
-
 import type * as TypeImport_1299ylc from "expo-image-manipulator";
 import type * as TypeImport_7z4mwb from "expo-video-thumbnails";
 import { describe, expect, it, vi } from "vitest";
 
 import { dhash } from "./derivatives-native";
 
-// Neither module is actually exercised by the test below (only `dhash`,
-// pure arithmetic, is) — these stubs exist solely so the native imaging/file
-// stack resolves under node. Their real types (native classes/enums with
-// dozens of members) are impractical to replicate faithfully, so each stub
-// is asserted to the real export's type instead of widening the module.
 type ExpoFileSystem = typeof import("expo-file-system");
 
 vi.mock(import("expo-file-system"), () => ({
@@ -33,7 +24,6 @@ vi.mock(import("expo-video-thumbnails"), () => ({
 }));
 vi.mock(import("../gateway"), () => ({ authHeader: () => ({}) }));
 
-/** A grayscale 9×8 RGBA buffer whose columns follow `luma(col)`. */
 function grayscale(luma: (col: number) => number): Uint8Array {
   const width = 9;
   const height = 8;
@@ -53,7 +43,6 @@ function grayscale(luma: (col: number) => number): Uint8Array {
 
 describe(dhash, () => {
   it("sets every bit when brightness strictly decreases left to right", () => {
-    // Each column is brighter than the one to its right ⇒ a > b ⇒ bit 1.
     expect(
       dhash(
         9,

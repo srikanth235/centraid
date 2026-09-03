@@ -1,9 +1,3 @@
-// Home cold start (#880, #883 D1). Nine reads fire at open, three of them "the
-// newest N". These hold the tile reads against the real reader over a
-// four-scope fixture and read the SQL back off the driver, pinning the SHAPE of
-// the work: one composed statement per read that orders and limits the union of
-// every attached vault, a pushed `IN` on body lookups, and a page that crosses
-// the driver at `limit`, not `limit x scopes`.
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -22,7 +16,6 @@ import {
   idFilter,
 } from "./home-tile-reads";
 
-/** Days per scope. Four scopes × one row per day is the whole library. */
 const DAYS = 500;
 const DAY_MS = 86_400_000;
 const SCOPES = ["personal", "family", "school", "club"] as const;
@@ -65,8 +58,6 @@ const SHAPES = [
         ],
       },
       {
-        // The content-hashed entity: equal bytes in two vaults collapse into
-        // one badged row, so this one is never given a per-scope page.
         entity: "core.content_item",
         primaryKey: "content_id",
         columns: ["content_id", "title", "sha256", "byte_size", "deleted_at"],
@@ -110,7 +101,6 @@ function stamp(day: number): string {
   return new Date(Date.UTC(2016, 0, 1) + day * DAY_MS).toISOString();
 }
 
-/** Record what each read asked SQLite for, and how much it got back. */
 class RecordingDriver extends NodeSqliteDriver {
   readonly reads: Array<{ sql: string; rows: number }> = [];
 
@@ -124,11 +114,6 @@ class RecordingDriver extends NodeSqliteDriver {
   }
 }
 
-/**
- * One vault's slice of a household library: the same day sequence in every
- * scope, so the global newest page spans all four and the fixed primary-key
- * tie-break is exercised on every tied day.
- */
 function seedScope(file: string, vaultId: string): void {
   const store = new ReplicaSqliteStore(new NodeSqliteDriver(file), vaultId);
   store.bootstrap({
@@ -243,7 +228,6 @@ function household(): Household {
   return { driver, reader: new MultiVaultReplicaReader(driver, scopes) };
 }
 
-/** The composed page: the one statement a read compiles its grammar into. */
 function pageReads(driver: RecordingDriver): Array<{
   sql: string;
   rows: number;
@@ -288,24 +272,16 @@ describe("Home tile reads", () => {
     const page = await reader.read(tile.appId, tile.request);
 
     const paged = onePage(driver);
-    // Escalating rows lead the page, then the caller's own key.
     expect(paged.sql).toContain(
       `ORDER BY (verdict = 0) ASC, json_extract(payload_json, '$.${tile.column}') DESC`
     );
-    // The refusal guards ride the same pass: the order column has to be
-    // type-uniform and disclosed across EVERY attached vault, not merely on
-    // the page, and that is a window column rather than a second statement.
     expect(paged.sql).toContain("order_oversized");
     expect(paged.sql).toContain("order_straddle");
-    // One arm per attached vault, one page across their union.
     expect(paged.sql.match(/UNION ALL/gu)).toHaveLength(SCOPES.length - 1);
     expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(1);
-    // The page is the answer: nothing is fetched only to be discarded.
     expect(paged.rows).toBe(tile.limit);
 
     expect(page.rows).toHaveLength(tile.limit);
-    // Four scopes share one day sequence, so the global newest `limit` rows
-    // are exactly the newest `limit / 4` days of all four.
     const oldest = page.rows
       .map((row) => String(row.values[tile.column]))
       .sort()[0];
@@ -325,10 +301,6 @@ describe("Home tile reads", () => {
     reader.close();
   });
 
-  // `core.content_item` carries `sha256`, so no limit may be carried into a
-  // cross-scope read of it: the collapse runs after the statement and could
-  // drop the duplicate supplying a source badge. Tiles fetch bodies by id
-  // instead, bounded by the pushed predicate.
   test("the document body lookup costs the ids it asks for", async () => {
     const { driver, reader } = household();
     const ids = Array.from({ length: 12 }, (_, index) =>
@@ -344,13 +316,9 @@ describe("Home tile reads", () => {
 
     const paged = onePage(driver);
     expect(paged.sql).toContain("json_extract(payload_json, '$.content_id')");
-    // The read still says it could not carry the caller's limit, rather than
-    // quietly costing the entity (`mounted-read-scoping.ts`).
     expect(page.degraded?.map((entry) => entry.fallback)).toStrictEqual([
       "content-hash-badges",
     ]);
-    // One scope holds these ids; the other three answer with nothing. The
-    // whole entity is 2,000 rows.
     expect(paged.rows).toBe(ids.length);
     expect(page.rows).toHaveLength(ids.length);
     reader.close();

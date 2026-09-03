@@ -1,13 +1,3 @@
-// Quick add at the foot of the board (Tasks spec §3).
-//
-// TITLE FIRST, THE REST INLINE AND OPTIONAL: the chips appear once there is
-// something to file, so an empty capture bar costs the board four rows of
-// chrome it is not using.
-//
-// THE FIELD NEVER PARSES A SENTENCE — `QUICK_ADD.assistant` names the door
-// that does, and it sits under the chips rather than beside the field, where
-// it would read as a hint about what to type here.
-
 import React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 

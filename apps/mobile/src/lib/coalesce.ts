@@ -1,5 +1,3 @@
-/** Trailing-debounce, no overlap: a signal during a run queues one guaranteed
- *  follow-up (dropping it would show stale UI). */
 export interface CoalescedWork {
   signal: () => void;
   cancel: () => void;

@@ -1,7 +1,3 @@
-// The frame watcher's serialization and its honest trigger table. The React
-// mount half is not exercised here: what makes the watcher correct is that one
-// sweep runs at a time and a listener burst cannot re-enter it.
-
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -128,8 +124,6 @@ describe("the frame camera-roll watcher", () => {
       const background = CAMERA_ROLL_TRIGGERS.find(
         (trigger) => trigger.reason === "background-pass"
       );
-      // It drains the durable queue and nothing more. A table that implied
-      // otherwise would be the promise this slice exists not to make.
       expect(background?.fires).toContain("never");
     });
   });

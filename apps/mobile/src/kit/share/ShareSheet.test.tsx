@@ -1,19 +1,8 @@
-// The native share sheet (#776), and the claims its shape rests on:
-//
-//  1. THE AUDIENCE IS THE LINKED ROSTER, AND ONLY THAT. A share is delivered
-//     into the receiver's own vault, so a person with no approved link has
-//     nowhere to receive one and is not offered.
-//  2. ONE CONTROL PER PERSON. The role menu carries "no access" as one of its
-//     answers, so selecting somebody and choosing what they may do is a single
-//     decision in a single place.
-//  3. A REUSED CIRCLE OPENS ALREADY SUBMITTING ITS OWN ROSTER, and detaches
-//     the moment the member edits one of its capabilities.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// @vitest-environment jsdom
 import ShareSheet from "./ShareSheet";
 
 (
@@ -112,8 +101,6 @@ vi.mock(
   () => ({ default: () => null }) as never
 );
 
-// The menu is the kit's own, proved by `AnchoredMenu.test.tsx`. Here it is a
-// window onto the rows the sheet HANDS it, so a role choice is pressable.
 vi.mock(import("../components/AnchoredMenu"), async () => {
   const ReactModule = await import("react");
   return {
@@ -215,8 +202,6 @@ vi.mock(
     }) as never
 );
 
-/** An approved link to a person's own vault — the only thing that puts them
- *  in this sheet. */
 function link(partyId: string, vaultId: string) {
   return {
     vaultA: "owner-vault",
@@ -272,7 +257,6 @@ async function press(target: HTMLButtonElement): Promise<void> {
   });
 }
 
-/** Open one person's role menu and answer it. */
 async function setRole(person: string, role: string): Promise<void> {
   const opener = [
     ...container!.querySelectorAll<HTMLButtonElement>("button"),
@@ -330,7 +314,6 @@ describe("ShareSheet audience", () => {
     mocks.links = [link("ben", "ben-vault")];
     await render();
     expect(container!.textContent).toContain("Ben");
-    // Asha is in People, but no link means nowhere to deliver.
     expect(container!.textContent).not.toContain("Asha");
     expect(container!.textContent).toContain(
       "Everyone you add gets the full shared item in their own vault and backup."
@@ -369,7 +352,6 @@ describe("ShareSheet role", () => {
 
   it("submits the capability the role menu chose, addressed to their vault", async () => {
     await render();
-    // Nobody is selected until a role is chosen: that IS the selection.
     expect(buttonWithText("Share").getAttribute("aria-disabled")).toBe("true");
     await setRole("Ben", "Editor");
     await press(buttonWithText("Share with 1"));
@@ -393,10 +375,6 @@ describe("ShareSheet role", () => {
   });
 });
 
-// A container that reuses its OWN circle is bound server-side to that circle's
-// exact stored roster and capabilities, so the sheet has to open already
-// submitting them — "choose people individually" would default every pick to
-// `read+write` and be refused for the drift.
 describe("ShareSheet preferred circle", () => {
   beforeEach(() => {
     openSheetContainer();
@@ -444,3 +422,4 @@ describe("ShareSheet preferred circle", () => {
     ]);
   });
 });
+// @vitest-environment jsdom

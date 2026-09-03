@@ -1,8 +1,3 @@
-// Memories, full screen (#724). Browse only — no selection, no batch actions.
-// Honest empty: one explainer when every section is empty, not three empty shelves.
-// A trip is named by the phrase ladder (`trips.ts`), never the place row's raw
-// name, and sketched from `projectPlaces` with no basemap and no URL (#816).
-
 import React, { useMemo } from "react";
 import {
   ScrollView,
@@ -130,15 +125,9 @@ function OnThisDayYearBlock({
   );
 }
 
-/** Small on purpose — situates the trip beside its name; not a map to be read. */
 const SKETCH_WIDTH = 96;
 const SKETCH_HEIGHT = 56;
 
-/**
- * Same `projectPlaces` arithmetic as `PlacesMap.tsx`. Drawn with
- * `react-native-svg` — a projection needs no map vendor (that would be told
- * where the member has been). A single-stop trip draws its dot and no line.
- */
 function RouteSketch({
   route,
   colors,
@@ -151,12 +140,9 @@ function RouteSketch({
   const { pins } = projectPlaces(route, {
     width: SKETCH_WIDTH,
     height: SKETCH_HEIGHT,
-    // Clear of the plate's edge by a dot's radius. No merging: two stops the
-    // eye cannot separate are still two stops the LINE has to pass through.
     padding: 7,
     mergeDistance: 0,
   });
-  // `projectPlaces` sorts by count; the line follows the trip's own order.
   const stops = route.flatMap((point) => {
     const pin = pins.find((candidate) => candidate.key === point.key);
     return pin ? [pin] : [];
@@ -262,7 +248,6 @@ export default function MemoriesView({
     [places.rows]
   );
 
-  // Stable for the screen's lifetime — "today" must not shift under a mid-scroll midnight.
   const now = useMemo(() => new Date(), []);
 
   const model = useMemo(

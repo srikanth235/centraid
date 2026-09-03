@@ -1,8 +1,4 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
-/**
- * Insights owner (#545) — pure format helpers the Insights screen uses.
- * Gateway fetch helpers are mocked so vitest never loads react-native.
- */
 import { describe, expect, it, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -10,8 +6,6 @@ import { useFakeClock } from "@centraid/test-kit/fake-clock";
 vi.mock(import("./gateway") as Promise<unknown>, () => ({
   apiHeaders: () => ({}),
   authHeader: () => ({}),
-  // `fetchJson` is generic (`<T>(href, init?) => Promise<T>`); a typed mock erases
-  // the type parameter, so `Mock<...>` stops being assignable to the export.
   fetchJson: vi.fn<typeof TypeImport_3w09v8.fetchJson>(),
   requireGatewayBase: vi.fn<typeof TypeImport_3w09v8.requireGatewayBase>(
     async () => "http://127.0.0.1:9"

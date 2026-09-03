@@ -1,5 +1,3 @@
-// Local profile + first-run state (#263); AsyncStorage-backed, not a security boundary.
-
 import { BRAND, IDENTITY_COLORS, identityInitials } from "@centraid/design";
 
 import { Store } from "../storage";
@@ -8,10 +6,8 @@ const PROFILE_NAME_KEY = "profile.name";
 const PROFILE_COLOR_KEY = "profile.color";
 const PROFILE_ONBOARDED_KEY = "profile.onboarded";
 
-// Ink per the Binding Layer; BRAND is a default colour only, never control tint.
 export { BRAND } from "@centraid/design";
 
-// Settings → You swatches; teal leads.
 export const PROFILE_COLORS: readonly string[] = IDENTITY_COLORS;
 
 export async function hydrateProfile(): Promise<void> {

@@ -1,6 +1,3 @@
-// JS surface for the CentraidTunnel Expo module (#263). Wire protocol:
-// packages/tunnel/src/protocol.ts — stay byte-for-byte in lockstep.
-
 import type { NativeModule } from "expo-modules-core";
 import { requireOptionalNativeModule } from "expo-modules-core";
 
@@ -34,17 +31,14 @@ export interface TunnelPairVault {
 }
 
 export interface TunnelPairArgs {
-  /** From the desktop's "Connect phone" QR. */
   ticket: string;
   code: string;
   deviceName: string;
   platform: string;
-  /** Base64 of the device's 32-byte ed25519 secret key. */
   secretKeyB64: string;
 }
 
 export interface TunnelGatewayPairArgs {
-  /** Gateway EndpointTicket from a `centraid-gw-pair` token. */
   ticket: string;
   ticketId: string;
   secret: string;
@@ -92,7 +86,6 @@ export async function generateSecretKey(): Promise<string> {
   return requireTunnel().generateSecretKey();
 }
 
-/** Transport failures resolve as `{ ok: false, error }` — one error path. */
 export async function pairWithDesktop(
   args: TunnelPairArgs
 ): Promise<TunnelPairResult> {
@@ -105,7 +98,6 @@ export async function pairWithGateway(
   return requireTunnel().pairWithGateway(args);
 }
 
-/** Idempotent while running: returns the already-bound port. */
 export async function startTunnel(
   args: TunnelStartArgs
 ): Promise<{ port: number }> {
@@ -120,7 +112,6 @@ export async function getTunnelStatus(): Promise<TunnelStatus> {
   return requireTunnel().getTunnelStatus();
 }
 
-/** No-op subscription when native is absent. */
 export function addTunnelStatusListener(cb: (status: TunnelStatus) => void): {
   remove: () => void;
 } {

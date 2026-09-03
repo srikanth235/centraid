@@ -1,21 +1,8 @@
-// Pins the anchored menu's anatomy (#712):
-//
-//  - every group's rows render, and a group boundary is a rule rather than a
-//    heading
-//  - the active row — and only it — carries the leading mark, and says so in
-//    its own accessibility label
-//  - a disclosure row swaps the card to its submenu IN PLACE, with a named way
-//    back; the parent's rows return exactly as they were
-//  - a plain row closes the card, a `staysOpen` row does not (iOS' zoom rows)
-//  - the backdrop dismisses
-//  - destructive and disabled rows take their own ink on the LEAF, never a
-//    container opacity (§18)
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// @vitest-environment jsdom
 import AnchoredMenu from "./AnchoredMenu";
 import type { MenuGroup } from "./AnchoredMenu";
 
@@ -88,9 +75,6 @@ vi.mock(import("react-native"), async () => {
       absoluteFill: {},
       create: <T,>(styles: T): T => styles,
     },
-    // The ONE style fact these tests read: whichever `color` a row's label
-    // resolved to, surfaced onto the DOM so the destructive and disabled inks
-    // can be asserted without a native renderer.
     Text: ({
       children,
       style,
@@ -109,8 +93,6 @@ vi.mock(import("react-native"), async () => {
   } as unknown as Partial<ReactNative>;
 });
 
-/** Flattens the array-of-styles a label carries down to whichever `color`
- *  wins — the same shape RN itself resolves. */
 function inkOf(style: unknown): string | undefined {
   if (Array.isArray(style)) {
     let found: string | undefined;
@@ -139,8 +121,6 @@ vi.mock(
     }) as unknown as Partial<ThemeModule>
 );
 
-// The glyph's NAME is what a test can hold — the checkmark is the mark, and a
-// row that swapped it for another icon would be a different statement.
 vi.mock(import("./Icon"), async () => {
   const ReactModule = await import("react");
   return {
@@ -173,9 +153,6 @@ let container: HTMLDivElement | undefined;
 let onClose: ReturnType<typeof vi.fn<() => void>>;
 let chose: string[];
 
-/** The Library's own shape, near enough to be worth testing against: an
- *  exclusive filter submenu, a stepping submenu that stays open, and a
- *  destructive/disabled pair in a group of their own. */
 function groups(): MenuGroup[] {
   return [
     {
@@ -278,8 +255,6 @@ function labels(): string[] {
   );
 }
 
-// #712 — anchored in a comment, never in a describe string: the
-// mobile-design gate counts `#712` in code (strings included) as a hex literal.
 describe("the anchored menu's rows", () => {
   beforeEach(() => {
     container = document.createElement("div");
@@ -324,8 +299,6 @@ describe("the anchored menu's rows", () => {
     press("Filter");
     expect(row("All Photos").getAttribute("aria-selected")).toBe("true");
     expect(row("Favorites").getAttribute("aria-selected")).toBe("false");
-    // The mark itself, not merely the state: a checkmark glyph in the leading
-    // slot of the checked row and of no other.
     const marks = container!.querySelectorAll('i[data-icon="check"]');
     expect(marks).toHaveLength(1);
     expect(row("All Photos").contains(marks[0]!)).toBe(true);
@@ -363,8 +336,6 @@ describe("one level of nesting, opened in place", () => {
       "All Photos. Selected",
       "Favorites",
     ]);
-    // The parent's OTHER rows are gone while the submenu is up — this is one
-    // card showing one level, not two lists stacked.
     expect(container!.textContent).not.toContain("Move to Trash");
   });
 
@@ -395,8 +366,6 @@ describe("one level of nesting, opened in place", () => {
     press("Small");
     expect(chose).toStrictEqual(["s"]);
     expect(onClose).not.toHaveBeenCalled();
-    // Still in the submenu, so a second rung is one tap away rather than
-    // three.
     expect(row("Small")).toBeTruthy();
   });
 });
@@ -421,9 +390,6 @@ describe("the inks a row's own state takes", () => {
     );
   });
 
-  // Stub tier: the DOM `disabled` attribute on this file's own host mock, not
-  // React Native's responder. A disabled RN `Pressable` short-circuits in the
-  // responder tree, which only the RNTL project observes (#890 W5).
   it("gives a disabled row the disabled ink and withholds its choice", () => {
     render();
     const share = row("Share");
@@ -443,3 +409,4 @@ describe("the inks a row's own state takes", () => {
     );
   });
 });
+// @vitest-environment jsdom

@@ -1,7 +1,3 @@
-// The engine's ORDER — the part an app must not reinvent. The byte store is
-// mocked here on purpose: what is under test is which step runs when, not
-// where the file lands (`content-store.test.ts` owns that).
-
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -62,7 +58,6 @@ const BASE = {
   headers: {},
 };
 
-/** A stored ref becomes readable — the store's real post-download behaviour. */
 function storeSucceeds(): void {
   let present = false;
   store.offlineContentUri.mockImplementation(() =>
@@ -163,9 +158,6 @@ describe("the pin/download engine", () => {
       );
     });
 
-    // An UNPINNED download big enough to blow the budget on its own is evicted
-    // by the pass that follows it. Saying "stored" there would promise bytes
-    // that are already gone.
     test("a download the budget pass immediately reclaims is not reported stored", async () => {
       store.offlineContentUri.mockReturnValue(undefined);
       const outcome = await ensureOfflineContent(BASE);

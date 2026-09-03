@@ -1,5 +1,3 @@
-// Photos share handler for all four shelves (#825): one grant-kit sheet over a single photo; refuses multi-photo/cross-vault selections.
-
 import type { SelectionHandler } from "@centraid/blueprints/apps/_shared/selection-engine";
 import { ONE_AT_A_TIME } from "@centraid/blueprints/apps/photos/grant-audiences";
 
@@ -35,7 +33,6 @@ export function usePhotoSelectionShare(
     dismiss: share.dismiss,
     sheetProps: {
       audiences: share.audiences,
-      // OBJECT-FIRST: handler refuses first; no empty id reaches the door.
       subject: { subjectType: "media.asset", subjectId: only?.assetId ?? "" },
       onStatus: (message) => {
         postStatus(message);

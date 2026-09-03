@@ -1,7 +1,3 @@
-// Upload-queue boot (#419.4). Drain on foreground; `begin` is keyed by
-// content sha so a drain IS reconciliation. Never concurrent (`withDrainLock`);
-// reconcile never starts or stops the Android FGS.
-
 import { useEffect } from "react";
 import { AppState } from "react-native";
 
@@ -34,7 +30,6 @@ async function reconcileOnce(
 ): Promise<ReconcileSummary> {
   let queue: UploadQueue | undefined;
   try {
-    // Probe the queue before resolving the gateway: nothing pending ⇒ no tunnel.
     const probe = UploadQueue.open({
       gatewayBaseUrl: "http://127.0.0.1",
       headers: authHeader,
@@ -61,7 +56,6 @@ async function reconcileOnce(
       onProgress: ({ completed, total }) =>
         UploadForegroundService.update(completed, total),
     });
-    // No FGS start here (F1): reconcile is an accelerator, not an owner.
     const drain = hasTransfers
       ? await queue.drain()
       : { settled: 0, failed: 0, deduped: 0, halted: false };
@@ -77,7 +71,6 @@ async function reconcileOnce(
       poisoned: replay.poisoned,
     };
   } catch {
-    // Drain never surfaces to the UI; unsettled items stay queued.
     return EMPTY_RECONCILE;
   } finally {
     queue?.close();
@@ -90,7 +83,6 @@ export function drainUploadQueueNow(
   return withDrainLock(() => reconcileOnce(session));
 }
 
-/** Never touches the FGS. */
 export async function drainUploadQueueInBackground(
   session?: MobileReplicaSession
 ): Promise<void> {

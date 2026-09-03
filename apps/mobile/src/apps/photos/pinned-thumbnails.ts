@@ -1,7 +1,3 @@
-// Timeline snapshot → offline thumbnail-pack candidates + change detection.
-// `usePhotoTimeline` re-publishes assets every tick; the cheap signature fold
-// skips the expensive filesystem pass.
-
 import type { PinnedThumbnailCandidate } from "../../lib/replica/thumbnail-pack";
 import type { PhotoAsset } from "./timeline-source";
 
@@ -13,7 +9,6 @@ function foldString(hash: number, value: string): number {
   return next;
 }
 
-/** Stable identity for the candidate set; `gatewayBase` included. */
 export function pinnedThumbnailSignature(
   gatewayBase: string,
   assets: readonly PhotoAsset[]
@@ -23,10 +18,8 @@ export function pinnedThumbnailSignature(
   let newest = "";
   for (const asset of assets) {
     const contentId = asset.contentId;
-    // Device-only rows have no blob; no content id = not backed up yet.
     if (contentId === undefined || asset.source === "device") continue;
     count += 1;
-    // Fold "" not `undefined`, which stringifies alike per row.
     const capturedAt = asset.capturedAt ?? "";
     if (capturedAt > newest) newest = capturedAt;
     hash = foldString(hash, contentId);
@@ -53,7 +46,6 @@ export function pinnedThumbnailCandidates(
       uri: `${gatewayBase}/centraid/_gateway/blobs/${encodeURIComponent(
         scopeId
       )}/${encodeURIComponent(contentId)}?variant=${variant}`,
-      // Undated rows sort oldest rather than being dropped.
       capturedAt: asset.capturedAt ?? "",
       favorite: asset.favorite,
     }));

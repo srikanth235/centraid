@@ -1,13 +1,3 @@
-// The SHARING half of the drive projection — who sent a document into this
-// vault, and who this vault has sent it on to. Split out of
-// `docs-projection.ts` when that file outgrew the size limit; only this half
-// needs the link plane.
-//
-// Same law as its parent: nothing is fabricated. Every field is a replica fact
-// or `null` where the replica cannot say — "unknown" is never "shared with
-// nobody" (#903).
-
-// `SharedFrom` is the BLUEPRINT's: two shapes for one fact is how seats drift.
 import type {
   SharedFrom,
   SharedMember,
@@ -23,10 +13,8 @@ import {
 } from "./docs-projection-rows";
 import type { EntityRow } from "./docs-projection-rows";
 
-/** The three replica reads `originsByDocument` joins. */
 export interface OriginEntityRows {
   origins: readonly EntityRow[];
-  /** What turns an origin VAULT into a person. */
   bindings: readonly EntityRow[];
   parties: readonly EntityRow[];
 }
@@ -51,13 +39,6 @@ function shareLabel(
   return rest > 0 ? `${shown} +${rest}` : shown;
 }
 
-/**
- * Inbound placements, by document id — the Shared shelf's whole source.
- *
- * The vault id is the durable fact; the NAME needs a live
- * `share_party_vault_binding`. No binding, no name — never a vault id worn as
- * one, and never a guess from `shared_by`, which is an owner id, not a party.
- */
 export function originsByDocument(
   rows: OriginEntityRows
 ): Map<string, SharedFrom> {
@@ -65,8 +46,6 @@ export function originsByDocument(
     rows.bindings.flatMap((binding) => {
       const vaultId = str(binding, "vault_id");
       const partyId = str(binding, "party_id");
-      // A revoked binding no longer says whose vault that is; the placement it
-      // once explained stays, unnamed.
       return vaultId && partyId && str(binding, "revoked_at") === null
         ? [[vaultId, partyId] as const]
         : [];

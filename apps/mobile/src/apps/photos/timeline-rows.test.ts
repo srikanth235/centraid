@@ -48,10 +48,6 @@ describe("month and day labels (handoff §4.3)", () => {
     expect(describeCounts([asset({ id: "p" })])).toBe("1 photograph");
   });
 
-  // The day sub-label carries the PLACE and no tally: the timeline prints no
-  // count at all (#712, iOS parity). `describeCounts` above serves the
-  // Years/Months period cards, which summarise a period the member cannot see
-  // the whole of.
   test("the day sub-label is the place alone, with no count in it", () => {
     const places = new Map([["pl1", "Lyme Regis"]]);
     const dayAtOnePlace = Array.from({ length: 12 }, (_, i) =>
@@ -93,7 +89,6 @@ describe("the row list", () => {
 
   test("a month header is emitted once per month, not once per day", () => {
     const months = rows.filter((row) => row.type === "month");
-    // Three days across two months → two month headers.
     expect(months).toHaveLength(2);
     expect(rows.filter((row) => row.type === "day")).toHaveLength(3);
   });
@@ -124,24 +119,15 @@ describe("the row list", () => {
     expect(monthLabelAt(rows, 2)).toBe(
       firstMonth?.type === "month" ? firstMonth.title : ""
     );
-    // A row before any header still resolves to a month rather than blank.
     expect(monthLabelAt(rows, 0)).not.toBe("");
   });
 
   test("a scroll offset resolves to the section day the member is looking at", () => {
-    // The grain control asks this to keep a member's place when they switch to
-    // Years or Months, so the answer has to be a `PhotoSection.day` and it has
-    // to track the scroll rather than the sticky month header above it.
     const tops = rowTops(rows);
-    // The top of the list is the newest day, whatever rows precede it.
     expect(dayAtOffset(rows, tops, 0)).toBe("2026-08-04");
-    // Deep enough to have passed into July: the July month header is sticky
-    // over its own days, but the day underneath is what is reported.
     const july = rows.findIndex((row) => row.key === "d:2026-07-30");
     expect(dayAtOffset(rows, tops, tops[july]!)).toBe("2026-07-30");
     expect(dayAtOffset(rows, tops, tops[july]! + 4)).toBe("2026-07-30");
-    // Past the end of the content still names the last day, never undefined —
-    // an over-scrolled list has not left the library.
     expect(dayAtOffset(rows, tops, 999_999)).toBe("2026-07-30");
   });
 

@@ -1,23 +1,3 @@
-// @vitest-environment jsdom
-// A regression net over the Face review screen's rules (#711, #712; see
-// FaceReview.tsx's own header), not a styling snapshot:
-//
-//   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285) — nothing rendered
-//      here may contain a `%`.
-//   2. ONE FACE AT A TIME (v4 3967). Never a FlatList over every unconfirmed
-//      region: exactly one "Is this someone you know?" panel is ever on
-//      screen.
-//   3. AN UNMATCHED FACE HAS A FORWARD ACTION — a proposal with no match is
-//      the PRIMARY case a face detector produces, and it is never
-//      reject-only.
-//   4. THE QUEUE CAN BE FINISHED. "Keep unnamed" writes a real `dismiss`
-//      answer through the one `answer-face` verb; an already-answered region
-//      stays out of the queue across pulls; and Skip is the only control that
-//      writes nothing.
-//
-// Same react-native-as-DOM mocking technique as PhotosPeopleView.test.tsx:
-// every RN primitive becomes a plain DOM element so the screen can be driven
-// with react-dom/client under jsdom, without a native runtime.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -50,9 +30,6 @@ const mocks = vi.hoisted(() => ({
     textInv: "#mock-text-inv",
     textSoft: "#mock-text-soft",
   },
-  // r1: proposed match "Ana", 8 other matching photographs — the confidence
-  // rule's fixture. r2: NO party_id at all — the "no forward action" bug's
-  // primary case. Neither is `confirmed_by_party_id`, so both are queued.
   faces: [
     {
       region_id: "r1",
@@ -68,9 +45,6 @@ const mocks = vi.hoisted(() => ({
       review_state: "proposed",
       bbox_json: null,
     },
-    // Already answered and NOT confirmed (#712) — a face the member
-    // deliberately left unnamed. It must not be in the queue, and it must not
-    // be counted as one of Ana's matches either.
     {
       region_id: "r-dismissed",
       asset_id: "a-dismissed",
@@ -78,8 +52,6 @@ const mocks = vi.hoisted(() => ({
       review_state: "dismissed",
       bbox_json: null,
     },
-    // 8 more photographs already confirmed as Ana — exactly what "8
-    // matching faces" (README.md:285's match-count rule) is counting.
     ...Array.from({ length: 8 }, (_, i) => ({
       region_id: `r-confirmed-${i}`,
       asset_id: `a-confirmed-${i}`,
@@ -337,7 +309,6 @@ describe("Face review, on the phone seat", () => {
     await renderScreen();
     expect(container!.textContent).toMatch(/Proposed: Ana/u);
     expect(container!.textContent).not.toMatch(/No proposed match/u);
-    // Only one panel's worth of facts — "confidence" appears once.
     const occurrences = (container!.textContent!.match(/confidence/gu) ?? [])
       .length;
     expect(occurrences).toBe(1);
@@ -345,7 +316,6 @@ describe("Face review, on the phone seat", () => {
 
   it("rule 3: an unmatched face (no proposed person) still has a forward action", async () => {
     await renderScreen();
-    // Skip to the second (unmatched) proposal.
     const skipBtn = Array.from(container!.querySelectorAll("button")).find(
       (b) => b.getAttribute("aria-label") === "Skip this face"
     )!;
@@ -391,14 +361,11 @@ describe("Face review, on the phone seat", () => {
       region_id: "r1",
       answer: "dismiss",
     });
-    // The shared Photos projection owns the local upsert. App call sites must
-    // not send a second, hand-maintained optimistic shape alongside it.
     expect(request).not.toHaveProperty("optimistic");
   });
 
   it("an already-answered region is not in the queue", async () => {
     await renderScreen();
-    // Two proposals pending (r1, r2) — the dismissed one is not a third.
     expect(container!.textContent).toMatch(/1 of 2/u);
     expect(container!.textContent).toMatch(/2 to go/u);
   });
@@ -414,3 +381,4 @@ describe("Face review, on the phone seat", () => {
     expect(mocks.write).not.toHaveBeenCalled();
   });
 });
+// @vitest-environment jsdom

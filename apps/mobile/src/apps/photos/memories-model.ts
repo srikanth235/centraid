@@ -1,5 +1,3 @@
-// Group vault-derived `media.memory` rows; do not compute memories here.
-// Honest empty: never claim a shelf that has no resolvable members (#724).
 import { gazetteerNameFrom } from "@centraid/blueprints/apps/photos/place-phrase";
 import {
   resolveHomeKey,
@@ -26,7 +24,6 @@ export interface OnThisDayMemory {
 export interface TripMemory {
   memoryId: string;
   placeId: string | null;
-  /** From members' places (#816), not `place_id` — a coordinate is not a name. */
   placeName: string | null;
   titleHint: string | null;
   title: string;
@@ -59,7 +56,6 @@ function coordOf(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/** `geo_lat`/`geo_lng` first; `latitude`/`lat` are fixture fallbacks (#787). */
 export function memoryPlacesById(
   rows: readonly RawPlaceRow[]
 ): Map<string, MemoryPlace> {
@@ -92,7 +88,6 @@ function tripMemberOf(
   };
 }
 
-/** Whole library, never one trip's members — that would mark every away day as home. */
 export function homePlaceKey(
   assets: readonly PhotoAsset[],
   places: ReadonlyMap<string, MemoryPlace>
@@ -111,7 +106,6 @@ function textOf(row: RawMemoryRow, column: string): string | null {
   return value === null || value === undefined ? null : String(value);
 }
 
-/** Index both `id` and `assetId` — members point at `asset_id`. */
 export function indexAssetsById(
   assets: readonly PhotoAsset[]
 ): Map<string, PhotoAsset> {
@@ -156,7 +150,6 @@ function todayKey(now: Date): string {
   return `${month}-${day}`;
 }
 
-/** Return `null`, never an empty `years` list. */
 export function buildOnThisDayMemory(
   rawMemories: readonly RawMemoryRow[],
   rawMembers: readonly RawMemoryMemberRow[],
@@ -180,7 +173,6 @@ export function buildOnThisDayMemory(
   for (const asset of members) {
     if (asset.capturedAt === undefined) continue;
     const year = asset.capturedAt.slice(0, 4);
-    // This calendar year is today, not a memory of it.
     if (Number(year) >= currentYear) continue;
     const list = byYear.get(year);
     if (list) list.push(asset);
@@ -279,7 +271,6 @@ export function hasNoMemories(model: MemoriesModel): boolean {
   );
 }
 
-/** Missing endpoint → title hint; do not print a partial range. */
 export function tripDateLabel(trip: TripMemory): string | null {
   if (!trip.startedAt || !trip.endedAt) return trip.titleHint;
   const start = new Date(trip.startedAt);

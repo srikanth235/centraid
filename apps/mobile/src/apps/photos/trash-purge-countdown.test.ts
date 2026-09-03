@@ -1,10 +1,3 @@
-// Trash's per-item countdown (proto:4446-4449, §5).
-//
-// Its own file rather than a block inside `tile-overlays.test.ts`: the rule
-// under test is the TRASH SHELF's, and it is asserted against the same
-// derivation the web ships (`packages/blueprints/apps/photos/queries/
-// library.ts` → `purge_in_days`, and `components/Timeline.tsx` → the wording).
-// Two surfaces, one countdown; if either drifts, this fails.
 import { describe, expect, it } from "vitest";
 
 import { purgeInDays, purgeNote, stateOverlay } from "./tile-overlays";
@@ -66,17 +59,10 @@ describe("the countdown lands in the tile's state slot", () => {
     expect(overlay?.form).toBe("line");
     if (overlay?.form !== "line") throw new Error("expected a line");
     expect(overlay.text).toMatch(/^purges in \d+ days?$/u);
-    // Mono on the page colour in the EXPIRING register (`--seam`, issue
-    // #765): a trashed photograph is not an error, and `--net` here would
-    // paint the whole shelf red (§4.4) — but it is not a settled fact either,
-    // which is precisely the state `--seam` names.
     expect(overlay.tone).toBe("seam");
   });
 
   it("takes the slot from the custody mark, never sits beside it", () => {
-    // A trashed photograph that is also `local-only` is a real combination,
-    // and the two would otherwise land in the same corner of the same tile.
-    // Days-until-gone is the one a member can act on.
     expect(
       stateOverlay(
         asset({
@@ -93,8 +79,6 @@ describe("the countdown lands in the tile's state slot", () => {
   });
 
   it("leaves every other shelf's state slot alone", () => {
-    // Outside Trash the slot is silent for the two custody states that are
-    // NORMAL, and carries the mark for the one that is not.
     expect(
       stateOverlay(asset({ backupState: "remote-only" }), M)
     ).toBeUndefined();

@@ -6,7 +6,6 @@ interface InstallPromptEvent extends Event {
 }
 
 const DISMISS_KEY = "centraid.web.v1.install-dismissed-at";
-/** Re-offer the install banner this many days after "Not now". */
 const REOFFER_DAYS = 14;
 
 function notice(kind: "install" | "offline", text: string): HTMLDivElement {
@@ -37,7 +36,7 @@ function markDismissed(): void {
   try {
     localStorage.setItem(DISMISS_KEY, String(Date.now()));
   } catch {
-    /* private mode */
+    // Intentionally empty.
   }
 }
 
@@ -74,9 +73,6 @@ function showInstallBanner(event: InstallPromptEvent): void {
   banner.append(install, dismiss);
 }
 
-/** First run has no gateway yet, so "reconnect to your gateway" is nonsense
- *  copy over the welcome screen (#603). The banner starts once the
- *  user has actually finished onboarding. */
 function onboardingComplete(): boolean {
   return typeof loadSettingsPatch()["onboardingCompletedAt"] === "string";
 }
@@ -94,17 +90,12 @@ export function installWebChrome(): void {
       snapshot?.status === "down" && onboardingComplete()
     );
   };
-  // The onboarding stamp is written through `saveSettingsPatch`, which
-  // publishes this. Re-read the gateway-owned health snapshot so this chrome
-  // and Gateway → Overview always use the same authority.
   subscribe(SETTINGS_EVENT, () => {
     void window.CentraidApi.getGatewayRuntime().then(syncGateway);
   });
   window.CentraidApi.onGatewayRuntime(syncGateway);
   void window.CentraidApi.getGatewayRuntime().then(syncGateway);
 
-  // Keep listening across the session (not `{ once: true }`) so a later
-  // re-offer after days, or a menu action, can still use the event.
   window.addEventListener("beforeinstallprompt", (raw) => {
     raw.preventDefault();
     const event = raw as InstallPromptEvent;

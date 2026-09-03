@@ -1,6 +1,3 @@
-// The readout every backup screen quotes, over the real store on node:sqlite
-// so the aggregates under test are SQL's own answers.
-
 import { rmSync } from "node:fs";
 import path from "node:path";
 
@@ -22,8 +19,6 @@ interface FakeQueue {
   close: () => void;
 }
 
-// Hoisted so the (hoisted) `vi.mock` factory closes over it without a
-// temporal-dead-zone reference.
 const H = vi.hoisted(() => {
   const state: { queue?: FakeQueue; openError?: Error; closes: number } = {
     closes: 0,
@@ -32,8 +27,6 @@ const H = vi.hoisted(() => {
 });
 
 vi.mock(import("../../lib/upload/native-queue"), () => ({
-  // `UploadQueue` is nominally typed (private constructor), so no structural
-  // stand-in is assignable; only `open()` is called, so assert that surface.
   UploadQueue: {
     open: () => {
       if (H.openError) throw H.openError;
@@ -67,8 +60,6 @@ describe("transfer-queue", () => {
     store = UploadQueueStore.create(driver);
     H.openError = undefined;
     H.closes = 0;
-    // `close` counts rather than closes: `readTransferQueue` releases the
-    // queue in a `finally`, and the assertions still need the store.
     H.queue = {
       pending: () => store.pending(),
       pendingStorageGroups: () => store.pendingStorageGroups(),

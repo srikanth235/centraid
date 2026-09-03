@@ -1,14 +1,6 @@
 import React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
-// THE ENRICHMENT CONSENT SURFACE, NATIVE (v4 handoff §8). A surface, not a
-// row, for a privacy reason: one tap on a summary row could start enrichment
-// without the member ever learning where it runs or that photographs can
-// leave the device at all — this screen is the only place the product says
-// so. Header chrome around the shared §8 gate (`ConsentGate`, #712); copy is
-// the SAME module the web client renders, so the two clients cannot drift.
-// A PURE VIEW: no state, no reads, no writes; every answer leaves through a
-// callback. The gate lives in PhotosLibrary.tsx.
 import {
   CLOUD_PANEL,
   ENRICHMENT_NOTE,
@@ -27,17 +19,13 @@ import { useTheme } from "../../kit/theme";
 import { styles } from "./EnrichmentConsent.styles";
 
 export interface EnrichmentConsentProps {
-  /** Photographs the question is about; `null` when unknown — the title then says "these photographs" rather than inventing a number. */
   count: number | null;
   onDevice: AnswerAvailability;
   cloud: AnswerAvailability;
-  /** A write is in flight; neither answer is takeable while it is. */
   busy?: boolean;
-  /** Latched once answered, so the question stops offering itself. */
   answered?: "device" | "declined" | null;
   onRunOnDevice: () => void;
   onDecline: () => void;
-  /** Absent while no cloud helper can be chosen — see `CLOUD_ANSWER` in the shared module. */
   onChooseCloud?: () => void;
   onClose: () => void;
 }

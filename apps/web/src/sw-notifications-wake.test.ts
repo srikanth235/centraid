@@ -144,8 +144,6 @@ describe("closed PWA Notifications wake", () => {
         setTimeout,
         clearTimeout,
       },
-      // Naming the script makes v8 attribute this run to public/sw.js, so the
-      // wake path counts toward the service worker's coverage (#656 1F).
       { filename: swPath }
     );
 

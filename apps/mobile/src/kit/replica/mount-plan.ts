@@ -1,16 +1,10 @@
-// WHAT THIS PHONE CAN OPEN WITHOUT ASKING ANYONE. Phase A is pure and decides
-// from DISK ALONE: `MountPlan` has two shapes, neither of them "ask the network
-// first". "Unpaired" is a DISK FACT, never a network verdict.
-
 export interface PersistedMountIdentity {
   gatewayId: string;
   vaultId: string;
 }
 
 export interface MountPlanInput {
-  /** `vaultId` is `''` while a gateway resolves — that case must probe. */
   link?: { gatewayId?: string; vaultId?: string };
-  /** A HINT, not an identity: the tunnel loopback port is ephemeral. */
   cachedBase: string;
   lastIdentity?: PersistedMountIdentity;
 }
@@ -27,7 +21,6 @@ function complete(
     : undefined;
 }
 
-/** Synchronous on purpose — an async phase A can hang. The registry row wins. */
 export function planMount(input: MountPlanInput): MountPlan {
   const identity = complete(input.link) ?? complete(input.lastIdentity);
   if (!identity) return { kind: "probe" };

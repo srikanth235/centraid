@@ -37,20 +37,12 @@ const wasm = vi.hoisted(() => {
     );
     request = vi.fn<WasmBrowserEndpoint["request"]>();
     close = vi.fn<WasmBrowserEndpoint["close"]>(async () => undefined);
-    // Present only to match the real wasm-bindgen-generated `BrowserEndpoint`
-    // shape (which the typed `vi.mock(import(...))` factory below now checks
-    // against) — the real methods free/dispose the underlying Rust value;
-    // nothing to release in this in-memory stand-in.
     free = vi.fn<WasmBrowserEndpoint["free"]>();
     [Symbol.dispose] = vi.fn<WasmBrowserEndpoint[typeof Symbol.dispose]>();
   }
   return {
     connectFailureMarker,
     BrowserEndpoint,
-    // The real default export resolves to the wasm-bindgen `InitOutput`
-    // (dozens of internal exports table entries); `iroh-transport.ts` only
-    // awaits it and never reads the result, so a placeholder cast here is
-    // honest — asserting only this one property, not the whole module.
     initWasm: vi.fn<typeof TypeImport_1ruos0p.default>(
       async (): Promise<InitOutput> => undefined as unknown as InitOutput
     ),
@@ -87,7 +79,6 @@ describe("iroh-transport", () => {
     localStorage.clear();
     sessionStorage.clear();
     vi.clearAllMocks();
-    // Drop the memoized endpoint promise between tests.
     purgeIrohDeviceState();
     wasm.BrowserEndpoint.spawn.mockImplementation(
       async () => new wasm.BrowserEndpoint()
@@ -110,8 +101,6 @@ describe("iroh-transport", () => {
       expect(localStorage.getItem(DEVICE_KEY)).toBe("stable-key");
       expect(sessionStorage.getItem(DEVICE_KEY)).toBeNull();
 
-      // Declining the offline copy no longer demotes the enrolled identity —
-      // that is what silently unpaired a browser on every restart.
       (loadConnection as ReturnType<typeof vi.fn>).mockReturnValue({
         endpointId: "gw-1",
         label: "Web",
@@ -147,7 +136,6 @@ describe("iroh-transport", () => {
         vaultId: "vault-1",
       });
       expect(wasm.BrowserEndpoint.spawn).toHaveBeenCalledOnce();
-      // encodeBytes([1,2,3]) is deterministic base64 'AQID'.
       expect(localStorage.getItem(DEVICE_KEY)).toBe("AQID");
     });
 
@@ -164,7 +152,6 @@ describe("iroh-transport", () => {
           rememberDevice: false,
         })
       ).rejects.toThrow("wasm init failed");
-      // A subsequent call must re-spawn rather than reuse the failed promise.
       wasm.BrowserEndpoint.spawn.mockImplementation(
         async () => new wasm.BrowserEndpoint()
       );

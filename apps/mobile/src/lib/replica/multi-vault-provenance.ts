@@ -60,7 +60,6 @@ export type StoredReplicaRowValues = Pick<
   | "server_version"
 >;
 
-/** Decode without adding a mounted-scope identity prefix. */
 export function storedReplicaEnvelope(
   row: StoredReplicaRowValues,
   extra: ReplicaRow = {}
@@ -77,7 +76,6 @@ export function storedReplicaEnvelope(
   };
 }
 
-/** Runs only after rows and outbox compose in their unprefixed domain. */
 export function replicaScopeEnvelope(
   scope: MountedReplicaScope,
   row: ReplicaRowEnvelope
@@ -97,13 +95,6 @@ export function replicaScopeEnvelope(
   };
 }
 
-/**
- * Collapse equal bytes into ONE consistent source row: payload id and
- * `__centraidScopeId` come from the same vault, so A's id never reaches
- * writable B merely because B badged the same sha. `mountOrder` picks that row
- * and orders badges; omit it to keep first-seen, which federated search wants
- * because it composes hits one scope at a time (#883 D1).
- */
 export function dedupeReplicaRowsByContent(
   rows: readonly ReplicaRowEnvelope[],
   mountOrder: readonly string[] = []
@@ -120,7 +111,6 @@ export function dedupeReplicaRowsByContent(
     if (group) group.push(row);
     else groups.set(key, [row]);
   }
-  // A group keeps its FIRST member's position, so collapsing never reorders.
   return [...groups.values()].map((group) =>
     collapseSources(group, mountOrder)
   );
@@ -135,7 +125,6 @@ function collapseSources(
   const rank = (row: ReplicaRowEnvelope): number => {
     const id = row.values[REPLICA_SCOPE_ID];
     const at = typeof id === "string" ? mountOrder.indexOf(id) : -1;
-    // An unranked source keeps its arrival position: `sort` is stable.
     return at === -1 ? Number.MAX_SAFE_INTEGER : at;
   };
   const ordered = [...group].sort((left, right) => rank(left) - rank(right));

@@ -1,9 +1,3 @@
-// The frame every Photos surface sits in (§F): wrapping a screen in it is what
-// keeps the band, the Home capsule and the reserved band height from being
-// forgotten on a pushed screen. The selection bar REPLACES the band, never
-// stacks above it. Safe-area top is an explicit inset — `SafeAreaView edges`
-// resolves zero inside this stack's modal cover.
-
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -64,7 +58,6 @@ export default function PhotosScreen({
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<PhotosShellNavigation>();
   const [moreOpen, setMoreOpen] = useState(false);
-  // The FRAME's latch, not Photos' (#712).
   const { bandOwner } = useBandOwner("photos");
 
   const selecting = (selection?.count ?? 0) > 0;
@@ -74,7 +67,6 @@ export default function PhotosScreen({
       setMoreOpen(true);
       return;
     }
-    // POP, never push: `navigate` pushes a second `PhotosHome` on RN7.
     navigation.popTo("PhotosHome", { destination: key });
   };
 
@@ -100,7 +92,6 @@ export default function PhotosScreen({
 
       {/* Exactly ONE bar at the foot: the selection bar or the band, never both. */}
       {selecting && selection ? (
-        // The home-indicator lift is added here only; `PhotosBand` adds its own.
         <View style={{ paddingBottom: insets.bottom }}>
           <SelectionBottomBar selection={selection} />
         </View>
@@ -109,7 +100,6 @@ export default function PhotosScreen({
           owner={bandOwner}
           current={current}
           onSelect={onDestination}
-          // `goBack()` no-ops on a deep link; `navigate` pushes a second Home.
           onHome={() => navigation.popTo("Home")}
         />
       )}
@@ -123,7 +113,6 @@ export default function PhotosScreen({
   );
 }
 
-/** Actions only; count and Done stay in the screen's head. */
 function SelectionBottomBar({
   selection,
 }: {
@@ -156,11 +145,9 @@ function SelectionBottomBar({
             accessibilityLabel={action.label}
             accessibilityRole="button"
             accessibilityState={{ disabled: action.disabled }}
-            // Never the ONLY place the reason lives (§6).
             accessibilityHint={action.disabled ? action.reason : undefined}
             disabled={action.disabled}
             key={action.id}
-            // Second half of the disabled rule — no synthetic press gets through.
             onPress={() => {
               if (action.disabled) return;
               action.run();

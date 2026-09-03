@@ -17,7 +17,6 @@ export interface ReplicaQueryState {
   connection: ReplicaQueryConnection;
   unavailableReason?: string;
   lastSyncedAt?: string;
-  /** `partial` means these rows are a readable preview, not the whole library. */
   coverage?: ReplicaCoverage;
   refresh: () => Promise<void>;
 }
@@ -47,10 +46,6 @@ export function replicaQueryConnection(input: {
   if (
     input.reachability === "device-offline" ||
     input.reachability === "gateway-asleep" ||
-    // A paused sync reads as `offline` here rather than gaining a sixth value
-    // every consumer would have to learn: what this enum tells an app is
-    // whether the rows may be stale, and under the member's own transfer rules
-    // they may. The reason is a status-bar sentence, not an app-level branch.
     input.reachability === "sync-paused"
   )
     return "offline";
@@ -80,8 +75,6 @@ export function combineReplicaQueryStates(
   const lastSyncedAt = states
     .flatMap((state) => (state.lastSyncedAt ? [state.lastSyncedAt] : []))
     .sort((a, b) => b.localeCompare(a))[0];
-  // Conservative, like the reader's own aggregate: one partial entity keeps the
-  // combined screen partial. A complete claim needs every part to claim it.
   const coverages = states.flatMap((state) =>
     state.coverage ? [state.coverage] : []
   );

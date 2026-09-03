@@ -55,18 +55,8 @@ import type {
 import type { NativeReadRequest, NativeSearchRequest } from "./native-session";
 import { MAX_MOUNTED_NATIVE_SCOPES } from "./offline-budgets";
 
-/**
- * Columns `dedupeReplicaRowsByContent` collapses on. An entity exposing one
- * merges rows across scopes, which makes a per-scope `LIMIT` unsafe: the
- * duplicate supplying a source badge may sit outside the other scope's page.
- */
 const CONTENT_HASH_COLUMNS = ["sha256", "content_sha256", "blob_sha256"];
 
-/**
- * The off-thread read op-sqlite adds on top of the deliberately synchronous
- * `ReplicaSqliteDriver`. On the phone the driver runs on the JS thread, where a
- * 50k-row scan freezes the UI, so prefer this whenever it is present.
- */
 interface AsyncReadDriver {
   allAsync?: <T extends object>(
     sql: string,
@@ -100,7 +90,6 @@ export interface MountedReplicaScope {
   label: string;
   canWrite: boolean;
   databaseName: string;
-  /** Undefined only before the gateway answers, and reads as their own (#711). */
   personal?: boolean;
 }
 
@@ -144,13 +133,6 @@ interface AttachedScope extends MountedReplicaScope {
   alias: string;
 }
 
-/**
- * Outbox states an overlay still projects from; `executed` settles the row out.
- * `conflict` is a PRESENTED state (`presentPendingIntentMutation`), not a stored
- * `IntentState`, and stays listed so the SQL filter matches the JS predicate.
- * Bound into `WHERE state IN (…)` so the `replica_intent_outbox_state` index
- * works instead of every read parsing the whole outbox.
- */
 const OVERLAY_STATES = [
   "queued",
   "sending",
@@ -161,18 +143,8 @@ const OVERLAY_STATES = [
   "failed",
 ] as const;
 
-/**
- * Ceiling on rows one federated search pulls from the FTS indexes. Rows a
- * pending mutation addresses are composed separately (address-bounded, below),
- * so a large outbox costs a bounded page, never a refused search (#880).
- */
 const MAX_SEARCH_FETCH_ROWS = 10_000;
 
-/**
- * One op-sqlite connection with every mounted vault attached. Per-vault
- * sessions remain the only writers; reads and FTS fan-in happen here so
- * changing the visible Vault is a filter change, not a session teardown.
- */
 export class MultiVaultReplicaReader {
   readonly #driver: ReplicaSqliteDriver;
   readonly #scopes: AttachedScope[];
@@ -216,24 +188,12 @@ export class MultiVaultReplicaReader {
     return this.#scopes;
   }
 
-  /**
-   * One composed plan over every mounted vault (#883 D1). Never re-implement
-   * filter, order or limit here: `planComposedReplicaRead` compiles the grammar
-   * ONCE and unions one arm per attached database, so the k-way merge across
-   * vaults IS that statement's `ORDER BY`, and only the returned page is parsed.
-   *
-   * Two things stay in JavaScript because no statement can do them: content
-   * dedupe across vaults, and mounted provenance composed onto the envelope.
-   * `mounted-read-scoping.ts` names what that costs and what it refuses.
-   */
   async read(
     appId: string,
     request: NativeReadRequest
   ): Promise<MountedReadResult> {
     const purpose = request.purpose ?? DEFAULT_REPLICA_PURPOSE;
     const mounted = await this.schemasForAll(appId, purpose, request.entity);
-    // Provenance is constant per database, so its equalities choose DATABASES
-    // rather than rows — and never reach SQL, which has no value for them.
     const selection = selectMountedScopes(request, this.#scopes);
     const schemas = mounted.filter((schema) =>
       selection.vaultIds.has(this.#scopes[schema.scope_index]!.vaultId)
@@ -283,10 +243,6 @@ export class MultiVaultReplicaReader {
       ),
       1
     );
-    // Dedupe runs AFTER the statement, so a limit it can collapse is a limit
-    // that may drop the duplicate supplying a source badge. Only a content
-    // hash lets rows collapse at all; across several vaults the badge is the
-    // point, so the page is not pushed and the whole filtered set is read.
     const badgeRisk = contentHashed && schemas.length > 1;
     const degraded: MountedReadDegradation[] = [];
     if (badgeRisk) degraded.push(mountedReadDegradation("content-hash-badges"));
@@ -297,9 +253,6 @@ export class MultiVaultReplicaReader {
       badgeRisk ? REPLICA_MAX_LOCAL_ROWS : requested
     );
     let rows = this.compose(planned, schemas);
-    // A short page proves there is nothing more only when nothing was cut off.
-    // One vault's own duplicates can collapse a full page; pay for the whole
-    // filtered set exactly then, and say so.
     if (
       !badgeRisk &&
       contentHashed &&
@@ -316,9 +269,6 @@ export class MultiVaultReplicaReader {
       rows = this.compose(planned, schemas);
     }
     const aggregate = this.aggregateState();
-    // The plan clamps a caller's limit to its own local ceiling. A page that
-    // then fills that ceiling provably has rows behind it, so report it partial
-    // rather than letting a capped answer read as the whole mounted plane.
     const clamped =
       (request.limit ?? 0) > REPLICA_MAX_LOCAL_ROWS &&
       planned.length === REPLICA_MAX_LOCAL_ROWS;
@@ -331,7 +281,6 @@ export class MultiVaultReplicaReader {
     };
   }
 
-  /** Compile, run and audit one composed page. */
   private async runPlan(
     schema: ReplicaEntitySchema,
     request: ReplicaReadRequest,
@@ -345,8 +294,6 @@ export class MultiVaultReplicaReader {
       sources
     );
     const rows = await this.query<ReplicaPlannedRow>(plan.sql, plan.binds);
-    // Escalating rows sort ahead of the whole union, so one page proves every
-    // mounted database clean or names the first refusal.
     assertReplicaPage(rows, plan);
     if (plan.tieCensus) {
       const census = await this.query<ReplicaTieCensusRow>(
@@ -358,7 +305,6 @@ export class MultiVaultReplicaReader {
     return rows;
   }
 
-  /** The statement's order is the answer's order; dedupe preserves it. */
   private compose(
     planned: readonly ReplicaPlannedRow[],
     schemas: readonly ScopedEntitySchemaRow[]
@@ -370,8 +316,6 @@ export class MultiVaultReplicaReader {
       planned.map((row) => {
         const index = row.source_index ?? schemas[0]!.scope_index;
         const scoped = byIndex.get(index) ?? schemas[0]!;
-        // Provenance prefixes the identity LAST: intent row ids and canonical
-        // primary keys deliberately share the unprefixed domain above it.
         return replicaScopeEnvelope(this.#scopes[index]!, {
           rowId: row.row_id,
           values: JSON.parse(row.payload_json) as ReplicaRow,
@@ -380,15 +324,10 @@ export class MultiVaultReplicaReader {
           ...(row.server_version > 0 ? { rowVersion: row.server_version } : {}),
         });
       }),
-      // Equal bytes in two vaults collapse into one badged row, and the
-      // statement's order decides which of them arrives first. The canonical
-      // source and its badge order stay the MOUNT's, which is the order the
-      // vaults switcher shows and the order a write target is chosen in.
       this.#scopes.map((scope) => scope.vaultId)
     );
   }
 
-  /** Federated FTS5: one bounded MATCH per index, ranked and deduped once. */
   async search(
     appId: string,
     request: NativeSearchRequest
@@ -416,12 +355,6 @@ export class MultiVaultReplicaReader {
     const overlays = await this.overlaysForAll(appId, request.entity, schemas);
     const indexed = new Set(required);
     const limit = Math.min(Math.max(request.limit ?? 100, 1), 1_000);
-    // Only a delete or an upsert that touches an INDEXED column can take a
-    // canonical hit out of the composed page; every other pending mutation
-    // leaves the FTS ranking alone. Over-fetch by that count rather than by the
-    // whole outbox, and cap the page: a phone with ten thousand queued writes
-    // keeps searching, because rows those writes address are pulled in by id
-    // below instead of by inflating the ranked page.
     const displacing = [...overlays.values()].reduce(
       (count, mutations) =>
         count +
@@ -467,9 +400,6 @@ export class MultiVaultReplicaReader {
       parameters
     );
     const hits: ReplicaRowEnvelope[] = [];
-    // Pending rows rank ahead of every canonical hit, in scope then composition
-    // order. The counter runs across scopes, never striding by the fetch page:
-    // a scope composing more pending rows than that page holds would collide.
     let pendingPosition = 0;
     for (const schema of schemas) {
       const scope = this.#scopes[schema.scope_index]!;
@@ -594,7 +524,6 @@ export class MultiVaultReplicaReader {
     }
     this.#driver.exec(`DETACH DATABASE ${scope.alias};`);
     this.#scopes.splice(this.#scopes.indexOf(scope), 1);
-    // Scope count and the union of shape columns both feed the pushdown plan.
     this.#contentHashed.clear();
   }
 
@@ -668,12 +597,6 @@ export class MultiVaultReplicaReader {
     );
   }
 
-  /**
-   * Each vault's outbox, composed into the JSON value its plan arm binds.
-   * Bounded by the MUTATIONS, not the vault: three queued edits cost three rows
-   * however large the library is, and the composed value crosses back into
-   * SQLite so filter, order and limit still run once over the overlaid set.
-   */
   private async overlayBindings(
     entity: string,
     schemas: readonly ScopedEntitySchemaRow[],
@@ -768,11 +691,6 @@ export class MultiVaultReplicaReader {
           []
         );
         if (!table[0]) return;
-        // State and app are what SQL can decide: the state column is indexed,
-        // and `appId` is a scalar at the top of the stored record. Entity and
-        // shape stay in JS because they live inside the record's `optimistic`
-        // ARRAY — one intent can address several of them, so no scalar column
-        // or path expression answers for the whole row.
         const records = await this.query<StoredIntentRow>(
           `SELECT record_json FROM ${scope.alias}.replica_intent_outbox
             WHERE state IN (${OVERLAY_STATES.map(() => "?").join(", ")})
@@ -796,7 +714,6 @@ export class MultiVaultReplicaReader {
     return result;
   }
 
-  /** Cacheable: shape metadata, stable until a scope is revoked. */
   private async contentHashed(
     appId: string,
     purpose: string,
@@ -805,8 +722,6 @@ export class MultiVaultReplicaReader {
     const key = `${appId}\u0000${purpose}\u0000${entity}`;
     const cached = this.#contentHashed.get(key);
     if (cached !== undefined) return cached;
-    // Every scope revoked: there is no union to build, and the read itself
-    // reports the empty plane. Do not turn that into a SQL syntax error here.
     if (this.#scopes.length === 0) return false;
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
@@ -833,7 +748,6 @@ export class MultiVaultReplicaReader {
     return hashed;
   }
 
-  /** Prefer op-sqlite's off-thread read; fall back to the shared sync contract. */
   private query<T extends object>(
     sql: string,
     parameters: readonly ReplicaBindValue[]
@@ -895,7 +809,6 @@ export class MultiVaultReplicaReader {
   }
 }
 
-/** Can this pending mutation remove a canonical hit from a composed page? */
 function displaces(
   mutation: OptimisticMutation,
   indexed: ReadonlySet<string>
@@ -906,13 +819,6 @@ function displaces(
   );
 }
 
-/**
- * One schema for a read spanning several vaults. Where the mounted databases
- * disagree, take the answer that REFUSES more, never less: any vault's column
- * is nameable, and one vault withholding fields makes the whole read check
- * availability per row. The primary key is the first vault's — the key the
- * merged read breaks order ties on.
- */
 function mergedSchema(
   entity: string,
   schemas: readonly ScopedEntitySchemaRow[]

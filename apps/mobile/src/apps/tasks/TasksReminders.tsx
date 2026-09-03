@@ -1,8 +1,3 @@
-// The Reminder lens (Tasks spec §1, ruling 4) — WHAT WILL REACH THIS PHONE.
-// This seat delivers task reminders, so it lists rows carrying both a lead
-// time and a moment to count back from. Snoozing moves the reminder, never
-// the due date; the snooze options are LABELS, not controls.
-
 import React from "react";
 import { FlatList, View } from "react-native";
 

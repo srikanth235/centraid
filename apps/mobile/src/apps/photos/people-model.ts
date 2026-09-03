@@ -1,11 +1,4 @@
-// People shelf model (#724), pure. THREE ROW KINDS, never merged: people =
-// CONFIRMED only; pendingByParty = question, no `name`; unnamed = cluster.
-// Counts are photographs, not regions.
-
 import { groupPeopleFaces } from "@centraid/blueprints/apps/_shared/people-counts";
-
-// "DETECT FACES" gates on the gateway rung — the sweep runs there;
-// `deviceAnswerFor` answers a different tier. Nothing here invents data.
 
 export interface FaceRegionRow {
   region_id: string;
@@ -35,13 +28,11 @@ export interface EnrichPolicyRow {
 export interface PeopleCover {
   assetId: string;
   regionId: string;
-  /** Fractions of the whole photograph; null when unparseable. */
   bbox: { x: number; y: number; w: number; h: number } | null;
 }
 
 export interface PersonEntry {
   partyId: string;
-  /** "Unnamed" is the view's word: null is fact, label is rendering. */
   name: string | null;
   count: number;
   cover: PeopleCover | null;
@@ -56,7 +47,6 @@ export interface PendingEntry {
 export interface UnnamedGroupEntry {
   clusterId: string;
   count: number;
-  /** All regions: naming the group names them all. */
   regionIds: string[];
   cover: PeopleCover | null;
 }
@@ -96,12 +86,6 @@ const DETECT_REASONS = {
   unknown: "This library has not said yet how far enrichment may run.",
 } as const;
 
-/**
- * The `gateway` rung is where the faces sweep runs.
- *
- * COMPAT(enrich-tier-rename #712): `model` is the pre-rename name for
- * `gateway`, and such a row must not read as "not allowed".
- */
 export function detectFacesFor(
   tier: string | null | undefined
 ): DetectFacesAvailability {
@@ -109,7 +93,6 @@ export function detectFacesFor(
   if (tier === "device" || tier === "local")
     return { available: false, reason: DETECT_REASONS.device };
   if (tier === "off") return { available: false, reason: DETECT_REASONS.off };
-  // null = "not read yet", not a refusal.
   if (tier == null) return { available: false };
   return { available: false, reason: DETECT_REASONS.unknown };
 }
@@ -125,7 +108,6 @@ function parseBbox(json: unknown): PeopleCover["bbox"] {
   return { x: x as number, y: y as number, w: w as number, h: h as number };
 }
 
-// Earliest region id with a photograph behind it — stable across loads.
 function coverOf(regions: readonly FaceRegionRow[]): PeopleCover | null {
   const usable = regions
     .filter((region) => Boolean(region.asset_id))
@@ -139,7 +121,6 @@ function coverOf(regions: readonly FaceRegionRow[]): PeopleCover | null {
   };
 }
 
-/** Deterministic order throughout. */
 export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
   const nameOf = new Map(
     facts.parties
@@ -185,7 +166,6 @@ export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
       a.count === b.count ? (a.partyId < b.partyId ? -1 : 1) : b.count - a.count
     );
 
-  // Absent regions contribute nothing, not an unopenable card.
   const unnamed: UnnamedGroupEntry[] = grouped.unnamed
     .map((group) => ({
       clusterId: group.id,
@@ -215,7 +195,6 @@ export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
     pendingByParty,
     unnamed,
     pendingTotal: grouped.pendingTotal,
-    // Already-asked members get "not finished", not a second invite.
     empty: facts.faces.length > 0 ? PEOPLE_PENDING_EMPTY : PEOPLE_EMPTY,
     detectFaces: detectFacesFor(tier),
   };
@@ -226,7 +205,6 @@ export interface DetectFacesIntent {
   input: { entity_type: "media.asset" };
 }
 
-/** reason/capability pinned SERVER-side; no client-side consent widening. */
 export function detectFacesIntent(): DetectFacesIntent {
   return {
     action: "request-enrichment",
@@ -239,7 +217,6 @@ export interface NameFaceIntent {
   input: { region_id: string; answer: "confirm"; party_id: string };
 }
 
-/** One confirm per region, NOT a batch verb: assertions are per face seen. */
 export function nameGroupIntents(
   group: Pick<UnnamedGroupEntry, "regionIds">,
   partyId: string

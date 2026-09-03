@@ -1,19 +1,3 @@
-// The first-run camera-roll import's OFFER (#724) — the honest,
-// reviewable alternative to the silent automatic sweep (`photos-backup.ts`).
-// A member sees a plain count and two verbs: `Import` runs
-// `runCameraRollImport` (`camera-roll-import.ts`) over the vault's existing
-// staged-import route (`camera-roll-import-run.ts`), `Not now` dismisses the
-// offer for this device without touching a single photograph. Progress is
-// PERSISTED (`Store`) after every candidate settles, so a kill mid-import
-// resumes on next launch exactly where it left off — see
-// `camera-roll-import.ts`'s header for the resumability argument in full.
-//
-// Deliberately a self-contained banner, not a screen of its own or a new
-// More-sheet row: `PhotosHome.tsx` renders it in one small, additive slot
-// (import + a few lines) rather than growing its own navigation surface,
-// so this feature does not compete with concurrent work on that file's band,
-// menus or routing.
-
 import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -48,9 +32,6 @@ export default function CameraRollImportOffer({
   const [progress, setProgress] = useState<ImportProgress>();
   const [running, setRunning] = useState(false);
 
-  // Hydrated once, exactly the pattern `backupConsent` uses in `PhotosHome.tsx`:
-  // the async read resolves into a `.then` callback rather than a synchronous
-  // effect-body `setState`, which is what react-compiler's own rule requires.
   useEffect(() => {
     void Store.hydrate(DISMISSED_KEY, false).then(setDismissed);
     void Store.hydrate(PROGRESS_KEY, EMPTY_IMPORT_PROGRESS).then(setProgress);
@@ -62,8 +43,6 @@ export default function CameraRollImportOffer({
       ? candidates
       : remainingCandidates(candidates, progress);
 
-  // Nothing to offer: still hydrating, the member said not now, or every
-  // camera-roll photograph is already somewhere other than "local-only".
   if (dismissed === undefined || progress === undefined) return null;
   if (dismissed || remaining.length === 0) return null;
 

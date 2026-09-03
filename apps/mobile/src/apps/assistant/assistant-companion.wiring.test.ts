@@ -8,15 +8,11 @@ const read = (relative: string): string =>
 
 describe("production Assistant companion wiring", () => {
   const sheet = read("./AssistantCompanionSheet.tsx");
-  // The lockup — and with it the New chat entry — moved out of the springboard
-  // when every app gained a header (`VaultBar`). One provider owns the route
-  // now, which is the thing this test actually cares about.
   const home = read("../../screens/Home.tsx");
   const chrome = read("../../screens/home/VaultChrome.tsx");
   const app = read("../../../App.tsx");
 
   it("routes every existing app-bar New chat entry to the global companion", () => {
-    // Exactly one place routes New chat, product-wide.
     expect(chrome).toContain(
       'openNewChat: () => navigation.navigate("Assistant")'
     );

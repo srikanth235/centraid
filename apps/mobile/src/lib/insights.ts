@@ -1,7 +1,3 @@
-// Two read-only mirrors over one gateway base. Health is gateway-wide (host
-// bearer, never a vault header); Insights are vault-scoped (`apiHeaders`).
-// Shapes come from screen-contracts.ts: mobile has no gateway dependency.
-
 import {
   formatBytes as sharedFormatBytes,
   formatRelativeTime,
@@ -57,7 +53,6 @@ export interface GatewayHealth {
 export interface InsightsKpis {
   totalTokens: number;
   hydrationTokens: number;
-  /** Floor while `unpricedRuns` > 0. */
   totalCostUsd: number;
   harnessReportedCostUsd: number;
   estimatedCostUsd: number;
@@ -67,11 +62,9 @@ export interface InsightsKpis {
   failedRuns: number;
   failedCostUsd: number;
   appsTouched: number;
-  /** Not on the gateway rollup — do not read yet. */
   quotaTokens: number;
   unpricedRuns: number;
   unreportedRuns: number;
-  /** p50 run wall clock (ms). ABSENT when nothing finished. */
   medianRunMs?: number;
 }
 
@@ -80,9 +73,7 @@ export interface InsightsDailyPoint {
   tokens: number;
   costUsd: number;
   runs: number;
-  /** Same predicate as the KPIs. */
   failedRuns: number;
-  /** Floor: digests carry no failure-cost split. */
   failedCostUsd: number;
 }
 
@@ -216,7 +207,6 @@ export function formatUptime(ms: number): string {
   return `${rem}m`;
 }
 
-// One declaration for both seats, aliased to this module's vocabulary (#883).
 export { insDuration as formatDuration } from "@centraid/client/insights-copy";
 
 export function formatMs(ms: number): string {

@@ -1,6 +1,3 @@
-// The refcount guarding the Android foreground service (F8): concurrent owners
-// must not tear it down under one another, and a non-owner poke is a no-op.
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type ReactNative = typeof import("react-native");
@@ -13,10 +10,6 @@ const native = {
 };
 
 vi.mock(import("react-native"), () => ({
-  // foreground-service.ts only reads `Platform.OS` — react-native's real
-  // `Platform` type is a union of per-platform statics with many members
-  // (Version, isTV, select, …) that a test stub has no reason to implement,
-  // so this narrow stand-in is asserted to the real type instead.
   Platform: {
     OS: "android",
   } as unknown as ReactNative["Platform"],
@@ -30,7 +23,6 @@ describe("foreground-service", () => {
     native.start.mockClear();
     native.update.mockClear();
     native.stop.mockClear();
-    // Re-import fresh so the module-level refcount resets between cases.
     vi.resetModules();
     ({ UploadForegroundService } = await import("./foreground-service"));
   });

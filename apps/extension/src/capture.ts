@@ -7,7 +7,6 @@ export function anchoredCaptureText(capture: PageCapture): string {
   return `[${capture.title || capture.url}](${capture.url})${quote}`;
 }
 
-/** Keep the verbatim source URL in screenshot provenance, including its path. */
 export function documentCaptureTitle(capture: PageCapture): string {
   return `${capture.title || "Web capture"} — ${capture.url}`;
 }

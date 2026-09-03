@@ -1,14 +1,3 @@
-// The Shared shelf — what other people sent you, in the slot Search vacated
-// (`docs-band.ts` carries why the trade was worth making).
-//
-// Newest arrival first, each row led by WHO sent it. That line rides the row's
-// one lead slot, the same one a matched passage takes on Search (`DocRow`'s
-// `reason`): a row answers "why am I in this set" once.
-//
-// EVERY ROW IS THIS VAULT'S OWN COPY, so it carries the same menu, star and
-// trash as any other document. What it does not do is outlive the share —
-// ruling G-revoke hard-deletes it — which is why the empty state says so.
-
 import React, { useMemo } from "react";
 
 import {
@@ -28,7 +17,6 @@ export default function DocsSharedView({
 }: {
   drive: UseDocsResult;
 }): React.JSX.Element {
-  // No placement row, no arrival; trashed drops out as on every other shelf.
   const docs = useMemo(
     () =>
       drive.documents
@@ -49,8 +37,6 @@ export default function DocsSharedView({
     [docs]
   );
 
-  // "Could not read" and "nothing arrived" must not look alike, so the unknown
-  // case REPLACES the set rather than captioning it.
   const known = drive.sharedFromKnown;
 
   return (

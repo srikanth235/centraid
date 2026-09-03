@@ -1,7 +1,3 @@
-// One place's photographs, opened from a PlacesView card (Photos v4 handoff
-// §14): groups by the same 0.1° key PlacesView mints for its cards, so a
-// card's count and this screen's count cannot disagree.
-
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -45,22 +41,16 @@ export default function PlaceDetail({
     [timelineAssets, places.rows, placeKey]
   );
 
-  // The unnamed row this screen could name (#816); null once the place has a
-  // recognisable name — recomputes after the replica pushes the rename.
   const unnamedPlaceId = useMemo(
     () => unnamedPlaceAt(timelineAssets, places.rows, placeKey),
     [timelineAssets, places.rows, placeKey]
   );
 
-  // Read from live rows first; the route param is a copy made at tap time —
-  // printing it would show the fallback phrase over a just-named place.
   const heading = useMemo(
     () => placeNameAt(timelineAssets, places.rows, placeKey) ?? placeName,
     [timelineAssets, places.rows, placeKey, placeName]
   );
 
-  /** Name this place; `kind: "home"` anchors relative phrases for every
-   *  place the vault cannot name. */
   const namePlace = async (name: string, kind?: "home"): Promise<void> => {
     const trimmed = name.trim();
     if (!session || !unnamedPlaceId || !trimmed) return;
@@ -83,8 +73,6 @@ export default function PlaceDetail({
   };
 
   return (
-    // Shell owns the band (#712); the back chevron STAYS because PlacesView
-    // is this screen's genuine parent.
     <PhotosScreen current="more">
       <View style={styles.header}>
         <Tappable
@@ -192,8 +180,6 @@ export default function PlaceDetail({
   );
 }
 
-// Module-level so they are stable across renders instead of allocating a new
-// empty Set/no-op per render.
 const EMPTY_SELECTION = new Set<string>();
 const NOOP_SELECTION_CHANGE = (): void => {};
 

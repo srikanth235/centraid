@@ -1,28 +1,3 @@
-// How many SQLite statements one mounted read costs (#880).
-//
-// Phone reads go to the mounted multi-vault reader, never the gateway's vault
-// plane that `client-query-counts.json` fences, so a read that grows a
-// per-scope round trip would otherwise surface only as a slower Home. The
-// budget is in STATEMENTS, not milliseconds, so it lives beside the reader it
-// fences rather than in tests/experience-budgets/mobile.json ("what the vault
-// owner feels"), and this test is its whole enforcement.
-//
-// What the shape is, per read, over S mounted scopes:
-//
-//   1  entity-schema union      (one statement across all scopes)
-//   1  content-hash lookup      (cached per app+purpose+entity after the first)
-//   S  pending-overlay probes   (one `sqlite_master` existence check per scope)
-//   1  composed page            (one UNION of per-vault arms, ordered and
-//                                limited once at the top — #883 D1)
-//   S  source-state reads       (cursor + coverage, one per scope)
-//
-// So a read costs `2S + k`, k small — linear in MOUNTED VAULTS and constant in
-// LIBRARY SIZE. That second half is the load-bearing claim: the fixture below
-// saturates every ordered page, so the numbers are measured on the path a real
-// library takes, not on an empty vault.
-// An ordered read carries no separate order probe: the page proves its own
-// order with window columns, and the two shapes it cannot answer for say so
-// (`mounted-read-scoping.ts`).
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -44,16 +19,9 @@ import { MultiVaultReplicaReader } from "./multi-vault-reader";
 import { NodeSqliteDriver } from "./node-sqlite-driver";
 import { MAX_MOUNTED_NATIVE_SCOPES } from "./offline-budgets";
 
-// The worst case a phone can be in: the mount planner attaches no more than
-// this, so a budget measured here is a budget for every household.
 const SCOPES = ["personal", "family", "school", "club"] as const;
 const DAY_MS = 86_400_000;
 
-/**
- * Deep enough that every ordered tile fills its page in every scope (the
- * largest per-scope page Home asks for is 500), so no read can pass this
- * budget by finding an empty vault.
- */
 const DEEP_ROWS = 520;
 const SHALLOW_ROWS = 8;
 
@@ -112,8 +80,6 @@ const SHAPES: Array<{
         }),
       },
       {
-        // The content-hashed entity: never given a per-scope page, so Home
-        // fetches its bodies by id instead of ordering them.
         entity: "core.content_item",
         primaryKey: "content_id",
         columns: ["content_id", "title", "sha256", "deleted_at"],
@@ -256,12 +222,9 @@ const SHAPES: Array<{
   },
 ];
 
-/** Every statement the reader hands SQLite, in order. */
 class CountingDriver extends NodeSqliteDriver {
   readonly statements: string[] = [];
 
-  // `allAsync` delegates to `all`, so overriding this one method counts the
-  // off-thread path the reader actually takes exactly once.
   override all<T extends object>(
     sql: string,
     bind: readonly ReplicaBindValue[] = []
@@ -338,11 +301,9 @@ function household(): {
   return { driver, reader: new MultiVaultReplicaReader(driver, scopes) };
 }
 
-/** Classify one statement into the kinds a read is made of. */
 function bucket(sql: string): string {
   if (sql.includes("sqlite_master")) return "overlayProbe";
   if (sql.includes("replica_intent_outbox")) return "overlayRows";
-  // The census shares the page's scan, so it has to be recognised first.
   if (sql.includes("count(DISTINCT")) return "tieCensus";
   if (sql.includes("AS verdict")) return "page";
   if (sql.includes("r.row_id, r.payload_json")) return "overlayTargets";
@@ -360,11 +321,6 @@ function shapeOf(statements: readonly string[]): Record<string, number> {
   return counts;
 }
 
-/**
- * Home's cold start, as the springboard fires it (`useSpringboardTiles`): three
- * ordered tiles, two id-filtered body lookups, one id-filtered party lookup,
- * and six bounded reads.
- */
 const HOME_COLD_START: Array<{
   appId: string;
   request: Parameters<MultiVaultReplicaReader["read"]>[1];
@@ -403,7 +359,6 @@ describe("mounted reader statement budget (#880)", () => {
     const { driver, reader } = household();
     try {
       const page = await reader.read("photos", HOME_ORDERED_TILE_READS.photos);
-      // Measured on a saturating page, not an empty vault.
       expect(page.rows).toHaveLength(HOME_TILE_LIMITS.photos);
       expect(shapeOf(driver.statements)).toStrictEqual({
         schema: 2,
@@ -411,8 +366,6 @@ describe("mounted reader statement budget (#880)", () => {
         page: 1,
         state: SCOPES.length,
       });
-      // `schema: 2` is the entity-schema union plus the content-hash lookup,
-      // which reads the same table; the second is cached from here on.
       expect(driver.statements).toHaveLength(2 * SCOPES.length + 3);
     } finally {
       reader.close();
@@ -427,7 +380,6 @@ describe("mounted reader statement budget (#880)", () => {
         idFilter("core.content_item", "content_id", ["content-personal-0001"])
       );
       const counts = shapeOf(driver.statements);
-      // No order to prove and no tie to census: the whole read is one page.
       expect(counts["tieCensus"]).toBeUndefined();
       expect(counts["page"]).toBe(1);
     } finally {
@@ -435,33 +387,16 @@ describe("mounted reader statement budget (#880)", () => {
     }
   });
 
-  /**
-   * THE CEILING. 12 reads over 4 mounted vaults.
-   *
-   * Observed 2026-08-28 over the composed plan (#883 D1), Node SQLite driver
-   * over the production reader: 132 statements — exactly `12 x (1 schema + 4
-   * overlay probes + 1 page + 4 states) + 12 content-hash lookups`, with no
-   * residue. The ceiling is that number plus ~12%
-   * headroom, so one more tile lands without a fight while a new per-scope
-   * round trip inside the reader (12 at once, and 12 more for every mounted
-   * vault a household adds) does not. It may only fall.
-   */
   test("Home's cold start stays inside its statement ceiling", async () => {
     const HOME_COLD_START_STATEMENT_CEILING = 148;
     const { driver, reader } = household();
     try {
-      // Sequential on purpose: the reader caches the content-hash lookup per
-      // app+purpose+entity, so racing the twelve reads would count a different
-      // number of them each run and the ceiling would mean nothing.
       await forEachSequentially(HOME_COLD_START, async (read) => {
         await reader.read(read.appId, read.request);
       });
       expect(driver.statements.length).toBeLessThanOrEqual(
         HOME_COLD_START_STATEMENT_CEILING
       );
-      // Linear in mounted vaults, constant in library size: every statement
-      // belongs to one of the known kinds, and none of them repeats per row or
-      // per page.
       expect(shapeOf(driver.statements)["other"]).toBeUndefined();
       expect(shapeOf(driver.statements)["page"]).toBe(HOME_COLD_START.length);
     } finally {

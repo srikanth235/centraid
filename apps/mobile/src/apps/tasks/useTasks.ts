@@ -1,7 +1,3 @@
-// Tasks read layer (#834): board projected from this device's consent-shaped
-// replica; board arithmetic is imported from the blueprint logic, never
-// restated here. Rows carry their fields, never an invented recurrence count.
-
 import { useCallback, useMemo } from "react";
 
 import { nestTaskFamilies } from "@centraid/blueprints/apps/tasks/logic";
@@ -42,9 +38,7 @@ export interface UseTasksResult {
   connection: ReplicaQueryState["connection"];
   error?: string;
   unavailableReason?: string;
-  /** The gateway is out of reach — the replica's own verdict, never invented. */
   offline: boolean;
-  /** The moment this replica last matched the vault, when it knows one. */
   lastSyncedAt?: string;
   refresh: () => Promise<void>;
 }
@@ -56,8 +50,6 @@ export function useTasks(): UseTasksResult {
 
   const queryState = combineReplicaQueryStates([tasks, projects, sections]);
 
-  // Children nest under their parent on every seat — same nest as the pointer
-  // `board` query, so completing a parent promotes unfinished children.
   const board = useMemo(() => {
     const rows = tasks.rows as unknown as Task[];
     const families = nestTaskFamilies(rows, (row, children) => ({
@@ -96,10 +88,6 @@ export function useTasks(): UseTasksResult {
   };
 }
 
-/**
- * One write door for every Tasks act — `session.write` plus the kit's outcome
- * surfacing; returns the result on a continuable outcome, else `undefined`.
- */
 export type TasksWrite = (
   action: string,
   input: Record<string, ReplicaValue>,

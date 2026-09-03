@@ -1,8 +1,3 @@
-// The note is TERTIARY INK AT THE BODY RUNG, and that pairing is the whole
-// component (#765, spec §8): what recedes is its colour, never its size — a
-// note is read once and has to be readable. A future edit that "quietens" it
-// by dropping to the small rung fails here.
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -53,3 +48,4 @@ describe(NoteBlock, () => {
     expect(styleOf(nodesOf(container, "span")[0] ?? null).maxWidth).toBe(520);
   });
 });
+// @vitest-environment jsdom

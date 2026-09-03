@@ -1,6 +1,3 @@
-// ONE stored rung index (0-3), mapped per surface; numbers duplicate
-// blueprints/apps/photos/layout.ts on purpose.
-
 export const RUNG_LABELS = ["XS", "S", "M", "L"] as const;
 export type Rung = 0 | 1 | 2 | 3;
 
@@ -28,7 +25,6 @@ export function rungHeight(rung: Rung, surface: "desktop" | "phone"): number {
   return RUNGS[rung]![surface];
 }
 
-// +1 is a LARGER tile (stepper and table order agree).
 export function stepRung(rung: Rung, delta: number): Rung {
   return clampRung(rung + delta);
 }

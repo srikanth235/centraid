@@ -1,6 +1,3 @@
-/**
- * Matrix cell web.contracts (#535): EndpointId is the sole gateway identity.
- */
 import { describe, expect, test } from "vitest";
 
 import { webGatewayId } from "./web-state.js";

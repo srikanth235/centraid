@@ -1,16 +1,3 @@
-// THE MODAL CONFIRM (v12 handoff § The three confirms) — the acts no reverse
-// write can undo. All three stand on this surface now: Trash, Merge, and —
-// since the grant plane gave People the write side (#825) — Revoke, whose
-// title, body and both control words are the shared kit's
-// (`_shared/grant-copy.ts`), which is why the cancel word is a prop: `Keep
-// sharing` is the honest opposite of a revoke, where `Cancel` is the opposite
-// of the other two.
-//
-// Full width, bottom-anchored, 12px radius on the top corners, one sentence of
-// body, then `Cancel` (quiet) and the verb (destructive — outlined, never a
-// fill), each filling half the row. Everything else in the app reports on the
-// status line with Undo instead of asking first.
-
 import React from "react";
 import { Modal, Pressable, View } from "react-native";
 
@@ -25,7 +12,6 @@ export interface PeopleConfirmProps {
   title: string;
   body: string;
   verb: string;
-  /** The way out, where it is not the plain `Cancel`. */
   cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;

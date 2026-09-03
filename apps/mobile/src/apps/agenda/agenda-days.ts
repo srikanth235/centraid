@@ -1,10 +1,3 @@
-// Native Agenda's day list: one row per local civil day an event occupies.
-//
-// The web grid walks `spanLocalDays` inside `bucketByDay`. The phone cannot
-// import that renderer, so it walks the SAME interval helper and groups the
-// replica occurrences itself. Grouping by `event.start`'s date alone drops
-// Saturday from a Friday–Sunday run — the S2 hole this module exists to close.
-
 import {
   civilMidnight,
   DAY_MS,
@@ -43,7 +36,6 @@ function intervalOf(event: {
   return { start, end };
 }
 
-/** Local YYYY-MM-DD keys this occurrence occupies. */
 export function daysSpannedByEvent(event: {
   start: string;
   end?: string;
@@ -54,7 +46,6 @@ export function daysSpannedByEvent(event: {
   return spanLocalDays(interval.start, interval.end).map(dayKeyOf);
 }
 
-/** Group occurrences onto every local day they occupy, earliest day first. */
 export function groupEventsByLocalDay<
   T extends {
     start: string;

@@ -1,15 +1,3 @@
-// The only React Native adapter for @centraid/design.
-//
-// Metro consumes the workspace package from source, so copying its values into
-// a checked-in generated module adds drift without buying compatibility. This
-// adapter does only the two jobs that are genuinely platform-specific:
-//
-//   1. map semantic weight to the concrete Expo font-family name;
-//   2. lower CSS `em` tracking to React Native point tracking.
-//
-// Color, spacing, density, radius, motion, and type metrics remain the exact
-// objects returned by the canonical typed native lowering.
-
 import type { TextStyle } from "react-native";
 
 import { toNativeTheme } from "@centraid/design/native";
@@ -20,31 +8,9 @@ import type {
 } from "@centraid/design/native";
 
 export const family = {
-  // React Native's generic resolves to the platform code face without another
-  // bundled font or an OS branch in the design registry.
   monoMedium: "monospace",
   monoRegular: "monospace",
   sansMedium: "InstrumentSans_600SemiBold",
-  // THE 400 REGISTER RENDERS IN A 470 FACE, AND ONLY ON NATIVE. The ramp still
-  // SPECIFIES weight 400 (DESIGN.md § Type) — this is the same rasterizer
-  // compensation the size delta already is, applied to the other axis.
-  //
-  // `NATIVE_DELTA_BY_FAMILY` concedes that a phone at arm's length needs +2px
-  // size and +3px leading over a desktop pane at the same role. That step
-  // scales the glyph but not the stroke's optical presence, and iOS compounds
-  // it: CoreText draws with grayscale antialiasing where a desktop browser
-  // gets stem darkening. Same face, same token, objectively lighter strokes on
-  // the phone — which is why the 400 register reads correct on desktop and
-  // thin on the device, and why no edit to the shared ramp could fix one
-  // without wrecking the other.
-  //
-  // 470 rather than the 500 that `@expo-google-fonts` ships: 500 overshot by
-  // eye, and 470 is ~73% of the way from 400 to 500 in measured ink coverage.
-  // The face is a derived static instance — see `assets/fonts/README.md`.
-  //
-  // Deliberately NOT a third rung on the ramp: nothing may ask for "470". The
-  // token space is still two weights, and this is the lowering that draws one
-  // of them. Web and desktop are untouched.
   sansRegular: "InstrumentSans_470Book",
 } as const;
 
@@ -64,20 +30,6 @@ const FAMILY_BY_WEIGHT: Record<FamilyKey, Record<string, string>> = {
   },
 };
 
-/**
- * The popover rung of the elevation scale, lowered to React Native.
- *
- * DESIGN.md § Depth: "`--shadow-sm`/`--shadow-md`/`--shadow-lg` exist for a
- * dialog, a sheet and a popover, and for nothing else." The registry publishes
- * those three as CSS strings, which no native surface can consume, so the
- * phone had no elevation at all and its one popover — the anchored menu — was
- * separated from the page by a hairline alone.
- *
- * `shadowMd` is `0 8px 24px -8px rgba(20,20,20,.10)`. React Native has no
- * spread, so the -8px is folded into a tighter radius rather than dropped:
- * half the blur would be 12, and 10 lands the same visual footprint. Android
- * takes `elevation`, which is a single rung and cannot carry the offset.
- */
 export const popoverShadow = {
   elevation: 8,
   shadowColor: "#141414",

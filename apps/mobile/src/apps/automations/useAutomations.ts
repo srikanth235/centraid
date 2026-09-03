@@ -1,11 +1,3 @@
-// The Automations place's data half (#765).
-//
-// WHY THE FAN-OUT. The gateway serves runs per automation only, so the page
-// reads a capped window of each and merges newest first; `known` names the
-// refs actually read, so an automation outside the window is never described
-// as never having run. A failed turns read is an empty window, not a failed
-// page; both writes re-read rather than patching a row in place.
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { OpsState } from "../../kit/components/health-line";
@@ -28,7 +20,6 @@ export const RECENT_CAP = 10;
 
 export type AutomationsLoad =
   | { kind: "loading" }
-  /** `at` is when the answer landed; relative phrases measure from it. */
   | {
       at: number;
       kind: "ready";
@@ -51,7 +42,6 @@ export interface AutomationsController {
   installing: string | undefined;
   refreshing: boolean;
   actionError: string | undefined;
-  /** Last clock read successfully — survives into the error state. */
   lastRunClock: string | undefined;
   refresh: () => Promise<void>;
   retry: () => void;
@@ -116,7 +106,6 @@ export function useAutomations(): AutomationsController {
   const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState<string | undefined>();
   const [lastRunClock, setLastRunClock] = useState<string | undefined>();
-  // A ref, not state: the guard must hold WITHIN a tick, before React re-renders.
   const inFlight = useRef(false);
 
   const apply = useCallback((next: AutomationsLoad): void => {
@@ -130,8 +119,6 @@ export function useAutomations(): AutomationsController {
     void read(apply);
   }, [apply]);
 
-  // Independent read: a catalogue failure is an empty list, never the page's
-  // error state.
   useEffect(() => {
     let cancelled = false;
     void listAutomationTemplates()

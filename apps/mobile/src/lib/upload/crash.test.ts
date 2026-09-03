@@ -1,13 +1,5 @@
 import { rmSync } from "node:fs";
 import path from "node:path";
-// The property the issue asks for: kill the drainer at random points — including
-// mid-PUT byte offsets — reconstruct the queue from SQLite alone, and let it
-// run again. No duplicates, no loss, ever.
-//
-// The CAS object is not merely counted: it is unsealed with the VAULT's own
-// reader, so "no loss" means the exact original plaintext came back out of an
-// object assembled from parts that may have been sealed across many different
-// process lifetimes.
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -40,12 +32,6 @@ import { UploadDrainer } from "./uploader";
 const crypto = webCryptoUploadCrypto();
 const fetchImpl = fakeBlobStoreFetch();
 
-/**
- * Frames are 4 MiB, so a realistic multi-part object would make this suite
- * seal hundreds of MiB. The kernel's logic is frame-count-driven, not
- * byte-driven, so tests use small files and assert part/frame structure
- * directly; `cbsf.test.ts` covers the real 4 MiB boundaries.
- */
 const FILES = [
   { name: "a.jpg", bytes: bytesOf(3_000, 11) },
   { name: "b.mp4", bytes: bytesOf(17, 29) },
@@ -56,7 +42,6 @@ function bytesOf(size: number, seed: number): Uint8Array {
   return new Uint8Array(size).map((_, index) => (index * seed + 7) & 0xff);
 }
 
-/** Deterministic PRNG so a failure is reproducible from its seed. */
 function rng(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -83,7 +68,6 @@ class Harness {
     return bytesFileSource(bytes);
   };
 
-  /** Simulate process death: drop every handle and reopen from disk alone. */
   remount(): void {
     this.driver.close();
     this.driver = new NodeSqliteFileDriver(path.join(this.dir, "uploads.db"));
@@ -127,7 +111,6 @@ class Harness {
   }
 }
 
-/** Unseal a committed CAS object with the vault's reader; returns plaintext. */
 function vaultUnseal(
   sealed: Uint8Array,
   sha256: string,
@@ -164,7 +147,6 @@ function vaultUnseal(
 }
 
 function assertNoLossNoDupes(harness: Harness): void {
-  // Every enqueued item reached a settled receipt.
   for (const file of FILES) {
     const item = harness.store
       .pending()
@@ -172,13 +154,11 @@ function assertNoLossNoDupes(harness: Harness): void {
     expect(item, `${file.name} never settled`).toBeUndefined();
   }
 
-  // Exactly one CAS object per sha — no duplicates.
   expect(harness.provider.cas.size).toBe(FILES.length);
   expect(harness.gateway.completeLog).toHaveLength(
     new Set(harness.gateway.completeLog).size
   );
 
-  // And the bytes are the bytes: unseal each object with the vault's reader.
   for (const file of FILES) {
     const entries = [...harness.provider.cas.entries()];
     const match = entries.find(([sha]) => {
@@ -210,10 +190,6 @@ describe("crash", () => {
       assertNoLossNoDupes(harness);
     });
 
-    // The seeded sweep: kill at a random step, reconstruct from SQLite, repeat
-    // until everything settles. Steps include mid-PUT byte offsets, the gap
-    // between a stored PUT and its receipt, and the gap between a committed CAS
-    // object and its persisted receipt.
     it.each([1, 7, 42, 1337, 90_210])(
       "survives randomized kills and settles exactly once (seed %i)",
       async (seed) => {
@@ -243,8 +219,6 @@ describe("crash", () => {
       }
     );
 
-    // Exhaustive rather than random: kill at EVERY step index in turn. This is
-    // the strongest form of the property — no reachable seam is left untested.
     it("survives a kill at every single step index", async () => {
       await forEachSequentially(
         Array.from({ length: 40 }),
@@ -258,7 +232,6 @@ describe("crash", () => {
             } catch (error) {
               if (!(error instanceof UploadKillSignalError)) throw error;
             }
-            // Unlimited budget from here: the queue must recover on its own.
             local.killer.budget = Number.POSITIVE_INFINITY;
             const recoverNextRound = async (round: number): Promise<void> => {
               if (round >= 10 || local.store.pending().length === 0) return;
@@ -269,8 +242,6 @@ describe("crash", () => {
             };
             await recoverNextRound(0);
             local.remount();
-            // Recovery is unbounded above: whatever step the kill landed on, the
-            // remounted queue must have drained itself to empty by now.
             expect(
               local.store.pending(),
               `kill at step ${budget} left work behind`
@@ -284,14 +255,10 @@ describe("crash", () => {
     });
 
     it("replays the receipt when a PUT lands but recordPart never does", async () => {
-      // The interesting case, pinned deterministically rather than left to the
-      // sweep: stop exactly at the first `record`, when the provider holds the
-      // bytes and the queue has persisted the ETag.
       harness = new Harness();
       await harness.enqueueAll();
       harness.killer.budget = 0;
       const killAt = "record:1";
-      // Walk the budget forward until the kill lands on the first recordPart.
       const findKillBudget = async (budget: number): Promise<number> => {
         if (budget >= 40) return budget;
         const probe = new Harness();
@@ -320,7 +287,6 @@ describe("crash", () => {
         UploadKillSignalError
       );
 
-      // The ETag is on disk even though the gateway never acknowledged it.
       harness.remount();
       const item = harness.store.pending()[0]!;
       const put = harness.store
@@ -345,8 +311,6 @@ describe("crash", () => {
       harness.remount();
       assertNoLossNoDupes(harness);
 
-      // The recovered part was NOT re-uploaded: the receipt was replayed from
-      // the durable ETag instead.
       const reUploads = harness.provider.putLog
         .slice(putsBefore)
         .filter(
@@ -362,7 +326,6 @@ describe("crash", () => {
 
     it("replays a settled follow-up exactly once across a kill before the ledger clears", async () => {
       harness = new Harness();
-      // One file plus its canonical follow-up; settle the bytes first.
       await enqueueLocalFile(
         {
           store: harness.store,
@@ -382,8 +345,6 @@ describe("crash", () => {
         "bytes settled, follow-up armed"
       ).toHaveLength(1);
 
-      // A minimal replay a kill can interrupt between the canonical write and
-      // clearing the ledger row — the exact crash the intent id defends against.
       const executed: string[] = [];
       const created = new Set<string>();
       const replayOnce = (killBeforeClear: boolean): void => {
@@ -398,7 +359,6 @@ describe("crash", () => {
 
       expect(() => replayOnce(true)).toThrow(UploadKillSignalError);
       harness.remount();
-      // The row survived the kill; the second pass completes it.
       expect(harness.store.pendingFollowups()).toHaveLength(1);
       replayOnce(false);
       harness.remount();
@@ -421,7 +381,6 @@ describe("crash", () => {
       const putsAfterFirst = harness.provider.putLog.length;
       expect(putsAfterFirst).toBeGreaterThan(0);
 
-      // Re-enqueue the same bytes under a fresh item id; begin must short-circuit.
       harness.remount();
       await enqueueLocalFile(
         {
@@ -431,7 +390,6 @@ describe("crash", () => {
         },
         { localUri: "file://a.jpg", plaintextSize: FILES[0]!.bytes.byteLength }
       );
-      // Same sha as an already-settled item, so the queue itself dedupes it.
       expect(harness.store.pending()).toHaveLength(0);
       expect(harness.provider.putLog).toHaveLength(putsAfterFirst);
       expect(harness.provider.cas.size).toBe(FILES.length);

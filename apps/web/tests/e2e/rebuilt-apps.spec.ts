@@ -6,16 +6,6 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// REBUILT AGENDA AND TASKS SURFACES in a real browser (#834): UI-impact
-// evidence. Each capture mounts the SHIPPED component over shipped tokens and
-// `kit.css`; asserted strings come from the app's own view-copy.
-//   Tasks — overdue is the ONE attention-tone group, with quiet bulk verbs
-//     (re-entry, not a wall of shame); families render whole.
-//   Agenda — layers paint as ANNOTATION, never a fourth calendar; the shelf
-//     hands off to Tasks.
-//
-// Runs against chromium in CI (`bun run --cwd apps/web e2e`).
-
 const here = import.meta.dirname;
 const REPO_ROOT = path.resolve(here, "../../../..");
 const KIT_CSS = path.join(REPO_ROOT, "packages/design/src/elements/kit.css");
@@ -32,7 +22,6 @@ const AGENDA_DAY_CONTEXT = path.join(
   "packages/blueprints/apps/agenda/components/DayContext.tsx"
 );
 
-/** Tasks harness: one overdue group with verbs, one parent/child, window end. */
 const TASKS_ENTRY = `
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -104,7 +93,6 @@ createRoot(document.getElementById("root")).render(
 );
 `;
 
-/** Agenda harness: layer switches, day ribbon, collapsed due shelf. */
 const AGENDA_ENTRY = `
 import { createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -151,7 +139,6 @@ function Harness() {
 createRoot(document.getElementById("root")).render(createElement(Harness));
 `;
 
-/** Bundle a shipped component, CSS modules included, for the browser. */
 async function bundle(
   contents: string,
   name: string
@@ -160,8 +147,6 @@ async function bundle(
     stdin: { contents, resolveDir: here, loader: "tsx", sourcefile: name },
     bundle: true,
     write: false,
-    // Never written (`write: false`), but esbuild needs a path for the CSS
-    // module output name.
     outdir: path.join(here, `.${name}-bundle`),
     format: "iife",
     jsx: "automatic",
@@ -202,8 +187,6 @@ test("the rebuilt Tasks board offers overdue re-entry, not a wall of shame", asy
   test.setTimeout(120_000);
   await mount(page, TASKS_ENTRY, "tasks-board-harness", 820);
 
-  // Overdue: one attention-tone group, quiet bulk verbs. `div[...]`, not
-  // `[...]`: attention also lives on the row's own due phrase.
   const overdue = page.locator('div[data-attention="true"]');
   await expect(overdue).toHaveCount(1);
   await expect(overdue.getByText("Overdue")).toBeVisible();
@@ -218,7 +201,6 @@ test("the rebuilt Tasks board offers overdue re-entry, not a wall of shame", asy
     )
   );
 
-  // ONE live occurrence with its collapse, in the summariser's words.
   await expect(page.getByText("every Friday")).toBeVisible();
   await expect(page.getByText("RRULE")).toHaveCount(0);
 
@@ -246,7 +228,6 @@ test("Agenda's day context draws layers as annotation, never as a calendar", asy
   test.setTimeout(120_000);
   await mount(page, AGENDA_ENTRY, "agenda-day-context-harness", 420);
 
-  // Three switches naming where facts live; layers are not writable here.
   await Promise.all(
     [
       ["Birthdays", "from People"],
@@ -261,7 +242,6 @@ test("Agenda's day context draws layers as annotation, never as a calendar", asy
     page.getByText("Layers decorate a day; none of them is writable.")
   ).toBeVisible();
 
-  // Birthdays collapse to a count; the due shelf starts collapsed.
   await expect(page.getByText("2 birthdays")).toBeVisible();
   const shelf = page.getByRole("button", { name: "2 due" });
   await expect(shelf).toHaveAttribute("aria-expanded", "false");
@@ -272,7 +252,6 @@ test("Agenda's day context draws layers as annotation, never as a calendar", asy
     fullPage: true,
   });
 
-  // The shelf lists names that hand off to Tasks; Agenda never edits.
   await shelf.click();
   await page
     .getByRole("button", { name: "Renew the passport", exact: true })
@@ -284,9 +263,7 @@ test("Agenda's day context draws layers as annotation, never as a calendar", asy
 
 declare global {
   interface Window {
-    /** Collected from the board's callbacks. */
     __tasksActs: string[];
-    /** Collected from the layers and the shelf. */
     __agendaActs: string[];
   }
 }

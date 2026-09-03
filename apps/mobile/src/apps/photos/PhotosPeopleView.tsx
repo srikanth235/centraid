@@ -1,7 +1,3 @@
-// People roster, off the band (#712): unnamed cards still render; a person
-// card opens that person's photographs, never Face review. Empty roster is
-// the consent gate until answered this session.
-
 import React, { useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
 
@@ -32,7 +28,6 @@ import type { PhotosScreenProps } from "../../navigation";
 import { buildPeopleShelf } from "./people-model";
 import PhotosScreen from "./PhotosScreen";
 
-/** Identity colour on a person card; unloaded album covers do not keep one. */
 function tintFor(key: string): string {
   return tileFinish(identityColor(key), "solid").backgroundColor;
 }
@@ -71,7 +66,6 @@ export default function PhotosPeopleView({
     : ((enrichPolicy?.tier as string | undefined) ?? "off");
   const deviceAnswer = deviceAnswerFor(enrichTier);
   const runOnDevice = async (): Promise<void> => {
-    // Do not rely on a disabled prop for this write.
     if (!session || enrichBusy || enrichAnswered) return;
     if (!deviceAnswer.available) return;
     setEnrichBusy(true);
@@ -123,7 +117,6 @@ export default function PhotosPeopleView({
     [clusters.rows, faces.rows, parties.rows, policies.loading, policies.rows]
   );
 
-  // Gate only while unanswered; an answered empty roster uses the plain copy.
   const showGate =
     shelf.people.length === 0 && shelf.unnamed.length === 0 && !enrichAnswered;
 

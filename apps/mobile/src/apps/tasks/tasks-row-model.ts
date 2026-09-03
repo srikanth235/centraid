@@ -1,6 +1,3 @@
-// What one row SAYS, as values (Tasks spec §5) — pure, so the tone and the
-// priority are testable without a renderer.
-
 import {
   metaParts,
   priorityLevel,
@@ -10,10 +7,7 @@ import type { Task } from "@centraid/blueprints/apps/tasks/types";
 import { PRIORITY_CHIPS } from "@centraid/blueprints/apps/tasks/view-copy";
 
 export interface TaskRowModel {
-  /** Each part keeps the tone `metaParts` gave it: flattening these to one
-   *  string is what dropped overdue's. */
   meta: MetaPart[];
-  /** `null` at level 0 — the row reserves no room for a priority nobody set. */
   priority: string | null;
 }
 

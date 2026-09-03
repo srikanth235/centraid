@@ -1,12 +1,3 @@
-// One poll for every status bar on screen, and none while the app is away.
-//
-// `ReplicaStatusBar` renders on sixteen screens, and a native stack keeps the
-// screens below the top one mounted, so a 5 s `setInterval` per copy is a
-// handful of redundant SQLite reads on the intent outbox every five seconds —
-// all night, if nothing listens to `AppState`. The queue is device-global, so
-// one ticker serves every subscriber, and a backgrounded app has nobody to
-// show the answer to.
-
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
@@ -17,22 +8,17 @@ export interface PendingChange {
   vaultId: string;
   vaultLabel: string;
   status: PendingChangeStatus;
-  /** `${appId}: ${action}`; seats parse it, the sheet presents `action`. */
   label: string;
   appId?: string;
   action?: string;
   reason?: string;
-  /** Transport attempts so far, and the first admission (ISO-8601): together
-   *  they separate a slow row from a stuck one. */
   attempts?: number;
   enqueuedAt?: string;
-  /** Conflict only, and both or neither: the versions the overlay copy prints. */
   expectedVersion?: number;
   actualVersion?: number;
   kind: "replica" | "placement";
 }
 
-/** The one method the ticker needs; the mounted session satisfies it. */
 export interface PendingChangeSource {
   pendingChanges: () => Promise<PendingChange[]>;
 }
@@ -110,8 +96,6 @@ class PendingChangesTicker {
   }
 
   #publish(next: PendingChange[]): void {
-    // `useSyncExternalStore` compares by identity, so an unchanged queue must
-    // keep the same array or every status bar re-renders on every tick.
     if (next.length === 0 && this.#snapshot.length === 0) return;
     this.#snapshot = next;
     for (const listener of this.#listeners) listener();

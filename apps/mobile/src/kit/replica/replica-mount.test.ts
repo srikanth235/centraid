@@ -1,13 +1,3 @@
-// `resolveIdentity` decides the replica DB namespace. It must not derive that
-// namespace from a display name or an ephemeral tunnel port: either one makes
-// every launch quietly abandon the replica the last launch built.
-//
-// Everything native is mocked outright rather than partially: the default
-// `@centraid/mobile` vitest project carries no react-native transform (see
-// vitest.projects.ts), so a single `importOriginal` on a module that reaches
-// expo-secure-store or op-sqlite drags Flow source into the graph and the file
-// fails to parse before a test runs.
-
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -149,7 +139,6 @@ const info = {
   },
 };
 
-/** Stub `/centraid/_gateway/info`; `body === undefined` means a 500. */
 function stubInfo(body: unknown): void {
   vi.stubGlobal(
     "fetch",
@@ -186,11 +175,6 @@ describe("resolveIdentity picks a durable gateway namespace", () => {
     expect(identity.online).toBe(true);
   });
 
-  // THE FIRST BOOTSTRAP AFTER PAIRING lands in the fallback branch, because
-  // pairing stores a real gateway id with `vaultId: ""` for the probe to fill
-  // in. Put `getDesktopName()` first in that order and this exact moment
-  // DEMOTES a durable endpoint id to the desktop's display name and writes it
-  // back through `noteActiveIdentity`.
   test("a freshly paired vault keeps its endpoint id, not the desktop name", async () => {
     resolveGatewayBase.mockResolvedValue("http://127.0.0.1:51890");
     stubInfo(info);
@@ -214,8 +198,6 @@ describe("resolveIdentity picks a durable gateway namespace", () => {
     });
   });
 
-  // The regression that started this: two launches, two tunnel ports, and the
-  // namespace followed the port instead of the gateway.
   test("the namespace survives the tunnel moving to a new ephemeral port", async () => {
     stubInfo(info);
 
@@ -245,10 +227,6 @@ describe("resolveIdentity picks a durable gateway namespace", () => {
   });
 });
 
-// A restored Android/iOS container is the one case where the phone holds a
-// cursor for rows it has never had: the replica databases are backup-excluded
-// and the AsyncStorage beside them was not. Resuming from an inherited cursor
-// skips every change beneath it, forever and silently.
 describe("what a restored container may resume from", () => {
   beforeEach(() => {
     store.values.clear();
@@ -286,9 +264,6 @@ describe("what a restored container may resume from", () => {
       expect(store.values.get(key)).toBe("1");
   });
 
-  // A first launch after pairing has neither a database nor a cache. Treating
-  // that as a restore would spend three writes per scope on every cold start
-  // and, worse, teach the reader that a missing file always means a restore.
   test("a first launch after pairing is a cold start, not a restore", async () => {
     await expect(
       discardRestoredReplicaCache(
@@ -350,9 +325,6 @@ describe("reclaiming a revoked scope's bytes", () => {
     expect(files.present.has("file:///replica/vault-2.sqlite3")).toBe(true);
   });
 
-  // op-sqlite's own default location, which this module cannot address. The
-  // storage screen reports those bytes rather than this guessing at a path and
-  // deleting some other app's file.
   test("refuses a bare database name it cannot place", () => {
     files.present.add("replica.sqlite3");
 

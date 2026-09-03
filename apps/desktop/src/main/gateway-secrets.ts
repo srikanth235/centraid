@@ -1,6 +1,3 @@
-// Device credential custody (#555): keys live in one safeStorage ciphertext
-// owned by Electron main, never in the gateway data directory.
-
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -31,10 +28,6 @@ function emptySecrets(): DeviceSecrets {
   };
 }
 
-/**
- * Dev/test plaintext fallback (docs/dev-environment.md); `app.isPackaged` is
- * the hard stop — shipped builds ignore the variable.
- */
 function insecureSecretsRequested(): boolean {
   return (
     process.env.CENTRAID_INSECURE_DEVICE_SECRETS === "1" && !app.isPackaged
@@ -98,8 +91,6 @@ function readSecrets(): DeviceSecrets {
   const text = ciphertext.toString("utf8");
   if (text.startsWith(FILE_FALLBACK_MAGIC)) {
     const secrets = parseSecrets(text.slice(FILE_FALLBACK_MAGIC.length), file);
-    // Adopt into OS custody when available; asking shouldUseFileFallback —
-    // not isEncryptionAvailable — stops a hatched dev run rewriting per read.
     if (!shouldUseFileFallback()) writeSecrets(secrets);
     return secrets;
   }
@@ -136,7 +127,6 @@ function writeSecrets(secrets: DeviceSecrets): void {
   }
 }
 
-/** safeStorage-backed persistence adapter for the shared endpoint loader. */
 export function deviceIrohKeyPersistence(
   connectionId: string
 ): EndpointSecretPersistence {
@@ -162,7 +152,6 @@ export function clearGatewayCredentials(connectionId: string): void {
   writeSecrets(current);
 }
 
-/** Device-local custody for a detached daemon's ephemeral loopback bearer. */
 export function readLocalLoopbackToken(
   connectionId: string
 ): string | undefined {
@@ -178,13 +167,10 @@ export function storeLocalLoopbackToken(
   writeSecrets(current);
 }
 
-/** Minting is silently fatal against an existing data dir; ask first — see
- * `deviceCustodyGap` in detached-gateway-core.ts. */
 export function hasGatewayWrappingKey(connectionId: string): boolean {
   return readSecrets().gatewayWrappingKeys[connectionId] !== undefined;
 }
 
-/** Device-custodied wrapping key for a local gateway's KeyStore envelopes. */
 export function getOrCreateGatewayWrappingKey(connectionId: string): Buffer {
   const current = readSecrets();
   const encoded = current.gatewayWrappingKeys[connectionId];
@@ -195,8 +181,6 @@ export function getOrCreateGatewayWrappingKey(connectionId: string): Buffer {
   return key;
 }
 
-/** Wrapping key is device-local: a copied data dir cannot open its KeyStore
- * envelopes on another machine. */
 export function desktopGatewayKeyStore(
   dataDir: string,
   connectionId: string

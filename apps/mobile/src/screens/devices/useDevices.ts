@@ -1,7 +1,3 @@
-// Data half of the Devices place (#765).
-// A failed roster read is the page's error state — absent plane ≠ empty roster.
-// An unmounted vault plane answers undefined: not an error; no section.
-
 import { useCallback, useEffect, useState } from "react";
 
 import { postStatus } from "../../kit/components/status-line";
@@ -20,10 +16,8 @@ import { isLastDeviceRefusal, memberDeviceError } from "./devices-model";
 export interface DevicesData {
   status: "loading" | "ready" | "error";
   message?: string;
-  /** This phone is not paired at all; the panel talks pairing. */
   noGateway: boolean;
   devices: DeviceRow[];
-  /** `undefined` = no vault plane on this gateway; section omitted. */
   vaults?: VaultRow[];
   ticket?: DeviceTicket;
   busy: boolean;
@@ -31,7 +25,6 @@ export interface DevicesData {
   mint: () => Promise<void>;
   dismissTicket: () => void;
   rename: (deviceId: string, label: string) => Promise<boolean>;
-  /** `"stranded"` = last-device refusal; collect the vault name from the member and retry. */
   revoke: (
     deviceId: string,
     confirmVaultName?: string
@@ -56,8 +49,6 @@ async function loadRoster(set: (next: Loaded) => void): Promise<void> {
       return;
     }
     const devices = await listDevices();
-    // Second plane: a gateway may serve devices and no vaults; its failure
-    // never fails the roster — the section just does not render.
     const vaults = await listOwnedVaults().catch(() => undefined);
     set({
       devices,
@@ -139,8 +130,6 @@ export function useDevices(): DevicesData {
         await loadRoster(setLoaded);
         return "done";
       } catch (error) {
-        // Escalate only on the FIRST attempt; a refusal after the member has
-        // confirmed the name is about something else.
         if (confirmVaultName === undefined && isLastDeviceRefusal(error)) {
           return "stranded";
         }

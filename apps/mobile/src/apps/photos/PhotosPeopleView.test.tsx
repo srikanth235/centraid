@@ -1,16 +1,8 @@
-// Pins #711 people-roster defects plus #712's re-homed consent gate: a party
-// without display_name still shows as "Unnamed" (README:217, proto:3760); card
-// taps open THAT PERSON'S photographs (`PhotoStateView`, mode "person"), never
-// `FaceReview`; the consent gate lives in THIS view's empty state only while
-// unanswered; the unmatched-faces note substitutes the LIVE count for the
-// mock's 54 (proto:4433 sentence). `kit/components/ConsentGate` is stubbed —
-// its own contract is pinned by EnrichmentConsent.test.tsx.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// @vitest-environment jsdom
 import PhotosPeopleView from "./PhotosPeopleView";
 
 type ReactNative = typeof import("react-native");
@@ -33,7 +25,6 @@ const mocks = vi.hoisted(() => ({
     textFaint: "#mock-text-faint",
   },
   postStatus: vi.fn<(message: string) => void>(),
-  // `enrich.policy`'s photos row: tier `device`, refused by this build.
   policies: [{ domain: "photos", tier: "device" }] as Array<{
     domain: string;
     tier: string;
@@ -43,8 +34,6 @@ const mocks = vi.hoisted(() => ({
       async () => ({ status: "executed" })
     ),
   },
-  // p2 has no display_name — the unnamed case; p1 and p2 both have ≥1
-  // confirmed face so both must render.
   faces: [
     {
       region_id: "f1",
@@ -60,7 +49,6 @@ const mocks = vi.hoisted(() => ({
       confirmed_by_party_id: "p2",
       review_state: "confirmed",
     },
-    // Never answered — counted by the unmatched note, not shown as a card.
     {
       region_id: "f3",
       asset_id: "a3",
@@ -73,7 +61,6 @@ const mocks = vi.hoisted(() => ({
       confirmed_by_party_id: undefined,
       review_state: "proposed",
     },
-    // Answered without confirmation (#712): nobody's card, nobody's backlog.
     {
       region_id: "f5",
       asset_id: "a5",
@@ -206,8 +193,6 @@ vi.mock(
   () =>
     ({
       surfaceWriteFailure: vi.fn<(error: unknown, title?: string) => void>(),
-      // result→boolean mapping is pinned by `write-outcome` itself; only
-      // "executed" must read as success here.
       surfaceWriteOutcome: (result: { status: string }) =>
         result.status === "executed",
     }) as unknown as Partial<WriteOutcomeModule>
@@ -221,9 +206,6 @@ vi.mock(
     }) as unknown as Partial<StatusLineModule>
 );
 
-// PhotosScreen pulls in react-navigation, the band-owner hook and the band/
-// selection-bar tree — none of this file's claims. Stubbed to a children
-// passthrough; `PhotosScreen.test.tsx` owns the shell's behaviour.
 vi.mock(import("./PhotosScreen"), async () => {
   const ReactModule = await import("react");
   return {
@@ -232,8 +214,6 @@ vi.mock(import("./PhotosScreen"), async () => {
   } as never;
 });
 
-// A stub, not the real renderer (see header): the two answers + a domain
-// marker, enough to prove wiring of handlers and gating.
 vi.mock(import("../../kit/components/ConsentGate"), async () => {
   const ReactModule = await import("react");
   return {
@@ -322,7 +302,6 @@ describe("the people roster's grid and card behaviour", () => {
 
   it("substitutes the live unmatched-face count into the exact proto note", () => {
     renderView();
-    // f3 and f4 are unconfirmed — 2, not the mock's 54.
     expect(container!.textContent).toContain(
       "2 faces are not matched to anyone — face review proposes them one at a time."
     );
@@ -346,7 +325,6 @@ describe("the people roster's consent gate (issue 712 C2)", () => {
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
-    // No confirmed faces at all — an empty roster, the gate's natural home.
     mocks.faces = [];
     mocks.policies = [{ domain: "photos", tier: "device" }];
     mocks.session.write.mockClear();
@@ -408,3 +386,4 @@ describe("the people roster's consent gate (issue 712 C2)", () => {
     expect(mocks.session.write).not.toHaveBeenCalled();
   });
 });
+// @vitest-environment jsdom

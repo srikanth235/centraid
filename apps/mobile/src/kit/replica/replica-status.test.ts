@@ -31,19 +31,12 @@ function memoryStorage(): AsyncStorageLike & { values: Map<string, string> } {
 
 describe("where a reachability pass lands", () => {
   it("never leaves the pass in flight", () => {
-    // THE REGRESSION THIS PINS. `syncing` is optimistic — set before the pull
-    // is attempted — so a pass with no failure branch left "Syncing recent
-    // changes…" on twenty screens forever, permanent AND untrue. Observed by
-    // killing the gateway under a running app.
     for (const landed of [true, false]) {
       expect(settledReachability(landed)).not.toBe("syncing");
     }
   });
 
   it("reads a pull that never landed as a gateway that is not answering", () => {
-    // Not `device-offline`: we asked and got nothing back, which is about the
-    // gateway, not the radio. `gateway-asleep` is also the only state that
-    // offers an action, and waking the gateway is the thing that would help.
     expect(settledReachability(false)).toBe("gateway-asleep");
     expect(replicaStatusRow(settledReachability(false)).action).toBe(
       "Wake help"
@@ -61,9 +54,6 @@ describe("what the replica bar says", () => {
     expect(replicaStatusRow("current")).toStrictEqual({ actionable: false });
   });
 
-  // THE ONE THIS MODULE EXISTS FOR. This bar mounts on roughly twenty screens,
-  // so a row here is twenty rows. Offline changes nothing any of them can show
-  // — the bytes are already on the phone — so it earns none of them.
   it("says nothing when the phone is offline", () => {
     const row = replicaStatusRow("device-offline");
     expect(row.label, "offline is not an incident worth a row").toBeUndefined();
@@ -89,23 +79,16 @@ describe("what the replica bar says", () => {
   });
 
   it("marks only the asleep gateway as actionable", () => {
-    // Drives the dot's ink. A red dot beside "Syncing recent changes…" reads as
-    // a failure to sync, which is the opposite of what is happening.
     expect(replicaStatusRow("gateway-asleep").actionable).toBe(true);
     expect(replicaStatusRow("syncing").actionable).toBe(false);
   });
 
   it("offers an action only where pull-to-refresh would not help", () => {
-    // Every screen carrying this bar scrolls, so the gesture already exists. A
-    // sleeping gateway needs waking, not pulling; a sync in flight can be
-    // hurried. Nothing else gets a button.
     expect(replicaStatusRow("gateway-asleep").action).toBe("Wake help");
     expect(replicaStatusRow("syncing").action).toBe("Sync now");
   });
 
   it("never asks a member to go check their network", () => {
-    // "Check network" sent someone to fix something on behalf of an app that
-    // did not need fixing. If it comes back, it comes back deliberately.
     for (const state of [
       "current",
       "device-offline",
@@ -119,12 +102,8 @@ describe("what the replica bar says", () => {
 });
 
 describe("a sync the member's own rules paused", () => {
-  // THE REGRESSION THIS PINS (#880 W2.2). A metered/battery refusal came back
-  // from the facade as "nothing threw", settled as `current`, and the bar then
-  // said nothing at all — the screen claiming freshness it never fetched.
   it("is neither current nor a sleeping gateway", () => {
     expect(settledReachability(false, true)).toBe("sync-paused");
-    // Even a "landed" boolean cannot outrank a pull that never happened.
     expect(settledReachability(true, true)).toBe("sync-paused");
     expect(settledReachability(true)).toBe("current");
   });
@@ -132,16 +111,12 @@ describe("a sync the member's own rules paused", () => {
   it("says what stopped it and stays out of the danger ink", () => {
     const row = replicaStatusRow("sync-paused");
     expect(row.label).toBe("Sync paused by transfer rules");
-    // The member set these rules; a red dot would read as a fault they hit.
     expect(row.actionable).toBe(false);
-    // And no button: pulling again re-hits the same rule.
     expect(row.action).toBeUndefined();
   });
 });
 
 describe("a library that is only partly here", () => {
-  // #880 W2.4: an app killed mid-backfill and relaunched offline has no live
-  // bootstrap to report pages, so coverage is the only thing left that knows.
   it("labels a partial replica even with no bootstrap running", () => {
     expect(
       replicaCoverageRow({ coverage: "partial", bootstrapping: false }).label
@@ -177,9 +152,6 @@ describe("the trace a revoked scope leaves", () => {
   });
 
   it("survives the relaunch after the purge, and clears on dismiss", async () => {
-    // THE POINT (#880 W4.4). The purge takes the rows, the cursor and the
-    // mount, so nothing else on the phone can afterwards say where a vault
-    // went. This record is written before the purge and outlives the process.
     const storage = memoryStorage();
     await recordRevokedNotice(storage, "gateway-1", notice);
 
@@ -221,9 +193,6 @@ describe("the trace a revoked scope leaves", () => {
 
 describe("what a pass may claim before it has asked the gateway anything", () => {
   it("does not call an unreachable vault `syncing` just because a URL resolved", () => {
-    // THE REGRESSION THIS PINS (#903). `resolveGatewayBase()` never probes, so
-    // every pass re-asserted reachability over a gateway whose last pull had
-    // already failed, and Home flipped back to "Everything's uploaded".
     expect(attemptedReachability(true, true, false)).toBe("gateway-asleep");
   });
 

@@ -1,12 +1,7 @@
-// Geometry for the always-collapsed record table (#765, spec §9/§11).
-
 import { StyleSheet } from "react-native";
 
 import { borders, metrics, radii, spacing, t } from "../theme";
 
-/** The collapsed row is TALLER than a list row (52 vs 44): it carries two
- *  lines where the wide form carries one, and the reference grows the row
- *  rather than tightening the leading. Layout dimension, not a token. */
 const COLLAPSED_ROW = 52;
 
 export const styles = StyleSheet.create({

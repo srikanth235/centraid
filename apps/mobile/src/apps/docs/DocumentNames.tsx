@@ -1,14 +1,3 @@
-// Who this document names (Docs handoff Part 2 §12; #821) — the
-// `names` capability's product screen, rendered HONESTLY EMPTY.
-//
-// The sample shows two links, each carrying the passage it was read from —
-// "the first cross-app link in the product". The capability that would write
-// those links ("Find the people a document names") is OFF with no runner and
-// no consent record, so this seat holds no link and no passage; the rail's
-// own sentence for that state is the one drawn here (`RAIL_NOTES.namesOff`:
-// "Docs has not looked. One consent, running on this device"). Nothing is
-// invented — not a person, not a passage, not a count.
-
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 

@@ -1,6 +1,3 @@
-// The pin/download verb shared by Docs and Photos: pin → download → local
-// read → eviction exemption. This file owns only that ORDER (#883).
-
 import {
   enforceOfflineContentBudget,
   offlineContentUri,
@@ -16,7 +13,6 @@ import type { FetchPolicy } from "./policy";
 
 export type OfflineContentOutcome =
   | { status: "stored"; uri: string; pinned: boolean }
-  /** Metered, unanswered: never a fetch that starts itself. */
   | { status: "needs-choice" }
   | { status: "unavailable"; reason: string };
 
@@ -39,7 +35,6 @@ export interface EnsureOfflineContentInput {
   budgetBytes?: number;
 }
 
-/** Local bytes first: asking the gate before disk spends the pin. */
 export async function ensureOfflineContent(
   input: EnsureOfflineContentInput
 ): Promise<OfflineContentOutcome> {
@@ -70,7 +65,6 @@ export async function ensureOfflineContent(
       reason: OFFLINE_FETCH_FAILED_REASON,
     };
   }
-  // Never selects a pin; may evict this download when unpinned.
   enforceOfflineContentBudget(input.budgetBytes);
   const settled = offlineContentUri(ref);
   return settled
@@ -78,7 +72,6 @@ export async function ensureOfflineContent(
     : { status: "unavailable", reason: OFFLINE_NO_STORAGE_REASON };
 }
 
-/** The bytes go with the pin — a cache the member cannot see is not one. */
 export function releaseOfflineContent(ref: ContentRef): void {
   unpinContent(ref);
   removeOfflineContent(ref);

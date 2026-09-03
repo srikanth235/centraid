@@ -19,8 +19,6 @@ function returnUrl(fragment: Record<string, string>): string {
 
 describe("mobile connection re-authorization", () => {
   test("asks for the deep-link return surface, never the PWA one", () => {
-    // `web` sends the Assist callback to app.centraid.dev, which cannot hand
-    // anything back to this app and is bound to a different client session.
     expect(MOBILE_AUTHORIZE_SURFACE).toBe("desktop");
     expect(ASSIST_RETURN_URL).toBe("centraid://oauth/finish");
   });
@@ -48,8 +46,6 @@ describe("mobile connection re-authorization", () => {
   });
 
   test("refuses to post a handoff from a link it cannot fully validate", () => {
-    // A foreign scheme, a malformed state, and a code without its receipt are
-    // all "closed"/"provider-error" — never a handoff.
     expect(
       parseAssistReturnUrl(
         `https://app.centraid.dev/oauth/finish#code=c&state=${STATE}&receipt=r`
@@ -66,9 +62,6 @@ describe("mobile connection re-authorization", () => {
   });
 
   test("a browser the owner simply closed asks only for a refresh", () => {
-    // iOS says `cancel`, Android says `dismiss`, and a BYO ceremony that
-    // finished at the gateway's own callback page looks identical from here —
-    // all three mean "re-read the Notifications", never "claim success".
     expect(classifyAuthSession({ type: "cancel" })).toStrictEqual({
       kind: "closed",
     });

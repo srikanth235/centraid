@@ -1,10 +1,3 @@
-// Two renderings of empty Home (Binding Layer — graded, not binary).
-// `DayOne` — nothing anywhere: themed page, three buttons of its own (not a
-// catalog slice), real-count foot. `FirstMovesBand` — at least one app has
-// content: micro-caps strip, up to three 44px rows. Deliberately absent:
-// dashed placeholder cards (they scale to identical apologies and open empty
-// apps). Every move lands somewhere that can TAKE content.
-
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -56,19 +49,12 @@ export default function FirstMovesBand({
 }
 
 export interface DayOneProps {
-  /** Real counts only — same rule as `HomeStatusLine`. */
   foot: string;
   onSeedSample: () => void;
   onBringPhotos: () => void;
   onBringDocuments: () => void;
 }
 
-/**
- * Vault holds nothing anywhere. Reached only when every readable tile has
- * SETTLED and is empty (`./tile-model` `springboardState`). A still-loading
- * vault, or an unreachable replica, gets the ordinary grid — this page is a
- * claim about the vault, and an unanswered read has not earned it.
- */
 export function DayOne({
   foot,
   onSeedSample,

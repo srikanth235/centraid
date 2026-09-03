@@ -1,6 +1,3 @@
-// WHAT A PLACE ANSWERS TO WHEN A MEMBER SEARCHES (#816): the member's name, the
-// gazetteer settlement, and the home band — never a coordinate, and no fallback
-// when no home is declared.
 import { readableName } from "@centraid/blueprints/apps/photos/place-map";
 import {
   distanceKm,
@@ -71,7 +68,6 @@ export function placeVocabulary(
     home && coords
       ? homeBand(distanceKm(coords.lat, coords.lng, home.lat, home.lng))
       : null;
-  // "away" is deliberately not vocabulary: 250 km from home is not near home.
   if (band === "at home" || band === "around town") {
     words.push(...PLACE_HOME_TERMS, band);
   }
@@ -87,12 +83,10 @@ export function placeLabel(
     gazetteerName: gazetteerNameFrom(rowText(row, "address_json") ?? null),
     ...rowCoords(row),
     namedPlaces: anchors,
-    // The relative rung is allowed here; sharing goes through `share-place.ts`.
     context: "private",
   }).text;
 }
 
-/** Matched as a PHRASE: "place" as a bare token would hit every place row. */
 export function noLocationAsked(query: string): boolean {
   const asked = query.trim().toLowerCase();
   if (asked === "") return false;

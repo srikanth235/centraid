@@ -97,7 +97,6 @@ describe(dueOn, () => {
     expect(shelfLabel(rows.length)).toBe("2 due");
   });
 
-  /** AN UNDATED TASK NEVER REACHES THE CALENDAR, in any code path. */
   it("has no day for a task with no due date", () => {
     for (const day of ["2026-03-18", "2026-03-19", "2026-03-20"])
       expect(dueOn(day, TASKS).some((row) => row.taskId === "t4")).toBe(false);

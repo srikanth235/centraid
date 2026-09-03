@@ -1,7 +1,3 @@
-// Photos' seat on the transfer engine (#711); the serial run lives in
-// `kit/transfer/transfer-run.ts`. `runBackup` is the manual override,
-// `automaticBackupCandidates` the consent-gated path (S4).
-
 import { File } from "expo-file-system";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -38,10 +34,8 @@ import { usePhotoTimeline } from "./timeline-source";
 
 export type BackupProgress = TransferProgress;
 
-/** Opaque to the engine; passed straight back to `send`. */
 interface PhotoRecord {
   kind: PhotoAsset["kind"];
-  /** Omit rather than send empty — the vault stores the device's fact or nothing. */
   capturedAt?: string;
   captureGroupId?: string;
   width?: number;
@@ -67,12 +61,10 @@ export interface BackupRunDeps {
 }
 
 export interface BackupOutcome {
-  /** iCloud originals stay selected so retry is one tap. */
   inCloud: Set<string>;
   paused?: string;
 }
 
-/** Bytes resolve inside `open()`; a long run never holds originals open. */
 function photoEntry(
   asset: PhotoAsset,
   localId: string,
@@ -91,7 +83,6 @@ function photoEntry(
           throw new TransferSourceUnavailableError(IN_CLOUD_MESSAGE);
         throw error;
       }
-      // Paired MOV is its own durable upload; the still's capture group needs it.
       const companion = await liveVideoUri(original.asset);
       const sends: Array<TransferSend<PhotoRecord>> = [
         {
@@ -104,7 +95,6 @@ function photoEntry(
           record: {
             kind: asset.kind,
             ...(asset.capturedAt ? { capturedAt: asset.capturedAt } : {}),
-            // MediaLibrary has no true UTC offset — do not fabricate the device's.
             ...(companion ? { captureGroupId: `live:${localId}` } : {}),
             ...(asset.width === undefined ? {} : { width: asset.width }),
             ...(asset.height === undefined ? {} : { height: asset.height }),
@@ -165,7 +155,6 @@ export async function runBackup(
   };
 }
 
-/** Pure consent gate: an unanswered or declined latch returns nothing. */
 export function automaticBackupCandidates(
   consent: BackupConsentRecord | undefined,
   assets: readonly PhotoAsset[]
@@ -180,7 +169,6 @@ export function automaticBackupCandidates(
 export interface AutomaticBackupState {
   remaining: number;
   sent: number;
-  /** iCloud originals: counted and shown, never silently dropped. */
   deferred: number;
   running: boolean;
   blocked?: string;
@@ -223,10 +211,6 @@ async function sweepOnce(
   }));
 }
 
-/**
- * A cold walk over a 50,000-item roll is seconds, not minutes; past this the
- * pass reports nothing and the NEXT trigger retries.
- */
 const SWEEP_SNAPSHOT_TIMEOUT_MS = 30_000;
 
 function settledTimeline(
@@ -234,8 +218,6 @@ function settledTimeline(
 ): Promise<TimelineSnapshot | undefined> {
   const ready = photoTimelineEngine.getSnapshot();
   if (!ready.loading) return Promise.resolve(ready);
-  // Two promises with ONE resolve site each, raced: the teardown belongs to
-  // the race, so either arm winning drops both subscription and timer.
   let unsubscribe = (): void => undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const settled = new Promise<TimelineSnapshot>((resolve) => {
@@ -253,16 +235,10 @@ function settledTimeline(
   });
 }
 
-/**
- * The sweep with no mounted screen (#883 C6). RELEASES the timeline engine
- * afterwards, so a member who never opens Photos does not pay for a
- * permanently-held camera-roll walk between sweeps.
- */
 export async function sweepCameraRollBackup(
   scope: CameraRollScope
 ): Promise<void> {
   const consent = await hydrateBackupConsent();
-  // An unanswered latch means the watcher fires and nothing moves.
   if (!automaticTransferAllowed(consent)) return;
   if (!(await nativeUploadPolicy().canTransfer())) return;
   const release = photoTimelineEngine.acquire();
@@ -286,12 +262,6 @@ export async function sweepCameraRollBackup(
   }
 }
 
-/**
- * Live counts for a MOUNTED screen; `sweepCameraRollBackup` covers the
- * unmounted case and neither supersedes the other. `runCameraRollSweep`'s
- * serialization plus the queue's drain lock are why two triggers cannot
- * double-enqueue one photograph.
- */
 export function useAutomaticPhotoBackup(
   consent: BackupConsentRecord | undefined
 ): AutomaticBackupState {
@@ -303,9 +273,7 @@ export function useAutomaticPhotoBackup(
     deferred: 0,
     running: false,
   });
-  // Per-hook: drain lock serialises the device; this only stops re-entry mid-walk.
   const sweeping = useRef(false);
-  // Memo on the snapshot; without it the effect re-enters the sweep every render.
   const candidates = useMemo(
     () => automaticBackupCandidates(consent, timeline.assets),
     [consent, timeline.assets]
@@ -314,7 +282,6 @@ export function useAutomaticPhotoBackup(
   useEffect(() => {
     const start = async (): Promise<void> => {
       if (sweeping.current || candidates.length === 0) return;
-      // Re-check policy: do not start on cellular because it was planned on Wi-Fi.
       if (!(await nativeUploadPolicy().canTransfer())) {
         setState((current) => ({ ...current, blocked: POLICY_BLOCKED }));
         return;

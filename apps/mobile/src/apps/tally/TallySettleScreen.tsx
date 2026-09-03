@@ -1,17 +1,3 @@
-// SETTLE UP — a payment that HAPPENED, recorded. Nothing here moves money;
-// there is no payment rail in this product, and the lede says so.
-//
-// FROM AND TO ARE BOTH OPEN, so two friends can settle with the owner as
-// neither party — and when they do, the foot states what that means: the
-// balances move and no ledger entry is written. The group scope includes *No
-// group*, because `settle-up` genuinely takes none, and a partial payment is
-// simply a smaller amount.
-//
-// THE SIMPLIFICATION PROPOSAL SITS BELOW THE FIELDS with its own explanation
-// of what it rewired — and only where the group has turned it on, because it
-// rewires who owes whom and a member who agreed to pay Ana should not silently
-// owe Tom.
-
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 
@@ -82,8 +68,6 @@ export default function TallySettleScreen({
   const patch = (next: Partial<SettleDraft>): void =>
     setDraft((prior) => ({ ...prior, ...next }));
 
-  // ANYONE TO ANYONE. Everyone this vault knows is a candidate on both sides;
-  // a group's own members join the list when a group is in scope.
   const people = useMemo(() => {
     const names = new Map<string, string>();
     if (me) names.set(me, "You");

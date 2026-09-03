@@ -1,8 +1,4 @@
-// CBSF sealer crypto seam (#419.4). Hermes has no AES-GCM/HMAC; inject
-// WebCrypto (node today; device polyfill at boot).
-
 export interface UploadCrypto {
-  /** AES-256-GCM. Returns `ciphertext || tag(16)`, matching WebCrypto. */
   sealGcm: (
     key: Uint8Array,
     nonce: Uint8Array,
@@ -105,7 +101,6 @@ export function webCryptoUploadCrypto(subtle?: SubtleCryptoLike): UploadCrypto {
   };
 }
 
-/** Standalone ArrayBuffer — pooled `subarray` views are read whole by some polyfills. */
 function bufferOf(bytes: Uint8Array): ArrayBuffer {
   return bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
     ? (bytes.buffer as ArrayBuffer)

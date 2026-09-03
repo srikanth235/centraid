@@ -1,9 +1,3 @@
-/**
- * Pure field discovery helpers for the content script. Kept free of chrome.*
- * so unit tests can drive SPA re-render / detached-input behavior without a
- * full extension host.
- */
-
 export interface PageFields {
   username?: HTMLInputElement;
   password?: HTMLInputElement;
@@ -11,7 +5,6 @@ export interface PageFields {
   newPassword?: HTMLInputElement;
 }
 
-/** True when the input is still in the live document and visibly painted. */
 export function isLiveFillTarget(
   input: HTMLInputElement | null | undefined
 ): input is HTMLInputElement {
@@ -54,15 +47,10 @@ export function findFields(root: ParentNode = document): PageFields {
   return { username, password, totp, newPassword };
 }
 
-/** Prefer a generated signup secret, falling back to the current-login field. */
 export function passwordForSaveFromFields(fields: PageFields): string {
   return fields.newPassword?.value || fields.password?.value || "";
 }
 
-/**
- * Write only into still-connected, visible targets discovered at gesture time.
- * Returns which slots were actually written (detached SPA nodes are skipped).
- */
 export function applyFillToLiveFields(
   fields: PageFields,
   material: {

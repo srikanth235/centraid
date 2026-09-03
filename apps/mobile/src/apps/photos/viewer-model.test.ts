@@ -67,8 +67,6 @@ describe("the phone's bottom row", () => {
   });
 
   test("the labels are the phone's short forms — the accessible name of every target", () => {
-    // The row does not DRAW these, but every target takes its
-    // `accessibilityLabel` from this field.
     expect(VIEWER_BOTTOM_ACTIONS.map((action) => action.label)).toStrictEqual([
       "Copy to another place",
       "Favorite",
@@ -96,8 +94,6 @@ describe("the bottom row's anatomy: chip · capsule · chip", () => {
   });
 
   test("the two ends are exactly the actions with consequences outside the photograph", () => {
-    // The ends reach outside this photograph; the middle does not. That is
-    // what the grouping is FOR, so it is asserted, not left to the eye.
     const ends = VIEWER_BOTTOM_GROUPS.filter(
       (group) => group.shape === "chip"
     ).flatMap((group) => [...group.actions]);
@@ -105,7 +101,6 @@ describe("the bottom row's anatomy: chip · capsule · chip", () => {
   });
 
   test("flattening the groups reproduces the desktop bar's five, in order", () => {
-    // The phone REARRANGES the viewer; it does not drop or reorder an action.
     expect(
       VIEWER_BOTTOM_GROUPS.flatMap((group) => [...group.actions])
     ).toStrictEqual(VIEWER_BOTTOM_ACTIONS.map((action) => action.id));
@@ -114,8 +109,6 @@ describe("the bottom row's anatomy: chip · capsule · chip", () => {
   test("every grouped id resolves to a real action, and an invented one throws", () => {
     for (const group of VIEWER_BOTTOM_GROUPS)
       for (const id of group.actions) expect(viewerAction(id).id).toBe(id);
-    // A group naming an id the list does not carry is a wiring bug, not a
-    // state to render an empty target for.
     // @ts-expect-error — the point of the assertion is the unlisted id (#712).
     expect(() => viewerAction("slideshow")).toThrow(
       "No viewer action named slideshow"
@@ -138,8 +131,6 @@ describe("the floating chrome at the head of the stage", () => {
   });
 
   test("the height it claims is its chip plus the inset above and below it", () => {
-    // Only the editor subtracts this; the stage runs under the chrome, which
-    // is the whole point of floating.
     expect(viewerChromeHeight(0)).toBe(
       VIEWER_CHROME_CHIP + VIEWER_CHROME_INSET * 2
     );
@@ -149,8 +140,6 @@ describe("the floating chrome at the head of the stage", () => {
 
 describe("the filmstrip", () => {
   test("survives on the phone at 58px", () => {
-    // Dropping it would make the phone a slideshow — swipe and the strip are
-    // the same control approached from two directions.
     expect(FILMSTRIP.height).toBe(58);
     expect(FILMSTRIP.current).toBe(58);
   });
@@ -177,7 +166,6 @@ describe("the vault a photograph is in", () => {
   test("the meaning derives from the record, never from the name", () => {
     const named = vaultLine(true, "Sharing");
     const plain = vaultLine(true, "My vault");
-    // A member who called their OWN vault "Sharing" has not shared it.
     expect(named.meaning).toBe(plain.meaning);
     expect(named.meaning).toContain("Reachable by nothing");
   });
@@ -191,9 +179,6 @@ describe("the vault a photograph is in", () => {
   });
 
   test("a shared vault is a place, so leaving it stops the sharing", () => {
-    // One sentence for EVERY shared vault: the place a copy lands is the
-    // recipient's vault, not a third kind of place, so a destination reads
-    // exactly like any other shared vault the member can reach (§H).
     const line = vaultLine(false, "Ana + Sam");
     expect(line.value).toBe("Ana + Sam");
     expect(line.meaning).toContain("Ana + Sam");
@@ -217,8 +202,6 @@ describe("zoom", () => {
   });
 
   test("only a zoomed photograph is offered a drag", () => {
-    // The words `drag to pan` are a promise the transform has to keep. At fit
-    // there is no overflow to pan into, so the readout must not offer one.
     expect(zoomReadout(1).label).not.toContain("drag to pan");
     expect(zoomReadout(ZOOM_FIT).label).toBe("fit");
   });
@@ -229,8 +212,6 @@ describe("zoom", () => {
   });
 
   test("every way in lands on ONE rung", () => {
-    // A double tap at 2.5 and a chip at 2.4 make the same photograph read
-    // 250% or 240% depending on which control you used.
     expect(zoomIn(ZOOM_FIT)).toBe(ZOOM_RUNG);
     expect(zoomReadout(zoomIn(ZOOM_FIT)).label).toBe("250% · drag to pan");
   });
@@ -254,8 +235,6 @@ describe("what the stage's one line says", () => {
   );
 
   test("a phone with nothing to fetch teaches the gestures", () => {
-    // None of these gestures are discoverable by looking, and nothing else
-    // says them.
     expect(
       viewerStatus({ bytes: onDevice, kind: "photo", scale: 1 })
     ).toStrictEqual({
@@ -266,8 +245,6 @@ describe("what the stage's one line says", () => {
   test("zoomed, it reads the live percentage and the way back", () => {
     const status = viewerStatus({ bytes: onDevice, kind: "photo", scale: 2.4 });
     expect(status.text).toBe("240% · drag to pan · double tap returns to fit");
-    // No inline fetch while zoomed: a reflow under a pinched finger is a
-    // control firing into a moving target.
     expect(status.action).toBeUndefined();
   });
 
@@ -301,7 +278,6 @@ describe("what a video IS", () => {
     expect(videoKindLabel({ height: 1440 })).toBe("video · 1440p");
     expect(videoKindLabel({ height: 1080 })).toBe("video · 1080p");
     expect(videoKindLabel({ height: 720 })).toBe("video · 720p");
-    // Between the named rungs it is honest rather than promoted.
     expect(videoKindLabel({ height: 480 })).toBe("video · 480p");
   });
 
@@ -309,7 +285,6 @@ describe("what a video IS", () => {
     expect(videoKindLabel({ durationS: 24 })).toBe("video · 0:24");
     expect(videoKindLabel({ height: 2160 })).toBe("video · 4K");
     expect(videoKindLabel({})).toBe("video");
-    // Not a fabricated `0:00` for a recording of unknown length.
     expect(videoKindLabel({ durationS: 0, height: 2160 })).toBe("video · 4K");
   });
 });
@@ -359,15 +334,11 @@ describe("transports", () => {
   });
 
   test("a duration rounds the way the web's clock rounds", () => {
-    // One recording, one length: the browser prints `0:25` for this video, so
-    // truncating here would give the same file two durations.
     expect(formatMediaClock(24.6)).toBe("0:25");
     expect(formatMediaClock(-3)).toBe("0:00");
   });
 
   test("past an hour it says hours — `90:00` is not an hour (#883 B5)", () => {
-    // One file, one screen, one length: both the transport and the tile read
-    // this from `_shared/format-kit.ts`.
     expect(formatMediaClock(3700)).toBe("1:01:40");
     expect(formatMediaClock(3_904)).toBe("1:05:04");
     expect(formatMediaClock(5400)).toBe("1:30:00");
@@ -416,7 +387,6 @@ describe("where the original is", () => {
     expect(placement).toBe("metered");
     const status = originalStatus(placement, "home-gateway");
     expect(status.text).toContain("spends mobile data");
-    // The bytes never move on their own: the action is the only way through.
     expect(status.action).toBe(LOAD_THE_ORIGINAL);
     expect(originalWhereabouts(status)).toContain("your choice");
   });
@@ -438,8 +408,6 @@ describe("slideshow is a different mode", () => {
     expect(SLIDESHOW.info).toBe(false);
   });
 
-  // THE MODEL MUST NOT DESCRIBE CONTROLS THAT DO NOT RENDER: the phone draws
-  // no transport and no pause in slideshow.
   test("it claims no transport and no pause, because it draws neither", () => {
     expect(SLIDESHOW.transports).toBe(0);
     expect(SLIDESHOW.pause).toBe(false);
@@ -484,7 +452,6 @@ describe("the viewer's floating stamp", () => {
       capturedAt: "2026-07-30T17:42:00Z",
       placeName: "Lyme Regis",
     });
-    // The date is a date and nothing else — the clock lives on the second line.
     expect(stamp.date).toContain("2026");
     expect(stamp.date).not.toContain(":");
     expect(stamp.date).not.toContain("Lyme Regis");
@@ -500,8 +467,6 @@ describe("the viewer's floating stamp", () => {
   });
 
   test("a photograph with no capture time invents nothing", () => {
-    // Both lines come back empty, which is the caller's signal to show the
-    // photograph's NAME on the first line instead of an empty stamp.
     expect(captureStamp({})).toStrictEqual({ date: "", time: "" });
     expect(captureStamp({ placeName: "Lyme Regis" })).toStrictEqual({
       date: "",
@@ -515,8 +480,6 @@ describe("gestures", () => {
     const gestures = [
       "pinch",
       "double tap",
-      // The pan the zoomed readout promises — a gesture the viewer did not
-      // have until now, and therefore one that needed an equivalent.
       "drag",
       "swipe left",
       "swipe right",

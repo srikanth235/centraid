@@ -1,20 +1,3 @@
-// Settings → Enrichment, rendered (#807). Three states and one law.
-//
-// What this pins is what a future edit is likeliest to undo quietly:
-//
-//  - the section is READ-ONLY: it renders no button, switch or text field, so
-//    a later "just one toggle" has to delete a test rather than add a control
-//  - a capability's line names its engine profile and WHERE the work happens,
-//    in member-facing words, never the registry's contract ids
-//  - `effective: null` — the gateway's fail-closed answer — is reported as
-//    such and never dressed up as an ordinary "off"
-//  - an unreachable gateway yields an unavailable state carrying the real
-//    reason, with NO policy rows: the phone keeps no copy of the policy
-//    (docs/mobile-offline.md), so there is nothing honest to show
-//  - the wire asks the one resolver per capability and lists profiles; both
-//    calls are GETs, which is the read-only rule at the transport
-//
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -37,8 +20,6 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
   };
 });
 
-// The wire's own test half: the transport is mocked at `lib/gateway`, so the
-// endpoints and methods below are the real ones `readEnrichmentPolicy` builds.
 const wire = vi.hoisted(() => ({
   fetchJson: vi.fn<(href: string, init?: RequestInit) => Promise<unknown>>(),
 }));
@@ -55,7 +36,6 @@ vi.mock(
 
 let dispose: (() => void) | undefined;
 
-/** Let the mount effect's read — and the render it schedules — finish. */
 async function settle(): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
@@ -119,7 +99,6 @@ describe(EnrichmentSection, () => {
     const text = textOf(container);
     expect(text).toContain("Text in photos");
     expect(text).toContain("Built-in · on this device · as items arrive");
-    // The contract id is a key, not copy.
     expect(text).not.toContain("ocr ");
   });
 
@@ -170,8 +149,6 @@ describe(EnrichmentSection, () => {
     expect(text).not.toContain("Text in photos");
   });
 
-  // READ ONLY. Editing the cascade is a desktop act in this wave; nothing on
-  // this section may accept a press or a keystroke.
   it("renders no control at all", async () => {
     const container = await render(() => Promise.resolve([state()]));
     expect(nodesOf(container, "button")).toHaveLength(0);
@@ -202,3 +179,4 @@ describe(EnrichmentSection, () => {
     );
   });
 });
+// @vitest-environment jsdom

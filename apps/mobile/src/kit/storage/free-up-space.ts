@@ -1,16 +1,8 @@
-// Frame-wide, not a Photos feature (#712); `freeUpOffer` takes app ids from its
-// CALLER, so exclusions stay structural. Delete-time re-hash is mandatory: a
-// photo edited in place keeps its `ph://` id but holds new bytes.
-
-/** Structural, not imported: `kit/` may not reach an app. */
 export interface FreeUpAsset {
   assetId?: string;
-  /** Every vault asset id that folded onto this row (SHA merge). */
   assetIds?: string[];
   sha256?: string;
-  /** `"merged"` — in a vault AND on this device. */
   source?: string;
-  /** `"backed-up"` — proven remote custody. */
   backupState?: string;
   verifiedCasAck?: boolean;
   localId?: string;
@@ -55,7 +47,6 @@ export function selectFreeUpCandidates(
   });
 }
 
-/** `'in-cloud'` is not `null`: nothing was hashed, so no evidence. */
 export type DeviceByteProbe = (
   localId: string
 ) => Promise<{ sha256: string; size: number } | "in-cloud" | null>;
@@ -123,7 +114,6 @@ export interface FreeUpTotals {
   bytes: number;
 }
 
-/** `uncounted` (nobody looked) is not `nothing` (looked, found none). */
 export type FreeUpOffer =
   | { kind: "uncounted" }
   | { kind: "nothing" }

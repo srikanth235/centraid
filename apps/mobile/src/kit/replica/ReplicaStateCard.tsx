@@ -1,15 +1,3 @@
-// The kit's own explanation block for a replica with NOTHING to show and no
-// prospect of getting it — `unavailable` (no gateway ever paired) and `error`
-// (a read that failed; an empty grid that is a bug). `offline` is deliberately
-// not one of them: a vault is a local replica, offline it renders from bytes
-// already on the phone, and carding the product's own premise as an incident —
-// in a block holding ~45% of the screen on every app that mounts it — is an
-// over-announcement. Offline is stated once by the replica
-// bar (Gateway asleep · Wake help) for members who can act on it.
-//
-// Kept app-agnostic on purpose: this is a kit component, not a Photos one, so
-// its copy names no app-specific noun ("photographs") — `noun` is the only
-// thing a caller supplies.
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 

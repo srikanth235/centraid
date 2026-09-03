@@ -1,13 +1,3 @@
-// Pure derivations for the Face review queue (#711), shared by FaceReview.tsx;
-// framework-free so its two rules stay unit-testable:
-//   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285): matchCountFor answers
-//      "how many OTHER photographs propose the same person" — same derivation
-//      as queries/face-queue.ts over the same table; the two must agree.
-//   2. ONE FACE AT A TIME (v4 3967): buildQueue returns an ORDERED list;
-//      FaceReview.tsx shows only queue[cursor].
-//
-// firstSeenAt: no created_at column exists (see FaceReview.tsx); earliest
-// CAPTURE date among matching photographs is the closest true substitute.
 export interface FaceRegionRow {
   region_id: unknown;
   asset_id: unknown;
@@ -15,7 +5,6 @@ export interface FaceRegionRow {
   confidence?: unknown;
   confirmed_by_party_id?: unknown;
   bbox_json?: unknown;
-  /** `proposed` | `confirmed` | `rejected` | `dismissed` (#712). */
   review_state?: unknown;
 }
 
@@ -38,10 +27,6 @@ function str(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
-/** Every UNANSWERED region, region_id order (no timestamp to sort on; same
- *  as the web query). "Unanswered", not "unconfirmed" (#712): rejected and
- *  deliberately-unnamed regions are finished with — filtering on
- *  confirmed_by_party_id resurrects them every pull (the unemptyable-queue bug). */
 export function buildQueue(
   faceRows: readonly FaceRegionRow[],
   assetRows: readonly AssetRow[]

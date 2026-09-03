@@ -1,20 +1,3 @@
-// Agenda's RNTL tier (#890 W5). ONE cold renderer for the app: the RN host
-// tree is expensive to boot, so every Agenda claim needing a real accessibility
-// tree, a real responder, or real style resolution is consolidated here
-// (TESTING.md, "React Native component tests").
-//
-// WHAT ONLY THIS TIER CAN FALSIFY here:
-//  - the band's real `tab` nodes and the single lit `selected` trait;
-//  - the accessible NAME RN builds for an event card — summary AND time, so a
-//    screen reader hears when the thing is, not just that it exists;
-//  - a press that must reach a real `Pressable` before the surface changes;
-//  - which nodes RN actually PUBLISHES — the last case pins two that it does
-//    not, and no props-echo stub can tell the difference.
-//
-// Device seams are the project's (`src/test/native-device-seams.ts`). Every
-// Agenda component, expansion rule and copy table stays real; only the replica
-// read layer — the device database — is substituted.
-
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,7 +37,6 @@ vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
   };
 });
 
-/** One confirmed event inside today's window, as the vault stores it. */
 function seedEvent(summary: string, hour: number): void {
   const day = new Date();
   const start = new Date(day);
@@ -103,8 +85,6 @@ describe("Agenda, on the real React Native host tree", () => {
 
     const tabs = screen.getAllByRole("tab");
     expect(tabs.length).toBeGreaterThan(1);
-    // Two lit places is the defect. The stub tier renders each tab as its own
-    // `div` and never sees the band as one tree, so it cannot count them.
     expect(litTabs(tabs)).toHaveLength(1);
 
     const elsewhere = tabs.find(
@@ -117,9 +97,6 @@ describe("Agenda, on the real React Native host tree", () => {
   });
 
   it("names an event card with its time, not only its words", () => {
-    // The card's ONE accessible name is everything a screen reader gets: an
-    // agenda that says "Dentist" without saying when is a list of nouns. RN
-    // builds this name; the stub can only confirm a prop was handed over.
     seedEvent("Dentist", 14);
     const screen = mountAgenda();
 
@@ -155,23 +132,7 @@ describe("Agenda, on the real React Native host tree", () => {
     expect(navigate.mock.calls).toStrictEqual([]);
   });
 
-  // ── CHARACTERISATION PIN, NOT A CONTRACT ────────────────────────────────
   it("PINS A DEFECT: labels on plain Views never reach the accessibility tree", () => {
-    // WHAT THIS CONTRADICTS: `AgendaBand` wraps its tabs in a `View` carrying
-    // `accessibilityRole="tablist"`, and `NowLine` marks the current moment
-    // with a `View` carrying `accessibilityLabel="Now"`. Neither sets
-    // `accessible`, and React Native only promotes a `View` to an
-    // accessibility element when it does — so the grouping role and the "Now"
-    // marker are both absent from the tree a screen reader walks. On the
-    // Agenda that is the whole signal: the line is otherwise a coloured rule.
-    //
-    // Nothing cheaper could see this. The DOM stub writes `data-role` and
-    // `aria-label` onto its `div` unconditionally, so a stub-tier test asserts
-    // the prop was passed and reports green while the device says nothing.
-    //
-    // FIXING THE PRODUCT IS OUT OF SCOPE HERE (#890 W5 rebuilds the tests), so
-    // this asserts today's behaviour and must be DELETED — not adjusted — by
-    // whoever adds `accessible` to those views.
     const screen = mountAgenda();
 
     expect(screen.getAllByRole("tab").length).toBeGreaterThan(1);

@@ -6,7 +6,6 @@ export interface CachedBackgroundScope {
   canWrite?: boolean;
 }
 
-/** The focused write target always survives the four-scope background cap. */
 export function selectBackgroundScopes(
   scopes: readonly CachedBackgroundScope[],
   activeVaultId: string

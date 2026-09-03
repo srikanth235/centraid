@@ -1,8 +1,3 @@
-// Records table (#765, spec §9/§11). Phone-width only: the collapsed form IS
-// the table — title over one snip line carrying the hidden columns
-// (./doc-table-model#snipLine). The menu card hangs off the TRAILING edge,
-// mirrored under RTL.
-
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 
@@ -22,10 +17,7 @@ import { styles } from "./DocTable.styles";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
 
-/** NO defaults: kit copy would be this app's only authorless string; a
- *  surface that can't yet do a verb omits it. */
 export interface DocTableCopy extends DocRowActionLabels {
-  /** Overflow button accessibility label. */
   more: (title: string) => string;
 }
 
@@ -55,7 +47,6 @@ function DocTableRow({
   moreIcon: string;
   onRowAction: (record: DocRecord, action: DocRowAction) => void;
 }): React.JSX.Element {
-  // One anchor per ROW, not shared — it would open beside the first measured row.
   const { anchor, anchorRef, measureAnchor } = useMenuAnchor();
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -78,8 +69,6 @@ function DocTableRow({
       }));
     return [
       { key: "record", rows: rowsFor(menu.record, false) },
-      // Own group: the rule above separates delete from "Copy the id".
-      // No delete named, no group, no rule.
       ...(menu.danger.length > 0
         ? [{ key: "danger", rows: rowsFor(menu.danger, true) }]
         : []),

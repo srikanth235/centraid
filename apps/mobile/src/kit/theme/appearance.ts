@@ -1,5 +1,3 @@
-// Appearance pref (#498), persisted in `Store`, exposed as an external store.
-
 import { useSyncExternalStore } from "react";
 
 import { Store } from "../../storage";
@@ -18,7 +16,6 @@ function coerce(value: unknown): Appearance {
   return value === "light" || value === "dark" ? value : "system";
 }
 
-// Sync read; call `hydrateAppearance()` once at boot.
 export function getAppearance(): Appearance {
   return coerce(Store.get<Appearance>(KEY, "system"));
 }
@@ -49,7 +46,6 @@ export function useAppearance(): Appearance {
   );
 }
 
-// 'system' follows the OS; RN 0.86 'unspecified' (like null) means none.
 export function resolveScheme(
   pref: Appearance,
   osScheme: "light" | "dark" | "unspecified" | null | undefined

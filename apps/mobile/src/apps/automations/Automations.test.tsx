@@ -1,22 +1,3 @@
-// The Automations place, rendered (#765, spec §3). Five states, one screen.
-//
-// What this pins is what a future edit is likeliest to undo quietly:
-//
-//  - loading draws the ROW GEOMETRY plus the sentence that explains why, and
-//    never a spinner
-//  - empty is the reference's verbatim paragraph, in the routine register,
-//    and the catalogue below it stays reachable
-//  - error is the net panel with the reference's exact title and retry verb,
-//    and its "nothing has run since" clause is ABSENT when no reading ever
-//    gave this screen a clock
-//  - a failing row tones its metadata and keeps its title in primary ink
-//  - both halves of the pause write survive the migration (`Resume` in the
-//    row's trailing slot, `Pause` in its expansion)
-//  - the suggestions note tells the truth about where suggestions come from
-//  - the filled `New automation` verb is ABSENT, because no author flow exists
-//    on this surface
-
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,8 +15,6 @@ import AutomationsScreen from "./Automations";
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
-  // `RefreshControl` is a pull-to-refresh gesture host with nothing to draw;
-  // the shared stub covers the primitives the kit blocks use.
   return {
     ...stub.reactNativeStub(),
     RefreshControl: () => null,
@@ -55,10 +34,6 @@ vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
 
-// The one fact this screen reads from the session: which experimental
-// features the gateway advertised on the single `/info` answer the
-// compatibility wall already made. Mocked at the provider so the test does
-// not mount the replica machinery to state a capability.
 const session = vi.hoisted(() => ({
   features: undefined as
     | { automations: boolean; connectors: boolean }
@@ -68,9 +43,6 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
   useReplica: () => ({ online: true, ready: true, ...session }),
 }));
 
-// Each mock takes the REAL function's signature, so a wire shape that drifts
-// is a typecheck failure here rather than a test that passes against a module
-// the app no longer has.
 type Automations = typeof import("../../lib/automations");
 
 const wire = vi.hoisted(() => ({
@@ -130,7 +102,6 @@ const navigation = {
 
 let dispose: (() => void) | undefined;
 
-/** Let the effect's read — and anything it chained — finish. */
 async function settle(): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
@@ -172,8 +143,6 @@ function buttonLabelled(container: HTMLElement, label: string): Element | null {
 describe(AutomationsScreen, () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Unknown by default — the gateway has not answered — which is the state
-    // every other test in this file is written against.
     session.features = undefined;
     wire.list.mockResolvedValue([]);
     wire.turns.mockResolvedValue([]);
@@ -187,9 +156,6 @@ describe(AutomationsScreen, () => {
     dispose = undefined;
   });
 
-  // THE V0 EXPERIMENTAL GATE. Off means the gateway does not mount the
-  // automations routes at all, so the page must not read them and must say
-  // what is actually true — not spin, and not dress a 404 as a page error.
   it("walls the place when the gateway has automations switched off", async () => {
     session.features = { automations: false, connectors: true };
     const container = await render();
@@ -209,11 +175,7 @@ describe(AutomationsScreen, () => {
   });
 
   it("draws the row geometry while it reads, and says why", async () => {
-    wire.list.mockReturnValue(
-      new Promise<AutomationRow[]>(() => {
-        // Never settles: this is what "still reading" looks like.
-      })
-    );
+    wire.list.mockReturnValue(new Promise<AutomationRow[]>(() => {}));
     const container = await render();
     const skeleton = nodesOf(container, "div").find(
       (node) => node.dataset.role === "progressbar"
@@ -271,7 +233,6 @@ describe(AutomationsScreen, () => {
         span.startsWith("Monday 8:00 · failed 2 runs in a row, since ")
       )
     ).toBe(true);
-    // The row's title stays primary ink; only the metadata takes `net`.
     const title = nodesOf(container, "span").find(
       (node) => node.textContent === "Weekly digest"
     );
@@ -284,7 +245,6 @@ describe(AutomationsScreen, () => {
       )
     ).toBe(true);
 
-    // The standing line's one verb reaches the failure itself.
     press(buttonLabelled(container, "Open the failure"));
     expect(navigation.push).toHaveBeenCalledWith("Automations", {
       automationRef: "mail/digest",
@@ -368,3 +328,4 @@ describe(AutomationsScreen, () => {
     expect(textOf(container)).toContain("Automations");
   });
 });
+// @vitest-environment jsdom

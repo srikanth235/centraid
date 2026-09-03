@@ -1,16 +1,8 @@
-// Regression coverage for the v4 Binding Layer search overlay anatomy (#711).
-// Pins the rules a future edit is likeliest to silently undo: OPAQUE paper
-// (bg-elev, never glass/tint film), try-chips as an empty-query-only
-// affordance, the exact foot and empty-line copy, and NO app-filter row /
-// APPS icon grid / RECENTS section. Absence checks are structural — they
-// inspect the *rendered* tree via fingerprinting mocks, not the source text.
-
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// @vitest-environment jsdom
 import SearchOverlay from "./SearchOverlay";
 import type { SearchOverlayProps } from "./SearchOverlay";
 
@@ -24,8 +16,6 @@ type UseSearchRecentsModule = typeof import("./useSearchRecents");
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-// Solid, alpha-free mock values — a translucent film sneaking back would show
-// up as an `rgba(` value on some `data-bg`, which the opaque-panel test scans for.
 const mocks = vi.hoisted(() => ({
   colors: {
     accent: "#mock-accent",
@@ -95,8 +85,6 @@ vi.mock(import("react-native"), async () => {
       },
       create: <T,>(styles: T): T => styles,
     },
-    // Foot fingerprints: the note's `flex`/`textAlign` become data
-    // attributes so the no-overflow contract is testable on the rendered tree.
     Text: ({
       children,
       style,
@@ -138,8 +126,6 @@ vi.mock(import("react-native"), async () => {
           )
         ),
       }),
-    // The one View mock detail this suite leans on: a `backgroundColor` in
-    // style becomes `data-bg`, so every painted background is inspectable.
     View: ({
       children,
       style,
@@ -151,7 +137,6 @@ vi.mock(import("react-native"), async () => {
       const bg = flat.backgroundColor;
       return element("div", {
         ...(typeof bg === "string" ? { "data-bg": bg } : {}),
-        // flexWrap fingerprint for the one-row try-chip contract.
         ...(typeof flat.flexWrap === "string"
           ? { "data-flexwrap": flat.flexWrap }
           : {}),
@@ -172,7 +157,6 @@ vi.mock(
   () =>
     ({
       borders: { hairline: 1 },
-      // Shared page margin the overlay insets its content by (handoff `R.margin.m`).
       pageMargin: 18,
       t: () => ({}),
       useTheme: () => ({
@@ -184,8 +168,6 @@ vi.mock(
     }) as unknown as Partial<ThemeModule>
 );
 
-// No paired gateway in this suite — the search effect no-ops without a
-// session: the predictable, always-zero state the assertions want.
 vi.mock(
   import("../../kit/replica/ReplicaProvider"),
   () =>
@@ -256,10 +238,7 @@ describe("the search overlay anatomy", () => {
         container!.querySelectorAll<HTMLElement>("[data-bg]")
       ).map((el) => el.dataset.bg);
 
-      // The opaque paper layer itself, and nothing else painting a colour.
       expect(painted).toStrictEqual([mocks.colors.bgElev]);
-      // Belt and braces: nothing painted may carry alpha (`expo-blur` is
-      // absent from the app entirely, so a live blur cannot sneak back).
       for (const value of painted) expect(value).not.toMatch(/rgba\(/u);
     });
   });
@@ -305,8 +284,6 @@ describe("the search overlay anatomy", () => {
   });
 
   describe("the fixed foot", () => {
-    // The brief's note (:6022) leads with ↵; on a phone only that glyph
-    // becomes its tap equivalent, every other word stays verbatim.
     const FOOT_NOTE =
       "tapping opens the owning app — record addressing is not built";
 
@@ -330,8 +307,6 @@ describe("the search overlay anatomy", () => {
         (candidate) => candidate.textContent === FOOT_NOTE
       );
       expect(note).toBeTruthy();
-      // `flex: 1` caps the note to the width the count leaves over; right
-      // alignment pins it to the trailing edge (brief's `margin-inline-start: auto`).
       expect(note?.dataset.flex).toBe("1");
       expect(note?.dataset.textalign).toBe("right");
     });
@@ -383,3 +358,4 @@ describe("the search overlay anatomy", () => {
     });
   });
 });
+// @vitest-environment jsdom

@@ -15,12 +15,6 @@ export interface IconProps {
   strokeWidth?: number;
 }
 
-// Set drawn for round caps and joins; the caller sets stroke-width — 1.6
-// normally, 1.75 below 16px (packages/design/src/icons.ts header comment).
-// `strokeWidth` stays available as an explicit override for the few
-// deliberately non-standard glyphs (illustration, debossed treatments). See
-// ./icon-stroke-width.ts for the rule itself.
-
 export default function Icon({
   name,
   size = 20,

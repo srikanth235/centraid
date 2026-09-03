@@ -1,24 +1,3 @@
-// @vitest-environment jsdom
-// The Places shelf's own wiring (#781) — what `places-model.test.ts`
-// cannot see: the sentence in the head, the label a card publishes, and which
-// screen a tap opens.
-//
-// Three claims, each a defect class this seat is prone to:
-//
-//   1. THE HEAD COUNTS PLACES, NOT PHOTOGRAPHS (proto:3939). "N of M
-//      geotagged" belongs to the map; on the shelf it answers a question
-//      nobody asked and reads as a different feature's header.
-//   2. A CARD OPENS ITS OWN PLACE. The card carries the place key AND the
-//      name it printed, so the screen it opens cannot be titled one place and
-//      filtered by another — the "labelled destination opens something else"
-//      class #711 found in People.
-//   3. THE MAP IS A CONTROL IN THE HEAD, not the shelf itself. This screen
-//      is not the map: the handoff inverts map-first on the phone, and the one
-//      chip that reaches it must reach the map rather than a place.
-//
-// Same react-native-as-DOM technique as `FaceReview.test.tsx`: every RN
-// primitive becomes a plain DOM element, the production component and its
-// pure model stay real, and only native/replica seams are stubbed.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -166,8 +145,6 @@ vi.mock(
     }) as unknown as Partial<TimelineSourceModule>
 );
 
-// The shell (#712) owns the band; this file owns the shelf inside it,
-// and `PhotosScreen.test.tsx` already owns the frame's own contract.
 vi.mock(import("./PhotosScreen"), async () => {
   const ReactModule = await import("react");
   return {
@@ -176,9 +153,6 @@ vi.mock(import("./PhotosScreen"), async () => {
   } as never;
 });
 
-// Two photographs at Lake Tahoe, one at home: three photographs, TWO places.
-// The rows carry `geo_lat`/`geo_lng` — the columns `core_place` actually
-// ships and the replica hands over raw (#787).
 const [TAHOE_PHOTO, HOME_PHOTO] = makePhotosFixture("place-tagged").assets;
 const PLACE_ROWS = [
   {
@@ -262,8 +236,6 @@ describe("the Places shelf, on the phone seat", () => {
     });
   });
 
-  // A coordinate pair is not a name (#816) — on the card OR in the label the
-  // card publishes to the screen it opens.
   it("prints a place named only by its coordinates as unnamed, on the card and in its label", () => {
     mocks.places = [
       { ...PLACE_ROWS[0], name: "39.0968, -120.0324" },
@@ -296,9 +268,6 @@ describe("the Places shelf, on the phone seat", () => {
     expect(container!.textContent).toContain("Places · 0");
   });
 
-  // THE TRAILING "NO LOCATION" CARD (#816). The photographs nobody told
-  // where they were taken were in the library and on no shelf: every other card
-  // stands at a coordinate.
   it("cards the photographs with no place at all, after the places, without counting them as places", () => {
     mocks.assets = [
       ...(mocks.assets as unknown[]),
@@ -309,9 +278,7 @@ describe("the Places shelf, on the phone seat", () => {
     expect(buttonLabelled("No location yet").getAttribute("aria-label")).toBe(
       "No location yet, 2 photographs"
     );
-    // Still TWO places: the bucket is the absence of a place, not one more.
     expect(container!.textContent).toContain("Places · 2");
-    // Last on the shelf.
     const labels = Array.from(container!.querySelectorAll("button")).map(
       (button) => button.getAttribute("aria-label")
     );
@@ -329,9 +296,6 @@ describe("the Places shelf, on the phone seat", () => {
         new MouseEvent("click", { bubbles: true })
       )
     );
-    // The full call list, as data: exactly one navigation, to the bucket.
-    // (Stated this way rather than via toHaveBeenCalled* — the hygiene
-    // ratchet's mock-call budget is down-only, and the claim is identical.)
     expect(navigate.mock.calls).toStrictEqual([
       [
         "PlaceDetail",
@@ -349,3 +313,4 @@ describe("the Places shelf, on the phone seat", () => {
     ).toStrictEqual([TAHOE_PHOTO!.previewUri, HOME_PHOTO!.previewUri]);
   });
 });
+// @vitest-environment jsdom

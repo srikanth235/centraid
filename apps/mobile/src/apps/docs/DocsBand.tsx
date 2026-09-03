@@ -1,13 +1,3 @@
-// The band Docs has claimed, rendered (Binding Layer v12 handoff Part 2
-// §"The band"; #821).
-//
-// Anatomy and shared plate geometry: `PhotosBand.tsx` and
-// `kit/band-surface.ts`. This file renders `docs-band.ts` and adds nothing.
-//
-// When the member has handed the band back (`owner === "host"`) the tab group
-// goes and the capsule STAYS — the way home is the one thing an app may never
-// take away, and on the phone a stack screen has no frame band underneath it.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -32,8 +22,6 @@ import type { ThemeColors } from "../../kit/theme";
 import { resolveDocsBand } from "./docs-band";
 import type { DocsBandDestinationKey } from "./docs-band";
 
-/** The group plate's inner gutter and the gap between the two plates — the
- *  same two numbers Photos' band draws from the handoff (:4955-4959). */
 const GROUP_GUTTER = 2;
 const PLATE_GAP = 8;
 
@@ -41,7 +29,6 @@ export interface DocsBandProps {
   owner: BandOwner;
   current: DocsBandDestinationKey;
   onSelect: (key: DocsBandDestinationKey) => void;
-  /** The capsule's one tap: all apps and places, in one move. */
   onHome: () => void;
 }
 
@@ -81,9 +68,6 @@ export default function DocsBand({
               key={destination.key}
               accessibilityRole="tab"
               accessibilityLabel={destination.label}
-              // The DESTINATION KEY, never the label: the label is copy a v-next
-              // handoff may re-word, and a flow that tapped it would then tap
-              // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.docs}${destination.key}`}
               accessibilityState={{ selected: active }}
               onPress={() => onSelect(destination.key)}

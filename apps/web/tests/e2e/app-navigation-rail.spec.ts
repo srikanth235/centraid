@@ -6,13 +6,6 @@ import { build } from "esbuild";
 
 import { metrics, toBlueprintCss } from "@centraid/design";
 
-// THE APP NAVIGATION RAIL, in a real browser (#835). Four handoff
-// definition-of-done items are LAYOUT/FOCUS claims jsdom cannot settle:
-// 1090 rail-width hold + grid reflow, independent rail/content scrolling,
-// one tab stop into the rail, the `(pointer: fine)` row rung. Mounts the
-// SHIPPED NavRail and row tables — nothing reimplemented. This capture is
-// the #835 UI-impact evidence.
-
 const here = import.meta.dirname;
 const REPO_ROOT = path.resolve(here, "../../../..");
 const NAV_RAIL = path.join(
@@ -30,8 +23,6 @@ const DOCS_RAIL = path.join(
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-835-app-navigation-rail.png";
 
-/** A tile is 104px + a 12px gap, so how many fit is a readable proxy for
- *  "the grid reflows" without depending on Photos' own justification pass. */
 const TILE = 104;
 
 const ENTRY = `
@@ -127,7 +118,6 @@ createRoot(document.getElementById("root")).render(
 );
 `;
 
-/** Bundle the shipped rail, its CSS modules included, for the browser. */
 async function bundleRail(): Promise<{ js: string; css: string }> {
   const result = await build({
     stdin: {
@@ -138,7 +128,6 @@ async function bundleRail(): Promise<{ js: string; css: string }> {
     },
     bundle: true,
     write: false,
-    // Never written (`write: false`); esbuild needs a path to name the CSS-module output against.
     outdir: path.join(here, ".app-navigation-rail-bundle"),
     format: "iife",
     jsx: "automatic",
@@ -154,8 +143,6 @@ async function bundleRail(): Promise<{ js: string; css: string }> {
   };
 }
 
-/** The pane geometry the two apps' own `Chrome.module.css` gives the row: a
- *  bounded flex row whose scroller is the only column that gives width back. */
 const HARNESS_CSS = `
   body { margin: 0; background: var(--bg); color: var(--text); }
   .seat { display: flex; flex-direction: column; gap: 0; height: 100vh; }
@@ -190,13 +177,11 @@ test("the app rail holds its width, scrolls itself, and is one tab stop", async 
   await expect(photos).toBeVisible();
   await expect(docs).toBeVisible();
 
-  // ── The rail is exactly the token on both apps, not resizable by adjacent content.
   const widthOf = async (nav: typeof photos): Promise<number> =>
     (await nav.boundingBox())?.width ?? 0;
   expect(await widthOf(photos)).toBe(metrics.appRail);
   expect(await widthOf(docs)).toBe(metrics.appRail);
 
-  // ── Pointer row rung via a real `(pointer: fine)` query; coarse keeps the 44 floor.
   const rowHeight = await page
     .getByRole("navigation", { name: "Photos" })
     .getByRole("button", { name: /Library/u })
@@ -204,13 +189,11 @@ test("the app rail holds its width, scrolls itself, and is one tab stop", async 
     .evaluate((el) => el.getBoundingClientRect().height);
   expect(Math.round(rowHeight)).toBe(metrics.appRailRow);
 
-  // ── Where the member is standing, on both spines at once.
   await expect(photos.locator('[aria-current="page"]')).toHaveText(/Albums/u);
   await expect(docs.locator('[aria-current="page"]')).toHaveText(/Property/u);
   await expect(docs.locator('[aria-current="page"]')).toHaveCount(1);
   await expect(docs.getByRole("button", { name: /^Folders/u })).toBeVisible();
 
-  // ── AT 1090 THE RAIL HOLDS ITS WIDTH AND THE GRID REFLOWS.
   const tilesPerRow = async (): Promise<number> =>
     page.evaluate(() => {
       const tiles = [
@@ -227,7 +210,6 @@ test("the app rail holds its width, scrolls itself, and is one tab stop", async 
   expect(packed).toBeLessThan(wide);
   await page.setViewportSize({ height: 900, width: 1420 });
 
-  // ── THE RAIL AND THE CONTENT COLUMN SCROLL INDEPENDENTLY, either direction.
   const scroller = page.locator('#photos [data-scroller="Photos"]');
   await scroller.evaluate((el) => {
     el.scrollTop = 400;
@@ -235,7 +217,6 @@ test("the app rail holds its width, scrolls itself, and is one tab stop", async 
   expect(await scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   expect(await photos.evaluate((el) => el.scrollTop)).toBe(0);
 
-  // ── ONE TAB STOP INTO THE RAIL, then up/down through the rows.
   await page.locator("#before").focus();
   await page.keyboard.press("Tab");
   const entered = await page.evaluate(
@@ -250,7 +231,6 @@ test("the app rail holds its width, scrolls itself, and is one tab stop", async 
     )
   ).not.toBe("Photos");
 
-  // ── UP/DOWN MOVES, ENTER ROUTES.
   await photos.getByRole("button", { name: /^Library/u }).focus();
   await page.keyboard.press("ArrowDown");
   expect(

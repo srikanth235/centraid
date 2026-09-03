@@ -1,6 +1,3 @@
-// Data place loader (#765). Reads settle independently; only a failed census
-// is the screen error. `no-gateway` is the pairing panel, not a sixth visual.
-
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -50,7 +47,6 @@ function messageOf(reason: unknown): string {
     : "The gateway did not answer.";
 }
 
-/** Newest-first when a time column exists; otherwise the first page as-is. */
 async function readRecords(table: BrowseTable): Promise<BrowseView> {
   const first = await fetchBrowseRows({
     limit: RECORD_PAGE,
@@ -104,7 +100,6 @@ export function useData(initialKind?: string): UseData {
   const [state, setState] = useState<DataState>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
   const wanted = useRef<string | undefined>(initialKind);
-  // Write latest in an effect, not during render — React may discard that render.
   const latest = useRef<DataState>(state);
   useEffect(() => {
     latest.current = state;

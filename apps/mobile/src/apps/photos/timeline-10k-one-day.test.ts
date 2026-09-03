@@ -1,6 +1,3 @@
-// Degenerate twin of timeline-50k.test.ts (#721/C1): 10k captures in ONE
-// day; owns the narrow/dense budget, 50k the wide/sparse one.
-
 import { describe, expect, test } from "vitest";
 
 import { justify } from "./justify";
@@ -8,7 +5,6 @@ import { makePhotosFixture } from "./photos-fixtures";
 import { sectionPhotoAssets } from "./timeline-model";
 
 function measureCpuMs<T>(run: () => T): { value: T; elapsedMs: number } {
-  // CPU time, not wall clock — immune to descheduling under load.
   const started = process.cpuUsage();
   const value = run();
   const elapsed = process.cpuUsage(started);
@@ -35,7 +31,6 @@ describe("timeline-10k-one-day", () => {
     );
     expect(elapsedMs).toBeLessThan(500);
     expect(rows.flat()).toHaveLength(10_000);
-    // Rows fill container width as justify.test.ts pins.
     for (const row of rows.slice(0, -1)) {
       const rowWidth =
         row.reduce((sum, tile) => sum + tile.width, 0) + 2 * (row.length - 1);

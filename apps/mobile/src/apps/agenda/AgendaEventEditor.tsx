@@ -1,16 +1,3 @@
-// The event editor on the phone.
-//
-// Title, all-day (the event's recurrence SEMANTICS, not a display toggle),
-// start and end through the platform's own picker, repeat, calendar, guests
-// and the reminder lead — the same seven fields the pointer editor carries.
-//
-// REPEAT SHOWS THE SUMMARY, NEVER THE RULE. The picker's options are named in
-// words; the rule each one carries is a value on its way to `edit-event`.
-//
-// EDITING A REPEATING EVENT GOES THROUGH THE SCOPE PICKER: this occurrence,
-// this and following, or the whole series. None of the three is the
-// recommended one, so none of them is filled.
-
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -33,8 +20,6 @@ const SCOPES: readonly { value: Scope; label: string }[] = [
   { value: "series", label: "The whole series" },
 ];
 
-/** Repeat choices. The label is what a member reads; the rule is what the
- *  vault stores, and it is never painted. */
 const REPEATS: readonly { rrule: string; label: string }[] = [
   { rrule: "", label: "Does not repeat" },
   { rrule: "FREQ=DAILY", label: "Every day" },
@@ -137,8 +122,6 @@ export default function AgendaEventEditor({
     const request: EditorWrite =
       isRecurring && scope !== "series"
         ? {
-            // An occurrence-shaped change is an EXCEPTION on the series, keyed
-            // by the instance the member opened.
             action: "edit-occurrence",
             input: {
               event_id: event.id,
@@ -177,8 +160,6 @@ export default function AgendaEventEditor({
     if (saved) onClose();
   };
 
-  /** Skip is occurrence-shaped: the whole series is not skippable, so the
-   *  control simply is not drawn for that scope. */
   const skip = async (): Promise<void> => {
     setSaving(true);
     const saved = await onWrite({
@@ -428,7 +409,6 @@ export default function AgendaEventEditor({
           </View>
 
           {isRecurring && scope !== "series" ? (
-            // Destructive takes the OUTLINE, never the fill.
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Skip this occurrence"

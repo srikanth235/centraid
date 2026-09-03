@@ -1,17 +1,3 @@
-// Bulk upload (Docs handoff Part 2 §13; #821) — per-file progress and
-// an HONEST partial failure: `9 of 12 landed · 3 did not · nothing was
-// discarded`. A failure never silently drops a file: every picked file stays
-// on this list with its own state and its own Retry until the member leaves.
-//
-// The transfer itself is the product's ONE durable upload queue
-// (`lib/upload/media-producer.ts` `backupDocument`): sha-addressed staging,
-// resume across process death, and the canonical `docs / upload` intent as
-// its settled follow-up — nothing here re-invents a byte path. Files run one
-// at a time (the queue's drain lock serializes transfers anyway), and each
-// row's state is what the producer actually reported, never a guessed
-// percentage — this producer reports settlement, not bytes, so the row says
-// "uploading…" rather than drawing a bar nobody is filling.
-
 import * as DocumentPicker from "expo-document-picker";
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
@@ -82,7 +68,6 @@ export default function BulkUpload(
         title: file.name,
         mediaType: file.mediaType,
         plaintextSize: file.size,
-        // Picker copies live in the cache; the durable copy is the vault's.
         deleteSourceAfterSettle: true,
       });
       patch(file.key, { state: "landed" });
@@ -99,13 +84,10 @@ export default function BulkUpload(
     if (running) return;
     setRunning(true);
     try {
-      // Snapshot the queue-worthy rows; state updates flow through `patch`.
       const queue = files.filter(
         (file) => file.state === "waiting" || file.state === "failed"
       );
       for (const file of queue) {
-        // Serial on purpose: the durable queue's drain lock single-files
-        // transfers anyway, and one honest state at a time beats a race.
         // oxlint-disable-next-line no-await-in-loop -- serial by contract, per the drain lock above
         await runOne(file);
       }

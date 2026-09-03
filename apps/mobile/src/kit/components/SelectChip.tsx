@@ -5,7 +5,6 @@ import { t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import { Text } from "./NativeText";
 
-/** A compact, explicit entry into multi-select mode. */
 export default function SelectChip({
   disabled,
   onPress,
@@ -13,7 +12,6 @@ export default function SelectChip({
 }: {
   disabled: boolean;
   onPress: () => void;
-  /** A handle from `kit/test-ids`, never a hand-spelled string (#890 W2). */
   testID?: string;
 }): React.JSX.Element {
   const { colors } = useTheme();

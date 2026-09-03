@@ -1,14 +1,3 @@
-// The two controls that belong to ONE staged write (#765).
-//
-// A whole decision inside one bordered plate per queued item — title, artifact
-// dump, edit form, always-allow switch and three buttons — is exactly what
-// this shape refuses. ONE write is promoted to a panel and the rest stay rows:
-// `PanelBlock` carries the plate, the title line and the body (quoted, because
-// the words are somebody else's, with every address a fact in a keyed column).
-// What lives here is only what the panel cannot express — an editable form and
-// a standing consent toggle — and it lives as the CHILDREN of two rows under
-// the panel, because a deny is not a smaller approve and neither is a grant.
-
 import React, { useMemo, useState } from "react";
 import { Switch, View } from "react-native";
 
@@ -29,11 +18,6 @@ export interface StagedEditFormProps {
   onSubmit: (artifact: Record<string, unknown>) => void;
 }
 
-/**
- * Edit-then-approve. Only scalar text fields are editable (the shape the
- * gateway's drift guard accepts); everything else rides through unchanged, so
- * what is sent is still exactly what the panel quoted plus what was typed.
- */
 export function StagedEditForm({
   row,
   busy,
@@ -101,8 +85,6 @@ export interface AlwaysAllowProps {
   label: string;
 }
 
-/** The standing-consent toggle. It mints a grant, which is why the row it
- *  sits in says so and the grants section below can take it back. */
 export function AlwaysAllow({
   checked,
   disabled,

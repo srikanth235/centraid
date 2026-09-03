@@ -1,6 +1,3 @@
-// The serial transfer run, engine-side. These guarantees belong to the engine
-// rather than to Photos (#711).
-
 import { describe, expect, it, vi } from "vitest";
 
 import { TransferSourceUnavailableError, runTransfers } from "./transfer-run";
@@ -39,7 +36,6 @@ describe(runTransfers, () => {
     const outcome = await runTransfers(
       [
         entry("a", [send("file:///a.jpg")]),
-        // A Live Photo: one entry, two durable uploads.
         entry("b", [send("file:///b.jpg"), send("file:///b.mov")]),
       ],
       {
@@ -79,8 +75,6 @@ describe(runTransfers, () => {
         },
       }
     );
-    // Serial is a memory contract on a phone, not a preference: one original
-    // in flight at a time is what keeps a 4 GB video from being fatal.
     expect(overlapped).toBe(false);
   });
 
@@ -89,8 +83,6 @@ describe(runTransfers, () => {
       [entry("a", [send("a")]), absent("b"), entry("c", [send("c")])],
       { onProgress: () => undefined, send: () => Promise.resolve() }
     );
-    // Deferred is NOT a failure: the run finished, and `b` is reported so the
-    // caller can keep it selected or sweep it again later.
     expect([...outcome.deferred]).toStrictEqual(["b"]);
     expect(outcome.sent).toBe(2);
     expect(outcome.pausedReason).toBeUndefined();
@@ -109,8 +101,6 @@ describe(runTransfers, () => {
     );
     expect(outcome.pausedReason).toBe("gateway went away");
     expect(outcome.sent).toBe(1);
-    // The deferral found before the stall is still reported. Losing it would
-    // hide an iCloud-only original behind an unrelated network error.
     expect([...outcome.deferred]).toStrictEqual(["b"]);
   });
 
@@ -126,17 +116,12 @@ describe(runTransfers, () => {
         },
       }
     );
-    // docs/mobile-offline.md: the row persists its target vault so a headless
-    // drain cannot mis-file bytes into whatever vault is focused later.
     expect(targets).toStrictEqual(["vault-1"]);
   });
 
   it("a non-Error thrown by a producer still reads as a reason", async () => {
     const outcome = await runTransfers([entry("a", [send("a")])], {
       onProgress: () => undefined,
-      // A native module can reject with a bare string. The run must still be
-      // able to say WHY it paused rather than printing `[object Object]` — so
-      // this case rejects with a NON-Error on purpose.
       // oxlint-disable-next-line prefer-promise-reject-errors
       send: () => Promise.reject("nope"),
     });

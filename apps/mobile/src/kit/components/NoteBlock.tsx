@@ -1,9 +1,3 @@
-// NOTE — the quiet sentence that explains the block group above it (#765).
-//
-// It is tertiary ink at the body rung, never small type: the note is read
-// once and it has to be readable, so what recedes is its COLOUR, not its size.
-// Copy is the caller's.
-
 import React, { useMemo } from "react";
 
 import { useTheme } from "../theme";

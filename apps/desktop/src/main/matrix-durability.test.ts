@@ -1,7 +1,3 @@
-/**
- * Matrix cell desktop.durability (#535 coverable-today).
- * Multi-step patches must not lose vault map / onboarding markers.
- */
 import { describe, expect, test } from "vitest";
 
 import { mergePersistedSettings } from "./settings-merge.ts";

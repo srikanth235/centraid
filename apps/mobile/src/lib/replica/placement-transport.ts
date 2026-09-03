@@ -13,14 +13,6 @@ export class PlacementSubmissionError extends Error {
   }
 }
 
-/**
- * `/edges`' wire status vocabulary (queued|in-flight|established|parked|
- * denied|revoked|completed|failed) succeeded `/placements`' narrower one
- * (…|executed|…, #726). The durable outbox (`multi-vault-reader.ts`,
- * `multi-vault-session.ts`) still only knows the old five-plus-one values —
- * translate the one terminal-success rename here, at the transport boundary,
- * rather than touching every reader of `PlacementRecord.status`.
- */
 function toPlacementStatus(status: unknown): PlacementRecord["status"] {
   if (status === "completed" || status === "established") return "executed";
   return status === "queued" ||
@@ -31,7 +23,6 @@ function toPlacementStatus(status: unknown): PlacementRecord["status"] {
     : "failed";
 }
 
-/** One `/edges` response, always carrying exactly the one item this outbox asked for. */
 interface EdgeWire {
   edgeId: string;
   status: string;
@@ -45,9 +36,6 @@ function toPlacementRecord(
   edge: EdgeWire,
   input: PlacementIntent
 ): PlacementRecord {
-  // `updatePlacement` (multi-vault-reader.ts) overwrites both timestamps
-  // from local state regardless (createdAt kept from the existing row,
-  // updatedAt stamped fresh) — these only need to satisfy the shape.
   const now = new Date().toISOString();
   return {
     ...input,
@@ -58,13 +46,6 @@ function toPlacementRecord(
   };
 }
 
-/**
- * Shared foreground/background transport for the durable placement outbox.
- * The wire door is `/edges` now (#726) — one edge can carry a SET of
- * items, but this outbox still queues and replays one item per row, so the
- * translation is one-item-in, one-item-out: `PlacementIntent`/
- * `PlacementRecord` (the outbox's own persisted shape) are untouched.
- */
 export async function postPlacement(
   baseUrl: string,
   input: PlacementIntent
@@ -106,9 +87,7 @@ export interface CommonsIntent {
   containerId: string;
   sourceVaultId: string;
   members: readonly {
-    /** Required when the destination is a linked, unmounted peer. */
     partyId?: string;
-    /** Absent while this is an invitation waiting for the person to join. */
     vaultId?: string;
     capability: "read" | "read+write";
   }[];
@@ -166,7 +145,6 @@ export async function retainCommonsItem(
   };
 }
 
-/** Compile a shared container into each joined member's vault. */
 export async function postCommons(
   baseUrl: string,
   input: CommonsIntent

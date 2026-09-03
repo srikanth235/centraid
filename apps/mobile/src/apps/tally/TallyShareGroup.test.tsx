@@ -1,11 +1,3 @@
-// THE COMMONS PRODUCER, EXERCISED (#825 G-edit). Three claims:
-//  1. THE VERB EXISTS AT ALL — between #831 and the v17 rebuild no seat could
-//     mint an invitation, and a group drawing no share row restores that.
-//  2. THE GROUP SHARES ITSELF — its own subject, container and circle.
-//  3. OFFLINE DRAWS THE SENTENCE, NOT THE VERB; a refusal that came BACK from
-//     a reachable gateway is the other answer, in the gateway's own words.
-// @vitest-environment jsdom
-
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -44,8 +36,6 @@ vi.mock(
   () => ({ useReplicaQuery: () => ({ rows: groupRows }) }) as never
 );
 
-// The sheet has its own suite (`kit/share/ShareSheet.test.tsx`); here it is a
-// recorder, so what this app HANDS the engine is the observable outcome.
 const sheetProps = vi.hoisted(() => [] as Record<string, unknown>[]);
 vi.mock(
   import("../../kit/share/ShareSheet"),
@@ -83,7 +73,6 @@ function show(): HTMLElement {
   return container;
 }
 
-/** The share control, by the words it wears — absent when it is withheld. */
 function shareVerb(): HTMLButtonElement | undefined {
   return [...container!.querySelectorAll("button")].find((button) =>
     button.textContent?.includes(SHARE_GROUP_VERB)
@@ -115,7 +104,6 @@ describe("sharing a group from the phone", () => {
     expect(shareVerb()?.tagName, "the verb is a control, not prose").toBe(
       "BUTTON"
     );
-    // Nothing is minted until the member asks for it.
     expect(sheetProps).toHaveLength(0);
   });
 
@@ -158,3 +146,4 @@ describe("sharing a group from the phone", () => {
     expect(shareVerb()).toBeUndefined();
   });
 });
+// @vitest-environment jsdom

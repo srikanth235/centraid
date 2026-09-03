@@ -1,14 +1,3 @@
-// The drive's remembered view — list or grid, WITH its sort, as one value
-// (handoff Part 2 §1: "Two views of one set — list and grid — with the choice
-// and the sort remembered together").
-//
-// One storage key holding both is what "remembered together" means in code: a
-// preference that could persist one half and lose the other would be two
-// preferences. Persisted the way the frame persists the band owner
-// (`kit/band/band-owner.ts`): the device Store, hydrated once per mount,
-// written through on change. This repo has no server-side member-preference
-// plane, so per-device is the honest scope.
-
 import { useCallback, useEffect, useState } from "react";
 
 import type { SortKey } from "@centraid/blueprints/apps/docs/types";
@@ -23,7 +12,6 @@ export interface DriveViewPrefs {
   sortDir: 1 | -1;
 }
 
-/** The handoff's default: list rows, date changed, newest first. */
 export const DEFAULT_DRIVE_PREFS: DriveViewPrefs = {
   view: "list",
   sortKey: "changed",
@@ -40,7 +28,6 @@ const SORT_KEYS: readonly SortKey[] = [
   "size",
 ];
 
-/** Narrow a hydrated value — the store is JSON, so anything could be in it. */
 export function asDrivePrefs(value: unknown): DriveViewPrefs {
   if (!value || typeof value !== "object") return DEFAULT_DRIVE_PREFS;
   const raw = value as Partial<DriveViewPrefs>;

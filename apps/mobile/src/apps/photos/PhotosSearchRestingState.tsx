@@ -5,7 +5,6 @@ import { Text } from "../../kit/components/NativeText";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
-/** The honest empty-query state: no request has run yet. */
 export default function PhotosSearchRestingState(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);

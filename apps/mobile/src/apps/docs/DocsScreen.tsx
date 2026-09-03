@@ -1,6 +1,3 @@
-// Docs shell frame (#821): every surface wraps it; only the Viewer passes
-// `hideBand`. Band taps POP home — navigate would re-push DocsHome (RN7).
-
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -16,7 +13,6 @@ import DocsBand from "./DocsBand";
 import DocsMoreSheet from "./DocsMoreSheet";
 
 export interface DocsScreenComponentProps {
-  /** Band tab this surface belongs under. */
   current: DocsBandDestinationKey;
   children: React.ReactNode;
   hideBand?: boolean;
@@ -31,7 +27,6 @@ export default function DocsScreen({
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<DocsShellNavigation>();
   const [moreOpen, setMoreOpen] = useState(false);
-  // One latch per app: hand-back applies app-wide.
   const { bandOwner } = useBandOwner("docs");
 
   const onDestination = (key: DocsBandDestinationKey): void => {
@@ -44,13 +39,10 @@ export default function DocsScreen({
 
   const onMoreRow = (key: DocsMoreRowKey): void => {
     setMoreOpen(false);
-    // Coming due and Search are DocsHome DESTINATIONS, not screens
-    // (docs-band.ts: why Search gave up its band slot).
     if (key === "due" || key === "search") {
       navigation.popTo("DocsHome", { destination: key });
       return;
     }
-    // Literal screen name per call: navigate's tuple overloads need one.
     const screen = resolveDocsMoreRoute(key);
     switch (screen) {
       case "DocsRecent":
@@ -99,7 +91,6 @@ export default function DocsScreen({
           owner={bandOwner}
           current={current}
           onSelect={onDestination}
-          // goBack() no-ops under a deep link; navigate re-pushes Home.
           onHome={() => navigation.popTo("Home")}
         />
       )}

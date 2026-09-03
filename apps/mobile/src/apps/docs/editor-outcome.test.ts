@@ -1,9 +1,3 @@
-// The editor's seven write outcomes (#821, spec §9) — the mapping from the
-// replica's REAL result union to the posture the member sees, and the copy
-// each posture carries. The two distinctions the spec names as load-bearing
-// are asserted by name: queued ≠ waiting-for-approval, and a no-op is not a
-// version.
-
 import { describe, expect, it } from "vitest";
 
 import type { NativeWriteResult } from "../../lib/replica/native-session";

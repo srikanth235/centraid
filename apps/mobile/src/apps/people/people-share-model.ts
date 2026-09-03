@@ -1,15 +1,3 @@
-// The sharing plane for one person, split from `people-model.ts` when that
-// file crossed the repo's 625-line ceiling — same contract, own module: the
-// projection mirrors `queries/_shared.ts` `readPersonShareLinks` over the
-// replica's own tables, and the caller hands null row sets for reads that
-// failed; ANY failed read nulls the whole answer — the plane is one story,
-// and half of it would read as "nothing is shared".
-//
-// WHAT IS SHARED WITH THE PERSON IS NOT PROJECTED HERE (#825). There is no
-// circle_grant × circle_member × commons_member_state projection on either
-// seat; standing grants are read live from the grant plane by
-// `PersonGrants.tsx` through the share kit's own transport.
-
 import type {
   PendingInvite,
   VaultBinding,

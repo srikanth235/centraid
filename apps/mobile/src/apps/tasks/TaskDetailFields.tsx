@@ -1,13 +1,3 @@
-// The detail place's field list and its controls (Tasks spec §5).
-//
-// THE ANCHOR IS THE FIELD THIS SCREEN EXISTS FOR: two cards, each a sentence a
-// member could say out loud, and the choice decides what a missed period MEANS.
-// It is drawn only where the task actually repeats, because a task that runs
-// once has no missed period to interpret.
-//
-// A read-only row keeps every control visible and disabled with the reason
-// attached (`accessibilityHint`), never a press that quietly fails.
-
 import React from "react";
 import { Pressable, View } from "react-native";
 
@@ -44,8 +34,6 @@ export interface TaskDetailFieldsProps extends TaskDetailActs {
   now: string;
   projects: readonly Project[];
   projectName: string | null;
-  /** The vault carrying this row, where the plane stamped one. This seat knows
-   *  the vault but not who else stands in it, so the sentence stops there. */
   home: { vault: string } | null;
   writable: boolean;
   styles: TasksStyles;

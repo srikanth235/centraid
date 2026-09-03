@@ -1,24 +1,3 @@
-// THE ENRICHMENT CONSENT MOMENT, NATIVE (v4 handoff §8, #711).
-//
-// Two rules are load-bearing, and both are cheap to break — this is a privacy
-// regression net, not a styling snapshot:
-//
-//   1. NO ENRICHMENT WRITE MAY BE ISSUED WITHOUT AN EXPLICIT ANSWER. Library's
-//      `Enrichment` row may not call `request-enrichment` straight from its
-//      `onPress` — one tap, one write, no panels and no facts. The surface
-//      routes every answer through a callback, and only the `Run on this
-//      device` control may reach it.
-//   2. THE EGRESS DISCLOSURE MUST BE ON SCREEN. The cloud panel is the only
-//      place the product tells a member that a downscaled copy of every
-//      photograph would leave the device. It renders even though no cloud
-//      helper can be chosen from an app — an unwired action is a stated fact,
-//      never a reason to drop a disclosure.
-//
-// The assertions read the rendered tree (through mocked primitives), not the
-// source text, so a rename or a restyle cannot fake them. The copy itself is
-// asserted against the SHARED module the web client renders, so the two
-// surfaces cannot drift on a promise about a member's photographs.
-
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -36,7 +15,6 @@ import {
   onDeviceTitle,
 } from "@centraid/blueprints/apps/photos/enrichment-consent";
 
-// @vitest-environment jsdom
 import EnrichmentConsent from "./EnrichmentConsent";
 
 type ReactNative = typeof import("react-native");
@@ -99,9 +77,6 @@ vi.mock(import("react-native"), async () => {
         {
           "aria-disabled": accessibilityState?.disabled ? "true" : undefined,
           "aria-label": accessibilityLabel,
-          // The mock deliberately does NOT swallow the press when `disabled`
-          // is set: a control that still carries a live handler behind a
-          // disabled flag is exactly the regression worth catching.
           disabled: undefined,
           "data-disabled": disabled ? "true" : "false",
           onClick: onPress,
@@ -115,9 +90,6 @@ vi.mock(import("react-native"), async () => {
     StyleSheet: {
       create: <T,>(styles: T): T => styles,
     },
-    // A `borderLeftColor` in the (possibly array) style becomes `data-rule`,
-    // so the egress flag can be inspected in the rendered tree rather than
-    // trusted from the source.
     View: ({
       children,
       style,
@@ -241,7 +213,6 @@ describe("the enrichment consent surface on the phone seat", () => {
 
   it("carries the egress disclosure, flagged with the net rule", () => {
     render();
-    // THE line. Its absence is the defect this file exists to catch.
     expect(host.textContent).toContain(CLOUD_EGRESS_DISCLOSURE);
     expect(host.textContent).toContain("a downscaled copy of every photograph");
     const flagged = [
@@ -249,8 +220,6 @@ describe("the enrichment consent surface on the phone seat", () => {
     ].filter((el) => el.dataset.rule === mocks.colors.net);
     expect(flagged).toHaveLength(1);
     expect(flagged[0]?.textContent).toContain(CLOUD_EGRESS_DISCLOSURE);
-    // The whole cloud panel is bordered in `net` — the panel IS the
-    // disclosure, so the mark belongs to the box.
     expect(
       [...host.querySelectorAll<HTMLElement>("[data-border]")].some(
         (el) => el.dataset.border === mocks.colors.net
@@ -263,7 +232,6 @@ describe("the enrichment consent surface on the phone seat", () => {
     const cloud = control(CLOUD_PANEL.action);
     expect(cloud.dataset.disabled).toBe("true");
     expect(host.textContent).toContain(ENRICHMENT_UNAVAILABLE.cloudUnavailable);
-    // Unavailable means it CANNOT FIRE, not merely that it looks grey.
     cloud.click();
     expect(onRunOnDevice).not.toHaveBeenCalled();
     expect(onChooseCloud).not.toHaveBeenCalled();
@@ -317,3 +285,4 @@ describe("the enrichment consent surface on the phone seat", () => {
     expect(onDeviceTitle(1)).toBe("Run face detection over 1 photograph?");
   });
 });
+// @vitest-environment jsdom

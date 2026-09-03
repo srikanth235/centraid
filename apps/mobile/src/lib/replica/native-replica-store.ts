@@ -25,13 +25,6 @@ import type {
   ReplicaStore,
 } from "@centraid/client/replica/native";
 
-/**
- * In-process React Native replica store: the shared driver-neutral core over an
- * op-sqlite driver, wrapped to satisfy the async {@link ReplicaStore} contract
- * the coordinator consumes. No worker, no postMessage — the "wire" results are
- * returned directly; `read` still applies the online-only guard exactly as the
- * web worker client does.
- */
 export class NativeReplicaStore implements ReplicaStore {
   constructor(private readonly core: ReplicaSqliteStore) {}
 
@@ -133,11 +126,6 @@ export class NativeReplicaStore implements ReplicaStore {
     return Promise.resolve();
   }
 
-  /**
-   * Terminal cleanup clears the replica tables in place. The intent outbox lives
-   * in its own table in the same database and is purged separately by the queue,
-   * so this must not drop the shared handle or delete the file.
-   */
   purge(): Promise<void> {
     this.core.wipe();
     return Promise.resolve();

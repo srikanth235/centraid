@@ -1,12 +1,3 @@
-// Incremental SHA-256 for React Native (#419.4).
-//
-// A port of `packages/vault/src/blob/incremental-sha256.ts` onto Uint8Array:
-// that module is Buffer-based and pulls in node builtins, so it cannot be
-// imported from Hermes. `expo-crypto` only exposes a one-shot digest, which
-// would force a whole 4 GB video into RAM to address it. The algorithm and
-// block processing are identical — `incremental-sha256.test.ts` pins this
-// against `node:crypto` byte-for-byte, including across chunk boundaries.
-
 const INITIAL = [
   0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c,
   0x1f83d9ab, 0x5be0cd19,
@@ -32,7 +23,6 @@ function rotr(value: number, bits: number): number {
 
 export class IncrementalSha256 {
   private readonly words: number[] = [...INITIAL];
-  /** Reused for every block; a 4 GB file must not allocate one array per 64 bytes. */
   private readonly schedule = new Uint32Array(64);
   private bytes = 0;
   private pending = new Uint8Array(0);
@@ -52,8 +42,6 @@ export class IncrementalSha256 {
   }
 
   digestHex(): string {
-    // Padding is applied to a clone so `update` may still be called after a
-    // caller peeks at the digest.
     const clone = new IncrementalSha256();
     clone.words.splice(0, 8, ...this.words);
     clone.bytes = this.bytes;

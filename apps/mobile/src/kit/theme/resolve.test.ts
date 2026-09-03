@@ -27,8 +27,6 @@ describe("theme resolution", () => {
     expect(theme.metrics.control).toBe(34);
     expect(theme.density.compact.row).toBe(38);
     expect(theme.borders.hairline).toBe(1);
-    // The page margin travels on the theme like every other shared scalar, so
-    // a screen reaches for `theme.pageMargin` instead of retyping 18.
     expect(theme.pageMargin).toBe(18);
     expect(theme.targetMin.coarse).toBe(44);
     expect(theme.targetMin.fine).toBe(34);

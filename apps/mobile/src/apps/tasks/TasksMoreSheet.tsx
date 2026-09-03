@@ -1,7 +1,3 @@
-// The More sheet, live (Tasks spec §2). Six lenses the band has no room for;
-// each row LEADS somewhere, because a row that reads like a destination and
-// answers nothing on press is worse than no row at all.
-
 import React from "react";
 import { Pressable, View } from "react-native";
 

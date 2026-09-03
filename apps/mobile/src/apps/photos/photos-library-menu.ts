@@ -1,15 +1,3 @@
-// Library header menu model (#712). The omissions are the point.
-//
-// NO SORT SECTION: `captured_at` is the only orderable key, so a "Recently
-// Added" row would sort identically to Date Captured while claiming otherwise.
-//
-// FILTER stops at All/Favorites — the only honest per-asset predicates
-// (`photos-collections.ts`). `kind === "video"` already has its own door
-// (Collections' shelf, `PhotoStateView`'s `videos` mode).
-//
-// DETECT FACES (#724) opens the consent gate, NEVER the `request-enrichment`
-// write; omitted entirely when the caller passes no handler.
-
 import type { MenuGroup } from "../../kit/components/AnchoredMenu";
 import type { DetectFacesAvailability } from "./people-model";
 import { RUNGS, RUNG_LABELS } from "./photos-rungs";
@@ -35,12 +23,6 @@ export interface LibraryMenuInput {
   };
 }
 
-/**
- * View Options is grain-scoped: Years and Months draw one cover per period at an
- * aspect the grain fixes, so a rung control there cannot act on what is on
- * screen. Filter holds at every grain — it narrows the sections periods are
- * built from.
- */
 export function libraryMenuGroups({
   filter,
   onFilter,
@@ -57,7 +39,6 @@ export function libraryMenuGroups({
             rows: [
               {
                 key: "detect-faces",
-                // One text slot per row, so a refusal rides after an em dash.
                 label: detectFaces.availability.available
                   ? "Detect faces"
                   : `Detect faces — ${detectFaces.availability.reason ?? "not available yet"}`,
@@ -80,7 +61,6 @@ export function libraryMenuGroups({
             checked: row.key === filter,
             key: row.key,
             label: row.label,
-            // Closes the menu: the card would hide the grid it just changed.
             onSelect: () => onFilter(row.key),
           })),
         },
@@ -95,7 +75,6 @@ export function libraryMenuGroups({
                   key: RUNG_LABELS[index]!,
                   label: RUNG_LABELS[index]!,
                   onSelect: () => onRung(index as Rung),
-                  // Stepping rungs against the live grid needs the card up.
                   staysOpen: true,
                 })),
               },

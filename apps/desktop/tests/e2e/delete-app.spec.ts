@@ -14,17 +14,6 @@ import {
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
 
-/**
- * §3 — App settings on a bundled inline app (#799, #819).
- *
- * The served-app plane is gone, and v11 also unmounted the frame settings
- * gear: every bundled app draws its bar to a design handoff, and none of
- * those handoffs has a frame control. What the gear opened has no other
- * door. These eight cases pin that live surface: Tasks still mounts, the
- * gear and its dialog stay gone, and opening / leaving the app fires no
- * DELETE.
- */
-
 const TASKS = "Tasks";
 
 async function openTasks(page: Page) {

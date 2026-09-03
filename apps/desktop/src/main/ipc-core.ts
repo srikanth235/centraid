@@ -1,6 +1,3 @@
-// Electron-free Channel map + broadcast payloads. Keep in sync with
-// `renderer/centraid-api.d.ts`.
-
 export const Channel = {
   SETTINGS_GET: "centraid:settings:get",
   SETTINGS_SAVE: "centraid:settings:save",
@@ -106,9 +103,6 @@ export function vaultChangedPayload(next: {
   };
 }
 
-// #603: will starting the local gateway pop an OS credential prompt?
-// No encryption → silent. macOS unpackaged → prompt. Linux libsecret → prompt.
-// Windows DPAPI → silent.
 export function keychainPromptExpected(host: {
   platform: NodeJS.Platform;
   encryptionAvailable: boolean;
@@ -120,16 +114,8 @@ export function keychainPromptExpected(host: {
   return false;
 }
 
-/**
- * Renderer-supplied app id gate for filesystem-bound app surfaces (#865):
- * an appId is joined into on-disk paths (APPS_OPEN → `shell.openPath`), so a
- * traversal id must never reach the filesystem. Mirrors the gateway's
- * app-meta ID_RE — store-created apps share it, so membership in the shipped
- * inline set is NOT required.
- */
 const APP_ID_GRAMMAR = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
-/** String-level guard; throws on anything outside the app-id grammar. */
 export function assertRevealableAppId(appId: string): void {
   if (!APP_ID_GRAMMAR.test(appId) || appId.startsWith("_")) {
     throw new Error(
@@ -140,7 +126,6 @@ export function assertRevealableAppId(appId: string): void {
   }
 }
 
-/** Validate the raw IPC envelope of an app-scoped channel; returns the id. */
 export function parseRevealableAppId(input: unknown): string {
   const id =
     input && typeof input === "object"
@@ -153,10 +138,6 @@ export function parseRevealableAppId(input: unknown): string {
   return id;
 }
 
-// Host-capability snapshot (pure, unit-testable). `compute.transcript` stays
-// `false` (#724 W6) — on-device ASR is gone; transcription is the gateway
-// `transcript` automation. The key stays in the `DeviceComputeCapabilities`
-// wire shape — do not drop it.
 export function hostCapabilities(): {
   platform: "desktop";
   compute: {

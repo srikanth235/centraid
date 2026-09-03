@@ -1,6 +1,3 @@
-// The fourth designed state (Binding Layer brief), mirroring
-// packages/client/src/react/ui/states.tsx's OutOfRoom. NEVER edit that file
-// from here — read it for structure only.
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -12,9 +9,7 @@ export interface OutOfRoomProps {
   consequence: string;
   usedLabel?: string;
   limitLabel?: string;
-  /** 0–1; above 1 the meter takes the danger tone. */
   fractionUsed?: number;
-  /** ONE action, never a list of remedies. */
   actionLabel: string;
   onAction: () => void;
 }

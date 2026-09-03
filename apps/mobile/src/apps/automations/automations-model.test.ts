@@ -1,11 +1,3 @@
-/**
- * The Automations place's copy, as a function of what the gateway sent (#765).
- *
- * What is pinned here is the honesty rule rather than the formatting: a clause
- * the wire cannot support must not appear (no `Draft` for an automation whose
- * runs were never read, no "nothing has run since" without a clock, no failure
- * streak counted past the first success), and a clause it does support must.
- */
 import { describe, expect, it } from "vitest";
 
 import type { AutomationRow } from "../../lib/automations";
@@ -55,7 +47,6 @@ function run(over: Partial<RunEntry> = {}): RunEntry {
   };
 }
 
-/** The everyday context: the automation's runs were read. */
 function context(
   runs: readonly RunEntry[],
   refs = ["mail/digest"]
@@ -105,7 +96,6 @@ describe(statusOf, () => {
   });
 
   it("never calls an automation a Draft when its runs were not read", () => {
-    // Outside the fan-out window: "never run" here would mean "never asked".
     expect(statusOf(row(), { known: new Set(), now: NOW, runs: [] })).toBe(
       "active"
     );

@@ -60,9 +60,6 @@ export default function PhoneStorage({
   const [queueReadable, setQueueReadable] = useState(true);
   const [other, setOther] = useState<OtherPhoneStorage>(NO_OTHER_STORAGE);
   const [expandedVaultId, setExpandedVaultId] = useState<string>();
-  // Nothing here may cost the size of the queue or of a pack: the pending
-  // numbers are one SQL aggregate and each pack total one native walk.
-  // Reported semantics are unchanged (docs/mobile-offline.md).
   const refresh = useCallback(() => {
     let totals = foldPendingUploadGroups([]);
     let queue: UploadQueue | undefined;
@@ -73,7 +70,6 @@ export default function PhoneStorage({
       totals = foldPendingUploadGroups(queue.pendingStorageGroups());
       setQueueReadable(true);
     } catch {
-      // A busy upload writer is transient; next focus/refresh fills it in.
       setQueueReadable(false);
     } finally {
       queue?.close();
@@ -107,9 +103,6 @@ export default function PhoneStorage({
     const timer = setTimeout(refresh, 0);
     return () => clearTimeout(timer);
   }, [refresh]);
-  // The durably recorded registration outcome, not a fresh attempt: a refused
-  // registration is otherwise invisible — Background App Refresh switched off
-  // looks exactly like a phone that has simply not been woken yet.
   useEffect(() => {
     let cancelled = false;
     void getReplicaBackgroundRegistrationStatus().then(
@@ -383,10 +376,6 @@ export default function PhoneStorage({
                   style: "destructive",
                   onPress: () => {
                     clearPinnedThumbnailPacks();
-                    // Room alone does not restart sync: the coordinator parked
-                    // the feed when the disk filled and stays parked until it
-                    // is told the space exists (coordinator.ts). The pull that
-                    // follows is what clears `out of room` from the status bar.
                     session?.resumeAfterStorageFull();
                     void refreshReplica?.();
                     refresh();
@@ -425,12 +414,6 @@ function StorageLine({
   );
 }
 
-/**
- * What background sync can honestly claim about itself, when that is worth a
- * row at all. A registered, permitted task says nothing here: a standing "it
- * works" card is the badge §18 forbids, and the only states a member can act
- * on are the two below.
- */
 function backgroundSyncNotice(
   status: ReplicaBackgroundRegistrationStatus | undefined
 ): { title: string; body: string } | undefined {
@@ -456,8 +439,6 @@ function fileBytes(path: string): number {
   return file.exists ? file.size : 0;
 }
 
-/** One shallow listing: a handful of database families plus the
- *  `thumbnail-pack` subdirectory, whose contents are sized natively. */
 function replicaDirectoryFiles(): { name: string; size: number }[] {
   const root = replicaStorageDirectoryUri();
   if (!root) return [];
@@ -501,9 +482,6 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     gap: 10,
-    // One row per vault — the Binding Layer's `comfortable` density tier is
-    // mobile's floor (one tier looser than declared), so the card's content
-    // padding reads from the tier rather than a bare literal.
     padding: density.comfortable.pad,
   },
   cardHeader: {

@@ -100,7 +100,6 @@ describe(applyProbe, () => {
     const state = run(probes);
     expect(state.samples.length).toBeLessThanOrEqual(SAMPLE_CAP);
     expect(state.outages.length).toBeLessThanOrEqual(OUTAGE_CAP);
-    // The ring keeps the most recent tail.
     expect(state.samples[state.samples.length - 1]?.at).toBe(
       probes[probes.length - 1]?.at
     );
@@ -135,7 +134,6 @@ describe(evaluateAlert, () => {
   });
 
   it("fires the recovery notice only for an alerted outage, exactly once", () => {
-    // Alerted outage → recovery notice on the up transition.
     let state = run([fail(T0)]);
     ({ state } = evaluateAlert(state, config, T0 + 120_000));
     state = applyProbe(state, ok(T0 + 150_000));
@@ -148,7 +146,6 @@ describe(evaluateAlert, () => {
       evaluateAlert(recovered.state, config, T0 + 155_000).action
     ).toBeUndefined();
 
-    // Short, un-alerted outage → no recovery noise.
     const quiet = run([fail(T0), ok(T0 + 10_000)]);
     expect(evaluateAlert(quiet, config, T0 + 10_000).action).toBeUndefined();
   });
@@ -227,11 +224,9 @@ describe("applyProbe: health reconciliation", () => {
     const slow = (at: number): GatewayProbe =>
       ok(at, { healthStatus: "ok", latencyMs: DEGRADED_LATENCY_MS + 500 });
     expect(SUSTAINED_LATENCY_SAMPLE_COUNT).toBeGreaterThan(1);
-    // One slow probe alone isn't "sustained".
     const one = run([slow(T0)]);
     expect(one.latencyDegraded).toBe(false);
     expect(one.healthStatus).toBe("ok");
-    // A full run of consecutive slow, successful probes is.
     const probes = Array.from(
       { length: SUSTAINED_LATENCY_SAMPLE_COUNT },
       (_, i) => slow(T0 + i * 1000)
@@ -261,8 +256,6 @@ describe("applyProbe: health reconciliation", () => {
     const withHealth = run([ok(T0, { healthStatus: "ok" })]);
     const stillOk = applyProbe(withHealth, fail(T0 + 5000));
     expect(stillOk.healthStatus).toBe("ok");
-    // A successful probe with no healthStatus opinion doesn't clobber the
-    // last-known health reconciliation either.
     const noStatus = applyProbe(
       withHealth,
       ok(T0 + 10_000, { healthStatus: undefined, componentIssues: undefined })
@@ -297,8 +290,6 @@ describe(applyComponentAlerts, () => {
         componentIssues: [errorIssue("vaults", "boom")],
       }),
     ]);
-    // First observation (same tick as the probe, T0) creates the record;
-    // a later tick, still erroring but short of the threshold, stays quiet.
     ({ state } = applyComponentAlerts(state, T0, config));
     const { state: next, actions } = applyComponentAlerts(
       state,
@@ -353,7 +344,6 @@ describe(applyComponentAlerts, () => {
     ));
     expect(state.componentAlerts).toHaveLength(1);
 
-    // Recovers — the record is dropped.
     state = applyProbe(
       state,
       ok(T0 + 500_000, { healthStatus: "ok", componentIssues: [] })
@@ -361,7 +351,6 @@ describe(applyComponentAlerts, () => {
     ({ state } = applyComponentAlerts(state, T0 + 500_000, config));
     expect(state.componentAlerts).toStrictEqual([]);
 
-    // Re-errors — starts a fresh window, doesn't immediately re-fire.
     state = applyProbe(
       state,
       ok(T0 + 501_000, {
@@ -444,8 +433,6 @@ describe(isPendingBootProbe, () => {
   });
 
   it("the suppressed pair vanishes together: no outage opens, so none closes", () => {
-    // The monitor skips `applyProbe` for a pending tick, so the first real
-    // answer is `unknown → up` — the transition that derives NO `recovered`.
     let state = initialRuntimeState(GW, T0);
     for (const at of [T0, T0 + 5000, T0 + 10_000])
       if (!isPendingBootProbe(state, booting(at)))
@@ -465,8 +452,6 @@ describe(isPendingBootProbe, () => {
   });
 
   it("stops suppressing once this launch has resolved the gateway either way", () => {
-    // Settings going unreadable AFTER the gateway has been seen is a genuine
-    // regression, not boot noise — it must still fold through to `down`.
     const up = applyProbe(initialRuntimeState(GW, T0), ok(T0 + 5000));
     expect(
       isPendingBootProbe(up, booting(T0 + 10_000, "settings unavailable"))

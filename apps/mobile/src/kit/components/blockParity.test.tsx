@@ -1,20 +1,6 @@
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Does this kit actually DRAW every flag the shared contracts let a caller set?
-//
-// The twin of `packages/client/src/react/ui/blockParity.test.tsx`. Both files
-// render the SAME fixtures from `@centraid/design/blocks`; each asserts its own
-// marks, because only this kit knows that "destructive" here is a native border
-// colour rather than a CSS class.
-//
-// The contracts stop the two kits DESCRIBING a block differently. They cannot
-// stop a kit accepting `dangerous` and drawing the ordinary control — which is
-// precisely what happened before #765: this kit took a row verb with nowhere to
-// put its `hint`, and forced filled ink on a panel verb every error state
-// wanted outlined. Neither was visible while each kit only checked itself
-// against fixtures it wrote for itself.
-// @vitest-environment jsdom
 import {
   BUTTON_FIXTURE,
   CHIPS_FIXTURE,
@@ -89,22 +75,14 @@ describe("[law:native-block-flag-marks] block parity — the phone draws every s
       />
     );
     const texts = nodesOf(el, "span");
-    // The TITLE stays disabled-ink (because `off`), never `net`: a row says
-    // "this leaves" with its metadata, not by recolouring its subject.
     expect(styleOf(texts[0]).color).toBe(colors.textDisabled);
     expect(styleOf(texts[1]).color).toBe(colors.net);
     const verb = nodesOf(el, "button")[0];
     expect(verb?.getAttribute("aria-disabled")).toBe("true");
-    // The hint is what tells ten identical verbs apart for a screen reader.
-    // It is invisible on screen, so nothing but an assertion protects it.
     expect(verb?.dataset.hint).toBe(ROW_ACTION_FIXTURE.hint);
   });
 
   it("outlines a dangerous verb in net once the row is not also inert", () => {
-    // `off` legitimately WINS over `dangerous` on the control above: a disabled
-    // destructive button takes the disabled recipe. So the destructive mark is
-    // asserted on the same fixture with the inert flag lifted, which keeps both
-    // rules honest instead of asserting only the one that happens to show.
     const el = render(
       <RowsBlock
         rows={[
@@ -139,8 +117,6 @@ describe("[law:native-block-flag-marks] block parity — the phone draws every s
     const texts = nodesOf(el, "span");
     expect(styleOf(texts[0]).textDecorationLine).toBe("line-through");
     expect(styleOf(texts[0]).color).toBe(colors.textDisabled);
-    // The record survives the revoke: the sub still says who held what, in
-    // ordinary faint ink rather than the struck title's step.
     expect(texts[1]?.textContent).toBe(ROW_STRUCK_FIXTURE.sub);
     expect(styleOf(texts[1]).textDecorationLine).not.toBe("line-through");
   });
@@ -148,7 +124,6 @@ describe("[law:native-block-flag-marks] block parity — the phone draws every s
   it("tones only the value of a net fact, and shows the key as the word", () => {
     const el = render(<PanelBlock facts={PANEL_FACTS_FIXTURE} />);
     const texts = nodesOf(el, "span");
-    // key, value, key, value — the keys are the DISPLAYED words.
     expect(texts[0]?.textContent).toBe(PANEL_FACTS_FIXTURE[0]?.key);
     expect(styleOf(texts[1]).color).toBe(colors.text);
     expect(texts[2]?.textContent).toBe(PANEL_FACTS_FIXTURE[1]?.key);
@@ -217,15 +192,10 @@ describe("[law:native-block-flag-marks] block parity — the phone draws every s
     const chips = nodesOf(el, "button");
     expect(chips[0]?.getAttribute("aria-selected")).toBe("true");
     expect(chips[1]?.getAttribute("aria-selected")).toBe("false");
-    // The active state is a border and a ground, never a hue.
     expect(styleOf(chips[0]).borderColor).toBe(colors.text);
   });
 
   it("[law:native-block-flag-marks] draws the routine empty state quieter than a first meeting, and spends no fill on it", () => {
-    // `routine` is a REGISTER, not a word. Asserting the copy alone let a kit
-    // accept the flag and draw the first-run block — the once-in-a-lifetime
-    // screen — over "nothing is waiting on you", turning the healthy state
-    // into an event. So both forms are drawn and COMPARED.
     const verb = { label: "Pair a device", onPress: noop };
     const routine = render(
       <EmptyBlock {...EMPTY_ROUTINE_FIXTURE} action={verb} />
@@ -254,8 +224,6 @@ describe("[law:native-block-flag-marks] block parity — the phone draws every s
 
     expect(Number(loud.title)).toBeGreaterThan(Number(quiet.title));
     expect(Number(loud.body)).toBeGreaterThan(Number(quiet.body));
-    // The first meeting gets the one filled commit; the routine form spends
-    // nothing on a verb nobody is waiting to press.
     expect(loud.fill).toBe(colors.accentFill);
     expect(quiet.fill).not.toBe(colors.accentFill);
   });
@@ -277,3 +245,4 @@ describe("[law:native-block-flag-marks] block parity — the phone draws every s
     expect(el.querySelector("[data-glyph]")).not.toBeNull();
   });
 });
+// @vitest-environment jsdom

@@ -16,7 +16,6 @@ import type {
   VaultChangeMessage,
 } from "@centraid/client/replica/native";
 
-/** The subset of `@react-native-async-storage/async-storage` the cursor uses. */
 export interface AsyncStorageLike {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;
@@ -28,24 +27,15 @@ export type StreamFetch = typeof expoFetch;
 export interface NativeVaultChangeFeedOptions {
   gatewayAuth: GatewayAuth;
   storage: AsyncStorageLike;
-  /** Injectable streaming fetch (defaults to `expo/fetch`, which streams bodies). */
   streamFetch?: StreamFetch;
   minReconnectMs?: number;
   maxReconnectMs?: number;
 }
 
 const MIN_RECONNECT_MS = 1_000;
-/** Quiet window before the resume cursor is written to durable storage. */
 const CURSOR_PERSIST_DEBOUNCE_MS = 1_000;
 const MAX_RECONNECT_MS = 30_000;
 
-/**
- * Single-process React Native change feed. Mirrors the browser vault feed's SSE
- * grammar (via the shared `consumeVaultChangeSse`/`decodeFrame`) but is driven by
- * `expo/fetch` (whose response bodies stream, unlike React Native's built-in
- * fetch), persists its resume cursor in AsyncStorage instead of sessionStorage,
- * and is paused/resumed explicitly by the session on AppState transitions.
- */
 export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
   readonly #gatewayAuth: GatewayAuth;
   readonly #storage: AsyncStorageLike;
@@ -103,14 +93,12 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     this.reconnect();
   }
 
-  /** Session lifecycle: open the stream on foreground, drop it on background. */
   setActive(active: boolean): void {
     if (this.#active === active) return;
     this.#active = active;
     if (active) this.connect();
     else {
       this.stopStream();
-      // Backgrounding is the last reliable moment to land the resume cursor.
       void this.flushCursor();
     }
   }
@@ -186,7 +174,7 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
         abort.signal
       );
     } catch {
-      /* Reconnect below unless the session paused or a newer generation started. */
+      // Intentionally empty.
     } finally {
       if (this.#abort === abort) this.#abort = undefined;
       if (generation === this.#generation && !abort.signal.aborted)
@@ -240,15 +228,6 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     this.schedulePersist(cursor);
   }
 
-  /**
-   * Write the resume cursor at most once per quiet window.
-   *
-   * A busy delta batch advances the cursor once per change, and an AsyncStorage
-   * write per advance is a disk write per row for work whose only consumer is
-   * the next cold start. Only the newest cursor matters, and
-   * losing an unwritten one costs a replay, not data, so the write is debounced
-   * and flushed when the app goes away.
-   */
   private schedulePersist(cursor: VaultChangeCursor): void {
     this.#pendingCursor = cursor;
     if (this.#persistTimer) return;
@@ -272,7 +251,7 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     try {
       this.#listener?.(message);
     } catch {
-      /* A listener fault must not stall the stream. */
+      // Intentionally empty.
     }
   }
 
@@ -281,7 +260,6 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
       since: `${cursor.epoch}:${cursor.seq}`,
       stream: "1",
     });
-    // Presence is significant: `shapeIds=` attests a persisted empty catalog.
     if (this.#shapeIds) params.set("shapeIds", this.#shapeIds.join(","));
     return `${this.#gatewayAuth.baseUrl}/centraid/_vault/changes?${params}`;
   }
@@ -331,7 +309,7 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
           parseCursor(JSON.parse(stored) as unknown) ?? INITIAL_VAULT_CURSOR
         );
     } catch {
-      /* A missing/corrupt cursor just restarts the stream from the beginning. */
+      // Intentionally empty.
     }
     return INITIAL_VAULT_CURSOR;
   }
@@ -340,11 +318,10 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     try {
       await this.#storage.setItem(this.#storageKey, JSON.stringify(cursor));
     } catch {
-      /* The in-memory cursor keeps the stream resumable until process exit. */
+      // Intentionally empty.
     }
   }
 
-  /** Drop a revoked scope's persisted resume cursor. */
   async clearCursor(): Promise<void> {
     if (this.#persistTimer) clearTimeout(this.#persistTimer);
     this.#persistTimer = undefined;
@@ -352,7 +329,7 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     try {
       await this.#storage.removeItem(this.#storageKey);
     } catch {
-      /* Best-effort; the durable replica database is purged separately. */
+      // Intentionally empty.
     }
   }
 }

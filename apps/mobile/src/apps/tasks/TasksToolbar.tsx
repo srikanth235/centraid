@@ -1,9 +1,3 @@
-// The board toolbar (Tasks spec §4) — the count, the three lenses, the sort.
-//
-// ONE HORIZONTAL SCROLLER, NEVER A WRAP. A `ScrollView` is right here and a
-// FlatList is not: the content is four fixed elements, and wrapping them into
-// stacked lines at 390px pushes the first task off the screen.
-
 import React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 

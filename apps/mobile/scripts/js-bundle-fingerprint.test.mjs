@@ -1,10 +1,3 @@
-// #892 Phase 0 — the properties that make this key safe to cache an apk on.
-//
-// The failure this guards is silent by construction: a key that is stable when
-// the JS changed produces a green, fast run against the wrong commit's bundle.
-// So the assertions here are about MOVEMENT (content, rename, file set) rather
-// than about any particular digest value.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -38,8 +31,6 @@ describe("digestFiles", () => {
   });
 
   it("cannot be forged by shifting bytes across a file boundary", () => {
-    // Without the NUL delimiters, {"ab": ""} and {"a": "b"} would fold to the
-    // same stream. A cache key that collides across a refactor is a stale apk.
     expect(digestFiles(["ab"], read({ ab: "" }))).not.toBe(
       digestFiles(["a"], read({ a: "b" }))
     );
@@ -55,9 +46,6 @@ describe("digestFiles", () => {
 
 describe("JS_BUNDLE_PATHSPECS", () => {
   it("excludes the native projects, which native-fingerprint.mjs owns", () => {
-    // Including them would make the two key components move together, which
-    // collapses the apk cache into "rebuild on any change" — the state #535
-    // spent a fingerprint escaping.
     expect(
       JS_BUNDLE_PATHSPECS.some((spec) =>
         /^apps\/mobile\/(?<native>android|ios)\b/u.test(spec)
@@ -83,7 +71,6 @@ describe("bundleInputFiles", () => {
   it("resolves a non-trivial tracked file set in this repo", () => {
     const files = bundleInputFiles();
     expect(files.length).toBeGreaterThan(100);
-    // Sorted, so the digest cannot depend on git's enumeration order.
     expect([...files].sort()).toEqual(files);
   });
 });

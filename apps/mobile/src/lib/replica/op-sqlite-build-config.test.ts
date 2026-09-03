@@ -3,9 +3,6 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-// FTS5 (and sqliteVec, #721) is a compile-time define. iOS podspec walks up
-// from op-sqlite to the ROOT package.json; Android gradle reads
-// apps/mobile/package.json. The `"op-sqlite"` block must exist in BOTH.
 const here = import.meta.dirname;
 const mobileRoot = path.resolve(here, "../../..");
 const repoRoot = path.resolve(mobileRoot, "../..");

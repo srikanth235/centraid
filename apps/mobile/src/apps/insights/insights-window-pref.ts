@@ -1,6 +1,3 @@
-// Analytics window pref (#765): a MEMBER preference on the gateway, read and
-// written under the one key both seats share (#883).
-
 import {
   INSIGHTS_WINDOW_PREF_KEY,
   isInsightsWindow,
@@ -8,7 +5,6 @@ import {
 
 import { apiHeaders, fetchJson, requireGatewayBase } from "../../lib/gateway";
 
-/** Never throws: an unreadable pref opens on the default. */
 export async function readWindowPref(): Promise<number | undefined> {
   try {
     const base = await requireGatewayBase();
@@ -23,7 +19,6 @@ export async function readWindowPref(): Promise<number | undefined> {
   }
 }
 
-/** Fire-and-forget: failure must never block or undo the view. */
 export async function writeWindowPref(windowDays: number): Promise<void> {
   try {
     const base = await requireGatewayBase();
@@ -35,6 +30,6 @@ export async function writeWindowPref(windowDays: number): Promise<void> {
       method: "PUT",
     });
   } catch {
-    // A pref note must not outrank the page.
+    // Intentionally empty.
   }
 }

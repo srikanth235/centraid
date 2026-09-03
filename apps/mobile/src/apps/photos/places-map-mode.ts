@@ -1,7 +1,3 @@
-// WHICH MAP THE MEMBER IS LOOKING AT (#816). `real` is the default: basemap
-// tiles tell the provider which areas were opened and nothing else, which
-// `MAP_EGRESS_NOTE` discloses rather than gates (P-egress).
-
 import { useCallback, useSyncExternalStore } from "react";
 
 import type {
@@ -31,10 +27,8 @@ export function mapModeNote(mode: PlacesMapMode): string {
   return mode === "real" ? MAP_EGRESS_NOTE : SKETCH_NOTE;
 }
 
-/** Required by OSM's licence wherever OpenFreeMap tiles are drawn. */
 export const OSM_ATTRIBUTION = "© OpenStreetMap contributors";
 
-/** No projection here: each surface runs `projectPlaces` itself. */
 export interface PlacesMapSurfaceProps {
   points: readonly PlacePoint[];
   width: number;

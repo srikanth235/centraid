@@ -1,28 +1,3 @@
-// Every Home springboard read, as data (#708 A, #880).
-//
-// Held apart from `useSpringboardTiles` because the claim these requests make
-// is a property of the REQUEST, not of React: the mounted reader can be
-// pointed straight at them and asked what SQL it emits
-// (`home-tile-reads.test.ts`). No runtime imports, so that test costs nothing
-// but SQLite.
-//
-// Two separate bounds are at work, and only one of them used to hold:
-//
-//  - Every read carries an explicit `limit`, because an unbounded read
-//    silently defaults to 1000 rows
-//    (packages/client/src/replica/read-plan.ts).
-//  - A limit bounds the ANSWER. It bounds the WORK only where the mounted
-//    reader can carry it into SQLite (lib/replica/multi-vault-reader.ts). The
-//    compiled plan expresses the whole read grammar, so the remaining
-//    exception is dedupe's: an entity that carries a content hash collapses
-//    equal bytes from several vaults into one badged row AFTER the statement,
-//    so its limit is not pushed and the whole matching set is read.
-//
-// `media.asset`, `core.document` and `knowledge.note` each clear that bar:
-// no `sha256`. `core.content_item` does NOT — it is the content-hashed entity
-// — which is why the document and note BODIES are fetched by id (`idFilter`)
-// rather than ordered: an id filter pushes as a predicate and costs the ids
-// asked for, with or without a page.
 import type { NativeReadRequest } from "../../lib/replica/native-session";
 
 export const HOME_TILE_LIMITS = {
@@ -37,11 +12,6 @@ export const HOME_TILE_LIMITS = {
   vaults: 4,
 } as const;
 
-/**
- * The three tiles that mean "the newest". Each one pages per scope inside
- * SQLite, so it costs its page rather than the library; the evaluator still
- * re-sorts the union and remains the authority on the final order.
- */
 export const HOME_ORDERED_TILE_READS = {
   photos: {
     entity: "media.asset",
@@ -63,11 +33,6 @@ export const HOME_ORDERED_TILE_READS = {
   },
 } satisfies Record<string, NativeReadRequest>;
 
-/**
- * Tiles that fold their whole bounded set in JavaScript — recurrence
- * expansion, an open-task count, a month's sum — so they ask for no order and
- * take an arbitrary bounded page.
- */
 export const HOME_TILE_READS = {
   events: { entity: "core.event", limit: HOME_TILE_LIMITS.events },
   exceptions: {
@@ -79,7 +44,6 @@ export const HOME_TILE_READS = {
   vault: { entity: "core.vault", limit: HOME_TILE_LIMITS.vaults },
 } satisfies Record<string, NativeReadRequest>;
 
-/** `spent_on` is a day string, so the month bound compares as text. */
 export function expenseTileRead(monthStart: string): NativeReadRequest {
   return {
     entity: "tally.expense",
@@ -91,7 +55,6 @@ export function expenseTileRead(monthStart: string): NativeReadRequest {
   };
 }
 
-/** Bounded: an unbounded second read blows past the 1000-row default. */
 export function idFilter(
   entity: string,
   column: string,

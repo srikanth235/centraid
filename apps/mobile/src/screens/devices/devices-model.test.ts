@@ -1,12 +1,3 @@
-/**
- * The Devices place's copy and grouping contract (#765, spec §7).
- *
- * Pure model, so what is under test is the wording, the roster split and the
- * five states — not a renderer. The rules that are cheap to undo and expensive
- * to lose: the roster splits on OWNER (never on a row index), a revoked
- * binding stays as an inert row, a one-device roster is the empty state, and a
- * 409 on revocation escalates to the typed-vault-name confirm exactly once.
- */
 import { describe, expect, it } from "vitest";
 
 import { healthLineFor } from "../../kit/components/health-line";
@@ -194,7 +185,6 @@ describe("the standing line", () => {
     expect(line.text).toBe(
       "1 request is pending · A pairing ticket minted here has not been used yet."
     );
-    // Nothing to review that is not already on the screen.
     expect(line.action).toBeUndefined();
   });
 

@@ -1,6 +1,3 @@
-// Library-opening placeholder (Photos v4 handoff §14, #712): fixed aspect
-// sequence, no shimmer or randomness — repacking per render is forbidden reflow.
-
 import React, { useMemo } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 
@@ -51,7 +48,6 @@ export default function PhotosGridSkeleton({
   );
 }
 
-// Same 2px gutter as the real grid.
 const styles = StyleSheet.create({
   skeleton: { flex: 1, overflow: "hidden" },
   skeletonRow: { flexDirection: "row", gap: 2, marginBottom: 2 },

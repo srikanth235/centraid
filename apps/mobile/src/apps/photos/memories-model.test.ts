@@ -57,15 +57,11 @@ function memberRow(
   return { memory_id: memoryId, asset_id: assetId, ordinal };
 }
 
-/** A place map of names only. A trip's title needs the whole row (#816),
- *  so this shorthand keeps the cases that do not need one readable. */
 const namedPlaces = (
   entries: readonly (readonly [string, string])[]
 ): Map<string, MemoryPlace> =>
   new Map(entries.map(([key, name]) => [key, { key, name }]));
 
-/** The trip fields `TripMemory` grew with the phrase ladder (#816), so a
- *  fixture asserting the older ones does not have to restate them. */
 const tripFixture = (over: Partial<TripMemory> = {}): TripMemory => ({
   memoryId: "trip:x",
   placeId: null,
@@ -149,10 +145,6 @@ describe(buildOnThisDayMemory, () => {
 
 describe(buildTripMemories, () => {
   test("resolves a trip's assets and place name, newest trip first", () => {
-    // The members carry their place, because a trip's name is read off the
-    // places its own photographs were taken at (#816) rather than off a name
-    // looked up from the row's place_id — a row can name a place
-    // nothing in the trip was actually shot at.
     const paris1 = photo("paris1", {
       capturedAt: "2026-01-05T09:00:00.000Z",
       placeId: "paris",
@@ -353,16 +345,6 @@ describe(yearsAgo, () => {
   });
 });
 
-// ── A trip, named and sketched (#816) ────────────────────────────────
-//
-// `trips.test.ts` in the blueprints package owns the title grammar and the
-// route arithmetic — both surfaces call the same function, so restating them
-// here would only assert that the import works. What these cases own is the
-// phone's own wiring: reading the place ROW (name, gazetteer, coordinates)
-// instead of a name map, and resolving home over the whole library rather than
-// over one trip's members, which is the mistake that makes every away day read
-// as a day at home.
-
 const PLACE_ROWS = [
   {
     place_id: "place-home",
@@ -373,8 +355,6 @@ const PLACE_ROWS = [
   },
   {
     place_id: "place-tahoe",
-    // What `findOrCreatePlaceTx` mints and nobody renamed — the label a title
-    // must never print.
     name: "39.09680, -120.03240",
     address_json: JSON.stringify({
       gazetteer: { name: "South Lake Tahoe, CA" },
@@ -443,8 +423,6 @@ describe("a trip block's heading", () => {
     ended_at: "2026-08-16T20:00:00.000Z",
   });
 
-  /** The seeded roll's shape: a stop in Truckee on the way to a Saturday and
-   *  a Sunday at the lake, plus a frame indoors that carries no place. */
   const TRIP_ASSETS = [
     photo("truckee-1", {
       placeId: "place-truckee",
@@ -510,7 +488,6 @@ describe("a trip block's heading", () => {
       "place-home"
     );
     expect(trips[0]?.title).toBe("2-day trip");
-    // Still sketchable: a stop with no name still has a coordinate.
     expect(trips[0]?.route).toHaveLength(2);
   });
 });

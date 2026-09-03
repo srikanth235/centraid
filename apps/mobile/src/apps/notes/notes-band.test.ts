@@ -1,13 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-// The band's rules, asserted without a renderer (#882).
-//
-// `notes-band.ts` is deliberately free of `react-native` imports so the CAP,
-// the ownership latch, the shelf→tab mapping and the sheet's contents can be
-// checked as values. What this file really guards is that the phone's band and
-// the pointer seats' band are one table: the labels are imported from the
-// blueprint, so a rename there that did not reach here fails as a mismatch
-// rather than shipping as two vocabularies.
 import {
   BAND_DESTINATIONS,
   BOOKS,

@@ -1,12 +1,3 @@
-// The band Tally has claimed, rendered (Tally spec §1, "Phone band").
-//
-// Anatomy and shared plate geometry: `PhotosBand.tsx` and
-// `kit/band-surface.ts`. This file renders `tally-band.ts` and adds nothing.
-//
-// NO COUNT ON WAITING, EVER. The slot exists because Waiting is the only place
-// in Tally where a write can be stuck; a number on it would be a badge, and a
-// badge says none of what the surface says when the member is standing in it.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,7 +22,6 @@ import type { ThemeColors } from "../../kit/theme";
 import { resolveTallyBand } from "./tally-band";
 import type { TallyBandDestinationKey } from "./tally-band";
 
-/** The group plate's inner gutter and the gap between the two plates. */
 const GROUP_GUTTER = 2;
 const PLATE_GAP = 8;
 
@@ -39,7 +29,6 @@ export interface TallyBandProps {
   owner: BandOwner;
   current: TallyBandDestinationKey;
   onSelect: (key: TallyBandDestinationKey) => void;
-  /** The capsule's one tap: all apps and places, in one move. */
   onHome: () => void;
 }
 
@@ -80,9 +69,6 @@ export default function TallyBand({
               key={destination.key}
               accessibilityRole="tab"
               accessibilityLabel={destination.label}
-              // The DESTINATION KEY, never the label: the label is copy a v-next
-              // handoff may re-word, and a flow that tapped it would then tap
-              // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.tally}${destination.key}`}
               accessibilityState={{ selected: active }}
               onPress={() => onSelect(destination.key)}

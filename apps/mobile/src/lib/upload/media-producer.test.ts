@@ -1,8 +1,3 @@
-// Producer orchestration: the follow-up input mapping, the derivative
-// short-circuit, the foreground-service lifecycle, and the settle outcomes. The
-// native queue, sealer, imaging and file modules are all injected via mocks so
-// the pure orchestration runs under node.
-
 import { rmSync } from "node:fs";
 import path from "node:path";
 
@@ -24,8 +19,6 @@ type StorageModule = typeof import("../../storage");
 type ForegroundServiceModule = typeof import("./foreground-service");
 type NativeQueueModule = typeof import("./native-queue");
 
-// Shared, mutable fakes — hoisted so the (hoisted) vi.mock factories can close
-// over them without a temporal-dead-zone reference.
 const H = vi.hoisted(() => {
   interface QueueState {
     existing: unknown;
@@ -50,7 +43,6 @@ const H = vi.hoisted(() => {
     unfinishedFollowup: false,
     closed: false,
   };
-  /** Every denominator the notification was started with, in order. */
   const foregroundTotals: number[] = [];
   const fgs = {
     start: vi.fn<ForegroundServiceModule["UploadForegroundService"]["start"]>(
@@ -101,10 +93,6 @@ const H = vi.hoisted(() => {
 });
 
 vi.mock(import("./native-queue"), () => ({
-  // `UploadQueue` has a private constructor and private fields, so it's
-  // nominally typed — no plain object (however matching its public surface)
-  // can be structurally assignable to it. The test only calls the static
-  // `open()` factory, so assert that surface to the real type.
   UploadQueue: {
     open: () => H.fakeQueue,
   } as unknown as NativeQueueModule["UploadQueue"],
@@ -128,27 +116,18 @@ vi.mock(import("./followup"), () => ({
   replaySettledUploadFollowups: async () => ({ replayed: 0, poisoned: 0 }),
 }));
 vi.mock(import("./native-policy"), () => ({
-  // The real export is a `'photos.lastSuccessfulSync'` string-literal const;
-  // an unannotated string here would widen to `string`.
   LAST_SUCCESSFUL_SYNC_KEY: "photos.lastSuccessfulSync" as const,
   nativeUploadPolicy: () => ({ canTransfer: () => true }),
 }));
 vi.mock(import("../gateway"), () => ({ authHeader: () => ({}) }));
 vi.mock(import("../../storage"), () => ({
   Store: {
-    // Only `set` is called by media-producer.ts, but `Store`'s real shape
-    // also has `get`/`hydrate` — implement them with matching signatures
-    // (rather than asserting) since they're trivial to satisfy honestly.
     get: <T>(_key: string, fallback: T): T => fallback,
     hydrate: async <T>(_key: string, fallback: T): Promise<T> => fallback,
     set: vi.fn<StorageModule["Store"]["set"]>(),
   },
 }));
 vi.mock(import("expo-file-system"), () => ({
-  // expo-file-system's `File` is a native-backed class with many members
-  // (downloadFileAsync, pickFileAsync, streams, …) this test never touches
-  // — only the constructor plus `.exists`/`.delete()` are exercised — so the
-  // narrow stand-in is asserted to the real type rather than widening it.
   File: class {
     readonly exists = true;
     constructor(readonly uri: string) {}

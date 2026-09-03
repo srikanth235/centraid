@@ -1,5 +1,3 @@
-// How much place detail travels with the copy (#816); asked EVERY time.
-
 import React from "react";
 
 import {
@@ -37,7 +35,6 @@ export function PhotoShareChoice({
         label: choice.label,
       }))}
       onSelect={(id) => {
-        // Chosen by identity from the offered rows, never cast from the id.
         const chosen = choices.find((choice) => choice.precision === id);
         if (chosen) onChoose(chosen.precision);
       }}

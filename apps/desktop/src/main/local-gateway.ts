@@ -32,17 +32,11 @@ import type {
 import { phoneLinkStatus } from "./phone-link.js";
 import { templatesCacheDir } from "./settings.js";
 
-/**
- * Electron local-gateway lifecycle (#351/#468): a detached child outliving the
- * UI (H1–H4). Quit deliberately does NOT kill detached children.
- */
-
 export interface LocalGatewayRuntime {
   url: string;
   token: string;
   mode: "embedded" | "detached";
   owned?: boolean;
-  /** The detached child's pid, for `reviveLocalGatewayIfDead`. */
   pid?: number;
   close: () => Promise<void>;
   health: {
@@ -228,8 +222,6 @@ export async function ensureLocalGateway(
   // clears both maps.
   const sup = supervisor.get(gatewayId);
   if (sup?.loopBroken) {
-    // Quoted verbatim on the startup error screen; "Try again" clears the
-    // latch via retryLocalGatewayStart.
     throw new Error(
       `local gateway "${gatewayId}" failed to start repeatedly and stopped retrying` +
         (sup.lastError ? ` (last error: ${sup.lastError})` : "")
@@ -244,7 +236,6 @@ export async function ensureLocalGateway(
   }
 
   const p = (async () => {
-    // Persisted settings only; `loadSettings()` re-enters ensure.
     if (preferEmbeddedGateway()) {
       return startEmbedded(gatewayId);
     }
@@ -268,9 +259,7 @@ export async function ensureLocalGateway(
         nextAttemptAt.set(gatewayId, Date.now() + delay);
         const timer = setTimeout(() => {
           if (disposed) return;
-          ensureLocalGateway(gatewayId).catch(() => {
-            // Recorded above.
-          });
+          ensureLocalGateway(gatewayId).catch(() => {});
         }, delay);
         timer.unref?.();
       }
@@ -317,7 +306,6 @@ export async function reviveLocalGatewayIfDead(
   );
   handles.delete(gatewayId);
   await ensureLocalGateway(gatewayId).catch((error: unknown) => {
-    // Recorded by the supervisor.
     process.stdout.write(
       `[local-gateway] respawn of "${gatewayId}" failed: ${error instanceof Error ? error.message : String(error)}\n`
     );

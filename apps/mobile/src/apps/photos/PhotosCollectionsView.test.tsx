@@ -1,10 +1,3 @@
-// Per-section collapse (#712). Pins two claims:
-//  1. A COLLAPSED SECTION KEEPS ITS HEADING AND COUNT — collapsing is a
-//     display fold, never a filter.
-//  2. Tapping the title still navigates after a fold/unfold.
-//
-// The `···` chip and its menu belong to `PhotosHome.test.tsx` (#712); this
-// file owns only the state those commands act on.
 import React, { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -14,7 +7,6 @@ import { COLLECTION_SECTION_KEYS } from "./photos-collections";
 import type { CollectionSectionKey } from "./photos-collections";
 import { makePhotosFixture } from "./photos-fixtures";
 import PhotosCollectionsView from "./PhotosCollectionsView";
-// @vitest-environment jsdom
 import PlaceDetail from "./PlaceDetail";
 
 (
@@ -147,8 +139,6 @@ vi.mock(
   () => ({ default: () => null }) as never
 );
 
-// Real provider imports expo-network, which cannot load in this renderer; the
-// naming conversation is owned by `PlaceDetail.test.tsx`.
 vi.mock(
   import("../../kit/replica/ReplicaProvider"),
   () => ({ useReplica: () => ({ session: undefined }) }) as never
@@ -202,8 +192,6 @@ vi.mock(
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-/** Stands in for `PhotosHome.tsx`, which owns `collapsed`; the toggle mirrors
- *  its Set add/delete shape, so tests exercise the real contract. */
 function Harness({
   navigate,
   initialCollapsed,
@@ -272,7 +260,6 @@ function press(label: string): void {
   act(() => button!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
-/** Favorites heading with count — the steady landmark every test folds against. */
 const FAVORITES_HEADING = "Open Favorites, 0";
 
 describe("Collections' per-section collapse", () => {
@@ -290,9 +277,6 @@ describe("Collections' per-section collapse", () => {
     container = undefined;
   });
 
-  // No header row of its own: the `···` chip and its Show All / Collapse All
-  // menu are covered by `PhotosHome.test.tsx`.
-
   it("a collapsed section keeps its heading and count, and drops its rail", () => {
     render();
     press("Collapse Favorites");
@@ -305,8 +289,6 @@ describe("Collections' per-section collapse", () => {
   });
 
   it("Collapse All (as PhotosHome's menu would set it) folds every section, each still stating its heading", () => {
-    // PhotosHome's Collapse All sets `collapsed` to every key at once — the
-    // view must honour that shape, not only single-section chevron folds.
     render(new Set(COLLECTION_SECTION_KEYS));
     const expanders = [
       ...container!.querySelectorAll("button[aria-label^='Expand ']"),
@@ -343,8 +325,6 @@ describe("Collections' per-section collapse", () => {
     });
   });
 
-  // People is off the band (#712): this route proves the people surface stays
-  // reachable via its heading, never a band destination.
   it("the People heading reaches the people surface, off the band", () => {
     const navigate = vi.fn<(...args: unknown[]) => void>();
     act(() => {
@@ -382,8 +362,6 @@ describe("Collections' per-section collapse", () => {
     );
   });
 
-  // A coordinate pair is not a name (#816): the rail says what the shelf and
-  // the map say, never the digits the row happens to carry.
   it("labels a place whose only name is its coordinates as unnamed, never the digits", () => {
     const [tahoe] = makePhotosFixture("place-tagged").assets;
     mocks.assets = [tahoe];
@@ -404,7 +382,6 @@ describe("Collections' per-section collapse", () => {
     expect(container!.textContent).not.toContain("39.0968, -120.0324");
   });
 
-  // #721 — Videos opens the same `PhotoStateView` filter door as Favorites.
   it("the Videos heading opens the shared filtered shelf, exactly like Favorites", () => {
     const navigate = vi.fn<(...args: unknown[]) => void>();
     act(() => {
@@ -417,3 +394,4 @@ describe("Collections' per-section collapse", () => {
     });
   });
 });
+// @vitest-environment jsdom

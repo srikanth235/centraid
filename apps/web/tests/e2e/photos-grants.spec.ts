@@ -6,14 +6,9 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// PHOTOS ON THE GRANT PLANE, in a real browser (#825). Proves the APP, not the
-// kit: shipped album bar over shipped tokens, stubbed only at the host bridge
-// and status line. This is the #825 UI-impact capture.
-
 declare global {
   interface Window {
     __photosStatus: string[];
-    /** Grant requests handed to the host bridge. */
     __photosGrants: unknown[];
   }
 }
@@ -32,10 +27,6 @@ const OUTCOMES = path.join(
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-825-photos-album-grant.png";
 
-/**
- * Harness entry: SHIPPED album bar + status sink; stubs only the host bridge
- * (registry answers `view` alone for `core.collection`).
- */
 const ENTRY = `
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -103,7 +94,6 @@ createRoot(document.getElementById("root")).render(
 );
 `;
 
-/** Bundle the shipped bar, its CSS modules included, for the browser. */
 async function bundleBar(): Promise<{ js: string; css: string }> {
   const result = await build({
     stdin: {
@@ -114,7 +104,6 @@ async function bundleBar(): Promise<{ js: string; css: string }> {
     },
     bundle: true,
     write: false,
-    // Not written (`write: false`); esbuild needs it to name CSS-module output.
     outdir: path.join(here, ".photos-grants-bundle"),
     format: "iife",
     jsx: "automatic",
@@ -151,7 +140,6 @@ test("an album shares through the one grant kit, view only", async ({
   const dialog = page.locator("dialog.kit-modal-back");
   await expect(dialog).toBeVisible();
 
-  // OBJECT-FIRST: the album is the fixed subject; Photos' roster beside it.
   await expect(page.getByText("Cornwall 2024", { exact: true })).toBeVisible();
   const audience = page.getByRole("combobox", { name: "Person or circle" });
   await expect(audience).toHaveValue("party-priya");
@@ -159,10 +147,8 @@ test("an album shares through the one grant kit, view only", async ({
     audience.locator("option", { hasText: "Named group · Ski trip" })
   ).toHaveCount(1);
 
-  // Registry decides verbs: view only — no edit control drawn.
   await expect(page.getByRole("button", { name: "Can view" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Can edit" })).toHaveCount(0);
-  // Absent ≠ empty: nothing shared says so in the album's own words.
   await expect(
     page.getByText("Cornwall 2024 is not shared with anyone yet.")
   ).toBeVisible();
@@ -175,7 +161,6 @@ test("an album shares through the one grant kit, view only", async ({
 
   await page.locator("button.kit-btn.primary").click();
 
-  // Grant names the album with its title carried, not just an id.
   await expect
     .poll(() => page.evaluate(() => window.__photosGrants))
     .toStrictEqual([
@@ -188,7 +173,6 @@ test("an album shares through the one grant kit, view only", async ({
         subjectLabel: "Cornwall 2024",
       },
     ]);
-  // Outcome reaches the frame's one status line, never a toast.
   await expect
     .poll(() => page.evaluate(() => window.__photosStatus))
     .toStrictEqual(["Priya can see it"]);

@@ -1,8 +1,3 @@
-// One link row for Sharing.tsx, kept separate so that file stays under the
-// repo's file-size guidance.
-//
-// `LinkTicketPanel` (below) is this file's one TextInput: pasting a ticket
-// someone showed you is external data, not a setting to cycle through.
 import * as Clipboard from "expo-clipboard";
 import React, { useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
@@ -58,23 +53,12 @@ export default function SharingLinkRow({
   );
 }
 
-/**
- * The remote link ceremony's owner-facing door (#726 audit finding 1): mint
- * and show a one-time ticket, or paste one someone showed you. Text-only
- * here (no QR/camera scan yet — pasting is the reachable door this closes;
- * a scan affordance is a follow-up, not a gap in THIS surface).
- */
 export function LinkTicketPanel({
   vaultId,
   colors,
   gatewayBase,
   onLinked,
 }: {
-  /** The FOCUSED vault, which is the one a link ticket is minted for and
-   *  redeemed into. Several vaults can be mounted at once — Sharing's read
-   *  plane spans all of them (`sharing-reads.ts`) — but a link is a ceremony
-   *  between two named vaults, so it takes the member's current one rather
-   *  than a picker over a set they did not choose from. */
   vaultId?: string;
   colors: ReturnType<typeof useTheme>["colors"];
   gatewayBase?: string;

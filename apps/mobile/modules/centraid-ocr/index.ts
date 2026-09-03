@@ -20,7 +20,6 @@ declare class CentraidOcrNativeModule extends NativeModule {
 const native =
   requireOptionalNativeModule<CentraidOcrNativeModule>("CentraidOcr");
 
-/** Device-native, network-free OCR. Throws honestly when the native build lacks it. */
 export async function recognizeText(uri: string): Promise<OcrResult> {
   if (!native)
     throw new Error(

@@ -1,7 +1,3 @@
-// The phone's own derivations (STATES.md's Locker row; SURFACES.md's seats).
-// The precedence order between the states IS the argument here — a re-ordering
-// would be invisible in a screenshot.
-
 import { describe, expect, it } from "vitest";
 
 import { WINDOW_RULE } from "@centraid/blueprints/apps/locker/view-copy";
@@ -43,7 +39,6 @@ describe(lockerScreenState, () => {
     expect(lockerScreenState({ ...settled, denied: true, rows: 0 })).toBe(
       "denied"
     );
-    // Even before the read lands: a refusal is data, not a delay.
     expect(lockerScreenState({ ...settled, denied: true, loaded: false })).toBe(
       "denied"
     );
@@ -71,7 +66,6 @@ describe(lockerWindowFoot, () => {
     const truncated = lockerWindowFoot(true, 300, true) ?? "";
     expect(truncated).toContain("300 shown");
     expect(truncated).toContain(WINDOW_RULE);
-    // The count is never dressed as a denominator the payload does not carry.
     expect(truncated).not.toContain("of 3");
     expect(lockerWindowFoot(true, 12, false) ?? "").toContain(
       "12 in the vault"
@@ -91,8 +85,6 @@ describe(lockerPendingCount, () => {
   });
 });
 
-// Companion is the ONE surface with no door on a phone, so `lockerFillCopy`
-// takes no key.
 describe(lockerFillCopy, () => {
   it("gives Companion facts and a place the act happens", () => {
     const copy = lockerFillCopy();
@@ -103,8 +95,6 @@ describe(lockerFillCopy, () => {
   });
 });
 
-// Locker reads through the gateway's own query handlers, so the device-global
-// outbox is the only honest source for this sentence (#880).
 describe(lockerPendingLine, () => {
   const change = (
     over: Record<string, unknown> = {}

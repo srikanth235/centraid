@@ -1,7 +1,3 @@
-// Connectors data half (#765): one read, two writes, re-auth ceremony. OAuth is
-// NOT reimplemented (`lib/connections.ts`; see lib/connection-reauth.ts).
-// Every action re-reads the list: health is the gateway's to report.
-
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -22,13 +18,10 @@ import { resolveGatewayBase } from "../../lib/gateway";
 import { opsStateFor } from "./connectors-model";
 import type { ConnectorAct, ConnectorFilter } from "./connectors-model";
 
-/** How often the page re-reads health while open. */
 const POLL_MS = 60_000;
 
-/** What the gateway answered. `empty`/`full` are derived, never stored. */
 export type ConnectorsLoad =
   | { kind: "loading" }
-  /** Every relative phrase measures from it, never Date.now() at render. */
   | { at: number; kind: "ready"; connections: ConnectionEntry[] }
   | { kind: "error"; reason: string };
 
@@ -36,7 +29,6 @@ export interface ConnectorsController {
   load: ConnectorsLoad;
   state: OpsState;
   connections: readonly ConnectionEntry[];
-  /** The clock every relative phrase on the page is measured from. */
   now: number;
   filter: ConnectorFilter;
   setFilter: (next: ConnectorFilter) => void;
@@ -68,7 +60,6 @@ async function read(apply: (next: ConnectorsLoad) => void): Promise<void> {
   }
 }
 
-/** Run the OAuth ceremony for one lapsed connection. */
 async function reauthorize(connectionId: string): Promise<void> {
   const authUrl = await beginConnectionAuthorization(connectionId);
   const outcome = classifyAuthSession(
@@ -78,7 +69,6 @@ async function reauthorize(connectionId: string): Promise<void> {
   if (failure) throw new Error(failure);
   if (outcome.kind === "assist-handoff")
     await completeConnectionAuthorization(outcome.handoff);
-  // `closed`: BYO finishes at the gateway callback; caller re-reads either way.
 }
 
 export function useConnectors(): ConnectorsController {
@@ -86,8 +76,6 @@ export function useConnectors(): ConnectorsController {
   const [filter, setFilter] = useState<ConnectorFilter>("all");
   const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState<string | undefined>();
-  // Ref, not state: the guard must hold WITHIN a tick — two taps before
-  // re-render would strand a consent ceremony.
   const inFlight = useRef(false);
 
   useEffect(() => {

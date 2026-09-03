@@ -1,17 +1,3 @@
-// The item list's designed states, rendered (STATES.md's Locker / Items row).
-//
-// What this pins:
-//
-//  - LOADING IS SKELETON ROWS at the list's own geometry, never a spinner and
-//    never an empty list
-//  - DAY ONE IS AN INVITATION with two ways in — and it is a different screen
-//    from a filter that matched nothing
-//  - the offline notice names what still works AND why a secret does not
-//  - the window's foot states what it is showing and offers *Show more* only
-//    where the read said there is more
-//  - the device-credential offer appears only where this phone can hold one
-
-// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -192,3 +178,4 @@ describe("the item list", () => {
     unmount();
   });
 });
+// @vitest-environment jsdom

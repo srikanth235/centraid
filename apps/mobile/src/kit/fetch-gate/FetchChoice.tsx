@@ -1,6 +1,3 @@
-// Gated-fetch choice UI (`fetchAccess`): held preview plus the one tap that
-// spends bytes — never a silent fetch, never a spinner. Theme-token geometry.
-
 import React from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -26,7 +23,6 @@ const styles = StyleSheet.create({
   chipText: { ...t("control") },
 });
 
-/** Standalone chip for callers that don't need the centred wrapper. */
 export function FetchChoiceChip({
   label,
   onPress,
@@ -56,7 +52,6 @@ export function FetchChoiceChip({
   );
 }
 
-/** Preview + chip; renders when `fetchAccess` answers `needs-choice`. */
 export function FetchChoicePlaceholder({
   width,
   height,

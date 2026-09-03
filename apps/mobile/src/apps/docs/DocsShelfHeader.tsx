@@ -1,8 +1,3 @@
-// The pushed-shelf head: the frame's back affordance (chevron + the NAME of
-// the destination, never the word "Back" — README §Cross-app
-// standardisation) beside the shelf's own title. Shared by every shelf the
-// More sheet reaches, and by the sibling's document screens.
-
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -20,8 +15,6 @@ export default function DocsShelfHeader({
   trailing,
 }: {
   title: string;
-  /** The return target's NAME — "All", "Folders" — for the back control's
-   *  accessible label. */
   backTo: string;
   trailing?: React.ReactNode;
 }): React.JSX.Element {
@@ -35,8 +28,6 @@ export default function DocsShelfHeader({
         accessibilityLabel={`Back to ${backTo}`}
         onPress={() => navigation.goBack()}
         style={styles.back}
-        // The label NAMES the destination ("Back to All", "Back to Folders"),
-        // so it moves with the shelf a member came from; the handle does not.
         testID={TEST_IDS.docs.breadcrumb}
       >
         <Icon name="chevron-left" size={22} color={colors.text} />

@@ -1,6 +1,4 @@
 import { MONTHS, plural } from "@centraid/blueprints/apps/_shared/format-kit";
-// Grouped search hits (Photos §9). KEEP PURE. Omit a group with no data path; never fake.
-// Semantic (#721) is derived, never a gate. Order/cap via `groupSearchHits` (#712); matching stays here.
 import { groupSearchHits } from "@centraid/blueprints/apps/_shared/search-scaffold";
 import type { SearchEntity } from "@centraid/blueprints/apps/_shared/search-scaffold";
 
@@ -44,12 +42,9 @@ export type SearchHitTarget =
 export interface SearchHit {
   key: string;
   kind: SearchHitKind;
-  /** Quoted for a caption (speech). */
   label: string;
   sub: string;
-  /** Overlap with these results. Empty where that number means nothing (album states size). */
   meta: string;
-  /** `media_asset` ids this hit reaches (#712) — the screen unions them into the grid. */
   assetIds: readonly string[];
   target: SearchHitTarget;
 }
@@ -64,7 +59,6 @@ export interface SearchHitSources {
   collections: readonly Row[];
   entries: readonly Row[];
   contentTitles: ReadonlyMap<string, string>;
-  /** Present only on `status: "ok"` (#721); `undefined` covers every other empty. */
   semanticHits?: readonly {
     assetId: string;
     contentId: string;
@@ -72,7 +66,6 @@ export interface SearchHitSources {
   }[];
 }
 
-/** Without this, "the coast road" pulls every album containing "the". */
 const STOPWORDS = new Set([
   "a",
   "an",
@@ -90,7 +83,6 @@ const STOPWORDS = new Set([
 
 const PER_KIND_CAP = 3;
 
-/** `30 July 2026`. Never `toLocaleDateString` — locale must not move printed dates. */
 export function captionDate(iso: string): string {
   const day = Number(iso.slice(8, 10));
   const month = MONTHS[Number(iso.slice(5, 7)) - 1];
@@ -139,12 +131,9 @@ const CAPTION_ENTITY: SearchEntity<HitSource, SearchHit> = {
 const SEMANTIC_ENTITY: SearchEntity<HitSource, SearchHit> = {
   key: "semantic",
   label: "semantic",
-  // Ignore `term`: the embedding already decided, and a substring re-match is
-  // the token search this row exists to go beyond.
   match: (_term, source) => semanticEntityHits(source),
 };
 
-/** Narrowest to broadest; semantic last. Data, never a branch. */
 const SEARCH_HIT_ENTITIES: readonly SearchEntity<HitSource, SearchHit>[] = [
   PERSON_ENTITY,
   PLACE_ENTITY,
@@ -165,7 +154,6 @@ export function groupedSearchHits(sources: SearchHitSources): SearchHit[] {
   );
 }
 
-/** Unioned with title matches so naming an album shows its photographs (#712). */
 export function reachableAssetIds(hits: readonly SearchHit[]): Set<string> {
   return new Set(hits.flatMap((hit) => [...hit.assetIds]));
 }
@@ -175,7 +163,6 @@ function personHits(
   tokens: readonly string[],
   matchedAssetIds: ReadonlySet<string>
 ): SearchHit[] {
-  // Confirmed party first, else proposed — same rule as `PhotosPeopleView`.
   const total = new Map<string, Set<string>>();
   const here = new Map<string, number>();
   for (const face of sources.faces) {
@@ -343,7 +330,6 @@ function captionHits(
   sources: SearchHitSources,
   tokens: readonly string[]
 ): SearchHit[] {
-  // No early break at `PER_KIND_CAP` — `groupSearchHits` caps every entity uniformly.
   const hits: SearchHit[] = [];
   for (const asset of sources.matches) {
     const title = asset.contentId

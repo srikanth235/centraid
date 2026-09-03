@@ -1,7 +1,3 @@
-// The eleven place ids: frame destinations that are not apps. The Assistant is
-// deliberately not one (:3482); it lives in ./catalog. Order is fixed, never
-// sorted by recency (:3470) — readers filter this array, never reorder it.
-
 import { DESTINATION_MARKS } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
@@ -23,17 +19,13 @@ export type PlaceId =
 export interface Place {
   id: PlaceId;
   name: string;
-  /** The band is 61px wide (:3480): declare a short name, never ellipsise. */
   short: string;
   icon: IconName;
   what: string;
-  /** Home only: pinned by law (:3469); its row shows "by law", not a switch. */
   law: boolean;
   pin: boolean;
 }
 
-/* Marks come from `DESTINATION_MARKS`, never a literal: ids differ per side,
-   so the glyph is the one fact neither list owns. */
 export const PLACES: readonly Place[] = [
   {
     icon: DESTINATION_MARKS.home,
@@ -146,7 +138,6 @@ export const DEFAULT_PLACE_PINS: readonly PlaceId[] = TOGGLEABLE_PLACES.filter(
 
 export const BAND_PLACE_SLOTS = 4;
 
-/** `PLACES[0]` is guaranteed by the table; the assertion is its invariant. */
 export function getPlace(id: PlaceId): Place {
   return PLACES.find((p) => p.id === id) ?? PLACES[0]!;
 }
@@ -160,15 +151,11 @@ export function pinnedPlaces(pins: readonly PlaceId[]): readonly Place[] {
   return PLACES.filter((p) => isPlacePinned(pins, p.id));
 }
 
-/** A sixth pinned place overflows to More, however many are pinned (:3480). */
 export function bandPlaces(pins: readonly PlaceId[]): readonly Place[] {
   const [home, ...rest] = pinnedPlaces(pins);
   return home ? [home, ...rest.slice(0, BAND_PLACE_SLOTS)] : [];
 }
 
-/* v0 gates: a gateway may not mount Automations or Connectors, and a tab onto a
- * dead route is worse than a missing one, so the derivations below FILTER the
- * fixed table. `undefined` (UNKNOWN) never hides a place. */
 const PLACE_CAPABILITY: Partial<Record<PlaceId, keyof MobileGatewayFeatures>> =
   {
     autos: "automations",
@@ -187,15 +174,11 @@ export function isPlaceEnabled(
 export function enabledPlaces(
   features: MobileGatewayFeatures | undefined
 ): readonly Place[] {
-  // System is a custodian/viewer surface; its route id still resolves in
-  // `Home.tsx`, so a saved link never dead-ends.
   return PLACES.filter(
     (p) => p.id !== "gateway" && isPlaceEnabled(p.id, features)
   );
 }
 
-/** Gated pins are DROPPED, not blanked, so the band stays five wide; pin STATE
- * is untouched, so re-enabling a feature restores the place. */
 export function enabledPlacePins(
   pins: readonly PlaceId[],
   features: MobileGatewayFeatures | undefined

@@ -6,13 +6,8 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// DOCS ON THE GRANT PLANE, in a real browser (#825): the shipped details rail
-// stubbed at `window.centraid.grants` (the one reach-in a web blueprint has).
-// Proves the APP: object-first sheet, registry verbs, one status line.
-
 declare global {
   interface Window {
-    /** What the harness collected from Docs' one status line. */
     __docsStatus: string[];
   }
 }
@@ -27,7 +22,6 @@ const DETAILS = path.join(
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-825-docs-grant.png";
 
-/** The shipped rail over a stub bridge — `webGrantDoor()`'s surface. */
 const ENTRY = `
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -124,7 +118,6 @@ createRoot(document.getElementById("root")).render(
 );
 `;
 
-/** Bundle the shipped rail, CSS modules included, for the browser. */
 async function bundleRail(): Promise<{ js: string; css: string }> {
   const result = await build({
     stdin: {
@@ -135,7 +128,6 @@ async function bundleRail(): Promise<{ js: string; css: string }> {
     },
     bundle: true,
     write: false,
-    // Never written (`write: false`); needed to name the CSS output.
     outdir: path.join(here, ".docs-grant-bundle"),
     format: "iife",
     jsx: "automatic",
@@ -165,7 +157,6 @@ test("Docs shares a document through the one shared grant kit", async ({
   );
   await page.addScriptTag({ content: js });
 
-  // The rail's own verb.
   const share = page.getByRole("button", { name: "Share document" });
   await expect(share).toBeVisible();
   await share.click();
@@ -173,22 +164,18 @@ test("Docs shares a document through the one shared grant kit", async ({
   const dialog = page.locator("dialog.kit-modal-back");
   await expect(dialog).toBeVisible();
 
-  // OBJECT-FIRST: the document is fixed; the sheet asks only who.
   await expect(dialog.getByText("Trip plan")).toBeVisible();
   await expect(dialog.getByLabel("What to share")).toHaveCount(0);
 
-  // The REGISTRY decides the verbs — Docs hardcodes none of them.
   await expect(dialog.getByRole("button", { name: "Can edit" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Can view" })).toBeVisible();
 
-  // The standing row carries the vault's phrase and reason, both verbatim.
   await expect(dialog.locator('[data-phrase="shared"]')).toHaveText(
     "Can view · Shared"
   );
   await expect(
     dialog.getByText("the vault it addresses is holding it")
   ).toBeVisible();
-  // A row the wire answered for never falls back to the unstated marker.
   await expect(dialog.locator('[data-phrase="unstated"]')).toHaveCount(0);
 
   await mkdir(EVIDENCE_DIR, { recursive: true });
@@ -199,7 +186,6 @@ test("Docs shares a document through the one shared grant kit", async ({
 
   await dialog.getByRole("button", { name: "Share", exact: true }).click();
 
-  // The outcome leaves through the APP's single status line.
   await expect
     .poll(() => page.evaluate(() => window.__docsStatus))
     .toStrictEqual(["Ravi can see it"]);

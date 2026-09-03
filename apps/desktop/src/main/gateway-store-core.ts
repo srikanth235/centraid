@@ -1,8 +1,5 @@
 import { IDENTITY_COLORS } from "@centraid/design";
 
-/** Gateway profile registry — pure core (#109 / #545 C1); I/O stays in
- *  `gateway-store.ts`. */
-
 export type GatewayKind = "local" | "remote";
 
 export interface GatewayProfileShape {
@@ -12,16 +9,13 @@ export interface GatewayProfileShape {
   readonly displayName?: string;
   readonly avatarColor?: string;
   readonly endpointId?: string;
-  /** Refreshable address cache; never connection identity. */
   readonly relayHint?: string;
   readonly rememberDevice?: boolean;
   readonly createdAt: string;
 }
 
-/** Order matters: `defaultAvatarColor` hashes id into this array. */
 export const AVATAR_PALETTE: readonly string[] = IDENTITY_COLORS;
 
-/** Deterministic FNV-1a pick from a profile id; stable across launches. */
 export function defaultAvatarColor(id: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < id.length; i++) {
@@ -32,7 +26,6 @@ export function defaultAvatarColor(id: string): string {
   return AVATAR_PALETTE[idx] as string;
 }
 
-/** Validate a user-supplied avatar color. */
 export function isValidAvatarColor(value: unknown): value is string {
   return typeof value === "string" && /^#[0-9a-fA-F]{6}$/u.test(value);
 }
@@ -43,7 +36,6 @@ export function isValidGatewayId(id: string): boolean {
   return id === "local" || ENDPOINT_ID_RE.test(id);
 }
 
-/** Raw `connections.json` row → populated profile, or undefined when invalid. */
 export function normalizeProfile(
   id: string,
   parsed: Partial<GatewayProfileShape> | null | undefined
@@ -82,7 +74,6 @@ export function normalizeProfile(
     ...(typeof parsed.relayHint === "string" && parsed.relayHint.length > 0
       ? { relayHint: parsed.relayHint }
       : {}),
-    // No stored preference counts as opted in; explicit false still honored.
     rememberDevice:
       parsed.rememberDevice === true ||
       (parsed.kind === "local" && parsed.rememberDevice === undefined),
@@ -90,7 +81,6 @@ export function normalizeProfile(
   };
 }
 
-/** Local first, then remotes by creation time; mutates nothing. */
 export function sortGatewayProfiles<
   T extends { id: string; createdAt: string },
 >(profiles: readonly T[], localId: string): T[] {
@@ -101,7 +91,6 @@ export function sortGatewayProfiles<
   });
 }
 
-/** Pure field checks for addGateway before any I/O. */
 export type AddGatewayFieldError =
   | { ok: false; code: "invalid_input"; message: string }
   | {

@@ -1,7 +1,3 @@
-// The phone's bottom band (§3.1). Opaque paper, never glass: contrast must not
-// depend on what was photographed. Content ends ABOVE the band by LAYOUT, never
-// by padding on the scroll content.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -47,8 +43,6 @@ export default function PhotosBand({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const band = resolveBand(owner);
   if (band.owner !== "app") {
-    // HANDED BACK, BUT NOT STRANDED (#712): never `return null` — a Photos stack
-    // screen has no frame band underneath, so the capsule stays.
     return (
       <View
         style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
@@ -60,7 +54,6 @@ export default function PhotosBand({
 
   const { capsule } = band;
   return (
-    // No `accessibilityRole` here: a tablist would nest the capsule in the group.
     <View
       style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
       testID={TEST_IDS.photos.band}
@@ -77,9 +70,6 @@ export default function PhotosBand({
               key={destination.key}
               accessibilityRole="tab"
               accessibilityLabel={destination.label}
-              // The DESTINATION KEY, never the label: the label is copy a v-next
-              // handoff may re-word, and a flow that tapped it would then tap
-              // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.photos}${destination.key}`}
               accessibilityState={{ selected: active }}
               onPress={() => onSelect(destination.key)}
@@ -145,8 +135,6 @@ const makeStyles = (colors: ThemeColors) =>
       ...t("control"),
       alignSelf: "stretch",
       color: colors.textSoft,
-      // No `fontFamily` override: `t("control")` is sansMedium. Active state
-      // is colour plus the ink rule, never weight.
       textAlign: "center",
     },
     labelActive: { color: colors.text },

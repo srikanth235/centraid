@@ -1,7 +1,3 @@
-// Home — graded per TILE, not per screen. This file owns grading and
-// navigation only. Tiles fill OFFLINE; the only gateway-shaped read is
-// reachability on the vault lockup.
-
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -48,7 +44,6 @@ import { useOriginHealth } from "./home/useOriginHealth";
 import { useSpringboardTiles } from "./home/useSpringboardTiles";
 import VaultBar from "./home/VaultBar";
 
-// From the token, never re-typed (R.margin.m).
 const H_PADDING = pageMargin;
 
 type HomeState =
@@ -62,13 +57,11 @@ const HOME_STALE_MS = 30_000;
 let homeLoadedAt = 0;
 let homeInFlight: Promise<void> | undefined;
 
-// Module-scope: closes over the setter only, no `useCallback` identity.
 async function loadHome(
   setState: (next: HomeState) => void,
   options: { force?: boolean } = {}
 ): Promise<void> {
   if (!options.force && Date.now() - homeLoadedAt < HOME_STALE_MS) return;
-  // One setter: a mid-load caller joins the running load.
   if (homeInFlight) return homeInFlight;
   homeInFlight = runHomeLoad(setState).finally(() => {
     homeInFlight = undefined;
@@ -82,7 +75,6 @@ async function runHomeLoad(setState: (next: HomeState) => void): Promise<void> {
     setState(base ? { kind: "ready" } : { kind: "no-gateway" });
     if (base) homeLoadedAt = Date.now();
   } catch {
-    // Gateway facts go on the status line — never a banner, never a thrown-away grid.
     setState({ kind: "error" });
   }
 }
@@ -93,8 +85,6 @@ export default function HomeScreen({
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  // Write-only on purpose: the cover renders the same either way, and the
-  // setter is what `loadHome` needs to drive its retries.
   const [, setState] = useState<HomeState>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
   const [allAppsOpen, setAllAppsOpen] = useState(false);
@@ -105,11 +95,9 @@ export default function HomeScreen({
   useEffect(() => {
     void loadHome(setState);
   }, []);
-  // Grid order is user data — hydrate once at mount.
   useEffect(() => {
     void hydratePins();
   }, []);
-  // Vault switch re-points the app; the grid must reload.
   useEffect(
     () => subscribeVaultLinks(() => void loadHome(setState, { force: true })),
     []
@@ -127,7 +115,6 @@ export default function HomeScreen({
   }, []);
 
   const items = useMemo(
-    // Springboard order first, then pins — reverse lets the default un-pin downward.
     () => orderByPins(orderForSpringboard(buildLauncherItems()), pins),
     [pins]
   );
@@ -183,7 +170,6 @@ export default function HomeScreen({
     [navigation]
   );
 
-  /** `connectors` has no mobile screen — route to Settings. */
   const pickMove = useCallback(
     (move: FirstMove): void => {
       if (move.id === "connectors") {
@@ -196,7 +182,6 @@ export default function HomeScreen({
     [items, openItem, openSettings]
   );
 
-  /** By app id, not the top-3 `moves` list — day-one buttons are fixed. */
   const openPhotos = useCallback((): void => {
     const item = items.find((candidate) => candidate.meta.id === "photos");
     if (item) openItem(item);
@@ -206,11 +191,6 @@ export default function HomeScreen({
     if (item) openItem(item);
   }, [items, openItem]);
 
-  /**
-   * Demo seed (#290) by hand — do not import `vaultDemoLoad` (client barrel
-   * pulls pdfjs + sqlite-wasm into the phone). Fail-soft: a partial fill
-   * leaves the offer live.
-   */
   const fillSample = useCallback(async (): Promise<void> => {
     try {
       const base = await requireGatewayBase();
@@ -228,21 +208,16 @@ export default function HomeScreen({
             { headers: apiHeaders(), method: "POST" }
           );
         } catch {
-          // Per-app failure is survivable.
+          // Intentionally empty.
         }
       }
-      // Before the tiles re-read, or they rebuild from the pre-seed replica.
       await replica.refresh?.();
     } catch {
-      // A dead gateway costs this offer, never the screen.
+      // Intentionally empty.
     }
     await loadHome(setState, { force: true });
   }, [replica]);
 
-  /**
-   * Band and All-apps share this map. `starred` is a stated no-op — no mobile
-   * screen. `default` is `never` so a new place is a typecheck failure.
-   */
   const goToPlace = useCallback(
     (id: PlaceId): void => {
       switch (id) {
@@ -276,7 +251,6 @@ export default function HomeScreen({
           navigation.navigate("Devices");
           break;
         case "starred":
-          // No mobile screen — stated no-op.
           break;
         default: {
           const exhaustive: never = id;
@@ -303,25 +277,9 @@ export default function HomeScreen({
     [goToPlace]
   );
 
-  // #890 W6 — the alarm test's mutation site. In every ordinary build this
-  // branch is statically false and eliminated: `EXPO_PUBLIC_CENTRAID_E2E_ALARM`
-  // is inlined at export time and nothing but the quarterly alarm lane sets it.
-  // In that lane, Home renders nothing, HOME_READY_MARKER never appears, and the
-  // suite MUST go red — a green there is the alarm not sounding, and it fails
-  // the job. See apps/mobile/src/kit/e2e-alarm.ts for why the mutation belongs
-  // in the artifact rather than in the harness.
-  // An empty View rather than `null`, so the production signature stays
-  // `React.JSX.Element` — widening a shipped return type to accommodate a
-  // test-only branch would be the mutation leaking into the product. The claim
-  // is identical either way: the band never mounts, so HOME_READY_MARKER never
-  // appears and every flow that waits for it must fail.
   if (isAlarmBlanked("home")) return <View style={styles.screen} />;
 
   return (
-    // Explicit paddingTop — SafeAreaView edges can resolve to zero in cover stacks.
-    // `home-screen` is the arrival handle: HOME_READY_MARKER keyed on the band's
-    // accessibility label, and its predecessor ("Home ready") vanished with a
-    // copy change (#789/#839). A root testID cannot be re-worded.
     <View
       style={[styles.screen, { paddingTop: insets.top }]}
       testID={TEST_IDS.home.screen}
@@ -399,7 +357,6 @@ export default function HomeScreen({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // Clears the flush band so the last row stays tappable.
     content: {
       paddingBottom: 24,
       paddingHorizontal: H_PADDING,

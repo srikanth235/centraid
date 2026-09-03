@@ -1,8 +1,3 @@
-// Places shelf (§14/§18; #816), two modes sharing place-map.ts: the switch swaps
-// the GROUND only, never which places plot or what a pin means. Tiles tell the
-// provider which areas opened — disclosed permanently under the map (P-egress):
-// told, not asked. Pins are photographs; dots labelled in degrees are a chart.
-
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
@@ -41,7 +36,6 @@ export default function PlacesMap({
   const [reading, setReading] = useState<MapPin | null>(null);
   const [mode, setMode] = usePlacesMapMode();
   const [modeOpen, setModeOpen] = useState(false);
-  // Destructured: anchorRef feeds a ref prop; reachable-through-ref reads as ref access during render.
   const {
     anchor: modeAnchor,
     anchorRef: modeAnchorRef,
@@ -53,8 +47,6 @@ export default function PlacesMap({
   );
   const { assets } = usePhotoTimeline();
 
-  // Id→row lookup stays inside the memo: hoisted out, it rebuilt every render
-  // and was useless as a dependency.
   const points = useMemo(
     () => placePoints(assets, places.rows),
     [assets, places.rows]

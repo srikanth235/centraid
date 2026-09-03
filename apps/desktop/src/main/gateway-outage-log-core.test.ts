@@ -24,7 +24,6 @@ function event(over: Partial<OutageLogEvent> = {}): OutageLogEvent {
   };
 }
 
-/** One bare NDJSON event line, as every schema of this file has written it. */
 function eventLine(e: OutageLogEvent): string {
   return `${JSON.stringify(e)}\n`;
 }
@@ -77,12 +76,6 @@ describe("formatOutageLogFile / parseOutageLogFile", () => {
     expect(parseOutageLogFile(raw)).toHaveLength(2);
   });
 
-  /**
-   * The #665 read-compatibility promise: an on-disk schema-3 log carries a
-   * header line AND one `projection-mark` line per gateway from the retired
-   * Notifications dual-write. Neither is an event, so neither may be lost, mistaken for
-   * one, or make the read fail.
-   */
   it("reads an existing schema-3 log, ignoring its legacy projection marks", () => {
     const events = [
       event({ at: T0 }),
@@ -95,7 +88,6 @@ describe("formatOutageLogFile / parseOutageLogFile", () => {
       `${JSON.stringify({ type: "projection-mark", gatewayId: "remote", at: 0, vaultId: "vault-a" })}\n`,
     ].join("");
     expect(parseOutageLogFile(legacySchema3)).toStrictEqual(events);
-    // ...and rewriting drops the marks for good.
     expect(
       formatOutageLogFile(parseOutageLogFile(legacySchema3))
     ).not.toContain("projection-mark");
@@ -240,8 +232,6 @@ describe(deriveOutageEvents, () => {
   });
 
   it("blames the unhealthy components, not the latency, when latency is fine", () => {
-    // The "Local is degraded — 4ms latency" card: degradation came from
-    // components, and the stamped latency was the number PROVING it hadn't.
     const events = deriveOutageEvents({
       prevStatus: "up",
       prevHealthStatus: "ok",

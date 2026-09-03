@@ -1,4 +1,3 @@
-// One feedback channel (#707) — never fork it.
 export {
   postStatus,
   readStatus,

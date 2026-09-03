@@ -1,10 +1,3 @@
-/**
- * Finishing a `needs-auth` connection from the phone (#647). NEVER the PWA
- * shape: `surface:"web"` binds the handoff where it cannot be redeemed, and the
- * SYSTEM browser suspends this app, killing the loopback proxy BYO needs — use
- * an in-app session with `surface:"desktop"`. A third value is a gateway change.
- */
-
 export const ASSIST_RETURN_URL = "centraid://oauth/finish";
 
 export const MOBILE_AUTHORIZE_SURFACE = "desktop";
@@ -19,15 +12,12 @@ export type ReconnectOutcome =
   | { kind: "assist-handoff"; handoff: AssistHandoff }
   | { kind: "declined" }
   | { kind: "provider-error" }
-  /** Owner backed out, or BYO finished at the gateway's callback —
-   * indistinguishable on purpose; re-read Notifications. */
   | { kind: "closed" };
 
 const STATE_PATTERN = /^[dw]\.[A-Za-z0-9_-]{43}$/u;
 
 function fragmentOf(rawUrl: string): Map<string, string> | undefined {
   const trimmed = rawUrl.trim();
-  // Some OS launchers normalize the scheme; none rewrite the fragment.
   const prefix = `${ASSIST_RETURN_URL}#`;
   if (trimmed.slice(0, prefix.length).toLowerCase() !== prefix.toLowerCase())
     return undefined;
@@ -42,7 +32,6 @@ function fragmentOf(rawUrl: string): Map<string, string> | undefined {
         decodeURIComponent(pair.slice(separator + 1).replaceAll("+", " "))
       );
     } catch {
-      // A malformed escape makes the whole link untrustworthy.
       return undefined;
     }
   }
@@ -53,7 +42,6 @@ function bounded(value: string | undefined, maxLength: number): string {
   return value && value.length > 0 && value.length <= maxLength ? value : "";
 }
 
-/** Incomplete links are `closed`, never a fake success. */
 export function parseAssistReturnUrl(rawUrl: string): ReconnectOutcome {
   const fields = fragmentOf(rawUrl);
   if (!fields) return { kind: "closed" };
@@ -75,7 +63,6 @@ export interface AuthSessionResultLike {
   url?: string;
 }
 
-/** iOS says `cancel`, Android `dismiss`; no platform branch belongs here. */
 export function classifyAuthSession(
   result: AuthSessionResultLike
 ): ReconnectOutcome {

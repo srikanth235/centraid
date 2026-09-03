@@ -1,7 +1,3 @@
-// Native scrub-strip frames via `expo-video-thumbnails` (iOS/Android only).
-// Web has no implementation: return [] so Transport keeps its static track
-// rather than throwing mid-gesture.
-
 import * as VideoThumbnails from "expo-video-thumbnails";
 import { Platform } from "react-native";
 
@@ -21,7 +17,6 @@ export async function generateScrubStrip(
   const frames: ScrubFrame[] = [];
   for (const atMs of timestamps) {
     try {
-      // Serial: six in-flight decodes is six times the memory mid-generation.
       // oxlint-disable-next-line no-await-in-loop
       const result = await VideoThumbnails.getThumbnailAsync(uri, {
         time: atMs,
@@ -29,7 +24,7 @@ export async function generateScrubStrip(
       });
       frames.push({ atMs, uri: result.uri });
     } catch {
-      // One unreadable instant costs one frame, never the strip.
+      // Intentionally empty.
     }
   }
   return frames;

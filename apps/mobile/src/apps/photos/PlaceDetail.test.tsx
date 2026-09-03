@@ -1,24 +1,3 @@
-// @vitest-environment jsdom
-// One place's photographs (#781) — the screen a Places card opens.
-//
-// What this file owns that `places-model.test.ts` cannot: the head's sentence,
-// the empty state's, and the two exits. Specifically:
-//
-//   1. THE COUNT IS THIS PLACE'S, and it is a sentence, not a numeral with a
-//      noun bolted on — "1 photograph", never "1 photographs".
-//   2. AN EMPTY PLACE SAYS WHICH PLACE IS EMPTY. A bare "Nothing here" would
-//      leave a member unable to tell an empty place from a screen that failed
-//      to load one.
-//   3. THE BACK CHEVRON STAYS AND GOES BACK. `PlacesView` is this screen's
-//      genuine parent (the split `DuplicatesShelf` states: the shell owns the
-//      band, the screen owns its own head), so the chevron must pop rather
-//      than push a second copy of the shelf.
-//   4. TAPPING A PHOTOGRAPH OPENS THAT PHOTOGRAPH in the lightbox.
-//
-// `PhotoTimeline` is stubbed to render the ids it was handed: it draws through
-// FlashList, which cannot mount in this renderer, and its own grid contract is
-// owned elsewhere. Rendering the ids keeps the assertion an OUTCOME — which
-// photographs reached the timeline — rather than a claim about a mock call.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -45,10 +24,7 @@ const mocks = vi.hoisted(() => ({
     textSoft: "#mock-text-soft",
   },
   places: [] as unknown[],
-  /** Every `session.write` this screen fired, in order. */
   writes: [] as unknown[],
-  /** Whether the replica has a session at all — a screen with none must not
-   *  offer a control that cannot land (§1: no silent no-ops). */
   session: true,
 }));
 
@@ -102,8 +78,6 @@ vi.mock(
     ({
       Text: ({ children }: { children?: React.ReactNode }) =>
         React.createElement("span", {}, children),
-      // The naming input, as an ordinary DOM input: `onChangeText` is the
-      // native contract and `input`/`change` is how this renderer expresses it.
       TextInput: ({
         accessibilityLabel,
         onChangeText,
@@ -235,8 +209,6 @@ vi.mock(import("./PhotosScreen"), async () => {
   } as never;
 });
 
-// The rows carry `geo_lat`/`geo_lng` — the columns `core_place` actually
-// ships and the replica hands over raw (#787).
 const [TAHOE_PHOTO, HOME_PHOTO] = makePhotosFixture("place-tagged").assets;
 const PLACE_ROWS = [
   {
@@ -351,14 +323,6 @@ describe("one place's photographs, on the phone seat", () => {
   });
 });
 
-// THE NAMING CONVERSATION (#816) — the phone is the primary surface for
-// it, because the phone is where the photographs were taken.
-//
-// A place minted from GPS carries its own coordinate as a label, and every
-// surface phrases it as "A place with no name yet" rather than printing the
-// digits. This screen is where that question gets asked: the ask appears
-// exactly where the fallback phrase appears, one tap declares home, and a
-// place the member already named is never asked again.
 describe("naming this place, on the phone seat", () => {
   const COORD_ROWS = [
     {
@@ -374,9 +338,6 @@ describe("naming this place, on the phone seat", () => {
       (node) => node.getAttribute("aria-label") === label
     ) as HTMLElement | undefined;
 
-  /** Type into the naming field. Through the prototype's own value setter, the
-   *  way `ShareSheet.test.tsx` does it: React tracks the node's value and
-   *  ignores an `input` event whose value it believes it already applied. */
   function type(text: string): void {
     const field = labelled("Place name") as HTMLInputElement | undefined;
     expect(field).toBeDefined();
@@ -450,10 +411,6 @@ describe("naming this place, on the phone seat", () => {
     ]);
   });
 
-  // RETROACTIVE, BY CONSTRUCTION. The head reads the row, not the route
-  // parameter the card handed over — so the moment the replica pushes the named
-  // row this screen says the member's own name for the place. A pinned
-  // parameter would leave the fallback standing over a place just named here.
   it("prints the name the row carries now, not the one the card was tapped with", () => {
     mocks.places = [{ ...COORD_ROWS[0], name: "Grandma's house" }] as unknown[];
     renderDetail(TAHOE_KEY, "A place with no name yet");
@@ -477,3 +434,4 @@ describe("naming this place, on the phone seat", () => {
     expect(mocks.writes).toStrictEqual([]);
   });
 });
+// @vitest-environment jsdom

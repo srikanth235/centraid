@@ -1,7 +1,3 @@
-// One read route, three surfaces (#821, spec §6–§7): the fork is a fact
-// about the document's kind, decided by the SHARED kind model, plus the
-// RN-safe inline-text decode and the honest status sentence.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -49,8 +45,6 @@ describe(readSurfaceFor, () => {
     expect(
       readSurfaceFor({ media_type: "application/vnd.ms-excel", title: "x.xls" })
     ).toBe("facts");
-    // An Office file sniffed as octet-stream still forks on the member's own
-    // extension, exactly like the shared kind table.
     expect(
       readSurfaceFor({
         media_type: "application/octet-stream",
@@ -71,7 +65,6 @@ describe(decodeTextDataUri, () => {
   });
 
   it("decodes base64 UTF-8 without atob", () => {
-    // "héllo\n" in UTF-8 base64.
     expect(decodeTextDataUri("data:text/plain;base64,aMOpbGxvCg==")).toBe(
       "héllo\n"
     );

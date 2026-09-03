@@ -80,8 +80,6 @@ describe("native Photos timeline model", () => {
         }),
       ]
     );
-    // The second copy must not be dropped (an `indexOf` miss drops it), and both
-    // localIds must survive so free-up-space can reach every device original.
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ source: "merged", localId: "local-a" });
     expect(rows[0]?.localIds).toStrictEqual(["local-a", "local-b"]);
@@ -118,13 +116,10 @@ describe("native Photos timeline model", () => {
       canWrite: true,
     });
     expect(rows[0]?.scopeIds).toStrictEqual(["personal", "family"]);
-    // The personal copy's id is not the canonical write target, but album
-    // membership and keep-originals pins still name it.
     expect(rows[0]?.assetIds).toStrictEqual(["asset-personal", "asset-family"]);
   });
 
   test("sections by capture-local day using tzOffsetMin, not the raw UTC slice", () => {
-    // 03:00 UTC in PDT (-420 min) is the previous evening, so it files a day earlier.
     const sections = sectionPhotoAssets([
       photo("evening", {
         capturedAt: "2026-07-16T03:00:00.000Z",
@@ -175,13 +170,6 @@ describe("native Photos timeline model", () => {
     expect(rows[0]).toMatchObject({ id: "still", liveVideoUri: "motion.mov" });
   });
 
-  // #724(a): the same collapse a device Live Photo gets must also
-  // apply to a Takeout-imported capture group (`takeout:<hash>`,
-  // `takeout-sidecar.ts`'s `pairingKey`) — `mergePhotoAssets` folds groups by
-  // `captureGroupId` alone, with no branch on WHICH prefix minted it, so this
-  // pins that generality rather than assuming it. Both rows arrive as REMOTE
-  // (replica) assets here, matching how a Takeout import actually surfaces —
-  // there is no device copy of an imported archive's photographs.
   test("a Takeout capture group collapses to one timeline cell with a `live` badge", () => {
     const rows = mergePhotoAssets(
       [],
@@ -229,10 +217,6 @@ describe("native Photos timeline model", () => {
 });
 
 describe("capture-local day across the date line and the device-local fallback (issue #721 C2)", () => {
-  // process.env.TZ swaps the host's local zone at runtime (POSIX) — the same
-  // technique packages/client/src/app-format.test.ts uses to pin conversions
-  // without mocking Date. Restored after every test so it never leaks into a
-  // sibling test file.
   const realTz = process.env.TZ;
   afterEach(() => {
     if (realTz === undefined) delete process.env.TZ;
@@ -241,10 +225,6 @@ describe("capture-local day across the date line and the device-local fallback (
 
   test("date-line-crossing sections stay in capture-local order, never raw UTC order", () => {
     const fixture = makePhotosFixture("date-line");
-    // Every row's raw UTC capturedAt slice disagrees with its capture-local
-    // day (see photos-fixtures.ts's header on this fixture) — sectioning must
-    // follow tzOffsetMin, not a naive Date.parse(capturedAt) slice, and must
-    // keep the newest-capture-local-first order the fixture was authored in.
     expect(fixture.sections.map((section) => section.day)).toStrictEqual([
       "2026-01-01",
       "2025-12-31",
@@ -262,9 +242,6 @@ describe("capture-local day across the date line and the device-local fallback (
   test("the date-line fixture buckets into the right YEAR periods, not the year its raw UTC instant suggests", () => {
     const fixture = makePhotosFixture("date-line");
     const years = buildPeriods(fixture.sections, "years");
-    // The Jan-1-local pair must land in 2026, not 2025, even though two of
-    // those rows' raw capturedAt instants are technically still 2025 in UTC —
-    // exactly the "wrong YEAR" trap timeline-grains.ts's header warns about.
     expect(years.map((period) => period.key)).toStrictEqual(["2026", "2025"]);
     expect(years[0]?.count).toBe("2 photographs");
     expect(years[1]?.count).toBe("2 photographs");
@@ -272,9 +249,6 @@ describe("capture-local day across the date line and the device-local fallback (
 
   test("onThisDay and sectionPhotoAssets agree about which day a date-line capture belongs to", () => {
     process.env.TZ = "UTC";
-    // Raw UTC slice says Dec 31 2024; tzOffsetMin +60 puts the capture-local
-    // day at Jan 1 2025 — a year before "now" below, so it must surface as a
-    // memory, filed under the exact day sectioning would give it alone.
     const dateLineMemory = photo("dateline-memory", {
       capturedAt: "2024-12-31T23:00:00.000Z",
       tzOffsetMin: 60,
@@ -288,10 +262,6 @@ describe("capture-local day across the date line and the device-local fallback (
   });
 
   test("captureLocalDay falls back to the viewing device's own calendar day when tzOffsetMin is absent", () => {
-    // Kiritimati carries a fixed UTC+14 all year (no DST), which flips this
-    // instant's calendar day relative to its raw UTC slice — proving the
-    // fallback took the device-local branch rather than silently slicing the
-    // UTC string.
     process.env.TZ = "Pacific/Kiritimati";
     const capturedAt = "2026-07-16T23:00:00.000Z";
     expect(capturedAt.slice(0, 10)).toBe("2026-07-16"); // the raw UTC day
@@ -317,9 +287,6 @@ describe("capture-local day across the date line and the device-local fallback (
     expect(
       fixture.sections.find((section) => section.day === "2003-01-01")?.assets
     ).toHaveLength(1);
-    // None of the wrong-clock rows carry a tzOffsetMin — every one of them
-    // exercised the fallback branch, not the one the rest of this suite
-    // covers.
     expect(
       fixture.assets
         .filter((asset) => asset.id.startsWith("clock-wrong"))

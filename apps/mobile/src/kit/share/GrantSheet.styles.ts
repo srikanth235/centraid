@@ -1,6 +1,3 @@
-// Geometry for the native grant sheet (#825). Colourless: every colour
-// comes from `useTheme()` at the call site.
-
 import { StyleSheet } from "react-native";
 
 import { borders, radii, spacing, t } from "../theme";

@@ -6,13 +6,8 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// The GRANT SHEET in a real browser (#825): proves the kit ALONE — the
-// shipped component over shipped tokens + `kit.css`, grant plane stubbed
-// at its ONE seam (`door`). The capture is the UI-impact evidence (#825).
-
 declare global {
   interface Window {
-    /** What the harness collected from the sheet's feedback channel. */
     __grantStatus: string[];
   }
 }
@@ -27,8 +22,6 @@ const SHEET = path.join(
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-825-grant-sheet.png";
 
-/** Harness entry: the SHIPPED sheet, with a door covering the three
- *  delivery states. */
 const ENTRY = `
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -135,7 +128,6 @@ createRoot(document.getElementById("root")).render(
 );
 `;
 
-/** Bundle the shipped sheet, CSS module included, for the browser. */
 async function bundleSheet(): Promise<{ js: string; css: string }> {
   const result = await build({
     stdin: {
@@ -146,7 +138,6 @@ async function bundleSheet(): Promise<{ js: string; css: string }> {
     },
     bundle: true,
     write: false,
-    // Never written; esbuild needs a path to name the CSS-module output.
     outdir: path.join(here, ".grant-sheet-bundle"),
     format: "iife",
     jsx: "automatic",
@@ -179,16 +170,12 @@ test("the grant sheet draws audience-first over the shipped tokens", async ({
   const dialog = page.locator("dialog.kit-modal-back");
   await expect(dialog).toBeVisible();
 
-  // Person → what → capability, in that order (ruling G-audience).
   await expect(page.getByText("Person", { exact: true })).toBeVisible();
   await expect(page.getByText("What", { exact: true })).toBeVisible();
   await expect(page.getByText("Access", { exact: true })).toBeVisible();
 
   await expect(page.getByRole("button", { name: "Can edit" })).toBeVisible();
 
-  // Phrase and reason are printed VERBATIM (V-phrases), so this asserts the
-  // rendering of a wire phrase, not a label table the sheet owns: two rows
-  // share `on its way` and are told apart only by their reasons.
   await expect(page.locator('[data-phrase="shared"]')).toHaveText(
     "Can edit · Shared"
   );
@@ -205,8 +192,6 @@ test("the grant sheet draws audience-first over the shipped tokens", async ({
   await expect(
     page.getByText("no vault has been addressed for it yet")
   ).toBeVisible();
-  // A row whose phrase the wire did not carry prints the capability alone, so
-  // an unstated one here is a dropped field.
   await expect(page.locator('[data-phrase="unstated"]')).toHaveCount(0);
   await expect(page.locator('[data-reach="live"]')).toBeVisible();
   await expect(page.getByText("Not reached yet")).toHaveCount(0);
@@ -217,20 +202,17 @@ test("the grant sheet draws audience-first over the shipped tokens", async ({
     fullPage: true,
   });
 
-  // Revoking asks first: a cross-vault removal is REQUESTED, not guaranteed.
   await page.getByRole("button", { name: "Revoke" }).first().click();
   await expect(page.getByText("Stop sharing with Priya?")).toBeVisible();
   await expect(
     page.getByText("their vault is asked to remove its copy", { exact: false })
   ).toBeVisible();
 
-  // Destructive is OUTLINED in `--net`; nothing filled competes.
   const confirm = page.getByRole("button", { name: "Revoke", exact: true });
   await expect(confirm).toHaveClass(/destructive/u);
   await expect(page.locator("button.kit-btn.primary")).toHaveCount(0);
 
   await confirm.click();
-  // The route's derived sentence reaches the status line verbatim.
   await expect
     .poll(() => page.evaluate(() => window.__grantStatus))
     .toStrictEqual([

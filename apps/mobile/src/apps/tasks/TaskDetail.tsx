@@ -1,13 +1,3 @@
-// THE TASK DETAIL PLACE (Tasks spec §5) — reached by pressing a row's body,
-// and a place WITHIN the one Tasks screen rather than a pushed route.
-//
-// A FLATLIST, NOT A SCROLLVIEW: the fields are bounded but the family under
-// them is not, so the subtasks ARE the list and the fields ride its header.
-//
-// TWO EXITS, TWO WEIGHTS. Release is a plain secondary — it destroys nothing
-// and the Logbook keeps the row as won't do — and Delete is the one outlined
-// `net` control in this room. Both name what happens before they happen.
-
 import React, { useCallback } from "react";
 import { Alert, FlatList, Pressable, View } from "react-native";
 
@@ -47,13 +37,11 @@ import type { TasksStyles } from "./TasksHome.styles";
 import TasksPlaceHeader from "./TasksPlaceHeader";
 import type { TasksWrite } from "./useTasks";
 
-/** The vault carrying the row, or nothing — a personal task stays silent. */
 function homeVaultOf(task: Task): { vault: string } | null {
   const vault = rowScopeLabels(task)[0];
   return vault ? { vault } : null;
 }
 
-/** The zone an anchor is stamped with when the row carries none of its own. */
 function seatTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
@@ -63,7 +51,6 @@ export interface TaskDetailProps {
   now: string;
   projects: readonly Project[];
   styles: TasksStyles;
-  /** The place the member returns to — the one they opened this row from. */
   backTo: string;
   onBack: () => void;
   onOpen: (task: Task) => void;
@@ -108,8 +95,6 @@ export default function TaskDetail({
     [setStatus]
   );
 
-  // Both exits name what happens to the row before it happens; the two-sentence
-  // body is the table's pair, rendered as the one paragraph a dialog can hold.
   const confirmRelease = useCallback(() => {
     Alert.alert(
       RELEASE_CONFIRM.title,

@@ -1,9 +1,3 @@
-// The drive, projected from the phone's replica rows (#821) — the same joins
-// the web `drive` query runs gateway-side, re-expressed pure and testable here.
-// Nothing is fabricated: every field is a replica fact or `null` where the
-// replica cannot say ("unknown" ≠ "shared with nobody"). No react-native or
-// replica imports beyond the provenance readers (docs-projection.test.ts).
-
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 import {
   canRender,
@@ -36,9 +30,6 @@ import type {
   ShareEntityRows,
 } from "./docs-projection-shares";
 
-// The sharing half lives next door (`docs-projection-shares.ts`) but is one
-// projection to every caller, so its names are re-exported here rather than
-// making each importer know which half a type came from.
 export {
   originsByDocument,
   sharesByDocument,
@@ -47,8 +38,6 @@ export {
 } from "./docs-projection-shares";
 export { type EntityRow } from "./docs-projection-rows";
 
-/** A drive row plus the phone-only facts: a folder tag pointing at a gone
- *  concept (§4.3), and the DOCUMENT row's provenance/pending stamps (#880). */
 export type MobileDriveDoc = DriveDoc & {
   folderGone: boolean;
   canWrite: boolean;
@@ -63,12 +52,7 @@ export interface DriveEntityRows {
   concepts: readonly EntityRow[];
   schemes: readonly EntityRow[];
   custody: readonly EntityRow[];
-  /** `null` when any share read was denied/failed — every row then carries
-   *  `shared_with: null`, as the web query ships too. */
   shares: ShareEntityRows | null;
-  /** `null` when the placement-origin read was denied/failed. Distinct from
-   *  an empty list: the Shared shelf must never draw "nothing was shared with
-   *  you" over a read that never answered. */
   origins: OriginEntityRows | null;
 }
 
@@ -76,18 +60,10 @@ export interface DriveProjection {
   documents: MobileDriveDoc[];
   folders: Folder[];
   rootFolderId: string | null;
-  /** Active (untrashed) documents at the drive's top level — Unfiled. */
   unfiledCount: number;
-  /** Whether the placement-origin read ANSWERED. False means the Shared shelf
-   *  knows nothing, which is not the same as knowing the set is empty. */
   sharedFromKnown: boolean;
 }
 
-/**
- * The whole projection: folders from the folders scheme (root = unfiled),
- * one folder tag per document, starred/labels from flags/tags schemes,
- * content join, custody by content id, commons-shares join.
- */
 export function projectDrive(rows: DriveEntityRows): DriveProjection {
   const schemeByUri = new Map(
     rows.schemes.flatMap((scheme) => {
@@ -151,7 +127,6 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
     })
   );
 
-  // One pass over tag edges, by concept scheme.
   const folderByDoc = new Map<string, string>();
   const orphanTagDocs = new Set<string>();
   const starredDocs = new Set<string>();
@@ -175,8 +150,6 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
       if (list) list.push(entry);
       else labelsByDoc.set(docId, [entry]);
     } else if (!liveConceptIds.has(conceptId)) {
-      // Nothing on the other end — the named folder/scheme was deleted.
-      // Only claimed when the doc has NO live folder tag (below).
       orphanTagDocs.add(docId);
     }
   }
@@ -260,13 +233,6 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
   };
 }
 
-// Shares — the same bounded join `queries/_shared.ts` runs gateway-side.
-// `null` never leaves this function.
-
-// The row's one state slot (§4.1) — the shared ladder, fed with phone facts.
-
-/** Days until purge, or `null` when the vault never asserted one — the slot
- *  stays blank rather than printing a number nobody computed. */
 export function purgeDaysLeft(
   purgeAt: string | null | undefined,
   now: number = Date.now()
@@ -277,17 +243,10 @@ export function purgeDaysLeft(
   return Math.max(0, Math.ceil((stamp - now) / DAY_MS));
 }
 
-/** POSITIVELY elsewhere? Only `remote-only`/`missing` say so; unswept
- *  (`null`) custody is unknown — never invent a refusal over unknown. */
 export function bytesOnDevice(doc: Pick<DriveDoc, "custody_state">): boolean {
   return doc.custody_state !== "remote-only" && doc.custody_state !== "missing";
 }
 
-/**
- * State slot precedence: cannot render → trash countdown → remote-only
- * (offline) → custody mark. The ladder is the shared `rowStateMark`
- * (view-copy.ts), so web and phone cannot disagree.
- */
 export function docRowState(
   doc: Pick<
     DriveDoc,
@@ -305,35 +264,12 @@ export function docRowState(
   });
 }
 
-/** The row's second line, split so the state rung can keep its own colour. */
 export interface RowMeta {
-  /** The state slot's TEXT rung, leading the line; `null` when there is none. */
   lead: string | null;
-  /** That rung is consequential (`--net`) and must not be drawn as chrome. */
   leadNet: boolean;
-  /** Kind, size and date — the facts, in the handoff's order. */
   rest: string;
 }
 
-/**
- * The row's SECOND LINE — the kind, the size and the date.
- *
- * The v12 handoff withheld these on the phone as COLUMNS ("a 390px canvas
- * cannot carry five columns and a title"), and the row carried that forward as
- * a blanket absence. The reasoning does not survive the shape actually drawn
- * here: a stacked sub-line is not a column. Without it every row is a bare
- * title, which is precisely how a drive of a few thousand documents stops
- * being readable — two documents named alike become indistinguishable without
- * opening one, and a kind this seat cannot render announces itself only after
- * the tap that fails.
- *
- * The state slot's TEXT rung LEADS this line instead of holding a column of
- * its own: "cannot be shown" is a fact about the document and belongs beside
- * its kind, and folding it in returns that width to the title. GLYPH rungs
- * (the device mark) stay on the trailing edge — a glyph is not prose and
- * cannot join a sentence. The ladder still yields at most one mark, so the
- * row still shows at most one state.
- */
 export function docRowMeta(
   doc: Pick<
     DriveDoc,
@@ -342,9 +278,6 @@ export function docRowMeta(
   mark: RowStateMark | null
 ): RowMeta {
   const parts = [typeMeta(doc.media_type, doc.title).name];
-  // `fmtBytes` answers an em dash where the replica has no byte count. A dash
-  // sitting between two real facts reads as a value, so the segment is dropped
-  // rather than printed as an absence nobody asked about.
   const size = fmtBytes(doc.byte_size);
   if (size !== "—") parts.push(size);
   const date = fmtDate(doc.updated_at || doc.created_at);
@@ -355,8 +288,6 @@ export function docRowMeta(
     rest: parts.join(" · "),
   };
 }
-
-// Sort (§4.1's remembered orders)
 
 export function sortDocuments<T extends DriveDoc>(
   docs: readonly T[],
@@ -375,8 +306,6 @@ export function sortDocuments<T extends DriveDoc>(
         );
       case "changed":
       case "owner":
-        // No `owner` order on the phone — one vault — so both keys share
-        // changed-newest.
         return (a.updated_at || a.created_at).localeCompare(
           b.updated_at || b.created_at
         );
@@ -385,8 +314,6 @@ export function sortDocuments<T extends DriveDoc>(
   return [...docs].sort((a, b) => dir * compare(a, b));
 }
 
-/** The kind's mark as a kit `Icon` name — the same registry the web's
- *  `KIND_ICONS` binds, so a kind wears one shape everywhere. */
 export function kindIconName(doc: {
   media_type?: string | null;
   title?: string | null;

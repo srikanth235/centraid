@@ -1,7 +1,3 @@
-// PANEL — one bordered plate (#765, spec §9 `panelBlock`). Fact keys sit in a
-// fixed column; `tone` colours the edge only; `net` is the one chromatic ink:
-// border, never fill.
-
 import React, { useMemo } from "react";
 import { View } from "react-native";
 
@@ -18,33 +14,27 @@ import Button from "./Button";
 import { Text } from "./NativeText";
 import { styles } from "./PanelBlock.styles";
 
-/** `key` IS the displayed uppercase word — fact keys are unique per panel. */
 export type PanelFact = PanelFactData;
 
 export interface PanelAction extends PanelActionData {
   onPress: () => void;
 }
 
-/** The promoted fact — display type over a qualifier line. */
 export type PanelFigure = PanelFigureData;
 
 export interface PanelBlockProps {
   eyebrow?: string;
   title?: string;
   body?: string;
-  /** Render body as quoted material — text the member did not write and is being asked to send. */
   quote?: boolean;
-  /** Promote ONE fact to display type — at most one per view. */
   figure?: PanelFigure;
   facts?: readonly PanelFact[];
   tone?: PanelTone;
-  /** Verbs stay OUTLINED unless they are the view's one commit; never force filled ink. */
   action?: PanelAction;
   action2?: PanelAction;
   accessibilityLabel?: string;
 }
 
-/** Identical to the shell's rule, so one panel cannot be louder on one seat. */
 function panelActionVariant(action: PanelAction): ButtonVariant {
   if (action.filled === true) return "primary";
   return action.dangerous === true ? "destructive" : "secondary";

@@ -1,9 +1,3 @@
-// Years and Months summary grains (#712). All is `PhotoTimeline.tsx`.
-// A card is a period: tap navigates, never selects — a period is not a
-// photograph. Year = chapter (full-width, name on the cover). Month = one of
-// twelve (two to a row, name beneath). Year label over an image needs a
-// scrim. Year headers only when the library spans more than one year.
-
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListRef } from "@shopify/flash-list";
 import { Image } from "expo-image";
@@ -36,10 +30,6 @@ type GrainRow =
       right: GrainPeriod | undefined;
     };
 
-/**
- * Two cards to a row. Pair within a year — never straddle a header
- * (December beside previous January under a heading true of only half).
- */
 function monthRows(periods: readonly GrainPeriod[]): GrainRow[] {
   const years = new Set(periods.map((period) => period.year));
   const rows: GrainRow[] = [];
@@ -93,7 +83,6 @@ export interface PhotoGrainViewProps {
   sections: PhotoSection[];
   grain: SummaryGrain;
   onOpenPeriod: (period: GrainPeriod) => void;
-  /** Reverse-anchored day; scroll once per distinct value, never yank back. */
   focusDay?: string;
   refreshing?: boolean;
   onRefresh?: () => void;
@@ -179,7 +168,6 @@ export default function PhotoGrainView({
             <View style={styles.coverEmpty} />
           )}
           {overlaid ? (
-            // Overlay is only permissible with a ground of its own.
             <View style={styles.overlay}>
               <View style={styles.scrim} />
               <Text style={styles.overlayTitle} numberOfLines={1}>
@@ -237,7 +225,6 @@ export default function PhotoGrainView({
   );
 
   if (rows.length === 0)
-    // Quiet line, not a card: undated photos live in All; a card would be a fake period.
     return (
       <View style={styles.empty}>
         <Text style={styles.emptyLine}>
@@ -257,7 +244,6 @@ export default function PhotoGrainView({
       renderItem={renderRow}
       refreshing={refreshing}
       onRefresh={onRefresh}
-      // Grain control floats over the foot — last card owes GRAIN_CONTROL_SLOT.
       contentContainerStyle={{ paddingBottom: GRAIN_CONTROL_SLOT }}
     />
   );
@@ -272,7 +258,6 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: 6,
     },
     card: { paddingBottom: CARD_BOTTOM },
-    // flexShrink on the title, not the count: half-width columns otherwise overflow.
     cardCount: { ...t("mono"), color: colors.textSoft, flexShrink: 0 },
     cardTitle: { ...t("smallStrong"), color: colors.text, flexShrink: 1 },
     cover: { height: "100%", width: "100%" },

@@ -1,11 +1,3 @@
-/*
- * Gateway heartbeat (main): probe health, fold through gateway-monitor-core,
- * broadcast to windows, fire OS notifications (down/recovered, component error,
- * version skew, crash loop). Main, not renderer: survives navigation, alerts
- * land backgrounded. Health must NOT reach vault Notifications (#665) — that
- * surface is for what the owner can resolve.
- */
-
 import { BrowserWindow, Notification } from "electron";
 
 import { setTrayGatewayRunning } from "./app-chrome.js";
@@ -44,10 +36,8 @@ import { pushPowerContext } from "./power-context-push.js";
 import { loadSettings } from "./settings.js";
 
 export const GATEWAY_RUNTIME_POLL_MS = 5000;
-/** Keep in sync with `Channel` in ipc.ts + preload.ts. */
 const RUNTIME_EVENT_CHANNEL = "centraid:gateway-runtime:event";
 
-/** Loaded from disk at boot, not recorded this run. */
 export interface OutageLogSnapshotEntry extends Omit<
   OutageLogEvent,
   "gatewayId" | "gatewayLabel"
@@ -55,14 +45,12 @@ export interface OutageLogSnapshotEntry extends Omit<
   previousSession: boolean;
 }
 
-/** Internal alert-dedupe bookkeeping must stay out of the broadcast payload. */
 export interface GatewayRuntimeSnapshot extends Omit<
   GatewayRuntimeState,
   "componentAlerts" | "versionSkewAlertedAt"
 > {
   alert: GatewayAlertConfig;
   pollIntervalMs: number;
-  /** Newest-last; unlike `outages`, survives a restart. */
   alertHistory: OutageLogSnapshotEntry[];
 }
 
@@ -71,7 +59,6 @@ let lastSnapshot: GatewayRuntimeSnapshot | undefined;
 let timer: NodeJS.Timeout | undefined;
 let inFlight: Promise<void> | undefined;
 const crashLoopNotified = new Set<string>();
-/** Captured at load: older entries predate this launch. */
 let outageHistory: OutageLogEvent[] | undefined;
 let historyBootAt: number | undefined;
 
@@ -148,7 +135,6 @@ function broadcast(snapshot: GatewayRuntimeSnapshot): void {
 }
 
 async function tick(): Promise<void> {
-  // loadSettings() rejects mid-backoff; fold a synthetic down probe so alerts still fire.
   let settings: Awaited<ReturnType<typeof loadSettings>> | undefined;
   let settingsError: string | undefined;
   try {
@@ -174,17 +160,14 @@ async function tick(): Promise<void> {
         Date.now()
       );
     }
-    // A rename changes label/kind without a gateway switch.
     state = {
       ...state,
       gatewayLabel: settings.activeGatewayLabel,
       gatewayKind: settings.activeGatewayKind,
     };
   }
-  // Always defined here: settings resolved above, or the early return fired.
   const trackedState = state as GatewayRuntimeState;
 
-  // Nothing listens until manual restart: report the real startup error.
   const activeGatewayKind =
     settings?.activeGatewayKind ?? trackedState.gatewayKind;
   const localSupervisor =
@@ -213,25 +196,19 @@ async function tick(): Promise<void> {
         detail: settingsError ?? "settings unavailable",
         bootPhase: true,
       };
-  // Only place the desktop learns its daemon died post-clean-start; awaited so revival lands first.
   if (!probe.ok && activeGatewayKind === "local") {
     await reviveLocalGatewayIfDead(trackedState.gatewayId);
   }
-  // Piggybacked heartbeat (#528): power posture must not near 120s staleness.
   if (settings?.gatewayUrl) {
     void pushPowerContext(settings.gatewayUrl, settings.gatewayToken);
   }
 
-  // Captured before applyProbe: outage-log derivation needs the BEFORE value.
   const prevStatus = trackedState.status;
   const prevHealthStatus = trackedState.healthStatus;
-  // A boot-phase pseudo-failure stays at `unknown` rather than folding to
-  // `down`, so no `down`/`recovered` pair is derived (see `isPendingBootProbe`).
   state = isPendingBootProbe(trackedState, probe)
     ? trackedState
     : applyProbe(trackedState, probe);
 
-  // No down-alert in first-run setup (#603); failed settings read still alerts.
   const inFirstRunSetup =
     settings !== undefined && settings.onboardingCompletedAt === undefined;
   const alert: GatewayAlertConfig = {
@@ -255,7 +232,6 @@ async function tick(): Promise<void> {
   for (const action of componentEvaluated.actions)
     notifyComponent(action, state.gatewayLabel);
 
-  // No-op for a local gateway: `versionSkew` is only ever set for remote.
   const skewEvaluated = applyVersionSkewAlert(state, alert, Date.now());
   state = skewEvaluated.state;
   if (skewEvaluated.action)
@@ -270,7 +246,6 @@ async function tick(): Promise<void> {
     crashLoopNotified.delete(state.gatewayId);
   }
 
-  // Independent of the OS-alert de-dupe: transitions log either way.
   if (outageHistory === undefined) {
     outageHistory = loadOutageLog();
     historyBootAt = Date.now();
@@ -285,8 +260,6 @@ async function tick(): Promise<void> {
       : {}),
     now: Date.now(),
   });
-  // The durable log is the whole story for health (#665): no Notifications
-  // write follows it.
   outageHistory = persistOutageEvents(outageHistory, newOutageEvents);
 
   const {
@@ -308,7 +281,6 @@ async function tick(): Promise<void> {
     alertHistory,
   };
   broadcast(lastSnapshot);
-  // Tray set once at boot (#603); the heartbeat corrects it — no second poller.
   setTrayGatewayRunning(state.status === "up");
 }
 
@@ -330,7 +302,6 @@ function runTick(): Promise<void> {
 export function startGatewayMonitor(): void {
   if (timer) return;
   timer = setInterval(() => void runTick(), GATEWAY_RUNTIME_POLL_MS);
-  // The poller alone must not keep the process alive at quit.
   timer.unref?.();
   void runTick();
 }
@@ -340,15 +311,12 @@ export function stopGatewayMonitor(): void {
   timer = undefined;
 }
 
-/** Probes immediately when no broadcast has landed: first read never empty. */
 export async function getGatewayRuntimeSnapshot(): Promise<GatewayRuntimeSnapshot> {
   if (!lastSnapshot) await runTick();
   if (!lastSnapshot) throw new Error("gateway monitor produced no snapshot");
   return lastSnapshot;
 }
 
-/** Re-probe now instead of waiting out the interval — call after settings
- *  writes and gateway switches so they apply immediately. */
 export function nudgeGatewayMonitor(): void {
   void runTick();
 }

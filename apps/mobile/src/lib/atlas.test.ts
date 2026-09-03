@@ -1,10 +1,4 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
-/**
- * Vault Atlas client (#765) — the four reads behind the Data place. The
- * gateway HTTP core is mocked so vitest never loads react-native; what is under
- * test is the URL each read addresses (including query building) and the two
- * places a payload is unwrapped.
- */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock(import("./gateway") as Promise<unknown>, () => ({

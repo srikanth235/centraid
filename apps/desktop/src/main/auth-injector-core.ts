@@ -1,21 +1,11 @@
-/**
- * Auth-injector pure core — outgoing header injection.
- *
- * Electron-free so unit tests cover the request rewrite rules without mocking
- * `session.webRequest`. `auth-injector.ts` wires these onto the renderer
- * session; this module owns only the pure transforms.
- */
-
 export interface AuthInjectorSnapshot {
   gatewayOrigin: string;
   gatewayToken: string;
   gatewayVaultId: string;
 }
 
-/** The vault-addressing header (mirrors the gateway's constant, #289). */
 export const VAULT_HEADER = "x-centraid-vault";
 
-/** True when `url` is same-origin with the configured gateway. */
 export function matchesGateway(url: string, gatewayOrigin: string): boolean {
   try {
     return new URL(url).origin === gatewayOrigin;
@@ -24,11 +14,6 @@ export function matchesGateway(url: string, gatewayOrigin: string): boolean {
   }
 }
 
-/**
- * Inject Authorization + vault headers when the request targets the gateway
- * and the headers are not already set. Returns the original map when the
- * snapshot has no origin/token (no-op path).
- */
 export function applyOutgoingAuthHeaders(
   requestHeaders: Record<string, string>,
   snapshot: AuthInjectorSnapshot,

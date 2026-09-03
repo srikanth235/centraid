@@ -88,7 +88,6 @@ describe("pinned thumbnail candidates", () => {
     expect(candidates[0]?.uri).toBe(
       `${GATEWAY}/centraid/_gateway/blobs/vault-a/content-a?variant=thumb`
     );
-    // A scope id is user-supplied and lands in a path segment.
     expect(candidates[1]?.uri).toContain("/blobs/vault%20b/");
   });
 

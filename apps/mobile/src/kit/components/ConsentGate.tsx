@@ -1,9 +1,6 @@
 import React from "react";
 import { Pressable, View } from "react-native";
 
-// THE §8 CONSENT GATE — GENERIC TWO-PANEL RENDERER (#712, native). A PURE
-// VIEW: every answer leaves through a callback. ONE FILLED ELEMENT (§18): the
-// on-device answer; the net answer is OUTLINED, never filled.
 import type {
   AnswerAvailability,
   ConsentFact,
@@ -16,24 +13,17 @@ import { styles } from "./ConsentGate.styles";
 import { Text } from "./NativeText";
 
 export interface ConsentGateProps {
-  /** The `enrich_policy` domain (#712); Locker has no value here — a type
-   *  error, not a policy. */
   domain: EnrichDomain;
   onDevicePanel: ConsentPanelCopy;
-  /** Live title override; falls back to `onDevicePanel.title`. */
   onDeviceTitle?: string;
   onDevice: AnswerAvailability;
-  /** The bordered `net` panel — outlined, never filled, and never absent. */
   netPanel: ConsentPanelCopy;
   net: AnswerAvailability;
   note: string;
-  /** A write is in flight; neither answer is takeable while it is. */
   busy?: boolean;
-  /** Latched once answered. */
   answered?: "device" | "declined" | null;
   onRunOnDevice: () => void;
   onDecline: () => void;
-  /** Absent while the action cannot be taken from here. */
   onChooseNet?: () => void;
 }
 
@@ -52,7 +42,6 @@ function Facts({
           style={[
             styles.fact,
             { borderBottomColor: colors.line },
-            // Egress fact: a 2px `net` rule, never a fill or red dot (§18).
             fact.net
               ? { borderLeftColor: colors.net, borderLeftWidth: 2 }
               : null,
@@ -87,7 +76,6 @@ function Panel({
       style={[
         styles.panel,
         { backgroundColor: colors.bgElev, borderColor: colors.line },
-        // Bordered in `net`: the panel IS the egress disclosure.
         copy.net ? { borderColor: colors.net } : null,
       ]}
     >

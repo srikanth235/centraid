@@ -1,15 +1,3 @@
-// The row list's four rules (#765, spec §9), each of which has a cheap and
-// wrong alternative a future edit will reach for:
-//
-//  - a row is a 44pt target, and rows are separated by a hairline — the FIRST
-//    row draws none, because the container's own edge is its top
-//  - the TITLE stays primary ink on a net-toned row; only the sub and the
-//    state word take `net`
-//  - the trailing verb is always OUTLINED (never a fill), and takes the
-//    destructive recipe when the row is dangerous
-//  - `off` recedes on the LEAF — disabled ink, a disabled button — never as a
-//    container opacity
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -55,8 +43,6 @@ describe(RowsBlock, () => {
     dispose = undefined;
   });
 
-  // Stub tier: the computed style OBJECT. A minHeight in a style is not a
-  // measured hit area on a device — that is a Maestro claim.
   it("declares the 44pt touch-floor minHeight per row, and a rule on all but the first", () => {
     const container = render(
       <RowsBlock
@@ -66,7 +52,6 @@ describe(RowsBlock, () => {
         ]}
       />
     );
-    // block > [row > [line > text]] per record.
     const [block, first, firstLine, , second] = nodesOf(container, "div");
     expect(styleOf(block ?? null).backgroundColor).toBe(colors.bgElev);
     expect(styleOf(first ?? null).borderTopWidth).toBe(0);
@@ -168,11 +153,9 @@ describe(RowsBlock, () => {
         ]}
       />
     );
-    // block > row > [line > text, expansion] — the expansion is a SIBLING of
-    // the row's line, inside the same cell, so the divider still separates
-    // one record from the next.
     const divs = nodesOf(container, "div");
     expect(divs).toHaveLength(5);
     expect(styleOf(divs[4] ?? null).paddingHorizontal).toBe(12);
   });
 });
+// @vitest-environment jsdom

@@ -1,6 +1,3 @@
-// The session's durable local write rail. The online rails are
-// `native-session.test.ts`; shared doubles are in
-// `native-session.test-fixtures.ts`.
 import { describe, expect, test, vi } from "vitest";
 
 import { IntentQueue } from "@centraid/client/replica/native";
@@ -39,8 +36,6 @@ describe(createNativeReplicaSession, () => {
       idFactory: sequentialIds(),
     });
     try {
-      // Without injection this path throws on device: RN has no crypto.subtle
-      // for the payload hash and no crypto.randomUUID for the intent id.
       const result = await session.write("photos", {
         action: "photos.favorite",
         input: { assetId: "asset-1", favorite: true },
@@ -52,9 +47,6 @@ describe(createNativeReplicaSession, () => {
 
       const [intent] = await session.coordinator.intents.list();
       expect(intent?.payloadHash).toBe(
-        // The pinned cross-platform hash: identical under crypto.subtle,
-        // expo-crypto and this node digest, so intent idempotency survives a
-        // device swap.
         "9fb4ce111fbf05254e7437936d9e5082d6888dd4112fe38c8254c6d1beff844f"
       );
     } finally {
@@ -80,11 +72,6 @@ describe(createNativeReplicaSession, () => {
           action: "photos.favorite",
           input: { assetId: "asset-1", favorite: true },
         })
-        // NOT "waiting for a connection": that row is on screen and unsent,
-        // while this one has no projection to draw at all until bootstrap
-        // supplies the shape catalog (#883 D1). The distinction, the durable
-        // stand-in reason and the backfill are pinned by
-        // `pending-write-visibility.test.ts`.
       ).resolves.toStrictEqual({
         intentId: "intent-1",
         status: "queued",
@@ -205,8 +192,6 @@ describe(createNativeReplicaSession, () => {
         reason: "gateway said no",
       },
     ]);
-    // The crash window the supersession marker exists for: the successor is
-    // durable, its predecessor is not settled yet.
     vi.spyOn(store, "settle").mockRejectedValueOnce(
       new Error("interrupted mid-handoff")
     );

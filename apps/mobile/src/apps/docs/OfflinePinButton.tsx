@@ -1,7 +1,3 @@
-// "Available offline" for one document (#883 C6). Disabled controls stay
-// VISIBLE, inert at the handler, and explained inline beside themselves —
-// never hidden, never a tooltip (blueprint-seats, refusal grammar).
-
 import React from "react";
 import { StyleSheet, View } from "react-native";
 

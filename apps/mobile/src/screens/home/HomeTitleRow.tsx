@@ -1,6 +1,3 @@
-// TITLE role, not display serif (route content only; handoff :5536). No
-// controls — Search is the lockup's, All apps the band's More tab.
-
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 

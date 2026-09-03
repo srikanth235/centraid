@@ -1,25 +1,3 @@
-// THE READ PLANE, ON THIS SEAT.
-//
-// One module-level store, subscribed to with `useSyncExternalStore` — the same
-// shape the frame's status line uses (`kit/components/status-line.ts`), and the
-// same shape Locker's boundary uses — because what it holds is process memory
-// shared by every Tally route. A React context would let a remount somewhere in
-// the stack hand a fresh subtree a payload the previous route had already
-// navigated away from.
-//
-// THE DASHBOARD IS THE SPINE and every route reads it; a route that needs a
-// second payload asks for exactly that one and no other. That law is
-// `apps/tally/ledger-reads.ts`'s, restated here rather than imported because
-// the web seat's version is a React hook bound to `window.centraid`, and this
-// seat's door is `tally-gateway.ts`.
-//
-// NOTHING HERE FOLDS A FIGURE. Every net, share and total arrives derived from
-// `queries/dashboard.ts`'s one balance engine; this module moves payloads and
-// records when they landed.
-
-// `ACTIVITY_WINDOW` / `ACTIVITY_STEP` are imported rather than restated: the
-// feed's window and its step are the shared fold's numbers, and two spellings
-// of 60 is exactly the drift `activity-model.ts` exists to prevent.
 import {
   ACTIVITY_STEP,
   ACTIVITY_WINDOW,
@@ -45,14 +23,8 @@ import {
   tallySearch,
 } from "./tally-gateway";
 
-/** How long a landed read may stand before the screen says it is behind the
- *  vault. Ten minutes: long enough that a member reading one expense is not
- *  told their ledger is stale, short enough that one left open overnight is. */
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
-/** How often the store re-examines its own freshness. The stale verdict is
- *  decided on this tick rather than by a screen reading the clock during
- *  render, which is a purity violation and an unstable result besides. */
 const TICK_MS = 30_000;
 
 const EMPTY_DASHBOARD: DashboardData = {
@@ -74,29 +46,19 @@ export interface TallySearchState {
 
 export interface TallyVaultState {
   dashboard: DashboardData;
-  /** The route's own payload, beside the spine. `null` for a route that asked
-   *  for none — never an empty object, which would read as "it answered". */
   group: GroupData | null;
   friend: FriendData | null;
   activity: ActivityData | null;
   history: HistoryData | null;
   search: TallySearchState;
   exported: ExportData | null;
-  /** A read has LANDED. False covers both "still in flight" and "every read so
-   *  far failed": in neither case may a view claim a set is empty. */
   loaded: boolean;
   reading: boolean;
-  /** A read that actually came back failed — evidence, not a guess. */
   readError: string;
-  /** The vault's refusal, as data. Denial is a screen, not an error. */
   denied: VaultDenied | null;
-  /** When the last read that ACTUALLY LANDED did — the stale sentence's clock. */
   lastReadAt: string | null;
   stale: boolean;
-  /** The clock the whole room reads, so a day heading and the rows under it
-   *  cannot straddle midnight and disagree about what "today" is. */
   now: string;
-  /** How much of the feed is on screen. `activity-model.ts` owns the numbers. */
   window: number;
 }
 
@@ -125,8 +87,6 @@ const subscribers = new Set<() => void>();
 let ticker: ReturnType<typeof setInterval> | null = null;
 
 function emit(): void {
-  // Snapshot: a subscriber that unsubscribes as it reacts must not mutate
-  // the set mid-iteration.
   for (const notify of Array.from(subscribers)) notify();
 }
 
@@ -167,17 +127,12 @@ function stopTicker(): void {
   ticker = null;
 }
 
-/** Reset for a fresh process — the tests' door, and nothing production calls. */
 export function resetTallyVault(): void {
   stopTicker();
   state = initialState();
   emit();
 }
 
-// ─── The reads ──────────────────────────────────────────────────────────────
-
-/** A denial carried on ANY payload is the app's denial: the grant is on the
- *  app, not on one query, so the first refusal that lands puts up the gate. */
 function deniedOf(payload: {
   vaultDenied?: VaultDenied | null;
 }): VaultDenied | null {
@@ -207,7 +162,6 @@ function failed(error: unknown): void {
   });
 }
 
-/** The spine. Called by the frame on arrival and by every refresh. */
 export async function openTally(): Promise<void> {
   set({ reading: true });
   try {
@@ -218,9 +172,6 @@ export async function openTally(): Promise<void> {
   }
 }
 
-/** The spine plus whatever the route standing on it already asked for, in one
- *  moment — so a change event can never land the spine and the route's own
- *  rows a render apart. */
 export async function refreshTally(): Promise<void> {
   const openGroup = state.group?.group?.group_id ?? null;
   const openFriend = state.friend?.friend?.party_id ?? null;
@@ -275,19 +226,12 @@ export async function loadTallyHistory(expenseId: string): Promise<void> {
   }
 }
 
-/**
- * Descriptions only, and the surface says so.
- *
- * A cleared field DROPS the previous answer rather than leaving it on screen:
- * results standing under an empty query are results about nothing.
- */
 export async function searchTally(term: string): Promise<void> {
   const trimmed = term.trim();
   set({ search: { term, data: null, searching: trimmed !== "" } });
   if (trimmed === "") return;
   try {
     const data = await tallySearch(trimmed);
-    // A slower answer to an older query must not overwrite a newer one.
     if (state.search.term !== term) return;
     set({ search: { term, data, searching: false }, denied: deniedOf(data) });
   } catch (error) {
@@ -297,8 +241,6 @@ export async function searchTally(term: string): Promise<void> {
   }
 }
 
-/** Read for its counts alone: the file is saved beside the gateway, and this
- *  seat states honestly how much WOULD leave (`tally-seat-copy.ts`). */
 export async function loadTallyExport(groupId: string): Promise<void> {
   if (!groupId) return;
   try {
@@ -309,8 +251,6 @@ export async function loadTallyExport(groupId: string): Promise<void> {
   }
 }
 
-/** Drop a cached payload the member is navigating away from, so the next
- *  group's ledger never paints under the previous group's name. */
 export function forgetTally(
   which: "group" | "friend" | "history" | "export"
 ): void {
@@ -320,7 +260,6 @@ export function forgetTally(
   else set({ exported: null });
 }
 
-/** One page more of the feed. The window is a window, and its foot says so. */
 export function showMoreTallyActivity(): void {
   set({ window: state.window + ACTIVITY_STEP });
 }

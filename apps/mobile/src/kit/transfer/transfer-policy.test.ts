@@ -1,7 +1,3 @@
-// The frame's transfer policy record (#711); rule EVALUATION against the
-// radios lives in `lib/upload/native-policy.test.ts`. AsyncStorage stubbed
-// so the record logic runs under node.
-
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -30,7 +26,6 @@ vi.mock(import("../../storage") as Promise<unknown>, () => {
 
 describe("the policy record", () => {
   it("keeps the original storage key, whatever the owner is called now", () => {
-    // Renaming the key resets every member device to defaults.
     expect(TRANSFER_POLICY_KEY).toBe("photos.backupRules");
   });
 
@@ -40,7 +35,6 @@ describe("the policy record", () => {
       allowMetered: false,
       allowRoaming: false,
       chargerOnly: false,
-      // `never` OFF by default: "under rules", not "not at all" (#712).
       never: false,
     });
   });
@@ -125,7 +119,6 @@ describe("which switches go inert", () => {
   });
 
   it("`never` makes every other switch inert, and is never inert itself", () => {
-    // Floor (#712): the switch must stay reachable, or it cannot be undone.
     const off = { ...DEFAULT_TRANSFER_POLICY, never: true };
     expect(inertKeys(off)).toStrictEqual([
       "wifiOnly",
@@ -146,7 +139,6 @@ describe("the switch table's shape", () => {
       "chargerOnly",
       "never",
     ]);
-    // `net` is ink/edge, never fill (§18) — reserved for ON-halts-transfers.
     expect(
       TRANSFER_POLICY_SWITCHES.filter((rule) => rule.net).map(
         (rule) => rule.key

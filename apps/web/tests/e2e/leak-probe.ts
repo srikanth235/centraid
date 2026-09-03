@@ -1,13 +1,7 @@
-/**
- * Page-side leak census via `addInitScript` — not a spec file (#842).
- * Install before any document script; Chromium CDP census lives in the spec.
- */
-
 import type { Page } from "@playwright/test";
 
 export interface LeakCensus {
   listeners: number;
-  /** `setTimeout` is excluded — it is one-shot. */
   intervals: number;
   eventSources: number;
   observers: number;
@@ -23,10 +17,8 @@ declare global {
   }
 }
 
-/** Must run before the shell boots or the first census is already a fiction. */
 export async function installLeakProbe(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    // WeakMap so a gone target takes its entry — the probe must not be a leak.
     const registry = new WeakMap<EventTarget, Map<string, Set<unknown>>>();
     const intervals = new Set<unknown>();
     const eventSources = new Set<EventSource>();

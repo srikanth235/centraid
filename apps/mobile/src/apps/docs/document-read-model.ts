@@ -1,6 +1,3 @@
-// One document's read surface (#821). The kind fork lives on the shared model
-// (`format.ts`) so phone and web agree. No react/react-native imports.
-
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 import {
   canRender,
@@ -17,9 +14,6 @@ export function readSurfaceFor(doc: DocFields): ReadSurface {
   if (canRender(doc)) return "stage";
   return "facts";
 }
-
-// ─── inline data: bodies ─────
-// Hermes ships neither `atob` nor a guaranteed TextDecoder, so decode by hand.
 
 const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -75,12 +69,9 @@ export function docBytesUrl(
   )}/${encodeURIComponent(doc.content_id)}`;
 }
 
-// Nothing records an opening — no clause may claim who has opened a document.
-
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
 
-/** Empty when the stamp is unreadable — an absent clause, never an invented one. */
 export function editedAgo(iso: string, now: number = Date.now()): string {
   const stamp = Date.parse(iso);
   if (Number.isNaN(stamp)) return "";
@@ -117,11 +108,9 @@ export function readStatus(
 export interface FactRow {
   key: string;
   value: string;
-  /** Drawn in the `net` tone. */
   net?: boolean;
 }
 
-/** "Open elsewhere" is a control beside these rows, not a row. */
 export function factsRows(
   doc: DocFields & { byte_size?: number | null; custody_state?: string | null },
   custodyLabel: string | null

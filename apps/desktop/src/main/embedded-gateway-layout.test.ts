@@ -1,5 +1,3 @@
-// @vitest-environment node
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -14,11 +12,6 @@ import { startDesktopEmbeddedGateway } from "./embedded-gateway.js";
 
 const roots: string[] = [];
 
-// These scenarios provision complete encrypted vaults, including every stable
-// app and automation agent. The parity case provisions four vaults across two
-// gateways; the founding case provisions one. Focused runs remain well below
-// these limits, while the headroom keeps full-suite worker contention from
-// turning successful boots into test-runner timeouts.
 const PARITY_TIMEOUT_MS = 120_000;
 const FOUNDING_TIMEOUT_MS = 30_000;
 
@@ -40,21 +33,6 @@ describe("embedded-gateway-layout scenarios", () => {
     };
   }
 
-  /**
-   * Quiet the boot warmers so this suite never depends on network or on local
-   * coding harness CLIs being present.
-   *
-   * - PricingWarmer (#445) refreshes LiteLLM into `model-pricing.json` when the
-   *   host pins a cache path and the on-disk table is stale/absent. A fresh
-   *   fixture file skips the fetch entirely.
-   * - CatalogWarmer enumerates runner models into `model-catalog.json` after a
-   *   successful CLI probe; an empty seeded catalog is still a valid file so a
-   *   later merge only rewrites contents.
-   *
-   * Tree comparison still *excludes* both paths (see `treeShape`): a warm that
-   * finishes after `close()` can create the catalog file on only one side, and
-   * layout parity is about desktop/headless ownership, not warmer timing.
-   */
   async function seedWarmerCaches(root: string): Promise<void> {
     const cacheDir = path.join(root, "cache");
     await fs.mkdir(cacheDir, { recursive: true });
@@ -76,7 +54,6 @@ describe("embedded-gateway-layout scenarios", () => {
     );
   }
 
-  /** Cache files whose presence is a warmer race, not a layout ownership signal. */
   const WARMER_CACHE_FILES = new Set([
     path.join("cache", "model-catalog.json"),
     path.join("cache", "model-pricing.json"),
@@ -166,10 +143,6 @@ describe("embedded-gateway-layout scenarios", () => {
   test(
     "actual Electron embed auto-founds Personal on a fresh data dir",
     async () => {
-      // The desktop passes no founding options at all (#603) — a fresh data
-      // dir is founded by the gateway itself at construction. This is the desktop
-      // half of that contract: start the real embed, ask it for its vault list,
-      // and expect the one auto-founded vault with no ceremony in between.
       const root = await tempDir("desktop-embedded-autofound-");
       roots.push(root);
       await seedWarmerCaches(root);
@@ -209,3 +182,4 @@ describe("embedded-gateway-layout scenarios", () => {
     FOUNDING_TIMEOUT_MS
   );
 });
+// @vitest-environment node

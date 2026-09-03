@@ -30,11 +30,6 @@ import { makeStyles } from "./Assistant.styles";
 import { useAssistant } from "./useAssistant";
 import type { Bubble } from "./useAssistant";
 
-// The vault assistant chat — a full-page cover over Home (springboard model).
-// Chrome mirrors the other covers: a serif title and the teal leave key. The
-// cover exits via that key (full-screen modal, no pull-down). The composer rises
-// with the keyboard; v0 sends a buffered turn (no incremental streaming — see
-// src/lib/assistant.ts for the expo/fetch upgrade path).
 export default function AssistantScreen({
   navigation,
 }: AssistantFullScreenProps): React.JSX.Element {
@@ -88,8 +83,6 @@ export default function AssistantScreen({
         { text: "Cancel", style: "cancel", onPress: declineConsent },
         { text: `Allow ${pendingConsent.provider}`, onPress: approveConsent },
       ],
-      // Android's back gesture dismisses without pressing a button. Silence is
-      // not consent — and without this the turn stays wedged on pendingConsent.
       { cancelable: true, onDismiss: declineConsent }
     );
   }, [approveConsent, declineConsent, pendingConsent]);
@@ -110,14 +103,7 @@ export default function AssistantScreen({
 
   const canSend =
     (draft.trim().length > 0 || attachments.length > 0) && !sending;
-  // With the back key up in the header, the composer owns the bottom edge: when
-  // the keyboard is up it rides just above it, otherwise it only clears the
-  // home-indicator safe area.
   const composerPad = keyboardUp ? 8 : insets.bottom + 8;
-  // Which picker is open, if any. Selection presents the platform's own
-  // single-choice list (#567) — the user picks the agent they want instead
-  // of cycling through the dead ones. `selectHarness` still preflights and
-  // reverts, so a chosen-but-unready harness surfaces as a selection error.
   const [picker, setPicker] = useState<"harness" | "model" | "effort" | null>(
     null
   );
@@ -229,11 +215,6 @@ export default function AssistantScreen({
                 )}
               </View>
             }
-            // No getItemLayout and no windowing overrides: bubble height is
-            // whatever the prose wraps to, and this transcript scrolls itself
-            // to the end on every content-size change — trimming the render
-            // window (or clipping subviews, which misbehaves on Android
-            // transcripts) would fight that scroll and blank the newest turn.
             renderItem={renderBubble}
           />
 

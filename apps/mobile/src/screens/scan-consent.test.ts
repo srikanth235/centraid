@@ -1,5 +1,3 @@
-// Capture-time OCR consent latch (#712), tested as a predicate: it must never
-// say yes to a device that never answered.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -11,7 +9,6 @@ import {
 
 const mocks = vi.hoisted(() => ({ cache: new Map<string, unknown>() }));
 
-// AsyncStorage stubbed; `mocks.cache` is module-level for `beforeEach`.
 vi.mock(import("../storage") as Promise<unknown>, () => {
   const cache = mocks.cache;
   return {
@@ -29,7 +26,6 @@ vi.mock(import("../storage") as Promise<unknown>, () => {
 
 describe("the latch", () => {
   it("is device state, under the frame's namespace and not an app's", () => {
-    // A `docs.` key would sync the answer across devices via the vault.
     expect(SCAN_OCR_CONSENT_KEY).toBe("frame.scanOcrConsent");
   });
 });
@@ -73,7 +69,6 @@ describe(answerScanOcrConsent, () => {
 });
 
 describe(hydrateScanOcrConsent, () => {
-  // Cleared here: earlier blocks answer the latch.
   beforeEach(() => {
     mocks.cache.clear();
   });

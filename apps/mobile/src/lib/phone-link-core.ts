@@ -1,12 +1,3 @@
-/**
- * Normalize the gateway's pairing response for device-local vault storage.
- *
- * `vaultId` is the primary landing vault. New gateways also return `vaultIds`
- * and per-vault metadata; older gateways may return only the primary field.
- * The response is presentation data after the gateway has already authorized
- * and enrolled the device, so this helper only preserves order and removes
- * duplicates—it never grants access locally.
- */
 export interface PairingResponseVault {
   vaultId: string;
   enrollmentId?: string;
@@ -32,7 +23,6 @@ export function normalizePairedVaults(
   );
   const ids = [
     ...(response.vaultId ? [response.vaultId] : []),
-    // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
     ...(response.vaultIds ?? []),
     ...metadata.keys(),
   ].filter(

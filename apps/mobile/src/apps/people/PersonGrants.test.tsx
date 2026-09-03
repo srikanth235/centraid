@@ -1,9 +1,3 @@
-// `Shared with them`, the phone's half (#825): FIVE STATES, FIVE SENTENCES —
-// none borrows another's words. Real component on the shared react-native
-// stub (the PeopleKit harness); the grant door is the seam, so what the
-// screen SAYS is the observable outcome.
-// @vitest-environment jsdom
-
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,7 +28,6 @@ vi.mock(import("react-native-svg"), async () => {
   return stub.svgStub() as unknown as typeof import("react-native-svg");
 });
 
-// No gateway base by default: tests inject a door to make the plane reachable.
 const gatewayBase = vi.hoisted(() => ({ value: "" }));
 vi.mock(
   import("../../kit/replica/ReplicaProvider"),
@@ -44,15 +37,11 @@ vi.mock(
     }) as never
 );
 
-// The default door would pull the Expo module runtime into plain jsdom;
-// every test injects its own door.
 vi.mock(
   import("../../kit/share/grant-seat"),
   () => ({ nativeGrantDoor: () => undefined }) as never
 );
 
-// The sheet has its own suite; here it is a recorder, so what this screen
-// HANDS it is observable.
 const sheetProps = vi.hoisted(() => [] as Record<string, unknown>[]);
 vi.mock(
   import("../../kit/share/GrantSheet"),
@@ -89,7 +78,6 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
     grantedBy: "party-owner",
     maxSizeBytes: null,
     fulfillment: [],
-    // The vault's own words for where it stands (ruling V-phrases).
     phrase: "on its way",
     reason: "no vault has been addressed for it yet",
     ...overrides,
@@ -99,9 +87,6 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
 function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
   return {
     subjects: () => Promise.resolve({ readable: true, offers: [] }),
-    // A LINKED person is the baseline, because since #903 that is the only
-    // person who can be granted at all; `channel: null` is the exception the
-    // never-reached tests opt into, not the default every other test inherits.
     forParty: () =>
       Promise.resolve({
         known: true,
@@ -121,7 +106,6 @@ function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
 let root: ReturnType<typeof createRoot> | undefined;
 let container: HTMLElement | undefined;
 
-/** Mount the section and hand back the text it painted. */
 async function show(door?: GrantDoor): Promise<HTMLElement> {
   container = document.createElement("div");
   document.body.append(container);
@@ -141,8 +125,6 @@ async function show(door?: GrantDoor): Promise<HTMLElement> {
   return container;
 }
 
-/** A control by its visible word, or by the hint that names its object —
- *  how the kit tells ten identical `Revoke`s apart (PeopleKit). */
 function verb(label: string, hint?: string | null): HTMLButtonElement {
   const found = [...container!.querySelectorAll("button")].find(
     (button) =>
@@ -172,14 +154,9 @@ describe("the person screen's grant dashboard, phone seat", () => {
   it("claims nothing while the read is still in flight", async () => {
     const el = await show(
       stubDoor({
-        forParty: () =>
-          new Promise(() => {
-            // Never settles: the read is still in flight.
-          }),
+        forParty: () => new Promise(() => {}),
       })
     );
-    // The skeleton names the section it stands in; the screen asserts nothing
-    // about Asha it has not read.
     expect(el.querySelector('[aria-label="Shared with them"]')).not.toBeNull();
     expect(el.textContent).not.toContain(nothingSharedYet(ASHA));
     expect(el.textContent).not.toContain(audienceNotKnown(ASHA));
@@ -248,8 +225,6 @@ describe("the person screen's grant dashboard, phone seat", () => {
     expect(el.textContent).toContain(
       "The link to their vault ended; link again in People to share."
     );
-    // An ended link withholds nothing that was already granted: its grant is
-    // still drawn, because the member's answer still stands.
     expect(el.textContent).not.toContain(nothingSharedYet(ASHA));
   });
 
@@ -266,7 +241,6 @@ describe("the person screen's grant dashboard, phone seat", () => {
     );
     await act(async () => verb("Share").click());
     const handed = sheetProps.at(-1) ?? {};
-    // This person is preselected, and she leads the roster.
     expect(handed.audienceId).toBe(PARTY);
     expect((handed.audiences as { label: string }[])[0]?.label).toBe(ASHA);
     expect((handed.subjects as unknown[]).length).toBeGreaterThan(0);
@@ -293,12 +267,9 @@ describe("the person screen's grant dashboard, phone seat", () => {
       })
     );
 
-    // The row's own Revoke names its object in the hint.
     await act(async () => verb("Revoke", "Revoke document").click());
-    // Asking is the whole point of the confirm: nothing revoked yet.
     expect(revoked).toStrictEqual([]);
 
-    // The confirm's Revoke carries no object hint — it is the decision.
     await act(async () => verb("Revoke", null).click());
     expect(revoked).toStrictEqual(["grant-1"]);
     expect(posted).toStrictEqual([
@@ -306,3 +277,4 @@ describe("the person screen's grant dashboard, phone seat", () => {
     ]);
   });
 });
+// @vitest-environment jsdom

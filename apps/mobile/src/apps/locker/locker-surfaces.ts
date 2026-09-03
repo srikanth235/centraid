@@ -1,7 +1,3 @@
-// Two workflow reads, through `locker-gateway.ts`, never the replica. Neither
-// may grow a cached answer; both write through the store's one seam, so a lock
-// takes the entries and the staged rows with it via `wipeSecretState`.
-
 import {
   draftBatches,
   publishedCopy,
@@ -36,11 +32,6 @@ function emitBag(patch: Parameters<typeof setLockerSurfaceState>[0]): void {
   setLockerSurfaceState({ ...patch, bag: { ...readLockerVault().bag } });
 }
 
-/**
- * A refusal leaves the list `null` and states itself: "we could not read the
- * ledger" and "the ledger is empty" are two sentences an audit surface may
- * never confuse.
- */
 export async function loadLockerAccess(): Promise<void> {
   const vault = readLockerVault();
   const token = vault.bag.sessionToken;
@@ -98,8 +89,6 @@ export async function loadLockerImportDrafts(): Promise<void> {
   }
 }
 
-/** NOTHING REACHES THE VAULT HERE: publishing is a second, explicit act, and a
- *  draft that parsed nothing is named a refusal, not an empty review. */
 export async function stageLockerImportFile(): Promise<void> {
   setLockerSurfaceState({ importNote: "", surfaceBusy: true });
   let picked: Awaited<ReturnType<typeof pickLockerImportFile>>;
@@ -130,7 +119,6 @@ export async function stageLockerImportFile(): Promise<void> {
   }
 }
 
-/** A staged row carries no value, and lands in the bag so a lock takes it. */
 export async function openLockerImportDraft(batchId: string): Promise<void> {
   readLockerVault().bag.importRows = null;
   emitBag({ openBatchId: batchId, surfaceBusy: true });
@@ -143,8 +131,6 @@ export async function openLockerImportDraft(batchId: string): Promise<void> {
   }
 }
 
-/** THE VAULT WINS: an already-held secret comes back `skipped`, and
- *  `publishedCopy` says so rather than reporting a success. */
 export async function publishLockerImportDraft(batchId: string): Promise<void> {
   setLockerSurfaceState({ surfaceBusy: true });
   try {

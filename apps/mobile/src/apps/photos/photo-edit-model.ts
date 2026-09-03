@@ -1,11 +1,3 @@
-// Phone editor as data (§7.4). NON-DESTRUCTIVE: nothing is written until
-// `Save as a new photograph` (a NEW photograph beside the original). Copy is
-// IMPORTED from the blueprint, never retyped. AUTO-ENHANCE is absent: a curve
-// heuristic needs a decoded RGBA buffer nothing here hands React Native.
-
-// Import from `shared-copy.ts`, the import-free leaf, NOT from `viewer.ts`:
-// that module uses `.ts`-suffixed specifiers the Expo tsconfig rejects, which
-// turns 0 type errors into 13 (#805).
 export {
   PHOTOS_SAVE_AS_NEW as SAVE_AS_NEW,
   PHOTOS_SAVE_AS_NEW_EXPLANATION as SAVE_AS_NEW_EXPLANATION,
@@ -28,14 +20,11 @@ export function editorMeta(capturedAt?: string): string {
 export const STRAIGHTEN_STEP = 1;
 export const STRAIGHTEN_LIMIT = 15;
 
-/** One control, not the desktop −/readout/+ trio. Each press levels a degree
- *  anticlockwise; past the limit returns to level. The phone cannot straighten CLOCKWISE. */
 export function nextStraighten(degrees: number): number {
   const next = degrees - STRAIGHTEN_STEP;
   return next < -STRAIGHTEN_LIMIT ? 0 : next;
 }
 
-/** Minus is U+2212, not a hyphen: a number in the mono role. */
 export function signedDegrees(degrees: number): string {
   if (degrees === 0) return "0°";
   return degrees < 0 ? `−${Math.abs(degrees)}°` : `+${degrees}°`;
@@ -49,8 +38,6 @@ export function totalRotation(quarters: number, straighten: number): number {
   return (((quarters % 4) + 4) % 4) * 90 + straighten;
 }
 
-/** Straighten is not a multiple of 90°, so the box GROWS rather than swapping
- *  sides; the crop is in fractions of that grown box. */
 export function rotatedBox(
   width: number,
   height: number,
@@ -70,7 +57,6 @@ export function rotatedFrameRatio(assetRatio: number, degrees: number): number {
   return box.height > 0 ? box.width / box.height : assetRatio;
 }
 
-/** FRACTIONS of the current (rotated) frame — survives resize; same on stage and saved pixels. */
 export interface CropRect {
   x: number;
   y: number;
@@ -92,12 +78,10 @@ export function clampCrop(rect: CropRect): CropRect {
   return { h, w, x: clamp(rect.x, 0, 1 - w), y: clamp(rect.y, 0, 1 - h) };
 }
 
-/** Size never changes: a resizing drag would silently change the chosen ratio. */
 export function moveCrop(rect: CropRect, dx: number, dy: number): CropRect {
   return clampCrop({ ...rect, x: rect.x + dx, y: rect.y + dy });
 }
 
-/** Keeps its aspect. Deliberately not a free-form eight-handle resize (#711). */
 export function scaleCrop(rect: CropRect, factor: number): CropRect {
   const cx = rect.x + rect.w / 2;
   const cy = rect.y + rect.h / 2;
@@ -106,7 +90,6 @@ export function scaleCrop(rect: CropRect, factor: number): CropRect {
   return clampCrop({ h, w, x: cx - w / 2, y: cy - h / 2 });
 }
 
-/** Spacing is load-bearing: `3 : 2` renders in the mono role. */
 export const EDITOR_RATIOS = ["Original", "Square", "3 : 2"] as const;
 export type EditorRatio = (typeof EDITOR_RATIOS)[number];
 
@@ -125,8 +108,6 @@ export function centredCrop(frameRatio: number, ratio: number): CropRect {
   return { h: 1, w, x: (1 - w) / 2, y: 0 };
 }
 
-/** Rounded and clamped so rounding cannot ask the native manipulator for a
- *  rectangle running off the bitmap. */
 export function cropPixels(
   rect: CropRect,
   frame: { width: number; height: number }
@@ -149,12 +130,8 @@ export function cropPixels(
   };
 }
 
-/** `undefined` is "no flip" — the third state a boolean cannot hold, and the
- *  one an untouched editor must be in. */
 export type FlipAxis = "horizontal" | "vertical" | undefined;
 
-/** Three-way cycle, not two toggles: the manipulator allows one flip per
- *  transformation. */
 export function nextFlip(current: FlipAxis): FlipAxis {
   if (current === undefined) return "horizontal";
   if (current === "horizontal") return "vertical";
@@ -167,8 +144,6 @@ export function flipLabel(flip: FlipAxis): string {
   return "Flip";
 }
 
-/** `nothing written yet` is a FACT: nothing is staged, uploaded or journalled
- *  while this is open. */
 export function editorStatus(input: {
   ratio: EditorRatio;
   quarters: number;
@@ -200,8 +175,6 @@ export function isEdited(input: {
   );
 }
 
-/** `-edited` rather than a fresh opaque id, so the member can find it by name
- *  — same suffix the web editor writes. */
 export function editedFilename(sourceName: string | undefined): string {
   const base = (sourceName ?? "photograph").replace(/\.[a-z0-9]+$/iu, "");
   return `${base || "photograph"}-edited.jpg`;

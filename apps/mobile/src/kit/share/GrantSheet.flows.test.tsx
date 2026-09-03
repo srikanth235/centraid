@@ -1,7 +1,3 @@
-// The grant sheet, native seat (#825). The parity claim: the SAME core answers
-// here — one write door, `edit` only where the registry declares it, an
-// unaccepted invitation reading as pending rather than error, and revoking
-// asking first before reporting the route's own sentence verbatim.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -13,7 +9,6 @@ import type {
   GrantSubjectOffer,
 } from "@centraid/blueprints/apps/_shared/grant-plane";
 
-// @vitest-environment jsdom
 import GrantSheet from "./GrantSheet";
 
 (
@@ -86,8 +81,6 @@ vi.mock(
   () => ({ useReplica: () => ({ gatewayBase: "" }) }) as never
 );
 
-// The default door pulls the Expo module runtime into a plain jsdom project,
-// so every test injects its own and stubs transport at the seam.
 vi.mock(
   import("./grant-seat"),
   () => ({ nativeGrantDoor: () => undefined }) as never
@@ -118,7 +111,6 @@ vi.mock(
     }) as never
 );
 
-// Registry truth (G-edit): only tally.group carries edit in v1.
 const OFFERS: GrantSubjectOffer[] = [
   { subjectType: "tally.group", capabilities: ["view", "edit"] },
   { subjectType: "core.document", capabilities: ["view"] },
@@ -149,7 +141,6 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
         detail: null,
       },
     ],
-    // The vault's own words for where it stands (ruling V-phrases).
     phrase: "shared",
     reason: "the vault it addresses is holding it",
     ...overrides,
@@ -159,9 +150,6 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
 function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
   return {
     subjects: () => Promise.resolve({ readable: true, offers: OFFERS }),
-    // A LINKED person is the baseline, because since #903 that is the only
-    // person who can be granted at all; `channel: null` is the exception the
-    // never-reached tests opt into, not the default every other test inherits.
     forParty: () =>
       Promise.resolve({
         known: true,
@@ -301,13 +289,10 @@ describe("the grant sheet, native seat — revoke and object-first", () => {
       });
       expect(subjectReads).toBe(1);
       expect(container?.textContent).toContain("Trip plan");
-      // The standing list is the object side, so its rows name PEOPLE.
       expect(container?.textContent).toContain("Priya");
     });
 
     test("the person's reach is read here too, never invented from the object read", async () => {
-      // `forSubject` cannot answer reach, so the object-first sheet asks the
-      // person side; without that read a live-channel person is told wrong.
       await render({
         subject: {
           subjectType: "core.document",
@@ -361,3 +346,4 @@ describe("the grant sheet, native seat — revoke and object-first", () => {
     });
   });
 });
+// @vitest-environment jsdom

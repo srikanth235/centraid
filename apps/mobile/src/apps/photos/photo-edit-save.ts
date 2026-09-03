@@ -1,6 +1,3 @@
-// THE ONLY PLACE IN THE EDITOR THAT WRITES (§7.4). It takes the SAME ingest path
-// a camera-roll photograph does; lineage is omitted, never invented (#711).
-
 import { File, Paths } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 
@@ -19,7 +16,6 @@ export interface EditPlan {
   flip?: FlipAxis;
 }
 
-/** Never the display copy — it would silently downscale. */
 export async function resolveLocalOriginal(asset: PhotoAsset): Promise<string> {
   const uri = asset.originalUri;
   if (uri.startsWith("http:") || uri.startsWith("https:")) {
@@ -37,7 +33,6 @@ export async function resolveLocalOriginal(asset: PhotoAsset): Promise<string> {
   return (await openDeviceOriginal(asset.localId ?? uri)).uri;
 }
 
-/** Flip, rotate, then crop: the crop is in fractions of the ROTATED frame. */
 async function renderEdit(
   sourceUri: string,
   plan: EditPlan
@@ -53,7 +48,6 @@ async function renderEdit(
       : await ImageManipulator.manipulate(rotated)
           .crop(cropPixels(plan.crop, rotated))
           .renderAsync();
-  // 0.92 — the web editor's quality; keep the two surfaces equal.
   const saved = await cropped.saveAsync({
     compress: 0.92,
     format: SaveFormat.JPEG,
@@ -66,7 +60,6 @@ export interface SaveEditDeps {
   gatewayBase: string;
 }
 
-/** Lands in the ORIGINAL's vault, never the selected one (#599). */
 export async function saveEditAsNewPhotograph(
   deps: SaveEditDeps,
   asset: PhotoAsset,

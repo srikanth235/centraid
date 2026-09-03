@@ -1,17 +1,6 @@
-// The Analytics place's health, standing, and export copy (#765, spec §5;
-// split from insights-model.test.ts to keep both under the file-size cap).
-//
-// Rendering is tested next door; this pins the arithmetic and the copy for the
-// gateway facts (only what the health snapshot actually reports), the standing
-// line (what succeeded, how long the machine has been up, no invented median),
-// and the empty/export behavior of the place.
-
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports follow */
 import { describe, expect, it, vi } from "vitest";
 
-// The formatters this module uses live beside the gateway client, and that
-// module reaches react-native. Mocking the transport (never the formatters)
-// keeps this test pure — the same one-liner `lib/insights.test.ts` writes.
 vi.mock(import("../../lib/gateway") as Promise<unknown>, () => ({
   apiHeaders: () => ({}),
   authHeader: () => ({}),
@@ -37,7 +26,6 @@ import {
 } from "./insights-model";
 
 const DAY_MS = 86_400_000;
-/** A fixed anchor so the arithmetic is readable: 2026-08-13T00:00:00Z. */
 const ANCHOR = Date.parse("2026-08-13T00:00:00.000Z");
 
 function summaryOf(over: Partial<InsightsSummary> = {}): InsightsSummary {
@@ -131,7 +119,6 @@ describe("the gateway facts", () => {
     expect(components?.value).toBe("1 of 2 healthy");
     expect(components?.net).toBe(true);
     expect(components?.note).toBe("Not healthy: outbox.");
-    // A healthy gateway carries no caveat at all.
     expect(
       mobileGatewayFacts(healthOf()).find((fact) => fact.key === "components")
         ?.note

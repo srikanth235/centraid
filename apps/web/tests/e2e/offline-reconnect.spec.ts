@@ -6,10 +6,6 @@ import {
   setHarnessControlOnline,
 } from "./control-transport.js";
 
-// Offline write / reconnect replay (#781): a write made with the gateway down
-// survives a full reload offline and settles into exactly one vault row on
-// reconnect. The rename goes through the door Docs' own handler calls.
-
 const API_URL = "http://127.0.0.1:48765";
 const ADMIN_TOKEN = "centraid-web-e2e-token";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
@@ -22,8 +18,6 @@ const RENAMED_TITLE = "offline-reconnect-renamed.txt";
 const RENAME_INTENT = "offline-e2e-rename-intent";
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
-  // Re-click until the palette opens: after a reload Search can paint before
-  // its listener attaches, and that click is silently lost.
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect
     .poll(
@@ -136,9 +130,6 @@ test("an offline write survives a reload and settles exactly once on reconnect",
   await connectPwa(page);
 
   await openFirstParty(page, "Docs");
-  // Prove the write rail BEFORE severing: an offline session never finishes
-  // bootstrapping, so a write issued first throws instead of queueing. The
-  // probe is a write the vault refuses, so it mints no row.
   await expect
     .poll(
       () =>
@@ -158,7 +149,6 @@ test("an offline write survives a reload and settles exactly once on reconnect",
     )
     .not.toBe("replica-not-ready");
 
-  // The canonical row the offline write decorates, minted while online.
   await page.locator('input[aria-label="Upload files"]').setInputFiles({
     name: DOC_TITLE,
     mimeType: "text/plain",
@@ -179,8 +169,6 @@ test("an offline write survives a reload and settles exactly once on reconnect",
     )
     .toBe(1);
 
-  // Never remount Docs after the toggle: a fresh replica walk cannot finish
-  // offline, and the write then throws instead of queueing.
   await setHarnessControlOnline(page, false);
   await page.evaluate(
     async ({ id, title, intentId }) =>
@@ -197,8 +185,6 @@ test("an offline write survives a reload and settles exactly once on reconnect",
   ).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".kit-pending-chip").first()).toHaveText("queued");
 
-  // Either honest word for "still in the outbox" passes — `queued` before the
-  // drain tries, `pending` after; a settled row or a denial never does.
   await page.reload({ waitUntil: "domcontentloaded" });
   await openFirstParty(page, "Docs");
   await expect(
@@ -218,7 +204,6 @@ test("an offline write survives a reload and settles exactly once on reconnect",
     timeout: 60_000,
   });
 
-  // Replay is idempotent, not additive: never a second row beside the original.
   await expect
     .poll(() => driveIdsFor(page, RENAMED_TITLE), { timeout: 30_000 })
     .toEqual([documentId]);

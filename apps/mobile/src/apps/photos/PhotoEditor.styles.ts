@@ -1,5 +1,3 @@
-// Phone editor geometry. Same three tokens as PhotoLightbox.styles.ts — no hex here.
-
 import { StyleSheet } from "react-native";
 
 import { radii, spacing, t } from "../../kit/theme";
@@ -14,7 +12,6 @@ export const styles = StyleSheet.create({
     overflow: "hidden",
   },
   frame: { position: "relative" },
-  /** Four mask panes — RN has no 9999px box-shadow spread. */
   mask: { position: "absolute" },
   cropBox: { borderWidth: 1, position: "absolute" },
   thirds: {
@@ -45,13 +42,8 @@ export const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
   },
   toolLabel: { ...t("control") },
-  /**
-   * `minWidth: 220, flexShrink: 0`, not `flexBasis` with `flexShrink: 1`:
-   * a basis has no floor once shrinking is allowed.
-   */
   note: { ...t("mono"), flexGrow: 1, flexShrink: 0, minWidth: 220 },
   commitRow: { flexDirection: "row", gap: spacing[2] },
-  /** The one filled element (§18). Disabled commit is outline, never a dimmed fill. */
   commit: {
     alignItems: "center",
     borderRadius: radii.md,
@@ -60,6 +52,5 @@ export const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: spacing[3],
   },
-  /** Why commit cannot fire, stated inline — never a hidden control (§6, §18). */
   refusal: { ...t("mono"), flexBasis: "100%" },
 });

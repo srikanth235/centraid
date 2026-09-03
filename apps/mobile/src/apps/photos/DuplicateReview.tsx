@@ -1,15 +1,3 @@
-// The Duplicates shelf, phone-shaped (Photos v4 handoff §4.4, §D). Same tile
-// grammar as the library grid — a candidate is a tile, not a row — because a
-// dHash hint on an asset is still a photograph first.
-//
-// The write is the same one the desktop Duplicates view takes (see
-// `duplicates-actions.ts`'s `trashDuplicateAssets`): a "duplicate" is not a
-// distinct kind of delete, just a different way of arriving at the asset id.
-// There is no separate "dismiss" write here because the hint itself is
-// derived at read time (`timeline-model.ts`), never stored — nothing to
-// un-set. Selecting the tiles the member does not want and trashing them
-// answers the same question a merge would.
-
 import React, { useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 
@@ -107,9 +95,6 @@ export default function DuplicateReview({
     online,
     targets: () => selected,
   });
-  // One handler for the third selection target, shared by every Photos shelf
-  // (`use-photo-selection-share.ts`) so the grant sheet's moment and the
-  // refusal grammar cannot drift between them.
   const share = usePhotoSelectionShare(
     () => selected,
     () => setSelection(new Set())
@@ -138,11 +123,8 @@ export default function DuplicateReview({
     addToAlbum: {
       unavailableReason: "Add to album from the library, where the albums are.",
     },
-    // Share is one standing grant over one photograph, through the one kit.
     share: share.handler,
     download: downloadHandler,
-    // The shelf's whole verb. Same confirm the head's control asks for, so
-    // the two ways to reach it cannot mean two different things.
     trash: writeBlockedReason
       ? { unavailableReason: writeBlockedReason }
       : trashing
@@ -150,9 +132,6 @@ export default function DuplicateReview({
         : { run: trashSelected },
   };
   return (
-    // Duplicates is a genuine CHILD of the More sheet's row, so it keeps a
-    // back affordance — and it now also carries the band, so the way out of
-    // Photos is no harder to reach than the app's own tabs (§F).
     <PhotosScreen current="more" selection={selectionBar}>
       <View style={styles.header}>
         <Tappable

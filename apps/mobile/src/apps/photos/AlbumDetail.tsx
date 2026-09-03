@@ -1,12 +1,3 @@
-// One album (Photos v4 handoff §14, §18).
-//
-// An album REFERS to a photograph where it lives; it never moves or copies
-// anything. That is why "Remove" here is an outlined control and not a filled
-// red one: it removes a reference, and the photograph stays in the library.
-//
-// The grid is the same justified timeline every other shelf uses — an album is
-// a shelf, not a different way of looking at photographs.
-
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, Switch, View } from "react-native";
 
@@ -73,9 +64,6 @@ export default function AlbumDetail({
   const [residentAlbumId, setResidentAlbumId] = useState<string>();
   const [name, setName] = useState("");
   const [keepOriginals, setKeepOriginals] = useState(false);
-  // Which album's "keep originals" pin has finished hydrating. Derived rather
-  // than a second boolean so switching albums can't leave a stale `true` behind
-  // (and so nothing has to be reset synchronously from the effect below).
   const [pinsHydratedFor, setPinsHydratedFor] = useState<string>();
   const album = collections.rows.find(
     (row) => row.collection_id === route.params.albumId
@@ -138,12 +126,6 @@ export default function AlbumDetail({
     });
   }, [route.params.albumId]);
   const pinsReady = pinsHydratedFor === route.params.albumId;
-  // CAN THIS MEMBER CHANGE THIS ALBUM? Rename, Delete, Share, Make cover and
-  // Remove all must not render unconditionally and then `return` on a missing
-  // session — a silent no-op, which §1 forbids outright: a control that looks
-  // available and does nothing teaches a member that the app is broken, and
-  // they have no way to learn otherwise. Two different truths block the write
-  // and a member can act on the difference, so each states its own sentence.
   const scopeWritable = album ? album.__centraidCanWrite !== false : true;
   const writeBlockedReason = session
     ? scopeWritable
@@ -163,9 +145,6 @@ export default function AlbumDetail({
     setKeepOriginals(next);
   };
   const remove = async (): Promise<void> => {
-    // Belt and braces, exactly as the viewer's bar does it: the control is
-    // already disabled AND its press handler returns early — this guard is
-    // what stops any other caller from reaching the write.
     if (!canChangeAlbum) return;
     const selectedAssets = assets.filter((item) => selection.has(item.id));
     const removeNext = async (index: number): Promise<void> => {
@@ -253,20 +232,11 @@ export default function AlbumDetail({
     online: replica.online,
     targets: () => selectedVaultAssets,
   });
-  // One handler for the third selection target, shared by every Photos shelf
-  // (`use-photo-selection-share.ts`) so the grant sheet's moment and the
-  // refusal grammar cannot drift between them.
-  // The ALBUM's own grant (`core.collection`) — a different subject from the
-  // selection's, so a different entry. Membership does the rest: a photograph
-  // added to a shared album reaches the same audience with no second gesture.
   const albumShare = usePhotoGrantEntry(postStatus);
   const share = usePhotoSelectionShare(
     () => selectedVaultAssets,
     () => setSelection(new Set())
   );
-  /** Add to ANOTHER album. The phone has no room for an inline popover, so
-   *  the album list is the platform's own list-of-choices (§6's phone note
-   *  reaches the same answer on the web with a sheet). */
   const addToAnotherAlbum = (): void => {
     const others = collections.rows.filter(
       (row) => String(row.collection_id) !== route.params.albumId
@@ -312,9 +282,6 @@ export default function AlbumDetail({
         .catch((error: unknown) => surfaceWriteFailure(error, failure));
     };
   };
-  // The five, wired to the writes this screen already performs. `Download`
-  // has no phone surface behind it yet, so it renders disabled with the
-  // sentence that says so rather than doing nothing.
   const selectionBar = {
     count: selection.size,
     shelf: "normal" as const,
@@ -331,7 +298,6 @@ export default function AlbumDetail({
     addToAlbum: canChangeAlbum
       ? { run: () => addToAnotherAlbum() }
       : { unavailableReason: writeBlockedReason! },
-    // Share is one standing grant over one photograph, through the one kit.
     share: share.handler,
     download: downloadHandler,
     trash: canChangeAlbum
@@ -430,10 +396,6 @@ export default function AlbumDetail({
             </Pressable>
           </View>
         ) : (
-          // Rename and Delete both WRITE. Each stays visible when the
-          // member may not write — hiding either answers "why can I not
-          // do this?" with silence — and each is disabled, inert, and
-          // explained by the one line under this row.
           <View style={styles.actions}>
             {/* THE WAY INTO THE PICKER (§10). Until this control existed the
                 picker had no entry point on the phone at all: an album could

@@ -1,6 +1,3 @@
-/** Consent card body (#647): mirrors web's scopeSummary/inputPreview — show
- * WHAT was asked before granting. */
-
 export interface DecisionScope {
   schema: string;
   table?: string;
@@ -9,7 +6,6 @@ export interface DecisionScope {
   fieldMask?: string[];
 }
 
-/** `schema.table (verbs · extents)`. */
 export function describeScopes(
   scopes: readonly DecisionScope[] | undefined
 ): string {
@@ -28,7 +24,6 @@ export function describeScopes(
     .join(", ");
 }
 
-/** Elide past ~4 lines of small text. */
 const INPUT_PREVIEW_LIMIT = 220;
 
 export function describeInvocationInput(

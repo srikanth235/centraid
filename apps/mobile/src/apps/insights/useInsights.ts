@@ -1,6 +1,3 @@
-// Analytics data half (#765): usage (`/_insights/summary`) is the page;
-// health (`/_gateway/health`) is a qualifier and must never sink it.
-
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { INSIGHTS_DEFAULT_WINDOW_DAYS } from "@centraid/client/insights-copy";
@@ -16,7 +13,6 @@ import { readWindowPref, writeWindowPref } from "./insights-window-pref";
 
 export type InsightsLoad =
   | { kind: "loading" }
-  /** `at` is when the answer landed — relative phrases measure from it, not `Date.now()` at render. */
   | {
       at: number;
       kind: "ready";
@@ -75,7 +71,6 @@ async function read(
   });
 }
 
-/** No `full`: the chip row is always shown (spec §5). `empty` is derived, not stored. */
 export function opsStateFor(load: InsightsLoad): OpsState {
   if (load.kind === "loading") return "loading";
   if (load.kind === "error") return "error";
@@ -88,10 +83,8 @@ export function useInsights(): InsightsController {
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | undefined>();
-  // Ref, not state: the guard must hold within a tick or two taps open two sheets.
   const inFlight = useRef(false);
 
-  // Stored window arrives after the first read; waiting for it is a blank frame.
   useEffect(() => {
     let cancelled = false;
     void readWindowPref().then((saved) => {

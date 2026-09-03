@@ -130,9 +130,6 @@ export function VaultSharingSection({
 
   useEffect(refresh, [refresh]);
 
-  // No parked incoming SHARE is drawn here beside the links (#825, ruling
-  // G-copy): a grant's audience answers its channel invitation in People
-  // rather than on this section.
   const visibleRead: SharingRead = replica.gatewayBase
     ? read
     : { links: [], state: "ready" };

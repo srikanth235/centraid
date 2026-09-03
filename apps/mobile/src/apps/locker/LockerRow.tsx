@@ -1,16 +1,3 @@
-// THE ITEM ROW (README-Locker §5, "Item row"), drawn once for every list.
-//
-// Type chip · title · meta sentence · star · verdict chip. Items, Review,
-// Search and Trash all compose THIS row out of `format.ts`'s three
-// derivations, so a row cannot read differently in one list than another —
-// which is the drift `format.ts` exists to close, and drawing it twice on this
-// seat would reopen.
-//
-// THE CHIP IS TWO LETTERS, NOT A GLYPH (§7: never a lock icon standing in for
-// a sentence). The verdict chip takes `--net` for compromised and the seam for
-// the rest, because compromised is the one verdict with a consequence outside
-// this device.
-
 import React, { memo, useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -29,12 +16,10 @@ import type { ThemeColors } from "../../kit/theme";
 
 export interface LockerRowProps {
   row: LockerRowData;
-  /** The one quiet verb this list puts on the row, if any. */
   act?: { label: string; onPress: () => void };
   onOpen: (row: LockerRowData) => void;
 }
 
-/** Stable key for every Locker list. */
 export function lockerRowKey(row: LockerRowData): string {
   return row.item_id;
 }
@@ -98,7 +83,6 @@ function LockerRowView({
   );
 }
 
-/** Memoized: a list of 300 rows re-renders on every countdown tick otherwise. */
 export const LockerRow = memo(LockerRowView);
 
 const makeStyles = (colors: ThemeColors) =>

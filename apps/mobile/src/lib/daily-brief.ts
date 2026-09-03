@@ -1,10 +1,3 @@
-// The daily-brief NOTIFICATION, and nothing else. The Binding Layer allows no
-// `DailyBriefCard` on Home: a card summarising four apps sits above a
-// springboard whose tiles preview those same four apps from the local replica,
-// says it a beat later over a gateway round trip, and pushes the grid down
-// while it arrives. The 07:00 notification is the one part that reaches the
-// member when Home is NOT open.
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 
@@ -17,7 +10,6 @@ export function nextBriefNotificationAt(now = new Date()): Date {
   return next;
 }
 
-/** Keep one content-minimized 07:00 local notification armed, without prompting. */
 export async function scheduleDailyBriefNotification(
   now = new Date()
 ): Promise<void> {
@@ -31,7 +23,7 @@ export async function scheduleDailyBriefNotification(
       const prior = JSON.parse(raw) as { day?: string };
       if (prior.day === day) return;
     } catch {
-      // Replace malformed device bookkeeping below.
+      // Intentionally empty.
     }
   }
   const id = await Notifications.scheduleNotificationAsync({

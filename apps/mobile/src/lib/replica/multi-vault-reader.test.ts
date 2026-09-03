@@ -128,10 +128,6 @@ const JOURNEY_SHAPES = [
         primaryKey: "__centraid_row_id",
         columns: ["__centraid_row_id", "expense_id", "party_id", "share_minor"],
       },
-      // Several payers is the ordinary shape now, so the offline expense
-      // projects payer rows too (`apps/tally/pending-projection.ts`). Without
-      // this entity in the shape the optimistic write has nowhere to land and
-      // the queued expense reads as unpaid after a restart.
       {
         entity: "tally.expense_payer",
         primaryKey: "__centraid_row_id",
@@ -367,9 +363,6 @@ function seedTenYearLibrary(
   });
   store.close();
 
-  // Seed through one prepared native statement per table. Bootstrap's normal
-  // per-row validation is covered elsewhere; this fixture is intentionally
-  // about the measured ATTACH read/FTS path, not ingest throughput.
   const database = new DatabaseSync(file);
   const insertRow = database.prepare(
     `INSERT INTO replica_row
@@ -446,7 +439,6 @@ async function seedPendingDocuments(
   driver.close();
 }
 
-/** Minimal payloads: this fixture is about row COUNT, not payload shape. */
 function seedBulkDocuments(file: string, vaultId: string, count: number): void {
   seed(file, vaultId, vaultId);
   const database = new DatabaseSync(file);
@@ -464,7 +456,6 @@ function seedBulkDocuments(file: string, vaultId: string, count: number): void {
   database.close();
 }
 
-/** Record what each read asked SQLite for, and how much it got back. */
 class RecordingDriver extends NodeSqliteDriver {
   readonly reads: Array<{ sql: string; rows: number }> = [];
 
@@ -478,12 +469,6 @@ class RecordingDriver extends NodeSqliteDriver {
   }
 }
 
-/**
- * Fill the durable outbox straight through one prepared statement. `IntentQueue`
- * owns a transaction per intent, which is the right shape for a write and the
- * wrong one for a ten-thousand-row fixture; the DDL still comes from the real
- * store so the table and its `(state, created_order)` index are the shipped ones.
- */
 function seedSyntheticOutbox(
   file: string,
   vaultId: string,
@@ -550,12 +535,9 @@ function seedSyntheticOutbox(
 }
 
 interface SearchAtScale {
-  /** Rows returned, and how many of them the pending writes supplied. */
   returned: number;
   pending: number;
-  /** Distinct pending ranks: a large outbox must not collide ordering slots. */
   ranks: number;
-  /** The canonical hit is still reachable behind all that pending work. */
   canonical: unknown[];
 }
 
@@ -666,10 +648,6 @@ describe(MultiVaultReplicaReader, () => {
         new NodeSqliteDriver(path.join(root, readerName)),
         [mounted]
       );
-      // This is the exact facade mounted by the mobile app. Tally, Tasks, and
-      // Notes begin from empty canonical tables and filter on an optimistic
-      // value; Agenda patches an existing canonical row. Together they prove
-      // both former failure modes after a full session/store reconstruction.
       const session = new MultiVaultReplicaSession({
         reader,
         sessions: new Map([["personal", native]]),
@@ -760,8 +738,6 @@ describe(MultiVaultReplicaReader, () => {
       }
     };
 
-    // RN 0.81/Hermes has no structuredClone. Keep it absent for both cold
-    // reads so Node cannot accidentally hide a native-only runtime failure.
     vi.stubGlobal("structuredClone", undefined);
     try {
       await assertAppRestart("first.db");
@@ -1009,9 +985,6 @@ describe(MultiVaultReplicaReader, () => {
       limit: 250_000,
     });
 
-    // The evaluator caps its own page at the same 100,000 rows, so the rows are
-    // the rows either way. What would otherwise be silent is that this is not
-    // the whole of what the caller asked for.
     expect(asked.rows).toHaveLength(100_000);
     expect(asked.coverage).toBe("partial");
     reader.close();
@@ -1055,15 +1028,11 @@ describe(MultiVaultReplicaReader, () => {
     expect(outbox[0]!.sql).toContain(
       "json_extract(record_json, '$.appId') = ?"
     );
-    // Only the three overlay-state Docs intents cross into JavaScript. The
-    // other app's four and the five settled ones are never parsed at all.
     expect(outbox[0]!.rows).toBe(3);
     expect(page.rows).toHaveLength(4);
     reader.close();
   });
 
-  // A thousand pending writes used to inflate the per-scope FTS page by a
-  // thousand rows; ten thousand used to refuse the read outright.
   const surviving = {
     returned: 20,
     pending: 20,
@@ -1111,10 +1080,6 @@ describe(MultiVaultReplicaReader, () => {
     });
     const coldMs = performance.now() - coldStarted;
     expect(recent.rows).toHaveLength(5_000);
-    // The dedicated evidence lane owns the product budgets. The full Vitest
-    // fan-out competes with 37 other files for the same CPU, so it retains a
-    // broader smoke ceiling instead of turning scheduler contention into a
-    // false regression.
     const strict = process.env.CENTRAID_PERF_EVIDENCE === "1";
     expect(coldMs).toBeLessThan(strict ? 1_000 : 15_000);
 
@@ -1135,9 +1100,6 @@ describe(MultiVaultReplicaReader, () => {
     const bootstrapPageBytes = Math.ceil(
       (projectionBytes / 50_000) * MOBILE_REPLICA_BOOTSTRAP_WINDOW
     );
-    // The checked thumbnail policy is recent 90 days plus favorites. Five
-    // percent favorites is intentionally conservative for a 12.5k-source
-    // slice; recent non-favorites are prorated over the measured ten years.
     const estimatedPinnedThumbnailsPerSource =
       Math.ceil(12_500 * 0.05) + Math.ceil((12_500 / (365.25 * 10)) * 90);
     const thumbnailSamples = measuredThumbnailBytes().sort((a, b) => a - b);

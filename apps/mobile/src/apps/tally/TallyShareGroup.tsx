@@ -1,7 +1,3 @@
-// THE COMMONS PRODUCER, AND THE ONLY ONE THIS DEVICE HAS (#825 G-edit).
-// `tally.group` is v1's one edit-capable subject, so this row is where a
-// shared space is compiled. Offline: `tally-seat-copy.ts`.
-
 import React, { useMemo, useState } from "react";
 
 import { placementEntity } from "@centraid/blueprints/apps/_shared/placement-registry";
@@ -29,7 +25,6 @@ export default function TallyShareGroup({
 }: TallyShareGroupProps): React.JSX.Element {
   const replica = useReplica();
   const [open, setOpen] = useState(false);
-  // The gateway binds this commons to the group circle's exact stored roster.
   const groups = useReplicaQuery(
     "tally",
     useMemo(() => ({ entity: "tally.group", limit: 500 }), [])

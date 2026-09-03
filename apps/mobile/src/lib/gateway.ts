@@ -1,6 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit single wire-client module (#647 added the notifications/decision endpoints); pending split of the notifications client into a sibling module
-// Mobile gateway client (#263). Base URL: (a) paired tunnel (desktop attaches
-// the bearer); (b) manual Settings → Advanced URL (RN-side token).
 
 import * as Crypto from "expo-crypto";
 import { fetch as expoFetch } from "expo/fetch";
@@ -63,7 +61,6 @@ export interface MobileNotifications {
       appId: string;
       purpose: string;
       requestedAt: string;
-      /** Asked triples — rendered on the card, never approved unseen. */
       scopes: DecisionScope[];
     }>;
   };
@@ -117,13 +114,11 @@ export function setGatewayToken(value: string): void {
   void setSecure(SETTINGS_TOKEN_KEY, value.trim());
 }
 
-/** Manual-URL dev. Harmless over the tunnel — desktop overrides `authorization`. */
 export function authHeader(): Record<string, string> {
   const token = getGatewayToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** `x-centraid-vault` (#289). No active vault → no header; gateway picks. */
 export function vaultHeader(): Record<string, string> {
   const vaultId = getActiveVaultId();
   return vaultId ? { "x-centraid-vault": vaultId } : {};
@@ -135,14 +130,8 @@ export function apiHeaders(
   return { ...authHeader(), ...vaultHeader(), ...extra };
 }
 
-/** `startTunnel()` has no timeout — without this, a sleeping desktop hangs launch. */
 const TUNNEL_START_BUDGET_MS = 4_000;
 
-/**
- * A BUDGET, not a cancellation: `work` is abandoned, never aborted.
- * `work.catch(() => undefined)` is attached UP FRONT so a late rejection
- * cannot surface unhandled.
- */
 function withBudget<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
   work.catch(() => undefined);
   return new Promise((resolve, reject) => {
@@ -159,10 +148,6 @@ function withBudget<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
   });
 }
 
-/**
- * Tunnel first, manual URL second. `undefined` when neither is configured.
- * Neither a timeout nor a failed start rejects: both fall through (#905).
- */
 export async function resolveGatewayBase(): Promise<string | undefined> {
   const tunnel = await withBudget(
     ensureTunnelStarted(),
@@ -176,7 +161,6 @@ export async function resolveGatewayBase(): Promise<string | undefined> {
   if (tunnel) return tunnel.baseUrl;
   const manual = await hydrateGatewayUrl();
   if (!manual) return undefined;
-  // Warm the sync `authHeader()` cache; else a cold manual-URL start 401s.
   await hydrateGatewayToken();
   return normalizeBase(manual);
 }
@@ -192,7 +176,6 @@ export async function requireGatewayBase(): Promise<string> {
   return base;
 }
 
-/** Keep passphrases out of the replica and intent queue. */
 export async function appQuery<T>(
   appId: string,
   query: string,
@@ -374,7 +357,6 @@ export async function decideNotificationsScope(
   );
 }
 
-/** Begin and complete MUST send the same value — persisted, never per-call random. */
 async function oauthClientSessionId(): Promise<string> {
   const stored = await Store.hydrate<string>(OAUTH_CLIENT_SESSION_KEY, "");
   if (/^[A-Za-z0-9_-]{32,128}$/u.test(stored)) return stored;
@@ -401,7 +383,6 @@ export async function beginNotificationsConnectionAuthorization(
   return body.auth_url;
 }
 
-/** Assist courier tuple is NEVER persisted (docs/oauth-assist.md step 5). */
 export async function completeNotificationsConnectionAuthorization(
   handoff: AssistHandoff
 ): Promise<void> {
@@ -458,10 +439,6 @@ export interface VaultRow {
   blurb?: string;
 }
 
-/**
- * `undefined` on 404 (no vault plane) — not an error. HEADER-FREE: an unknown
- * `x-centraid-vault` would 404. Active vault is device-local (#289).
- */
 export async function listVaults(): Promise<VaultRow[] | undefined> {
   const base = await requireGatewayBase();
   const res = await fetchOrThrow(`${base}/centraid/_vault/vaults`, {
@@ -478,10 +455,6 @@ export async function listVaults(): Promise<VaultRow[] | undefined> {
   return body.vaults;
 }
 
-/**
- * Header-free; vault named by path. Create/delete have NO client HTTP (#289).
- * Mobile "Vaults" adds/switches/forgets device-local tuples, never vaults.
- */
 export async function updateVault(
   vaultId: string,
   patch: { name?: string; color?: string; icon?: string; blurb?: string }
@@ -496,8 +469,6 @@ export async function updateVault(
     }
   );
 }
-
-// Display metadata: row → builtin template → title-cased id + palette hash.
 
 const BUILTIN_BY_ID = new Map<string, AppMetaResolved>(
   BUILTIN_APPS.map((a) => [a.id, a])
@@ -564,13 +535,8 @@ export function resolveAppMeta(row: {
   };
 }
 
-/** Auto-founded owner label (`build-gateway.ts`). Placeholder — "not set yet". */
 export const PLACEHOLDER_MEMBER_LABEL = "You";
 
-/**
- * Person's name, not the phone's. `""` = roster still "You"; `undefined` = no
- * plane or read failed. Both mean "ask", never "assume".
- */
 export async function readSelfMemberName(): Promise<string | undefined> {
   try {
     const base = await requireGatewayBase();

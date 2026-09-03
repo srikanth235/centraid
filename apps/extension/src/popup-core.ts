@@ -1,15 +1,9 @@
-/**
- * Popup pure helpers (#545) — error text and module availability
- * without DOM wiring. `popup-state.ts` already owns paused/blocking strings.
- */
-
 import type { CompanionModule, ModuleStatus } from "./types.js";
 
 export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Map module statuses to which capture buttons are enabled / visible. */
 export function moduleAvailability(modules: readonly ModuleStatus[]): {
   enabled: ReadonlySet<CompanionModule>;
   agendaVisible: boolean;
@@ -24,14 +18,12 @@ export function moduleAvailability(modules: readonly ModuleStatus[]): {
   };
 }
 
-/** Message envelope from chrome.runtime.sendMessage (owned here for popup). */
 export interface PopupEnvelope<T> {
   readonly ok: boolean;
   readonly value?: T;
   readonly error?: string;
 }
 
-/** Envelope unwrap for popup send() — same contract as content-core. */
 export function unwrapPopupEnvelope<T>(
   response: PopupEnvelope<T> | undefined
 ): T {

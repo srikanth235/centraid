@@ -1,9 +1,3 @@
-// What the Automations place SAYS about an automation and its runs (#765, §3).
-// The wire sends only `enabled`, so `Failing`/`Draft` are DERIVED from the run
-// feed; `Draft` means "has never run", and a ref outside `known` is never called
-// a draft. Suggestions are a slice of the TEMPLATE CATALOGUE — nothing watches
-// the member.
-
 import { automationsErrorBody } from "@centraid/client/automations-copy";
 import {
   EMPTY_HEALTH,
@@ -14,13 +8,11 @@ import {
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
 import type { AutomationRow, AutomationTemplate } from "../../lib/automations";
 
-/** Where `ready` becomes `full` — the chips start earning their space. */
 export const FULL_AT = 8;
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
-/** Past this, a run is named by its date, not its weekday. */
 const WEEK = 7 * DAY;
 
 export interface RunEntry {
@@ -29,7 +21,6 @@ export interface RunEntry {
   name: string;
   ok: boolean;
   startedAt: number;
-  /** Summary, or why it failed. May be empty. */
   detail: string;
 }
 
@@ -41,7 +32,6 @@ export type AutomationFilter = "all" | "failing" | "paused" | "drafts";
 
 export interface FailureStreak {
   count: number;
-  /** The OLDEST failure in the streak. */
   startedAt: number;
 }
 
@@ -55,7 +45,6 @@ export interface AutomationRowCopy {
   action: string;
   act: AutomationAct;
   status: AutomationStatus;
-  /** Kept so the standing line picks the worst failure without re-reading the feed. */
   streak: FailureStreak | null;
 }
 
@@ -69,9 +58,7 @@ export interface RunRowCopy {
 }
 
 export interface RunContext {
-  /** Newest first. */
   runs: readonly RunEntry[];
-  /** Refs whose runs were READ — outside this set means unknown, not none. */
   known: ReadonlySet<string>;
   now: number;
 }
@@ -91,7 +78,6 @@ export function clockLabel(at: number): string {
   });
 }
 
-/** Day and month only — a year reads as an archive entry. */
 export function automationDayLabel(at: number): string {
   return new Date(at).toLocaleDateString(undefined, {
     day: "numeric",
@@ -140,7 +126,6 @@ export function statusOf(
   row: AutomationRow,
   context: RunContext
 ): AutomationStatus {
-  // The member's own act leads: a paused automation says `Paused`.
   if (!row.enabled) return "paused";
   if (failureStreak(row.ref, context.runs)) return "failing";
   if (context.known.has(row.ref) && !newestRunOf(row.ref, context.runs))
@@ -168,7 +153,6 @@ export function automationSub(row: AutomationRow, context: RunContext): string {
   return join([row.scheduleLabel, tail]);
 }
 
-/** No manifest description under the name: line two is what fires it (§3). */
 export function automationRowCopy(
   row: AutomationRow,
   context: RunContext
@@ -265,7 +249,6 @@ export function opsStateFor(
   return count >= FULL_AT ? "full" : "ready";
 }
 
-/** The LONGEST streak: "failed its last 6 runs" differs from "failed once". */
 export function worstFailure(
   copies: readonly AutomationRowCopy[]
 ): AutomationRowCopy | undefined {
@@ -282,8 +265,6 @@ export {
   AUTOMATIONS_ERROR_TITLE as ERROR_TITLE,
 } from "@centraid/client/automations-copy";
 
-/** The "nothing has run since" clause drops without a successful read — an
- *  invented clock is worse than a shorter sentence. */
 export function errorBody(sinceClock: string | undefined): string {
   return automationsErrorBody(sinceClock);
 }

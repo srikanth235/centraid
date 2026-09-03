@@ -1,6 +1,3 @@
-// Direct-transfer client (#414/#416); identity is stamped server-side from
-// the tunnel, never sent here.
-
 export interface MultipartPartReceipt {
   partNumber: number;
   etag: string;
@@ -25,14 +22,10 @@ export interface DirectBeginInput {
 
 export interface DirectBeginResult {
   sessionId?: string;
-  /** D10 dedupe: the gateway already holds these bytes. */
   alreadyPresent: boolean;
   custody: string;
-  /** Raw content key — response-only; never persisted, never in a URL. */
   keyBase64: string;
   completedParts: MultipartPartReceipt[];
-  /** Authoritative settlement iff `alreadyPresent`; persist verbatim,
-   *  NEVER fabricate a `casAck`. */
   settlement?: SettlementReceipt;
   upload?: DirectUploadPlan;
 }
@@ -64,7 +57,6 @@ export class DirectTransferError extends Error {
     this.name = "DirectTransferError";
   }
 
-  /** 4xx other than 408/429 will not fix itself by retrying. */
   get terminal(): boolean {
     return (
       this.status >= 400 &&

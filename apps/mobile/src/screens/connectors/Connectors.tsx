@@ -1,7 +1,3 @@
-// CONNECTORS — what is allowed to reach outside this vault (#765, spec §4). Consent surface: one verb per state. `net` only on a broken connection's metadata — the NAME stays primary ink (the credential is the problem).
-// TWO VERBS ARE WITHHELD, ON PURPOSE: no BYO wizard or Assist onboarding on phone, no mobile catalog client. A verb that opened nothing would be worse than a bar with no verbs.
-// ATTACHED DATA SYNCS IS OMITTED, ON PURPOSE: the gateway serves no such plane; do not invent it from a name-matching guess.
-
 import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 
@@ -140,9 +136,6 @@ function ConnectorsBody({
   );
 }
 
-/**
- * Gate above the page so a connectors-off gateway never mounts `useConnectors` (that would dress a 404 as a page error). `undefined` is unknown, not off.
- */
 export default function ConnectorsScreen(
   props: ConnectorsScreenProps
 ): React.JSX.Element {
@@ -170,7 +163,6 @@ function ConnectorsPlace({
     }),
     [colors]
   );
-  // Clock is the one the read landed at (`useConnectors`) — relative phrases agree and do not age without a re-read.
   const health = healthLineFor(
     page.state,
     connectorsHealth(page.connections, page.now)

@@ -1,5 +1,3 @@
-// Derivative-then-original retry. recyclingKey must change on rung — expo-image caches the failed URL.
-
 import { useCallback, useState } from "react";
 
 export interface ImageFallback {

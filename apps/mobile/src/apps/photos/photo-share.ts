@@ -1,8 +1,3 @@
-// SENDING A COPY — the one path a photograph takes off this device (#816).
-// Below `exact` the bytes leave through `stripJpegLocation`. No other file under
-// Photos may call the OS share APIs (`share-place-call-sites.test.ts`); saving to
-// the camera roll is not a share.
-
 import { File, Paths } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as Sharing from "expo-sharing";
@@ -60,8 +55,6 @@ function outgoingName(
     : `${trimmed.replace(/\.[^.]+$/u, "")}.jpg`;
 }
 
-/** HEIC and PNG have no walker here, so re-encode. A video is never re-encoded —
- *  refuse instead of transcoding it. */
 async function jpegBytes(request: ShareRequest): Promise<Uint8Array> {
   const original = await new File(request.uri).bytes();
   if (isJpeg(original)) return original;
@@ -77,7 +70,6 @@ async function jpegBytes(request: ShareRequest): Promise<Uint8Array> {
   return bytes;
 }
 
-/** Throws rather than degrading: never a share that hides a place it carries. */
 async function scrubbedCopy(request: ShareRequest): Promise<string> {
   const stripped = stripJpegLocation(await jpegBytes(request));
   if (stripped === null) throw new LocationNotRemovableError();

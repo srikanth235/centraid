@@ -1,12 +1,3 @@
-/**
- * Independent re-derivation of the /refresh capability (issue #865) for
- * tests. Deliberately NOT imported from worker.ts: the expected value is
- * recomputed from the documented construction —
- *   HMAC-SHA256(CALLBACK_RECEIPT_SECRET,
- *               "centraid/oauth-refresh-capability/v1\n" + sha256(token))
- * base64url-encoded — so a domain-separation or hashing regression inside
- * the Worker cannot satisfy its own expectations.
- */
 export async function expectedRefreshCapability(
   refreshToken: string,
   receiptSecret: string

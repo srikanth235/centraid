@@ -1,6 +1,4 @@
 import { rmSync } from "node:fs";
-// Queue conformance: enqueue, dedupe, resume, state transitions, and the
-// guarantee that the replica store's schema rebuild is not collateral damage.
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -125,7 +123,6 @@ describe("store", () => {
         { size: 10, vault: "vault-personal", mediaType: "image/jpeg" },
         { size: 25, vault: "vault-personal", mediaType: "video/quicktime" },
         { size: 40, vault: "vault-family", mediaType: "video/mp4" },
-        // A legacy pre-target row: durable, and assigned to no vault.
         { size: 7 },
       ];
       rows.forEach((row, index) => {
@@ -139,7 +136,6 @@ describe("store", () => {
           })
         );
       });
-      // Terminal rows are not pending storage and must not be counted.
       store.enqueue(
         upload({
           itemId: "item-settled",
@@ -199,7 +195,6 @@ describe("store", () => {
       });
       store.markPartRecorded(item.itemId, 1, '"etag-1"');
       expect(store.parts(item.itemId)[0]?.state).toBe("recorded");
-      // A gateway-reported completedPart may be recorded without a local PUT.
       store.markPartRecorded(item.itemId, 2, '"etag-2"');
       expect(store.parts(item.itemId)[1]).toStrictEqual({
         partNumber: 2,
@@ -326,7 +321,6 @@ describe("store", () => {
       expect(item.targetVaultId).toBe("vault-family");
     });
 
-    // The historical v2 follow-up table: no intent_id, no attempts/poison columns.
     const V2_FOLLOWUP_DDL = `
     CREATE TABLE upload_followup (
       followup_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -382,7 +376,6 @@ describe("store", () => {
     it("survives a kill between the v2→v3 ALTER and its version bump (idempotent)", () => {
       const item = store.enqueue(upload());
       reopenAsV2(item);
-      // The ALTER landed but the process died before `user_version` moved to 3.
       driver.exec("ALTER TABLE upload_followup ADD COLUMN intent_id TEXT");
 
       expect(() => {
@@ -397,7 +390,6 @@ describe("store", () => {
     it("survives a kill between the v3→v4 ALTER and its version bump (idempotent)", () => {
       const item = store.enqueue(upload());
       reopenAsV2(item);
-      // Walk to a clean v3 first, then simulate a half-applied v3→v4.
       driver.exec("ALTER TABLE upload_followup ADD COLUMN intent_id TEXT");
       driver.exec(
         "ALTER TABLE upload_followup ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"
@@ -480,8 +472,6 @@ describe("store", () => {
     });
 
     it("leaves foreign tables alone when it rebuilds its own schema", () => {
-      // Mirrors the replica store's own guarantee: a schema-version mismatch
-      // drops only the tables this module names.
       driver.exec(
         "CREATE TABLE replica_intent_outbox (intent_id TEXT PRIMARY KEY)"
       );
@@ -494,9 +484,6 @@ describe("store", () => {
       store = UploadQueueStore.create(driver);
 
       expect(store.pending(), "own tables rebuild").toHaveLength(0);
-      // node:sqlite hands back null-prototype rows; spreading compares the
-      // column data (which is the contract) without asserting the driver's
-      // prototype.
       expect(
         driver
           .all<{ intent_id: string }>(

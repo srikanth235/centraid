@@ -1,5 +1,3 @@
-// Renderer transport for the gateway link surface (#726/P3); a link is the
-// channel a grant to another person is delivered over (#825).
 import { authHeader } from "../gateway";
 
 const LINKS_PATH = "/centraid/_gateway/links";
@@ -8,7 +6,6 @@ export interface GatewayLink {
   linkId: string;
   vaultA: string;
   vaultB: string;
-  /** Self-declared label, `null` when unknown. `labelA` names `vaultA`. */
   labelA: string | null;
   labelB: string | null;
   partyIdA?: string | null;
@@ -29,7 +26,6 @@ async function getJson<T>(baseUrl: string, path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** Total parser (#750): drifted payloads are dropped, not half-built. */
 function parseGatewayLink(value: unknown): GatewayLink | undefined {
   if (value === null || typeof value !== "object") return undefined;
   const row = value as Record<string, unknown>;
@@ -82,15 +78,12 @@ export async function approveLink(
   return out.link;
 }
 
-/** One-time, 15-minute-TTL ticket (#726 audit finding 1). */
 export interface GatewayLinkTicket {
   vaultId: string;
-  /** Opaque — hand back to `redeemLinkTicket` verbatim. */
   ticket: string;
   expiresAt: string;
 }
 
-/** Owning `vaultId` IS the authorization; `not_found` otherwise. */
 export async function mintLinkTicket(
   baseUrl: string,
   vaultId: string
@@ -105,14 +98,12 @@ export async function mintLinkTicket(
   return (await response.json()) as GatewayLinkTicket;
 }
 
-/** Non-link outcomes are reachability values; other refusals throw. */
 export interface RedeemLinkTicketOutcome {
   state: "linked" | "unreachable";
   link?: GatewayLink;
   detail?: string;
 }
 
-/** Redeem into the LOCAL `vaultId`; the gateway dials the peer itself. */
 export async function redeemLinkTicket(
   baseUrl: string,
   vaultId: string,

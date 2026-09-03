@@ -1,9 +1,3 @@
-// `viewerOverflowMenuGroups` — the viewer `···` chip's anchored menu, as pure
-// data (#712). Asserted without a renderer, the same discipline
-// `viewer-model.test.ts` uses for the rest of this module's shapes: the row
-// set, the honesty omissions the header comment argues for, and the
-// enabled/disabled logic a read-only grant drives.
-
 import { describe, expect, test } from "vitest";
 
 import type {
@@ -16,9 +10,7 @@ import {
 } from "./viewer-menu";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
-function noop(): void {
-  // A stand-in for a callback the test does not care about firing.
-}
+function noop(): void {}
 
 function baseInput(
   overrides: Partial<Parameters<typeof viewerOverflowMenuGroups>[0]> = {}
@@ -40,8 +32,6 @@ function baseInput(
   };
 }
 
-/** Every group here carries plain action rows, never a submenu — flattening
- *  is safe and keeps the assertions below reading as a flat row set. */
 function flatten(groups: readonly MenuGroup[]): MenuActionRow[] {
   return groups.flatMap((group) => group.rows as MenuActionRow[]);
 }
@@ -62,12 +52,6 @@ describe("viewerOverflowMenuGroups — the row set", () => {
     );
   });
 
-  // The ORDER is the parity, not just the set. iOS reads Copy · Duplicate ·
-  // Hide · Slideshow, then Add to Album, then the Adjust pair, then Delete
-  // last; strike the two rows this vault cannot carry and the remainder must
-  // still fall in that sequence, with Download / Send a copy — which iOS puts
-  // behind its share chip and this vault has to state separately — sitting
-  // above the destructive floor.
   test("keeps the row sequence iOS reads, minus what cannot be carried", () => {
     const rows = flatten(viewerOverflowMenuGroups(baseInput()));
     expect(rows.map((row) => row.key)).toStrictEqual([
@@ -87,8 +71,6 @@ describe("viewerOverflowMenuGroups — the row set", () => {
     const last = rows.at(-1)!;
     expect(last.key).toBe("delete");
     expect(last.destructive).toBe(true);
-    // Its own group: nothing may be placed under the destructive floor, and a
-    // shared group would let a later row land there by accident.
     expect(groups.at(-1)!.rows.map((row) => row.key)).toStrictEqual(["delete"]);
   });
 
@@ -298,10 +280,6 @@ describe("viewerOverflowMenuGroups — wiring", () => {
   });
 
   test("Adjust Location opens the info sheet rather than carrying its own place editor", () => {
-    // The row's presence and its wiring to `onAdjustLocation` (asserted
-    // above) is the whole claim: there is no second `onSelect` branch here
-    // that edits place data directly, which is what would have to exist for
-    // this menu to duplicate `PhotoInfoSheet.tsx`'s editor.
     const rows = flatten(viewerOverflowMenuGroups(baseInput()));
     const row = rows.find((candidate) => candidate.key === "adjust-location");
     expect(row?.label).toBe("Adjust Location");

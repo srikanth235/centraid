@@ -4,9 +4,6 @@ import type { MenuSubmenuRow } from "../../kit/components/AnchoredMenu";
 import { libraryMenuGroups } from "./photos-library-menu";
 import type { LibraryFilter } from "./photos-library-menu";
 
-/** Every row this module builds sits one level deep, inside a disclosure —
- *  never a flat action row at the top, so tests reach in through this rather
- *  than repeating the type guard and the "not found" failure everywhere. */
 function submenu(
   groups: ReturnType<typeof libraryMenuGroups>,
   key: string
@@ -145,9 +142,6 @@ describe("the Library header menu's Detect faces row (issue #724 W5)", () => {
     );
     expect(found).toMatchObject({ label: "Detect faces", disabled: false });
     found!.onSelect!();
-    // The row OPENS the question. That the handler is the consent gate rather
-    // than the enrichment write is the consumer's contract; what this model
-    // guarantees is that it fires the caller's handler and nothing else.
     expect(onDetectFaces).toHaveBeenCalledOnce();
   });
 

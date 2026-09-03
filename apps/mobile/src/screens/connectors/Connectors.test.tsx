@@ -1,12 +1,4 @@
-// The Connectors place, rendered (#765, spec §4). Pins what an edit is
-// likeliest to undo quietly: loading = ROW GEOMETRY + why-sentence, never a
-// spinner; empty = verbatim consent paragraph; error = net panel + exact
-// cause + retry + promise nothing was paused; lapsed `Re-authorize` runs the
-// real ceremony, not a local write; inline verb only with a lapsed row.
-// Frame verbs ABSENT by decision — the last test holds that absence.
-
 import type { WebBrowserAuthSessionResult } from "expo-web-browser";
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,8 +16,6 @@ import ConnectorsScreen from "./Connectors";
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
-  // RefreshControl is the screen-added primitive: a gesture host that draws
-  // nothing; kit primitives come from the shared stub.
   return {
     ...stub.reactNativeStub(),
     RefreshControl: () => null,
@@ -45,8 +35,6 @@ vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
 
-// Only session fact read: features advertised on `/info`. Provider mocked so
-// the replica machinery never mounts to state a capability.
 const session = vi.hoisted(() => ({
   features: undefined as
     | { automations: boolean; connectors: boolean }
@@ -119,7 +107,6 @@ const navigation = {
 
 let dispose: (() => void) | undefined;
 
-/** Mount the screen and let the first read settle. */
 async function render(): Promise<HTMLElement> {
   const mounted = mountBlock(
     <ConnectorsScreen
@@ -134,8 +121,6 @@ async function render(): Promise<HTMLElement> {
   return mounted.container;
 }
 
-/** Two macrotask turns: microtasks drain before the first timer; the second
- *  covers a read that a write kicked off. */
 async function settle(): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
@@ -160,14 +145,11 @@ function buttonLabelled(container: HTMLElement, label: string): Element | null {
 describe(ConnectorsScreen, () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Unknown by default — the gateway has not answered yet.
     session.features = undefined;
     wire.list.mockResolvedValue([]);
     wire.begin.mockResolvedValue(wire.authUrl);
     wire.complete.mockResolvedValue(undefined);
     wire.setStatus.mockResolvedValue(undefined);
-    // Everyday outcome: member closed the sheet. Runtime enum from a mocked
-    // module — the literal is type-asserted.
     wire.openAuthSession.mockResolvedValue({
       type: "dismiss",
     } as WebBrowserAuthSessionResult);
@@ -178,8 +160,6 @@ describe(ConnectorsScreen, () => {
     dispose = undefined;
   });
 
-  // V0 gate off: no connections routes mounted — don't dress a 404 as a
-  // failed read.
   it("walls the place when the gateway has connectors switched off", async () => {
     session.features = { automations: true, connectors: false };
     const container = await render();
@@ -199,12 +179,7 @@ describe(ConnectorsScreen, () => {
   });
 
   it("draws the row geometry while it reads, and says why", async () => {
-    // A read that never settles is the loading state.
-    wire.list.mockReturnValue(
-      new Promise<ConnectionEntry[]>(() => {
-        // Never settles: this is what "still reading" looks like.
-      })
-    );
+    wire.list.mockReturnValue(new Promise<ConnectionEntry[]>(() => {}));
     const container = await render();
     const skeleton = nodesOf(container, "div").find(
       (node) => node.dataset.role === "progressbar"
@@ -226,7 +201,6 @@ describe(ConnectorsScreen, () => {
       "A connector lets one outside service reach a named part of this vault, and nothing else."
     );
     expect(spans).toContain("Nothing to attend to");
-    // No catalog exists on this surface; offer nothing it cannot do.
     expect(buttonLabelled(container, "Open the catalog")).toBeNull();
   });
 
@@ -274,7 +248,6 @@ describe(ConnectorsScreen, () => {
       "centraid://oauth/finish"
     );
     expect(wire.complete).toHaveBeenCalledOnce();
-    // Health is re-read from the gateway, never assumed locally.
     expect(wire.setStatus).not.toHaveBeenCalled();
     expect(wire.list.mock.calls.length).toBeGreaterThan(1);
   });
@@ -305,3 +278,4 @@ describe(ConnectorsScreen, () => {
     expect(textOf(container)).toContain("Connectors");
   });
 });
+// @vitest-environment jsdom

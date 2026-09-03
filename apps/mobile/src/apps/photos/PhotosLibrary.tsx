@@ -52,10 +52,6 @@ type AlbumRow = {
   count: number;
 };
 
-/**
- * Memoized and hoisted out of the screen body so a state change anywhere on the
- * page does not re-render — and re-decode the cover of — every album.
- */
 const AlbumCard = memo(
   ({
     row: { album, cover, count },
@@ -142,9 +138,6 @@ export default function PhotosLibrary({
       };
     }, [])
   );
-  // The keep-pin exclusion is only trustworthy once the collection_entry rows
-  // have actually loaded — an empty set mid-load would wrongly treat pinned
-  // album originals as eligible for deletion.
   const pinsHydrated = pinsReady && !entries.loading;
   const protectedAssets = useMemo(
     () => protectedAssetIdsFromPins(entries.rows, keptAlbums, assets),
@@ -170,14 +163,8 @@ export default function PhotosLibrary({
       ),
     [freeCandidates]
   );
-  // One pass over the merged timeline for all four head counts, and one over
-  // the face rows for the other two. Inline in the head's JSX they re-walked
-  // the whole library every time this screen re-rendered for any reason.
   const counts = useMemo(() => photoLibraryCounts(assets), [assets]);
   const faceCounts = useMemo(() => faceReviewCounts(faces.rows), [faces.rows]);
-  // Memoized because it is the list's `data`: an array rebuilt on every render
-  // is a new identity, which makes the windowed list treat every album as a
-  // changed row. The build itself is also a full entries × albums pass.
   const albumRows = useMemo(
     () =>
       [...collections.rows]
@@ -227,8 +214,6 @@ export default function PhotosLibrary({
       surfaceWriteFailure(error, "Album not created");
     }
   };
-  // Re-hash the CURRENT bytes of one device copy. A photo edited in place after
-  // backup keeps its ph:// id but holds new bytes; this is what catches that.
   const probeDeviceBytes: DeviceByteProbe = async (localId) => {
     try {
       const original = await openDeviceOriginal(localId);
@@ -239,15 +224,12 @@ export default function PhotosLibrary({
       );
     } catch (error) {
       if (!(error instanceof InCloudOriginalError)) throw error;
-      // Reported as its own outcome below. Calling it "already gone" would be a
-      // lie about a photo that is very much still there, just not here.
       return "in-cloud";
     }
   };
   const confirmFreeSpace = async (): Promise<void> => {
     setFreeing(true);
     try {
-      // Revalidate at delete time, never trusting the settle-time map alone.
       const result = await revalidateBackedUp(freeCandidates, probeDeviceBytes);
       if (result.deletableLocalIds.length)
         await MediaLibrary.Asset.delete(
@@ -310,10 +292,6 @@ export default function PhotosLibrary({
     );
   };
   return (
-    // The band is the way out now (§F, proto:4953-4954), so the head carries
-    // NO back chevron: this surface is the band's `Library` destination, and a
-    // destination that also owns a back arrow gives a member two answers to
-    // "where does this go".
     <PhotosScreen current="library">
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>Library</Text>
@@ -444,8 +422,6 @@ export default function PhotosLibrary({
               accessibilityLabel="Open backup health"
               accessibilityRole="button"
               onPress={() =>
-                // Cross-stack since #712: Backup health is a frame
-                // screen in Settings now, not a Photos route.
                 navigation.navigate("Settings", { screen: "BackupHealth" })
               }
             >

@@ -1,8 +1,3 @@
-// The Home springboard (#708 A). INVARIANT: every tile header is icon chip,
-// name, count, in that order — it is what makes eight unlike bodies
-// (./TileBody) read as one grid. Home takes no identity hue (#707); the hue
-// belongs to the app a tile previews, on its chip alone.
-
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
@@ -29,12 +24,10 @@ import { TILE_PAD } from "./tile-model";
 import type { TileData } from "./tile-model";
 import TileBody from "./TileBody";
 
-/** State curve, not a spring — a press is a state change, not physics. */
 const PRESS_CURVE = Easing.bezier(0.3, 0, 0.4, 1);
 const PRESS_DURATION = durations.one;
 const CHIP_SIZE = 22;
 
-/** A floor, never a height: fixed heights slice bodies at 150% text. */
 const TILE_MIN_HEIGHT = 152;
 
 function buildPressHandlers(scale: SharedValue<number>): {
@@ -67,7 +60,6 @@ export default function LauncherGrid({
   const { colors, scheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  // Order only, and only forwards — no blank half-rows.
   const packed = useMemo(
     () => packTiles(items, (item) => isWideTile(item.meta.id)),
     [items]
@@ -90,7 +82,6 @@ export default function LauncherGrid({
   );
 }
 
-/** `undefined` is withheld, never rendered as zero. */
 function countText(tile: TileData | undefined): string {
   if (!tile || tile.count === undefined) return "—";
   return tile.countCapped ? `${tile.count}+` : String(tile.count);
@@ -118,7 +109,6 @@ function ContentTile({
   }));
   const { pressIn, pressOut } = buildPressHandlers(scale);
   const count = countText(tile);
-  // The em dash is a glyph; a screen reader gets the label alone.
   const spoken =
     tile?.count === undefined
       ? (tile?.countLabel ?? "")
@@ -133,9 +123,6 @@ function ContentTile({
         onPress={onPress}
         onPressIn={pressIn}
         onPressOut={pressOut}
-        // Keyed on the blueprint app id. The label carries the live count
-        // ("Open Photos, 812 photographs"), so it changes with the vault; the
-        // id does not.
         testID={`${TEST_ID_PREFIXES.homeTile}${meta.id}`}
       >
         <Animated.View style={[styles.card, animStyle]}>
@@ -189,7 +176,6 @@ const makeStyles = (colors: ThemeColors) =>
       width: CHIP_SIZE,
     },
     count: { ...t("mono"), color: colors.textFaint },
-    // Cancels the slots' 4px halves so outer columns meet content padding.
     grid: { flexDirection: "row", flexWrap: "wrap", marginHorizontal: -4 },
     header: { alignItems: "center", flexDirection: "row", gap: 8 },
     invite: { ...t("control"), color: colors.textFaint },

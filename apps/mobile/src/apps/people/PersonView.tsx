@@ -1,22 +1,3 @@
-// Person (v12 handoff § Screens 4) — one person in full, one level deep.
-//
-// Hero, two commits, the record sections, and the two acts that end a person.
-// The web renderer (`components/PersonRoute.tsx`) is the reference: the vault
-// link is drawn here IN FULL — the hero ring, the vault tags, the `Vaults` and
-// `Shared with them` sections — and its two sections are ABSENT ENTIRELY when
-// the sharing plane could not be read, because an empty `Not linked yet.` over
-// a denied read answers a question nobody could ask.
-//
-// `Share` AND `Revoke` ARE HERE, AND THEY ARE LIVE (#825). A share is a
-// standing grant over an audience × subject × capability, so this screen is
-// the grant dashboard the ruling names it — every live grant reaching this
-// party, `Revoke` on each row and `Share` on the section that lists them
-// (`PersonGrants.tsx`). There is no `Link vault`: linking is not an act a
-// member performs.
-//
-// ADDING IS A FIELD WHERE THE ROW WILL BE, never a new screen (handoff
-// deviation 3): each record section's `Add` opens an inline composer.
-
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -75,7 +56,6 @@ const CHANNEL_KINDS: readonly ContactChannel["kind"][] = [
   "handle",
 ];
 
-/** `phone · work · preferred` — the channel row's second line. */
 function channelSub(channel: ContactChannel): string {
   const parts: string[] = [channel.kind];
   if (channel.label) parts.push(channel.label);
@@ -149,8 +129,6 @@ export default function PersonView({
     if (loading && !person) {
       return <SkeletonRows accessibilityLabel="Reading this person" />;
     }
-    // Past the loading gate an absent person is a fact — trashed or merged
-    // away in another window — so this screen says so and offers the way back.
     if (!person) return <EmptyLine text={EMPTY.noMatch} />;
 
     const vaults = person.vaults;
@@ -168,7 +146,6 @@ export default function PersonView({
         <Verb label={VERBS.cancel} quiet onPress={() => setComposer(null)} />
       </>
     );
-    // WITHHELD, not disabled: there is no writable target to copy into.
     const addVerb = (key: ComposerKey): React.ReactNode =>
       composing(key) || !writable ? null : (
         <Verb label={VERBS.add} onPress={() => openComposer(key)} />

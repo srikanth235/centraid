@@ -97,7 +97,6 @@ describe("phone storage accounting", () => {
         { name: "centraid-replica-revoked.sqlite3", size: 900 },
         { name: "centraid-replica-revoked.sqlite3-shm", size: 32 },
         { name: "centraid-replica-gone.sqlite3", size: 7 },
-        // Not ours to attribute: the screen must not invent a Centraid cost.
         { name: "something-else.txt", size: 5_000 },
       ],
       ["/durable/CentraidReplica/centraid-replica-mounted.sqlite3"],

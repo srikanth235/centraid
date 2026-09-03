@@ -1,16 +1,3 @@
-// Properties (Docs handoff Part 2 §11; #821) — "the whole custody
-// story, on demand", told strictly from facts this device holds:
-//
-//   * the custody projection (`blob.custody_state`) in the same owner-facing
-//     words every other surface uses — with its own note that this is "where
-//     the bytes are, as the vault last swept them";
-//   * the gateway this vault rides (the session's own base), the folder
-//     label, the tags, the share reach (absent, never negative — a denied
-//     share read says nothing here);
-//   * the sample's "backed up Sunday 21:40" is WITHHELD: the backup
-//     timestamp is the gateway's record and this seat has no read for it —
-//     `PROPERTIES_BACKUP_WITHHELD` says so instead of guessing a time.
-
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
@@ -44,7 +31,6 @@ import DocsScreen from "./DocsScreen";
 import DocsShelfHeader from "./DocsShelfHeader";
 import { useDocs } from "./useDocs";
 
-/** The status sentence, from the custody fact alone — no invented clauses. */
 export function custodyStatusLine(state: string | null): string {
   switch (state) {
     case "replicated":
@@ -86,7 +72,6 @@ export default function DocumentProperties({
   }, [gatewayBase]);
 
   const custody = doc ? custodyMeta(doc.custody_state) : null;
-  // DETAIL surfaces only — the `scopeLabels` join `PhotoInfoSheet` shows.
   const sources = doc?.scopeLabels.join(" · ") ?? "";
   const pending = doc ? readPendingOverlay(doc.raw) : undefined;
 

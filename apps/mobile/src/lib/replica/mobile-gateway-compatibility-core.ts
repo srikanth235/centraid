@@ -62,14 +62,11 @@ export function supportsMobileOfflineGateway(raw: unknown): boolean {
   );
 }
 
-/** Experimental features this app gates surfaces on, from the SAME `/info`
- * answer the compatibility wall fetched (C1). */
 export interface MobileGatewayFeatures {
   automations: boolean;
   connectors: boolean;
 }
 
-/** Copy for a member who reaches a switched-off place. Names the GATEWAY. */
 export const MOBILE_FEATURE_OFF_COPY: Record<
   keyof MobileGatewayFeatures,
   { title: string; body: string }
@@ -84,8 +81,6 @@ export const MOBILE_FEATURE_OFF_COPY: Record<
   },
 };
 
-/** Absent flag reads OFF. Never returns `undefined`: "never answered" is the
- * caller's fact (`requireMobileOfflineGateway`), distinct from a verdict. */
 export function readMobileGatewayFeatures(raw: unknown): MobileGatewayFeatures {
   const capabilities =
     raw !== null && typeof raw === "object"
@@ -99,7 +94,6 @@ export function readMobileGatewayFeatures(raw: unknown): MobileGatewayFeatures {
   };
 }
 
-/** Chooses which side is older on `protocol_mismatch` (C1(b)). */
 export function judgeMobileGatewayCompatibility(
   raw: unknown
 ): MobileCompatibilityDisposition | "supported" {
@@ -122,7 +116,5 @@ export function judgeMobileGatewayCompatibility(
     protocol.protocolVersion < GATEWAY_MIN_PROTOCOL_VERSION
   )
     return "update-gateway";
-  // Non-overlapping window: safest read is a newer peer — a store update
-  // refreshes the app's complete protocol range.
   return "update-app";
 }

@@ -1,25 +1,3 @@
-// @vitest-environment jsdom
-// The Memories screen's trip block (#816) — the phone is the primary
-// surface, so this is where "the seeded roll yields the Tahoe trip as a NAMED
-// card" is actually checked.
-//
-// `trips.test.ts` (blueprints) owns the title grammar and the route arithmetic,
-// and `memories-model.test.ts` owns the grouping. What this file owns is the
-// seat around them, which no cheaper layer can falsify:
-//
-//   1. THE BLOCK IS HEADED BY A SENTENCE — never the place row's raw name,
-//      which is the coordinate `findOrCreatePlaceTx` mints until somebody
-//      renames it, and never a bare "Away from home".
-//   2. THE TRIP CARRIES A SKETCH. Dots for the stops and a line through them in
-//      capture order, from the same projection the Places map runs.
-//   3. THE SCREEN FETCHES NOTHING TO DRAW EITHER. No basemap, no tile, no
-//      remote URL in the markup this block adds — the sketch is arithmetic over
-//      coordinates the vault already holds, so it renders with the network
-//      unplugged.
-//
-// Same react-native-as-DOM technique as `PlacesMap.test.tsx`; the production
-// component, the pure model, the phrase ladder and the shared projection all
-// stay real.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -93,9 +71,6 @@ vi.mock(import("react-native"), async () => {
   } as unknown as Partial<ReactNative>;
 });
 
-// The one native drawing seam. `react-native-svg` has no DOM implementation;
-// the shapes keep their geometry as attributes so the sketch's claims are
-// checkable, and the geometry itself is owned by `place-map.test.ts`.
 vi.mock(import("react-native-svg"), async () => {
   const ReactModule = await import("react");
   return {
@@ -133,7 +108,6 @@ vi.mock(
   () => ({ default: () => null }) as never
 );
 
-// The tiles are not this file's subject and their bytes are a device seam.
 vi.mock(import("./PhotoTile"), () => ({ default: () => null }) as never);
 
 vi.mock(
@@ -192,8 +166,6 @@ vi.mock(
     }) as unknown as Partial<TimelineSourceModule>
 );
 
-/** The seeded roll's places: a tagged home near Palo Alto, and two away places
- *  the opt-in gazetteer automation has named. */
 const PLACE_ROWS = [
   {
     place_id: "place-home",
@@ -204,7 +176,6 @@ const PLACE_ROWS = [
   },
   {
     place_id: "place-tahoe",
-    // Still the label GPS minted — the string a heading must never print.
     name: "39.09680, -120.03240",
     address_json: JSON.stringify({
       gazetteer: { name: "South Lake Tahoe, CA" },
@@ -243,8 +214,6 @@ const photo = (
   source: "replica",
 });
 
-// A Saturday and a Sunday away — Truckee on the way up, the lake for the rest,
-// and one frame indoors that carries no place at all.
 const TRIP_ASSETS = [
   photo("truckee-1", "2026-08-15T09:00:00.000Z", "place-truckee"),
   photo("tahoe-1", "2026-08-15T14:00:00.000Z", "place-tahoe"),
@@ -322,8 +291,6 @@ describe("a trip on the Memories screen", () => {
     const stops = container!.querySelectorAll("[data-stop]");
     expect(stops).toHaveLength(2);
     const line = container!.querySelector("[data-points]");
-    // The line passes through the stops it drew, in the order they were
-    // photographed — Truckee before the lake.
     expect(
       (line as HTMLElement | null)?.dataset.points?.split(" ")
     ).toStrictEqual(
@@ -350,11 +317,10 @@ describe("a trip on the Memories screen", () => {
   });
 
   it("still shows a trip whose places are unknown to this phone", () => {
-    // The place rows have not replicated yet: the block keeps the vault's own
-    // hint and simply has no sketch, rather than vanishing.
     mocks.places = [];
     renderMemories();
     expect(container!.textContent).toContain("2-day trip");
     expect(container!.querySelectorAll("[data-stop]")).toHaveLength(0);
   });
 });
+// @vitest-environment jsdom

@@ -1,12 +1,3 @@
-// @vitest-environment jsdom
-// *Share*, as ONE selection-bar handler (#825): what the four Photos shelves
-// get for their third target.
-//
-// The claim: the control refuses BEFORE anything opens where the selection is
-// not one subject, and where it is one, the sheet is opened over that
-// photograph's own id — never over the selection key that carries it. Every
-// outcome lands on the status line and then closes the selection.
-
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,8 +11,6 @@ import { usePhotoSelectionShare } from "./use-photo-selection-share";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-// The grant entry has its own suite (`photo-grants.test.tsx`) — here it is a
-// recorder, so this file's own two decisions are what is under test.
 const entry = vi.hoisted(() => ({
   requested: 0,
   dismissed: 0,
@@ -105,7 +94,6 @@ describe("Photos' selection-bar Share", () => {
   it("refuses a selection of many with the sentence that names the album", () => {
     const share = drive([asset("asset-1"), asset("asset-2")]);
     expect(share.handler).toStrictEqual({ unavailableReason: ONE_AT_A_TIME });
-    // Refused BEFORE anything opens: the roster is never even asked for.
     expect(entry.requested).toBe(0);
     expect(ONE_AT_A_TIME).toContain("album");
   });
@@ -135,3 +123,4 @@ describe("Photos' selection-bar Share", () => {
     expect(entry.dismissed).toBe(1);
   });
 });
+// @vitest-environment jsdom

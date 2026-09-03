@@ -1,15 +1,3 @@
-// The durable upload queue (#419.4).
-//
-// Own DB file, NOT the replica: `PRAGMA user_version` is owned by replica
-// store-core (drop-and-rebuild on mismatch); a queued upload is unreplicated
-// source-of-truth; a long drain must not contend with replica transactions
-// on one `journal_mode=DELETE` handle.
-//
-// SECRETS: the per-blob content key is NOT persisted. `begin` returns
-// `keyBase64` on every call (including resume) so the key lives only in
-// memory. Presigned URLs are not persisted — they expire, and `begin`
-// re-mints them.
-
 import type { ReplicaSqliteDriver } from "@centraid/client/replica/native";
 
 import type { PendingUploadGroup } from "../replica/storage-accounting";
@@ -90,10 +78,6 @@ export type UploadItemState =
   | "settled"
   | "failed";
 
-/**
- * `put` exists solely so a PUT-succeeded-but-recordPart-never-landed crash
- * replays the receipt instead of re-uploading the bytes.
- */
 export type UploadPartState = "pending" | "put" | "recorded";
 
 export interface UploadPart {
@@ -136,8 +120,6 @@ export interface NewUpload {
 
 const TERMINAL: readonly UploadItemState[] = ["settled", "failed"];
 
-/** The most queue rows one read materializes: a memory bound, not a product
- *  limit. Whole-queue answers are a SQL aggregate or a walk over pages. */
 export const PENDING_PAGE_LIMIT = 500;
 
 interface PendingGroupRow {
@@ -160,14 +142,10 @@ export class UploadQueueStore {
       driver.exec(DDL);
       driver.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     } else if (version >= 1 && version < SCHEMA_VERSION) {
-      // Source-of-truth ledger: migrate transactionally and idempotently so a
-      // kill mid-migration cannot brick the queue.
       migrateUploadSchema(driver, version, FOLLOWUP_DDL);
     } else if (version === SCHEMA_VERSION) {
       driver.exec(DDL);
     } else {
-      // Unknown (future/foreign) version rebuilds in place. Only this module's
-      // own tables are named, so nothing else in the file is collateral.
       driver.exec(`
         DROP TABLE IF EXISTS upload_part;
         DROP TABLE IF EXISTS upload_followup;
@@ -180,7 +158,6 @@ export class UploadQueueStore {
     return new UploadQueueStore(driver);
   }
 
-  /** Local half of D10 dedupe; the gateway's `alreadyPresent` is the other half. */
   enqueue(upload: NewUpload): UploadItem {
     return this.transaction(() => this.enqueueItem(upload));
   }
@@ -196,14 +173,6 @@ export class UploadQueueStore {
     });
   }
 
-  /**
-   * One page of the queue, oldest first — never the whole ledger. A phone that
-   * shot a wedding offline holds tens of thousands of non-terminal rows, and
-   * an unbounded `SELECT` made *starting* a drain cost the backlog rather than
-   * the work. `afterOrder` is a keyset cursor over `created_order` (UNIQUE and
-   * monotonic), so paging never re-reads a row. Callers that need only totals
-   * use `pendingCount` / `pendingStorageGroups`.
-   */
   pending(limit: number = PENDING_PAGE_LIMIT, afterOrder = 0): UploadItem[] {
     return this.driver
       .all<ItemRow>(
@@ -224,13 +193,6 @@ export class UploadQueueStore {
     );
   }
 
-  /**
-   * Pending bytes per durable target vault, aggregated by SQLite: the storage
-   * screen wants the numbers, not the rows behind them. `target_vault_id IS
-   * NULL` stays its own group so a legacy pre-target row is reported honestly
-   * as unassigned. `GLOB` not `LIKE` for the video probe — GLOB is
-   * case-sensitive, matching the `startsWith("video/")` test it replaced.
-   */
   pendingStorageGroups(): PendingUploadGroup[] {
     return this.driver
       .all<PendingGroupRow>(
@@ -259,7 +221,6 @@ export class UploadQueueStore {
       .map(toItem);
   }
 
-  /** Unique key makes producer retries idempotent; one blob may feed many apps. */
   enqueueFollowup(followup: NewUploadFollowup): UploadFollowup {
     const inputJson = JSON.stringify(followup.input);
     const intentId = stableFollowupIntentId(
@@ -291,7 +252,6 @@ export class UploadQueueStore {
     return toUploadFollowup(row);
   }
 
-  /** Settled bytes, oldest first. Poisoned follow-ups excluded (F4). */
   pendingFollowups(): UploadFollowup[] {
     return this.driver
       .all<PersistedUploadFollowupRow>(
@@ -393,11 +353,6 @@ export class UploadQueueStore {
     );
   }
 
-  /**
-   * Persist the ETag BEFORE the gateway acknowledges it: a crash between PUT
-   * and receipt must find the ETag on disk, or the next drain re-uploads bytes
-   * the provider already holds.
-   */
   markPartPut(itemId: string, partNumber: number, etag: string): void {
     this.driver.run(
       `UPDATE upload_part SET state = 'put', etag = ? WHERE item_id = ? AND part_number = ?`,
@@ -452,7 +407,6 @@ export class UploadQueueStore {
           [upload.targetVaultId, existing.itemId]
         );
       }
-      // F6: re-enqueue of a failed item revives it; do not report success over a stuck row.
       if (existing.state === "failed") {
         this.driver.run(
           `UPDATE upload_item SET state = 'pending', attempts = 0, last_error = NULL

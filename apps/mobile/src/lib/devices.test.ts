@@ -1,10 +1,4 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
-/**
- * Devices client (#765) — the roster reads and the three gestures behind
- * the Devices place. The gateway HTTP core is mocked so vitest never loads
- * react-native; what is under test is the addressed route, the body each
- * gesture sends, and the last-device confirmation rule.
- */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock(import("./gateway") as Promise<unknown>, () => ({

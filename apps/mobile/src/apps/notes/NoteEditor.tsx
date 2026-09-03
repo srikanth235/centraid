@@ -1,12 +1,3 @@
-// The note, open (#882): the writing surface plus the acts that belong to one
-// note — where it is filed, how it is tagged, what it points at, and the one
-// checklist line that leaves for Tasks.
-//
-// EVERY RULE HERE IS THE BLUEPRINT'S. `probeAt`/`anchorFrom` decide when `[[`
-// is a live probe and what a link carries, `bodySegments` finds the checklist
-// lines, and `wantsDate` decides which of them may be sent — this file draws
-// those answers and derives none of them.
-
 import React, { useState } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
 
@@ -36,7 +27,6 @@ import NotesPowerbox from "./NotesPowerbox";
 
 export interface NoteEditorProps {
   open: boolean;
-  /** Absent while the note is being written for the first time. */
   note?: NativeNote;
   title: string;
   body: string;
@@ -71,8 +61,6 @@ export default function NoteEditor(props: NoteEditorProps): React.JSX.Element {
     (segment) => segment.kind === "check"
   );
 
-  /** The picked target replaces the live `[[…` type-in and becomes a link
-   *  row; a selected passage, when there is one, travels with it. */
   const pick = (target: LinkTarget): void => {
     const anchor = anchorFrom(props.body, caret.start, caret.end);
     if (probe) {

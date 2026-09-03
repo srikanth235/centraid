@@ -1,20 +1,8 @@
-/*
- * HTTP client for the gateway's git-store editing + publish surface
- * exposed under `/centraid/_apps`. The gateway owns drafted code as a git
- * store, so the desktop is a thin client that opens a session, writes draft
- * files into the session worktree, and publishes — all over HTTP against the
- * active gateway (local or remote, identical wire protocol).
- *
- * `resetAppsStoreAuthCache()` is called from settings-save when the
- * gateway URL/token may have flipped.
- */
-
 import { loadSettings } from "./settings.js";
 
 interface AuthCache {
   baseUrl: string;
   token: string | undefined;
-  /** The vault the client addresses (#289) — `x-centraid-vault`. */
   vaultId: string | undefined;
 }
 let cachedAuth: AuthCache | undefined;
@@ -50,8 +38,6 @@ function headers(
   const h: Record<string, string> = {};
   if (token) h.authorization = `Bearer ${token}`;
   if (contentType) h["content-type"] = contentType;
-  // The addressed vault (#289): `auth()` is always awaited before any
-  // `headers()` call, so the cache carries the current vault id.
   if (cachedAuth?.vaultId) h["x-centraid-vault"] = cachedAuth.vaultId;
   return h;
 }
@@ -74,7 +60,6 @@ async function parse<T>(res: Response, label: string): Promise<T> {
   return parsed as T;
 }
 
-/** Open (or reuse) an editing session; returns the session id. */
 export async function openSession(sessionId?: string): Promise<string> {
   const { baseUrl, token } = await auth();
   const res = await fetch(`${baseUrl}/centraid/_apps/_sessions`, {

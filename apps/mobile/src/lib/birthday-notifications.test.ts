@@ -9,7 +9,6 @@ import {
 import type { BirthdayPerson } from "./birthday-notifications";
 import { notificationActionPlan } from "./notification-model";
 
-/** Sunday 1 March 2026, 08:00 local. */
 const NOW = new Date(2026, 2, 1, 8, 0);
 
 const DANA: BirthdayPerson = {
@@ -43,7 +42,6 @@ describe("reading a birth date", () => {
   });
 
   it("leaves a 29 February birthday absent rather than rounding it", () => {
-    // Neither 2026 nor 2027 has one, and 1 March is somebody else's day.
     expect(nextOccurrence("02-29", NOW)).toBeNull();
   });
 });
@@ -61,14 +59,12 @@ describe(planBirthdayNotifications, () => {
     expect(plan[0]?.body).toBe(
       "Inner circle · your phone tells you 2 days ahead."
     );
-    // Two days ahead of the 12th, at the hour a member can act on it.
     expect(plan[0]?.at.toISOString()).toBe(
       new Date(2026, 2, 10, 9).toISOString()
     );
     expect(plan[0]?.url).toBe("centraid://apps/people/p-dana");
   });
 
-  /** NEVER FOR ANYONE BUT THE INNER CIRCLE. Everyone else stays a ribbon. */
   it("never notifies for someone the owner has not starred", () => {
     const plan = planBirthdayNotifications({
       people: [{ ...RUTH, inner: false }],
@@ -100,7 +96,6 @@ describe(planBirthdayNotifications, () => {
   });
 
   it("drops a lead that has already passed rather than firing it late", () => {
-    // Two days before the 12th is the 10th; asking on the 11th is too late.
     const plan = planBirthdayNotifications({
       people: [DANA],
       leadDays: 2,

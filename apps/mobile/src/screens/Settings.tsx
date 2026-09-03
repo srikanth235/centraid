@@ -51,27 +51,6 @@ import SettingsSection from "./settings/SettingsSection";
 import VaultSection from "./settings/VaultSection";
 import YouSection from "./settings/YouSection";
 
-// Settings is a full-screen cover over Home (springboard model): a native back
-// arrow returns to Home (no pull-down on a full-screen modal), and the title sits
-// in the editorial serif to match Home's greeting. Sections read top-to-bottom as
-// one designed surface: You (local profile) · Appearance (theme override) ·
-// Vault (the active vault) · Desktop link (pairing) · Approvals · Advanced.
-//
-// The desktop link is the primary connection path: scan a desktop "Connect phone"
-// QR, or a headless `centraid-gateway pair` / `pair --qr` terminal QR on a VPS,
-// or paste the one-line ticket — everything then loads through an encrypted
-// tunnel, no URLs or tokens. The manual URL/token fields under Advanced remain a
-// dev fallback for simulators pointing at a token-less local gateway.
-//
-// BOTH pairing branches offer BOTH roads. A paste field rendered only in the
-// unpaired branch leaves a phone that has already paired once able to add a
-// second gateway by camera alone — and a camera is exactly what the two cases
-// that need a ticket do not have: a simulator, and a headless VPS whose QR
-// lives in a terminal on the same machine you are typing on. The only way back
-// to the paste field would be to unpair (or reinstall), which throws away a
-// working link to add one. Adding a vault must never cost the vault you
-// already have.
-
 interface TicketPasteProps {
   value: string;
   onChangeText: (next: string) => void;
@@ -82,7 +61,6 @@ interface TicketPasteProps {
   label: string;
 }
 
-/** The paste road to a pairing ticket — rendered in BOTH pairing branches. */
 function TicketPasteField({
   value,
   onChangeText,
@@ -230,8 +208,6 @@ export default function SettingsScreen({
   const saveAdvanced = (): void => {
     setGatewayUrl(urlValue);
     setGatewayToken(tokenValue);
-    // Settings is a cover over Home — dismiss it back to the launcher, which
-    // reloads its app list against the new gateway on focus.
     navigation.getParent()?.goBack();
   };
 
@@ -242,15 +218,6 @@ export default function SettingsScreen({
   }
 
   return (
-    // `useSafeAreaInsets` + an explicit `paddingTop`, NOT `<TopSafeArea
-    // edges={["top"]}>`. Every screen in this app is presented with
-    // `COVER_OPTIONS` (a native `fullScreenModal`), and inside that
-    // presentation the `edges` form resolved to a ZERO top inset here — the
-    // back arrow and the title drew straight through the status bar, over the
-    // clock. The hook is what Photos' own cover screens already use
-    // (`PhotosHome.tsx`, `PhotosScreen.tsx`), and those render correctly, so
-    // this is the form that is known to work under a cover rather than the one
-    // that reads better.
     <View
       style={[styles.safe, { paddingTop: insets.top }]}
       testID={TEST_IDS.settings.screen}
@@ -390,8 +357,6 @@ export default function SettingsScreen({
             onPress={() => navigation.navigate("Sharing")}
             style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
             accessibilityLabel="Sharing"
-            // The accessible name is the bare word "Sharing", which the section
-            // heading above it also carries — the id is the unambiguous target.
             testID={TEST_IDS.settings.sharingRow}
           >
             <Icon name="Share" size={18} color={colors.textSoft} />
@@ -492,8 +457,6 @@ export default function SettingsScreen({
   );
 }
 
-// --- QR scanner ---
-
 function PairScanner({
   onScanned,
   onCancel,
@@ -514,9 +477,6 @@ function PairScanner({
   }, [permission, requestPermission]);
 
   return (
-    // Same reason as the main screen above: a cover gets no top inset from
-    // `<TopSafeArea edges>`, so the scanner's cancel bar landed under the
-    // status bar too.
     <View style={[styles.scanSafe, { paddingTop: insets.top }]}>
       <View style={styles.bar}>
         <Pressable

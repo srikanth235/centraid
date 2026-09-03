@@ -7,12 +7,6 @@ import type { TextInputProps, TextProps } from "react-native";
 
 import { DYNAMIC_TYPE } from "../theme/dynamic-type";
 
-/**
- * The app-wide text boundary. React Native's `defaultProps` mutation is not a
- * reliable default under the new architecture, so every text primitive gets
- * the bounded Dynamic Type policy at render time while callers can still
- * override either prop for a deliberate local surface.
- */
 export const Text = React.forwardRef<
   React.ElementRef<typeof ReactNativeText>,
   TextProps

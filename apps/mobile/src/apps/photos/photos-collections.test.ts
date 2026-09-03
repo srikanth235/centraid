@@ -1,9 +1,3 @@
-// `buildCollectionSections` — the section model behind `PhotosCollectionsView`
-// (see that module's own header for the shelf-by-shelf argument). This file
-// pins two things #721 changed: the key-photo fix (B5) and the new
-// Videos shelf (B3), plus the ordering and honest-empty-copy invariants the
-// rest of the model already holds.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -118,14 +112,10 @@ describe("buildCollectionSections — album covers honor the member's choice (is
       })
     );
     const albums = sections.find((section) => section.key === "albums")!;
-    // Without the fix this reads `newer.uri` — every rail tile called the
-    // unconditional "newest" helper regardless of what the member chose.
     expect(albums.tiles[0]).toMatchObject({ uri: older.uri });
   });
 
   it("falls back to the newest member when the chosen cover is no longer a live member", () => {
-    // The member trashed the photograph they had made the cover — the choice
-    // does not resurrect it, and the shelf reads this exactly as "no choice".
     const trashedCover = asset("gone", {
       capturedAt: "2025-01-01T00:00:00.000Z",
       contentId: "content-gone",

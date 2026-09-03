@@ -41,7 +41,6 @@ interface DocumentSeed {
   created_at: string;
 }
 
-/** Count what actually crosses the driver, which is what pushdown is about. */
 class CountingDriver extends NodeSqliteDriver {
   rowsReturned = 0;
 
@@ -133,11 +132,6 @@ function mount(
   return { reader, driver };
 }
 
-/**
- * The mounted reader answers from ONE composed plan (#883 D1): the shared read
- * grammar's compiler, unioned over every attached vault database. These are the
- * seams that plan cannot reach into SQL, and what the phone does at each.
- */
 describe("the composed mounted plan", () => {
   test("a badge equality chooses vaults instead of filtering rows", async () => {
     const root = tempDirSync("centraid-mounted-provenance-");
@@ -150,9 +144,6 @@ describe("the composed mounted plan", () => {
       { vaultId: "family", databaseName: family },
     ]);
 
-    // `__centraidScopeId` is composed onto the envelope AFTER SQL runs, so a
-    // pushed predicate would read NULL for every row. It is constant per
-    // database, so the answer is which databases join the union at all.
     const family_only = await reader.read("docs", {
       entity: "core.document",
       where: [{ column: "__centraidScopeId", op: "eq", value: "family" }],
@@ -198,8 +189,6 @@ describe("the composed mounted plan", () => {
   });
 
   test("the four shapes it cannot carry are the four it names", () => {
-    // A fifth entry means the composed plan grew a hole; a missing one means a
-    // shape stopped being reported. Both are worth failing a test over.
     expect(Object.keys(MOUNTED_READ_FALLBACKS).sort()).toStrictEqual([
       "content-hash-badges",
       "dedupe-collapse",
@@ -226,9 +215,6 @@ describe("the composed mounted plan", () => {
     });
     expect(bounded.degraded).toBeUndefined();
 
-    // `core.content_item` carries `sha256`, so equal bytes in two vaults
-    // collapse into one badged row after the statement. The limit is therefore
-    // not pushed — and the read SAYS so rather than quietly costing the set.
     const badged = await reader.read("docs", {
       entity: "core.content_item",
       limit: 1,

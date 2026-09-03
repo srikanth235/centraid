@@ -1,5 +1,3 @@
-// Places seat arithmetic (#781). `placeCards` and `assetsAtPlace` are two
-// readers of one key — a card whose detail opens empty is the defect.
 import { describe, expect, it } from "vitest";
 
 import { PLACE_UNNAMED } from "@centraid/blueprints/apps/photos/shared-copy";

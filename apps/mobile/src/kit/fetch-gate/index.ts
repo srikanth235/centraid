@@ -1,9 +1,3 @@
-// DOWN-direction (gateway → device) pin/download engine barrel (#883 C6).
-// `ensureOfflineContent` is THE verb: pin → download → local read → eviction
-// exemption, shared by Docs' "available offline" and Photos' "download the
-// original". The pieces below it are exported for the surfaces that need one
-// half (a storage screen wants totals, not a download).
-
 /** @public */
 export { FetchChoiceChip } from "./FetchChoice";
 export { FetchChoicePlaceholder } from "./FetchChoice";

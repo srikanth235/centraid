@@ -1,9 +1,3 @@
-// The session's online rails: windowed bootstrap, the change feed and its
-// app-state gating, gateway rebase, delta pull, the 409 rebootstrap, and the
-// ship drain's settlement of waiters. The durable local write rail — payload
-// hashing, offline queueing, network policy, cancellation and crash-recovered
-// attention — is `native-session-write-rail.test.ts`; the doubles both suites
-// share are in `native-session.test-fixtures.ts`.
 import { describe, expect, test } from "vitest";
 
 import type {
@@ -100,7 +94,6 @@ describe(createNativeReplicaSession, () => {
       .on("/replica/bootstrap", () =>
         json(page({ epoch: "replica-1", seq: 1 }))
       )
-      // The bootstrap's own convergence replay runs first and finds nothing.
       .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })))
       .on("/changes", () =>
         json(
@@ -210,7 +203,6 @@ describe(createNativeReplicaSession, () => {
       },
     ];
     const gateway = createGateway()
-      // Page 1 pins the delta floor at seq 1; page 2 is read from a later snapshot.
       .on("/replica/bootstrap", () =>
         json(
           page(
@@ -227,8 +219,6 @@ describe(createNativeReplicaSession, () => {
           )
         )
       )
-      // The mandatory replay from seq 1 removes what page 1 handed us but that
-      // was deleted before page 2's snapshot — the deletion hole this closes.
       .on("/changes", () =>
         json({
           protocolVersion: 1,
@@ -360,7 +350,6 @@ describe(createNativeReplicaSession, () => {
       isConnected: () => true,
     });
     try {
-      // Queue an intent directly so it stays 'queued' (no drain shipping it).
       await session.coordinator.enqueue({
         appId: "photos",
         action: "rename",
@@ -374,12 +363,10 @@ describe(createNativeReplicaSession, () => {
         type: "centraid:vault-cursor",
         cursor: { epoch: "replica-1", seq: 2 },
       });
-      // The 409 pull wipes canonical state and re-bootstraps to the new epoch.
       await until(
         async () => (await session.status()).cursor?.epoch === "replica-2"
       );
 
-      // The queued intent lives in its own table and survives the wipe.
       const pending = await session.coordinator.pendingIntents();
       expect(pending).toHaveLength(1);
       expect(pending[0]?.state).toBe("queued");

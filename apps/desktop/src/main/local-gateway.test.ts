@@ -5,15 +5,7 @@ import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import type * as TypeImport_detached from "./detached-gateway.js";
 
-/**
- * What "Try again" has to survive (#660): after a burst of failed starts the
- * supervisor latches, and ensureLocalGateway fails instantly without retrying
- * — correct automatically, fatal on the error screen. Contract: fail to give-up,
- * fix the cause, prove an explicit retry starts the gateway for real.
- */
-
 const fixture = vi.hoisted(() => ({
-  /** Set to undefined once the "cause" is fixed. */
   failWith: undefined as string | undefined,
   attempts: 0,
 }));
@@ -56,9 +48,6 @@ vi.mock(import("./gateway-paths.js"), () => ({
   gatewayModelCatalogFile: () => "/tmp/centraid-test/models.json",
 }));
 vi.mock(import("./gateway-secrets.js"), () => ({
-  // Only reached from the embedded path, which this suite does not take —
-  // throwing keeps a real keychain call out and turns an accidental embedded
-  // run into a loud failure.
   desktopGatewayKeyStore: () => {
     throw new Error("the embedded path is not exercised by this suite");
   },
@@ -81,18 +70,14 @@ const LOCKED = "a process is holding gateway.db and is not answering";
 
 let clock: FakeClock;
 
-/** Fail until the supervisor latches `loopBroken`, driving its own retry timers. */
 async function failUntilGivenUp(
   ensure: (id: string) => Promise<unknown>
 ): Promise<void> {
   await expect(ensure("local")).rejects.toThrow(LOCKED);
-  // 1st and 2nd failures each schedule one retry (1s, then 5s); the 3rd
-  // failure inside the window trips the loop breaker.
   await clock.advance(1000);
   await clock.advance(5000);
 }
 
-/** The rejection message, or `""` when the call unexpectedly succeeded. */
 async function rejectionMessage(promise: Promise<unknown>): Promise<string> {
   return promise.then(
     () => "",
@@ -103,8 +88,6 @@ async function rejectionMessage(promise: Promise<unknown>): Promise<string> {
 describe("local gateway manual retry suite", () => {
   beforeEach(() => {
     vi.resetModules();
-    // Installed per test, restored by the helper itself — a clock leaking past
-    // a failing test would hang every test after it.
     clock = useFakeClock();
     fixture.failWith = LOCKED;
     fixture.attempts = 0;
@@ -117,12 +100,8 @@ describe("local gateway manual retry suite", () => {
 
     const message = await rejectionMessage(ensureLocalGateway("local"));
     expect(message).toMatch(/failed to start repeatedly and stopped retrying/u);
-    // The cause travels with it — quoted verbatim on the error screen.
     expect(message).toContain(`last error: ${LOCKED}`);
-    // That screen has no navigation; the message must not send its reader
-    // anywhere they cannot go.
     expect(message).not.toContain("Settings");
-    // The guard answered from the latch — it never went near the gateway.
     expect(fixture.attempts).toBe(3);
   });
 
@@ -132,9 +111,7 @@ describe("local gateway manual retry suite", () => {
     await failUntilGivenUp(ensureLocalGateway);
     expect(fixture.attempts).toBe(3);
 
-    // The member does what the screen implies they can do: fix the cause…
     fixture.failWith = undefined;
-    // …and press Try again.
     await expect(retryLocalGatewayStart("local")).resolves.toBeUndefined();
 
     expect(fixture.attempts).toBe(4);
@@ -149,8 +126,6 @@ describe("local gateway manual retry suite", () => {
     await failUntilGivenUp(ensureLocalGateway);
 
     fixture.failWith = "connection-secrets.bin is unreadable";
-    // A doomed retry rejects with what went wrong THIS time, not the stale
-    // latched message — the screen re-quotes the fresh words.
     await expect(
       rejectionMessage(retryLocalGatewayStart("local"))
     ).resolves.toBe("connection-secrets.bin is unreadable");
@@ -166,8 +141,6 @@ describe("local gateway manual retry suite", () => {
       rejectionMessage(retryLocalGatewayStart("local"))
     ).resolves.toBe("still broken");
     const afterFirst = fixture.attempts;
-    // Leaning on the button must not become a respawn loop; the second press
-    // gets the first's outcome.
     await expect(
       rejectionMessage(retryLocalGatewayStart("local"))
     ).resolves.toBe("still broken");

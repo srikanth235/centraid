@@ -1,6 +1,3 @@
-// PERMANENT (#712): no timers, no arming, no opacity tied to scroll — this is
-// the feature's only front door. Band grammar; never glass or blur over photos.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -19,7 +16,6 @@ import type { TimelineGrain } from "./timeline-grains";
 
 const SEGMENT_MIN_HEIGHT = 44;
 
-/** Reserve: mounting surfaces pad scroll content by exactly this. */
 export const GRAIN_CONTROL_SLOT =
   SEGMENT_MIN_HEIGHT + 2 * BAND_BORDER + BAND_INSET;
 
@@ -36,7 +32,6 @@ export default function TimelineGrainControl({
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
-    // `box-none` in style, not the deprecated prop.
     <View style={styles.dock}>
       <View style={styles.plate} accessibilityRole="tablist">
         {TIMELINE_GRAINS.map((key) => {
@@ -87,7 +82,6 @@ const makeStyles = (colors: ThemeColors) =>
       paddingBottom: BAND_INSET,
       pointerEvents: "box-none",
       position: "absolute",
-      // Above the grid for TOUCH: the grid's recogniser spans this slot.
       zIndex: 2,
     },
     label: { ...t("control"), color: colors.textSoft },

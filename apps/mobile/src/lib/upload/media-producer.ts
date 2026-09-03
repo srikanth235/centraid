@@ -24,12 +24,10 @@ export interface DeviceMediaInput {
   capturedAt?: string;
   tzOffsetMin?: number;
   captureGroupId?: string;
-  /** Edit lineage (#711): asset these bytes derive FROM. */
   sourceAssetId?: string;
   width?: number;
   height?: number;
   durationS?: number;
-  /** F10: delete the source after durable settle; never a camera-roll original. */
   deleteSourceAfterSettle?: boolean;
   onProgress?: (progress: { completed: number; total: number }) => void;
 }
@@ -41,9 +39,7 @@ export interface BackupDocumentInput {
   mediaType: string;
   plaintextSize: number;
   folderId?: string;
-  /** User-reviewed OCR text; the document's searchable derivative. */
   extractedText?: string;
-  /** F10: see {@link DeviceMediaInput.deleteSourceAfterSettle}. */
   deleteSourceAfterSettle?: boolean;
 }
 
@@ -85,10 +81,6 @@ function openQueue(
   });
 }
 
-/**
- * Single-flight drain/replay (F8); owns the foreground service here;
- * terminal failure, not phantom success (F6).
- */
 async function drainToSettlement(
   session: MobileReplicaSession,
   gatewayBase: string,
@@ -97,7 +89,6 @@ async function drainToSettlement(
   source: { localUri: string; deleteAfterSettle: boolean }
 ): Promise<string> {
   await withDrainLock(async () => {
-    // Foreground service owned only here; reconcile never starts it.
     UploadForegroundService.start(
       foldPendingUploadGroups(queue.pendingStorageGroups()).total.itemCount
     );
@@ -126,17 +117,15 @@ async function drainToSettlement(
   return sha256;
 }
 
-/** Bytes durable in CAS; the share-container copy is redundant. */
 function deleteSource(localUri: string): void {
   try {
     const file = new File(localUri);
     if (file.exists) file.delete();
   } catch {
-    // A leaked share-container temp is cosmetic, never a correctness loss.
+    // Intentionally empty.
   }
 }
 
-/** Safe to re-run after process death: sha dedupe, CAS begin dedupe, derivative upserts, idempotent intent. */
 export async function backupDeviceMedia(
   session: MobileReplicaSession,
   gatewayBase: string,
@@ -144,7 +133,6 @@ export async function backupDeviceMedia(
 ): Promise<string> {
   const queue = openQueue(gatewayBase, input.onProgress);
   try {
-    // F11: address bytes ONCE — seen shas keep their first derivatives; re-scans pay hash+lookup only.
     const digest = await sha256OfFile(
       expoFileSource,
       input.localUri,
@@ -164,7 +152,6 @@ export async function backupDeviceMedia(
         plaintextSize: input.plaintextSize,
         digest,
       },
-      // Brand-new shas alone attach a follow-up; existing rows carry their own (re-adding forks it).
       isNew
         ? (addressed) => ({
             shape: "photos",
@@ -205,7 +192,6 @@ export async function backupDeviceMedia(
   }
 }
 
-/** Docs producer: same queue and transfer path, different canonical intent. */
 export async function backupDocument(
   session: MobileReplicaSession,
   gatewayBase: string,
@@ -243,7 +229,6 @@ export async function backupDocument(
   }
 }
 
-/** Publish one reviewed receipt atomically after its bytes settle in the CAS. */
 export async function backupReceiptExpense(
   session: MobileReplicaSession,
   gatewayBase: string,

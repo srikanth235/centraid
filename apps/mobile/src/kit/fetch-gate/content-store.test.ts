@@ -1,9 +1,3 @@
-// The pin/download store's on-disk half: storing bytes, reading them back
-// offline, the budget pass that MUST NOT touch a pin, and honest byte totals.
-// The expo filesystem and the native storage module are injected as mocks, so
-// the store's own accounting runs under node — the same rig
-// `thumbnail-pack.test.ts` uses for its sibling store.
-
 /* oxlint-disable max-classes-per-file -- the fake Directory and File are one expo-file-system stand-in; the module under test distinguishes them with `instanceof`, so they cannot be one class */
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -52,9 +46,7 @@ class FakeDirectory {
   get exists(): boolean {
     return childrenOf(this.path).length > 0;
   }
-  create(): void {
-    // Directories are implied by their contents in this fake.
-  }
+  create(): void {}
   delete(): void {
     for (const name of childrenOf(this.path)) disk.delete(name);
   }
@@ -123,8 +115,6 @@ vi.mock(import("../../../modules/centraid-storage"), () => ({
     const path = storage.replicaStorageDirectory();
     return path === undefined ? undefined : `file://${path}`;
   },
-  // Absent on purpose in this rig: the JavaScript listing fallback is the path
-  // a build without the native module takes, and it is the one under test.
   nativeDirectorySize: () => undefined,
 }));
 vi.mock(
@@ -142,7 +132,6 @@ vi.mock(
 type ContentStore = typeof import("./content-store");
 type Pin = typeof import("./pin");
 
-/** The store caches its listing, so each test loads a fresh module graph. */
 async function load(): Promise<{ store: ContentStore; pin: Pin }> {
   vi.resetModules();
   const pin = await import("./pin");
@@ -213,7 +202,6 @@ describe("the offline byte store", () => {
 
       const plan = store.enforceOfflineContentBudget(100);
 
-      // The pin is older than its peer and would go first on age alone.
       expect(plan.evict).toHaveLength(1);
       expect(store.offlineContentUri(REF_A)).toBeDefined();
       expect(store.offlineContentUri(REF_B)).toBeUndefined();

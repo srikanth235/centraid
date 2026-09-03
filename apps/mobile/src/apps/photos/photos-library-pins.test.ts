@@ -1,11 +1,3 @@
-// Free-up-space must not delete originals in a keep-on-device album
-// (issue #864 free-up-pinned).
-//
-// Album membership is `core.collection_entry.target_id` = that scope's
-// `media_asset.asset_id`. SHA merge keeps one canonical `assetId` (the
-// writable copy). Indexing the pin join on that survivor alone silently
-// resolves the other copy's album entry to nothing, and the confirm copy
-// still promised exclusion.
 import { describe, expect, it } from "vitest";
 
 import { selectFreeUpCandidates } from "../../kit/storage/free-up-space";

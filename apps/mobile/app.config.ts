@@ -1,13 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-// Single-sources version + native build numbers (#468); app.json cannot drift.
 import type { ExpoConfig, ConfigContext } from "expo/config";
 
-// Node require only — extensionless TS fails on CI; import.meta dies under Expo eval.
 import { nativeBuildNumber } from "./src/version-core.cjs";
 
-// Version of @centraid/mobile (#501); cwd candidates cover gradle + root.
 function readMobilePackageVersion(): string {
   const candidates = [
     path.join(process.cwd(), "package.json"),
@@ -24,7 +21,7 @@ function readMobilePackageVersion(): string {
       if (j.name === "@centraid/mobile" && typeof j.version === "string")
         return j.version;
     } catch {
-      /* try next */
+      // Intentionally empty.
     }
   }
   throw new Error(
@@ -79,21 +76,13 @@ export default function createExpoConfig({
     android: {
       package: "dev.centraid.mobile",
       versionCode: BUILD,
-      // Centraid opts out of Android Auto Backup entirely: resume cursors,
-      // the cached scope manifest and Keystore-wrapped SecureStore blobs
-      // restored onto a phone with an empty replica claim rows that device
-      // never had (android/.../replica_backup_rules.xml). The manifest already
-      // says so; declaring it here is what stops a future `expo prebuild` from
-      // regenerating the manifest without it.
       allowBackup: false,
       adaptiveIcon: {
         foregroundImage: "../../assets/adaptive-icon.png",
         backgroundColor: "#3EC8B4",
       },
     },
-    // Bare workflow needs a concrete runtime version; VERSION ties OTA to it.
     runtimeVersion: VERSION,
-    // Store-only updates (#501): OTA off until a real Expo project id is enrolled.
     updates: EAS_PROJECT_ID
       ? {
           enabled: true,
@@ -152,12 +141,10 @@ export default function createExpoConfig({
         },
       ],
       "expo-video",
-      // Photos' map (#816): MapKit iOS + MapLibre/OpenFreeMap Android; NO location permission.
       "expo-maps",
       [
         "@maplibre/maplibre-react-native",
         {
-          // Plugin default; `google` would pull Play Services back in.
           android: { locationEngine: "default" },
         },
       ],
@@ -166,7 +153,6 @@ export default function createExpoConfig({
     ],
     extra: {
       recurrencePolicy: "bounded-local-expansion",
-      // For tests/tooling outside Expo's module graph.
       nativeBuildNumber: BUILD,
       updateChannel: EAS_PROJECT_ID ? "eas-hotfix" : "store-only",
       ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),

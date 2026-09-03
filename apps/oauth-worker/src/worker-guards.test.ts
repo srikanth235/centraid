@@ -1,16 +1,3 @@
-/**
- * Fail-closed guard laws for the Assist courier (#656 Layer 3 mutation seed).
- *
- * `index.test.ts` proves the happy path and the headline refusals. What it does
- * not prove is that each guard's BOUNDARY is where the code says it is: a
- * mutant that unanchors the client-id regex, turns `>= 32` into `> 32`, ORs
- * the loopback checks together, accepts a duplicated scope, or lets `every`
- * become `some` in the scope comparison survives it. Those are the exact
- * shapes an attacker probes.
- *
- * Every test drives the real `handleRequest` and asserts the refusal (or
- * acceptance) that the guard is FOR — never an internal call count.
- */
 import { describe, expect, test, vi } from "vitest";
 
 import { expectedRefreshCapability } from "./refresh-capability-test-support.js";
@@ -29,8 +16,6 @@ const GMAIL = "https://www.googleapis.com/auth/gmail.readonly";
 
 const context = {} as ExecutionContext;
 
-// `Env` is generated from wrangler.jsonc with literal string types, so a
-// deliberately-wrong value is not assignable; take the patch untyped.
 function environment(patch: Record<string, unknown> = {}): Env {
   return {
     APP_ORIGIN: "https://app.centraid.dev",
@@ -49,7 +34,6 @@ function environment(patch: Record<string, unknown> = {}): Env {
   } as Env;
 }
 
-/** Any request that gets past routing — `/start` needs no body or cookie. */
 async function probe(env: Env, origin = PUBLIC_ORIGIN): Promise<Response> {
   return handleRequest(new Request(`${origin}/start`), env, context, {
     fetch,
@@ -100,7 +84,6 @@ interface ExchangeOptions {
   env?: Env;
 }
 
-/** Run a fully-formed /exchange, stubbing Google's token endpoint. */
 async function exchange(options: ExchangeOptions = {}): Promise<{
   status: number;
   json: Record<string, unknown>;
@@ -171,7 +154,6 @@ describe("environment invariants", () => {
       expect(status, id).toBe(503);
       expect(body, id).toStrictEqual({ error: "configuration_error" });
     }
-    // Exactly three characters ahead of the suffix is the boundary, and it holds.
     expect(
       (
         await probe(
@@ -236,7 +218,6 @@ describe("environment invariants", () => {
         )
       ).status
     ).toBe(503);
-    // Loopback is not an acceptable app origin on the PUBLIC hostname.
     expect(
       (await probe(environment({ APP_ORIGIN: "http://127.0.0.1:3000" }))).status
     ).toBe(503);
@@ -490,7 +471,6 @@ describe("bounded string fields", () => {
       }))
     );
     for (const { label, status } of results) expect(status, label).toBe(502);
-    // Exactly at the ceiling is still fine — the bound is inclusive.
     const atLimit = await exchange({
       upstream: {
         status: 200,
@@ -522,8 +502,6 @@ describe("bounded string fields", () => {
   });
 
   test("request fields are length-bounded before the receipt is even checked", async () => {
-    // `code` is bounded at 4096 and `code_verifier` at 128; an empty string is
-    // as invalid as an over-long one.
     const patches = [
       { code: "" },
       { code: "c".repeat(4097) },

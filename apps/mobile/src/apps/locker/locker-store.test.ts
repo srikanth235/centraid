@@ -1,20 +1,3 @@
-// THE BOUNDARY, EXERCISED (README-Locker §2).
-//
-// Five claims, each of which a plausible refactor could undo silently:
-//
-//  1. IT BOOTS LOCKED. There is no argument, payload or replay that produces
-//     an open session out of the status read alone.
-//  2. A HIDDEN WINDOW ENDS IT AT ONCE — not at the next timer tick — and takes
-//     the browsable window with it, so no list is left standing behind a lock.
-//  3. A LOCK WIPES THE ENUMERATED BAG. Every secret-bearing field named in
-//     `session.SECRET_BEARING_KEYS` is empty afterwards, and the assertion is
-//     over that list rather than over a hand-written one, so a new field
-//     cannot be added without this test noticing.
-//  4. A PERMIT IS SPENT. After one reveal the permit is gone, so a second
-//     field costs a second confirmation.
-//  5. A DENIED READ IS DATA. It becomes a screen, not an error, and it does
-//     not empty the vault's own state.
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -52,9 +35,6 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
   };
 });
 
-// Each mock takes the REAL function's signature, so a wire shape that drifts
-// is a typecheck failure here rather than a green test against a module the
-// app no longer has.
 type Gateway = typeof import("./locker-gateway");
 const wire = vi.hoisted(() => ({
   auth: vi.fn<Gateway["lockerAuth"]>(),
@@ -63,9 +43,6 @@ const wire = vi.hoisted(() => ({
   search: vi.fn<Gateway["lockerSearch"]>(),
   trash: vi.fn<Gateway["lockerTrash"]>(),
 }));
-// The door is replaced WHOLE rather than spread over the real module: the
-// real one reaches `lib/gateway`, which pulls Expo's fetch shim into a node
-// run for no benefit — this test is about the boundary, not the transport.
 vi.mock(import("./locker-gateway"), () => {
   const door = {
     ITEMS_WINDOW: 300,
@@ -187,7 +164,6 @@ describe("the Locker boundary on this seat", () => {
       },
     });
     await confirmLockerPermit("a-long-enough-passphrase");
-    // One shot: nothing is left to point at a second field.
     expect(readLockerVault().bag.permit).toBeNull();
     expect(readLockerVault().bag.permitRequest).toBeNull();
   });

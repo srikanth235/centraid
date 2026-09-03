@@ -1,6 +1,3 @@
-// Pure pairing-ticket redemption (#376). `decodePairingTicket` is a lockstep
-// mirror of `encodePairingTicket` — not an import of `@centraid/server`.
-
 export interface PairingTicketPayload {
   v: 1;
   kind: "centraid-gw-pair";
@@ -11,7 +8,6 @@ export interface PairingTicketPayload {
   exp: number;
 }
 
-/** `undefined` on anything malformed. */
 export function decodePairingTicket(
   raw: string
 ): PairingTicketPayload | undefined {
@@ -32,7 +28,6 @@ export function decodePairingTicket(
   }
 }
 
-/** Fast-feedback only — the gateway re-checks on redemption regardless. */
 export function isTicketExpired(
   payload: Pick<PairingTicketPayload, "exp">,
   now = Date.now()
@@ -113,7 +108,6 @@ export function foldIrohPairResponse(response: {
   const vaults = (response.vaults ?? []).filter(
     (vault) => typeof vault.vaultId === "string" && vault.vaultId.length > 0
   );
-  // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
   const vaultIds = [
     response.vaultId,
     ...(response.vaultIds ?? []),

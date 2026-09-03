@@ -1,8 +1,3 @@
-/**
- * Springboard tile selection + first-run detection (#708 A). The module
- * under test is pure by construction, so nothing here needs a renderer or a
- * replica — the rows are the wire shape `useReplicaQuery` hands back.
- */
 import { describe, expect, it } from "vitest";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
@@ -67,9 +62,6 @@ describe(selectPhotoMosaic, () => {
   });
 
   it("keeps a cell for an asset whose bytes are not addressable yet", () => {
-    // A seeded, gateway-side vault with no gateway reachable: ten photographs
-    // exist, none can be painted. Dropping them rendered the tile as one blank
-    // rectangle under a header reading 10.
     const mosaic = selectPhotoMosaic(assets, undefined, () => undefined);
     expect(mosaic.map((photo) => photo.id)).toStrictEqual(["b", "a"]);
     expect(mosaic.every((photo) => photo.uri === undefined)).toBe(true);
@@ -96,10 +88,6 @@ describe(selectPhotoMosaic, () => {
 });
 
 describe("the mosaic a seeded, gateway-side vault produces", () => {
-  // The real replica shape for `media.asset`: `asset_id` and `content_id`
-  // are both NOT NULL in the DDL, `captured_at` is nullable, and the multi-vault
-  // reader stamps `__centraidScopeId` on every row. Ten of them, none pinned to
-  // this device — which is what a freshly seeded vault looks like from a phone.
   const seeded = Array.from({ length: 10 }, (_, index) =>
     row({
       asset_id: `asset-${index}`,
@@ -112,20 +100,13 @@ describe("the mosaic a seeded, gateway-side vault produces", () => {
 
   it("draws a full grid of cells with no local bytes and no gateway", () => {
     const photos = selectPhotoMosaic(seeded, undefined, () => undefined);
-    // Bounded to what the tile draws, not to how many exist.
     expect(photos).toHaveLength(MOSAIC_SLOTS);
     expect(mosaicCells(photos)).toHaveLength(MOSAIC_SLOTS);
-    // Every slot is a real cell — this is the assertion that fails if a row
-    // without addressable bytes is dropped, which rendered the tile as one
-    // blank rectangle under a header reading 10.
     for (const cell of mosaicCells(photos)) expect(cell).toBeDefined();
     expect(mosaicAwaitingBytes(photos)).toBe(true);
   });
 
   it("gives every cell a real height, so none can collapse into the ground", () => {
-    // TileBody's `styles.thumb` takes this exact value as an explicit height
-    // rather than deriving one from `aspectRatio`. A zero-height cell is
-    // invisible and reads as a deliberate blank rectangle.
     expect(MOSAIC_CELL_HEIGHT).toBeGreaterThan(0);
     expect(Number.isFinite(MOSAIC_CELL_HEIGHT)).toBe(true);
   });
@@ -144,8 +125,6 @@ describe("the mosaic a seeded, gateway-side vault produces", () => {
       () => undefined
     );
     expect(photos).toHaveLength(2);
-    // The grid does not shrink to two cells — it draws six and leaves four
-    // empty, so nothing reflows when the rest arrive.
     const cells = mosaicCells(photos);
     expect(cells).toHaveLength(MOSAIC_SLOTS);
     expect(cells.filter(Boolean)).toHaveLength(2);
@@ -362,9 +341,6 @@ describe(selectFaces, () => {
   });
 
   it("does not treat a blank stored colour as a choice", () => {
-    // The seeded vault leaves `avatar_color` empty, and an empty string that
-    // survives to the renderer wins over the derivation — which is exactly how
-    // the tile drew unfilled, near-white circles. Blank is absent.
     const faces = selectFaces(
       [
         row({ party_id: "p1", avatar_color: "" }),
@@ -380,14 +356,11 @@ describe(selectFaces, () => {
     expect(faces).toStrictEqual([
       { id: "p1", initials: "A" },
       { id: "p2", initials: "B" },
-      // A real stored colour still wins, and only its surrounding space is cut.
       { id: "p3", initials: "C", color: "#7a5283" },
     ]);
   });
 
   it("identifies a face by party id, never by the name it renders", () => {
-    // The id is what the renderer derives the circle's hue from, so a rename
-    // must not be able to move it.
     const faces = selectFaces(
       [row({ party_id: "party_ada" })],
       new Map([["party_ada", "Ada Lovelace"]])
@@ -487,7 +460,6 @@ describe(monthStartDate, () => {
 });
 
 describe(combineTileStatus, () => {
-  /** A read that has heard from the gateway at least once. */
   const settled = (
     over: Partial<Parameters<typeof combineTileStatus>[0][0]> = {}
   ) => ({
@@ -516,8 +488,6 @@ describe(combineTileStatus, () => {
     ).toBe("unknown");
   });
 
-  // Rows in hand outrank the stamp: a cached replica can hold real content
-  // before this launch has pulled anything.
   it("still reports content an unsynced read did return", () => {
     expect(
       combineTileStatus([settled({ lastSyncedAt: undefined })], true)

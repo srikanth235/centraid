@@ -10,22 +10,12 @@ import { spacing, t, useTheme } from "../theme";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
 
-/**
- * `label`, `icon` and `disabled` are the shared half (`ButtonData`); `label` is
- * narrowed to required here because this kit has no children escape hatch.
- *
- * There is no `size`: the 44px touch floor is the size. There is no `commit`
- * either, and that is a decision rather than a gap — see `ButtonData`.
- */
 export interface ButtonProps extends ButtonData {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
   style?: StyleProp<ViewStyle>;
-  /** What distinguishes this instance of a repeated verb. A HINT, not a label:
-   *  the control already renders its visible word (#708 B.4). */
   accessibilityHint?: string;
-  /** A handle from `kit/test-ids`, never a hand-spelled string (#890 W2). */
   testID?: string;
 }
 

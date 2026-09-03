@@ -33,8 +33,6 @@ describe("service worker Iroh tunnel caching", () => {
       request(tunnelRequestFor("/centraid/notes/app.js"))
     );
     const assets = worker.caches.buckets.get(ASSET_CACHE)!;
-    // The entry is namespaced by the bridge (gateway+vault) and owning app so
-    // one app can never consume another's authorized copy.
     expect([...assets.entries.keys()]).toStrictEqual([
       `${ORIGIN}/centraid/notes/app.js?__centraid_scope=d-bridge1&__centraid_app_scope=notes`,
     ]);
@@ -157,7 +155,6 @@ describe("service worker Iroh tunnel caching", () => {
     const target = tunnelRequestFor("/centraid/notes/app.js");
     const first = await worker.dispatchFetch(request(target));
     await first.text();
-    // The second read is the stale copy; its background revalidation returns 200.
     const second = await worker.dispatchFetch(request(target));
     await expect(second.text()).resolves.toBe("bytes 1");
     const third = await worker.dispatchFetch(request(target));
@@ -201,7 +198,6 @@ describe("service worker Iroh tunnel caching", () => {
   });
 
   test("reports a tunnel failure as a 502 rather than a broken page", async () => {
-    // No shell tab owns the bridge, so the claim handshake cannot succeed.
     const worker = loadWorker({ clients: [] });
     const response = await worker.dispatchFetch(
       request(tunnelRequestFor("/centraid/notes/app.js"))

@@ -18,15 +18,6 @@ import {
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
 
-/** §12 Settings, §13 Gateways / profiles, §14 cross-cutting. */
-
-/**
- * Open Settings from the All apps sheet (stem foot).
- *
- * Settings is a launcher destination (#707), not a sidebar page. The account
- * menu still hosts it too, but the account control is only mounted once the
- * member identity resolves — All apps is always present on the stem foot.
- */
 async function gotoSettings(page: Page): Promise<void> {
   await page.getByRole("button", { name: /All apps/iu }).click();
   await page
@@ -49,8 +40,6 @@ test.afterEach(async () => {
   await cleanupEnv(env);
 });
 
-// ─────────────────────────── §12 Settings ───────────────────────────
-
 test("12.1 — picking a theme in Appearance applies it live and saves to the gateway", async () => {
   const { app, page } = await launchApp(env);
   try {
@@ -58,15 +47,11 @@ test("12.1 — picking a theme in Appearance applies it live and saves to the ga
     await gotoSettings(page);
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
 
-    // There are no accent swatches (#608). Theme is a
-    // three-position Segmented control (role=tablist "Appearance") with
-    // Light / Dark / Match system — default is dark (appearance.ts).
     const appearance = page.getByRole("tablist", { name: "Appearance" });
     await appearance.getByRole("tab", { name: "Light" }).click();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
       .toBe("light");
-    // The change is persisted to the gateway prefs store.
     await expect
       .poll(() =>
         gateway.calls.some(
@@ -88,11 +73,6 @@ test("12.5 — appearance choices persist across a reload", async () => {
     await waitForHome(page);
     await gotoSettings(page);
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
-    // You exposes no Cards control (#814); the pref paints with nothing
-    // driving it. Theme is the remaining visual pick on this page. `light` is
-    // never the shipped default (`dark`), so a reload that restores it proves
-    // the prefs write path. Reload is not a restart — 12.6 still covers
-    // Electron process death.
     const appearance = page.getByRole("tablist", { name: "Appearance" });
     await appearance.getByRole("tab", { name: "Light" }).click();
     await expect
@@ -116,10 +96,6 @@ test("12.6 — an explicit dark theme survives a full Electron restart", async (
     await launched.page
       .getByTestId("settings-page")
       .waitFor({ state: "visible" });
-    // Theme is the "Appearance" Segmented tablist (SettingsAppearanceScreen);
-    // `dark` is also the shipped default (appearance.ts), so pass through
-    // Light first — otherwise "survives a restart" would be satisfied by the
-    // default alone.
     const themes = launched.page.getByRole("tablist", {
       name: "Appearance",
     });
@@ -160,17 +136,13 @@ test('12.2 — "Match system" resolves the OS scheme to a theme and persists it'
     await gotoSettings(page);
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
 
-    // Match system is a standing position on the Appearance Segmented control,
-    // not a one-shot button (#608).
     await page
       .getByRole("tablist", { name: "Appearance" })
       .getByRole("tab", { name: "Match system" })
       .click();
-    // A concrete theme is applied to the document root…
     await expect
       .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
       .toMatch(/^(?:light|dark)$/u);
-    // …and the choice is mirrored to the gateway prefs store with the mode.
     await expect
       .poll(() =>
         gateway.calls.some(
@@ -197,16 +169,11 @@ test("12.4 — the Agents (providers) settings page renders", async () => {
       .getByTestId("settings-nav")
       .getByRole("button", { name: "Agents" })
       .click();
-    // The modal's h1 is always "Settings"; the selected page is the h2.
     await expect(
       page
         .getByTestId("settings-dialog")
         .getByRole("heading", { name: "Agents" })
     ).toBeVisible();
-    // There is no exclusive "active agent" switch. Per-subsystem harnesses
-    // make the exclusive pick the *default* lane of the Routing table, so
-    // `SettingsHarnessesScreen`'s primary control is the "Default agent"
-    // select.
     await expect(
       page.getByRole("combobox", { name: "Default agent" })
     ).toBeVisible({
@@ -225,8 +192,6 @@ test("12.4 — the Agents (providers) settings page renders", async () => {
     await closeApp(app);
   }
 });
-
-// ─────────────────────────── §13 Gateways / profiles ───────────────────────────
 
 test("13.2 — desktop exposes pairing-only gateway enrollment", async () => {
   const { app, page } = await launchApp(env);
@@ -265,7 +230,6 @@ test("13.2 — desktop exposes pairing-only gateway enrollment", async () => {
 });
 
 test("13.4 — switching the active gateway re-scopes home", async () => {
-  // A second gateway pointing at the same mock, so its app list resolves.
   gateway.state.apps = [appEntry({ id: "shared", name: "Shared App" })];
   const newId = await seedRemoteGatewayProfile(env, gateway, {
     label: "Second",
@@ -279,7 +243,6 @@ test("13.4 — switching the active gateway re-scopes home", async () => {
       newId
     );
 
-    // Active pointer flipped and the renderer re-fetched against the gateway.
     await expect
       .poll(() =>
         page.evaluate(() =>
@@ -290,7 +253,6 @@ test("13.4 — switching the active gateway re-scopes home", async () => {
       )
       .toBe(newId);
     await expect.poll(() => gateway.calls.length).toBeGreaterThan(callsBefore);
-    // Stem stays mounted across gateway switch; springboard may re-fetch.
     await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
   } finally {
     await closeApp(app);
@@ -313,7 +275,6 @@ test("13.7 — a remote gateway can be removed; the local one cannot", async () 
     }>;
     expect(list.some((g) => g.id === id)).toBe(false);
 
-    // Removing the primordial local gateway is rejected.
     const localErr = await page.evaluate(() =>
       window.CentraidApi.removeGateway({ id: "local" })
         .then(() => null)
@@ -371,15 +332,11 @@ test("13.8 — switching to an unreachable gateway degrades gracefully", async (
       (id) => window.CentraidApi.setActiveGateway({ id }),
       deadId
     );
-    // No crash — the shell stays mounted even though the gateway is unreachable.
-    // The stem (`nav[aria-label="Apps"]`) is the chrome root (#707).
     await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
   } finally {
     await closeApp(app);
   }
 });
-
-// ─────────────────────────── §14 cross-cutting ───────────────────────────
 
 test("14.2 — a first-party inline app has no Build control", async () => {
   gateway.state.apps = [appEntry({ id: "tasks", name: "Tasks" })];
@@ -388,8 +345,6 @@ test("14.2 — a first-party inline app has no Build control", async () => {
     await waitForHome(page);
     await openAppFromPalette(page, "Tasks");
     await expect(page.getByTestId("inline-app-view")).toBeVisible();
-    // There is no served-app builder (#799). The titlebar must not advertise
-    // a Build that cannot load.
     await expect(
       page.getByRole("button", { name: "Build", exact: true })
     ).toHaveCount(0);
@@ -403,7 +358,6 @@ test("14.4 — Cmd+K opens the command palette", async () => {
   try {
     await waitForHome(page);
     await page.keyboard.press("Meta+k");
-    // The palette is a labelled dialog (PaletteScreen.tsx:140).
     const palette = page.getByRole("dialog", { name: "Command palette" });
     await expect(palette).toBeVisible();
     await page.keyboard.press("Escape");

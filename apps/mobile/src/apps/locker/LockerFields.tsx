@@ -1,19 +1,3 @@
-// THE FIELD ROW WITH VERBS (README-Locker §5).
-//
-// Key column · value · a note carrying the rule · a trailing act group. Plain
-// for metadata; a letter-spaced dot run for a sealed value, whose LENGTH never
-// tracks the secret's (`item-fields.SEALED_RUN`).
-//
-// THE ACTS ARE THE STATE. Sealed offers `Reveal` and `Copy`; revealed offers
-// `Copy` and `Conceal`, and its note states the remaining time AND that the
-// receipt is already written — the cost has been paid, so a member deciding
-// whether to conceal early is not deciding whether to spend it again.
-//
-// TOTP is the one row whose value is computed rather than stored: the seed is
-// sealed like any other secret, and once revealed the code ticks from
-// `totp.ts`'s `useTotp` — RFC-6238 over the WebCrypto HMAC `index.ts` installs
-// on Hermes.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -47,7 +31,6 @@ export interface LockerFieldRowProps {
   label: string;
   value?: string | null;
   note?: string;
-  /** Read in the numeric register — an expiry, a code, a dot run. */
   numeric?: boolean;
   acts?: readonly FieldAct[];
   children?: React.ReactNode;
@@ -100,10 +83,8 @@ export function LockerFieldRow({
 export interface LockerSealedFieldProps {
   label: string;
   field: string;
-  /** Plaintext, present only while a permit's reveal is live. */
   revealed: string | null;
   revealedAt: number | null;
-  /** One clock for the whole screen, ticking once a second. */
   now: number;
   note?: string;
   onReveal: (field: string) => void;
@@ -143,14 +124,11 @@ export function LockerSealedField(
 }
 
 export interface LockerTotpFieldProps {
-  /** The seed, once a permit has revealed it. `null` keeps the row sealed. */
   seed: string | null;
   onReveal: () => void;
   onCopy: (code: string) => void;
 }
 
-/** The one-time code: live, counted down, and copyable. The row is drawn even
- *  when the seed is sealed, because "this login has one" is metadata. */
 export function LockerTotpField(
   props: LockerTotpFieldProps
 ): React.JSX.Element {
@@ -171,8 +149,6 @@ export function LockerTotpField(
   );
 }
 
-/** The strength meter, over a revealed password only — a score of a value
- *  nobody has seen would be a claim about a secret this screen never read. */
 export function LockerStrengthField({
   password,
 }: {

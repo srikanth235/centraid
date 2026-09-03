@@ -1,22 +1,3 @@
-// What one device row's trailing verb opens (#765).
-//
-// The row block gives a row exactly ONE trailing control, and a device answers
-// to two verbs, so the control is `Manage` and it opens the app's existing
-// single-choice surface (`kit/components/OptionSheet` — the system action
-// sheet on iOS, a bottom sheet on Android). This screen adds no new menu
-// grammar; it reuses the one the app already has.
-//
-// Rename is a name the member types, so it is a dialog with a field — the
-// idiom `apps/photos/AlbumDetail.tsx` already uses.
-//
-// Revoke asks twice, and the second ask is the load-bearing one. The gateway
-// refuses (409) to revoke the LAST live device of a vault unless the vault's
-// own name is echoed back, because losing it strands that vault behind
-// filesystem-only recovery. Mobile's HTTP core never surfaces a response body,
-// so the screen cannot learn the vault name from the refusal — it takes it
-// from the device row and asks the member to TYPE it. Prefilling that field
-// would confirm nothing.
-
 import React, { useState } from "react";
 import { Alert, Modal, Pressable, TextInput, View } from "react-native";
 
@@ -29,10 +10,6 @@ import { strandedVaultName } from "./devices-model";
 import { makeStyles } from "./Devices.styles";
 
 export interface DeviceActionsProps {
-  /** The row whose verb was pressed. The screen mounts this component KEYED on
-   *  that row, so opening a second device starts at its own menu with its own
-   *  label rather than inheriting the previous one's half-typed state — which
-   *  is what a reset effect would have had to do by hand. */
   device: DeviceRow;
   busy: boolean;
   onClose: () => void;

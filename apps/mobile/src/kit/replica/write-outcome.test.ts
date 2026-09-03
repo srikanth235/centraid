@@ -58,10 +58,6 @@ describe("native write outcome surface", () => {
   });
 
   it("routes a conflict to the row that still holds both versions", () => {
-    // THE REGRESSION THIS PINS (#880 W2.3). A conflict fell through to the
-    // generic failure line — "Change not applied: …" — which told a member
-    // their work was gone while the write was still retained on the phone with
-    // both versions and a retry waiting for them.
     expect(
       surfaceWriteOutcome({
         intentId: "i-c",

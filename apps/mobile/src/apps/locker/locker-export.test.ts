@@ -1,10 +1,3 @@
-// THE EXPORT ACT, EXERCISED — the write half of the surface whose render half
-// is `LockerExportView.test.tsx`. What this pins: the act is online-only
-// because the flag rides the SHARED builder, so a mass reveal has no
-// representation in the durable outbox at any layer; a park is narrated as a
-// park; nothing back means no file; and the plaintext goes straight to the file
-// door, never held by the call.
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -86,14 +79,11 @@ const { exportLockerVault } = await import("./locker-writes");
 
 type Session = Parameters<typeof exportLockerVault>[0];
 
-/** Records what it was asked to write and answers with one online-only
- *  outcome, in `postAction`'s own result shape. */
 type SessionWrite = (
   appId: string,
   input: Record<string, unknown>
 ) => Promise<unknown>;
 
-/** One entry the write door received, in the order it arrived. */
 interface WriteCall {
   appId: string;
   input: Record<string, unknown>;
@@ -124,7 +114,6 @@ const PAYLOAD = {
 const posted = (): string =>
   status.post.mock.calls.map((call) => String(call[0])).join(" | ");
 
-/** The files the door was handed — the seat's only durable output. */
 const written = (): Array<{ csv: string; name: string }> =>
   files.hand.mock.calls.map(([name, csv]) => ({
     csv: String(csv),

@@ -1,11 +1,3 @@
-// The places and acts that are lists of rows rather than lists of notes
-// (#882): the notebook spine, the tag vocabulary, the trash, the More sheet,
-// and the two origin acts.
-//
-// Every row here reads the blueprint's own words (`view-copy.ts`) and the
-// blueprint's own projections (`filing.ts`); nothing on this seat names a
-// notebook, a tag or a countdown in a second spelling.
-
 import React, { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -35,7 +27,6 @@ import type { NotesMoreRow } from "./notes-band";
 import type { NativeNote } from "./notes-model";
 import { styles } from "./NotesHome.styles";
 
-/** Create and rename are the same control at two moments. */
 function NameField({
   initial,
   label,
@@ -90,9 +81,6 @@ export interface NotebooksPlaceProps {
   onDelete: (shelf: NotebookShelf) => void;
 }
 
-/** The spine of the library: one row per notebook, its count, and the two
- *  acts that change it. Unfiled is a row here because an unfiled note is not
- *  a lost one. */
 export function NotebooksPlace(props: NotebooksPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
   const [creating, setCreating] = useState(false);
@@ -197,8 +185,6 @@ export interface TagsPlaceProps {
   onSelect: (conceptId?: string) => void;
 }
 
-/** Tags are a LENS: a row narrows the library rather than standing as a place
- *  a note could be moved into. */
 export function TagsPlace(props: TagsPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
   return (
@@ -240,8 +226,6 @@ export interface TrashPlaceProps {
   onRestore: (note: NativeNote) => void;
 }
 
-/** The countdown is the vault's, read off `purge_at` — never a number this
- *  seat invents, and absent rather than guessed when the row carries none. */
 export function TrashPlace(props: TrashPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
   return (
@@ -320,8 +304,6 @@ export function MoreSheet(props: MoreSheetProps): React.JSX.Element {
   );
 }
 
-/** Capture hands off to the frame's own Scan cover, which already owns the
- *  camera permission and the on-device review. */
 export function CapturePlace({
   onScan,
 }: {
@@ -353,8 +335,6 @@ export function CapturePlace({
   );
 }
 
-/** No recorder on this seat. The sentence stands where a dead control would
- *  otherwise sit. */
 export function VoicePlace(): React.JSX.Element {
   const { colors } = useTheme();
   return (

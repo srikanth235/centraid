@@ -29,7 +29,6 @@ function followupOf(overrides: Partial<UploadFollowup> = {}): UploadFollowup {
   };
 }
 
-/** A queue double whose follow-up list and poison ledger are plain arrays. */
 function fakeQueue(pending: UploadFollowup[]) {
   const cleared: number[] = [];
   const poisoned: { id: number; reason: string }[] = [];
@@ -116,8 +115,6 @@ describe("settled upload follow-ups", () => {
       }),
     } as unknown as NativeReplicaSession;
 
-    // The kill lands on the FIRST clear; the record is not cleared, so the next
-    // pass replays the same intent (idempotent) rather than losing the work.
     await replaySettledUploadFollowups(queue, session, "http://gateway");
     await expect(
       replaySettledUploadFollowups(queue, session, "http://gateway")
@@ -148,8 +145,6 @@ describe("settled upload follow-ups", () => {
     const { queue, poisoned } = fakeQueue([poison, good]);
     const { session, writes } = okSession();
 
-    // Five passes: the poison never clears, but `good` replays on the first
-    // pass and is gone thereafter; by pass five the poison is quarantined.
     let last = { replayed: 0, poisoned: 0 };
     const replayNextPass = async (pass: number): Promise<void> => {
       if (pass >= 5) return;

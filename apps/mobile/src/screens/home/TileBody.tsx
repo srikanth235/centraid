@@ -1,8 +1,4 @@
-// Structurally distinct tile bodies (#708 A).
 // governance: allow-repo-hygiene file-size-limit The #712 shared tile-body catalog stays together so every blueprint's shape remains comparable in one binding layer.
-//
-// Header is INVARIANT (`LauncherGrid`). Body shape names the app — Docs is ruled file rows, Notes is prose (a title over an opening line made them indistinguishable).
-// `loading` is STATIC skeletons, never a spinner. `empty`/`unknown` is the what-to-do line — fabricate neither a count nor a row.
 
 import { Image } from "expo-image";
 import React from "react";
@@ -40,12 +36,10 @@ export default function TileBody({
   hue: string;
   scheme: Scheme;
 }): React.JSX.Element {
-  // Locker is a STATE, not a query result — draw in every status, do not fall through to loading/empty.
   if (tile.body.kind === "locker")
     return (
       <FilledBody body={tile.body} colors={colors} hue={hue} scheme={scheme} />
     );
-  // Photos draws in EVERY status — the generic skeleton would replace the per-cell waiting grid with one blank rectangle.
   if (tile.body.kind === "photos")
     return (
       <FilledBody body={tile.body} colors={colors} hue={hue} scheme={scheme} />
@@ -156,7 +150,6 @@ function FilledBody({
                 style={[
                   styles.checkbox,
                   {
-                    // Ink, never the app's hue (a hue-filled box is a second identity). DONE is a filled box with NO glyph.
                     borderColor: row.done ? colors.accent : colors.lineStrong,
                     backgroundColor: row.done ? colors.accent : "transparent",
                   },
@@ -294,7 +287,6 @@ function Prose({
   );
 }
 
-/** Per-cell retry ladder (`use-image-fallback.ts`) — the thumb 404s until the preview backstop; without this the tile sits on skeleton forever. */
 function MosaicCell({
   photo,
   skel,
@@ -357,7 +349,6 @@ function Skeleton({
   kind: TileBodyModel["kind"];
   colors: ThemeColors;
 }): React.JSX.Element {
-  // No `photos` case: the mosaic draws its own waiting state cell by cell.
   const widths: readonly `${number}%`[] =
     kind === "people" ? ["46%", "46%"] : ["88%", "70%", "54%"];
   return (
@@ -413,7 +404,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     height: 30,
     justifyContent: "center",
-    // Logical overlap so it mirrors under RTL — never `marginLeft`.
     marginEnd: -7,
     width: 30,
   },
@@ -424,7 +414,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   invite: { ...t("control") },
-  // No ground, no min-height: the CELLS are the mosaic. Negative margins cancel `TILE_PAD` so bleed is flush.
   mosaic: {
     flexDirection: "row",
     gap: 2,
@@ -444,7 +433,6 @@ const styles = StyleSheet.create({
   taskRow: { alignItems: "center", flexDirection: "row", gap: 8 },
   taskTitle: { ...t("small"), flex: 1 },
   tallyLabel: { ...t("small") },
-  // EXPLICIT height, never `aspectRatio` (derived height can be zero). `flex: 1` so four cells + 2px gap share the row.
   thumb: {
     flex: 1,
     height: MOSAIC_CELL_HEIGHT,

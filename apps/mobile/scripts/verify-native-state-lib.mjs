@@ -1,7 +1,3 @@
-/**
- * Pure validators and formatters for native-state L1–L4 (#646).
- * Kept free of project I/O so unit tests can drive fixtures without the CLI.
- */
 import path from "node:path";
 
 export const WRITE_CMD = "bun run --cwd apps/mobile ci:native-state --write";
@@ -106,18 +102,15 @@ export function validateFingerprints(expected, actualByPlatform) {
   return errors;
 }
 
-/** Body of a top-level Podfile.lock section (DEPENDENCIES, EXTERNAL SOURCES, …). */
 export function lockSectionBody(lock, sectionName) {
   const header = `${sectionName}:\n`;
   const start = lock.indexOf(header);
   if (start < 0) return "";
   const rest = lock.slice(start + header.length);
-  // Next top-level heading is a non-indented non-empty line (PODS-style ALL CAPS / words).
   const next = rest.search(/^[A-Za-z]/mu);
   return next < 0 ? rest : rest.slice(0, next);
 }
 
-/** Pod names declared under Podfile.lock DEPENDENCIES (bare name before space/paren). */
 export function dependencyPodNames(lock) {
   const section = lockSectionBody(lock, "DEPENDENCIES");
   if (!section) return [];
@@ -129,7 +122,6 @@ export function dependencyPodNames(lock) {
   return names;
 }
 
-/** Pod names with EXTERNAL SOURCES entries (path/git pods). */
 export function externalSourcePodNames(lock) {
   const section = lockSectionBody(lock, "EXTERNAL SOURCES");
   if (!section) return [];
@@ -141,10 +133,6 @@ export function externalSourcePodNames(lock) {
   return names;
 }
 
-/**
- * L1 iOS: every local modules/<name>/ios/<Name>.podspec basename (minus .podspec)
- * must appear in both DEPENDENCIES and EXTERNAL SOURCES.
- */
 export function validateIosModuleLockCompleteness({ localPodNames, lock }) {
   const deps = new Set(dependencyPodNames(lock));
   const external = new Set(externalSourcePodNames(lock));
@@ -164,11 +152,6 @@ export function validateIosModuleLockCompleteness({ localPodNames, lock }) {
   return errors;
 }
 
-/**
- * L1 Android depth limit: each module's expo-module.config.json must declare
- * every platform its on-disk directories imply. No committed Android lock —
- * ci:android-native compilation is the real Android completeness gate.
- */
 export function validateModulePlatformShape({
   moduleId,
   config,
@@ -200,7 +183,6 @@ export function validateModulePlatformShape({
   return errors;
 }
 
-/** Classify a free-text error into L1–L4 for --status presentation. */
 export function classifyNativeStateError(message) {
   if (
     message.startsWith("L1 ") ||

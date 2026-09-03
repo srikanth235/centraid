@@ -1,6 +1,3 @@
-// Birthdays and due tasks decorate a day's header/shelf; they never become
-// list rows (`core.event` only). Replica-scoped to this seat's own tasks
-// (#834 R-shelf-scope).
 import {
   ribbonCollapsedBirthdays,
   shelfDue,
@@ -37,7 +34,6 @@ export interface DueRow {
   title: string;
 }
 
-/** Match `MM-DD` only — never read the stored year (`YYYY-MM-DD` and `--MM-DD`). */
 export function birthdaysOn(
   dayKey: string,
   parties: readonly ContextRow[],
@@ -67,7 +63,6 @@ export function ribbonLabel(facts: readonly RibbonFact[]): string {
   return ribbonCollapsedBirthdays(facts.length);
 }
 
-/** A task with no `due_at` has no day and must not appear. */
 export function dueOn(dayKey: string, tasks: readonly ContextRow[]): DueRow[] {
   return tasks
     .filter((task) => {
@@ -87,7 +82,6 @@ export function shelfLabel(count: number): string {
   return shelfDue(count);
 }
 
-/** Missing flags scheme/marker is honest outer for everyone, not a missing field. */
 export function starredParties(
   schemes: readonly ContextRow[],
   concepts: readonly ContextRow[],

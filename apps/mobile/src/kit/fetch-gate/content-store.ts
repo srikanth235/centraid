@@ -1,8 +1,3 @@
-// The DOWN-direction byte store: where a pinned document or a downloaded
-// photo original lives on this phone. Scoped by vault — content ids are minted
-// per vault and collide across them. Eviction runs `eviction.ts`'s plan, which
-// never selects a pin (#883).
-
 import { Directory, File } from "expo-file-system";
 
 import {
@@ -22,7 +17,6 @@ export { OFFLINE_CONTENT_BUDGET_BYTES } from "../../lib/replica/offline-budgets"
 const DIRECTORY_NAME = "offline-content";
 const USED_AT_KEY = "fetchGate.contentUsedAt";
 
-/** Store-unique key, never a filename — see `filename` below. */
 export function contentKey(ref: ContentRef): string {
   return `${encodeURIComponent(ref.scopeId)}/${encodeURIComponent(ref.contentId)}`;
 }
@@ -31,7 +25,6 @@ function filename(contentId: string): string {
   return encodeURIComponent(contentId);
 }
 
-/** Call once at app start, beside `hydratePinnedContent`. */
 export async function hydrateOfflineContent(): Promise<void> {
   await Store.hydrate<Record<string, number>>(USED_AT_KEY, {});
 }
@@ -62,7 +55,6 @@ function scopeDirectory(scopeId: string): Directory | undefined {
   return new Directory(root, DIRECTORY_NAME, encodeURIComponent(scopeId));
 }
 
-/** Filesystem PATH for the native sizer; `Directory.uri` is a `file://` URI. */
 function storePath(scopeId?: string): string | undefined {
   const root = replicaStorageDirectory();
   if (!root) return undefined;
@@ -70,7 +62,6 @@ function storePath(scopeId?: string): string | undefined {
   return scopeId ? `${base}/${encodeURIComponent(scopeId)}` : base;
 }
 
-// Reused until invalidated: a per-row `stat` is the cost this removes.
 let listing: Map<string, string> | undefined;
 
 function index(): Map<string, string> {
@@ -95,7 +86,6 @@ function invalidateIndex(): void {
   listing = undefined;
 }
 
-/** A URI here means do not reach for the network; `undefined` means say so. */
 export function offlineContentUri(ref: ContentRef): string | undefined {
   return index().get(contentKey(ref));
 }
@@ -105,7 +95,6 @@ export interface StoreContentResult {
   bytes: number;
 }
 
-/** `undefined` on failure — never a partial file presented as a stored one. */
 export async function storeOfflineContent(
   ref: ContentRef,
   url: string,
@@ -126,7 +115,6 @@ export async function storeOfflineContent(
   return file.exists ? { uri: file.uri, bytes: file.size } : undefined;
 }
 
-/** Unpin-and-release only; never the budget pass. */
 export function removeOfflineContent(ref: ContentRef): void {
   const directory = scopeDirectory(ref.scopeId);
   if (!directory?.exists) return;
@@ -179,7 +167,6 @@ export function storedContentEntries(): StoredContentEntry[] {
   return entries;
 }
 
-/** Under budget without touching a pin; the plan carries a pins-only overage. */
 export function enforceOfflineContentBudget(
   budgetBytes: number = OFFLINE_CONTENT_BUDGET_BYTES
 ): ReturnType<typeof planContentEviction> {
@@ -210,10 +197,6 @@ export function enforceOfflineContentBudget(
   return plan;
 }
 
-/**
- * Here, not `pin.ts`: this is where the bytes are, and the reverse import would
- * close a cycle. `unavailable` beats a fabricated 0, which reads as a budget.
- */
 export function pinnedBytes(): PinnedBytesAnswer {
   if (replicaStorageDirectory() === undefined) {
     return {

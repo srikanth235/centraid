@@ -1,17 +1,3 @@
-// The import surface, rendered (#882) — the refusal states in particular,
-// because every one of them is a place where a screen could lie.
-//
-// What this pins:
-//
-//  - offline the file control is WITHHELD and the reason stands in its place;
-//    the draft shelf is not drawn at all, because there is nothing to read
-//  - the three verdicts are always drawn, so a reviewer has the vocabulary
-//    before the rows, and `held` says the vault won
-//  - a draft that parsed nothing is a REFUSAL, not an empty review
-//  - nothing publishes without the member's own tap on the publish verb
-//  - a staged row that is not a Locker item says which app owns it
-
-// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -118,7 +104,6 @@ describe("the import surface", () => {
         (node.textContent ?? "").includes(IMPORT_CHOOSE)
       )
     ).toBe(false);
-    // Nothing to read offline, so no shelf is drawn to be empty.
     expect(textOf(container)).not.toContain(IMPORT_NO_DRAFTS);
     unmount();
   });
@@ -151,7 +136,6 @@ describe("the import surface", () => {
   });
 
   it("publishes and discards only from the member's own tap", () => {
-    // What each door RECEIVED — the batch the tap named, and nothing before it.
     const published: string[] = [];
     const discarded: string[] = [];
     const { container, unmount } = mountBlock(
@@ -188,3 +172,4 @@ describe("the import surface", () => {
     unmount();
   });
 });
+// @vitest-environment jsdom

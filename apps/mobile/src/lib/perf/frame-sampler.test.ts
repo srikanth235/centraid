@@ -7,10 +7,6 @@ import {
 } from "./frame-sampler";
 import type { FrameSamplerDeps } from "./frame-sampler";
 
-/**
- * A display that ticks at `periodMs`, except where `dropAt` says the app missed
- * its slot and the next callback lands a whole period late.
- */
 function display(periodMs: number, dropped: ReadonlySet<number> = new Set()) {
   let clock = 0;
   let tick = 0;
@@ -21,9 +17,6 @@ function display(periodMs: number, dropped: ReadonlySet<number> = new Set()) {
       pending.push(frame);
     },
   };
-  // Drain cooperatively — `sampleFrames` schedules the next frame from inside
-  // its own callback, so this recursion is the display's vsync. Recursive
-  // rather than looped because each tick has to yield to the microtask queue.
   const run = async (): Promise<void> => {
     const frame = pending.shift();
     if (!frame) return;
@@ -50,7 +43,6 @@ describe(sampleFrames, () => {
   });
 
   test("missed slots show up as dropped frames", async () => {
-    // Every third slot is missed, so the app renders two frames per three.
     const dropped = new Set(
       Array.from({ length: 200 }, (_, index) => index * 3 + 1)
     );
@@ -65,7 +57,6 @@ describe(sampleFrames, () => {
   });
 
   test("60 fps on a 120 Hz display is not reported as perfect", async () => {
-    // The device proves it can do 120 in its fastest intervals, then holds 60.
     const { deps, run } = display(
       1_000 / 120,
       new Set(Array.from({ length: 400 }, (_, index) => index * 2 + 2))
@@ -88,7 +79,6 @@ describe(sampleFrames, () => {
       },
     };
     const sampling = sampleFrames(100, deps);
-    // A 5-second stall before the very first callback, then a clean 60 Hz.
     clock = 5_000;
     const drain = async (): Promise<void> => {
       const frame = pending.shift();
@@ -131,8 +121,6 @@ describe(formatFrameSample, () => {
     };
     const line = formatFrameSample(sample);
 
-    // The exact string IS the contract with scroll-frames.mjs, which reads it
-    // back with a `dropped=<number>%` match. Changing this shape breaks the probe.
     expect(line).toBe(
       "frames=137 expected=241 elapsed=4016ms fps=34.11 targetHz=60 dropped=43.15%"
     );

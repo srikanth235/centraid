@@ -1,9 +1,5 @@
 import { saveSettingsPatch } from "./web-state.js";
 
-// iOS can evict an origin's storage after ~7 idle days, which would wipe the
-// iroh device key and force a re-pair. Requesting persistence after a
-// successful pairing marks the origin as durable. Best-effort: the browser may
-// refuse, and there is nothing to do about it beyond recording the outcome.
 export async function requestPersistentStorage(): Promise<void> {
   try {
     if (!navigator.storage?.persist) return;
@@ -15,7 +11,7 @@ export async function requestPersistentStorage(): Promise<void> {
     );
     saveSettingsPatch({ storagePersisted: granted });
   } catch {
-    /* persistence is advisory only */
+    // Intentionally empty.
   }
 }
 
@@ -23,8 +19,6 @@ export function purgeTunnelCaches(): void {
   navigator.serviceWorker?.controller?.postMessage({
     type: "centraid:purge-tunnel-cache",
   });
-  // A newly opened page may not be controlled yet. Delete the origin caches
-  // directly as well so a consent downgrade cannot depend on SW timing.
   if ("caches" in globalThis) {
     void caches
       .keys()
@@ -43,11 +37,6 @@ export function purgeTunnelCaches(): void {
   }
 }
 
-// A service worker update: the shell's SW calls skipWaiting()+clients.claim(),
-// so a new worker takes control mid-session (controllerchange). Rather than
-// reload out from under the user, surface the existing "Relaunch to update"
-// affordance. The very first controllerchange after a cold load is the initial
-// claim, not an update, so it is ignored.
 let updateAvailable = false;
 const updateListeners = new Set<
   (msg: { available: boolean; version: string }) => void

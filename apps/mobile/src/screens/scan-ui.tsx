@@ -42,9 +42,6 @@ export function PrimaryButton({
   onPress: () => void;
   colors: ThemeColors;
 }): React.JSX.Element {
-  // Disabled is a colour token on the leaf, not container opacity — opacity
-  // would dim the fill AND the label together and silently invalidate the
-  // label's own token-level contrast.
   return (
     <Pressable
       accessibilityRole="button"

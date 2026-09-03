@@ -1,7 +1,4 @@
-/* Pure backoff + crash-loop bookkeeping; no `serve()` import. */
-
 export interface SupervisorState {
-  /** Epoch ms, within the window. */
   failures: number[];
   attempt: number;
   loopBroken: boolean;
@@ -16,7 +13,6 @@ export function initialSupervisorState(): SupervisorState {
   return { failures: [], attempt: 0, loopBroken: false };
 }
 
-/** 1-based — pass `state.attempt` after a failure. */
 export function backoffForAttempt(attempt: number): number {
   const idx = Math.min(
     Math.max(attempt, 1) - 1,
@@ -44,8 +40,6 @@ export function recordFailure(
 export function recordSuccess(): SupervisorState {
   return initialSupervisorState();
 }
-
-/* Bounds a daemon that died after starting; the heartbeat would respawn forever. */
 
 export const MAX_REVIVALS = 3;
 export const REVIVAL_WINDOW_MS = 10 * 60_000;
@@ -80,7 +74,6 @@ export function claimRevival(
   };
 }
 
-/* Explicit retry clears both give-up budgets; this floor absorbs double-clicks. */
 export const MANUAL_RETRY_FLOOR_MS = 3000;
 
 export function claimManualRetry(

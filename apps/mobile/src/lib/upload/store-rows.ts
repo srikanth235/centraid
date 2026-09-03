@@ -1,7 +1,3 @@
-// Row shapes and mappers for the upload queue's SQLite tables, kept out of
-// store.ts so that module stays under the governance line-cap. Pure functions
-// over plain rows — no driver, no I/O.
-
 import type {
   UploadItem,
   UploadItemState,

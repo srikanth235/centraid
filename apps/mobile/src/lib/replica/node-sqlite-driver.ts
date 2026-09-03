@@ -1,7 +1,3 @@
-// Test-only stand-in for the op-sqlite driver. op-sqlite is a native module that
-// cannot load under vitest on macOS/node, so the intent-store and session suites
-// exercise the exact same SQLite code paths against Node's built-in `node:sqlite`
-// (FTS5-enabled). Never imported by app code, so Metro never bundles it.
 import { DatabaseSync } from "node:sqlite";
 
 import type {
@@ -27,10 +23,6 @@ export class NodeSqliteDriver implements ReplicaSqliteDriver {
     return this.db.prepare(sql).all(...bind) as T[];
   }
 
-  /**
-   * `node:sqlite` has no off-thread read, but exposing the method keeps the
-   * mounted reader's async path — the one production takes — under test.
-   */
   allAsync<T extends object>(
     sql: string,
     bind: readonly ReplicaBindValue[] = []

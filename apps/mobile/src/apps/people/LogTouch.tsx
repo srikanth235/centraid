@@ -1,11 +1,3 @@
-// Log a touch (v12 handoff § Screens 5) — the app's most repeated act.
-//
-// ONE SCREEN, THREE DECISIONS, NO SCROLLING: who it was about (stated, not
-// chosen), what kind it was, and an optional note. Saving stamps
-// last-contacted, prepends the touch to Touch → Recent, and reports
-// `<Kind> logged · <name>` on the frame's status line — with NO Undo, because
-// nothing in the contract un-logs an interaction (`people-writes.ts`).
-
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -36,7 +28,6 @@ export default function LogTouch({
   const writes = usePeopleWrites(() =>
     navigation.navigate("Settings", { screen: "Approvals" })
   );
-  // The chip's word IS the word the vault stores (`people-copy.ts`).
   const [kind, setKind] = useState<string>(LOG_KINDS[0]);
   const [text, setText] = useState("");
 

@@ -1,18 +1,3 @@
-// The one READ route (Docs handoff Part 2 §6–§7; #821): reading view
-// for text kinds, the facts panel for kinds Docs cannot set, and a hand-off
-// to the stage for the kinds that render as media — the fork is a fact about
-// the document (`document-read-model.ts`), not three places.
-//
-// Reading view: real text at the reading measure (`t("reading")`, capped at
-// 34em), kind eyebrow, display title, ruled byline. Its status is
-// `Version N · edited two hours ago` with the REAL chain count off the
-// replica's `core.link` walk; the sample's "only you have opened this" is
-// withheld — nothing records an opening.
-//
-// Facts panel: "a kind is a fact about the bytes; whether Docs can set it is
-// a separate fact. The panel exists for the difference." Nothing converts;
-// Open elsewhere hands the file, as stored, to an app that reads the kind.
-
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
@@ -59,16 +44,11 @@ export default function DocumentRead({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { doc, loading, offline } = useDocument(documentId);
   const chain = useVersionChain(documentId);
-  // The stage carries Share; this route is where every text and unrenderable
-  // kind lands, so without it those documents had no share door at all.
-  // `null` is "the roster is not an answer yet" — no verb, not a dead one.
   const audiences = useDocsGrantAudiences();
   const [shareOpen, setShareOpen] = useState(false);
 
   const surface = doc ? readSurfaceFor(doc) : null;
 
-  // The stage is a MODE, not a place under this header — media kinds hand
-  // off to the Viewer route, replacing this frame rather than stacking on it.
   useEffect(() => {
     if (surface === "stage")
       navigation.replace("DocumentViewer", { documentId });
@@ -145,7 +125,6 @@ export default function DocumentRead({
           styles={styles}
         />
       ) : (
-        // The stage hand-off is in flight; nothing to draw under it.
         <View style={styles.page} />
       )}
     </DocsScreen>
@@ -220,7 +199,6 @@ function FactsView({
   const { colors } = useTheme();
   const [exporting, setExporting] = useState(false);
   const rows = factsRows(doc, custodyMeta(doc.custody_state)?.label ?? null);
-  // Inline bytes travel from here; anything else needs the gateway in reach.
   const inline = String(doc.content_uri ?? "").startsWith("data:");
   const reachable = inline || (!offline && Boolean(gatewayBase));
   const localOnlyGone = !bytesOnDevice(doc) && offline;
@@ -267,8 +245,6 @@ function FactsView({
         style={styles.editButton}
       />
       {!reachable || localOnlyGone ? (
-        // The disabled outline carries its reason INLINE — never a hidden
-        // control (platform states table).
         <Text style={styles.bodyFaint}>
           The bytes are not on this device and the gateway is out of reach, so
           nothing can be handed over right now.
@@ -286,19 +262,6 @@ function FactsView({
   );
 }
 
-/**
- * The two ways on from an OPEN document — its history and its details.
- *
- * Both routes existed before this panel; neither was reachable from here. The
- * only door was the `···` on the drive's row, so a member reading a document
- * and wondering when it last changed had to leave it, find its row again, and
- * open a menu. A document's own screen is where facts about that document
- * belong.
- *
- * The version count is REAL or the row is silent: the chain comes off the
- * replica's `core.link` walk, and a row that guessed "7 versions" while the
- * walk was still running would be inventing a history.
- */
 function ThisDocument({
   versionCount,
   onVersions,
@@ -367,7 +330,6 @@ const makeStyles = (colors: ThemeColors) => {
   return StyleSheet.create({
     absent: { ...t("body"), color: colors.textSoft },
     bodyFaint: { ...t("body"), color: colors.textSoft, paddingTop: 12 },
-    // The row rung, so the head's one trailing control is a real target.
     headAction: {
       alignItems: "center",
       height: 44,

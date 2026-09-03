@@ -34,8 +34,6 @@ describe("service worker cache identity", () => {
     expect(shell.paths()).toContain("/assets/entry-bbb.js");
   });
 
-  // Install is exactly "the required shell is cached" (#883 C5): the lazy-chunk
-  // crawl runs in activate, so the offline guarantee never waits on it.
   test("install caches the required shell WITHOUT crawling lazy chunks", async () => {
     const worker = loadWorker({ routes: SHELL_ROUTES });
     await worker.runLifecycle("install");
@@ -49,7 +47,6 @@ describe("service worker cache identity", () => {
     await worker.runLifecycle("install");
     await worker.runLifecycle("activate");
     const shell = worker.caches.buckets.get(SHELL_CACHE)!;
-    // Relative `assets/…` literals normalise to the absolute request URL.
     expect(shell.paths()).toContain("/assets/app-inline-ccc.js");
     expect(shell.paths()).toContain("/assets/app-inline-ccc.css");
   });
@@ -72,8 +69,6 @@ describe("service worker cache identity", () => {
 });
 
 describe("service worker activation", () => {
-  // No routes: the crawl finds no index to seed from and must NOT open a shell
-  // bucket it has nothing to put in.
   test("deletes caches left behind by a previous version", async () => {
     const worker = loadWorker();
     worker.caches.seed("centraid-shell-v1");
@@ -162,8 +157,6 @@ describe("service worker fetch routing", () => {
     expect(shell.paths()).toStrictEqual(["/assets/late-ddd.js"]);
   });
 
-  // The iroh WASM loads by JS `fetch()`, whose EMPTY destination is the shape
-  // a naive routing bailout skips — at ~2 MB, once per visit (#659).
   test("caches a JS-initiated /assets fetch, which is how the wasm loads", async () => {
     const worker = loadWorker({
       routes: { "/assets/centraid_web_iroh_bg-abc.wasm": () => html("wasm") },
@@ -178,8 +171,6 @@ describe("service worker fetch routing", () => {
     ]);
   });
 
-  // No background revalidation for content-addressed entries (#883 C5): a
-  // hashed name changes when its bytes do, so a hit is never stale.
   test("serves that wasm from the cache on the next visit, hitting no network at all", async () => {
     const worker = loadWorker({
       routes: { "/assets/centraid_web_iroh_bg-abc.wasm": () => html("wasm") },
@@ -193,8 +184,6 @@ describe("service worker fetch routing", () => {
     expect(worker.fetched.slice(before)).toStrictEqual([]);
   });
 
-  // The page loads the WASM from the worker's OWN copy, so this unhashed but
-  // `?v=`-stamped path is on the critical path and must be cacheable (#883 C5).
   test("caches the versioned worker WASM the page now loads", async () => {
     const worker = loadWorker({
       routes: { "/centraid-worker-iroh.wasm": () => html("wasm") },
@@ -209,11 +198,9 @@ describe("service worker fetch routing", () => {
     await expect(
       worker.dispatchFetch(req()).then(async (next) => next.text())
     ).resolves.toBe("wasm");
-    // Immutable behind the SW generation token: no revalidation.
     expect(worker.fetched.slice(before)).toStrictEqual([]);
   });
 
-  // A stable MUTABLE path keeps stale-while-revalidate: it changes in place.
   test("still revalidates a non-hashed shell entry in the background", async () => {
     const worker = loadWorker({ routes: SHELL_ROUTES });
     await worker.runLifecycle("install");
@@ -264,7 +251,6 @@ describe("service worker never-cache rules", () => {
     const worker = loadWorker({
       routes: { "/centraid/_vault/notifications": () => html("{}") },
     });
-    // An empty `destination` must pass through: gateway JSON is authenticated.
     const response = await worker.dispatchFetch(
       request("/centraid/_vault/notifications", { destination: "" })
     );

@@ -1,7 +1,3 @@
-// Selection-bar writes shared by every Photos shelf (v4 handoff §6). Same
-// action string everywhere: one word, one write. SERIAL: each write awaits
-// the previous — parallel races the replica queue and the optimistic overlay.
-
 import { runSelectionBatch } from "@centraid/blueprints/apps/_shared/selection-engine";
 
 import { ensureOfflineContent } from "../../kit/fetch-gate/download";
@@ -11,7 +7,6 @@ import type {
 } from "../../lib/replica/native-session";
 import type { PhotoAsset } from "./timeline-model";
 
-/** In a vault, not only on the camera roll. Device-only rows have no vault write. */
 export type VaultAsset = PhotoAsset & { assetId: string };
 
 export function vaultAssets(
@@ -45,7 +40,6 @@ async function runSerially(
   }
 }
 
-/** One value for the whole selection, never a per-item toggle. */
 export function batchFavorite(
   session: MobileReplicaSession,
   targets: readonly VaultAsset[],
@@ -63,7 +57,6 @@ export function batchFavorite(
   );
 }
 
-/** Trash vault rows only — never the device original. */
 export function batchTrash(
   session: MobileReplicaSession,
   targets: readonly VaultAsset[],
@@ -96,11 +89,6 @@ export function batchRestore(
   );
 }
 
-/**
- * Irreversible vault-row purge; the overlay is a `delete`, not a flag. Order is
- * `emptyTrashOrder`: the vault refuses to purge a source an edited copy still
- * names. Never touches the device original.
- */
 export function batchPurge(
   session: MobileReplicaSession,
   targets: readonly VaultAsset[],
@@ -141,13 +129,6 @@ export function batchAddToAlbum(
   );
 }
 
-/*
- * DOWNLOAD moves BYTES, not the replica, so it skips `runSerially` and takes
- * the frame's pin/download engine (`kit/fetch-gate`) as Docs' "available
- * offline" does. This file owns only the Photos nouns on top of it (#883 C6).
- */
-
-/** A vault-resident asset whose bytes have an address on the gateway. */
 export type DownloadableAsset = VaultAsset & {
   contentId: string;
   sourceVaultId: string;
@@ -166,9 +147,7 @@ export function downloadableAssets(
 
 export interface DownloadSummary {
   stored: number;
-  /** Held for the member's tap on a metered connection — never spent silently. */
   needsChoice: number;
-  /** Could not be had; each carries the engine's own sentence. */
   unavailable: number;
   reason?: string;
 }
@@ -176,16 +155,10 @@ export interface DownloadSummary {
 export interface DownloadOptions {
   headers: Record<string, string>;
   networkType?: string;
-  /** The member has already answered the metered question for this batch. */
   consented?: boolean;
   online?: boolean;
 }
 
-/**
- * PIN what is downloaded: a member who asked for bytes on their phone did not
- * ask for a cache the next budget pass may reclaim. Serial — parallel
- * downloads race the same store and the same radio.
- */
 export async function batchDownload(
   targets: readonly DownloadableAsset[],
   options: DownloadOptions
@@ -220,7 +193,6 @@ export async function batchDownload(
   return summary;
 }
 
-/** Every count that happened is named; three landed of four is not "3". */
 export function downloadStatus(summary: DownloadSummary): string {
   const parts: string[] = [];
   if (summary.stored > 0)

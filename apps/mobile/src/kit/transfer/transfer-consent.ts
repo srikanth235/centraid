@@ -1,8 +1,3 @@
-// Consent asked once per device, then automatic (#711; decisions.md S4).
-// `automaticTransferAllowed` is the single predicate every automatic enqueue
-// must ask. Never sync the latch through the vault: a new phone would upload
-// its whole camera roll on an answer given on a different one.
-
 import { Store } from "../../storage";
 import {
   DEFAULT_TRANSFER_POLICY,
@@ -15,11 +10,9 @@ export type BackupConsentAnswer = "automatic" | "not-now";
 
 export interface BackupConsentRecord {
   answer: BackupConsentAnswer;
-  /** Never used as a gate. */
   at: string;
 }
 
-/** `undefined` = never asked. */
 export async function hydrateBackupConsent(): Promise<
   BackupConsentRecord | undefined
 > {
@@ -37,7 +30,6 @@ export function answerBackupConsent(
   return record;
 }
 
-/** THE GATE. An unanswered question is not a yes: `undefined` is refused. */
 export function automaticTransferAllowed(
   consent: BackupConsentRecord | undefined
 ): boolean {
@@ -53,13 +45,9 @@ export function automaticTransferPlan<Item>(
   return items.filter(isLocalOnly);
 }
 
-// ── The copy ───────────────────────────────────────────────────────────────
-// Restated, not imported: `kit/` may not depend on one app's blueprint.
-
 export interface ConsentFact {
   readonly label: string;
   readonly value: string;
-  /** Egress claim: a 2px leading-edge rule, never a fill. */
   readonly net?: boolean;
 }
 

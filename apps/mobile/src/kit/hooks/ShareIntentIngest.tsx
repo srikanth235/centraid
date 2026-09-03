@@ -28,20 +28,17 @@ import {
 } from "./share-ingest";
 import type { ShareStagingEntry } from "./share-ingest";
 
-/** Must match `ShareViewController.hostAppGroupIdentifier`. */
 const SHARE_APP_GROUP = "group.dev.centraid.mobile";
 
-/** Mirrors the settle path's source delete (`media-producer`). */
 function deleteStagedFile(path: string): void {
   try {
     const file = new File(path);
     if (file.exists) file.delete();
   } catch {
-    // A copy that resists deletion is swept at the next start.
+    // Intentionally empty.
   }
 }
 
-/** `undefined` on Android and on any iOS build without the share extension. */
 function stagedEntries(): readonly ShareStagingEntry[] | undefined {
   try {
     const container = Paths.appleSharedContainers[SHARE_APP_GROUP];
@@ -58,21 +55,16 @@ function stagedEntries(): readonly ShareStagingEntry[] | undefined {
   }
 }
 
-/** iOS share extension + Android share target converge on the one durable queue. */
 export function ShareIntentIngest(): React.JSX.Element {
   const { hasShareIntent, shareIntent, resetShareIntent } =
     useShareIntentContext();
   const { gatewayBase, ready, scopes, session, vaultId } = useReplica();
-  // One gate across renders: a re-render while an ingest is still in flight must
-  // not spawn a second pass over the same files (#431). The memoized gate
-  // has mount lifetime without a render-time ref read/write.
   const gate = useMemo(() => new ShareIntentGate(), []);
   const reviewing = useRef("");
   const [choosing, setChoosing] = useState(false);
   const chose = useRef(false);
   const choices = useMemo(() => shareTargetChoices(scopes ?? []), [scopes]);
 
-  // A kill between staging and ingest leaves a copy nobody will claim (#880).
   useEffect(() => {
     sweepStaleShareStaging({
       stagedEntries,
@@ -115,10 +107,8 @@ export function ShareIntentIngest(): React.JSX.Element {
 
   useEffect(() => {
     if (!hasShareIntent) return;
-    // "Not mounted yet" is not "not paired"; only the second is worth a word.
     if (!ready) return;
     if (!session || !gatewayBase) {
-      // Files and text end the same way: nothing pending, nothing staged.
       discard();
       Alert.alert(SHARE_UNPAIRED_TITLE, SHARE_UNPAIRED_MESSAGE);
       return;
@@ -228,9 +218,6 @@ export function ShareIntentIngest(): React.JSX.Element {
       onClose={() => {
         setChoosing(false);
         chose.current = false;
-        // `OptionSheet` closes BEFORE it reports a choice, in the same tick, so
-        // a dismissal is only real once that tick ends with no vault picked —
-        // and abandoning leaves copies as unclaimed as Cancel does.
         queueMicrotask(() => {
           if (!chose.current) discard();
         });

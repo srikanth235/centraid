@@ -18,8 +18,6 @@ import {
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
 
-/** §1 Onboarding & first run, §2 Home / app tiles. */
-
 let env: TestEnv;
 let gateway: MockGateway;
 
@@ -33,13 +31,10 @@ test.afterEach(async () => {
   await cleanupEnv(env);
 });
 
-// ─────────────────────────── §1 Onboarding ───────────────────────────
-
 test("1.1 — first launch reaches Home without a profile gate", async () => {
   await seedRemoteGateway(env, gateway, { onboarding: true });
   const { app, page } = await launchApp(env);
   try {
-    // First run is chooser-first (#603); no identity gate on the fresh path.
     const onboarding = page.getByTestId("onboarding-view");
     const chooser = page.getByTestId("first-run-choice");
     await chooser.waitFor({ state: "visible" });
@@ -61,15 +56,11 @@ test("1.1 — first launch reaches Home without a profile gate", async () => {
 });
 
 test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home', async () => {
-  // First run is a two-option chooser, not a founding ceremony (#603). The local
-  // gateway stays unstarted until the user picks, so no keychain prompt precedes
-  // any UI; the gateway founds Personal itself and profile identity is optional.
   const { app, page } = await launchApp(env);
   try {
     const chooser = page.getByTestId("first-run-choice");
     await chooser.waitFor({ state: "visible" });
 
-    // No local gateway URL resolved yet, so no keychain write has happened.
     const beforeConnect = (await page.evaluate(() =>
       window.CentraidApi.getSettings()
     )) as {
@@ -84,7 +75,6 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
     const onboarding = page.getByTestId("onboarding-view");
     await onboarding.waitFor({ state: "visible" });
 
-    // The fresh path enters Home directly; no profile step, and H5 does not block.
     await onboarding.waitFor({ state: "detached" });
     await waitForHome(page);
     const evidenceDir = path.resolve(
@@ -136,7 +126,6 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
       path: path.join(evidenceDir, "issue-726-vault-as-share-unit.png"),
       fullPage: true,
     });
-    // Household does not render against the mock gateway; Home is the honest frame.
     await page.screenshot({
       path: path.join(evidenceDir, "issue-750-vault-sharing.png"),
       fullPage: true,
@@ -150,7 +139,6 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
       fullPage: true,
     });
 
-    // A relaunch skips onboarding; the gateway is really running.
     const persisted = (await page.evaluate(() =>
       window.CentraidApi.getSettings()
     )) as {
@@ -160,7 +148,6 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
     expect(persisted.onboardingCompletedAt).toBeTruthy();
     expect(persisted.gatewayUrl ?? "").not.toBe("");
 
-    // The auto-founded vault stays Personal until an explicit rename.
     const listed = (await page.evaluate(() =>
       window.CentraidApi.listGatewayVaults({ gatewayId: "local" })
     )) as { vaults?: Array<{ name: string }> };
@@ -182,13 +169,7 @@ test("1.4 — a returning user (onboarding already complete) boots straight to h
   }
 });
 
-// ─────────────────────────── §2 Home / tiles ───────────────────────────
-//
-// Home is the content springboard (#708), not a library of app cards: first-party
-// apps paint as tiles or day-one first-moves, custom apps open from the palette.
-
 test("2.1 — home paints the springboard (or day-one first-moves) for first-party apps", async () => {
-  // The mock lists no apps, so day-one first-moves show instead of tiles.
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -196,19 +177,13 @@ test("2.1 — home paints the springboard (or day-one first-moves) for first-par
     await waitForHome(page);
     const springboard = page.getByTestId("home-springboard");
     const firstRun = page.getByTestId("home-first-run");
-    // One of the two graded treatments must be visible.
     await expect(springboard.or(firstRun)).toBeVisible();
-    // No library shelf / composer on Home.
     await expect(page.getByTestId("home-composer")).toHaveCount(0);
     await expect(page.getByTestId("shelf-empty")).toHaveCount(0);
     await expect(
       page.locator('[role="tablist"][aria-label="Filter your library by kind"]')
     ).toHaveCount(0);
     await expect(page.getByTestId("home-health-ribbon")).toBeVisible();
-    // Perceived-latency budget (#785), measured in the renderer to exclude
-    // Playwright transport. MutationObserver, never an rAF poll (#842): an rAF
-    // loop measures the runner's frame cadence, not the product. Arm the observer
-    // BEFORE the click so a synchronous open cannot slip between the two.
     const assistantOpenMs = await page.evaluate(async () => {
       const button = document.querySelector<HTMLButtonElement>(
         'button[aria-label="Ask Assistant"]'
@@ -227,7 +202,6 @@ test("2.1 — home paints the springboard (or day-one first-moves) for first-par
       });
       started = performance.now();
       button.click();
-      // A synchronous render lands with no mutation record to observe.
       if (companion()) return performance.now() - started;
       return appeared;
     });
@@ -250,7 +224,6 @@ test("2.1 — home paints the springboard (or day-one first-moves) for first-par
 });
 
 test("2.2 — day-one Home offers first-moves rather than a shelf-empty card", async () => {
-  // First-moves appear only for installed apps with empty bodies.
   gateway.state.apps = [
     appEntry({ id: "photos", name: "Photos" }),
     appEntry({ id: "notes", name: "Notes" }),
@@ -259,7 +232,6 @@ test("2.2 — day-one Home offers first-moves rather than a shelf-empty card", a
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // Installed apps, no vault content: first-moves, not a library card.
     await expect(page.getByTestId("home-first-run")).toBeVisible();
     await expect(page.getByTestId("home-first-move").first()).toBeVisible();
     await expect(page.getByTestId("home-composer")).toHaveCount(0);
@@ -274,7 +246,6 @@ test("2.3 — opening a first-party app via the palette lands in the inline app 
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // Home hosts no library cards (#708); the palette opens any installed app.
     await openAppFromPalette(page, "Tasks");
     await expect(page.getByTestId("inline-app-view")).toBeVisible();
   } finally {
@@ -290,7 +261,6 @@ test("2.5 — App settings on an inline app is not in the frame", async () => {
     await waitForHome(page);
     await openAppFromPalette(page, "Tasks");
     await expect(page.getByTestId("inline-app-view")).toBeVisible();
-    // The frame gear is unmounted; pin its absence rather than click it.
     await expect(
       page.getByRole("button", { name: "App settings" })
     ).toHaveCount(0);
@@ -303,13 +273,11 @@ test("2.5 — App settings on an inline app is not in the frame", async () => {
 });
 
 test("2.6 — opening a first-party app from Home lands in the app view", async () => {
-  // A listing row makes notes installed, not a draft.
   gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // First-move or tile, depending on content.
     await openTile(page, "notes");
     await expect(
       page.locator('[data-testid="app-view"], [data-testid="inline-app-view"]')
@@ -320,8 +288,6 @@ test("2.6 — opening a first-party app from Home lands in the app view", async 
 });
 
 test("2.6b — Photos opens into the app view and yields the #711 UI evidence", async () => {
-  // The ui-receipt gate wants a frame of the CHANGED surface: screenshotting Home
-  // under a `photos` filename passes the regex and lies to the reviewer.
   gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -452,7 +418,6 @@ test("2.7 — the stem nav is present and All apps is reachable", async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // The stem is fixed, not a collapsible sidebar (#707); All apps is in the foot.
     await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
     await page.getByRole("button", { name: /All apps/iu }).click();
     await expect(
@@ -483,7 +448,6 @@ test("2.8 — the command palette opens from the stem Search control", async () 
   }
 });
 
-// Keeps desktop-real-journey minimumTests (13) met.
 test("2.9 — palette has no Build a new app row after the builder retired", async () => {
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);

@@ -1,12 +1,3 @@
-/*
- * Desktop connection registry (#555).
- *
- * Electron main owns one `<userData>/connections.json`; it never scans or
- * creates a directory per connection. Remote gateways are keyed by their
- * stable iroh EndpointId. Relay hints are refreshable address cache, not
- * identity, and device secrets live separately behind safeStorage.
- */
-
 import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -28,9 +19,7 @@ export type GatewayProfile = GatewayProfileShape;
 
 export interface ResolvedGateway {
   readonly profile: GatewayProfile;
-  /** Loopback URL: embedded server for local, iroh proxy for remote. */
   readonly url: string;
-  /** Temporary local loopback bearer; remote iroh connections use no bearer. */
   readonly token: string;
 }
 
@@ -136,7 +125,6 @@ export async function listGateways(): Promise<GatewayProfile[]> {
 export interface AddGatewayInput {
   label: string;
   endpointId: string;
-  /** Current relay cache from the one-time pairing ticket. */
   relayHint?: string;
   displayName?: string;
   avatarColor?: string;
@@ -184,7 +172,6 @@ export async function updateGatewayRememberDevice(
   return next;
 }
 
-/** Refresh address cache without changing a gateway's identity. */
 export async function updateGatewayRelayHint(
   id: string,
   relayHint: string | undefined

@@ -1,6 +1,3 @@
-/**
- * Home / Vaults launcher owner (#545/C7 surface) — the pure catalog.
- */
 import { describe, expect, it } from "vitest";
 
 import type { AppMetaResolved } from "@centraid/design";
@@ -43,9 +40,6 @@ describe(orderForSpringboard, () => {
     items.map((item) => item.meta.id);
 
   it("gives the mosaic the corner", () => {
-    // The regression this guards: the grid took the CATALOG's order, which
-    // opens with Notes, so Home led with a paragraph and the photographs sat
-    // in the third row.
     expect(ids(orderForSpringboard(buildLauncherItems()))[0]).toBe("photos");
   });
 

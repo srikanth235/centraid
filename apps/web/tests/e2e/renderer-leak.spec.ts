@@ -1,10 +1,3 @@
-/**
- * RENDERER LEAK SOAK (#842, #883). The shell is one long-lived document with no
- * served-app iframe (#799), so what an app open allocates is released by the
- * close or never. This proves the per-cycle residue is zero, NOT that a
- * multi-day session is clean.
- */
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -22,8 +15,6 @@ const CONTROL_SESSION = "web-e2e-control-session";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
 const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
 
-/** Photos carries the leak class no integral counter shows — `blob:` URLs and
- *  decoded image data. */
 const MEASURED_APPS = ["Tasks", "Photos"] as const;
 
 const here = import.meta.dirname;
@@ -40,7 +31,6 @@ interface HeapCensus {
   heapUsedBytes: number;
 }
 
-/** No inline app mounts without a replica lease. */
 async function establishSession(page: Page): Promise<void> {
   await installHarnessControlTransport(page, API_URL);
   const control = await page.evaluate(
@@ -127,7 +117,6 @@ async function openPalette(page: Page): Promise<void> {
     .toBe(true);
 }
 
-/** Both ends prove on `window.centraid`; the frame alone stays visible. */
 async function openAndClose(page: Page, appName: string): Promise<number> {
   await openPalette(page);
   const palette = page.getByRole("dialog", { name: "Command palette" });
@@ -148,7 +137,6 @@ async function openAndClose(page: Page, appName: string): Promise<number> {
       )
     )
     .toBe(true);
-  // The app's OWN subtree: the document total reads 0 delta.
   const mountedNodes = await page.evaluate(
     () => document.querySelectorAll('[data-testid="inline-app-view"] *').length
   );
@@ -167,18 +155,8 @@ async function openAndClose(page: Page, appName: string): Promise<number> {
   return mountedNodes;
 }
 
-/**
- * `collectGarbage` makes the count mean "retained", not "allocated" — TWICE,
- * WITH A BEAT BETWEEN (#883 C4). One sweep leaves the census bimodal, because
- * whether the last cycle's detached tree is gone by `getMetrics` depends on
- * work that sweep itself queues; a second sweep in the same turn does not fix
- * it, since the queued work has to actually RUN in between. A leak that
- * survives two spaced forced GCs is a leak by any reading.
- */
 async function heapCensus(page: Page, cdp: CDPSession): Promise<HeapCensus> {
   await cdp.send("HeapProfiler.collectGarbage");
-  // On the page's own clock: the second sweep must run AFTER the tasks the
-  // first queued.
   await page.waitForTimeout(250);
   await cdp.send("HeapProfiler.collectGarbage");
   const { metrics } = await cdp.send("Performance.getMetrics");
@@ -190,11 +168,6 @@ async function heapCensus(page: Page, cdp: CDPSession): Promise<HeapCensus> {
   };
 }
 
-/**
- * One independent soak per app: the residue argument compares an app against
- * ITSELF across identical cycles, so two apps sharing one document would
- * measure only their sum.
- */
 for (const appName of MEASURED_APPS) {
   test(`renderer leak soak — repeated ${appName} open/close leaves no residue`, async ({
     page,
@@ -207,14 +180,12 @@ for (const appName of MEASURED_APPS) {
     await page.goto("/");
     await establishSession(page);
 
-    // Only Chromium exposes the post-GC census.
     let cdp: CDPSession | undefined;
     if (browserName === "chromium") {
       cdp = await page.context().newCDPSession(page);
       await cdp.send("Performance.enable");
     }
 
-    // Sequential: parallel cycles measure a different renderer.
     let mountedSubtreeLow = Number.POSITIVE_INFINITY;
     const runCycles = async (count: number): Promise<void> => {
       if (count === 0) return;
@@ -304,13 +275,11 @@ for (const appName of MEASURED_APPS) {
     }
     console.log("======================================================\n");
 
-    // Anti-vacuity: every ceiling caps GROWTH, so a nothing-run passes.
     expect(
       mountedSubtreeLow,
       "elements inside the mounted app view, worst cycle"
     ).toBeGreaterThanOrEqual(budgets.minMountedSubtreeNodes);
 
-    // Integral: a subscription is torn down or it is not.
     expect(growth("intervals"), "live setInterval handles").toBeLessThanOrEqual(
       budgets.maxIntervalGrowth
     );

@@ -1,10 +1,3 @@
-// One task row, drawn the same way wherever rows appear (Tasks spec §5).
-//
-// THREE GESTURES, THREE MEANINGS: the box completes, the body OPENS the task's
-// detail place, and a long press picks the row up to file it. A read-only row
-// keeps all three affordances visible and attaches the reason instead of
-// failing on press.
-
 import React from "react";
 import { Pressable, View } from "react-native";
 
@@ -36,12 +29,10 @@ export interface TaskRowProps {
   projectName?: string | null;
   child?: boolean;
   picked?: boolean;
-  /** A positional handle from `kit/test-ids`, supplied by the list. */
   testID?: string;
   onToggle: (task: Task) => void;
   onOpen: (task: Task) => void;
   onPickUp?: (task: Task) => void;
-  /** The row's ONE act where the place gives it one (the Inbox). */
   act?: { label: string; run: (task: Task) => void };
 }
 
@@ -59,8 +50,6 @@ export default function TaskRow({
   act,
 }: TaskRowProps): React.JSX.Element {
   const { colors } = useTheme();
-  // The pending marker is drawn INLINE: one unsettled row in one app is not
-  // yet kit vocabulary.
   const pending = readPendingOverlay(
     task as unknown as Record<string, unknown>
   );

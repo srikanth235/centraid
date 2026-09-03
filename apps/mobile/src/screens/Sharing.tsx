@@ -1,10 +1,3 @@
-// Who this vault is linked to, and the ceremony that adds one more.
-//
-// Reaching another person is ONE mechanism: an approved vault link. The people
-// a link produced are what every share sheet offers as an audience, so this
-// screen has exactly two parts — mint or redeem a ticket, and read the roster
-// that ceremony writes.
-
 import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -49,8 +42,6 @@ export default function SharingScreen({
   const refresh = useCallback((): void => {
     const base = replica.gatewayBase;
     if (!base) return;
-    // A refusal and an unreachable gateway are different answers, and neither
-    // of them is `[]` — an empty roster must only ever mean an empty roster.
     void readShareSection(() => listLinks(base), online).then(setLinks);
   }, [online, replica.gatewayBase]);
 
@@ -158,7 +149,6 @@ function Section({
   title: string;
   colors: ReturnType<typeof useTheme>["colors"];
   children: React.ReactNode;
-  /** A handle from `kit/test-ids`, on the sections a flow has to find. */
   testID?: string;
 }): React.JSX.Element {
   return (

@@ -1,7 +1,3 @@
-// Unit spec for the pinned-simulator resolver (#890 W0). The whole point of the
-// pin is that a substitution is visible and a miss is loud, so both are asserted
-// here rather than left to a nightly to discover.
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -68,8 +64,6 @@ test("falls back down the ordered ladder and reports the rung", () => {
     },
     PIN
   );
-  // "iPhone 17" is rung 1 and must win over "iPhone 16 Pro" at rung 2 even
-  // though the latter is listed first — the ladder's order is the contract.
   expect({ udid: found.udid, rung: found.rung }).toEqual({
     udid: "u-17",
     rung: 1,
@@ -126,7 +120,6 @@ test("the committed matrix declares both platforms and records the Android diver
   expect(typeof matrix.ios.osPrefix).toBe("string");
   expect(matrix.android.apiLevel).toBe(34);
   expect(matrix.android.arch).toBe("x86_64");
-  // A divergence entry with no `why` is a divergence nobody decided.
   expect(matrix.android.divergences.length >= 2).toBe(true);
   for (const divergence of matrix.android.divergences) {
     expect(divergence.deliberate).toBe(true);

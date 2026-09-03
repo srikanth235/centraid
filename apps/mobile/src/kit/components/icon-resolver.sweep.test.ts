@@ -1,6 +1,3 @@
-// Every icon literal must resolve — a missing alias is a render crash.
-// Computed names escape; keep call sites literal.
-
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -10,7 +7,6 @@ import { resolveIconName } from "./icon-resolver";
 
 const SRC = path.join(__dirname, "../..");
 
-// `icon` props and `<Icon name>` only.
 const ICON_PROP = /\bicon(?:=|:\s*)"(?<name>[a-zA-Z0-9_-]+)"/gu;
 const ICON_ELEMENT = /<Icon\b[^>]*?\bname="(?<name>[a-zA-Z0-9_-]+)"/gsu;
 
@@ -34,7 +30,6 @@ describe("icon call sites", () => {
           if (match.groups?.name) used.add(match.groups.name);
     }
 
-    // Fail loudly if a pattern goes quiet.
     expect(used.size).toBeGreaterThan(40);
 
     const unresolved: string[] = [];

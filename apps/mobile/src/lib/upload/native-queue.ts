@@ -1,9 +1,3 @@
-// Device assembly of the upload queue (#419.4).
-//
-// Native-module imports live here and in `expo-native.ts` only; the queue,
-// sealer and drainer take every one of these by injection so the vitest rig
-// can exercise them.
-
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { OpSqliteDriver } from "../replica/op-sqlite-driver";
 import type { PendingUploadGroup } from "../replica/storage-accounting";
@@ -24,20 +18,13 @@ import type {
 import { UploadDrainer } from "./uploader";
 import type { DrainSummary, UploadPolicy } from "./uploader";
 
-/**
- * The queue's own database, deliberately NOT the replica's — see the header of
- * `store.ts` for why. Production places it in the native durable,
- * backup-excluded replica directory so OS cache cleanup cannot evict intents.
- */
 export const UPLOAD_DB_NAME = "centraid-uploads.db";
 
 export interface UploadQueueOptions {
   gatewayBaseUrl: string;
-  /** Extra headers for gateway calls (e.g. Authorization in manual dev mode). */
   headers?: () => Record<string, string>;
   policy?: UploadPolicy;
   onProgress?: (progress: { completed: number; total: number }) => void;
-  /** Overridable for tests; defaults to the ambient WebCrypto. */
   crypto?: UploadCrypto;
 }
 
@@ -82,7 +69,6 @@ export class UploadQueue {
     });
   }
 
-  /** Address the bytes and durably queue them. Idempotent by content sha. */
   async enqueue(
     input: EnqueueInput,
     makeFollowup?: UploadFollowupFactory
@@ -99,12 +85,6 @@ export class UploadQueue {
     );
   }
 
-  /**
-   * One resumable pass. Safe to call at any time from any lifecycle: recovery,
-   * foreground reconciliation and a foreground-service drain are all just this.
-   * When Android 15 stops a `dataSync` service at its 6h cap, the next call
-   * resumes from the queue rather than restarting the work.
-   */
   async drain(): Promise<DrainSummary> {
     return this.drainer.drainOnce();
   }
@@ -113,12 +93,10 @@ export class UploadQueue {
     return this.store.pending();
   }
 
-  /** Per-target-vault pending bytes/counts, aggregated in SQL — no rows. */
   pendingStorageGroups(): PendingUploadGroup[] {
     return this.store.pendingStorageGroups();
   }
 
-  /** Ledger lookup by content sha — the F11 probe and the F6 outcome check. */
   bySha(sha256: string): UploadItem | undefined {
     return this.store.bySha(sha256);
   }

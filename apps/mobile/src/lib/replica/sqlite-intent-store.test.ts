@@ -1,5 +1,3 @@
-// Proves SqliteIntentStore matches the durable-outbox spec by running the same
-// conformance corpus against it and the reference MemoryIntentStore.
 import { describe, expect, test } from "vitest";
 
 import {
@@ -174,22 +172,6 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
     await expect(store.list()).resolves.toHaveLength(0);
   });
 
-  // INTERLEAVED WRITERS (#890 follow-up). Everything above drives one writer at
-  // a time; the single exception races claimNext against itself. That left the
-  // interesting half unproven, because the outbox's real caller is a drain loop
-  // where DIFFERENT operations overlap — an intent is admitted while another is
-  // being claimed, a settle lands while a third is being transitioned.
-  //
-  // WHAT THESE CAN AND CANNOT CATCH, stated plainly so the cell is not read as
-  // more than it is. `node:sqlite` is synchronous and JS is single-threaded, so
-  // these do not simulate OS threads contending for the file. What they DO pin
-  // is atomicity across `await` boundaries: every operation here is a
-  // read-modify-write, and the moment one of them grows an `await` between the
-  // read and the write, another queued continuation runs in the gap and these
-  // tests go red. That is the regression that actually happens in this codebase
-  // — the store already carries a guard rejecting async transaction bodies for
-  // exactly this reason — and it is invisible to every serial test above.
-
   test("concurrent admissions all land with unique, strictly increasing order", async () => {
     const store = makeStore();
     const ids = Array.from({ length: 24 }, (_, index) => `race-${index}`);
@@ -201,9 +183,6 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
 
     const listed = await store.list();
     expect(listed).toHaveLength(ids.length);
-    // Two intents sharing a createdOrder is the defect: claimNext orders by it,
-    // so a duplicate makes the drain order depend on SQLite's tiebreak rather
-    // than on admission — silently reordering a user's queued writes.
     const orders = listed.map((intent) => intent.createdOrder);
     expect(new Set(orders).size).toBe(ids.length);
     expect([...orders].sort((a, b) => a - b)).toStrictEqual(orders);
@@ -221,12 +200,6 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
       const store = makeStore();
       await store.add(newIntent({ intentId: "first" }));
 
-      // Both orderings, and the honest reason: these bodies contain no `await`,
-      // so `Promise.all` runs the first entry to completion before the second is
-      // entered. The interleave is deterministic per order rather than a coin
-      // flip, which is why driving one order and calling it a race — as an
-      // earlier version of this test did — proves nothing the serial tests
-      // above do not.
       const claim = () => store.claimNext();
       const admit = () =>
         store.add(
@@ -237,9 +210,6 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
       const byId = new Map(
         (await store.list()).map((intent) => [intent.intentId, intent.state])
       );
-      // `first` is the oldest queued intent either way, so it is the one claimed
-      // — and `second` must still be queued and intact. A read-modify-write that
-      // lost the concurrent insert leaves one of them nowhere.
       expect(byId.get("first")).toBe("sending");
       expect(byId.get("second")).toBe("queued");
       expect(byId.size).toBe(2);
@@ -256,13 +226,6 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
       await store.add(newIntent());
       await store.claimNext();
 
-      // BOTH ORDERINGS, because they are genuinely different. `settle` deletes
-      // the row `transition` wants to patch, and these bodies contain no
-      // `await`, so `Promise.allSettled` runs the first entry to completion
-      // before the second is entered — the outcome is deterministic per order,
-      // not a coin flip. An earlier version of this test drove only
-      // settle-then-transition, which is the ONE ordering under which the defect
-      // below cannot appear; found by audit, not by the test itself.
       const settleFirst = () =>
         store.settle("intent-1", ["sending"], { state: "executed" });
       const transitionFirst = () =>
@@ -280,17 +243,10 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
       const settledIds = new Set(
         (await store.listSettled()).map((outcome) => outcome.intentId)
       );
-      // Stated as a set comparison rather than a loop over `survivors`. The loop
-      // ran ZERO times whenever settle won and the outbox was empty, so it
-      // asserted nothing at all in exactly the case it was written for — a test
-      // that passes by having nothing to check.
       const orphans = survivors
         .map((intent) => intent.intentId)
         .filter((intentId) => settledIds.has(intentId));
       expect(orphans).toStrictEqual([]);
-      // And the intent is accounted for SOMEWHERE. Without this, a store that
-      // lost the row entirely — neither queued nor journalled — passes the
-      // orphan check trivially.
       expect(survivors.length + settledIds.size).toBeGreaterThan(0);
     }
   );
@@ -306,17 +262,9 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
       )
     );
 
-    // Four workers running the production shape — claim, then settle what they
-    // claimed — with their awaits interleaving. A claimNext that is not atomic
-    // hands the same intent to two workers, and the duplicate shows up as a
-    // repeated id in `drained` rather than as a crash.
     const drained: string[] = [];
     async function worker(): Promise<void> {
       for (;;) {
-        // Sequential BY CONSTRUCTION: a worker settles what it claimed, so the
-        // second await depends on the first. Parallelising them is not a faster
-        // version of this test, it is a different one that no longer models the
-        // drain loop.
         // oxlint-disable-next-line no-await-in-loop
         const claimed = await store.claimNext();
         if (!claimed) return;

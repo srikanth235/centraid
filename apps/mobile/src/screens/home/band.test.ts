@@ -1,6 +1,3 @@
-// Band contract (Binding Layer invariant 1): FRAME destinations only, max
-// five plus More; these checks pin the real touch floor.
-
 import { describe, expect, it } from "vitest";
 
 import { apps, metrics } from "@centraid/design";
@@ -29,9 +26,7 @@ describe("the mobile band", () => {
 
   it("holds at most 5 destinations, Home included", () => {
     expect(bandTabs(DEFAULT_PLACE_PINS)).toHaveLength(4);
-    // Standing More sits outside this list.
     expect(bandTabs(DEFAULT_PLACE_PINS).length + 1).toBe(5);
-    // Pinning every place still caps at five; rest overflows to More.
     expect(bandTabs(ALL_PLACE_IDS)).toHaveLength(MAX_BAND_TABS);
     expect(bandTabs(ALL_PLACE_IDS).length + 1).toBe(6);
   });
@@ -48,7 +43,6 @@ describe("the mobile band", () => {
   });
 
   it("keeps the table's fixed order, never the pin order", () => {
-    // Order is the table's, never the member's click order (:3470).
     const tabs = bandTabs(["storage", "notifs"]);
     expect(tabs.map((tab) => tab.id)).toStrictEqual([
       "home",
@@ -76,7 +70,6 @@ describe("the mobile band", () => {
   });
 
   it("keeps the shared row metric at least a 44pt touch target", () => {
-    // Sabotaging metrics.row in design is the regression shape.
     expect(metrics.row).toBeGreaterThanOrEqual(TOUCH_TARGET_FLOOR);
   });
 });

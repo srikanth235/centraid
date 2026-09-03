@@ -1,9 +1,3 @@
-// People & circles on the phone (#880). The screen reads ONE thing — who this
-// vault is linked to — and the claim is L-READ (#821): a read that did not
-// land renders ABSENT. "No people linked yet." is an answer, and this screen
-// may only print it when it got one; offline must not read as refused.
-// @vitest-environment jsdom
-
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -51,8 +45,6 @@ vi.mock(
   import("../kit/components/Icon"),
   () => ({ default: () => null }) as never
 );
-// The link ceremony has its own file and its own Clipboard/Expo reach; here it
-// is a recorder, so this suite stays about what Sharing READ and SAID.
 vi.mock(
   import("./SharingLinkRow"),
   () =>
@@ -140,7 +132,6 @@ describe("the Sharing screen", () => {
       expect(el.textContent).toContain(
         shareAbsentLine("Who is linked", "unreachable")
       );
-      // The refusal sentence is a DIFFERENT sentence, and this is not it.
       expect(el.textContent).not.toContain(
         shareAbsentLine("Who is linked", "refused")
       );
@@ -167,3 +158,4 @@ describe("the Sharing screen", () => {
     expect(el.textContent).not.toContain("No people linked yet.");
   });
 });
+// @vitest-environment jsdom

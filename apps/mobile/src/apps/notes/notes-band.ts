@@ -1,7 +1,3 @@
-// The phone's bottom band, as Notes claims it: four PLACES plus More — the
-// frame's exact cap. Acts sit behind More. Ids, labels and order come from the
-// web app's shelf tables, so band, rail and app bar cannot disagree.
-
 import {
   BAND_DESTINATIONS,
   MORE_SHELVES,
@@ -52,7 +48,6 @@ export const NOTES_BAND_DESTINATIONS: readonly NotesBandDestination[] = [
   { key: "more", label: "More", icon: BAND_ICONS.more },
 ];
 
-/** Exactly one band exists at any moment. */
 export type ResolvedNotesBand =
   | {
       owner: "app";
@@ -81,8 +76,6 @@ export type NotesPlace = ShelfId | typeof NOTES_MORE_SHEET;
 
 const BAND_KEYS = new Set(BAND_DESTINATIONS.map((entry) => entry.id));
 
-/** A shelf the band has no room for lights More: that is how the member got
- *  there, and another tab would point at a place they are not looking at. */
 export function notesBandKeyFor(place: NotesPlace): NotesBandDestinationKey {
   if (place === NOTES_MORE_SHEET) return "more";
   const active = bandActiveId(place);

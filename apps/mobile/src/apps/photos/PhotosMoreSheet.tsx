@@ -1,7 +1,3 @@
-// The More sheet (Photos v4 handoff §3.1, §H): the band caps at five
-// destinations, so only Backup lives here. NO import row (see photos-band.ts);
-// tile size belongs to the Library header menu, not this sheet.
-
 import React, { useMemo } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,12 +14,6 @@ export interface PhotosMoreSheetProps {
   onClose: () => void;
   onSelect: (key: PhotosMoreRowKey) => void;
 }
-
-/*
- * NO META MAP HERE: no live counts derived in this file. Collections states
- * counts beside the same shelves; Backup deliberately carries no meta — its
- * figure needs a network round trip this sheet must not make.
- */
 
 export default function PhotosMoreSheet({
   visible,

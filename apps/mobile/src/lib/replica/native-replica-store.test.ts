@@ -128,9 +128,7 @@ describe(NativeReplicaStore, () => {
         dependencies: [],
       });
       await store.wipe();
-      // Replica rows are gone (a read now demands a fresh bootstrap)...
       expect((await store.status()).cursor).toBeNull();
-      // ...but the queued intent in its own table survives the wipe.
       expect(
         (await intents.list(["queued"])).map((intent) => intent.intentId)
       ).toStrictEqual(["intent-1"]);

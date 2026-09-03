@@ -1,13 +1,3 @@
-// One event on the phone: what it is, who is coming, the member's own RSVP,
-// what is held about it, and the two verbs — Edit, and Ask to cancel.
-//
-// PARKED CANCEL IS A STATE, NOT AN ERROR. Cancelling is medium-risk, so the
-// vault HOLDS the ask for the owner rather than executing it. The event stays
-// on the agenda, this screen says what is held, and the way on is Approvals —
-// the owner's own surface. There is deliberately no unpark control: the
-// vault's release door is the owner's, and a button that could not act would
-// be worse than the sentence naming who decides.
-
 import React, { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
@@ -46,9 +36,6 @@ export default function AgendaEvent({
   const { colors } = useTheme();
   const { session } = useReplica();
   const { eventId, instanceKey } = route.params;
-  // One event is looked up across the whole replicated series, so a recurrence
-  // instance years out still resolves. The expansion is bounded by the engine's
-  // own instance cap, not by this range.
   const range = useMemo(
     () => [new Date("1970-01-01"), new Date("2100-01-01")] as const,
     []
@@ -62,8 +49,6 @@ export default function AgendaEvent({
     (row) => row["event_id"] === eventId
   );
   const editable = { ...canonical, ...extension };
-  // Render the tapped OCCURRENCE when an instance key was threaded through, so
-  // a recurring instance shows its own date. Writes still target the series.
   const event =
     (instanceKey
       ? agenda.events.find((row) => row.instanceKey === instanceKey)
@@ -80,8 +65,6 @@ export default function AgendaEvent({
   const attendees = agenda.attendees.filter(
     (row) => row["event_id"] === eventId
   );
-  // RSVP acts as the vault OWNER's own attendee row, never `attendees[0]`. If
-  // the owner is not on the guest list there is no honest party to answer as.
   const me = agenda.ownerPartyId;
   const myAttendee = attendees.find(
     (row) => me !== undefined && String(row["party_id"]) === String(me)

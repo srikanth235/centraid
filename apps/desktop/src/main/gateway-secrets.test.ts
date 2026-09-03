@@ -21,8 +21,6 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock(import("electron"), () => ({
-  // gateway-secrets.ts only reads `app.isPackaged` (the insecure-hatch guard);
-  // the real Electron.App type is enormous, so mock the one property and cast.
   app: {
     get isPackaged(): boolean {
       return mocked.isPackaged;
@@ -32,10 +30,6 @@ vi.mock(import("electron"), () => ({
     decryptString: (value: Buffer) => value.toString("utf8"),
     encryptString: (value: string) => Buffer.from(value, "utf8"),
     isEncryptionAvailable: () => mocked.encryptionAvailable,
-    // Unused by gateway-secrets.ts (grep confirms only decryptString /
-    // encryptString / isEncryptionAvailable are called), but Electron's
-    // `SafeStorage` type requires them — stub each with its real signature
-    // so the mock is structurally assignable without widening/asserting.
     decryptStringAsync: (value: Buffer) =>
       Promise.resolve({
         result: value.toString("utf8"),
@@ -134,9 +128,6 @@ describe("gateway-secrets", () => {
   test("the dev hatch bypasses the keychain, without rewrites, and only unpackaged", async () => {
     const root = await tempDir("gateway-secrets-hatch-");
     mocked.secretsFile = path.join(root, "connection-secrets.bin");
-    // A dev Mac: the keychain is perfectly available. The hatch exists to stop
-    // the app from *using* it, because an ad-hoc-signed dev build re-prompts for
-    // the login password on every restart.
     mocked.encryptionAvailable = true;
     vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
     vi.stubEnv("CENTRAID_INSECURE_DEVICE_SECRETS", "1");
@@ -147,17 +138,10 @@ describe("gateway-secrets", () => {
     );
     expect(statSync(mocked.secretsFile).mode & 0o777).toBe(0o600);
 
-    // The adopt-back-into-custody branch fires whenever custody is available,
-    // which on macOS is ALWAYS. It cannot corrupt the store (writeSecrets
-    // honours the hatch too), so assert what does regress if that branch asks
-    // isEncryptionAvailable instead of shouldUseFileFallback: a plain read
-    // rewriting the file, temp + rename, on every single access.
     const write = vi.spyOn(fs, "writeFileSync");
     expect(getOrCreateGatewayWrappingKey("local")).toStrictEqual(key);
     expect(write).not.toHaveBeenCalled();
 
-    // A shipped build must not be talked out of the keychain by an environment
-    // variable — `app.isPackaged` is the hard stop, not the variable's absence.
     mocked.secretsFile = path.join(root, "packaged-secrets.bin");
     mocked.isPackaged = true;
     getOrCreateGatewayWrappingKey("local");

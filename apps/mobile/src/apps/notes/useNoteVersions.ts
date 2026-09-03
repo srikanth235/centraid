@@ -1,7 +1,3 @@
-// A note's version chain, off this device's replica. Bodies are fetched only
-// once the walk has named them: an unbounded `core.content_item` read is capped
-// server-side at 1000 rows, so older bodies would simply be missing.
-
 import { useMemo } from "react";
 
 import type { VaultRow } from "@centraid/blueprints/apps/notes/filing";

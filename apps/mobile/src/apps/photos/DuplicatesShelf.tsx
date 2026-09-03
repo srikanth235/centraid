@@ -1,11 +1,3 @@
-// Duplicates SHELF, phone-shaped (Photos v4 handoff §5, proto:4436-4442). A
-// flat grid cannot answer "which of THESE copies do I keep"; this shelf gives
-// one labelled row per cluster (`Cluster 1 · …`) with `Review duplicates` as
-// the way into the cluster-at-a-time flow (proto:4800-4803). SAME TILE, SAME
-// SELECTION: rows are `justify()`'d like timeline day-rows, tiles are the
-// shared `PhotoTile` at the member's rung; note wording is imported from web
-// so clients cannot drift.
-
 import React, { useMemo, useState } from "react";
 import {
   Alert,
@@ -57,7 +49,6 @@ import { useSelectionDownload } from "./use-photo-download";
 import { usePhotoSelectionShare } from "./use-photo-selection-share";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
-/** The web's own `EMPTY_COPY[DUPLICATES]` sentence, from its owning module. */
 const NOTHING_TO_REVIEW = PHOTOS_EMPTY_DUPLICATES;
 
 export default function DuplicatesShelf({
@@ -72,7 +63,6 @@ export default function DuplicatesShelf({
     () => duplicateClusters(timeline.assets),
     [timeline.assets]
   );
-  // Every photograph shown, so a selection resolves without re-walking clusters.
   const shown = useMemo(
     () => clusters.flatMap((cluster) => cluster.assets),
     [clusters]
@@ -87,8 +77,6 @@ export default function DuplicatesShelf({
     online,
     targets: () => selected,
   });
-  // Shared third selection target across Photos shelves (grant moment/refusal
-  // grammar must not drift).
   const share = usePhotoSelectionShare(
     () => selected,
     () => setSelection(new Set())
@@ -125,11 +113,8 @@ export default function DuplicatesShelf({
     addToAlbum: {
       unavailableReason: "Add to album from the library, where the albums are.",
     },
-    // Share is one standing grant over one photograph, via the kit.
     share: share.handler,
     download: downloadHandler,
-    // The shelf's own verb (proto:4437 — "selecting a copy marks it for
-    // trash"), with the same confirm as the rest of Photos.
     trash: writeBlockedReason
       ? { unavailableReason: writeBlockedReason }
       : {
@@ -224,7 +209,6 @@ function ClusterBlock({
   onToggle,
 }: {
   cluster: DuplicateCluster;
-  /** Ordinal the header reads (`Cluster 1`), never a stable id (proto:4439). */
   index: number;
   selection: Set<string>;
   onToggle: (asset: PhotoAsset) => void;
@@ -234,7 +218,6 @@ function ClusterBlock({
   const [rung] = usePhotosRung();
   const vaults = useVaultFacts();
   const { width } = useWindowDimensions();
-  // Gutters come out of the packing width so a cluster row fills the stage.
   const content = width - spacing[4] * 2;
   const rows = useMemo(
     () => justify(cluster.assets, content, rungHeight(rung, "phone")),
@@ -254,12 +237,7 @@ function ClusterBlock({
         ) : null}
       </View>
       {rows.map((tiles, rowIndex) => (
-        <View
-          // Re-packed from the same ordered list each render: position IS
-          // identity — same key as the timeline's packed rows.
-          key={`${cluster.key}-${rowIndex}`}
-          style={styles.clusterRow}
-        >
+        <View key={`${cluster.key}-${rowIndex}`} style={styles.clusterRow}>
           {tiles.map((tile) => (
             <PhotoTile
               key={tile.asset.id}
@@ -268,8 +246,6 @@ function ClusterBlock({
               height={tile.height}
               rung={rung}
               selected={selection.has(tile.asset.id)}
-              // A cluster is a decision, not a browse: tap picks the copy
-              // to trash rather than opening it.
               selecting
               vaults={vaults}
               onOpen={onToggle}

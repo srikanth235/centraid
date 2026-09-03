@@ -31,7 +31,6 @@ function extractComponentIssues(
   return issues;
 }
 
-/** Probe component health. */
 export async function probeGateway(
   baseUrl: string,
   token: string | undefined

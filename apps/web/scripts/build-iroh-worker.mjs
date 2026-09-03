@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-/**
- * Build the browser Iroh wasm-bindgen module as a classic worker script.
- *
- * public/sw.js is deliberately a classic service worker because it predates
- * module-worker support in Centraid's browser floor. wasm-bindgen emits ESM,
- * so this small deterministic adapter removes only its export syntax and
- * publishes the two bindings the worker needs. The tracked generated source
- * and WASM remain the source of truth.
- */
 import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 

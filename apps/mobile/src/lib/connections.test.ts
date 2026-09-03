@@ -1,10 +1,4 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
-/**
- * Connections client (#765) — the wire mapping the Connectors place
- * depends on. The gateway HTTP core is mocked so vitest never loads react
- * native; what is under test is the URL, the header set, and the snake_case →
- * camelCase boundary.
- */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock(import("./gateway") as Promise<unknown>, () => ({
@@ -68,7 +62,6 @@ describe("mobile connections client", () => {
           kind: "google",
           label: "Gmail",
           lastRunAt: null,
-          // No `oauth_mode` on the wire + an OAuth credential ⇒ a BYO client.
           oauthMode: "byo",
           principal: "you@example.com",
           provider: "google",

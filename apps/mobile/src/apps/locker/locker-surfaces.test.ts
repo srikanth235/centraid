@@ -1,23 +1,3 @@
-// ACCESS HISTORY AND IMPORT, EXERCISED (#882).
-//
-// What a plausible refactor could undo silently:
-//
-//  1. A REFUSED READ IS NOT AN EMPTY HISTORY. Denied, failed and "no receipt
-//     yet" are three answers; only one of them is a list, and the other two
-//     must leave the list `null` so nothing draws "nothing has happened" over a
-//     ledger it never got to read.
-//  2. AN EXPIRED SESSION LOCKS. The receipts read is session-bound like every
-//     other read here, so `authRequired` ends the session rather than blanking
-//     a screen inside a live-looking frame.
-//  3. THE IMPORT BRIDGE REFUSES OUT LOUD. A cancel says nothing; a file this
-//     phone will not read says which of the two refusals it was; a file the
-//     border recognised nothing in stages a draft that is named as a refusal
-//     rather than drawn as an empty review.
-//  4. NOTHING REACHES THE VAULT UNTIL PUBLISH, and a discard says nothing was
-//     written.
-//  5. A LOCK TAKES BOTH SURFACES WITH IT — the entries and the staged rows
-//     through the SHARED bag's own wipe, the companions beside them.
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IMPORT_NO_ROWS } from "@centraid/blueprints/apps/locker/route-copy";
@@ -52,9 +32,6 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
   };
 });
 
-// Each mock takes the REAL function's signature, so a wire shape that drifts is
-// a typecheck failure here rather than a green test against a door the app no
-// longer has.
 type Gateway = typeof import("./locker-gateway");
 const wire = vi.hoisted(() => ({
   access: vi.fn<Gateway["lockerAccess"]>(),
@@ -87,10 +64,6 @@ vi.mock(import("./locker-gateway"), () => {
   return door as unknown as Gateway;
 });
 
-// Replaced WHOLE, like the door above: the real module reaches
-// `expo-file-system` and `expo-document-picker`, which drag React Native's Flow
-// source into a node run for no benefit. This suite is about what the bridge
-// SAYS, not how a file is read.
 type Files = typeof import("./locker-files");
 const files = vi.hoisted(() => ({
   pick: vi.fn<Files["pickLockerImportFile"]>(),
@@ -239,7 +212,6 @@ describe("the import bridge on this seat", () => {
     files.pick.mockResolvedValue({ filename: "logins.csv", text: "Title,Url" });
     wire.stage.mockResolvedValue({ batchId: "b1", staged: { create: 12 } });
     await stageLockerImportFile();
-    // The staging door received the picked file WHOLE, exactly once.
     expect(wire.stage.mock.calls.flat()).toStrictEqual([
       { filename: "logins.csv", text: "Title,Url" },
     ]);
@@ -277,7 +249,6 @@ describe("the import bridge on this seat", () => {
   it("says a discarded draft wrote nothing", async () => {
     wire.discard.mockResolvedValue();
     await discardLockerImportDraft("b1");
-    // The discard door was named the one batch, and no other.
     expect(wire.discard.mock.calls.flat()).toStrictEqual(["b1"]);
     expect(readLockerVault().importNote).toContain("nothing was written");
   });

@@ -13,13 +13,7 @@ export interface PhotoAsset {
   captureGroupId?: string;
   liveVideoUri?: string;
   localId?: string;
-  /** Every device copy of this sha — free-up-space must reach all of them. */
   localIds?: string[];
-  /**
-   * Every vault `media_asset.asset_id` that folded onto this row. SHA merge
-   * keeps one canonical `assetId` (the writable copy); album membership and
-   * free-up pins still name the other copies, so the set has to survive.
-   */
   assetIds?: string[];
   uri: string;
   previewUri: string;
@@ -28,7 +22,6 @@ export interface PhotoAsset {
   sha256?: string;
   phash?: string;
   thumbhash?: string;
-  /** `undefined` is no fact — never treat as 1970. */
   capturedAt?: string;
   tzOffsetMin?: number;
   kind: "photo" | "video" | "audio" | "scan";
@@ -40,13 +33,11 @@ export interface PhotoAsset {
   favorite: boolean;
   archived: boolean;
   deleted: boolean;
-  /** Trashed-only; from `purge_at` (#274), content row as fallback. */
   purgeAt?: string;
   backupState: BackupState;
   verifiedCasAck?: boolean;
   duplicateHint?: boolean;
   source: "device" | "replica" | "merged";
-  /** Writes must keep this pair with `assetId`. */
   sourceVaultId?: string;
   scopeIds?: string[];
   scopeLabels?: string[];
@@ -165,7 +156,6 @@ export function mergePhotoAssets(
         asset.duplicateHint ||
         Boolean(asset.phash && (phashCounts.get(asset.phash) ?? 0) > 1),
     }))
-    // ISO-8601 UTC sorts by code unit. Undated sinks rather than interleaving.
     .sort((a, b) => {
       if (a.capturedAt === undefined && b.capturedAt === undefined) return 0;
       if (a.capturedAt === undefined) return 1;
@@ -208,7 +198,6 @@ function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
 
-/** Capture-local day. Raw UTC would file a 20:00 PDT photo under the next day. */
 export function captureLocalDay(
   capturedAt: string,
   tzOffsetMin?: number
@@ -225,7 +214,6 @@ export function captureLocalDay(
   return `${year}-${month}-${day}`;
 }
 
-/** Shared key so Years/Months exclude the undated bucket the same way. */
 export const UNDATED_SECTION_DAY = "undated";
 
 export function sectionPhotoAssets(

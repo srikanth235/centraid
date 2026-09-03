@@ -1,24 +1,3 @@
-// ADD / EDIT — `locker/edit` (README-Locker §1, §3; STATES.md Locker/Add-edit).
-//
-// THE ONLINE-ONLY RULE IS THE LEDE, not a refusal discovered at commit. It is
-// the first thing on the screen, in `EDIT_LEDE`'s own words, and the second
-// sentence says what the rule does NOT cost — the star, the tags, the trash
-// all still work offline.
-//
-// TYPE IS THE FIRST CONTROL AND IT DECIDES THE FIELDS (`draft.ts`), so a card
-// is never asked for a username. Switching type keeps what the two types share
-// and drops what they do not, rather than carrying a stale value invisibly to
-// the payload builder.
-//
-// A SEALED FIELD ROUND-TRIPS AS A PLACEHOLDER. An edit pre-fills every sealed
-// value with `SEALED`, which the vault reads as UNCHANGED — so a title can be
-// changed without the member re-typing a password they never revealed, and the
-// form never holds a secret it was not given.
-//
-// THE WRITE GOES THROUGH THE ONLINE-ONLY DOOR. `addItemWrite`/`editItemWrite`
-// carry `onlineOnly`, and `native-session.ts` sends those straight to the
-// gateway: there is no branch in which this payload reaches the outbox.
-
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -96,10 +75,6 @@ export default function LockerEditScreen({
   const itemId = route.params?.itemId;
   const generated = route.params?.generated;
 
-  // An edit seeds from the detail the item screen already opened — which is
-  // the only place on this seat a `LockerDetail` exists. With none (a deep
-  // link straight to the editor) the form is a new item, because seeding from
-  // a read this screen never made would mean opening one without a permit.
   const opened = useLockerVault().bag.detail;
   const [seed, setSeed] = useState<ItemDraftSeed>(() => {
     if (itemId && opened?.item_id === itemId) return seedFromDetail(opened);

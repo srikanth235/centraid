@@ -3,13 +3,6 @@ import type { Page } from "@playwright/test";
 
 import { installHarnessControlTransport } from "./control-transport.js";
 
-// Locker × viewer seat (docs/blueprint-seats.md S5): Locker declares
-// `disabledOn: ["viewer"]`, so its web journey IS the refusal — the shell
-// must state the seat wall plainly instead of mounting the app, because a
-// shared browser is the risky seat for secrets. The desktop journey
-// (apps/desktop/tests/e2e/locker.spec.ts) owns the custodian-seat
-// passphrase/unlock/persistence proof. #781.
-
 const API_URL = "http://127.0.0.1:48765";
 const ADMIN_TOKEN = "centraid-web-e2e-token";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
@@ -91,9 +84,6 @@ test("Locker refuses the viewer seat with the manifest-declared wall", async ({
 }) => {
   test.setTimeout(120_000);
   await connectPwa(page);
-  // Re-click until the palette actually opens: right after a reload the Search
-  // button can paint before its React listener attaches, and a click that
-  // lands in that window is silently lost.
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect
     .poll(
@@ -116,9 +106,6 @@ test("Locker refuses the viewer seat with the manifest-declared wall", async ({
     .click();
   await expect(page.getByTestId("inline-app-view")).toBeVisible();
 
-  // The refusal grammar: a title and one sentence of reason, no retry —
-  // the seat itself is what refuses. And no Locker surface may mount: the
-  // lock screen dialog must never appear on this seat.
   const refusal = page.getByTestId("inline-app-seat-refusal");
   await expect(refusal).toBeVisible({ timeout: 30_000 });
   await expect(refusal).toContainText(

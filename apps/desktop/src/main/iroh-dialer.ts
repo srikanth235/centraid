@@ -1,13 +1,3 @@
-/*
- * Desktop iroh dialer (#555).
- *
- * Gateway identity is the stable EndpointId. Relay URLs are refreshable cache
- * and are converted to a fresh EndpointTicket only at dial time. The device
- * secret is safeStorage-backed and keyed by that gateway EndpointId; corrupt
- * device keys explicitly remint with a warning because re-pairing is the
- * bounded recovery for one client.
- */
-
 import {
   createTunnelClient,
   endpointTicketFor,

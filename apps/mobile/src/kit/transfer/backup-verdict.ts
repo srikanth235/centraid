@@ -1,6 +1,3 @@
-// Verdict comes from the device's durable queue, never the custody rollup
-// (#712). `readable: false` means UNKNOWN: never fold it into `complete`.
-
 import { formatBytes } from "@centraid/design";
 
 import { memberFacingError } from "../member-error";
@@ -12,7 +9,6 @@ export interface BackupVerdictCopy {
   verdict: BackupVerdict;
   title: string;
   detail: string;
-  /** `--net` ink — `failing` only (§18). */
   net: boolean;
   icon: string;
 }
@@ -23,7 +19,6 @@ export function backupVerdict(queue: TransferQueueCounts): BackupVerdict {
   return queue.pending > 0 ? "pending" : "complete";
 }
 
-// `onOneDeviceCount`: photographs held only here — the actionable fact.
 export function backupVerdictCopy(
   queue: TransferQueueCounts,
   onOneDeviceCount = queue.pending
@@ -40,7 +35,6 @@ export function backupVerdictCopy(
   }
   if (verdict === "failing") {
     const refused = queue.failures.length;
-    // `||`, not `??`: an empty message must fall through, or detail opens " · ".
     const first = memberFacingError(
       queue.failures[0]?.lastError || "no reason was recorded"
     );
@@ -68,7 +62,6 @@ export function backupVerdictCopy(
     title: "Backup is complete",
     detail: "The durable queue is empty.",
     net: false,
-    // Registry name, not `check-circle`: the resolver throws on unknown keys.
     icon: "CheckCircle",
   };
 }

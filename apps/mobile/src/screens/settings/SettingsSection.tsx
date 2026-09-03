@@ -1,8 +1,3 @@
-// A labelled Settings section — a mono uppercase eyebrow over its content, with
-// consistent top spacing so the Settings screen reads as evenly-spaced bands
-// (You · Appearance · Vault · Desktop link · Approvals · Advanced). Every
-// section shares one label treatment and rhythm (#498).
-
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 

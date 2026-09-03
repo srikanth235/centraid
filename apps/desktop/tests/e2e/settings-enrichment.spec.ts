@@ -15,9 +15,6 @@ import {
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
 
-/** §12 Settings → Enrichment (#807). */
-
-/** Open Settings via the All apps sheet. */
 async function gotoSettings(page: Page): Promise<void> {
   await page.getByRole("button", { name: /All apps/iu }).click();
   await page
@@ -61,7 +58,6 @@ test.beforeEach(async () => {
       delegateCapable: true,
     },
   ];
-  // The page asks the ONE resolver per capability (#814).
   gateway.state.enrichEffective = {
     faces: {
       capability: "faces",
@@ -98,7 +94,6 @@ test.beforeEach(async () => {
       receiptId: null,
     },
   ];
-  // 12.9 opens the engine pill; cards come from /_harnesses/status.
   gateway.state.harnessesStatus = {
     harnesses: [
       {
@@ -133,7 +128,6 @@ test("12.9 — Settings → Enrichment states what runs, and says when a stored 
       .click();
 
     const pane = page.getByTestId("settings-page");
-    // WHERE ENRICHMENT RUNS IS NOT A CHOICE (v11): no ceiling control.
     await expect(
       pane.getByRole("tablist", { name: "Enrichment for Photos" })
     ).toHaveCount(0);
@@ -141,15 +135,12 @@ test("12.9 — Settings → Enrichment states what runs, and says when a stored 
     await expect(pane).toContainText("Text in photos");
     await expect(pane).toContainText("receipts, signs, whiteboards");
     await expect(pane).toContainText("Faces");
-    // Faces is structurally undelegatable — reassurance in its copy.
     await expect(pane).toContainText(
       "Named only by you, and never sent to a provider."
     );
-    // Ceiling lost its control, not its teeth: the row states the gate.
     await expect(pane).toContainText("Stopped by a stored ceiling");
     await expect(pane).toContainText("Declined · built-in engine only");
 
-    // UI-receipt evidence for #814 (check:ui-receipt).
     const evidenceDir = path.resolve(
       import.meta.dirname,
       "../../../../artifacts/e2e/ui-impact"
@@ -160,7 +151,6 @@ test("12.9 — Settings → Enrichment states what runs, and says when a stored 
       fullPage: true,
     });
 
-    // Engine collapsed behind one pill; picking an agent creates the profile.
     await pane
       .getByRole("button", { name: "Built in", exact: true })
       .first()
@@ -169,7 +159,6 @@ test("12.9 — Settings → Enrichment states what runs, and says when a stored 
       pane.getByRole("button", { name: "Codex", exact: true })
     ).toBeVisible();
 
-    // Flipping a switch writes ONE vault-scope rule via the owner route.
     await pane.getByLabel("Faces", { exact: true }).click();
     await expect
       .poll(() =>

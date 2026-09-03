@@ -27,9 +27,6 @@ const fixture = vi.hoisted(() => ({
 }));
 
 vi.mock(import("./gateway-paths.js"), () => ({
-  // `as const` keeps this a `'local'` literal matching the real module's
-  // inferred const type — an unannotated object-literal property would
-  // widen to `string`, which the typed factory rejects.
   LOCAL_GATEWAY_ID: "local" as const,
   connectionsFile: () => fixture.file,
   localGatewayDataDir: () => fixture.localDataDir,

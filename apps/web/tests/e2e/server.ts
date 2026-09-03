@@ -21,9 +21,6 @@ const enrollments = EnrollmentStore.open(gatewayDatabase);
 const pairingTickets = PairingTicketStore.open(gatewayDatabase);
 const webDeviceKey = "web-e2e-device";
 const webControlToken = "web-e2e-control-session";
-// No `initVaultName`: a fresh gateway auto-founds "Personal" at
-// construction (#603), and the specs address whichever vault
-// `/centraid/_web/control` hands back rather than one by name.
 const handle = await serve({
   host: "127.0.0.1",
   port: 48765,
@@ -38,9 +35,6 @@ const handle = await serve({
       if (request.headers["x-centraid-authed-plane"] === "admin") {
         return webDeviceKey;
       }
-      // The harness gateway is loopback-only. Model the proved local
-      // transport identity for the direct one-time app-session redemption;
-      // unlike shell fetches, that browser navigation has no injected header.
       const remoteAddress = request.socket.remoteAddress;
       return remoteAddress === "127.0.0.1" ||
         remoteAddress === "::1" ||
@@ -64,10 +58,6 @@ const handle = await serve({
   },
 });
 
-// The general PWA smoke establishes its own bearer-derived session. The
-// pending-replica journey additionally uses this deterministic, enrolled
-// device session because replica routes intentionally reject an admin-only
-// browser cookie with no durable device identity.
 controlStore.establish({
   tokenHash: hashControlToken(webControlToken),
   vaultId: handle.vaults.defaultVaultId(),
@@ -75,9 +65,6 @@ controlStore.establish({
   shellOrigin: "http://127.0.0.1:4173",
 });
 
-// No code-store fixture app is seeded. There is no served-app plane (#799), so
-// the only openable apps are the eight bundled system apps the gateway installs
-// into every vault at mount — which is exactly what the specs drive.
 await handle.syncApps();
 
 async function close(): Promise<void> {

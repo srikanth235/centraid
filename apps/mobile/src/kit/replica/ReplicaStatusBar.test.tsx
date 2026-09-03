@@ -1,13 +1,3 @@
-// Regression net for ReplicaStatusBar (#711).
-//
-// Sabotage-verified: dropping the `pending.length > 0 ?` guard for an
-// unconditional render makes the "hides the chip" test below fail — the chip
-// would stand at "Pending changes 0" forever, exactly the standing badge §18
-// forbids.
-//
-// react-native is mocked to plain DOM elements (the same approach
-// `EnrichmentConsent.test.tsx` uses) so this can run under jsdom.
-// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -186,7 +176,6 @@ vi.mock(
     }) as unknown as Partial<PendingChangesModule>
 );
 
-/** What the sheet actually asked the outbox to do, in order. */
 const outbox = vi.hoisted(() => ({ calls: [] as string[][] }));
 
 const sessionMock = vi.hoisted(() => ({
@@ -260,7 +249,6 @@ function teardown(): void {
   container.remove();
 }
 
-/** The sheet is behind the chip, exactly as a member reaches it. */
 async function press(label: string): Promise<void> {
   const control = container.querySelector(`[aria-label="${label}"]`);
   if (!control) throw new Error(`no control labelled ${label}`);
@@ -281,10 +269,6 @@ describe("pending-changes chip visibility (issue #711)", () => {
   });
 
   it("says nothing at all when the replica is current", async () => {
-    // The whole point of the bar mounting on ~20 screens: on a settled
-    // replica it must not draw a row. Sabotage target — make the `label ||
-    // pending.length > 0` guard unconditional and this fails on the border,
-    // or restore the `Updated …`/`Refresh` pair and it fails on the text.
     replicaMock.reachability = "current";
     await render();
     expect(container.textContent).toBe("");
@@ -295,14 +279,10 @@ describe("pending-changes chip visibility (issue #711)", () => {
     await render();
     expect(container.textContent).toContain("Gateway asleep");
     expect(container.textContent).toContain("Wake help");
-    // Never the plain word: pull-to-refresh is that control already.
     expect(container.textContent).not.toContain("Refresh");
   });
 
   it("shows the pending-changes chip once there is something pending", async () => {
-    // Sabotage target: remove the `pending.length > 0 ?` guard around this
-    // chip and it renders unconditionally, including at zero — the standing
-    // badge §18 forbids.
     pendingMock.pending = [{ id: "1" }, { id: "2" }];
     await render();
     expect(container.textContent).toContain("Pending changes");
@@ -331,10 +311,6 @@ describe("the pending sheet's body (issue #880 W2.3)", () => {
   afterEach(teardown);
 
   it("gives a conflict both versions and both doors, in any app", async () => {
-    // THE REGRESSION THIS PINS. The sheet printed the engine's own word
-    // ("conflict"), dropped the two versions the row was retained WITH, and
-    // offered one Dismiss — so the only way out of a conflicted write on this
-    // phone was to throw it away, and only Tally had grown anything better.
     pendingMock.pending = [CONFLICT];
     replicaMock.session = sessionMock;
     await render();
@@ -345,7 +321,6 @@ describe("the pending sheet's body (issue #880 W2.3)", () => {
     expect(container.textContent).toContain("Expected version 3; found 5.");
     expect(container.textContent).toContain("Retry");
     expect(container.textContent).toContain("Discard");
-    // Never the raw state, and never a Cancel for a write already settled.
     expect(container.textContent).not.toContain("conflict");
     expect(container.textContent).not.toContain("Cancel");
   });
@@ -381,9 +356,6 @@ describe("what else the bar owes a member (issue #880)", () => {
   afterEach(teardown);
 
   it("labels a partial library when no bootstrap is left to report pages", async () => {
-    // The relaunch after a kill mid-backfill: the walk that would have counted
-    // pages died with the old process, so durable coverage is the only fact
-    // left that can say the library is short.
     replicaMock.coverage = "partial";
     await render();
     expect(container.textContent).toContain(
@@ -398,7 +370,6 @@ describe("what else the bar owes a member (issue #880)", () => {
     expect(container.textContent).toContain(
       "Change these under Backup health in Settings."
     );
-    // A refresh here would re-hit the same rule, so it must not be offered.
     expect(container.textContent).not.toContain("Sync now");
   });
 
@@ -415,9 +386,6 @@ describe("what else the bar owes a member (issue #880)", () => {
 
 describe("the outbox vocabulary (issue #880 W2.3)", () => {
   it("has a member's word for every state the outbox can be in", () => {
-    // Exhaustiveness is the compiler's job — `humanStatus` has no `default`
-    // arm, so a new state fails typecheck rather than reaching a member as an
-    // engine word. This pins the other half: none of the nine ARE that word.
     const states = [
       "queued",
       "sending",
@@ -439,7 +407,6 @@ describe("the outbox vocabulary (issue #880 W2.3)", () => {
   it("calls a row stuck only once every ordinary way back has passed", () => {
     const now = Date.parse("2026-08-27T12:00:00.000Z");
     const row = { ...CONFLICT, status: "queued" as const };
-    // Half an hour is a lunch out of coverage, not a fault.
     expect(
       pendingChangeStuckLine(
         { ...row, enqueuedAt: "2026-08-27T11:30:00.000Z" },
@@ -452,7 +419,6 @@ describe("the outbox vocabulary (issue #880 W2.3)", () => {
     );
     expect(stuck).toContain("Queued");
     expect(stuck).toContain("2 attempts");
-    // A settled row is not waiting for anything; it has already stopped.
     expect(
       pendingChangeStuckLine(
         { ...CONFLICT, enqueuedAt: "2026-08-27T08:00:00.000Z" },
@@ -461,3 +427,4 @@ describe("the outbox vocabulary (issue #880 W2.3)", () => {
     ).toBeUndefined();
   });
 });
+// @vitest-environment jsdom

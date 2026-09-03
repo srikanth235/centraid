@@ -120,10 +120,6 @@ export function AppLockProvider({
     [enabled]
   );
 
-  // The AsyncStorage read behind `hydrated` resolves sub-frame in the common
-  // case (see App.tsx's own note on the lazy-screen Suspense fallback for the
-  // same reasoning): a blank themed fill never registers as more than the one
-  // flash a spinner would have been, and it costs no motion.
   if (!hydrated) return <TopSafeArea style={styles.screen} />;
   if (enabled && !unlocked)
     return (

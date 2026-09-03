@@ -1,7 +1,3 @@
-// The Devices place as pure model (#765, §7). Two DATA facts bound it:
-// `DeviceRow` carries no "last seen", so no row says `Dormant`, and this wire
-// has no recovery plane, so no recovery section is built.
-
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
 import { memberFacingError } from "../../kit/member-error";
 import type { DeviceRow, DeviceTicket } from "../../lib/devices";
@@ -9,7 +5,6 @@ import type { VaultRow } from "../../lib/gateway";
 
 export const FULL_ROSTER = 8;
 
-/** Member-facing: architecture vocabulary is lowered. */
 export function memberDeviceError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : fallback;
   return memberFacingError(message).replace(
@@ -23,7 +18,6 @@ export interface DeviceRowCopy {
   title: string;
   sub: string;
   meta: string;
-  /** A revoked binding: kept for attribution, inert. */
   off: boolean;
 }
 
@@ -35,7 +29,6 @@ export interface DeviceGroup {
   rows: DeviceRowCopy[];
 }
 
-/** A date, never an age: the wire carries no clock here. */
 export function pairedOn(iso: string | undefined): string {
   if (!iso) return "";
   const at = Date.parse(iso);
@@ -94,7 +87,6 @@ export function deviceRowCopy(
   };
 }
 
-/** `undefined` rather than a guess: several owners, no `current` row. */
 export function selfOwnerId(devices: readonly DeviceRow[]): string | undefined {
   const current = devices.find((device) => device.current === true);
   if (current) return current.ownerId;
@@ -112,13 +104,11 @@ function groupOf(
     devices,
     key,
     label,
-    // Tombstones counted: a revoked row is still scrolled past.
     meta: String(devices.length),
     rows: devices.map((device) => deviceRowCopy(device, other)),
   };
 }
 
-/** Split on `ownerId`, not a row index. */
 export function rosterGroups(devices: readonly DeviceRow[]): DeviceGroup[] {
   const self = selfOwnerId(devices);
   if (self === undefined) {
@@ -143,7 +133,6 @@ export function hasOtherPeople(groups: readonly DeviceGroup[]): boolean {
   return groups.length === 1 && groups[0]?.key !== "yours";
 }
 
-/** No verb: vault administration is the host's CLI. */
 export function vaultRowCopy(vault: VaultRow): DeviceRowCopy {
   return {
     key: vault.vaultId,
@@ -165,8 +154,6 @@ export function devicesState(input: {
   return live.length >= FULL_ROSTER ? "full" : "ready";
 }
 
-/** The only PENDING thing is an unredeemed ticket minted here; the phone gets
- * no inbound-request plane. No inline verb. */
 export function devicesHealthCopy(input: {
   devices: readonly DeviceRow[];
   pendingTickets: number;
@@ -209,8 +196,6 @@ export function ticketFacts(
   ];
 }
 
-/** Status only: mobile's HTTP core surfaces no body, so the name to echo back
- * comes from the device row. A misread costs a prompt, never a revocation. */
 export function isLastDeviceRefusal(error: unknown): boolean {
   return error instanceof Error && /\b409\b/u.test(error.message);
 }

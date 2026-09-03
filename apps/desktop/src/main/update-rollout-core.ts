@@ -1,5 +1,3 @@
-/* Rollout (#468): admit when bucket < elapsed/window; fail-open on missing metadata + manual checks, fail-closed on negative elapsed. */
-
 export const ROLLOUT_WINDOW_MS = 72 * 60 * 60 * 1000;
 
 export interface ShouldAdmitUpdateInput {
@@ -29,7 +27,6 @@ export function shouldAdmitUpdate(input: ShouldAdmitUpdateInput): boolean {
   return input.bucket < fraction;
 }
 
-/** Install id → [0,1) via FNV-1a. */
 export function stableBucketId(installId: string): number {
   let hash = 0x811c9dc5;
   for (let i = 0; i < installId.length; i++) {

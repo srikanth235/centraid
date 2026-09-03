@@ -20,7 +20,6 @@ describe(unwrapCompanionEnvelope, () => {
 
 describe(randomPassword, () => {
   it("returns the requested length from the allowed alphabet", () => {
-    // Deterministic stream of small values always accepted by rejection sampling.
     let n = 0;
     const pw = randomPassword(16, () => {
       const arr = new Uint32Array(4);
@@ -34,7 +33,6 @@ describe(randomPassword, () => {
   });
 
   it("rejects out-of-bound samples (unbiased charset)", () => {
-    // First value is >= bound (rejected); second is 0 (accepted).
     const alphabetLen =
       "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*"
         .length;

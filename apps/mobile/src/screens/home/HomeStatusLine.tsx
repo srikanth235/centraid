@@ -1,18 +1,3 @@
-// Home's v10 Origin health ribbon. Quiet is deliberately ignorable; attention
-// and urgent earn one rule and one action, never a filled warning plate.
-//
-// It is the only feedback channel on this screen: no spinner, no toast, no
-// badge count, no red dot. What it carries is the vault at a glance — how much
-// is in it, and whether the gateway holding it is answering.
-//
-// Every number on it is read from the durable upload queue. Backup language is
-// added only when the custody rollup has actually been computed.
-//
-// It is a static row above the band rather than the transient host in
-// kit/components/StatusLine — that one is the imperative channel a `.catch()`
-// handler posts into, and it goes quiet. This never does: it is an ambient
-// sentence about the route.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet } from "react-native";
 

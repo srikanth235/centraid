@@ -1,5 +1,3 @@
-// Pure (#708): no React, no react-native, no replica imports.
-
 import type { IconName } from "@centraid/design";
 
 import { BLUEPRINT_SEARCH_TARGETS } from "./blueprint-search";
@@ -13,7 +11,6 @@ export interface SearchGroup {
   hits: BlueprintSearchHit[];
 }
 
-// Catalog order — the same order the overlay's filter chips use.
 const APP_ORDER: readonly string[] = BLUEPRINT_SEARCH_TARGETS.map(
   (target) => target.appId
 );
@@ -55,7 +52,6 @@ export interface RecentSourceRow {
   meta?: string;
 }
 
-/** Rows without `meta` sort last: unknown is not evidence of recency. */
 export function selectSearchRecents(
   rows: readonly RecentSourceRow[],
   limit = 8
@@ -77,7 +73,6 @@ export function formatSearchMeta(iso?: string): string | undefined {
   return when.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-/** A long label yields its longest word — never an ellipsised fragment. */
 function deriveSuggestionTerm(
   label: string,
   maxTermChars: number
@@ -94,7 +89,6 @@ function deriveSuggestionTerm(
   return best;
 }
 
-/** Caps count AND row characters: the chip row is one line, never wrapped. */
 export function selectSuggestionChips(
   candidates: readonly string[],
   limit = 3,
@@ -110,7 +104,6 @@ export function selectSuggestionChips(
     const key = term.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    // Keep scanning: a shorter later term may still fit.
     if (used + term.length > rowCharBudget) continue;
     chips.push(term);
     used += term.length;

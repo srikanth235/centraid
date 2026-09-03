@@ -17,7 +17,6 @@ export interface NewUploadFollowup {
 export interface UploadFollowup extends NewUploadFollowup {
   followupId: number;
   intentId: string;
-  /** Replay attempts so far; drives the poison threshold (F4). */
   attempts: number;
   targetVaultId?: string;
 }
@@ -64,7 +63,6 @@ export function toUploadFollowup(
   };
 }
 
-/** Stable FNV-1a/64 identifier; the replica outbox also verifies payload equality. */
 export function stableFollowupIntentId(
   itemId: string,
   shape: string,

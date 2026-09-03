@@ -16,11 +16,6 @@ import {
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
 
-/**
- * Real Electron launch-time probe (#659). NOT budgeted here — a cold CI runner has no distribution yet. Report: `artifacts/perf-input/desktop-launch-report.json`. Gate: `tests/perf/desktop-launch.perf.test.ts`.
- * Volume (D6): NONE — empty vault; bounds shell boot, not O(vault-size). Selectors, never pixels; same `launchApp` fixture (docs/traps/electron-screenshot.md).
- */
-
 const REPORT_PATH = path.resolve(
   import.meta.dirname,
   "../../../..",
@@ -51,7 +46,6 @@ test("desktop cold launch — process start to a usable Home", async () => {
     await waitForHome(page);
     const homeAt = Date.now();
 
-    // Custom apps are not Home springboard tiles (#708) — open via the palette.
     const tapStarted = Date.now();
     await openAppFromPalette(page, "Tasks");
     await page
@@ -87,7 +81,6 @@ test("desktop cold launch — process start to a usable Home", async () => {
     );
     console.log("========================================\n");
 
-    // Sanity only: 0 or negative means the probe timed nothing — fail rather than publish a flattering report.
     expect(
       report.measurements.processToFirstWindowMs,
       "process → first window"

@@ -18,18 +18,11 @@ import type {
 } from "../../lib/enrichment";
 import SettingsSection from "./SettingsSection";
 
-// Settings → Enrichment (#807): read-only statement of the effective policy —
-// what it is, nothing else. Editing (scope/capability/engine/egress-consent
-// cascade) is a desktop surface this wave. Every word is the gateway's answer:
-// GET /_vault/enrich/effective joined to engine profiles; an unreachable gateway
-// says so (mobile-offline.md: unavailable state, never cached/un-rechecked).
-
 const DOMAIN_LABELS: Readonly<Record<EnrichDomain, string>> = {
   docs: "Documents",
   photos: "Photos",
 };
 
-/** Member-facing names; registry ids are contract keys. */
 const CAPABILITY_LABELS: Readonly<Record<string, string>> = {
   "doc-entities": "Names, dates and amounts",
   "doc-filing": "Filing suggestions",
@@ -42,14 +35,12 @@ const CAPABILITY_LABELS: Readonly<Record<string, string>> = {
   transcript: "Video and audio transcripts",
 };
 
-/** Where work runs, member's words (engine egress class axis). */
 const EGRESS_WORDS: Readonly<Record<EnrichEgressClass, string>> = {
   gateway: "on your gateway",
   "on-device": "on this device",
   provider: "sent to a provider",
 };
 
-/** Ceiling wording, only for an unlisted profile: a limit, not a fact. */
 const CEILING_WORDS: Readonly<Record<EnrichEgressCeiling, string>> = {
   gateway: "no further than your gateway",
   off: "nothing runs",
@@ -63,15 +54,12 @@ const TRIGGER_WORDS: Readonly<Record<EnrichTrigger, string>> = {
   "on-view": "when you open an item",
 };
 
-/** What the gateway answered, or why it could not. */
 type Load =
   | { kind: "loading" }
   | { kind: "ready"; states: readonly EnrichCapabilityState[] }
-  /** `reason` is the underlying failure, stated rather than smoothed over. */
   | { kind: "unavailable"; reason: string };
 
 export interface EnrichmentSectionProps {
-  /** Defaults to the gateway client; test-only override. */
   read?: () => Promise<EnrichCapabilityState[]>;
 }
 

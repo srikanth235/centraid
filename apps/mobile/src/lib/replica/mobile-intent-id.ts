@@ -14,11 +14,6 @@ function stableJson(value: ReplicaValue): string {
     .join(",")}}`;
 }
 
-/**
- * Gesture-scoped idempotency for native writes. Two taps carrying the same
- * action/payload inside the platform double-tap window share one intent id;
- * the same legitimate action can be repeated after the window.
- */
 export class MobileIntentIds {
   readonly #recent = new Map<string, { intentId: string; expiresAt: number }>();
 

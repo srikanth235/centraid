@@ -51,7 +51,6 @@ function civilDate(value: Date): string {
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
 }
 
-/** Start/end as the vault stores them — viewer zone, civil date when all-day. */
 export function nativeEventBounds(
   start: Date,
   end: Date,
@@ -125,7 +124,6 @@ function extraOverride(
     )[0];
 }
 
-/** Materialize the same timezone-aware recurrence contract as web handlers. */
 export function expandEvent(
   event: Omit<
     AgendaEventModel,
@@ -159,8 +157,6 @@ export function expandEvent(
     semantics,
     maxInstances: max,
   });
-  // Unsupported FREQ (e.g. HOURLY) expands to nothing; fall back to the
-  // single anchor occurrence so free-text RRULE mistakes stay visible.
   const instances = applyRecurrenceExceptions(
     expanded.length > 0
       ? expanded

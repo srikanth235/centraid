@@ -1,5 +1,3 @@
-// Remembers the last full re-sync, which outlives the frame (#883).
-
 import { rebootstrapNoticeFrom } from "@centraid/client/replica/native";
 import type { ReplicaRebootstrapNotice } from "@centraid/client/replica/native";
 
@@ -16,12 +14,11 @@ function emit(): void {
     try {
       listener(current);
     } catch {
-      /* One bad subscriber must not stop the rest. */
+      // Intentionally empty.
     }
   }
 }
 
-/** Only a full resync surfaces: `initial`/`shape-changed` are machinery. */
 export function noteResyncVerdict(detail: unknown, scopeId?: string): boolean {
   const notice = rebootstrapNoticeFrom(detail);
   if (!notice || !notice.fullResync) return false;

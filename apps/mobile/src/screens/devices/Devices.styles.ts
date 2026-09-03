@@ -1,12 +1,3 @@
-// Geometry for the Devices place (#765, spec §7).
-//
-// The page itself is only a scroll column of kit blocks — everything with an
-// opinion about type or edge lives in those blocks. What is left here is the
-// column's rhythm, the docked health line's clearance, and the one dialog this
-// screen owns (rename, and the typed-name confirm a last-device revocation
-// needs), whose anatomy is the app's existing modal idiom
-// (`apps/photos/AlbumDetail.tsx`).
-
 import { StyleSheet } from "react-native";
 
 import {
@@ -19,16 +10,11 @@ import {
 } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
-/** Clearance under the standing health line for the floating home key, which
- *  is absolutely positioned on the bottom edge (54pt plate + one rhythm step,
- *  `kit/components/HomeKey.tsx`). Without it the key would sit ON the line. */
 const HOME_KEY_CLEARANCE = 54 + 8;
 
 export const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     backdrop: { backgroundColor: colors.scrim, flex: 1 },
-    // The column of blocks. The bottom pad clears the floating home key, which
-    // sits over the scroll rather than in it.
     body: { gap: spacing[2], paddingBottom: spacing[6] },
     dialog: {
       backgroundColor: colors.bgElev,
@@ -61,12 +47,7 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[3],
     },
     page: { flex: 1, paddingHorizontal: pageMargin },
-    // The screen ROOT, which `TopSafeArea` does not fill on its own: it
-    // renders a bare `View`, so a root styled only with a colour collapses
-    // to nothing and takes `page` (and every row under it) with it.
     safe: { flex: 1 },
-    // The ticket token is read aloud to another machine — it is data, not
-    // prose, so it takes the numeric register and wraps rather than truncates.
     ticket: { ...t("mono"), color: colors.text },
     scroll: { flex: 1 },
   });

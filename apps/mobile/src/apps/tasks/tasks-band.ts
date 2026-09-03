@@ -1,9 +1,3 @@
-// The phone's bottom band, as Tasks claims it (Tasks spec §2; #834): four
-// PLACES plus More — the invariant's exact cap; lenses/acts sit behind More.
-// Ids+labels come from the web app's tables so band, rail and app bar cannot
-// disagree. No `react-native` imports: `tasks-band.test.ts` asserts these
-// rules directly; `TasksBand.tsx` renders them unchanged.
-
 import {
   BAND_DESTINATIONS,
   MORE_SHELVES,
@@ -15,7 +9,6 @@ import { BAND_CAPSULE } from "../../kit/band/band-capsule";
 import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
 
-// The frame's capsule lives in `kit/band/band-capsule.ts` (#883 B5).
 export { BAND_CAPSULE } from "../../kit/band/band-capsule";
 export type { BandCapsule } from "../../kit/band/band-capsule";
 
@@ -28,12 +21,10 @@ export type TasksBandDestinationKey =
 
 export interface TasksBandDestination {
   key: TasksBandDestinationKey;
-  /** Copy is final — these five strings ARE the band. */
   label: string;
   icon: string;
 }
 
-/** Frame band's cap, hence a claiming app's: five destinations, fifth = More. */
 export const TASKS_BAND_MAX_DESTINATIONS = 5;
 
 const BAND_ICONS: Readonly<Record<TasksBandDestinationKey, string>> = {
@@ -46,7 +37,6 @@ const BAND_ICONS: Readonly<Record<TasksBandDestinationKey, string>> = {
 
 export const TASKS_MORE_LABEL = "More";
 
-/** Tasks' five in spec order: web's four destinations plus the sheet. */
 export const TASKS_BAND_DESTINATIONS: readonly TasksBandDestination[] = [
   ...BAND_DESTINATIONS.map((destination) => ({
     key: destination.id as TasksBandDestinationKey,
@@ -56,7 +46,6 @@ export const TASKS_BAND_DESTINATIONS: readonly TasksBandDestination[] = [
   { key: "more", label: TASKS_MORE_LABEL, icon: BAND_ICONS.more },
 ];
 
-/** Exactly one band exists at any moment — the frame's latch. */
 export type ResolvedTasksBand =
   | {
       owner: "app";
@@ -79,8 +68,6 @@ export function resolveTasksBand(owner: BandOwner): ResolvedTasksBand {
   };
 }
 
-// ─── The More sheet — the six lenses and acts that are not places ───────────
-
 export interface TasksMoreRow {
   shelf: ShelfId;
   label: string;
@@ -97,7 +84,6 @@ const MORE_ICONS: readonly string[] = [
   "Bell",
 ];
 
-/** Rows keyed to SHARED shelf ids: labels stay the web app's words. */
 export const TASKS_MORE_ROWS: readonly TasksMoreRow[] = MORE_SHELVES.map(
   (shelf, index) => {
     const row = MORE_ROWS.find((candidate) => candidate.shelf === shelf);

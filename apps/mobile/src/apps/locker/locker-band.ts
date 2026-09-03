@@ -1,17 +1,3 @@
-// Locker's claim on the phone's bottom band (README-Locker §1, "Phone band"):
-// **Items · Review · Generate · Search** plus the frame's More — four
-// destinations and a sheet, the invariant's exact cap.
-//
-// Ids and labels come from `apps/locker/shelves.ts`, so the band, the desktop
-// rail and the app bar cannot disagree about what a place is called. No
-// `react-native` import here: `locker-band.test.ts` asserts these tables
-// directly and `LockerBand.tsx` renders them unchanged.
-//
-// The sheet's other half names where each row's act happens. Companion is
-// permanently `elsewhere` — it runs in a browser extension, beside the page —
-// and its row still leads somewhere, because a greyed row would teach that
-// Companion is broken rather than that it lives in the browser.
-
 import {
   SURFACE_META,
   SURFACE_TITLE,
@@ -32,9 +18,6 @@ import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
 import type { LockerStackParamList } from "../../navigation";
 
-// THE FRAME'S CAPSULE (#883 B5): one component, one constant, one geometry,
-// in `kit/band/band-capsule.ts`. Re-exported here because this band's view
-// and its tests read the model through this module's path.
 export { BAND_CAPSULE } from "../../kit/band/band-capsule";
 export type { BandCapsule } from "../../kit/band/band-capsule";
 
@@ -47,24 +30,18 @@ export type LockerBandDestinationKey =
 
 export interface LockerBandDestination {
   key: LockerBandDestinationKey;
-  /** Copy is final — these five words ARE the band. */
   label: string;
   icon: string;
 }
 
-/** The frame band's cap, hence a claiming app's: five, the fifth being More. */
 export const LOCKER_BAND_MAX_DESTINATIONS = 5;
 
 const MORE_ICON = "more-vertical";
 
-/** The four the blueprint declares, then the sheet. */
 export const LOCKER_BAND_DESTINATIONS: readonly LockerBandDestination[] = [
   ...BAND_DESTINATIONS.map((destination) => ({
     key: destination.id as LockerBandDestinationKey,
     label: destination.label,
-    // The shared table types the glyph as optional because the desktop rail
-    // does not draw one; the band always does, so an absent glyph falls back
-    // to the sheet's own mark rather than rendering nothing.
     icon: destination.icon ?? MORE_ICON,
   })),
   { key: "more", label: "More", icon: MORE_ICON },
@@ -92,11 +69,6 @@ export function resolveLockerBand(owner: BandOwner): ResolvedLockerBand {
   };
 }
 
-// ─── The More sheet ─────────────────────────────────────────────────────────
-
-/** Where a More row's act actually happens, from this seat. `here` is a route
- *  on this phone; `elsewhere` is a surface whose door is on another seat, and
- *  the row says which rather than offering a control with nothing behind it. */
 export type LockerSurfaceReach = "here" | "elsewhere";
 
 export type LockerMoreRowKey =
@@ -131,8 +103,6 @@ const SHEET_ICONS: Readonly<Record<LockerMoreRowKey, string>> = {
   trash: "Trash",
 };
 
-/** The four surfaces this seat performs. What is left is Companion, and its row
- *  carries an honest account of where it lives rather than a count. */
 const REACHED_HERE: ReadonlySet<LockerMoreRowKey> = new Set([
   "access",
   "export",
@@ -140,8 +110,6 @@ const REACHED_HERE: ReadonlySet<LockerMoreRowKey> = new Set([
   "trash",
 ]);
 
-/** Rows keyed to the SHARED shelf ids, in the shared sheet's own order, with
- *  labels and meta taken from the shared table rather than respelled here. */
 export const LOCKER_MORE_ROWS: readonly LockerMoreRow[] = MORE_SHELVES.map(
   (shelf) => {
     const key = SHEET_KEYS[String(shelf)];
@@ -166,7 +134,6 @@ export type LockerMoreScreen = Extract<
   "LockerAccess" | "LockerTrash" | "LockerSurface"
 >;
 
-/** Exhaustive: a row without a route fails typecheck, not at tap. */
 export function resolveLockerMoreRoute(
   key: LockerMoreRowKey
 ): LockerMoreScreen {

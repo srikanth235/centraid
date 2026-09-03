@@ -1,10 +1,3 @@
-// THE RECEIPTS, AS A LIST (README-Locker §1 `locker/access`, §2 "Receipts").
-//
-// AN AUDIT SURFACE NEVER INVENTS A ROW: the projection is the SHARED
-// `access-model.ts`. NO VALUE IS SHOWN — a reveal names the COLUMNS it opened
-// and stops. NO REFUSAL IS HIDDEN: a denial lists like an allowance. Offline,
-// refused and empty stay three facts, never one emptiness.
-
 import React, { useMemo } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
@@ -39,14 +32,10 @@ import type { ThemeColors } from "../../kit/theme";
 const REFUSED = "REFUSED";
 
 export interface LockerAccessViewProps {
-  /** `null` until a read lands: nothing is empty before one comes back. */
   entries: readonly LockerAccessEntry[] | null;
   window: { window: number; truncated: boolean } | null;
   error: string;
-  /** Receipts live in the journal, which this device does not carry. */
   offline: boolean;
-  /** From the window this session already read; a receipt outside it keeps its
-   *  id. */
   titles: ReadonlyMap<string, string>;
 }
 
@@ -55,7 +44,6 @@ export default function LockerAccessView(
 ): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  // Windowed (#883 C4); these three withhold the LIST, not rows.
   const listing = !props.offline && !props.error && props.entries !== null;
   const entries = listing ? (props.entries ?? []) : [];
 
@@ -104,7 +92,6 @@ export default function LockerAccessView(
       {props.offline ? (
         <Text style={styles.note}>{ACCESS_OFFLINE}</Text>
       ) : props.error ? (
-        // A refusal is not an empty history: no list is drawn over it.
         <Text style={[styles.note, { color: colors.net }]}>{props.error}</Text>
       ) : props.entries === null ? (
         <SkeletonRows accessibilityLabel="Reading the receipts" />

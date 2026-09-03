@@ -1,11 +1,3 @@
-/**
- * Home's ambient status line — the sentence, not the frame.
- *
- * These are honesty assertions rather than copy assertions: the point of each
- * case is that the line never publishes a number it does not have, never
- * renders a capped count as an exact one, and never invents a fact this device
- * cannot read.
- */
 import { describe, expect, it } from "vitest";
 
 import { statusSentence } from "./home-status";
@@ -51,7 +43,6 @@ describe(statusSentence, () => {
     const line = statusSentence(facts({ offline: true }));
     expect(line).toContain("changes sync when home-gateway.local is back");
     expect(line).not.toContain("not answering");
-    // Never claims a backup while it cannot reach the thing that runs them.
     expect(line).not.toContain("Backups run");
   });
 

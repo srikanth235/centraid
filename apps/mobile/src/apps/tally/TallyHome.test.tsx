@@ -1,20 +1,3 @@
-// Tally's RNTL tier (#890 W5). ONE cold renderer for the app: the RN host tree
-// is expensive to boot, so every Tally claim needing a real accessibility tree,
-// a real responder, or real style resolution is consolidated here (TESTING.md,
-// "React Native component tests").
-//
-// WHAT ONLY THIS TIER CAN FALSIFY here:
-//  - the DENIED gate as an absence: behind it the ledger is not rendered at
-//    all, and neither is the band. A DOM stub could only see a dimmed panel.
-//  - the band's real `tab` nodes and the single lit `selected` trait;
-//  - the ledger row's accessible NAME — the row says both WHO and HOW MUCH in
-//    one name, which is everything a screen reader gets from a row of figures;
-//  - a press that must reach a real `Pressable` before a sheet or a route opens.
-//
-// Device seams are the project's (`src/test/native-device-seams.ts`). Every
-// Tally component, ledger projection and copy table stays real; only the vault
-// store — the gateway read plane — is substituted.
-
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -39,10 +22,6 @@ vi.mock(
     }) as never
 );
 
-// The vault store is the gateway read plane and lives in process memory rather
-// than a React tree, so this is the read seam — the same place the Photos file
-// seams its timeline. `openTally` is a no-op here: on a device it reads the
-// spine over the network, and a test that let it run would assert a network.
 vi.mock(import("./tally-store"), async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -80,7 +59,6 @@ function friend(id: string, name: string, netMinor: number) {
   };
 }
 
-/** The store's shape, with whatever the case needs on the spine. */
 function vault(options: {
   denied?: { reason: string } | null;
   friends?: ReturnType<typeof friend>[];
@@ -141,8 +119,6 @@ describe("Tally, on the real React Native host tree", () => {
       "Waiting",
       "More",
     ]);
-    // Two lit places is the defect a props-echo stub cannot see: it renders
-    // each tab as its own `div` and never holds the band as one tree.
     expect(
       tabs.filter(
         (tab) =>
@@ -164,9 +140,6 @@ describe("Tally, on the real React Native host tree", () => {
     });
     const screen = mountTally();
 
-    // Not dimmed, not disabled: absent. A figure still mounted behind a gate is
-    // a figure a screen reader still reads out, and only the real tree can say
-    // whether the node is there.
     expect(
       screen
         .queryAllByRole("button")
@@ -185,8 +158,6 @@ describe("Tally, on the real React Native host tree", () => {
     const names = screen
       .getAllByRole("button")
       .map((node) => String(node.props.accessibilityLabel));
-    // A row of figures read aloud as just a name is a row nobody can act on;
-    // the name has to carry the meta. RN builds it, the stub only copies props.
     expect(names.some((name) => name.startsWith("Ada. "))).toBe(true);
     expect(names.some((name) => name.startsWith("Grace. "))).toBe(true);
   });
@@ -194,9 +165,6 @@ describe("Tally, on the real React Native host tree", () => {
   it("keeps the day-one act reachable by role when nothing is owed either way", () => {
     const screen = mountTally();
 
-    // The day-one commit is a `Text` with a button ROLE, not a `Pressable`.
-    // RNTL still resolves it as a button because RN publishes the role — and
-    // that is exactly the substitution a source-level grep cannot check.
     expect(screen.getAllByRole("button").length).toBeGreaterThan(0);
   });
 });

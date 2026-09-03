@@ -69,7 +69,6 @@ describe("settings-merge", () => {
   });
 
   test("gateway alert fields preserve-or-set, clamping the threshold on write", () => {
-    // Unrelated save carries both fields through.
     const carried = mergePersistedSettings(
       {
         activeGatewayId: "local",
@@ -81,7 +80,6 @@ describe("settings-merge", () => {
     expect(carried.gatewayAlertSeconds).toBe(300);
     expect(carried.gatewayAlertsEnabled).toBe(false);
 
-    // A patch sets them; out-of-range thresholds clamp to [15, 3600].
     const set = mergePersistedSettings(
       { activeGatewayId: "local" },
       { gatewayAlertSeconds: 5, gatewayAlertsEnabled: true }
@@ -95,26 +93,22 @@ describe("settings-merge", () => {
       ).gatewayAlertSeconds
     ).toBe(3600);
 
-    // A garbage threshold falls back to the current value.
     const garbage = mergePersistedSettings(
       { activeGatewayId: "local", gatewayAlertSeconds: 120 },
       { gatewayAlertSeconds: Number.NaN }
     );
     expect(garbage.gatewayAlertSeconds).toBe(120);
 
-    // Absent everywhere → the fields are dropped, not persisted as defaults.
     const absent = mergePersistedSettings({ activeGatewayId: "local" }, {});
     expect(absent.gatewayAlertSeconds).toBeUndefined();
     expect(absent.gatewayAlertsEnabled).toBeUndefined();
   });
 
   test("launchAtLogin preserve-or-sets like a plain boolean field (issue #351)", () => {
-    // Unset everywhere → dropped, not persisted as a default.
     expect(
       mergePersistedSettings({ activeGatewayId: "local" }, {}).launchAtLogin
     ).toBeUndefined();
 
-    // A patch sets it.
     expect(
       mergePersistedSettings(
         { activeGatewayId: "local" },
@@ -122,7 +116,6 @@ describe("settings-merge", () => {
       ).launchAtLogin
     ).toBe(true);
 
-    // An unrelated save carries the current value through.
     expect(
       mergePersistedSettings(
         { activeGatewayId: "local", launchAtLogin: true },
@@ -130,7 +123,6 @@ describe("settings-merge", () => {
       ).launchAtLogin
     ).toBe(true);
 
-    // A patch can flip it back off.
     expect(
       mergePersistedSettings(
         { activeGatewayId: "local", launchAtLogin: true },

@@ -1,7 +1,3 @@
-// PERMISSION IS A TAKEOVER OF THE TIMELINE, NOT A SCREEN BEHIND A MENU ROW
-// (Photos v4 handoff §13, #712): PhotosHome renders this panel in the grid's
-// slot whenever the grant can't produce a timeline.
-
 import * as MediaLibrary from "expo-media-library";
 import React, { useMemo } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -17,14 +13,11 @@ import type {
   PhotoAccessState,
 } from "./photo-access";
 
-/** The OS grant as this app asks for it; null before the OS has been asked —
- *  genuinely unknown, not denied. */
 export function usePhotoAccessGrant(): {
   state: PhotoAccessState | null;
   canAskAgain: boolean;
   request: () => void;
 } {
-  // Same granular permissions the timeline engine walks the library with.
   const [permission, requestPermission] = MediaLibrary.usePermissions({
     granularPermissions: ["photo", "video"],
   });
@@ -38,8 +31,6 @@ export function usePhotoAccessGrant(): {
 export interface PhotoAccessPanelProps {
   state: PhotoAccessState;
   canAskAgain: boolean;
-  /** Photographs read off THIS device; only the limited state prints it.
-   *  `null` leaves the meta column blank, never a zero. */
   readableCount: number | null;
   onRequest: () => void;
 }
@@ -55,16 +46,11 @@ export default function PhotoAccessPanel({
   const copy = photoAccessCopy(state, { canAskAgain, readableCount });
 
   const run = (action: PhotoAccessAction): void => {
-    // Fallible at the OS boundary; failures reach the error boundary,
-    // never a silently dead control.
     if (action === "ask") onRequest();
     else void Linking.openSettings();
   };
 
   return (
-    // The takeover's COPY is the claim — the refusal sentence and the recovery
-    // it offers are the product's promise, and stay asserted. The id is only
-    // how a flow FINDS the panel.
     <ScrollView
       contentContainerStyle={styles.body}
       testID={TEST_IDS.photos.accessPanel}
@@ -85,8 +71,6 @@ export default function PhotoAccessPanel({
           style={[
             styles.row,
             { borderTopColor: colors.line },
-            // The cannot-reach row takes a 2px `net` leading rule — never a
-            // fill, never a red dot (§18).
             row.net
               ? { borderLeftColor: colors.net, borderLeftWidth: 2 }
               : null,

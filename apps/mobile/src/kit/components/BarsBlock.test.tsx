@@ -1,10 +1,3 @@
-// The runs chart (#765, spec §9). The stacking arithmetic is pinned once in
-// `@centraid/design/blocks`; what is pinned HERE is the native lowering (a `%`
-// string, and no node at all for an absent segment) and the one claim only a
-// render can make: exactly one colour is spent — `net` on the failed cap.
-// Succeeded is tertiary INK, and a future edit that reaches for a status green
-// or an amber fails here.
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -112,8 +105,6 @@ describe(BarsBlock, () => {
   });
 
   it("draws every column it is given, and tightens the gutter rather than dropping days", () => {
-    // The block never samples to ten columns itself: a spike would vanish and
-    // the screen would have no way to know (#775).
     const month = Array.from({ length: 30 }, (_unused, index) =>
       day(String(index), 40, 0)
     );
@@ -161,3 +152,4 @@ describe(BarsBlock, () => {
     expect(styleOf(spans.at(-1) ?? null).color).toBe(colors.net);
   });
 });
+// @vitest-environment jsdom

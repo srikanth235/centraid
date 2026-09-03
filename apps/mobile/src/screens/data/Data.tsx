@@ -1,25 +1,3 @@
-// DATA — every store the vault keeps (#765, spec §6).
-//
-// Home's Data row lands here. It reads the four owner census endpoints in
-// `lib/atlas.ts` and shows exactly what they answer — nothing on this screen
-// is derived from anything but the vault's own tables.
-//
-// TWO VERBS THE REFERENCE HAS AND THIS BAR DOES NOT:
-//  • the filled commit — the reference sets `a1:''` for this page on purpose
-//    (a place that shows you what you already have commits to nothing);
-//  • `Export a kind` — there is no export route reachable from this app, and a
-//    quiet verb that opens nothing is worse than an absent one. It belongs
-//    here the day the gateway serves the export the desktop offers.
-//
-// AND THREE CLAUSES: the reference's `12 written today` sub clause, its
-// per-kind `4 min` meta column and its `Written today` filter chip all rest on
-// a write pulse the census does not carry. See `data-model.ts`.
-//
-// The five states are the shared set: loading is the skeleton at row geometry
-// plus the reflow note, empty is the routine empty block, error is the net
-// panel (which an unpaired phone also lands on, with the pairing sentence
-// rather than the store's), and ready/full differ only by the filter chips.
-
 import * as Clipboard from "expo-clipboard";
 import React, { useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
@@ -77,9 +55,6 @@ import { useData } from "./useData";
 import type { DataState } from "./useData";
 import { VaultCopiesSection, VaultSharingSection } from "./VaultSections";
 
-/** The place's own words. Verbatim from the reference where the payload
- *  supports them; the two error plates below are this app's, because the
- *  reference has no unpaired-phone state. */
 const COPY = {
   emptyBody: ATLAS_EMPTY_BODY,
   emptyTitle: ATLAS_EMPTY_TITLE,
@@ -100,10 +75,6 @@ const COPY = {
   title: "Vault",
 } as const;
 
-/** The record menu's words. `Open the record` and `Copy the id` are wired to
- *  what this app can do; the other two name where the act actually happens,
- *  because `lib/atlas.ts` is a READ surface — a row edit on this gateway is a
- *  journalled operator command, and the phone cannot make one. */
 const RECORD_MENU = {
   copyId: "Copy the id",
   delete: "Delete on the desktop",
@@ -117,8 +88,6 @@ const DESKTOP_ONLY =
 
 const COPIED = "Copied the id.";
 
-/** Which of the five states the payload is in. `full` is data-driven — the
- *  chips appear because the list got long, never because a mode was set. */
 function opsStateOf(state: DataState, kinds: number): OpsState {
   if (state.kind === "loading") return "loading";
   if (state.kind === "error" || state.kind === "no-gateway") return "error";
@@ -251,8 +220,6 @@ export default function DataScreen({
           ) : null}
 
           {opsState === "empty" ? (
-            // No action: nothing on this page creates a kind, and an empty
-            // vault is a healthy state rather than an incident.
             <EmptyBlock body={COPY.emptyBody} routine title={COPY.emptyTitle} />
           ) : null}
 

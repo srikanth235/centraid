@@ -5,23 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-/**
- * One-off screenshot capture of the per-app "Standing orders" popover
- * landed in this PR. Drives the Electron renderer via Playwright's
- * `_electron` driver (CDP under the hood):
- *
- *   1. Builds + seeds a per-run userData dir
- *   2. Pre-populates the gateway SQLite with sample automations so
- *      the popover has real rows to render
- *   3. Launches the app, clicks the seeded tile, opens the gear,
- *      captures the popover region as PNG
- *
- * Saved to `apps/desktop/scripts/out/standing-orders.png` so the
- * caller can read it back.
- *
- * Not part of CI — pure visual-regression aid. Run with:
- *   bun run scripts/screenshot-standing-orders.mjs
- */
 import { _electron } from "playwright";
 
 const __filename = import.meta.filename;
@@ -38,9 +21,6 @@ async function main() {
   await fs.mkdir(userData, { recursive: true });
   await fs.mkdir(appsDir, { recursive: true });
 
-  // Settings — gateway URL is bogus but the standing-orders panel only
-  // reads from the local SQLite mirror so the popover renders without a
-  // live gateway.
   await fs.writeFile(
     path.join(userData, "centraid-settings.json"),
     JSON.stringify(
@@ -55,17 +35,11 @@ async function main() {
     { mode: 0o600 }
   );
 
-  // Seed three automations into the gateway mirror. The path mirrors
-  // localRuntimeGatewayDb() — keep this in sync if the local-runtime
-  // moves the file.
   const dbDir = path.join(userData, "local-runtime");
   await fs.mkdir(dbDir, { recursive: true });
   const dbFile = path.join(dbDir, "centraid-gateway.sqlite");
   await seedAutomations(dbFile);
 
-  // Seed an app dir + the localStorage userApp entry that the home
-  // grid renders from. The renderer reads localStorage in-process; we
-  // write it via page.evaluate after the window loads.
   const appId = "journal";
   await seedAppDir(appsDir, appId);
 
@@ -76,8 +50,6 @@ async function main() {
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
 
-  // Inject the userApp into localStorage and reload so the home grid
-  // picks it up.
   await page.evaluate((id) => {
     localStorage.setItem(
       "centraid.v1.home.userApps",
@@ -97,8 +69,6 @@ async function main() {
   await page.reload();
   await page.waitForLoadState("domcontentloaded");
 
-  // Open the tile and then the gear popover. Home grid renders cards
-  // as `.cd-app-card` inside `.cd-app-card-wrap[data-app-id]`.
   const tile = page
     .locator(`.cd-app-card-wrap[data-app-id="${appId}"] .cd-app-card`)
     .first();
@@ -108,11 +78,8 @@ async function main() {
   await page
     .locator(".cd-app-orders")
     .waitFor({ state: "visible", timeout: 10000 });
-  // Brief pause so the toggle transition + hover hint settle before capture.
   await page.waitForTimeout(400);
 
-  // Tight crop on the popover so the screenshot reads as the
-  // component, not the chrome.
   const panel = page.locator(".cd-app-settings-panel");
   await panel.screenshot({ path: OUT_FILE, omitBackground: false });
 
@@ -126,8 +93,6 @@ async function main() {
 function seedAutomations(dbFile) {
   const db = new DatabaseSync(dbFile);
   db.exec("PRAGMA foreign_keys=ON");
-  // Bring the DB to migration v2 the same way the runtime does on first
-  // open. Copy-pasted DDL — keep in sync with gateway-db.ts MIGRATIONS.
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,

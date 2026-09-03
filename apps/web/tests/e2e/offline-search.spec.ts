@@ -8,24 +8,18 @@ import {
   setHarnessControlOnline,
 } from "./control-transport.js";
 
-// Offline search over an unsettled row (#846 P4/P5). The outbox matcher MIRRORS
-// FTS5: whitespace-only splitting makes `don't` ONE token, where re-splitting on
-// word runs returns the decoy row FTS5 never would and marks only `don`.
-
 const API_URL = "http://127.0.0.1:48765";
 const ADMIN_TOKEN = "centraid-web-e2e-token";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
 const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
 const CONTROL_SESSION = "web-e2e-control-session";
 
-// Plain: punctuation arrives with the offline rename.
 const PHRASE_UPLOAD = "offline-search-phrase.txt";
 const DECOY_UPLOAD = "offline-search-decoy.txt";
 const PHRASE_TITLE = "don't lose this.txt";
 const DECOY_TITLE = "don is on the t list.txt";
 const QUERY = "don't";
 
-// The whole phrase, not `don`: P5.
 const EXPECTED_MARK = "don't";
 
 const SHOT = path.resolve(
@@ -34,7 +28,6 @@ const SHOT = path.resolve(
 );
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
-  // Re-click: the button can paint before its listener.
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect
     .poll(
@@ -171,9 +164,6 @@ test("offline search reads a pending row's punctuation the way FTS5 does", async
   await connectPwa(page);
   await openFirstParty(page, "Docs");
 
-  // Prove write-rail readiness BEFORE severing: an offline session never
-  // bootstraps, and an early write throws instead of queueing. The probe is a
-  // write the vault REFUSES, so no row is minted.
   await expect
     .poll(
       () =>
@@ -196,11 +186,7 @@ test("offline search reads a pending row's punctuation the way FTS5 does", async
   const phraseId = await uploadDoc(page, PHRASE_UPLOAD);
   const decoyId = await uploadDoc(page, DECOY_UPLOAD);
 
-  // Never remount Docs after the toggle: a fresh route walks the replica, which
-  // cannot finish offline.
   await setHarnessControlOnline(page, false);
-  // NEITHER WRITE IS AWAITED: not because one hangs (#880 W2.1 fixed that rail
-  // in `shell-session.ts`) but because the subject is the rendered rows.
   await page.evaluate(
     ({ renames }) => {
       for (const rename of renames) {
@@ -235,7 +221,6 @@ test("offline search reads a pending row's punctuation the way FTS5 does", async
     page.getByRole("button", { name: `Select ${DECOY_TITLE}` })
   ).toBeVisible();
 
-  // Marks live on the LIST row; the shelf has no toggle.
   await page.getByRole("button", { name: "List view" }).click();
 
   await page.getByRole("button", { name: "Search documents" }).click();
@@ -243,7 +228,6 @@ test("offline search reads a pending row's punctuation the way FTS5 does", async
   await expect(field).toBeVisible();
   await field.fill(QUERY);
 
-  // ONE row: FTS5 would not return the decoy, nor may the replica.
   await expect(
     page.getByRole("button", { name: `Select ${PHRASE_TITLE}` })
   ).toBeVisible({ timeout: 30_000 });
@@ -253,7 +237,6 @@ test("offline search reads a pending row's punctuation the way FTS5 does", async
 
   await expect(page.locator("mark").first()).toHaveText(EXPECTED_MARK);
 
-  // Still unlanded: search over the OUTBOX, not a settled row.
   await expect(page.locator(".kit-pending-chip").first()).toHaveText(
     /^(?:queued|pending)$/u
   );

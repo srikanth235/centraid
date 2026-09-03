@@ -1,21 +1,3 @@
-// Agenda on the phone: Day, Schedule and Waiting on, with the band the app
-// has claimed carrying those three plus Search.
-//
-// THERE IS NO MONTH OR WEEK GRID HERE. A seven-column grid at 390pt gives
-// 42pt cells, under the 44pt tap-target floor, so neither is a destination —
-// decided once in the blueprint table `agenda-band.ts` derives from.
-//
-// THE GRID IS FOR THINGS WITH A TIME COST: every row below came from
-// `core.event`. The day-context layers decorate a day and NEVER become a row
-// (#834): a birthday rides the day header as a ribbon, and the member's own
-// tasks coming due sit under it as one collapsed shelf that opens on tap. A
-// tap-through leaves for Tasks, which is the room that owns the task —
-// Agenda shows the fact and never edits it.
-//
-// The held-write mark is drawn INLINE (a 2pt inline-start rule and the words),
-// not through a shared component: it is two elements, and a kit file for it
-// would be a dependency for nothing.
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
@@ -62,23 +44,17 @@ import type { DueRow, RibbonFact } from "./day-context";
 import type { NativeAgendaEvent } from "./useAgenda";
 import { useAgenda } from "./useAgenda";
 
-/** What the surface is showing. `search` and `more` are band destinations that
- *  open a field and a sheet rather than replacing the list. */
 type Surface = "day" | "schedule" | "waiting";
 
 interface AgendaDay {
   key: string;
   date: Date;
   events: NativeAgendaEvent[];
-  /** The day's costless facts. Empty is the common case, and it draws
-   *  nothing at all rather than an empty container. */
   ribbon: RibbonFact[];
   due: DueRow[];
 }
 
 const dayKeyOf = (row: AgendaDay): string => row.key;
-/** One shared identity for "nothing to list": a fresh `[]` per render would
- *  make FlatList re-diff a list it already knows is empty. */
 const NO_DAYS: AgendaDay[] = [];
 const BIRTHDAY_LEAD_KEY = "centraid:birthday-lead-days:v1";
 const BIRTHDAY_LEAD_ROW = "birthday-lead";
@@ -110,8 +86,6 @@ export default function AgendaHome({
 }: AgendaScreenProps<"AgendaHome">): React.JSX.Element {
   const { colors } = useTheme();
   const { refresh, session } = useReplica();
-  // The frame's latch, per app — handing the band back on one Agenda surface
-  // hands it back on all of them.
   const { bandOwner } = useBandOwner("agenda");
 
   const [surface, setSurface] = useState<Surface>("day");
@@ -121,20 +95,12 @@ export default function AgendaHome({
   const [refreshing, setRefreshing] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  /** How far ahead the phone tells the member about an inner-circle birthday.
-   *  A DEVICE preference by construction: reminder delivery is the phone's
-   *  alone, so the lead belongs to the phone that delivers it (#834). */
   const [leadOpen, setLeadOpen] = useState(false);
   const [leadDays, setLeadDays] = useState(BIRTHDAY_LEAD_DEFAULT_DAYS);
-  /** Calendars the member has switched off. The rail that carries this on a
-   *  pointer surface has no room on the phone, so it lives in the band's
-   *  overflow sheet — a filter is not a destination. */
   const [hiddenCalendars, setHiddenCalendars] = useState<Set<string>>(
     () => new Set()
   );
 
-  // The bounded window each surface reads. Day is one day; the two lists look
-  // forward from the anchor, capped so a read never grows with the vault.
   const range = useMemo(() => {
     const from = startOfDay(anchor);
     return surface === "day"
@@ -144,8 +110,6 @@ export default function AgendaHome({
 
   const agenda = useAgenda(range[0], range[1]);
 
-  // The member's stored lead, read once. An unreadable store is not an error:
-  // the default lead is a real answer, and the notification still lands.
   useEffect(() => {
     let cancelled = false;
     void AsyncStorage.getItem(BIRTHDAY_LEAD_KEY)
@@ -185,8 +149,6 @@ export default function AgendaHome({
     surface,
   ]);
 
-  // One row per DAY the event occupies — not just the start day. A Friday–
-  // Sunday run must still paint Saturday (`spanLocalDays`, same as the web grid).
   const days = useMemo<AgendaDay[]>(() => {
     return groupEventsByLocalDay(visible).map((bucket) => {
       const dayKey = contextDayKey(bucket.date);
@@ -200,7 +162,6 @@ export default function AgendaHome({
     });
   }, [agenda.dueTasks, agenda.parties, agenda.starred, visible]);
 
-  /** Hand a task to Tasks. A NAVIGATION, never an edit. */
   const openTask = useCallback((): void => {
     navigation.navigate("Tasks");
   }, [navigation]);
@@ -215,11 +176,6 @@ export default function AgendaHome({
     [navigation]
   );
 
-  /**
-   * Propose the event. The write is OPTIMISTIC and its outcome lands on the
-   * shared status line: `parked` sends the member to Approvals, `queued` says
-   * the phone is holding it, and a refusal names itself.
-   */
   const create = async (input: AgendaCreateInput): Promise<boolean> => {
     if (!session) return false;
     try {
@@ -283,8 +239,6 @@ export default function AgendaHome({
       : "Nothing matches that.";
 
   return (
-    // There is one page for the shell and every app in it — no per-app surface
-    // tone (docs/traps/design-tokens.md).
     <View style={[styles.frame, { backgroundColor: colors.bg }]}>
       {/* The vault lockup on every route (see `VaultBar`). This surface hosts
           its own band rather than a shared frame, so it mounts the bar. */}
@@ -354,8 +308,6 @@ export default function AgendaHome({
           data={listData}
           keyExtractor={dayKeyOf}
           contentContainerStyle={styles.list}
-          // Each row is one day holding any number of events, so no fixed
-          // item height exists and `getItemLayout` would misplace every cell.
           initialNumToRender={8}
           maxToRenderPerBatch={8}
           windowSize={7}
@@ -454,19 +406,12 @@ export default function AgendaHome({
         owner={bandOwner}
         current={surface}
         onSelect={onDestination}
-        // HOME via popTo — `goBack()` is a no-op under a deep link and
-        // `navigate` pushes a second Home on React Navigation 7.
         onHome={() => navigation.popTo("Home")}
       />
     </View>
   );
 }
 
-/**
- * A row is one DAY: a date column beside a stacked column of that day's
- * events. Title above time — the title gets the full width instead of sharing
- * the row with a time column.
- */
 const AgendaDayRow = memo(
   ({
     day,
@@ -481,7 +426,6 @@ const AgendaDayRow = memo(
   }): React.JSX.Element => {
     const now = new Date();
     const isToday = day.date.toDateString() === now.toDateString();
-    // The first row that has not started yet — where "now" sits in a list.
     const nowSlot = day.events.findIndex(
       (event) => Date.parse(event.start) > now.getTime()
     );
@@ -541,8 +485,6 @@ const AgendaDayRow = memo(
 );
 AgendaDayRow.displayName = "AgendaDayRow";
 
-/** The now line. Its time is a numeric, so it carries the tabular figures the
- *  system gives every number. */
 function NowLine({ colors }: { colors: ThemeColors }): React.JSX.Element {
   return (
     <View style={styles.nowLine} accessibilityLabel="Now">

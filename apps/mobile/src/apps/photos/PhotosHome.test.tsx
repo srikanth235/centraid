@@ -274,7 +274,6 @@ describe("Photos native component coverage", () => {
     expect(
       new Set(
         makePhotosFixture("year-spanning").assets.map((asset) =>
-          // Every fixture asset in this corpus carries a real capturedAt.
           asset.capturedAt!.slice(0, 4)
         )
       ).size
@@ -292,9 +291,6 @@ describe("Photos native component coverage", () => {
   });
 
   it("keeps the grain control on screen at rest, with no timer to wait out", async () => {
-    // THE DEFECT THIS PINS: its predecessor appeared only while the member was
-    // scrolling and withdrew 3.2s after the last gesture, and the feature
-    // behind it was never found at all. Time passing must change nothing here.
     const clock = useFakeClock("2026-08-06T00:00:00.000Z");
     const onGrain =
       vi.fn<React.ComponentProps<typeof TimelineGrainControl>["onGrain"]>();
@@ -321,9 +317,6 @@ describe("Photos native component coverage", () => {
   });
 
   it("publishes native roles, names, and state for the north-star library controls", () => {
-    // #791 chooses the cheapest falsifying native layer: RNTL observes the RN
-    // accessibility tree (roles/traits/state), which Maestro text selectors
-    // cannot. Device journeys continue to own recognizers and OS integration.
     const grain = render(
       <TimelineGrainControl
         grain="months"
@@ -361,12 +354,6 @@ describe("Photos native component coverage", () => {
   });
 
   it("says plainly when a grain has no periods, rather than showing a blank surface", () => {
-    // A library whose photographs are ALL undated: they exist, and they are in
-    // All, but not one of them holds a position in the calendar — so Years has
-    // nothing to summarise. ONE QUIET LINE, never a card standing in for a
-    // period that does not exist, and never an empty void.
-    // (The populated grains are asserted in `timeline-grains.test.ts`: the
-    // cards are drawn by a FlashList, which cannot mount in this renderer.)
     const undatedOnly = makePhotosFixture("undated-mixed").sections.filter(
       (section) => section.day === "undated"
     );

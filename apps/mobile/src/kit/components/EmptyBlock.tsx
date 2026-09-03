@@ -1,13 +1,3 @@
-// EMPTY — the two forms of "there is nothing here" (#765, spec §8).
-//
-// `routine` picks the register. The default is FIRST-RUN (the reference's own
-// default), the once-in-a-lifetime screen: display title, reading body, one
-// filled commit. `routine` is the everyday state of a populated screen and
-// deliberately quieter — title rung, body rung, an outlined verb — because an
-// empty consent surface is the healthy state, not an incident.
-//
-// Both titles and bodies are the caller's words.
-
 import React, { useMemo } from "react";
 import { View } from "react-native";
 
@@ -22,7 +12,6 @@ export interface EmptyBlockAction extends ActionData {
   onPress: () => void;
 }
 
-/** `title`, `body` and `routine` are the shared copy contract. */
 export interface EmptyBlockProps extends EmptyCopy {
   action?: EmptyBlockAction;
   action2?: EmptyBlockAction;
@@ -58,8 +47,6 @@ export default function EmptyBlock({
             <Button
               label={action.label}
               onPress={() => action.onPress()}
-              // The one filled commit a first meeting is allowed; the routine
-              // form spends nothing.
               variant={firstRun ? "primary" : "secondary"}
             />
           ) : null}

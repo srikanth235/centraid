@@ -8,13 +8,6 @@ import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import SettingsSection from "./SettingsSection";
 
-// Hands the band back on the phone (#712): the writer for the unused
-// `setBandOwner` claim. Rows stay PER APP — one stored answer per app;
-// reclaiming the band in Photos says nothing about the next app that claims.
-// Web puts its toggle in the per-app app bar; the phone has no frame slot
-// left (the tab group is at the BAND_MAX_DESTINATIONS cap), so frame Settings
-// hosts this list.
-
 function BandRow({ app }: { app: BandClaimingApp }): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);

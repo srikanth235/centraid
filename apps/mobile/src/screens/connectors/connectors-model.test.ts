@@ -1,16 +1,3 @@
-// The words the Connectors place puts on screen (#765, spec §4).
-//
-// Rendering is tested next door; this pins the copy contract, because every
-// claim below is a claim about what can reach outside the vault:
-//
-//  - the state word is the gateway's status, and `Expiring` is derived from
-//    the token's own expiry rather than guessed from health
-//  - a lapsed or failing connection is `net`; a paused one is NOT (a member
-//    paused it on purpose, and alarm ink would call their own act a fault)
-//  - the row's verb is the one the gateway actually serves for that state
-//  - `full` and `empty` come off the row count, never a stored mode
-//  - the standing line's inline verb is published in ready/full only
-
 import { describe, expect, it } from "vitest";
 
 import { healthLineFor } from "../../kit/components/health-line";
@@ -67,7 +54,6 @@ describe("connector rows", () => {
     });
     expect(expiryPhrase(soon, NOW)).toBe("token expires in 6 days");
     expect(statusWord(soon, NOW)).toBe("Expiring");
-    // Far-off expiry is not news, so it says nothing at all.
     const later = entry({
       tokenExpiresAt: new Date(NOW + 90 * DAY).toISOString(),
     });
@@ -87,7 +73,6 @@ describe("connector rows", () => {
     expect(row.net).toBe(true);
     expect(row.action).toBe("Re-authorize");
     expect(row.act).toBe("reauthorize");
-    // The broker's own reason replaces a last-run timestamp nobody asked for.
     expect(row.sub).toContain("The refresh token was revoked on 9 August");
   });
 

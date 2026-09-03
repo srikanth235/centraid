@@ -1,10 +1,3 @@
-/**
- * What Home offers for the apps that have not earned the grid.
- *
- * The module under test is pure, so these are list assertions — but the list is
- * the product decision: which invitations a member sees, in what order, and
- * whether any of them can appear for an app that already has content.
- */
 import { describe, expect, it } from "vitest";
 
 import { FIRST_MOVE_LIMIT, firstMoves } from "./first-moves";

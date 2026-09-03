@@ -1,7 +1,3 @@
-// The mounted plane's stamps, read once for every app (#880). Screens with no
-// render harness on this seat are asserted from their sources: the ONE sentence
-// must be IMPORTED, never re-typed, and reach JSX as element children, so a
-// sighted member reads the refusal and not only a screen reader.
 import fs from "node:fs";
 import path from "node:path";
 
@@ -115,8 +111,6 @@ describe("stated once above the route, never one refusing button at a time", () 
   });
 
   it("withholds the Tasks verbs off the row's own role rather than letting a tap throw", () => {
-    // The checkbox refuses, the long-press that files a task is not attached,
-    // and the group's move-all is withheld where no row could take it.
     expect(TASK_ROW_SRC).toMatch(/disabled=\{!writable\}/u);
     expect(TASK_ROW_SRC).toMatch(
       /\{\.\.\.\(writable && onPickUp \? \{ onLongPress: \(\) => onPickUp\(task\) \} : \{\}\)\}/u

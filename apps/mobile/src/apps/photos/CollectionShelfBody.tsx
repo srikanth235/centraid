@@ -4,7 +4,6 @@ import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
 
-/** Shared visible/collapsed/empty body of every Collections shelf. */
 export default function CollectionShelfBody({
   action,
   children,

@@ -1,11 +1,3 @@
-/*
- * Updater signature custody, pure half (#842); fetching lives in
- * update-signature-gate.ts. Trust rests on a detached ed25519 signature over a
- * manifest pinning each artifact's SHA-512, never on OS code-signing (a no-op
- * on AppImage, skipped for block-maps). Keep this module pure and fail-closed:
- * an unrecognised shape is `trusted: false`.
- */
-
 import {
   createHash,
   createPublicKey,
@@ -19,7 +11,6 @@ const ED25519_SIGNATURE_BYTES = 64;
 export const RELEASE_MANIFEST_SCHEMA = "centraid.release-manifest/1";
 export const RELEASE_SIGNATURE_SCHEMA = "centraid.release-signature/1";
 
-/** `sha512` is base64, as electron-updater reports it. */
 export interface ReleaseArtifact {
   name: string;
   sha512: string;
@@ -38,13 +29,11 @@ export interface ReleaseSignature {
   signature: string;
 }
 
-/** `publicKey` is base64 raw 32 bytes. */
 export interface TrustedReleaseKey {
   keyId: string;
   publicKey: string;
 }
 
-/** Never collapse into a generic "invalid": the operator's next action differs. */
 export type UpdateRefusalReason =
   | "no-trust-anchor"
   | "missing-manifest"
@@ -67,10 +56,6 @@ export type UpdateTrustVerdict =
     }
   | { trusted: false; reason: UpdateRefusalReason; detail?: string };
 
-/**
- * Sign the parsed document's canonical form, never the received bytes, so a
- * re-serialising proxy cannot break verification. Array order is signed.
- */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object")
     return JSON.stringify(value) ?? "null";
@@ -84,7 +69,6 @@ export function canonicalJson(value: unknown): string {
   return `{${parts.join(",")}}`;
 }
 
-/** A keyId is a routing hint, never the thing that grants trust. */
 export function keyIdFor(publicKeyBase64: string): string {
   const raw = Buffer.from(publicKeyBase64, "base64");
   return createHash("sha256").update(raw).digest("hex").slice(0, 32);
@@ -99,7 +83,6 @@ export function parseReleaseManifest(text: string): ReleaseManifest | null {
   try {
     parsed = JSON.parse(text);
   } catch {
-    // Untrusted feed bytes: malformed is a refusal cause, never a throw.
     return null;
   }
   if (!isRecord(parsed)) return null;
@@ -148,7 +131,6 @@ function publicKeyFromRaw(publicKeyBase64: string) {
   });
 }
 
-/** A keyId matching no pinned key refuses rather than trying them all. */
 export function verifyManifestSignature(input: {
   manifest: ReleaseManifest;
   signature: ReleaseSignature;
@@ -187,7 +169,6 @@ export function verifyManifestSignature(input: {
 }
 
 export interface UpdateTrustInput {
-  /** Unpackaged dev reloads its own `dist/`, not a feed. */
   packaged: boolean;
   trustedKeys: readonly TrustedReleaseKey[];
   version: string;
@@ -196,7 +177,6 @@ export interface UpdateTrustInput {
   signatureText: string | null;
 }
 
-/** Order matters: each step is a narrower claim, so the reason is the first thing wrong. */
 export function resolveUpdateTrust(
   input: UpdateTrustInput
 ): UpdateTrustVerdict {
@@ -248,7 +228,6 @@ export function resolveUpdateTrust(
   return verdict;
 }
 
-/** Never prints key material. */
 export function describeUpdateVerdict(
   verdict: UpdateTrustVerdict,
   version: string

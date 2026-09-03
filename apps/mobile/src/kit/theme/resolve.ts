@@ -1,5 +1,3 @@
-// Scheme selection and navigation adaptation over the canonical native theme.
-
 import type { Theme as NavigationTheme } from "@react-navigation/native";
 
 import type { NativeColors, NativeScheme } from "@centraid/design/native";

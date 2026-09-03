@@ -1,20 +1,3 @@
-// The Notifications place, rendered (#765, spec §2). Five states, one screen.
-//
-// What this pins is what a future edit is likeliest to undo quietly:
-//
-//  - loading draws the ROW GEOMETRY plus the sentence that explains why, and
-//    never a spinner
-//  - the head of the queue is a PANEL whose body is quoted and whose last fact
-//    is the verbatim promise that approving cannot be undone
-//  - approve, edit-and-approve and deny reach the real mutations, with the
-//    always-allow flag carried through
-//  - a decision in flight WITHDRAWS its verbs rather than dimming them
-//  - the queue's reference tail (standing grants, updates, the archive) is
-//    present even when nothing is waiting
-//  - empty and error are the reference's verbatim copy, and an unpaired phone
-//    is the error state with a way forward, not a sixth visual
-
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,8 +10,6 @@ vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
   return {
     ...stub.reactNativeStub(),
-    // Two gesture hosts with nothing to draw, which the kit blocks never use
-    // and this SCREEN does.
     RefreshControl: () => null,
     Switch: (props: { accessibilityLabel?: string; value?: boolean }) =>
       React.createElement("input", {
@@ -47,9 +28,6 @@ vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");
 });
-// The reconnection ceremony's browser half. Nothing in this file opens it —
-// the row that would is asserted for its copy, not its side effect — but the
-// module reaches expo's native core at import time.
 vi.mock(
   import("expo-web-browser"),
   () =>
@@ -61,9 +39,6 @@ vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
 
-// Each mock takes the REAL function's signature, so a wire shape that drifts
-// is a typecheck failure here rather than a test that passes against a module
-// the app no longer has.
 type Gateway = typeof import("../../lib/gateway");
 
 const wire = vi.hoisted(() => ({
@@ -91,10 +66,7 @@ vi.mock(
       getNotifications: wire.notifications,
       requireGatewayBase: () => Promise.resolve("http://127.0.0.1:7777"),
       resolveGatewayBase: wire.resolveBase,
-      subscribeMobileNotificationsChanges: () =>
-        new Promise<void>(() => {
-          // The doorbell never resolves; it is aborted on unmount.
-        }),
+      subscribeMobileNotificationsChanges: () => new Promise<void>(() => {}),
       updateMobileNotice: wire.updateNotice,
     }) as unknown as Gateway
 );
@@ -204,9 +176,7 @@ describe(ApprovalsScreen, () => {
 
   it("draws the row geometry while it reads, and says why", async () => {
     wire.notifications.mockReturnValue(
-      new Promise<MobileNotifications>(() => {
-        // Never settles: this is what "still reading" looks like.
-      })
+      new Promise<MobileNotifications>(() => {})
     );
     const container = await render();
     const skeleton = nodesOf(container, "div").find(
@@ -219,7 +189,6 @@ describe(ApprovalsScreen, () => {
       "A row knows its shape before its content arrives, so nothing reflows when it does."
     );
     expect(textOf(container)).toContain("Reading from the gateway");
-    // Both bar verbs are withheld while loading.
     expect(buttonLabelled(container, "Review all")).toBeNull();
     expect(buttonLabelled(container, "History")).toBeNull();
   });
@@ -232,8 +201,6 @@ describe(ApprovalsScreen, () => {
       "Staged writes, lapsed connections and access requests land here."
     );
     expect(spans).toContain("Nothing to attend to");
-    // The reference tail renders in every state — a consent surface that hides
-    // what it already consented to is not a record.
     expect(spans).toContain("Standing grants");
     expect(spans).toContain(
       "A standing grant skips this page for one narrow thing; revoking one takes effect on the next run."
@@ -261,7 +228,6 @@ describe(ApprovalsScreen, () => {
     expect(spans).toContain(
       "approving sends it immediately and cannot be undone"
     );
-    // Deny is its own row, with the sentence about what a refusal means.
     expect(spans).toContain("Deny this write");
     expect(spans).toContain(
       "Nothing is sent. The automation is told it was refused, and remembers."
@@ -318,11 +284,7 @@ describe(ApprovalsScreen, () => {
         },
       })
     );
-    wire.approve.mockReturnValue(
-      new Promise<void>(() => {
-        // Never settles: the write is in flight.
-      })
-    );
+    wire.approve.mockReturnValue(new Promise<void>(() => {}));
     const container = await render();
     press(buttonLabelled(container, "Approve and send"));
     await settle();
@@ -378,13 +340,9 @@ describe(ApprovalsScreen, () => {
     expect(spans).toContain("Lapsed");
     expect(spans).toContain("delete_files");
     expect(spans).toContain("Weekly digest is asking for wider access");
-    // Five waiting items is past the chip threshold.
     expect(spans).toContain("Everything");
     expect(spans).toContain("High risk");
 
-    // A parked act opens in place and shows WHAT was asked before deciding.
-    // The queue's Reviews are, in order: the second staged write, the parked
-    // act, then the scope request.
     press(
       nodesOf(container, "button").filter(
         (node) => (node.textContent ?? "") === "Review"
@@ -415,8 +373,6 @@ describe(ApprovalsScreen, () => {
     expect(textOf(container)).toContain("Photos may always share");
     press(buttonLabelled(container, "Revoke"));
     await settle();
-    // The revoke, then the re-read behind it — the row is the gateway's to
-    // report, so the screen never patches it away locally.
     const deletes = wire.fetchJson.mock.calls.filter(
       (call) => call[1]?.method === "DELETE"
     );
@@ -436,8 +392,8 @@ describe(ApprovalsScreen, () => {
     expect(spans).toContain("This page could not load");
     press(buttonLabelled(container, "Open Settings"));
     expect(navigation.popTo).toHaveBeenCalledWith("SettingsHome");
-    // The filled commit is withheld on error; the quiet verb is not.
     expect(buttonLabelled(container, "Review all")).toBeNull();
     expect(buttonLabelled(container, "History")).not.toBeNull();
   });
 });
+// @vitest-environment jsdom

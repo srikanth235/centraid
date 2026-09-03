@@ -1,11 +1,5 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-/**
- * Ensure the browser Iroh WASM artifact exists (issue #468 K15).
- * The binary is gitignored; CI and clean checkouts must build it via
- * scripts/build-iroh-wasm.sh. If the file is already present (local cache
- * or a prior build), skip the expensive rustc step.
- */
 import { existsSync } from "node:fs";
 import path from "node:path";
 

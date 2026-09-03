@@ -16,7 +16,7 @@ export function markConnectStart(): number {
   try {
     performance.mark("centraid:iroh-connect-start");
   } catch {
-    /* User Timing may be unavailable; instrumentation is best-effort. */
+    // Intentionally empty.
   }
   return nowMs();
 }
@@ -30,7 +30,7 @@ export function measureConnect(startMs: number): void {
       end: nowMs(),
     });
   } catch {
-    /* best-effort */
+    // Intentionally empty.
   }
 }
 
@@ -41,7 +41,7 @@ export function measureRequest(startMs: number): void {
       end: nowMs(),
     });
   } catch {
-    /* best-effort */
+    // Intentionally empty.
   }
 }
 

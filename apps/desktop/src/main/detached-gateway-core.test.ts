@@ -58,7 +58,6 @@ describe("decideControl (gateway.db lock-informed adopt-don't-kill)", () => {
   });
 });
 
-/** A `lock-status` run with nothing interesting in it; override per case. */
 function run(patch: Partial<LockStatusRun> = {}): LockStatusRun {
   return { stdout: "", stderr: "", status: 1, timedOut: false, ...patch };
 }
@@ -91,8 +90,6 @@ describe(classifyLockStatus, () => {
     ).toStrictEqual({ kind: "reported", held: false, answering: false });
   });
 
-  // D5: wrong/absent wrapping key. The CLI cannot open the key store, so it
-  // never reaches the lock at all — treating this as "locked" was the bug.
   it("names a key-store failure as a custody mismatch, not a lock", () => {
     const probe = classifyLockStatus(
       run({
@@ -107,8 +104,6 @@ describe(classifyLockStatus, () => {
     });
   });
 
-  // D4: the CLI blocks on the stopped holder's SQLite lock and we kill it at
-  // the spawn timeout — genuinely held, but by something not answering at all.
   it("distinguishes a spawn timeout from a fast CLI failure", () => {
     expect(
       classifyLockStatus(run({ timedOut: true, status: null }))
@@ -118,8 +113,6 @@ describe(classifyLockStatus, () => {
     ).toStrictEqual({ kind: "cli-failed", detail: "cannot find module" });
   });
 
-  // The gateway CLI always emits `(node:N) ExperimentalWarning: SQLite …`, so
-  // the FIRST stderr line is routinely not the failure.
   it("skips Node's own diagnostics when quoting the failure", () => {
     expect(
       classifyLockStatus(
@@ -176,7 +169,6 @@ describe(lockViewFor, () => {
         held: true,
         answering: false,
       });
-      // …and fail-closed must still mean "refuse", not "spawn".
       expect(
         decideControl({
           lockHeld: lockViewFor(probe).held,
@@ -262,8 +254,6 @@ describe(describeLockRefusal, () => {
 });
 
 describe(deviceCustodyGap, () => {
-  // E2: connection-secrets.bin removed while the data dir stayed. Minting a
-  // fresh wrapping key here orphans the envelopes already in keys/.
   it("fires only for an existing gateway this device has no key for", () => {
     expect(
       deviceCustodyGap({
@@ -271,14 +261,12 @@ describe(deviceCustodyGap, () => {
         gatewayKeysPresent: true,
       })
     ).toBe(true);
-    // A brand-new data dir: minting is exactly right.
     expect(
       deviceCustodyGap({
         hasStoredWrappingKey: false,
         gatewayKeysPresent: false,
       })
     ).toBe(false);
-    // We hold the key — whatever else is wrong, it isn't custody.
     expect(
       deviceCustodyGap({ hasStoredWrappingKey: true, gatewayKeysPresent: true })
     ).toBe(false);
@@ -347,7 +335,6 @@ describe("buildDetachedSpawnOptions (H2)", () => {
 describe("shouldOfferServiceInstall (H5)", () => {
   it("defaults install off but offers the step during first-run onboarding", () => {
     expect(DEFAULT_OFFER_GATEWAY_SERVICE).toBe(false);
-    // No decision + no onboarding stamp → show the opt-in step.
     expect(shouldOfferServiceInstall({})).toBe(true);
   });
 

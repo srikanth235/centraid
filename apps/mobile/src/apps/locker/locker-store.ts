@@ -1,20 +1,3 @@
-// THE BOUNDARY, ON THIS SEAT (README-Locker §2, "build first").
-//
-// One module-level store, subscribed to with `useSyncExternalStore` — the same
-// shape the frame's status line uses (`kit/components/status-line.ts`) — and
-// for the same reason: what it holds is process memory, shared by every Locker
-// route, and it must not be a React context that a remount could reconstruct
-// with a session in it. It BOOTS LOCKED, it locks when the app is hidden, and
-// nothing in it is ever handed a durable store.
-//
-// The rules themselves are NOT here. The session state machine is
-// `apps/locker/session.ts`, the permit arithmetic is `permits.ts`, and the
-// enumerated secret-bearing bag plus its wipe are `session.ts`'s
-// `SecretBag` / `wipeSecretState` — imported, never restated. This file is the
-// seat's adapter: it holds those values, calls this seat's gateway door
-// (`locker-gateway.ts`), and clears this seat's clipboard (`locker-clipboard.ts`),
-// which the browser-shaped `clipboard.ts` cannot reach.
-
 import type { StagedBatch } from "@centraid/blueprints/apps/locker/import-model";
 import {
   isRevealExpired,
@@ -64,22 +47,14 @@ import {
 } from "./locker-gateway";
 import type { VaultDenial } from "./locker-gateway";
 
-/** The sliding window and every reveal countdown are read from this one tick,
- *  so a reveal cannot outlive its session. */
 const TICK_MS = 1000;
 
-/** Long enough that a member reading an item is not told their list is stale,
- *  short enough that one left open overnight is. */
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
 export interface LockerVaultState {
   session: SessionState;
-  /** The enumerated secret-bearing half. Wiped whole, never field by field. */
   bag: SecretBag;
-  /** The vault's refusal, as data. Denial is a screen, not an error. */
   denied: VaultDenial | null;
-  /** The browsable window a live session bought. Dropped by a lock with the
-   *  bag, so no list is ever left standing behind a lock screen. */
   rows: LockerRow[];
   truncated: boolean;
   limit: number;
@@ -87,33 +62,21 @@ export interface LockerVaultState {
   reading: boolean;
   readError: string;
   lastReadAt: string | null;
-  /** Decided on the boundary's tick, never by a screen reading the clock
-   *  during render — that is a purity violation and unstable besides. */
   stale: boolean;
-  /** The permit gate is standing, and this is what it is refusing so far. */
   permitError: string;
   permitBusy: boolean;
-  /** A permit expired with nothing revealed (STATES.md, Locker / Re-auth). */
   reauth: boolean;
   masked: boolean;
   credentialId: string | null;
   busy: boolean;
-  /** `null` before one lands — an audit surface says nothing until it reads. */
   accessWindow: { window: number; truncated: boolean } | null;
-  /** Why the receipts could not be read. A refusal is not an empty history. */
   accessError: string;
-  /** `null` before the list lands. */
   importBatches: StagedBatch[] | null;
   openBatchId: string | null;
   importNote: string;
   surfaceBusy: boolean;
 }
 
-/**
- * The only part of this store anything outside this file may write. `bag` is in
- * the set so Access history and Import fill fields the SHARED bag declares and
- * a lock takes both through `wipeSecretState`, not a second rule.
- */
 export type LockerSurfacePatch = Partial<
   Pick<
     LockerVaultState,
@@ -155,8 +118,6 @@ function initialState(): LockerVaultState {
   };
 }
 
-/** What a lock takes from Access history and Import. Their secret-bearing
- *  halves ride the bag's own wipe; these are the companions. */
 function lockedSurfaceState(): LockerSurfacePatch {
   return {
     accessWindow: null,
@@ -173,8 +134,6 @@ const subscribers = new Set<() => void>();
 let ticker: ReturnType<typeof setInterval> | null = null;
 
 function emit(): void {
-  // Snapshot: a subscriber that unsubscribes as it reacts must not mutate
-  // the set mid-iteration.
   for (const notify of Array.from(subscribers)) notify();
 }
 
@@ -192,15 +151,10 @@ export function readLockerVault(): LockerVaultState {
   return state;
 }
 
-/** The one door `locker-surfaces.ts` writes through — typed to that slice so it
- *  can never reach the session, the permits or the wipe. `readLockerVault()` is
- *  the matching half, and there is deliberately no general setter. */
 export function setLockerSurfaceState(patch: LockerSurfacePatch): void {
   set(patch);
 }
 
-/** Test seam. Production never resets — a process restart is the only reset,
- *  and that is the point (the Maestro flow proves it). */
 export function resetLockerVault(): void {
   stopTicker();
   state = initialState();
@@ -210,8 +164,6 @@ export function resetLockerVault(): void {
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
-
-// ─── The clock ──────────────────────────────────────────────────────────────
 
 function stopTicker(): void {
   if (ticker) clearInterval(ticker);
@@ -229,7 +181,6 @@ function startTicker(): void {
       state.lastReadAt !== null &&
       Date.now() - Date.parse(state.lastReadAt) > STALE_AFTER_MS;
     if (stale !== state.stale) set({ stale });
-    // A revealed value outliving the permit that bought it conceals itself.
     const outlived = Object.entries(state.bag.revealedAt).filter(([, at]) =>
       isRevealExpired(at)
     );
@@ -246,19 +197,11 @@ function startTicker(): void {
   }, TICK_MS);
 }
 
-/** Mark member activity. Sliding, never extending. */
 export function noteLockerActivity(): void {
   if (!isOpen(state.session)) return;
   state = { ...state, session: touch(state.session) };
 }
 
-// ─── Locking ────────────────────────────────────────────────────────────────
-
-/**
- * End the session. The ONE door: the idle path, the hide path and the explicit
- * verb all come through here, so they cannot diverge. The gateway is told, but
- * a failed telling does not keep the local session alive.
- */
 export function lockNow(): void {
   stopTicker();
   const token = state.bag.sessionToken;
@@ -285,7 +228,6 @@ export function lockNow(): void {
   });
 }
 
-/** A hidden window ends a session AT ONCE, and paints the switcher mask. */
 export function onLockerAppState(next: string): void {
   if (next === "active") {
     set({ masked: false });
@@ -295,9 +237,6 @@ export function onLockerAppState(next: string): void {
   if (isOpen(state.session)) lockNow();
 }
 
-// ─── Opening ────────────────────────────────────────────────────────────────
-
-/** The boot-time status read. Answers "is there a passphrase at all". */
 export async function openLocker(): Promise<void> {
   set({ credentialId: await lockerDeviceCredentialId() });
   try {
@@ -309,7 +248,6 @@ export async function openLocker(): Promise<void> {
   }
 }
 
-/** Unlock, or create the passphrase where there is none yet. */
 export async function unlockLocker(
   secret: string,
   credentialId?: string
@@ -334,7 +272,6 @@ export async function unlockLocker(
   }
 }
 
-/** The device credential, exchanged for the same unlock. */
 export async function unlockLockerWithDevice(): Promise<void> {
   set({ busy: true });
   try {
@@ -361,7 +298,6 @@ export async function unlockLockerWithDevice(): Promise<void> {
   }
 }
 
-/** Enrol this device's biometric credential against the open session. */
 export async function enrolLockerDevice(): Promise<void> {
   const token = state.bag.sessionToken;
   if (!token) return;
@@ -392,8 +328,6 @@ export async function enrolLockerDevice(): Promise<void> {
   }
 }
 
-/** Revoke it. The passphrase is the one way in that cannot be revoked; this
- *  one can, and the screen says so. */
 export async function revokeLockerDevice(): Promise<void> {
   const token = state.bag.sessionToken;
   const credentialId = state.credentialId;
@@ -406,16 +340,12 @@ export async function revokeLockerDevice(): Promise<void> {
       sessionToken: token,
     });
   } catch {
-    // The local material goes either way: a credential this device cannot
-    // produce is not a credential, whatever the gateway still believes.
+    // Intentionally empty.
   }
   await removeLockerDeviceCredential();
   set({ busy: false, credentialId: null });
 }
 
-// ─── Reading ────────────────────────────────────────────────────────────────
-
-/** The bounded window. `limit` is what *Show more* widens. */
 export async function loadLockerItems(limit = state.limit): Promise<void> {
   const token = state.bag.sessionToken;
   if (!token) return;
@@ -445,13 +375,10 @@ export async function loadLockerItems(limit = state.limit): Promise<void> {
   }
 }
 
-/** One page more, capped by the query's own ceiling. */
 export function showMoreLockerItems(): Promise<void> {
   return loadLockerItems(nextWindow(state.limit));
 }
 
-/** Title, username and address — and it is the server that matches them, over
- *  fields the payload never returns. */
 export async function searchLocker(term: string): Promise<void> {
   state.bag.searchTerm = term;
   if (!term.trim()) {
@@ -480,10 +407,6 @@ export async function loadLockerTrash(): Promise<void> {
   }
 }
 
-// ─── The permit gate ────────────────────────────────────────────────────────
-
-/** Stand the gate open for ONE field of ONE item. Nothing is revealed by
- *  asking; the gate is what the member answers. */
 export function askLockerPermit(request: PermitRequest): void {
   state.bag.permitRequest = request;
   set({ bag: { ...state.bag }, permitError: "", reauth: false });
@@ -494,11 +417,6 @@ export function dismissLockerPermit(): void {
   set({ bag: { ...state.bag }, permitError: "" });
 }
 
-/**
- * Answer it. A fresh confirmation mints one permit, the permit buys one read,
- * and the permit is spent on the way out — a permit that survived its read
- * would be a session by another name.
- */
 export async function confirmLockerPermit(secret: string): Promise<void> {
   const request = state.bag.permitRequest;
   const token = state.bag.sessionToken;
@@ -559,8 +477,6 @@ async function spendLockerPermit(
   });
 }
 
-/** Put the one field the permit was minted for on screen. An item whose type
- *  seals nothing reveals nothing — the read itself was what was authorised. */
 function revealFrom(detail: LockerDetail, field: string): void {
   const value = (detail as unknown as Record<string, unknown>)[field];
   if (typeof value !== "string" || value === "") return;
@@ -568,7 +484,6 @@ function revealFrom(detail: LockerDetail, field: string): void {
   state.bag.revealedAt = { ...state.bag.revealedAt, [field]: Date.now() };
 }
 
-/** Put one revealed value away by hand, before its countdown runs out. */
 export function concealLockerField(field: string): void {
   const revealed = { ...state.bag.revealed };
   const revealedAt = { ...state.bag.revealedAt };
@@ -579,7 +494,6 @@ export function concealLockerField(field: string): void {
   set({ bag: { ...state.bag } });
 }
 
-/** Leaving the item screen takes every reveal with it. */
 export function closeLockerItem(): void {
   state.bag.detail = null;
   state.bag.revealed = {};
@@ -589,8 +503,6 @@ export function closeLockerItem(): void {
   set({ bag: { ...state.bag }, permitError: "", reauth: false });
 }
 
-/** The generator's output — a secret nobody has saved, and one of the
- *  enumerated fields a lock wipes. */
 export function setLockerGenerated(value: string): void {
   state.bag.generated = value;
   set({ bag: { ...state.bag } });

@@ -32,9 +32,6 @@ describe(planContentEviction, () => {
     expect(plan.keptBytes).toBe(60);
   });
 
-  // THE LAW: a pinned item survives an eviction pass that removes its unpinned
-  // peers. This is the demonstrated-red for "eviction respects pins" — flip
-  // `pinned` to false on `kept` and the assertion below fails.
   test("a pinned entry survives a pass that evicts every unpinned peer", () => {
     const plan = planContentEviction(
       [
@@ -69,7 +66,6 @@ describe(planContentEviction, () => {
     expect(plan.evict).toStrictEqual(["x"]);
     expect(plan.keptBytes).toBe(160);
     expect(plan.pinnedBytes).toBe(160);
-    // Reported, never resolved by breaking the promise.
     expect(plan.overBudgetBy).toBe(60);
   });
 

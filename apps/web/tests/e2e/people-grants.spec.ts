@@ -6,14 +6,8 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// PEOPLE'S PERSON SCREEN AS THE GRANT DASHBOARD, in a real browser (#825):
-// shipped section, grant plane stubbed at its `door` seam. A browser proves
-// what jsdom cannot: recipes paint, "not reached" reads as an opportunity,
-// Share on a never-reached person is ONE GESTURE, no link ceremony.
-
 declare global {
   interface Window {
-    /** What the harness collected from the section's one feedback channel. */
     __peopleStatus: string[];
   }
 }
@@ -28,8 +22,6 @@ const SECTION = path.join(
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-825-people-grants.png";
 
-/** Harness entry: the SHIPPED section, with a door stubbing delivered vs
- *  parked grants. */
 const ENTRY = `
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -123,7 +115,6 @@ createRoot(document.getElementById("root")).render(
 );
 `;
 
-/** Bundle the shipped section, CSS modules included, for the browser. */
 async function bundleSection(): Promise<{ js: string; css: string }> {
   const result = await build({
     stdin: {
@@ -134,8 +125,6 @@ async function bundleSection(): Promise<{ js: string; css: string }> {
     },
     bundle: true,
     write: false,
-    // Never written (`write: false`); esbuild needs a path to name the CSS
-    // output against.
     outdir: path.join(here, ".people-grants-bundle"),
     format: "iife",
     jsx: "automatic",
@@ -166,12 +155,9 @@ test("the person screen lists live grants and shares in one gesture", async ({
   await page.addScriptTag({ content: js });
 
   await expect(page.getByText("Shared with them")).toBeVisible();
-  // Each row wears the vault's own phrase: the delivered document is settled,
-  // the photo parked for want of a channel is travelling.
   await expect(page.getByText("Shared", { exact: true })).toBeVisible();
   await expect(page.getByText("On its way", { exact: true })).toBeVisible();
 
-  // A live link needs no note: nothing for the member to do first (#903).
   await expect(page.getByText("Reachable", { exact: true })).toBeVisible();
   await expect(
     page.getByText("Link their account in People to share with them.")
@@ -183,7 +169,6 @@ test("the person screen lists live grants and shares in one gesture", async ({
     fullPage: true,
   });
 
-  // ONE GESTURE: Share opens the sheet already on this person.
   await page
     .getByRole("button", { name: "Share", exact: true })
     .first()
@@ -197,7 +182,6 @@ test("the person screen lists live grants and shares in one gesture", async ({
     .poll(() => page.evaluate(() => window.__peopleStatus))
     .toStrictEqual(["Priya can see it"]);
 
-  // Revoke asks first, then reports the route's own derived sentence verbatim.
   await page.getByRole("button", { name: "Revoke document" }).click();
   await expect(page.getByText("Stop sharing with Priya?")).toBeVisible();
   await expect(

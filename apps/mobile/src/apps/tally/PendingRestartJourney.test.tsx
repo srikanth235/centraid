@@ -1,44 +1,3 @@
-// THE PENDING RESTART JOURNEY, RENDERED — the iOS-compatible half of the
-// airplane-mode device proof (docs/mobile-offline.md, "Performance
-// guardrails"). Maestro's airplane control is Android-only, so the Android
-// lane owns the OS lifecycle and the touch, and this file owns the same
-// contract on infrastructure iOS CI can actually run.
-//
-// It is a JOURNEY, not a component test: nothing about the outbox is faked.
-// One real `node:sqlite` file on disk carries a real `NativeReplicaSession`,
-// a real `MultiVaultReplicaReader` and the exact `MultiVaultReplicaSession`
-// facade `ReplicaProvider.tsx` mounts. The rendered Tally cover records the
-// expense through `TallyAddScreen` and reads it back through `TallyHome`'s
-// Waiting place; the restart closes every handle, drops the process-memory
-// read plane, and rebuilds all three over the same file — which is what a
-// killed app does and what `multi-vault-reader.test.ts`'s own restart
-// companion does one layer below the interface.
-//
-// FOUR CLAIMS, and the reason each one is here:
-//
-//  1. RECORDING NEVER NEEDS THE GATEWAY. `tally-writes.ts` sends every act
-//     through `session.write`, so an unreachable gateway settles the write as
-//     QUEUED and the commit says so in §6's own sentence, rather than leaving
-//     an awaited promise hanging on a drain that will not run.
-//  2. WAITING IS THE SURFACE THAT IS TRUE OFFLINE. Tally's reads are gateway
-//     RPCs, so no ledger lands while disconnected; the queued row, its chip
-//     and the offline notice are what the seat can honestly draw.
-//  3. THE SAME WRITE SURVIVES THE PROCESS — the same durable intent id, not a
-//     re-minted twin. After the restart the outbox is the only thing left: the
-//     store's payload died with the process and the dashboard read cannot land
-//     offline, so the row can have come from nowhere else.
-//  4. THE PENDING EXPENSE ITSELF SURVIVES, THROUGH THE PRODUCTION READER.
-//     The row Waiting draws is an outbox row; the EXPENSE is an optimistic
-//     projection, and it is the mounted reader's overlay that carries it. The
-//     phone draws no surface over that read (Tally's reads are gateway RPCs —
-//     `tally-gateway.ts` says why), so the claim is asserted at the reader the
-//     app mounts rather than at a screen that does not exist.
-//
-// WHAT THIS FILE DELIBERATELY DOES NOT CLAIM: reconnect. The gateway is
-// unreachable from the first render to the last, so settlement-on-reconnect
-// stays where `tests/quality/offline-reconnect.integration.test.ts` owns it.
-
-// @vitest-environment jsdom
 import path from "node:path";
 
 import React, { act } from "react";
@@ -62,14 +21,6 @@ import type { NativeChangeFeed } from "../../lib/replica/native-session";
 import { createNativeReplicaSession } from "../../lib/replica/native-session";
 import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
 
-// The shared block stub, plus the one primitive it does not wire: it forwards
-// `onPress` and drops every other handler, and a journey that TYPES needs
-// `onChangeText` to reach the draft. Overridden here rather than in the shared
-// stub, because a composer is the only surface that needs it.
-// The vault lockup every app frame draws. Stubbed for the same reason as in
-// `PhotosScreen.test.tsx`: this journey's claim is Tally's pending-write
-// behaviour, and mounting the real header pulls the active-vault read and its
-// native storage into a project with no setup file to seam them.
 vi.mock(import("../../screens/home/VaultBar"), () => ({
   default: (): React.JSX.Element => React.createElement("view"),
 }));
@@ -79,7 +30,6 @@ vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
   return {
     ...stub.reactNativeStub(),
-    // The pending-changes ticker polls only while the app is foregrounded.
     AppState: {
       currentState: "active",
       addEventListener: () => ({ remove: () => undefined }),
@@ -127,18 +77,12 @@ vi.mock(
     }) as never
 );
 
-// Hermes has no WebCrypto, so the production hashes come from `expo-crypto`'s
-// native module. The session takes both by injection here; this keeps the
-// module out of the graph for the frame's own `resolveAppMeta` import.
 vi.mock(import("expo-crypto") as Promise<unknown>, () => ({
   CryptoDigestAlgorithm: { SHA256: "SHA-256" },
   digestStringAsync: () => Promise.resolve("digest"),
   randomUUID: () => "journey-id",
 }));
 
-// The frame asks the wire client for one thing — the app's icon and colour.
-// The rest of that module is the phone's whole gateway transport, and none of
-// it belongs in a journey whose premise is that no gateway answers.
 vi.mock(
   import("../../lib/gateway"),
   () =>
@@ -154,9 +98,6 @@ vi.mock(
     }) as never
 );
 
-// The gateway door, replaced wholesale — the neighbouring read-plane suite's
-// own shape (`tally-store.test.ts`). Tally's reads are RPCs, so "the gateway
-// is unreachable" IS these handlers rejecting.
 const answers = vi.hoisted(() => ({
   dashboard: vi.fn<() => Promise<unknown>>(),
 }));
@@ -204,10 +145,6 @@ const { default: TallyHome } = await import("./TallyHome");
 const VAULT = "personal";
 const SPENT = "Airplane dinner at the Ship";
 
-/** The shape the seat's writes project into. Copied from the reader suite's
- *  own journey shape rather than shared: a fixture two suites edit together is
- *  a fixture neither one owns. Payers and splits are entities of their own, so
- *  an expense with nowhere to put them reads back unpaid. */
 const TALLY_SHAPE = {
   shapeId: "tally-default",
   appId: "tally",
@@ -248,10 +185,6 @@ const TALLY_SHAPE = {
   ],
 };
 
-/** The dashboard this phone last landed while the gateway still answered. The
- *  composer divides between the people it names, so a seat with no landed
- *  spine has nobody to divide between — which is exactly why the journey
- *  lands one before the gateway goes away. */
 const DASHBOARD = {
   currency: "USD",
   friends: [{ party_id: "ana", name: "Ana", initials: "AN", net_minor: 0 }],
@@ -303,13 +236,6 @@ function seedReplica(): void {
   store.close();
 }
 
-/**
- * One process's worth of session, reader and facade over the file on disk.
- *
- * Every door is the offline one: the fetcher REJECTS rather than resolving an
- * empty answer, so a write that reached the network would fail loudly instead
- * of passing as queued, and `isConnected` is false for the whole journey.
- */
 async function mountProcess(): Promise<MultiVaultReplicaSession> {
   readerSerial += 1;
   const scope: MountedReplicaScope = {
@@ -361,8 +287,6 @@ function unmount(): void {
   root = undefined;
 }
 
-/** Flush the microtasks a rendered write and the pending-changes ticker each
- *  leave behind, inside `act` so React commits what they resolve. */
 async function settle(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
@@ -381,9 +305,6 @@ function field(label: string): HTMLInputElement {
   return input!;
 }
 
-/** React tracks a controlled input's value on the node itself, so assigning
- *  `.value` and firing `input` is swallowed as a no-op. The prototype setter is
- *  what an actual keystroke goes through. */
 function type(label: string, value: string): void {
   const input = field(label);
   const setValue = Object.getOwnPropertyDescriptor(
@@ -396,9 +317,6 @@ function type(label: string, value: string): void {
   });
 }
 
-/** A control by the words it wears. Tally draws several of its verbs as
- *  `Text accessibilityRole="button"` rather than a Pressable, so the lookup
- *  spans both shapes and matches an accessible name or the visible label. */
 function control(label: string): HTMLElement {
   const button = [
     ...container!.querySelectorAll<HTMLElement>('button, [data-role="button"]'),
@@ -411,7 +329,6 @@ function control(label: string): HTMLElement {
   return button!;
 }
 
-/** The composer, driven the way a member drives it. */
 const addScreen = (): React.JSX.Element => (
   <TallyAddScreen
     navigation={{ goBack: () => undefined } as never}
@@ -419,8 +336,6 @@ const addScreen = (): React.JSX.Element => (
   />
 );
 
-/** One expense, recorded the way a member records it: two typed fields and
- *  the commit. Every other field is the composer's own default. */
 async function recordExpense(): Promise<void> {
   render(addScreen());
   type("What was it", SPENT);
@@ -430,8 +345,6 @@ async function recordExpense(): Promise<void> {
   await settle();
 }
 
-/** The process boundary. The store is module memory and dies with the
- *  process; the SQLite file is all that crosses. */
 async function restartProcess(): Promise<void> {
   await facade!.close();
   resetTallyVault();
@@ -439,7 +352,6 @@ async function restartProcess(): Promise<void> {
   replica.session = facade;
 }
 
-/** Waiting — the band place that draws this device's own outbox. */
 const waitingScreen = (): React.JSX.Element => (
   <TallyHome
     navigation={{ navigate: () => undefined, popTo: () => undefined } as never}
@@ -467,13 +379,10 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     replica.session = facade;
     replica.online = false;
     replica.vaultId = VAULT;
-    // The spine that landed while the gateway still answered. It is process
-    // memory, and the restart below is where that matters.
     answers.dashboard.mockResolvedValue(DASHBOARD);
     await act(async () => {
       await openTally();
     });
-    // From here the gateway is unreachable, and every read says so.
     answers.dashboard.mockRejectedValue(new Error("gateway is unreachable"));
   });
 
@@ -490,9 +399,6 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
 
   it("queues the write and says so in the commit's own words", async () => {
     await recordExpense();
-    // The write rail settles an unreachable drain as QUEUED rather than
-    // leaving the awaited promise open, so the commit is a sentence and not a
-    // spinner. §6's own line, and not a paraphrase of it.
     expect(posted).toStrictEqual([COMPOSE_OUTCOMES.added]);
   });
 
@@ -503,11 +409,8 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     render(waitingScreen());
     await settle();
     const drawn = container!.textContent ?? "";
-    // In flight is where a write of the member's own belongs — never under
-    // "Waiting on you", which is a steward's question.
     expect(drawn).toContain(CONTRIB_SECTIONS.inFlight);
     expect(drawn).toContain("QUEUED");
-    // The one exception is named, and recording is not it.
     expect(drawn).toContain(OFFLINE_NOTICE);
   });
 
@@ -516,25 +419,16 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     const before = await facade!.pendingChanges();
     unmount();
 
-    // THE RESTART. Every handle closes, the process-memory read plane goes
-    // with it, and session, reader and facade are rebuilt over the same file —
-    // which is all a killed app leaves behind.
     await restartProcess();
 
     render(waitingScreen());
     await settle();
     const drawn = container!.textContent ?? "";
-    // The outbox row, its status, and the sentence that says where it is.
     expect(drawn).toContain("QUEUED");
     expect(drawn).toContain(
       "on a device, not in the vault yet · it lands when the gateway answers"
     );
-    // And the surface still says whose writes these are, rather than implying
-    // it is showing everybody's.
     expect(drawn).toContain(WAITING_OWN_SCOPE);
-    // THE SAME WRITE, not a fresh one: a restart that re-minted the intent
-    // would draw an identical row over a different durable id, and the vault
-    // would eventually apply two expenses for one press.
     const after = await facade!.pendingChanges();
     expect(after.map((change) => change.id)).toStrictEqual(
       before.map((change) => change.id)
@@ -551,9 +445,6 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     unmount();
     await restartProcess();
 
-    // The reader the app mounts, over the file the killed process left. The
-    // expense is an OPTIMISTIC projection, so the overlay is what carries it —
-    // description, queued status and the vault it belongs to.
     const found = await facade!.read("tally", {
       entity: "tally.expense",
       where: [{ column: "description", op: "eq", value: SPENT }],
@@ -566,3 +457,4 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     });
   });
 });
+// @vitest-environment jsdom

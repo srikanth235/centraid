@@ -1,11 +1,3 @@
-// @vitest-environment node
-
-/*
- * `resolveGatewayCliPath()` runs on every desktop launch and fails silently:
- * `stdio: 'ignore'` eats the child's "Cannot find module", so a bad path
- * surfaces only as a 30s ready-poll timeout (#883).
- */
-
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -19,8 +11,6 @@ const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(import.meta.dirname, "../../../..");
 
 describe(resolveGatewayCliPath, () => {
-  // Node refuses unlisted subpaths: drop this export and every caller falls
-  // to the monorepo fallback, which no installed app has.
   test("@centraid/server exports the ./package.json subpath the resolver needs", () => {
     expect(() =>
       require.resolve("@centraid/server/package.json")
@@ -72,3 +62,4 @@ describe(resolveGatewayCliPath, () => {
     expect(fs.existsSync(threeLevels)).toBe(false);
   });
 });
+// @vitest-environment node

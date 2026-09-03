@@ -1,7 +1,3 @@
-// A PLACE spends no colour on itself (#765): the bar is a title and at most
-// two verbs, ink only — no app-identity chip, no tint, and (deliberately) no
-// count line, which the reference suppresses entirely at phone width.
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -76,3 +72,4 @@ describe(PlaceHeader, () => {
     expect(nodesOf(container, "button")).toHaveLength(1);
   });
 });
+// @vitest-environment jsdom

@@ -1,19 +1,3 @@
-// THE PHONE'S OWN TABLES, EXERCISED.
-//
-// Five claims, each of which a plausible refactor could undo silently:
-//
-//  1. THE STATE PRECEDENCE IS THE ARGUMENT. A refusal outranks a delay, a delay
-//     outranks an emptiness, and an emptiness outranks a level balance — so a
-//     screen can never say "everyone is level" over a ledger it was refused.
-//  2. ALL SETTLED IS NOT AN EMPTINESS. It needs rows, and every one of them
-//     level; a surface with no balances on it can never reach it.
-//  3. THE WINDOW'S FOOT IS HONEST. §6's `60 of 194` needs a real denominator;
-//     without one the foot says what is shown and that the window is a window.
-//  4. WAITING'S DOORS ARE THIS TRANSPORT'S. `decide` is false, so no row can
-//     ever carry an Approve or a Decline this seat cannot fire.
-//  5. EVERY OUTBOX ROW IS THE MEMBER'S OWN, which is why they file under *in
-//     flight* and *ended* and never under *Waiting on you*.
-
 import { describe, expect, it } from "vitest";
 
 import { windowEnd } from "@centraid/blueprints/apps/tally/view-copy";
@@ -98,8 +82,6 @@ describe("which state a Tally screen is in", () => {
   it("reaches All settled only with rows, every one of them level", () => {
     expect(tallyScreenState({ ...READY, nets: [0, 0] })).toBe("settled");
     expect(tallyScreenState({ ...READY, nets: [0, 4200] })).toBe("ready");
-    // A surface with no balances on it can never be All settled: an empty
-    // array of nets would otherwise claim every balance was level.
     expect(tallyScreenState({ ...READY, nets: [] })).toBe("ready");
     expect(tallyScreenState(READY)).toBe("ready");
   });
@@ -118,7 +100,6 @@ describe("the window's foot", () => {
   it("refuses to invent a denominator where the payload carries none", () => {
     const foot = tallyWindowFoot(true, 60, null);
     expect(foot).toBe(windowFootNoTotal(60));
-    // No `60 of 194`: the denominator is what the payload did not carry.
     expect(foot).not.toMatch(/\d+ of \d+/u);
   });
 });

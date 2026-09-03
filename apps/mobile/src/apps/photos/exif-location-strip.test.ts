@@ -1,18 +1,13 @@
-// Proves location leaves the BYTES (#816): the fixture carries a real fix (Exif GPS, XMP, IPTC)
-// and assertions use the independent parser below — "digits gone from bytes", not a render claim.
-
 import { describe, expect, it } from "vitest";
 
 import { isJpeg, stripJpegLocation } from "./exif-location-strip";
 
-/** NUL terminating tags below — escaped so no repo file carries a literal zero byte. */
 const NUL = "\u0000";
 
 const MARKER = 0xff;
 const SOI = [MARKER, 0xd8];
 const EOI = [MARKER, 0xd9];
 
-/** Big-endian TIFF words under `MM`. */
 const be16 = (value: number): number[] => [(value >> 8) & 0xff, value & 0xff];
 const be32 = (value: number): number[] => [
   (value >>> 24) & 0xff,
@@ -34,7 +29,6 @@ interface ByteOrder {
 const BIG: ByteOrder = { mark: ascii("MM"), u16: be16, u32: be32 };
 const LITTLE: ByteOrder = { mark: ascii("II"), u16: le16, u32: le32 };
 
-/** One 12-byte IFD entry; `value` padded to its four bytes. */
 function entry(
   order: ByteOrder,
   tag: number,
@@ -51,7 +45,6 @@ function entry(
   ];
 }
 
-/** GPS coordinate as EXIF's three rationals: degrees, minutes, seconds. */
 function rationals(order: ByteOrder, parts: [number, number][]): number[] {
   return parts.flatMap(([numerator, denominator]) => [
     ...order.u32(numerator),
@@ -60,20 +53,17 @@ function rationals(order: ByteOrder, parts: [number, number][]): number[] {
 }
 
 const CAPTURED = `2026:08:17 09:41:00${NUL}`;
-/** 37° 26' 30.84" N — the digits the strip must make disappear. */
 const LATITUDE: [number, number][] = [
   [37, 1],
   [26, 1],
   [3084, 100],
 ];
-/** 122° 8' 34.8" W. */
 const LONGITUDE: [number, number][] = [
   [122, 1],
   [8, 1],
   [348, 10],
 ];
 
-// Fixed TIFF layout: every pointer is a named number.
 const IFD0_AT = 8;
 const IFD0_ENTRIES = 3;
 const CAPTURED_AT = IFD0_AT + 2 + IFD0_ENTRIES * 12 + 4; // 50
@@ -82,14 +72,12 @@ const GPS_ENTRIES = 4;
 const GPS_DATA_AT = GPS_IFD_AT + 2 + GPS_ENTRIES * 12 + 4; // 124
 const LONGITUDE_AT = GPS_DATA_AT + 24;
 
-/** TIFF block with an orientation, a capture time and a real GPS directory. */
 function tiff(order: ByteOrder): number[] {
   return [
     ...order.mark,
     ...order.u16(42),
     ...order.u32(IFD0_AT),
     ...order.u16(IFD0_ENTRIES),
-    // Orientation 6 — the tag the walker must leave alone.
     ...entry(order, 0x0112, 3, 1, order.u16(6)),
     ...entry(order, 0x0132, 2, CAPTURED.length, order.u32(CAPTURED_AT)),
     ...entry(order, 0x8825, 4, 1, order.u32(GPS_IFD_AT)),
@@ -106,7 +94,6 @@ function tiff(order: ByteOrder): number[] {
   ];
 }
 
-/** Any APP segment + the two-byte length JPEG prepends. */
 function segment(marker: number, payload: number[]): number[] {
   return [MARKER, marker, ...be16(payload.length + 2), ...payload];
 }
@@ -124,7 +111,6 @@ const IPTC_BLOCK = [
   ...ascii("Menlo Park  "),
 ];
 
-/** The compressed image — never metadata, never touched. */
 const SCAN = [
   ...segment(0xda, [0x00, 0x03, 0x01, 0x00, 0x3f, 0x00]),
   0x12,
@@ -134,7 +120,6 @@ const SCAN = [
   ...EOI,
 ];
 
-/** A photograph carrying a fix three different ways. */
 function photograph(order: ByteOrder = BIG): Uint8Array {
   return new Uint8Array([
     ...SOI,
@@ -145,7 +130,6 @@ function photograph(order: ByteOrder = BIG): Uint8Array {
   ]);
 }
 
-/** A photograph that never knew where it was. */
 function unlocatedPhotograph(): Uint8Array {
   const order = BIG;
   return new Uint8Array([
@@ -162,8 +146,6 @@ function unlocatedPhotograph(): Uint8Array {
     ...SCAN,
   ]);
 }
-
-// ── Independent reader: against the format, not the module under test ──
 
 interface ExifRead {
   orientation?: number;
@@ -223,7 +205,6 @@ function readTiff(bytes: Uint8Array, start: number): ExifRead {
   return read;
 }
 
-/** Does `haystack` contain this exact run of bytes anywhere? */
 function contains(haystack: Uint8Array, needle: number[]): boolean {
   return haystack.some((_, index) =>
     needle.every((byte, offset) => haystack[index + offset] === byte)
@@ -247,7 +228,6 @@ describe("what a shared copy no longer says", () => {
     expect(readExif(stripped!.bytes)?.gpsEntries).toBe(0);
     expect(contains(stripped!.bytes, rationals(BIG, LATITUDE))).toBe(false);
     expect(contains(stripped!.bytes, rationals(BIG, LONGITUDE))).toBe(false);
-    // The reference letters go too — "N"/"W" are half a coordinate.
     expect(contains(stripped!.bytes, ascii(`N${NUL}`))).toBe(false);
   });
 
@@ -298,7 +278,6 @@ describe("bytes with nothing to remove", () => {
   });
 
   it("refuses a container it cannot walk, rather than passing it through", () => {
-    // Not-JPEG container: the null makes `photo-share.ts` re-encode or refuse rather than ship the fix.
     expect(
       stripJpegLocation(new Uint8Array([0, 0, 0, 24, 102, 116]))
     ).toBeNull();

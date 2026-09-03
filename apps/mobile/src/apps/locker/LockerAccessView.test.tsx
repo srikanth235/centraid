@@ -1,11 +1,3 @@
-// The receipts list, rendered.
-//
-// WHAT IT MUST NEVER SHOW: a value. `ACCESS_NO_VALUES` is the promise and this
-// suite is what keeps it true, so a change that fetched one would fail here
-// rather than be noticed in review. Not read yet, offline, refused and "no
-// receipt has been written yet" stay four facts, never one emptiness.
-
-// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -40,8 +32,6 @@ vi.mock(import("react-native-svg"), async () => {
   return stub.svgStub() as unknown as typeof import("react-native-svg");
 });
 
-/** Here so the assertions can name what must never appear; nothing hands it to
- *  the component. */
 const SECRET = "hunter2";
 
 const REVEAL: LockerAccessEntry = {
@@ -90,7 +80,6 @@ describe("the receipts list", () => {
     expect(text).toContain(ACCESS_HEAD);
     expect(text).toContain("Revealed");
     expect(text).toContain("Mail");
-    // The COLUMN, in the shared model's own word for it.
     expect(text).toContain("password");
     expect(text).not.toContain(SECRET);
     expect(text).toContain(ACCESS_NO_VALUES);
@@ -145,7 +134,6 @@ describe("the receipts list", () => {
   it("names the journal offline instead of drawing a cached history", () => {
     const { container, unmount } = mountBlock(view({ offline: true }));
     expect(textOf(container)).toContain(ACCESS_OFFLINE);
-    // The register above still names the verbs; no ROW is drawn.
     expect(textOf(container)).not.toContain("Mail");
     expect(textOf(container)).not.toContain(ACCESS_ENTRIES);
     unmount();
@@ -157,3 +145,4 @@ describe("the receipts list", () => {
     unmount();
   });
 });
+// @vitest-environment jsdom

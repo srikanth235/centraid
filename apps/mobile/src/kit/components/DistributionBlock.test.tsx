@@ -1,9 +1,3 @@
-// The distribution rows (#775). The ordering and the share arithmetic are
-// pinned once in `@centraid/design/blocks`; what is pinned HERE is the native
-// lowering — a `%` width a style actually takes, the share said in WORDS beside
-// the bar (a bar is nothing to a screen reader), and the `Progress` recipe's
-// two grounds: the sunken track and the ink fill, and no third colour.
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -117,3 +111,4 @@ describe(DistributionBlock, () => {
     expect(nodesOf(container, "span")).toHaveLength(0);
   });
 });
+// @vitest-environment jsdom

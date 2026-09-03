@@ -1,17 +1,3 @@
-// THE THREE SURFACES REACHED FROM *More* THAT ARE NOT ROUTES OF THEIR OWN —
-// Import, Export and Companion.
-//
-// Import and Export perform here: both doors are the gateway's, both are
-// online-only by construction, and neither has any representation in the
-// durable outbox. Companion runs in the browser extension, so it is drawn as
-// what it IS plus a sentence saying where the act happens — the
-// origin-capabilities rule: no dead controls, and no pretending an act is
-// available because its name is in a menu.
-//
-// Facts come from the shared table (`route-copy.ts`); only the where-sentence
-// is this seat's, because where an act happens is the fact that differs by seat
-// (docs/blueprint-seats.md, "search is not one behaviour").
-
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -34,7 +20,6 @@ import LockerImportView from "./LockerImportView";
 import LockerScreen from "./LockerScreen";
 import { useLockerVault } from "./useLockerVault";
 
-/** Which `ROUTE_TITLE` key each surface carries. */
 const ROUTE_OF = {
   export: "export",
   fill: "fill",
@@ -50,8 +35,6 @@ export default function LockerSurfaceScreen({
   const surface = route.params.surface;
   const online = replica.online;
 
-  // Options and gate live in the screen, not the store: a lock withdraws this
-  // screen entirely, so an answered gate cannot survive one.
   const [includeTrashed, setIncludeTrashed] = useState(false);
   const [includeHistory, setIncludeHistory] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -112,8 +95,6 @@ export default function LockerSurfaceScreen({
   );
 }
 
-/** Companion, stated rather than performed: the candidate and fill queries are
- *  the extension's, so this screen dispatches neither. */
 function FillFacts(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);

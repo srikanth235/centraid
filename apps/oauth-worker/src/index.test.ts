@@ -170,7 +170,6 @@ describe("index", () => {
         }
       );
       expect(response.status).toBe(200);
-      // Issue #865: a minted refresh token leaves with its capability.
       await expect(response.json()).resolves.toStrictEqual({
         access_token: "ya29.gateway-only",
         refresh_token: "1//gateway-only",
@@ -389,7 +388,6 @@ describe("index", () => {
           expect(form.get("grant_type")).toBe("refresh_token");
           expect(form.get("refresh_token")).toBe("1//stored-on-gateway");
           expect(form.get("client_secret")).toBe("worker-only-google-secret");
-          // No rotation: no refresh token, and therefore no new capability.
           return Response.json({
             access_token: "ya29.refreshed",
             expires_in: 3600,
@@ -449,8 +447,6 @@ describe("index", () => {
         error: "invalid_capability",
       });
 
-      // A genuinely minted capability for a DIFFERENT token does not redeem
-      // this one — the capability is bound to its exact refresh token.
       const foreign = await expectedRefreshCapability(
         "1//some-other-token",
         RECEIPT_SECRET
@@ -510,8 +506,6 @@ describe("index", () => {
         refreshUpstream as typeof fetch
       );
       expect(response.status).toBe(200);
-      // The rotated pair leaves with the capability for the NEW token, in the
-      // same strict allowlist shape.
       await expect(response.json()).resolves.toStrictEqual({
         access_token: "ya29.rotated",
         refresh_token: rotatedToken,
@@ -730,8 +724,6 @@ describe("index", () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
       const upstream = vi.fn<typeof fetch>();
-      // Receipt expiresAt is NOW/1000 + 120. A clock that is more than TTL
-      // *ahead* of mint time also fails closed (future skew).
       const skewedFuture = await handleRequest(
         exchangeRequest(receipt),
         env,

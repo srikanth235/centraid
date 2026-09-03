@@ -19,8 +19,6 @@ import {
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
 
-/** §7 the inline app route, §10 automation templates, §11 Insights. */
-
 let env: TestEnv;
 let gateway: MockGateway;
 
@@ -48,8 +46,6 @@ async function openApp(
   await page.getByTestId("inline-app-view").waitFor({ state: "visible" });
 }
 
-// No sandboxed app iframe, no per-app copilot panel (#799): no §7.2–7.4 cases.
-
 test("7.1 — opening a system app renders inline; back returns home", async () => {
   gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
   const { app, page } = await launchApp(env);
@@ -69,13 +65,9 @@ test("7.1 — opening a system app renders inline; back returns home", async () 
   }
 });
 
-// No Discover page (#708): the catalogue is the automation gallery
-// (Automations → Browse templates), so this section carries only 10.2.
-
 test("10.2 — an automation template clone survives a fresh gateway instance and Electron process", async () => {
   gateway.state.templates = [
     {
-      // The gallery exposes only v0 curated IDs; made-up ids are filtered out.
       id: "obligation-extractor",
       name: "Daily Digest",
       desc: "Summarize the day",
@@ -122,9 +114,7 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
       .toBe(true);
     await expect.poll(() => gateway.state.automations).toHaveLength(1);
 
-    // Clone must NOT consume the source template — it stays adoptable.
     await gotoNav(launched.page, "Automations");
-    // Populated list drops the empty-state verb; use the app bar secondary (#765).
     await launched.page
       .getByRole("button", { name: "Templates" })
       .first()
@@ -133,8 +123,6 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
       launched.page.getByRole("button", { name: /Daily Digest/u })
     ).toBeVisible();
 
-    // #765 UI evidence: the v9 binding layer on a POPULATED page (blocks draw
-    // real rows; an empty state would prove nothing).
     const evidenceDir = path.resolve(
       import.meta.dirname,
       "../../../../artifacts/e2e/ui-impact"
@@ -170,8 +158,6 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
     if (launched) await closeApp(launched.app);
   }
 });
-
-// ─────────────────────────── §11 Analytics (was Insights) ───────────────────────────
 
 test("11.1 — Analytics renders the runs chart and what it cost", async () => {
   gateway.state.insights = {
@@ -216,8 +202,6 @@ test("11.1 — Analytics renders the runs chart and what it cost", async () => {
   try {
     await waitForHome(page);
     await gotoNav(page, "Analytics");
-    // No KPI strip (#765): only the promoted spend figure and the categorical
-    // breakdowns remain (#775); the chart draws SPEND per day.
     await expect(
       page.getByRole("img", { name: "Spend per day over the last 30 days" })
     ).toBeVisible();
@@ -228,10 +212,8 @@ test("11.1 — Analytics renders the runs chart and what it cost", async () => {
       page.locator("dl[aria-label='Spend by harness']")
     ).toBeVisible();
     await expect(page.locator("body")).toContainText("claude-code");
-    // The spend, promoted: HEADLINED.
     await expect(page.locator("body")).toContainText("$1.23");
 
-    // #775 UI evidence, captured on a POPULATED page (same reason as #765's).
     const evidenceDir = path.resolve(
       import.meta.dirname,
       "../../../../artifacts/e2e/ui-impact"

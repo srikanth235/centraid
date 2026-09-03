@@ -1,9 +1,3 @@
-// The grid IS the loading state (Photos v4 handoff §14, proto:3993-4033).
-//
-// What these pin is that the placeholder grid is the REAL grid's geometry —
-// same packing, same widths, no reflow when the bytes land — and that it is
-// deterministic, so it cannot flicker into a new shape on a re-render.
-
 import { describe, expect, it } from "vitest";
 
 import { justify } from "./justify";
@@ -19,9 +13,6 @@ const TARGET = 120;
 describe("the loading grid's geometry", () => {
   it("packs to the container width exactly, like every real row", () => {
     const rows = skeletonRows(WIDTH, TARGET, 40);
-    // Every FULL row fills the width: `justify` folds per-tile rounding into
-    // the last tile precisely so the grid does not drift. The trailing partial
-    // row deliberately keeps its natural width.
     for (const row of rows.slice(0, -1)) {
       const width =
         row.reduce((sum, tile) => sum + tile.width, 0) + 2 * (row.length - 1);
@@ -36,8 +27,6 @@ describe("the loading grid's geometry", () => {
   });
 
   it("uses `justify()` itself, not a lookalike packer", () => {
-    // If the timeline's packing changes, the skeleton changes with it in the
-    // same commit, because there is only one implementation of it.
     const rows = skeletonRows(WIDTH, TARGET, 12);
     const direct = justify(
       SKELETON_ASPECTS.map((aspect, index) => ({

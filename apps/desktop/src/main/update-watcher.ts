@@ -1,9 +1,3 @@
-/*
- * Electron wiring around update-check.ts. Unpackaged: poll dist mtime.
- * Packaged: download after {@link admitUpdate} (#501), then ready-to-install.
- * Broadcast UPDATE_AVAILABLE; `relaunchToUpdate()` restarts same argv/cwd.
- */
-
 import { readFile, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -30,7 +24,6 @@ export const UPDATE_AVAILABLE_CHANNEL = "centraid:update:available";
 export interface UpdateStatus {
   available: boolean;
   version: string;
-  /** Packaged: true only after download. Unpackaged: true when available. */
   readyToInstall?: boolean;
 }
 
@@ -56,7 +49,6 @@ export function getUpdateStatus(): UpdateStatus {
 
 export function relaunchToUpdate(): void {
   if (app.isPackaged && packagedDownloadReady && autoUpdaterRef) {
-    // I9: admitted download; forceRunAfter so the app returns.
     autoUpdaterRef.quitAndInstall(false, true);
     return;
   }
@@ -156,15 +148,9 @@ export function startUpdateWatcher(): void {
   })();
 }
 
-/**
- * Packaged path (I4 / #501). createRequire here — CJS `autoUpdater` crashes
- * under `"type":"module"` if imported statically. Download after admit;
- * never call the autoUpdater getter outside this packaged-ready path.
- */
 export function startPackagedUpdateChecker(): void {
   void (async () => {
     try {
-      // Deferred CJS load; knip cannot see createRequire (knip.json ignoreDependencies).
       const req = createRequire(import.meta.url);
       const { autoUpdater } = req("electron-updater") as {
         autoUpdater: {
@@ -181,7 +167,6 @@ export function startPackagedUpdateChecker(): void {
           on: (event: string, cb: (info: unknown) => void) => void;
         };
       };
-      // I9: never install-on-quit a stale download.
       autoUpdater.autoDownload = false;
       autoUpdater.autoInstallOnAppQuit = false;
       autoUpdater.channel = updaterChannelForVersion(app.getVersion());
@@ -213,7 +198,7 @@ export function startPackagedUpdateChecker(): void {
           try {
             await autoUpdater.downloadUpdate();
           } catch {
-            // Network failure — leave available, not ready; user can retry.
+            // Intentionally empty.
           }
         })();
       });
@@ -225,8 +210,6 @@ export function startPackagedUpdateChecker(): void {
             typeof release.version === "string"
               ? release.version
               : app.getVersion();
-          // W6.1 (#842): installable only with a pinned-key signature. Refusal
-          // leaves packagedDownloadReady false — relaunch, never quitAndInstall.
           const trusted = await admitDownloadedUpdate({
             packaged: app.isPackaged,
             version,
@@ -249,13 +232,11 @@ export function startPackagedUpdateChecker(): void {
 
       await autoUpdater.checkForUpdates();
       const timer = setInterval(() => {
-        void autoUpdater.checkForUpdates().catch(() => {
-          /* ignore */
-        });
+        void autoUpdater.checkForUpdates().catch(() => {});
       }, PACKAGED_CHECK_MS);
       timer.unref();
     } catch {
-      // Packaged without updater lib / no feed / offline.
+      // Intentionally empty.
     }
   })();
 }
@@ -267,7 +248,7 @@ export async function checkForUpdatesManual(): Promise<UpdateStatus> {
   try {
     await autoUpdaterRef.checkForUpdates();
   } catch {
-    /* ignore */
+    // Intentionally empty.
   }
   return getUpdateStatus();
 }

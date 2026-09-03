@@ -1,22 +1,3 @@
-// THE COMPONENT RECIPES (Tally spec §5), drawn once for every list in the app.
-//
-// Four leaves and one rule. The rule is the app's one SIGN CONVENTION:
-// positive is owed to you, negative is owed by you, so a figure never needs a
-// legend. That convention is expressed exactly once — `format.figureTone` —
-// and `Figure` below is the only leaf that reads it. `--net` means you owe,
-// plain ink means you are owed, the recessive rung means settled, and NEVER a
-// green: a settled balance is a fact, not a reward.
-//
-//   * `Section`  — label · count/meta · one text verb · rows · an empty line
-//                  in its own words.
-//   * `LedgerRow` — person chip · title · meta sentence · optional proportion
-//                  bar · optional status chip · figure block · up to ONE quiet
-//                  trailing verb, because this is a touch seat. A pending row
-//                  takes the 2px leading rule.
-//   * `FieldRow` — key column · value or chips · a note carrying the rule.
-//   * `Hero`     — display-rung figure · label · the sentence that says where
-//                  the figure came from · up to two secondary verbs.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -29,7 +10,6 @@ import Tappable from "../../kit/components/Tappable";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
-/** The 2px leading rule an unsettled write's row takes (§5). */
 const PENDING_RULE = 2;
 const BAR_HEIGHT = 3;
 const CHIP_SIZE = 28;
@@ -39,18 +19,10 @@ export function toneColor(tone: FigureTone, colors: ThemeColors): string {
   return tone === "owed" ? colors.text : colors.textFaint;
 }
 
-// ─── Figure ─────────────────────────────────────────────────────────────────
-
 export interface FigureProps {
-  /** Already derived by the queries' one balance engine. Never folded here. */
   netMinor: number;
-  /** The amount, as `format.money` / `format.netFigure` rendered it. */
   text: string;
-  /** What the figure MEANS, under it. Empty on a level balance, because a
-   *  level balance has no direction to name. */
   sub?: string;
-  /** Overrides the sign convention where the row's own stance decides it —
-   *  a ledger row is `roleTone`, not `figureTone`. */
   tone?: FigureTone;
 }
 
@@ -73,18 +45,12 @@ export function Figure({
   );
 }
 
-// ─── Section ────────────────────────────────────────────────────────────────
-
 export interface SectionProps {
   label: string;
   meta?: string;
-  /** The one underlined text verb a section carries. */
   act?: { label: string; onPress: () => void };
-  /** The empty line, in this section's own words. */
   empty?: string;
   children?: React.ReactNode;
-  /** Is there anything under the head? Decided by the caller, because a
-   *  section with a notice under it is not empty even with no rows. */
   filled: boolean;
 }
 
@@ -124,25 +90,16 @@ export function Section({
   );
 }
 
-// ─── Ledger row ─────────────────────────────────────────────────────────────
-
 export interface LedgerRowProps {
-  /** The person chip's two letters, in the person's own hue. Absent where the
-   *  row is not about one person. */
   initials?: string;
   title: string;
   meta?: string;
-  /** A whole percentage of the largest row, or absent. */
   bar?: { value: number; largest: number };
-  /** The status word a row wears — PARKED, Paused, departed. */
   chip?: string;
   chipTone?: "seam" | "net";
   figure?: FigureProps;
-  /** ONE quiet trailing verb: this is a touch seat, and §5 caps it at one. */
   act?: { label: string; onPress: () => void };
-  /** An unsettled write. Takes the 2px leading rule and says so in its meta. */
   pending?: boolean;
-  /** A handle from `kit/test-ids`, on the rows a flow has to find. */
   testID?: string;
   onPress?: () => void;
 }
@@ -245,12 +202,9 @@ export function LedgerRow({
   );
 }
 
-// ─── Field row ──────────────────────────────────────────────────────────────
-
 export interface FieldRowProps {
   label: string;
   value?: string;
-  /** The note that carries the rule, and where relevant the gap tag. */
   note?: string;
   children?: React.ReactNode;
 }
@@ -275,14 +229,10 @@ export function FieldRow({
   );
 }
 
-// ─── Hero ───────────────────────────────────────────────────────────────────
-
 export interface HeroProps {
-  /** The display-rung figure, already rendered by `format`. */
   figure: string;
   netMinor: number;
   label: string;
-  /** The sentence that says where the figure came from. */
   sub: string;
   acts?: readonly { label: string; onPress: () => void }[];
 }
@@ -322,8 +272,6 @@ export function Hero({
     </View>
   );
 }
-
-// ─── The window's foot ──────────────────────────────────────────────────────
 
 export function WindowFoot({
   text,

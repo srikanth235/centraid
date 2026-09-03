@@ -16,13 +16,10 @@ import { loadConnection, webGatewayId } from "./web-state.js";
 const KEY_STORAGE = "centraid.web.v1.iroh-device-key";
 const BRIDGE_STORAGE = "centraid.web.v1.iroh-bridge";
 const VIRTUAL_PREFIX = "/__centraid_iroh__/";
-// Versioned: an older shell worker must not read as ready.
 const SERVICE_WORKER_URL = `/sw.js?v=${SERVICE_WORKER_VERSION}`;
 
-// The WASM layer already redials once, so failures here pause first.
 const MAX_RETRIES = 2;
 const RETRY_BACKOFF_MS = [250, 750];
-// Bounds connect + send + first-header, never the body stream.
 const CONNECT_TIMEOUT_MS = 15_000;
 const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "OPTIONS", "PUT", "DELETE"]);
 
@@ -58,31 +55,22 @@ async function endpoint(): Promise<BrowserEndpoint> {
     });
   }
   const node = await endpointPromise;
-  // A pending spawn may write its key to session storage; fold it in.
   adoptDurableIrohDeviceKey();
   return node;
 }
 
-/** Warm the WASM endpoint at idle (#659). The gate stays narrow: a 2 MB
- * download cached by `public/sw.js`, and a paired page can still route
- * elsewhere (`window.CentraidIroh` is a replaceable seam). */
 export function warmIrohTransport(): void {
   if (endpointPromise) return;
   if (!webGatewayId(loadConnection())) return;
-  // Identity check: warm only the transport we installed.
   if (window.CentraidIroh?.fetch !== irohFetch) return;
   const warm = (): void => {
-    void endpoint().catch(() => {
-      // A warm failure is silent; the first real request reports.
-    });
+    void endpoint().catch(() => {});
   };
   if (typeof requestIdleCallback === "function")
     requestIdleCallback(warm, { timeout: 4000 });
   else setTimeout(warm, 1500);
 }
 
-/** MOVE, never copy: this key IS the enrolled identity, and in sessionStorage
- * it silently unpairs on restart. Durability is not a consent axis. */
 export function adoptDurableIrohDeviceKey(): string | null {
   const stored =
     localStorage.getItem(KEY_STORAGE) ?? sessionStorage.getItem(KEY_STORAGE);
@@ -134,7 +122,6 @@ export async function pairGatewayOverIroh(
   return { response, endpointId: node.endpoint_id() };
 }
 
-// The only failure provably raised BEFORE the body went out.
 function isConnectFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes(connect_failure_marker());
@@ -167,8 +154,6 @@ async function withConnectTimeout(
   }
 }
 
-// A rejection means no bytes reached the caller, so a retry duplicates nothing;
-// a non-idempotent request replays only on a proven connect failure.
 async function requestWithRetry(
   node: BrowserEndpoint,
   endpointTicket: string,
@@ -223,10 +208,7 @@ async function requestParts(init: RequestInit): Promise<{
     ...(method === "GET" || method === "HEAD" ? { body: undefined } : {}),
   });
   const headers = Object.fromEntries(request.headers.entries());
-  // The transport bypasses browser HTTP; stamp the shell origin explicitly.
   headers["origin"] = window.location.origin;
-  // Browsers never expose Accept-Encoding to JS; without this the gateway ships
-  // raw bytes. `irohFetch` decodes.
   if (!(headers["accept"] || "").toLowerCase().includes("text/event-stream")) {
     headers["accept-encoding"] = "gzip";
   }
@@ -257,8 +239,6 @@ export async function irohFetch(
   );
   const headers = responseHeaders(response.headers_json);
   let body: ReadableStream = response.take_body();
-  // A JS-built Response is not auto-decoded; strip the compressed-form headers
-  // but KEEP the ETag, keyed to raw bytes.
   if ((headers.get("content-encoding") || "").toLowerCase() === "gzip") {
     headers.delete("content-encoding");
     headers.delete("content-length");
@@ -276,9 +256,6 @@ async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
     ...message.headers,
     "x-centraid-tunnel-auth-mode": "web-session",
   };
-  // Set unconditionally: the desktop tunnel keys off it to STRIP the device
-  // bearer, so behind the cookie check an idle app falls through to the full
-  // bearer.
   if (message.sessionCookie) {
     headers["cookie"] = message.sessionCookie;
   }
@@ -297,7 +274,6 @@ function bridgeId(): string {
   const durable = connection.rememberDevice === true;
   const storage = durable ? localStorage : sessionStorage;
   const stale = durable ? sessionStorage : localStorage;
-  // Tickets refresh without changing the gateway; keep the cache namespace.
   const scope = `${webGatewayId(connection) ?? connection.endpointTicket ?? ""}\u0000${connection.vaultId ?? ""}`;
   let saved: { scope?: string; id?: string } = {};
   try {
@@ -318,7 +294,6 @@ function bridgeId(): string {
   return id;
 }
 
-/** Only `d-` bridge scopes are cache-readable to the worker. */
 export function irohBridgeIdForConsent(
   rememberDevice: boolean,
   randomId = crypto.randomUUID()
@@ -340,7 +315,6 @@ export function purgeIrohDeviceState(): void {
   void current
     ?.then(async (node) => {
       await node.close().catch(() => undefined);
-      // A pending spawn can write its key after the clear.
       clear();
     })
     .catch(() => undefined);
@@ -364,7 +338,6 @@ function currentIrohWakeConfiguration(): IrohWakeConfiguration | undefined {
   };
 }
 
-/** A closed PWA has no WindowClient, so the worker authenticates its own pull. */
 export async function syncIrohWakeConfiguration(): Promise<void> {
   if (!("serviceWorker" in navigator)) return;
   const registration = await navigator.serviceWorker.ready;
@@ -438,7 +411,6 @@ function postError(port: MessagePort, error: unknown): void {
 }
 
 export function installIrohServiceWorkerBridge(): void {
-  // Surface the perf counters at boot (#404): a probe can spot a stale bundle.
   irohStats();
   if (!("serviceWorker" in navigator)) return;
   navigator.serviceWorker.addEventListener(
@@ -463,7 +435,6 @@ export function installIrohServiceWorkerBridge(): void {
           >,
         });
         const reader = response.take_body().getReader();
-        // Ordered stream: post this chunk before reading the next.
         const pump = async (): Promise<void> => {
           const { done, value } = await reader.read();
           if (done) return;

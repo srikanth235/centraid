@@ -1,19 +1,3 @@
-// People's WRITE side on the phone — the web `writes.ts` doctrine over the
-// native session.
-//
-// THREE RULES HOLD HERE, AND NOTHING ELSE DOES (the web module states them):
-//
-// 1. ONE DOOR. Every write is `session.write("people", {action, input})`, and
-//    every outcome lands on the frame's one status line (`postStatus`) —
-//    no toast, no badge, no second line. Parked writes route to Approvals;
-//    queued writes say so in People's own sentence.
-// 2. AN OUTCOME IS NOT A THROW. `surfaceWriteOutcome` narrates parked, queued
-//    and denied; only a transport failure reaches `surfaceWriteFailure`.
-// 3. UNDO IS OFFERED ONLY WHERE A TRUE REVERSE WRITE EXISTS: star↔unstar,
-//    trash→restore, edit-person back, set-cadence back. Everything else
-//    reports what happened and stops — an `Undo` that would have to invent a
-//    compensating write is a button that lies about what the vault can do.
-
 import { useCallback, useMemo } from "react";
 
 import { OUTCOMES, VERBS } from "@centraid/blueprints/apps/people/people-copy";
@@ -69,15 +53,9 @@ export interface PeopleWrites {
   ) => Promise<boolean>;
 }
 
-export function usePeopleWrites(
-  /** Where a PARKED write sends the member: the frame's Approvals screen —
-   *  the caller navigates, this module only says when. */
-  onParked: () => void
-): PeopleWrites {
+export function usePeopleWrites(onParked: () => void): PeopleWrites {
   const { session } = useReplica();
 
-  /** One command. Returns whether the write may be treated as landed — the
-   *  optimistic contract `surfaceWriteOutcome` narrates. */
   const act = useCallback(
     async (action: string, input: Input): Promise<boolean> => {
       if (!session) return false;
@@ -95,8 +73,6 @@ export function usePeopleWrites(
     [onParked, session]
   );
 
-  /** Report a landed write, with `Undo` beside it exactly where the caller
-   *  holds a true reverse write. */
   const report = useCallback((text: string, undo?: () => Promise<void>) => {
     postStatus(
       text,
@@ -207,7 +183,6 @@ export function usePeopleWrites(
       return true;
     };
 
-    /** No Undo: nothing in the contract un-logs an interaction. */
     const logTouch: PeopleWrites["logTouch"] = async (draft, name) => {
       const landed = await act("log-interaction", {
         party_id: draft.party_id,
@@ -240,8 +215,6 @@ export function usePeopleWrites(
       return landed;
     };
 
-    /** The command flips whatever it finds; the caller says which way it went
-     *  for the sentence. No Undo — a second toggle is a new decision. */
     const toggleReminder: PeopleWrites["toggleReminder"] = async (
       dateId,
       label,
@@ -274,8 +247,6 @@ export function usePeopleWrites(
       if (landed) report(OUTCOMES.channelRemoved(channel.kind));
     };
 
-    /** The one act with no reverse at all — behind the modal confirm, never
-     *  behind an Undo. */
     const mergePeople: PeopleWrites["mergePeople"] = async (source, target) => {
       const landed = await act("merge-people", {
         source_party_id: source.party_id,

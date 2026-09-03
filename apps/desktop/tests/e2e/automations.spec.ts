@@ -19,8 +19,6 @@ import {
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
 
-/** §8 Automations list & viewer, §9 Automation runs & monitoring. */
-
 let env: TestEnv;
 let gateway: MockGateway;
 
@@ -45,15 +43,6 @@ async function openAutomations(page: TypeImport_11i4z7t.Page): Promise<void> {
     .waitFor({ state: "visible" });
 }
 
-/**
- * Open one automation from the overview.
- *
- * The overview is the shared row block, not a clickable tile grid (issue
- * #765): a row is not a control, its trailing action is, and every one of
- * those reads "Open". The `title` is what distinguishes them — it is a title
- * rather than an `aria-label` because the button already renders visible text
- * (aria-label discipline, #708 B.4).
- */
 async function openAutomationRow(
   page: TypeImport_11i4z7t.Page,
   name: string
@@ -61,7 +50,6 @@ async function openAutomationRow(
   await page.getByTitle(`Open ${name}`).click();
 }
 
-/** Overflow menu (⋯) holds Edit / Pause·Resume / Delete after the chat-thread redesign. */
 async function openAutomationMenu(
   page: TypeImport_11i4z7t.Page
 ): Promise<void> {
@@ -69,13 +57,10 @@ async function openAutomationMenu(
   await expect(page.getByRole("menu")).toBeVisible();
 }
 
-/** Run cards open the viewer via Details / View details, not the entry shell. */
 async function openRunDetails(page: TypeImport_11i4z7t.Page): Promise<void> {
   await page.getByTestId("run-entry").first().waitFor({ timeout: 15_000 });
   await page.getByTestId("run-details").first().click({ timeout: 15_000 });
 }
-
-// ─────────────────────────── §8 list & viewer ───────────────────────────
 
 test("8.1 — the automations list renders a row per automation, with its state", async () => {
   gateway.state.automations = [
@@ -88,9 +73,7 @@ test("8.1 — the automations list renders a row per automation, with its state"
     const list = page.getByTestId("automations-overview");
     await expect(list).toContainText("Inbox Digest");
     await expect(list).toContainText("Nightly Backup");
-    // One trailing Open per row — the row itself is not a control.
     await expect(page.getByTitle(/^Open /u)).toHaveCount(2);
-    // The state word takes the row's one mono slot (no more status pills).
     await expect(list).toContainText("Active");
   } finally {
     await closeApp(app);
@@ -103,17 +86,11 @@ test("8.2 — a list load failure shows the error panel and Reconnect recovers",
   try {
     await openAutomations(page);
     const errorCard = page.getByTestId("automations-error");
-    // v9 error shape (#765): what failed, then the consequence. The old
-    // "stored on the gateway and are safe" reassurance was cut by #805 —
-    // the queue sentence is what now carries "nothing was lost".
     await expect(errorCard).toContainText("The scheduler is not answering");
     await expect(errorCard).toContainText("queue until the scheduler is back");
     const retry = errorCard.getByRole("button", { name: "Reconnect" });
-    // Error UI must settle before we rewire the mock — a mid-flight reload
-    // would still see 500 and re-paint the card under the cursor.
     await expect(retry).toBeVisible();
     await expect(retry).toBeEnabled();
-    // Recover: fix the gateway, click Reconnect.
     gateway.state.automationsStatus = 200;
     gateway.state.automations = [
       automationRow({ id: "digest", name: "Inbox Digest" }),
@@ -129,13 +106,7 @@ test('8.3 — "New automation" opens the editor; the draft is posted on Save', a
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    // "New automation" is the page's one filled commit and it lives in the app
-    // bar (#765) — the empty state's own verb is "Browse templates".
     await page.getByRole("button", { name: "New automation" }).first().click();
-    // Draft creation is deliberately deferred to Save — AutomationEditorRoute
-    // calls createAutomation() only from its onSave handler — so opening the
-    // editor posts nothing. Both halves are asserted rather than dropping
-    // either.
     await expect(page.getByTestId("automation-editor")).toBeVisible();
     expect(
       gateway.calls.some(
@@ -184,11 +155,6 @@ test("8.5 — toggling the lifecycle menu posts set-enabled; a failed toggle toa
     await openAutomationRow(page, "Inbox Digest");
     await expect(page.getByTestId("automation-thread")).toBeVisible();
 
-    // Enable/disable lives in the ⋯ menu (Pause when enabled, Resume when not).
-    // Success is silent — toast only on failure. set-enabled is async
-    // (opens an app session first), so poll the mock rather than assert
-    // synchronously. Never-run rows become draft (not "paused") when
-    // disabled, so re-open the menu and assert Resume.
     await openAutomationMenu(page);
     await expect(page.getByTestId("automation-menu-toggle")).toContainText(
       "Pause"
@@ -208,7 +174,6 @@ test("8.5 — toggling the lifecycle menu posts set-enabled; a failed toggle toa
       "Resume"
     );
 
-    // Fault-inject the Resume path — the one that does toast.
     gateway.state.setEnabledStatus = 500;
     await page.getByTestId("automation-menu-toggle").click();
     await expect(statusLine(page)).toContainText(
@@ -282,8 +247,6 @@ test("8.8 — Edit opens the automation builder", async () => {
   }
 });
 
-// ─────────────────────────── §9 runs & monitoring ───────────────────────────
-
 function seedSuccessfulTurn(
   g: MockGateway,
   automationRef: string,
@@ -340,8 +303,6 @@ test("9.1 + 9.2 — Run now opens the forensic viewer and the timeline resolves 
     await openAutomations(page);
     await openAutomationRow(page, "Inbox Digest");
     await page.getByRole("button", { name: "Run now" }).click();
-    // The fired turn lands in the thread feed; Details opens the forensic
-    // viewer, whose timeline resolves to a successful final node.
     await openRunDetails(page);
     await expect(page.getByTestId("run-view")).toBeVisible();
     await expect(page.getByTestId("timeline-final")).toHaveAttribute(
@@ -467,8 +428,6 @@ test("9.7 — Run again fires another turn from the automation thread", async ()
     await openAutomations(page);
     await openAutomationRow(page, "Inbox Digest");
     await page.getByRole("button", { name: "Run now" }).click();
-    // Re-run lives on the automation thread card ("Run again"), not the
-    // run-view detail (those in-view controls were removed as noise).
     await page.getByTestId("run-entry").first().waitFor({ timeout: 15_000 });
     await expect(page.getByTestId("run-details").first()).toBeVisible({
       timeout: 15_000,

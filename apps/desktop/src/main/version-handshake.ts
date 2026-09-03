@@ -1,7 +1,3 @@
-/*
- * Desktop re-export of the shared handshake core (#468 K10 / #512).
- * Implementation lives in @centraid/client so web and desktop stay lockstep.
- */
 export {
   EXPECTED_GATEWAY_VERSION,
   EXPECTED_PROTOCOL_VERSION,

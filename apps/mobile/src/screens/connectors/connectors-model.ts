@@ -1,7 +1,3 @@
-// Connectors copy (#765 §4). Pure — no React. Healthy-row verb is `Pause`,
-// not `Configure`: mobile has no credential wizard. `Expiring` is computed
-// from `tokenExpiresAt` here; the gateway sends a timestamp, not a verdict.
-
 import {
   EMPTY_HEALTH,
   ERROR_HEALTH,
@@ -19,7 +15,6 @@ export interface ConnectorRow {
   title: string;
   sub: string;
   meta: string;
-  /** `net` — this connection to the outside has failed. */
   net: boolean;
   action: string;
   act: ConnectorAct;
@@ -27,10 +22,8 @@ export interface ConnectorRow {
 
 export type ConnectorFilter = "all" | "failing" | "needs-auth" | "paused";
 
-/** `ready` → `full` at this count (between the reference's 5 and 9 fixtures). */
 export const FULL_AT = 8;
 
-/** Live tokens inside this window are worth mentioning before they lapse. */
 const EXPIRING_WITHIN_DAYS = 14;
 
 const MINUTE = 60_000;
@@ -71,7 +64,6 @@ export function lastWorkedPhrase(entry: ConnectionEntry, now: number): string {
   return at === undefined ? "never run" : `last worked ${agoPhrase(at, now)}`;
 }
 
-/** Remaining life when short enough to matter; else `undefined`. */
 export function expiryPhrase(
   entry: ConnectionEntry,
   now: number
@@ -104,7 +96,6 @@ export function statusWord(entry: ConnectionEntry, now: number): string {
 }
 
 export function subLine(entry: ConnectionEntry, now: number): string {
-  // needs-auth: prefer the broker's note over "last worked …".
   const tail =
     entry.status === "needs-auth" && entry.authNote
       ? entry.authNote
@@ -177,7 +168,6 @@ export function filterChips(
   return chips.map(([key, label]) => ({ key, label, on: key === filter }));
 }
 
-/** Meta sentence; at phone width the app bar suppresses it, so it lives on the heading. */
 export function countSentence(entries: readonly ConnectionEntry[]): string {
   const needsAuth = entries.filter((e) => e.status === "needs-auth").length;
   const paused = entries.filter((e) => e.status === "paused").length;
@@ -192,12 +182,10 @@ export function countSentence(entries: readonly ConnectionEntry[]): string {
   ]);
 }
 
-/** Only while a chip narrows the list. */
 export function showingSentence(shown: number, total: number): string {
   return `showing ${String(shown)} of ${String(total)}`;
 }
 
-/** `full`/`empty` from row count — never stored, so they cannot disagree. */
 export function opsStateFor(
   load: "loading" | "error" | "ready",
   count: number
@@ -214,7 +202,6 @@ export function firstNeedingAuth(
   return entries.find((entry) => entry.status === "needs-auth");
 }
 
-/** Standing line. Generic three are the reference's per-state sentences. */
 export function connectorsHealth(
   entries: readonly ConnectionEntry[],
   now: number

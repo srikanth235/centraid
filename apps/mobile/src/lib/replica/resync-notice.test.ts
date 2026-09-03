@@ -1,7 +1,3 @@
-// The phone's memory of "why is my library downloading again" (#883 C6).
-// The sentences themselves belong to `@centraid/client/replica`; what is
-// pinned here is WHICH frames earn a notice and which say nothing.
-
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -31,9 +27,6 @@ describe("the phone's re-sync notice", () => {
       expect(notice?.scopeId).toBe("vault-1");
     });
 
-    // The promise moved from the detail to the HEADLINE (#883 W-F1): it is
-    // true of every full re-sync, so it is stated once where every one of them
-    // shows it rather than four times in seven details.
     test("a full re-sync never reads as lost work", () => {
       noteResyncVerdict(RETENTION_FRAME);
       expect(readResyncNotice()?.headline).toContain(

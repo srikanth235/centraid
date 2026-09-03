@@ -1,12 +1,3 @@
-// Deep-link routing for the whole app: the URL scheme, the screen map, and the
-// two ways a link reaches us (an `centraid://` open, or a tapped notification
-// whose payload carries one).
-//
-// Kept out of `App.tsx` because it is a table, not app wiring — it grows one row
-// per screen, it is the thing to read when a link goes to the wrong place, and
-// it owns the only two `expo-linking` / notification-response subscriptions in
-// the app.
-
 import type { LinkingOptions } from "@react-navigation/native";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";

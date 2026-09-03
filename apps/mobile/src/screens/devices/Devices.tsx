@@ -1,7 +1,3 @@
-// DEVICES — machines holding a copy (#765, spec §7). Deliberately absent, for
-// want of a wire: inbound gateway links, shared recovery nominations,
-// per-device compute writes. Pairing from this phone lives in Settings.
-
 import * as Clipboard from "expo-clipboard";
 import React, { useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
@@ -53,7 +49,6 @@ const EMPTY_BODY = DEVICES_EMPTY_BODY;
 const ERROR_TITLE = "Cannot reach your vault's home machine";
 const ERROR_BODY =
   "Served from a cached copy — pairing and revocation need your vault's home machine.";
-/** The `no-gateway` degrade: same visual, truer sentence. */
 const UNPAIRED_BODY =
   "Pair this phone from Settings to see the devices sharing that vault.";
 
@@ -65,10 +60,8 @@ export default function DevicesScreen({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const devices = useDevices();
-  /* What revoking a device can promise is derived in the vault from the
-     principal kind and printed verbatim; unread, it is not said (#883). */
+
   const boundaryPromise = useDeviceBoundaryPromise();
-  // The row whose trailing verb is open — the sheet is modal, one at a time.
   const [acting, setActing] = useState<DeviceRow | undefined>(undefined);
 
   const state = devicesState(devices);
@@ -84,7 +77,6 @@ export default function DevicesScreen({
   const rowsFor = (group: (typeof groups)[number]): readonly RowsBlockRow[] =>
     group.rows.map((row, index) => {
       const device = group.devices[index];
-      // A tombstone answers to nothing; kept so past writes resolve.
       if (!device || row.off) return row;
       return {
         ...row,
@@ -109,8 +101,6 @@ export default function DevicesScreen({
       <View style={styles.page}>
         <PlaceHeader
           title="Copies"
-          // Pair verb hidden while loading or errored — minting needs the
-          // gateway that is not answering.
           {...(state === "loading" || state === "error"
             ? {}
             : {
@@ -225,7 +215,6 @@ export default function DevicesScreen({
         <DeviceActions
           busy={devices.busy}
           device={acting}
-          // Keyed on the row: each device's sheet keeps its own state.
           key={acting.deviceId}
           onClose={handleCloseActions}
           onRename={handleRename}

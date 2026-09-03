@@ -1,6 +1,3 @@
-// The tile's four overlay slots — selection, vault, kind, state — and nothing
-// else (§4.4). A fifth slot is chrome inside the grid, which §18 forbids.
-
 import { mediaClock } from "@centraid/blueprints/apps/_shared/format-kit";
 import { photosPurgeNote } from "@centraid/blueprints/apps/photos/shared-copy";
 
@@ -9,29 +6,15 @@ import type { PhotoAsset } from "./timeline-model";
 
 export interface VaultFacts {
   vaultId: string;
-  /** DISPLAY ONLY. Never the marker's trigger. */
   label: string;
-  /** Straight off the vault record (§H). There is no vault "kind" — where a
-   *  share goes is a pointer the member owns, not a property of a vault. */
   personal: boolean;
   color?: string;
 }
 
-// ── Slot 2: vault ──────────────────────────────────────────────────────────
-//
-// A 2px rule in the vault's hue on the LEADING edge, plus the initial in mono
-// from rung M. It fires for any vault but the member's own, shared included
-// (§H) — the question is "is this only mine?".
-//
-// Derived from `personal`, NEVER from `label`: renaming the shared vault must
-// not lose the marker, and naming your own "Sharing" must not gain one.
-
-/** The rule itself draws at every rung; only the INITIAL waits for M. */
 export const VAULT_INITIAL_MIN_RUNG: Rung = 2; // M
 
 export interface VaultMark {
   hue: string;
-  /** Shown from rung M up; `undefined` below it. */
   initial?: string;
 }
 
@@ -50,27 +33,16 @@ export function vaultMarkFor(
     : undefined;
   if (!facts || !marksVault(facts.personal)) return undefined;
   const hue = facts.color ?? fallbackHue;
-  // The name is read only AFTER the record has decided the marker fires.
   const initial = facts.label.trim().slice(0, 1).toUpperCase();
   return rung >= VAULT_INITIAL_MIN_RUNG && initial ? { hue, initial } : { hue };
 }
 
-// ── Slot 3: kind ───────────────────────────────────────────────────────────
-//
-// Video duration or `live`, in mono, bottom/trailing. From rung S up: §18 puts
-// the floor at 11px rather than shrinking the type.
-
 export const KIND_MIN_RUNG: Rung = 1; // S
 
-// `1:04`, `12:07`, `1:02:03` — tabular mono, so a column of them lines up.
-// The arithmetic is the kit's (#883 B5): a tile badge and a viewer transport
-// state the same recording's length, so they cannot own two of it.
 export { mediaClock as formatDuration } from "@centraid/blueprints/apps/_shared/format-kit";
 
 export function kindOverlay(asset: PhotoAsset, rung: Rung): string | undefined {
   if (rung < KIND_MIN_RUNG) return undefined;
-  // A Live Photo says `live`, not a duration — that is not what a member is
-  // choosing by.
   if (asset.liveVideoUri) return "live";
   if (asset.kind !== "video") return undefined;
   return asset.durationS === undefined
@@ -78,32 +50,14 @@ export function kindOverlay(asset: PhotoAsset, rung: Rung): string | undefined {
     : mediaClock(asset.durationS);
 }
 
-// ── Slot 4: state ──────────────────────────────────────────────────────────
-//
-// ONE slot, two registers, never both at once: a MARK for custody, or a LINE of
-// mono. Never a fill, never a red dot, never a vanishing tile (§14).
-//
-// The custody triple collapses to a binary: `local-only` takes the mark, the
-// other two say nothing. Marking the steady state fires on everything — no
-// information, and the chrome-inside-the-grid §18 forbids (also `media.ts`).
-
-/** Copy is final (§4.4). About THIS tile's own bytes, which is the whole bar
- *  for entry into this slot. */
 export const STATE_COULD_NOT_DECODE = "could not decode";
 
-/** Below S a 13px stroke glyph is mush; §18 puts the floor at legibility rather
- *  than shrinking the mark. */
 export const CUSTODY_MIN_RUNG: Rung = 1; // S
 
-/** An unlabelled glyph earns its silence by being familiar, not clever. */
 export const CUSTODY_ICON = "CloudOff";
 
-/** The glyph is decorative by the icon contract (DESIGN.md:449), so the meaning
- *  reaches a screen reader through the tile's own label instead. */
 export const CUSTODY_LABEL = "not backed up";
 
-/** Never negative, rounded UP so hours left still read as a day; `undefined`
- *  when unreadable, since an invented countdown is worse than none. */
 export function purgeInDays(
   purgeAt: string | undefined,
   now: number = Date.now()
@@ -118,29 +72,15 @@ export function purgeNote(days: number): string {
   return photosPurgeNote(days);
 }
 
-/**
- * AT MOST ONE of two forms, structurally: a line and a mark cannot collide at
- * the tile's foot, and one-note-per-tile (proto:4004-4020) survives. Every case
- * producing a LINE is one where custody is not the actionable fact.
- */
 export type StateOverlay =
   | {
       form: "line";
       text: string;
-      /**
-       * `net` is text plus a 1px `--net` border; `seam` is text alone; `normal`
-       * is one quiet mono line. `seam` is the expiring register (#765), so a
-       * purge countdown never borrows `--net` and alarms a whole trash shelf.
-       */
       tone: "normal" | "net" | "seam";
     }
   | { form: "custody" };
 
-/** Holds nothing AMBIENT: a fact equally true of every tile on screen belongs
- *  to the screen, not to forty tiles. Defaults to false — a surface with no
- *  signal must not invent one. */
 export interface StateContext {
-  /** This tile's own bytes failed to decode — terminal, and about the tile. */
   decodeFailed?: boolean;
 }
 
@@ -149,45 +89,24 @@ export function stateOverlay(
   rung: Rung,
   context: StateContext = {}
 ): StateOverlay | undefined {
-  // A terminal failure outranks everything.
   if (context.decodeFailed) {
     return { form: "line", text: STATE_COULD_NOT_DECODE, tone: "net" };
   }
-  // On its way out outranks custody: where the bytes live matters less than how
-  // long they will be anywhere at all.
   const days = purgeInDays(asset.purgeAt);
   if (days !== undefined) {
     return { form: "line", text: purgeNote(days), tone: "seam" };
   }
-  // NO `on the gateway` LINE: an unreachable gateway is one ambient fact, and a
-  // per-tile slot would print it forty times. The replica bar states it once.
-  //
-  // The mark means bytes are HERE and nowhere else — the one custody state a
-  // member can lose something to. `queued`/`uploading` fall through to nothing
-  // on purpose: a mark that blinks off as a drain walks the grid is chrome.
   if (rung >= CUSTODY_MIN_RUNG && asset.backupState === "local-only") {
     return { form: "custody" };
   }
   return undefined;
 }
 
-// ── Slot 1: selection ──────────────────────────────────────────────────────
-
-/** 20px circle, top/trailing, 6px in (§4.4). */
 export const SELECTION_DOT = 20;
 export const SELECTION_INSET = 6;
-/** RN has no `outline`, so this is drawn as a border on a sibling overhanging
- *  the tile by exactly this much — same pixels, same geometry. */
+
 export const SELECTION_OUTLINE = 2;
 
-// ── Geometry ───────────────────────────────────────────────────────────────
-
-// A tile's box is known BEFORE its bytes arrive (§14) and kept through a
-// terminal failure, so nothing reflows: skeleton, photograph and failed tile
-// are one rectangle, packed by `justify.ts`.
-
-/** `--skel`, never `--bg-elev`: that reads as a card, and an absence is not a
- *  card (§B). */
 export function tileGround(
   hasBytes: boolean,
   skel: string,

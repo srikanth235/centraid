@@ -1,12 +1,3 @@
-// The create composer on the phone. Title, when, calendar, guests — the same
-// seven fields the editor carries, minus the ones a brand-new event has no
-// answer for yet.
-//
-// The date and time come from the platform's own picker
-// (`@react-native-community/datetimepicker`), never from a typed string: a
-// member on a phone should not be spelling an ISO instant, and the picker is
-// what the `DateTimeField` recipe lowers to on this seat.
-
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -18,9 +9,6 @@ import { Text, TextInput } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
 import { radii, t, useTheme } from "../../kit/theme";
 
-/** The `propose` payload, in the shape the native write path takes. The
- *  vault's own input schema (app.json) is the contract; this is the local
- *  spelling of it. */
 export type AgendaCreateInput = Record<string, ReplicaValue>;
 
 const HOUR_MS = 60 * 60 * 1000;

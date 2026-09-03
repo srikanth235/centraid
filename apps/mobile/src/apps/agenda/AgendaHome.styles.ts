@@ -1,14 +1,9 @@
-// Geometry for Agenda's native surfaces. Colour arrives from `useTheme` at
-// the call site; nothing here names an ink.
-
 import { StyleSheet } from "react-native";
 
 import { radii, t } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
   body: { flex: 1 },
-  /** The day rail's date column — the row's identity, not a separate header
-   *  interleaved with the events under it. */
   dateCol: {
     alignItems: "center",
     borderRadius: radii.md,
@@ -41,9 +36,6 @@ export const styles = StyleSheet.create({
   headerActions: { flexDirection: "row", gap: 14 },
   headerCopy: { flex: 1 },
   list: { gap: 14, paddingBottom: 24, paddingHorizontal: 18 },
-  /** The held-write mark: a 2pt rule on the reading edge and the words beside
-   *  it. Drawn inline here rather than in a shared kit file — it is two
-   *  elements, and a component for it would be a dependency for nothing. */
   pendingMark: {
     borderStartWidth: 2,
     marginTop: 4,
@@ -62,15 +54,11 @@ export const styles = StyleSheet.create({
   searchInput: { ...t("body"), flex: 1 },
   subtitle: { ...t("control") },
   title: { ...t("title") },
-  /** THE DAY-CONTEXT RIBBON (#834): a costless fact about the day on a 2pt
-   *  rule, in the annotation register — decoration on the day, never a card
-   *  competing with a meeting. */
   ribbon: {
     ...t("annotLabel"),
     borderStartWidth: 2,
     paddingStart: 8,
   },
-  /** The collapsed due shelf and its rows. 44pt targets, without exception. */
   shelfRow: {
     borderStartWidth: 2,
     justifyContent: "center",
@@ -80,8 +68,6 @@ export const styles = StyleSheet.create({
   shelfText: { ...t("annotLabel") },
   shelfToggle: { justifyContent: "center", minHeight: 44 },
 
-  /** The now line: a hairline in the attention tone with its time at the
-   *  reading edge. Drawn on the Day surface only. */
   nowLine: { alignItems: "center", flexDirection: "row", gap: 6 },
   nowRule: { flex: 1, height: 1 },
   nowText: { ...t("annotLabel"), fontVariant: ["tabular-nums"] as const },

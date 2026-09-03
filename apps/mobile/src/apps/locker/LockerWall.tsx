@@ -1,18 +1,3 @@
-// THE THREE WALLS (README-Locker §1, §6; FLOWS.md "First run", "Unlock").
-//
-// One field, one verb, and a sentence about what a session is. Both gates are
-// the same shape because they are the same question asked at two moments, and
-// both state the boundary IN WORDS — §7 forbids a lock icon standing in for a
-// sentence, so there is no key glyph on either.
-//
-// NOTHING IS BROWSABLE BEHIND ANY OF THEM. `LockerScreen.tsx` withdraws the
-// band and every list while one of these stands (`shelves.suppressesNavigation`),
-// and this is what stands in their place.
-//
-// THE THIRD WALL IS DENIAL, and it is not a failure: a revoked grant is a
-// receipt, a scope, and the fact that nothing was deleted (§4, "Denied vs.
-// refused"). It offers no retry, because there is nothing here to retry.
-
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -38,18 +23,13 @@ import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { DEVICE_NOTE, DEVICE_REVOKE, DEVICE_UNLOCK } from "./locker-seat-copy";
 
-/** The gates' own headings. `Lock.tsx` draws the same two words on the web. */
 const SETUP_TITLE = "Choose a passphrase";
 const LOCK_TITLE = "Locked";
 
 export interface LockerWallProps {
   mode: "setup" | "lock" | "denied";
-  /** A request is in flight. The commit says so by being unavailable, never
-   *  by a spinner — this app has no spinner anywhere. */
   busy: boolean;
-  /** The host's refusal, in its own words, backoff sentence included. */
   error: string;
-  /** A device credential is enrolled, so there is a second way in. */
   deviceEnrolled: boolean;
   onSubmit: (secret: string) => void;
   onDeviceUnlock: () => void;
@@ -87,8 +67,6 @@ export default function LockerWall({
   }
 
   const setup = mode === "setup";
-  // The twelve-character rule is enforced HERE, in front of the member, rather
-  // than by a round trip that comes back refused.
   const tooShort =
     setup && secret.length > 0 && secret.length < PASSPHRASE_MINIMUM;
   const ready =
@@ -113,9 +91,6 @@ export default function LockerWall({
 
       <TextInput
         accessibilityLabel={setup ? SETUP_PLACEHOLDER : LOCK_PLACEHOLDER}
-        // An RN TextInput's accessibilityLabel never reaches the iOS a11y tree
-        // (README "Known caveats"), so this field had NO selector at all — the
-        // reason the passphrase-floor journey is still an unowned gap.
         testID={TEST_IDS.locker.gateField}
         autoCapitalize="none"
         autoComplete={setup ? "new-password" : "current-password"}

@@ -49,7 +49,6 @@ interface ContentSeed {
   sha256: string;
 }
 
-/** Count what actually crosses the driver, which is what pushdown is about. */
 class CountingDriver extends NodeSqliteDriver {
   rowsReturned = 0;
 
@@ -128,14 +127,8 @@ function seedContentItems(file: string, items: readonly ContentSeed[]): void {
   database.close();
 }
 
-/** Scripts whose UTF-8 bytes order differently from their code points. */
 const TITLES = ["Doc", "Éclair", "école", "日記", "Zebra"];
 
-/**
- * Ties on every ordered column, holes where the evaluator sorts nulls, and the
- * same shape in two vaults: the fixture a per-scope page can only survive by
- * paging on the evaluator's own total key, under its own BINARY collation.
- */
 function orderedSeeds(vaultId: string, count: number): DocumentSeed[] {
   return Array.from({ length: count }, (_, index) => ({
     document_id: `${vaultId}-${String(index).padStart(3, "0")}`,
@@ -202,11 +195,6 @@ function mount(
   return { reader, driver };
 }
 
-/**
- * The mounted reader answers from ONE composed plan (#883 D1): the shared read
- * grammar's compiler, unioned over every attached vault database. These are the
- * seams that plan cannot reach into SQL, and what the phone does at each.
- */
 describe("mounted reads with pushdown", () => {
   test("an equality filter answers from SQL instead of parsing every row", async () => {
     const root = tempDirSync("centraid-pushdown-");
@@ -225,7 +213,6 @@ describe("mounted reads with pushdown", () => {
     expect(filtered.rows.map((row) => row.values.document_id)).toStrictEqual([
       "personal-0",
     ]);
-    // One shape-metadata row plus the single matching document.
     expect(driver.rowsReturned).toBeLessThan(5);
     reader.close();
   });
@@ -250,8 +237,6 @@ describe("mounted reads with pushdown", () => {
         .map((row) => row.values.document_id)
         .sort((left, right) => String(left).localeCompare(String(right)))
     ).toStrictEqual(["personal-0", "personal-499"]);
-    // Metadata, one pushed canonical hit, and one mutation-addressed base cross
-    // the driver. The other 498 vault rows remain inside SQLite.
     expect(driver.rowsReturned).toBeLessThan(12);
     reader.close();
   });
@@ -341,8 +326,6 @@ describe("mounted reads with pushdown", () => {
     const root = tempDirSync("centraid-pushdown-saturated-");
     const personal = path.join(root, "personal.db");
     seed(personal, "personal", documentSeeds("personal", 3));
-    // `seed` already stored one `identical-bytes` row; four more make the first
-    // page of three collapse into a single badged row.
     seedContentItems(personal, [
       ...Array.from({ length: 4 }, (_, index) => ({
         content_id: `same-${index}`,
@@ -365,8 +348,6 @@ describe("mounted reads with pushdown", () => {
     });
 
     expect(page.rows).toHaveLength(3);
-    // And it says what the short first page cost it, rather than paying for
-    // the whole matching set in silence.
     expect(page.degraded).toStrictEqual([
       {
         fallback: "dedupe-collapse",
@@ -420,8 +401,6 @@ describe("ordered mounted reads with pushdown", () => {
     ];
     const compared = await Promise.all(
       orders.map(async (orderBy) => {
-        // Both vaults hold fewer rows than the grammar's default page, so
-        // the unlimited read is the whole merged answer.
         const [whole, paged] = await Promise.all([
           reader.read("docs", { entity: "core.document", orderBy }),
           reader.read("docs", { entity: "core.document", orderBy, limit: 7 }),
@@ -460,8 +439,6 @@ describe("ordered mounted reads with pushdown", () => {
     });
 
     expect(recent.rows).toHaveLength(10);
-    // Shape metadata, one aggregate probe verdict, and the ten-row page. The
-    // other 490 documents are ordered and dropped inside SQLite.
     expect(driver.rowsReturned).toBeLessThan(20);
     reader.close();
   });
@@ -482,8 +459,6 @@ describe("ordered mounted reads with pushdown", () => {
       { vaultId: "personal", databaseName: personal },
     ]);
 
-    // SQLite sorts a numeric title below every text one, so a DESC page of two
-    // would leave it behind and quietly answer a question the evaluator refuses.
     await expect(
       reader.read("docs", {
         entity: "core.document",
@@ -504,8 +479,6 @@ describe("ordered mounted reads with pushdown", () => {
       { vaultId: "personal", databaseName: personal },
     ]);
 
-    // `personal-5` sorts outside an ASC page of two; the order column has to be
-    // disclosed on every row of the set, not merely on the page.
     await expect(
       reader.read("docs", {
         entity: "core.document",

@@ -293,7 +293,6 @@ export async function streamAssistantTurn(
     effort?: string;
     harnessKind?: string;
     attachments?: AssistantAttachment[];
-    /** One approved provider, or every provider approved so far this turn (#567). */
     providerConsent?: string | string[];
     idempotencyKey: string;
   },
@@ -355,7 +354,7 @@ export async function streamAssistantTurn(
             onEvent(event);
           }
         } catch {
-          // Skip one malformed optional frame and keep the turn alive.
+          // Intentionally empty.
         }
       }
       boundary = buffer.indexOf("\n\n");

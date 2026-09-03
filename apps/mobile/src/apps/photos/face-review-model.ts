@@ -1,13 +1,5 @@
-// The pure fringe of the native Face review screen (#712) — the answer→state
-// table, the failure sentences, and two parsing helpers. Split from
-// `FaceReview.tsx` so the screen file stays a screen (and inside the
-// repo-hygiene size budget); everything here is a function of its inputs and
-// carries no React.
-
 export const CROP_PX = 120;
 
-/** What a failed answer is called on the status bar. Never a stack trace:
- *  the member asked a question of their own library and deserves a sentence. */
 export const ANSWER_FAILURE = {
   confirm: "Face not confirmed",
   reject: "Face not rejected",

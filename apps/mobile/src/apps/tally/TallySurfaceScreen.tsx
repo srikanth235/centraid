@@ -1,17 +1,3 @@
-// THE SURFACE WHOSE DOOR IS ON ANOTHER SEAT.
-//
-// Export is `custodian` in SURFACES.md's seat column: the file is saved beside
-// the gateway, and this phone has no door to it. A greyed *Export* button would
-// teach that Export is broken; this screen states what the surface IS, reads
-// the payload so it can say honestly HOW MUCH would leave, carries §6's foot,
-// and names where the act happens (docs/blueprint-seats.md — a seat states a
-// DIFFERENT fact, in different words, rather than a disabled copy of another
-// seat's control).
-//
-// THE READ IS REAL. `queries/export.ts` answers with the rows and the window it
-// used, so the counts here are the file's counts and not a guess; `truncated`
-// is how the payload says the window was reached, and the sentence says so.
-
 import React, { useEffect } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 

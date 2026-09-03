@@ -1,20 +1,3 @@
-// ONE ITEM — `locker/item` (README-Locker §1, §5; FLOWS.md).
-//
-// METADATA READS PLAINLY; A SECRET IS A ROW WITH A VERB, and the row states
-// the cost of using it — about thirty seconds, and a receipt. Which rows exist
-// is `item-fields.ts`'s answer, shared with the desktop, because "does a card
-// have a security code row" is a product law and not a rendering detail.
-//
-// NOTHING HERE IS REVEALED UNTIL THE MEMBER ASKS. The screen arrives with no
-// detail at all: opening the item is itself a per-item gesture, so the permit
-// gate stands first and names the field this TYPE seals
-// (`format.primarySealedField`) — asking a card for its password would mint a
-// permit against a field the item does not have.
-//
-// THE COUNTDOWN IS ONE CLOCK. A single `now` ticks the screen once a second so
-// every revealed row agrees about how long is left; the store's own tick is
-// what actually conceals them.
-
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -81,7 +64,6 @@ import LockerPermitGate from "./LockerPermitGate";
 import LockerScreen from "./LockerScreen";
 import { useLockerVault } from "./useLockerVault";
 
-/** One tick for every countdown on the screen. */
 const TICK_MS = 1000;
 
 export default function LockerItemScreen({
@@ -103,8 +85,6 @@ export default function LockerItemScreen({
     return () => clearInterval(timer);
   }, []);
 
-  // Leaving takes every reveal with it. Not a nicety: a revealed value left in
-  // the bag would outlive the screen that justified it.
   useEffect(() => closeLockerItem, []);
 
   const detail = vault.bag.detail?.item_id === itemId ? vault.bag.detail : null;
@@ -119,8 +99,6 @@ export default function LockerItemScreen({
     (field: string) => {
       const value = vault.bag.revealed[field];
       if (!value) {
-        // Nothing revealed yet: copying costs the same permit as revealing,
-        // so it asks for one rather than failing quietly.
         ask(field);
         return;
       }

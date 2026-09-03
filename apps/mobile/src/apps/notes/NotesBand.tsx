@@ -1,10 +1,3 @@
-// The band Notes has claimed, rendered: the frame's Home capsule on the page
-// colour, then the app's destinations as one group on `bgElev`, over the
-// shared plate geometry in `kit/band-surface.ts` (#882).
-//
-// When the member hands the band back (`owner === "host"`) the tab group goes
-// and the capsule STAYS — the way home is what an app may never take away.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -29,7 +22,6 @@ import type { ThemeColors } from "../../kit/theme";
 import { resolveNotesBand } from "./notes-band";
 import type { NotesBandDestinationKey } from "./notes-band";
 
-/** The group plate's inner gutter and the gap between the two plates. */
 const GROUP_GUTTER = 2;
 const PLATE_GAP = 8;
 
@@ -37,7 +29,6 @@ export interface NotesBandProps {
   owner: BandOwner;
   current: NotesBandDestinationKey;
   onSelect: (key: NotesBandDestinationKey) => void;
-  /** The capsule's one tap: all apps and places, in one move. */
   onHome: () => void;
 }
 
@@ -78,9 +69,6 @@ export default function NotesBand({
               key={destination.key}
               accessibilityRole="tab"
               accessibilityLabel={destination.label}
-              // The DESTINATION KEY, never the label: the label is copy a v-next
-              // handoff may re-word, and a flow that tapped it would then tap
-              // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.notes}${destination.key}`}
               accessibilityState={{ selected: active }}
               onPress={() => onSelect(destination.key)}

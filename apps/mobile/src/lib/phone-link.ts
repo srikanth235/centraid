@@ -1,10 +1,3 @@
-// Pairing state + tunnel lifecycle for the phone ↔ gateway link (#263).
-// Two ticket shapes, one Settings entry: desktop `centraid-pair` and headless
-// `centraid-gw-pair` (only its refreshable `gw` hint is kept; `t`/`s` are
-// one-time). Each pairing is a VaultLink and this module reads the ACTIVE
-// link's LINK_* slot. The phone holds no gateway bearer — the peer attaches
-// auth. The device secret key is device-wide, never per-vault.
-
 import { Platform } from "react-native";
 
 import {
@@ -51,7 +44,6 @@ export class PhoneLinkError extends Error {
 }
 
 export async function hydratePhoneLink(): Promise<void> {
-  // Registry first: it projects the active link into the LINK_* keys read below.
   await hydrateVaultLinks();
   await Promise.all([
     hydrateSecure(LINK_ENDPOINT_HINT_KEY, ""),
@@ -117,10 +109,8 @@ export async function pair(
     }
     const desktopName = result.desktopName ?? "";
     const deviceId = result.deviceId;
-    // A new pairing may target a different gateway — drop the old proxy.
-    await stopTunnel().catch(() => {
-      /* not running */
-    });
+
+    await stopTunnel().catch(() => {});
     await addVaultLink({
       gatewayId: result.gatewayId,
       desktopName,
@@ -131,7 +121,6 @@ export async function pair(
     return { desktopName, deviceId };
   }
 
-  // Headless gateway ticket.
   const result = await pairWithGateway({
     ticket: parsed.gw,
     ticketId: parsed.t,
@@ -146,9 +135,7 @@ export async function pair(
       result.error ?? "Pairing was refused by the gateway."
     );
   }
-  await stopTunnel().catch(() => {
-    /* not running */
-  });
+  await stopTunnel().catch(() => {});
   const gatewayId = result.gatewayId;
   if (!gatewayId) {
     throw new PhoneLinkError(
@@ -156,8 +143,6 @@ export async function pair(
       "Gateway did not return its EndpointId."
     );
   }
-  // Hostname first: this is a switcher row's SECOND line, and `vaultName` made
-  // both lines read the same word.
   const desktopName =
     result.gatewayName || result.vaultName || parsed.vaultName || "Gateway";
   const deviceId =
@@ -174,7 +159,6 @@ export async function pair(
   const metadata = new Map(
     returnedVaults.map((vault) => [vault.vaultId, vault] as const)
   );
-  // Ordered: addVaultLink writes one shared projection, first grant stays active.
   const links = await returnedVaultIds.reduce<Promise<VaultLink[]>>(
     async (previous, vaultId) => {
       const prior = await previous;
@@ -200,21 +184,17 @@ export async function pair(
   return { desktopName, deviceId, vaultIds: returnedVaultIds };
 }
 
-/** Keeps the device secret key, so a re-pair presents the same EndpointId. */
 export async function unpair(): Promise<void> {
   await hydrateVaultLinks();
   const active = getActiveVaultLink();
   if (isTunnelAvailableImpl()) {
     if (active && isLastVaultLinkForGateway(active))
       await revokePushRegistration().catch(() => undefined);
-    await stopTunnel().catch(() => {
-      /* already stopped */
-    });
+    await stopTunnel().catch(() => {});
   }
   if (active) await removeVaultLink(active.id);
 }
 
-/** Stops the tunnel only when the gateway changes. */
 export async function switchVaultLink(
   id: string
 ): Promise<VaultLink | undefined> {
@@ -224,14 +204,11 @@ export async function switchVaultLink(
   const next = await setActiveVaultLink(id);
   if (!next) return undefined;
   if (isTunnelAvailableImpl() && prev && prev.gatewayId !== next.gatewayId) {
-    await stopTunnel().catch(() => {
-      /* not running */
-    });
+    await stopTunnel().catch(() => {});
   }
   return next;
 }
 
-/** Local tuple only — the vault stays on the gateway. */
 export async function forgetVaultLink(id: string): Promise<void> {
   await hydrateVaultLinks();
   const active = getActiveVaultLink();
@@ -240,9 +217,7 @@ export async function forgetVaultLink(id: string): Promise<void> {
   if (wasActive && isTunnelAvailableImpl()) {
     if (removed && isLastVaultLinkForGateway(removed))
       await revokePushRegistration().catch(() => undefined);
-    await stopTunnel().catch(() => {
-      /* not running */
-    });
+    await stopTunnel().catch(() => {});
   }
   await removeVaultLink(id);
 }
@@ -263,10 +238,8 @@ async function revokePushRegistration(): Promise<void> {
   );
 }
 
-// Deduplicate concurrent starts (Home and a cover can race on mount).
 let startInFlight: Promise<{ baseUrl: string } | undefined> | undefined;
 
-/** `undefined` when unpaired or without the native module (Expo Go). */
 export async function ensureTunnelStarted(): Promise<
   { baseUrl: string } | undefined
 > {
@@ -307,15 +280,12 @@ export async function ensureTunnelStarted(): Promise<
   }
 }
 
-/** No-op remover when the module is unavailable. */
 export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): {
   remove: () => void;
 } {
   if (!isTunnelAvailableImpl()) {
     return {
-      remove: () => {
-        /* noop */
-      },
+      remove: () => {},
     };
   }
   return addTunnelStatusListener(cb);

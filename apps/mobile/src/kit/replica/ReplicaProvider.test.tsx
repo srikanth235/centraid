@@ -1,14 +1,3 @@
-// The four-scope cap is a bound on what is OPEN at once, not on which vaults a
-// member may open (#880 W3.4, docs/mobile-offline.md). Activating a vault
-// outside the mounted four used to re-key the write target and nothing else, so
-// the Space a member had just tapped stayed unreadable until the app was
-// relaunched. These tests pin the live remount, and pin that a switch INSIDE
-// the mounted four still costs nothing.
-//
-// Everything native is mocked outright: the default `@centraid/mobile` vitest
-// project carries no react-native transform, so any real import that reaches
-// op-sqlite or expo-secure-store fails to parse before a test runs.
-// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -48,7 +37,6 @@ const registry = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
 }));
 
-/** The device axis. Every double below used to pin it to "offline" (#905). */
 const net = vi.hoisted(() => ({
   deviceOnline: false,
   base: undefined as string | undefined,
@@ -56,7 +44,6 @@ const net = vi.hoisted(() => ({
 
 const world = vi.hoisted(() => ({
   enrolled: [] as string[],
-  /** Scopes the gateway has taken away; the plan can never return them. */
   revoked: [] as string[],
   mountPlans: 0,
   purged: [] as string[],
@@ -158,8 +145,6 @@ vi.mock(
     }) as unknown as Partial<CompatibilityModule>
 );
 
-/** One inert double stands in for both the mounted reader and the multiplex
- *  feed: this test is about the mount lifecycle, not about either of them. */
 const Inert = vi.hoisted(() => {
   class InertNativeDouble {
     close(): void {}
@@ -292,8 +277,6 @@ vi.mock(
     }) as unknown as Partial<StoreModule>
 );
 
-// The cap itself lives here and is exercised for real: active vault first, the
-// rest in registry order, sliced to MAX_MOUNTED_NATIVE_SCOPES.
 vi.mock(
   import("./replica-mount"),
   () =>
@@ -332,15 +315,12 @@ let seen: ReplicaContextValue | undefined;
 
 function Probe(): null {
   const value = useReplica();
-  // In an effect, not during render: the provider republishes a fresh context
-  // object on every commit, and reading it out here keeps the probe pure.
   React.useEffect(() => {
     seen = value;
   }, [value]);
   return null;
 }
 
-/** The mount is a chain of awaits, so one act pass is not enough. */
 async function settle(): Promise<void> {
   for (let pass = 0; pass < 8; pass += 1) {
     // oxlint-disable-next-line no-await-in-loop -- sequential flushes ARE the work
@@ -411,16 +391,12 @@ describe("activating a vault outside the mounted four (#880 W3.4)", () => {
   it("re-plans the mounted set around the newly active fifth vault", async () => {
     await activate("vault-5");
 
-    // THE REGRESSION THIS PINS: before the remount, this stayed the launch-time
-    // four and vault-5 was unreadable until the process restarted.
     expect(mountedVaultIds()).toContain("vault-5");
     expect(mountedVaultIds()).toHaveLength(4);
     expect(world.mountPlans).toBe(2);
     expect(seen?.ready).toBe(true);
   });
 
-  // A remount is open/close over per-vault SQLite files. Purging one would take
-  // that vault's durable outbox with it — the exact thing a switch must not do.
   it("closes the evicted sessions without purging a single outbox", async () => {
     await activate("vault-5");
 
@@ -428,8 +404,6 @@ describe("activating a vault outside the mounted four (#880 W3.4)", () => {
     expect(world.purged).toStrictEqual([]);
   });
 
-  // Sabotage target: drop the `scopes.some(...)` guard and every switch — every
-  // freshness commit, even — tears the read plane down and rebuilds it.
   it("costs nothing when the new active vault is already mounted", async () => {
     await activate("vault-3");
 
@@ -442,20 +416,15 @@ describe("activating a vault outside the mounted four (#880 W3.4)", () => {
     ]);
   });
 
-  // One attempt per vault. A scope the gateway will not hand back must leave
-  // the member on a settled screen, not in a mount loop.
   it("does not spin when the vault cannot be mounted at all", async () => {
     world.revoked = ["vault-5"];
     await activate("vault-5");
 
-    // The plan is asked exactly once more, and then the provider settles.
     expect(world.mountPlans).toBe(2);
     expect(seen?.ready).toBe(true);
   });
 });
 
-// Every double above pinned the device offline, so the suite agreed with a
-// provider that never connects. These pin the other half of the axis (#905).
 describe("a device that is online with a gateway in reach (#905)", () => {
   const BASE = "http://127.0.0.1:9999";
 
@@ -495,3 +464,4 @@ describe("a device that is online with a gateway in reach (#905)", () => {
     expect(seen?.reachability).not.toBe("device-offline");
   });
 });
+// @vitest-environment jsdom

@@ -1,7 +1,4 @@
 import { createHash } from "node:crypto";
-// Enqueue: addressing bytes and the structural maths the gateway is told at
-// `begin`. Sizes here are exact, not approximate — `sealedSize` is a promise
-// the client makes before uploading and `verifyRemoteSealedObject` checks it.
 import { rmSync } from "node:fs";
 import path from "node:path";
 
@@ -58,7 +55,6 @@ describe("enqueue", () => {
       expect(item.state).toBe("pending");
       expect(item.frameCount).toBe(1);
       expect(item.partCount).toBe(1);
-      // header 37 + (nonce 12 + algo 1 + 5000 + tag 16) + directory 48 + trailer 13
       expect(item.sealedSize).toBe(BYTES.byteLength + 94 + 33);
       expect(item.mediaType).toBe("image/jpeg");
     });
@@ -119,7 +115,6 @@ describe("enqueue", () => {
         };
       };
       await sha256OfFile(bigOpen, "file://big");
-      // Never a single read of the whole file; every window is capped at 4 MiB.
       expect(Math.max(...reads)).toBeLessThanOrEqual(FRAME_BYTES);
       expect(reads).toStrictEqual([FRAME_BYTES, FRAME_BYTES, 10]);
     });

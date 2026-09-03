@@ -1,9 +1,3 @@
-// Interop proof: bytes sealed by the device sealer are opened by the VAULT's
-// own reader (`packages/vault/src/blob/seal-frames.ts`, node:crypto) and pass
-// the same layout assertions `verifyRemoteSealedObject` makes on arrival.
-// Importing the real reader — rather than re-deriving the format in a fixture —
-// is the point: it is what stops the two implementations drifting.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -43,7 +37,6 @@ function shaOf(bytes: Uint8Array): string {
   return new IncrementalSha256().update(bytes).digestHex();
 }
 
-/** Seal a whole object exactly as the drainer does: directory once, then parts. */
 async function sealWholeObject(plain: Uint8Array): Promise<Uint8Array> {
   const sha256 = shaOf(plain);
   const frameCount = frameCountFor(plain.byteLength);
@@ -78,10 +71,6 @@ async function sealWholeObject(plain: Uint8Array): Promise<Uint8Array> {
   return out;
 }
 
-/**
- * Re-run the checks `verifyRemoteSealedObject` performs against the provider,
- * using the vault's reader, and return the recovered plaintext.
- */
 function vaultUnseal(
   sealed: Uint8Array,
   sha256: string,
@@ -102,7 +91,6 @@ function vaultUnseal(
     buf.subarray(directoryStart, buf.length - VAULT_TRAILER_BYTES)
   );
   expect(directory.totalSize).toBe(expectedPlaintextSize);
-  // The layout assertion that fires if sealedSizeFor/frameSealedLengths drift.
   const framesEnd =
     VAULT_HEADER_BYTES +
     directory.sealedLens.reduce((total, length) => total + length, 0);
@@ -131,8 +119,6 @@ describe("CBSF device sealer", () => {
     expect(FRAME_BYTES).toBe(DEFAULT_FRAME_SIZE);
   });
 
-  // Spans every structural branch: empty, sub-frame, exact frame boundary,
-  // multi-frame single part, and an object that spills past one 16 MiB part.
   const sizes = [
     { label: "empty", size: 0 },
     { label: "one byte", size: 1 },
@@ -143,10 +129,6 @@ describe("CBSF device sealer", () => {
     { label: "two parts", size: FRAME_BYTES * 4 + 17 },
   ] as const;
 
-  // The multi-frame sizes seal 64+ MiB; fine bare, above the 5s default
-  // under v8 coverage instrumentation — measured per-test budget.
-  // #496 — under full monorepo parallel load the two-parts case can exceed
-  // 15s on a busy host; budget is still well below a hang.
   it.each(sizes)(
     "round-trips $label through the vault reader",
     async ({ size }) => {
@@ -154,7 +136,6 @@ describe("CBSF device sealer", () => {
       const sha256 = shaOf(plain);
       const sealed = await sealWholeObject(plain);
 
-      // The size the gateway was told at `begin` must be what actually landed.
       expect(sealed.byteLength).toBe(sealedSizeFor(size, frameCountFor(size)));
 
       const recovered = vaultUnseal(sealed, sha256, size);
@@ -165,8 +146,6 @@ describe("CBSF device sealer", () => {
   );
 
   it("seals byte-identically on a re-seal, so a replayed PUT is a no-op", async () => {
-    // The property the durable queue leans on: HMAC-derived nonces make a
-    // crash-resumed re-seal bit-for-bit identical to what the provider holds.
     const plain = plaintextOf(FRAME_BYTES + 5);
     const first = await sealWholeObject(plain);
     const second = await sealWholeObject(plain);
@@ -193,7 +172,6 @@ describe("CBSF device sealer", () => {
       directory.offsets[0]!,
       directory.offsets[0]! + directory.sealedLens[0]!
     );
-    // Replaying frame 0 as frame 1 must fail GCM's AAD check.
     expect(() =>
       unsealFrame(Buffer.from(KEY), sha256, 1, trailer.frameCount, frame0)
     ).toThrow("Unsupported state or unable to authenticate data");

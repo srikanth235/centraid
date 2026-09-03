@@ -1,27 +1,3 @@
-// Tasks' RNTL tier (#890 W5). ONE cold renderer for the whole app, because the
-// RN host tree costs seconds to boot: every Tasks claim that needs it is
-// consolidated here rather than spawning a second renderer file (TESTING.md,
-// "React Native component tests").
-//
-// WHAT ONLY THIS TIER CAN FALSIFY, and why each case below is here:
-//  - real accessibility ROLE/NAME/STATE traits — `getByRole("checkbox", …)`
-//    queries RN's own accessibility tree, so a row that stops publishing
-//    `checked` fails here. The DOM stub maps every RN primitive onto a `div`
-//    and echoes the props it was handed, so it can only prove a prop was
-//    passed, never that RN built an accessibility node from it.
-//  - the real RESPONDER tree — `fireEvent.press` traverses real `Pressable`
-//    responder wiring, `disabled` short-circuiting included. The stub's
-//    `Pressable` is a `<button onClick>`, and a disabled RN row still fires
-//    there.
-//  - real `FlatList` behaviour — `TasksRows` renders through the host list, so
-//    the empty slot, the window foot and the row order are the list's own.
-//  - real `StyleSheet` flattening — `StyleSheet.flatten` over the registered
-//    sheet and its array styles, not the stub's `data-style` JSON echo.
-//
-// Device seams are the project's (`src/test/native-device-seams.ts`). Every
-// Tasks component, every string table and every blueprint model is real; only
-// the replica read layer — the device database — is substituted here.
-
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { StyleSheet } from "react-native";
@@ -57,9 +33,6 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
   })),
 }));
 
-// The replica read layer stands in for the on-device database. `useTasks` and
-// every blueprint projection above it stay real, so the board arithmetic under
-// test is the shipped arithmetic; only the rows' arrival is substituted.
 vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -77,7 +50,6 @@ vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
 const NOW = "2026-08-30T09:00:00.000Z";
 const styles = makeTasksStyles(resolveTheme("light").colors);
 
-/** One task row, shaped as the projection hands it on. */
 function task(
   id: string,
   title: string,
@@ -93,7 +65,6 @@ function task(
   } as Task;
 }
 
-/** The real place projection, so the rendered list is the shipped list. */
 function itemsFor(tasks: readonly Task[], limit: number) {
   const groups =
     groupsFor({
@@ -147,16 +118,6 @@ describe("Tasks, on the real React Native host tree", () => {
   });
 
   it("mounts the whole route, band included, over the real glyph registry", () => {
-    // The inverse of the pin this replaced (#905). `tasks-band.ts` names
-    // `"Inbox"` for the third band destination and again as the More sheet's
-    // first row; `@centraid/design` shipped no such glyph, so `resolveIconName`
-    // threw inside `TasksBand`'s render and the shipped route could not mount
-    // at all — the device gate found it as an error boundary reading
-    // "Unknown mobile icon name: Inbox" where the Tasks list should have been.
-    //
-    // Nothing cheaper sees this. `tasks-band.test.ts` asserts the icon TABLE,
-    // never that a name in it RESOLVES; the stub tier never mounts the band.
-    // It takes a real renderer over the real registry, which is this tier.
     const screen = render(
       <TasksHome
         navigation={{ navigate: vi.fn<() => void>() } as never}
@@ -164,8 +125,6 @@ describe("Tasks, on the real React Native host tree", () => {
       />
     );
 
-    // Counted, not merely non-throwing: a band that drew zero destinations
-    // would also not throw, and that is the same route being missing.
     expect(
       TASKS_BAND_DESTINATIONS.filter(
         (destination) => screen.queryAllByText(destination.label).length > 0
@@ -176,15 +135,10 @@ describe("Tasks, on the real React Native host tree", () => {
   it("publishes each row as a native checkbox carrying its own checked trait", () => {
     const screen = renderRows([task("t1", "Renew the passport")]);
 
-    // RNTL resolves `checkbox` through RN's accessibility tree, so this fails
-    // if the box stops being one — a fact a prop echo cannot establish.
     expect(
       screen.getByRole("checkbox", { name: "Renew the passport" }).props
     ).toMatchObject({ accessibilityState: { checked: false } });
 
-    // A closed row publishes the OPPOSITE trait from the same node. Rendered
-    // through `TaskRow` directly: Today's projection withholds closed rows, and
-    // the trait is the row's claim, not the place's.
     const closed = render(
       <TaskRow
         task={task("t2", "File the receipts", { status: "completed" })}
@@ -214,8 +168,6 @@ describe("Tasks, on the real React Native host tree", () => {
   });
 
   it("refuses the press on a read-only row rather than merely dimming it", () => {
-    // The stub tier would still fire this: its `Pressable` is a DOM button, and
-    // `disabled` on an RN `Pressable` is responder-level, not attribute-level.
     const onToggle = vi.fn<(row: Task) => void>();
     const screen = renderRows(
       [task("t1", "Held by another vault", { [REPLICA_CAN_WRITE]: false })],
@@ -239,10 +191,6 @@ describe("Tasks, on the real React Native host tree", () => {
     const onShowMore = vi.fn<() => void>();
     const screen = renderRows(many, { onShowMore }, 20);
 
-    // The host list renders what it is handed, in order: row 59 is absent from
-    // the accessibility tree, not merely hidden by a style.
-    // Two nodes per row carry the title — the box and the row body — so the
-    // question is presence in the tree, not a unique match.
     expect(screen.queryAllByLabelText("Task 00").length).toBeGreaterThan(0);
     expect(screen.queryAllByLabelText("Task 59")).toHaveLength(0);
     fireEvent.press(screen.getByRole("button", { name: "Show more" }));
@@ -250,8 +198,6 @@ describe("Tasks, on the real React Native host tree", () => {
   });
 
   it("says the day-one line through FlatList's empty slot, not an empty list", () => {
-    // `ListEmptyComponent` is host-list behaviour: it renders INSTEAD of rows,
-    // and only when the data really is empty.
     const screen = renderRows([]);
     expect(
       screen.getByText("Add the first thing you must not forget.").props
@@ -286,9 +232,6 @@ describe("Tasks, on the real React Native host tree", () => {
           .accessibilityState.selected === true
     );
     expect(lit).toHaveLength(1);
-    // A lens announced as selected but drawn identically is the defect. Only
-    // the real `StyleSheet` resolves the registered array style to the applied
-    // values; the stub tier reads back the JSON it was handed.
     const dark = chips.find((node) => !lit.includes(node));
     expect(StyleSheet.flatten(lit[0]?.props.style).backgroundColor).not.toBe(
       StyleSheet.flatten(dark?.props.style).backgroundColor

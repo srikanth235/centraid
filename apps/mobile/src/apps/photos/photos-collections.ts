@@ -1,7 +1,3 @@
-// Collections: every section is a real filter, even when empty. Empty-by-
-// construction is a defect. Screenshots/Panoramas/Selfies fail (per-asset
-// iOS getters). Videos (#721) qualifies: `PhotoAsset.kind` is bulk.
-
 import type { PhotoAsset } from "./timeline-model";
 
 export type CollectionSectionKey =
@@ -14,7 +10,6 @@ export type CollectionSectionKey =
   | "duplicates"
   | "trash";
 
-/** Collapse All folds this shape — never whatever a query happened to return. */
 export const COLLECTION_SECTION_KEYS: readonly CollectionSectionKey[] = [
   "memories",
   "albums",
@@ -29,7 +24,6 @@ export const COLLECTION_SECTION_KEYS: readonly CollectionSectionKey[] = [
 export interface CollectionTile {
   id: string;
   label?: string;
-  /** `undefined` leaves `--skel`, never a decorative tint. */
   uri?: string;
   originalUri?: string;
   round?: boolean;
@@ -41,18 +35,15 @@ export interface CollectionSection {
   count?: number;
   action?: string;
   tiles: CollectionTile[];
-  /** What would appear and why it has not. Never "nothing here". */
   empty: string;
 }
 
-/** Rail scroll is unbounded; this caps tiles built unasked. */
 export const RAIL_LIMIT = 12;
 
 export interface AlbumRow {
   collectionId: string;
   name: string;
   assetIds: readonly string[];
-  /** Member's key photo (#721). `undefined` = no choice (`chosenCover`). */
   coverContentId?: string;
 }
 
@@ -94,7 +85,6 @@ function tileFor(
 function cover(assets: readonly PhotoAsset[]): PhotoAsset | undefined {
   let newest: PhotoAsset | undefined;
   for (const asset of assets) {
-    // Undated never wins "newest", but may still cover a shelf of only undated.
     if (asset.capturedAt === undefined) {
       newest ??= asset;
       continue;
@@ -108,10 +98,6 @@ function cover(assets: readonly PhotoAsset[]): PhotoAsset | undefined {
   return newest;
 }
 
-/**
- * Member's choice first, newest otherwise — never the reverse (#721).
- * `members` is the LIVE set; a stale chosen id falls through.
- */
 function chosenCover(
   members: readonly PhotoAsset[],
   coverContentId: string | undefined
@@ -153,7 +139,6 @@ export function buildCollectionSections(
   facts: CollectionFacts
 ): CollectionSection[] {
   const live = facts.assets.filter((asset) => !asset.deleted);
-  // Index both ids: albums/faces point at `assetId`; `id` alone misses half.
   const byId = new Map<string, PhotoAsset>();
   for (const asset of facts.assets) {
     byId.set(asset.id, asset);

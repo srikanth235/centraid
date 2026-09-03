@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 
-/** Standalone Stryker test root for the courier's fail-closed guards. */
 export default defineConfig({
   test: {
     name: "@centraid/oauth-worker-mutation",

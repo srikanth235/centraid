@@ -16,7 +16,6 @@ describe(defaultAvatarColor, () => {
     const b = defaultAvatarColor("local");
     expect(a).toBe(b);
     expect(AVATAR_PALETTE).toContain(a);
-    // Different ids almost always differ; at minimum both are palette members.
     expect(AVATAR_PALETTE).toContain(defaultAvatarColor("remote-uuid-1"));
   });
 });

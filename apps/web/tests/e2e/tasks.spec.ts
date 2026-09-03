@@ -3,21 +3,6 @@ import type { Page } from "@playwright/test";
 
 import { installHarnessControlTransport } from "./control-transport.js";
 
-// Tasks on the VIEWER seat (matrix `appSeats`, umbrella #864).
-//
-// The viewer's claim is not "the app renders": it is that what the member sees
-// is a replica of MEANING that survives the seat being thrown away. A task
-// minted through the app's own write rail against the real harness gateway
-// must land in the RIGHT GROUP — a task due yesterday is overdue, and the
-// overdue group is the one that carries the re-entry verbs — and the whole
-// arrangement must come back after the PWA is reloaded, service worker,
-// replica session and React tree included. Grouping is derived from the due
-// date at render time, so a row that came back in the wrong group would be a
-// replica that kept the row and lost its meaning.
-//
-// The harness gateway, vault and inline Tasks bundle are all real; only the
-// iroh wire is adapted (control-transport.ts).
-
 const API_URL = "http://127.0.0.1:48765";
 const ADMIN_TOKEN = "centraid-web-e2e-token";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
@@ -28,9 +13,6 @@ const TASK_TITLE = "Renew the passport";
 const ADD_INTENT = "tasks-e2e-add-task";
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
-  // Re-click until the palette actually opens: right after a reload the Search
-  // button can paint before its React listener attaches, and a click that
-  // lands in that window is silently lost.
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect
     .poll(
@@ -133,10 +115,6 @@ test("Tasks files a dated task under Overdue and keeps it across a PWA reload", 
   await connectPwa(page);
   await openFirstParty(page, "Tasks");
 
-  // The inline replica session bootstraps asynchronously after the app mounts;
-  // a write issued before that throws ReplicaRebootstrapRequired. Prove write
-  // readiness with the task this journey is about — the intent id makes the
-  // retries idempotent, so the poll can never mint two of it.
   await expect
     .poll(
       () =>
@@ -164,11 +142,6 @@ test("Tasks files a dated task under Overdue and keeps it across a PWA reload", 
     )
     .toBe("executed");
 
-  // The write lands as a board row through the app's own change-stream
-  // refresh, with window focus as the sanctioned recovery re-read while the
-  // replica is still bootstrapping (`onFocusRefresh` never gates behind a
-  // consent banner). A row is addressed by its stable `data-task-id`, which is
-  // what the row IS — never by a class name, which is presentation.
   const taskRow = page
     .locator("[data-task-id]")
     .filter({ hasText: TASK_TITLE });
@@ -183,9 +156,6 @@ test("Tasks files a dated task under Overdue and keeps it across a PWA reload", 
     )
     .toBe(true);
 
-  // THE GROUP IS THE MEANING. A task due yesterday belongs to Overdue, and
-  // Overdue is the one group that carries the two re-entry verbs — so finding
-  // them proves the row was filed, not merely stored.
   const overdue = page.locator('div[data-attention="true"]');
   await expect(overdue.first()).toBeVisible();
   await expect(overdue.getByText("Overdue").first()).toBeVisible();
@@ -194,8 +164,6 @@ test("Tasks files a dated task under Overdue and keeps it across a PWA reload", 
   ).toBeVisible();
   await expect(taskRow.first()).toBeVisible();
 
-  // A task is a vault row, not browser state: both the row and the group it
-  // was filed into must come back after a full reload of the PWA shell.
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
   await openFirstParty(page, "Tasks");

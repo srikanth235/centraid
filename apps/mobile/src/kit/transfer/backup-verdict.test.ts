@@ -1,8 +1,3 @@
-// The three dynamic states the Backup surface has to be able to say (#712),
-// plus the fourth the fail-closed queue read forces. What is pinned here is
-// which EVIDENCE produces which verdict — the whole reason the phone may claim
-// "failing" where the web's Storage screen honestly may not.
-
 import { describe, expect, it } from "vitest";
 
 import { backupVerdict, backupVerdictCopy } from "./backup-verdict";
@@ -29,8 +24,6 @@ describe(backupVerdict, () => {
   });
 
   it("a refusal outranks a backlog", () => {
-    // Severity, not size: a thousand rows merely waiting is bytes moving; one
-    // row the device tried to send and was told no is the thing to say first.
     expect(
       backupVerdict(
         queue({ pending: 1000, failures: [{ lastError: "413 too large" }] })
@@ -39,9 +32,6 @@ describe(backupVerdict, () => {
   });
 
   it("an unreadable ledger is its OWN verdict, never 'complete'", () => {
-    // `readTransferQueue` fails closed: the zeroes it returns are UNKNOWN, and
-    // printing "Backup is complete" over them would tell a member their
-    // photographs are safe on the strength of a failed read.
     expect(backupVerdict(queue({ readable: false }))).toBe("unreadable");
   });
 });
@@ -58,7 +48,6 @@ describe(backupVerdictCopy, () => {
       })
     );
     expect(copy.title).toBe("2 transfers refused");
-    // The transport's own words, not a paraphrase.
     expect(copy.detail).toContain("vault host refused: 507");
     expect(copy.detail).toContain("11 photographs are on this device only");
   });
@@ -80,16 +69,11 @@ describe(backupVerdictCopy, () => {
   });
 
   it("names a refusal even when the queue recorded no reason", () => {
-    // A row that failed with no message is still a refusal; saying "no reason
-    // was recorded" beats an empty clause that reads as a rendering bug.
     const copy = backupVerdictCopy(queue({ failures: [{ lastError: "" }] }));
     expect(copy.detail).toContain("no reason was recorded");
   });
 
   it("every verdict names an icon the mobile resolver actually knows", () => {
-    // `icon-resolver.ts` throws on an unknown name: a hyphenated `check-circle`
-    // is neither a registry name nor an alias, so the healthy state raises
-    // rather than renders.
     const known = new Set([
       "CheckCircle",
       "cloud",

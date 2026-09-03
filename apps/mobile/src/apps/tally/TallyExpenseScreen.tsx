@@ -1,21 +1,3 @@
-// ONE EXPENSE — what it cost, who paid, how it divided, what that makes yours,
-// and the revision list that is the reason an edit is safe (§1, §4).
-//
-// EVERY PAYER IS NAMED. Several people can front one expense, and each is owed
-// back the part they actually put down, so *Paid by* lists them with their
-// amounts rather than naming one and rounding the rest away.
-//
-// THE METHOD IS NOT INFERRED — IT IS READ. `add-expense` records `split_method`
-// beside the shares, so *Divided* states the method actually used. An expense
-// written before the method was recorded has none, and then the row says how
-// many shares there are and points at the table: "Equally" guessed from three
-// equal numbers would be exactly the claim a member opened this screen to check.
-//
-// UNDO IS THE VAULT'S OWN REVERSE WRITE. `queries/history.ts` reports each
-// revision's `undo_until`, and `undo-expense` applies that durable pre-edit
-// snapshot exactly once — so Undo appears on the revision it would undo, inside
-// the window, and nowhere else.
-
 import React, { useEffect, useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -69,8 +51,6 @@ import { FieldRow, LedgerRow, Section } from "./TallyParts";
 import TallyScreen from "./TallyScreen";
 import { useTallyVault } from "./useTallyVault";
 
-/** Is this revision's one-shot undo window still open? A window that has
- *  closed, or a snapshot already applied, offers nothing. */
 export function undoIsLive(revision: Revision, nowIso: string): boolean {
   if (revision.undone_at) return false;
   const until = Date.parse(revision.undo_until);
@@ -78,8 +58,6 @@ export function undoIsLive(revision: Revision, nowIso: string): boolean {
   return !Number.isNaN(until) && !Number.isNaN(now) && now < until;
 }
 
-/** The payers, as one value: who put down what. One payer reads as one name
- *  and one amount, which is what a one-payer expense IS. */
 export function paidValue(entry: LedgerEntry, currency: string): string {
   const payers = entry.payers ?? [];
   if (payers.length === 0)
@@ -89,8 +67,6 @@ export function paidValue(entry: LedgerEntry, currency: string): string {
     .join("  ·  ");
 }
 
-/** The recorded method, in the interface's own word — or the share count where
- *  the vault holds no method for this expense. */
 export function dividedText(entry: LedgerEntry): string {
   const spec = DIVISIONS.find((row) => row.method === entry.split_method);
   return spec ? spec.label : dividedValue(entry.splits.length);
@@ -332,8 +308,6 @@ export default function TallyExpenseScreen({
   );
 }
 
-/** The member arrived by a deep link and the ledger it came from is not
- *  loaded. Stated, rather than an empty expense painted over nothing. */
 const ABSENT =
   "This expense is not in any ledger this screen has read · open it from Activity, a group or a friend.";
 

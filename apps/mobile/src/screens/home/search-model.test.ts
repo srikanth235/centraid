@@ -1,7 +1,3 @@
-/**
- * Search overlay's pure grouping + empty-state logic (#708, mobile
- * close-out). No React/replica involved — see the module header for why.
- */
 import { describe, expect, it } from "vitest";
 
 import type { BlueprintSearchHit } from "./blueprint-search";
@@ -90,7 +86,6 @@ describe(selectSearchRecents, () => {
 
 describe(formatSearchMeta, () => {
   it("formats an ISO instant as a short month + day", () => {
-    // Host locale may put day before or after month ("Aug 3" vs "3 Aug").
     expect(formatSearchMeta("2026-08-03T12:00:00.000Z")).toMatch(
       /(?:Aug\s*3|3\s*Aug)/u
     );
@@ -112,7 +107,6 @@ describe(selectSuggestionChips, () => {
   });
 
   it("keeps a handoff-shaped candidate set whole — short terms pass as-is", () => {
-    // The v4 fixture row (.dc.html :6012): three short terms, one row.
     expect(
       selectSuggestionChips(["Pemberton", "right of way", "Ana"])
     ).toStrictEqual(["Pemberton", "right of way", "Ana"]);
@@ -135,7 +129,6 @@ describe(selectSuggestionChips, () => {
   });
 
   it("drops a candidate with no usable word rather than truncating it", () => {
-    // Every word exceeds the term cap — nothing searchable survives.
     expect(
       selectSuggestionChips(["Pneumonoultramicroscopicsilicovolcanoconiosis"])
     ).toStrictEqual([]);
@@ -148,8 +141,6 @@ describe(selectSuggestionChips, () => {
       16,
       24
     );
-    // 9 + 12 = 21 used; "Reconciliation" (14) would blow the 24 budget and
-    // is dropped, but "Ana" (3) still fits exactly.
     expect(chips).toStrictEqual(["Pemberton", "right of way", "Ana"]);
   });
 });

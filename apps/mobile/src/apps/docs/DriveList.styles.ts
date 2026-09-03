@@ -1,8 +1,3 @@
-// The drive list's stylesheet, in its own module for the same reason every
-// other screen's is: a 100-line style object between the component and its
-// helpers is the thing that pushed `DriveList.tsx` past the file-size limit,
-// and it is the part of the file nobody reads while following the logic.
-
 import { StyleSheet } from "react-native";
 
 import { borders, radii, t } from "../../kit/theme";

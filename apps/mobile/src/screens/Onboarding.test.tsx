@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// @vitest-environment jsdom
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 import Onboarding from "./Onboarding";
@@ -114,8 +113,6 @@ vi.mock(import("react-native"), async () => {
       }),
     View: ({ children }: { children?: React.ReactNode }) =>
       element("div", { children }),
-    // The flow sizes its hero against the window and the safe area; a fixed
-    // iPhone-sized viewport keeps that arithmetic deterministic here.
     useWindowDimensions: () => ({ height: 874, scale: 3, width: 402 }),
   } as unknown as Partial<ReactNative>;
 });
@@ -129,8 +126,6 @@ vi.mock(import("react-native-safe-area-context"), async () => {
   } as unknown as Partial<SafeAreaContext>;
 });
 
-// The hero art animates. Stub the driver rather than the art itself, so the
-// real artwork still renders here and a crash in it fails this suite.
 vi.mock(import("react-native-reanimated"), async () => {
   const identity = <T,>(value: T): T => value;
   return {
@@ -240,8 +235,6 @@ vi.mock(
     }) as unknown as Partial<ProfileModule>
 );
 
-// Mocked, not stubbed-around: the real module pulls AsyncStorage in at import
-// time, which does not resolve under vitest's jsdom environment.
 vi.mock(
   import("../lib/gateway"),
   () =>
@@ -270,8 +263,6 @@ describe("Onboarding scenarios", () => {
       desktopName: "Gateway",
       deviceId: "device-1",
     });
-    // Default: a roster that does not name this person yet, so the profile
-    // step runs. Individual tests override it.
     mocks.readSelfMemberName.mockResolvedValue("");
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -334,11 +325,6 @@ describe("Onboarding scenarios", () => {
     });
   }
 
-  /**
-   * Reveal the pasted-code fallback. Scanning is the primary path, so the code
-   * box does not exist until someone asks for it — every paste-based scenario
-   * has to open it first, exactly as a person would.
-   */
   function revealPasteFallback(): void {
     click(button("Can't scan? Paste a code instead"));
   }
@@ -355,7 +341,6 @@ describe("Onboarding scenarios", () => {
     return input;
   }
 
-  /** Paste a pair ticket and land on the profile step. */
   async function pairWithPastedTicket(deviceName?: string): Promise<void> {
     if (deviceName !== undefined)
       typeValue(container!.querySelector("input")!, deviceName);
@@ -366,7 +351,6 @@ describe("Onboarding scenarios", () => {
     expect(container!.textContent).toContain("Who's using");
   }
 
-  /** Paste a pair ticket without asserting which step it lands on. */
   async function pasteTicket(): Promise<void> {
     revealPasteFallback();
     typeValue(ticketInput(), "pair-ticket");
@@ -375,15 +359,11 @@ describe("Onboarding scenarios", () => {
   }
 
   describe("naming an already-known person", () => {
-    // Self-pairing a second device is the common case: the household roster
-    // already carries the name. Asking again would be a second chance to
-    // disagree with yourself, and the answer would overwrite the roster.
     it("skips the profile step when the roster already names this person", async () => {
       mocks.readSelfMemberName.mockResolvedValue("Ada Lovelace");
       await pasteTicket();
       expect(container!.textContent).not.toContain("Who's using");
       expect(container!.textContent).toContain("You're all set, Ada");
-      // The roster's name is adopted, not re-asked and not re-written to it.
       expect(mocks.setProfileName).toHaveBeenCalledWith("Ada Lovelace");
       expect(mocks.setOnboarded).toHaveBeenCalledWith(true);
     });
@@ -394,8 +374,6 @@ describe("Onboarding scenarios", () => {
       expect(container!.textContent).toContain("Who's using");
     });
 
-    // A failed read is not evidence of a name. Asking is the safe branch:
-    // the worst case is one redundant question, not a silently wrong identity.
     it("still asks when the roster could not be read", async () => {
       mocks.readSelfMemberName.mockResolvedValue(undefined);
       await pasteTicket();
@@ -408,7 +386,6 @@ describe("Onboarding scenarios", () => {
       await pairWithPastedTicket("Ada Phone");
       expect(mocks.pair).toHaveBeenCalledWith("pair-ticket", "Ada Phone");
 
-      // Name is required — an empty profile cannot be saved.
       click(button("Continue"));
       expect(mocks.setProfileName).not.toHaveBeenCalled();
       expect(container!.textContent).toContain("Enter a name");
@@ -437,9 +414,6 @@ describe("Onboarding scenarios", () => {
       expect(mocks.setProfileName).toHaveBeenCalledWith("Grace");
     });
 
-    // Scanning is the way in; pasting a ticket is the fallback for when it
-    // cannot work. The screen has to say so by what it shows, not only by what
-    // it calls things — a permanent code box outweighs any button label.
     it("offers scanning first and keeps the code box out of the way", () => {
       expect(button("Scan the QR code")).toBeTruthy();
       expect(queryTicketInput()).toBeNull();
@@ -449,7 +423,6 @@ describe("Onboarding scenarios", () => {
       expect(ticketInput()).toBeTruthy();
       expect(container!.textContent).toContain("PAIRING CODE");
 
-      // …and the way back to the primary path stays open.
       click(button("Scan the QR code instead"));
       expect(queryTicketInput()).toBeNull();
     });
@@ -472,8 +445,6 @@ describe("Onboarding scenarios", () => {
       await flush();
 
       expect(container!.textContent).toContain("gateway refused the ticket");
-      // A rejected ticket must leave the code the person pasted on screen to
-      // fix, never bounce them back to the scanner with their typing gone.
       expect(container!.textContent).toContain("PAIRING CODE");
       expect(mocks.setOnboarded).not.toHaveBeenCalled();
 
@@ -483,3 +454,4 @@ describe("Onboarding scenarios", () => {
     });
   });
 });
+// @vitest-environment jsdom

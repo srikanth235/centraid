@@ -1,10 +1,3 @@
-// Version history on the phone (#882) — the app's headline feature, which
-// this seat had no surface for at all.
-//
-// RESTORING APPENDS. The control on an older row asks the vault to put that
-// body back at the HEAD of the chain; nothing between is rewritten or dropped,
-// and the status line above the list says so in the blueprint's own words.
-
 import React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -29,7 +22,6 @@ export interface NotesHistoryProps {
     concepts: readonly VaultRow[];
     schemes: readonly VaultRow[];
   };
-  /** The edge read failed: the chain is UNKNOWN, not empty. */
   unreadable: boolean;
   onRestore: (contentId: string) => void;
 }

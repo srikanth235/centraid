@@ -1,15 +1,11 @@
 import { isIconName } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
-// The adapter accepts the mobile call-site spelling, but every value resolves
-// to the one shared semantic registry. Unknown names fail loudly so a new
-// glyph cannot silently become an unrelated MoreHoriz icon.
 const ALIASES: Record<string, IconName> = {
   activity: "Activity",
   "alert-circle": "AlertCircle",
   archive: "Archive",
   "arrow-left": "ArrowLeft",
-  // The composer's send affordance; the registry spells the verb, not the glyph.
   "arrow-up": "Send",
   "bar-chart-2": "BarChart2",
   "battery-charging": "BatteryCharging",
@@ -27,8 +23,6 @@ const ALIASES: Record<string, IconName> = {
   "cloud-off": "CloudOff",
   copy: "Copy",
   cpu: "Cpu",
-  // Money, as the registry spells it — there is one currency glyph and it is
-  // not denominated in dollars.
   "dollar-sign": "Coin",
   download: "Download",
   "download-cloud": "Download",
@@ -39,7 +33,6 @@ const ALIASES: Record<string, IconName> = {
   folder: "Folder",
   "folder-plus": "FolderPlus",
   grid: "Grid",
-  // "Free up vault" is about how much room is left, not about a disk.
   "hard-drive": "Gauge",
   headphones: "Music",
   heart: "Heart",
@@ -52,8 +45,6 @@ const ALIASES: Record<string, IconName> = {
   maximize: "Maximize",
   menu: "Menu",
   "message-circle": "MessageCircle",
-  // The viewer's floating overflow chip. Horizontal, not vertical: it sits in a
-  // round chip on the stage, where a vertical run of dots reads as a handle.
   "more-horizontal": "MoreHoriz",
   "more-vertical": "MoreVert",
   paperclip: "Paperclip",
@@ -65,7 +56,6 @@ const ALIASES: Record<string, IconName> = {
   share: "Share",
   shield: "Shield",
   smartphone: "Smartphone",
-  // The composer stop control while a turn is streaming.
   square: "Stop",
   star: "Star",
   "trash-2": "Trash",

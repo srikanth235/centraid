@@ -1,5 +1,3 @@
-// Band claim/hand-back latch (#712): shared web-shell key namespace, survives relaunch, keyed per app.
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -33,7 +31,6 @@ vi.mock(
     }) as never
 );
 
-/** The store's warm cache, as the hook's hydrate leaves it. */
 const currentOwner = (appId: string): BandOwner =>
   asBandOwner(Store.get(bandOwnerKey(appId), DEFAULT_BAND_OWNER));
 
@@ -51,8 +48,6 @@ describe("the band-owner latch", () => {
   });
 
   it("shares the web shell's key namespace, not a Photos-owned one", () => {
-    // Photos-owned keys would force the frame to import an app — a boundary
-    // check-import-boundaries.ts forbids.
     expect(bandOwnerKey("photos")).toBe("shell.bandOwner.photos");
     expect(bandOwnerKey("docs")).toBe("shell.bandOwner.docs");
   });
@@ -92,8 +87,6 @@ describe("the band-owner latch", () => {
   });
 
   it("names the claiming apps the settings list offers", () => {
-    // Hand-maintained roster: no "who claimed" channel exists, so an app that
-    // claims the band (Notes, #882) is only offerable here once listed here.
     expect(BAND_CLAIMING_APPS.map((app) => app.id)).toStrictEqual([
       "photos",
       "docs",

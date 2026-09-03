@@ -1,7 +1,6 @@
 import { COMPANION_MODULE_CATALOG } from "./types.js";
 import type { CompanionModule, ModuleStatus } from "./types.js";
 
-/** Selected modules remain visible but paused while locked or unreachable. */
 export function pausedModuleStatuses(
   selected: readonly CompanionModule[]
 ): ModuleStatus[] {

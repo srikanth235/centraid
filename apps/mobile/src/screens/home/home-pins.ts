@@ -1,7 +1,3 @@
-// NO CAP on Home grid pins — a grid scrolls; and unpinned is never hidden, a
-// pin only lifts an app to the front. No app is pinned by default: the catalog
-// order is the only opinion the grid carries.
-
 import { useSyncExternalStore } from "react";
 
 import { Store } from "../../storage";
@@ -18,8 +14,6 @@ function emit(): void {
   for (const listener of listeners) listener();
 }
 
-/** De-duplicate only: an unresolvable id is dropped where the grid is BUILT
- *  (./catalog#orderByPins), so an unlistable app keeps its pin. */
 export function sanitizePins(ids: readonly string[]): string[] {
   return [...new Set(ids)];
 }

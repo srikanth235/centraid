@@ -12,8 +12,6 @@ vi.mock(import("../gateway") as Promise<unknown>, () => ({
   authHeader: () => ({ Authorization: "Bearer test-mobile" }),
 }));
 
-// Stated against the shared constants: a literal floor here would assert that
-// a current gateway needs updating the next time the floor moves.
 const supportedInfo = {
   version: "0.1.0",
   protocolVersion: GATEWAY_PROTOCOL_VERSION,
@@ -41,9 +39,6 @@ describe("mobile gateway compatibility handshake", () => {
     );
     vi.stubGlobal("fetch", fetchInfo);
 
-    // The admitted gateway advertises no experimental flag, so both read off
-    // — and the SAME call reports them, which is the point: a gated surface
-    // never gets to fetch `/info` a second time for itself.
     await expect(
       requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
@@ -78,12 +73,6 @@ describe("mobile gateway compatibility handshake", () => {
     ).resolves.toStrictEqual({ automations: true, connectors: false });
   });
 
-  // THE ONE THIS FILE EXISTS TO HOLD. The predecessor cached an online
-  // verdict (keyed, worse, by an ephemeral tunnel port) and walled every
-  // offline start whose cache came up empty behind "Reconnect once" — local
-  // reads gated on the network, observed on a device whose replica held the
-  // member's whole vault. An unanswered question is not a judgment: offline
-  // fails open, and the wall is re-raised the moment a gateway answers.
   test("an offline start is admitted — absence of an answer is not a judgment", async () => {
     vi.stubGlobal(
       "fetch",
@@ -96,8 +85,6 @@ describe("mobile gateway compatibility handshake", () => {
         baseUrl: "http://127.0.0.1:18789",
         online: false,
       })
-      // …and `undefined`, not "both off": a gateway that never answered has
-      // not switched anything off, so no surface may be hidden on its behalf.
     ).resolves.toBeUndefined();
   });
 
@@ -133,10 +120,6 @@ describe("mobile gateway compatibility handshake", () => {
   });
 
   test("a transient server failure is the offline case wearing a status code", async () => {
-    // 503 proves the gateway is unwell, not that it is incompatible — the
-    // only status that IS a judgment by itself is 404 (the info route does
-    // not exist on gateways that old). Anything else fails open, same as no
-    // answer at all.
     vi.stubGlobal(
       "fetch",
       vi.fn<() => Promise<Response>>(

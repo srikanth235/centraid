@@ -1,15 +1,3 @@
-// The band Tasks has claimed, rendered (Tasks spec §2; #834).
-//
-// Anatomy and shared plate geometry: `PhotosBand.tsx` and
-// `kit/band-surface.ts`. This file renders `tasks-band.ts` and adds nothing.
-//
-// SIZED TO CONTENT WITH A 44px FLOOR, not six equal cells: all five labels
-// render in full at 390px because each tab takes the width its word needs.
-//
-// When the member has handed the band back (`owner === "host"`) the tab group
-// goes and the capsule STAYS — the way home is the one thing an app may never
-// take away.
-
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -34,7 +22,6 @@ import type { ThemeColors } from "../../kit/theme";
 import { resolveTasksBand } from "./tasks-band";
 import type { TasksBandDestinationKey } from "./tasks-band";
 
-/** The group plate's inner gutter and the gap between the two plates. */
 const GROUP_GUTTER = 2;
 const PLATE_GAP = 8;
 
@@ -42,7 +29,6 @@ export interface TasksBandProps {
   owner: BandOwner;
   current: TasksBandDestinationKey;
   onSelect: (key: TasksBandDestinationKey) => void;
-  /** The capsule's one tap: all apps and places, in one move. */
   onHome: () => void;
 }
 
@@ -83,9 +69,6 @@ export default function TasksBand({
               key={destination.key}
               accessibilityRole="tab"
               accessibilityLabel={destination.label}
-              // The DESTINATION KEY, never the label: the label is copy a v-next
-              // handoff may re-word, and a flow that tapped it would then tap
-              // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.tasks}${destination.key}`}
               accessibilityState={{ selected: active }}
               onPress={() => onSelect(destination.key)}

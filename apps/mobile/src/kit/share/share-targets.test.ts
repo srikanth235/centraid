@@ -7,8 +7,6 @@ import {
   selectedNativeShareMembers,
 } from "./share-targets";
 
-/** An approved link to `partyId`'s own vault, which is what makes a person
- *  reachable at all. */
 function linkTo(partyId: string, vaultId: string, label?: string) {
   return {
     vaultA: "owner-vault",
@@ -23,8 +21,6 @@ function linkTo(partyId: string, vaultId: string, label?: string) {
 
 describe(nativeShareTargets, () => {
   test("drops agent and animal parties — a recognition recipe is not an audience", () => {
-    // Founding a vault creates six agent parties; before this filter they led
-    // every share sheet in the product, above the actual people.
     expect(
       nativeShareTargets({
         sourceVaultId: "owner-vault",
@@ -41,7 +37,6 @@ describe(nativeShareTargets, () => {
           { party_id: "ocr", kind: "agent", display_name: "Photo OCR" },
           { party_id: "dog", kind: "animal", display_name: "Rufus" },
           { party_id: "asha", kind: "person", display_name: "Asha" },
-          // No kind at all: unstamped is not a refusal.
           { party_id: "ben", display_name: "Ben" },
         ],
       }).map((target) => target.label)
@@ -49,10 +44,6 @@ describe(nativeShareTargets, () => {
   });
 
   test("a refused party stays refused even when it carries a link", () => {
-    // The linked-only pass exists for someone the directory has no row for.
-    // It must not become a second door for a row the directory DID answer
-    // about and ruled out — that would put the six recognition recipes back
-    // in every sheet, this time nameless.
     expect(
       nativeShareTargets({
         sourceVaultId: "owner-vault",
@@ -68,9 +59,6 @@ describe(nativeShareTargets, () => {
   });
 
   test("a person with no link is not a share target", () => {
-    // A share is DELIVERED into the receiver's own vault. Someone the member
-    // typed into People has no vault to deliver to, so listing them would
-    // offer a reach the product cannot perform.
     expect(
       nativeShareTargets({
         sourceVaultId: "owner-vault",
@@ -153,9 +141,6 @@ describe(nativeShareTargets, () => {
   });
 
   test("never lists an offline-queued person — an overlay id names nobody", () => {
-    // The outbox projects a party no vault has settled, so it can hold no
-    // link either. It falls out of the list for the same reason anyone
-    // unlinked does, rather than needing a rule of its own.
     expect(
       nativeShareTargets({
         sourceVaultId: "owner-vault",

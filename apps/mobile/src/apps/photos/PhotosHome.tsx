@@ -1,4 +1,3 @@
-// Photos' home surface on the phone (v4 §3.1, §4, §14, §15). Wiring only — shaped UI lives in siblings.
 // governance: allow-repo-hygiene file-size-limit The #712 screen intentionally retains its cohesive data/routing orchestration; #716 extracts only independently testable UI bodies.
 
 import * as Haptics from "expo-haptics";
@@ -86,7 +85,6 @@ function filterSections(
     .filter((section) => section.assets.length > 0);
 }
 
-/** iOS Photos wording (#712). Keep the `count === 0` branch — do not assume no caller. */
 function selectionCountLabel(count: number): string {
   if (count === 0) return "Select Items";
   return `${count} ${count === 1 ? "Photo" : "Photos"} Selected`;
@@ -109,7 +107,6 @@ export default function PhotosHome({
   const insets = useSafeAreaInsets();
   const { session, gatewayBase, vaultId, refresh } = useReplica();
   const timeline = usePhotoTimeline();
-  // §13 / P13: read here — the timeline goes blank when the grant is refused, so it must say why.
   const grant = usePhotoAccessGrant();
   const deviceReadable = timeline.assets.filter(
     (asset) => asset.source !== "replica"
@@ -121,7 +118,6 @@ export default function PhotosHome({
     loading: timeline.loading,
   });
 
-  // Collections is the landing. Effect is load-bearing: Navigation updates params without remounting.
   const [destination, setDestination] = useState<BandDestinationKey>(
     route.params?.destination ?? "collections"
   );
@@ -132,23 +128,14 @@ export default function PhotosHome({
   }, [routeDestination]);
   const [moreOpen, setMoreOpen] = useState(false);
   const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
-  // Destructure; never hold as one object — react-compiler treats a ref-carrying value as a ref.
   const {
     anchor: menuAnchorRect,
     anchorRef: menuAnchorRef,
     measureAnchor,
   } = useMenuAnchor();
-  // Filter, grain, place and fold state stay SESSION-scoped: this repo has no
-  // member-preference plane, and `bandOwner` plus the rung already stretch
-  // device-local storage as far as it should go.
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
   const [grain, setGrain] = useState<TimelineGrain>("all");
-  // A `PhotoSection.day` — the one vocabulary all three grains speak. Held here,
-  // not in a grain's view: it must outlive the view across a switch.
   const [placeDay, setPlaceDay] = useState<string | undefined>(undefined);
-  // Lifted out of `PhotosCollectionsView` (#712): the header chip's Show
-  // All / Collapse All must drive the same set the chevrons toggle, or the two
-  // can disagree.
   const [collapsedSections, setCollapsedSections] = useState<
     ReadonlySet<CollectionSectionKey>
   >(() => new Set());
@@ -172,10 +159,8 @@ export default function PhotosHome({
   const [refreshing, setRefreshing] = useState(false);
 
   const [rung, setRung] = usePhotosRung();
-  // Frame latch, not Photos' (#712): `shell.bandOwner.<appId>`.
   const { bandOwner } = useBandOwner("photos");
 
-  // Automatic sweep (#711) mounts here — must walk wherever Photos is on screen. Consent is the only gate.
   const [backupConsent, setBackupConsent] = useState<BackupConsentRecord>();
   useEffect(() => {
     void hydrateBackupConsent().then(setBackupConsent);
@@ -195,7 +180,6 @@ export default function PhotosHome({
     () => filterSections(timeline.sections, libraryFilter),
     [timeline.sections, libraryFilter]
   );
-  // Re-express the current place as a day the target grain can land on — switching up a grain must not dump the scroll.
   const changeGrain = useCallback(
     (next: TimelineGrain): void => {
       setPlaceDay((current) => anchorForGrain(visibleSections, next, current));
@@ -203,7 +187,6 @@ export default function PhotosHome({
     },
     [visibleSections]
   );
-  // Leaving Library resets grain and place. Deferred: sync setState in the effect is the shape react-compiler rejects.
   useEffect(() => {
     if (destination === "library") return;
     queueMicrotask(() => {
@@ -211,14 +194,10 @@ export default function PhotosHome({
       setPlaceDay(undefined);
     });
   }, [destination]);
-  // A card tap: one grain narrower, at that period's first day.
   const openPeriod = useCallback((period: GrainPeriod): void => {
     setPlaceDay(period.anchorDay);
-    // Off the grain on screen, never a captured copy.
     setGrain((current) => (current === "years" ? "months" : "all"));
   }, []);
-  // Trailing control is destination-scoped (#712). Search has no honest menu.
-  // `detectFacesFor` is the gateway question, not `deviceAnswerFor` (#724).
   const enrichPolicies = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "enrich.policy" }), [])
@@ -241,15 +220,11 @@ export default function PhotosHome({
         grain,
         detectFaces: {
           availability: detectFacesAvailability,
-          // The consent gate (the People roster's empty state), never the
-          // enrichment write — see `photos-library-menu.ts`'s header.
           onDetectFaces: () => navigation.navigate("PhotosPeople"),
         },
       });
     }
     if (destination === "collections") {
-      // Over the full fixed key set, not the rendered rows, so Collapse All
-      // folds the page before its replica queries have answered.
       return collectionsMenuGroups({
         onCollapseAll: () =>
           setCollapsedSections(new Set(COLLECTION_SECTION_KEYS)),
@@ -276,9 +251,6 @@ export default function PhotosHome({
     }
   };
 
-  // The pack refresh stats every pinned file, so it must not ride every timeline
-  // snapshot — the engine republishes on each replica tick with the candidate
-  // set almost always unchanged. Hence the signature gate.
   const packSignature = useRef<string | undefined>(undefined);
   const packRun = useRef<Promise<void> | undefined>(undefined);
   useEffect(() => {
@@ -293,8 +265,6 @@ export default function PhotosHome({
           pinnedThumbnailCandidates(gatewayBase, assets)
         )
       )
-      // Forgetting the signature is the recovery: the next snapshot retries
-      // instead of being skipped as "already done".
       .catch(() => {
         packSignature.current = undefined;
       });
@@ -335,7 +305,6 @@ export default function PhotosHome({
     const selected = timeline.assets.filter(
       (asset) => selection.has(asset.id) && asset.localId
     );
-    // Nothing to send is an answer, not a success (`nothingToBackUpMessage`).
     if (!selected.length) {
       postStatus(nothingToBackUpMessage(selection.size));
       return;
@@ -380,8 +349,6 @@ export default function PhotosHome({
               (item) => selection.has(item.id) && item.assetId
             );
             try {
-              // Serial by contract: `position` derives from the rows the
-              // previous write landed. Parallel writes race it.
               for (const [index, asset] of assets.entries()) {
                 const albumId = String(album.collection_id);
                 const position =
@@ -411,7 +378,6 @@ export default function PhotosHome({
     ]);
   };
 
-  // Shared `batchTrash`. Confirmation must say the device original survives.
   const trashSelection = (): void => {
     if (!session) return;
     const targets = vaultAssets(timeline.assets, selection);
@@ -435,7 +401,6 @@ export default function PhotosHome({
     );
   };
 
-  // Destination + size (#712): residual selection must not outlive a destination change.
   const selecting = selection.size > 0 && destination === "library";
 
   const onDestination = (key: BandDestinationKey): void => {
@@ -443,10 +408,8 @@ export default function PhotosHome({
       setMoreOpen(true);
       return;
     }
-    // Clear selection synchronously — an effect keyed on `destination` is the cascading-render shape react-compiler flags (#712).
     if (key !== "library") setSelection(new Set());
     setViewOptionsOpen(false);
-    // Search is a destination, not a push — the band must stay up.
     setDestination(key);
   };
 
@@ -457,7 +420,6 @@ export default function PhotosHome({
   };
 
   return (
-    // `colors.bg` verbatim. Explicit inset — SafeAreaView-with-edges can resolve a zero top inset in this fullScreenModal.
     <View
       style={[
         styles.safe,
@@ -468,7 +430,6 @@ export default function PhotosHome({
           its own band rather than a shared frame, so it mounts the bar. */}
       <VaultBar />
       {selecting ? (
-        // iOS parity (#712): Select keeps the page title. Count/verbs live on the foot bar.
         <View style={styles.header}>
           <Text style={styles.title} numberOfLines={1}>
             Photos
@@ -499,9 +460,6 @@ export default function PhotosHome({
           </View>
         </View>
       ) : (
-        // No ☰. The claimed band is the ONE navigation on the phone (§F/§3.1);
-        // frame destinations are reached through its Home capsule, never
-        // mirrored inside the app.
         <View style={styles.header}>
           <Text style={styles.title} numberOfLines={1}>
             Photos
@@ -520,8 +478,6 @@ export default function PhotosHome({
                     : "Collections options"
                 }
                 onPress={() => {
-                  // Measured on the press, never cached: a rotation between two
-                  // openings leaves a stale rectangle.
                   measureAnchor();
                   setViewOptionsOpen(true);
                 }}
@@ -566,7 +522,6 @@ export default function PhotosHome({
       )}
 
       {backingUp && uploadProgress ? (
-        // Determinate, with exact counts. Never a spinner (§18).
         <View
           accessibilityLabel={`Uploading ${uploadProgress.completed} of ${uploadProgress.total}`}
           accessibilityRole="progressbar"
@@ -616,12 +571,9 @@ export default function PhotosHome({
         ) : destination === "search" ? (
           <PhotosSearchView navigation={navigation} />
         ) : accessTakeover && grant.state ? (
-          // The takeover (§13, P13) fills the GRID's slot only. The band below
-          // stays: a refusal never takes away the way out of Photos.
           <PhotoAccessPanel
             state={grant.state}
             canAskAgain={grant.canAskAgain}
-            // Withheld mid-walk: a count read then is true for a second only.
             readableCount={timeline.loading ? null : deviceReadable}
             onRequest={() => grant.request()}
           />
@@ -631,9 +583,6 @@ export default function PhotosHome({
                 the grid's pinch (§4.2). The rung is still read here so the
                 skeleton lands at the geometry that was showing. */}
             {timeline.loading ? (
-              // The grid IS the loading state (§14, proto:3993-4033): skeleton
-              // tiles at the rung's real geometry, so nothing reflows when the
-              // bytes land. Never a message, never a spinner (§18).
               <PhotosGridSkeleton rung={rung} />
             ) : timeline.sections.length === 0 ? (
               <View style={styles.center}>
@@ -649,8 +598,6 @@ export default function PhotosHome({
                 </Text>
               </View>
             ) : visibleSections.length === 0 ? (
-              // The filter emptied the grid, not the library — its own sentence,
-              // never the empty-library copy above.
               <View style={styles.center}>
                 <Text style={styles.emptyTitle}>No favorites yet</Text>
                 <Text style={styles.bodyText}>
@@ -664,8 +611,6 @@ export default function PhotosHome({
                 refreshing={refreshing}
                 scrollToDay={placeDay}
                 onVisibleDay={setPlaceDay}
-                // Room for the floating grain control, on the same condition it
-                // mounts under below.
                 footerInset={selecting ? 0 : GRAIN_CONTROL_SLOT}
                 onRefresh={() => void refreshLibrary()}
                 onSelectionChange={setSelection}
@@ -674,8 +619,6 @@ export default function PhotosHome({
                 }
               />
             ) : (
-              // The same sections the grid above draws, grouped into periods —
-              // never a second query, or the grains could disagree.
               <PhotoGrainView
                 sections={visibleSections}
                 grain={grain}
@@ -746,10 +689,6 @@ export default function PhotosHome({
           owner={bandOwner}
           current={destination}
           onSelect={onDestination}
-          // `popTo`, never `navigate` (RN7 PUSHES a second Home, which above a
-          // `fullScreenModal` arrives as a card sheet) and never `goBack`
-          // (Photos can be entered by deep link with nothing beneath, and §3.1
-          // makes the way home the one thing an app may not take away).
           onHome={() => navigation.popTo("Home")}
         />
       )}

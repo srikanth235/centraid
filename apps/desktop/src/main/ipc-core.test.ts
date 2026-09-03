@@ -26,7 +26,6 @@ describe("Channel map", () => {
     const preload = readFileSync(path.join(here, "preload-core.ts"), "utf8");
     expect(ipc).toMatch(/from ['"]\.\/ipc-core\.js['"]/u);
     expect(preload).toMatch(/from ['"]\.\/ipc-core\.js['"]/u);
-    // Neither file re-declares the channel map inline.
     expect(ipc).not.toMatch(/SETTINGS_GET:\s*'centraid:settings:get'/u);
     expect(preload).not.toMatch(/SETTINGS_GET:\s*'centraid:settings:get'/u);
   });

@@ -1,7 +1,3 @@
-// Member-facing readout of native-queue.ts's ledger (#711), one place so
-// screens cannot disagree. Totals are SQL. FAILS CLOSED: unreadable →
-// zeroed + readable:false.
-
 import { authHeader } from "../../lib/gateway";
 import { foldPendingUploadGroups } from "../../lib/replica/storage-accounting";
 import { UploadQueue } from "../../lib/upload/native-queue";

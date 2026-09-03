@@ -1,12 +1,3 @@
-/**
- * The springboard grid's packing rule.
- *
- * The case this module exists for is `packs the seeded vault with no interior
- * hole` below: the exact size sequence a freshly seeded vault produces on
- * device, which renders three blank half-rows unpacked. `holes()` is the assertion that
- * matters — it walks the packed order the way the flex-wrap grid does and
- * counts the gaps a member would actually see.
- */
 import { describe, expect, it } from "vitest";
 
 import { MOBILE_COLUMNS, packTiles } from "./grid-packing";
@@ -15,14 +6,6 @@ type Size = "S" | "W";
 
 const isWide = (size: Size): boolean => size === "W";
 
-/**
- * Where a flex-wrap grid would leave a blank half-row, replaying its placement.
- *
- * A wide tile needs a whole row, so meeting one with a partly-filled row of
- * smalls leaves that row's remaining seats blank. Returns the index of every
- * such gap; a run of smalls left short at the very END is not counted, because
- * there is nothing left to pair it with.
- */
 function holes(order: readonly Size[], columns = MOBILE_COLUMNS): number[] {
   const found: number[] = [];
   let seats = 0;
@@ -39,8 +22,6 @@ function holes(order: readonly Size[], columns = MOBILE_COLUMNS): number[] {
 
 describe(packTiles, () => {
   it("packs the seeded vault with no interior hole", () => {
-    // The exact order observed on device: Notes, People, Photos, Locker,
-    // Tally, Tasks, Docs, Agenda.
     const observed: Size[] = ["W", "S", "W", "S", "S", "S", "W", "S"];
     expect(holes(observed)).not.toStrictEqual([]);
 
@@ -61,8 +42,6 @@ describe(packTiles, () => {
   });
 
   it("only ever moves a small EARLIER, so a pinned app keeps the front", () => {
-    // `orderByPins` has already lifted "pinned" to the head; packing must not
-    // demote it behind the small it pulls forward.
     const items = ["pinned-wide", "small-1", "wide", "small-2"];
     const wide = (id: string): boolean => id.includes("wide");
     expect(packTiles(items, wide)[0]).toBe("pinned-wide");
@@ -81,8 +60,6 @@ describe(packTiles, () => {
   });
 
   it("accepts a hole it cannot fill, rather than reshuffling the page", () => {
-    // One small and no partner anywhere: the gap is a consequence of the
-    // sizes, not of the order, so the order is left as it is.
     const items: Size[] = ["S", "W", "W"];
     expect(packTiles(items, isWide)).toStrictEqual(["S", "W", "W"]);
   });

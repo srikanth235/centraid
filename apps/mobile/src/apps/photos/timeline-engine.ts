@@ -1,9 +1,3 @@
-// One shared timeline instance for the whole Photos stack (#419, finding 5):
-// a process-singleton engine that reads the replica, walks the camera roll,
-// folds the upload queue in, and publishes an immutable snapshot every screen
-// subscribes to via `useSyncExternalStore`. Driven imperatively, so it
-// survives screen mount/unmount; the hook API is unchanged.
-
 import * as MediaLibrary from "expo-media-library";
 import { AppState } from "react-native";
 
@@ -39,18 +33,11 @@ interface UploadEntry {
   receipt?: Record<string, unknown>;
 }
 
-/** Poll rate while the queue has work; slow rate when it is settled. */
 const ACTIVE_UPLOAD_POLL_MS = 4_000;
 const IDLE_UPLOAD_POLL_MS = 30_000;
 
-/** Debounce merged-timeline recomputes during the device walk; page one paints immediately. */
 const WALK_RECOMPUTE_DEBOUNCE_MS = 250;
 
-/**
- * Invalidation burst window, mirroring the kit's `useReplicaQuery`: long
- * enough to swallow one delta batch, short enough that a change made on
- * another device still feels immediate.
- */
 const REPLICA_INVALIDATION_WINDOW_MS = 120;
 
 const REPLICA_ENTITIES = [
@@ -58,20 +45,13 @@ const REPLICA_ENTITIES = [
   "core.content_item",
   "core.content_derivative",
   "media.asset_phash",
-  // The star is DERIVED (#916): `media_asset.favorite` is gone and the one
-  // truth is a flags-scheme `starred` tag on the asset — the same mechanism
-  // Docs, Locker and People already read (`docs-projection.ts`). Three more
-  // small tables, no mirror to keep in step.
   "core.tag",
   "core.concept",
   "core.concept_scheme",
 ] as const;
 
-/** The scheme every owner flag lives in (`packages/vault/src/commands/flags.ts`). */
 const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 const STARRED_NOTATION = "starred";
-/** Photos' star anchors on the ASSET — the entity Photos shows — not the
- *  shared bytes underneath it (#916, rung nine). */
 const ASSET_TARGET_TYPE = "media.asset";
 
 function value<T>(row: ReplicaRow, key: string): T | undefined {
@@ -128,11 +108,6 @@ class PhotoTimelineEngine {
     return () => this.#subscribers.delete(listener);
   };
 
-  /**
-   * Ref-counted screen mount; teardown only when the last Photos screen
-   * leaves. Separate from `setSession` so a gateway-base change never bounces
-   * the ref count and re-walks the library.
-   */
   acquire(): () => void {
     this.#refs += 1;
     if (this.#refs === 1) {
@@ -150,11 +125,6 @@ class PhotoTimelineEngine {
     };
   }
 
-  /**
-   * Flip queued → backed-up badges without a remount by polling the queue's
-   * own SQLite database. Handle stays open while any screen is mounted, an
-   * idle queue drops to a slow poll, nothing polls in the background.
-   */
   private startUploadPoll(): void {
     if (this.#pollTimer || this.#refs === 0) return;
     this.#pollTimer = setInterval(
@@ -181,10 +151,6 @@ class PhotoTimelineEngine {
       this.#generation += 1;
       this.#unsubscribe?.();
       this.#replicaLoading = true;
-      // A bootstrap emits one invalidation per committed page and the mounted
-      // session fans each one out per scope, so this listener fires in bursts
-      // of hundreds. Collapse a burst into one pass; the first read still runs
-      // straight away, because a cold Photos screen has nothing to show.
       const coalesced = coalesceWork(
         () => this.readReplica(),
         REPLICA_INVALIDATION_WINDOW_MS
@@ -197,7 +163,6 @@ class PhotoTimelineEngine {
       void this.readReplica();
     }
     if (sessionChanged || baseChanged) this.refreshUploads();
-    // A base change rewrites every remote URL without touching rows; re-derive, no re-walk.
     if (baseChanged && !sessionChanged) this.recompute();
     if (!this.#deviceStarted) {
       this.#deviceStarted = true;
@@ -205,7 +170,6 @@ class PhotoTimelineEngine {
     }
   }
 
-  /** Re-read the durable upload queue; recompute only when something changed. */
   refreshUploads(): void {
     const base = this.#gatewayBase;
     let next = new Map<string, UploadEntry>();
@@ -221,7 +185,6 @@ class PhotoTimelineEngine {
             ])
         );
       } catch {
-        // Dead long-lived handle (storage, purge): drop it so next tick reopens.
         this.closeUploadQueue();
         return;
       }
@@ -231,7 +194,6 @@ class PhotoTimelineEngine {
     );
     if (inFlight !== this.#uploadsInFlight) {
       this.#uploadsInFlight = inFlight;
-      // Poll interval derives from this flag; re-arm at the new rate.
       this.stopUploadPoll();
       this.startUploadPoll();
     }
@@ -247,13 +209,6 @@ class PhotoTimelineEngine {
     this.recompute();
   }
 
-  /**
-   * ONE replica pass at a time. Each pass is four full-projection reads that
-   * hold SHARED locks on every mounted vault, so stacking them against the
-   * writer that is still bootstrapping is the worst thing this engine can do.
-   * An invalidation that lands mid-pass marks the result stale and buys
-   * exactly one more pass afterwards, however many arrived.
-   */
   private async readReplica(): Promise<void> {
     if (this.#reading) {
       this.#readAgain = true;
@@ -320,7 +275,6 @@ class PhotoTimelineEngine {
         return;
       }
       const rows: PhotoAsset[] = [];
-      // Small first page paints the grid fast; bigger bites after.
       const loadPage = async (
         offset: number,
         pageSize: number
@@ -336,14 +290,9 @@ class PhotoTimelineEngine {
           })
           .limit(pageSize)
           .offset(offset)
-          // ONE native round-trip per page: `exe()`'s per-field getters cost
-          // seven crossings per photo (~350k across a 50k library, not ~50).
           .exeForMetadata();
         if (generation !== this.#generation) return;
         for (const metadata of page) {
-          // The media-store id IS the addressable uri (ph://…, content://…)
-          // and renders directly in expo-image; full bytes resolve per asset
-          // on demand via `openDeviceOriginal`.
           rows.push({
             id: `device:${metadata.id}`,
             localId: metadata.id,
@@ -359,7 +308,6 @@ class PhotoTimelineEngine {
             width: metadata.width ?? undefined,
             height: metadata.height ?? undefined,
             durationS: durationSeconds(metadata.duration),
-            // Not worth a per-photo round-trip; replica row carries it once backed up.
             fileSize: undefined,
             favorite: metadata.isFavorite,
             archived: false,
@@ -368,13 +316,11 @@ class PhotoTimelineEngine {
             source: "device",
           });
         }
-        // Live accumulator, not a copy: per-page copying is quadratic over ~50 pages.
         this.#deviceRows = rows;
         if (offset === 0) {
           this.#deviceLoading = false;
           this.recompute();
         } else this.scheduleRecompute();
-        // Short page = last page; the query has no cursor to run out of.
         if (page.length < pageSize) {
           this.recompute();
           return;
@@ -390,7 +336,6 @@ class PhotoTimelineEngine {
     }
   }
 
-  /** One open handle per gateway base while Photos is mounted. */
   private uploadQueue(base: string): UploadQueue | undefined {
     if (this.#queue && this.#queueBase === base) return this.#queue;
     this.closeUploadQueue();
@@ -400,7 +345,6 @@ class PhotoTimelineEngine {
         headers: authHeader,
       });
     } catch {
-      // Storage unavailable: skip this tick; the durable queue is intact.
       return undefined;
     }
     this.#queueBase = base;
@@ -413,7 +357,6 @@ class PhotoTimelineEngine {
     this.#queueBase = undefined;
   }
 
-  /** Collapse the walk's page-by-page recomputes into one per quiet window. */
   private scheduleRecompute(): void {
     if (this.#recomputeTimer) return;
     this.#recomputeTimer = setTimeout(() => {
@@ -464,8 +407,6 @@ class PhotoTimelineEngine {
         value<string>(row, "phash"),
       ])
     );
-    // No flags scheme, or no `starred` concept, means nothing has ever been
-    // starred in this vault — an honest empty set, not a missing join.
     const flagsSchemeId = this.#schemeRows.find(
       (row) => value<string>(row, "uri") === FLAGS_SCHEME_URI
     );
@@ -601,7 +542,6 @@ class PhotoTimelineEngine {
     this.#deviceStarted = false;
     this.#deviceLoading = true;
     this.#replicaLoading = true;
-    // An in-flight pass is already stale by generation; drop its follow-up too.
     this.#readAgain = false;
     this.#assetRows = [];
     this.#contentRows = [];

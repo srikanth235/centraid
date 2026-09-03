@@ -244,9 +244,6 @@ EXTERNAL SOURCES:
   });
 
   test("shipped fingerprint options omit packageJson:scripts source on both platforms", async () => {
-    // Drives createFingerprintAsync with the real options object from
-    // native-fingerprint.mjs — proves PackageJsonScriptsAll is wired, not just
-    // declared. Without the skip, Bare.js would emit id packageJson:scripts.
     const { createFingerprintAsync } = await import("@expo/fingerprint");
     const mobileRoot = path.resolve(import.meta.dirname, "..");
     const fingerprints = await Promise.all(
@@ -267,8 +264,6 @@ EXTERNAL SOURCES:
   }, 300_000);
 
   test("script-key reorder leaves both platform fingerprints unchanged", async () => {
-    // Real path: fingerprintForPlatform → createFingerprintAsync with shipped
-    // sourceSkips. Reverse script keys (oxfmt sortPackageJson.sortScripts shape).
     const mobileRoot = path.resolve(import.meta.dirname, "..");
     const pkgPath = path.join(mobileRoot, "package.json");
     const original = await readFile(pkgPath, "utf8");
@@ -296,8 +291,6 @@ EXTERNAL SOURCES:
   }, 600_000);
 
   test("write refuses when L1–L3 dirty — unit path via recipe validators", async () => {
-    // Simulate the --write gate: recipe errors present ⇒ no fingerprint write.
-    // Uses a temp fingerprints file to prove we never touch it on L1 failure.
     const dir = await tempDir("native-state-");
     const fpPath = path.join(dir, "native-fingerprints.json");
     const before = { ios: "keep-me", android: "keep-me-too" };
@@ -314,7 +307,6 @@ EXTERNAL SOURCES:
       lock: incompleteLock,
     });
     expect(recipeErrors.length).toBeGreaterThan(0);
-    // The CLI path returns early before writeFile when recipeErrors.length > 0.
     if (recipeErrors.length === 0) {
       await writeFile(fpPath, JSON.stringify({ ios: "mutated" }), "utf8");
     }

@@ -33,39 +33,16 @@ export interface MultiVaultSessionOptions {
   isNetworkWorkAllowed?: () => Promise<boolean>;
   isRowSyncAllowed?: () => Promise<boolean>;
   onScopePulled?: (vaultId: string) => void;
-  /** Fires once per revoked scope, with the label the purge is about to erase. */
   onScopeRevoked?: (scope: MountedReplicaScope) => void;
-  /**
-   * Closes that vault's SQLite handle and deletes its file family, after the
-   * purge has emptied it. Injected because the provider owns the driver handles
-   * and the filesystem; this class owns only WHEN a replica file stops being an
-   * asset — which is revocation, and never cap eviction.
-   */
   reclaimRevokedReplica?: (scope: MountedReplicaScope) => void | Promise<void>;
 }
 
-/**
- * What one `pullScopes()` pass actually obtained, per scope.
- *
- * A pull can end three ways and the UI must not conflate them: it landed
- * (freshness may advance), it was tried and did not land (the gateway is not
- * answering), or the member's transfer rules refused the radio before anything
- * was asked. Only `pulled` may stamp freshness — docs/mobile-offline.md:
- * freshness advances only after that source successfully pulls.
- */
 export interface ReplicaPullOutcome {
   pulled: readonly string[];
   stalled: readonly string[];
-  /** The transfer rules said no, so no scope was dialled at all. */
   policyBlocked: boolean;
 }
 
-/**
- * Every state a row of this device's outbox can be in — the intent outbox's
- * own states, plus the placement outbox's. Closed on purpose: the pending
- * surface's copy switch is exhaustive over it, so a new state cannot reach a
- * member as a raw engine word.
- */
 export type PendingChangeStatus =
   | "queued"
   | "sending"
@@ -77,13 +54,11 @@ export type PendingChangeStatus =
   | "failed"
   | "executed";
 
-/** Per-scope durable coverage, plus the conservative aggregate over it. */
 export interface MultiVaultReplicaStatus {
   coverage: ReplicaCoverage;
   scopes: ReadonlyArray<{ vaultId: string; coverage: ReplicaCoverage }>;
 }
 
-/** App-facing facade: unified reads/search, explicitly scoped writes. */
 export class MultiVaultReplicaSession implements MobileReplicaSession {
   readonly #reader: MultiVaultReplicaReader;
   readonly #sessions: Map<string, NativeReplicaSession>;
@@ -178,16 +153,10 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     return this.#scopes;
   }
 
-  /**
-   * Out of room is a device fact, not a per-vault one: one parked scope means
-   * the phone has no space, so the whole mounted plane reports it and the
-   * screens draw the `out of room` state once.
-   */
   get storageFull(): boolean {
     return [...this.#sessions.values()].some((session) => session.storageFull);
   }
 
-  /** Space was freed on the phone: unpark every scope that stopped for it. */
   resumeAfterStorageFull(): void {
     for (const session of this.#sessions.values())
       session.resumeAfterStorageFull();
@@ -203,18 +172,11 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
       session.updateGatewayBase(baseUrl);
   }
 
-  /** `MobileReplicaSession`'s boolean: did this pass obtain anything at all. */
   async pullNow(): Promise<boolean> {
     const outcome = await this.pullScopes();
     return outcome.pulled.length > 0;
   }
 
-  /**
-   * The pass the UI reads. The transfer-rule check is asked HERE, once, rather
-   * than left to each `NativeReplicaSession.pullNow()` — those answer `false`
-   * for a blocked pull and a silent gateway alike, and a caller that cannot
-   * tell them apart renders "Updated just now" over a pull that never happened.
-   */
   async pullScopes(): Promise<ReplicaPullOutcome> {
     const vaultIds = [...this.#sessions.keys()];
     if (!(await this.#isRowSyncAllowed()))
@@ -222,7 +184,6 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     const results = await Promise.all(
       [...this.#sessions].map(async ([vaultId, session]) => {
         const contactedGateway = await session.pullNow();
-        // Only a landed pull may stamp freshness for its scope.
         if (contactedGateway) this.#onScopePulled?.(vaultId);
         return { vaultId, contactedGateway: contactedGateway === true };
       })
@@ -238,12 +199,6 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     };
   }
 
-  /**
-   * Durable coverage per mounted scope. The aggregate is conservative — one
-   * partial source keeps the whole mounted read plane partial — matching the
-   * reader's own `min` rule, so a fast source cannot make a half-backfilled
-   * library look complete (docs/mobile-offline.md).
-   */
   async status(): Promise<MultiVaultReplicaStatus> {
     const scopes = await Promise.all(
       [...this.#sessions].map(async ([vaultId, session]) => ({
@@ -268,16 +223,10 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     );
     this.#sessions.delete(vaultId);
     this.#scopes = this.#scopes.filter((entry) => entry.vaultId !== vaultId);
-    // Announce BEFORE the purge: the label is about to be erased along with
-    // the rows, and a member told nothing is a vault that vanished silently.
     if (scope) this.#onScopeRevoked?.(scope);
     try {
       this.#reader.revokeScope(vaultId);
     } finally {
-      // Purge empties the tables in place and keeps the handle, so the file is
-      // still at full size for a vault this phone may never see again. Detach
-      // (above) then purge then reclaim is the only order in which the delete
-      // cannot race a live reader or writer.
       await session?.purge();
       if (scope) await this.#reclaimRevokedReplica?.(scope);
     }
@@ -300,7 +249,6 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
         )
       : [...this.#sessions.values()];
     for (const session of candidates) {
-      // Intent ids are globally unique. Stop at the one outbox that owns it.
       // oxlint-disable-next-line no-await-in-loop
       if (await session.discardPendingWrite(intentId)) return true;
     }
@@ -324,17 +272,6 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     return undefined;
   }
 
-  /**
-   * The device's whole outbox, as one list the pending surface renders.
-   *
-   * `label` stays `${appId}: ${action}` because seats parse it for their own
-   * rows (apps/tally/tally-view-model.ts). `appId` and `action` travel beside
-   * it so the shell's own sheet can present the act in words instead, and the
-   * conflict versions, `attempts` and `enqueuedAt` travel with the row because
-   * a member deciding between Retry and Discard needs all three
-   * (docs/mobile-offline.md: the client retains reason and both versions until
-   * the member edits, retries or discards).
-   */
   async pendingChanges(): Promise<
     Array<{
       id: string;

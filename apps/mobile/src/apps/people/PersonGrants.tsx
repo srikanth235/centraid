@@ -1,21 +1,3 @@
-// `Shared with them`, drawn from the GRANT PLANE — the phone's half (#825).
-//
-// The web `components/PersonGrants.tsx` is the reference, and everything that
-// is not a React Native rendering difference is imported rather than restated:
-// the read (`grant-dashboard.ts`), every sentence (`_shared/grant-copy.ts`),
-// and the sheet itself (`kit/share/GrantSheet.tsx`). One fact, one wording,
-// both seats.
-//
-// This is the person screen's grant dashboard: every live grant reaching this
-// party, the channel that carries them, and the two acts the ruling gives
-// People — `Share` and `Revoke`. An unreached channel reads as an opportunity
-// rather than an error, and it names the act that opens it: linking the
-// person's account here is what makes them shareable (#903).
-//
-// FOUR STATES, FOUR SENTENCES: a read in flight draws the skeleton; a phone
-// with no gateway base says so; a refusal prints the route's own words; only a
-// read that came back empty says nothing is shared.
-
 import React, {
   useCallback,
   useEffect,
@@ -70,11 +52,9 @@ import {
 export interface PersonGrantsProps {
   partyId: string;
   personName: string;
-  /** The roster window, for the sheet's audience list — People's own duty. */
   roster: readonly { party_id: string; name: string }[];
   open: boolean;
   onToggle: () => void;
-  /** The grant plane. Defaults to this seat's authed transport. */
   door?: GrantDoor;
 }
 
@@ -95,8 +75,6 @@ export default function PersonGrants(
   const [busy, setBusy] = useState(false);
 
   const partyId = props.partyId;
-  // Keyed to the person it was asked about: an answer landing after the member
-  // has moved on is dropped rather than drawn under the wrong name.
   const asked = useRef(partyId);
   const read = useCallback(
     async (showPending: boolean): Promise<void> => {
@@ -112,8 +90,6 @@ export default function PersonGrants(
     [available, door, partyId]
   );
 
-  // Deferred off the effect body: a sync setState here would cascade a
-  // second render before the first has painted.
   useEffect(() => {
     let active = true;
     void Promise.resolve().then(async () => {
@@ -136,8 +112,6 @@ export default function PersonGrants(
     const outcome = await door.revoke(grant.grantId);
     setBusy(false);
     setConfirming(null);
-    // The route DERIVES that sentence from what each delivered copy did; it is
-    // posted verbatim, on the frame's one status line.
     postStatus(outcome.message);
     await read(false);
   };

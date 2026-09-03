@@ -4,9 +4,6 @@ import { mergePhotoAssets, sectionPhotoAssets } from "./timeline-model";
 import type { PhotoAsset } from "./timeline-model";
 
 function measureCpuMs<T>(run: () => T): { value: T; elapsedMs: number } {
-  // This package runs alongside several other affected packages in PR checks.
-  // CPU time preserves the checked algorithm budget without counting time the
-  // OS deschedules this worker under concurrent CI load.
   const started = process.cpuUsage();
   const value = run();
   const elapsed = process.cpuUsage(started);
@@ -70,8 +67,6 @@ describe("timeline-50k", () => {
     const { value: merged, elapsedMs } = measureCpuMs(() =>
       mergePhotoAssets(device, remote)
     );
-    // An `indexOf(same)` scan is O(n·m); at 50k that is ~2.5B comparisons.
-    // A Map keeps every device copy folded onto its remote in well under budget.
     expect(elapsedMs).toBeLessThan(2_000);
     expect(merged).toHaveLength(50_000);
     expect(merged.every((asset) => asset.source === "merged")).toBe(true);

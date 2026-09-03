@@ -1,16 +1,9 @@
-// Tasks' native styles (Tasks spec §5; #834). Values come from the design
-// boundary (`kit/theme`) and nothing else — no hex, no literal rule weight, no
-// font size of its own.
-
 import { StyleSheet } from "react-native";
 
 import { borders, radii, spacing, t } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
-/** The touch floor, without exception (§7). */
 const TOUCH = 44;
-/** The pending rule's weight — 2px, the one deliberate exception to the
- *  hairline, because it is a MARK rather than a boundary. */
 const PENDING_RULE = 2;
 
 export type TasksStyles = ReturnType<typeof makeTasksStyles>;
@@ -49,8 +42,6 @@ export const makeTasksStyles = (colors: ThemeColors) =>
       flex: 1,
       minHeight: TOUCH,
     },
-    // The anchor's two cards: the SELECTED one takes the raised surface and an
-    // ink border — no hue, because a control never carries the app's.
     card: {
       borderColor: colors.line,
       borderRadius: radii.lg,
@@ -77,8 +68,6 @@ export const makeTasksStyles = (colors: ThemeColors) =>
     chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing[2] },
     chipText: { ...t("control"), color: colors.textSoft },
     chipTextOn: { color: colors.text },
-    // A project's dot is a CONTENT marker on the row, never a control: no
-    // press, no state, and `aria-hidden` on every seat that has one.
     dot: { borderRadius: radii.pill, height: 8, width: 8 },
     detailNote: {
       ...t("body"),
@@ -112,8 +101,6 @@ export const makeTasksStyles = (colors: ThemeColors) =>
       paddingVertical: spacing[2],
     },
     fieldValue: { ...t("body"), color: colors.text },
-    // Delete is the ONE outlined `net` control in this room; Release destroys
-    // nothing and stays a plain secondary.
     foot: {
       flexDirection: "row",
       flexWrap: "wrap",
@@ -139,8 +126,6 @@ export const makeTasksStyles = (colors: ThemeColors) =>
       paddingBottom: spacing[2],
     },
     groupLabel: { ...t("smallStrong"), color: colors.text },
-    // OVERDUE IS THE ATTENTION TONE, NEVER RED. `net` is reserved for
-    // destructive controls and is outlined even there.
     groupLabelAttention: { color: colors.seam },
     headVerb: {
       justifyContent: "center",
@@ -150,11 +135,7 @@ export const makeTasksStyles = (colors: ThemeColors) =>
     },
     lead: { ...t("body"), color: colors.textSoft },
     listContent: { paddingHorizontal: spacing[4], paddingBottom: spacing[5] },
-    // Every number is tabular and bidi-isolated: without the isolate,
-    // `today, 17:00` reorders under RTL and a member reads a time nobody wrote.
     num: { ...t("mono"), color: colors.textFaint },
-    // OVERDUE IS THE ATTENTION TONE, NEVER RED, and it is worn by the ONE part
-    // that is overdue rather than by the whole meta line.
     numAttention: { color: colors.seam },
     pane: { gap: spacing[2], padding: spacing[4] },
     pendingWords: { ...t("annotLabel"), color: colors.textFaint },
@@ -172,8 +153,6 @@ export const makeTasksStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
       paddingTop: spacing[2],
     },
-    // Optional, so it reserves nothing: the mark is absent at level 0 and the
-    // title takes the whole line.
     priorityMark: { ...t("eyebrow"), color: colors.textSoft },
     primary: {
       alignItems: "center",
@@ -183,7 +162,6 @@ export const makeTasksStyles = (colors: ThemeColors) =>
       minHeight: TOUCH,
       paddingHorizontal: spacing[4],
     },
-    // A filled control that cannot be pressed stops being filled.
     primaryOff: { backgroundColor: colors.bgSunken },
     primaryText: { ...t("control"), color: colors.onAccent },
     projectRow: {
@@ -230,8 +208,6 @@ export const makeTasksStyles = (colors: ThemeColors) =>
       color: colors.textFaint,
       textDecorationLine: "line-through",
     },
-    // ONE HORIZONTAL SCROLLER, never a wrap: three chips and a verb cannot
-    // stack at 390px without pushing the first task off the screen.
     toolbar: {
       borderBottomColor: colors.line,
       borderBottomWidth: borders.hairline,
@@ -243,7 +219,6 @@ export const makeTasksStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
       paddingVertical: spacing[2],
     },
-    // The vault marker is a read-only STATUS chip, never a control colour.
     vault: { ...t("eyebrow"), color: colors.textFaint },
     verbText: { ...t("control"), color: colors.textSoft },
     windowFoot: { alignItems: "center", gap: spacing[2], padding: spacing[4] },

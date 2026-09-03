@@ -1,11 +1,3 @@
-// SEARCH — expense DESCRIPTIONS, and it says so at rest and on a miss.
-//
-// "Amounts and people are not searched" is §6's own sentence and it appears on
-// the empty result, not only in a tooltip nobody opens: a search that quietly
-// failed to match a person's name would teach a member the ledger does not
-// hold them. The resting state says the same thing before a single key is
-// pressed, which is the honest place for a scope to be stated.
-
 import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
 

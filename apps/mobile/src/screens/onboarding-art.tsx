@@ -1,9 +1,3 @@
-// #686: illustration art, exempt from token contract
-// Small marks for the first-run onboarding flow (screens/Onboarding). Split out
-// so the flow file stays under the repo file-size limit; these are pure,
-// stateless SVG glyphs with no onboarding logic in them. The flow's hero lives
-// in onboarding-home-art.tsx, which needs animation and its own file.
-
 import React from "react";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
@@ -19,7 +13,6 @@ export function BrandMark({ size = 22 }: { size?: number }): React.JSX.Element {
   );
 }
 
-/** Checkmark badge for the terminal "you're all set" state. */
 export function DoneCheck(): React.JSX.Element {
   return (
     <Svg width={36} height={36} viewBox="0 0 24 24" fill="none">
@@ -34,13 +27,6 @@ export function DoneCheck(): React.JSX.Element {
   );
 }
 
-/**
- * Viewfinder mark for the pairing step's primary action: QR finder modules
- * inside four camera brackets. It has to read as "point your camera at
- * something" rather than "submit a form", because scanning is the way in and
- * pasting a ticket is only the fallback — a plain label on a plain pill leaves
- * that ambiguous.
- */
 export function ScanTargetMark({
   size = 58,
 }: {
@@ -52,8 +38,6 @@ export function ScanTargetMark({
     "M54 41v9a4 4 0 0 1-4 4h-9",
     "M15 54H6a4 4 0 0 1-4-4v-9",
   ];
-  // Three finder squares plus a scatter of data modules: enough of a QR to be
-  // recognised at 58pt, far short of enough to be mistaken for a real code.
   const finders = [
     [16, 16],
     [31, 16],
@@ -115,7 +99,6 @@ export function ScanTargetMark({
   );
 }
 
-/** Right-pointing arrow used inside the primary button. */
 export function ForwardArrow(): React.JSX.Element {
   return (
     <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">

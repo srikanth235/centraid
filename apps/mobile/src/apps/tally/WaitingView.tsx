@@ -1,23 +1,3 @@
-// WAITING — the multi-writer surface, as three sections and the verbs each
-// state actually permits (Tally spec §1, FLOWS.md "Group co-contribution").
-//
-// WHAT THIS SEAT CAN HONESTLY DRAW. `session.pendingChanges()` answers with
-// THIS phone's own durable outbox: the writes this device composed and nothing
-// else. It is not a read of another member's commons intents, and no mobile
-// transport reaches the gateway's per-intent decide door — so there is no
-// Approve and no Decline here, and the surface says whose rows it is showing
-// rather than implying it is showing everybody's. `contrib-model.ts` refuses
-// to invent an Accept for exactly this reason; its `approvals` verb is the
-// hand-over to the shell's own Approvals inbox, which this phone does have.
-//
-// EMPTY IS THE HEALTHY STATE (STATES.md). Three empty sections are the ordinary
-// Tuesday, so each says so in its own words rather than collapsing to one
-// generic nothing.
-//
-// A NUDGE ALWAYS PARKS. The reminders section states them as prepared and
-// never as sent, in any tense: Tally has no delivery path, and the record IS
-// the intention.
-
 import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
 
@@ -48,19 +28,12 @@ import { LedgerRow, Section } from "./TallyParts";
 
 export interface WaitingViewProps {
   sections: ContribSections;
-  /** Reminders the owner prepared. Never sent, and never said to be. */
   nudges: readonly Nudge[];
-  /** Party id → the name this vault knows them by. */
   names: ReadonlyMap<string, string>;
   notice: TallyNoticeProps;
   onVerb: (verb: ContribVerb, row: ContribRow) => void;
 }
 
-/** Total over the grammar, so a verb added upstream fails typecheck here
- *  rather than rendering as nothing. `approve` and `decline` never reach this
- *  seat — `TALLY_CONTRIB_DOORS.decide` is false, so `contrib-model` emits
- *  neither — and they carry their shared labels for the day a mobile transport
- *  gains the door. */
 const VERB_LABEL: Readonly<Record<ContribVerb, string>> = {
   approvals: CONTRIB_VERBS.approvals,
   approve: CONTRIB_VERBS.approve,
@@ -85,8 +58,6 @@ export default function WaitingView(
         chip={row.status.toUpperCase()}
         {...(row.tone === "none" ? {} : { chipTone: row.tone })}
         pending={row.pending}
-        // ONE quiet verb on touch (§5). `contrib-model` orders them by what
-        // the state permits, and the first is the one this seat offers.
         {...(row.verbs[0]
           ? {
               act: {

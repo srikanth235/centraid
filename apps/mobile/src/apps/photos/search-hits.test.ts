@@ -1,7 +1,3 @@
-// The grouped hits above the search grid (Photos v4 §9, proto:4258-4265).
-// Every number derives from replica rows the phone reads and is asserted
-// here — guarding against a plausible count nothing produced.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -80,8 +76,6 @@ function sources(over: Partial<SearchHitSources> = {}): SearchHitSources {
 
 describe("query tokens", () => {
   it("drops the words that are in every third name in a library", () => {
-    // Otherwise "the coast road" hits every album whose name contains "the"
-    // — false hits above true ones is worse than no list at all.
     expect(queryTokens("the coast road")).toStrictEqual(["coast", "road"]);
     expect(queryTokens("ana at the coast")).toStrictEqual(["ana", "coast"]);
   });
@@ -101,8 +95,6 @@ describe("the caption row's date", () => {
 describe("grouped hits", () => {
   it("names the PERSON, with her whole size and her share of these results", () => {
     const [hit] = groupedSearchHits(sources());
-    // Ana is on assets 1, 2, 5 — three DISTINCT photographs, two here;
-    // a proposed face counts exactly as a confirmed one.
     expect(hit).toMatchObject({
       kind: "person",
       label: "Ana",
@@ -133,7 +125,6 @@ describe("grouped hits", () => {
     expect(hit).toMatchObject({
       kind: "place",
       label: "Lyme Regis",
-      // Three in the library, two of them in these results.
       meta: "2 here",
       sub: "place · 3 photographs",
       target: { screen: "PlacesMap" },
@@ -176,8 +167,6 @@ describe("grouped hits", () => {
   });
 
   it("emits NO things row — the vault has no label entity to count", () => {
-    // proto:4265 draws a things row, but the vault has no label entity to
-    // count — omitted rather than invented.
     const hits = groupedSearchHits(sources({ query: "beach sea coat" }));
     expect(hits.map((hit) => hit.kind)).not.toContain("things");
   });
@@ -197,8 +186,6 @@ describe("grouped hits", () => {
   });
 });
 
-// A query naming an album/person/place must bring its PHOTOGRAPHS (#712):
-// title search alone came up empty under the row announcing it.
 describe("the photographs a hit reaches", () => {
   it("carries an album's members", () => {
     const [hit] = groupedSearchHits(sources({ query: "coast road" }));
@@ -211,8 +198,6 @@ describe("the photographs a hit reaches", () => {
   });
 
   it("carries a place's photographs, not just the matched ones", () => {
-    // Two of Lyme Regis's three are matched; the third is reachable through
-    // the place row.
     const [hit] = groupedSearchHits(sources({ query: "Lyme" }));
     expect(hit?.assetIds).toStrictEqual(["asset-1", "asset-2", "asset-3"]);
   });
@@ -225,7 +210,6 @@ describe("the photographs a hit reaches", () => {
   });
 
   it("unions the rows without repeating a photograph two rows share", () => {
-    // Ana reaches 1, 2 and 5; Lyme Regis 1, 2 and 3 — asset-1 draws once.
     const hits = groupedSearchHits(sources({ query: "ana lyme" }));
     expect([...reachableAssetIds(hits)].sort()).toStrictEqual([
       "asset-1",
@@ -242,8 +226,6 @@ describe("the photographs a hit reaches", () => {
   });
 });
 
-// Semantic search (#721): one aggregate row for the gateway's ranked set,
-// appended after the other four and never gating them.
 describe("the semantic row", () => {
   it("is absent when the network has answered nothing yet", () => {
     const hits = groupedSearchHits(sources({ query: "beach" }));
@@ -333,7 +315,6 @@ describe("the semantic row", () => {
         ],
       })
     );
-    // Ana (person) reaches 1, 2, 5; the semantic row adds 4.
     expect([...reachableAssetIds(hits)].sort()).toStrictEqual([
       "asset-1",
       "asset-2",
@@ -343,9 +324,6 @@ describe("the semantic row", () => {
   });
 });
 
-// A PLACE IS A SEARCH TERM (#816): places answering only to their `name`
-// column leave "Tahoe" unfindable once sections carry member-chosen names.
-// Fixtures mirror the seeded roll: declared home, errand nearby, Tahoe off.
 const HOME_ROW = {
   place_id: "place-home",
   name: "Home",
@@ -359,7 +337,6 @@ const PARK_ROW = {
   geo_lat: 37.47,
   geo_lng: -122.16,
 };
-/** Member-named "the shore"; the gazetteer says which shore. */
 const SHORE_ROW = {
   place_id: "place-shore",
   name: "the shore",
@@ -367,8 +344,6 @@ const SHORE_ROW = {
   geo_lat: 38.9542,
   geo_lng: -120.1094,
 };
-/** Unnamed coordinate mint, 250 km from home — the gazetteer is the only
- *  rung with an answer. */
 const RIVER_ROW = {
   place_id: "place-river",
   name: "39.16820, -120.14290",
@@ -414,7 +389,6 @@ describe("the vocabulary a place answers to", () => {
     expect(hits).toHaveLength(1);
     expect(hits[0]).toMatchObject({
       key: "place:place-shore",
-      // A person-entered name outranks a derived one in display, always.
       label: "the shore",
       sub: "place · 2 photographs",
       target: { screen: "PlacesMap" },
@@ -422,8 +396,6 @@ describe("the vocabulary a place answers to", () => {
   });
 
   it("does not pull in a section whose gazetteer says somewhere else", () => {
-    // Truckee is not Tahoe; returning it would be guessing geography.
-    // It is findable through its gazetteer-phrased name.
     expect(placeHitsFor("truckee").map((hit) => hit.label)).toStrictEqual([
       "near Truckee, CA",
     ]);
@@ -439,8 +411,6 @@ describe("the vocabulary a place answers to", () => {
   });
 
   it("has no home vocabulary until a member declares which place is home", () => {
-    // No `kind: 'home'` anywhere: "near home" is a claim about a place a
-    // person named, and the phone does not guess which one.
     const hits = groupedSearchHits(
       sources({
         assets: GEO_LIBRARY,
@@ -450,13 +420,11 @@ describe("the vocabulary a place answers to", () => {
         faces: [],
         matches: [],
         parties: [],
-        // Named for the street, so nothing answers to the WORD "home".
         places: [{ ...HOME_ROW, name: "Cedar Street", kind: null }, PARK_ROW],
         query: "near home",
       })
     );
     expect(hits).toStrictEqual([]);
-    // Same rows, declaration back: the vocabulary is the declaration's doing.
     const declared = groupedSearchHits(
       sources({
         assets: GEO_LIBRARY,
@@ -492,7 +460,6 @@ describe("the vocabulary a place answers to", () => {
         expect(hit.label).not.toMatch(/^-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+$/u);
       }
     }
-    // Digits are not a search term: a coordinate is a placeholder.
     expect(placeHitsFor("39.16")).toStrictEqual([]);
   });
 });
@@ -506,7 +473,6 @@ describe("the no-location bucket", () => {
         key: "place:no-location",
         label: "No location yet",
         sub: "place · 2 photographs",
-        // Opens the same asset list the shelf's trailing card opens.
         target: {
           screen: "PlaceDetail",
           params: { placeKey: "no-location", placeName: "No location yet" },
@@ -523,8 +489,6 @@ describe("the no-location bucket", () => {
   });
 
   it("sits after the named places when a query somehow hits both", () => {
-    // "home" is home vocabulary, not the bucket — the order claim is only
-    // that the bucket is never first.
     expect(
       placeHitsFor("home").every((hit) => hit.key !== "place:no-location")
     ).toBe(true);

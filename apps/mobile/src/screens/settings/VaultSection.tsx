@@ -20,16 +20,6 @@ import { getActiveVaultId, subscribeVaultLinks } from "../../lib/vault-links";
 import ColorSwatchRow from "./ColorSwatchRow";
 import SettingsSection from "./SettingsSection";
 
-// Settings → Vault — a port of desktop's Settings → Vault (#382), scoped
-// to the ACTIVE (gateway, vault) tuple the Vaults switcher has selected (lib/
-// vaults). Falls back to the first visible vault when nothing is active yet.
-// Edits the vault's presentation only: name, colour, icon, description. Creating
-// or deleting a vault is an admin act on the gateway host (#289) with no client
-// HTTP surface; the switcher's add/forget act on device-local tuples, not the
-// vault itself.
-
-// The vault stores a raw hex colour; these are the shared design-tokens palette
-// values — the same set desktop's PROFILE_COLORS offers (they ARE those hexes).
 const VAULT_COLORS: readonly string[] = [
   palette.indigo,
   palette.rose,
@@ -41,8 +31,6 @@ const VAULT_COLORS: readonly string[] = [
   palette.slate,
 ];
 
-// The vault stores an icon as a design-tokens IconName key. Mirrors desktop's
-// PROFILE_ICONS; every one resolves in the mobile Icon registry.
 const VAULT_ICONS: readonly IconName[] = [
   "Home",
   "Bolt",
@@ -76,7 +64,6 @@ type VaultFormSetters = {
   setBlurb: (next: string) => void;
 };
 
-/** Push a vault's presentation into the edit form's fields. */
 function seedForm(setters: VaultFormSetters, vault: VaultRow): void {
   setters.setName(vault.name);
   setters.setColor(vault.color ?? DEFAULT_COLOR);
@@ -84,9 +71,6 @@ function seedForm(setters: VaultFormSetters, vault: VaultRow): void {
   setters.setBlurb(vault.blurb ?? "");
 }
 
-// The loader lives outside the component: it closes over nothing but the
-// (stable) state setters, so it needs no `useCallback` identity dance and the
-// effects below read as plain async kick-offs.
 async function loadVault(setters: VaultFormSetters): Promise<void> {
   try {
     const base = await resolveGatewayBase();
@@ -95,8 +79,6 @@ async function loadVault(setters: VaultFormSetters): Promise<void> {
       return;
     }
     const vaults = await listVaults();
-    // Prefer the vault the Vaults switcher has active; fall back to the first
-    // visible one (fresh install with nothing selected yet).
     const activeVaultId = getActiveVaultId();
     const active =
       vaults?.find((v) => v.vaultId === activeVaultId) ?? vaults?.[0];
@@ -126,8 +108,6 @@ export default function VaultSection(): React.JSX.Element {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
 
-  // Every member is a `useState` setter, so the bundle is stable for the
-  // component's lifetime — memoized once so the effects below can depend on it.
   const setters = useMemo<VaultFormSetters>(
     () => ({ setState, setName, setColor, setIcon, setBlurb }),
     []
@@ -136,8 +116,6 @@ export default function VaultSection(): React.JSX.Element {
   useEffect(() => {
     void loadVault(setters);
   }, [setters]);
-  // Re-load when the active Vault changes, so this edits whatever the switcher
-  // just selected.
   useEffect(
     () => subscribeVaultLinks(() => void loadVault(setters)),
     [setters]

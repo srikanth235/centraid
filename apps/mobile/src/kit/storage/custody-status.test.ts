@@ -1,7 +1,3 @@
-// The fold of the gateway's custody rollup (#712). What is pinned here is
-// the one property the whole block exists for: an UNCOUNTED vault contributes
-// nothing and is NAMED, rather than being summed in as a row of zeroes.
-
 import { describe, expect, it, vi } from "vitest";
 
 import type * as Gateway from "../../lib/gateway";
@@ -12,8 +8,6 @@ import type {
   CustodyTotals,
 } from "./custody-status";
 
-// Mocked the way `lib/daily-brief.test.ts` mocks it, so the HTTP shape is
-// exercised without a real gateway — and without pulling react-native in.
 const { apiHeaders, fetchJson } = vi.hoisted(() => ({
   apiHeaders: vi.fn<typeof Gateway.apiHeaders>(() => ({})),
   fetchJson: vi.fn<typeof Gateway.fetchJson>(),
@@ -31,8 +25,6 @@ const vault = (
 
 describe(foldCustodyStatus, () => {
   it("sums counted vaults and keeps the OLDEST sweep instant", () => {
-    // A total is only as current as its stalest part, so the weakest link is
-    // what the surface may claim it was counted at.
     const folded = foldCustodyStatus([
       vault("Mine", "2026-08-06T10:00:00.000Z", {
         freeable: { count: 2, bytes: 200 },
@@ -61,9 +53,6 @@ describe(foldCustodyStatus, () => {
   });
 
   it("computedAt stays null when NOT ONE vault has been swept", () => {
-    // The load-bearing difference: null means "nobody has looked", and the
-    // surface must say so rather than render zeroes, which read as "you have
-    // nothing".
     const folded = foldCustodyStatus([vault("Mine", null), vault("B", null)]);
     expect(folded.computedAt).toBeNull();
     expect(folded.uncounted).toStrictEqual(["Mine", "B"]);
@@ -107,8 +96,6 @@ describe(readCustodyStatus, () => {
   });
 
   it("answers null when the read fails — never a fold of zeroes", async () => {
-    // Zeroes would render as "your library is empty and nothing is freeable",
-    // which is a claim about the originals rather than about this read.
     fetchJson.mockRejectedValue(new Error("offline"));
     await expect(readCustodyStatus("https://gw.test")).resolves.toBeNull();
   });

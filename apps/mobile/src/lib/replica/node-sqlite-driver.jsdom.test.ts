@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-// Pin #842; see test-kit/src/vitest.ts.
 import { describe, expect, it } from "vitest";
 
 import { NodeSqliteDriver } from "./node-sqlite-driver";
@@ -15,7 +13,6 @@ describe("node:sqlite driver under a jsdom docblock", () => {
       "collected",
     ]);
 
-    // Per-field: rows are null-prototype.
     const rows = driver.all<{ id: string; note: string }>("SELECT * FROM pin");
     expect(rows).toHaveLength(1);
     const [row] = rows;
@@ -25,3 +22,4 @@ describe("node:sqlite driver under a jsdom docblock", () => {
     driver.close();
   });
 });
+// @vitest-environment jsdom

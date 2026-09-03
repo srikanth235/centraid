@@ -1,15 +1,3 @@
-// @vitest-environment jsdom
-// Photos' way into the grant sheet, phone seat (#825): the REFUSALS, spoken
-// before a sheet opens, and the mapping law they stand on.
-//
-// Four facts the screen must keep apart — no gateway session, a roster that
-// named somebody, a roster that answered nobody, and a roster half of which
-// could not be read. Speaking the last one as the third tells a member with a
-// full People directory that they know nobody.
-//
-// The hook is driven inside a probe component: what reached the status line,
-// and whether the sheet opened, are the whole observable outcome of a refusal.
-
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,8 +29,6 @@ vi.mock(
   () => ({ useReplica: () => replica.value }) as never
 );
 
-// The replica rows each query answers, by entity. Real reads reach the Expo
-// runtime; the roster's SHAPE is what this suite is about, not its transport.
 const rows = vi.hoisted(() => ({
   value: {} as Record<string, Record<string, unknown>[]>,
 }));
@@ -73,7 +59,6 @@ interface Entry {
 
 let root: ReturnType<typeof createRoot> | undefined;
 
-/** Press *Share* and hand back the sentences and whether the sheet opened. */
 async function press(): Promise<{
   said: string[];
   opened: boolean;
@@ -136,8 +121,6 @@ describe("Photos' grant entry, phone seat", () => {
     rows.value = {
       "core.party": [{ party_id: "party-asha", display_name: "Asha Rao" }],
     };
-    // The link is the whole address (#903): a People row without one names
-    // nobody a grant could reach, so the roster needs both halves.
     links.answer = () =>
       Promise.resolve([
         {
@@ -156,8 +139,6 @@ describe("Photos' grant entry, phone seat", () => {
   });
 
   it("never offers a person queued offline — that id names nobody yet", async () => {
-    // The mapping law (`grantAudiencesFrom`) is what drops them; this pins that
-    // Photos composes it rather than restating a looser rule of its own.
     rows.value = {
       "core.party": [
         { party_id: "pending:intent-1:0", display_name: "Queued friend" },
@@ -183,10 +164,6 @@ describe("Photos' grant entry, phone seat", () => {
   });
 
   it("People rows do not rescue a failed links read — they are not an address", async () => {
-    // This used to open on the People rows alone, on the reading that a link
-    // was one way to reach somebody among several. Since #903 it is the ONLY
-    // way, so a broken links read leaves no target to name and the sheet must
-    // say the roster is unreadable rather than draw a person it cannot reach.
     links.answer = () => Promise.reject(new Error("gateway gone"));
     rows.value = {
       "core.party": [{ party_id: "party-asha", display_name: "Asha Rao" }],
@@ -198,3 +175,4 @@ describe("Photos' grant entry, phone seat", () => {
     expect(named).toStrictEqual([]);
   });
 });
+// @vitest-environment jsdom

@@ -6,11 +6,6 @@ import { build } from "esbuild";
 
 import { apps, toBlueprintCss } from "@centraid/design";
 
-// Home tile under a mirrored writing direction (#842).
-// `lint:logical-insets` cannot prove a logical replacement resolves as intended.
-// DEMONSTRATED RED: restore `right: -3px` / `text-align: left` in
-// AppCard.module.css and the RTL half fails while LTR stays green.
-
 const here = import.meta.dirname;
 const REPO_ROOT = path.resolve(here, "../../../..");
 const APP_CARD = path.join(
@@ -73,7 +68,6 @@ async function bundleCard(): Promise<{ js: string; css: string }> {
     define: { "process.env.NODE_ENV": '"production"' },
     format: "iife",
     jsx: "automatic",
-    // Never written (`write: false`); esbuild still needs a path to name CSS-module output.
     outdir: path.join(here, ".app-card-logical-insets-bundle"),
     platform: "browser",
     target: "es2022",
@@ -112,7 +106,6 @@ test("the home tile mirrors with the writing direction, not against it", async (
   await expect(ltr.getByTestId("app-tile")).toHaveCount(3);
   await expect(rtl.getByTestId("app-tile")).toHaveCount(3);
 
-  // Dot rides INLINE-END. Signed offset from plate centre.
   const dotSide = async (pane: typeof ltr): Promise<number> => {
     const tile = pane.getByTestId("app-tile").first();
     return tile.evaluate((el) => {
@@ -124,11 +117,9 @@ test("the home tile mirrors with the writing direction, not against it", async (
       return d.left + d.width / 2 - (p.left + p.width / 2);
     });
   };
-  // LTR: inline-end is RIGHT — positive. RTL: LEFT. Old `right: -3px` stayed positive.
   expect(await dotSide(ltr)).toBeGreaterThan(0);
   expect(await dotSide(rtl)).toBeLessThan(0);
 
-  // Computed `text-align` so a physical `left` fails even though LTR looks identical.
   const align = async (pane: typeof ltr): Promise<string> =>
     pane
       .getByTestId("app-tile")

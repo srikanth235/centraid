@@ -1,7 +1,3 @@
-// The denied gate (Tasks spec §3, §5). Denial is DATA: the facts sit in rows
-// beside the sentence that names the way out, and the seat writes no row for a
-// fact it does not hold.
-
 import React from "react";
 import { View } from "react-native";
 
@@ -12,7 +8,6 @@ import { Text } from "../../kit/components/NativeText";
 import type { TasksStyles } from "./TasksHome.styles";
 
 export interface TasksDeniedProps {
-  /** The refusal the vault gave, which IS the receipt on both seats. */
   receipt: string;
   scope: string;
   when: string;

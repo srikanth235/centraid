@@ -1,5 +1,3 @@
-// Network half of the first-run camera-roll import (#724): the `attempt` for camera-roll-import.ts's pure logic.
-
 import { File } from "expo-file-system";
 
 import { authHeader } from "../../lib/gateway";
@@ -21,8 +19,6 @@ interface PublishResponse {
   failed: number;
 }
 
-/** One file through the SAME staged-import door as a dropped Takeout zip;
- *  true = NEW, not a dedupe skip. */
 async function stageAndPublishOne(
   gatewayBase: string,
   filename: string,
@@ -59,8 +55,6 @@ async function stageAndPublishOne(
   return { created: publishedBody.created > 0 };
 }
 
-/** Stage+publish the device original; a Live Photo also publishes its paired
- *  video under `live:<localId>` (`photos-backup.ts`). Never a bulk pre-scan. */
 export async function attemptImportCandidate(
   gatewayBase: string,
   candidate: ImportCandidate

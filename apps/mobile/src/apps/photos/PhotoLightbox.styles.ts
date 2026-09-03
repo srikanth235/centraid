@@ -1,6 +1,3 @@
-// Geometry only — no hex (the token layer owns colour) and no bare `fontSize`
-// (`t(...)` keeps the 11px floor honest at 200% text scale).
-
 import { StyleSheet } from "react-native";
 
 import { radii, spacing, t } from "../../kit/theme";
@@ -12,7 +9,6 @@ import {
 } from "./viewer-model";
 
 export const styles = StyleSheet.create({
-  /** Transparent by design — a background here restores the full-width bar. */
   actionRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -26,14 +22,12 @@ export const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
   },
   facts: { ...t("mono"), flex: 1, marginTop: spacing[1] },
-  /** Fixed key column: a flexible key lets the value fight the label for width. */
   factLabel: { ...t("small"), flexGrow: 0, flexShrink: 0, width: 96 },
   factsRow: { flexDirection: "row", gap: spacing[3], paddingVertical: 3 },
   fill: { flex: 1 },
   filmstrip: {
     height: FILMSTRIP.height,
   },
-  /** RN throws on child-layout props in a ScrollView `style`; pad the content. */
   filmstripContent: {
     alignItems: "center",
     paddingHorizontal: spacing[3],
@@ -70,7 +64,6 @@ export const styles = StyleSheet.create({
   liveText: { ...t("eyebrow") },
   mediaCenter: { alignItems: "center", justifyContent: "center" },
   modalBackdrop: { flex: 1 },
-  /** Logical insets, never legacy `start`/`end` (scripts/lint-logical-insets.mjs). */
   pager: {
     alignItems: "center",
     borderRadius: radii.pill,
@@ -146,7 +139,6 @@ export const styles = StyleSheet.create({
     borderRadius: radii.pill,
     borderWidth: 1,
     flexDirection: "row",
-    // `minWidth: 0` lets the clamp take effect; the row otherwise overflows.
     flexShrink: 1,
     minHeight: VIEWER_CHROME_CHIP,
     minWidth: 0,
@@ -179,7 +171,6 @@ export const styles = StyleSheet.create({
     paddingVertical: spacing[2],
     textAlign: "center",
   },
-  /** `alignSelf` is what centres an absolutely positioned child under Yoga. */
   zoomPill: {
     alignItems: "center",
     alignSelf: "center",
@@ -191,7 +182,6 @@ export const styles = StyleSheet.create({
     paddingHorizontal: spacing[1],
     position: "absolute",
   },
-  /** Each rung is its own 44 target: this bar is pressed with a thumb. */
   zoomStep: {
     alignItems: "center",
     justifyContent: "center",

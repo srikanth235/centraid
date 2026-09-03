@@ -1,8 +1,3 @@
-// The viewer's read-only reason (#711 item M). This package has no React
-// Native render harness, so these assert by reading the component sources:
-// `READ_ONLY_VAULT_REASON` is imported (never re-typed) everywhere the truth
-// is stated, and reaches JSX as element children — not only as an
-// `accessibilityHint` a sighted member never sees.
 import fs from "node:fs";
 import path from "node:path";
 
@@ -88,8 +83,6 @@ describe("the viewer bottom bar states the reason inline, never only in a hint (
   });
 
   it("greys a refused target with the STAGE's soft ink, never the page's disabled ink", () => {
-    // `--text-disabled` is mixed against paper: on the stage it reads as an
-    // absent control, not a refused one.
     expect(CHROME_SRC).toMatch(/disabled\s*\?\s*colors\.onStageSoft/u);
     expect(CHROME_SRC).not.toMatch(/colors\.textDisabled/u);
   });

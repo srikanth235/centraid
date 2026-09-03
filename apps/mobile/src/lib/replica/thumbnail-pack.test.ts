@@ -1,8 +1,3 @@
-// Pinned thumbnail packs: per-source eviction, the native byte total, and the
-// transfer policy that governs pack downloads. The expo filesystem, the native
-// storage module, and the network policy are injected as mocks, so the pack's
-// own accounting runs under node.
-
 /* oxlint-disable max-classes-per-file -- the fake Directory and File are one expo-file-system stand-in; the module under test distinguishes them with `instanceof`, so they cannot be one class (#880) */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,9 +12,7 @@ interface DiskFile {
   modificationTime: number;
 }
 
-/** Path → file. Directories exist exactly when something lives under them. */
 const disk = new Map<string, DiskFile>();
-/** Every native sizing crossing, in order — the cost this module is tuned for. */
 const nativeSizedPaths: string[] = [];
 const storage = {
   replicaStorageDirectory: vi.fn<() => string | undefined>(() => ROOT),
@@ -65,9 +58,7 @@ class FakeDirectory {
   get exists(): boolean {
     return childrenOf(this.path).length > 0;
   }
-  create(): void {
-    // Directories are implied by their contents in this fake.
-  }
+  create(): void {}
   delete(): void {
     for (const name of childrenOf(this.path)) disk.delete(name);
   }
@@ -145,7 +136,6 @@ vi.mock(import("../upload/native-policy"), () => ({
 
 type ThumbnailPack = typeof import("./thumbnail-pack");
 
-/** The module caches its directory listing, so each test gets a fresh copy. */
 async function loadPack(): Promise<ThumbnailPack> {
   vi.resetModules();
   return import("./thumbnail-pack");
@@ -195,8 +185,6 @@ describe("pinned thumbnail packs", () => {
   });
 
   it("evicts a source's oldest thumbnails and never reaches into another source", async () => {
-    // Three of these overrun the 128 MiB source budget; two fit inside it, so
-    // exactly one eviction is due and it must be the oldest.
     const chunk = 50 * MIB;
     seed("alpha", [
       ["oldest", chunk, 1],

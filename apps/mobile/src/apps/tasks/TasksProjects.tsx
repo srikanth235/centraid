@@ -1,9 +1,3 @@
-// The Projects place (Tasks spec §2): projects under their areas, each row
-// carrying its own dot, and a New project that asks for what a project needs.
-//
-// THE DOT IS A CONTENT MARKER, NOT A CONTROL — it is inside the row's press
-// target and carries no state of its own.
-
 import React, { useMemo, useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
 
@@ -42,7 +36,6 @@ export interface TasksProjectsProps {
   projects: readonly Project[];
   counts: Readonly<Record<string, number>>;
   scopes: readonly QuickAddScope[];
-  /** Set while a row has been picked up: a press FILES rather than opens. */
   filing: boolean;
   styles: TasksStyles;
   onOpen: (projectId: string) => void;

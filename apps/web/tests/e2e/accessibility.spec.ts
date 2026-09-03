@@ -1,18 +1,11 @@
-// Web accessibility browser lane (#781, closing #587 D21): static scanners
-// never see the live tree; axe-core (WCAG A/AA) runs in the shared Chromium
-// harness against the cold connect screen, the connected Home shell (#708),
-// and — since #892 — every first-party blueprint the shell can open.
-// The mobile device-side lane is NOT this spec's claim (#781 follow-up).
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { connectPwa } from "./connect.js";
 
-// WCAG A + AA — a testable standard, not axe's "best-practice" opinions.
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
-/** Render violations so the assertion failure is readable on its own. */
 function describeViolations(
   violations: Array<{
     id: string;
@@ -57,7 +50,6 @@ test("the cold connect screen has no WCAG A/AA violations", async ({
   page,
 }) => {
   await page.goto("/");
-  // Scan only once heading + textbox are up.
   await page.getByRole("textbox").first().waitFor();
 
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
@@ -79,8 +71,6 @@ test("the connected Home shell has no WCAG A/AA violations", async ({
   ).toStrictEqual([]);
 });
 
-// #892 — every first-party blueprint, not one of them: a violation is
-// per-tree, so scanning Docs alone said nothing about the other seven.
 const FIRST_PARTY_APPS = [
   "Docs",
   "Notes",
@@ -98,8 +88,6 @@ for (const app of FIRST_PARTY_APPS) {
   }) => {
     test.setTimeout(120_000);
     await connectPwa(page);
-    // `openFirstParty` IS the arrival assertion, and deliberately not a heading
-    // matching the app name: three apps head their view with the shelf instead.
     await openFirstParty(page, app);
     const results = await new AxeBuilder({ page })
       .withTags(WCAG_TAGS)

@@ -1,14 +1,3 @@
-// The section heading's load-bearing rules (#765, spec §8):
-//
-//  - the LABEL never shrinks and clamps to one line; the COUNT is the half
-//    that truncates, because a heading on two lines reads as a second heading
-//  - the label is uppercase micro; the count carries tabular figures
-//
-// The REAL design lowering is used rather than a colour fixture, so a role
-// that stopped carrying its own transform or figures fails here rather than on
-// a device.
-
-// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -65,3 +54,4 @@ describe(SectionBlock, () => {
     expect(nodesOf(container, "span")).toHaveLength(1);
   });
 });
+// @vitest-environment jsdom

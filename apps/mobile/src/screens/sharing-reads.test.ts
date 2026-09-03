@@ -1,12 +1,3 @@
-// Sharing's read plane (#880), the two rules that keep it honest:
-//
-//  1. L-READ (#821): "nobody is linked" must never be rendered from "we could
-//     not look". A failed read answers ABSENT, and absent is a third state
-//     beside loading and read — never `[]`.
-//  2. A refusal and an outage are different screens (docs/mobile-offline.md),
-//     the same pin `apps/mobile/src/apps/tally/tally-store.test.ts` keeps over
-//     the Tally read plane.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -28,7 +19,6 @@ describe("one section's answer", () => {
       true
     );
     expect(answer.state).toBe("absent");
-    // The one thing this must never be: a shape a caller can draw "none" from.
     expect(answer).not.toHaveProperty("rows");
   });
 
@@ -60,7 +50,6 @@ describe("naming which of the two happened", () => {
   });
 
   it("trusts a replica that already knows the device is offline", () => {
-    // No request can have been refused by a gateway this device cannot reach.
     expect(shareReadReach(new Error("HTTP 500"), false)).toBe("unreachable");
   });
 
@@ -71,7 +60,6 @@ describe("naming which of the two happened", () => {
     );
     expect(shareAbsentLine(noun, "unreachable")).toContain("out of reach");
     expect(shareAbsentLine(noun, "refused")).toContain("refused");
-    // And neither may be mistakable for the true-empty sentence.
     expect(shareAbsentLine(noun, "refused")).not.toContain("yet");
   });
 });

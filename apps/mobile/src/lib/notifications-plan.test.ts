@@ -141,8 +141,6 @@ describe(planNotifications, () => {
     });
 
     expect(plan.notifications).toStrictEqual([]);
-    // Untouched, not overwritten: a decision the owner did not act on while
-    // looking must still notify on the next background wake.
     expect(plan.nextDelivered).toBeUndefined();
     expect(plan.seeded).toBe(false);
   });

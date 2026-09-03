@@ -73,12 +73,6 @@ export interface NativeWriteInput {
   optimistic?: NativeOptimisticMutation[];
   intentId?: string;
   baseVersions?: ReplicaBaseVersion[];
-  /**
-   * The online-only door (blueprint-seats contract H; docs/mobile-offline.md).
-   * A sealed input must never reach the outbox, which outlives the process.
-   * `true` goes straight to the gateway and NEVER enqueues; a transport failure
-   * surfaces as a failure, since the queue fallback is what this forbids.
-   */
   onlineOnly?: boolean;
 }
 
@@ -87,7 +81,6 @@ export type NativeWriteResult =
   | { intentId: string; status: "queued" | "in-flight"; reason?: string };
 
 export interface MobileReplicaSession {
-  /** `MountedReadResult` widens the wire result with what a degraded read cost. */
   read: (
     appId: string,
     request: NativeReadRequest
@@ -113,7 +106,6 @@ export interface MobileReplicaSession {
   pullNow: () => Promise<void | boolean>;
 }
 
-/** AppState-shaped foreground signal; RN's `AppState` satisfies it. */
 export interface AppStateLike {
   readonly currentState: string | null;
   addEventListener: (
@@ -122,62 +114,35 @@ export interface AppStateLike {
   ) => { remove: () => void };
 }
 
-/** The change-feed adapter plus the session's foreground pause/resume control. */
 export interface NativeChangeFeed extends ReplicaChangeFeedAdapter {
   setActive: (active: boolean) => void;
 }
 
 export interface CreateNativeReplicaSessionOptions {
   gatewayAuth: GatewayAuth;
-  /** Non-streaming transport to the tunnel loopback proxy (`http://127.0.0.1:<port>`). */
   fetcher: ReplicaFetcher;
   changeFeed: NativeChangeFeed;
-  /** Injected, never constructed here, so this module never imports op-sqlite. */
   driver: ReplicaSqliteDriver;
   appState?: AppStateLike;
   isConnected?: () => boolean;
   isNetworkWorkAllowed?: () => Promise<boolean>;
   isRowSyncAllowed?: () => Promise<boolean>;
   retryDelayMs?: number;
-  /**
-   * Hermes has no WebCrypto; these default to `./native-hash` (expo-crypto),
-   * imported lazily so an injecting test never loads an Expo native module.
-   */
   digest?: ReplicaDigest;
   idFactory?: ReplicaIdFactory;
-  /**
-   * Rows per bootstrap page. Native bootstraps windowed by default: a 50k+ asset
-   * library cannot land in one JSON envelope (the single-shot route 413s).
-   */
   bootstrapWindow?: number;
-  /**
-   * Return from `start()` once page one is durable, then backfill behind it.
-   * Headless jobs leave it off and wait for convergence.
-   */
   progressiveBootstrap?: boolean;
   onBootstrapProgress?: (progress: {
     phase: "first-page" | "backfill" | "complete";
     pages: number;
   }) => void;
-  /** Fires once per storage-full pause, so the mount need not poll. */
   onStorageFull?: (error: unknown) => void;
   onGatewayOutcome?: (reachable: boolean) => void;
-  /**
-   * Who a queued write into THIS vault may wait for. Set only where
-   * `MountedReplicaScope.personal === false`; absent means the member's own
-   * vault, where a write waits for nobody and a steward label would be fiction.
-   */
   steward?: MountedSteward;
 }
 
-/** Ceiling, not the usual wait: reconnect, foreground and writes all reset. */
 const MAX_INTENT_RETRY_DELAY_MS = 5 * 60_000;
 
-/**
- * Deliberately not `waiting for a connection`: that row is drawn and merely
- * unsent, while this one cannot be drawn at all until the shape catalog lands
- * with bootstrap page one (docs/mobile-offline.md: absent is never empty).
- */
 export const NOT_YET_SYNCED =
   "Saved on this phone; it appears here once this vault finishes its first sync.";
 
@@ -186,12 +151,6 @@ interface Waiter {
   reject: (error: unknown) => void;
 }
 
-/**
- * Headless single-process replica session for React Native: store, intent
- * outbox, coordinator and transport wired into foreground delta pulls, an SSE
- * feed while active, teardown on background, and a rebootstrap that keeps
- * queued intents.
- */
 export class NativeReplicaSession implements MobileReplicaSession {
   readonly #coordinator: ReplicaCoordinator;
   readonly #gatewayAuth: GatewayAuth;
@@ -283,12 +242,10 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return this.#coordinator;
   }
 
-  /** True while this scope's sync is parked for lack of device storage. */
   get storageFull(): boolean {
     return this.#coordinator.storageFull;
   }
 
-  /** Space was freed on the phone: unpark the feed for this scope. */
   resumeAfterStorageFull(): void {
     this.#coordinator.resumeAfterStorageFull();
   }
@@ -299,8 +256,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#hasCursor = status.cursor !== null;
     if (status.cursor) {
       this.#catalog = await this.#coordinator.catalog();
-      // A relaunch after a first-open write: the catalog is durable now, and
-      // the intent that was admitted without one is still waiting to be drawn.
       await this.backfillDeferredProjections();
     }
     if (
@@ -373,8 +328,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.assertOpen();
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
-    // Before ANY projection, id minting or queue touch: an online-only write
-    // has no representation in the outbox at all.
     if (input.onlineOnly === true) return this.postAction(appId, input);
     const retainedIntent = pendingIntentIdFromInput(
       appId,
@@ -404,9 +357,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
       input: input.input as Readonly<Record<string, unknown>>,
       intentId,
     });
-    // No catalog yet (first-open offline launch): keep the durable intent, defer
-    // only its projection, and RECORD the deferral so
-    // `backfillDeferredProjections` can finish it when page one lands.
     const deferred = this.#catalog.length === 0;
     const { optimistic, dependencies } = deferred
       ? { optimistic: [], dependencies: [] }
@@ -445,8 +395,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
       dependencies,
       ...(baseVersions.length > 0 ? { baseVersions } : {}),
     } satisfies EnqueueIntentInput);
-    // Absent is never empty: a deferred act is durable yet draws nothing, so it
-    // says so rather than borrowing the ordinary offline sentence.
     if (deferred) await this.markDeferred(intent);
     const settled = terminalResult(intent);
     if (settled) return settled;
@@ -454,7 +402,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
       return {
         intentId: intent.intentId,
         status: "queued",
-        // Both are true; say the one that explains the missing row.
         reason: deferred ? NOT_YET_SYNCED : "waiting for a connection",
       };
     }
@@ -467,11 +414,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return admitted;
   }
 
-  /**
-   * The steward label is a fact about the MOUNT, so stamping it at admission
-   * lets the overlay name it before any round trip. Runs AFTER
-   * `validateOptimisticMutation`: `PENDING_OVERLAY_FIELDS` skip column checks.
-   */
   private stamped(prepared: PreparedReplicaWrite): PreparedReplicaWrite {
     const steward = this.#stewardLabel;
     if (steward === undefined) return prepared;
@@ -491,19 +433,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
     };
   }
 
-  /** Say the durable act is unrendered, on the row itself, until it is not. */
   private async markDeferred(intent: ReplicaIntent): Promise<void> {
     await this.#intentStore
       .transition(intent.intentId, [intent.state], { reason: NOT_YET_SYNCED })
       .catch(() => undefined);
   }
 
-  /**
-   * Project the intents admitted with no catalog, once page one lands (#883
-   * D1). Patches the SAME intent through the outbox's atomic transition — id,
-   * payload hash and queue position untouched, so an in-flight `write()` still
-   * settles on it. Idempotent: an intent with a projection is skipped.
-   */
   private async backfillDeferredProjections(): Promise<void> {
     if (this.#catalog.length === 0) return;
     const pending = await this.#coordinator.pendingIntents();
@@ -531,27 +466,19 @@ export class NativeReplicaSession implements MobileReplicaSession {
           )
         );
       } catch {
-        // Still durable, still sends; a shape this grant lacks never draws.
         continue;
       }
-      // Sequential: each transition is a durable state move on one outbox.
       // oxlint-disable-next-line no-await-in-loop
       await this.#intentStore
         .transition(intent.intentId, [intent.state], {
           optimistic: prepared.optimistic,
           dependencies: prepared.dependencies,
-          // The row draws itself now, so the sentence that stood in for it goes.
           ...(intent.reason === NOT_YET_SYNCED ? { reason: undefined } : {}),
         })
         .catch(() => undefined);
     }
   }
 
-  /**
-   * The online-only transport: no durable trace of the payload on this device —
-   * no intent id, no projection, no outbox row — and `executed` or throw, with
-   * deliberately no `queued` branch.
-   */
   private async postAction(
     appId: string,
     input: NativeWriteInput
@@ -576,8 +503,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
       );
     }
     const output = (await response.json()) as ReplicaValue;
-    // Local and disposable: nothing persisted it and no outcome will quote it.
-    // It exists so `kit/replica/write-outcome.ts` sees one shape.
     return {
       intentId: `online-only:${appId}:${input.action}`,
       status: "executed",
@@ -609,7 +534,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return this.#coordinator.status();
   }
 
-  /** `attempts` and `enqueuedAt` are what separate "sending" from "stuck". */
   async pendingChanges(): Promise<
     Array<
       | {
@@ -627,7 +551,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
           reason?: string;
           attempts: number;
           enqueuedAt?: string;
-          /** Conflict only: the two versions the overlay copy prints. */
           expectedVersion?: number;
           actualVersion?: number;
         }
@@ -667,7 +590,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     ];
   }
 
-  /** A member's own cancel retires the intent; only a gateway denial is retained. */
   async cancelPendingChange(intentId: string): Promise<boolean> {
     const pending = await this.#coordinator.pendingIntents();
     if (!pending.some((intent) => intent.intentId === intentId)) return false;
@@ -732,7 +654,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return this.#catalog;
   }
 
-  /** Wake the one coordinator after the platform reports connectivity. */
   notifyReachable(): void {
     if (!this.#isConnected() || this.#closed) return;
     this.resetRetry();
@@ -744,7 +665,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     void this.flushIntents();
   }
 
-  /** Replace an ephemeral loopback tunnel URL after process restart/reconnect. */
   updateGatewayBase(baseUrl: string): void {
     if (this.#closed || this.#gatewayAuth.baseUrl === baseUrl) return;
     this.#gatewayAuth.baseUrl = baseUrl;
@@ -758,7 +678,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
   async flushIntents(): Promise<void> {
     if (this.#closed || !this.#isConnected()) return;
     if (!(await this.#isNetworkWorkAllowed())) {
-      // A paused drain must not hang an awaited write(); the intent is durable.
       this.settleWaitersAsQueued(
         "saved locally; sync is paused on this network"
       );
@@ -779,7 +698,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return this.#drainPromise;
   }
 
-  /** Force a foreground delta pull immediately (e.g. on manual refresh). */
   async pullNow(): Promise<boolean> {
     if (this.#closed || !this.#isConnected() || !this.#hasCursor) return false;
     if (!(await this.#isRowSyncAllowed())) return false;
@@ -790,8 +708,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     let cursor = status.cursor;
     let batches = 0;
     while (cursor && batches < 32 && Date.now() - started < 5_000) {
-      // Each request must use the cursor returned by the previous apply;
-      // concurrent pulls would race and make the cursor merge ambiguous.
       // oxlint-disable-next-line no-await-in-loop
       const batch = await this.pullChanges(cursor, abort.signal);
       if (!batch) break;
@@ -805,11 +721,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return true;
   }
 
-  /**
-   * The gateway's rebootstrap frame is recorded BEFORE the wipe-and-refetch
-   * (#883 C6), so the member can be told why. No detail records nothing rather
-   * than inventing a reason.
-   */
   requireBootstrap(detail?: unknown): void {
     if (detail !== undefined)
       noteResyncVerdict(detail, this.#gatewayAuth.vaultId);
@@ -834,7 +745,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     await this.#coordinator.close();
   }
 
-  /** Membership revocation: close and delete this scope's rows and intents. */
   async purge(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
@@ -885,9 +795,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return this.#bootstrapPromise;
   }
 
-  /** THE ONLY THING THAT ASKS AGAIN (#905): every other trigger fires once per
-   *  event, so one refusal left an empty library over a full vault. Its own
-   *  slot, never the outbox's — a parked drain must not swallow a rebootstrap. */
   private scheduleBootstrapRetry(): void {
     if (this.#bootstrapRetryTimer || this.#closed) return;
     this.#bootstrapRetryTimer = setTimeout(() => {
@@ -896,10 +803,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     }, this.#bootstrapBackoff.next());
   }
 
-  /**
-   * `runWindowedBootstrap` owns the page walk, the page-1 cursor commit and the
-   * mandatory convergence replay; a cursor is reported only once all succeed.
-   */
   private async bootstrap(): Promise<void> {
     const abort = new AbortController();
     this.#bootstrapAbort = abort;
@@ -938,8 +841,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
         },
         onFirstPage: async () => {
           this.#catalog = await this.#coordinator.catalog();
-          // Page one IS the catalog, so a write admitted without one becomes
-          // visible with the first rows rather than after the whole walk.
           await this.backfillDeferredProjections();
           this.#onBootstrapProgress?.({ phase: "first-page", pages: 1 });
           this.#previewReady?.resolve();
@@ -999,7 +900,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
           await this.#coordinator.applyIntentOutcome(outcome);
         }
         this.resolveWaiter(intent.intentId, outcome);
-        // The gateway answered, so whatever the outage was is over.
         this.#retryBackoff.reset();
         this.#onGatewayOutcome?.(true);
       } catch (error) {
@@ -1049,7 +949,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     }, this.#retryBackoff.next());
   }
 
-  /** Something changed, so do not keep waiting out an outage-length delay. */
   private resetRetry(): void {
     this.#retryBackoff.reset();
     this.#bootstrapBackoff.reset();
@@ -1077,14 +976,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
     for (const waiter of waiters) waiter.reject(error);
   }
 
-  /** A durable admission is an honest settlement; an unresolved promise is not. */
   private settleWaitersAsQueued(reason: string): void {
     for (const intentId of Array.from(this.#waiters.keys()))
       this.resolveWaiter(intentId, { intentId, status: "queued", reason });
   }
 
   private rejectWaiters(error: unknown): void {
-    // Snapshot the ids first: rejectWaiter deletes from the map as it resolves.
     const intentIds = Array.from(this.#waiters.keys());
     for (const intentId of intentIds) this.rejectWaiter(intentId, error);
   }
@@ -1127,7 +1024,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
   }
 }
 
-/** Store and intent outbox share ONE driver handle. */
 export async function createNativeReplicaSession(
   options: CreateNativeReplicaSessionOptions
 ): Promise<NativeReplicaSession> {
@@ -1141,8 +1037,6 @@ export async function createNativeReplicaSession(
   );
   const intentStore = SqliteIntentStore.create(options.driver);
   const feed = options.changeFeed;
-  // Loaded only when the caller supplies neither, so `node:test` runs (which
-  // inject both) never resolve expo-crypto's native module.
   let digest = options.digest;
   let idFactory = options.idFactory;
   if (!digest || !idFactory) {
@@ -1154,8 +1048,6 @@ export async function createNativeReplicaSession(
   const intents = new IntentQueue(intentStore, {
     digest,
     idFactory,
-    // Startup's handoff writes an attention row with no member gesture behind
-    // it to dismiss.
     onSupersededRetired: (intentId) => intentStore.dismissAttention(intentId),
   });
   let session: NativeReplicaSession | undefined = undefined;
@@ -1180,9 +1072,6 @@ export async function createNativeReplicaSession(
       ).catch(() => undefined);
     },
     onRebootstrapRequired: (detail) => session?.requireBootstrap(detail),
-    // The op-sqlite taxonomy, not the normalized-name default: the driver
-    // raises the platform's own SQLITE_FULL/ENOSPC shapes, and only this
-    // classifier recognises all of them (./replica-storage-error).
     isStorageFull: isReplicaStorageFullError,
     onStorageFull: (error) => options.onStorageFull?.(error),
   });

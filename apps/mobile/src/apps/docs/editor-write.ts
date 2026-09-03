@@ -1,7 +1,3 @@
-// The editor's write intent. Title and body are separate drafts; a missing
-// body is not an empty one. `edit` requires body_text, so a title-only
-// change (body absent or unchanged) uses `rename`.
-
 export type EditorWriteIntent =
   | { kind: "nochange" }
   | {
@@ -19,7 +15,6 @@ export function editorWrite(args: {
   documentId: string;
   baselineTitle: string;
   typedTitle: string | null;
-  /** The document's own body on this device. `null` means it has not been had. */
   baselineBody: string | null;
   typedBody: string | null;
 }): EditorWriteIntent {

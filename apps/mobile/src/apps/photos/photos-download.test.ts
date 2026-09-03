@@ -1,8 +1,3 @@
-// The phone's download path, which #883 C6 replaced `NO_DOWNLOAD_REASON` with.
-// The engine is mocked: what is pinned here is that Photos hands it the right
-// refs, that a batch is serial, and that a mixed outcome is stated in full
-// rather than reported as a success.
-
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { OfflineContentOutcome } from "../../kit/fetch-gate/download";

@@ -1,8 +1,3 @@
-// THE PIN, once for all three grounds (#816): sketch graticule, MapKit,
-// MapLibre. A real `Pressable` with an accessible name — never a bare shape;
-// native marker press events are unreliable at this iOS floor. Positioned by
-// its CENTRE by every caller.
-
 import React, { useMemo } from "react";
 import { Image, Pressable, StyleSheet } from "react-native";
 
@@ -15,12 +10,10 @@ import { pinLabel } from "./places-model";
 
 export interface PlacePinProps {
   pin: MapPin;
-  /** Drawn edge; area tracks the count. */
   size: number;
   active: boolean;
   onPress: () => void;
   style?: object;
-  /** A positional handle from `kit/test-ids`, supplied by the map that plots it. */
   testID?: string;
 }
 
@@ -69,9 +62,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: borders.hairline,
       overflow: "hidden",
     },
-    // Ring, not scale: centre-positioned pins would need re-layout to grow.
     pinActive: { borderColor: colors.accent, borderWidth: 2 },
-    // Solid stage ink; RN cannot `color-mix` and slicing tokens invents colours.
     pinCount: {
       ...t("mono"),
       backgroundColor: colors.stage,

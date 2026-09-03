@@ -1,7 +1,3 @@
-// Same five as desktop (CHANGELOG §D), chip·capsule·chip. Labels gone (44
-// not 70); `accessibilityLabel` from `action.label`. REASON stays visible
-// as `READ_ONLY_VAULT_REASON` (§6, §18). Trash `--net` ink, never fill.
-
 import * as Haptics from "expo-haptics";
 import React from "react";
 import { Alert, View } from "react-native";
@@ -43,7 +39,6 @@ export function PhotoLightboxToolbar({
   const writable = Boolean(
     asset.assetId && asset.sourceVaultId && asset.canWrite === true
   );
-  // Crop/rotate are raster on a still; do not pretend a video has a non-destructive editor.
   const editable = asset.kind === "photo" || asset.kind === "scan";
   const enabled: Record<ViewerActionId, boolean> = {
     copy: Boolean(onSaveToMyVault ?? (asset.assetId && asset.scopeIds?.length)),
@@ -109,19 +104,15 @@ export function PhotoLightboxToolbar({
                 <ViewerChromeTarget
                   colors={colors}
                   disabled={!on}
-                  // Hint for AT; never the only place the reason lives (§6, §18).
                   hint={why}
                   icon={action.icon}
                   key={id}
                   label={label}
-                  // `disabled` stops tap/AT; this guard stops a direct `onPress` on a refused write.
                   onPress={() => {
                     if (!on) return;
                     run[id]();
                   }}
                   selected={selected}
-                  // The action's own id — `label` swaps to "Save to my vault"
-                  // on a foreign asset, so it cannot be a locator.
                   testID={`${TEST_ID_PREFIXES.photosViewerAction}${id}`}
                   tone={action.tone}
                   wide={group.shape === "capsule"}

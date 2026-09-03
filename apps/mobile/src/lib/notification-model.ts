@@ -1,7 +1,6 @@
 import { notifyEventReminderBody } from "@centraid/client/notifications-copy";
 
 export const TASK_CATEGORY = "CENTRAID_TASK_REMINDER";
-/** The ONE notification day context earns (#834): an inner-circle birthday. */
 export const BIRTHDAY_CATEGORY = "CENTRAID_BIRTHDAY";
 export const EVENT_CATEGORY = "CENTRAID_EVENT_REMINDER";
 export const TALLY_CATEGORY = "CENTRAID_TALLY_SETTLE";
@@ -94,8 +93,6 @@ export function notificationActionPlan(
   if (action === SNOOZE_TASK) return { kind: "snooze" };
   if (data.kind === "event" && typeof data.eventId === "string")
     return { kind: "open-event", eventId: data.eventId };
-  // A birthday notification is ABOUT a person, so it lands on that person —
-  // not on the calendar, which holds no row for it and never will.
   if (data.kind === "birthday" && typeof data.partyId === "string")
     return { kind: "open-person", partyId: data.partyId };
   if (data.kind === "tally" || action === SETTLE_BALANCE)

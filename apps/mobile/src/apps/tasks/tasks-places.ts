@@ -1,7 +1,3 @@
-// Tasks gets ONE navigator screen (#834), so a destination is a value here,
-// not a route, and the names are the SHARED shelf segments: no place the
-// pointer seats cannot address.
-
 import {
   MORE_SHELVES,
   bandActiveId,
@@ -37,8 +33,6 @@ export function shelfForPlace(place: TasksPlaceKey): ShelfId | undefined {
   return place === "more" ? undefined : shelfFromSegment(place);
 }
 
-/** Throws rather than guessing: a shelf with no segment of ours would
- *  otherwise land silently on Today. */
 export function morePlace(shelf: ShelfId): TasksMorePlaceKey {
   const segment = shelfSegment(shelf);
   const place = MORE_PLACE_KEYS.find((entry) => entry === segment);

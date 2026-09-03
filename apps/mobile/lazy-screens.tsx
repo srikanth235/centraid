@@ -1,28 +1,5 @@
-// The lazily-evaluated screen registry for the root and nested navigators.
-//
-// It lives beside `App.tsx` rather than under `src/` on purpose. This file is
-// part of the composition root: it names every app, and `scripts/check-import-
-// boundaries.ts` forbids anything under `src/` from importing `src/apps/*`
-// (platform/kit may not reach into an app, and no app may reach into another).
-// Only the root is allowed to wire them together, so only the root can hold
-// this list.
-
 import React from "react";
 
-/**
- * Defer a screen module's *evaluation* until the first navigation to it.
- *
- * Metro has no code splitting, so the bytes still ship in the launch bundle —
- * what this buys is that `expo-camera`,
- * `react-native-webview` and `expo-video` no longer run their module bodies
- * (and therefore their `requireNativeComponent` / TurboModule registration) as
- * part of app start. That native-module init is the measurable cold-start cost,
- * not the parse.
- *
- * The wrapper exists so the result stays a plain `ComponentType<P>`:
- * `React.lazy` returns a `LazyExoticComponent`, which react-navigation's
- * `component=` prop does not accept.
- */
 function lazyScreen<P extends object>(
   load: () => Promise<{ default: React.ComponentType<P> }>
 ): React.ComponentType<P> {
@@ -33,9 +10,6 @@ function lazyScreen<P extends object>(
   return LazyScreen;
 }
 
-// Every screen below is reachable only through a `component=` prop on a
-// navigator, so nothing else in this file may reference these bindings — that
-// is what keeps the deferral honest.
 export const AgendaEvent = lazyScreen(
   () => import("./src/apps/agenda/AgendaEvent")
 );
@@ -216,9 +190,6 @@ export const BackupHealthScreen = lazyScreen(
   () => import("./src/screens/BackupHealth")
 );
 export const CaptureScreen = lazyScreen(() => import("./src/screens/Capture"));
-// Interim shells for the three places that became covers of their own: the
-// ROUTE is what these owe, so that Home's Connectors/Data/Devices rows stop
-// landing on Settings or on nothing at all (#765).
 export const ConnectorsScreen = lazyScreen(
   () => import("./src/screens/connectors/Connectors")
 );

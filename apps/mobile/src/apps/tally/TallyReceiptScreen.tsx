@@ -1,21 +1,3 @@
-// THE RECEIPT — the phone's headline surface, because THIS SEAT OWNS CAPTURE.
-//
-// SURFACES.md gives Receipt to `origin (read on others)`: the camera and the
-// OCR pass live here and nowhere else. So this screen carries the verb the
-// other seats cannot — *Photograph a receipt*, which opens the frame's own
-// scanner — and the lede that says the lines were photographed at the table,
-// rather than the other seats' lede that says photographing is the phone's job.
-//
-// WHAT TALLY OWNS IS THE ALLOCATION. One row per line, a chip per member, and
-// the reconciliation stated as ARITHMETIC — six lines total £132.50, the
-// expense is £132.50, yours is £41.17 — so a mis-allocation is visible before
-// saving rather than after. Every bit of that is `receipt-model.ts`'s, shared,
-// so two seats cannot cut one receipt two ways.
-//
-// A RE-ALLOCATION IS A REVISION AND THE AMOUNT NEVER CHANGES. It answers *who
-// had what*, not *what did it cost*; `reallocate-receipt` re-validates that the
-// lines still sum to the expense, and the undo window lives on the expense.
-
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -64,8 +46,6 @@ import { FieldRow } from "./TallyParts";
 import TallyScreen from "./TallyScreen";
 import { useTallyVault } from "./useTallyVault";
 
-/** One stable empty list, so a receipt-less expense does not re-key every
- *  memo on this screen with a fresh array each render. */
 const NO_LINES: readonly ReceiptLine[] = [];
 
 export default function TallyReceiptScreen({
@@ -82,12 +62,8 @@ export default function TallyReceiptScreen({
     [vault.group?.ledger, vault.friend?.ledger, vault.search.data?.results],
     expenseId
   );
-  // NO_LINES is module-level so an expense without a receipt yields the SAME
-  // array every render: a fresh `[]` would make every memo below recompute.
   const lines = entry?.receipt?.lines ?? entry?.line_items ?? NO_LINES;
   const [selection, setSelection] = useState<LineSelection>({});
-  // Re-seeded during render whenever the STORED cut changes, so a landed
-  // revision is what the chips show rather than the edit the member abandoned.
   const [seeded, setSeeded] = useState<readonly ReceiptLine[]>(NO_LINES);
   if (seeded !== lines) {
     setSeeded(lines);

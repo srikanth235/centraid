@@ -1,9 +1,3 @@
-// What the Notifications place says (#765, spec §2) — the copy contract,
-// under test without a renderer.
-//
-// The sentences that state a RULE are asserted verbatim: they are promises
-// about what approving does, and a promise that drifts is a promise broken.
-
 import { describe, expect, it } from "vitest";
 
 import type { MobileNotice, MobileOutboxRow } from "../../lib/gateway";
@@ -84,19 +78,15 @@ describe("the staged write", () => {
     expect(stagedTitle(row)).toBe("The survey came back");
     expect(stagedBody(row)).toBe("Tom — the survey arrived on Tuesday.");
     const facts = stagedFacts(row);
-    // The addressed fields come first, in the order an envelope is read.
     expect(facts.slice(0, 3).map((fact) => fact.key)).toStrictEqual([
       "to",
       "cc",
       "from",
     ]);
-    // The irreversibility fact is LAST and is the one chromatic value on the
-    // panel: it changes what the commit beside it means.
     const last = facts.at(-1);
     expect(last?.key).toBe(SENDING_FACT_KEY);
     expect(last?.value).toBe(SENDING_FACT_VALUE);
     expect(last?.net).toBe(true);
-    // Neither the quoted body nor the title is repeated as a fact.
     expect(facts.map((fact) => fact.key)).not.toContain("body");
     expect(facts.map((fact) => fact.key)).not.toContain("subject");
   });
@@ -258,8 +248,6 @@ describe("the queue", () => {
       )
     ).toBe("failing for 6 days");
     expect(noticeSpanPhrase(notice({ count: 6 }))).toBe("×6 over 30 minutes");
-    // An unreadable or non-advancing pair states the multiplicity only —
-    // never an invented duration.
     expect(noticeSpanPhrase(notice({ count: 6, lastAt: "nonsense" }))).toBe(
       "×6"
     );
@@ -279,7 +267,6 @@ describe("the standing line and the reference tail", () => {
     expect(copy.detail).toBe(
       "Nothing here has happened yet — approving is the act."
     );
-    // No inline verb, ever: the page's whole content IS the thing to act on.
     expect(copy.action).toBeUndefined();
     expect(copy.emptyText).toBe("Nothing to attend to");
     expect(copy.errorText).toBe("This page could not load");

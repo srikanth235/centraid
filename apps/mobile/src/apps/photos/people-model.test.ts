@@ -1,7 +1,3 @@
-// The People shelf's model (#724). Each case is a claim the shelf
-// makes to a member: who is named, what is only a question, what a group is,
-// and what the shelf says when it holds nothing.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -54,7 +50,6 @@ describe("the People shelf's model", () => {
       facts({
         parties: [ANA],
         faces: [
-          // Two faces of Ana in ONE photograph — one photograph.
           region({
             region_id: "r-1",
             asset_id: "asset-a",
@@ -119,8 +114,6 @@ describe("the People shelf's model", () => {
         },
       },
     ]);
-    // The type has no name field at all, so a view cannot render one by
-    // accident — this asserts the shape as well as the value.
     expect(shelf.pendingByParty[0]).not.toHaveProperty("name");
     expect(shelf.pendingTotal).toBe(1);
   });
@@ -218,8 +211,6 @@ describe("the People shelf's model", () => {
         ],
       })
     );
-    // Named people alphabetically, the unnamed party last — never dropped
-    // (a member confirmed a face onto it, and hiding it would lose that).
     expect(shelf.people.map((entry) => entry.name)).toStrictEqual([
       "Ana",
       "Zed",
@@ -229,8 +220,6 @@ describe("the People shelf's model", () => {
 
   it("says what would put somebody here, and that nothing runs on its own", () => {
     expect(buildPeopleShelf(facts()).empty).toBe(PEOPLE_EMPTY);
-    // Once faces exist but none are named, the invitation would be a lie: the
-    // member already asked. The sentence changes to say where the work is.
     expect(
       buildPeopleShelf(facts({ faces: [region({ region_id: "r-1" })] })).empty
     ).toBe(PEOPLE_PENDING_EMPTY);
@@ -238,10 +227,7 @@ describe("the People shelf's model", () => {
 
   it("offers Detect faces only at the rung that can actually answer it", () => {
     expect(detectFacesFor("gateway")).toStrictEqual({ available: true });
-    // COMPAT: the pre-#712 name for the same rung stays legible.
     expect(detectFacesFor("model")).toStrictEqual({ available: true });
-    // On-device enrichment is a real setting and a real refusal, with a reason
-    // that names the road ("allow that in Privacy") rather than just failing.
     const device = detectFacesFor("device");
     expect(device.available).toBe(false);
     expect(device.reason).toContain("Privacy");
@@ -251,8 +237,6 @@ describe("the People shelf's model", () => {
   });
 
   it("says nothing at all while the policy is still being read", () => {
-    // Not "unavailable because off" — that would be a claim the read has not
-    // yet justified. No reason means the surface shows no refusal.
     expect(detectFacesFor(null)).toStrictEqual({ available: false });
     const shelf = buildPeopleShelf(facts({ policiesLoading: true }));
     expect(shelf.detectFaces).toStrictEqual({ available: false });
@@ -265,8 +249,6 @@ describe("the People shelf's model", () => {
   });
 
   it("asks for the whole library without naming the consent scope itself", () => {
-    // `reason` and `capability` are pinned server-side. A client that could
-    // send them could widen its own consent, so the intent carries neither.
     expect(detectFacesIntent()).toStrictEqual({
       action: "request-enrichment",
       input: { entity_type: "media.asset" },

@@ -1,20 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit cohesive Vaults switcher sheet (identity list + add/switch/forget + pair entry); decompose in a follow-up (#498)
-// The Vaults switcher — the phone's picker over its device-local (gateway,
-// vault) tuples (lib/vault-links). Reached by tapping the identity head in the VaultLink
-// drawer. It is the ONE surface that does add / switch / delete of Vaults:
-//
-//   • switch — tap a saved VaultLink; the whole app (app grid, replica, every vault
-//     fetch) re-points at it (phone-link.switchVaultLink restarts the tunnel when
-//     the gateway changes; same-gateway is just a vault-header + replica re-key).
-//   • add    — a vault the active gateway exposes but the phone hasn't saved yet
-//     (from listVaults) joins with one tap; a whole new desktop is added by
-//     pairing (routed to Settings, which owns the QR scanner).
-//   • delete — "Remove from this phone" forgets a tuple locally. The vault stays
-//     on the gateway; deleting a vault itself is an admin act on the host (#289).
-//
-// Form: a bottom sheet in the springboard idiom — serif title, per-vault colour
-// accents, a prominent active card. Mechanics mirror the VaultLink/Photos drawers (a
-// transparent Modal, an Animated slide, a fading scrim that closes on tap).
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -59,11 +43,6 @@ import type { VaultLink } from "../../lib/vault-links";
 const DEFAULT_ICON: IconName = "Sparkle";
 const SHEET_TRAVEL = 720; // ≥ max sheet height, so the closed sheet sits fully off-screen.
 
-// The mounted read plane holds four vaults at once — a deliberate bound on file
-// descriptors, query fan-out, radio fan-out and frame work (docs/mobile-offline.md).
-// Past four, the switcher is the surface that must say which saved Vaults this
-// phone is actually carrying; the rest are one tap from being carried, since
-// activating one re-plans the mount.
 const CAP_NOTE = "Four vaults stay on this phone at a time.";
 const RESIDENT_SUB = "On this phone";
 const NON_RESIDENT_SUB = "Over the four-vault limit";
@@ -71,11 +50,9 @@ const NON_RESIDENT_SUB = "Over the four-vault limit";
 export interface VaultsSwitcherProps {
   open: boolean;
   onClose: () => void;
-  /** Route to the desktop-pairing flow (Settings owns the QR scanner). */
   onPairDesktop: () => void;
 }
 
-/** A saved VaultLink, or a vault the active gateway offers that isn't saved yet. */
 type AddableVault = {
   vaultId: string;
   name: string;
@@ -89,9 +66,6 @@ function iconOf(value: string | undefined): IconName {
     : DEFAULT_ICON;
 }
 
-// Re-read the registry into the sheet's local mirrors. Outside the component so
-// both the subscription and the on-open refresh share one definition and the
-// effects stay plain external-system reads.
 function syncFromRegistry(
   setVaultLinks: (next: VaultLink[]) => void,
   setActiveId: (next: string | undefined) => void
@@ -112,8 +86,6 @@ export default function VaultsSwitcher({
   const slide = useAnimatedValue(SHEET_TRAVEL);
   const fade = useAnimatedValue(0);
 
-  // Local mirrors of the registry, kept live via subscribeVaultLinks so a switch/add/
-  // forget from within this sheet re-renders it immediately.
   const [vaultLinks, setVaultLinks] = useState<VaultLink[]>(() =>
     listVaultLinks()
   );
@@ -134,7 +106,6 @@ export default function VaultsSwitcher({
     []
   );
 
-  // On open: animate in, and refresh the addable list from the active gateway.
   useEffect(() => {
     if (!open) return;
     syncFromRegistry(setVaultLinks, setActiveId);
@@ -159,8 +130,6 @@ export default function VaultsSwitcher({
     void listVaults()
       .then((vaults) => {
         if (cancelled || !vaults) return;
-        // Enrich the active VaultLink's cached presentation so its card shows the
-        // vault's real name/colour/icon even before the next connect.
         const active = getActiveVaultLink();
         const activeRow =
           active && vaults.find((v) => v.vaultId === active.vaultId);
@@ -188,7 +157,6 @@ export default function VaultsSwitcher({
         );
       })
       .catch(() => {
-        // Offline / no vault plane — saved Vaults still switch; nothing to add.
         if (!cancelled) setAddable([]);
       });
     return () => {
@@ -261,11 +229,6 @@ export default function VaultsSwitcher({
 
   const active = vaultLinks.find((s) => s.id === activeId);
   const others = vaultLinks.filter((s) => s.id !== activeId);
-  // Residency is a fact about ONE gateway's mounted set, so only that gateway's
-  // saved Vaults may be judged by it; a Vault on another desktop is absent for
-  // an entirely different reason and stays unlabelled.
-  // A replica still mounting has no mounted set to report, and every row would
-  // read as evicted. Silence until there is a fact.
   const capped =
     active !== undefined &&
     mountedVaultIds.size > 0 &&
@@ -390,7 +353,6 @@ export default function VaultsSwitcher({
   );
 }
 
-/** The prominent card for the currently-active VaultLink. */
 function ActiveCard({
   colors,
   styles,
@@ -438,7 +400,6 @@ function ActiveCard({
   );
 }
 
-/** A saved VaultLink that isn't active — tap to switch, trailing control to forget. */
 function VaultLinkRow({
   colors,
   styles,
@@ -452,7 +413,6 @@ function VaultLinkRow({
   styles: ReturnType<typeof makeStyles>;
   vault: VaultLink;
   disabled: boolean;
-  /** Set only while the four-scope cap is actually binding this gateway. */
   residency?: string;
   onPress: () => void;
   onForget: () => void;
@@ -499,7 +459,6 @@ function VaultLinkRow({
   );
 }
 
-/** A vault the active gateway exposes that isn't saved yet — tap to add. */
 function AddRow({
   colors,
   styles,
@@ -542,9 +501,6 @@ function AddRow({
   );
 }
 
-// A translucent wash of the vault colour for the active card. The palette hexes
-// are opaque, so append an alpha byte (~12%) to the #rrggbb; non-hex tints fall
-// back to a neutral elevated surface handled by the caller's border.
 function washFor(hex: string): string {
   return /^#[0-9a-fA-F]{6}$/u.test(hex) ? `${hex}1f` : "transparent";
 }

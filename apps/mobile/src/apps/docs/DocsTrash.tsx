@@ -1,12 +1,3 @@
-// Trash (handoff Part 2 §Trash; spec §4.3, §14). Soft delete, and each
-// document carries its OWN purge date — the row's state slot prints it
-// (`purged in N days`), never one global countdown. Restoring one puts its
-// folder and its star back exactly as they were.
-//
-// There is NO destroy verb. The `Delete forever` / `Empty trash` ask stands
-// as an ask (`TRASH_ASK`), and while it stands the shelf says once, plainly,
-// why destruction is scheduled (`TRASH_FALLBACK`).
-
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 

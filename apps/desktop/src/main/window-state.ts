@@ -1,10 +1,3 @@
-/*
- * Persist main window bounds (#468).
- * Debounced writes while resizing; flush sync on close / before-quit.
- * Clamped to a visible display work area so a disconnected monitor
- * cannot hide the window off-screen.
- */
-
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -33,7 +26,6 @@ function clampToDisplay(state: WindowState): WindowState {
   if (displays.length === 0) return state;
   const width = Math.max(400, state.width);
   const height = Math.max(300, state.height);
-  // Prefer the display that contains the saved origin; fall back to primary.
   const display =
     displays.find((d) => {
       const b = d.workArea;
@@ -92,7 +84,6 @@ export function saveWindowStateSync(state: WindowState): void {
 
 function capture(win: BrowserWindow): WindowState {
   const isMaximized = win.isMaximized();
-  // When maximized, bounds are the work area; persist pre-maximize if available.
   const bounds: Rectangle = isMaximized
     ? win.getNormalBounds()
     : win.getBounds();
@@ -105,7 +96,6 @@ function capture(win: BrowserWindow): WindowState {
   };
 }
 
-/** Wire debounced persist + sync flush on close for one BrowserWindow. */
 export function trackWindowState(win: BrowserWindow): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const schedule = (): void => {

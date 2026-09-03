@@ -1,7 +1,3 @@
-// Place-phrase call-site scan (#816). Every `placePhrase` names `context:`;
-// only `photo-share.ts` may call OS share. Source scan, not a render: omitting
-// `context:` silently defaults to `"private"`.
-
 import fs from "node:fs";
 import path from "node:path";
 
@@ -13,7 +9,6 @@ const BLUEPRINT_PHOTOS = path.resolve(
   "../../../../../packages/blueprints/apps/photos"
 );
 
-/** Ladder DEFINES the call — exclude it from the scan. */
 const LADDER = "place-phrase.ts";
 
 function sources(root: string, acc: string[] = []): string[] {
@@ -112,7 +107,6 @@ describe("one door out of Photos", () => {
       path.join(MOBILE_PHOTOS, "PhotoShareChoice.tsx"),
       "utf8"
     );
-    // Sheet, not sendCopy, is the door; default rung discloses nothing.
     expect(viewer).toMatch(/onSendCopy:\s*\(\)\s*=>\s*setShareOpen\(true\)/u);
     expect(viewer).toMatch(
       /onChoose=\{\(precision\) =>\s*void sendCopy\(current, precision, sharePlace\)/u

@@ -1,18 +1,3 @@
-// REVIEW — `locker/watch` (README-Locker §5, "Review"; §6).
-//
-// TWO REGISTERS, and the second one is the point. *Needs attention* is what
-// this product can honestly check and what it found; *Checked, and cannot be
-// checked* is every check that could not run, each with its reason and its
-// gap tag — listed rather than left out, because a review surface that
-// silently omits what it cannot do is a review surface that overstates itself.
-//
-// ALL CLEAR IS A DESIGNED STATE, not an empty one: it says what was checked
-// and over how many items. Both registers come from `review-model.ts`, which
-// reads the same `matchesCheck` derivation the list's verdict lens uses — so
-// pressing a count can never open a lens over a different set.
-//
-// WINDOWED (#883 C4): a verdict can hold it all.
-
 import React, { useMemo, useState } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
@@ -60,7 +45,6 @@ export default function LockerReviewView(
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const register = useMemo(() => reviewRegister(props.rows), [props.rows]);
-  /** Which verdict's rows are open. One at a time: *Show them* narrows. */
   const [lens, setLens] = useState<CheckKey | null>(null);
 
   if (props.state === "loading") {

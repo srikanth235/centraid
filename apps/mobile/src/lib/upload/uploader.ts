@@ -1,14 +1,3 @@
-// The drainer (#419.4): durable queue rows → settled CAS objects. Death at
-// ANY point leaves the queue recoverable from SQLite alone — no duplicate
-// object, no lost item:
-//  * `begin` is keyed by content sha: resume primitive AND D10 dedupe check;
-//    `alreadyPresent` transfers nothing.
-//  * A part's ETag is persisted BEFORE its gateway receipt is requested, so a
-//    crash in that window replays the receipt instead of re-uploading bytes.
-//  * Re-sealing is byte-identical (cbsf.ts): a lost ETag costs one repeated
-//    PUT of the same object, never a divergent one.
-//  * `complete` is settlement; its receipt is the only settled marker.
-
 import { base64ToBytes } from "./bytes";
 import { sealDirectory, sealPart } from "./cbsf";
 import type { UploadCrypto } from "./crypto";
@@ -24,21 +13,14 @@ import type { UploadItem, UploadQueueStore } from "./store";
 import { assertGatewayMintedUploadUrl } from "./transfer-policy";
 
 const MAX_ATTEMPTS = 5;
-/** Parts in flight per item, and so the sealer's peak transient cost:
- *  `sealPart` (cbsf.ts) holds each part twice — 4 x 4 MiB of sealed frames in
- *  its `body` array plus the concatenated 16 MiB it returns — so ~32 MiB live
- *  per part, ~96 MiB here. Re-measure that before raising it. */
 const DEFAULT_PART_CONCURRENCY = 3;
 
-/** Puts one sealed part and returns the provider's ETag. */
 export type PartPutter = (input: {
   url: string;
   body: Uint8Array;
   transferId: string;
 }) => Promise<string | null>;
 
-/** Network-policy seam (Wi-Fi-only etc.). M1 owns the real policy; false
- *  halts the drain cleanly, leaving every item recoverable. */
 export interface UploadPolicy {
   canTransfer: () => boolean | Promise<boolean>;
 }
@@ -49,12 +31,10 @@ export interface UploadDrainerDeps {
   crypto: UploadCrypto;
   openFile: FileSourceOpener;
   putPart: PartPutter;
-  /** Gateway base URL, used to pin every presigned URL before any PUT. */
   gatewayBaseUrl: string;
   fetchImpl?: typeof fetch;
   partConcurrency?: number;
   policy?: UploadPolicy;
-  /** Progress for the Android foreground-service notification. */
   onProgress?: (progress: DrainProgress) => void;
 }
 
@@ -74,8 +54,6 @@ export interface DrainSummary {
 export class UploadDrainer {
   constructor(private readonly deps: UploadDrainerDeps) {}
 
-  /** One pass over every non-terminal item, oldest first; restart just
-   *  calls this — recovery needs no special path. */
   async drainOnce(): Promise<DrainSummary> {
     const summary: DrainSummary = {
       settled: 0,
@@ -83,17 +61,6 @@ export class UploadDrainer {
       deduped: 0,
       halted: false,
     };
-    /*
-     * A LOOP, not recursion (#659) — the same de-recursion the replica SSE
-     * stream took, for the same reason: `drainNext(index + 1)` held every
-     * earlier item's promise alive until the last one settled, so a deep
-     * backlog cost memory proportional to the queue's LENGTH rather than to
-     * the item in flight. The queue is read one page at a time for the
-     * matching reason. `created_order` is UNIQUE and monotonic, so it doubles
-     * as the keyset cursor — a non-terminal failure returns its row to
-     * `pending` without rewinding the walk, which is what keeps one failing
-     * item from being retried forever inside a single pass.
-     */
     const total = this.deps.store.pendingCount();
     let completed = 0;
     let afterOrder = 0;
@@ -145,10 +112,6 @@ export class UploadDrainer {
       ...(item.filename ? { filename: item.filename } : {}),
     });
 
-    // D10: gateway holds these bytes; it is authoritative on durability —
-    // persist its receipt verbatim; if none issued (defensive), settle WITHOUT
-    // casAck: absent casAck withholds device-original deletion, where a
-    // fabricated `replicated` would authorize it.
     if (plan.alreadyPresent) {
       this.deps.store.settle(
         item.itemId,
@@ -163,7 +126,6 @@ export class UploadDrainer {
     }
     this.deps.store.markBegun(item.itemId, plan.sessionId);
 
-    // The gateway's completedParts are authoritative over local part state.
     for (const part of plan.completedParts) {
       this.deps.store.markPartRecorded(item.itemId, part.partNumber, part.etag);
     }
@@ -188,7 +150,6 @@ export class UploadDrainer {
     const source = await this.deps.openFile(item.localUri);
     try {
       if (source.size !== item.plaintextSize) {
-        // The local file changed under us; its sha no longer addresses it.
         throw new DirectTransferError(
           `local file is ${source.size} bytes, expected ${item.plaintextSize}`,
           400
@@ -244,8 +205,6 @@ export class UploadDrainer {
         ? 1
         : (this.deps.partConcurrency ?? DEFAULT_PART_CONCURRENCY);
     await pool(ctx.outstanding, limit, async (part) => {
-      // Crash-window replay: bytes are at the provider and the ETag survived;
-      // only the gateway receipt did not. Replay the receipt.
       if (part.state === "put" && part.etag) {
         if (kind === "multipart") {
           await this.deps.client.recordPart(
@@ -265,8 +224,6 @@ export class UploadDrainer {
       if (!url)
         throw new Error(`gateway minted no URL for part ${part.partNumber}`);
 
-      // Nothing is PUT anywhere the gateway did not mint. This resolves the
-      // provider allowlist from the trusted gateway on every part.
       await assertGatewayMintedUploadUrl(url, {
         gatewayBaseUrl: this.deps.gatewayBaseUrl,
         ...(this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}),
@@ -290,8 +247,6 @@ export class UploadDrainer {
       if (kind === "multipart" && !etag) {
         throw new Error("provider did not expose the multipart ETag");
       }
-      // Durability ordering: persist the receipt-to-be before asking the
-      // gateway to record it.
       this.deps.store.markPartPut(item.itemId, part.partNumber, etag ?? "");
       if (kind === "multipart") {
         await this.deps.client.recordPart(sessionId, part.partNumber, etag!);
@@ -305,7 +260,6 @@ export class UploadDrainer {
   }
 }
 
-/** Bounded-parallel map that surfaces the first error once all runners stop. */
 async function pool<T>(
   items: readonly T[],
   limit: number,
@@ -338,8 +292,6 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Simulated process death unwinds the whole drain — never retried as a
- *  network error; crash tests rely on it. */
 function isKill(error: unknown): boolean {
   return error instanceof Error && error.name === "UploadKillSignalError";
 }
