@@ -7,21 +7,11 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrappedVault } from "@centraid/test-kit/vault";
-
-import { bootstrapVault } from "../bootstrap.js";
-import type { BootstrapResult } from "../bootstrap.js";
-import { openVaultDb } from "../db.js";
-import type { VaultDb } from "../db.js";
-import type { Gateway } from "./gateway.js";
-import { createGateway } from "./gateway.js";
+import { openOwnerVault } from "./owner-vault.test-fixtures.js";
+import type { OwnerVault } from "./owner-vault.test-fixtures.js";
 import { GATEWAY_DEFAULT_READ_ROWS } from "./types.js";
-import type { Credential } from "./types.js";
 
-let db: VaultDb;
-let gw: Gateway;
-let boot: BootstrapResult;
-let owner: Credential;
+let vault: OwnerVault;
 
 const PURPOSE = "dpv:ServiceProvision";
 
@@ -31,14 +21,14 @@ const PURPOSE = "dpv:ServiceProvision";
  * shared body content item, because a note's body is not what is under test.
  */
 function seedNotes(count: number): void {
-  db.vault
+  vault.db.vault
     .prepare(
       `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, created_at)
        VALUES (?, 'text/markdown', 'centraid:body', 'sha-truncation', 0, ?)`
     )
     .run("content-truncation", "2026-01-01T00:00:00Z");
-  const insert = db.vault.prepare(
+  const insert = vault.db.vault.prepare(
     `INSERT INTO knowledge_note
        (note_id, author_party_id, title, body_content_id, format, pinned,
         created_at, updated_at)
@@ -47,7 +37,7 @@ function seedNotes(count: number): void {
   for (let index = 0; index < count; index += 1) {
     insert.run(
       `note-${String(index).padStart(6, "0")}`,
-      boot.ownerPartyId,
+      vault.boot.ownerPartyId,
       `note ${index}`,
       "2026-01-01T00:00:00Z",
       "2026-01-01T00:00:00Z"
@@ -57,21 +47,12 @@ function seedNotes(count: number): void {
 
 describe("gateway read truncation", () => {
   beforeEach(() => {
-    ({ db, boot } = bootstrappedVault(
-      { openVaultDb, bootstrapVault },
-      { ownerName: "Priya" }
-    ));
-    gw = createGateway(db);
-    owner = {
-      kind: "device",
-      deviceId: boot.deviceId,
-      deviceKey: boot.deviceKey,
-    };
+    vault = openOwnerVault();
   });
 
   test("the default cap filling is reported, with the limit that was applied", () => {
     seedNotes(GATEWAY_DEFAULT_READ_ROWS + 1);
-    const result = gw.read(owner, {
+    const result = vault.gateway.read(vault.owner, {
       entity: "knowledge.note",
       purpose: PURPOSE,
     });
@@ -82,7 +63,7 @@ describe("gateway read truncation", () => {
 
   test("a page under the cap is not truncated", () => {
     seedNotes(3);
-    const result = gw.read(owner, {
+    const result = vault.gateway.read(vault.owner, {
       entity: "knowledge.note",
       purpose: PURPOSE,
     });
@@ -93,7 +74,7 @@ describe("gateway read truncation", () => {
 
   test("a set of exactly the window fills it without hiding a row", () => {
     seedNotes(4);
-    const result = gw.read(owner, {
+    const result = vault.gateway.read(vault.owner, {
       entity: "knowledge.note",
       limit: 4,
       purpose: PURPOSE,
@@ -104,7 +85,7 @@ describe("gateway read truncation", () => {
 
   test("an explicit window that fills reports that window, not the default", () => {
     seedNotes(10);
-    const result = gw.read(owner, {
+    const result = vault.gateway.read(vault.owner, {
       entity: "knowledge.note",
       limit: 4,
       purpose: PURPOSE,
@@ -116,12 +97,12 @@ describe("gateway read truncation", () => {
 
   test("the receipt counts the rows the caller got, never the probe row", () => {
     seedNotes(10);
-    const result = gw.read(owner, {
+    const result = vault.gateway.read(vault.owner, {
       entity: "knowledge.note",
       limit: 4,
       purpose: PURPOSE,
     });
-    const receipt = db.audit
+    const receipt = vault.db.audit
       .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
       .get(result.receiptId) as { detail_json: string } | undefined;
     expect(

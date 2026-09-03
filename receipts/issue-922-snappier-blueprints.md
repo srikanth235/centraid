@@ -795,6 +795,24 @@ Measured with the same scan the root ran, over the wave diff's ADDED source line
 
 The residual 27 lines are the scan's own artifact, not an extractable block: a run of eight consecutive `acceptTruncation: true,` lines, one per read, inside three handlers whose `Promise.all` happens to open that many reads in a row (`tasks/board.ts`, `people/person.ts`, `notes/library.ts`). The reads around them are all different entities with different filters; only the flag line repeats, and a line-based scan cannot tell that apart from a copied block. Nothing to extract, and E2 deletes those lines outright when each read declares its own window.
 
+**Second pass, against a repo-wide estimator.** The line-local scan above was too kind: Sonar scores a new line as duplicated when its block matches ANYTHING in the repo at that head, old code included. Re-measured that way — 8-line normalised windows over the added lines, each looked up in an index of every tracked `.ts`/`.tsx`/`.mjs`/`.js` file at the wave head, windows under 120 characters ignored — `fd3948e6b` reads **160 of 2,489 added lines (6.4 %)**, which tracks the 6.8 % Sonar reported. 110 of those belong to the Metro adapter (`inline-query-ctx.native.ts` 99, its test 11), which its own de-duplication commit removes. The 50 that were 0a's were both preamble, not logic:
+
+| file | before | after | what it matched |
+| --- | --- | --- | --- |
+| `packages/vault/src/gateway/read-truncation.test.ts` | 31 | 0 | the nine-line import block and the `beforeEach` that bootstraps a vault, wraps it in a gateway and mints the owner credential — shared verbatim with `read-batch.test.ts:9`, `read-order.test.ts:17`, `locker-sidecar-reveal.test.ts:19` |
+| `apps/mobile/src/kit/hooks/useReplicaQuery.truncation.test.tsx` | 19 | 0 | the four-factory `vi.mock` host-stub preamble every DOM-stub-tier test repeats — `DocRow.test.tsx:12`, `DocsCapabilities.test.tsx:15`, `LockerExportView.test.tsx:30`, `Automations.test.tsx:43` |
+| **0a total** | **50** | **0** | |
+
+Two more extractions, no behaviour change and no assertion touched:
+
+- `packages/vault/src/gateway/owner-vault.test-fixtures.ts` — `openOwnerVault()` returns `{ db, gateway, boot, owner }`, the opening four gateway suites had each written out. The repo's convention for exactly this is a `*.test-fixtures.ts` module (`store-core.test-fixtures.ts`); the three older suites keep their copies, which are old code and are not this change set's to rewrite.
+- The mobile test's host mocks now call one lazy `hosts()` import instead of restating four factories. `vi.mock` is hoisted, so the shared module is reached from INSIDE each factory rather than passed as one — a hoisted call cannot reference an import that has not been evaluated yet.
+
+Residual after both passes: **110 of 2,524 added lines (4.4 %)** repo-wide, and every one of them is the Metro adapter's — `inline-query-ctx.native.ts` 99, its test 11 — which leave with that slice's own de-duplication commit. **0a's own share is 0.**
+
+The consecutive `acceptTruncation: true,` runs the first pass counted do not register under this measure: a window of eight identical single-property lines is under the 120-character floor, which is the more Sonar-like reading — an eight-line block that carries almost no tokens is not a copied block. Nothing was extracted for them, and E2 deletes those lines outright when each read declares its own window.
+
+
 ## User impact
 
 **One new line, and one refusal a member will never see.** Nothing a shipped screen shows changes in this slice except this: when a list is cut short by its window, the seat now says so on its one status line — `Showing the newest 1,000; more not loaded` — instead of drawing a shorter list that looks complete. That is the whole visible surface. A member with fewer than a thousand contacts, notes or photographs in any one entity sees nothing new at all, because nothing was ever hidden from them.

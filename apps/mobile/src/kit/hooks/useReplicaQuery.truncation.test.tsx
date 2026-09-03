@@ -17,20 +17,30 @@ import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-co
 import { mountBlock } from "../../test/react-native-stub";
 import type { ReplicaContextValue } from "../replica/replica-context";
 
-vi.mock(import("react-native"), async () => {
-  const stub = await import("../../test/react-native-stub");
-  return stub.reactNativeStub() as unknown as typeof import("react-native");
-});
-vi.mock(import("@react-native-async-storage/async-storage"), async () => {
-  const stub = await import("../../test/react-native-stub");
-  return stub.asyncStorageStub() as unknown as {
-    default: typeof import("@react-native-async-storage/async-storage").default;
-  };
-});
-vi.mock(import("react-native-svg"), async () => {
-  const stub = await import("../../test/react-native-stub");
-  return stub.svgStub() as unknown as typeof import("react-native-svg");
-});
+// The DOM-stub tier's host mocks, called through one lazy import rather than
+// restated as four copied factories — the preamble every stub-tier file used to
+// repeat verbatim (#922 0a, Sonar duplication).
+const hosts = () => import("../../test/react-native-stub");
+
+vi.mock(
+  import("react-native"),
+  async () =>
+    (
+      await hosts()
+    ).reactNativeStub() as unknown as typeof import("react-native")
+);
+vi.mock(
+  import("@react-native-async-storage/async-storage"),
+  async () =>
+    (await hosts()).asyncStorageStub() as unknown as {
+      default: typeof import("@react-native-async-storage/async-storage").default;
+    }
+);
+vi.mock(
+  import("react-native-svg"),
+  async () =>
+    (await hosts()).svgStub() as unknown as typeof import("react-native-svg")
+);
 vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
