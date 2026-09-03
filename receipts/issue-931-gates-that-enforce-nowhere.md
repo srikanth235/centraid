@@ -345,6 +345,123 @@ $ bun run lint:path-filters
 path-filters: 10 filter(s) cover every workspace and top-level path …
 ```
 
+## Audit
+
+Verdict: REFUTED
+
+Findings:
+
+- `scripts/validate-ui-receipt.mjs:33` (`CLIENT_SURFACE_RE`) — the refinement
+  drops files that draw, not only transport. Probed against the built predicate,
+  `packages/client/src/home-copy.ts`, `src/icons.ts`, `src/theme-vars.ts` and
+  `src/index.html` now return `[]` where they previously demanded evidence.
+  `home-copy.ts` is, by its own header (#708), the single spelling of every
+  string Home shows in both renderers ("Nothing in here yet"); `icons.ts`
+  innerHTMLs the SVG a member sees; `theme-vars.ts` injects the token CSS before
+  first paint; `index.html` is the shell document. `## What changed` §7 and the
+  `## Decisions` entry describe the dropped set as "`src/replica/**`, the gateway
+  clients and the transport modules beside them", and the Decisions entry states
+  "nothing exits it that could not exit it before" — both are false for those
+  four paths. Only `.tsx`/`.css` outside `src/react/` was checked
+  (`src/styles.css`, correctly kept); the non-`.tsx` drawing modules were not.
+  Fix: express the refinement as an EXCLUSION of the non-drawing subtrees
+  (`src/replica/**`, `src/gateway-client*`, the transport modules) rather than an
+  allowlist of `src/react/` + `*.css`, or extend the allowlist to
+  `src/index.html`, `src/icons.ts`, `src/theme-vars.ts` and the `*-copy.ts`
+  modules, and correct both prose claims.
+- `receipts/issue-931-gates-that-enforce-nowhere.md:188-190` — the quoted
+  `classification-ratchet.json` re-pin is `a3d830db… → be04aaf5…`; the file's
+  actual transition is `76aac1a07f17…` → `56f64c948746…`. Neither quoted digest
+  appears in the diff. Fix: quote the digests the file carries.
+- `receipts/issue-931-gates-that-enforce-nowhere.md:317-337` — two quoted
+  transcript lines do not reproduce on this tree: `test-reachability: 1705 test
+  files` reproduces as `1710` (the slice's own four new test files plus one), and
+  `claims: 45 claims, 49 lanes, 192 derived flows` reproduces as `193 derived
+  flows`. Fix: re-run and paste the current output, or say which pre-slice tree
+  the numbers were taken on.
+
+Non-blocking observations:
+
+- `scripts/lint-test-reachability.mjs:403` — `run()` carries a JSDoc
+  `@param {{cwd?: string}} [options]` for a parameter it does not accept.
+- `scripts/design-gallery-browser.mjs:31` — `IS_CI` accepts only `"true"`/`"1"`,
+  so a provider that sets `CI` to another truthy value gets the non-fatal path.
+- `scripts/design-gallery.mjs:67` — an unrelated blank line is removed; not
+  described.
+- The issue's fourth comment files a further item ("load-sensitive timeouts") that
+  is neither in `## Checklist` nor in `## Out of scope`, while `## What changed`
+  reuses the label "item 7" for the `check:ui-receipt` work.
+
+Verified:
+
+- Diff ↔ receipt: 34 files, every one named by `## What changed`; no scope creep,
+  no file described that is not there. `.github/workflows/e2e.yml`,
+  `tests/budgets.json`, `tests/floors.json`, `tests/inventory.json` and
+  `tests/suite-wall-clock.json` are untouched; `scripts/fuzz/targets-storage.mjs`
+  is byte-identical, and `git log -S parseWalPairMarkerKey` names `cf616a09a`
+  (#916) as the commit that removed the symbol — the target still asserts
+  `marker.vaultGeneration`, `marker.journalGeneration` and `db === "journal"`, so
+  item 8's "finding, not a fix" is accurate and the unticked box is justified.
+- NUL escapes are pure substitutions. For all twelve files,
+  `git show 9e130654a:<f> | perl -pe 's/\x00/\\0/g'` is byte-identical to the
+  branch version, and no `\0` is followed by a digit (no legacy-octal hazard), so
+  every runtime string is unchanged.
+- Ratchet: `claimsGovernanceFingerprint` is byte-identical
+  (`71625bd5f205…` both sides) and `sha256(claims.claims)` is identical
+  (`302fc39107…`, 45 rows) — the whole-file digest moved only because `lanes`
+  gained `rung1-on-main`. The `approvedDeviation` chains after #928 w1b.
+- Rung-2 metric: `wallClockMs` returns the union of busy intervals; overlap still
+  collapses, and the added fixture (7+7 min inside a 26-min span) plus the
+  "lane running through another's wait" case show work is never shortened.
+  `tests/budgets.json` and `tests/suite-wall-clock.json` are untouched.
+- `rung1-on-main`: candidate.yml has no `pull_request` trigger, so the PR path is
+  untouched; all three actions are SHA-pinned (`lint:workflow-pins` green); the
+  claims row mirrors `suite`'s shape; `.governance/run.sh <id>` supports a bare
+  directive id, and `commit-message-format`'s Mode B does fall back to validating
+  the tip subject when the merge base equals HEAD. No `lint:product` member reads
+  a built `dist/`, so the job's lack of a build step is sound.
+- Item 5's numbers reproduce exactly: the pathspec sweep is 2,730 files
+  unfiltered, 1,935 after `isBundleInput`, 795 dropped.
+
+Gates run (worktree `931-gates-that-enforce-nowhere` @ `01f772cbd`, Linux
+container, Node 22, `packages/core` and `packages/vault` `dist/` rebuilt first):
+
+- `bun run format:check` → clean, 5,364 files.
+- `bun run lint` → clean.
+- `bun run lint:product` → 41/41 passed.
+- `bun run scripts:test` → 613 pass, 0 fail.
+- `bun run lint:workflow-pins` → 23 workflows clean.
+- `bun run lint:path-filters` → 10 filters, clean.
+- `bun run lint:evidence-mapping` → 49 lanes, every evidence step mapped.
+- `bun run test:claims` → 45 claims, 49 lanes, 193 derived flows.
+- `node scripts/check-quality-knobs.mjs` → no silent widening.
+- `bun run gateway:npm:helpers:test` → 19 pass (publish.test.mjs wired).
+- typecheck: `packages/core`, `packages/vault`, `packages/client`,
+  `packages/server`, `packages/blueprints`, `apps/mobile` → all clean.
+- `bun run --cwd packages/core test` → 291 pass.
+- `bun run --cwd packages/vault test` → 1,569 pass, 2 skipped.
+- `bun run --cwd packages/client test` → 2,420 pass.
+- `bun run --cwd packages/server test -- support-bundle` → 15 pass.
+- `bun run --cwd packages/blueprints test -- photos-selection-bar` → 35 pass.
+- `bun run --cwd apps/mobile test -- js-bundle-fingerprint` → 15 pass.
+- `node --test` on the new files → lint-test-reachability 11, lint-no-nul-bytes
+  5 (via scripts:test), design-gallery-browser 4, validate-ui-receipt 7 — all
+  green.
+- `bun run design:gallery` → exit 0, `SKIPPED — the pinned Playwright Chromium is
+  not installed …`; `CI=1` and `CI=true` → exit 1 with the `::error` annotation.
+- `bash .governance/run.sh` → 21 passed, 1 pending (this attestation).
+
+Falsification attempts:
+
+1. Planted `scripts/zz-orphan-verify.test.mjs`, `git add`ed but uncommitted:
+   `bun run lint:test-reachability` exited 1 naming the file; after removal,
+   `1710 test files, every one reached by a runner`.
+2. Planted a raw NUL in a staged `scripts/zz-nul-verify.mjs`:
+   `node scripts/lint-no-nul-bytes.mjs` exited 1 at `1:13`; after removal,
+   `6047 tracked text files, none carrying a raw NUL`.
+3. Probed `validateUiReceipt` directly over every non-`src/react/` module in
+   `packages/client/src` — this is what produced finding 1.
+
 ## Session
 
 ### Identifiers
