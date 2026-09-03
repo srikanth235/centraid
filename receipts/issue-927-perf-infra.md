@@ -840,3 +840,53 @@ the profile passed to `materializeYear3Fixture` is the unchanged `YEAR3`, and
 the materialized directory is copied to a private `sourceDir` before any blob
 is written, so the shared persistent cache root holds only the vault, never the
 10 GiB store.
+
+## w1-gateway — the gateway emits spans, and the statement layer counts work
+
+**Files**
+
+| Path | What |
+| --- | --- |
+| `packages/vault/src/gateway/work-counters.ts` (new) | Process-total `WorkCounters` and the SQLite statement-layer instrumentation: statements, rows scanned, payload bytes read/written, durability barriers as `fsyncs`. |
+| `packages/vault/src/gateway/work-counters.test.ts` (new) | 9 tests, incl. the seeded-extra-statement case. |
+| `packages/vault/src/gateway/gateway.ts` | `createGateway` attaches the instrumentation to the one vault handle. Nothing inside the read-cap or read-plan functions (#922's tree) is touched. |
+| `packages/vault/src/index.ts` | Exports `bumpWorkCounter`, `gatewayWorkCounters`, `instrumentVaultStatements`. |
+| `packages/server/src/engine/handlers/work-counters.ts` (new) | The engine's `workerSpawns` registry — a second registry because the engine must not import `@centraid/vault` (#404 keeps its module load thread-free); the consumer sums with `addCounters`. |
+| `packages/server/src/engine/handlers/worker-pool.ts` | One bump in `spawn()`, the only place `new Worker` happens. |
+| `packages/server/src/serve/gateway-trace.ts` (new) | `GatewayTracer` + `beginGatewayTrace` (span emitter, sampling, counter snapshot+diff), `traceRequests` (the per-request seam), `TRACE_ID_HEADER`, `processWorkCounters`. |
+| `packages/server/src/serve/trace-store.ts` (new) | `TraceStore` (JSONL under `<vaultDir>/diagnostics/`, one rotation, torn-line-tolerant reader) and `lazyVaultTraceSink`. |
+| `packages/server/src/serve/gateway-trace.test.ts` (new) | 16 tests: default-off, sampling determinism, purge-with-vault, torn-line recovery, header refusal, once-only close. |
+| `packages/server/src/serve/serve.ts` | Wraps `composedHandler` in `traceRequests`; store bound lazily to the current vault dir. |
+| `packages/server/src/index.ts` | Public exports for the tracer, store and engine counters. |
+| `docs/logs.md` | § "Traces and work counters (#927)" extended: store location + purge property, `CENTRAID_TRACE` switch, the counter→seam table, and the "this is the only per-request gateway timing seam" ruling. |
+
+**Numbers** — host: this container, Linux 6.18 x64, 4 cores / 15 GB, Node 22. Volume: the golden year-3 vault (`goldenYear3Vault()`), one file, two SQLite handles on it, 8 alternating rounds (order flipped each round so WAL growth is not charged to one side), medians reported. Read = `SELECT party_id, display_name, kind FROM core_party ORDER BY party_id LIMIT 20`, fresh `prepare` each time (2000/round). Write = one `core_place` insert in its own `BEGIN IMMEDIATE`/`COMMIT` (200/round).
+
+| Measurement | Before | After | Δ |
+| --- | --- | --- | --- |
+| Counters OFF → ON, per read | 0.04417 ms | 0.04961 ms | +0.0054 ms (+12.3%) |
+| Counters OFF → ON, per write | 1.9131 ms | 1.9839 ms | +0.071 ms (+3.7%) |
+| Spans OFF → ON (`sampleEvery: 1`, record written), per read | 0.06186 ms | 0.13002 ms | +0.068 ms (+110%) |
+| Spans OFF → ON (`sampleEvery: 1`, record written), per write | 4.2310 ms | 4.2487 ms | +0.018 ms (+0.4%) |
+
+The span row is exactly why the invariant makes spans off by default: a read is cheap enough that writing a record doubles it. The counter row is the always-on cost and is single-digit percent on the write path; the read figure is the instrumentation's worst case (a 60-cell payload walk on a statement that does almost no work). A first pass built the counted statement out of one closure per method and cost **+47%** per read; moving the forwarder to a prototype-based class and screening the barrier regex on one character brought it to +12.3%.
+
+**Deleted / replaced** — nothing yet. `route-latency.ts` stays: it answers a different question (aggregate per-route histograms for health) and the receipt names that property rather than citing a ruling. #922's F1 per-request gateway phase timing is ABSORBED by `traceRequests` per the root ruling — no second timing seam was built.
+
+**Decisions**
+
+- `fsyncs` counts **durability barriers** (`COMMIT`/`END`, WAL checkpoints), not `fsync(2)` calls. Counting the syscall needs `strace` and a Linux runner, which is the platform-shaped instrument P1 exists to replace; the barrier is the product's own behaviour and is the same integer on every host. The existing wall-clock rig's strace count stays available on its own rung.
+- `bytesRead`/`bytesWritten` are **payload bytes** — what a statement materialized out of SQLite and what it bound into it — not disk I/O. Disk bytes are not observable from `node:sqlite` and are not deterministic per action; payload bytes are, and they catch the regression the gate is for ("this read now selects the whole row"), which the test asserts directly.
+- Two counter registries (vault + engine) rather than one: the engine importing `@centraid/vault` would undo #404's "import must not spawn threads". `addCounters` is the contract's own answer and `processWorkCounters()` is the single consumer-side sum.
+- `TRACE_ID_HEADER` is read **only while tracing is enabled**, and only as an opaque `[A-Za-z0-9._:-]{1,128}` token. Off by default means shipped builds have no ingestion surface at all; the id joins two span trees on one machine and is never echoed or forwarded.
+- `diffCounters` throws on a backwards counter, so it is not called on the product path in the emitter sense: the one call sits behind the sampling guard, over a totals object that is allocated once per process and never replaced, inside a `try` that drops the record rather than failing a request.
+
+**Verification**
+
+```
+bun run --cwd packages/vault typecheck                                   # tsc clean
+bun run --cwd packages/server typecheck                                  # tsc clean
+bun run --cwd packages/vault test -- src/gateway/work-counters.test.ts   # 9 passed
+bun run --cwd packages/server test -- src/serve/gateway-trace.test.ts    # 16 passed
+node node_modules/vitest/vitest.mjs run --config vitest.perf.config.ts   # ad-hoc A/B rig (not committed) — the four numbers above
+```

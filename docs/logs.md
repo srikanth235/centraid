@@ -76,7 +76,20 @@ The product measures itself: every hop of a user action — seat → tunnel → 
 
 A trace id is not a new identifier: for a write it **is** the replica intent id (`traceIdOfIntent`), so the outbox row and the waterfall join without a lookup table; a read has no intent and mints one at the seat (`mintTraceId`).
 
-**Reading the last tap's waterfall.** `centraid-gateway trace last` prints the most recent trace on this machine as a nested waterfall (each row: hop, name, offset from the root, duration, depth), rendered from the pure `waterfall()` helper the rigs also use. It is a developer tool on the owner's own machine, not product surface. _Lands in #927 w1-gateway_ — the contract in `packages/core` is here now, the command and the store that backs it arrive with the gateway emitter slice.
+**Where the records live.** `<vaultDir>/<vaultId>/diagnostics/traces.jsonl`, one JSON record per line, rotated once at 2 MB. Inside the vault directory on purpose: `VaultRegistry.delete` removes that directory whole, so purge-with-vault is a property of the location and not of a sweeper anyone has to remember to run. Writes are best-effort and swallow their failures — a diagnostics record must never be the thing that fails a request — and a torn trailing line from a process that died mid-append is skipped by the reader, not fatal.
+
+**Turning spans on.** They are **off in every shipped build**. `CENTRAID_TRACE=1` enables them for a gateway process; `CENTRAID_TRACE_SAMPLE_EVERY=N` records one action in N (deterministic in the action counter, not random, so two runs of a rig sample the same actions). The work counters underneath are not affected by this switch — they are always on and cost single-digit percent.
+
+**Where the numbers come from.**
+
+| Counter | Seam |
+| --- | --- |
+| `statements`, `rowsScanned`, `bytesRead`, `bytesWritten`, `fsyncs` | `packages/vault/src/gateway/work-counters.ts`, attached to the vault's one SQLite handle at `createGateway`. `fsyncs` counts **durability barriers** — `COMMIT`/`END` and WAL checkpoints, the statements that make SQLite sync — so the integer is a property of the product's own behaviour rather than of `strace` and a platform. `bytesRead`/`bytesWritten` are payload bytes: what a statement materialized out of SQLite, and what it bound into it. |
+| `workerSpawns` | `packages/server/src/engine/handlers/work-counters.ts`, bumped in `WorkerPool.spawn()` — the one place a handler thread is created. A second registry on purpose: the engine must not import `@centraid/vault`, and `addCounters` is the contract's answer for summing them. |
+
+**The gateway's per-request timing seam is this one and only this one.** `serve.ts` wraps the composed handler in `traceRequests` (`packages/server/src/serve/gateway-trace.ts`); `route-latency.ts` keeps aggregate per-route histograms for health, which answers "how slow is this route across many requests" and cannot answer "where did THIS request spend its milliseconds". #922's per-request gateway phase timing is absorbed here by ruling: do not add a second instrument beside it.
+
+**Reading the last tap's waterfall.** `centraid-gateway trace last` prints the most recent trace on this machine as a nested waterfall (each row: hop, name, offset from the root, duration, depth), rendered from the pure `waterfall()` helper the rigs also use. It is a developer tool on the owner's own machine, not product surface. _Lands in #927 w1-gate._
 
 ## What is not a log
 

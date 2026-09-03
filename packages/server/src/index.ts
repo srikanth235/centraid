@@ -78,6 +78,29 @@ export {
   type GatewayLogEntry,
   type GatewayLogLevel,
 } from "./serve/gateway-log-store.js";
+export {
+  beginGatewayTrace,
+  GatewayTracer,
+  processWorkCounters,
+  TRACE_ID_HEADER,
+  traceIdFromHeader,
+  traceRequests,
+  traceSamplingFromEnvironment,
+  type GatewayTrace,
+  type GatewayTracerOptions,
+} from "./serve/gateway-trace.js";
+export {
+  lazyVaultTraceSink,
+  TRACE_DIR_NAME,
+  TRACE_FILE_NAME,
+  TraceStore,
+  traceFileFor,
+  type TraceSink,
+} from "./serve/trace-store.js";
+export {
+  bumpEngineWorkCounter,
+  engineWorkCounters,
+} from "./engine/handlers/work-counters.js";
 export type { GatewayPaths } from "./paths.js";
 export {
   readHarnessesStatus,

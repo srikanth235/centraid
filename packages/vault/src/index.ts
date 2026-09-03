@@ -642,6 +642,11 @@ export {
 export { createGateway, Gateway } from "./gateway/gateway.js";
 export { GatewayError, DEFAULT_PURPOSE } from "./gateway/types.js";
 export {
+  bumpWorkCounter,
+  gatewayWorkCounters,
+  instrumentVaultStatements,
+} from "./gateway/work-counters.js";
+export {
   evaluateAccess,
   type AccessAllow,
   type AccessDecision,
