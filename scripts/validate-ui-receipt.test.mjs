@@ -119,9 +119,9 @@ test("UI receipt evidence: a packages/client data-client change needs no screens
         "packages/client/src/turn-stream.ts",
         "packages/client/src/version-handshake.ts",
         // The inline query engine: #922 wave 1's ctx-core refactor moves query
-        // planning between modules that render nothing.
+        // planning between modules that render nothing. One exact name — a
+        // wildcard here would exempt files nobody can read yet.
         "packages/client/src/react/blueprints/inlineQueryCtx.ts",
-        "packages/client/src/react/blueprints/inline-query-ctx-core.ts",
         receipt,
       ],
       readText: () => "",

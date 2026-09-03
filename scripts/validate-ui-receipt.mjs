@@ -91,8 +91,14 @@ const CLIENT_NOT_A_SURFACE = [
   // refactor is the case: it moves query planning between modules that render
   // nothing and was made to photograph a screen that had not changed). BY FILE
   // NAME, never the folder — `centraid-inline.ts` posts status a member reads,
-  // and the app-root wiring beside it is a surface.
-  /^packages\/client\/src\/react\/blueprints\/(?:inlineQueryCtx|inline-query-ctx-core[\w.-]*)\.ts$/u,
+  // and `kit-ask-inline.ts` beside it holds "Ask your <app>".
+  //
+  // ONE NAME, NOT A PREFIX. An earlier form also matched
+  // `inline-query-ctx-core*.ts`, which no file in the tree is: a wildcard over
+  // unwritten modules pre-exempts code nobody can read, which is the exact
+  // class this issue exists to close. The ctx-core modules get their exact
+  // names here on the day #922 lands them and someone can check them.
+  /^packages\/client\/src\/react\/blueprints\/inlineQueryCtx\.ts$/u,
 ];
 
 /** Does this path draw something a member can see? */

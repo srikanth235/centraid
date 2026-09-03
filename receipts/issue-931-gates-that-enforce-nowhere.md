@@ -215,7 +215,7 @@ HTTP client hub and its per-surface modules); beside them `gateway-auth.ts`,
 `turn-stream.ts`, `vault-change-feed.ts`, `vault-change-sse.ts`,
 `version-handshake.ts`, `device-blob-source.ts`, `device-enrichment-worker.ts`
 and `device-roster.ts`; and, by file name only, the inline query engine
-`react/blueprints/inlineQueryCtx.ts` and `inline-query-ctx-core*.ts`.
+`react/blueprints/inlineQueryCtx.ts`.
 `status-channel.ts` was checked and LEFT OUT of the list, because it carries an
 `"Undo"` action label, and `device-enrichment-compute.ts` was left out as
 borderline — keeping a file as a surface is never a hole. On this formulation,
@@ -275,11 +275,16 @@ into one of four groups, and none is composed member copy:
 **The inline query engine (#922 wave 1).** The root added one case from the
 Metro re-verifier: `react/blueprints/inlineQueryCtx.ts` draws nothing — it plans
 replica reads — but the folder is a surface, so the ctx-core refactor was made to
-photograph a screen that had not changed. It is excluded BY FILE NAME
-(`inlineQueryCtx.ts` and `inline-query-ctx-core*.ts`, the modules that refactor
-extracts), never by folder: `centraid-inline.ts` beside it posts status a member
+photograph a screen that had not changed. It is excluded BY FILE NAME —
+one exact name, `inlineQueryCtx.ts` — never by folder: `centraid-inline.ts` beside it posts status a member
 reads and `kit-ask-inline.ts` holds "Ask your <app>", so a folder exclusion would
-be the allowlist mistake again in a smaller box.
+be the allowlist mistake again in a smaller box. It is also not a PREFIX: the
+first form of this entry also matched `inline-query-ctx-core*.ts`, files the
+refactor has not landed and `git ls-files` does not know, and the second
+verification refuted it — a wildcard over unwritten modules pre-exempts code
+nobody can read, which is the class #931 exists to close, and a grant for a case
+is not a grant for a wildcard. The ctx-core modules get their exact names on the
+day #922 lands them.
 
 `scripts/validate-ui-receipt.test.mjs` — the `node:test` file #930 wired into
 `scripts:test` — carries both directions, widened after each audit. The drawing
@@ -290,8 +295,8 @@ case asserts that `src/react/Shell.tsx`, `src/react/screens/Home.tsx`,
 `src/react/blueprints/centraid-inline.ts` each still demand the screenshot; the
 transport case asserts that `gateway-client-conversation-history.ts`,
 `gateway-client.ts`, `replica/apply.ts`, `turn-stream.ts`,
-`version-handshake.ts`, `react/blueprints/inlineQueryCtx.ts` and
-`react/blueprints/inline-query-ctx-core.ts` together demand none.
+`version-handshake.ts` and `react/blueprints/inlineQueryCtx.ts` together demand
+none.
 
 **Granted addition B — `test:fuzz:replay`: the `wal-keys` target, filed rather
 than patched.**
@@ -407,8 +412,13 @@ exemption above cannot generalise into a folder.
   plans replica reads and draws nothing, yet the folder is a surface. Excluding
   the folder would repeat the allowlist mistake in a smaller box —
   `centraid-inline.ts` posts status a member reads and `kit-ask-inline.ts` holds
-  "Ask your <app>" — so only the engine modules are named, and a test pins that
+  "Ask your <app>" — so only the engine module is named, and a test pins that
   `centraid-inline.ts` still demands evidence while `inlineQueryCtx.ts` does not.
+  It is one exact name and not a prefix, for the same reason: the first form
+  wildcarded `inline-query-ctx-core*.ts`, which matches no file in the tree, and
+  an exemption over unwritten code is unreadable and therefore uncheckable — the
+  class this issue is about. The grant covered the ctx-core CASE, not a wildcard;
+  the modules get their names when they exist.
 - **`test:fuzz:replay` stays red, deliberately.** The alternative — re-pointing
   the import at `parseWalTickMarkerKey` — would leave the target asserting
   `marker.vaultGeneration` and `db === "journal"`, fields #916 deleted, so the
