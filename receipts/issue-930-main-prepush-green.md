@@ -2,12 +2,14 @@
 
 [#930](https://github.com/srikanth235/centraid/issues/930) is a bug issue, so it
 carries no acceptance-criteria checkboxes. The checklist below is its
-**Expected** section written as two items.
+**Expected** section written as two items, plus the third the root added when
+it granted the `check:ui-receipt` fix into this slice.
 
 ## Checklist
 
 - [x] lint:ledgers and test:ratchet green on main
 - [x] repo-hygiene file-size green on main
+- [x] check:ui-receipt no longer demands a screenshot for a test-only change under packages/blueprints/apps
 
 ## What changed
 
@@ -69,6 +71,17 @@ config names the file. `packages/blueprints/manifest.json` is generated and
 lists every app file, so the blueprints build regenerated it to register the two
 new files; it is committed with them rather than left to drift.
 
+**3. The gate that made defect 2 unfixable.** `check:ui-receipt` no longer
+demands a screenshot for a test-only change under packages/blueprints/apps:
+`scripts/validate-ui-receipt.mjs`'s `touchesUi` predicate now skips
+`*.test.*` and `*.test-fixtures.*` paths under that tree, and
+`scripts/validate-ui-receipt.test.mjs` gains the three cases that pin the new
+line — a blueprint app's `.tsx` and its `.module.css` each still demand a
+screenshot, a test-only change (a `states.test.tsx` among them) needs none. The
+evidence rule itself is untouched; only the classification of what counts as a
+surface moves. Scope granted by the root on the issue after this slice reported
+the blocker; the full reasoning is under `## Verification`.
+
 `receipts/issue-930-main-prepush-green.md` is this issue's own receipt.
 
 ## User impact
@@ -95,10 +108,16 @@ red on `main`.
   against `HEAD` — `main`'s own #916 commit has a 105-character subject (max
   100). It is a property of a commit already on the trunk, not of this change
   set; rewriting a landed commit is not something this issue may do.
-- **Narrowing `check:ui-receipt`'s `touchesUi` predicate.** The gate is
-  red on this change set (see `## Verification`); `scripts/validate-ui-receipt.mjs`
-  is outside this slice's file list, so the finding is reported rather than
-  fixed here.
+- **Wiring `scripts/validate-ui-receipt.test.mjs` into a runner.** It is an
+  ORPHAN: it imports from `vitest`, and no vitest project includes `scripts/*`
+  outside `scripts/release`, `scripts/fuzz` and `scripts/test-report`, while
+  `scripts:test`'s `node --test` list does not name it — so neither its two
+  original cases nor the three added here are executed by any lane. Wiring it
+  means editing `package.json`'s `scripts:test` (toolchain config, a
+  `governance: allow-toolchain-config` commit), which the root's grant does not
+  cover. Reported as a finding; the three new cases were verified by calling
+  `validateUiReceipt` directly (see `## Verification`) and by the real
+  `bun run check:ui-receipt` over this change set.
 - **Teaching `replacesMinimumTestsFlow` to no-op once its predecessor is gone.**
   The checker option, re-judged under `## Decisions` and left unbuilt.
 - **`CHANGELOG.md`.** Not touched: this change set repairs two bookkeeping
@@ -150,6 +169,15 @@ and `route-security.ts` pins, none of which move here, stays whole in
 
 #930 re-pins the tests/claims.json whole-file fingerprint after removing the spent rename marker on the `golden-vault-archaeology` flow, superseding the #916 re-pin note rather than contradicting it — every sentence of #916's account of what that flow took over is kept, in receipts/issue-916-vault-ontology-review.md and in the flow's own `_comment`. `replacesMinimumTestsFlow` is a ONE-SHOT claim about the change set that makes a rename, checked against the merge base; once #916 landed, `schema-migration-corpus` existed at no base any more, so the marker could only ever report an unknown predecessor and `lint:ledgers` / `test:ratchet` were red on main itself. The marker and the `approvedMinimumTestsDeviation` that authorized it are removed together, because that note waives a future minimumTests drop on this flow by presence alone; the floor stays at 5, no claim row, severity, evidence selector or demonstrated-red date moves, and claimsGovernanceFingerprint is unchanged. Prior: #916.
 
+**A suite is not a surface.** The `check:ui-receipt` narrowing changes what the
+gate CLASSIFIES as user-facing, never what it demands once something is: the
+screenshot-plus-emitter rule, the `packages/client/**` arm and the
+`apps/*/**.{tsx,css}` arm are byte-identical, and a component, stylesheet or
+handler beside an exempted suite still owes its photograph. The alternative
+inside the old predicate — attaching a screenshot of a screen that did not move
+to a test split — would have been evidence theatre, and the other alternative,
+leaving `main` over the file-size limit, is the red this issue exists to clear.
+
 **The split is by subject, and the fixtures move with it.** The alternative —
 trimming comments or collapsing cases to get under 625 — would have been the
 weakening this repo forbids. The seam chosen is the one the file already had:
@@ -177,33 +205,58 @@ bun run lint                  # ✓
 bun run --cwd packages/blueprints test        # ✓
 bun run --cwd packages/blueprints typecheck   # ✓
 bash .governance/run.sh       # ✓ repo-hygiene (see Out of scope for commit-message-format on HEAD)
-bun run check:push            # ✗ 15/17 — design:gallery (no browser in this container)
-                              #   and lint:product → check:ui-receipt (see below)
+bun run check:ui-receipt      # ✓ UI receipt gate: evidence verified
+bun run scripts:test          # ✓ 584 passed (node --test lane) + the release vitest lane
+bun run check:push            # ✗ 15/17 — design:gallery (environment) and test:qualities
+                              #   (host contention, see below); every other gate green,
+                              #   lint:product → check:ui-receipt among them
 bun run design:gallery        # ✗ launch: Executable doesn't exist at
                               #   /opt/pw-browsers/chromium_headless_shell-1234/… — environment only
-bun run check:ui-receipt      # ✗ "user-facing changes require `## User impact`, a `First-run:` note,
-                              #   and a screenshot path emitted by a changed e2e harness"
+bun run test:qualities kill-mid-write   # ✓ 1 file, 5 passed, 66.9s
 ```
 
-**`check:ui-receipt` is red on this change set and cannot be made green from
-inside this slice.** `scripts/validate-ui-receipt.mjs` classifies a change as
-user-facing when any changed path starts with `packages/blueprints/apps/` —
-`*.test.ts` and `*.test-fixtures.ts` included — and the only exit from the gate
-is a screenshot path in the receipt that a CHANGED e2e harness emits
-(`validateUiReceipt` returns `[]` only from inside its screenshot loop; a
-receipt with `## User impact` and a `First-run:` note but no screenshot still
-errors). So *every* repair of the 638-line file trips it, including one that
-only deleted comment lines, and this container cannot photograph anything —
-Playwright's browser is not installed. The receipt carries the honest `## User
-impact` section (nothing a member sees changes: no handler, component,
-stylesheet or copy string moves) and the gate still refuses it. This is a
-finding, raised to the root rather than worked around: the gate's `touchesUi`
-predicate is the thing that is wrong, not the evidence rule it enforces, and
-narrowing it to exclude test and fixture files — with a case in
-`scripts/validate-ui-receipt.test.mjs` proving a `.tsx`-touching change still
-demands its screenshot — is a `scripts/` change this slice's contract does not
-cover. No git history on `origin/main` contains a test-only change under
-`packages/blueprints/apps/`, so this is the first change set to reach it.
+**The two reds, neither of them this change set.** `design:gallery` needs the
+pinned Playwright browser, which this container does not have. `test:qualities`
+failed on `tests/quality/kill-mid-write.integration.test.ts` (4 of 5 SIGKILL
+crash-recovery cases timing out at 30s) in the same `check:push` run, and it is
+host contention, not a product red: an earlier full `check:push` on this same
+tree passed `test:qualities` in 141.5s, the failing run took 375.4s while three
+sibling agents ran their own full suites on the same 4-core / 15 GB host (a
+second attempt at the whole lane was SIGKILLed outright — the kernel, not an
+assertion), and the file passes in 66.9s on its own. Nothing in this change set
+reaches it: the diff is two ledger files, three Locker test files, a generated
+manifest and the UI-receipt gate.
+
+**The `check:ui-receipt` narrowing.** Before it, `scripts/validate-ui-receipt.mjs`
+classified a change as user-facing when any changed path started with
+`packages/blueprints/apps/` — `*.test.ts` and `*.test-fixtures.ts` included —
+and the only exit from the gate is a screenshot path in the receipt that a
+CHANGED e2e harness emits (`validateUiReceipt` returns `[]` only from inside its
+screenshot loop; a receipt with `## User impact` and a `First-run:` note but no
+screenshot still errors). So *every* repair of the 638-line file tripped it,
+including one that only deleted comment lines, and no container without
+Playwright's browser can photograph anything. A suite is not a surface: the
+predicate now skips `*.test.*` and `*.test-fixtures.*` under
+`packages/blueprints/apps/` and nothing else moves — `packages/client/**`, the
+`apps/*/**.{tsx,css}` rule, the handler, component and stylesheet files beside
+the suites, and the screenshot/emitter rule itself are all untouched.
+`scripts/validate-ui-receipt.test.mjs` gains three cases: a blueprint app's
+`.tsx` and its `.module.css` each still demand a screenshot, and a test-only
+change (including a `states.test.tsx`, so the exemption is read off the FILENAME
+and not the extension) passes with none.
+
+Those three cases do not execute in any lane — `scripts/validate-ui-receipt.test.mjs`
+is an orphan (see `## Out of scope`) — so the new predicate was exercised
+directly instead, five cases, all passing: the `.tsx` and the `.module.css`
+still error, the test-only set returns `[]`, and `packages/client/src/react/Shell.tsx`
+and `packages/blueprints/apps/locker/queries/item.ts` still error:
+
+```sh
+node -e "import('./scripts/validate-ui-receipt.mjs').then(({validateUiReceipt}) => { /* the five cases */ })"
+# PASS tsx demands screenshot / PASS module.css demands screenshot
+# PASS test-only passes / PASS client still demands / PASS handler still demands
+bun run check:ui-receipt   # ✓ UI receipt gate: evidence verified (over this real change set)
+```
 
 - `bun run --cwd packages/blueprints test -- locker/queries` — 2 files, **22
   passed**, against **22** on `origin/main` for the single pre-split file

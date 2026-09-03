@@ -16,6 +16,46 @@ describe("UI receipt evidence", () => {
     );
   });
 
+  test("a blueprint app's .tsx still demands a screenshot", () => {
+    expect(
+      validateUiReceipt({
+        changed: ["packages/blueprints/apps/locker/app-root.tsx", receipt],
+        readText: () => "## User impact\n\nFirst-run: unchanged.\n",
+      })
+    ).toStrictEqual([
+      "user-facing changes require `## User impact`, a `First-run:` note, and a screenshot path emitted by a changed e2e harness under artifacts/e2e/ui-impact/",
+    ]);
+  });
+
+  test("a blueprint app's stylesheet still demands a screenshot", () => {
+    expect(
+      validateUiReceipt({
+        changed: ["packages/blueprints/apps/locker/Chrome.module.css", receipt],
+        readText: () => "## User impact\n\nFirst-run: unchanged.\n",
+      })
+    ).toStrictEqual([
+      "user-facing changes require `## User impact`, a `First-run:` note, and a screenshot path emitted by a changed e2e harness under artifacts/e2e/ui-impact/",
+    ]);
+  });
+
+  // A suite is not a surface (#930): splitting an over-long test file must not
+  // require photographing a screen that did not move. `states.test.tsx` is in
+  // the list because the exemption is the FILENAME, not the extension.
+  test("a test-only change under a blueprint app needs no screenshot", () => {
+    expect(
+      validateUiReceipt({
+        changed: [
+          "packages/blueprints/apps/locker/queries.test.ts",
+          "packages/blueprints/apps/locker/queries-reveal-access.test.ts",
+          "packages/blueprints/apps/locker/queries.test-fixtures.ts",
+          "packages/blueprints/apps/locker/states.test.tsx",
+          receipt,
+        ],
+        readText: () => "",
+      })
+    ).toStrictEqual([]);
+  });
+
   test("accepts a path emitted by a changed e2e harness", () => {
     expect(
       validateUiReceipt({
