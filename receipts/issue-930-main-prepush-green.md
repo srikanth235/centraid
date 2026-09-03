@@ -82,6 +82,18 @@ evidence rule itself is untouched; only the classification of what counts as a
 surface moves. Scope granted by the root on the issue after this slice reported
 the blocker; the full reasoning is under `## Verification`.
 
+**4. The gate test that never ran.** `scripts/validate-ui-receipt.test.mjs` was
+written against `vitest` and named by no runner, so its cases — the two
+original ones and the three item 3 adds — executed in no lane. It is converted
+to `node:test` + `node:assert/strict` (the runner the other pure
+`scripts/*.test.mjs` gates use; `scripts/lint-law-registry.test.mjs` is the
+pattern followed), all five cases kept with the same inputs and expectations,
+and `package.json` gains one path in `scripts:test`'s `node --test` list. That
+line is toolchain config, so the commit carries
+`governance: allow-toolchain-config`. `bun run scripts:test` goes **584 → 589
+passing**, and the five cases genuinely bind: reverting item 3's predicate makes
+the run fail 1 of 5, restoring it passes 5 of 5.
+
 `receipts/issue-930-main-prepush-green.md` is this issue's own receipt.
 
 ## User impact
@@ -108,16 +120,16 @@ red on `main`.
   against `HEAD` — `main`'s own #916 commit has a 105-character subject (max
   100). It is a property of a commit already on the trunk, not of this change
   set; rewriting a landed commit is not something this issue may do.
-- **Wiring `scripts/validate-ui-receipt.test.mjs` into a runner.** It is an
-  ORPHAN: it imports from `vitest`, and no vitest project includes `scripts/*`
-  outside `scripts/release`, `scripts/fuzz` and `scripts/test-report`, while
-  `scripts:test`'s `node --test` list does not name it — so neither its two
-  original cases nor the three added here are executed by any lane. Wiring it
-  means editing `package.json`'s `scripts:test` (toolchain config, a
-  `governance: allow-toolchain-config` commit), which the root's grant does not
-  cover. Reported as a finding; the three new cases were verified by calling
-  `validateUiReceipt` directly (see `## Verification`) and by the real
-  `bun run check:ui-receipt` over this change set.
+- **The orphaned gate test — FIXED, not deferred.** It was reported here as a
+  finding first: `scripts/validate-ui-receipt.test.mjs` imported from `vitest`
+  while no vitest project includes `scripts/*` outside `scripts/release`,
+  `scripts/fuzz` and `scripts/test-report`, and `scripts:test`'s `node --test`
+  list did not name it, so neither its two original cases nor the three added
+  here executed anywhere. The root granted the scope and it is now wired (see
+  `## What changed` item 4). What stays out of scope is the wider question the
+  find raises — whether any OTHER `scripts/*.test.mjs` is unlisted in the same
+  way. That is a sweep with its own issue, not a rider on a `main`-unblocking
+  fix.
 - **Teaching `replacesMinimumTestsFlow` to no-op once its predecessor is gone.**
   The checker option, re-judged under `## Decisions` and left unbuilt.
 - **`CHANGELOG.md`.** Not touched: this change set repairs two bookkeeping
@@ -206,7 +218,7 @@ bun run --cwd packages/blueprints test        # ✓
 bun run --cwd packages/blueprints typecheck   # ✓
 bash .governance/run.sh       # ✓ repo-hygiene (see Out of scope for commit-message-format on HEAD)
 bun run check:ui-receipt      # ✓ UI receipt gate: evidence verified
-bun run scripts:test          # ✓ 584 passed (node --test lane) + the release vitest lane
+bun run scripts:test          # ✓ 589 passed, 0 failed (was 584 before the gate test was wired)
 bun run check:push            # ✗ 15/17 — design:gallery (environment) and test:qualities
                               #   (host contention, see below); every other gate green,
                               #   lint:product → check:ui-receipt among them
@@ -245,16 +257,17 @@ the suites, and the screenshot/emitter rule itself are all untouched.
 change (including a `states.test.tsx`, so the exemption is read off the FILENAME
 and not the extension) passes with none.
 
-Those three cases do not execute in any lane — `scripts/validate-ui-receipt.test.mjs`
-is an orphan (see `## Out of scope`) — so the new predicate was exercised
-directly instead, five cases, all passing: the `.tsx` and the `.module.css`
-still error, the test-only set returns `[]`, and `packages/client/src/react/Shell.tsx`
-and `packages/blueprints/apps/locker/queries/item.ts` still error:
+Those five cases run for the first time here: the file was written against
+vitest and named by no runner, so it is converted to `node:test` +
+`node:assert/strict` and added to `scripts:test`'s `node --test` list, and the
+lane goes 584 → 589 passing. They bind to the predicate rather than describing
+it — deleting the `&& !TEST_FILE_RE.test(file)` clause makes the file fail 1 of
+5, and restoring it passes 5 of 5:
 
 ```sh
-node -e "import('./scripts/validate-ui-receipt.mjs').then(({validateUiReceipt}) => { /* the five cases */ })"
-# PASS tsx demands screenshot / PASS module.css demands screenshot
-# PASS test-only passes / PASS client still demands / PASS handler still demands
+bun run scripts:test                             # ✓ # tests 589 / # pass 589 / # fail 0
+node --test scripts/validate-ui-receipt.test.mjs # ✓ 5 pass, 0 fail
+#   with the predicate's exemption clause deleted: 4 pass, 1 fail (restored after)
 bun run check:ui-receipt   # ✓ UI receipt gate: evidence verified (over this real change set)
 ```
 
