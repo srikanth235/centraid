@@ -10,13 +10,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 
+import { OnlineOnlyGuard } from "../../replica/errors.js";
 import type { ShellReplicaReadRequest } from "../../replica/shell-session.js";
 import type {
   ReplicaReadWireResult,
   ReplicaSearchWireResult,
 } from "../../replica/types.js";
 import { readStatus, resetStatus } from "../../status-channel.js";
-import { buildInlineCtx, createOnlineGuard } from "./inlineQueryCtx.js";
+import { buildInlineCtx } from "./inlineQueryCtx.js";
 import type { InlineReplicaSession } from "./inlineQueryCtx.js";
 
 const cursor = { epoch: "e1", seq: 3 };
@@ -48,7 +49,7 @@ function vaultOf(replica: InlineReplicaSession): {
   return (
     buildInlineCtx(
       { session: replica, appId: "people" },
-      createOnlineGuard()
+      new OnlineOnlyGuard()
     ) as {
       vault: {
         read: (
