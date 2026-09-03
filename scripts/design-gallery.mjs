@@ -51,6 +51,7 @@ import {
   fontStacks,
   typeForSurface,
 } from "../packages/design/src/index.ts";
+import { launchOptions, unrunnableVerdict } from "./design-gallery-browser.mjs";
 import { runFidelityLanes } from "./design-gallery-fidelity.mjs";
 import { captureLowering } from "./design-gallery-lowering.mjs";
 
@@ -63,7 +64,6 @@ const WEB_DIR = path.join(ROOT, "apps/web");
 const WEB_DIST = path.join(WEB_DIR, "dist");
 const MATRIX = JSON.parse(readFileSync(MATRIX_FILE, "utf8"));
 const UPDATE = process.argv.includes("--update");
-
 /** The one bundled face. Every lane must resolve it or fail. */
 const SANS = fonts.sans;
 
@@ -471,6 +471,14 @@ async function captureShell(page, origin, entry) {
 }
 
 async function main() {
+  // #931 item 3 — a machine with no pinned browser skips with a reason locally
+  // and fails loudly under CI; see design-gallery-browser.mjs for the ruling.
+  const verdict = unrunnableVerdict(chromium);
+  if (verdict) {
+    if (verdict.fatal) process.exitCode = 1;
+    (verdict.fatal ? console.error : console.warn)(verdict.message);
+    return;
+  }
   const entries = captures();
   const manifest = {
     issue: 690,
@@ -515,7 +523,7 @@ async function main() {
 
   buildWebShell();
   const { origin, server } = await serveDist();
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch(launchOptions());
   try {
     await entries.reduce(
       (chain, entry) =>

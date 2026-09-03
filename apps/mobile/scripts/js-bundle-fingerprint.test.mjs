@@ -11,6 +11,7 @@ import {
   JS_BUNDLE_PATHSPECS,
   bundleInputFiles,
   digestFiles,
+  isBundleInput,
 } from "./js-bundle-fingerprint.mjs";
 
 const read = (contents) => (file) => contents[file] ?? "";
@@ -85,5 +86,48 @@ describe("bundleInputFiles", () => {
     expect(files.length).toBeGreaterThan(100);
     // Sorted, so the digest cannot depend on git's enumeration order.
     expect([...files].sort()).toEqual(files);
+  });
+
+  it("hands the digest nothing the Hermes bundle could not contain", () => {
+    // The live sweep, not a fixture: a pathspec added later without the filter
+    // in mind would fail here rather than on a 21-minute Android lane (#931).
+    expect(bundleInputFiles().filter((file) => !isBundleInput(file))).toEqual(
+      []
+    );
+  });
+});
+
+describe("isBundleInput", () => {
+  // #931 item 5. A test-only edit under a bundled workspace package moved this
+  // key, missed the apk cache and paid a cold Android build (#934).
+  const tracked = [
+    "packages/blueprints/apps/locker/queries.ts",
+    "packages/blueprints/apps/locker/queries.test.ts",
+    "packages/blueprints/apps/locker/queries.test-fixtures.ts",
+    "packages/blueprints/apps/locker/__tests__/helpers.ts",
+    "packages/blueprints/apps/locker/README.md",
+  ];
+  const inputs = tracked.filter(isBundleInput);
+  const at = (edited) => (file) => (file === edited ? "edited" : "original");
+
+  it("keeps only what the bundle can contain", () => {
+    expect(inputs).toEqual(["packages/blueprints/apps/locker/queries.ts"]);
+  });
+
+  it.each([
+    "packages/blueprints/apps/locker/queries.test.ts",
+    "packages/blueprints/apps/locker/queries.test-fixtures.ts",
+    "packages/blueprints/apps/locker/__tests__/helpers.ts",
+    "packages/blueprints/apps/locker/README.md",
+  ])("leaves the fingerprint unchanged when %s is edited", (edited) => {
+    expect(digestFiles(inputs, at(edited))).toBe(
+      digestFiles(inputs, at("nothing"))
+    );
+  });
+
+  it("still moves the fingerprint when the src file is edited", () => {
+    expect(
+      digestFiles(inputs, at("packages/blueprints/apps/locker/queries.ts"))
+    ).not.toBe(digestFiles(inputs, at("nothing")));
   });
 });

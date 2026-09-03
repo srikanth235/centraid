@@ -718,7 +718,7 @@ export function recreateExtTables(db: VaultDb): string[] {
     .all() as unknown as RegistryRow[];
   const byAppBand = new Map<string, RegistryRow[]>();
   for (const row of rows) {
-    const key = `${row.app_id} ${row.band}`;
+    const key = `${row.app_id}\0${row.band}`;
     byAppBand.set(key, [...(byAppBand.get(key) ?? []), row]);
   }
   const created: string[] = [];

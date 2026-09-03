@@ -1,0 +1,290 @@
+# issue-931 — four gates that enforce nowhere
+
+[#931](https://github.com/srikanth235/centraid/issues/931) is a bug issue, so it
+carries no acceptance-criteria checkboxes. The checklist below is its
+**Expected** section written as four items, plus items 5 and 6 added in its
+comments.
+
+## Checklist
+
+- [x] `lint:test-reachability` is in the `lint:product` bundle and every test file is reached by a runner
+- [x] no `\x00` in a tracked text file, proved by a seeded case
+- [x] `design:gallery` skips with a reason locally and stays fatal under `CI`
+- [x] `candidate.yml` runs the rung-1 bundle and the commit-message check on the merged tip
+- [x] the JS bundle fingerprint ignores test, spec, fixture and markdown modules
+- [x] the rung-2 wall clock excludes runner queue wait without widening the ceiling
+
+## What changed
+
+**1. Orphan test files — `scripts/lint-test-reachability.mjs`.** A new rung-1
+contract gate: every `*.test.*` / `*.spec.*` file in the tree must be reached by
+a runner. Reached means one of three things — matched by some vitest project's
+`include` (and not removed by its `exclude`), named as an argument in a root
+`package.json` script (that is how the `node --test` lanes take their files), or
+sitting under a Playwright `testDir` and matching Playwright's spec pattern.
+
+It runs under **bun**, not node, and that is load-bearing: the vitest configs are
+TypeScript modules that compose each other — `apps/mobile/vitest.projects.ts`
+builds its two projects out of one shared `nativeComponentFiles` array — so the
+only faithful reading of an `include` is the object vitest itself would receive.
+A regex over the config text answers a different question and goes wrong the
+first time a project list is computed rather than written out. `RUNNERS` records
+each entry-point config **with the working directory its lane runs from**,
+because vitest resolves a project's `include` against a root that defaults to the
+process CWD, not to the config file's folder (this is why
+`packages/model-runtime/vitest.live.config.ts` is listed with
+`cwd: packages/model-runtime`, and why `tests/integration-mobile/vitest.config.ts`
+pins its own `root`). `assertEveryConfigModelled` fails when a
+`vitest*.config.ts` appears that is neither a listed runner, nor a config a
+runner composes, nor a Stryker/derived-coverage shape, so the table cannot fall
+behind the tree in silence.
+
+`scripts/lint-test-reachability.test.mjs` carries the seeded-red case the issue
+asks for: an unlisted `scripts/foo.test.mjs` is reported as an orphan, and the
+same file stops being reported the moment `scripts:test` hands it to
+`node --test`. It also pins the glob compiler (`**`, `{a,b}`, `?(…)`, `@(…)`,
+character classes; an unsupported extglob throws rather than compiling to
+something that matches too much), the include/exclude interplay that the mobile
+stub/RNTL split depends on, the Playwright `testDir` forms, and a live run of the
+gate on this tree.
+
+**The orphan it found, and the fix.** Run over 1,705 test files, the gate
+reported exactly **one** orphan: `scripts/gateway-npm/publish.test.mjs` — four
+`node:test` cases pinning `publish.mjs`'s refusal contract (it aborts before the
+first `npm publish` spawn), sitting in no vitest project and named by no script.
+`gateway:npm:helpers:test` in `package.json` — which
+`.github/workflows/lane-release-gateway-npm.yml` runs — now names it beside
+`pack-helpers.test.mjs` and `native-platforms.test.mjs`. Wired, not deleted, and
+not converted.
+
+**2. NUL bytes — `scripts/lint-no-nul-bytes.mjs`.** A second rung-1 contract
+gate over every tracked file whose extension is not binary. The skip list is
+**stated, not sniffed**, because "does it contain a NUL" is precisely the
+question and cannot also be how the file is classified: `.bin .gz .icns .ico
+.jar .jpeg .jpg .keystore .node .png .ttf .wasm .webp .woff .woff2` — the images
+and app icons, the vendored web fonts, the Android keystore and gradle wrapper
+jar, the wasm-bindgen bundle, the fuzz corpus seeds and the gzipped golden
+vaults under `packages/vault/tests/golden/`. `scripts/lint-no-nul-bytes.test.mjs`
+seeds the red directly: the `${a}\x00${b}` composite-key idiom fails with its
+line and column, and the same line written with `\0` passes.
+
+**The twelve hits, all fixed by escaping.** The gate found twelve tracked text
+files carrying raw NULs, every one of them the same composite-key delimiter
+idiom typed literally. Each is now `\0`, which is the same byte to the program
+and ordinary text to git:
+
+- `packages/vault/src/grant/authority-registry.ts` — the `BY_KEY` composite key
+  the issue's third comment names (byte-identical on `origin/main`, so a kilobyte
+  of #928 w1c grant-authority edits had been unreviewable).
+- `packages/vault/src/grant/fulfillment.ts`, `packages/vault/src/gateway/ext.ts`,
+  `packages/vault/src/enrich/clusters.ts`,
+  `packages/vault/src/golden-snapshot.ts` — Map keys and hash separators.
+- `packages/client/src/gateway-client-conversation-history.ts` — the attachment
+  URL cache key.
+- `packages/server/src/serve/support-bundle.ts` — the log bucket key.
+- `packages/blueprints/src/photos-selection-bar.test.ts`,
+  `tests/quality/user-facing-qualities.test.ts` — test-side keys.
+- `scripts/security/supply-chain-core.mjs` — the provenance invocation id.
+- `scripts/fuzz/mutate.mjs` — a NUL string in the fuzz value table.
+- `packages/core/src/protocol/trace.ts` — the attribute-set join separator. This
+  one arrived DURING the slice: it landed on `main` with
+  [#927](https://github.com/srikanth235/centraid/issues/927)'s trace contract
+  while this branch was open, and the rebase onto the new tip turned the gate red
+  immediately. That is the gate working, one commit after it exists; the escape
+  is the same two characters and `bun run --cwd packages/core test -- trace`
+  stays green at 45 cases.
+
+No behaviour changes: `"\0"` and a raw NUL are the same string, so every digest,
+Map key and golden fingerprint is unmoved. The one tracked text file left
+holding a NUL is `receipts/issue-573-toolchain-opinions-one-shot.md`, named as a
+single-path exemption with its reason (see `## Decisions`); the entry is one
+path, not a folder, so a NUL in a receipt that has not merged yet is still
+caught.
+
+**3. `design:gallery` — skip with a reason, fatal under CI.** The decision lives
+in a new sibling module, `scripts/design-gallery-browser.mjs` — beside
+`design-gallery-fidelity.mjs` and `design-gallery-lowering.mjs`, because
+`scripts/design-gallery.mjs` was already within thirty lines of `repo-hygiene`'s
+file-size ceiling and a decision this consequential reads better on its own.
+`scripts/design-gallery.mjs` now asks `unrunnableVerdict(chromium)` before it
+builds anything, and takes its launch options from `launchOptions()`.
+`scripts/design-gallery-browser.test.mjs` (wired into `scripts:test`, as this
+slice's own reachability gate requires) pins all three outcomes: a present
+browser runs, an absent one with `CI` unset yields a non-fatal message naming
+both fixes, and the same absence under `CI` yields the fatal `::error`
+annotation. Run for real: locally the gate prints
+`design:gallery: SKIPPED — <reason>` naming both fixes
+(`bunx playwright install chromium`, or `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`)
+and exits 0; under `CI` the same tree exits 1 with the annotation, because there
+a missing browser means the workflow is misconfigured. This is
+[#668](https://github.com/srikanth235/centraid/issues/668)'s `lint:node-version`
+ruling applied to the same shape — one claim about the tree fused to one claim
+about the machine, the second one making the first unrunnable, and a gate that
+only ever fails for a reason unrelated to your diff being the gate that teaches
+`--no-verify`.
+
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` is honoured before the pinned download is
+looked for, and passed to `chromium.launch({ executablePath })`. It is a NEW
+name and not a duplicate: `git log origin/main -- apps/web/playwright.config.ts`
+shows no such env, the #922 0a branch has not landed (no `claude/922-w1-0a-*`
+ref exists on the remote), and Playwright's own `PLAYWRIGHT_BROWSERS_PATH`
+answers a different question — it redirects the whole browsers directory and
+already works with no code, whereas this container has a Chromium at build 1194
+while the pinned Playwright asks for 1234. Nothing else in the file moves.
+
+**4. Rung-1 gates on `main` — `candidate.yml`'s `rung1-on-main`.** One new job,
+as the root's grant allows: harden-runner, checkout, the setup action, then
+`bun run lint:product` and `bash .governance/run.sh commit-message-format` on the
+merged tip, then the standard `Write lane evidence` step and evidence artifact.
+`.governance/run.sh` accepts a bare directive id, so the second step is a
+single-directive invocation and not a whole governance run. On `main` the
+directive's merge-base search finds `origin/main` at HEAD, falls through every
+candidate, and takes its documented HEAD fallback — which validates the SQUASH
+subject the commit-msg hook never sees (#916 merged at 105 characters against a
+100-character rule). `rung1-on-main` joins `promote`'s `needs:`, so red blocks
+the promotion and is attributed through the existing
+`[candidate] lane red — <lane>` rolling-issue loop with no new mechanism.
+`tests/claims.json#lanes` gains the matching registry row (rung 3, platform
+`any`, 1,200,000 ms, `contracts` over `vault` / `gateway` / `protocol` — the
+three engine surfaces whose route, SQL, engine-conformance and ledger contracts
+the bundle actually checks). `lint:workflow-pins`, `lint:path-filters`,
+`lint:evidence-mapping` and `test:claims` all accept it.
+
+**5. `apps/mobile/scripts/js-bundle-fingerprint.mjs` — test edits stop moving the
+apk key.** `isBundleInput` drops `*.test.*`, `*.spec.*`, `*.test-fixtures.*`,
+`__tests__/**` and `**/*.md` from the hashed inputs — the same shape
+`G-turbo-inputs` (#915) applied to the build hash. A Hermes release bundle is
+reachable from `index.ts`, so none of the excluded files can be inside the
+artifact and the exclusion cannot produce a stale hit; the module's documented
+over-approximation gets narrower, not wrong.
+Measured on this tree: the hashed input set drops from **2,730 files to 1,935** (795 test, spec, fixture and markdown modules), and the digest is now blind to every one of them. `apps/mobile/scripts/js-bundle-fingerprint.test.mjs` proves both directions: a
+test, spec, fixture or markdown edit under a bundled workspace package leaves the
+digest unchanged, a `src` edit still moves it, and the live `bundleInputFiles()`
+sweep contains nothing the filter would reject.
+
+**6. `scripts/ci/pr-gate-wall-clock.mjs` — the budget prices work, not backlog.**
+`wallClockMs` now returns the **union of the jobs' `started_at → completed_at`
+intervals** as `ms` (the budgeted number), plus `spanMs` and `queuedMs` for the
+summary. Overlapping lanes collapse into one interval exactly as before, so
+parallelism is worth what it was and a genuinely slow gate is charged for every
+minute; what is no longer charged is the gaps in which no gate job was running at
+all. `tests/budgets.json` is **untouched** — the ceiling is the same 900,000 ms,
+measured honestly. `scripts/ci/pr-gate-wall-clock.test.mjs` adds the fixture the
+comment asks for (7 min + 7 min of work inside a 26-minute span: the old metric
+fails it, the new one passes at 14 min), a case proving a lane running through
+another's wait is still counted as work, and the summary's new queue line.
+`docs/dev-environment.md` § "The rung-2 budget is enforced on the run that spends
+it" and `TESTING.md` § suite wall-clock (the `pr-gate` paragraph, and the
+`lanes["pr-gate"]` note below it) are rewritten to state the new metric, why it
+changed, and that the ceiling did not move.
+
+**Registration.** `scripts/lint-product.mjs` gains both new gates and
+`scripts/ci/gate-classes.json` classifies both (contract, rung 1, with reasons);
+`package.json` gains `lint:test-reachability` and `lint:no-nul-bytes`, adds both
+`.test.mjs` files to the `scripts:test` `node --test` list, and adds
+`publish.test.mjs` to `gateway:npm:helpers:test`.
+`tests/quality/classification-ratchet.json` re-pins the `tests/claims.json`
+whole-file fingerprint (`a3d830db…` → `be04aaf5…`) with the reason in
+`approvedDeviation`.
+
+**This receipt.** `receipts/issue-931-gates-that-enforce-nowhere.md` is new, so it
+is not yet frozen by `doc-integrity`; the NUL gate's own test asserts that an
+unmerged receipt at exactly this path is still scanned, so the single-path
+exemption above cannot generalise into a folder.
+
+## Out of scope
+
+- **`scripts/validate-ui-receipt.mjs`.** `check:ui-receipt` is red on this change
+  set and the fix is not this slice's to make — see `## Decisions`.
+- Any product code beyond the NUL escapes; `.governance/**` (read, never
+  edited); any budget, floor or ratchet NUMBER — `tests/budgets.json`,
+  `tests/floors.json` and `tests/inventory.json` are untouched.
+- Item 4's `.github/workflows/candidate.yml` edit is normally
+  [#927](https://github.com/srikanth235/centraid/issues/927)'s file; the program
+  root granted it into this slice, capped at one new job, with #927 w2 not yet
+  started.
+
+## Decisions
+
+**#930 re-pins the tests/claims.json whole-file fingerprint after removing the spent rename marker on the `golden-vault-archaeology` flow, superseding the #916 re-pin note rather than contradicting it — every sentence of #916's account of what that flow took over is kept, in receipts/issue-916-vault-ontology-review.md and in the flow's own `_comment`. `replacesMinimumTestsFlow` is a ONE-SHOT claim about the change set that makes a rename, checked against the merge base; once #916 landed, `schema-migration-corpus` existed at no base any more, so the marker could only ever report an unknown predecessor and `lint:ledgers` / `test:ratchet` were red on main itself. The marker and the `approvedMinimumTestsDeviation` that authorized it are removed together, because that note waives a future minimumTests drop on this flow by presence alone; the floor stays at 5, no claim row, severity, evidence selector or demonstrated-red date moves, and claimsGovernanceFingerprint is unchanged. Prior: #916. #928 w1b re-pins tests/claims.json once more, for the static app entity tripwire: it registers the new law `app-entity-tripwire` and its flow `blueprint-app-entity-tripwire-law` (owner packages/blueprints/src/app-entity-tripwire.test.ts, minimumTests 17), mirroring how `one-computation` is registered so the lane is owned. Additions to the law and flow registries only, and a NEW minimumTests floor, which is a tightening — no claim row, severity, evidence selector, demonstrated-red date or existing floor moves, and the 45 claim rows stay byte-identical, so claimsGovernanceFingerprint is unchanged. Prior: #930. #931 re-pins it once more after registering ONE new rung-3 lane, `rung1-on-main`, in `lanes` — the row `candidate.yml`'s new job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept it. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or `minimumTests` floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #928 w1b.**
+
+- **The gate runs under bun.** `lint:test-reachability` is the one member of
+  `lint:product` invoked as `bun scripts/…` rather than `node scripts/…`
+  (`lint:site-tokens` already sets that precedent). The alternative — a regex over
+  the config text — cannot read `apps/mobile/vitest.projects.ts`'s computed
+  project pair, and a reachability gate that over-matches reports every orphan as
+  reached.
+- **One named NUL exemption, `receipts/issue-573-toolchain-opinions-one-shot.md`.**
+  Its NUL sits inside prose describing this exact idiom, and `receipts/*.md` are
+  frozen at the default-branch baseline by the `doc-integrity` directive: the
+  bytes on `main` may not be rewritten, only appended to. The gate cannot demand a
+  fix that governance forbids. The entry names one path rather than the folder, so
+  a NUL in an unmerged receipt is still caught while its author can still fix it.
+- **`check:ui-receipt` is red and this slice does not touch it.** The gate treats
+  every file under `packages/client/` as a user-facing surface, so escaping the
+  NUL in `packages/client/src/gateway-client-conversation-history.ts` — a
+  two-character change to an attachment-URL cache key, in a data module that draws
+  nothing — demands a screenshot of a screen that did not move, emitted by a
+  changed e2e harness, in a container with no browser. That is the identical shape
+  #930 narrowed for `packages/blueprints/apps/**` one commit ago ("a suite is not a
+  surface"); the analogous refinement here would be "a data client is not a
+  surface". `scripts/validate-ui-receipt.mjs` is outside this slice's contract, so
+  it is reported to the root rather than edited: the honest options are (a) grant
+  the predicate refinement into a follow-up, or (b) carry a screenshot. Nothing was
+  weakened and no gate was removed to get around it.
+- **`RUNNERS` records a `cwd` per config.** Not decoration: with the repo root as
+  CWD, `packages/model-runtime/vitest.live.config.ts`'s `src/**/*.live.test.ts`
+  resolves against the repo root and matches nothing, and
+  `model-goldens.live.test.ts` reads as an orphan. The lane's working directory is
+  part of what the config means, so it is recorded beside it.
+
+## Verification
+
+Each box above, and the command that shows it:
+
+- `lint:test-reachability` is in the `lint:product` bundle and every test file is reached by a runner — `bun run lint:product` (41 gates) and `bun scripts/lint-test-reachability.mjs`.
+- no `\x00` in a tracked text file, proved by a seeded case — `node scripts/lint-no-nul-bytes.mjs` and `node --test scripts/lint-no-nul-bytes.test.mjs`.
+- `design:gallery` skips with a reason locally and stays fatal under `CI` — `bun run design:gallery` and `CI=1 bun run design:gallery`, plus `node --test scripts/design-gallery-browser.test.mjs`.
+- `candidate.yml` runs the rung-1 bundle and the commit-message check on the merged tip — `bun run test:claims`, `bun run lint:evidence-mapping`, `bun run lint:workflow-pins`, `bun run lint:path-filters`.
+- the JS bundle fingerprint ignores test, spec, fixture and markdown modules — `bun run --cwd apps/mobile test -- js-bundle-fingerprint` (15 cases).
+- the rung-2 wall clock excludes runner queue wait without widening the ceiling — `node --test scripts/ci/pr-gate-wall-clock.test.mjs` (8 cases), `tests/budgets.json` unchanged.
+
+```
+$ bun scripts/lint-test-reachability.mjs
+test-reachability: scripts/gateway-npm/publish.test.mjs is matched by no vitest project's include, …
+   → the one orphan on this tree; wired into gateway:npm:helpers:test, then:
+test-reachability: 1705 test files, every one reached by a runner
+
+$ node scripts/lint-no-nul-bytes.mjs
+   → 12 source files reported, escaped to \0, then:
+no-nul-bytes: 6047 tracked text files, none carrying a raw NUL
+
+$ node --test scripts/lint-test-reachability.test.mjs      # 11 pass, 0 fail
+$ node --test scripts/lint-no-nul-bytes.test.mjs           #  5 pass, 0 fail
+$ node --test scripts/ci/pr-gate-wall-clock.test.mjs       #  8 pass, 0 fail
+$ node --test scripts/ci/gate-classes.test.mjs             #  6 pass, 0 fail
+
+$ bun run design:gallery
+design:gallery: SKIPPED — the pinned Playwright Chromium is not installed (…). Install it with …
+$ CI=true bun run design:gallery
+::error title=design:gallery unrunnable::…   (exit 1)
+
+$ bun run test:claims
+claims: 45 claims, 49 lanes, 192 derived flows, 56 deliberate n/a cells
+nightly-wiring: 4 mobile device lane(s) discovered, …
+release-wiring: one tag entry point, …
+$ bun run lint:evidence-mapping
+evidence-mapping: 49 registered lanes, every evidence step mapped
+$ bun run lint:workflow-pins
+workflow-pins: 23 workflow(s) clean …
+$ bun run lint:path-filters
+path-filters: 10 filter(s) cover every workspace and top-level path …
+```
+
+## Session
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-09-03 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |

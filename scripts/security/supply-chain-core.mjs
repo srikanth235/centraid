@@ -262,7 +262,7 @@ export function buildProvenance(input) {
       runDetails: {
         builder: { id: input.builderId },
         metadata: {
-          invocationId: sha256Hex(`${input.builderId} ${input.sourceDigest}`),
+          invocationId: sha256Hex(`${input.builderId}\0${input.sourceDigest}`),
           startedOn: input.startedOn,
         },
       },

@@ -77,6 +77,31 @@ export const JS_BUNDLE_PATHSPECS = [
   "bun.lock",
 ];
 
+/**
+ * What the pathspecs sweep up but the bundle can never contain (#931 item 5).
+ *
+ * The same shape `G-turbo-inputs` (#915) fixed for the build hash. A Hermes
+ * release bundle is reachable from `index.ts`; a `*.test.ts` beside a module is
+ * imported by no production path, a `__tests__` folder by none at all, and a
+ * `.md` by nothing that runs. Yet a test-only edit under one of the four
+ * bundled workspace packages moved this digest, missed the apk cache, and made
+ * `mobile-device-gate` pay a cold 21.4-minute Android build to prove that a
+ * `queries.test.ts` still passed (#934). Because the excluded files cannot be
+ * inside the artifact, dropping them cannot produce a stale hit — the
+ * over-approximation this module documents gets narrower, not wrong.
+ */
+const NOT_IN_BUNDLE =
+  /(?:^|\/)__tests__\/|\.(?:test|spec|test-fixtures)\.[^/]*$|\.md$/u;
+
+/**
+ * Is this tracked path something the release bundle can actually contain?
+ * @param {string} file A repo-relative path.
+ * @returns {boolean} False for test, spec, fixture and markdown files.
+ */
+export function isBundleInput(file) {
+  return !NOT_IN_BUNDLE.test(file);
+}
+
 /** Tracked files under the bundle pathspecs, repo-relative and sorted. */
 export function bundleInputFiles(
   cwd = REPO_ROOT,
@@ -87,7 +112,7 @@ export function bundleInputFiles(
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
-  return out.split("\0").filter(Boolean).sort();
+  return out.split("\0").filter(Boolean).filter(isBundleInput).sort();
 }
 
 /**

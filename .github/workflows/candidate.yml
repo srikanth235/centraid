@@ -768,6 +768,64 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+  # THE RUNG-1 GATES, ON THE MERGED TIP (#931 item 4).
+  #
+  # Every gate in `lint:product` runs on a BRANCH, against the merge base, and
+  # nowhere else. Two failure modes follow, and both were observed:
+  #
+  #   A ledger annotation that was right on its PR can be wrong the moment it
+  #   merges. #916's `replacesMinimumTestsFlow: "schema-migration-corpus"`
+  #   turned `lint:ledgers` red on `main`, and no lane ran it there — the next
+  #   branch to touch a ledger inherited the red as if it were its own (#930).
+  #
+  #   `commit-message-format` is a commit-msg hook, and a SQUASH subject is
+  #   written by GitHub after the hook has run. #916 merged with a 105-character
+  #   subject against a 100-character rule that nothing on `main` ever applied.
+  #
+  # So this job asks the rung-1 question of the tree that actually exists. It is
+  # rung 3 by construction — the merge already happened — and its value is
+  # attribution: red here names ONE commit, through the same
+  # `[candidate] lane red — <lane>` rolling issue every other candidate lane
+  # uses, instead of surfacing days later on somebody else's branch.
+  #
+  # ONE job, not a matrix: both members are seconds of offline Node work, and a
+  # second job would buy a second rolling issue to read rather than a second
+  # answer.
+  rung1-on-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      # The whole rung-1 bundle, on the merged tree. The diff-scoped members
+      # (the ratchets, the UI receipt) compare HEAD against `main`, which is
+      # HEAD here, so they contribute their STANDING checks and nothing else —
+      # which is exactly the half that went missing.
+      - run: bun run lint:product
+      # The subject the commit-msg hook never saw. With `origin/main` at HEAD
+      # the directive's merge-base search finds nothing to compare against and
+      # falls back to validating the tip commit, which is the squash subject.
+      - name: Commit message format on the merged tip
+        run: bash .governance/run.sh commit-message-format
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane rung1-on-main --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1200000 --candidate ${{ github.sha }} --qualities contracts --surfaces vault-core,gateway,replica-sync
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-evidence-rung1-on-main
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
   # THE PROMOTION. Fail-closed over every lane above, exactly like ci.yml's
   # `check`: `success | skipped` is satisfied, anything else — `cancelled`
   # included — is not, and an EMPTY result list refuses to pass rather than
@@ -790,6 +848,7 @@ jobs:
         suite,
         codeql,
         rust-supply-chain,
+        rung1-on-main,
       ]
     if: always()
     runs-on: ubuntu-latest
