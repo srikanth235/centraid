@@ -1216,3 +1216,54 @@ bun run lint:hermes-surface                   # ok — 809 modules reachable, no
 bash .governance/run.sh                       # 22/22 directives
 bun run lint:product                          # 35/39 — see the two-way check above
 ```
+
+### Verifier follow-up — the collision with 0a, and the gate the audit predicted
+
+Nothing above this sub-heading is rewritten, the audit text included. Two of its statements
+are overtaken by the landing, and both are corrected here rather than edited in place.
+
+1. **`check:ui-receipt` is green on the integration branch, and nothing was invented to
+   make it so.** The audit's finding 1 was right about the predicate: `#931`'s refined
+   exclusion covers `packages/client/src/replica/**` but not
+   `packages/client/src/react/blueprints/inlineQueryCtx.ts`, which alone re-triggers the
+   gate — that is still true, and the root is settling it in #931. What changed is the
+   changed-set: rebased onto 0a, `receipts/issue-922-snappier-blueprints.md` carries 0a's
+   own `## User impact` section, which the gate reads and accepts. The predicate is
+   satisfied by 0a's genuine user-visible change, not by a `## User impact` written for
+   this refactor — there is none, and a no-op has no screen to photograph. So the earlier
+   paragraph's "no honest exit" stands as written for this diff **standing alone**; on the
+   wave branch the question does not arise.
+2. **`lint:product` is 36/39 here**, failing `test:ratchet`, `lint:ledgers` and
+   `lint:quality-knobs`. All three are base lag and none is this diff's: a detached clean
+   worktree at `fd3948e6b` — no diff applied — fails exactly the same three, because
+   `origin/main` moved past this wave branch and #928's `9e130654a` renamed the
+   `blueprint-app-entity-tripwire-law` floors flow. They clear when the wave branch rebases
+   onto the newer main, which is the root's call.
+
+**The collision with 0a, resolved.** 0a had added two duties to the very read/search
+closures this refactor moved. Re-applied onto the new shape, never copied:
+
+- **`packages/client/src/react/blueprints/inlineQueryCtx.ts` posts the truncation notice**
+  — the web thin caller, exactly where 0a put it. The status channel is the shell's; a
+  React Native screen has no status line. `assertBoundedReplicaRead` stays beside it for
+  the same kind of reason: the refusal's whole value is that the calling query's own file
+  is named in the stack, which a module shared by both seats cannot do.
+- **The core gained the seam, not the behaviour.** `inlineReadsFor` takes an optional
+  `InlineReadHooks` (`beforeRead`, `beforeSearch`, `onResult`), and `InlineWireResult`
+  declares `truncated` / `appliedLimit` so a seat can see a cut-off page without unwrapping
+  the result twice. The phone passes no hooks — 0a's mobile half already bounds and reports
+  through `useReplicaQuery` and `MultiVaultReplicaSession`.
+- 0a posted the notice from two hand-written blocks, one in `read` and one in `search`. On
+  the hook it is **one** `onResult`, run on both paths: the same behaviour from one site.
+
+**No 0a assertion was weakened.** `inlineQueryCtx.test.ts` merged cleanly. 0a's
+`inline-read-truncation.test.ts` took a setup-only edit — 3 insertions, 2 deletions, all of
+it the guard import and its single construction site (`createOnlineGuard()` →
+`new OnlineOnlyGuard()`) — and all five of its cases assert exactly what 0a wrote.
+`read-plan-truncation.test.ts` (11 cases) is untouched. The Metro parity test is unchanged.
+
+Gates on the landed branch, under the shared lock: `packages/client` build ✓, typecheck ✓,
+full test **266 files / 2436 passed**; `src/react/blueprints/` **9 files / 81 passed**;
+`apps/mobile` full test **273 files / 2364 passed**, typecheck ✓; `packages/blueprints`
+typecheck ✓; `bun run format:check` ✓; root `bun run lint` ✓; `bash .governance/run.sh`
+**22/22**.
