@@ -116,7 +116,8 @@ describe("golden year-3 vault", () => {
       distributions.notes
     );
 
-    // The >64 KiB share: exactly what the declaration says, no more.
+    // The >64 KiB share preserves the declared corpus distribution, even
+    // though the content entity's current ceiling is higher.
     const long = count(
       vault,
       `SELECT COUNT(*) AS n FROM core_content_item

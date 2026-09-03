@@ -166,6 +166,7 @@ Falsification attempts:
 | date | harness | session |
 | --- | --- | --- |
 | 2026-09-03 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-03 | codex | 01a06827-b506-78d1-b396-f4b14307e138 |
 
 ## w1 Metro-loader spike — ADOPT
 

@@ -201,29 +201,31 @@ describe("golden phone replica", () => {
     expect(notes.primaryKey).toBe("note_id");
   });
 
-  test("the long note bodies land in the deferred half, not the eager one", async () => {
+  test("the long note bodies ride in the eager half under the entity ceiling", async () => {
     const fixture = await seededVault();
     const snapshot = buildYear3ReplicaSnapshot(sourceOf(fixture), {
       // Above everything the small vault holds: this test is about equality
       // with the reader, and the ceiling has its own test below.
       maxRows: 100_000,
     });
-    const deferred = snapshot.rows.filter(
+    const longBodies = snapshot.rows.filter(
       (row) =>
         row.entity === "core.content_item" &&
-        (row.oversizedFields ?? []).includes("content_uri")
+        Number(row.values["byte_size"]) > 64 * 1_024
     );
-    // The declared >64 KiB share is what the gateway defers — the whole reason
-    // the distribution exists (#922 0b needs something to prove against).
-    expect(deferred).toHaveLength(
+    // The distribution stays over the old default so the fixture preserves the
+    // before/after corpus shape, but core.content_item now declares a 1 MiB
+    // ceiling. Those bodies must therefore arrive in full on the replica.
+    expect(longBodies).toHaveLength(
       Math.round(
         SMALL.distributions!.notes * SMALL.distributions!.longNoteShare
       )
     );
-    expect(deferred.length).toBeGreaterThan(0);
-    // Deferred means ABSENT, never truncated or placeholdered.
-    for (const row of deferred)
-      expect(row.values).not.toHaveProperty("content_uri");
+    expect(longBodies.length).toBeGreaterThan(0);
+    for (const row of longBodies) {
+      expect(row.oversizedFields ?? []).toStrictEqual([]);
+      expect(row.values).toHaveProperty("content_uri");
+    }
   });
 
   test("the walk stops at the declared ceiling", async () => {
