@@ -857,7 +857,7 @@ Slices (iii) photos-timeline rig fix, (iv) fixture warm + build/mount split, (v)
 | `tests/quality/user-facing-qualities.test.ts` | The `year3-cache` temp-dir prefix follows the module that owns the cache, and the file's one raw NUL byte becomes `\u0000`. |
 | `tests/scale/large-vault.scale.test.ts` | Publishes `golden vault mount` — the copy alone. The file lands in this lane's #922 gauge commit, which adds the audit-band gauges to the same `recordQualityResult` call. |
 
-Also in this lane, under #922 and detailed there: `tests/scale/replica-sse-fanout.scale.test.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `scripts/test-report/render/adversaries.mjs`, `scripts/test-report/render.test.mjs`.
+Also in this lane, under #922 and detailed in `receipts/issue-922-snappier-blueprints.md`: `tests/scale/replica-sse-fanout.scale.test.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `scripts/test-report/render/adversaries.mjs`, `scripts/test-report/render.test.mjs`.
 
 ### Numbers
 
@@ -890,14 +890,22 @@ Before, a replica cache HIT still mounted 126 MB of golden vault and walked 50,0
 
 ```sh
 # in /home/user/centraid-wt/claude/927-w1c-golden-vault
-bash $S/self-audit.sh 927 origin/claude/927-ledger   # tree <TREE_927>
+bash $S/self-audit.sh 927 origin/claude/927-ledger   # tree d4697a3e1fb4f84bde8323ff42fbfd652246ad0d
 bun run --cwd packages/test-kit typecheck && bun run --cwd packages/test-kit test
 bun run typecheck
 bun run test:scale -- tests/scale/photos-timeline.scale.test.ts    # 1 passed (red at the base)
 bun run test:scale -- tests/scale/large-vault.scale.test.ts        # 1 passed
 bun run test:scale -- tests/scale/replica-bootstrap.scale.test.ts  # 5 passed
-bash .governance/run.sh
+bash .governance/run.sh                                # 22/22 directives passed
 ```
+
+Gates ran on tree `d4697a3e1fb4f84bde8323ff42fbfd652246ad0d` (head `564ff42d5`),
+and `self-audit.sh` was re-run on the landed head after this paragraph was
+written, with the same result — the two trees differ only by this paragraph and
+its twin in the other receipt. `self-audit.sh` is single-umbrella: it reports
+each of this lane's other-umbrella commits as "subject lacks (#N)",
+symmetrically in both runs. Every other check is green in both, and
+`.governance/run.sh` passes 22 of 22.
 
 ### Findings
 

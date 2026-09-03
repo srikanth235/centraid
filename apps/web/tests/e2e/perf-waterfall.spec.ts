@@ -848,8 +848,34 @@ async function readVitals(page: Page): Promise<VitalsCapture> {
         .getEntriesByType("paint")
         .map((entry) => `${entry.name}=${Math.round(entry.startTime)}`)
         .join(","),
+      // Both attribute a null: a hidden document emits no paint timing, and an
+      // empty body means the shell never rendered rather than never painted.
+      visibility: document.visibilityState,
+      bodyText: (document.body.textContent ?? "").slice(0, 400),
     };
   })) as VitalsCapture;
+}
+
+/**
+ * FORCE ONE PRESENTED FRAME (#922 F5).
+ *
+ * PaintTiming stamps `first-contentful-paint` when a frame carrying that
+ * content is PRESENTED, and largest-contentful-paint has no candidate before
+ * it. A headless shell driving no display presents nothing on its own, so this
+ * probe could sit for its whole run on a fully rendered screen with
+ * `first-paint` alone on the timeline and report `LCP: n/a` — the "missing
+ * first-contentful-paint" that tests/experience-budgets/web.json parked its
+ * LCP ceiling behind. It is neither a webfont nor an unresolved transition:
+ * animation frames and forced layout reads are not enough either, because they
+ * never reach presentation. A capture does, which is the whole reason this
+ * screenshot is taken and thrown away.
+ *
+ * It must run BEFORE the interaction below: Chromium stops reporting
+ * largest-contentful-paint at the first input, so interacting ahead of the
+ * first presented frame costs the LCP number this probe exists to produce.
+ */
+async function flushPaint(page: Page): Promise<void> {
+  await page.screenshot({ timeout: 15_000 });
 }
 
 test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => {
@@ -877,13 +903,45 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
   await page.goto("/");
   await waitForShellBundle(page);
 
+  await flushPaint(page);
+
+  // The candidate must be DELIVERED to the observer before the interaction
+  // below. Chromium stops reporting largest-contentful-paint at the first
+  // input, and an entry still queued at that moment is dropped rather than
+  // handed over late — which is why the first run of this fix reported a
+  // `first-contentful-paint` on the timeline and `LCP: n/a` beside it. Giving
+  // up here is not a failure: a run that produced no candidate lands in the
+  // `lcpMs === null` branch below, which annotates and does not assert.
+  const lcpDelivered = await page
+    .waitForFunction(
+      () =>
+        (
+          globalThis as unknown as {
+            __centraidVitals?: { lcpMs: number | null };
+          }
+        ).__centraidVitals?.lcpMs !== null,
+      undefined,
+      { timeout: 10_000 }
+    )
+    .then(
+      () => true,
+      () => false
+    );
+
   // INP is undefined without an interaction, and "INP: null, passed" is the
-  // vacuous green this rig exists to prevent.
-  const anyButton = page.locator("button:visible").first();
-  const clicked = await anyButton.click({ timeout: 15_000 }).then(
-    () => true,
-    () => false
-  );
+  // vacuous green this rig exists to prevent. The interaction is the
+  // pairing-ticket field, because it is the only control the cold connect
+  // screen offers that is ENABLED: "Continue" stays disabled until a ticket is
+  // pasted, so `button:visible` spent its whole 15 s actionability timeout and
+  // left `interactionDriven: false`. A pointer press plus a keystroke is what
+  // Chromium hands an `interactionId`, which is what event-timing reports.
+  const ticketField = page.getByLabel("Pairing ticket");
+  const interact = async (): Promise<boolean> => {
+    await ticketField.click({ timeout: 15_000 });
+    await ticketField.press("c");
+    return true;
+  };
+  const clicked = await interact().catch(() => false);
   // Event-timing entries arrive on the frame after the interaction.
   await page.evaluate(
     () =>
@@ -900,6 +958,7 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
     // (tests/experience-budgets/README.md).
     volume: "empty (web-e2e fixture vault, loopback, headless Chromium)",
     interactionDriven: clicked,
+    lcpDelivered,
     vitals,
   };
   await fs.mkdir(path.dirname(VITALS_REPORT_PATH), { recursive: true });
@@ -944,7 +1003,8 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
     test.info().annotations.push({
       type: "perf-note",
       description:
-        `no largest-contentful-paint entry (paint timeline: [${vitals.paintEntries}]). ` +
+        `no largest-contentful-paint entry (paint timeline: [${vitals.paintEntries}], ` +
+        `candidate delivered: ${lcpDelivered}, visibility: ${vitals.visibility}). ` +
         `LCP not asserted this run; tests/experience-budgets/web.json keeps it unmeasured.`,
     });
   } else {
