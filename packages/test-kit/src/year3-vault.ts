@@ -22,7 +22,7 @@ export * from "./year3-shape.js";
 /**
  * 2 — the golden artifact (#927 P4). Version 1 declared row COUNTS only; the
  * golden year-3 vault declares DISTRIBUTIONS as well (long note bodies over
- * the replica's 64 KiB value ceiling, grantees with live bindings and standing
+ * the previous 64 KiB default but under the declared content ceiling, grantees with live bindings and standing
  * authority, a year of receipts in the audit band, the five-vault footprint),
  * so a fixture cached under version 1 is a different artifact and is not
  * reusable. `year3FixtureCacheKey` carries the version, so the bump alone

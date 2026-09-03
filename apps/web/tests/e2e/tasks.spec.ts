@@ -35,6 +35,7 @@ const ADD_INTENT = "tasks-e2e-add-task";
 const TRUNCATION_WINDOW = 20;
 const TRUNCATION_SEED = TRUNCATION_WINDOW + 1;
 const TRUNCATION_NOTICE = "Showing the newest 20; more not loaded";
+const UI_IMPACT_DIR = "artifacts/e2e/ui-impact";
 const UI_IMPACT_SHOT = "issue-922-web-truncation-status.png";
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
@@ -295,7 +296,8 @@ test("Tasks says so on the status line when a read's window cuts the board short
 
   const evidenceDir = path.resolve(
     import.meta.dirname,
-    "../../../../artifacts/e2e/ui-impact"
+    "../../../../",
+    UI_IMPACT_DIR
   );
   await mkdir(evidenceDir, { recursive: true });
   await page.screenshot({

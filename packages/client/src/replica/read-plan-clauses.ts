@@ -1,3 +1,5 @@
+import { fieldNotOnThisDevice } from "@centraid/blueprints/apps/_shared/shared-copy";
+
 /**
  * THE `where` LIST, COMPILED TO A VERDICT (#883 C3): oversized, undisclosed,
  * non-scalar, wrong comparison class, then the comparison — one input always
@@ -140,7 +142,7 @@ export function clauseGuards(
   const branches = [
     `WHEN ${oversized(clause.column)} THEN ${code(builder, {
       kind: "online",
-      message: `oversized field ${clause.column} is required by a filter`,
+      message: `${fieldNotOnThisDevice(clause.column)} is required by a filter`,
     })}`,
   ];
   if (schema.hasUnavailableFields) {

@@ -1,3 +1,5 @@
+import { fieldNotOnThisDevice } from "@centraid/blueprints/apps/_shared/shared-copy";
+
 /**
  * THE REPLICA READ GRAMMAR, COMPILED TO SQL (#883): a clause compiles to a
  * VERDICT — -1 dropped, 0 kept, >0 escalates — because a value this seat
@@ -206,7 +208,7 @@ function orderGuards(
   if (role === "order") {
     add("oversized", oversized(column), {
       kind: "online",
-      message: `oversized field ${column} is required for ordering`,
+      message: `${fieldNotOnThisDevice(column)} is required for ordering`,
     });
     if (schema.hasUnavailableFields) {
       add("undisclosed", undisclosed(column), {

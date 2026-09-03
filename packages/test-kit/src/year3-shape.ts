@@ -16,8 +16,8 @@ import type { SQLInputValue } from "node:sqlite";
  * THE GOLDEN YEAR-3 DISTRIBUTIONS (#927 P4).
  *
  * A count is not a distribution. `parties: 5_000` says how many rows exist; it
- * says nothing about whether any note body crosses the replica's 64 KiB value
- * ceiling, whether anyone has been granted anything, or whether the audit band
+ * says nothing about whether any note body crosses the previous 64 KiB default
+ * (or the entity's declared ceiling), whether anyone has been granted anything, or whether the audit band
  * holds enough history for a retention or "last used" query to have an answer.
  * Every field here is DECLARED, not measured — the fixture states the shape of
  * the owner's third year, and the rigs measure against it. Changing a number
@@ -29,10 +29,9 @@ export interface Year3Distributions {
   readonly notes: number;
   /**
    * Share of note bodies whose canonical `core_content_item.content_uri`
-   * exceeds `DEFAULT_REPLICA_MAX_VALUE_BYTES` (64 KiB) and is therefore
-   * DEFERRED by `packages/vault/src/replica/snapshot.ts` rather than shipped
-   * eagerly. Without these rows a replica fixture never exercises the deferred
-   * path at all, so #922 0b would have nothing to prove against.
+   * exceeds the previous default text ceiling (64 KiB). The content entity now
+   * declares a 1 MiB ceiling, so these rows preserve the before/after corpus
+   * shape while riding eagerly in the current replica.
    */
   readonly longNoteShare: number;
   readonly longNoteMinBytes: number;

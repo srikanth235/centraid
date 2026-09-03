@@ -4,8 +4,8 @@
  * `year3-vault.ts` owns the artifact's identity — its version, its profile,
  * its content-addressed cache — and the version-1 row axes every caller has
  * always had. This module owns the seeding that turns those counts into the
- * shape of an owner's third year: notes whose bodies cross the replica's
- * 64 KiB value ceiling, three calendar years of events, the phone's replica
+ * shape of an owner's third year: notes whose bodies cross the previous
+ * 64 KiB default text ceiling, three calendar years of events, the phone's replica
  * volume, automations with durable ledger state, grantees with live bindings
  * and standing authority, and a year of receipts in the audit band.
  *
