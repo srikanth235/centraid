@@ -296,6 +296,41 @@ describe("E2 — a purge revokes, it does not erase", () => {
     for (const entityType of PRINCIPAL_ENTITY_KINDS.values())
       expect(kinds).toContain(entityType);
   });
+
+  // #928 A3, wave 1: the table ACCEPTS an automation answer a wave before the
+  // compiled manifest writes one, so wave 3 lands without a schema change. The
+  // reserved `app` kind stays unwritable — first-party apps are not principals
+  // (#928 A1), and a third-party door would be a new answer, not a new value.
+  it("accepts an automation answer and still refuses an app one", () => {
+    const db = baselineVault();
+    party(db, "owner");
+    const insert = (id: string, kind: string) =>
+      db
+        .prepare(
+          `INSERT INTO share_authority (authority_id, principal_kind, principal_id, subject_type, subject_id, verb, duration, decision, granted_at, granted_by)
+           VALUES (?, ?, 'photos/dedupe', 'agent.pack', 'media', 'read', 'standing', 'granted', ?, 'owner')`
+        )
+        .run(id, kind, NOW);
+    insert("auto1", "automation");
+    const row = db
+      .prepare(
+        `SELECT principal_id AS who, granted_by AS by FROM share_authority WHERE authority_id = 'auto1'`
+      )
+      .get() as { who: string; by: string | null };
+    // The principal id is the manifest ref, and the OWNER answered: an
+    // automation is never exempt from `granted_by` the way a harness is.
+    expect(row.who).toBe("photos/dedupe");
+    expect(row.by).toBe("owner");
+    expect(() => insert("app1", "app")).toThrow(/CHECK constraint failed/u);
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO share_authority (authority_id, principal_kind, principal_id, subject_type, subject_id, verb, duration, decision, granted_at, granted_by)
+           VALUES ('auto2','automation','photos/dedupe','core.entity','media.asset','act','standing','granted', ?, NULL)`
+        )
+        .run(NOW)
+    ).toThrow(/CHECK constraint failed/u);
+  });
 });
 
 describe("audit F1 — the entity id namespace is ENFORCED, not assumed", () => {
