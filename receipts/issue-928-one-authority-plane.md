@@ -6,7 +6,7 @@ Umbrella receipt. One receipt for the whole umbrella; each wave appends its own 
 
 - [ ] `evaluateAccess` has no `app` identity path; the app bridge issues no app credential; an owner-device read of the owner's vault runs 0 grant statements
 - [ ] Replica shapes are composed statically from the app manifest and the sealed registry; shape ids for all eight apps are unchanged on the golden vault; a sealed column name appears in no shape
-- [ ] The static tripwire fails a build in which an app query touches an undeclared entity (proven with a seeded violation)
+- [x] The static tripwire fails a build in which an app query touches an undeclared entity (proven with a seeded violation)
 - [ ] `access_grant`, `access_grant_scope`, `access_policy`, `access_scope_tombstone`, `access_scope_request` and every reader of them are gone; `grep -r "dpv:" packages apps` is empty outside receipts and CHANGELOG
 - [ ] Every automation's standing answer is a `share_authority` row with `principal_kind = 'automation'`; the owner's prior refusals survive as `declined` rows (count and content asserted by the migration test); a widened manifest still parks
 - [ ] The assistant holds no standing grant; its reads and writes are receipted exercises on behalf of the acting owner; scheduler-fired automations are capped by their row
@@ -17,7 +17,7 @@ Umbrella receipt. One receipt for the whole umbrella; each wave appends its own 
 - [ ] Authz deny matrix, automation clamp sweeps and the harness parity integration test green at every slice exit
 - [ ] `docs/decisions.md`, SECURITY.md and `docs/vault-ontology.md` state the model above; the drift register rows for the consent plane are closed
 
-Nothing is ticked. Wave 1a writes the rulings only; every criterion above needs code, and the last one needs both halves — the three docs state the model now, but the drift register rows are **open**, not closed, so the item stays unticked until the waves that close them land.
+Ticked by the wave-1 root doc commit: **box 3 only**, realized in full by w1b. Wave 1a itself wrote the rulings only; every remaining criterion needs code, and the last one needs both halves — the three docs state the model now, but the drift register rows are **open**, not closed, so that item stays unticked until the waves that close them land. Wave 1c (`principal_kind` gains `automation`) ticks nothing either, by its own account: the plane now **accepts** an automation answer and nothing writes one, while box 5 also requires the migration, the `declined` rows and the parking behaviour, all of which land in wave 3.
 
 ## What changed
 
@@ -29,6 +29,8 @@ Wave 1a is docs-only. It records the rulings #928 makes as current state, so lat
 - **`docs/vault-ontology.md`** — six rows added to `## Drift register`, each `open — closes in #928 wave N` with the mechanism named: **ONT-16** the app grant tables, **ONT-17** purposes and the DPV vocabulary, **ONT-18** `access_policy` and its two consultations per non-owner read, **ONT-19** the receipt's four id spaces, **ONT-20** `grant_profile_json` and `outbox_grant`, **ONT-21** the give-plane residue. No row is closed by this slice.
 - **`docs/glossary.md`** — `principal` gains `automation` and states the clamp as its locus; new entries define **automation** (principal kind), **app** (reserved principal kind), **authority_id** and **owner-direct read**; the `consent / grant` entry stops calling app grants strategy machinery beneath manifests; two rows in the broader forbidden-synonyms table retire "purpose" / `dpv:` and "app grant" / "consent-scoped app handler", each pointing at #928. Every entry whose sentence would describe code that has not landed names the wave that lands it (the `automation` kind in waves 1 and 3, `authority_id` in wave 4, the app credential in wave 2), and the same wave-naming was added to the #873 supersession row.
 - **`receipts/issue-928-one-authority-plane.md`** — this file, created as the umbrella receipt.
+
+Added by the wave-1 root doc commit (see `## w1 root doc commit` below), so the one ticked box crosswalks to evidence in this section: **The static tripwire fails a build in which an app query touches an undeclared entity (proven with a seeded violation)** — realized by w1b in `packages/blueprints/src/app-entity-tripwire.ts` and `app-entity-tripwire.test.ts`, registered as a law and a flow in `tests/claims.json` / `tests/floors.json`, and demonstrated red on 2026-09-03 against the real tree on both halves (an undeclared read of `schedule.project` from `packages/blueprints/apps/tasks/queries/board.ts`, an undeclared `act` on `locker.purge_item` from `packages/blueprints/apps/locker/actions/purge-item.ts`), each restored immediately after, plus four further seeded violations that run on every build. The failure names the app, the file and the entity. Full evidence, numbers and three verifier passes are in `## w1b — the static app entity tripwire`.
 
 ## Out of scope
 
@@ -419,3 +421,67 @@ Observation for the umbrella owner, not a defect of this slice:
 
 - `packages/vault/src/grant/authority-registry.ts` reports as **binary** in `git diff --numstat` (`-\t-`), so its hunk is invisible to a normal textual review. Cause: two raw NUL bytes at offsets 7092 and 7288, used as the `BY_KEY` composite-key delimiter — **pre-existing, byte-identical on `origin/main`**, not introduced here. This slice's edit was reviewed against a NUL-stripped copy of both revisions and matches `## What changed` exactly. Fix (own slice): write the delimiter as the two-character escape `\\0` in source, or use a nested `Map`, rather than embedding a literal NUL byte.
 
+## w1 root doc commit
+
+The root's one doc commit for wave 1. It writes no code and adds no evidence of its own: it
+ticks the acceptance boxes the wave's slices realized, and records where each tick's evidence
+already lives.
+
+### What changed, file by file
+
+- **`receipts/issue-928-one-authority-plane.md`** (this file) — `## Checklist` box 3 ticked;
+  the "Nothing is ticked" note under the checklist rewritten to say what is ticked and why
+  the rest is not; one paragraph added to `## What changed` so the ticked item crosswalks to
+  evidence in that section, as `receipt-per-issue` rule 3 requires (the crosswalk reads only
+  `## What changed` and `## Verification`, never an appended wave section); this section
+  appended. Nothing else above this section was rewritten.
+- **`docs/decisions.md`** — not changed for #928 by this commit. The #928 section was written
+  by wave 1a and is current; this commit's decisions work is #922's `SB-loader` row, the
+  pending-write overlay sub-table and register, and a new `## Perf and scale infrastructure
+  (#927)` section. See `receipts/issue-922-snappier-blueprints.md` § `## w1 root doc commit`.
+
+### Boxes ticked, with the evidence pointer for each
+
+| Box | Ticked | Evidence |
+| --- | --- | --- |
+| 3 — the static tripwire fails a build in which an app query touches an undeclared entity (proven with a seeded violation) | **yes** | `## w1b — the static app entity tripwire`: `packages/blueprints/src/app-entity-tripwire.{ts,test.ts}`, the seeded reds demonstrated 2026-09-03 on both the read and the act half naming app, file and entity, four further synthetic seeded violations running on every build, and three verifier passes ending PASS at `8078afd8` |
+
+### Boxes deliberately NOT ticked
+
+- **Box 5** (`principal_kind = 'automation'` rows, `declined` rows asserted by the migration
+  test, a widened manifest still parks). PR #949 **merged** while this commit was being
+  prepared and w1c is on this branch, so the root re-judged the box against the landed
+  evidence rather than against the PR's absence: `## w1c — the automation principal kind in
+  the schema` widens the schema CHECK and the authority registry so the plane **accepts** an
+  automation answer, and says in its own first paragraph that **nothing writes one** and
+  that "accepting a value in a CHECK is not, on its own, any of #928's acceptance criteria".
+  The box's three clauses — every automation's standing answer is a row, the owner's prior
+  refusals survive as `declined` rows with count and content asserted by the migration test,
+  and a widened manifest still parks — all need wave 3's writer and migration. Unticked.
+- **Box 12** (the three docs state the model *and* the drift register rows are closed). The
+  docs state it; ONT-16…ONT-21 are `open`. Both halves are required.
+- Every other box needs code from waves 2–5.
+
+### Decisions
+
+- **A tick needs its text inside `## What changed` or `## Verification`, not just inside the
+  wave section that earned it.** `receipt-per-issue`'s crosswalk stops at the next `## `
+  heading, so an appended `## w1b …` section is invisible to it. Rather than weaken the
+  directive or leave the box untickable, the root added one crosswalk paragraph naming the
+  evidence and pointing at the wave section. This is the one edit above an appended section
+  that the root doc commit makes, and it adds no claim the w1b evidence does not already
+  carry.
+
+### Verification
+
+```
+bun run format                    # clean
+bun run lint                      # clean
+bun run lint:product              # 39/39
+bash .governance/run.sh           # 22/22
+bun run test:claims               # 45 claims, 48 lanes, 193 derived flows
+```
+
+### Audit
+
+Verdict: PASS — root doc commit; ticks are traceable to the evidence sections named above
