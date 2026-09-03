@@ -4,17 +4,14 @@ import { PENDING_OVERLAY_FIELDS } from "@centraid/blueprints/apps/_shared/pendin
 import boardQuery from "@centraid/blueprints/apps/tasks/queries/board";
 import { seededRandom } from "@centraid/test-kit/random";
 
+import { OnlineOnlyGuard } from "../../replica/errors.js";
 import type { ShellReplicaReadRequest } from "../../replica/shell-session.js";
 import type {
   ReplicaReadWireResult,
   ReplicaRowEnvelope,
   ReplicaSearchWireResult,
 } from "../../replica/types.js";
-import {
-  buildInlineCtx,
-  createOnlineGuard,
-  runInlineQuery,
-} from "./inlineQueryCtx.js";
+import { buildInlineCtx, runInlineQuery } from "./inlineQueryCtx.js";
 import type { InlineReplicaSession } from "./inlineQueryCtx.js";
 
 const cursor = { epoch: "e1", seq: 7 };
@@ -106,13 +103,13 @@ describe("inlineQueryCtx", () => {
   });
 
   it("resolves mentions to {cards:[]} offline and never rejects", async () => {
-    const guard = createOnlineGuard();
+    const guard = new OnlineOnlyGuard();
     const ctx = buildInlineCtx(
       { session: seededSession(), appId: "tasks", isOnline: () => false },
       guard
     ) as { vault: { resolve: () => Promise<{ cards: unknown[] }> } };
     await expect(ctx.vault.resolve()).resolves.toStrictEqual({ cards: [] });
-    expect(guard.error).toBeNull();
+    expect(guard.required).toBe(false);
   });
 
   it("marks the online-only guard when a query reads an undisclosed field", async () => {

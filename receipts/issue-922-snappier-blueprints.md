@@ -945,3 +945,172 @@ bash .governance/run.sh
 - **A second script, not a bigger gate.** Adding the journeys to `bench-low-end.mjs` would have changed the denominators its budgets are stated over (fsync *per write*), which is a budget change by accident. The two share `bench-support.mjs` instead, and the duplicated helpers are deleted rather than left beside it.
 - **Volume comes from the demo seeds plus filled rows, not `@centraid/test-kit/year3-vault`.** That fixture is a TypeScript module and these are `node` `.mjs` scripts; seeding through the gateway's own write path also keeps the journal sequence the replica cursor is derived from, which a direct SQLite insert would skip. The row count and its composition are stated with every number.
 - **`no-await-in-loop` disabled per line, with the reason.** Serialisation *is* the measurement: one intent per round trip, one commit per fan-out sample. Twelve `oxlint-disable-next-line` comments each name why, matching the repo's existing pattern in `peer-commons-client.ts`.
+
+## w1 Metro-loader spike — ctx-core de-duplication
+
+**Amends the `## w1 Metro-loader spike — ADOPT` section above, which is left byte-for-byte
+as it landed.** Where that section says both ADOPT preconditions are E7's first line, read
+instead: **(a) — one shared ctx builder, this spike's native adapter deleted — is DONE, in
+wave 1, below. Only (b) (no `__centraid*` provenance on rows handed to a handler) remains
+for E7.** This is the Metro adapter half of the duplication 0a's `### Sonar duplication`
+paragraph above attributes to "the Metro adapter, which its own de-duplication commit
+removes"; that commit is this one.
+
+
+SonarCloud failed the wave PR's quality gate: **27.6 % duplicated lines on new code**,
+ceiling 3 %. The duplicate was the spike's own second ctx builder — the very thing
+precondition (a) says must go — so (a) was done here rather than deferred to E7. A bot
+finding is a bug report; deletion with replacement is the fix.
+
+**The shared module.** `packages/client/src/replica/inline-query-ctx-core.ts` (new) now
+holds everything both seats had in common: `guardedRow` (the unavailable/oversized row
+proxy), `receiptIdFor`, `inlineReadsFor` (the session → rows wiring), `buildInlineCtxCore`
+(the verb surface: `resolve` → `{ cards: [] }`, every write and gateway-only verb an
+`ONLINE_ONLY` effect), `runInlineQueryCore`, and `ctx.time`. It lives under `replica/`,
+not `react/blueprints/`, and is DOM-free by construction — that is what lets it be
+re-exported through `@centraid/client/replica/native` (added to `native.ts`; also to the
+browser `index.ts` barrel), the subpath React Native already consumes from source. It
+pulls in no `window` type, so it does not drag `gateway-client-core.ts` into a Metro
+bundle — the 8-error path this receipt documented above.
+
+**What moved, and what stayed seat-side.** The web `inlineQueryCtx.ts` and the native
+adapter are now thin callers. Each keeps exactly one thing: **what one row becomes.** The
+shell threads its pending-row provenance symbol onto the row and carries that identity
+across product-field projections afterwards (`pendingMarker`, `carriedPendingMarker`,
+`carryPendingRows` — blueprint-overlay logic with no native counterpart yet, so it stays
+in `react/blueprints/`); the phone does not. Nothing else is seat-specific, and nothing is
+left duplicated.
+
+**Two further duplicates deleted while there.** (1) `ctx.time` was being assembled
+identically by each seat; the core imports `@centraid/core/time` itself, so "both seats
+run the same civil-time engine" is now a fact of the module graph rather than a convention
+two files must keep agreeing on. (2) The spike had hand-rolled an online-only guard —
+`createOnlineGuard` / `InlineOnlineGuard` / a local `OnlineOnlyError` — while
+`packages/client/src/replica/online-only-guard.ts` has owned exactly that (sticky
+first-reason `mark()`, `required`, `assertLocal()`, the identical message string) all
+along. The hand-rolled one is deleted; both seats and `inlineQueryCtx.test.ts` now use
+`OnlineOnlyGuard`. That was a **third** copy the Sonar finding surfaced, and the web
+builder had been carrying it since before this slice.
+
+**Before/after, same block scan** (python `difflib.SequenceMatcher` over the two files,
+matching blocks ≥ 8 lines; `scripts` not involved — reproduced in the fenced block below):
+
+| pair | before (`61973cef5`) | after |
+| --- | --- | --- |
+| native adapter ↔ web `inlineQueryCtx.ts` | 6 blocks, **93 of 238 lines (39.1 %)** | **0 blocks, 0 lines (0.0 %)** |
+| native adapter ↔ shared core | — (core did not exist) | **0 blocks, 0 lines** |
+| web `inlineQueryCtx.ts` ↔ shared core | — | **0 blocks, 0 lines** |
+
+The adapter shrank 238 → 81 lines and `inlineQueryCtx.ts` 294 → 173. The six blocks the
+root named (native 26-33, 70-79, 97-135, 176-192, 195-204, 228-236) are all gone: the
+first is the time import, the second the guard, the third `guardedRow`, the fourth and
+fifth the verb surface and ctx assembly, the sixth the runner — every one of them now
+exists once, in the core.
+
+Sonar's ratio is over *new* code and includes the new core file, which no other file
+duplicates; with zero identical blocks ≥ 8 lines anywhere among the three, the measured
+duplication is 0 %, against the 3 % ceiling.
+
+```
+$ python3 dupscan.py          # difflib.SequenceMatcher, blocks >= 8 lines
+BEFORE (at 61973cef5):
+  native vs web: native=238 lines, web=294 lines, identical blocks>=8: 6,
+                 duplicated native lines: 93 (39.1% of the file)
+     native 26-33 = web 3-10 (8) | 70-79 = 52-61 (10) | 97-135 = 80-118 (39)
+     native 176-192 = web 249-265 (17) | 195-204 = 267-276 (10) | 228-236 = 284-292 (9)
+AFTER (working tree):
+  native vs web:  native=81 lines, web=173 lines, identical blocks>=8: 0, 0 lines (0.0%)
+  native vs core: identical blocks>=8: 0, 0 lines (0.0%)
+  web vs core:    identical blocks>=8: 0, 0 lines (0.0%)
+
+# Gates for the engine lane this now touches (all under scratchpad/gate.lock)
+$ bun run --cwd packages/client build          # tsc -p tsconfig.build.json, clean
+$ bun run --cwd packages/client typecheck      # clean
+$ bun run --cwd packages/client test           # 264 files, 2420 tests passed
+$ bun run --cwd packages/client test -- src/react/blueprints/
+                                               # 8 files, 76 passed — the importers of
+                                               # inlineQueryCtx.ts, incl. its own suite
+$ bun run --cwd apps/mobile test               # 272 files, 2357 tests passed
+$ bun run --cwd apps/mobile typecheck          # clean
+$ bun run --cwd packages/blueprints typecheck  # clean
+$ bun run format / bun run lint                # clean / green
+$ bash .governance/run.sh                      # all 22 directives passed
+$ bun run lint:product                         # 35/39 — NONE of the four is this diff's
+                                               # work except one; see below
+```
+
+**`lint:product` after this commit, honestly.** Three of the four reds —
+`test:ratchet`, `lint:ledgers`, `lint:quality-knobs` — fail on the **clean tree at this
+branch's base** (`git stash -u && bun run lint:product`): `origin/main` moved to
+`7d47fee4c` while this was in flight and #928's `9e130654a` renamed the
+`blueprint-app-entity-tripwire-law` flow, so every ledger gate reads the flow as removed
+relative to this older base. They clear when the wave branch rebases onto the newer main —
+the root's call, not a slice's.
+
+The fourth, `check:ui-receipt`, **is** caused by this commit and has no honest exit:
+`validate-ui-receipt.mjs` treats every path under `packages/client/` as user-facing, and
+its only way to pass is a screenshot emitted by a changed e2e harness. This diff is an
+internal refactor of `src/replica/` and `src/react/blueprints/` engine code with no
+surface change — there is no screen to photograph, and inventing a `## User impact` and a
+`First-run:` note for a no-op would be a false receipt. Not worked around, not waived:
+flagged for the root. The shape of the fix, if the root wants one, is the carve-out #930
+already established for `packages/blueprints/apps/**` test files (`TEST_FILE_RE` in that
+script) — a non-UI exclusion for the engine paths under `packages/client/src/replica/**` —
+but widening a gate is never a slice's decision, so nothing here touches it.
+
+Files in this commit: `packages/client/src/replica/inline-query-ctx-core.ts` (new),
+`packages/client/src/replica/native.ts`, `packages/client/src/replica/index.ts`,
+`packages/client/src/react/blueprints/inlineQueryCtx.ts`,
+`packages/client/src/react/blueprints/inlineQueryCtx.test.ts`,
+`apps/mobile/src/lib/replica/inline-query-ctx.native.ts`,
+`receipts/issue-922-snappier-blueprints.md`.
+
+Deleted, with its replacement: the spike's second ctx builder (93 lines of
+`inline-query-ctx.native.ts`) → `inline-query-ctx-core.ts`; the hand-rolled inline guard
+(`createOnlineGuard`, `InlineOnlineGuard`, the local `OnlineOnlyError`) → the existing
+`OnlineOnlyGuard`; two per-seat `ctx.time` literals → one `INLINE_CTX_TIME` in the core.
+
+One consequence worth naming for E7: because the phone now imports the same builder the
+shell does, precondition (b) has exactly one place to land — `inlineReadsFor`'s row
+callback in `inline-query-ctx.native.ts` — instead of two. The parity test's provenance
+assertion is unchanged and still fails the moment that strip happens, which is the signal
+E7 wants.
+
+### 0a's truncation duties on the refactored shape
+
+This commit rebased onto 0a, which had added two duties to the very read/search closures
+the refactor moved: `assertBoundedReplicaRead(request)` before a read, and
+`postStatus(truncatedListNotice(...))` after a read **and** after a search. Re-applied, not
+re-implemented, and not duplicated:
+
+- **`packages/client/src/react/blueprints/inlineQueryCtx.ts` still posts the notice** — the
+  web thin caller, exactly where 0a put it, because the status channel is the shell's and a
+  React Native screen has no status line to post to. `assertBoundedReplicaRead` stays there
+  too: its value is that the refusal names the calling query's own file in the stack, which
+  a shared module cannot do.
+- **The core gained the seam, not the behaviour.** `inlineReadsFor` takes an optional
+  `InlineReadHooks` (`beforeRead`, `beforeSearch`, `onResult`) and `InlineWireResult` now
+  declares `truncated` / `appliedLimit`, so the seat can see a cut-off page without
+  unwrapping the result a second time. The phone passes no hooks — 0a's mobile half already
+  bounds and reports through `useReplicaQuery` and `MultiVaultReplicaSession`.
+- 0a posted the notice from two hand-written blocks (one in `read`, one in `search`). On the
+  hook it is **one** `onResult`, run on both paths — the same behaviour from one site, which
+  is what "never a second copy" means here.
+
+No 0a assertion was changed. `inlineQueryCtx.test.ts` merged cleanly (0a's
+`acceptTruncation` setup edits and this refactor's `OnlineOnlyGuard` construction touch
+different lines). 0a's `inline-read-truncation.test.ts` needed a **setup-only** edit —
+3 insertions, 2 deletions, all of it `import { buildInlineCtx, createOnlineGuard }` →
+`import { buildInlineCtx }` plus `OnlineOnlyGuard` beside it, and `createOnlineGuard()` →
+`new OnlineOnlyGuard()` at the one construction site. Every one of its five cases asserts
+exactly what 0a wrote. `read-plan-truncation.test.ts` (11 cases) is untouched and green,
+and the Metro parity test is unchanged and green.
+
+Files this commit changed on top of 0a:
+`packages/client/src/replica/inline-query-ctx-core.ts` (new),
+`packages/client/src/replica/native.ts`, `packages/client/src/replica/index.ts`,
+`packages/client/src/react/blueprints/inlineQueryCtx.ts`,
+`packages/client/src/react/blueprints/inlineQueryCtx.test.ts`,
+`packages/client/src/react/blueprints/inline-read-truncation.test.ts`,
+`apps/mobile/src/lib/replica/inline-query-ctx.native.ts`,
+`receipts/issue-922-snappier-blueprints.md`.

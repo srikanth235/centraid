@@ -1,14 +1,18 @@
 import { PENDING_OVERLAY_FIELDS } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 import type { InlineQueryModule } from "@centraid/blueprints/apps/inline-types";
-import {
-  applyRecurrenceExceptions,
-  collapseMissedOccurrences,
-  describeRecurrence,
-  expandRecurrence,
-  shiftTemporal,
-} from "@centraid/core/time";
 
+// The ctx itself is seat-neutral and lives with the replica engine, so the
+// phone imports the SAME builder through `@centraid/client/replica/native`
+// (#922). Only the read/search closures below are the shell's.
+import { OnlineOnlyGuard } from "../../replica/errors.js";
+import {
+  buildInlineCtxCore,
+  guardedRow,
+  inlineReadsFor,
+  runInlineQueryCore,
+} from "../../replica/inline-query-ctx-core.js";
+import type { InlineWireResult } from "../../replica/inline-query-ctx-core.js";
 import { assertBoundedReplicaRead } from "../../replica/read-plan.js";
 import type {
   ShellReplicaReadRequest,
@@ -20,7 +24,6 @@ import type {
   ReplicaReadWireResult,
   ReplicaRowEnvelope,
   ReplicaSearchWireResult,
-  ReplicaValue,
 } from "../../replica/types.js";
 import { postStatus } from "../../status-channel.js";
 
@@ -35,89 +38,9 @@ export interface InlineReplicaSession {
   ) => Promise<ReplicaSearchWireResult>;
 }
 
-export interface OnlineOnlyError extends Error {
-  code: string;
-}
-
-export interface InlineOnlineGuard {
-  error: OnlineOnlyError | null;
-  mark: (reason: string) => OnlineOnlyError;
-}
-
-export function createOnlineGuard(): InlineOnlineGuard {
-  const guard: InlineOnlineGuard = {
-    error: null,
-    mark(reason: string): OnlineOnlyError {
-      if (!guard.error) {
-        const error = new Error(
-          `Query requires the online vault: ${reason}`
-        ) as OnlineOnlyError;
-        error.code = "ONLINE_ONLY";
-        error.name = "OnlineOnlyError";
-        guard.error = error;
-      }
-      return guard.error;
-    },
-  };
-  return guard;
-}
-
-// Throws ONLINE_ONLY on oversized or undisclosed fields — same conditions as
-// the iframe path's `guardedRow`.
+// Pending identity is shell-owned and rides the row as an enumerable symbol:
+// it follows object spreads but cannot leak onto JSON.
 const PENDING_ROW_PROVENANCE = Symbol("centraid.pending-row-provenance");
-
-function guardedRow(
-  envelope: ReplicaRowEnvelope,
-  guard: InlineOnlineGuard,
-  pending: PendingRowMarker | undefined
-): Record<string, unknown> {
-  const missing = new Map<string, string>();
-  for (const key of envelope.oversizedFields ?? [])
-    missing.set(key, `oversized field ${key}`);
-  const undisclosed = envelope.hasUnavailableFields === true;
-  // Enumerable symbol follows object spreads but cannot leak onto JSON.
-  const values: Record<string, unknown> & {
-    [PENDING_ROW_PROVENANCE]?: PendingRowMarker;
-  } = { ...(envelope.values as Record<string, unknown>) };
-  if (pending) values[PENDING_ROW_PROVENANCE] = pending;
-  const unavailable = (
-    target: Record<string, unknown>,
-    key: string | symbol
-  ): boolean =>
-    typeof key === "string" &&
-    (missing.has(key) || (undisclosed && !(key in target)));
-  const fail = (key?: string | symbol): never => {
-    throw guard.mark(
-      (typeof key === "string" && missing.get(key)) ||
-        "accessing undisclosed unavailable fields"
-    );
-  };
-  return new Proxy(values, {
-    get(target, key) {
-      if (unavailable(target, key)) fail(key);
-      return target[key as string];
-    },
-    has(target, key) {
-      if (unavailable(target, key)) fail(key);
-      return key in target;
-    },
-    ownKeys(target) {
-      if (missing.size || undisclosed) fail();
-      return Reflect.ownKeys(target);
-    },
-    getOwnPropertyDescriptor(target, key) {
-      if (unavailable(target, key)) fail(key);
-      return Object.getOwnPropertyDescriptor(target, key);
-    },
-  });
-}
-
-function receiptIdFor(result: {
-  cursor?: { epoch: string; seq: number };
-}): string {
-  const cursor = result.cursor;
-  return cursor ? `replica:${cursor.epoch}:${cursor.seq}` : "replica:local";
-}
 
 export interface InlineCtxOptions {
   session: InlineReplicaSession;
@@ -211,102 +134,66 @@ function carryPendingRows(
 // `resolve` NEVER rejects — `{ cards: [] }` rather than blanking the board.
 export function buildInlineCtx(
   options: InlineCtxOptions,
-  guard: InlineOnlineGuard,
+  guard: OnlineOnlyGuard,
   pendingRows: PendingRowMarker[] = []
 ): unknown {
   const { session, appId, signal } = options;
-  const effect = (name: string) => (): Promise<never> =>
-    Promise.reject(guard.mark(`${name} is online-only`));
-
-  const vault = {
-    async read(
-      request: ShellReplicaReadRequest
-    ): Promise<{ rows: unknown[]; receiptId: string }> {
-      // THE WEB SEAT'S BOUNDARY (#922 0a). A query that declares no window and
-      // does not accept the default one is refused HERE, where the caller's
-      // own file is named in the stack, rather than answered with a page
-      // silently capped at 1,000 rows.
-      assertBoundedReplicaRead(request);
-      const result = await session.read(appId, request);
-      // Honesty is not optional and not the app's to forget: a window that cut
-      // rows off says so on the one status line, from the read itself.
-      if (result.truncated && result.appliedLimit !== undefined) {
-        postStatus(truncatedListNotice(result.appliedLimit));
-      }
-      const rows = result.rows.map((row) => {
-        const marker = pendingMarker(row);
-        if (marker) pendingRows.push(marker);
-        return guardedRow(row, guard, marker);
-      });
-      return {
-        rows,
-        receiptId: receiptIdFor(result),
-      };
+  return buildInlineCtxCore<ShellReplicaReadRequest, ShellReplicaSearchRequest>(
+    {
+      // The shell's contributions, and only the shell's: each row carries its
+      // pending-row provenance so a projection can be traced back to the
+      // intent, and the two 0a duties below need a surface the phone has not
+      // got — a stack that names the calling query, and a status line.
+      reads: inlineReadsFor(
+        session,
+        appId,
+        (envelope) => {
+          const marker = pendingMarker(envelope);
+          if (marker) pendingRows.push(marker);
+          return guardedRow(
+            envelope,
+            guard,
+            marker ? [[PENDING_ROW_PROVENANCE, marker]] : []
+          );
+        },
+        {
+          // THE WEB SEAT'S BOUNDARY (#922 0a). A query that declares no window
+          // and does not accept the default one is refused HERE, where the
+          // caller's own file is named in the stack, rather than answered with
+          // a page silently capped at 1,000 rows.
+          beforeRead: assertBoundedReplicaRead,
+          // Honesty is not optional and not the app's to forget: a window that
+          // cut rows off says so on the one status line, from the read itself.
+          // A ranked search page that filled its window hides hits exactly as a
+          // list read hides rows, and says so on the same line (#922 0a) —
+          // which is why this is `onResult` and not two copies.
+          onResult: (result: InlineWireResult) => {
+            if (result.truncated && result.appliedLimit !== undefined)
+              postStatus(truncatedListNotice(result.appliedLimit));
+          },
+        }
+      ),
+      ...(signal ? { signal } : {}),
     },
-    async search(
-      request: ShellReplicaSearchRequest
-    ): Promise<{ rows: unknown[]; receiptId: string }> {
-      const result = await session.search(appId, request);
-      // A ranked page that filled its window hides hits exactly as a list read
-      // hides rows, and says so on the same line (#922 0a).
-      if (result.truncated && result.appliedLimit !== undefined) {
-        postStatus(truncatedListNotice(result.appliedLimit));
-      }
-      const rows = result.rows.map((row) => {
-        const marker = pendingMarker(row);
-        if (marker) pendingRows.push(marker);
-        return guardedRow(row, guard, marker);
-      });
-      return {
-        rows,
-        receiptId: receiptIdFor(result),
-      };
-    },
-    // No client-side card resolver; empty cards, never blank (#505 P4).
-    resolve(): Promise<{ cards: ReplicaValue[] }> {
-      return Promise.resolve({ cards: [] });
-    },
-    invoke: effect("invoke"),
-    query: effect("query"),
-    describe: effect("describe"),
-    parked: effect("parked"),
-    reveal: effect("reveal"),
-    authenticate: effect("authenticate"),
-    content: effect("content"),
-    changes: effect("changes"),
-  };
-
-  return {
-    abortSignal: signal,
-    fetch: (): Promise<never> =>
-      Promise.reject(guard.mark("fetch is online-only")),
-    vault,
-    // Same civil-time engine as the gateway worker — in-process, identical summary.
-    time: {
-      applyRecurrenceExceptions,
-      collapseMissedOccurrences,
-      describeRecurrence,
-      expandRecurrence,
-      shiftTemporal,
-    },
-  };
+    guard
+  );
 }
 
 export async function runInlineQuery(
   module: InlineQueryModule,
   options: InlineCtxOptions & { input?: Record<string, unknown> }
 ): Promise<unknown> {
-  const guard = createOnlineGuard();
+  const guard = new OnlineOnlyGuard();
   const pendingRows: PendingRowMarker[] = [];
   const ctx = buildInlineCtx(options, guard, pendingRows);
-  const value = await module.default({
-    params: {},
-    query: options.input ?? {},
-    input: options.input,
-    app: { id: options.appId, dir: "" },
-    log: { info: () => {}, warn: () => {}, error: () => {} },
-    ctx,
-  });
-  if (guard.error) throw guard.error;
+  const value = await runInlineQueryCore(
+    module as never,
+    {
+      ctx,
+      appId: options.appId,
+      ...(options.input ? { input: options.input } : {}),
+    },
+    guard
+  );
   return carryPendingRows(value, pendingRows, options.scopeId);
 }

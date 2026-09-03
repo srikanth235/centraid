@@ -11,6 +11,7 @@
 export * from "./coordinator.js";
 export * from "./digest.js";
 export * from "./errors.js";
+export * from "./inline-query-ctx-core.js";
 export * from "./intent-invalidations.js";
 export * from "./intent-record-store.js";
 export * from "./intents.js";
