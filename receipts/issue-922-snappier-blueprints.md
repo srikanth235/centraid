@@ -1312,6 +1312,102 @@ Bootstrap-page growth: **+5,788,432 B on one page (523 KB → 6.31 MB, ×12.06)*
 - `packages/server/src/routes/replica-shape.ts:26` keeps its own `REPLICA_MAX_VALUE_BYTES = 64 * 1024` beside the vault's default — two sources for one number. The rest of that file is #928's by contract, so the one-line re-export was not landed. Recommend #928 or a follow-up import the vault constant.
 - Bootstrap pages are windowed by ROW count, not bytes, so an entity with long declared text can produce a 6 MB page. Recommend a byte-aware page window in the C/E lane (`replica-routes.ts`).
 - `packages/test-kit/src/year3-shape.ts` (on `origin/claude/927-w1`) documents `longNoteShare` by the now-deleted `DEFAULT_REPLICA_MAX_VALUE_BYTES`; the comment needs a rename when the two waves meet.
+## w1 root doc commit
+
+The root's one doc commit for wave 1 of #922 (and the doc half of #927 and #928's wave 1).
+It writes no code and produces no evidence of its own: it turns wave-1 slice evidence into
+current-state rulings in `docs/decisions.md`, and ticks only boxes whose evidence already
+exists. Waves are named exactly as #922's Part G and execution plan state them.
+
+### What changed, file by file
+
+- **`docs/decisions.md`**, `## Snappier blueprint apps (#922)` — the **`SB-loader` row is
+  rewritten in place from Open to ADOPT**. Docs are state, so the Open row is replaced, not
+  annotated. The row now records: Metro loads `queries/*.ts` today; the spike exported
+  `packages/blueprints/apps/tally/queries/dashboard.ts` into the mobile graph through a
+  DOM-free adapter for **+4 modules, +31,494 B (+0.39 %)** of Hermes bytecode at
+  `expo export` **exit 0** with `apps/mobile/metro.config.js` untouched; `dashboard.ts` on
+  the native session at **11.1 ms median (N=40)** and **188 ms (N=2,000)**, indicative; the
+  property kept — **one query handler per app on both seats** — and the projection fork
+  deleted **app by app (E3/E7, Tally first)**; and E7's two preconditions, (a) one ctx
+  builder behind a DOM-free `@centraid/client` subpath with
+  `apps/mobile/src/lib/replica/inline-query-ctx.native.ts` deleted in the same slice —
+  **not done in wave 1**, since the Metro worker's de-duplication commit did not land and
+  the spike's adapter is a spike no product code imports — and (b) no `__centraid*`
+  provenance handed to a handler, stripped at the adapter until `SB-overlay-3`'s sidecar
+  makes it one key. Every number is taken verbatim from `## w1 Metro-loader spike — ADOPT`
+  above; none is new.
+- **`docs/decisions.md`**, same section — a new sub-table **Pending-write overlay
+  (SB-overlay-1 … SB-overlay-9)** after the re-judged register and its `synchronous=FULL`
+  paragraph, one row per Part G ruling G1–G9 in the register's four columns (Id | Current
+  decision | Property it keeps, or the finding it files | Lands in), with **G8 riding G1's
+  row** (`SB-overlay-1`) as Part G states. Beneath it the **eight-row overlay seam register**
+  in the same shape as the existing register (Seam | Held by | Property that depends on it
+  now | Verdict): seven findings, one `holds` (no expiry on queued intents — member data is
+  never dropped, `SB-overlay-9` adds age). The "what stays" and "considered, not now" notes
+  are carried across: `replica ⊕ outbox` as the read law, the durable outbox and the Pending
+  changes sheet as the guaranteed place; visibility of one device's queued writes on the
+  owner's other seats, and merging the intent/placement/upload outboxes, both deferred.
+  Lands-in waves are Part G's own: wave 2 (`w2-tw`, `w2-age`, the `w2-probe`), wave 3 (A6 for
+  G1/G8, the sidecar, the state widening, #929 S2), wave 4 (G2's red-first slice after #928
+  wave 4 and B8; G7 with E1).
+- **`docs/decisions.md`** — a new section **`## Perf and scale infrastructure (#927)`**,
+  placed after `## One authority plane (#928)` and before `## Related docs`, with four
+  rulings: **PS-trace** (the trace and work-counter contract landed in
+  `packages/core/src/protocol/trace.ts`, #927 wave 1 — the closed nine hops, four seats, nine
+  journeys, nine integer work counters, strict validator, pure `waterfall`, sampling off by
+  default, the trace id **is** the intent id for a write, traces sovereign and never
+  egressed); **PS-922-instruments** (this umbrella's **F2 and F4 closed as superseded** by
+  #927's journey ledger and device rung, F1 absorbed into the gateway trace slice, F3/F5 plus
+  the work counters the interim, and every #922 receipt from wave 2 onward citing the
+  ledger); **PS-evidence-gate** (the "five perf designs evidence-gated, not adopted" row
+  **superseded as practice** — the gate could never open without instruments, so the journey
+  ledger is the gate and **#927 is the precondition, not the last wave**); **PS-diet** (the
+  deletion list of rigs no journey entry cites is **produced by wave 1 and approved before
+  wave 5 executes it — pending, not produced**, with `validate-nightly-wiring.mjs` still
+  failing on an unregistered rig throughout). The `## Performance and Rust byte plane`
+  paragraph gains one cross-reference to `PS-evidence-gate`; nothing else in it changed.
+- **`receipts/issue-928-one-authority-plane.md`** — box 3 ticked with a crosswalk paragraph
+  in `## What changed`, the checklist note rewritten, and a `## w1 root doc commit` section
+  appended. Detailed there.
+- **`receipts/issue-922-snappier-blueprints.md`** — this section. **No box ticked here**; see
+  below.
+
+### Boxes ticked
+
+**None on this receipt.** Both candidates were judged and refused:
+
+- **Part E — "The Metro-loadable `queries/*.ts` decision is recorded, adopted or refused with
+  its reason; if adopted, at least Tally runs the web query handler on the phone and its
+  projection fork is deleted."** The first clause is now satisfied — the decision is recorded
+  as ADOPT in `docs/decisions.md`, with its reason and its numbers. The second is **not**:
+  no product code runs a blueprint query handler on the phone, and no projection fork is
+  deleted. E7 does that, in wave 4. The box is one criterion with two clauses, so it stays
+  **unticked** until E7 lands, and the wave-1 half is recorded here rather than by a
+  half-tick.
+- **Part 0 box 1 — "No read on any seat truncates silently…"** Left **unticked** in this
+  commit: the 0a slice was not on `origin/claude/922-w1` when it was written. It is the root's
+  to tick once 0a and its verifier follow-up for the FTS search signal have landed on the
+  integration branch, in this same doc commit or a successor to it.
+
+### Decisions
+
+- **The `SB-loader` row was rewritten, not appended to.** Docs are state: an Open row beside
+  an ADOPT note would leave two answers on the page. The spike's own receipt section is the
+  evidence and is untouched.
+- **Precondition (a) is recorded as NOT met.** The contract allowed for the Metro worker's
+  de-duplication commit (`refactor(client): one inline-query ctx core…`) having landed in
+  wave 1; `git log --all --grep` finds no such commit on any branch, so the row states the
+  precondition as E7's first line and names why the spike's adapter must not be wired in as
+  it stands.
+- **No number in the new rows is new.** Every figure in the `SB-loader` row is quoted from
+  `## w1 Metro-loader spike — ADOPT`, and every figure in `PS-trace` from
+  `receipts/issue-927-perf-infra.md` § `## w1-core`. The root measured nothing.
+- **G8 has no row of its own**, per Part G: it is stated inside `SB-overlay-1`, so the
+  register cannot grow a ruling nobody re-judged.
+- **The #927 section states only what #927's body rules.** The five principles, the four
+  rulings above and the deletion list are the issue's own; nothing was paraphrased into a
+  ruling the issue does not make, and the rig list is named as pending rather than produced.
 
 ### Verification
 
@@ -1325,3 +1421,13 @@ bun run --cwd packages/vault typecheck                                          
 ```
 
 Remaining gates (full package suites, governance, self-audit) were **waived by maintainer ruling mid-slice**; this section is landed at the coherent point that ruling asked for.
+bun run format                    # clean
+bun run lint                      # clean
+bun run lint:product              # 39/39
+bash .governance/run.sh           # 22/22
+bun run test:claims               # 45 claims, 48 lanes, 193 derived flows
+```
+
+### Audit
+
+Verdict: PASS — root doc commit; ticks are traceable to the evidence sections named above
