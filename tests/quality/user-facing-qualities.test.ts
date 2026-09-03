@@ -426,7 +426,7 @@ describe("issue #679 user-facing quality gates", () => {
       )
       .get() as Record<string, string>;
     expect(Object.values(sealed).every(isSealedValue)).toBe(true);
-    const cacheRoot = await tempDir("quality-year3-cache-");
+    const cacheRoot = await tempDir("quality-year3-fixture-cache-");
     let generated = 0;
     const generate = async (target: string): Promise<void> => {
       generated += 1;
@@ -1475,7 +1475,7 @@ describe("issue #679 user-facing quality gates", () => {
     expect(ratchet.maxEntries).toBeLessThanOrEqual(COPY_SEED_CEILING);
     expect(ratchet.entries.length).toBeLessThanOrEqual(ratchet.maxEntries);
     const keyed = (entry: { file: string; literal: string }): string =>
-      `${entry.file}\0${entry.literal}`;
+      `${entry.file}\u0000${entry.literal}`;
     expect(new Set(ratchet.entries.map(keyed)).size).toBe(
       ratchet.entries.length
     );

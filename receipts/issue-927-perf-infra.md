@@ -1024,6 +1024,7 @@ Slices (iii) photos-timeline rig fix, (iv) fixture warm + build/mount split, (v)
 | `packages/test-kit/src/year3-vault.ts` | Loses the cache half (461 → 358 lines), gains the re-export. `YEAR3_FIXTURE_VERSION` 2 → 3: the golden replica carries `meta.json` now, so a version-2 directory is a different artifact. The unused `profile` default is dropped. |
 | `packages/test-kit/src/year3-vault.test.ts` | Version assertion follows the bump; new test — three CONCURRENT materializations of one key run `generate` once and share one directory. |
 | `tests/helpers/factories.ts` | `buildGoldenYear3Vault()` (the artifact exists in the cache; no copy) and `mountGoldenYear3Vault()` (a private writable copy) are separate; `goldenYear3Vault()` is their composition. `goldenYear3Replica()` computes its content address from the profile alone and reads `rows`/`cursor` from the artifact's `meta.json`, so a warm run neither mounts the vault nor walks a row. |
+| `tests/quality/user-facing-qualities.test.ts` | The `year3-cache` temp-dir prefix follows the module that owns the cache, and the file's one raw NUL byte becomes `\u0000`. |
 | `tests/scale/large-vault.scale.test.ts` | Publishes `golden vault mount` — the copy alone. The file lands in this lane's #922 gauge commit, which adds the audit-band gauges to the same `recordQualityResult` call. |
 
 Also in this lane, under #922 and detailed there: `tests/scale/replica-sse-fanout.scale.test.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `scripts/test-report/render/adversaries.mjs`, `scripts/test-report/render.test.mjs`.
@@ -1047,6 +1048,7 @@ Before, a replica cache HIT still mounted 126 MB of golden vault and walked 50,0
 
 - `goldenYear3Vault({ copy: false })` — the branch handing a caller the cache directory itself. No caller passed it, and opening the artifact writes a WAL and an identity key into the bytes every other rig measures against. Replaced by `buildGoldenYear3Vault()` for callers that need only its existence.
 - `copyMs` → `mountMs`; `materializeYear3Fixture`'s `profile` default.
+- The last three `year3-cache` literals: the cache-root comment's account of how the path used to be spelled, the kit test's `tempDir("year3-cache-")` prefix, and `tests/quality/user-facing-qualities.test.ts`'s `quality-year3-cache-`. `grep -rn "year3-cache" packages apps tests scripts` is empty. That file also carried a RAW NUL byte in a template literal (a join separator); it is `\u0000` now, the same string with no unreadable source.
 
 ### Decisions
 
