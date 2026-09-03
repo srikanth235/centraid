@@ -1,0 +1,2206 @@
+{
+  "slug": "2026-09-03-33742938329",
+  "date": "2026-09-03",
+  "runId": null,
+  "runUrl": null,
+  "reportPath": "test-report/nightly/runs/2026-09-03-33742938329/",
+  "summary": {
+    "generatedAt": "2026-09-03T11:08:10.461Z",
+    "passed": 1568,
+    "failed": 5,
+    "skipped": 0,
+    "skippedTests": 37,
+    "envGated": 37,
+    "stale": 1,
+    "unhandledErrors": 0,
+    "unhandledErrorMessages": [],
+    "cellsPassed": 122,
+    "cellsFailed": 4,
+    "cellsMissing": 10,
+    "cellsFlaky": 0,
+    "cellsOwnerSilent": 8,
+    "cellsLaneDidNotRun": 2,
+    "cellsInfraMismatch": 0,
+    "cellsEvidenceUnmatched": 0,
+    "cellsExpectedGrey": 0,
+    "expectedGreyCellIds": [],
+    "missingCellIds": [
+      "blueprints:correctness",
+      "blueprints:accessibility",
+      "desktop:performance",
+      "desktop:security",
+      "web:performance",
+      "mobile:performance",
+      "mobile:scalability",
+      "mobile:offline",
+      "mobile:journey",
+      "tunnel-pairing:security"
+    ],
+    "failedCellIds": [
+      "replica-sync:journey",
+      "web:security",
+      "web:offline",
+      "web:journey"
+    ],
+    "infraMismatchCellIds": [],
+    "envGatedOwners": [],
+    "unmappedEvidence": 20,
+    "unmappedFailed": [
+      "apps/web/tests/e2e/tasks.spec.ts"
+    ],
+    "unmatchedOwners": [
+      "packages/blueprints/src/app-boot-harness.ts",
+      "scripts/accessibility-contract.test.mjs",
+      "scripts/perf/app-weight.mjs",
+      "scripts/security/dependency-behaviour.test.mjs",
+      "scripts/security/rust-supply-chain.test.mjs",
+      "scripts/security/supply-chain-core.test.mjs",
+      "scripts/security/unsafe-edge-audit.test.mjs",
+      "tests/agent-e2e-mobile/flows/cold-start.mjs",
+      "tests/agent-e2e-mobile/flows/home-loads.mjs",
+      "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
+      "tests/agent-e2e-mobile/flows/photos-library.mjs",
+      "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
+      "tests/agent-e2e-mobile/flows/photos-search.mjs",
+      "tests/agent-e2e-mobile/flows/photos-select-write.mjs",
+      "tests/agent-e2e-mobile/flows/photos-viewer.mjs",
+      "tests/agent-e2e-mobile/flows/places-seat.mjs",
+      "tests/agent-e2e-mobile/flows/scroll-frames.mjs",
+      "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
+      "tests/agent-e2e-mobile/flows/volume-proof.mjs"
+    ],
+    "appSeatCells": {
+      "declared": 22,
+      "unowned": 0,
+      "skipped": 2
+    },
+    "appStateCells": {
+      "declared": 51,
+      "unowned": 5,
+      "skipped": 0
+    },
+    "appScenarioCells": {
+      "owned": 95,
+      "gap": 0,
+      "bug": 0,
+      "skipped": 0
+    },
+    "cellsSolid": 42,
+    "cellsPartial": 94,
+    "cellsGap": 2,
+    "cellsNotApplicable": 27,
+    "laneSeries": {
+      "tests/perf/app-engine-handler.perf.test.ts::wall clock": {
+        "owner": "tests/perf/app-engine-handler.perf.test.ts",
+        "name": "wall clock",
+        "lane": "perf",
+        "value": 440.80079399999994,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/app-engine-handler.perf.test.ts::mean handler": {
+        "owner": "tests/perf/app-engine-handler.perf.test.ts",
+        "name": "mean handler",
+        "lane": "perf",
+        "value": 22.040039699999998,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/automation-fire.perf.test.ts::wall clock": {
+        "owner": "tests/perf/automation-fire.perf.test.ts",
+        "name": "wall clock",
+        "lane": "perf",
+        "value": 321.77754600000003,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/automation-fire.perf.test.ts::mean fire": {
+        "owner": "tests/perf/automation-fire.perf.test.ts",
+        "name": "mean fire",
+        "lane": "perf",
+        "value": 32.1777546,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/backup-throughput.perf.test.ts::wall clock": {
+        "owner": "tests/perf/backup-throughput.perf.test.ts",
+        "name": "wall clock",
+        "lane": "perf",
+        "value": 179.38411599999998,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/backup-throughput.perf.test.ts::throughput": {
+        "owner": "tests/perf/backup-throughput.perf.test.ts",
+        "name": "throughput",
+        "lane": "perf",
+        "value": 178.38814669633294,
+        "unit": "MiB/s",
+        "budget": null
+      },
+      "tests/perf/blob-egress.perf.test.ts::TTFB": {
+        "owner": "tests/perf/blob-egress.perf.test.ts",
+        "name": "TTFB",
+        "lane": "perf",
+        "value": 27.52386000000024,
+        "unit": "ms",
+        "budget": 500
+      },
+      "tests/perf/blob-egress.perf.test.ts::RSS growth": {
+        "owner": "tests/perf/blob-egress.perf.test.ts",
+        "name": "RSS growth",
+        "lane": "perf",
+        "value": 50827264,
+        "unit": "bytes",
+        "budget": 100663296
+      },
+      "tests/perf/blob-egress.perf.test.ts::bytes streamed": {
+        "owner": "tests/perf/blob-egress.perf.test.ts",
+        "name": "bytes streamed",
+        "lane": "perf",
+        "value": 134217728,
+        "unit": "bytes",
+        "budget": 134217728
+      },
+      "tests/perf/desktop-cold.perf.test.ts::import wall clock": {
+        "owner": "tests/perf/desktop-cold.perf.test.ts",
+        "name": "import wall clock",
+        "lane": "perf",
+        "value": 345.564244,
+        "unit": "ms",
+        "budget": 1300
+      },
+      "tests/perf/desktop-cold.perf.test.ts::modules loaded": {
+        "owner": "tests/perf/desktop-cold.perf.test.ts",
+        "name": "modules loaded",
+        "lane": "perf",
+        "value": 440,
+        "unit": "modules",
+        "budget": 650
+      },
+      "tests/perf/desktop-cold.perf.test.ts::heap after import": {
+        "owner": "tests/perf/desktop-cold.perf.test.ts",
+        "name": "heap after import",
+        "lane": "perf",
+        "value": 29351888,
+        "unit": "bytes",
+        "budget": null
+      },
+      "tests/perf/desktop-launch.perf.test.ts::cold open to usable": {
+        "owner": "tests/perf/desktop-launch.perf.test.ts",
+        "name": "cold open to usable",
+        "lane": "perf",
+        "value": 911,
+        "unit": "ms",
+        "budget": 12000
+      },
+      "tests/perf/desktop-launch.perf.test.ts::process to first window": {
+        "owner": "tests/perf/desktop-launch.perf.test.ts",
+        "name": "process to first window",
+        "lane": "perf",
+        "value": 774,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/desktop-launch.perf.test.ts::first window to Home": {
+        "owner": "tests/perf/desktop-launch.perf.test.ts",
+        "name": "first window to Home",
+        "lane": "perf",
+        "value": 137,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/desktop-launch.perf.test.ts::tap to visual response": {
+        "owner": "tests/perf/desktop-launch.perf.test.ts",
+        "name": "tap to visual response",
+        "lane": "perf",
+        "value": 128,
+        "unit": "ms",
+        "budget": 6000
+      },
+      "tests/perf/gateway-request.perf.test.ts::slowest core route p95": {
+        "owner": "tests/perf/gateway-request.perf.test.ts",
+        "name": "slowest core route p95",
+        "lane": "perf",
+        "value": 21.963594000000285,
+        "unit": "ms",
+        "budget": 0
+      },
+      "tests/perf/gateway-request.perf.test.ts::gatewayInfo p95": {
+        "owner": "tests/perf/gateway-request.perf.test.ts",
+        "name": "gatewayInfo p95",
+        "lane": "perf",
+        "value": 3.880439000000024,
+        "unit": "ms",
+        "budget": 120
+      },
+      "tests/perf/gateway-request.perf.test.ts::apps p95": {
+        "owner": "tests/perf/gateway-request.perf.test.ts",
+        "name": "apps p95",
+        "lane": "perf",
+        "value": 21.963594000000285,
+        "unit": "ms",
+        "budget": 120
+      },
+      "tests/perf/gateway-request.perf.test.ts::health p95": {
+        "owner": "tests/perf/gateway-request.perf.test.ts",
+        "name": "health p95",
+        "lane": "perf",
+        "value": 4.279062999999951,
+        "unit": "ms",
+        "budget": 120
+      },
+      "tests/perf/gateway-request.perf.test.ts::cold start": {
+        "owner": "tests/perf/gateway-request.perf.test.ts",
+        "name": "cold start",
+        "lane": "perf",
+        "value": 2329.401648,
+        "unit": "ms",
+        "budget": 5000
+      },
+      "tests/perf/gateway-request.perf.test.ts::idle CPU per second": {
+        "owner": "tests/perf/gateway-request.perf.test.ts",
+        "name": "idle CPU per second",
+        "lane": "perf",
+        "value": 2.1392121907787827,
+        "unit": "ms/s",
+        "budget": 25
+      },
+      "tests/perf/gateway-request-volume.perf.test.ts::slowest core route p95": {
+        "owner": "tests/perf/gateway-request-volume.perf.test.ts",
+        "name": "slowest core route p95",
+        "lane": "perf",
+        "value": 17.100490999999238,
+        "unit": "ms",
+        "budget": 120
+      },
+      "tests/perf/gateway-request-volume.perf.test.ts::gatewayInfo p95": {
+        "owner": "tests/perf/gateway-request-volume.perf.test.ts",
+        "name": "gatewayInfo p95",
+        "lane": "perf",
+        "value": 2.9474759999993694,
+        "unit": "ms",
+        "budget": 120
+      },
+      "tests/perf/gateway-request-volume.perf.test.ts::apps p95": {
+        "owner": "tests/perf/gateway-request-volume.perf.test.ts",
+        "name": "apps p95",
+        "lane": "perf",
+        "value": 17.100490999999238,
+        "unit": "ms",
+        "budget": 120
+      },
+      "tests/perf/gateway-request-volume.perf.test.ts::health p95": {
+        "owner": "tests/perf/gateway-request-volume.perf.test.ts",
+        "name": "health p95",
+        "lane": "perf",
+        "value": 3.9250730000003387,
+        "unit": "ms",
+        "budget": 120
+      },
+      "tests/perf/gateway-request-volume.perf.test.ts::replica bootstrap page p95 (published, not gated)": {
+        "owner": "tests/perf/gateway-request-volume.perf.test.ts",
+        "name": "replica bootstrap page p95 (published, not gated)",
+        "lane": "perf",
+        "value": 155.99440800000048,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/gateway-request-volume.perf.test.ts::cold start on seeded vault": {
+        "owner": "tests/perf/gateway-request-volume.perf.test.ts",
+        "name": "cold start on seeded vault",
+        "lane": "perf",
+        "value": 469.82952899999873,
+        "unit": "ms",
+        "budget": 5000
+      },
+      "tests/perf/gateway-request-volume.perf.test.ts::seeded domain rows": {
+        "owner": "tests/perf/gateway-request-volume.perf.test.ts",
+        "name": "seeded domain rows",
+        "lane": "perf",
+        "value": 25007,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/perf/gateway-request-volume.perf.test.ts::seed": {
+        "owner": "tests/perf/gateway-request-volume.perf.test.ts",
+        "name": "seed",
+        "lane": "perf",
+        "value": 1486.4767860000002,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/harness-turn.perf.test.ts::wall clock": {
+        "owner": "tests/perf/harness-turn.perf.test.ts",
+        "name": "wall clock",
+        "lane": "perf",
+        "value": 1.2641439999999875,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/harness-turn.perf.test.ts::mean dispatch": {
+        "owner": "tests/perf/harness-turn.perf.test.ts",
+        "name": "mean dispatch",
+        "lane": "perf",
+        "value": 0.0006320719999999937,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/pwa-waterfall.perf.test.ts::cold shell requests": {
+        "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+        "name": "cold shell requests",
+        "lane": "perf",
+        "value": 16,
+        "unit": "requests",
+        "budget": 17
+      },
+      "tests/perf/pwa-waterfall.perf.test.ts::cold shell transfer": {
+        "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+        "name": "cold shell transfer",
+        "lane": "perf",
+        "value": 456937,
+        "unit": "bytes",
+        "budget": 528000
+      },
+      "tests/perf/pwa-waterfall.perf.test.ts::warm/cold shell bytes": {
+        "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+        "name": "warm/cold shell bytes",
+        "lane": "perf",
+        "value": 0,
+        "unit": "ratio",
+        "budget": 0.15
+      },
+      "tests/perf/pwa-waterfall.perf.test.ts::cold app requests": {
+        "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+        "name": "cold app requests",
+        "lane": "perf",
+        "value": 10,
+        "unit": "requests",
+        "budget": 10
+      },
+      "tests/perf/pwa-waterfall.perf.test.ts::cold app transfer": {
+        "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+        "name": "cold app transfer",
+        "lane": "perf",
+        "value": 0,
+        "unit": "bytes",
+        "budget": 8000
+      },
+      "tests/perf/pwa-waterfall.perf.test.ts::cold app encoded": {
+        "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+        "name": "cold app encoded",
+        "lane": "perf",
+        "value": 77624,
+        "unit": "bytes",
+        "budget": 120000
+      },
+      "tests/perf/replica-sync-io.perf.test.ts::wall clock": {
+        "owner": "tests/perf/replica-sync-io.perf.test.ts",
+        "name": "wall clock",
+        "lane": "perf",
+        "value": 81.171855,
+        "unit": "ms",
+        "budget": 2500
+      },
+      "tests/perf/replica-sync-io.perf.test.ts::overlay enumeration and composition": {
+        "owner": "tests/perf/replica-sync-io.perf.test.ts",
+        "name": "overlay enumeration and composition",
+        "lane": "perf",
+        "value": 5.915161000000012,
+        "unit": "ms",
+        "budget": 250
+      },
+      "tests/perf/tunnel-native.perf.test.ts::load wall clock": {
+        "owner": "tests/perf/tunnel-native.perf.test.ts",
+        "name": "load wall clock",
+        "lane": "perf",
+        "value": 1.6572630000000004,
+        "unit": "ms",
+        "budget": 5000
+      },
+      "tests/perf/tunnel-throughput.perf.test.ts::throughput": {
+        "owner": "tests/perf/tunnel-throughput.perf.test.ts",
+        "name": "throughput",
+        "lane": "perf",
+        "value": 4.231336508661713,
+        "unit": "MiB/s",
+        "budget": 1.5
+      },
+      "tests/perf/tunnel-throughput.perf.test.ts::payload": {
+        "owner": "tests/perf/tunnel-throughput.perf.test.ts",
+        "name": "payload",
+        "lane": "perf",
+        "value": 16777216,
+        "unit": "bytes",
+        "budget": 16777216
+      },
+      "tests/perf/tunnel-throughput.perf.test.ts::wall clock": {
+        "owner": "tests/perf/tunnel-throughput.perf.test.ts",
+        "name": "wall clock",
+        "lane": "perf",
+        "value": 3781.311169,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/perf/vault-write.perf.test.ts::p95 transaction latency": {
+        "owner": "tests/perf/vault-write.perf.test.ts",
+        "name": "p95 transaction latency",
+        "lane": "perf",
+        "value": 0.7312640000000101,
+        "unit": "ms",
+        "budget": 6
+      },
+      "tests/perf/vault-write.perf.test.ts::fsyncs per write": {
+        "owner": "tests/perf/vault-write.perf.test.ts",
+        "name": "fsyncs per write",
+        "lane": "perf",
+        "value": 1.138,
+        "unit": "calls/write",
+        "budget": 3
+      },
+      "tests/scale/automations-fire.scale.test.ts::wall clock": {
+        "owner": "tests/scale/automations-fire.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 8.177016999999978,
+        "unit": "ms",
+        "budget": 10000
+      },
+      "tests/scale/automations-fire.scale.test.ts::missed entries": {
+        "owner": "tests/scale/automations-fire.scale.test.ts",
+        "name": "missed entries",
+        "lane": "scale",
+        "value": 200,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/backup-manifest-size.scale.test.ts::bytes per chunk": {
+        "owner": "tests/scale/backup-manifest-size.scale.test.ts",
+        "name": "bytes per chunk",
+        "lane": "scale",
+        "value": 205.16918,
+        "unit": "bytes",
+        "budget": 230
+      },
+      "tests/scale/backup-manifest-size.scale.test.ts::manifest bytes at 100k chunks": {
+        "owner": "tests/scale/backup-manifest-size.scale.test.ts",
+        "name": "manifest bytes at 100k chunks",
+        "lane": "scale",
+        "value": 20516918,
+        "unit": "bytes",
+        "budget": null
+      },
+      "tests/scale/backup-manifest-size.scale.test.ts::50k→100k growth": {
+        "owner": "tests/scale/backup-manifest-size.scale.test.ts",
+        "name": "50k→100k growth",
+        "lane": "scale",
+        "value": 1.9999760200776286,
+        "unit": "x",
+        "budget": null
+      },
+      "tests/scale/backup-manifest-size.scale.test.ts::seal wall clock": {
+        "owner": "tests/scale/backup-manifest-size.scale.test.ts",
+        "name": "seal wall clock",
+        "lane": "scale",
+        "value": 1329.5443460000001,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/backup-restore.scale.test.ts::wall clock": {
+        "owner": "tests/scale/backup-restore.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 2748.151406,
+        "unit": "ms",
+        "budget": 12000
+      },
+      "tests/scale/backup-restore.scale.test.ts::restored vault bytes": {
+        "owner": "tests/scale/backup-restore.scale.test.ts",
+        "name": "restored vault bytes",
+        "lane": "scale",
+        "value": 6119424,
+        "unit": "bytes",
+        "budget": null
+      },
+      "tests/scale/backup-restore.scale.test.ts::party rows restored": {
+        "owner": "tests/scale/backup-restore.scale.test.ts",
+        "name": "party rows restored",
+        "lane": "scale",
+        "value": 501,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/backup-restore.scale.test.ts::content rows restored": {
+        "owner": "tests/scale/backup-restore.scale.test.ts",
+        "name": "content rows restored",
+        "lane": "scale",
+        "value": 160,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/blob-gc.scale.test.ts::wall clock": {
+        "owner": "tests/scale/blob-gc.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 277.0285180000001,
+        "unit": "ms",
+        "budget": 30000
+      },
+      "tests/scale/blob-gc.scale.test.ts::objects scanned": {
+        "owner": "tests/scale/blob-gc.scale.test.ts",
+        "name": "objects scanned",
+        "lane": "scale",
+        "value": 5000,
+        "unit": "objects",
+        "budget": null
+      },
+      "tests/scale/blob-gc.scale.test.ts::objects evicted": {
+        "owner": "tests/scale/blob-gc.scale.test.ts",
+        "name": "objects evicted",
+        "lane": "scale",
+        "value": 1000,
+        "unit": "objects",
+        "budget": null
+      },
+      "tests/scale/blueprint-clones.scale.test.ts::wall clock": {
+        "owner": "tests/scale/blueprint-clones.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 12.366872,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/blueprint-clones.scale.test.ts::apps": {
+        "owner": "tests/scale/blueprint-clones.scale.test.ts",
+        "name": "apps",
+        "lane": "scale",
+        "value": 1000,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/browser-replica-query.scale.test.ts::full-entity read": {
+        "owner": "tests/scale/browser-replica-query.scale.test.ts",
+        "name": "full-entity read",
+        "lane": "scale",
+        "value": 261.4871060000005,
+        "unit": "ms",
+        "budget": 4000
+      },
+      "tests/scale/browser-replica-query.scale.test.ts::filtered + sorted read": {
+        "owner": "tests/scale/browser-replica-query.scale.test.ts",
+        "name": "filtered + sorted read",
+        "lane": "scale",
+        "value": 121.14536899999985,
+        "unit": "ms",
+        "budget": 1500
+      },
+      "tests/scale/browser-replica-query.scale.test.ts::in over 1000 ids": {
+        "owner": "tests/scale/browser-replica-query.scale.test.ts",
+        "name": "in over 1000 ids",
+        "lane": "scale",
+        "value": 71.00017600000047,
+        "unit": "ms",
+        "budget": 1500
+      },
+      "tests/scale/browser-replica-query.scale.test.ts::bootstrap": {
+        "owner": "tests/scale/browser-replica-query.scale.test.ts",
+        "name": "bootstrap",
+        "lane": "scale",
+        "value": 4793.136218,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/browser-replica-query.scale.test.ts::rows scanned per read": {
+        "owner": "tests/scale/browser-replica-query.scale.test.ts",
+        "name": "rows scanned per read",
+        "lane": "scale",
+        "value": 50000,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::composite phase wall clock": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "composite phase wall clock",
+        "lane": "scale",
+        "value": 5551.928247,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::solo phase wall clock": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "solo phase wall clock",
+        "lane": "scale",
+        "value": 6406.445331,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::composition throughput factor (composite/solo)": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "composition throughput factor (composite/solo)",
+        "lane": "scale",
+        "value": 0.8666160343451154,
+        "unit": "x",
+        "budget": 2
+      },
+      "tests/scale/composite-load.scale.test.ts::worst lane p95 under composition (write)": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "worst lane p95 under composition (write)",
+        "lane": "scale",
+        "value": 1139.8732909999999,
+        "unit": "ms",
+        "budget": 3500
+      },
+      "tests/scale/composite-load.scale.test.ts::ref-search p95 under composition": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "ref-search p95 under composition",
+        "lane": "scale",
+        "value": 324.1493589999991,
+        "unit": "ms",
+        "budget": 1000
+      },
+      "tests/scale/composite-load.scale.test.ts::worst per-lane latency factor (browse, reported not gated)": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "worst per-lane latency factor (browse, reported not gated)",
+        "lane": "scale",
+        "value": 85.40362123663137,
+        "unit": "x",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::sync p95 composite": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "sync p95 composite",
+        "lane": "scale",
+        "value": 575.1031210000001,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::search p95 composite": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "search p95 composite",
+        "lane": "scale",
+        "value": 784.5545780000011,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::write p95 composite": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "write p95 composite",
+        "lane": "scale",
+        "value": 1139.8732909999999,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::blob p95 composite": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "blob p95 composite",
+        "lane": "scale",
+        "value": 402.29185300000063,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::browse p95 composite": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "browse p95 composite",
+        "lane": "scale",
+        "value": 324.1493589999991,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::sync p95 solo": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "sync p95 solo",
+        "lane": "scale",
+        "value": 289.0777049999997,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::search p95 solo": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "search p95 solo",
+        "lane": "scale",
+        "value": 248.78751700000066,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::write p95 solo": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "write p95 solo",
+        "lane": "scale",
+        "value": 272.79002799999944,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::blob p95 solo": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "blob p95 solo",
+        "lane": "scale",
+        "value": 18.463356000000203,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::browse p95 solo": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "browse p95 solo",
+        "lane": "scale",
+        "value": 3.795498999999836,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::turn dispatch": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "turn dispatch",
+        "lane": "scale",
+        "value": 0.7166760000000068,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::missed-window scan": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "missed-window scan",
+        "lane": "scale",
+        "value": 5.68540799999937,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/composite-load.scale.test.ts::composite ops": {
+        "owner": "tests/scale/composite-load.scale.test.ts",
+        "name": "composite ops",
+        "lane": "scale",
+        "value": 100,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/conversation-ledger.scale.test.ts::wall clock": {
+        "owner": "tests/scale/conversation-ledger.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 3116.3950720000003,
+        "unit": "ms",
+        "budget": 60000
+      },
+      "tests/scale/conversation-ledger.scale.test.ts::turns pruned": {
+        "owner": "tests/scale/conversation-ledger.scale.test.ts",
+        "name": "turns pruned",
+        "lane": "scale",
+        "value": 7300,
+        "unit": "turns",
+        "budget": null
+      },
+      "tests/scale/desktop-windows.scale.test.ts::wall clock": {
+        "owner": "tests/scale/desktop-windows.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 162.17801300000002,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/desktop-windows.scale.test.ts::window deliveries": {
+        "owner": "tests/scale/desktop-windows.scale.test.ts",
+        "name": "window deliveries",
+        "lane": "scale",
+        "value": 64000,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/gateway-sessions.scale.test.ts::wall clock": {
+        "owner": "tests/scale/gateway-sessions.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 484.16694400000006,
+        "unit": "ms",
+        "budget": 15000
+      },
+      "tests/scale/gateway-sessions.scale.test.ts::sessions": {
+        "owner": "tests/scale/gateway-sessions.scale.test.ts",
+        "name": "sessions",
+        "lane": "scale",
+        "value": 40,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/harness-sessions.scale.test.ts::wall clock": {
+        "owner": "tests/scale/harness-sessions.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 0.5183199999999033,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/harness-sessions.scale.test.ts::sessions": {
+        "owner": "tests/scale/harness-sessions.scale.test.ts",
+        "name": "sessions",
+        "lane": "scale",
+        "value": 256,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/large-vault.scale.test.ts::fixture seed": {
+        "owner": "tests/scale/large-vault.scale.test.ts",
+        "name": "fixture seed",
+        "lane": "scale",
+        "value": 1831.9633979999999,
+        "unit": "ms",
+        "budget": 30000
+      },
+      "tests/scale/large-vault.scale.test.ts::combined reads": {
+        "owner": "tests/scale/large-vault.scale.test.ts",
+        "name": "combined reads",
+        "lane": "scale",
+        "value": 2.5547139999998763,
+        "unit": "ms",
+        "budget": 2000
+      },
+      "tests/scale/large-vault.scale.test.ts::photos": {
+        "owner": "tests/scale/large-vault.scale.test.ts",
+        "name": "photos",
+        "lane": "scale",
+        "value": 10000,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/large-vault.scale.test.ts::contacts": {
+        "owner": "tests/scale/large-vault.scale.test.ts",
+        "name": "contacts",
+        "lane": "scale",
+        "value": 5000,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/large-vault.scale.test.ts::event days": {
+        "owner": "tests/scale/large-vault.scale.test.ts",
+        "name": "event days",
+        "lane": "scale",
+        "value": 1096,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/large-vault.scale.test.ts::notes": {
+        "owner": "tests/scale/large-vault.scale.test.ts",
+        "name": "notes",
+        "lane": "scale",
+        "value": 1000,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/large-vault.scale.test.ts::year-3 photos": {
+        "owner": "tests/scale/large-vault.scale.test.ts",
+        "name": "year-3 photos",
+        "lane": "scale",
+        "value": 90000,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/long-run-soak.scale.test.ts::latency creep (last third / first third)": {
+        "owner": "tests/scale/long-run-soak.scale.test.ts",
+        "name": "latency creep (last third / first third)",
+        "lane": "scale",
+        "value": 1.0149360744281415,
+        "unit": "x",
+        "budget": 3
+      },
+      "tests/scale/long-run-soak.scale.test.ts::soak wall clock": {
+        "owner": "tests/scale/long-run-soak.scale.test.ts",
+        "name": "soak wall clock",
+        "lane": "scale",
+        "value": 45762.617487,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/long-run-soak.scale.test.ts::cycles": {
+        "owner": "tests/scale/long-run-soak.scale.test.ts",
+        "name": "cycles",
+        "lane": "scale",
+        "value": 50,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/long-run-soak.scale.test.ts::ops": {
+        "owner": "tests/scale/long-run-soak.scale.test.ts",
+        "name": "ops",
+        "lane": "scale",
+        "value": 750,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/long-run-soak.scale.test.ts::RSS growth": {
+        "owner": "tests/scale/long-run-soak.scale.test.ts",
+        "name": "RSS growth",
+        "lane": "scale",
+        "value": 1250410.5679926,
+        "unit": "bytes/cycle",
+        "budget": 65536
+      },
+      "tests/scale/long-run-soak.scale.test.ts::heapUsed growth": {
+        "owner": "tests/scale/long-run-soak.scale.test.ts",
+        "name": "heapUsed growth",
+        "lane": "scale",
+        "value": 94401.54116558742,
+        "unit": "bytes/cycle",
+        "budget": null
+      },
+      "tests/scale/long-run-soak.scale.test.ts::arrayBuffers growth": {
+        "owner": "tests/scale/long-run-soak.scale.test.ts",
+        "name": "arrayBuffers growth",
+        "lane": "scale",
+        "value": 39638.148011100835,
+        "unit": "bytes/cycle",
+        "budget": null
+      },
+      "tests/scale/long-run-soak.scale.test.ts::gateway SQLite growth": {
+        "owner": "tests/scale/long-run-soak.scale.test.ts",
+        "name": "gateway SQLite growth",
+        "lane": "scale",
+        "value": 1938304.9454209064,
+        "unit": "bytes/cycle",
+        "budget": null
+      },
+      "tests/scale/long-run-soak.scale.test.ts::open descriptors (max)": {
+        "owner": "tests/scale/long-run-soak.scale.test.ts",
+        "name": "open descriptors (max)",
+        "lane": "scale",
+        "value": 71,
+        "unit": "count",
+        "budget": 256
+      },
+      "tests/scale/long-run-soak.scale.test.ts::open descriptor spread": {
+        "owner": "tests/scale/long-run-soak.scale.test.ts",
+        "name": "open descriptor spread",
+        "lane": "scale",
+        "value": 7,
+        "unit": "count",
+        "budget": 96
+      },
+      "tests/scale/mobile-reconnect-to-fresh.scale.test.ts::reconnect to fresh": {
+        "owner": "tests/scale/mobile-reconnect-to-fresh.scale.test.ts",
+        "name": "reconnect to fresh",
+        "lane": "scale",
+        "value": 348.2322610000001,
+        "unit": "ms",
+        "budget": 1800
+      },
+      "tests/scale/mobile-reconnect-to-fresh.scale.test.ts::polls to fresh": {
+        "owner": "tests/scale/mobile-reconnect-to-fresh.scale.test.ts",
+        "name": "polls to fresh",
+        "lane": "scale",
+        "value": 2,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/multi-vault-footprint.scale.test.ts::summed page cache": {
+        "owner": "tests/scale/multi-vault-footprint.scale.test.ts",
+        "name": "summed page cache",
+        "lane": "scale",
+        "value": 32768000,
+        "unit": "bytes",
+        "budget": 32768000
+      },
+      "tests/scale/multi-vault-footprint.scale.test.ts::summed mmap window": {
+        "owner": "tests/scale/multi-vault-footprint.scale.test.ts",
+        "name": "summed mmap window",
+        "lane": "scale",
+        "value": 134217720,
+        "unit": "bytes",
+        "budget": 134217728
+      },
+      "tests/scale/multi-vault-footprint.scale.test.ts::smallest per-file cache": {
+        "owner": "tests/scale/multi-vault-footprint.scale.test.ts",
+        "name": "smallest per-file cache",
+        "lane": "scale",
+        "value": 3276800,
+        "unit": "bytes",
+        "budget": 524288
+      },
+      "tests/scale/multi-vault-footprint.scale.test.ts::page cache had this been per-file": {
+        "owner": "tests/scale/multi-vault-footprint.scale.test.ts",
+        "name": "page cache had this been per-file",
+        "lane": "scale",
+        "value": 163840000,
+        "unit": "bytes",
+        "budget": null
+      },
+      "tests/scale/multi-vault-footprint.scale.test.ts::RSS delta mounting all 5 (idle; includes one-time module load)": {
+        "owner": "tests/scale/multi-vault-footprint.scale.test.ts",
+        "name": "RSS delta mounting all 5 (idle; includes one-time module load)",
+        "lane": "scale",
+        "value": 197705728,
+        "unit": "bytes",
+        "budget": null
+      },
+      "tests/scale/multi-vault-footprint.scale.test.ts::RSS per additional vault after the first (idle)": {
+        "owner": "tests/scale/multi-vault-footprint.scale.test.ts",
+        "name": "RSS per additional vault after the first (idle)",
+        "lane": "scale",
+        "value": 27969536,
+        "unit": "bytes",
+        "budget": null
+      },
+      "tests/scale/multi-vault-footprint.scale.test.ts::SQLite handles": {
+        "owner": "tests/scale/multi-vault-footprint.scale.test.ts",
+        "name": "SQLite handles",
+        "lane": "scale",
+        "value": 10,
+        "unit": "handles",
+        "budget": null
+      },
+      "tests/scale/ontology.scale.test.ts::wall clock": {
+        "owner": "tests/scale/ontology.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 51.36021000000005,
+        "unit": "ms",
+        "budget": 10000
+      },
+      "tests/scale/ontology.scale.test.ts::party rows paged": {
+        "owner": "tests/scale/ontology.scale.test.ts",
+        "name": "party rows paged",
+        "lane": "scale",
+        "value": 10001,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/ontology.scale.test.ts::relation rows paged": {
+        "owner": "tests/scale/ontology.scale.test.ts",
+        "name": "relation rows paged",
+        "lane": "scale",
+        "value": 9999,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/phash-clustering.scale.test.ts::cold sweep": {
+        "owner": "tests/scale/phash-clustering.scale.test.ts",
+        "name": "cold sweep",
+        "lane": "scale",
+        "value": 7310.040196999998,
+        "unit": "ms",
+        "budget": 30000
+      },
+      "tests/scale/phash-clustering.scale.test.ts::idle sweep": {
+        "owner": "tests/scale/phash-clustering.scale.test.ts",
+        "name": "idle sweep",
+        "lane": "scale",
+        "value": 389.87742099999923,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/phash-clustering.scale.test.ts::idle rows written": {
+        "owner": "tests/scale/phash-clustering.scale.test.ts",
+        "name": "idle rows written",
+        "lane": "scale",
+        "value": 0,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/phash-clustering.scale.test.ts::assets": {
+        "owner": "tests/scale/phash-clustering.scale.test.ts",
+        "name": "assets",
+        "lane": "scale",
+        "value": 90000,
+        "unit": "assets",
+        "budget": null
+      },
+      "tests/scale/phash-clustering.scale.test.ts::clustered assets": {
+        "owner": "tests/scale/phash-clustering.scale.test.ts",
+        "name": "clustered assets",
+        "lane": "scale",
+        "value": 9000,
+        "unit": "assets",
+        "budget": null
+      },
+      "tests/scale/phash-clustering.scale.test.ts::fixture seeding": {
+        "owner": "tests/scale/phash-clustering.scale.test.ts",
+        "name": "fixture seeding",
+        "lane": "scale",
+        "value": 7782.573528,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/photo-similarity.scale.test.ts::sqlite-vec ranked search": {
+        "owner": "tests/scale/photo-similarity.scale.test.ts",
+        "name": "sqlite-vec ranked search",
+        "lane": "scale",
+        "value": 152.42317000000003,
+        "unit": "ms",
+        "budget": 750
+      },
+      "tests/scale/photo-similarity.scale.test.ts::SQL cosine ranked search": {
+        "owner": "tests/scale/photo-similarity.scale.test.ts",
+        "name": "SQL cosine ranked search",
+        "lane": "scale",
+        "value": 502.5544829999999,
+        "unit": "ms",
+        "budget": 3600
+      },
+      "tests/scale/photo-similarity.scale.test.ts::sqlite-vec RSS delta": {
+        "owner": "tests/scale/photo-similarity.scale.test.ts",
+        "name": "sqlite-vec RSS delta",
+        "lane": "scale",
+        "value": 0,
+        "unit": "bytes",
+        "budget": 134217728
+      },
+      "tests/scale/photo-similarity.scale.test.ts::SQL cosine RSS delta": {
+        "owner": "tests/scale/photo-similarity.scale.test.ts",
+        "name": "SQL cosine RSS delta",
+        "lane": "scale",
+        "value": 60338176,
+        "unit": "bytes",
+        "budget": 134217728
+      },
+      "tests/scale/photo-similarity.scale.test.ts::sqlite-vec event-loop block": {
+        "owner": "tests/scale/photo-similarity.scale.test.ts",
+        "name": "sqlite-vec event-loop block",
+        "lane": "scale",
+        "value": 151.83769500000017,
+        "unit": "ms",
+        "budget": 750
+      },
+      "tests/scale/photo-similarity.scale.test.ts::SQL cosine event-loop block": {
+        "owner": "tests/scale/photo-similarity.scale.test.ts",
+        "name": "SQL cosine event-loop block",
+        "lane": "scale",
+        "value": 503.21273199999996,
+        "unit": "ms",
+        "budget": 3600
+      },
+      "tests/scale/photo-similarity.scale.test.ts::embeddings": {
+        "owner": "tests/scale/photo-similarity.scale.test.ts",
+        "name": "embeddings",
+        "lane": "scale",
+        "value": 90000,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/photo-similarity.scale.test.ts::vector width": {
+        "owner": "tests/scale/photo-similarity.scale.test.ts",
+        "name": "vector width",
+        "lane": "scale",
+        "value": 512,
+        "unit": "floats",
+        "budget": null
+      },
+      "tests/scale/photo-similarity.scale.test.ts::fixture seeding": {
+        "owner": "tests/scale/photo-similarity.scale.test.ts",
+        "name": "fixture seeding",
+        "lane": "scale",
+        "value": 9813.330928,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/photos-memories.scale.test.ts::rebuild": {
+        "owner": "tests/scale/photos-memories.scale.test.ts",
+        "name": "rebuild",
+        "lane": "scale",
+        "value": 1528.0216809999997,
+        "unit": "ms",
+        "budget": 20000
+      },
+      "tests/scale/photos-memories.scale.test.ts::fixture seeding": {
+        "owner": "tests/scale/photos-memories.scale.test.ts",
+        "name": "fixture seeding",
+        "lane": "scale",
+        "value": 3039.5531180000003,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/photos-memories.scale.test.ts::assets": {
+        "owner": "tests/scale/photos-memories.scale.test.ts",
+        "name": "assets",
+        "lane": "scale",
+        "value": 50000,
+        "unit": "assets",
+        "budget": null
+      },
+      "tests/scale/photos-memories.scale.test.ts::on-this-day memories": {
+        "owner": "tests/scale/photos-memories.scale.test.ts",
+        "name": "on-this-day memories",
+        "lane": "scale",
+        "value": 365,
+        "unit": "memories",
+        "budget": null
+      },
+      "tests/scale/photos-memories.scale.test.ts::trip memories": {
+        "owner": "tests/scale/photos-memories.scale.test.ts",
+        "name": "trip memories",
+        "lane": "scale",
+        "value": 28,
+        "unit": "memories",
+        "budget": null
+      },
+      "tests/scale/photos-memories.scale.test.ts::similar memories": {
+        "owner": "tests/scale/photos-memories.scale.test.ts",
+        "name": "similar memories",
+        "lane": "scale",
+        "value": 1000,
+        "unit": "memories",
+        "budget": null
+      },
+      "tests/scale/photos-memories.scale.test.ts::total memories": {
+        "owner": "tests/scale/photos-memories.scale.test.ts",
+        "name": "total memories",
+        "lane": "scale",
+        "value": 1393,
+        "unit": "memories",
+        "budget": null
+      },
+      "tests/scale/photos-memories.scale.test.ts::member rows written": {
+        "owner": "tests/scale/photos-memories.scale.test.ts",
+        "name": "member rows written",
+        "lane": "scale",
+        "value": 58394,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/photos-timeline.scale.test.ts::fixture seed": {
+        "owner": "tests/scale/photos-timeline.scale.test.ts",
+        "name": "fixture seed",
+        "lane": "scale",
+        "value": 6751.34832,
+        "unit": "ms",
+        "budget": 30000
+      },
+      "tests/scale/photos-timeline.scale.test.ts::50k-corpus ordered page read": {
+        "owner": "tests/scale/photos-timeline.scale.test.ts",
+        "name": "50k-corpus ordered page read",
+        "lane": "scale",
+        "value": 8.921101999999337,
+        "unit": "ms",
+        "budget": 2000
+      },
+      "tests/scale/photos-timeline.scale.test.ts::10k-one-day ordered page read": {
+        "owner": "tests/scale/photos-timeline.scale.test.ts",
+        "name": "10k-one-day ordered page read",
+        "lane": "scale",
+        "value": 10.43438900000001,
+        "unit": "ms",
+        "budget": 1000
+      },
+      "tests/scale/photos-timeline.scale.test.ts::day-bucket GROUP BY over the full 60k corpus": {
+        "owner": "tests/scale/photos-timeline.scale.test.ts",
+        "name": "day-bucket GROUP BY over the full 60k corpus",
+        "lane": "scale",
+        "value": 24.334501999999702,
+        "unit": "ms",
+        "budget": 2000
+      },
+      "tests/scale/photos-timeline.scale.test.ts::one-day degenerate corpus seed": {
+        "owner": "tests/scale/photos-timeline.scale.test.ts",
+        "name": "one-day degenerate corpus seed",
+        "lane": "scale",
+        "value": 1029.215948,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/photos-timeline.scale.test.ts::photos": {
+        "owner": "tests/scale/photos-timeline.scale.test.ts",
+        "name": "photos",
+        "lane": "scale",
+        "value": 50000,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/photos-timeline.scale.test.ts::one-day photos": {
+        "owner": "tests/scale/photos-timeline.scale.test.ts",
+        "name": "one-day photos",
+        "lane": "scale",
+        "value": 10000,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/photos-timeline.scale.test.ts::distinct day buckets": {
+        "owner": "tests/scale/photos-timeline.scale.test.ts",
+        "name": "distinct day buckets",
+        "lane": "scale",
+        "value": 1097,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/replica-bootstrap.scale.test.ts::wall clock": {
+        "owner": "tests/scale/replica-bootstrap.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 137.11495000000002,
+        "unit": "ms",
+        "budget": 20000
+      },
+      "tests/scale/replica-bootstrap.scale.test.ts::converged rows": {
+        "owner": "tests/scale/replica-bootstrap.scale.test.ts",
+        "name": "converged rows",
+        "lane": "scale",
+        "value": 49999,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/replica-reconnect.scale.test.ts::reconnect to fresh": {
+        "owner": "tests/scale/replica-reconnect.scale.test.ts",
+        "name": "reconnect to fresh",
+        "lane": "scale",
+        "value": 49.24779000000035,
+        "unit": "ms",
+        "budget": 250
+      },
+      "tests/scale/replica-reconnect.scale.test.ts::first change frame": {
+        "owner": "tests/scale/replica-reconnect.scale.test.ts",
+        "name": "first change frame",
+        "lane": "scale",
+        "value": 49.24779000000035,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/replica-reconnect.scale.test.ts::missed commits replayed": {
+        "owner": "tests/scale/replica-reconnect.scale.test.ts",
+        "name": "missed commits replayed",
+        "lane": "scale",
+        "value": 25,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/replica-reconnect.scale.test.ts::bootstrap walk": {
+        "owner": "tests/scale/replica-reconnect.scale.test.ts",
+        "name": "bootstrap walk",
+        "lane": "scale",
+        "value": 1091.2942619999994,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/replica-reconnect.scale.test.ts::bootstrap pages": {
+        "owner": "tests/scale/replica-reconnect.scale.test.ts",
+        "name": "bootstrap pages",
+        "lane": "scale",
+        "value": 3,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/replica-reconnect.scale.test.ts::seed": {
+        "owner": "tests/scale/replica-reconnect.scale.test.ts",
+        "name": "seed",
+        "lane": "scale",
+        "value": 2726.1115950000003,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/replica-retention.scale.test.ts::worst-day resumable window (compaction)": {
+        "owner": "tests/scale/replica-retention.scale.test.ts",
+        "name": "worst-day resumable window (compaction)",
+        "lane": "scale",
+        "value": 28,
+        "unit": "days",
+        "budget": 30
+      },
+      "tests/scale/replica-retention.scale.test.ts::worst-day resumable window (entry cap alone)": {
+        "owner": "tests/scale/replica-retention.scale.test.ts",
+        "name": "worst-day resumable window (entry cap alone)",
+        "lane": "scale",
+        "value": 5,
+        "unit": "days",
+        "budget": null
+      },
+      "tests/scale/replica-retention.scale.test.ts::retained entries": {
+        "owner": "tests/scale/replica-retention.scale.test.ts",
+        "name": "retained entries",
+        "lane": "scale",
+        "value": 100000,
+        "unit": "entries",
+        "budget": 100000
+      },
+      "tests/scale/replica-retention.scale.test.ts::wall clock": {
+        "owner": "tests/scale/replica-retention.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 22932,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/replica-sse-fanout.scale.test.ts::fan-out wall clock": {
+        "owner": "tests/scale/replica-sse-fanout.scale.test.ts",
+        "name": "fan-out wall clock",
+        "lane": "scale",
+        "value": 923.4987249999999,
+        "unit": "ms",
+        "budget": 3600
+      },
+      "tests/scale/replica-sse-fanout.scale.test.ts::per-commit fan-out p95": {
+        "owner": "tests/scale/replica-sse-fanout.scale.test.ts",
+        "name": "per-commit fan-out p95",
+        "lane": "scale",
+        "value": 20.984485999999833,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/replica-sse-fanout.scale.test.ts::per-commit fan-out median": {
+        "owner": "tests/scale/replica-sse-fanout.scale.test.ts",
+        "name": "per-commit fan-out median",
+        "lane": "scale",
+        "value": 17.575964000000113,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/replica-sse-fanout.scale.test.ts::subscribers": {
+        "owner": "tests/scale/replica-sse-fanout.scale.test.ts",
+        "name": "subscribers",
+        "lane": "scale",
+        "value": 16,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/replica-sse-fanout.scale.test.ts::commits": {
+        "owner": "tests/scale/replica-sse-fanout.scale.test.ts",
+        "name": "commits",
+        "lane": "scale",
+        "value": 50,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/replica-sse-fanout.scale.test.ts::vault statements per commit": {
+        "owner": "tests/scale/replica-sse-fanout.scale.test.ts",
+        "name": "vault statements per commit",
+        "lane": "scale",
+        "value": 658,
+        "unit": "statements",
+        "budget": 1200
+      },
+      "tests/scale/restore-10gib.scale.test.ts::restore wall clock": {
+        "owner": "tests/scale/restore-10gib.scale.test.ts",
+        "name": "restore wall clock",
+        "lane": "scale",
+        "value": 58033.56171400001,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/restore-10gib.scale.test.ts::snapshot wall clock": {
+        "owner": "tests/scale/restore-10gib.scale.test.ts",
+        "name": "snapshot wall clock",
+        "lane": "scale",
+        "value": 88587.58559599999,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/restore-10gib.scale.test.ts::foreign_key_check (isolated)": {
+        "owner": "tests/scale/restore-10gib.scale.test.ts",
+        "name": "foreign_key_check (isolated)",
+        "lane": "scale",
+        "value": 52.931995999999344,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/restore-10gib.scale.test.ts::integrity_check (isolated)": {
+        "owner": "tests/scale/restore-10gib.scale.test.ts",
+        "name": "integrity_check (isolated)",
+        "lane": "scale",
+        "value": 1535.0846380000003,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/restore-10gib.scale.test.ts::seeded CAS bytes": {
+        "owner": "tests/scale/restore-10gib.scale.test.ts",
+        "name": "seeded CAS bytes",
+        "lane": "scale",
+        "value": 10737418240,
+        "unit": "bytes",
+        "budget": null
+      },
+      "tests/scale/restore-10gib.scale.test.ts::restored vault.db": {
+        "owner": "tests/scale/restore-10gib.scale.test.ts",
+        "name": "restored vault.db",
+        "lane": "scale",
+        "value": 153477120,
+        "unit": "bytes",
+        "budget": null
+      },
+      "tests/scale/restore-10gib.scale.test.ts::rows checked by foreign_key_check": {
+        "owner": "tests/scale/restore-10gib.scale.test.ts",
+        "name": "rows checked by foreign_key_check",
+        "lane": "scale",
+        "value": 95640,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::ladder wall clock": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "ladder wall clock",
+        "lane": "scale",
+        "value": 9710.209987,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::knee (first refusing concurrency)": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "knee (first refusing concurrency)",
+        "lane": "scale",
+        "value": 32,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::recovery after load drop": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "recovery after load drop",
+        "lane": "scale",
+        "value": 170.54897600000004,
+        "unit": "ms",
+        "budget": 1000
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::untyped refusals": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "untyped refusals",
+        "lane": "scale",
+        "value": 0,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::refusals outside 429/503": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "refusals outside 429/503",
+        "lane": "scale",
+        "value": 0,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::write storm accepted": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "write storm accepted",
+        "lane": "scale",
+        "value": 18,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::notes committed": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "notes committed",
+        "lane": "scale",
+        "value": 18,
+        "unit": "rows",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::p95 at concurrency 1": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "p95 at concurrency 1",
+        "lane": "scale",
+        "value": 278.97368000000006,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::p95 at concurrency 2": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "p95 at concurrency 2",
+        "lane": "scale",
+        "value": 221.5648659999997,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::p95 at concurrency 4": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "p95 at concurrency 4",
+        "lane": "scale",
+        "value": 459.56540399999994,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::p95 at concurrency 8": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "p95 at concurrency 8",
+        "lane": "scale",
+        "value": 892.3460189999996,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::p95 at concurrency 16": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "p95 at concurrency 16",
+        "lane": "scale",
+        "value": 1767.932304,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::p95 at concurrency 32": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "p95 at concurrency 32",
+        "lane": "scale",
+        "value": 1954.3079899999993,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::p95 at concurrency 64": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "p95 at concurrency 64",
+        "lane": "scale",
+        "value": 1767.031153,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/stress-to-failure.scale.test.ts::p95 at concurrency 128": {
+        "owner": "tests/scale/stress-to-failure.scale.test.ts",
+        "name": "p95 at concurrency 128",
+        "lane": "scale",
+        "value": 1480.0977620000012,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/tunnel-pairs.scale.test.ts::wall clock": {
+        "owner": "tests/scale/tunnel-pairs.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 71.044499,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/tunnel-pairs.scale.test.ts::pairs": {
+        "owner": "tests/scale/tunnel-pairs.scale.test.ts",
+        "name": "pairs",
+        "lane": "scale",
+        "value": 200,
+        "unit": "count",
+        "budget": null
+      },
+      "tests/scale/web-tabs.scale.test.ts::wall clock": {
+        "owner": "tests/scale/web-tabs.scale.test.ts",
+        "name": "wall clock",
+        "lane": "scale",
+        "value": 17.267032999999998,
+        "unit": "ms",
+        "budget": null
+      },
+      "tests/scale/web-tabs.scale.test.ts::tabs": {
+        "owner": "tests/scale/web-tabs.scale.test.ts",
+        "name": "tabs",
+        "lane": "scale",
+        "value": 64,
+        "unit": "count",
+        "budget": null
+      }
+    },
+    "flakyOwnerIds": [],
+    "playwrightOwnerIds": [
+      "apps/desktop/tests/e2e/agenda.spec.ts",
+      "apps/desktop/tests/e2e/appview-templates-insights.spec.ts",
+      "apps/desktop/tests/e2e/automations.spec.ts",
+      "apps/desktop/tests/e2e/delete-app.spec.ts",
+      "apps/desktop/tests/e2e/docs-drive.spec.ts",
+      "apps/desktop/tests/e2e/household.spec.ts",
+      "apps/desktop/tests/e2e/launch-time.spec.ts",
+      "apps/desktop/tests/e2e/locker.spec.ts",
+      "apps/desktop/tests/e2e/notes.spec.ts",
+      "apps/desktop/tests/e2e/onboarding-home.spec.ts",
+      "apps/desktop/tests/e2e/pending-overlay.spec.ts",
+      "apps/desktop/tests/e2e/people.spec.ts",
+      "apps/desktop/tests/e2e/photos.spec.ts",
+      "apps/desktop/tests/e2e/settings-enrichment.spec.ts",
+      "apps/desktop/tests/e2e/settings-gateways.spec.ts",
+      "apps/desktop/tests/e2e/tally.spec.ts",
+      "apps/desktop/tests/e2e/tasks.spec.ts",
+      "apps/web/tests/e2e/accessibility.spec.ts",
+      "apps/web/tests/e2e/agenda-compact-band.spec.ts",
+      "apps/web/tests/e2e/agenda.spec.ts",
+      "apps/web/tests/e2e/app-card-logical-insets.spec.ts",
+      "apps/web/tests/e2e/app-navigation-rail.spec.ts",
+      "apps/web/tests/e2e/docs-drive.spec.ts",
+      "apps/web/tests/e2e/docs-grant.spec.ts",
+      "apps/web/tests/e2e/grant-sheet.spec.ts",
+      "apps/web/tests/e2e/locker-seat.spec.ts",
+      "apps/web/tests/e2e/notes.spec.ts",
+      "apps/web/tests/e2e/offline-reconnect.spec.ts",
+      "apps/web/tests/e2e/offline-search.spec.ts",
+      "apps/web/tests/e2e/people-grants.spec.ts",
+      "apps/web/tests/e2e/people.spec.ts",
+      "apps/web/tests/e2e/perf-waterfall.spec.ts",
+      "apps/web/tests/e2e/photos-grants.spec.ts",
+      "apps/web/tests/e2e/rebuilt-apps.spec.ts",
+      "apps/web/tests/e2e/renderer-leak.spec.ts",
+      "apps/web/tests/e2e/tasks.spec.ts",
+      "apps/web/tests/e2e/web-pwa-cache.spec.ts",
+      "apps/web/tests/e2e/web-pwa.spec.ts"
+    ],
+    "failedJobs": [
+      "compat-upgrade-and-skew",
+      "dast-scan",
+      "desktop-e2e",
+      "fuzz-parsers",
+      "lane-health",
+      "mobile-e2e-android",
+      "mobile-e2e-ios",
+      "mutation-testing",
+      "pairing-cross-network-relay",
+      "pairing-lifecycle",
+      "pairing-ticket-hygiene",
+      "protocol-join",
+      "quality-performance-scale",
+      "restore-year3",
+      "web-e2e",
+      "web-e2e-cross-browser"
+    ],
+    "silentAllClear": false,
+    "jobReconciliation": null,
+    "cellsMissingPrior": 6,
+    "cellsMissingRose": true,
+    "cellsMissingDelta": 4,
+    "newMissingCellIds": [
+      "blueprints:accessibility",
+      "blueprints:correctness",
+      "desktop:performance",
+      "desktop:security",
+      "mobile:journey",
+      "mobile:offline",
+      "mobile:performance",
+      "mobile:scalability",
+      "tunnel-pairing:security",
+      "web:performance"
+    ],
+    "newFailedCellIds": [
+      "replica-sync:journey",
+      "web:journey",
+      "web:offline",
+      "web:security"
+    ],
+    "floorSeries": {
+      "coverage:repo-wide:lines": null,
+      "coverage:repo-wide:branches": null,
+      "coverage:packages/server/src/engine/**:lines": null,
+      "coverage:packages/server/src/engine/**:branches": null,
+      "coverage:packages/server/src/automation/**:lines": null,
+      "coverage:packages/server/src/automation/**:branches": null,
+      "coverage:packages/backup/src/**:lines": null,
+      "coverage:packages/backup/src/**:branches": null,
+      "coverage:packages/core/src/blob/**:lines": null,
+      "coverage:packages/core/src/blob/**:branches": null,
+      "coverage:packages/blueprints/src/**:lines": null,
+      "coverage:packages/blueprints/src/**:branches": null,
+      "coverage:packages/blueprints/apps/photos/**:lines": null,
+      "coverage:packages/blueprints/apps/photos/**:branches": null,
+      "coverage:packages/blueprints/apps/agenda/**:lines": null,
+      "coverage:packages/blueprints/apps/agenda/**:branches": null,
+      "coverage:packages/blueprints/apps/notes/**:lines": null,
+      "coverage:packages/blueprints/apps/notes/**:branches": null,
+      "coverage:packages/blueprints/apps/tasks/**:lines": null,
+      "coverage:packages/blueprints/apps/tasks/**:branches": null,
+      "coverage:packages/blueprints/apps/{_shared,docs,locker,people,tally}/**:lines": null,
+      "coverage:packages/blueprints/apps/{_shared,docs,locker,people,tally}/**:branches": null,
+      "coverage:packages/model-runtime/src/**:lines": null,
+      "coverage:packages/model-runtime/src/**:branches": null,
+      "coverage:packages/model-runtime/automation-handlers/**:lines": null,
+      "coverage:packages/model-runtime/automation-handlers/**:branches": null,
+      "coverage:packages/blueprints/automations/**/handler.js:lines": null,
+      "coverage:packages/blueprints/automations/**/handler.js:branches": null,
+      "coverage:packages/client/src/replica/**:lines": null,
+      "coverage:packages/client/src/replica/**:branches": null,
+      "coverage:packages/client/src/*.{ts,tsx}:lines": null,
+      "coverage:packages/client/src/*.{ts,tsx}:branches": null,
+      "coverage:packages/server/src/{backup,brief,capture,cli,enrich,lifecycle,preview,push,reminders,routes,runs,serve,skills,worktree-store}/**:lines": null,
+      "coverage:packages/server/src/{backup,brief,capture,cli,enrich,lifecycle,preview,push,reminders,routes,runs,serve,skills,worktree-store}/**:branches": null,
+      "coverage:packages/server/src/*.{ts,js}:lines": null,
+      "coverage:packages/server/src/*.{ts,js}:branches": null,
+      "coverage:packages/core/src/time/**:lines": null,
+      "coverage:packages/core/src/time/**:branches": null,
+      "coverage:packages/server/src/acp/**:lines": null,
+      "coverage:packages/server/src/acp/**:branches": null,
+      "coverage:packages/vault/src/**:lines": null,
+      "coverage:packages/vault/src/**:branches": null,
+      "coverage:packages/design/src/**:lines": null,
+      "coverage:packages/design/src/**:branches": null,
+      "coverage:packages/tunnel/src/**:lines": null,
+      "coverage:packages/tunnel/src/**:branches": null,
+      "coverage:packages/core/src/protocol/**:lines": null,
+      "coverage:packages/core/src/protocol/**:branches": null,
+      "coverage:packages/cli/src/**:lines": null,
+      "coverage:packages/cli/src/**:branches": null,
+      "coverage:apps/mobile/src/lib/**:lines": null,
+      "coverage:apps/mobile/src/lib/**:branches": null,
+      "coverage:apps/mobile/src/**/*-model.ts:lines": null,
+      "coverage:apps/mobile/src/**/*-model.ts:branches": null,
+      "coverage:apps/desktop/src/main/*-core.ts:lines": null,
+      "coverage:apps/desktop/src/main/*-core.ts:branches": null,
+      "coverage:apps/oauth-worker/src/**:lines": null,
+      "coverage:apps/oauth-worker/src/**:branches": null,
+      "coverage:packages/client/src/react/**:lines": null,
+      "coverage:packages/client/src/react/**:branches": null,
+      "mutation:apps/mobile": 73,
+      "mutation:apps/oauth-worker": 90.85365853658537,
+      "mutation:packages/backup": 84.6590909090909,
+      "mutation:packages/blueprints": 76.31578947368422,
+      "mutation:packages/blueprints/apps/_shared/pending-overlay": 97.20496894409938,
+      "mutation:packages/blueprints/apps/_shared/search-scaffold": 95.65217391304348,
+      "mutation:packages/blueprints/apps/_shared/selection": 76.41509433962264,
+      "mutation:packages/blueprints/apps/_shared/triage": 73.07692307692307,
+      "mutation:packages/blueprints/apps/_shared/untrusted": 95.13888888888889,
+      "mutation:packages/blueprints/apps/agenda": 77.79411764705883,
+      "mutation:packages/blueprints/apps/notes": 72.29268292682927,
+      "mutation:packages/blueprints/apps/tasks": 70.43343653250774,
+      "mutation:packages/cli": 92.20779220779221,
+      "mutation:packages/client/src/replica": 82.38095238095238,
+      "mutation:packages/core/src/blob": 100,
+      "mutation:packages/core/src/protocol": 90.17857142857143,
+      "mutation:packages/core/src/time": 77.77777777777779,
+      "mutation:packages/design": 73.15175097276264,
+      "mutation:packages/model-runtime": 82.99595141700405,
+      "mutation:packages/server": 78.78787878787878,
+      "mutation:packages/server/src/acp": 91.8918918918919,
+      "mutation:packages/server/src/automation": 83.83838383838383,
+      "mutation:packages/server/src/engine": 100,
+      "mutation:packages/tunnel": 92.43697478991596,
+      "mutation:packages/vault": 100
+    },
+    "floorRatchetCandidates": [],
+    "agedInfraMismatchCellIds": [],
+    "absoluteWeaknesses": [],
+    "flakeRates": [
+      {
+        "owner": "apps/desktop/tests/e2e/agenda.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/automations.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/delete-app.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/docs-drive.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/household.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/launch-time.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/locker.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/notes.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/onboarding-home.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/pending-overlay.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/people.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/photos.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/settings-enrichment.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/settings-gateways.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/tally.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/desktop/tests/e2e/tasks.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/accessibility.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/agenda-compact-band.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/agenda.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/app-card-logical-insets.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/app-navigation-rail.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/docs-drive.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/docs-grant.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/grant-sheet.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/locker-seat.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/notes.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/offline-reconnect.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/offline-search.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/people-grants.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/people.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/perf-waterfall.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/photos-grants.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/rebuilt-apps.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/renderer-leak.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/tasks.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/web-pwa-cache.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      },
+      {
+        "owner": "apps/web/tests/e2e/web-pwa.spec.ts",
+        "runs": 1,
+        "flaky": 0,
+        "rate": 0
+      }
+    ],
+    "adversaryCounts": {
+      "mutationSeeds": 25,
+      "mutationBelowFloor": 0,
+      "fuzzTargets": 6,
+      "fuzzCorpusSeeds": 42,
+      "fuzzCrashers": 3,
+      "pinnedFindings": 0,
+      "propertyFlows": 10,
+      "enginesWithoutProperty": 11
+    },
+    "joinLawCounts": {
+      "scripted": 4,
+      "simulation": 6,
+      "passed": 10,
+      "failed": 0
+    },
+    "journeyCounts": {
+      "journeys": 19,
+      "passed": 0,
+      "missing": 19,
+      "unbudgeted": 7
+    },
+    "consentLedgerCounts": {
+      "layers": 8,
+      "withoutAdversary": 0,
+      "fullSeatCoverage": 5
+    },
+    "verdict": "red",
+    "verdictReasons": [
+      "4 red cell(s)",
+      "failed job(s): compat-upgrade-and-skew, dast-scan, desktop-e2e, fuzz-parsers, lane-health, mobile-e2e-android, mobile-e2e-ios, mutation-testing, pairing-cross-network-relay, pairing-lifecycle, pairing-ticket-hygiene, protocol-join, quality-performance-scale, restore-year3, web-e2e, web-e2e-cross-browser"
+    ],
+    "verdictDirection": "regressed",
+    "attentionQueueBands": {
+      "S1": 1,
+      "S2": 13,
+      "S3": 0,
+      "S4": 0
+    },
+    "attentionQueue": [
+      {
+        "id": "web:offline",
+        "severity": "S1",
+        "kind": "red",
+        "title": "Web PWA · Offline / resilience",
+        "owner": "apps/web/tests/e2e/web-pwa-cache.spec.ts",
+        "trackingIssue": null,
+        "why": "evidence ran and failed (failed)"
+      },
+      {
+        "id": "replica-sync:journey",
+        "severity": "S2",
+        "kind": "red",
+        "title": "Replica & sync (schema + client engine) · Journey (e2e)",
+        "owner": "apps/web/tests/e2e/web-pwa.spec.ts",
+        "trackingIssue": 864,
+        "why": "evidence ran and failed (failed)"
+      },
+      {
+        "id": "web:journey",
+        "severity": "S2",
+        "kind": "red",
+        "title": "Web PWA · Journey (e2e)",
+        "owner": "apps/web/tests/e2e/web-pwa.spec.ts",
+        "trackingIssue": 864,
+        "why": "evidence ran and failed (failed)"
+      },
+      {
+        "id": "web:security",
+        "severity": "S2",
+        "kind": "red",
+        "title": "Web PWA · Security / isolation",
+        "owner": "apps/web/tests/e2e/web-pwa.spec.ts",
+        "trackingIssue": 864,
+        "why": "evidence ran and failed (failed)"
+      },
+      {
+        "id": "blueprints:correctness",
+        "severity": "S2",
+        "kind": "grey",
+        "title": "Blueprint apps (x8) · Correctness",
+        "owner": "packages/blueprints/src/app-boot-harness.ts",
+        "trackingIssue": null,
+        "why": "no evidence tonight (owner-silent)"
+      },
+      {
+        "id": "desktop:performance",
+        "severity": "S2",
+        "kind": "grey",
+        "title": "Desktop shell (Electron) · Performance",
+        "owner": "tests/perf/desktop-cold.perf.test.ts",
+        "trackingIssue": 864,
+        "why": "no evidence tonight (owner-silent)"
+      },
+      {
+        "id": "desktop:security",
+        "severity": "S2",
+        "kind": "grey",
+        "title": "Desktop shell (Electron) · Security / isolation",
+        "owner": "apps/desktop/src/main/gateway-pairing-core.test.ts",
+        "trackingIssue": 864,
+        "why": "no evidence tonight (owner-silent)"
+      },
+      {
+        "id": "mobile:offline",
+        "severity": "S2",
+        "kind": "grey",
+        "title": "Mobile (native surfaces) · Offline / resilience",
+        "owner": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
+        "trackingIssue": 864,
+        "why": "no evidence tonight (owner-silent)"
+      },
+      {
+        "id": "mobile:performance",
+        "severity": "S2",
+        "kind": "grey",
+        "title": "Mobile (native surfaces) · Performance",
+        "owner": "tests/scale/large-vault.scale.test.ts",
+        "trackingIssue": 864,
+        "why": "no evidence tonight (owner-silent)"
+      },
+      {
+        "id": "mobile:scalability",
+        "severity": "S2",
+        "kind": "grey",
+        "title": "Mobile (native surfaces) · Scalability",
+        "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
+        "trackingIssue": null,
+        "why": "no evidence tonight (owner-silent)"
+      }
+    ],
+    "coverageBelowFloor": [],
+    "validationErrorCount": 0
+  }
+}
