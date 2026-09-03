@@ -9,6 +9,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { notifyReplicaCommit } from "@centraid/vault";
 
 import { unrefTimer } from "../../packages/server/src/lib/unref-timer.js";
+import { replicaProjectionHub } from "../../packages/server/src/routes/replica-fanout.js";
+import type { ReplicaProjectedPage } from "../../packages/server/src/routes/replica-projection.js";
 import { serve } from "../../packages/server/src/serve/serve.js";
 import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
@@ -76,6 +78,12 @@ const FRAME_DEADLINE_MS = 30_000;
  * here rather than only showing up as a slower wall clock. Tighten-only.
  */
 const SHARED_PROJECTION_STATEMENTS_CEILING = 1_200;
+/**
+ * Commits behind the projections-per-commit GAUGE below (#922 F5/B6). Short:
+ * the gauge asks how many projections one commit costs a household, and that
+ * answer does not need fifty commits to be stable.
+ */
+const GAUGE_COMMITS = 10;
 
 interface Subscriber {
   readonly index: number;
@@ -322,6 +330,33 @@ describe("replica-sse-fanout.scale", () => {
     const p95CommitMs = percentile(perCommitMs, 0.95);
     const budgetMs = rigBudgetMs(OWNER);
 
+    // ── #922 F5 / B6 gauge: household projections per commit ───────────────
+    // Read from the hub's OWN counters — `currentGeneration()` is the commit
+    // counter, bumped once per replica commit, and `subscriberCount()` is the
+    // household actually attached — plus the property the hub exists for: the
+    // page it hands back is SHARED, so DISTINCT page objects across a household
+    // reading at one cursor IS the projection count. Nothing is added to
+    // `routes/replica-fanout.ts` to measure it. No budget: the mechanism is
+    // already gated by the statements ceiling above; this is the number #927
+    // wave 2's ledger records for the household row.
+    const hub = replicaProjectionHub(plane.db.vault);
+    const householdAccess = {
+      canWrite: true,
+      rememberDevice: true,
+      appId: "agenda",
+    };
+    const householdSubscribers = hub.subscriberCount();
+    const generationBefore = hub.currentGeneration();
+    const distinctPages = new Set<ReplicaProjectedPage>();
+    for (let index = 0; index < GAUGE_COMMITS; index += 1) {
+      commit(`gauge-${index.toString().padStart(4, "0")}`);
+      for (let reader = 0; reader < SUBSCRIBERS; reader += 1) {
+        distinctPages.add(hub.project(householdAccess, opening.cursor, 500));
+      }
+    }
+    const generations = hub.currentGeneration() - generationBefore;
+    const projectionsPerCommit = distinctPages.size / generations;
+
     // #659 R4 — sustained-drift gate over this rig's own 30-sample nightly
     // history. Null until the history is deep enough; a null is "no opinion
     // yet", never a pass.
@@ -359,6 +394,21 @@ describe("replica-sse-fanout.scale", () => {
           unit: "statements",
           budget: SHARED_PROJECTION_STATEMENTS_CEILING,
         },
+        {
+          name: "household projections per commit",
+          value: projectionsPerCommit,
+          unit: "projections",
+        },
+        {
+          name: "hub subscribers",
+          value: householdSubscribers,
+          unit: "count",
+        },
+        {
+          name: "hub generations per commit",
+          value: generations / GAUGE_COMMITS,
+          unit: "generations",
+        },
       ],
     });
     expect(
@@ -373,5 +423,9 @@ describe("replica-sse-fanout.scale", () => {
       `shared projection: ${statementsPerCommit} vault statements per commit across ${SUBSCRIBERS} subscribers — above ${SHARED_PROJECTION_STATEMENTS_CEILING} means the projection is being re-derived per subscriber again (routes/replica-fanout.ts)`
     ).toBeLessThan(SHARED_PROJECTION_STATEMENTS_CEILING);
     expect(durationMs).toBeLessThan(budgetMs);
+    // The gauge carries no ceiling, but an instrument that saw no commit is
+    // reporting a number about nothing: one generation per commit is the
+    // reading the projection count is divided by.
+    expect(generations).toBe(GAUGE_COMMITS);
   });
 });
