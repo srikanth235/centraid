@@ -29,7 +29,16 @@ Named here once for the whole umbrella, from the issue's Scope § Out:
 
 ## Verification
 
-Per slice, in the appended sections. Each carries the exact commands and their outcomes.
+Per slice, in the appended sections; each carries the exact commands and their outcomes. The gates every slice of this umbrella exits on:
+
+```sh
+bun run format
+bun run lint
+bun run --cwd packages/<pkg> test
+bun run --cwd packages/<pkg> typecheck
+bun run check:push
+bun run check:pr
+```
 
 ## Decisions
 
@@ -137,26 +146,23 @@ Executable doesn't exist … npx playwright install
 
 1. **`test:ratchet` / `lint:ledgers`** — `tests/floors.json#minimumTests` carries a `replacesMinimumTestsFlow` entry naming a predecessor flow, `schema-migration-corpus`, that no longer exists in the ledger. The check validates head's own mapping, so it fails on every branch cut from `main` regardless of diff. Not fixed here: `tests/floors.json` is outside this slice's contract, and repairing a rename mapping needs the owning issue's intent. Filed to the root.
 2. **`design:gallery`** — Playwright browsers are not installed in this container. Environment, not code; already recorded as container-only red in `receipts/issue-905-*.md`.
+3. **`repo-hygiene` (pre-push)** — `packages/blueprints/apps/locker/queries.test.ts` is 638 lines against a 625-line limit, on `origin/main` and untouched here. Splitting that suite is not this slice's contract; filed to the root.
 
 Nothing was weakened to go green: no floor moved, no `approvedDeviation` extended, no allowlist touched.
 
-### Audit
+### Claims an auditor should attack
 
-**VERDICT: REFUTED — the fresh-context verifier required by the worker/verifier split has NOT run.**
-
-Recorded as REFUTED because the verdict defaults to REFUTED under uncertainty, and "nobody independent has looked" is the strongest form of that. It is a verdict about the audit's absence, not about a finding in the diff. Same shape as the record in `receipts/issue-905-mobile-gate-loop.md`.
-
-**Why it is absent.** The split wants a fresh-context sub-agent handed only `git diff origin/main...HEAD`, this section and the issue number. This slice ran in a harness with no sub-agent spawn tool and no way to read a spawned session's transcript back, so the verdict could not be obtained, let alone recorded verbatim. Writing PASS would be the author attesting to their own work in the section reserved for someone who has not seen their reasoning.
-
-**What to do before merging.** Hand a fresh-context agent only `git diff origin/main...HEAD` on `claude/927-w1-core-trace-contract`, this `## w1-core` section and issue #927; ask it adversarially whether the section describes the diff, whether the two pre-existing reds are really pre-existing, and whether any "deliberate" claim lacks a named property. Replace this verdict with its answer.
-
-**Author's own review, which is NOT that audit.** Recorded so an auditor has claims to attack rather than reconstruct:
+Not an audit — the author's own list, left here so the root's fresh-context verifier has claims to attack rather than reconstruct. The verdict itself belongs to that verifier and is written by it, not by this slice.
 
 - Every number in this section is reproducible from the commands in Verification. The counts were checked mechanically, not asserted: 43 tests (`vitest --reporter=verbose`), 23 malformed classes in the `it.each` table, 100% of 133 statements / 87 branches / 20 functions / 126 lines on `trace.ts`, and `check:diff-coverage` reports 100.0% (253/253) over the diff.
-- The weakest claim is "no `deliberate` seam without a property". The five entries under Decisions each name one, but decision 3 (`traceIdOfIntent` as an identity function) is the one an auditor should push on: the property is review-time grep-ability, which is real but weaker than a runtime property. If the root disagrees, the fix is to delete the function and put the rule in the emitter slices' review checklist instead — nothing else in the contract depends on it.
+- The weakest claim is "no `deliberate` seam without a property". The five entries under Decisions each name one, but decision 3 (`traceIdOfIntent` as an identity function) is the one to push on: the property is review-time grep-ability, which is real but weaker than a runtime property. If the root disagrees, the fix is to delete the function and put the rule in the emitter slices' review checklist instead — nothing else in the contract depends on it.
 - The strict parser is a deliberate departure from `docs/protocol.md` C1, argued in the file header and in Decisions 1. If a trace record ever becomes something one machine sends to another, that argument dies with it, and the parser must change in the same slice.
-- Two `check:push` gates are red. Both were reproduced on a clean `origin/main` checkout, transcript in "Pre-existing reds" above. Nothing was weakened to go green; no floor, budget, allowlist or ratchet is touched by this diff.
+- Three gates are red, all reproduced on a clean `origin/main` checkout — transcript in "Pre-existing reds" above. Nothing was weakened to go green; no floor, budget, allowlist or ratchet is touched by this diff.
 - Scope: `git diff origin/main --stat` is exactly the five files this slice's contract names. `packages/core/src/protocol/version.ts` is untouched, so no wire version moved.
+
+### Audit
+
+Written by the root's fresh-context verifier. Not self-authored by this slice.
 
 ## Session
 
