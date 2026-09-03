@@ -189,6 +189,29 @@ function parseReminders(json: string): { minutes_before: number }[] {
 }
 
 /**
+ * The reminder-bearing rows one scan works from. Read ONCE per scan: since
+ * #916 every read here is a `gateway.read`, and a gateway read appends a
+ * receipt — so a re-read is not a free SELECT, it is another durable row.
+ */
+interface ReminderSources {
+  tasks: TaskReminderRow[];
+  events: EventReminderRow[];
+}
+
+function readReminderSources(
+  vault: ReminderVaultReader,
+  cred: Credential
+): ReminderSources {
+  // Trash is invisible, not merely un-listed (#916, review-A 8.2): every read
+  // here clamps `deleted_at IS NULL`, or a task the owner threw away keeps
+  // ringing until its purge lapses.
+  return {
+    tasks: reminderTasks(vault, cred),
+    events: reminderEvents(vault, cred),
+  };
+}
+
+/**
  * Every task/event reminder whose fire time (`at` minus `minutesBefore`) has
  * arrived by `nowIso`, and hasn't gone stale (more than `staleAfterMinutes`
  * past its own `at`). Pure given `nowIso` — no wall-clock reads — so it's
@@ -201,13 +224,28 @@ export function computeDueReminders(
   staleAfterMinutes = DEFAULT_STALE_AFTER_MINUTES,
   pendingInvitations: readonly PendingInvitation[] = []
 ): DueReminder[] {
+  return dueFrom(
+    readReminderSources(vault, cred),
+    vault,
+    cred,
+    nowIso,
+    staleAfterMinutes,
+    pendingInvitations
+  );
+}
+
+function dueFrom(
+  sources: ReminderSources,
+  vault: ReminderVaultReader,
+  cred: Credential,
+  nowIso: string,
+  staleAfterMinutes: number,
+  pendingInvitations: readonly PendingInvitation[]
+): DueReminder[] {
   const now = Date.parse(nowIso);
   const out: DueReminder[] = [];
 
-  // Trash is invisible, not merely un-listed (#916, review-A 8.2): every read
-  // here clamps `deleted_at IS NULL`, or a task the owner threw away keeps
-  // ringing until its purge lapses.
-  const taskRows = reminderTasks(vault, cred);
+  const taskRows = sources.tasks;
   for (const t of taskRows) {
     const dueMs = Date.parse(t.due_at);
     if (Number.isNaN(dueMs)) continue;
@@ -225,7 +263,7 @@ export function computeDueReminders(
     }
   }
 
-  const eventRows = reminderEvents(vault, cred);
+  const eventRows = sources.events;
   for (const e of eventRows) {
     const leads = parseReminders(e.remindersJson);
     if (leads.length === 0) continue;
@@ -350,15 +388,49 @@ export function nextReminderFireAt(
   cred: Credential,
   nowIso: string
 ): string | undefined {
+  return nextFireFrom(readReminderSources(vault, cred), nowIso);
+}
+
+/**
+ * One scan, both answers (#916). The push relay needs what is due NOW and when
+ * to wake NEXT, at the same instant; asking for them separately re-read
+ * `schedule.task` and `schedule.event_ext` a second time with the same `now` —
+ * duplicate work on base, and since #916 two extra receipt commits per idle
+ * tick on top of it. The two answers now come off one read of the sources, so
+ * they can also never disagree about what the vault held.
+ */
+export function scanReminders(
+  vault: ReminderVaultReader,
+  cred: Credential,
+  nowIso: string,
+  staleAfterMinutes = DEFAULT_STALE_AFTER_MINUTES,
+  pendingInvitations: readonly PendingInvitation[] = []
+): { due: DueReminder[]; nextFireAt: string | undefined } {
+  const sources = readReminderSources(vault, cred);
+  return {
+    due: dueFrom(
+      sources,
+      vault,
+      cred,
+      nowIso,
+      staleAfterMinutes,
+      pendingInvitations
+    ),
+    nextFireAt: nextFireFrom(sources, nowIso),
+  };
+}
+
+function nextFireFrom(
+  sources: ReminderSources,
+  nowIso: string
+): string | undefined {
   const now = Date.parse(nowIso);
   let next = Number.POSITIVE_INFINITY;
-  const taskRows = reminderTasks(vault, cred);
-  for (const task of taskRows) {
+  for (const task of sources.tasks) {
     const fireAt = Date.parse(task.due_at) - task.remind_before_min * 60_000;
     if (Number.isFinite(fireAt) && fireAt > now && fireAt < next) next = fireAt;
   }
-  const eventRows = reminderEvents(vault, cred);
-  for (const event of eventRows) {
+  for (const event of sources.events) {
     const leads = parseReminders(event.remindersJson);
     if (leads.length === 0) continue;
     const rangeTo = new Date(now + 120 * 86_400_000).toISOString();

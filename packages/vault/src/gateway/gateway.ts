@@ -568,6 +568,33 @@ export class Gateway {
     return authenticate(this.db.vault, cred);
   }
 
+  /**
+   * A sequence of reads whose receipts commit ONCE (#916).
+   *
+   * A gateway read is a writer: it appends an `access.receipt`, and SQLite
+   * commits each one on its own. Five reads by one background scan therefore
+   * cost five fsyncs and five copies of the same five b-tree leaf pages in the
+   * WAL — 41 KB apiece, whatever the receipt says. That is what an idle vault
+   * was paying for a single due-reminder poll.
+   *
+   * `body`'s reads run inside one transaction, so the SAME receipts land in
+   * one commit. Nothing is suppressed, nothing is deferred past the return —
+   * and the commit runs on the throwing path too, because the receipt a read
+   * writes just before it refuses is precisely the one evidence must keep.
+   * READS ONLY: a caller that writes inside `body` gets a batch whose failures
+   * are no longer atomic, which is why the name says what belongs here.
+   */
+  readBatch<T>(body: () => T): T {
+    if (this.db.vault.isTransaction || this.db.audit.isTransaction)
+      throw new Error("gateway read batch cannot nest");
+    this.db.vault.exec("BEGIN IMMEDIATE");
+    try {
+      return body();
+    } finally {
+      if (this.db.vault.isTransaction) this.db.vault.exec("COMMIT");
+    }
+  }
+
   read(cred: Credential, rawRequest: ReadRequest): ReadResult {
     const identity = this.identify(cred);
     const request = {

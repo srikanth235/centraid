@@ -7,10 +7,8 @@ import { unrefTimer } from "../lib/unref-timer.js";
 import { assertPublicPushEndpoint } from "../push/endpoint-guard.js";
 import { createWebPushSender } from "../push/web-push.js";
 import type { WebPushSender } from "../push/web-push.js";
-import {
-  computeDueReminders,
-  nextReminderFireAt,
-} from "../reminders/due-reminders.js";
+import { scanReminders } from "../reminders/due-reminders.js";
+import type { DueReminder } from "../reminders/due-reminders.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
@@ -243,19 +241,19 @@ export class PushWakeRelay {
     const now = new Date();
     const seen = this.#dueKeys.get(vaultId) ?? new Set<string>();
     this.#dueKeys.set(vaultId, seen);
-    let due: ReturnType<typeof computeDueReminders>;
+    let due: DueReminder[];
     let next: string | null | undefined;
     try {
-      due = computeDueReminders(
-        plane.gateway,
-        plane.ownerCredential,
-        now.toISOString()
-      ).filter((reminder) => !seen.has(reminder.key));
-      next = nextReminderFireAt(
-        plane.gateway,
-        plane.ownerCredential,
-        now.toISOString()
+      // ONE SCAN, ONE COMMIT (#916). Every read below is a `gateway.read`, and
+      // a gateway read appends a receipt — so this idle-path tick is a writer.
+      // `scanReminders` reads the sources once for both answers, and the
+      // enclosing transaction lands the receipts as a single fsync instead of
+      // one per read: the same evidence, a fifth of the WAL.
+      const scan = plane.gateway.readBatch(() =>
+        scanReminders(plane.gateway, plane.ownerCredential, now.toISOString())
       );
+      due = scan.due.filter((reminder) => !seen.has(reminder.key));
+      next = scan.nextFireAt;
     } catch (error) {
       // Plane/tests may close the vault after stop(); never surface a
       // closed-DB timer as an unhandled exception (vitest fails the suite).
