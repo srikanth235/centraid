@@ -1475,7 +1475,7 @@ describe("issue #679 user-facing quality gates", () => {
     expect(ratchet.maxEntries).toBeLessThanOrEqual(COPY_SEED_CEILING);
     expect(ratchet.entries.length).toBeLessThanOrEqual(ratchet.maxEntries);
     const keyed = (entry: { file: string; literal: string }): string =>
-      `${entry.file} ${entry.literal}`;
+      `${entry.file}\0${entry.literal}`;
     expect(new Set(ratchet.entries.map(keyed)).size).toBe(
       ratchet.entries.length
     );

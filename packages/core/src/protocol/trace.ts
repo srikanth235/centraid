@@ -282,7 +282,7 @@ function attrsSignature(attrs: TraceAttrs | undefined): string {
   return Object.keys(attrs)
     .sort()
     .map((key) => `${key}=${String(attrs[key])}`)
-    .join(" ");
+    .join("\0");
 }
 
 const ROOT_AGREEMENT_FIELDS = [

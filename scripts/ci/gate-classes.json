@@ -90,6 +90,16 @@
     "rung": 1,
     "why": "The pinned Node. Warns locally, fatal under CI, where the claim is real."
   },
+  "lint:test-reachability": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Every *.test.* / *.spec.* file in the tree is reached by a vitest project, a package.json runner list or a Playwright config. A test nothing runs is a green suite that proves nothing (#931)."
+  },
+  "lint:no-nul-bytes": {
+    "class": "contract",
+    "rung": 1,
+    "why": "A raw NUL in a source file makes git call it binary, and every diff in it becomes unreviewable. Three files reached main that way before this gate (#931)."
+  },
   "lint:packages": {
     "class": "contract",
     "rung": 1,

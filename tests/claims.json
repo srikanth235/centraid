@@ -344,6 +344,15 @@
       "status": "gating"
     },
     {
+      "id": "rung1-on-main",
+      "rung": 3,
+      "platform": "any",
+      "budgetMs": 1200000,
+      "qualities": ["contracts"],
+      "surfaces": ["vault", "gateway", "protocol"],
+      "status": "gating"
+    },
+    {
       "id": "web-e2e-linux",
       "rung": 3,
       "platform": "web",
