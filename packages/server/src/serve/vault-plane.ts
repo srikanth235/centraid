@@ -9,7 +9,6 @@
  * gateway's own pipeline; this module adds nothing and takes nothing away.
  */
 
-import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
@@ -2032,14 +2031,13 @@ export class VaultPlane {
     this.ensureWalShipper();
     if (!this.walShipper) {
       // `wal_autocheckpoint = 0` is set regardless, so without a checkpointer
-      // the WALs grow unboundedly for the whole gateway uptime.
+      // the WALs grow unboundedly for the whole gateway uptime. The size test
+      // and the reader-safe checkpoint both live in the vault (#922 B6).
       try {
-        const wal = path.join(this.dir, "vault.db-wal");
-        const oversized = (p: string) =>
-          existsSync(p) &&
-          statSync(p).size > VaultPlane.FALLBACK_CHECKPOINT_WAL_BYTES;
-        if (oversized(wal)) {
-          this.gateway.checkpoint(this.ownerCredential);
+        const pass = this.db.checkpointIfLargerThan(
+          VaultPlane.FALLBACK_CHECKPOINT_WAL_BYTES
+        );
+        if (pass.checkpointed) {
           this.logger.warn(
             "vault plane: WAL checkpointed by fallback (no wal shipper — backups are NOT capturing this vault)"
           );

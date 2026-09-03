@@ -1611,6 +1611,24 @@ Demonstrated red, both new isolation properties, seeded by reverting one line ea
 - **A pool full of one key never serves another.** `acquire` falls back to a fresh thread when no idle spare matches, and does not evict a mismatched spare to make room. Harmless while app seeds are rare and every automation lane is `automation-handler`, and visible the moment a household runs two lanes hot.
 ## lane 4a — commit path
 
+Host for every number below: Linux 6.18.44 x86-64, 4 cores / 15 GB, container filesystem, `synchronous = FULL` unless a row says otherwise.
+
+| file | change |
+| --- | --- |
+| `packages/server/src/routes/replica-intent-crash-replay.test.ts` | new: the commit path's crash boundaries, one case each |
+| `packages/server/src/serve/group-commit-queue.ts` | idle queue commits on the next microtask; window sized from the measured fsync |
+| `packages/server/src/serve/group-commit-queue.test.ts` | lone write, writes issued together, the window opening and closing again |
+| `packages/server/src/serve/vault-plane.ts` | `storageFsyncMs` option feeding the window; fallback checkpoint reduced to one call |
+| `packages/server/src/serve/vault-registry.ts` | passes `storageFsyncMs` to each plane |
+| `packages/server/src/serve/build-gateway.ts` | passes the boot probe's `storageFsyncMs` to the registry |
+| `packages/vault/src/db.ts` | `checkpointIfLargerThan`: the size test and a reader-safe PASSIVE checkpoint |
+| `packages/vault/src/db.test.ts` | the threshold, the bound under a reading client, and why not TRUNCATE |
+| `packages/vault/src/index.ts` | exports `VaultWalCheckpoint` |
+
+**Deleted with replacement.** The `synchronous === "NORMAL" ? 8 : 5` group-commit window pair in `vault-plane.ts` — two numbers with no measurement behind either — replaced by `groupCommitWindowMs(storageFsyncMs)`. The inline `existsSync`/`statSync`/`gateway.checkpoint` block in the plane's WAL tick, replaced by `VaultDb.checkpointIfLargerThan`.
+
+**Decisions.** B8's fold is refused with evidence rather than landed; see the verdict below.
+
 ### B8 — durable commits per offline intent
 
 **Measured, not assumed.** The gate landed first: `packages/server/src/routes/replica-intent-crash-replay.test.ts` walks the offline-intent commit path boundary by boundary — crash before admission, crash after admission and before the canonical commit, crash after the canonical commit, and a clean commit redelivered — stopping the plane at each point, reopening the vault FROM DISK and resubmitting the same intent. Convergence is the assertion everywhere: one write, one terminal outcome, one receipt.
@@ -1636,3 +1654,28 @@ The window's size is now the measured cost of the fsync it exists to share: `gro
 | lone write through the plane's queue, p50 | 12.29 ms | 7.33 ms | 200 sequential `plane.invoke("schedule.add_task")`, median of 3 runs (before 11.89/12.29/13.64, after 5.38/7.33/7.98); Linux 6.18.44, 4 cores / 15 GB, tmpfs-backed vault dir |
 | one offline intent end to end, p50 | 14.59 ms | 9.33 ms | 50 intents through `handleReplicaIntent` on a real `VaultPlane`, median of 3 runs (before 14.52/14.59/15.44, after 9.14/9.33/10.25), same host |
 | durable commits per offline intent | 3.00 | 3.00 | unchanged by B7 — the window never changed how many transactions a serial writer opens, only how long each waited |
+
+### B6 — a size-based checkpoint that survives a reading client
+
+`VaultDb.checkpointIfLargerThan(thresholdBytes)` in `packages/vault/src/db.ts` is the size test and the checkpoint in one place, independent of shipper state. It is **PASSIVE, never TRUNCATE**: with a client holding a read transaction, TRUNCATE does not merely fail — it blocks the gateway's own connection for the vault's 30 s `busy_timeout` and then changes nothing, while PASSIVE returns at once having backfilled every frame no reader still needs, so the WAL is reused rather than grown. `packages/vault/src/db.test.ts` pins the threshold, the bound under a reading client and that refusal. The vault-plane fallback is reduced to one call; when a shipper IS attached it stays the sole checkpointer (#408), and the 64 MiB fallback threshold stays the plane's to choose — gating it is lane 3b's.
+
+| number | before | after | provenance |
+| --- | --- | --- | --- |
+| WAL bytes after 600 × 8 KiB writes with a client reading between rounds | 14.80 MB | 2.47 MB | `node` over `node:sqlite` with the vault's own pragmas (8 KiB pages, WAL, `wal_autocheckpoint=0`, `busy_timeout=30000`), 1 MiB threshold; same host |
+| `wal_checkpoint` on the gateway's connection while a client holds a read transaction | 30,103.5 ms, `busy=1`, WAL unchanged (TRUNCATE) | 0.1 ms, `busy=0`, 901 frames backfilled (PASSIVE) | same script, 300 × 8 KiB writes before the call |
+
+### Verification
+
+```
+bun run --cwd packages/vault test -- --run src/db.test.ts src/replica
+bun run --cwd packages/server test -- --run src/serve/group-commit-queue.test.ts src/serve/vault-plane-wal.test.ts src/routes/replica-intent-route.test.ts src/routes/replica-intent-crash-replay.test.ts
+bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck
+bun run --cwd packages/vault test && bun run --cwd packages/server test
+bash .governance/run.sh
+```
+
+Full suites and governance ran green against tree `7156dad154a136f348b828a81d8704a0c0787705` (vault 1584 passed; server 3449 passed). Three server reds are this container, not the diff: `IS_SANDBOX=yes` is set in the environment (`acp/backends/acp/launch.test.ts`, two cases) and the `sqlite3` CLI is absent (`serve/gateway-db-lock.integration.test.ts`); no file in either is touched here.
+
+Seeded reds, each run before its fix landed: dropping the journal-proof stamp fails three of the four crash-replay cases on an unfinished marker; making `checkpointIfLargerThan` skip the pragma grows the WAL 13.33 MB → 18.26 MB under the same workload and fails the bound.
+
+**Findings.** (1) The B8 row in `docs/decisions.md` ("~4 durable commits per intent … no remaining crash property") is stale and should be superseded: the measured cost is 3, one of which is already the folded canonical transaction, and the other two are named above with the property each keeps. (2) `gateway.checkpoint` → `checkpointVault` is TRUNCATE on a connection with `busy_timeout = 30000`; any caller reaching it while a replica session reads stalls the gateway for 30 s. The fallback tick no longer does; the owner-facing `checkpoint` verb still can. (3) The intent-status pair could still share commits with the canonical writes if the route's two writes went through the group-commit queue — worth nothing until [#880](https://github.com/srikanth235/centraid/issues/880)'s one-intent-per-round-trip drain (A6) makes intents concurrent, so it is not landed here.

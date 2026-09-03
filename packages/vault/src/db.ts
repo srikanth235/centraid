@@ -6,7 +6,7 @@
 // foreign key. Size is answered by RETENTION (schema/audit.ts,
 // `RETENTION_WINDOWS`), not by a second file.
 
-import { mkdirSync, statfsSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, statfsSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -50,6 +50,14 @@ import {
 } from "./vault-footprint.js";
 import type { VaultFootprintBudget } from "./vault-footprint.js";
 
+/** What one size-based checkpoint pass did, for the caller's log and gauges. */
+export interface VaultWalCheckpoint {
+  walBytes: number;
+  checkpointed: boolean;
+  /** A live reader kept some frames; the next pass takes them. */
+  busy: boolean;
+}
+
 export interface VaultDb {
   vault: DatabaseSync;
   /**
@@ -69,6 +77,17 @@ export interface VaultDb {
   remote: () => RemoteTier | null;
   blobTransfers: BlobTransferCoordinator;
   previewCodec?: PreviewCodec;
+  /**
+   * Bound the WAL by SIZE, independently of who else is checkpointing.
+   * `wal_autocheckpoint = 0` above hands TRUNCATE to the shipper (#408) and
+   * leaves the file to grow for the whole uptime whenever no shipper is
+   * attached. PASSIVE, never TRUNCATE: a client holding a read transaction
+   * makes TRUNCATE answer `busy` and change nothing at all, while PASSIVE
+   * backfills every frame no reader still needs and lets the WAL be REUSED —
+   * so the file stops growing, which is the property the disk cares about.
+   * A memory vault has no WAL and reports zero.
+   */
+  checkpointIfLargerThan: (thresholdBytes: number) => VaultWalCheckpoint;
   /** ANALYZE must not sit in the WAL at close (#408). */
   close: (opts?: { skipOptimize?: boolean }) => void;
 }
@@ -335,6 +354,22 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     remote: remoteTier,
     blobTransfers,
     ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
+    checkpointIfLargerThan(thresholdBytes) {
+      if (dir === undefined)
+        return { walBytes: 0, checkpointed: false, busy: false };
+      const walFile = path.join(dir, "vault.db-wal");
+      const walBytes = existsSync(walFile) ? statSync(walFile).size : 0;
+      if (walBytes <= thresholdBytes)
+        return { walBytes, checkpointed: false, busy: false };
+      const row = vault.prepare("PRAGMA wal_checkpoint(PASSIVE)").get() as
+        | { busy: number; checkpointed: number }
+        | undefined;
+      return {
+        walBytes: existsSync(walFile) ? statSync(walFile).size : 0,
+        checkpointed: (row?.checkpointed ?? 0) > 0,
+        busy: (row?.busy ?? 0) !== 0,
+      };
+    },
     close(opts) {
       // Fence the runner: no in-flight request may settle against SQLite.
       blobTransfers.abandon();

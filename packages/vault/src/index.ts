@@ -6,6 +6,7 @@ export {
   openVaultDb,
   readBlobStoreSettings,
   type VaultDb,
+  type VaultWalCheckpoint,
   type OpenVaultOptions,
   type BlobStoreSettings,
 } from "./db.js";
