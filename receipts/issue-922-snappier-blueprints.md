@@ -1526,3 +1526,29 @@ symmetrically in both runs. Every other check is green in both, and
 ### Doc debt
 
 - `tests/experience-budgets/README.md` — its status vocabulary has no word for "measured, deliberately ungated"; the report page now calls that a gauge.
+
+## lane 5 — handlers
+
+**Acceptance clauses served (Part B).** *"Blueprint handlers run precompiled; no esbuild hook on the app-handler path; per-call `fs.stat`s gone"* — B2 below. *"Workers are reused across clean runs and terminated only on timeout/error/limit; the pool size has one source and constrained hosts keep ≥1 warm worker; #842 W4.1 ref-search p95 under composition re-measured and budgeted"* — B3 below.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `packages/blueprints/scripts/build-handlers.mjs` | NEW. esbuild-bundles every `apps/*/{actions,queries}/*.ts` to a self-contained `.js` beside it. |
+| `packages/blueprints/package.json` | `build:handlers` runs first in `build`. |
+| `packages/blueprints/turbo.json` | The compiled handlers are declared build outputs (both gitignored; `lint:turbo-cache` clean). |
+| `packages/blueprints/scripts/build-manifest.mjs` | The walk drops a `.js` that has a `.ts` sibling, so `manifest.json` still lists sources only. |
+| `.gitignore` | The compiled handlers are generated, never committed. |
+| `packages/server/src/engine/handlers/dispatcher.ts` | `probeHandlerFile` prefers the precompiled `.js`; handler resolution and the manifest `stat` cache behind `CODE_REVALIDATE_MS`; `invalidate()` clears both. |
+| `packages/server/src/engine/handlers/worker-pool.ts` | Keyed reuse: `acquire(key)` / `release(worker, key)` / `retire(worker)`, refill accounts for threads that are coming back. |
+| `packages/server/src/engine/handlers/handler-runner.ts` | Releases a thread that completed the protocol, retires it on timeout/error/exit; parks under the lane the WORKER reports. |
+| `packages/server/src/engine/worker/runner.ts` | Per-run `AbortController`, per-run handler URL, global scrub between runs, `MAX_RUNS_PER_WORKER`, reports its installed `sandboxKey`. |
+| `packages/server/src/automation/worker/runner.ts` | The same four, for the automation lane. |
+| `packages/server/src/automation/handler/runner.ts` | Keyed acquire/release; a timed-out thread never returns to the pool. |
+| `packages/server/src/serve/hardware-profile.ts` | The `workerPoolSize` preset entries are deleted; the knob's fallback is the pool's own constants. |
+| `packages/server/src/serve/build-gateway.ts` | The boot-time `CENTRAID_WORKER_POOL_SIZE` override is deleted; only a durable UI override is still exported. |
+| `tests/experience-budgets/gateway.json` | `refSearchUnderComposition._remeasured` (ceiling unchanged at 1000 ms). |
+| `docs/traps/manifest-regeneration.md` | The checklist item said `.ts` wins and no compile step exists; both are now false. |
+| `packages/server/src/engine/handlers/dispatcher.test.ts` · `packages/server/src/engine/handlers/handler-pool.test.ts` · `packages/server/src/engine/sandbox/sandbox-escape.test.ts` | Resolution order, stat coalescing, thread reuse, fresh graph, global scrub, lane keying, timeout destruction. |
+| `packages/server/src/serve/hardware-profile.test.ts` · `packages/server/src/serve/hardware-profile.budget.test.ts` · `packages/server/src/serve/hardware-profile.cgroup.test.ts` · `packages/blueprints/src/runtime-boundary.test.ts` | The pinned pool sizes follow the pool's constants; the scripts set gains the handler compiler. |

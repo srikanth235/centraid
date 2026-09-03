@@ -20,12 +20,19 @@ const OUTPUT = path.join(PACKAGE_ROOT, "manifest.json");
 
 async function walk(dir, base = dir) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
+  const names = new Set(entries.map((e) => e.name));
   return (
     await Promise.all(
       entries.map(async (e) => {
         const full = path.join(dir, e.name);
         if (e.isDirectory()) {
           return walk(full, base);
+        }
+        // A `.js` with a `.ts` sibling is build-handlers.mjs output (#922 B2),
+        // not a template file: the catalog lists handler SOURCES, and a clone
+        // recompiles from them rather than inheriting someone else's bundle.
+        if (e.name.endsWith(".js") && names.has(`${e.name.slice(0, -3)}.ts`)) {
+          return [];
         }
         return e.isFile()
           ? [path.relative(base, full).split(path.sep).join("/")]

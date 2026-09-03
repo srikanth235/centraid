@@ -59,3 +59,11 @@ docs/design/handoff-binding-layer/
 # dist`/`dist:dir`. Packaged apps carry the whole Electron runtime; CI uploads
 # them as release artifacts and never commits them.
 apps/desktop/release/
+
+# Precompiled first-party app handlers (#922 B2): `bun run --cwd
+# packages/blueprints build:handlers` bundles every `apps/<id>/{actions,
+# queries}/<name>.ts` to a `<name>.js` beside it, which is what a bundled app
+# — enrolled in place — actually runs. Generated, so never committed; shipped
+# by `files: ["apps"]` and kept out of the catalog by build-manifest.mjs.
+packages/blueprints/apps/*/actions/*.js
+packages/blueprints/apps/*/queries/*.js

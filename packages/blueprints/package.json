@@ -50,7 +50,8 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun run build:manifest && tsc -p tsconfig.build.json",
+    "build": "bun run build:handlers && bun run build:manifest && tsc -p tsconfig.build.json",
+    "build:handlers": "node scripts/build-handlers.mjs",
     "build:manifest": "node scripts/build-manifest.mjs",
     "clean": "rm -rf dist",
     "test": "vitest run",
