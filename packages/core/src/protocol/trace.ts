@@ -276,6 +276,48 @@ function parseCounters(value: unknown): WorkCounters {
   return out;
 }
 
+/** Order-independent, so an attrs map that differs only in key order agrees. */
+function attrsSignature(attrs: TraceAttrs | undefined): string {
+  if (attrs === undefined) return "";
+  return Object.keys(attrs)
+    .sort()
+    .map((key) => `${key}=${String(attrs[key])}`)
+    .join(" ");
+}
+
+const ROOT_AGREEMENT_FIELDS = [
+  "traceId",
+  "parentSpanId",
+  "hop",
+  "name",
+  "seat",
+  "startMs",
+  "endMs",
+] as const;
+
+/**
+ * `root` and its entry in `spans` are the same span written twice, and every
+ * consumer reads whichever copy is closer to hand — `waterfall` offsets from
+ * `record.root` but renders the `spans` copy. Two copies that disagree would
+ * therefore produce a different waterfall depending on which field was read,
+ * so a disagreement is rejected rather than silently resolved in favour of
+ * either side.
+ */
+function assertRootAgreesWithSpans(root: TraceSpan, entry: TraceSpan): void {
+  for (const field of ROOT_AGREEMENT_FIELDS) {
+    if (root[field] !== entry[field]) {
+      throw new Error(
+        `trace record: the root span disagrees with its entry in spans on ${field} (${String(root[field])} vs ${String(entry[field])})`
+      );
+    }
+  }
+  if (attrsSignature(root.attrs) !== attrsSignature(entry.attrs)) {
+    throw new Error(
+      "trace record: the root span disagrees with its entry in spans on attrs"
+    );
+  }
+}
+
 /**
  * Strict parse of a record read back from the diagnostics store. Throws on the
  * first violation; a malformed record is an emitter bug, never a version skew.
@@ -310,6 +352,7 @@ export function validateTraceRecord(value: unknown): TraceRecord {
   if (rootInSpans === undefined) {
     throw new Error("trace record: spans must contain the root span");
   }
+  assertRootAgreesWithSpans(root, rootInSpans);
   for (const span of spans) {
     if (span.parentSpanId !== undefined && !byId.has(span.parentSpanId)) {
       throw new Error(

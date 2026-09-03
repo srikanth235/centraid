@@ -43,6 +43,7 @@ function threeHopRecord(): TraceRecord {
     name: "tap",
     startMs: 100,
     endMs: 180,
+    attrs: { screen: "notes", cold: false },
   });
   return {
     root,
@@ -339,6 +340,24 @@ describe(validateTraceRecord, () => {
       "a root missing from spans",
       { root: span({ spanId: "s0" }), spans: [], counters: zeroCounters() },
       /spans must contain the root span/u,
+    ],
+    [
+      "a root that disagrees with its own entry in spans",
+      {
+        root: span({ spanId: "s0", hop: "seat" }),
+        spans: [span({ spanId: "s0", hop: "render" })],
+        counters: zeroCounters(),
+      },
+      /root span disagrees with its entry in spans on hop \(seat vs render\)/u,
+    ],
+    [
+      "a root whose attrs disagree with its entry in spans",
+      {
+        root: span({ spanId: "s0", attrs: { cold: true } }),
+        spans: [span({ spanId: "s0", attrs: { cold: false } })],
+        counters: zeroCounters(),
+      },
+      /root span disagrees with its entry in spans on attrs/u,
     ],
     [
       "an unknown parent",

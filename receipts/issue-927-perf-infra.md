@@ -64,10 +64,10 @@ The shared, dependency-free contract that every emitter (gateway, web/desktop cl
   - `TraceSpan` — `{ traceId, spanId, parentSpanId?, hop, name, seat, startMs, endMs, attrs? }`, timestamps monotonic-clock milliseconds as numbers, `attrs` a flat `Record<string, string | number | boolean>` (`TraceAttrs`) because a nested attr is not queryable from a budget expression.
   - `WORK_COUNTER_KEYS` / `WorkCounterKey` / `WorkCounters` — exactly nine integer keys (`statements`, `rowsScanned`, `fsyncs`, `bytesRead`, `bytesWritten`, `workerSpawns`, `httpRoundTrips`, `invalidations`, `reReads`), all defaulting to 0, with pure `zeroCounters()`, `addCounters(a, b)` and `diffCounters(before, after)`. One shape serves both the per-trace counters (on the root span) and the per-process running total.
   - `TraceRecord` — `{ root, spans, counters, journey? }`, `spans` carrying every span including the root.
-  - `validateTraceRecord(unknown): TraceRecord` — strict: it throws on an unknown hop, seat or journey, a non-integer or negative or unknown counter, `endMs < startMs`, an empty id, a non-flat attr, a root with a `parentSpanId`, a root absent from `spans`, a duplicate `spanId`, a span from another trace, an unknown parent, and any span not reachable from the root (which is how a detached parent cycle is caught).
+  - `validateTraceRecord(unknown): TraceRecord` — strict: it throws on an unknown hop, seat or journey, a non-integer or negative or unknown counter, `endMs < startMs`, an empty id, a non-flat attr, a root with a `parentSpanId`, a root absent from `spans`, a duplicate `spanId`, a span from another trace, a `root` that disagrees field-by-field (attrs included) with its own entry in `spans`, an unknown parent, and any span not reachable from the root (which is how a detached parent cycle is caught).
   - `waterfall(record)` — pure, ordering spans by start, nesting by parent and offsetting from the root: `{ name, hop, offsetMs, durationMs, depth }[]`. The developer command and the rigs both render from this one function.
   - `TraceSamplingPolicy`, `TRACE_SAMPLING_OFF`, `shouldSample(policy, counterValue)` — emission is off by default and sampled deterministically in the action counter (so two runs of the same rig sample the same actions and a waterfall diff is comparable). The always-on half is the integer counters.
-- **`packages/core/src/protocol/trace.test.ts` (new)** — 43 tests: the vocabulary is the closed nine/four/nine; the validator accepts a well-formed record (structurally cloned first, so the parse is over foreign data rather than the fixture's own objects) and a minimal one, and rejects each of 23 malformed classes; two fast-check properties over `@centraid/test-kit/fast-check` (`addCounters` associative with `zeroCounters()` as identity; `diffCounters` inverts `addCounters` on a running total) plus the backwards-counter refusal; `waterfall` nesting on a three-hop fixture with a sibling, its spanId tie-break and a lone root; `shouldSample` always true at `sampleEvery: 1`, always false while disabled (both under fast-check), one-in-N determinism, and the four argument refusals.
+- **`packages/core/src/protocol/trace.test.ts` (new)** — 45 tests: the vocabulary is the closed nine/four/nine; the validator accepts a well-formed record (structurally cloned first, so the parse is over foreign data rather than the fixture's own objects) and a minimal one, and rejects each of 26 malformed classes; two fast-check properties over `@centraid/test-kit/fast-check` (`addCounters` associative with `zeroCounters()` as identity; `diffCounters` inverts `addCounters` on a running total) plus the backwards-counter refusal; `waterfall` nesting on a three-hop fixture with a sibling, its spanId tie-break and a lone root; `shouldSample` always true at `sampleEvery: 1`, always false while disabled (both under fast-check), one-in-N determinism, and the four argument refusals.
 - **`packages/core/src/protocol/index.ts`** — the barrel re-exports the contract. `version.ts` is untouched: nothing here changes a wire shape, so no protocol version bump.
 - **`docs/logs.md`** — new section "Traces and work counters (#927)": the trace store is sovereign and local-only, lives under the vault's diagnostics, is purged with the vault, and is never egressed; spans are off by default and sampled while the integer work counters are always on; the trace id is the intent id for a write; and `centraid-gateway trace last` is named as the developer entry point for the last tap's waterfall, marked "lands in #927 w1-gateway".
 - **`receipts/issue-927-perf-infra.md`** — this file, created by this slice.
@@ -78,8 +78,8 @@ No before/after performance number: this slice adds no code to any hot path. Its
 
 | Metric | Before | After | Provenance |
 | --- | --- | --- | --- |
-| `trace.ts` statements / branches / functions / lines | n/a (new file) | 100% / 100% / 100% / 100% (133/133, 87/87, 20/20, 126/126) | `node ../../node_modules/vitest/vitest.mjs run --coverage --coverage.reporter=text --coverage.include='src/protocol/trace.ts' src/protocol/trace.test.ts` from `packages/core`, host Linux 6.18 x64 / 4 cores / 15 GB, 2026-09-03 |
-| `@centraid/core` suite | 246 tests, 16 files | 289 tests, 17 files | `bun run --cwd packages/core test` on the same host |
+| `trace.ts` statements / branches / functions / lines | n/a (new file) | 100% / 100% / 100% / 100% (144/144, 93/93, 23/23, 136/136) | `node ../../node_modules/vitest/vitest.mjs run --coverage --coverage.reporter=text --coverage.include='src/protocol/trace.ts' src/protocol/trace.test.ts` from `packages/core`, host Linux 6.18 x64 / 4 cores / 15 GB, 2026-09-03 |
+| `@centraid/core` suite | 246 tests, 16 files | 291 tests, 17 files | `bun run --cwd packages/core test` on the same host |
 
 The new file is above the `packages/core/src/protocol/**` floor on both axes, so the floor is untouched — no ratchet moved, no `approvedDeviation` needed.
 
@@ -95,6 +95,8 @@ Nothing. This slice is additive by construction: the machinery #927 deletes (the
 4. **`validateTraceRecord` requires every span to be reachable from the root.** A span has at most one parent, so a detached island or a parent cycle is exactly the set the walk cannot reach; one rule covers both, and `waterfall` can then be a plain DFS with no cycle guard on the hot path.
 5. **Sampling is deterministic in an action counter, not random.** Randomness would make two runs of the same rig sample different actions, which is what makes a waterfall diff meaningless. `shouldSample` is therefore a pure `counterValue % sampleEvery === 0` behind an `enabled` gate whose shipped default (`TRACE_SAMPLING_OFF`) is off.
 
+6. **A `root` that disagrees with its own entry in `spans` is rejected, not reconciled.** Found by the verifier: the first version accepted the disagreement and silently returned the `spans` copy. `root` and that entry are the same span written twice, and consumers read whichever copy is nearer — `waterfall` offsets from `record.root` while rendering the `spans` copy — so two copies that disagree produce a different waterfall depending on which field was read. `assertRootAgreesWithSpans` compares `traceId`, `parentSpanId`, `hop`, `name`, `seat`, `startMs`, `endMs` and an order-independent attrs signature, and names the disagreeing field in the message. Picking a winner would have buried an emitter bug in a number.
+
 No ruling was re-judged in this slice — it introduces a contract rather than keeping an existing seam. The rulings #927 re-judges (#659 R2/R4, #873, #456, #532) are owned by waves 2 and 5.
 
 ### Verification
@@ -108,7 +110,7 @@ $ bun run lint
 
 $ bun run --cwd packages/core test
 Test Files  17 passed (17)
-     Tests  289 passed (289)
+     Tests  291 passed (291)
 
 $ bun run --cwd packages/core typecheck
 tsc -p tsconfig.test.json --noEmit  (green)
@@ -119,10 +121,10 @@ tsc -p tsconfig.json  (green)
 $ cd packages/core && node ../../node_modules/vitest/vitest.mjs run --coverage \
     --coverage.reporter=text --coverage.include='src/protocol/trace.ts' \
     src/protocol/trace.test.ts
-Statements   : 100% ( 133/133 )
-Branches     : 100% ( 87/87 )
-Functions    : 100% ( 20/20 )
-Lines        : 100% ( 126/126 )
+Statements   : 100% ( 144/144 )
+Branches     : 100% ( 93/93 )
+Functions    : 100% ( 23/23 )
+Lines        : 100% ( 136/136 )
 
 $ bun run check:push
 ✗ 15/17 gates passed — design:gallery, lint:product (test:ratchet + lint:ledgers)
@@ -157,11 +159,18 @@ Nothing was weakened to go green: no floor moved, no `approvedDeviation` extende
 
 Not an audit — the author's own list, left here so the root's fresh-context verifier has claims to attack rather than reconstruct. The verdict itself belongs to that verifier and is written by it, not by this slice.
 
-- Every number in this section is reproducible from the commands in Verification. The counts were checked mechanically, not asserted: 43 tests (`vitest --reporter=verbose`), 23 malformed classes in the `it.each` table, 100% of 133 statements / 87 branches / 20 functions / 126 lines on `trace.ts`, and `check:diff-coverage` reports 100.0% (253/253) over the diff.
-- The weakest claim is "no `deliberate` seam without a property". The five entries under Decisions each name one, but decision 3 (`traceIdOfIntent` as an identity function) is the one to push on: the property is review-time grep-ability, which is real but weaker than a runtime property. If the root disagrees, the fix is to delete the function and put the rule in the emitter slices' review checklist instead — nothing else in the contract depends on it.
+- Every number in this section is reproducible from the commands in Verification. The counts were checked mechanically, not asserted: 45 tests (`vitest --reporter=verbose`), 26 malformed classes in the `it.each` table, 100% of 144 statements / 93 branches / 23 functions / 136 lines on `trace.ts`, and `check:diff-coverage` reports 100.0% (260/260) over the diff.
+- The weakest claim is "no `deliberate` seam without a property". The six entries under Decisions each name one, but decision 3 (`traceIdOfIntent` as an identity function) is the one to push on: the property is review-time grep-ability, which is real but weaker than a runtime property. If the root disagrees, the fix is to delete the function and put the rule in the emitter slices' review checklist instead — nothing else in the contract depends on it.
 - The strict parser is a deliberate departure from `docs/protocol.md` C1, argued in the file header and in Decisions 1. If a trace record ever becomes something one machine sends to another, that argument dies with it, and the parser must change in the same slice.
 - Three gates are red, all reproduced on a clean `origin/main` checkout — transcript in "Pre-existing reds" above. Nothing was weakened to go green; no floor, budget, allowlist or ratchet is touched by this diff.
 - Scope: `git diff origin/main --stat` is exactly the five files this slice's contract names. `packages/core/src/protocol/version.ts` is untouched, so no wire version moved.
+
+### Verifier findings, fixed
+
+Both findings the verifier raised below were fixed after its verdict; its text is left exactly as written.
+
+1. **Miscount in this section.** The `it.each` table held 24 rejection cases, not the 23 claimed (the single-line first row was missed by the count). Every mechanical number in this section was then re-derived rather than adjusted: 45 tests, 26 rejection cases, 144/93/23/136 coverage, 291 tests in `@centraid/core`, 260/260 diff coverage.
+2. **`validateTraceRecord` accepted a self-contradicting record.** A `root` that disagreed with its same-`spanId` entry in `spans` (e.g. root `hop: "seat"`, the `spans` copy `hop: "render"`) was accepted and the `spans` copy returned silently. `assertRootAgreesWithSpans` in `packages/core/src/protocol/trace.ts` now rejects it and names the disagreeing field; two rejection cases were added (a scalar field and an attrs disagreement), taking the table from 24 to 26 with `trace.ts` still at 100% coverage. Rationale in Decisions 6.
 
 ### Audit
 
