@@ -1,39 +1,5 @@
-/**
- * Floors-up-only ratchet (#496 E4, extended #532).
- *
- * governance: allow-repo-hygiene file-size-limit (#532) pure comparison helpers
- * for coverage, mutation, minimumTests, and perf budgets share one module so
- * unit tests and the CLI entry share a single source of truth.
- *
- * Diffs against a git merge-base (default: origin/main):
- *   - `tests/floors.json#coverage` (up-only)
- *   - every claims flow `minimumTests` (up-only)
- *   - `tests/floors.json#mutation` (up-only mutation scores, #532)
- *   - perf budget numeric ceilings/floors (tighten-only / widen fails, #532)
- *
- * #915 Wave 4 merged twenty ledgers into four. The ceiling table below names
- * SECTIONS of `tests/budgets.json` rather than seven separate files, and each
- * section keeps its OWN `approvedDeviation` — merging the files must not merge
- * the waivers, or a reviewed widen of one ceiling would silently waive a drop
- * in another. `scripts/check-ledgers.mjs` (`bun run lint:ledgers`) holds the
- * rest of the merged shape (issue-and-expiry, the derived mirrors, the
- * inventory budgets); this module stays the numeric ratchet the report reads.
- *
- * Any decrease (or budget widen) fails unless the touched file's
- * `approvedDeviation` (flow-level: `approvedMinimumTestsDeviation`) was
- * CHANGED in the same change set — mere presence never waives, because the
- * field is a permanent provenance ledger and is non-empty forever (#781).
- *
- * Deletion of a floor scope, metric key, or flow `minimumTests` counts as a
- * decrease (cannot bypass the ratchet by deleting the key).
- *
- * Usage:
- *   node scripts/test-report/ratchet-floors.mjs
- *   node scripts/test-report/ratchet-floors.mjs --base origin/main
- *   node scripts/test-report/ratchet-floors.mjs --base <sha>
- *
- * Pure comparison is exported for unit tests.
- */
+// governance: allow-repo-hygiene file-size-limit (#532) shared ratchet helpers
+// keep coverage, mutation, minimumTests, and perf floors under one source of truth.
 import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";

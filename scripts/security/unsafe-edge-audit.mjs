@@ -1,30 +1,4 @@
 #!/usr/bin/env node
-/**
- * Unsafe-edge audit over the first-party Rust crates (issue #842 W7.2).
- *
- * Centraid's Rust side is the tunnel data plane, its N-API native binding, and
- * the browser iroh WASM module — the three places where the product parses
- * bytes that arrived from a peer. `unsafe` there is where memory-safety
- * guarantees stop being the compiler's problem, so this lane makes every such
- * site visible and countable.
- *
- * Two rules, both tighten-only:
- *   1. Every `unsafe` site must carry a `// SAFETY:` comment on the same line
- *      or within the five lines above it, stating why the invariant holds.
- *      No ledger entry waives this.
- *   2. The per-crate count must EQUAL its ledger entry. Above it fails (new
- *      unsafe needs a reviewed bump); below it fails too (the ledger must be
- *      lowered in the same change that removes the site, so the ratchet cannot
- *      silently slacken while looking green).
- *
- * Today every crate is at 0, so the lane is a tripwire on the first `unsafe`
- * anyone adds rather than a backlog. That is a real gate, not a vacuous one:
- * `unsafe-edge-audit.test.mjs` seeds an unsafe block and asserts it goes red.
- *
- * Usage:  node scripts/security/unsafe-edge-audit.mjs [--root <dir>]
- * Exit:   0 clean · 1 unjustified site, count drift, or unknown crate
- */
-
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -34,7 +8,6 @@ const LEDGER = path.join(import.meta.dirname, "rust-unsafe-ledger.json");
 
 const SKIP_DIRS = new Set(["target", "node_modules", ".git", "dist", "build"]);
 
-/** How many lines above an `unsafe` site a `// SAFETY:` note may sit. */
 const SAFETY_LOOKBACK = 5;
 
 const UNSAFE_RE = /(?<![A-Za-z0-9_])unsafe(?![A-Za-z0-9_])/u;
@@ -44,12 +17,6 @@ export function codePortion(line) {
   return idx === -1 ? line : line.slice(0, idx);
 }
 
-/**
- * Does an `unsafe` at `index` carry a SAFETY justification?
- * @param {string[]} lines All lines of the file.
- * @param {number} index Zero-based line index of the site.
- * @returns {boolean} True when a `// SAFETY:` note is on or above the line.
- */
 export function hasSafetyNote(lines, index) {
   const start = Math.max(0, index - SAFETY_LOOKBACK);
   for (let i = start; i <= index; i += 1) {

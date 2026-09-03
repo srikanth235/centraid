@@ -330,6 +330,10 @@ node scripts/check-comment-density-ratchet.mjs       # after final --write: shar
   approved baseline update.
 - Final changes are committed in package, blueprint, server, application,
   and tooling/test batches for independent review.
+- Follow-up `.mjs` cleanup removed five remaining source-comment blocks; required
+  directives and comments embedded in generated CSS/HTML strings were retained.
+- The earlier fixture drift in `automation-event-sources.test-fixtures.ts` was
+  restored to `origin/main`; the final diff leaves fixture files unchanged.
 
 ## Audit
 

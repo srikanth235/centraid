@@ -5,9 +5,7 @@ import process from "node:process";
 
 const root = path.resolve(import.meta.dirname, "..");
 
-// Packaging / Docker set CENTRAID_REQUIRE_NATIVE_TUNNEL=1 — tunnel is product-
-// critical for remote devices; fail the build if cargo or the artifact is missing.
-// CENTRAID_SKIP_NATIVE_TUNNEL=1 remains for local TS-only loops (not Docker).
+// Packaging/Docker require the native tunnel; local TS-only loops may skip it.
 const requireNative = process.env.CENTRAID_REQUIRE_NATIVE_TUNNEL === "1";
 if (process.env.CENTRAID_SKIP_NATIVE_TUNNEL === "1") {
   if (requireNative) {
@@ -61,14 +59,8 @@ const destination = path.join(
 );
 copyFileSync(source, destination);
 
-// macOS: cargo emits a *linker-signed* Mach-O, a lightweight signature that
-// does not survive being re-materialized by a generic copy (our copyFileSync
-// above, a turbo cache restore, an npm tarball extract). The file still passes
-// `codesign --verify`, but the kernel rejects its pages at fault-in time and
-// SIGKILLs the host process the moment Node dlopen()s it:
-//   EXC_BAD_ACCESS · SIGKILL (Code Signature Invalid) · CODESIGNING/Invalid Page
-// A full ad-hoc signature is self-contained and survives any copy, so sign here
-// — before the artifact enters the turbo cache or a publish tarball.
+// macOS Mach-O signatures do not survive cache restores or artifact extraction;
+// sign before the addon enters the turbo cache or a publish tarball.
 if (process.platform === "darwin") {
   const signed = spawnSync(
     "codesign",

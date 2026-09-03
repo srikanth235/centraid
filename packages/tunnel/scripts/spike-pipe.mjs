@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-// Phase 0 spike for issue #263 — validate the dumbpipe architecture.
-//
-//   --local                     whole loop on one machine (demo gateway + desktop + phone proxy)
-//   --serve [--upstream URL --token T]
-//                               desktop role; without --upstream, serves a demo app.
-//                               Prints the pair payload to give to --dial.
-//   --dial '<pair payload>'     phone role; pairs, then serves http://127.0.0.1:8787
-//
-// Build first: bun run --filter=@centraid/tunnel build
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -20,7 +11,6 @@ import {
   startLocalProxy,
 } from "../dist/index.js";
 
-// Spike CLI: stdout IS the interface (pair payloads, verdicts).
 const log = (...parts) =>
   process.stdout.write(`${parts.map(String).join(" ")}\n`);
 
