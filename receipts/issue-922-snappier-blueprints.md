@@ -887,3 +887,60 @@ The refusal is a developer-facing guard, not a member-facing state: every read t
 **First-run: unchanged.** A new vault has no entity anywhere near a thousand rows, so no window fills, `truncated` is absent on every read, and no line is drawn. Day one looks exactly as it did.
 
 **Evidence:** `artifacts/e2e/ui-impact/issue-922-web-truncation-status.png`, published by `apps/web/tests/e2e/tasks.spec.ts`. That case seeds 21 open tasks through the app's own write rail against the real harness gateway, asks the real `board` query for a window of 20 through `window.centraid.read`, and reads the phrase off the frame's one status line before capturing the frame. Twenty-one against twenty is the smallest honest way to fill a window end to end: the board clamps its open read to a floor of 20, and a thousand real writes would be a fixture this slice has no reason to add. The same phrase is asserted on the phone by `apps/mobile/src/kit/hooks/useReplicaQuery.truncation.test.tsx`, which mounts the real `StatusLine` over the render host and reads the text off it.
+
+## lane 3a — F5 gauges and web probe
+
+Slices (i) F5/B6 gauges and (ii) the web LCP/INP probe. Gauges only: no budget is added, moved or widened. Serves "Audit-band bytes/read and WAL size are gated numbers" (the numbers half — gating is 3b's, the checkpoint 4a's) and the F5 half of "F1/F3/F5 landed in wave 1 with provenance".
+
+### Files
+
+| Path | Change |
+| --- | --- |
+| `tests/scale/large-vault.scale.test.ts` | Enrolls a real owner device on the mounted golden vault, issues 500 real `Gateway.read`s of `media.asset`, and publishes what they cost the audit band: bytes per read, WAL bytes per read, the achieved read rate, and WAL growth per hour AT that rate. Two non-zero assertions guard the instrument; no ceiling is added. Also publishes `golden vault mount` (#927's slice iv). |
+| `tests/scale/replica-sse-fanout.scale.test.ts` | Publishes household projections per commit, read from the hub's OWN counters — `currentGeneration()` for commits, `subscriberCount()` for the household — plus the property the hub exists for: the page it returns is SHARED, so distinct page objects across a household reading at one cursor IS the projection count. `routes/replica-fanout.ts` is untouched. |
+| `scripts/test-report/render/adversaries.mjs` | A trend card with no budget now reads `gauge · no budget` instead of a blank corner, and §9's note says what that means. An ungated series and a gate someone forgot to wire looked identical on the page. |
+| `scripts/test-report/render.test.mjs` | Pins both halves of that: `budget 500 ms` on a gated series, `gauge · no budget` on a gauge. |
+
+Also in this lane, under #927 and detailed there: `packages/test-kit/src/year3-fixture-cache.ts`, `packages/test-kit/src/year3-vault.ts`, `packages/test-kit/src/year3-vault.test.ts`, `tests/helpers/factories.ts`, `tests/scale/photos-timeline.scale.test.ts`, `tests/quality/user-facing-qualities.test.ts`.
+
+### Numbers
+
+Host: this session's container, Linux 4 cores / 15 GB, node 22. Volumes: the mounted golden year-3 vault (106,274,816 B) at 500 gateway reads of `limit` 20; 16 subscribers x 10 commits on a real `serve()` gateway; headless_shell 1194 on the `apps/web` e2e harness, empty fixture vault.
+
+| Gauge | Value | Ledger entry it feeds (wave 2: surface x journey x volume x hardware) |
+| --- | --- | --- |
+| Audit-band bytes per gateway read | 360.4 B (three runs, identical) | vault-core x open-a-surface x year-3 golden x this container |
+| WAL bytes per gateway read | 45,352 / 45,599 / 45,649 B | same row's storage axis — and the input to #922's WAL ceiling and 4a's size-based checkpoint |
+| Gateway reads sustained | 263.4 / 660.8 / 779.8 reads/s | the rate the row below is stated at; it is the HOST's, and it moves |
+| WAL growth per hour under a reading client | 43.3 / 107.9 / 128.0 GB/h | vault-core x a client that only reads x year-3 golden x this container |
+| Household projections per commit | 1, across 16 subscribers | server x a write reaches the household x 16 devices x this container |
+| Hub subscribers / generations per commit | 16 / 1 | the same row's denominators |
+
+The per-READ pair is the stable measurement; the per-HOUR figure is that pair times the run's own achieved rate, so it moves with the host and is never to be quoted without the rate beside it. 45 KiB of WAL for a 360-byte receipt is one commit's worth of dirty pages per read — the cost `gateway/read-batch.test.ts` was written about, now with a number.
+
+Commands:
+
+```sh
+bun run test:scale -- tests/scale/large-vault.scale.test.ts
+bun run test:scale -- tests/scale/replica-sse-fanout.scale.test.ts
+```
+
+### Verification
+
+```sh
+# in /home/user/centraid-wt/claude/927-w1c-golden-vault
+bash $S/self-audit.sh 922 origin/claude/927-ledger   # tree <TREE_922>
+bun run test:ratchet:unit                            # scripts/test-report, incl. the new gauge-label test
+bun run typecheck
+bun run test:scale -- tests/scale/large-vault.scale.test.ts        # 1 passed
+bun run test:scale -- tests/scale/replica-sse-fanout.scale.test.ts # 1 passed
+bash .governance/run.sh
+```
+
+### Findings
+
+1. **`replica-fanout.ts` is another lane's file this rig now reads.** The gauge uses `currentGeneration()`, `subscriberCount()` and `project()` only; a rename there fails this rig loudly rather than reporting a wrong number.
+
+### Doc debt
+
+- `tests/experience-budgets/README.md` — its status vocabulary has no word for "measured, deliberately ungated"; the report page now calls that a gauge.
