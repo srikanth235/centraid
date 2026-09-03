@@ -67,6 +67,41 @@ test("UI receipt evidence: a test-only change under a blueprint app needs no scr
   );
 });
 
+// A data client is not a surface (#931), the #930 refinement applied to the
+// other over-broad half of the predicate. The React tree and the shell's
+// stylesheet still draw; the gateway clients and the transport beside them do
+// not.
+test("UI receipt evidence: a packages/client React change still demands a screenshot", () => {
+  for (const file of [
+    "packages/client/src/react/Shell.tsx",
+    "packages/client/src/react/screens/Home.tsx",
+    "packages/client/src/styles.css",
+  ]) {
+    assert.deepEqual(
+      validateUiReceipt({
+        changed: [file, receipt],
+        readText: () => "## User impact\n\nFirst-run: unchanged.\n",
+      }),
+      [DEMANDS_EVIDENCE],
+      file
+    );
+  }
+});
+
+test("UI receipt evidence: a packages/client data-client change needs no screenshot", () => {
+  assert.deepEqual(
+    validateUiReceipt({
+      changed: [
+        "packages/client/src/gateway-client-conversation-history.ts",
+        "packages/client/src/replica/apply.ts",
+        receipt,
+      ],
+      readText: () => "",
+    }),
+    []
+  );
+});
+
 test("UI receipt evidence: accepts a path emitted by a changed e2e harness", () => {
   assert.deepEqual(
     validateUiReceipt({

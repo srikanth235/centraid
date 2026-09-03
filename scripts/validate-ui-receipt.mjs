@@ -18,10 +18,25 @@ const SCREENSHOT_RE = /artifacts\/e2e\/ui-impact\/[^\s)]+\.png/giu;
  */
 const TEST_FILE_RE = /(?:\.test|\.test-fixtures)\.[^./]+$/u;
 
+/*
+ * A DATA CLIENT is not a surface either (#931), the same refinement #930 made
+ * one commit earlier for a blueprint app's suite. `packages/client` is the
+ * shell package, and only part of it draws: `src/react/**` is the screens and
+ * blocks a member looks at, and `src/styles.css` is what they are painted
+ * with. `src/replica/**`, the gateway clients and the transport modules beside
+ * them render nothing. Watching the whole package meant that escaping a raw NUL
+ * in an attachment-URL cache key — two characters, in a module with no DOM —
+ * demanded a screenshot of a screen that had not moved, emitted by an e2e
+ * harness the change had no reason to touch, in an environment that may have no
+ * browser at all. The screenshot requirement itself is untouched: this narrows
+ * WHICH files are surfaces, not what a surface change owes.
+ */
+const CLIENT_SURFACE_RE = /^packages\/client\/(?:src\/react\/|.*\.css$)/u;
+
 export function validateUiReceipt({ changed, readText }) {
   const touchesUi = changed.some(
     (file) =>
-      file.startsWith("packages/client/") ||
+      CLIENT_SURFACE_RE.test(file) ||
       /^apps\/[^/]+\/.*\.(?:tsx|css)$/u.test(file) ||
       (file.startsWith("packages/blueprints/apps/") && !TEST_FILE_RE.test(file))
   );

@@ -13,6 +13,8 @@ comments.
 - [x] `candidate.yml` runs the rung-1 bundle and the commit-message check on the merged tip
 - [x] the JS bundle fingerprint ignores test, spec, fixture and markdown modules
 - [x] the rung-2 wall clock excludes runner queue wait without widening the ceiling
+- [x] a data client is not a surface: `check:ui-receipt` watches the client's React tree and stylesheets, not its transport
+- [ ] `test:fuzz:replay` green — the `wal-keys` target is filed as a finding, not fixed
 
 ## What changed
 
@@ -187,6 +189,56 @@ changed, and that the ceiling did not move.
 whole-file fingerprint (`a3d830db…` → `be04aaf5…`) with the reason in
 `approvedDeviation`.
 
+**7. `check:ui-receipt` — a data client is not a surface.** Granted into this
+slice by the program root after the collision below was reported, and made the
+way [#930](https://github.com/srikanth235/centraid/issues/930) made its
+neighbour one commit earlier: by narrowing WHICH files are surfaces, never by
+touching what a surface change owes. `scripts/validate-ui-receipt.mjs`'s
+predicate treated every path under `packages/client/` as user-facing, so a
+two-character NUL escape in an attachment-URL cache key demanded a screenshot of
+a screen that had not moved. `packages/client` is the shell package and only
+part of it draws: `CLIENT_SURFACE_RE` now matches `packages/client/src/react/**`
+(the screens and blocks) and any `.css` in the package (`src/styles.css` is what
+they are painted with). `src/replica/**`, the gateway clients and the transport
+modules beside them render nothing and are no longer watched. The screenshot
+requirement, the emitter rule, the `apps/*` rule and the blueprints
+test/fixture exclusion are all untouched.
+`scripts/validate-ui-receipt.test.mjs` — the `node:test` file #930 wired into
+`scripts:test` — gains the two cases the root asked for: a
+`packages/client/src/react/**` edit (and `src/styles.css`) still demands the
+screenshot, and a `packages/client/src/gateway-client-*.ts` / `src/replica/**`
+edit does not.
+
+**8. `test:fuzz:replay` — the `wal-keys` target, filed rather than patched.**
+`scripts/fuzz/targets-storage.mjs` imports `parseWalPairMarkerKey` and
+`walPairMarkerKey` from `packages/backup/dist/wal-format.js`. `git log -S
+parseWalPairMarkerKey` names the commit: `cf616a09a`, #916's ontology close,
+which deleted `journal.db` and collapsed the WAL pair marker into ONE TICK
+MARKER PER GENERATION. That is a contract change, not a rename, on three axes at
+once — `WalDbName` went from `"vault" | "journal"` to `"vault"`;
+`WalPairMarker`/`WalPairMarkerAddress` (`{vaultGeneration, journalGeneration,
+tickMs}`) became `WalTickMarkerAddress` (`{generation, tickMs}`); and
+`walPairMarkerKey(marker: {…})` became `walTickMarkerKey(addr:
+WalTickMarkerAddress)`. The target's invariants assert exactly the fields that
+were removed (`marker.vaultGeneration`, `marker.journalGeneration`, and
+`db === "vault" || db === "journal"` in the segment and closer checks), so
+re-pointing the import would not restore the lane — it would assert a contract
+the product no longer has. Per the root's bound, it is a **finding, not a fix**:
+the import is left as it is and the lane stays red rather than being stubbed.
+Deciding what the tick-marker key parser should now be fuzzed for belongs with
+the owner of the marker contract.
+
+**Which rung runs `test:fuzz:replay` today: rung 4.** `e2e.yml`'s
+`fuzz-parsers` job runs `bun run test:fuzz` and then `bun run test:fuzz:replay`
+`if: always()`, nightly, against the resolved candidate. It is therefore not
+enforced nowhere, and it is NOT added to `rung1-on-main`: that job deliberately
+pays no `bun run build`, and five of the six fuzz targets import each package's
+built `dist`. What IS wrong is the claim in that job's comment — "the PR-path
+guard is `test:fuzz:replay`, which replays only the committed crashers and
+finishes in a second" — which describes a PR lane that does not exist. That
+sentence is #931's own class and is filed for the workflow owner rather than
+edited here.
+
 **This receipt.** `receipts/issue-931-gates-that-enforce-nowhere.md` is new, so it
 is not yet frozen by `doc-integrity`; the NUL gate's own test asserts that an
 unmerged receipt at exactly this path is still scanned, so the single-path
@@ -194,8 +246,12 @@ exemption above cannot generalise into a folder.
 
 ## Out of scope
 
-- **`scripts/validate-ui-receipt.mjs`.** `check:ui-receipt` is red on this change
-  set and the fix is not this slice's to make — see `## Decisions`.
+- **The `wal-keys` fuzz target's invariants.** `scripts/fuzz/targets-storage.mjs`
+  is left exactly as it is: the tick-marker contract that replaced the pair
+  marker is #916's, and choosing what to fuzz it for is a decision for that
+  contract's owner, not a rename this slice can apply.
+- The `fuzz-parsers` comment in `.github/workflows/e2e.yml` that claims a
+  PR-path guard which does not exist — filed, not edited.
 - Any product code beyond the NUL escapes; `.governance/**` (read, never
   edited); any budget, floor or ratchet NUMBER — `tests/budgets.json`,
   `tests/floors.json` and `tests/inventory.json` are untouched.
@@ -220,18 +276,25 @@ exemption above cannot generalise into a folder.
   bytes on `main` may not be rewritten, only appended to. The gate cannot demand a
   fix that governance forbids. The entry names one path rather than the folder, so
   a NUL in an unmerged receipt is still caught while its author can still fix it.
-- **`check:ui-receipt` is red and this slice does not touch it.** The gate treats
-  every file under `packages/client/` as a user-facing surface, so escaping the
-  NUL in `packages/client/src/gateway-client-conversation-history.ts` — a
-  two-character change to an attachment-URL cache key, in a data module that draws
-  nothing — demands a screenshot of a screen that did not move, emitted by a
-  changed e2e harness, in a container with no browser. That is the identical shape
-  #930 narrowed for `packages/blueprints/apps/**` one commit ago ("a suite is not a
-  surface"); the analogous refinement here would be "a data client is not a
-  surface". `scripts/validate-ui-receipt.mjs` is outside this slice's contract, so
-  it is reported to the root rather than edited: the honest options are (a) grant
-  the predicate refinement into a follow-up, or (b) carry a screenshot. Nothing was
-  weakened and no gate was removed to get around it.
+- **`check:ui-receipt`: a data client is not a surface (predicate refinement, not
+  a waiver).** Reported to the root as a collision and granted back into this
+  slice, since `scripts/validate-ui-receipt.mjs` is a gate script and #931 is the
+  gates issue. The precedent is #930's, one commit earlier and the same sentence
+  shape: "a suite is not a surface" narrowed `packages/blueprints/apps/**` after
+  every repair of an over-long test file had to photograph a screen that had not
+  moved. Here the over-broad half is `packages/client/`, a package whose React
+  tree draws and whose gateway clients and replica transport do not. The gate is
+  not weakened: nothing exits it that could not exit it before, the screenshot
+  and changed-emitter rules are byte-identical, and two new `node:test` cases pin
+  both directions. What changed is the answer to "is this file something a member
+  can see", which is what the predicate was always for.
+- **`test:fuzz:replay` stays red, deliberately.** The alternative — re-pointing
+  the import at `parseWalTickMarkerKey` — would leave the target asserting
+  `marker.vaultGeneration` and `db === "journal"`, fields #916 deleted, so the
+  lane would go green only if the invariants were rewritten too. Rewriting a
+  fuzz target's invariants is a claim about what the new contract guarantees,
+  and this slice has no standing to make it. Stubbing the import was never an
+  option: a fuzz target that imports nothing proves nothing.
 - **`RUNNERS` records a `cwd` per config.** Not decoration: with the repo root as
   CWD, `packages/model-runtime/vitest.live.config.ts`'s `src/**/*.live.test.ts`
   resolves against the repo root and matches nothing, and
@@ -248,6 +311,7 @@ Each box above, and the command that shows it:
 - `candidate.yml` runs the rung-1 bundle and the commit-message check on the merged tip — `bun run test:claims`, `bun run lint:evidence-mapping`, `bun run lint:workflow-pins`, `bun run lint:path-filters`.
 - the JS bundle fingerprint ignores test, spec, fixture and markdown modules — `bun run --cwd apps/mobile test -- js-bundle-fingerprint` (15 cases).
 - the rung-2 wall clock excludes runner queue wait without widening the ceiling — `node --test scripts/ci/pr-gate-wall-clock.test.mjs` (8 cases), `tests/budgets.json` unchanged.
+- a data client is not a surface: `check:ui-receipt` watches the client's React tree and stylesheets, not its transport — `node --test scripts/validate-ui-receipt.test.mjs` (7 cases) and `bun run check:ui-receipt`.
 
 ```
 $ bun scripts/lint-test-reachability.mjs
