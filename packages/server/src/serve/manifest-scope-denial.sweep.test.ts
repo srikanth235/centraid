@@ -49,7 +49,12 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       withScopes: 36,
       // `app-manifest-reads.test.ts` is the gate keeping a manifest's declared
       // reads and its seats' actual reads honest; this number only tracks them.
-      declaredScopes: 278,
+      // 278 → 277 (#916): Locker's history pane moved off the dropped
+      // `locker.item_history` onto the shared revision ledger, and the two
+      // scopes that named the dead table (`read` and `reveal`) became one
+      // `core.entity_revision` read. Nothing may reveal a revision, so the
+      // reveal scope did not move — it is gone.
+      declaredScopes: 277,
     });
     // Every scope-carrying manifest rides the one defaulted DPV purpose.
     expect([
