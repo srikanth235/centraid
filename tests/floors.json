@@ -175,6 +175,7 @@
       "blueprint-enrichment-law": 5,
       "blueprint-pending-overlay-law": 1,
       "blueprint-one-computation-law": 3,
+      "blueprint-app-entity-tripwire-law": 17,
       "blueprint-select-all-law": 7,
       "enrichment-service-contract": 8,
       "vault-consent-write": 38,
