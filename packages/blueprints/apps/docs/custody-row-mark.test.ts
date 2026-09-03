@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, test } from "vitest";
 
 import { custodyMeta, custodyRowMark } from "./format.ts";
@@ -44,4 +45,3 @@ describe("docs custodyRowMark", () => {
     });
   });
 });
-// @vitest-environment jsdom

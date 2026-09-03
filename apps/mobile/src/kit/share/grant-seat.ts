@@ -1,3 +1,5 @@
+// The native seat's half of the grant transport — only the base URL and this
+// phone's own device credential differ from the browser seat's (#883).
 import { grantDoor } from "@centraid/blueprints/apps/_shared/grant-door";
 import type { GrantDoor } from "@centraid/blueprints/apps/_shared/grant-door";
 import {

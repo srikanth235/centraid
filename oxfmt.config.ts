@@ -30,6 +30,7 @@ export default defineConfig({
     "!apps/web/src/generated/centraid_web_iroh.d.ts",
     "!apps/web/src/generated/centraid_web_iroh_bg.wasm.d.ts",
     "**/*.xcassets/**/Contents.json",
+    // governance-kit owns this vendored tree and workflow byte-for-byte.
     ".governance/**",
     ".github/workflows/governance.yml",
     "receipts/**",

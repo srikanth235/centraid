@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -68,4 +69,3 @@ describe(AppMark, () => {
     expect(styleOf(mark).backgroundColor).toBe(colors.bgSunken);
   });
 });
-// @vitest-environment jsdom

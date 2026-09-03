@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -65,6 +66,8 @@ describe("[law:people-link-ring] the avatar ring states the link, and only the l
     const linked = render(<PersonAvatar person={ana} link="linked" />);
     const ring = ringStyle(unknown);
     expect(ring.borderColor).toBe("transparent");
+    // The outer rectangle is identical in every state, so a row cannot
+    // reflow when the link facts arrive.
     expect(ring.width).toBe(ringStyle(linked).width);
     expect(ring.height).toBe(ringStyle(linked).height);
   });
@@ -196,4 +199,3 @@ describe("[law:people-row-pending] a queued People change says so on its own row
     ).toBe(false);
   });
 });
-// @vitest-environment jsdom

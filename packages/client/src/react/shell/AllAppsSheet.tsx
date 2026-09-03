@@ -110,7 +110,6 @@ export default function AllAppsSheet({
                 >
                   <span
                     className={chrome.sheetRowChip}
-
                     style={
                       {
                         "--chip-radius": `${iconChipRadius(ROW_ICON)}px`,

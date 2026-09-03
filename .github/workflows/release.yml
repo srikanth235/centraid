@@ -1,19 +1,7 @@
 name: release
 
-# The single entry point for cutting a release (#557).
-# Three workflows used to listen on the same `v*.*.*` tags independently —
-# release-desktop, release-gateway-image and npm-gateway-publish — plus a fourth
-# on `companion-v*`. Cutting a tag produced three or four unrelated runs with no
-# shared notion of whether "the release" succeeded: npm could publish while
-# desktop packaging failed, and nothing anywhere said the release was broken.
-# You had to know to check four places.
-# Now one tag produces one run, and `release-check` is the single red/green for
-# it. Each surface stays in its own `lane-release-*.yml` file and declares the
-# secrets it accepts, so a lane can only ever receive the credentials for its own
-# platform — stronger isolation than five peer workflows that could each read
-# every repo secret.
-# Enforced by policy (6) of scripts/lint-workflow-pins.mjs: only this workflow
-# may listen on `push: tags`.
+# Single release entry point; `release-check` is the aggregate gate and only
+# this workflow may listen for version-tag pushes (#557).
 
 on:
   push:
@@ -78,7 +66,7 @@ on:
         required: false
         default: ""
 
-# A tag is immutable — never cancel a release mid-flight for a "newer" one.
+  # A tag is immutable; never cancel a release mid-flight for a newer tag.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -255,12 +243,8 @@ jobs:
       contents: read
     uses: ./.github/workflows/lane-release-companion.yml
 
-  # The one signal for "did this release work". Before #557 there was none: four
-  # peer workflows each reported separately, so a partial release — npm shipped,
-  # desktop broken — looked like three greens and one red in four different
-  # places, with nothing naming the release itself as bad.
-  # `skipped` passes (a `companion-v*` tag legitimately skips every product
-  # lane); `cancelled` fails.
+  # `release-check` is the single release verdict; `skipped` is valid only for
+  # companion tags, while `cancelled` fails.
   release-check:
     needs:
       [

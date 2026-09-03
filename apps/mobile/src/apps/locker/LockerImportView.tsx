@@ -1,3 +1,17 @@
+// IMPORT — `locker/import` (README-Locker §1, §6 "Import verdicts").
+//
+// DRAFT → REVIEW → PUBLISH. Nothing reaches the vault until a draft is
+// published, and a discarded draft writes nothing at all. The three verdicts
+// are drawn whether or not this draft uses all three, because a member reading
+// a review needs the vocabulary before the rows.
+//
+// THE VAULT WINS. `held` is not "we could not decide" — it is the promise that
+// an import never overwrites a secret the vault already holds.
+//
+// WITHHELD OFFLINE, NEVER DISABLED. An import payload is the file itself,
+// secrets and all, so the doors refuse offline by construction; the reason
+// stands where the control would be rather than a grey button that teaches that
+// Import is broken.
 import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 

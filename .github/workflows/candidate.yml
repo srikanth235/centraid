@@ -3,25 +3,10 @@
 # every build-bearing promotion lane.
 name: candidate
 
-# RUNG 3 OF THE QUALITY LADDER (#915). One question: **is this SHA a build we
-# would hand to a device?**
-#   rung 2  ci.yml `check`  — can this land? Blocks the merge. ≤ 15 min.
-#   rung 3  THIS            — is the merged tree promotable? ≤ 45 min.
-#   rung 4  e2e.yml         — does the promoted candidate hold under depth?
-#   rung 5  the weeklies    — does it survive time and live dependencies?
-# Nothing here blocks a merge: the merge already happened. What it produces is a
-# CANDIDATE — `refs/candidates/latest` plus `artifacts/candidate.json` — and
-# every deeper rung, and the release chain, consumes that instead of the tip of
-# `main`. Before this existed, a red nightly could not distinguish "the product
-# regressed" from "the 04:00 dependency merge broke the build", which is most of
-# why thirty consecutive red nights carried no information.
-# The lanes here are the ones #915 took OFF the merge gate — desktop Playwright,
-# the gateway package smoke, the macOS desktop journey, the full mutation seed
-# set, CodeQL and the Rust supply chain — plus the Android roster that used to
-# live in `mobile-canary.yml`. Each was answering a post-merge question in front
-# of a human waiting on review. `mobile-ios-smoke` is the one lane that is new
-# rather than moved: every candidate now carries an iOS verdict, because the iOS
-# `.app` is a separate artifact and Android's green says nothing about it.
+# Rung 3 answers whether the merged SHA is a promotable candidate (#915).
+# Deeper rungs and releases consume `refs/candidates/latest`; a red roster
+# blocks promotion rather than merely filing an issue.
+# Every candidate carries an iOS verdict; Android success cannot prove iOS.
 # Deliberately NOT a `pull_request` trigger: ci.yml is the only workflow allowed
 # to listen on open-PR events (scripts/lint-workflow-pins.mjs rule 5).
 on:
@@ -43,13 +28,8 @@ permissions:
   issues: write
 
 jobs:
-  # THE ANDROID ROSTER, moved verbatim from the deleted `mobile-canary.yml`
-  # (#890 W4). It kept two jobs: prove the full roster on one commit rather than
-  # a night's worth, and BANK the `android-release-*` / `android-gradle-*` caches
-  # `ci.yml`'s `mobile-device-gate` restores from. Both are rung-3 questions, so
-  # the lane belongs here rather than in a workflow of its own — and being a job
-  # of `candidate` means a red roster now blocks promotion instead of only
-  # filing an issue.
+  # The Android roster and release/Gradle caches are candidate evidence; a red
+  # roster blocks promotion.
   mobile-canary-android:
     runs-on: ubuntu-latest
     # The roster's own budgets (probes / photos / home-apps) are what fail a slow

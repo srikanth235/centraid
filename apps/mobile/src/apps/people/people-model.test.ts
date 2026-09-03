@@ -1,3 +1,6 @@
+// The view-model projection, asserted where it can lie: the roster shaping,
+// the tri-state link facts, the overdue/Never arithmetic THROUGH the shared
+// format module, the search scope, and the stored-hue round trip.
 import { describe, expect, it } from "vitest";
 
 import { isOverdue } from "@centraid/blueprints/apps/people/format";
@@ -193,6 +196,7 @@ describe("[law:people-avatar-hue] the stored hue round-trips across surfaces", (
     );
     const derived = avatarFill({ party_id: "p1", avatar_color: null }, ring);
     expect(derived.startsWith("ring:")).toBe(true);
+    // Keyed by the id, so a rename never moves them.
     expect(avatarFill({ party_id: "p1" }, ring)).toBe(derived);
   });
 });

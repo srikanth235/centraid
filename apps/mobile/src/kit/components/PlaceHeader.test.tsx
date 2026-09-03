@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -72,4 +73,3 @@ describe(PlaceHeader, () => {
     expect(nodesOf(container, "button")).toHaveLength(1);
   });
 });
-// @vitest-environment jsdom

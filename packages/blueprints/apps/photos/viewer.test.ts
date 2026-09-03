@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, test } from "vitest";
 
 import type { Asset } from "./types.ts";
@@ -109,4 +110,3 @@ describe(originParagraph, () => {
     expect(unknown).not.toContain("The original is on this device");
   });
 });
-// @vitest-environment jsdom

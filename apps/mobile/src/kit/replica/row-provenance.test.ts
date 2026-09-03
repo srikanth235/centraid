@@ -1,3 +1,7 @@
+// The mounted plane's stamps, read once for every app (#880). Screens with no
+// render harness on this seat are asserted from their sources: the ONE sentence
+// must be IMPORTED, never re-typed, and reach JSX as element children, so a
+// sighted member reads the refusal and not only a screen reader.
 import fs from "node:fs";
 import path from "node:path";
 

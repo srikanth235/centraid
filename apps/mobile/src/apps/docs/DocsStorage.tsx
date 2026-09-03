@@ -1,3 +1,12 @@
+// Storage (spec §4.5; #821) — what this PHONE can say about where the
+// drive's bytes are, and nothing it cannot.
+//
+// The desktop screen prints byte totals ("18.4 GB · 2.1 GB could be
+// released") from the gateway's own storage read; this seat has no such read,
+// so the figures are WITHHELD and the absence is stated
+// (`STORAGE_WITHHELD`). What IS shown is real: the custody projection the
+// replica carries per current content item (blob.custody_state), counted per
+// state in the same owner-facing words `format.ts`'s custody table uses.
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 

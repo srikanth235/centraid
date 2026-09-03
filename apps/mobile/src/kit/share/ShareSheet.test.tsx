@@ -1,3 +1,14 @@
+// @vitest-environment jsdom
+// The native share sheet (#776), and the claims its shape rests on:
+//
+//  1. THE AUDIENCE IS THE LINKED ROSTER, AND ONLY THAT. A share is delivered
+//     into the receiver's own vault, so a person with no approved link has
+//     nowhere to receive one and is not offered.
+//  2. ONE CONTROL PER PERSON. The role menu carries "no access" as one of its
+//     answers, so selecting somebody and choosing what they may do is a single
+//     decision in a single place.
+//  3. A REUSED CIRCLE OPENS ALREADY SUBMITTING ITS OWN ROSTER, and detaches
+//     the moment the member edits one of its capabilities.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -422,4 +433,3 @@ describe("ShareSheet preferred circle", () => {
     ]);
   });
 });
-// @vitest-environment jsdom

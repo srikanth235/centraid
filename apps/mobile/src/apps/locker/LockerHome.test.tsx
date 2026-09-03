@@ -1,3 +1,20 @@
+// Locker's RNTL tier (#890 W5). ONE cold renderer for the app: the RN host
+// tree is expensive to boot, so every Locker claim needing a real accessibility
+// tree, a real responder, or real style resolution is consolidated here
+// (TESTING.md, "React Native component tests").
+//
+// WHAT ONLY THIS TIER CAN FALSIFY here:
+//  - THE WALL, as an absence in the real tree. Behind a lock the children are
+//    not dimmed or disabled — they are not rendered — and only a real tree can
+//    say that no item node exists. A DOM stub asserting "the panel has
+//    `aria-disabled`" would pass on a screen that still holds every title.
+//  - the band's real `tab` nodes and the single lit `selected` trait;
+//  - the item row's real accessible name and the second control beside it;
+//  - `FlatList` slot behaviour for the window's rows and its foot.
+//
+// Device seams are the project's (`src/test/native-device-seams.ts`). Every
+// Locker component, shelf rule and copy table stays real; only the vault store
+// — the gateway/session boundary, which is a device concern — is substituted.
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -169,6 +186,10 @@ describe("Locker, on the real React Native host tree", () => {
     const names = screen
       .getAllByRole("button")
       .map((node) => String(node.props.accessibilityLabel));
+    // Two rows, two DISTINCT accessible names, built by RN from the row's own
+    // title. A window whose rows share one name is a window a screen reader
+    // cannot navigate, and the DOM stub cannot tell the difference because it
+    // never builds a name at all — it copies the prop onto an attribute.
     expect(names).toContain("Bank login");
     expect(names).toContain("Router admin");
     expect(new Set(names).size).toBe(names.length);

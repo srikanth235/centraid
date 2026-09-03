@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -123,4 +124,3 @@ describe("Photos' selection-bar Share", () => {
     expect(entry.dismissed).toBe(1);
   });
 });
-// @vitest-environment jsdom

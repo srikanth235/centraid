@@ -1,3 +1,9 @@
+// THE EXPORT ACT, EXERCISED — the write half of the surface whose render half
+// is `LockerExportView.test.tsx`. What this pins: the act is online-only
+// because the flag rides the SHARED builder, so a mass reveal has no
+// representation in the durable outbox at any layer; a park is narrated as a
+// park; nothing back means no file; and the plaintext goes straight to the file
+// door, never held by the call.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {

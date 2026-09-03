@@ -1,3 +1,8 @@
+// @vitest-environment jsdom
+// The grant sheet, native seat (#825). The parity claim: the SAME core answers
+// here — one write door, `edit` only where the registry declares it, an
+// unaccepted invitation reading as pending rather than error, and revoking
+// asking first before reporting the route's own sentence verbatim.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -158,6 +163,9 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
 function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
   return {
     subjects: () => Promise.resolve({ readable: true, offers: OFFERS }),
+    // A LINKED person is the baseline, because since #903 that is the only
+    // person who can be granted at all; `channel: null` is the exception the
+    // never-reached tests opt into, not the default every other test inherits.
     forParty: () =>
       Promise.resolve({
         known: true,
@@ -288,6 +296,8 @@ describe("the grant sheet, native seat", () => {
       expect(container?.textContent).toContain(
         "Link their account in People to share with them."
       );
+      // #903: the sheet does not grow a control naming an act it cannot
+      // perform — the reach line above already says what would work.
       expect(press("Share").getAttribute("aria-disabled")).toBe("true");
     });
 
@@ -348,6 +358,7 @@ describe("the grant sheet, native seat", () => {
           },
         ],
       ]);
+      // Never the plain create door: that post is the one the route refuses.
       expect(created).toStrictEqual([]);
       expect(status).toStrictEqual(["Priya can now edit it"]);
     });
@@ -520,4 +531,3 @@ describe("the grant sheet, native seat", () => {
     });
   });
 });
-// @vitest-environment jsdom

@@ -96,6 +96,9 @@ describe("gateway-secrets", () => {
   test("one encrypted device store owns iroh keys, loopback tokens, and fallback adoption", async () => {
     const root = await tempDir("gateway-secrets-all-credentials-");
     mocked.secretsFile = path.join(root, "connection-secrets.bin");
+    // A dev Mac: the keychain is perfectly available. The hatch exists to stop
+    // the app from *using* it, because an ad-hoc-signed dev build re-prompts for
+    // the login password on every restart.
     mocked.encryptionAvailable = true;
     const persistence = deviceIrohKeyPersistence("remote");
 
@@ -138,10 +141,17 @@ describe("gateway-secrets", () => {
     );
     expect(statSync(mocked.secretsFile).mode & 0o777).toBe(0o600);
 
+    // The adopt-back-into-custody branch fires whenever custody is available,
+    // which on macOS is ALWAYS. It cannot corrupt the store (writeSecrets
+    // honours the hatch too), so assert what does regress if that branch asks
+    // isEncryptionAvailable instead of shouldUseFileFallback: a plain read
+    // rewriting the file, temp + rename, on every single access.
     const write = vi.spyOn(fs, "writeFileSync");
     expect(getOrCreateGatewayWrappingKey("local")).toStrictEqual(key);
     expect(write).not.toHaveBeenCalled();
 
+    // A shipped build must not be talked out of the keychain by an environment
+    // variable — `app.isPackaged` is the hard stop, not the variable's absence.
     mocked.secretsFile = path.join(root, "packaged-secrets.bin");
     mocked.isPackaged = true;
     getOrCreateGatewayWrappingKey("local");

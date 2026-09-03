@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
@@ -341,4 +342,3 @@ describe("the alias is read back, which is the paper cut §8 names", () => {
     expect(item({ alias: null })).toContain("None");
   });
 });
-// @vitest-environment jsdom

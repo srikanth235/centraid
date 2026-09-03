@@ -1,3 +1,25 @@
+// THE PHONE'S OWN TABLES — the derivations this seat needs that no other seat
+// does, and nothing else.
+//
+// Everything a seat SHARES is imported: the sign convention and every figure's
+// tone are `format.ts`, the day headings and the window are `activity-model.ts`,
+// the three Waiting sections are `contrib-model.ts`, the six divisions are
+// `split-model.ts`, and every sentence is `view-copy.ts` / `tally-seat-copy.ts`.
+// What is genuinely this seat's own is here:
+//
+//   1. WHICH DESIGNED STATE A SCREEN IS IN. Seven states plus Tally's own two
+//      — All settled and Window end — resolved once so a dozen surfaces cannot
+//      each decide differently which notice they are showing (STATES.md).
+//   2. HOW THIS DEVICE'S OUTBOX BECOMES WAITING'S ROWS. `contrib-model.ts`
+//      takes commons intents; this phone holds an intent OUTBOX, which is a
+//      different shape carrying different facts, and the adapter that maps one
+//      onto the other is this seat's and only this seat's.
+//   3. WHICH EXPENSE THE MEMBER TAPPED. A row can arrive from the activity,
+//      group or friend payload, so the lookup walks all three rather than
+//      making every caller remember which list it came from.
+//
+// Pure: no `react-native` import, so `tally-view-model.test.ts` asserts it
+// directly.
 import { contribSections } from "@centraid/blueprints/apps/tally/contrib-model";
 import type {
   ContribDoors,
@@ -30,9 +52,20 @@ export interface TallyStateInput {
   parked: boolean;
   rows: number;
   stale: boolean;
+  /**
+   * Every net this surface derives, where it derives any. `undefined` is a
+   * surface with no balance on it (Activity, Trash, Search): they can never be
+   * All settled, and saying so with an empty array would claim they were.
+   */
   nets?: readonly number[];
 }
 
+/**
+ * ONE resolution, in precedence order, and the order is the argument:
+ * a refusal outranks a delay, a delay outranks an emptiness, and an emptiness
+ * outranks a level balance. A screen that said "everyone is level" over a
+ * denied read would be describing a ledger it never got to look at.
+ */
 export function tallyScreenState(input: TallyStateInput): TallyScreenState {
   if (input.denied) return "denied";
   if (!input.loaded) return "loading";
@@ -42,6 +75,9 @@ export function tallyScreenState(input: TallyStateInput): TallyScreenState {
   if (input.pending > 0) return "pending";
   if (input.stale) return "stale";
   if (input.rows === 0) return "dayone";
+  // ALL SETTLED IS NOT AN EMPTINESS. There are rows; every one of them is
+  // level. It is stated, never celebrated (§6), and it comes last because a
+  // queued write or a stale read is a fact about the figures themselves.
   if (
     input.nets !== undefined &&
     input.nets.length > 0 &&
@@ -90,6 +126,16 @@ export function tallyHasConflict(
   );
 }
 
+/**
+ * A wall clock for the stale sentence.
+ *
+ * `view-copy.staleNotice` takes a time and puts it in a sentence; it does not
+ * decide what a time LOOKS like, because that is a locale question and the web
+ * seat answers it with the browser's own formatter. Hermes has `Intl`, but a
+ * stale notice is the one place the answer must be stable across a render, so
+ * the hour and minute are read off the stamp directly and an unreadable stamp
+ * yields nothing rather than `Invalid Date`.
+ */
 export function clockAt(iso: string): string | null {
   const stamp = Date.parse(iso);
   if (Number.isNaN(stamp)) return null;
@@ -111,6 +157,19 @@ export function outboxAction(label: string): string {
   return at < 0 ? "" : label.slice(at + 1).trim();
 }
 
+/**
+ * The outbox, in the shape `contrib-model.ts` folds.
+ *
+ * EVERY ROW HERE IS THE MEMBER'S OWN, and that is a fact about this seat, not
+ * a simplification: the phone's outbox holds the writes this device composed
+ * and nothing else. `actorPartyId` is therefore `me` on every row, which is
+ * what makes `contrib-model` file them under *in flight* and *ended* and never
+ * under *Waiting on you* — a steward's inbox is the shell's Approvals surface,
+ * and Waiting hands over to it rather than drawing a decision it cannot take.
+ *
+ * `createdAt` is empty because the outbox row carries no stamp; the sections
+ * do not sort on it, and inventing one would be a figure nobody derived.
+ */
 export function outboxIntents(
   rows: readonly OutboxRow[],
   me: string | null
@@ -128,6 +187,21 @@ export function outboxIntents(
     }));
 }
 
+/**
+ * WHICH DOORS THIS SEAT ACTUALLY HAS.
+ *
+ * `cancel`, `retry` and `discard` are the outbox's own verbs and the
+ * multi-vault session exposes all three. `approvals` is the hand-over to the
+ * shell's Approvals inbox, which this phone does have as a route.
+ *
+ * `decide` IS FALSE, and that is a fact about this transport rather than a
+ * preference. The gateway grew a per-intent Approve/Decline door with the #872
+ * backend (`core/protocol/routes.ts` `commonsIntentDecidePath`), but no mobile
+ * client reaches it and nothing on this device reads another member's commons
+ * intents at all — `session.pendingChanges()` answers with this phone's own
+ * outbox. `contrib-model.ts` draws neither verb when this is false, with no
+ * fallback standing in for one that cannot fire (protocol C1).
+ */
 export const TALLY_CONTRIB_DOORS: ContribDoors = {
   approvals: true,
   cancel: true,

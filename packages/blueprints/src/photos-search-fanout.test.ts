@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -159,4 +160,3 @@ describe("Photos search fan-out — per-scope reach (#726 D10/D11)", () => {
     expect(results).toBeNull();
   });
 });
-// @vitest-environment jsdom

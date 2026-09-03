@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -262,4 +263,3 @@ describe("Storage names both halves of what it opens", () => {
     expect(shelfCopy(STORAGE).title).toBe("Storage and backup");
   });
 });
-// @vitest-environment jsdom

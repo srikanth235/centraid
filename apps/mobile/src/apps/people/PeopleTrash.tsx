@@ -38,6 +38,8 @@ export default function PeopleTrash({
           {data.loading ? (
             <SkeletonRows rows={4} accessibilityLabel="Reading the trash" />
           ) : data.trash.length === 0 ? (
+            // Past the loading gate an empty trash is a fact, and a good one:
+            // one line, never a first-run pitch.
             <EmptyLine text={EMPTY.trash} />
           ) : (
             <ScrollView contentContainerStyle={styles.scroll}>

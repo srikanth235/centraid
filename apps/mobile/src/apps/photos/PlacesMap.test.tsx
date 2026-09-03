@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -464,4 +465,3 @@ describe("what the Places map asks of anybody, per mode", () => {
     ]);
   });
 });
-// @vitest-environment jsdom

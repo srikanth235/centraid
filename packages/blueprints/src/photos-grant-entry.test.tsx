@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -118,4 +119,3 @@ describe("Photos' grant entry, web seat", () => {
     expect(opened).toBe(false);
   });
 });
-// @vitest-environment jsdom

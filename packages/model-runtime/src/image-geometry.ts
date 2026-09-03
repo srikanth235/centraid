@@ -5,6 +5,7 @@ export interface ResizeTarget {
   height: number;
 }
 
+/** Never upscales; rounds dims to positive multiples of `multiple` (detector ONNX needs stride-divisible inputs). */
 export function computeBoundedMultipleResize(
   width: number,
   height: number,
@@ -44,6 +45,12 @@ export function roundBox(box: Box): [number, number, number, number] {
   ];
 }
 
+/**
+ * Rounds AND clamps so `x + w <= width` holds exactly: rounding x/x+w
+ * independently overshoots by a pixel, clamping x2/y2 cannot. The vault
+ * rejects any overshoot, so handler boxes MUST pass through this — not
+ * just `roundBox`.
+ */
 export function roundAndClampBox(
   box: Box,
   width: number,

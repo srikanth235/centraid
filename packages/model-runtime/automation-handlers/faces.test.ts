@@ -1,3 +1,13 @@
+/*
+ * Source-level contract for the face-detection recognition handler (#781).
+ *
+ * `packages/server/src/automation/manifest/enricher-templates.test.ts` owns the
+ * bundled copy's spine: a per-item consent request derives and drains, and a
+ * target-less request walks the vault behind its own cursor. This file owns
+ * the model-availability gate, the consent-queue edge cases (missing target,
+ * already-stamped target, capacity exhaustion), the consent-cursor sweep that
+ * re-derives on a model bump, and the detector call/write shapes.
+ */
 import { beforeEach, describe, expect, it } from "vitest";
 
 import handler, { setFacesRuntimeForTests } from "./faces.js";

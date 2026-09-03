@@ -109,7 +109,6 @@ export async function pair(
     }
     const desktopName = result.desktopName ?? "";
     const deviceId = result.deviceId;
-
     await stopTunnel().catch(() => {});
     await addVaultLink({
       gatewayId: result.gatewayId,

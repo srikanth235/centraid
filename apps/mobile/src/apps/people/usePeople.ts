@@ -1,3 +1,9 @@
+// People's read layer on the phone: local replica queries projected into the
+// row shapes the web query emitters serve (`people-model.ts` names mirrors).
+//
+// THE SHARING PLANE STAYS OUT OF THE COMBINED STATE: `share.*` scopes deny
+// independently, so a denial degrades LINK FACTS to absent rather than
+// carding the whole roster as an error (decisions.md #821 L-read).
 import { useMemo } from "react";
 
 import type { DashboardData } from "@centraid/blueprints/apps/people/types";
@@ -22,6 +28,7 @@ import { projectShareLinks } from "./people-share-model";
 
 const APP = "people";
 
+/** Share rows, or null while unanswered — loading and denial draw ABSENT, never "nobody". */
 function shareRows(state: ReplicaQueryState): Row[] | null {
   if (state.error) return null;
   if (state.loading) return null;
@@ -111,6 +118,9 @@ export function usePeople(): PeopleData {
       []
     )
   );
+  // Sharing plane tables: each degrades alone; `projectShareLinks` nulls when
+  // either is missing. No commons-grant join (#825); standing grants read
+  // live in `PersonGrants.tsx`.
   const bindings = useReplicaQuery(
     APP,
     useMemo(() => ({ entity: "share.party_vault_binding" }), [])
@@ -204,6 +214,7 @@ export interface PersonData {
   connection: ReplicaQueryState["connection"];
   unavailableReason?: string;
   person: MobilePersonDetail | null;
+  /** The roster window found in; handed to the share sheet as audience list (#825). */
   roster: readonly MobilePersonRow[];
 }
 

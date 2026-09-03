@@ -25,8 +25,41 @@ import { useReplica } from "./ReplicaProvider";
 
 const DIVERGENCE_MS = 24 * 60 * 60 * 1_000;
 
+/**
+ * Where the switch that would un-pause sync actually is.
+ *
+ * `sync-paused` is the member's own transfer rules refusing the radio, so
+ * pulling again re-hits the same rule and a Refresh here would be a control
+ * that cannot work (replica-status.ts). The rules live on Backup health, and
+ * saying so is the whole action this state can honestly offer.
+ */
 const TRANSFER_RULES_HINT = "Change these under Backup health in Settings.";
 
+/**
+ * Human status only: no cursor, epoch, replica, or internal storage jargon.
+ *
+ * **It says nothing when there is nothing wrong.** This bar mounts on roughly
+ * twenty app screens, and in the settled case it drew a permanent row reading
+ * `Updated 10m ago` with a `Refresh` button on the other end — above Photos'
+ * own count, above the first photograph. Neither half earned that row:
+ *
+ *  - **Refresh** is the third way to do the same thing. Every screen carrying
+ *    this bar scrolls, and pull-to-refresh is the gesture a phone already has;
+ *    a labelled button for it is a control that exists because the desktop had
+ *    one. The action label is kept for the states where the gesture would NOT
+ *    help — a sleeping gateway needs waking, not pulling — and those states are
+ *    the only ones that still render it.
+ *  - **Updated 10m ago** is a fact about the vault, not about Photos, and the
+ *    vault has one screen: Home already carries an ambient line saying how much
+ *    is in it and whether the gateway is answering
+ *    (screens/home/HomeStatusLine.tsx). Repeating a per-route copy of it made
+ *    freshness look like something each app owns separately.
+ *
+ * So `current` renders no row at all. Everything that is genuinely worth
+ * interrupting a member for — offline, asleep, syncing, first-sync progress,
+ * sources disagreeing by a day, pending changes, out of room — still renders
+ * exactly as before, and now has the row to itself.
+ */
 export default function ReplicaStatusBar(): React.JSX.Element {
   const { colors } = useTheme();
   const {

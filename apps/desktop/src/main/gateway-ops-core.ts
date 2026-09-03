@@ -1,3 +1,8 @@
+/*
+ * Gateway ops (#351): electron-free pure core — side effects injected so this
+ * unit-tests without `electron`; gateway-ops.ts wires the real ones for IPC.
+ */
+/** `GET /centraid/_gateway/diagnostics`, fetched and pretty-printed. */
 export type DiagnosticsFetchResult =
   | { ok: true; text: string }
   | { ok: false; error: string };
@@ -5,6 +10,8 @@ export type DiagnosticsFetchResult =
 const DIAGNOSTICS_PATH = "/centraid/_gateway/diagnostics";
 const RECOVERY_KIT_PATH = "/centraid/_gateway/backup/kit";
 
+/** Parsed as JSON and re-stringified so a malformed response fails HERE,
+ *  never saved as unparseable bytes. */
 export async function fetchDiagnosticsText(
   baseUrl: string,
   token: string | undefined,

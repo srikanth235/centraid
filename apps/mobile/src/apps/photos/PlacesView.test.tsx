@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -313,4 +314,3 @@ describe("the Places shelf, on the phone seat", () => {
     ).toStrictEqual([TAHOE_PHOTO!.previewUri, HOME_PHOTO!.previewUri]);
   });
 });
-// @vitest-environment jsdom

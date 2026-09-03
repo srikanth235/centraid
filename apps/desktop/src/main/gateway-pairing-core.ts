@@ -1,3 +1,5 @@
+// Pure pairing-ticket redemption (#376). `decodePairingTicket` is a lockstep
+// mirror of `encodePairingTicket` — not an import of `@centraid/server`.
 export interface PairingTicketPayload {
   v: 1;
   kind: "centraid-gw-pair";

@@ -1,3 +1,43 @@
+// THE PENDING RESTART JOURNEY, RENDERED — the iOS-compatible half of the
+// airplane-mode device proof (docs/mobile-offline.md, "Performance
+// guardrails"). Maestro's airplane control is Android-only, so the Android
+// lane owns the OS lifecycle and the touch, and this file owns the same
+// contract on infrastructure iOS CI can actually run.
+//
+// It is a JOURNEY, not a component test: nothing about the outbox is faked.
+// One real `node:sqlite` file on disk carries a real `NativeReplicaSession`,
+// a real `MultiVaultReplicaReader` and the exact `MultiVaultReplicaSession`
+// facade `ReplicaProvider.tsx` mounts. The rendered Tally cover records the
+// expense through `TallyAddScreen` and reads it back through `TallyHome`'s
+// Waiting place; the restart closes every handle, drops the process-memory
+// read plane, and rebuilds all three over the same file — which is what a
+// killed app does and what `multi-vault-reader.test.ts`'s own restart
+// companion does one layer below the interface.
+//
+// FOUR CLAIMS, and the reason each one is here:
+//
+//  1. RECORDING NEVER NEEDS THE GATEWAY. `tally-writes.ts` sends every act
+//     through `session.write`, so an unreachable gateway settles the write as
+//     QUEUED and the commit says so in §6's own sentence, rather than leaving
+//     an awaited promise hanging on a drain that will not run.
+//  2. WAITING IS THE SURFACE THAT IS TRUE OFFLINE. Tally's reads are gateway
+//     RPCs, so no ledger lands while disconnected; the queued row, its chip
+//     and the offline notice are what the seat can honestly draw.
+//  3. THE SAME WRITE SURVIVES THE PROCESS — the same durable intent id, not a
+//     re-minted twin. After the restart the outbox is the only thing left: the
+//     store's payload died with the process and the dashboard read cannot land
+//     offline, so the row can have come from nowhere else.
+//  4. THE PENDING EXPENSE ITSELF SURVIVES, THROUGH THE PRODUCTION READER.
+//     The row Waiting draws is an outbox row; the EXPENSE is an optimistic
+//     projection, and it is the mounted reader's overlay that carries it. The
+//     phone draws no surface over that read (Tally's reads are gateway RPCs —
+//     `tally-gateway.ts` says why), so the claim is asserted at the reader the
+//     app mounts rather than at a screen that does not exist.
+//
+// WHAT THIS FILE DELIBERATELY DOES NOT CLAIM: reconnect. The gateway is
+// unreachable from the first render to the last, so settlement-on-reconnect
+// stays where `tests/quality/offline-reconnect.integration.test.ts` owns it.
+// @vitest-environment jsdom
 import path from "node:path";
 
 import React, { act } from "react";
@@ -21,6 +61,14 @@ import type { NativeChangeFeed } from "../../lib/replica/native-session";
 import { createNativeReplicaSession } from "../../lib/replica/native-session";
 import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
 
+// The shared block stub, plus the one primitive it does not wire: it forwards
+// `onPress` and drops every other handler, and a journey that TYPES needs
+// `onChangeText` to reach the draft. Overridden here rather than in the shared
+// stub, because a composer is the only surface that needs it.
+// The vault lockup every app frame draws. Stubbed for the same reason as in
+// `PhotosScreen.test.tsx`: this journey's claim is Tally's pending-write
+// behaviour, and mounting the real header pulls the active-vault read and its
+// native storage into a project with no setup file to seam them.
 vi.mock(import("../../screens/home/VaultBar"), () => ({
   default: (): React.JSX.Element => React.createElement("view"),
 }));
@@ -409,6 +457,8 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     render(waitingScreen());
     await settle();
     const drawn = container!.textContent ?? "";
+    // In flight is where a write of the member's own belongs — never under
+    // "Waiting on you", which is a steward's question.
     expect(drawn).toContain(CONTRIB_SECTIONS.inFlight);
     expect(drawn).toContain("QUEUED");
     expect(drawn).toContain(OFFLINE_NOTICE);
@@ -457,4 +507,3 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     });
   });
 });
-// @vitest-environment jsdom

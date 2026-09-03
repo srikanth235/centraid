@@ -1,5 +1,11 @@
 // governance: allow-repo-hygiene file-size-limit (#468) one cohesive detached spawn/adopt/poll/stop owner — splitting would scatter lock/probe/CLI resolve that must stay in lockstep
-
+/*
+ * Impure detached-gateway glue (#468, H2–H7): CLI resolve, detached spawn,
+ * lock inspection, loopback-token mint, stopping only processes we own. Pure
+ * decisions belong in `detached-gateway-core.ts`, crash-loop bookkeeping in
+ * `gateway-supervisor-core.ts`. The desktop is the loopback token's landlord
+ * (#505): it lives in device safeStorage, never the data dir.
+ */
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
@@ -8,6 +14,9 @@ import { createRequire } from "node:module";
 import net from "node:net";
 import path from "node:path";
 
+// Subpath, never the barrel (#883 C5) — see `gateway-paths.ts`. This still
+// costs the `@centraid/vault` KeyStore graph that `gateway-secrets.js` pays
+// for anyway.
 import { landlordBearerForDataDir } from "@centraid/server/landlord-auth";
 import { endpointIdForSecret } from "@centraid/tunnel";
 
@@ -41,12 +50,16 @@ const READY_TIMEOUT_MS = 30_000;
 export interface DetachedGatewayHandle {
   mode: "detached";
   url: string;
+  /** Minted here, passed via `CENTRAID_GATEWAY_TOKEN` (#505): no token file
+   *  exists to poll. */
   token: string;
   pid: number;
   host: string;
   port: number;
   dataDir: string;
   owned: boolean;
+  /** Stops the child only if we own it (H3). App quit must NOT call this for
+   *  detached handles — see `shutdownAllLocalGatewaysExcept`. */
   close: () => Promise<void>;
   health: {
     registerProbe: (
@@ -57,16 +70,25 @@ export interface DetachedGatewayHandle {
       }>
     ) => void;
   };
+  /** Through the live daemon: a second CLI writer cannot mutate gateway.db. */
   vaults: {
     create: (name?: string) => Promise<{ vaultId: string }>;
     delete: (vaultId: string, name: string) => Promise<void>;
   };
 }
 
+/** An EndpointId, never a parallel UUID or a gateway-tree credential. */
 export async function getOrCreateDesktopOwnerId(): Promise<string> {
   return endpointIdForSecret(ensureIrohDeviceKey(LOCAL_GATEWAY_ID));
 }
 
+/**
+ * Package resolution serves every INSTALLED layout, and works only because
+ * `@centraid/server` exports `./package.json`: drop that subpath and
+ * `require.resolve` throws, silently demoting every call to the fallback
+ * (`detached-gateway-resolve.test.ts` pins it). The fallback serves the working
+ * tree, where this file sits FOUR levels below the repo root, not three.
+ */
 export function resolveGatewayCliPath(): string {
   try {
     const pkgJson = require.resolve("@centraid/server/package.json");
@@ -185,6 +207,11 @@ function signalGatewayGroup(pid: number, signal: NodeJS.Signals): void {
   }
 }
 
+/**
+ * Callers MUST await before rebinding the port (the fresh child otherwise races
+ * the old listener into an EADDRINUSE that `stdio:'ignore'` swallows) or before
+ * re-reading the stamp (`ensureDetachedGateway` would adopt the dying pid).
+ */
 async function terminateDetachedGateway(
   pid: number,
   timeoutMs = STOP_TIMEOUT_MS
@@ -284,6 +311,8 @@ function makeHandle(input: {
     vaults: makeVaults(input.url, input.token),
     async close() {
       if (!owned) return;
+      // Awaited (H2): a fire-and-forget SIGTERM lets a restart race the
+      // dying daemon.
       await terminateDetachedGateway(pid);
     },
   };
@@ -313,6 +342,8 @@ async function waitUntilReady(input: {
 
 const LOCK_STATUS_TIMEOUT_MS = 5_000;
 
+/** Never throws. `ETIMEDOUT` is the only signal separating "blocked on the
+ *  holder's SQLite lock" from "failed fast". */
 function probeLockStatus(
   dataDir: string,
   cliPath: string,
@@ -342,6 +373,10 @@ function probeLockStatus(
   });
 }
 
+/**
+ * Must not go through SQLite: the CLI may itself be blocked on the lock being
+ * asked about. Diagnostic only, never a decision input.
+ */
 function osLockHolderPid(file: string): number | undefined {
   const result = spawnSync("lsof", ["-t", file], {
     encoding: "utf8",
@@ -394,6 +429,9 @@ export async function ensureDetachedGateway(
   const nodeBin = options.nodeBin ?? resolveNodeBin();
   const readyTimeoutMs = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
   const candidateUrl = `http://${host}:${port}`;
+  // Custody check BEFORE the mint: `getOrCreateGatewayWrappingKey` mints
+  // whenever this device holds no key, and a fresh key cannot open envelopes
+  // already in `<dataDir>/keys`.
   if (
     options.gatewayWrappingKey === undefined &&
     deviceCustodyGap({
@@ -414,6 +452,9 @@ export async function ensureDetachedGateway(
     gatewayWrappingKey
   );
   const lock = lockViewFor(lockProbe);
+  // An OS-service gateway never got `CENTRAID_GATEWAY_TOKEN` and derives
+  // its landlord bearer from the endpoint key, so the derived bearer must stay
+  // in the candidate list or the service is refused as `'foreign'` (#568).
   const controlToken = await firstWorkingToken(candidateUrl, [
     existingToken,
     landlordBearerForDataDir(dataDir, { masterKey: gatewayWrappingKey }),
@@ -427,6 +468,8 @@ export async function ensureDetachedGateway(
   });
 
   if (decision === "probe-failed-refuse") {
+    // Never open a second writer against a db whose lock we could not read:
+    // the OS names the holder exactly when the blocked CLI cannot.
     const holderPid =
       lock.holderPid ?? osLockHolderPid(path.join(dataDir, "gateway.db"));
     throw new Error(
@@ -462,6 +505,9 @@ export async function ensureDetachedGateway(
   const listenPort = port;
   const listenHost = host;
 
+  // A free lock says nothing about the port, and under `stdio: 'ignore'` (H2)
+  // a child's EADDRINUSE exit surfaces only as a 30s ready-poll timeout
+  // against a stranger's gateway.
   if (await portInUse(listenHost, listenPort)) {
     const pid = portListenerPid(listenPort);
     throw new Error(
@@ -485,6 +531,7 @@ export async function ensureDetachedGateway(
     listenHost,
   ];
 
+  // Device safeStorage, never the gateway tree, so a restart can re-adopt.
   const loopbackToken = crypto.randomBytes(32).toString("hex");
   storeLocalLoopbackToken(LOCAL_GATEWAY_ID, loopbackToken);
 
@@ -541,6 +588,7 @@ export function preferEmbeddedGateway(
   return env.CENTRAID_EMBEDDED_GATEWAY === "1";
 }
 
+/** H5/H6 — opt-in only, never from a silent path. */
 export async function installGatewayOsService(
   dataDir: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {

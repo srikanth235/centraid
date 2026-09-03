@@ -1,7 +1,6 @@
 name: lane-release-companion
 
-# A `release.yml` lane, not an independently-triggered workflow (#557). Fires on
-# the `companion-v*` tag line, a separate product cadence from `v*.*.*`.
+# Reusable release lane for the separate `companion-v*` tag cadence (#557).
 
 on:
   workflow_call:

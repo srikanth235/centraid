@@ -1,3 +1,14 @@
+// "More in Tally" — the band's fifth slot (Tally spec §1).
+//
+// Five rows, in the shared sheet's own order, with the shared tables' labels
+// (`shelves.shelfLabel`) and meta (`route-copy.moreMeta`), so the sheet cannot
+// drift from what the desktop rail calls the same surfaces.
+//
+// LENSES AND ACTS, NEVER PLACES. The four places are in the band; what is here
+// is Recurring, Spending, Search, Trash and Export. Four of them are routes on
+// this phone and one is not — Export's door is beside the gateway
+// (SURFACES.md's seat column) — and the row says which, because a greyed row
+// teaches that Export is broken rather than that it is elsewhere.
 import React, { useMemo } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

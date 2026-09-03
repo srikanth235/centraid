@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /* oxlint-disable typescript-eslint/ban-ts-comment -- app components are browser
    modules; this node-side suite intentionally runs them under jsdom. */
 /* oxlint-disable no-script-url -- the adversarial URL assertion must name the
@@ -271,4 +272,3 @@ describe("untrusted blueprint render paths", () => {
     ).toBeUndefined();
   });
 });
-// @vitest-environment jsdom

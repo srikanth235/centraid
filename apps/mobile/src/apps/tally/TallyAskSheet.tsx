@@ -1,3 +1,14 @@
+// THE ONE CONFIRM, and the one composer — because §6 writes both as sentences.
+//
+// Every guard in Tally is a paragraph that names the consequence and then
+// offers the act: leaving a group, archiving one, trashing an expense, and the
+// removal guard that REFUSES and says why. A refusal is the same sheet with no
+// confirming verb — the member reads why and closes it — rather than a
+// different component, so the two can never drift apart in tone.
+//
+// It doubles as the composer for the two acts that need one typed word: a
+// friend's name and a group's. `Alert.prompt` is iOS-only, and a control that
+// exists on one platform is a control this app cannot rely on.
 import React, { useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,6 +19,8 @@ import { Text } from "../../kit/components/NativeText";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
+/** One closed set, drawn as chips — because a choice from a set is a chip and
+ *  never a typed word (§3: "everything else is a chip set"). */
 export interface TallyAskChips {
   key: string;
   label: string;

@@ -1,3 +1,5 @@
+// Device credential custody (#555): keys live in one safeStorage ciphertext
+// owned by Electron main, never in the gateway data directory.
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -28,6 +30,10 @@ function emptySecrets(): DeviceSecrets {
   };
 }
 
+/**
+ * Dev/test plaintext fallback (docs/dev-environment.md); `app.isPackaged` is
+ * the hard stop — shipped builds ignore the variable.
+ */
 function insecureSecretsRequested(): boolean {
   return (
     process.env.CENTRAID_INSECURE_DEVICE_SECRETS === "1" && !app.isPackaged
@@ -181,6 +187,8 @@ export function getOrCreateGatewayWrappingKey(connectionId: string): Buffer {
   return key;
 }
 
+/** Wrapping key is device-local: a copied data dir cannot open its KeyStore
+ * envelopes on another machine. */
 export function desktopGatewayKeyStore(
   dataDir: string,
   connectionId: string

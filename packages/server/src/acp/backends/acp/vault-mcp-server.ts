@@ -17,9 +17,7 @@ import {
 } from "../../vault-sql-tool.js";
 
 const MCP_PATH = "/mcp";
-
 export const VAULT_MCP_SERVER_NAME = "centraid";
-
 const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
 const KNOWN_PROTOCOL_VERSIONS = new Set([
   "2024-11-05",

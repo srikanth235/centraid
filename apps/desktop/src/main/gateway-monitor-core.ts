@@ -1,3 +1,10 @@
+/*
+ * Pure gateway-runtime tracking; must stay free of `electron` imports to remain
+ * unit-testable. State is in-memory, scoped to this launch and the active
+ * gateway. Skew is judged on the protocol floor, not product version (#512),
+ * and only for REMOTE gateways — a local one ships from this same tree. Hard
+ * refuse stays with `judgeGatewayInfo`; here skew only surfaces loudly.
+ */
 import {
   EXPECTED_GATEWAY_VERSION,
   EXPECTED_PROTOCOL_VERSION,
@@ -14,6 +21,11 @@ export interface GatewayProbe {
   version?: string;
   protocolVersion?: number;
   detail?: string;
+  /**
+   * A SYNTHESIZED failure: no request was made because the desktop has no URL
+   * yet. "Not started yet", not "unreachable" — see {@link isPendingBootProbe}.
+   * A crash-looped local gateway is deliberately NOT flagged; that is real.
+   */
   bootPhase?: boolean;
   healthStatus?: "ok" | "degraded" | "error";
   componentIssues?: GatewayComponentIssue[];
@@ -25,6 +37,7 @@ export interface GatewayComponentIssue {
   message?: string;
 }
 
+/** `skewed` means the protocol support window failed (#512). */
 export interface GatewayVersionSkew {
   skewed: boolean;
   gatewayVersion: string;
@@ -145,6 +158,12 @@ function sustainedHighLatency(samples: GatewaySample[]): boolean {
   );
 }
 
+/**
+ * Boot-phase noise that must NOT be folded into tracking at all (#647): folding
+ * it opens an outage and emits a durable `down`/`recovered` pair. Leaving the
+ * state untouched makes that pair vanish by construction — do not swap this for
+ * a "was suppressed" flag.
+ */
 export function isPendingBootProbe(
   state: GatewayRuntimeState,
   probe: GatewayProbe
@@ -217,6 +236,7 @@ export function applyProbe(
           ...(probe.protocolVersion === undefined
             ? {}
             : { protocolVersion: probe.protocolVersion }),
+          // REMOTE only: a local gateway ships from this tree and cannot skew.
           ...(state.gatewayKind === "remote" &&
           probe.version !== undefined &&
           probe.protocolVersion !== undefined
@@ -242,6 +262,10 @@ export function applyProbe(
   };
 }
 
+/**
+ * Marks the outage so it never re-fires. The recovery notice pairs with an
+ * already-fired down alert and lands even if alerts were toggled off mid-outage.
+ */
 export function evaluateAlert(
   state: GatewayRuntimeState,
   config: GatewayAlertConfig,

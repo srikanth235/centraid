@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -89,4 +90,3 @@ describe("Docs reading sheet", () => {
     expect(paragraphs).toContain(DOC_BODY.split("\n\n")[1]);
   });
 });
-// @vitest-environment jsdom

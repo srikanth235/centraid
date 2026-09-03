@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 
 import { emptyTrashOrder, emptyTrashSummary } from "./trash-actions.ts";
@@ -66,4 +67,3 @@ describe("the summary sentence", () => {
     );
   });
 });
-// @vitest-environment jsdom

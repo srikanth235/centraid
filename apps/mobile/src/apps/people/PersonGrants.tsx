@@ -1,3 +1,20 @@
+// `Shared with them`, drawn from the GRANT PLANE — the phone's half (#825).
+//
+// The web `components/PersonGrants.tsx` is the reference, and everything that
+// is not a React Native rendering difference is imported rather than restated:
+// the read (`grant-dashboard.ts`), every sentence (`_shared/grant-copy.ts`),
+// and the sheet itself (`kit/share/GrantSheet.tsx`). One fact, one wording,
+// both seats.
+//
+// This is the person screen's grant dashboard: every live grant reaching this
+// party, the channel that carries them, and the two acts the ruling gives
+// People — `Share` and `Revoke`. An unreached channel reads as an opportunity
+// rather than an error, and it names the act that opens it: linking the
+// person's account here is what makes them shareable (#903).
+//
+// FOUR STATES, FOUR SENTENCES: a read in flight draws the skeleton; a phone
+// with no gateway base says so; a refusal prints the route's own words; only a
+// read that came back empty says nothing is shared.
 import React, {
   useCallback,
   useEffect,

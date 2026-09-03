@@ -1,3 +1,7 @@
+// The pushed-shelf head: the frame's back affordance (chevron + the NAME of
+// the destination, never the word "Back" — README §Cross-app
+// standardisation) beside the shelf's own title. Shared by every shelf the
+// More sheet reaches, and by the sibling's document screens.
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";

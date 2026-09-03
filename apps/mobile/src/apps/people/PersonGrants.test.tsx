@@ -1,3 +1,8 @@
+// `Shared with them`, the phone's half (#825): FIVE STATES, FIVE SENTENCES —
+// none borrows another's words. Real component on the shared react-native
+// stub (the PeopleKit harness); the grant door is the seam, so what the
+// screen SAYS is the observable outcome.
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -87,6 +92,9 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
 function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
   return {
     subjects: () => Promise.resolve({ readable: true, offers: [] }),
+    // A LINKED person is the baseline, because since #903 that is the only
+    // person who can be granted at all; `channel: null` is the exception the
+    // never-reached tests opt into, not the default every other test inherits.
     forParty: () =>
       Promise.resolve({
         known: true,
@@ -158,6 +166,8 @@ describe("the person screen's grant dashboard, phone seat", () => {
       })
     );
     expect(el.querySelector('[aria-label="Shared with them"]')).not.toBeNull();
+    // An ended link withholds nothing that was already granted: its grant is
+    // still drawn, because the member's answer still stands.
     expect(el.textContent).not.toContain(nothingSharedYet(ASHA));
     expect(el.textContent).not.toContain(audienceNotKnown(ASHA));
   });
@@ -218,6 +228,7 @@ describe("the person screen's grant dashboard, phone seat", () => {
             known: true,
             channel: { state: "severed" as const, vaultId: "vault-asha" },
             grants: [standingGrant()],
+            // Never settles: the read is still in flight.
           }),
       })
     );
@@ -277,4 +288,3 @@ describe("the person screen's grant dashboard, phone seat", () => {
     ]);
   });
 });
-// @vitest-environment jsdom

@@ -1,3 +1,14 @@
+// ACTIVITY — expenses and settlements interleaved, newest first, under the
+// three day headings the shared fold decides.
+//
+// A SETTLEMENT WHERE NEITHER PARTY IS YOU changes a balance and nothing else,
+// and the row says so out loud (§6). It is not hidden, because it is why a
+// figure moved.
+//
+// THE WINDOW IS A WINDOW and the foot says so. The feed payload carries no
+// count of what lies behind it, so the total is the length of what arrived —
+// `tallyWindowFoot` is handed that, and it renders §6's sentence with the real
+// denominator rather than an invented one.
 import React, { useMemo } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 

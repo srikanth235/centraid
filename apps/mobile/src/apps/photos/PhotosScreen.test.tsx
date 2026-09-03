@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -289,4 +290,3 @@ describe("a live selection replaces the band", () => {
     );
   });
 });
-// @vitest-environment jsdom

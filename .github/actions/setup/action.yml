@@ -2,26 +2,10 @@ name: Set up the repo toolchain
 description: >-
   Pin Node from `.node-version` and Bun from package.json `packageManager`, install dependencies, and warm the Turbo/Cargo build caches — the prologue every job in this repo shares.
 
-# #557 replaced 35 hand-copied `bun-version:` literals with a Bun-only version
-# of this action. The prologue around it stayed copied: 33 duplicate
-# `bun install --frozen-lockfile` lines, 5 copies of the Turbo cache block, and
-# 5 copies of the ~12-line Cargo cache block (3 of them byte-identical inside a
-# single file). Copies drift silently — a cache key fixed in one lane and missed
-# in four others produces no error, just slower jobs nobody attributes.
-# #637 — Cargo caches use restore on every ref and save only from `main`, so
-# PR branches stop re-saving multi-GB cargo-* duplicates into the 10 GB pool.
-# Turbo remote cache remains opt-in per job; `turbo.json` hashes `RUNNER_OS`
-# so Linux/macOS never share `native/*.node` artifacts.
-# The version is read from package.json at run time with `sed` rather than
-# `node -p`, because this action runs BEFORE any toolchain is installed — the
-# only thing guaranteed present is the shell. `shell: bash` resolves to git-bash
-# on Windows runners, where sed is also available.
-# Requires actions/checkout to have run first (package.json must be on disk).
-# That is also why checkout cannot move in here: a composite action has to be on
-# disk already to be resolved, so `checkout` + `setup` is the irreducible
-# two-line prologue.
-# Enforced repo-wide by scripts/lint-workflow-pins.mjs, which fails if any
-# workflow reintroduces a literal `bun-version:`.
+# Read Bun with shell-only `sed` before toolchain install; checkout must run
+# first, and lint rejects workflow-local `bun-version:` literals.
+# Cargo restores on every ref but saves only on `main`; Turbo native keys include
+# `RUNNER_OS` so Linux and macOS never share `native/*.node` artifacts.
 
 inputs:
   working-directory:

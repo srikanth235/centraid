@@ -247,6 +247,8 @@ export function usePeopleWrites(onParked: () => void): PeopleWrites {
       if (landed) report(OUTCOMES.channelRemoved(channel.kind));
     };
 
+    /** The one act with no reverse at all — behind the modal confirm, never
+     *  behind an Undo. */
     const mergePeople: PeopleWrites["mergePeople"] = async (source, target) => {
       const landed = await act("merge-people", {
         source_party_id: source.party_id,

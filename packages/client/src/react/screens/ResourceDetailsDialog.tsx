@@ -36,7 +36,6 @@ const MODE_LABEL: Record<ResourceProfileDTO["mode"], string> = {
 
 export interface ResourceDetailsDialogProps {
   profile: ResourceProfileDTO;
-
   loadKnobPrefs?: () => Promise<ResourceKnobPrefs>;
   saveKnobPrefs?: (
     patch: Partial<Record<TunableKnobKey, number | null>>

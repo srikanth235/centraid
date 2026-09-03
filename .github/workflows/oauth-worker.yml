@@ -1,15 +1,7 @@
 name: oauth-worker
 
-# #526 — stateless Centraid Assist ceremony edge. Verification always runs.
-# Production deploy is additionally gated by the protected environment and an
-# explicit repository variable; Google/Cloudflare release evidence remains a
-# human operator gate documented under docs/release.
-# #557 — the PR gate is the `oauth-worker` lane in ci.yml, so it rolls up into
-# the single required `check`. This workflow is push-to-main only and keeps its
-# own `verify` job even though that lane covers the same steps: `deploy` sits
-# behind a protected `environment:`, and a reviewer must be approving a build
-# already known to be green. Folding verify into deploy would put the human
-# approval *before* typecheck/test ran.
+# Verification runs on main pushes; production deploy additionally requires a
+# protected environment and explicit release evidence (#526, #557).
 on:
   workflow_dispatch:
   push:

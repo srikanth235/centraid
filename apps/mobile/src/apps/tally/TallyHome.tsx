@@ -1,3 +1,18 @@
+// THE FOUR PLACES OF TALLY'S BAND, on one route (spec §1).
+//
+// Balances, Activity, Groups and Waiting are destinations WITHIN this screen
+// rather than pushed stack entries — the same shape `TasksHome.tsx` and
+// `LockerHome.tsx` use — so a band tap swaps what is drawn instead of growing
+// the stack. Every other surface IS pushed, because each is a subject with a
+// back row rather than a place.
+//
+// THE ACTS THAT ASK FIRST ASK HERE. Add a friend, New group, Leave, Archive
+// and Remind each open the one confirm/composer sheet, in §6's own words, and
+// each dispatches through the shared write door. Nothing on this screen builds
+// a payload of its own.
+//
+// Everything about the denied gate is `TallyScreen.tsx`'s: this file never asks
+// whether the grant is gone, because behind the gate it is not rendered.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
@@ -67,6 +82,8 @@ import TallyScreen from "./TallyScreen";
 import { useTallyVault } from "./useTallyVault";
 import WaitingView from "./WaitingView";
 
+/** Which shelf each band place IS, for the app bar's word and its sentence.
+ *  The ids are the SHARED table's, so a place cannot invent a name here. */
 function shelfOf(destination: string): ShelfId {
   if (destination === "activity") return ACTIVITY;
   if (destination === "groups") return GROUPS;
@@ -139,6 +156,8 @@ export default function TallyHome({
   const onVerb = useCallback(
     (verb: ContribVerb, row: ContribRow): void => {
       const session = replica.session;
+      // `approve` and `decline` cannot reach here: this seat's doors set
+      // `decide: false`, so `contrib-model` never puts either on a row.
       if (verb === "approvals" || verb === "approve" || verb === "decline") {
         navigation.navigate("Settings", { screen: "Approvals" });
         return;
@@ -218,6 +237,8 @@ export default function TallyHome({
     setAsk({
       body: archived ? [UNARCHIVE_BODY] : [ARCHIVE_BODY, ARCHIVE_BODY_2],
       confirm: archived ? VERBS.unarchive : VERBS.archive,
+      // A nudge ALWAYS parks, so the outcome the status line states is the
+      // parked one — never "sent", in any tense.
       onConfirm: () =>
         write(
           archiveGroupWrite(groupId, !archived),

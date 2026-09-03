@@ -3,6 +3,8 @@ import type { PersistedSettings } from "./settings.js";
 
 export interface PersistedSettingsPatch {
   activeGatewayId?: string;
+  /** Client-owned vault per gateway (#289); carried through so a plain
+   *  `saveSettings` never wipes it. */
   activeVaultByGateway?: Record<string, string>;
   onboardingCompletedAt?: string;
   gatewayAlertSeconds?: number;

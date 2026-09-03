@@ -1,3 +1,18 @@
+// The editor (Docs handoff Part 2 §9; #821) — "the hardest screen in
+// the app. A write has seven visible outcomes and the member must always know
+// which one is showing."
+//
+// The seven postures, their copy and their HONEST mapping onto the replica's
+// real result union live in `editor-outcome.ts` (pure, tested). This screen
+// owns only what a screen must: the two drafts, the byte-identical compare
+// BEFORE dispatch (a no-op is not a version), and the raw `session.write` —
+// deliberately not `useDocsWrite`, whose 6-second status line cannot carry a
+// standing outcome; here the posture row IS the outcome surfacing, and each
+// terminal state stays on screen with its note and its follow-up.
+//
+// Only text kinds edit — the vault's own `edit_document` precondition — so a
+// non-text document opens straight into the Refused posture with the rule
+// named and `What can be edited?` beside it. Everything else takes Replace.
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
@@ -42,6 +57,11 @@ export default function DocumentEditor({
 
   const textKind = doc ? isTextKind(doc) : false;
 
+  // The drafts are DERIVED over the loaded body rather than seeded by an
+  // effect: `null` means "not typed yet — show the loaded value". `baseline`
+  // is what the byte-identical compare runs against; it starts as the loaded
+  // pair and moves forward on a Saved. A missing body (`null`) is not an
+  // empty one — title-only must not invent `body_text`.
   const loadedTitle = doc?.title ?? "";
   const loadedBody = body.text;
   const [savedBaseline, setSavedBaseline] = useState<{
@@ -54,6 +74,8 @@ export default function DocumentEditor({
   const draftTitle = typedTitle ?? baseline.title;
   const draftBody = typedBody ?? baseline.body ?? "";
   const bodyUnready = typedBody === null && baseline.body === null;
+  // `null` = pristine: nothing typed, nothing claimed. A non-text kind is a
+  // fact, not an event, so its Refused posture is derived, never stored.
   const [claimed, setClaimed] = useState<EditorPosture | null>(null);
   const posture: EditorPosture | null =
     claimed ??

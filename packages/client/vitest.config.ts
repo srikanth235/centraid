@@ -18,6 +18,7 @@ export default jsdomProject({
         ),
       },
       {
+        // Keep measurement modules out of the barrel; it exceeds oxlint's 100-module ceiling.
         find: /^@centraid\/design\/(?<module>color|css-vars|oklab)$/u,
         replacement: fileURLToPath(
           new URL("../design/src/$1.ts", import.meta.url)

@@ -1,3 +1,19 @@
+// ONE ITEM — `locker/item` (README-Locker §1, §5; FLOWS.md).
+//
+// METADATA READS PLAINLY; A SECRET IS A ROW WITH A VERB, and the row states
+// the cost of using it — about thirty seconds, and a receipt. Which rows exist
+// is `item-fields.ts`'s answer, shared with the desktop, because "does a card
+// have a security code row" is a product law and not a rendering detail.
+//
+// NOTHING HERE IS REVEALED UNTIL THE MEMBER ASKS. The screen arrives with no
+// detail at all: opening the item is itself a per-item gesture, so the permit
+// gate stands first and names the field this TYPE seals
+// (`format.primarySealedField`) — asking a card for its password would mint a
+// permit against a field the item does not have.
+//
+// THE COUNTDOWN IS ONE CLOCK. A single `now` ticks the screen once a second so
+// every revealed row agrees about how long is left; the store's own tick is
+// what actually conceals them.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 

@@ -9,6 +9,7 @@ import {
 
 describe(computeBoundedMultipleResize, () => {
   it("leaves a small image unscaled, rounding each dimension to the nearest multiple", () => {
+    // 100/32=3.125 -> round 3 -> 96; 50/32=1.5625 -> round 2 -> 64
     expect(computeBoundedMultipleResize(100, 50, 960, 32)).toStrictEqual({
       width: 96,
       height: 64,
@@ -16,6 +17,8 @@ describe(computeBoundedMultipleResize, () => {
   });
 
   it("downscales an oversized image so the longer side fits maxSide, then rounds to the multiple", () => {
+    // longSide=2000 > maxSide=960 -> scale=0.48; width=1000*0.48=480 (already a
+    // multiple of 32? 480/32=15 exactly) -> 480; height=2000*0.48=960 -> 960
     expect(computeBoundedMultipleResize(1000, 2000, 960, 32)).toStrictEqual({
       width: 480,
       height: 960,
@@ -59,6 +62,9 @@ describe(roundBox, () => {
 
 describe(roundAndClampBox, () => {
   it("never lets x + width exceed the declared bound, even when independent rounding would", () => {
+    // x=9.6 rounds to 10, width=0.9 rounds to 1 independently -> 10+1=11 > 10.
+    // Clamping x2 = round(9.6+0.9)=round(10.5)=10... but our impl clamps the
+    // MIN of that and `width` (10), so x2 is guaranteed <= 10 regardless.
     const [x, , w] = roundAndClampBox(
       { x: 9.6, y: 0, width: 0.9, height: 1 },
       10,

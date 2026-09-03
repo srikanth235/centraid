@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -249,4 +250,3 @@ describe("the album picker commit", () => {
     expect(closed).toBe(0);
   });
 });
-// @vitest-environment jsdom

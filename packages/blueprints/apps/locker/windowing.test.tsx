@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
@@ -144,4 +145,3 @@ describe("the routes beyond the list", () => {
     expect(windowOf(markup, MANY)).toStrictEqual(WINDOWED);
   });
 });
-// @vitest-environment jsdom

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -322,4 +323,3 @@ describe("what the switcher says about the four-vault cap (#880)", () => {
     ).toHaveLength(2);
   });
 });
-// @vitest-environment jsdom

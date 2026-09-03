@@ -1,3 +1,4 @@
+/** Re-run all seeds only when the runner, catalog or mutation floors change (#892). */
 export const MUTATION_GLOBAL_WATCH = [
   "scripts/mutation/run.mjs",
   "scripts/mutation/seeds.mjs",
@@ -146,6 +147,7 @@ export const MUTATION_SEEDS = [
       "packages/server/vitest.acp.mutation.config.ts",
     ],
   },
+  // Blueprint seeds are pure logic and must run under node; jsdom directives do not affect Stryker.
   {
     id: "packages/blueprints",
     label: "blueprints",

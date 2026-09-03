@@ -1,3 +1,7 @@
+/**
+ * Matrix cell desktop.concurrency (#535 coverable-today).
+ * mergePersistedSettings is pure — concurrent patches on the same base do not share outputs.
+ */
 import { describe, expect, test } from "vitest";
 
 import { mergePersistedSettings } from "./settings-merge.ts";

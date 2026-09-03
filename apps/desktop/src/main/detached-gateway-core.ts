@@ -1,3 +1,8 @@
+/*
+ * Pure detached-gateway decisions (#468, H2–H7); impure glue lives in
+ * `detached-gateway.ts`. Crash-loop bookkeeping: `gateway-supervisor-core.ts`.
+ */
+/** Fixed port (H4) — pairing and the service unit need one. */
 export const DEFAULT_GATEWAY_PORT = 17832;
 
 export type ControlDecision =
@@ -87,6 +92,7 @@ export function classifyLockStatus(run: LockStatusRun): LockProbe {
       detail: stderrDetail(run.stderr, run.status, CUSTODY_ERROR_PATTERN),
     };
   }
+  // After custody: a timeout only says the CLI never finished.
   if (run.timedOut) return { kind: "holder-unresponsive" };
   return {
     kind: "cli-failed",
@@ -94,6 +100,7 @@ export function classifyLockStatus(run: LockStatusRun): LockProbe {
   };
 }
 
+/** Fail-closed: an unreadable lock never permits a second writer. */
 export function lockViewFor(probe: LockProbe): {
   held: boolean;
   answering: boolean;

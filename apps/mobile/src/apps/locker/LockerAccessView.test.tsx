@@ -1,3 +1,10 @@
+// The receipts list, rendered.
+//
+// WHAT IT MUST NEVER SHOW: a value. `ACCESS_NO_VALUES` is the promise and this
+// suite is what keeps it true, so a change that fetched one would fail here
+// rather than be noticed in review. Not read yet, offline, refused and "no
+// receipt has been written yet" stay four facts, never one emptiness.
+// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -32,6 +39,8 @@ vi.mock(import("react-native-svg"), async () => {
   return stub.svgStub() as unknown as typeof import("react-native-svg");
 });
 
+/** Here so the assertions can name what must never appear; nothing hands it to
+ *  the component. */
 const SECRET = "hunter2";
 
 const REVEAL: LockerAccessEntry = {
@@ -145,4 +154,3 @@ describe("the receipts list", () => {
     unmount();
   });
 });
-// @vitest-environment jsdom

@@ -1,3 +1,17 @@
+// ONE GROUP'S LEDGER — members with the nets the group engine derived,
+// departed members kept on the ledger with the balance they left, and the
+// group's expenses newest-first.
+//
+// THE REMOVAL GUARD LIVES ON THE MEMBER ROW. A member who appears anywhere on
+// this ledger cannot be removed, because removing them would make the
+// arithmetic unreadable — they are marked departed instead. The guard REFUSES
+// and says why, in §6's own sentence, and the sheet it opens carries no
+// confirming verb at all: there is nothing to confirm, only something to read.
+//
+// THE SIMPLIFICATION PROPOSAL SITS BESIDE THE LEDGER IT WOULD REWIRE. Off is
+// the default and stays a stated fact; on shows what it changed, in this
+// group's own figures, and NOTHING about it is written — the opt-in stores a
+// flag, and the transfers are derived at read time.
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 

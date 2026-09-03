@@ -1,3 +1,18 @@
+// The Folders shelf (handoff Part 2 §2; #821).
+//
+// "A folder is a label on the document, not a place it sits" — the copy says
+// it out loud in the status line and the caption. Three blocks:
+//
+//   1. The folder rows, with counts, each opening `DocsFolder`.
+//   2. `Unfiled` — documents never put anywhere. Not an error, and not a
+//      folder: the row navigates nowhere special, it opens All filtered by…
+//      nothing; on the phone it is a fact block with a count, and the caption
+//      (`foldersCaption`) carries its sentence, once.
+//   3. The deleted-folder section — documents whose folder tag has nothing on
+//      the other end (`folderGone`), with the shared `GONE_FOLDER_NOTE` and
+//      the same row menu so they can be refiled from here.
+//
+// Deliberately cut, as the handoff cuts it: no folder tree in a rail.
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";

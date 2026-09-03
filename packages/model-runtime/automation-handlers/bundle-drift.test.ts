@@ -1,3 +1,21 @@
+/*
+ * Rebuild-drift check for the published recognition bundles (#781).
+ *
+ * The handlers in this directory are the source; `bun run build:automations`
+ * bundles them into `packages/blueprints/automations/<id>/automations/<id>/
+ * handler.js`, which is what the runtime actually executes and what
+ * `packages/server/src/automation/manifest/enricher-templates.test.ts` drives. If the
+ * committed bundle stops being the build of the committed source, that suite
+ * keeps passing while it tests a program nobody can produce again — and the
+ * source-level suites here would be testing code that never ships.
+ *
+ * The rebuild is deterministic: the same Bun build of the same source produces
+ * byte-identical output run to run. The committed copies additionally pass
+ * through `oxfmt` (the repo formats every tracked file, generated or not), so
+ * the freshly built output is formatted with the repo's own config before the
+ * comparison. A failure here means "run `bun run --cwd packages/model-runtime
+ * build:automations` and commit the result", not "edit this test".
+ */
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";

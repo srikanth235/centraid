@@ -2,24 +2,8 @@
 # one lane in this repo whose PASS condition is a red suite.
 name: mobile-alarm-test
 
-# #890 W6 — MUTATION TESTING FOR THE E2E LAYER.
-# Every other gate answers "does the product still work?". This one answers the
-# question no green run can: "would this suite notice if it did not?". Six
-# mobile flows were once green while observing nothing (#474/#478/#483), and the
-# only reason anybody found out was a human reading the YAML. A suite that
-# cannot be shown to go red is not evidence, it is a habit.
-# So this lane builds the app with ONE surface deliberately blanked
-# (EXPO_PUBLIC_CENTRAID_E2E_ALARM=home, wired at
-# apps/mobile/src/kit/e2e-alarm.ts) and requires the PR-gate suite to FAIL.
-# A GREEN SUITE HERE FAILS THE JOB — that is the alarm not sounding.
-# WEEKLY since #915 Wave 2, from quarterly. The issue's open decision 4 reads
-# "monthly now, weekly once the roster is single-sourced", and Wave 2 IS that
-# single-sourcing: the members of every suite are `tests/agent-e2e-mobile/roster.json`
-# rows rather than seven `const FLOWS` literals, so one edit to one file now
-# changes what this lane mutates against. The cost of asking more often fell for
-# the same reason the answer got easier to invalidate — which is the whole
-# argument for the shorter cadence, not the calendar.
-# Sunday 03:00 UTC, deliberately BEFORE the 04:00 slot: the alarm asks whether
+# Mutation testing blanks one surface and requires the PR suite to fail (#890).
+# The shared roster makes this weekly alarm sensitive to selector changes.
 # the suite can go red at all, and an answer that arrives after the weekly lanes
 # have already reported is an answer about last week's evidence.
 # It is still not nightly. The mutation is a whole extra native build, the answer

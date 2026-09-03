@@ -1,9 +1,6 @@
 name: lane-release-gateway-npm
 
-# A `release.yml` lane, not an independently-triggered workflow (#557).
-
-# #509 / #511 — multi-platform native tunnel build, pack (always), publish (secret-gated).
-# Does not install OS services. Live publish only when NPM_TOKEN is present.
+# Reusable multi-platform tunnel package lane; publish is NPM_TOKEN-gated (#509).
 
 on:
   workflow_call:

@@ -1,3 +1,4 @@
+/** Composes People readers for Docs grants; null means unreadable, distinct from empty (#825). */
 import { useEffect, useMemo, useState } from "react";
 
 import { grantAudiencesFrom } from "@centraid/blueprints/apps/_shared/grant-audiences";
@@ -26,6 +27,7 @@ export function useDocsGrantAudiences(): readonly GrantAudienceOption[] | null {
   useEffect(() => {
     let active = true;
     void Promise.resolve()
+      // Failed links read = "unreadable", never empty.
       .then(() => (gatewayBase ? listLinks(gatewayBase) : []))
       .catch((): GatewayLink[] | "unreadable" => "unreadable")
       .then((rows) => {
@@ -48,6 +50,11 @@ export function useDocsGrantAudiences(): readonly GrantAudienceOption[] | null {
     scopes: replica.scopes ?? [],
   });
   const circles = useNamedShareCircles(targets, ownerPartyId);
+  // Two ways to have no answer, and neither is an empty roster: the read is
+  // still in flight, or it fell over. The second used to be qualified with
+  // "…and nobody else answered", which stopped meaning anything once a link
+  // became the WHOLE address (`nativeShareTargets`): with the links read
+  // broken there is no target to name, so the qualifier could never be false.
   if (links === null || links === "unreadable") return null;
   return grantAudiencesFrom(targets, circles);
 }

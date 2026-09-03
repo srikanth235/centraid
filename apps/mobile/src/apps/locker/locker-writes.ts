@@ -49,6 +49,9 @@ function normalizeOtpSeed(seed: ItemDraftSeed): ItemDraftSeed {
   return { ...seed, fields: { ...seed.fields, otp_seed: parsed } };
 }
 
+/** The one door. `write.onlineOnly` travels with the payload rather than being
+ *  decided at the call site, so a new secret-bearing action cannot be issued
+ *  through the queue by a caller that forgot. */
 async function issue(
   session: MobileReplicaSession | undefined,
   write: LockerWrite,
@@ -127,6 +130,25 @@ export function purgeLockerItem(
   return issue(session, purgeWrite(itemId), PURGED);
 }
 
+/**
+ * THE ONE ACT THAT PRODUCES PLAINTEXT (README-Locker §6).
+ *
+ * It does not go through `issue` and the reason is not tidiness: `issue`
+ * announces a generic outcome and throws the payload away, and this act's whole
+ * point IS the payload. Its outcomes are §6's own three sentences — written,
+ * parked, nothing came back — rather than the write grammar's.
+ *
+ * ONLINE-ONLY, and not by a decision made here: `exportWrite` stamps the flag
+ * and the native session's online-only door is what refuses to enqueue it. A
+ * mass reveal has no representation in the durable outbox at any layer.
+ *
+ * PARKED OFF-OWNER. The command parks a mass reveal asked for on a device that
+ * is not the owner's, so the outcome is read from the write's own status and
+ * narrated as a park — saying "written" would claim an act that did not run.
+ *
+ * The plaintext is never held: it is turned into bytes and handed to the system
+ * sheet inside this call, and nothing keeps a reference to either.
+ */
 export async function exportLockerVault(
   session: MobileReplicaSession | undefined,
   options: { includeTrashed?: boolean; includeHistory?: boolean }

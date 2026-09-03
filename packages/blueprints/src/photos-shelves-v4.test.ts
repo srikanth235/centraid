@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -507,4 +508,3 @@ describe("the duplicates shelf honours the member's tile size", () => {
     expect(render()).toBe(render(1));
   });
 });
-// @vitest-environment jsdom

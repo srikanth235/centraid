@@ -1,3 +1,16 @@
+// BALANCES — who owes whom, on balance, then per person, then per group.
+//
+// THE HERO'S FIGURE IS THE TWO TOTALS THE DASHBOARD DERIVED, DIFFERENCED — not
+// a third sum over the rows below it. `owed − owe` is the same subtraction the
+// sub-line states in words, and it is the only arithmetic on this screen. The
+// sub-line names the counts it was derived FROM, which is what makes the figure
+// inspectable: a member can go and count those rows.
+//
+// ALL SETTLED IS STATED, NEVER CELEBRATED (§6). No tick, no colour, no
+// congratulation — the ledger is the point and not the score.
+//
+// DAY ONE AND DENIED LOOK NOTHING ALIKE. Denied never reaches here: the frame
+// puts up the gate before this view mounts. What is here is the invitation.
 import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 

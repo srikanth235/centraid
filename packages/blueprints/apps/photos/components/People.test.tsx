@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -145,4 +146,3 @@ describe("a person's confirmers", () => {
     expect(html).not.toContain("Confirmed by");
   });
 });
-// @vitest-environment jsdom

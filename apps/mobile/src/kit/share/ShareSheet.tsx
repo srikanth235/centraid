@@ -1,3 +1,17 @@
+// THE SHARE SHEET — the one surface in the product that reaches another person.
+//
+// Shaped after the share dialog everybody already knows (Drive's): a search
+// field, one row per person carrying their face and a ROLE control on the
+// right, a general-access block stating what a share costs, and a single
+// primary action. The role menu is the whole interaction — the older sheet
+// asked twice (a checkbox, then a segmented control that appeared underneath
+// and reflowed the row), which put the two halves of one decision in two
+// places.
+//
+// WHO IS LISTED IS NOT A UI CHOICE. A share is delivered into the receiver's
+// own vault, so the audience is exactly who this vault is LINKED to
+// (`share-targets.ts`). There is no invite-a-stranger row, because there is no
+// mechanism behind one.
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { View as RNView } from "react-native";
@@ -368,6 +382,13 @@ export default function ShareSheet({
   );
 }
 
+/**
+ * One person, one line: their face, their name, the vault a share would land
+ * in, and the role control. The role is a MENU rather than a pair of toggles
+ * because "not shared with" is one of its answers — a control that can only
+ * choose between two capabilities has to be paired with a separate on/off, and
+ * that pairing is what made the old row take two lines and reflow when tapped.
+ */
 function PersonShareRow({
   busy,
   colors,

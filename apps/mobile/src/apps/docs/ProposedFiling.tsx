@@ -1,3 +1,13 @@
+// Proposed filing (Docs handoff Part 2 §12; #821) — the `filing`
+// capability's product screen, rendered HONESTLY EMPTY.
+//
+// The capability that would fill it ("Propose a title, a folder and a tag")
+// is a consent that is OFF with no runner and no consent record
+// (blueprints/apps/docs/capabilities.ts), so there are no proposals anywhere
+// to read. This screen states that in the capability's own words and routes
+// to the one place the consent can be given — no sample proposals, no
+// invented counts. The day a real proposals read exists, this screen grows
+// the accept/edit/reject rows over it.
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 

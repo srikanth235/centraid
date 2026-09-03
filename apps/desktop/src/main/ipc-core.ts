@@ -103,6 +103,9 @@ export function vaultChangedPayload(next: {
   };
 }
 
+// #603: will starting the local gateway pop an OS credential prompt?
+// No encryption → silent. macOS unpackaged → prompt. Linux libsecret → prompt.
+// Windows DPAPI → silent.
 export function keychainPromptExpected(host: {
   platform: NodeJS.Platform;
   encryptionAvailable: boolean;
@@ -114,6 +117,13 @@ export function keychainPromptExpected(host: {
   return false;
 }
 
+/**
+ * Renderer-supplied app id gate for filesystem-bound app surfaces (#865):
+ * an appId is joined into on-disk paths (APPS_OPEN → `shell.openPath`), so a
+ * traversal id must never reach the filesystem. Mirrors the gateway's
+ * app-meta ID_RE — store-created apps share it, so membership in the shipped
+ * inline set is NOT required.
+ */
 const APP_ID_GRAMMAR = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
 export function assertRevealableAppId(appId: string): void {
@@ -138,6 +148,10 @@ export function parseRevealableAppId(input: unknown): string {
   return id;
 }
 
+// Host-capability snapshot (pure, unit-testable). `compute.transcript` stays
+// `false` (#724 W6) — on-device ASR is gone; transcription is the gateway
+// `transcript` automation. The key stays in the `DeviceComputeCapabilities`
+// wire shape — do not drop it.
 export function hostCapabilities(): {
   platform: "desktop";
   compute: {

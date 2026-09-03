@@ -111,7 +111,6 @@ export default function ApprovalsRoute(): JSX.Element {
     void subscribeNotificationsChanges(reload, controller.signal).catch(
       () => {}
     );
-
     void enableWebPushWake(true)
       .then((enabled) => (enabled ? syncWebNotifications() : Promise.resolve()))
       .catch(() => undefined);

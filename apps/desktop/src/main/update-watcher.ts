@@ -1,3 +1,8 @@
+/*
+ * Electron wiring around update-check.ts. Unpackaged: poll dist mtime.
+ * Packaged: download after {@link admitUpdate} (#501), then ready-to-install.
+ * Broadcast UPDATE_AVAILABLE; `relaunchToUpdate()` restarts same argv/cwd.
+ */
 import { readFile, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -148,9 +153,15 @@ export function startUpdateWatcher(): void {
   })();
 }
 
+/**
+ * Packaged path (I4 / #501). createRequire here — CJS `autoUpdater` crashes
+ * under `"type":"module"` if imported statically. Download after admit;
+ * never call the autoUpdater getter outside this packaged-ready path.
+ */
 export function startPackagedUpdateChecker(): void {
   void (async () => {
     try {
+      // Deferred CJS load; knip cannot see createRequire (knip.json ignoreDependencies).
       const req = createRequire(import.meta.url);
       const { autoUpdater } = req("electron-updater") as {
         autoUpdater: {
@@ -167,6 +178,7 @@ export function startPackagedUpdateChecker(): void {
           on: (event: string, cb: (info: unknown) => void) => void;
         };
       };
+      // I9: never install-on-quit a stale download.
       autoUpdater.autoDownload = false;
       autoUpdater.autoInstallOnAppQuit = false;
       autoUpdater.channel = updaterChannelForVersion(app.getVersion());
@@ -210,6 +222,8 @@ export function startPackagedUpdateChecker(): void {
             typeof release.version === "string"
               ? release.version
               : app.getVersion();
+          // W6.1 (#842): installable only with a pinned-key signature. Refusal
+          // leaves packagedDownloadReady false — relaunch, never quitAndInstall.
           const trusted = await admitDownloadedUpdate({
             packaged: app.isPackaged,
             version,

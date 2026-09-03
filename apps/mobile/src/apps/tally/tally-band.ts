@@ -1,3 +1,6 @@
+// The phone band has five destinations: Balances, Activity, Groups, Waiting and
+// More. Waiting occupies a slot because it is the only place for another
+// member's stuck write; labels come from the shared shelf catalog (#883 B5).
 import { moreMeta } from "@centraid/blueprints/apps/tally/route-copy";
 import {
   BAND_DESTINATIONS,
@@ -16,6 +19,7 @@ import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
 import type { TallyStackParamList } from "../../navigation";
 
+// The frame's capsule lives in `kit/band/band-capsule.ts` (#883 B5).
 export { BAND_CAPSULE } from "../../kit/band/band-capsule";
 export type { BandCapsule } from "../../kit/band/band-capsule";
 
@@ -40,6 +44,9 @@ export const TALLY_BAND_DESTINATIONS: readonly TallyBandDestination[] = [
   ...BAND_DESTINATIONS.map((destination) => ({
     key: destination.id as TallyBandDestinationKey,
     label: destination.label,
+    // The shared table types the glyph as optional because the desktop rail
+    // does not draw one; the band always does, so an absent glyph falls back
+    // to the sheet's own mark rather than rendering nothing.
     icon: destination.icon ?? MORE_ICON,
   })),
   { key: "more", label: "More", icon: MORE_ICON },

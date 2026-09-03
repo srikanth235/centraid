@@ -1,16 +1,7 @@
 name: web
 
-# #501 — deploy of the continuous public PWA (app.centraid.dev).
-# Gateway-embedded shell remains primary for the LAN/ticket path.
-# The deploy step runs only when CLOUDFLARE_API_TOKEN is present.
-# #557 — the PR gate for this build is `web-build` in ci.yml, so every merge
-# blocker lives under the single required `check`. What stays here is the
-# deploy, which owns the Cloudflare credentials. Deploys are deliberately not
-# folded into ci.yml: one workflow holding every publishing secret is a blast
-# radius, not a simplification.
-# The build previously ran twice on a push to main (a `build` job, then again
-# inside `deploy`). It is one job now — the smoke check that gated the deploy
-# runs in the same job that performs it.
+# Deploy the public PWA; the PR build gate remains `web-build` in ci.yml, while
+# Cloudflare credentials stay isolated here (#501, #557).
 
 on:
   workflow_dispatch:

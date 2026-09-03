@@ -8,8 +8,14 @@ import {
   toOpenCvRgbPlanar,
 } from "./preprocess.js";
 
+// Only the pure buffer-math helpers are covered here. decodeImage*/
+// resizeDecodedImage go through sharp (lazily loaded from
+// runtime/node_modules, see the file header) and are exercised by hand once
+// `bun run setup` has installed the runtime — see README.md.
+
 describe(cropImage, () => {
   it("extracts the requested region from an interleaved RGB buffer", () => {
+    // 3x1 image, pixels red/green/blue
     const image = {
       data: new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255]),
       width: 3,
@@ -38,7 +44,9 @@ describe(normalizeClip, () => {
     };
     const out = normalizeClip(image);
     expect(out).toHaveLength(2 * 3);
+    // channel 0, pixel 0 (white): (1 - mean) / std, a positive value
     expect(out[0]).toBeGreaterThan(0);
+    // channel 0, pixel 1 (black): (0 - mean) / std, a negative value
     expect(out[1]).toBeLessThan(0);
   });
 });

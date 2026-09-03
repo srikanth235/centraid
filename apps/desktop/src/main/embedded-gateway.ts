@@ -29,6 +29,9 @@ export async function startDesktopEmbeddedGateway(
     keyStore: options.keyStore,
     token: options.token,
     hostDeviceEndpointId: options.ownerEndpointId,
+    // No founding options (#603): the gateway founds its own Personal
+    // vault synchronously when it sees a fresh data dir, and the
+    // founding-ticket plane is gone entirely.
     ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
     ...(options.logTag ? { logTag: options.logTag } : {}),
   });

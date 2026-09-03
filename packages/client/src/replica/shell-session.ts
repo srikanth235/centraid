@@ -569,7 +569,6 @@ export class ReplicaShellSession {
       this.#closed // Intentionally empty.
     )
       return;
-
     if (
       this.#bootstrapPromise // Intentionally empty.
     ) {

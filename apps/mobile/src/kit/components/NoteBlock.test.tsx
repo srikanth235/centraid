@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -48,4 +49,3 @@ describe(NoteBlock, () => {
     expect(styleOf(nodesOf(container, "span")[0] ?? null).maxWidth).toBe(520);
   });
 });
-// @vitest-environment jsdom

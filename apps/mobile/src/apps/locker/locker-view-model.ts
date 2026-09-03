@@ -1,3 +1,12 @@
+// THE PHONE'S OWN TABLES — the derivations this seat needs that no other seat
+// does. Anything a seat SHARES is imported: row recipe and window foot from
+// `format.ts`, sentences from `view-copy.ts` / `route-copy.ts`. What stays here
+// is (1) which designed state a screen is in, resolved once so nine surfaces
+// cannot each pick a different notice, and (2) the copy for the one surface
+// this seat cannot perform.
+//
+// Pure: no `react-native` import, so `locker-view-model.test.ts` asserts it
+// directly.
 import { pendingOverlayCopy } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { PendingOverlayStatus } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { windowEndCopy } from "@centraid/blueprints/apps/locker/format";
@@ -11,6 +20,12 @@ import {
   FILL_WHERE,
 } from "@centraid/blueprints/apps/locker/route-copy";
 
+// ─── 1 · Which state a screen is in ─────────────────────────────────────────
+/**
+ * `denied`, `parked` and `dayone` stay three values, never one emptiness: a
+ * revoked grant has a receipt behind it, day one is an invitation, and the two
+ * look nothing alike (STATES.md, rule 1).
+ */
 export type LockerScreenState =
   | "loading"
   | "denied"
@@ -27,6 +42,7 @@ export interface LockerStateInput {
   loaded: boolean;
   denied: boolean;
   online: boolean;
+  /** Metadata writes still on this device — never a secret (writes.ts). */
   pending: number;
   conflicted: boolean;
   parked: boolean;
@@ -35,6 +51,11 @@ export interface LockerStateInput {
   stale: boolean;
 }
 
+/**
+ * Precedence order is the argument: a refusal outranks a delay, a delay
+ * outranks an emptiness. A screen showing "nothing is kept here yet" over a
+ * denied read would be describing a vault it never got to look at.
+ */
 export function lockerScreenState(input: LockerStateInput): LockerScreenState {
   if (input.denied) return "denied";
   if (!input.loaded) return "loading";
@@ -76,6 +97,13 @@ const OVERLAY_STATUSES: readonly PendingOverlayStatus[] = [
   "cancelled",
 ];
 
+/**
+ * Locker reads its rows through the gateway's query handlers rather than the
+ * replica plane (docs/mobile-offline.md, "Locker is stricter"), so no Locker
+ * row can carry the overlay stamps and the DEVICE-GLOBAL outbox is the only
+ * honest source for this sentence. A status the overlay grammar has no rung for
+ * is skipped, never coerced into one.
+ */
 export function lockerPendingLine(
   pending: readonly {
     id: string;

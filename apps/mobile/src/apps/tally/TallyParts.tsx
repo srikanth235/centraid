@@ -1,3 +1,21 @@
+// THE COMPONENT RECIPES (Tally spec §5), drawn once for every list in the app.
+//
+// Four leaves and one rule. The rule is the app's one SIGN CONVENTION:
+// positive is owed to you, negative is owed by you, so a figure never needs a
+// legend. That convention is expressed exactly once — `format.figureTone` —
+// and `Figure` below is the only leaf that reads it. `--net` means you owe,
+// plain ink means you are owed, the recessive rung means settled, and NEVER a
+// green: a settled balance is a fact, not a reward.
+//
+//   * `Section`  — label · count/meta · one text verb · rows · an empty line
+//                  in its own words.
+//   * `LedgerRow` — person chip · title · meta sentence · optional proportion
+//                  bar · optional status chip · figure block · up to ONE quiet
+//                  trailing verb, because this is a touch seat. A pending row
+//                  takes the 2px leading rule.
+//   * `FieldRow` — key column · value or chips · a note carrying the rule.
+//   * `Hero`     — display-rung figure · label · the sentence that says where
+//                  the figure came from · up to two secondary verbs.
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -20,8 +38,11 @@ export function toneColor(tone: FigureTone, colors: ThemeColors): string {
 }
 
 export interface FigureProps {
+  /** Already derived by the queries' one balance engine. Never folded here. */
   netMinor: number;
   text: string;
+  /** What the figure MEANS, under it. Empty on a level balance, because a
+   *  level balance has no direction to name. */
   sub?: string;
   tone?: FigureTone;
 }
@@ -51,6 +72,8 @@ export interface SectionProps {
   act?: { label: string; onPress: () => void };
   empty?: string;
   children?: React.ReactNode;
+  /** Is there anything under the head? Decided by the caller, because a
+   *  section with a notice under it is not empty even with no rows. */
   filled: boolean;
 }
 

@@ -1,3 +1,7 @@
+// Docs' "available offline": the engine is the frame's (`kit/fetch-gate`) and
+// this file owns only the Docs nouns. A document whose body is an inline
+// `data:` URI is already on this phone, so it gets a stated reason rather than
+// a live toggle that would change nothing (#883).
 import { useState } from "react";
 
 import {

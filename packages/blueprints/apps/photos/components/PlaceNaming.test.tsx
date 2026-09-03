@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -195,4 +196,3 @@ describe("naming a place from the Places shelf", () => {
     expect(pressing("Name this place?")).toBeDefined();
   });
 });
-// @vitest-environment jsdom

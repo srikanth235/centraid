@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -381,4 +382,3 @@ describe("Face review, on the phone seat", () => {
     expect(mocks.write).not.toHaveBeenCalled();
   });
 });
-// @vitest-environment jsdom

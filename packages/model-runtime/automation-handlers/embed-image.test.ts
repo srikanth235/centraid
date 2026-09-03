@@ -1,3 +1,12 @@
+/*
+ * Source-level contract for the image-embedding recognition handler (#781).
+ *
+ * The bundled copy's spine — the typed `enrich.upsert_embedding` command and
+ * the honest failure when a preview cannot be read — is owned by
+ * `packages/server/src/automation/manifest/enricher-templates.test.ts`. This file
+ * owns the model-availability gate, cursor seeding and the model-change
+ * rewalk, the kind filter, and the shape of the write.
+ */
 import { beforeEach, describe, expect, it } from "vitest";
 
 import handler, { setEmbedImageRuntimeForTests } from "./embed-image.js";

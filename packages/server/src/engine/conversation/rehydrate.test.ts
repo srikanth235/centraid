@@ -430,7 +430,6 @@ async function getViaRoute(
     writeHead(): unknown {
       return res;
     },
-
     setHeader(): void {},
     end(text?: string | Buffer): void {
       if (text) bodyText = Buffer.isBuffer(text) ? text.toString("utf8") : text;

@@ -1,3 +1,12 @@
+// EXPORT — `locker/export` (README-Locker §6). THE ONE ACT THAT PRODUCES
+// PLAINTEXT, and the surface is shaped by that fact rather than by the control.
+//
+// The consequence stands above every control and the confirm NAMES it, never
+// asks whether the member is sure: the ask sets the gate, the gate is a full
+// stop, and only its own verb issues the write. The two options that make the
+// file worse are off unless asked for. WITHHELD OFFLINE, NEVER DISABLED — a
+// mass reveal is never answered from a device's durable store, so the reason
+// stands where the control would be.
 import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 

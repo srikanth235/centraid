@@ -36,6 +36,14 @@ describe(getPairs, () => {
 });
 
 describe(bpeMerge, () => {
+  // Classic worked BPE example (word "lower", merges learned in this
+  // priority order): trace by hand below to keep the fixture self-verifying
+  // rather than asserting against the real CLIP vocab from memory.
+  //   start:            l  o  w  e  r</w>
+  //   merge "l o"  (r0): lo  w  e  r</w>
+  //   merge "lo w" (r1): low  e  r</w>
+  //   merge "e r</w>" (r2): low  er</w>
+  //   no remaining ranked pair ("low er</w>") -> stop
   const ranks = buildBpeRanks([
     ["l", "o"],
     ["lo", "w"],
@@ -86,6 +94,9 @@ describe(pretokenize, () => {
 });
 
 describe(createClipTokenizer, () => {
+  // Small, fully hand-verified vocab/merges fixture — NOT the real 49408-
+  // token CLIP vocabulary. Only the final BPE symbols need vocab entries;
+  // intermediate merge steps are looked up by rank, not by vocab id.
   const vocab = new Map<string, number>([
     ["<|startoftext|>", 100],
     ["<|endoftext|>", 101],

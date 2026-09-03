@@ -1,3 +1,10 @@
+// The grant transport over the NATIVE seat's addressing: the law under test is
+// shared with the browser seat, and what this file supplies is a phone's base
+// URL and credential (#825, #883).
+//
+// A REFUSAL IS NOT AN OUTAGE — `fetch` rejecting means the request never left
+// the phone and the gateway said nothing; a 4xx/5xx means it said something.
+// Two facts, two sentences (docs/mobile-offline.md).
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -97,6 +104,8 @@ describe("the native grant transport", () => {
     });
 
     test("a person the vault has no record of is an answer, not a read failure", async () => {
+      // The primary read is `?partyId=`. Throwing here would make "we do not
+      // know this person" arrive wearing "shares could not be read".
       stubFetch(() => ({
         status: 404,
         body: {
@@ -129,6 +138,9 @@ describe("the native grant transport", () => {
 
   describe("refusals keep the route's words", () => {
     test("a subject the vault cannot share is refused in its own terms", async () => {
+      // #883 (ruling V-table): an answer is never edited in place, so the pack
+      // refuses the second verb rather than reading the first one back. The
+      // refusal names the fix, and nothing here may soften it into a success.
       const message =
         "locker.item is not something this vault can share; nothing here can keep that grant true";
       stubFetch(() => ({
@@ -166,6 +178,7 @@ describe("the native grant transport", () => {
     });
 
     test("an unreadable registry offers nothing rather than everything, and says which", async () => {
+      // A gateway that ANSWERED is never marked, however unhappy the answer.
       stubFetch(() => ({ status: 500, body: { error: "boom" } }));
       await expect(nativeGrantDoor(BASE).subjects()).resolves.toStrictEqual({
         readable: false,

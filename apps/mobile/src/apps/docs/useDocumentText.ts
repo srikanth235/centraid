@@ -1,3 +1,11 @@
+// One document's PROSE as this device can have it (#821 §6/§9): inline `data:`
+// bodies decode locally, PINNED bodies come off this phone's disk (#883 C6),
+// everything else is one authenticated fetch. Where none works the hook says
+// WHY, so the screen states the absence instead of spinning.
+//
+// ONE effect keyed by one resolved location: a second effect for the local
+// case would be a second place for the precedence to be wrong. Synchronous
+// answers are DERIVED at render; only the fetch lives in the effect.
 import { File } from "expo-file-system";
 import { useEffect, useMemo, useState } from "react";
 
@@ -44,6 +52,10 @@ export function useDocumentText(
   const isInline =
     inlineBody !== null || String(contentUri ?? "").startsWith("data:");
 
+  /**
+   * A PINNED document reads from disk and never asks the gateway (#883 C6);
+   * checking `online` first would spend the "available offline" promise.
+   */
   const localUri = useMemo(() => pinnedDocUri(doc, vaultId), [doc, vaultId]);
 
   const fetchUrl = useMemo(() => {

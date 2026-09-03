@@ -1,3 +1,11 @@
+/*
+ * GATEWAY_TEST_CONNECTION (#382) — the ConnectFlow "handshake ladder".
+ * Wires `handshakeGateway` (version-handshake.ts) and
+ * `fetchGatewayVaults`/`foldVaultsResponse` (gateway-vaults-core.ts) through
+ * the pure fold functions in `gateway-connectivity-core.ts`. Never throws —
+ * every failure is a failed stage with a human-actionable detail, per the
+ * frozen IPC contract. Only the ticket and known-gateway rungs exist.
+ */
 import {
   assembleReport,
   buildTicketReport,
@@ -73,6 +81,8 @@ export async function testGatewayConnection(
         return assembleReport([], { error: "bad_input" });
     }
   } catch (error) {
+    // Belt-and-suspenders: the contract promises this never throws even if
+    // something upstream (a store read, a malformed input) does.
     return assembleReport([], {
       error: error instanceof Error ? error.message : String(error),
     });

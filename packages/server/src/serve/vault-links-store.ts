@@ -74,6 +74,7 @@ export class VaultLinksStore {
     return this.row("SELECT * FROM vault_links WHERE link_id = ?", linkId);
   }
 
+  /** `findPair` avoids oxlint misclassifying this two-argument lookup as `.find`. */
   findPair(vaultX: string, vaultY: string): VaultLink | undefined {
     const [a, b] = pairOf(vaultX, vaultY);
     return this.row(

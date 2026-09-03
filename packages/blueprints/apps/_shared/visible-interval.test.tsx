@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { act, useState } from "react";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -102,4 +103,3 @@ describe("a second hand that stops when nobody is looking", () => {
     expect(clock.pending()).toBe(0);
   });
 });
-// @vitest-environment jsdom

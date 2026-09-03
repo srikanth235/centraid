@@ -1,3 +1,6 @@
+// ACCESS HISTORY — `locker/access` (SURFACES.md: custodian AND origin).
+// Never give this read a cached fallback: it would draw what this device
+// happened to hold as the vault's whole record.
 import React, { useEffect, useMemo } from "react";
 
 import { titlesOf } from "@centraid/blueprints/apps/locker/access-model";

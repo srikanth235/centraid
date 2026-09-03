@@ -1,3 +1,6 @@
+// One read route, three surfaces (#821, spec §6–§7): the fork is a fact
+// about the document's kind, decided by the SHARED kind model, plus the
+// RN-safe inline-text decode and the honest status sentence.
 import { describe, expect, it } from "vitest";
 
 import {

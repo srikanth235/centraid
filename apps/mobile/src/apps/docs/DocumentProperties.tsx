@@ -1,3 +1,15 @@
+// Properties (Docs handoff Part 2 §11; #821) — "the whole custody
+// story, on demand", told strictly from facts this device holds:
+//
+//   * the custody projection (`blob.custody_state`) in the same owner-facing
+//     words every other surface uses — with its own note that this is "where
+//     the bytes are, as the vault last swept them";
+//   * the gateway this vault rides (the session's own base), the folder
+//     label, the tags, the share reach (absent, never negative — a denied
+//     share read says nothing here);
+//   * the sample's "backed up Sunday 21:40" is WITHHELD: the backup
+//     timestamp is the gateway's record and this seat has no read for it —
+//     `PROPERTIES_BACKUP_WITHHELD` says so instead of guessing a time.
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 

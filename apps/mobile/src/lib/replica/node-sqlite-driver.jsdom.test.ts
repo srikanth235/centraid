@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 
 import { NodeSqliteDriver } from "./node-sqlite-driver";
@@ -22,4 +23,3 @@ describe("node:sqlite driver under a jsdom docblock", () => {
     driver.close();
   });
 });
-// @vitest-environment jsdom

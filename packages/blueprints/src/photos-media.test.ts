@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (#406)
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -436,4 +437,3 @@ describe("Photos next-screen media loading", () => {
     expect(tile.querySelectorAll("img")).toHaveLength(painted);
   });
 });
-// @vitest-environment jsdom

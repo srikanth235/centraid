@@ -90,6 +90,8 @@ describe(classifyLockStatus, () => {
     ).toStrictEqual({ kind: "reported", held: false, answering: false });
   });
 
+  // D5: wrong/absent wrapping key. The CLI cannot open the key store, so it
+  // never reaches the lock at all — treating this as "locked" was the bug.
   it("names a key-store failure as a custody mismatch, not a lock", () => {
     const probe = classifyLockStatus(
       run({
@@ -104,6 +106,8 @@ describe(classifyLockStatus, () => {
     });
   });
 
+  // D4: the CLI blocks on the stopped holder's SQLite lock and we kill it at
+  // the spawn timeout — genuinely held, but by something not answering at all.
   it("distinguishes a spawn timeout from a fast CLI failure", () => {
     expect(
       classifyLockStatus(run({ timedOut: true, status: null }))
@@ -169,6 +173,7 @@ describe(lockViewFor, () => {
         held: true,
         answering: false,
       });
+      // …and fail-closed must still mean "refuse", not "spawn".
       expect(
         decideControl({
           lockHeld: lockViewFor(probe).held,

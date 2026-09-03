@@ -98,6 +98,7 @@ const NETWORK_FLAP_WINDOW_MS = 1_500;
 
 const FRESHNESS_COMMIT_WINDOW_MS = 1_000;
 
+/** RN's scheduler owns "the UI is usable now" — never substitute a timeout. */
 function afterInteractions(): Promise<void> {
   return new Promise((resolve) => {
     InteractionManager.runAfterInteractions(() => resolve());
@@ -148,6 +149,8 @@ export function ReplicaProvider({
       remountedFor.current = undefined;
       return;
     }
+    // One attempt per vault. A scope the gateway will not hand back — revoked
+    // mid-mount, or gone from the manifest — must not spin the mount forever.
     if (remountedFor.current === activeVaultId) return;
     remountedFor.current = activeVaultId;
     setBuilt(undefined);
@@ -164,6 +167,9 @@ export function ReplicaProvider({
     let freshnessWork: CoalescedWork | undefined;
     let flushFreshness = async (): Promise<void> => undefined;
     const looseDrivers: Array<{ close: () => void }> = [];
+    // Every mid-mount update goes through here: a torn-down mount publishes
+    // nothing, and a mount whose gateway key has moved on never overwrites its
+    // successor.
     const publish: PublishReplicaValue = (patch) => {
       if (cancelled) return;
       setBuilt((current) =>
@@ -177,6 +183,10 @@ export function ReplicaProvider({
       try {
         await afterInteractions();
         if (cancelled) return;
+        // PHASE A decides what to open from disk alone (`planMount`): a device
+        // holding a (gateway, vault) tuple opens that replica offline, with no
+        // await on the network. `resolveIdentity` is for a fresh install only.
+        // "unpaired" is a DISK fact, never a network verdict — keep it that way.
         const [cachedBase, lastGatewayId, lastVaultId] = await Promise.all([
           Store.hydrate(LAST_BASE, "http://127.0.0.1"),
           Store.hydrate(LAST_GATEWAY, ""),
@@ -224,11 +234,15 @@ export function ReplicaProvider({
         if (identity.online) sendEventualWork(identity.auth.baseUrl);
         if (cancelled) return;
         let connected = identity.online;
+        // Reports, never decides (docs/traps/unreachable-vault.md).
         const noteGatewayOutcome = (reachable: boolean): void => {
           if (cancelled || reachable === connected) return;
           reachabilityWork?.signal();
         };
         const sessions = new Map<string, NativeReplicaSession>();
+        // Kept per vault, not just until the session takes over: a revoked
+        // scope's file cannot be deleted while its handle is still open, and
+        // `purge()` deliberately leaves that handle alive.
         const scopeDrivers = new Map<string, { close: () => void }>();
         const revokedScopeIds = new Set<string>();
         const reclaimRevokedReplica = (scope: MountedReplicaScope): void => {
@@ -407,6 +421,10 @@ export function ReplicaProvider({
             multiplex?.updateGatewayBase(liveBase);
             facade?.updateGatewayBase(liveBase);
             facade?.notifyReachable();
+            // THE WALL, RE-RAISED. The mount fails open offline, so this is the
+            // one moment skew is provable: a gateway just answered. Incompatible
+            // flips to the blocking disposition rather than pulling against a
+            // contract this build cannot speak; the same answer settles the flags.
             try {
               features =
                 (await requireMobileOfflineGateway({
@@ -440,6 +458,13 @@ export function ReplicaProvider({
           }));
           if (liveBase) {
             const outcome = await facade?.pullScopes().catch(() => undefined);
+            // `syncing` above is set OPTIMISTICALLY, so every pass reaching here
+            // MUST settle: an unconditional settle is what stops a pull that
+            // never lands from pinning "Syncing recent changes…" on screen.
+            //
+            // A pull the transfer rules refused is NOT a landed pull: reading
+            // the refusal as freshness paints a settled, silent `current` over
+            // data that was never fetched.
             const policyBlocked = outcome?.policyBlocked === true;
             const landed = outcome !== undefined && !policyBlocked;
             connected = landed || policyBlocked;

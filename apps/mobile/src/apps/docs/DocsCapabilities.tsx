@@ -1,3 +1,15 @@
+// What Docs may read (Docs handoff Part 2 §12; #821) — "four
+// capabilities, four separate consents, all off by default. A consent that
+// enables more than it names is not consent."
+//
+// Every row is the shared capability record (`blueprints/apps/docs/
+// capabilities.ts`), stating what it does, where it runs, what leaves the
+// device (nothing) and what it writes. THE SWITCH IS NOT DRAWN: there is no
+// consent record behind these yet (`capabilityOn` can only say `off` because
+// nothing exists to read), and a live-looking control that flipped nothing
+// would promise a consent nobody recorded — `CAPABILITY_SWITCH_WITHHELD`
+// says exactly that on screen. When the record lands, this screen grows the
+// real control (INTEGRATION-NOTES.md → Withholdings).
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 

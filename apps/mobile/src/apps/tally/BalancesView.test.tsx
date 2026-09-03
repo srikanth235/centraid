@@ -1,3 +1,17 @@
+// BALANCES, RENDERED (§4, §6; STATES.md's Tally row).
+//
+// What this pins is what a future edit is likeliest to undo quietly:
+//
+//  - the hero's sub-line names the COUNTS the figure was derived from, so the
+//    figure stays inspectable rather than being a number the app asserts
+//  - All settled is STATED, never celebrated, and it replaces the arithmetic
+//    sub-line rather than sitting beside it
+//  - day one and denied look nothing alike: day one offers a first move
+//  - Remind appears only on a row that owes YOU something — a level balance
+//    has nothing to remind about — and a reminder is never said to be sent
+//  - the sign convention is one convention: `--net` is you-owe, ink is
+//    owed-to-you, and neither is ever a green
+// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -118,6 +132,8 @@ describe("day one", () => {
     expect(container.textContent).toContain(DAY_ONE);
     expect(container.textContent).toContain(DAY_ONE_SUB);
     expect(container.textContent).toContain(DAY_ONE_ACT);
+    // Nothing about a grant, a receipt or a re-grant: denied is a different
+    // screen and the two must never read alike (STATES.md, rule 1).
     expect(container.textContent).not.toContain("revoked");
     unmount();
   });
@@ -178,4 +194,3 @@ describe("the sign convention", () => {
     unmount();
   });
 });
-// @vitest-environment jsdom

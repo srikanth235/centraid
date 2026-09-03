@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -249,4 +250,3 @@ describe("offline is READ from the host, and it speaks as the stale notice", () 
     expect(SOURCE).toMatch(/\{offline && loaded \? \(\s*<Stale/u);
   });
 });
-// @vitest-environment jsdom

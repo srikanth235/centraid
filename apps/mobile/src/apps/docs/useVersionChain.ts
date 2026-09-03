@@ -1,3 +1,10 @@
+// The version chain, read live off this device's replica (#821).
+//
+// The ONE entity read behind it is `core.link` (the scope is granted and
+// replicates — INTEGRATION-NOTES.md). The walk
+// itself is `docs-versions.ts`, pure; this hook only feeds it rows and
+// carries the honesty state so the screen can tell "no versions" apart from
+// "could not read the links".
 import { useMemo } from "react";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";

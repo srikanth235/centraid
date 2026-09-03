@@ -1,3 +1,8 @@
+/**
+ * Grant sheet, native seat (#825). Audience-first: person → what → capability.
+ * Object-first is an ENTRY via `subject`, not a second sheet. Feedback is
+ * `onStatus`, never a toast.
+ */
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
 
@@ -87,6 +92,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     [props.door, gatewayBase]
   );
 
+  // `null` = unread; an empty registry is a claim, so do not paint it early.
   const [registry, setRegistry] = useState<SubjectRegistry | null>(null);
   const [audienceId, setAudienceId] = useState(props.audienceId ?? "");
   const [subjectId, setSubjectId] = useState("");
@@ -106,11 +112,14 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
   const subject =
     offered.find((candidate) => subjectKey(candidate) === subjectId) ??
     offered[0];
+  // Effect keys, not objects: a rebuilt array must not re-read every render.
   const audienceKey = audience?.id ?? "";
   const audienceKind = audience?.kind ?? "party";
   const pinnedType = props.subject?.subjectType ?? "";
   const pinnedId = props.subject?.subjectId ?? "";
 
+  // Reach is about the person, not the door, and `forSubject` cannot answer
+  // one — so object-first still owes a reach read.
   useEffect(() => {
     if (!props.visible) return;
     let active = true;
@@ -141,6 +150,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
       setStanding(null);
       setChannel(undefined);
       setAudienceKnown(true);
+      // Failed reach leaves channel unknown; do not blank the standing list.
       const readReach = async (): Promise<void> => {
         try {
           const reach = await door.forParty(audienceKey);
@@ -161,6 +171,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
           ]);
           if (active) setStanding(found);
           return;
+          /* unknown draws the checking line, never a claim */
         }
         if (audienceKind === "party") {
           const reach = await door.forParty(audienceKey);
@@ -187,6 +198,8 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     };
   }, [props.visible, pinnedType, pinnedId, audienceKind, audienceKey, door]);
 
+  // Open on the standing capability: never propose a change.
+  // Derived at render; an effect writing it back is a second truth.
   const alreadyStanding =
     subject && standing
       ? grantOverSubject(
@@ -199,6 +212,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
   const capabilities = subject
     ? capabilitiesFor(registry?.offers ?? [], subject.subjectType)
     : [];
+  // Clamp to drawable: a narrowed standing `edit` must not be posted.
   const capability = drawableCapability(
     capabilities,
     picked ?? defaultCapability(alreadyStanding)
@@ -238,11 +252,16 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     registryPending ||
     registryUnreadable ||
     notOfferable ||
+    // A person is reachable only through a live link (#903), and the command
+    // pack refuses the rest — so the sheet does not grow a control naming an
+    // act it cannot perform. The reach line above already says why.
     reachBlocksSharing(reach) ||
     busy;
 
   const submit = async (): Promise<void> => {
     if (!audience || !subject || blocked) return;
+    // Another verb cannot be widened or narrowed in place (V-table), and the
+    // change costs the audience their copy while it runs. Ask first.
     if (changing) {
       setChangeConfirm(true);
       return;
@@ -257,6 +276,8 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
       setRefusal(outcome.message);
       return;
     }
+    // A HELD share is not a granted one (#883): the granted sentence would
+    // claim an audience can see something no vault was asked about.
     props.onStatus(
       outcome.outcome === "awaiting_confirmation" ||
         outcome.outcome === "queued"
@@ -296,6 +317,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     const outcome = await door.revoke(grant.grantId);
     setBusy(false);
     setConfirming(null);
+    // Route sentence, verbatim: never soften it.
     props.onStatus(outcome.message);
     if (outcome.ok)
       setStanding((current) =>

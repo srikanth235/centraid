@@ -1,3 +1,5 @@
+// The Starred shelf (spec §2; #821) — a band destination on `DocsHome`.
+// One star product-wide; this replica reads document tags, so it counts those.
 import React, { useMemo } from "react";
 
 import { STARRED } from "@centraid/blueprints/apps/docs/shelves";

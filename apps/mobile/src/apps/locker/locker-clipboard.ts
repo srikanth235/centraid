@@ -1,3 +1,14 @@
+// THE CLIPBOARD LEG, on this seat (README-Locker §2, "Clipboard").
+//
+// The rule and its sentence are the blueprint's (`apps/locker/clipboard.ts`):
+// thirty seconds, and the copy SAYS SO. What cannot be shared is the door —
+// that module reaches `navigator.clipboard`, which does not exist under
+// Hermes — so this file is the same semantics over `expo-clipboard`, and it
+// takes the seconds and the sentence from there rather than restating either.
+//
+// COMPARE-THEN-CLEAR, exactly as next door: the wipe only fires if the
+// pasteboard still holds the value Locker put there, so a secret's timer never
+// clobbers something the member copied since.
 import * as Clipboard from "expo-clipboard";
 
 import {
@@ -25,6 +36,8 @@ export function scheduleLockerClipboardClear(secret: string): void {
   }, CLIPBOARD_CLEAR_SECONDS * 1000);
 }
 
+/** Lock-time hygiene. Called by the one lock door in `locker-store.ts`, so a
+ *  session ending and the pasteboard emptying cannot come apart. */
 export function clearLockerClipboard(): void {
   if (clearTimer) clearTimeout(clearTimer);
   clearTimer = null;

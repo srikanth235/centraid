@@ -1,3 +1,8 @@
+// The drive, projected from the phone's replica rows (#821) — the same joins
+// the web `drive` query runs gateway-side, re-expressed pure and testable here.
+// Nothing is fabricated: every field is a replica fact or `null` where the
+// replica cannot say ("unknown" ≠ "shared with nobody"). No react-native or
+// replica imports beyond the provenance readers (docs-projection.test.ts).
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 import {
   canRender,
@@ -38,6 +43,8 @@ export {
 } from "./docs-projection-shares";
 export { type EntityRow } from "./docs-projection-rows";
 
+/** A drive row plus the phone-only facts: a folder tag pointing at a gone
+ *  concept (§4.3), and the DOCUMENT row's provenance/pending stamps (#880). */
 export type MobileDriveDoc = DriveDoc & {
   folderGone: boolean;
   canWrite: boolean;
@@ -53,6 +60,9 @@ export interface DriveEntityRows {
   schemes: readonly EntityRow[];
   custody: readonly EntityRow[];
   shares: ShareEntityRows | null;
+  /** `null` when the placement-origin read was denied/failed. Distinct from
+   *  an empty list: the Shared shelf must never draw "nothing was shared with
+   *  you" over a read that never answered. */
   origins: OriginEntityRows | null;
 }
 
@@ -233,6 +243,11 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
   };
 }
 
+// Shares — the same bounded join `queries/_shared.ts` runs gateway-side.
+// `null` never leaves this function.
+// The row's one state slot (§4.1) — the shared ladder, fed with phone facts.
+/** Days until purge, or `null` when the vault never asserted one — the slot
+ *  stays blank rather than printing a number nobody computed. */
 export function purgeDaysLeft(
   purgeAt: string | null | undefined,
   now: number = Date.now()
@@ -243,10 +258,17 @@ export function purgeDaysLeft(
   return Math.max(0, Math.ceil((stamp - now) / DAY_MS));
 }
 
+/** POSITIVELY elsewhere? Only `remote-only`/`missing` say so; unswept
+ *  (`null`) custody is unknown — never invent a refusal over unknown. */
 export function bytesOnDevice(doc: Pick<DriveDoc, "custody_state">): boolean {
   return doc.custody_state !== "remote-only" && doc.custody_state !== "missing";
 }
 
+/**
+ * State slot precedence: cannot render → trash countdown → remote-only
+ * (offline) → custody mark. The ladder is the shared `rowStateMark`
+ * (view-copy.ts), so web and phone cannot disagree.
+ */
 export function docRowState(
   doc: Pick<
     DriveDoc,
@@ -266,10 +288,30 @@ export function docRowState(
 
 export interface RowMeta {
   lead: string | null;
+  /** That rung is consequential (`--net`) and must not be drawn as chrome. */
   leadNet: boolean;
   rest: string;
 }
 
+/**
+ * The row's SECOND LINE — the kind, the size and the date.
+ *
+ * The v12 handoff withheld these on the phone as COLUMNS ("a 390px canvas
+ * cannot carry five columns and a title"), and the row carried that forward as
+ * a blanket absence. The reasoning does not survive the shape actually drawn
+ * here: a stacked sub-line is not a column. Without it every row is a bare
+ * title, which is precisely how a drive of a few thousand documents stops
+ * being readable — two documents named alike become indistinguishable without
+ * opening one, and a kind this seat cannot render announces itself only after
+ * the tap that fails.
+ *
+ * The state slot's TEXT rung LEADS this line instead of holding a column of
+ * its own: "cannot be shown" is a fact about the document and belongs beside
+ * its kind, and folding it in returns that width to the title. GLYPH rungs
+ * (the device mark) stay on the trailing edge — a glyph is not prose and
+ * cannot join a sentence. The ladder still yields at most one mark, so the
+ * row still shows at most one state.
+ */
 export function docRowMeta(
   doc: Pick<
     DriveDoc,

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -245,4 +246,3 @@ describe("[law:native-block-flag-marks] block parity — the phone draws every s
     expect(el.querySelector("[data-glyph]")).not.toBeNull();
   });
 });
-// @vitest-environment jsdom

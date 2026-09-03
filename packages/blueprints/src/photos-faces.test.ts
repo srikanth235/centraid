@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -102,4 +103,3 @@ describe("photos faces mini-list", () => {
     expect(host.dataset.faceIndex).toBe("1");
   });
 });
-// @vitest-environment jsdom

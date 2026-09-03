@@ -1,3 +1,4 @@
+/* Power-context push (#528 D): courtesy-only live power state, never a durable mode flip. */
 import { powerMonitor } from "electron";
 
 const POWER_CONTEXT_PATH = "/centraid/_gateway/resource/power-context";

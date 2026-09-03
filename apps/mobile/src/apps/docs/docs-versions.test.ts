@@ -1,3 +1,8 @@
+// The version chain over replica rows (#821, spec §10) — the same walk the
+// gateway's history query performs, asserted here over plain rows: NEW → OLD
+// along live revises edges, dates from the edges' own assertion times, a
+// cycle guard for restored versions, and the honest one-entry history for a
+// vault where nothing was ever revised.
 import { describe, expect, it } from "vitest";
 
 import type { EntityRow } from "./docs-projection";
@@ -58,6 +63,7 @@ describe(projectVersionChain, () => {
       current: true,
       asserted_at: "2026-08-11T18:44:00Z",
     });
+    // The never-revised original dates from its own mint.
     expect(chain?.entries[2]?.asserted_at).toBe("2026-08-08T20:12:00Z");
   });
 

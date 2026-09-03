@@ -1,3 +1,17 @@
+// The one READ route (Docs handoff Part 2 §6–§7; #821): reading view
+// for text kinds, the facts panel for kinds Docs cannot set, and a hand-off
+// to the stage for the kinds that render as media — the fork is a fact about
+// the document (`document-read-model.ts`), not three places.
+//
+// Reading view: real text at the reading measure (`t("reading")`, capped at
+// 34em), kind eyebrow, display title, ruled byline. Its status is
+// `Version N · edited two hours ago` with the REAL chain count off the
+// replica's `core.link` walk; the sample's "only you have opened this" is
+// withheld — nothing records an opening.
+//
+// Facts panel: "a kind is a fact about the bytes; whether Docs can set it is
+// a separate fact. The panel exists for the difference." Nothing converts;
+// Open elsewhere hands the file, as stored, to an app that reads the kind.
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
@@ -245,6 +259,8 @@ function FactsView({
         style={styles.editButton}
       />
       {!reachable || localOnlyGone ? (
+        // The disabled outline carries its reason INLINE — never a hidden
+        // control (platform states table).
         <Text style={styles.bodyFaint}>
           The bytes are not on this device and the gateway is out of reach, so
           nothing can be handed over right now.

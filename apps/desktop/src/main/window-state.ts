@@ -1,3 +1,9 @@
+/*
+ * Persist main window bounds (#468).
+ * Debounced writes while resizing; flush sync on close / before-quit.
+ * Clamped to a visible display work area so a disconnected monitor
+ * cannot hide the window off-screen.
+ */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 

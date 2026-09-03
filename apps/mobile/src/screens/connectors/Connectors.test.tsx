@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { WebBrowserAuthSessionResult } from "expo-web-browser";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -278,4 +279,3 @@ describe(ConnectorsScreen, () => {
     expect(textOf(container)).toContain("Connectors");
   });
 });
-// @vitest-environment jsdom

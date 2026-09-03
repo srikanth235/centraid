@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -175,4 +176,3 @@ describe("Photos' grant entry, phone seat", () => {
     expect(named).toStrictEqual([]);
   });
 });
-// @vitest-environment jsdom

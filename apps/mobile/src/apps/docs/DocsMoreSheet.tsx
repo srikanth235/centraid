@@ -1,3 +1,16 @@
+// The "More in Docs" sheet (Binding Layer v12 handoff Part 2 §"The band";
+// spec §1.5).
+//
+// The band is capped at five destinations, and Docs has more shelves than
+// slots — the sixth onward live here: Recently changed, Starred, Trash,
+// Storage, What Docs may read, Add to Docs. Labels and meta come from the
+// shared `view-copy.ts` table (`docs-band.ts` selects the mobile six), so the
+// sheet can never drift from what the web app calls the same shelves.
+//
+// Counts are deliberately absent: the sheet mounts over whichever screen is
+// current and has no replica read of its own, and a placeholder number is the
+// lie the shared table's "no meta where the spec printed a sample" rule
+// exists to avoid. The rows that carry meta carry the spec's own prose rules.
 import React, { useMemo } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

@@ -1,3 +1,12 @@
+// The SHARING half of the drive projection — who sent a document into this
+// vault, and who this vault has sent it on to. Split out of
+// `docs-projection.ts` when that file outgrew the size limit; only this half
+// needs the link plane.
+//
+// Same law as its parent: nothing is fabricated. Every field is a replica fact
+// or `null` where the replica cannot say — "unknown" is never "shared with
+// nobody" (#903).
+// `SharedFrom` is the BLUEPRINT's: two shapes for one fact is how seats drift.
 import type {
   SharedFrom,
   SharedMember,
@@ -39,6 +48,13 @@ function shareLabel(
   return rest > 0 ? `${shown} +${rest}` : shown;
 }
 
+/**
+ * Inbound placements, by document id — the Shared shelf's whole source.
+ *
+ * The vault id is the durable fact; the NAME needs a live
+ * `share_party_vault_binding`. No binding, no name — never a vault id worn as
+ * one, and never a guess from `shared_by`, which is an owner id, not a party.
+ */
 export function originsByDocument(
   rows: OriginEntityRows
 ): Map<string, SharedFrom> {

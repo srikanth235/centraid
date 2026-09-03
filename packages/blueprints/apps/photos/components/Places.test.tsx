@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -60,4 +61,3 @@ describe("the no-location section", () => {
     expect(markup([ROLL[0]!])).not.toContain("No location yet");
   });
 });
-// @vitest-environment jsdom

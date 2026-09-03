@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
@@ -549,4 +550,3 @@ describe("COMPANION explains where the act happens and dispatches nothing", () =
     expect(markup).not.toContain("<button");
   });
 });
-// @vitest-environment jsdom

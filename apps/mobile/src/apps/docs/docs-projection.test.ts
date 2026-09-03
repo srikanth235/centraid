@@ -1,3 +1,4 @@
+// The phone's drive projection and the row's one state slot (#821).
 import { describe, expect, it } from "vitest";
 
 import {
@@ -186,6 +187,8 @@ describe(projectDrive, () => {
   });
 
   it("says it does not KNOW what was shared when the origin read is absent", () => {
+    // The Shared shelf reads this flag before it draws a set: an unanswered
+    // read and an empty inbox are different facts and must not look alike.
     expect(projection.sharedFromKnown).toBe(false);
     for (const doc of projection.documents) {
       expect(doc.shared_from).toBeNull();
@@ -225,6 +228,7 @@ describe(projectDrive, () => {
       party_id: "party-alice",
       name: "Alice",
     });
+    // A shelf built on "has an origin row" must leave every other row alone.
     expect(
       answered.documents.filter((doc) => doc.shared_from !== null)
     ).toHaveLength(1);
@@ -310,6 +314,7 @@ describe(sharesByDocument, () => {
         revoked_at: null,
         implicit_circle: 0,
       },
+      // Revoked — never listed.
       {
         grant_id: "g-folder",
         circle_id: "circle-implicit",
@@ -379,6 +384,7 @@ describe(sharesByDocument, () => {
       "Ana",
     ]);
     expect(docShare?.pending_count).toBe(0);
+    // The implicit circle's machine name never prints — the roster does.
     expect(folderShare?.label).toBe("Ana");
     expect(folderShare?.via).toBe("folder");
     expect(folderShare?.pending_count).toBe(1);
@@ -441,6 +447,7 @@ describe(docRowState, () => {
     expect(
       docRowState({ ...base, custody_state: "remote-only" }, { offline: true })
     ).toStrictEqual({ kind: "text", text: "will not open", net: true });
+    // Unknown custody is unknown — never a fabricated refusal.
     expect(docRowState(base, { offline: true })).toBeNull();
   });
 

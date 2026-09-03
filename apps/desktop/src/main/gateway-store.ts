@@ -1,3 +1,11 @@
+/*
+ * Desktop connection registry (#555).
+ *
+ * Electron main owns one `<userData>/connections.json`; it never scans or
+ * creates a directory per connection. Remote gateways are keyed by their
+ * stable iroh EndpointId. Relay hints are refreshable address cache, not
+ * identity, and device secrets live separately behind safeStorage.
+ */
 import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";

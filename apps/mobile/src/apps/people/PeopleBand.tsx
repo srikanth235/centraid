@@ -1,3 +1,11 @@
+// People's claimed bottom band, rendered (Binding Layer v12 handoff, § Nav).
+//
+// Anatomy and every shared value: `PhotosBand.tsx` and `kit/band-surface.ts`,
+// so the claimed bands cannot drift apart.
+//
+// Mobile band tab: icon over label, 2px active rule pinned to the tab's top
+// edge inset 14, `min-width: 44` via `flex:1` fifths of the plate. The active
+// tab takes ink; selection is the rule + the colour, never a weight flip.
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -43,6 +51,8 @@ export default function PeopleBand({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const band = resolvePeopleBand(owner);
   if (band.owner !== "app") {
+    // Handed back, but never stranded: the tab group is what the member handed
+    // back, not the frame's way out — the capsule stays (#712).
     return (
       <View
         style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
@@ -70,6 +80,9 @@ export default function PeopleBand({
               key={destination.key}
               accessibilityRole="tab"
               accessibilityLabel={destination.label}
+              // The DESTINATION KEY, never the label: the label is copy a v-next
+              // handoff may re-word, and a flow that tapped it would then tap
+              // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.people}${destination.key}`}
               accessibilityState={{ selected: active }}
               onPress={() => onSelect(destination.key)}

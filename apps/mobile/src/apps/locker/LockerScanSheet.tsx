@@ -1,3 +1,18 @@
+// THE ONE-TIME-CODE SCANNER — the origin seat's own capability.
+//
+// FLOWS.md: "The one-time code offers Scan only on the phone; elsewhere it
+// says how to get the seed instead." This is that Scan. It follows the frame's
+// established camera pattern (`screens/Onboarding.tsx`): `useCameraPermissions`
+// for the grant, `CameraView` with `barcodeScannerSettings` restricted to
+// `qr`, and one `onBarcodeScanned` handler.
+//
+// THE SEED IS READ AND HANDED STRAIGHT TO THE FORM. It is never written to
+// this device: the field that receives it is `editSeed`, one of the enumerated
+// secret-bearing values a lock wipes, and the write that carries it is
+// online-only. Nothing here logs the code or keeps a frame.
+//
+// A SQUARE THAT IS NOT AN OTPAUTH CODE IS REFUSED BY NAME, not swallowed: a
+// scanner that quietly ignored a wifi square would look broken.
 import { CameraView, useCameraPermissions } from "expo-camera";
 import React, { useState } from "react";
 import { Modal, StyleSheet, View } from "react-native";

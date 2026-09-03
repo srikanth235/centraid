@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
 import { act, createElement } from "react";
@@ -174,4 +175,3 @@ describe("the read-only surface keeps a primary (proto 4800-4801)", () => {
     );
   });
 });
-// @vitest-environment jsdom

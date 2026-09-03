@@ -1,3 +1,16 @@
+// The drive's row set, shared by every shelf that paints documents
+// (#821): All, one folder, Recently changed, Starred, Trash and the
+// Search results all draw THIS — rows in one container (1px rule, 12 radius,
+// `bgElev` ground, per the handoff's row-container recipe), the quick-actions
+// menu on `···` and press-and-hold, the honest loading/empty/error states,
+// and the caption + status sentences under the set.
+//
+// The menu's WRITES live here too — star/unstar, rename, refile, trash,
+// restore — one implementation with one Undo grammar (`showUndoStatus` + the
+// reverse write, only where a reverse write exists), so five shelves cannot
+// drift on what a verb does. The Undo is BOUNDED (#903). Outcomes surface through the kit's
+// `surfaceWriteOutcome` (parked → Approvals; queued → the one queued
+// sentence).
 import { useNavigation } from "@react-navigation/native";
 import { FlashList } from "@shopify/flash-list";
 import React, { useMemo, useState } from "react";
@@ -135,6 +148,15 @@ export default function DriveList({
     showUndoStatus(sentence, () => void write(undo.action, undo.input));
   };
 
+  /**
+   * The same verb over a chosen set. Serial rather than `Promise.all`: the
+   * write door is one queue and the drain lock single-files intents anyway, so
+   * a burst buys nothing and costs the ability to report how far it got.
+   *
+   * The status counts what SETTLED, never what was asked. A write that parked
+   * for a steward or was refused returns nothing from the door, so it is not
+   * in the sentence and not in the Undo.
+   */
   const actMany = async (
     action: string,
     targets: readonly MobileDriveDoc[],
@@ -146,6 +168,9 @@ export default function DriveList({
     }
   ): Promise<void> => {
     const settled: MobileDriveDoc[] = [];
+    // Serial BY CONTRACT: the sentence afterwards counts what actually
+    // landed, so a failure partway has to stop counting rather than race the
+    // rest of the batch.
     for (const doc of targets) {
       // oxlint-disable-next-line no-await-in-loop -- see above
       const result = await write(action, input(doc));
@@ -171,6 +196,12 @@ export default function DriveList({
     );
   };
 
+  /**
+   * The row's Download. Stages the EXACT stored bytes and hands them to the
+   * OS — the same `docs-export` path the facts panel's "Open elsewhere" uses,
+   * because they are one act with two names, and the phone's file space is the
+   * share sheet. Nothing is converted.
+   */
   const handOver = async (doc: MobileDriveDoc): Promise<void> => {
     try {
       await openElsewhere(doc, gatewayBase, vaultId);

@@ -42,6 +42,7 @@ export interface ReplicaContextValue {
   compatibility?: MobileCompatibilityDisposition;
   features?: MobileGatewayFeatures;
   error?: string;
+  /** The `out of room` state (#708): the driver hit SQLITE_FULL/ENOSPC. */
   storageFull?: boolean;
 }
 
@@ -63,6 +64,12 @@ export interface ReplicaFreshnessStore {
   commit: () => Promise<void>;
 }
 
+/**
+ * One frame can advance every mounted scope, so stamps accumulate and land
+ * together: a thousand-change frame costs one write per scope and one context
+ * rebuild, not one of each per change. Losing an uncommitted stamp costs a
+ * replay, never data — which is why the debounce is safe at all.
+ */
 export function createFreshnessStore(input: {
   storage: AsyncStorageLike;
   gatewayId: string;

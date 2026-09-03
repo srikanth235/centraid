@@ -1,3 +1,16 @@
+// Locker's claim on the phone's bottom band (README-Locker §1, "Phone band"):
+// **Items · Review · Generate · Search** plus the frame's More — four
+// destinations and a sheet, the invariant's exact cap.
+//
+// Ids and labels come from `apps/locker/shelves.ts`, so the band, the desktop
+// rail and the app bar cannot disagree about what a place is called. No
+// `react-native` import here: `locker-band.test.ts` asserts these tables
+// directly and `LockerBand.tsx` renders them unchanged.
+//
+// The sheet's other half names where each row's act happens. Companion is
+// permanently `elsewhere` — it runs in a browser extension, beside the page —
+// and its row still leads somewhere, because a greyed row would teach that
+// Companion is broken rather than that it lives in the browser.
 import {
   SURFACE_META,
   SURFACE_TITLE,
@@ -18,6 +31,9 @@ import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
 import type { LockerStackParamList } from "../../navigation";
 
+// THE FRAME'S CAPSULE (#883 B5): one component, one constant, one geometry,
+// in `kit/band/band-capsule.ts`. Re-exported here because this band's view
+// and its tests read the model through this module's path.
 export { BAND_CAPSULE } from "../../kit/band/band-capsule";
 export type { BandCapsule } from "../../kit/band/band-capsule";
 
@@ -42,6 +58,9 @@ export const LOCKER_BAND_DESTINATIONS: readonly LockerBandDestination[] = [
   ...BAND_DESTINATIONS.map((destination) => ({
     key: destination.id as LockerBandDestinationKey,
     label: destination.label,
+    // The shared table types the glyph as optional because the desktop rail
+    // does not draw one; the band always does, so an absent glyph falls back
+    // to the sheet's own mark rather than rendering nothing.
     icon: destination.icon ?? MORE_ICON,
   })),
   { key: "more", label: "More", icon: MORE_ICON },

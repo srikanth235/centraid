@@ -1,3 +1,16 @@
+// TRASH — `locker/trash` (README-Locker §6; FLOWS.md "Trash and purge").
+//
+// THIRTY DAYS, WITH ITS STAR AND ITS TAGS, so a restore brings it back whole.
+// Each row states its own purge countdown rather than a date nobody can
+// subtract in their head (`format.purgeCountdown`), and there is no Empty
+// button: purging is per item, confirmed, and irreversible.
+//
+// A PURGE ASKED FOR OFF-OWNER PARKS AND SAYS SO. The vault decides that, not
+// this screen — which is why the outcome is read from the write's own status
+// (`surfaceWriteOutcome` publishes the parked reason on the one status line)
+// rather than announced before the answer comes back.
+//
+// WINDOWED (#883 C4): trash has no cap.
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";

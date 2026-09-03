@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -291,4 +292,3 @@ describe("shell↔app conformance", () => {
     });
   });
 });
-// @vitest-environment jsdom

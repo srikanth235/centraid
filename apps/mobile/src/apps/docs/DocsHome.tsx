@@ -1,3 +1,15 @@
+// The Docs stack's home (Binding Layer v12 handoff Part 2; #821).
+//
+// The claimed band's shelf destinations — All, Folders, Starred, Search, plus
+// Coming due off the More sheet — all live on this one screen, so a band tap
+// from a pushed route navigates here with the destination named rather than
+// pushing a second copy (`DocsScreen.tsx`'s `popTo`). React Navigation updates
+// params on a mounted screen WITHOUT remounting it, so the param is mirrored
+// into state through an effect, exactly as `PhotosHome` does.
+//
+// The All shelf is the drive: filter chips that COMPOSE (each axis its own
+// menu, `Clear` only once something is filtered), a sort menu, and the
+// list/grid pair remembered together with the sort (`docs-view-prefs.ts`).
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
@@ -255,6 +267,8 @@ function AllShelf({
           key: option,
           label: option,
           checked: filters[axis.id] === option,
+          // Choosing the chosen option again clears the axis — the chip is a
+          // toggle over one selection, never a second control.
           onSelect: () =>
             onFilters({
               ...filters,

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -158,4 +159,3 @@ describe(RowsBlock, () => {
     expect(styleOf(divs[4] ?? null).paddingHorizontal).toBe(12);
   });
 });
-// @vitest-environment jsdom

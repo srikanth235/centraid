@@ -1,3 +1,21 @@
+// THE FRAME EVERY TALLY SURFACE SITS IN.
+//
+// It owns three things no screen should own twice: the spine read, the DENIED
+// GATE, and the band with its More sheet.
+//
+// THE GATE IS THE POINT. A refused grant is asked about once, here, and when
+// it answers the children are not rendered at all — not dimmed, WITHDRAWN —
+// and neither is the band. Fifteen routes therefore cannot each forget to
+// check: a Tally surface that wraps itself in this frame cannot paint a ledger
+// over a vault it was refused, because there is nothing behind the gate.
+//
+// The band, on the other hand, STAYS while the gate stands is the wrong shape
+// too — a navigation spine over a refused grant advertises destinations that
+// would each refuse in turn. So it is withdrawn with the children, exactly as
+// Locker withdraws it behind a lock.
+//
+// `routeStatus` is asked for the ambient sentence, so the app bar carries the
+// same line as the desktop's status row and neither seat can invent one.
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -60,6 +78,7 @@ export default function TallyScreen({
       setMoreOpen(true);
       return;
     }
+    // popTo, never navigate: navigate would push a second copy of the list.
     navigation.popTo("TallyHome", { destination: key });
   };
 

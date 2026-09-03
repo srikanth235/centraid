@@ -20,6 +20,11 @@ describe(binarizeProbabilityMap, () => {
 
 describe(findConnectedComponents, () => {
   it("finds a single 2x2 square component and its bounding box", () => {
+    // 4x4 grid, foreground square at rows 1-2, cols 1-2
+    // 0 0 0 0
+    // 0 1 1 0
+    // 0 1 1 0
+    // 0 0 0 0
     const width = 4;
     const height = 4;
     const mask = new Uint8Array(width * height);
@@ -63,6 +68,7 @@ describe(unclipBox, () => {
   it("expands a box symmetrically using PaddleOCR's distance formula", () => {
     const box = { x: 10, y: 10, width: 10, height: 10 };
     const area = 100;
+    // perimeter = 40; distance = area * ratio / perimeter = 100 * 1.5 / 40 = 3.75
     const expanded = unclipBox(box, area, 1.5);
     expect(expanded).toStrictEqual({
       x: 6.25,
@@ -91,6 +97,8 @@ describe(clampBoxToImage, () => {
   });
 
   it("rounds fractional coordinates to integer pixels", () => {
+    // x1=round(1.4)=1, y1=round(1.6)=2, x2=round(1.4+3.0)=round(4.4)=4,
+    // y2=round(1.6+3.0)=round(4.6)=5 -> width=4-1=3, height=5-2=3
     expect(
       clampBoxToImage({ x: 1.4, y: 1.6, width: 3, height: 3 }, 10, 10)
     ).toStrictEqual({
@@ -104,6 +112,7 @@ describe(clampBoxToImage, () => {
 
 describe(meanProbabilityInBox, () => {
   it("averages exactly the pixels covered by the box", () => {
+    // 3x1 row: [0.2, 0.8, 0.4]; box covers columns 1-2 (0.8, 0.4)
     const probs = [0.2, 0.8, 0.4];
     expect(
       meanProbabilityInBox(probs, 3, { x: 1, y: 0, width: 2, height: 1 })
@@ -125,6 +134,7 @@ describe(dbPostprocess, () => {
     const results = dbPostprocess(probs, width, height, { unclipRatio: 0 });
     expect(results).toHaveLength(1);
     expect(results[0]?.score).toBeCloseTo(0.95, 5);
+    // unclipRatio 0 -> box == the raw connected-component bounding box
     expect(results[0]?.box).toStrictEqual({ x: 2, y: 3, width: 6, height: 3 });
   });
 

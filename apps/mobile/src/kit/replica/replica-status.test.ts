@@ -102,8 +102,12 @@ describe("what the replica bar says", () => {
 });
 
 describe("a sync the member's own rules paused", () => {
+  // THE REGRESSION THIS PINS (#880 W2.2). A metered/battery refusal came back
+  // from the facade as "nothing threw", settled as `current`, and the bar then
+  // said nothing at all — the screen claiming freshness it never fetched.
   it("is neither current nor a sleeping gateway", () => {
     expect(settledReachability(false, true)).toBe("sync-paused");
+    // Even a "landed" boolean cannot outrank a pull that never happened.
     expect(settledReachability(true, true)).toBe("sync-paused");
     expect(settledReachability(true)).toBe("current");
   });
@@ -117,6 +121,8 @@ describe("a sync the member's own rules paused", () => {
 });
 
 describe("a library that is only partly here", () => {
+  // #880 W2.4: an app killed mid-backfill and relaunched offline has no live
+  // bootstrap to report pages, so coverage is the only thing left that knows.
   it("labels a partial replica even with no bootstrap running", () => {
     expect(
       replicaCoverageRow({ coverage: "partial", bootstrapping: false }).label
@@ -168,6 +174,9 @@ describe("the trace a revoked scope leaves", () => {
   });
 
   it("keeps the first instant when the same revoked frame arrives twice", async () => {
+    // THE POINT (#880 W4.4). The purge takes the rows, the cursor and the
+    // mount, so nothing else on the phone can afterwards say where a vault
+    // went. This record is written before the purge and outlives the process.
     const storage = memoryStorage();
     await recordRevokedNotice(storage, "gateway-1", notice);
     const again = await recordRevokedNotice(storage, "gateway-1", {
@@ -193,6 +202,9 @@ describe("the trace a revoked scope leaves", () => {
 
 describe("what a pass may claim before it has asked the gateway anything", () => {
   it("does not call an unreachable vault `syncing` just because a URL resolved", () => {
+    // THE REGRESSION THIS PINS (#903). `resolveGatewayBase()` never probes, so
+    // every pass re-asserted reachability over a gateway whose last pull had
+    // already failed, and Home flipped back to "Everything's uploaded".
     expect(attemptedReachability(true, true, false)).toBe("gateway-asleep");
   });
 

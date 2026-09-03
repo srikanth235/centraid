@@ -1,3 +1,8 @@
+// What a mounted row says about its own source (#880).
+//
+// AN UNSTAMPED ROW IS WRITABLE: a single-vault replica, a locally projected
+// pending row and a test fixture carry no provenance at all, and a missing
+// stamp is not a refusal.
 import {
   REPLICA_CAN_WRITE,
   REPLICA_SCOPE_LABELS,

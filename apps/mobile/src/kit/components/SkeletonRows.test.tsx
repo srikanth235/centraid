@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -67,4 +68,3 @@ describe(SkeletonRows, () => {
     ).toHaveLength(3);
   });
 });
-// @vitest-environment jsdom

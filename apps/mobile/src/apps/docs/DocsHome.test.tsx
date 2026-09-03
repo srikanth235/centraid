@@ -1,3 +1,20 @@
+// Docs' RNTL tier (#890 W5). ONE cold renderer for the app: the RN host tree
+// is expensive to boot, so every Docs claim that needs a real accessibility
+// tree, a real responder, or real style resolution is consolidated in this one
+// file (TESTING.md, "React Native component tests").
+//
+// WHAT ONLY THIS TIER CAN FALSIFY here:
+//  - the band as a real `tablist` with exactly one `selected` tab, and the
+//    filter/sort chips as real `button`s carrying their own state traits;
+//  - a press that must reach a real `Pressable` — including the row menu,
+//    which the DOM stub fires as a plain click on a `<button>`;
+//  - `FlashList` slot behaviour: the empty state renders INSTEAD of rows, and
+//    only when the drive really is empty;
+//  - real `StyleSheet` flattening across the frame's array styles.
+//
+// Device seams are the project's (`src/test/native-device-seams.ts`). Every
+// Docs component, blueprint filter and copy table stays real; only the replica
+// read layer — the device database — and the navigator are substituted.
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { StyleSheet } from "react-native";
@@ -105,6 +122,11 @@ describe("Docs, on the real React Native host tree", () => {
   it("draws the band as one native tablist with exactly one selected tab", () => {
     const screen = mountDocs();
 
+    // Five real `tab` nodes, resolved through RN's accessibility tree. The
+    // GROUP around them declares `accessibilityRole="tablist"` but no
+    // `accessible`, so RN never promotes it to an accessibility element and no
+    // assistive technology sees a tab list — visible only from here, since the
+    // DOM stub writes `data-role` onto its `div` unconditionally (#890 W5).
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((tab) => tab.props.accessibilityLabel)).toStrictEqual([
       "All",
@@ -113,6 +135,8 @@ describe("Docs, on the real React Native host tree", () => {
       "Shared",
       "More",
     ]);
+    // EXACTLY ONE lit place. Two lit tabs is precisely the defect a props-echo
+    // stub cannot see, because it never renders the band as one tree.
     expect(statesOf(tabs).filter((selected) => selected === true)).toHaveLength(
       1
     );
@@ -150,6 +174,10 @@ describe("Docs, on the real React Native host tree", () => {
     ]);
     const screen = mountDocs();
 
+    // Accessible NAMES, read off RN's own accessibility tree. The row's
+    // overflow is its own control with its own name, so a screen reader can
+    // tell two rows' menus apart; the DOM stub can only confirm the prop was
+    // handed over, never that RN made an accessibility node of it.
     const names = new Set(
       screen
         .getAllByRole("button")
@@ -162,6 +190,10 @@ describe("Docs, on the real React Native host tree", () => {
   });
 
   it("opens a row into the reader through the real responder tree", () => {
+    // The seam answers an unseeded entity with zero rows and no error, which
+    // is a genuine "nothing arrived". The shelf must say THAT and not inherit
+    // All's sentences, which would tell a member with four documents that
+    // their drive is empty.
     seedDocuments([{ id: "d1", title: "Lease agreement" }]);
     const screen = mountDocs();
 

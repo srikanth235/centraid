@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -158,4 +159,3 @@ describe("the Sharing screen", () => {
     expect(el.textContent).not.toContain("No people linked yet.");
   });
 });
-// @vitest-environment jsdom

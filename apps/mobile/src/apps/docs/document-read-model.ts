@@ -1,3 +1,5 @@
+// One document's read surface (#821). The kind fork lives on the shared model
+// (`format.ts`) so phone and web agree. No react/react-native imports.
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 import {
   canRender,
@@ -72,6 +74,7 @@ export function docBytesUrl(
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
 
+/** Empty when the stamp is unreadable — an absent clause, never an invented one. */
 export function editedAgo(iso: string, now: number = Date.now()): string {
   const stamp = Date.parse(iso);
   if (Number.isNaN(stamp)) return "";

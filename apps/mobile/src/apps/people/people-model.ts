@@ -1,3 +1,11 @@
+// People's read-side projection: pure functions over replica rows.
+//
+// THE WEB QUERY EMITTERS ARE THE CONTRACT — restate the joins of
+// `blueprints/apps/people/queries/*.ts` and invent no column.
+//
+// THE SHARING PLANE DEGRADES TO ABSENT, NEVER TO EMPTY (decisions.md #821
+// L-read): a failed share read arrives as `null` rows, so `linked` is null,
+// never a false "unlinked".
 import {
   daysSinceContact,
   daysUntilMonthDay,
@@ -26,6 +34,8 @@ import type { PersonShareLinks } from "./people-share-model";
 
 export type Row = Record<string, unknown>;
 
+/** A projected person plus the PROFILE row's provenance and pending stamps
+ *  (#880) — the canonical role a star or trash takes. */
 export type MobilePersonRow = PersonRow & {
   canWrite: boolean;
   scopeLabels: readonly string[];
@@ -239,6 +249,8 @@ export function searchRoster<T extends PersonRow>(
   });
 }
 
+// The keep-in-touch summary (`queries/dashboard.ts`), judged over the roster
+// window so Touch and the roster cannot disagree.
 export interface DashboardInput {
   people: readonly PersonRow[];
   linksAvailable: boolean;

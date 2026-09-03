@@ -1,3 +1,4 @@
+/* Rollout (#468): admit when bucket < elapsed/window; fail-open on missing metadata + manual checks, fail-closed on negative elapsed. */
 export const ROLLOUT_WINDOW_MS = 72 * 60 * 60 * 1000;
 
 export interface ShouldAdmitUpdateInput {

@@ -1,3 +1,8 @@
+/*
+ * Pure outage/alert log logic (Electron-free; `gateway-outage-log.ts` wires the
+ * filesystem). The ONLY durable home for gateway health (#665) — never
+ * dual-write it into vault Notifications: health is STATUS, not a decision.
+ */
 import type {
   GatewayComponentAlertAction,
   GatewayRuntimeState,
@@ -22,6 +27,7 @@ export interface OutageLogEvent {
 
 export const OUTAGE_LOG_CAP = 500;
 
+/** Never write a `projection-mark` line again (#665); old ones stay readable. */
 const OUTAGE_LOG_SCHEMA = 4;
 
 interface OutageLogHeaderLine {
@@ -94,6 +100,7 @@ export interface DeriveOutageEventsInput {
   now: number;
 }
 
+/** Latency detail only when `latencyDegraded`: a 4ms sample disproves it (#647). */
 function degradedDetail(state: GatewayRuntimeState): string | undefined {
   if (state.latencyDegraded && state.latencyMs !== undefined)
     return `${state.latencyMs}ms latency`;

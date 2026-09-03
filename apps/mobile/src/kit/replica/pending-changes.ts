@@ -96,6 +96,8 @@ class PendingChangesTicker {
   }
 
   #publish(next: PendingChange[]): void {
+    // `useSyncExternalStore` compares by identity, so an unchanged queue must
+    // keep the same array or every status bar re-renders on every tick.
     if (next.length === 0 && this.#snapshot.length === 0) return;
     this.#snapshot = next;
     for (const listener of this.#listeners) listener();

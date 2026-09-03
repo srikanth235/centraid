@@ -2,10 +2,8 @@
 # Actions caches on close so cargo/turbo entries stop filling the 10 GB pool.
 name: cache-cleanup
 
-# When a PR closes (merge or abandon), drop every Actions cache entry scoped to
-# that head ref and the ephemeral pull-request merge ref. Without this, each PR
-# that ever saved a cache leaves multi-hundred-MB entries until LRU eviction —
-# the audit for #637 found 1,072 turbogha_* keys alone.
+# Delete caches for both the PR head and ephemeral merge refs; otherwise closed
+# PRs retain multi-hundred-MB entries until LRU eviction (#637).
 on:
   pull_request:
     types: [closed]

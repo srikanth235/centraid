@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -285,4 +286,3 @@ describe("the enrichment consent surface on the phone seat", () => {
     expect(onDeviceTitle(1)).toBe("Run face detection over 1 photograph?");
   });
 });
-// @vitest-environment jsdom

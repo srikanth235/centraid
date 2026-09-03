@@ -1,3 +1,6 @@
+// Version chain over THIS DEVICE'S replica (#821). Follow live `revises` OUT
+// (NEW → OLD); a restore can cycle. Date is the edge's assertion time.
+// No provenance on this replica — withhold rather than guess. No diff.
 import type { EntityRow } from "./docs-projection";
 
 const RELATIONS_SCHEME_URI = "urn:duaility:relations";

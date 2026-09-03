@@ -1,3 +1,12 @@
+/*
+ * W6.1 — the fetch half of the install gate (umbrella #842).
+ *
+ * The core's decision table is proven in update-signature-core.test.ts; this
+ * file proves the gate feeds it honestly: that a 404 or a hostile mirror
+ * becomes a REFUSAL rather than a pass, that the trust-anchor short-circuit
+ * makes no network call at all, and that the shipping
+ * {@link TRUSTED_RELEASE_KEYS} value refuses in a packaged build today.
+ */
 import {
   createPrivateKey,
   createPublicKey,
@@ -129,6 +138,8 @@ describe(fetchUpdateTrust, () => {
         reason: "signature-verified",
       }
     );
+    // Stronger than a call count: the gate must fetch the manifest and its
+    // detached signature, and nothing else.
     expect(fetchText.mock.calls.map((call) => call[0])).toStrictEqual([
       manifestUrl,
       signatureUrl,

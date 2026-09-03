@@ -1,3 +1,10 @@
+// Log a touch (v12 handoff § Screens 5) — the app's most repeated act.
+//
+// ONE SCREEN, THREE DECISIONS, NO SCROLLING: who it was about (stated, not
+// chosen), what kind it was, and an optional note. Saving stamps
+// last-contacted, prepends the touch to Touch → Recent, and reports
+// `<Kind> logged · <name>` on the frame's status line — with NO Undo, because
+// nothing in the contract un-logs an interaction (`people-writes.ts`).
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 

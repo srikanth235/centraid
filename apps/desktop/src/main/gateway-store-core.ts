@@ -1,5 +1,7 @@
 import { IDENTITY_COLORS } from "@centraid/design";
 
+/** Gateway profile registry — pure core (#109 / #545 C1); I/O stays in
+ *  `gateway-store.ts`. */
 export type GatewayKind = "local" | "remote";
 
 export interface GatewayProfileShape {
@@ -9,6 +11,7 @@ export interface GatewayProfileShape {
   readonly displayName?: string;
   readonly avatarColor?: string;
   readonly endpointId?: string;
+  /** Refreshable address cache; never connection identity. */
   readonly relayHint?: string;
   readonly rememberDevice?: boolean;
   readonly createdAt: string;

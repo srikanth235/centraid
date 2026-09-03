@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -356,4 +357,3 @@ describe("grouping and labels (§4.3)", () => {
     expect(ticks[0]!.short).toMatch(/2026/u);
   });
 });
-// @vitest-environment jsdom

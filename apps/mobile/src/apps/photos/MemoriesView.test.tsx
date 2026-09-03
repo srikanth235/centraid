@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -323,4 +324,3 @@ describe("a trip on the Memories screen", () => {
     expect(container!.querySelectorAll("[data-stop]")).toHaveLength(0);
   });
 });
-// @vitest-environment jsdom

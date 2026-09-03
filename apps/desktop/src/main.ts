@@ -33,6 +33,9 @@ import { loadWindowState, trackWindowState } from "./main/window-state.js";
 
 const __dirname = import.meta.dirname;
 
+// Single-instance lock (#351): a second copy boots a second gateway on one
+// vault. Startup stays in the `else` — an unconditional `app.whenReady()` can
+// beat the queued `quit()`.
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (gotSingleInstanceLock) {
@@ -72,6 +75,7 @@ if (gotSingleInstanceLock) {
       minWidth: 1100,
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 16, y: 16 },
+      // Revealed on first paint below: no empty-window flash (#659).
       show: false,
       webPreferences: {
         contextIsolation: true,
@@ -83,6 +87,7 @@ if (gotSingleInstanceLock) {
     if (state.isMaximized) win.maximize();
     flushWindowState = trackWindowState(win);
 
+    // Both listeners: a window that never fires `ready-to-show` stays invisible.
     const reveal = (): void => {
       if (win.isDestroyed() || win.isVisible()) return;
       win.show();
@@ -121,6 +126,7 @@ if (gotSingleInstanceLock) {
     });
     registerIpcHandlers();
     createWindow();
+    // First run starts no local gateway (#603): no keychain prompt before choosing.
     try {
       const settings = await loadSettings();
       applyLaunchAtLogin(settings.launchAtLogin);
@@ -132,12 +138,16 @@ if (gotSingleInstanceLock) {
       );
     }
     startUpdateWatcher();
+    // In main so they survive navigation and alert while backgrounded (#528).
     startGatewayMonitor();
     registerPowerContextListeners(() => nudgeGatewayMonitor());
     startReminderMonitor();
+    // Must not block launch (#263); failures surface in Settings → Phone.
     ensurePhoneLink().catch((error) => {
       process.stdout.write(`[phone-link] failed to start: ${String(error)}\n`);
     });
+    // Templates and harness detection belong to the gateway (#141): main must
+    // not touch `@centraid/blueprints`.
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
@@ -151,6 +161,9 @@ if (gotSingleInstanceLock) {
     }
   });
 
+  // Graceful quit (#351 / #468 H1): detached children outlive the UI; only
+  // embedded gateways get the WAL checkpoint. `before-quit` is cancelable, so
+  // the `quitting` guard passes the re-fire through.
   const QUIT_TEARDOWN_TIMEOUT_MS = 5000;
   let quitting = false;
 
@@ -168,6 +181,7 @@ if (gotSingleInstanceLock) {
       shutdownAllLocalGatewaysExcept(),
       shutdownPhoneLink(),
     ]);
+    // Not unref'd: this deadline must fire when teardown wedges.
     let cap: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<void>((resolve) => {
       cap = setTimeout(resolve, QUIT_TEARDOWN_TIMEOUT_MS);

@@ -2,19 +2,14 @@
 # closure build; buildx + registry-backed layer cache for the Docker image.
 name: lane-gateway-package
 
-# A `ci.yml` lane, not an independently-triggered workflow (#557) — the `lane-`
-# prefix marks that.
-# Packaging CI (issue #504 Phase G + Docker artifact smoke). External observer:
-# host binary smoke + docker build/run with a durable /data volume. No
-# product-main "is smoke" branches.
+# Reusable packaging lane for gateway build and Docker smoke tests (#504, #557).
 
 on:
   workflow_call:
 
 permissions:
   contents: read
-  # #637 Phase 2 — registry-backed BuildKit cache lives on GHCR (outside the
-  # 10 GB Actions pool). The lane still does not push the final runtime image.
+  # Registry-backed cache is on GHCR; this lane does not publish the runtime image.
   packages: write
 
 jobs:

@@ -1,3 +1,5 @@
+// Docs shell frame (#821): every surface wraps it; only the Viewer passes
+// `hideBand`. Band taps POP home — navigate would re-push DocsHome (RN7).
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";

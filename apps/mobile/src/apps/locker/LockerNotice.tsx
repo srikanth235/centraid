@@ -1,3 +1,17 @@
+// THE ONE NOTICE ROW, and the seven-plus-two states it can carry
+// (STATES.md's Locker row; README-Locker §4).
+//
+// Every list-bearing surface asks `lockerScreenState` once and hands the
+// answer here, so nine surfaces cannot disagree about what "offline" looks
+// like. NO TOAST, NO SPINNER, NO BADGE, NO RED DOT — a notice is a bordered
+// row with a sentence, and an outcome goes to the frame's one status line.
+//
+// LOADING IS NOT A NOTICE. It is skeleton rows at the list's own geometry,
+// which is `SkeletonRows` and the caller's job, because a notice saying "still
+// reading" tells a member nothing they cannot see.
+//
+// The `--net` border is spent on exactly one state: denied. Offline, stale,
+// pending, parked and conflict are facts about a delay, not about a refusal.
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -19,6 +33,7 @@ import type { LockerScreenState } from "./locker-view-model";
 
 export interface LockerNoticeProps {
   state: LockerScreenState;
+  /** How many metadata writes are still on this device. Never a secret. */
   pending: number;
   waiting?: string | null;
   lastReadAt: string | null;

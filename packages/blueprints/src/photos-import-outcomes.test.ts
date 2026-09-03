@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -91,4 +92,3 @@ describe("ImportPanels", () => {
     expect(html).toContain(">Dismiss</button>");
   });
 });
-// @vitest-environment jsdom

@@ -1,3 +1,7 @@
+// An offline add is a SUCCESS, not a failure (#880). QUALITY.md recorded
+// People closing its add form only on `executed`, so a durable queued row
+// read as nothing having happened.
+// @vitest-environment jsdom
 import React, { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -103,4 +107,3 @@ describe("adding a person while the gateway is out of reach", () => {
     probe.unmount();
   });
 });
-// @vitest-environment jsdom

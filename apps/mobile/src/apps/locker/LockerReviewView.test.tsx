@@ -1,3 +1,16 @@
+// Review's two registers, rendered (README-Locker §5, "Review").
+//
+// The second register is the point, and it is the half a tidy-up would delete:
+// a review surface that silently omits what it cannot check is a review
+// surface that overstates itself. What this pins:
+//
+//  - *Needs attention* carries one row per verdict, with its count and its
+//    reason
+//  - *Checked, and cannot be checked* is always drawn, all clear or not, and
+//    carries the gap tags as literal text
+//  - ALL CLEAR is a designed screen that says what ran and over how many
+//  - nothing to review yet is a THIRD state, distinct from both
+// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -72,6 +85,7 @@ describe("Review", () => {
     for (const rows of [[CLEAN], [CLEAN, WEAK]]) {
       const { container, unmount } = mountBlock(view(rows));
       expect(textOf(container)).toContain(REVIEW_UNRUNNABLE);
+      // The surface owes the REASON, in words — never a bracketed gap tag.
       for (const check of UNRUNNABLE_CHECKS) {
         expect(textOf(container)).toContain(check.label);
         expect(textOf(container)).toContain(check.why);
@@ -95,4 +109,3 @@ describe("Review", () => {
     unmount();
   });
 });
-// @vitest-environment jsdom

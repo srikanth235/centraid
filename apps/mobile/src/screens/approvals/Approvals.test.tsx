@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -396,4 +397,3 @@ describe(ApprovalsScreen, () => {
     expect(buttonLabelled(container, "History")).not.toBeNull();
   });
 });
-// @vitest-environment jsdom

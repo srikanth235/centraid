@@ -1,3 +1,19 @@
+// Version history (Docs handoff Part 2 §10; #821) — "every change is a
+// version and nothing is ever overwritten."
+//
+// The chain is REAL: `core.link` revises edges off this device's replica,
+// walked by `docs-versions.ts` exactly as the gateway's own history query
+// walks them. What the sample shows and this seat cannot say is absent and
+// SAID to be absent:
+//   * WHO made each version (`you` / `Docs` / `a machine`) is a
+//     access.provenance fact the replica does not carry → one sentence under
+//     the list (`VERSIONS_WHO_WITHHELD`), no invented actors.
+//   * NO DIFF IS MOCKED — this seat cannot render a real one, so none is
+//     drawn. Each entry shows its own facts (kind, size, when asserted).
+//
+// Restore dispatches the manifest's `restore-version` through the one write
+// door. A restore is itself a NEW version (history only ever grows forward),
+// so it carries no Undo — there is no reverse write, only another forward one.
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";

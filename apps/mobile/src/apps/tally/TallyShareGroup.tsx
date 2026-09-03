@@ -1,3 +1,6 @@
+// THE COMMONS PRODUCER, AND THE ONLY ONE THIS DEVICE HAS (#825 G-edit).
+// `tally.group` is v1's one edit-capable subject, so this row is where a
+// shared space is compiled. Offline: `tally-seat-copy.ts`.
 import React, { useMemo, useState } from "react";
 
 import { placementEntity } from "@centraid/blueprints/apps/_shared/placement-registry";

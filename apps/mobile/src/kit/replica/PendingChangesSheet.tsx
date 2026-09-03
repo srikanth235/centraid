@@ -37,6 +37,22 @@ export interface PendingSheetScope {
   updatedAt?: string;
 }
 
+/**
+ * Every stopped write on this phone, and what can still be done about each.
+ *
+ * THE ONE THING THIS SHEET OWES A MEMBER is a way out of a write that stopped.
+ * A conflict is the case that proves it: the change is retained with both
+ * versions (docs/mobile-offline.md — the client keeps the projected row, the
+ * reason and both versions until the member edits, retries or discards it), so
+ * this sheet must offer that retry and that discard for EVERY app rather than
+ * for whichever seat happened to grow its own affordance.
+ *
+ * There is deliberately no Edit here. Revising a queued write means composing
+ * a new payload, and only the seat that composed the first one holds the form
+ * to do it (`revisePendingWrite` is called from the app's own editor, and the
+ * browser seat's `PendingWriteActions` takes an `onEdit` from the seat for the
+ * same reason). A generic Edit button in a shell sheet would open nothing.
+ */
 export default function PendingChangesSheet({
   visible,
   onClose,
@@ -220,6 +236,7 @@ export default function PendingChangesSheet({
   );
 }
 
+/** One verb. The subject rides the accessible name, never the visible text. */
 function SheetVerb({
   label,
   subject,

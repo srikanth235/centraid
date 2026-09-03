@@ -1,3 +1,5 @@
+// The phone's own status sentences (#821). Sentences the SHARED copy modules
+// carry are imported at their call sites, never restated here.
 const fmt = (n: number): string => n.toLocaleString("en-US");
 
 export function allStatus(count: number): string {
@@ -22,6 +24,14 @@ export function starredStatus(count: number): string {
   return `${fmt(count)} starred`;
 }
 
+// ─── Shared with you (the inbound half) ─────
+//
+// What this shelf can and cannot claim, stated once here so no surface has to
+// re-derive it. `core_share_origin` is written when a share is DELIVERED into
+// this vault, so its rows are the complete and only answer: a document with no
+// row simply did not arrive that way. What the shelf cannot always say is WHO
+// — naming the sender needs a live link binding for the origin vault, and
+// without one the vault stays unnamed rather than wearing a truncated id.
 export const SHARED_TITLE = "Shared with you";
 
 export function sharedStatus(count: number): string {
@@ -30,6 +40,8 @@ export function sharedStatus(count: number): string {
 
 export const SHARED_CAPTION = "Sorted by when it reached you, newest first.";
 
+/** Not an empty shelf: a shelf that does not know. The two must never look
+ *  alike, so this replaces the set rather than captioning it. */
 export const SHARED_UNKNOWN_TITLE = "This device cannot say what was shared";
 export const SHARED_UNKNOWN_BODY =
   "Where each document came from is a separate read, and it did not answer.";
@@ -38,6 +50,8 @@ export const SHARED_EMPTY_TITLE = "Nothing has been shared with you yet";
 export const SHARED_EMPTY_BODY =
   "When someone you are linked with shares a document, a copy lands here — and goes when they withdraw it.";
 
+// The sender line is the BLUEPRINT's, not a second copy: both seats draw the
+// same shelf and must name a sender the same way (law:one-computation).
 export { sharedFromLine } from "@centraid/blueprints/apps/docs/view-copy";
 
 export function searchStatus(results: number, couldNotRead: number): string {
@@ -60,6 +74,14 @@ export const MOBILE_SEARCH_LABEL = "Search documents by title";
 
 export const SEARCH_IDLE = "Type to search.";
 
+// What this search CANNOT reach, said BEFORE a query rather than after one.
+//
+// The handoff calls this "the state Photos never needed", and on the phone it
+// is the whole drive: the replica indexes titles, so every result was matched
+// on its name. Stating it only alongside results is the failure mode that
+// matters — a member who searches a phrase they know is in a document, sees
+// nothing, and concludes the document is gone. The absence has to be legible
+// before the query that would mislead them.
 export const SEARCH_REACH_EYEBROW = "What could not be searched";
 export function searchReachTitle(count: number): string {
   return count === 1
@@ -70,6 +92,7 @@ export const SEARCH_REACH_BODY =
   "Reading inside a document is a separate consent, and it is off — a phrase from inside one will not find it here.";
 export const SEARCH_REACH_ACTION = "What Docs may read";
 
+/** The `due` capability is off with no runner: state the absence, never guess. */
 export const DUE_EMPTY_TITLE =
   "Nothing has been read out of your documents yet";
 export const DUE_EMPTY_ACTION = "What Docs may read";
@@ -90,6 +113,7 @@ export const STORAGE_ROWS: readonly { state: string; label: string }[] = [
   { state: "missing", label: "Missing — needs attention" },
 ];
 
+// ─── One document's screens (#821) ─────
 export const FACTS_STATUS =
   "Docs cannot set this kind · nothing has been converted";
 

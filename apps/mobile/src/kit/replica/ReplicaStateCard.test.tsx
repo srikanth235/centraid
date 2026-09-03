@@ -1,3 +1,14 @@
+// Regression net for ReplicaStateCard (#711).
+//
+// Sabotage-verified: replacing the `connection === "offline"` branch with a
+// `connection !== "unavailable" && !error` guard makes the offline test below
+// fail — the card renders `null` for the offline case (README:333, "a grey
+// mosaic with no explanation is a bug").
+//
+// react-native is mocked to plain DOM elements (the same approach
+// `EnrichmentConsent.test.tsx` uses) so this can run under jsdom without a
+// full RN test renderer in this workspace.
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -152,6 +163,9 @@ describe("offline/unavailable explanation card (issue #711)", () => {
     expect(container.innerHTML).toBe("");
   });
 
+  // Stub tier: the style object and the `accessibilityRole` PROP, echoed back
+  // by this file's host mock. Whether RN publishes an alert is not observable
+  // here (#890 W5).
   it("gives the unavailable card the net borderColor and declares role alert", async () => {
     await renderCard({ connection: "unavailable", noun: "Tally" });
     const card = container.querySelector<HTMLElement>("div[data-style]");
@@ -173,4 +187,3 @@ describe("offline/unavailable explanation card (issue #711)", () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 });
-// @vitest-environment jsdom

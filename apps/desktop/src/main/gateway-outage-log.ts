@@ -30,6 +30,10 @@ export function loadOutageLog(): OutageLogEvent[] {
   }
 }
 
+/**
+ * Append, cap, persist atomically (temp + rename); no-op when empty.
+ * Drops legacy `projection-mark` lines (#665) — never write one.
+ */
 export function persistOutageEvents(
   existing: readonly OutageLogEvent[],
   events: OutageLogEvent[]

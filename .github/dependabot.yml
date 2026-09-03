@@ -1,13 +1,5 @@
-# Dependency + action updates (#557).
-# Why this file exists: every third-party action in .github/workflows/ is
-# pinned to a 40-char SHA. Pinning without an updater is a freeze, not a
-# control — the pin never moves, including through security fixes. Dependabot
-# rewrites the SHA *and* the trailing `# vX.Y.Z` comment, so the convention in
-# CONTRIBUTING/CI stays intact while the pin stays current.
-# Volume control: everything is weekly and grouped, so a normal week is a
-# handful of PRs rather than one per dependency. Security advisories bypass
-# these groups and open immediately (that is Dependabot security updates, a
-# repo setting — see receipts/issue-557-ci-posture.md).
+# Keep SHA-pinned actions current, including their trailing version comments;
+# security advisories bypass weekly grouping and open immediately.
 version: 2
 
 updates:
@@ -20,17 +12,14 @@ updates:
       timezone: Etc/UTC
     open-pull-requests-limit: 5
     commit-message:
-      # Conventional Commits + mandatory issue suffix are enforced by
-      # .governance/packs/.../commit-message-format. Dependabot cannot append
-      # the "(#N)" suffix, so these land as `ci(deps): …` and the hook's
-      # dependabot exemption (or a manual reword) applies — see the receipt.
+      # Dependabot cannot append the required issue suffix; the governance
+      # hook's Dependabot exemption handles these commit titles.
       prefix: "ci(deps)"
     groups:
       actions:
         patterns: ["*"]
 
-  # Bun workspaces: the root manifest + bun.lock cover every packages/* and
-  # apps/* workspace, so one entry is enough.
+  # The root manifest and bun.lock cover every workspace.
   - package-ecosystem: bun
     directory: /
     schedule:
@@ -39,15 +28,11 @@ updates:
       time: "05:00"
       timezone: Etc/UTC
     open-pull-requests-limit: 10
-    # `prefix-development` is deliberately not set: it is documented for the
-    # older ecosystems and its behaviour on `bun` is unverified, and a rejected
-    # key disables the whole config rather than just that line. The dev/prod
-    # split below already separates the two streams.
+    # Keep the dev/prod split; `prefix-development` is not verified for Bun and
+    # an invalid key disables the whole config.
     commit-message:
       prefix: "chore(deps)"
-    # The monthly toolchain-upgrade issue owns these coupled exact pins. A
-    # grouped weekly bump would bypass the rule/catalog/formatter review in
-    # docs/toolchain.md.
+    # Monthly toolchain upgrades own these coupled exact pins and their review.
     ignore:
       - dependency-name: ultracite
       - dependency-name: oxlint
@@ -58,21 +43,17 @@ updates:
       - dependency-name: vitest
       - dependency-name: turbo
     groups:
-      # Toolchain churn (lint/format/test/build) is noisy and low-risk to batch.
+      # Batch low-risk toolchain churn.
       dev-toolchain:
         dependency-type: development
         patterns: ["*"]
       production:
         dependency-type: production
         patterns: ["*"]
-        # #587 E25 — Dependabot still proposes every major production update,
-        # but each major gets an attributable PR and the full test suite gets
-        # to accept or reject it. The grouped #565 bump hid several independent
-        # mobile breakages in one lockfile diff; patch/minor updates retain the
-        # low-noise batch.
+        # Keep major production bumps attributable; group patch/minor updates.
         update-types: ["minor", "patch"]
 
-  # Three independent crates; Cargo.lock lives next to each manifest.
+  # Keep the three crates independent; each owns its adjacent Cargo.lock.
   - package-ecosystem: cargo
     directories:
       - /packages/tunnel/data-plane
@@ -90,9 +71,8 @@ updates:
       cargo:
         patterns: ["*"]
     ignore:
-      # iroh is the wire protocol. A minor bump can change ALPN/relay behaviour
-      # that only the nightly pairing lanes prove — upgrade deliberately, with
-      # tests/agent-e2e-pairing green, never as a batched dependency PR.
+      # Iroh minor bumps can change ALPN/relay behavior; require pairing tests
+      # and keep them out of batched dependency PRs.
       - dependency-name: iroh
         update-types:
           ["version-update:semver-minor", "version-update:semver-major"]

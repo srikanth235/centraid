@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -137,4 +138,3 @@ describe("each cluster is its own labelled header", () => {
     expect(html).not.toContain("each");
   });
 });
-// @vitest-environment jsdom

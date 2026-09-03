@@ -19,41 +19,11 @@ concurrency:
 permissions:
   contents: read
 
-# ci.yml is the ONLY workflow that listens on `pull_request` (#557). Everything
-# a PR must satisfy is a job here, so all of it rolls up into the single
-# required `check`.
-# Before this, ten workflows each listened on `pull_request` independently. To
-# stay affordable each carried its own `paths:` filter — and that is precisely
-# what made them unrequirable: a workflow filtered out of a PR reports no
-# status, and a required check that never reports blocks the PR forever. So
-# eight lanes (web, docs, iroh-wasm, gateway-package, client-e2e, companion,
-# oauth-worker, dependency-review) could go red with the merge button still
-# green. As path-gated *jobs* they skip cleanly — GitHub counts a skipped job as
-# satisfied — and `check` aggregates them explicitly.
-# Two lanes are big enough to keep their own file and are invoked with
-# `workflow_call`; the rest are jobs below. Deploys stay OUT of here: they own
-# their own secrets and environments (see web.yml, oauth-worker.yml, release-*),
-# and merging those into one file would put every publishing credential in one
-# blast radius.
-# Wall-clock plan: static (format/lint/typecheck) and verify (build/tests/
-# coverage) run in parallel, alongside whichever path-gated lanes the diff woke.
-# Each uses turbo's GitHub-backed remote cache (+ Cargo cache on verify) so warm
-# PR pushes skip cold tsc/cargo.
+# This is the only `pull_request` workflow (#557); `check` aggregates required
+# lanes, and path-gated children pass explicitly when their path is untouched.
 jobs:
-  # One paths-filter table for the whole repo. Previously these globs lived in
-  # six `on: paths:` blocks with 20 lines duplicated verbatim between each
-  # file's push: and pull_request: halves.
-  # #892 Phase 3 — THIS TABLE IS LOAD-BEARING AND IS NOW LINTED. `check` treats
-  # `skipped` as a pass (that is what makes a path-gated lane requirable at all),
-  # so a path no filter names wakes no lane and merges green, unexercised — #890
-  # W0 fixed one instance of that by hand. `bun run lint:path-filters` inverts the
-  # table: every workspace package, app and tracked top-level directory must be
-  # claimed here or ledgered in tests/path-filter-ledger.json with the always-on
-  # job that covers it. It also refuses duplicates, which is how the table looked
-  # when the check was written — `packages/server/**` four times inside `gateway`,
-  # twice inside `client` and twice inside `extension`, and `packages/core/**`
-  # twice inside `gateway`. Those are removed below; the SET each filter matches
-  # is unchanged.
+  # The linted paths table owns push/PR coverage; every workspace path is claimed
+  # once or ledgered as always-on, otherwise a required lane can skip unnoticed.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 10

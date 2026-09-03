@@ -1,9 +1,7 @@
 name: Companion e2e
 
 on:
-  # Live n0-relay companion flow is environmentally flaky and blocks unrelated
-  # merges when used as a PR required gate. Keep it on schedule + manual only;
-  # PR coverage is the `companion-static` job in ci.yml plus unit tests (#557).
+  # Keep the flaky live relay flow off the PR gate; ci.yml covers its static path.
   schedule:
     - cron: "45 6 * * *"
   workflow_dispatch:

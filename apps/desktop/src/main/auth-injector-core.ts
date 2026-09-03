@@ -4,6 +4,7 @@ export interface AuthInjectorSnapshot {
   gatewayVaultId: string;
 }
 
+/** The vault-addressing header (mirrors the gateway's constant, #289). */
 export const VAULT_HEADER = "x-centraid-vault";
 
 export function matchesGateway(url: string, gatewayOrigin: string): boolean {

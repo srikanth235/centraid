@@ -1,3 +1,5 @@
+/* Fetch half of updater signature custody (#842); the decision is in
+ * update-signature-core.ts. */
 import {
   describeUpdateVerdict,
   resolveUpdateTrust,
@@ -8,11 +10,16 @@ import type {
   UpdateTrustVerdict,
 } from "./update-signature-core.js";
 
+/**
+ * BLOCKED-EXTERNAL (#842): empty while the desktop lane ships unsigned
+ * scaffolding, so every packaged update refuses with `no-trust-anchor`.
+ */
 export const TRUSTED_RELEASE_KEYS: readonly TrustedReleaseKey[] = [];
 
 export const RELEASE_MANIFEST_FILE = "centraid-release-manifest.json";
 export const RELEASE_SIGNATURE_FILE = "centraid-release-manifest.sig.json";
 
+/** A constant so a compromised feed cannot redirect it. */
 export const RELEASE_ASSET_BASE =
   "https://github.com/srikanth235/centraid/releases/download";
 
@@ -38,6 +45,7 @@ async function fetchAsset(
   try {
     response = await fetchText(url);
   } catch {
+    // Transport failure is a refusal, never a throw.
     return null;
   }
   if (!response.ok) return null;
@@ -107,6 +115,7 @@ export function artifactFromUpdateInfo(info: unknown): ReleaseArtifact | null {
   const first = files[0] as { url?: unknown; sha512?: unknown };
   if (typeof first.url !== "string" || typeof first.sha512 !== "string")
     return null;
+  // Bare filename: a mirror prefix must not change matching.
   const name = first.url.split("/").pop() ?? first.url;
   return { name, sha512: first.sha512 };
 }

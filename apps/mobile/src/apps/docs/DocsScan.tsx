@@ -1,3 +1,19 @@
+// Scan (Docs handoff Part 2 §14; #821) — "where documents are born on
+// a phone", framed by Docs and HANDED OFF to the frame's own Scan cover
+// (`src/screens/Scan.tsx`).
+//
+// That cover is the one honest camera entrance this phone already has: it
+// owns the camera permission, the per-device OCR consent gate (#712), the
+// on-device extraction with the member's review, and the `docs / upload`
+// producer that lands the capture as an image document with its extracted
+// text. Duplicating any of that here would be a second camera flow to keep
+// honest — so this screen says what a Docs scan IS and where it lands, then
+// opens the cover with the Docs destination one tap away.
+//
+// The spec's "3 pages · lands as one PDF" is NOT promised: multi-page
+// capture assembled into one PDF has no machinery on this seat, and a status
+// line may not claim a landing shape nothing produces
+// (`SCAN_PDF_WITHHELD`; INTEGRATION-NOTES.md → choices).
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 

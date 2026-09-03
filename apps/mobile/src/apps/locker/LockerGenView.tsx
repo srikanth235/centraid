@@ -1,3 +1,13 @@
+// THE GENERATOR — `locker/gen` (README-Locker §5, "Generator"; FLOWS.md).
+//
+// A ROUTE OF ITS OWN, because someone who wants a string should not have to
+// invent an item to get one. NOTHING HERE IS SAVED: the output is a secret
+// nobody has written, it lives in the enumerated bag's `generated` field, and
+// the same lock that wipes a reveal wipes it.
+//
+// LOOK-ALIKES ARE EXCLUDED ALWAYS — in every kind, not as a switch — so a
+// password read off a screen and typed on a keypad is the same password. The
+// rule is `gen-model.ts`'s, and this screen states it under the chips.
 import React, { useEffect, useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 

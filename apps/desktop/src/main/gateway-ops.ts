@@ -1,3 +1,12 @@
+/*
+ * Gateway ops (#351) — electron wiring around the pure core in
+ * gateway-ops-core.ts. The only seam this file adds over the core is real
+ * `dialog.showSaveDialog` / `fs.writeFile` / `loadSettings` — see
+ * gateway-ops-core.ts for the testable orchestration and local-gateway.ts
+ * for the restart implementation (its IPC handler lives directly in
+ * ipc.ts, alongside the other gateway-lifecycle handlers it shares
+ * cache-invalidation + broadcast plumbing with).
+ */
 import { promises as fs } from "node:fs";
 
 import { dialog } from "electron";

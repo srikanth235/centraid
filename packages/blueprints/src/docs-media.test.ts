@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- browser fixture intentionally uses DOM-shaped PDF.js objects; governance: allow-no-unjustified-suppressions JS fixture boundary (#414)
 // @ts-nocheck -- imported blueprint app code has no declarations; governance: allow-no-unjustified-suppressions JS fixture boundary (#414)
 import path from "node:path";
@@ -139,4 +140,3 @@ describe("Docs device-side PDF text", () => {
     }
   });
 });
-// @vitest-environment jsdom

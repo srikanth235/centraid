@@ -1,3 +1,22 @@
+// ADD AN EXPENSE — two typed fields, and everything else a chip set (§3).
+//
+// ALL SIX DIVISIONS COMMIT, and the allocation table and the RECONCILE LINE
+// change with the division: the odd penny goes to the payer for equal, a penny
+// of tolerance for exact amounts, "it will not commit at 99" for percentages,
+// weights for shares, an equal base with a per-person adjustment, and typed
+// lines. None of that arithmetic is here — `split-model.ts` and `line-model.ts`
+// resolve it, `draft-model.ts` turns a draft into a verdict and the exact input
+// `add-expense` declares, and this screen renders the verdict. Two seats
+// composing one write out of one computation is the whole point.
+//
+// THE FOOT NAMES WHERE THE WRITE LANDS BEFORE THE COMMIT, not after it, and it
+// says the write queues on this device — because on a phone it usually does,
+// and discovering that at the commit would be the wrong moment.
+//
+// THE RATE IS SUPPLIED AT ENTRY. There is no rate provider in this path and
+// the vault works with none; where this vault has already been TOLD a rate for
+// the same pair it is offered as a prefill, with its source and its date, and
+// pressing it fills the fields in rather than deciding anything.
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -437,6 +456,9 @@ export default function TallyAddScreen({
   );
 }
 
+/** A By-line draft opens with one empty line, because a table with no rows is
+ *  a control with nothing to press. A SEEDING decision, not a computation —
+ *  the arithmetic over the lines is `line-model.ts`'s and is never restated. */
 function seedLines(draft: ExpenseDraft): LineDraft[] {
   return draft.lines.length > 0 ? draft.lines : [newLineDraft()];
 }

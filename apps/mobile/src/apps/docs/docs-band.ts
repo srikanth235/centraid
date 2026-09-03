@@ -1,3 +1,7 @@
+// Docs' claim on the phone's bottom band (#821). Restated rather than imported
+// from Photos' band: one app may not import another
+// (`scripts/check-import-boundaries.ts`). No `react-native` here, so the rules
+// stay assertable.
 import {
   CAPABILITIES,
   NEWDOC,
@@ -12,6 +16,8 @@ import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
 import type { DocsStackParamList } from "../../navigation";
 
+// The frame's capsule lives in `kit/band/band-capsule.ts` (#883 B5); only the
+// TYPE is re-exported here.
 export type { BandCapsule } from "../../kit/band/band-capsule";
 
 export type DocsBandDestinationKey =
@@ -77,6 +83,7 @@ export interface DocsMoreRow {
   meta?: string;
 }
 
+/** From `MORE_ROWS`, never respelled here. */
 const SHEET_SHELVES: readonly {
   key: Exclude<DocsMoreRowKey, "due" | "search">;
   shelf: string;
@@ -105,6 +112,9 @@ const DUE_ROW: DocsMoreRow = {
   meta: "off",
 };
 
+/** The band slot Shared took. First row, because it is the one people come to
+ *  this sheet FOR — and, like `due`, a `DocsHome` destination rather than a
+ *  pushed screen, so it is spelled here and not looked up as a shelf route. */
 const SEARCH_ROW: DocsMoreRow = {
   key: "search",
   label: "Search",
@@ -136,6 +146,10 @@ export type DocsMoreScreen = Extract<
   "DocsRecent" | "DocsTrash" | "DocsStorage" | "DocsCapabilities" | "DocsAdd"
 >;
 
+/** Exhaustive: a row without a route fails typecheck, not at tap. `due` and
+ *  `search` are excluded because both are DESTINATIONS on `DocsHome`, not
+ *  pushed screens — and Starred is not a row here at all, having taken a band
+ *  slot, as Shared now has. */
 export function resolveDocsMoreRoute(
   key: Exclude<DocsMoreRowKey, "due" | "search">
 ): DocsMoreScreen {

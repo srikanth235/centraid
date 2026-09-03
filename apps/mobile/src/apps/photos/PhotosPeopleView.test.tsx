@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -386,4 +387,3 @@ describe("the people roster's consent gate (issue 712 C2)", () => {
     expect(mocks.session.write).not.toHaveBeenCalled();
   });
 });
-// @vitest-environment jsdom

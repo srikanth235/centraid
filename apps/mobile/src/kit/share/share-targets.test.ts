@@ -44,6 +44,10 @@ describe(nativeShareTargets, () => {
   });
 
   test("a refused party stays refused even when it carries a link", () => {
+    // The linked-only pass exists for someone the directory has no row for.
+    // It must not become a second door for a row the directory DID answer
+    // about and ruled out — that would put the six recognition recipes back
+    // in every sheet, this time nameless.
     expect(
       nativeShareTargets({
         sourceVaultId: "owner-vault",
@@ -59,6 +63,9 @@ describe(nativeShareTargets, () => {
   });
 
   test("a person with no link is not a share target", () => {
+    // A share is DELIVERED into the receiver's own vault. Someone the member
+    // typed into People has no vault to deliver to, so listing them would
+    // offer a reach the product cannot perform.
     expect(
       nativeShareTargets({
         sourceVaultId: "owner-vault",

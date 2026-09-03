@@ -1,25 +1,8 @@
 name: sonarcloud
 
-# #842 W0.6 — `scripts/ci/configure-sonarcloud.mjs` was a complete, idempotent
-# configurator that no workflow ran, while SECURITY.md advertised SonarCloud as
-# the second-opinion check. The scope exclusions and silenced-noise rules that
-# keep the Autoscan PR gate honest therefore only existed on whatever a
-# maintainer had last applied by hand from a laptop keychain. This lane applies
-# them from the repo instead.
-# Analysis itself stays SonarCloud **Automatic Analysis** (Autoscan), per
-# docs/toolchain.md#sonarcloud-autoscan: SonarCloud refuses a CI-side scanner
-# run while Automatic Analysis is enabled on the project, so this workflow
-# configures the project and lets Autoscan scan. It is a configuration lane, not
-# a scanner lane.
-# #557 — not a `pull_request` workflow: `ci.yml` is the single open-PR entry
-# point, and a project-configuration apply is not a per-PR gate. Push-to-main on
-# the configurator itself, plus a weekly re-apply so UI drift is corrected, plus
-# manual dispatch.
-# SONAR_TOKEN is optional: it is a personal SonarCloud token with project
-# administer, absent on forks and on any clone of this repo. Every step is
-# gated on its presence through an env indirection (the `secrets` context is not
-# readable from a job-level `if:`), and the absent case logs an explicit skip
-# line so the lane is visibly skipped rather than silently missing.
+# Configure SonarCloud for Automatic Analysis; this is not a scanner lane.
+# `SONAR_TOKEN` is optional and is hoisted through env because job `if:` cannot
+# read secrets directly (#842).
 on:
   workflow_dispatch:
   schedule:

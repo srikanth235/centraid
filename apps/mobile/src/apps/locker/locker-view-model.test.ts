@@ -1,3 +1,6 @@
+// The phone's own derivations (STATES.md's Locker row; SURFACES.md's seats).
+// The precedence order between the states IS the argument here — a re-ordering
+// would be invisible in a screenshot.
 import { describe, expect, it } from "vitest";
 
 import { WINDOW_RULE } from "@centraid/blueprints/apps/locker/view-copy";
@@ -66,6 +69,7 @@ describe(lockerWindowFoot, () => {
     const truncated = lockerWindowFoot(true, 300, true) ?? "";
     expect(truncated).toContain("300 shown");
     expect(truncated).toContain(WINDOW_RULE);
+    // The count is never dressed as a denominator the payload does not carry.
     expect(truncated).not.toContain("of 3");
     expect(lockerWindowFoot(true, 12, false) ?? "").toContain(
       "12 in the vault"
@@ -95,6 +99,8 @@ describe(lockerFillCopy, () => {
   });
 });
 
+// Locker reads through the gateway's own query handlers, so the device-global
+// outbox is the only honest source for this sentence (#880).
 describe(lockerPendingLine, () => {
   const change = (
     over: Record<string, unknown> = {}

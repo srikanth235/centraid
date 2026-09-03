@@ -1,3 +1,13 @@
+// The four PLACES of Locker's band, on one route (README-Locker §1).
+//
+// Items, Review, Generate and Search are destinations WITHIN this screen
+// rather than pushed stack entries — the same shape `TasksHome.tsx` uses — so
+// a band tap swaps what is drawn instead of growing the stack. Item, Add/edit,
+// Trash, Access history and the three elsewhere-surfaces ARE pushed, because
+// each is a subject with a back row rather than a place.
+//
+// Everything about the boundary is `LockerScreen.tsx`'s: this file never asks
+// whether the vault is locked, because behind a wall it is not rendered.
 import React, { useCallback, useMemo, useState } from "react";
 
 import {

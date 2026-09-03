@@ -1,3 +1,15 @@
+// GROUPS — the shared circles, their nets, and the two row acts that change
+// what a member's ledger looks like.
+//
+// LEAVE AND ARCHIVE EACH ASK FIRST, in §6's own words, and the two confirms
+// say different things because the acts are different: leaving keeps your rows
+// on the ledger marked departed and asks you to settle first if you can;
+// archiving takes the group out of the lists, keeps everything, and needs no
+// settled balance. Neither is a delete, and neither pretends to be.
+//
+// ARCHIVING IS NOT DELETING, so the archived section exists whenever the
+// dashboard answered with one — a member can always see what left the lists,
+// and every row carries the verb that brings it back.
 import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
 

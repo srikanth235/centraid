@@ -1,3 +1,12 @@
+/*
+ * Source-level contract for the opt-in place-names handler (#816).
+ *
+ * The lookup's own answers are pinned in `src/gazetteer.test.ts`. This file owns
+ * the handler's spine: what it selects, what it refuses to re-examine, the shape
+ * of the typed write, the none-marker that makes a miss terminal, the cursor and
+ * snapshot rewalk — and, structurally, that neither this source nor the bundle
+ * it compiles into can reach the network.
+ */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -10,7 +19,9 @@ const SNAPSHOT = "2017-02-27";
 const SOURCE = "geonames-cities15000";
 const BATCH = 64;
 
+/** The seeded roll's Truckee river bend — 18 km from Truckee, CA. */
 const TRUCKEE_RIVER = { lat: 39.1682, lng: -120.1429 };
+/** Mid-Pacific: nothing within 50 km, so the miss has to be recorded. */
 const OPEN_OCEAN = { lat: -30, lng: -140 };
 
 function place(
@@ -63,6 +74,9 @@ describe("place-names handler", () => {
     });
 
     it("never sends a place name or a kind to any command", async () => {
+      // The member-authority invariant from the handler's side: whatever it
+      // writes, `name` and `kind` on `core_place` are not in the payload. The
+      // command layer's half is `media-gazetteer.test.ts`.
       const harness = createHarness({
         entities: {
           "core.place": [
@@ -237,11 +251,18 @@ describe("place-names handler", () => {
       "../../blueprints/automations/place-names/automations/place-names/handler.js"
     );
 
+    // Prose in the handler header promises this; these two assertions are what
+    // make the promise checkable. A gazetteer that quietly grew a geocoding
+    // fallback would be the single worst regression this app could ship, and it
+    // would look like a bug fix in review.
     it.each([
       ["source", sourcePath],
       ["bundle", bundlePath],
     ])("the %s reaches no network", async (_label, file) => {
       const text = await readFile(file, "utf8");
+      // `ctx.fetch` is the only egress rail an automation is given, and the
+      // matches below are CALLS, not the words: the handler's header says
+      // "no `ctx.fetch`" in prose, and prose is not what this test is about.
       expect(text).not.toMatch(/\.fetch\s*\(/u);
       expect(text).not.toMatch(/(?:^|[^.\w])fetch\s*\(/u);
       expect(text).not.toMatch(/\.delegate\s*\(/u);

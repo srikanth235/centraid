@@ -4,6 +4,7 @@ import * as Sharing from "expo-sharing";
 
 import { IMPORT_TOO_LARGE, IMPORT_UNREADABLE } from "./locker-seat-copy";
 
+/** Cache, never documents. */
 const LOCKER_FILES = "locker-files";
 
 export const IMPORT_MAX_BYTES = 2 * 1024 * 1024;

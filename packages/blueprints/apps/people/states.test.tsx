@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -259,4 +260,3 @@ describe("people.pending / people.parked — the frame's one status line", () =>
     expect(drive.refreshed).toBe(1);
   });
 });
-// @vitest-environment jsdom

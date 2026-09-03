@@ -1,3 +1,8 @@
+/*
+ * APPS_OPEN hardening (issue #865): the renderer-supplied id is grammar-checked
+ * BEFORE any path join, so traversal ids never reach shell.openPath (mocked
+ * here — the core module is electron-free by design).
+ */
 import { describe, expect, it, vi } from "vitest";
 
 import { openAppFolder } from "./app-reveal-core.js";

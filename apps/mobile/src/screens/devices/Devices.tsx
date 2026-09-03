@@ -60,7 +60,6 @@ export default function DevicesScreen({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const devices = useDevices();
-
   const boundaryPromise = useDeviceBoundaryPromise();
   const [acting, setActing] = useState<DeviceRow | undefined>(undefined);
 

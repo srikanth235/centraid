@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -116,4 +117,3 @@ describe(HealthLine, () => {
     void noop;
   });
 });
-// @vitest-environment jsdom

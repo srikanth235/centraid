@@ -42,7 +42,6 @@ function approved(config) {
   if (typeof note !== "string" || !/#\d+/u.test(note)) return false;
   return [...changed]
     .filter((file) => /^receipts\/issue-\d+-.*\.md$/u.test(file))
-
     .filter((file) => existsSync(path.join(root, file)))
     .some((file) => {
       const receipt = readFileSync(path.join(root, file), "utf8");

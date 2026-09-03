@@ -3,6 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GatewayProbe } from "./gateway-monitor-core.js";
 import type { OutageLogEvent } from "./gateway-outage-log-core.js";
 
+/**
+ * Gateway health never reaches Notifications (#665). Dual-write produces a
+ * card the owner cannot resolve (#647). Pin both halves: a real transition
+ * lands in the durable log, and the tick performs no HTTP write beyond the
+ * probe. Assert on `fetch` so a reintroduced projection is caught however
+ * it is spelled.
+ */
 const fixture = vi.hoisted(() => ({
   persisted: [] as OutageLogEvent[],
   fetched: [] as string[],

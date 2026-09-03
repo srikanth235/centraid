@@ -86,6 +86,7 @@ export function registerIpcHandlers(): void {
     await refreshAuthInjector();
   };
 
+  // Vault pointer only (#289): drop auth caches, NOT app-editing sessions.
   const invalidateVaultCaches = async (): Promise<void> => {
     resetAppsStoreAuthCache();
     await refreshAuthInjector();
@@ -98,6 +99,7 @@ export function registerIpcHandlers(): void {
     }
   };
 
+  // Token's single bridge crossing: this payload must never carry `gatewayToken`.
   ipcMain.handle(Channel.SETTINGS_GET, async () => {
     const { gatewayToken: _gatewayToken, ...rest } = await loadSettings();
     return rest;
@@ -112,6 +114,8 @@ export function registerIpcHandlers(): void {
       return next;
     }
   );
+  // Local gateway is not removable. Tokens never cross the bridge (#109).
+  // No "add gateway by URL + token" IPC (#505) — pairing calls `addGateway` in-process.
   ipcMain.handle(
     Channel.GATEWAYS_LIST,
     async (): Promise<GatewayProfile[]> => listGateways()
@@ -184,6 +188,7 @@ export function registerIpcHandlers(): void {
       await shutdownAllLocalGatewaysExcept(
         next.activeGatewayKind === "local" ? next.activeGatewayId : undefined
       );
+      // Else a dormant QUIC dialer accumulates per switch (#289).
       const { closeAllIrohDialersExcept } = await import("./iroh-dialer.js");
       await closeAllIrohDialersExcept(
         next.activeGatewayKind === "remote" ? next.activeGatewayId : undefined
@@ -195,6 +200,7 @@ export function registerIpcHandlers(): void {
     }
   );
 
+  // List vaults WITHOUT switching (#376) — no invalidation or broadcast.
   ipcMain.handle(
     Channel.GATEWAY_PAIR_REDEEM,
     async (
@@ -227,6 +233,7 @@ export function registerIpcHandlers(): void {
     }
   );
 
+  // Never throws (#382): every failure is a failed stage in the report.
   ipcMain.handle(
     Channel.GATEWAYS_LIST_VAULTS,
     async (
@@ -235,6 +242,7 @@ export function registerIpcHandlers(): void {
     ): Promise<ListGatewayVaultsResult> => listGatewayVaults(input.gatewayId)
   );
 
+  // Client-side pointer flip (#289): no server call, no session teardown.
   ipcMain.handle(
     Channel.GATEWAY_TEST_CONNECTION,
     async (_e, input: TestConnectionInput): Promise<ConnectivityReport> =>
@@ -279,6 +287,7 @@ export function registerIpcHandlers(): void {
     ): Promise<{ deleted: true }> => {
       const gatewayId = await assertLocalAdmin();
       const settings = await loadSettings();
+      // Never delete the currently addressed vault — clear the pointer first.
       let next: DesktopSettings | undefined;
       if (settings.activeVaultId === input.vaultId) {
         next = await setActiveVaultId(undefined);
@@ -286,6 +295,7 @@ export function registerIpcHandlers(): void {
       }
       const { deleteLocalVault } = await import("./local-gateway.js");
       await deleteLocalVault(gatewayId, input.vaultId, input.name);
+      // Else the shell keeps showing the deleted vault's name (#382).
       if (next) broadcastVaultChanged(next);
       return { deleted: true };
     }
@@ -298,6 +308,10 @@ export function registerIpcHandlers(): void {
     }
   });
 
+  // Harness detection belongs on the gateway — never add a desktop-side probe.
+  // App lifecycle is HTTP, not IPC. APPS_OPEN is Reveal-in-Finder, LOCAL-ONLY
+  // (#141). Grammar-check the id before any path join (#865) so traversal ids
+  // never reach `shell.openPath`.
   ipcMain.handle(Channel.APPS_OPEN, (_e, input: unknown) =>
     openAppFolder(input, {
       resolveDir: resolveAppRevealDir,
@@ -375,6 +389,8 @@ export function registerIpcHandlers(): void {
     const { exportActiveGatewayDiagnostics } = await import("./gateway-ops.js");
     return exportActiveGatewayDiagnostics();
   });
+  // Cannot use GATEWAY_RESTART: `loadSettings()` is the failing call. Read
+  // persisted settings only.
   ipcMain.handle(
     Channel.GATEWAY_RECOVERY_KIT_EXPORT,
     async (_event, input: { password: string }) => {
@@ -402,6 +418,7 @@ export function registerIpcHandlers(): void {
         gatewayId: profile?.id ?? settings.activeGatewayId,
         token: settings.gatewayToken || undefined,
         rememberDevice: profile?.rememberDevice === true,
+        // `x-centraid-vault`; undefined lets the gateway pick (#289).
         ...(settings.activeVaultId === undefined
           ? {}
           : { vaultId: settings.activeVaultId }),
@@ -430,12 +447,14 @@ export function registerIpcHandlers(): void {
     }
   );
 
+  // Phone link (#263): tunnel + allowlist live in main.
   ipcMain.handle(Channel.PHONE_STATUS, async () => phoneLinkStatus());
   ipcMain.handle(Channel.PHONE_BEGIN_PAIRING, async () => beginPhonePairing());
   ipcMain.handle(Channel.PHONE_CANCEL_PAIRING, async () => {
     cancelPhonePairing();
     return { ok: true as const };
   });
+  // Pairing defaults offline-copy ON. OFF must reuse redeem's purge or the replica is orphaned.
   ipcMain.handle(
     Channel.PHONE_REVOKE,
     async (_e, input: { deviceId: string }) => {
@@ -459,6 +478,7 @@ export function registerIpcHandlers(): void {
     return { ok: true as const };
   });
 
+  // Warn BEFORE the OS credential dialog (#603).
   ipcMain.handle(Channel.KEYCHAIN_PROMPT_EXPECTED, (): boolean =>
     keychainPromptExpected({
       platform: process.platform,
@@ -468,4 +488,5 @@ export function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(Channel.CHANGELOG_GET, async () => getChangelog());
+  // Templates/automations/insights are HTTP — never add IPC.
 }

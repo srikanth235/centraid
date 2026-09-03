@@ -458,7 +458,6 @@ export default function SettingsHarnessesScreen({
           <PickRow
             first
             label="Default"
-
             caption={`Every lane left inheriting lands here · ${defaultAnswer}`}
           >
             <Select

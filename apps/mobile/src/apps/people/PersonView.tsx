@@ -1,3 +1,21 @@
+// Person (v12 handoff § Screens 4) — one person in full, one level deep.
+//
+// Hero, two commits, the record sections, and the two acts that end a person.
+// The web renderer (`components/PersonRoute.tsx`) is the reference: the vault
+// link is drawn here IN FULL — the hero ring, the vault tags, the `Vaults` and
+// `Shared with them` sections — and its two sections are ABSENT ENTIRELY when
+// the sharing plane could not be read, because an empty `Not linked yet.` over
+// a denied read answers a question nobody could ask.
+//
+// `Share` AND `Revoke` ARE HERE, AND THEY ARE LIVE (#825). A share is a
+// standing grant over an audience × subject × capability, so this screen is
+// the grant dashboard the ruling names it — every live grant reaching this
+// party, `Revoke` on each row and `Share` on the section that lists them
+// (`PersonGrants.tsx`). There is no `Link vault`: linking is not an act a
+// member performs.
+//
+// ADDING IS A FIELD WHERE THE ROW WILL BE, never a new screen (handoff
+// deviation 3): each record section's `Add` opens an inline composer.
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 

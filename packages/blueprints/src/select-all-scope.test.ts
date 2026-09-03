@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -152,4 +153,3 @@ describe("[law:select-all-filtered] the engine photos calls answers the same two
     expect([...pruneSelection(new Set(visible), ["v2"])]).toStrictEqual(["v2"]);
   });
 });
-// @vitest-environment jsdom

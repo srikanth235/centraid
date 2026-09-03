@@ -1,3 +1,16 @@
+// The document row's quick-actions menu, as a model (handoff Part 2 §"The
+// document row"; #821).
+//
+// One menu for both of the row's doors — the 44×44 `···` and press-and-hold —
+// built here as plain data so the composition is testable: which verbs a row
+// offers is a fact about the DOCUMENT (trashed? starred? renameable?), not
+// about whichever screen happened to draw it. `DriveList.tsx` renders the
+// groups through the kit's `AnchoredMenu` and adds nothing.
+//
+// Trash carries NO destroy verb, here or anywhere: a trashed row offers
+// Restore and nothing else — destruction happens only on the schedule its
+// purge date announces (§14, and `TRASH_FALLBACK`'s one sentence), and no
+// Share — a grant the purge would break.
 import { MENU_ICON_NAMES } from "@centraid/blueprints/apps/docs/icons";
 import type { Folder } from "@centraid/blueprints/apps/docs/types";
 
@@ -28,6 +41,8 @@ export interface DocMenuHandlers {
 
 export function buildDocMenu(
   doc: Pick<MobileDriveDoc, "trashed" | "starred" | "folder_id"> & {
+    /** The row's OWN canonical role (#880): the five writing verbs degrade
+     *  together off it, and the three reads never do. */
     canWrite?: boolean;
     canShare?: boolean;
   },
@@ -89,6 +104,12 @@ export function buildDocMenu(
     ),
   ];
 
+  // Order and wording follow `blueprints/apps/docs/popovers.ts`, which is the
+  // same menu on the web: Rename, Move to…, the star, then the two reads, with
+  // trash alone below the rule. Mobile had invented shorter labels — "Versions",
+  // "Properties", "Unstar", "Trash" — so one product named the same six verbs
+  // two ways depending on the surface. (Absent here: Place in a space, which
+  // this seat cannot perform. Here and not on web: Share — that menu's gap.)
   const actGroup: MenuRow[] = [
     {
       key: "rename",
@@ -148,6 +169,7 @@ export function buildDocMenu(
     ...(reachGroup.length ? [{ key: "reach", rows: reachGroup }] : []),
     { key: "openings", rows: openGroup },
     { key: "acts", rows: actGroup },
+    // Reads never degrade, so these two carry no refusal.
     {
       key: "trash",
       rows: [

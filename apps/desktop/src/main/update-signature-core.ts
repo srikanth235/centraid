@@ -1,3 +1,10 @@
+/*
+ * Updater signature custody, pure half (#842); fetching lives in
+ * update-signature-gate.ts. Trust rests on a detached ed25519 signature over a
+ * manifest pinning each artifact's SHA-512, never on OS code-signing (a no-op
+ * on AppImage, skipped for block-maps). Keep this module pure and fail-closed:
+ * an unrecognised shape is `trusted: false`.
+ */
 import {
   createHash,
   createPublicKey,
@@ -34,6 +41,7 @@ export interface TrustedReleaseKey {
   publicKey: string;
 }
 
+/** Never collapse into a generic "invalid": the operator's next action differs. */
 export type UpdateRefusalReason =
   | "no-trust-anchor"
   | "missing-manifest"
@@ -56,6 +64,10 @@ export type UpdateTrustVerdict =
     }
   | { trusted: false; reason: UpdateRefusalReason; detail?: string };
 
+/**
+ * Sign the parsed document's canonical form, never the received bytes, so a
+ * re-serialising proxy cannot break verification. Array order is signed.
+ */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object")
     return JSON.stringify(value) ?? "null";
@@ -69,6 +81,7 @@ export function canonicalJson(value: unknown): string {
   return `{${parts.join(",")}}`;
 }
 
+/** A keyId is a routing hint, never the thing that grants trust. */
 export function keyIdFor(publicKeyBase64: string): string {
   const raw = Buffer.from(publicKeyBase64, "base64");
   return createHash("sha256").update(raw).digest("hex").slice(0, 32);
@@ -89,6 +102,7 @@ export function parseReleaseManifest(text: string): ReleaseManifest | null {
   if (parsed.schema !== RELEASE_MANIFEST_SCHEMA) return null;
   if (typeof parsed.version !== "string" || parsed.version === "") return null;
   if (!Array.isArray(parsed.artifacts) || parsed.artifacts.length === 0)
+    // Untrusted feed bytes: malformed is a refusal cause, never a throw.
     return null;
   const artifacts: ReleaseArtifact[] = [];
   for (const entry of parsed.artifacts) {
@@ -228,6 +242,7 @@ export function resolveUpdateTrust(
   return verdict;
 }
 
+/** Never prints key material. */
 export function describeUpdateVerdict(
   verdict: UpdateTrustVerdict,
   version: string

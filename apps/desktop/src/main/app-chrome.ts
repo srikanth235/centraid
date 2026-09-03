@@ -1,3 +1,7 @@
+/*
+ * Application menu, tray, and deep-link scaffolding (#468).
+ * Registers centraid:// as the default protocol; tray shows gateway status.
+ */
 import path from "node:path";
 
 import { app, BrowserWindow, Menu, Tray, nativeImage } from "electron";

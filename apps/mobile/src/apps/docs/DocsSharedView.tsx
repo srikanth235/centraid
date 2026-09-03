@@ -37,6 +37,8 @@ export default function DocsSharedView({
     [docs]
   );
 
+  // "Could not read" and "nothing arrived" must not look alike, so the unknown
+  // case REPLACES the set rather than captioning it.
   const known = drive.sharedFromKnown;
 
   return (

@@ -1,3 +1,16 @@
+// PEOPLE ON THE PHONE — the three band destinations, on one screen
+// (Binding Layer v12 handoff Part 1, #821).
+//
+// `People` (the roster), `Touch` (the keep-in-touch summary) and `Search` all
+// live here, switched by the band exactly the way `PhotosHome` switches its
+// shelves: the `destination` route param names where a band tap on a PUSHED
+// screen lands, and the effect below keeps a mounted Home following it.
+//
+// WHAT THE ROSTER ROW WITHHOLDS: the handoff's trailing `Link` verb on an
+// unlinked row. A link is made from a container and People owns none
+// (decisions.md #821 L-write), so the ring and the sub-line SAY the link state
+// and no control here pretends to change it. The full register is
+// `INTEGRATION-NOTES.md`.
 import { FlashList } from "@shopify/flash-list";
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
@@ -277,6 +290,8 @@ function RosterRow({
 }): React.JSX.Element {
   const overdue = isOverdue(person);
   const sub = rosterSub(person);
+  // Until #880 the roster had no pending marker, so an offline add read as a
+  // failure while its row was durable (QUALITY.md).
   const overlay = readPendingOverlay(person.raw);
   const pending = overlay ? pendingChangeLabel(overlay) : "";
   return (
@@ -330,6 +345,9 @@ function TouchBody({
   }
   const dashboard = data.dashboard;
   const counts = dashboard.counts;
+  // Two tile sets, one row: the handoff's own four while the sharing plane
+  // answers, the people-counting four while it cannot — a `Vaults` tile
+  // reading 0 over a denied read would be a count nobody took.
   const tiles =
     counts.linked === null || counts.to_link === null
       ? TOUCH_TILES.map((tile) => ({
@@ -423,6 +441,11 @@ function TouchBody({
   );
 }
 
+// THIS SHELF SEARCHES THE WINDOW IN HAND — name, role and notes,
+// case-insensitive substring (handoff § Screens 3) — and draws NO link facts:
+// the web search query returns none, and the same person must not read two
+// different ways on two screens, so its rows carry no ring and the two link
+// chips are not offered.
 const SEARCH_CHIPS = filterChips(false);
 
 function SearchBody({

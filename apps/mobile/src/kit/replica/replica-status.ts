@@ -1,3 +1,10 @@
+// A row must be actionable or awaited; `device-offline` stays silent because
+// the replica is local — a notice there reads as a fault.
+//
+// This module owns the replica surface's WORDS, and the one small durable
+// record that stands behind a row nothing else remembers (a revoked scope's
+// notice). Storage is injected, never imported, so the vocabulary stays
+// renderer-free and unit-testable.
 import type { ReplicaCoverage } from "@centraid/client/replica/native";
 
 import type { AsyncStorageLike } from "../../lib/replica/native-change-feed";
@@ -9,6 +16,15 @@ export type ReplicaReachability =
   | "sync-paused"
   | "syncing";
 
+/**
+ * `syncing` is optimistic, so every pass must settle or it pins forever.
+ *
+ * `policyBlocked` is the member's own transfer rules refusing the radio
+ * (Wi-Fi only, no metered, charging only). It is NOT a failed pull: nothing
+ * was asked of the gateway, so reading it as `current` claims a freshness the
+ * phone never obtained, and reading it as `gateway-asleep` blames a gateway
+ * that was never dialled.
+ */
 export function settledReachability(
   pullLanded: boolean,
   policyBlocked = false
@@ -55,6 +71,16 @@ export function replicaStatusRow(
   }
 }
 
+/**
+ * The partial-library row, for the case no in-process bootstrap is running.
+ *
+ * An app killed mid-backfill and relaunched offline has a truncated library and
+ * no `bootstrapProgress` to explain it, because the walk that would have
+ * reported progress died with the old process. Coverage is the durable fact
+ * (docs/mobile-offline.md: a partial preview is readable and searchable, but it
+ * is labeled partial), so the label comes from coverage when nothing is
+ * actively reporting pages.
+ */
 export function replicaCoverageRow(input: {
   coverage?: ReplicaCoverage;
   bootstrapping: boolean;
@@ -72,6 +98,12 @@ export interface ReplicaRevokedNotice {
   at: string;
 }
 
+/**
+ * Purging a revoked scope is silent by construction — the rows, the cursor and
+ * the mount all go, so nothing on the phone can afterwards say why a vault
+ * vanished. This notice is the one trace left behind, and it outlives the
+ * process because the relaunch after a purge is exactly when it is asked for.
+ */
 export function revokedNoticeRow(notice: ReplicaRevokedNotice): {
   label: string;
   action: string;
@@ -94,6 +126,7 @@ export async function loadRevokedNotices(
     const raw = await storage.getItem(revokedNoticesKey(gatewayId));
     return raw ? parseRevokedNotices(JSON.parse(raw) as unknown) : [];
   } catch {
+    // A corrupt notice list costs a member one explanation, never their data.
     return [];
   }
 }

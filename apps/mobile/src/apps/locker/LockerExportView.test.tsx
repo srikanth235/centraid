@@ -1,3 +1,17 @@
+// The export surface, rendered (#882) — and the confirmation path in
+// particular, because it is the one thing between a tap and every secret in the
+// vault sitting in a file.
+//
+// What this pins:
+//
+//  - the consequence is stated ABOVE every control, and the confirm NAMES it
+//    rather than asking whether the member is sure
+//  - the commit control never runs the export: it opens the gate, and only the
+//    gate's own verb writes
+//  - the two options that make the file worse are off unless asked for
+//  - offline the control is WITHHELD and the reason stands in its place — never
+//    a grey button
+// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -95,6 +109,7 @@ describe("the export surface", () => {
     const { container, unmount } = mountBlock(
       <Seat onRun={(options) => runs.push(options)} />
     );
+    // The gate is struck, and the file it guarded was never made.
     expect(textOf(container)).not.toContain(EXPORT_CONFIRM_TITLE);
     press(control(container, EXPORT_COMMIT));
     expect(textOf(container)).toContain(EXPORT_CONFIRM_TITLE);
@@ -156,4 +171,3 @@ describe("the export surface", () => {
     unmount();
   });
 });
-// @vitest-environment jsdom

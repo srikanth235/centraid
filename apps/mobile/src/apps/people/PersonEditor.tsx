@@ -1,3 +1,18 @@
+// Edit / New person (v12 handoff § 8) — one form, written as one commit.
+//
+// `new` and `edit` draw the same form; the route param alone decides which
+// write is sent (`add-person` vs `edit-person` + `set-cadence`, the web
+// `writes.ts` doctrine). THE HANDOFF'S `Vaults` SECTION IS ABSENT, with its
+// composer and empty line: People reads the sharing plane and writes none of
+// it (decisions.md #821 L-write; `INTEGRATION-NOTES.md`).
+//
+// THE `Never` CHIP IS THE ZERO, and it writes the zero — the vault floors
+// `cadence_days` at 0, so a person on zero is simply never overdue.
+//
+// THE SWATCHES WRITE WHAT EVERY AVATAR READS: the chosen hue is stored as the
+// same scheme-relative expression the web editor writes (`storedHueValue`),
+// so the disc on this screen and the disc in every row cannot disagree — and
+// a person carrying a legacy hex matches no swatch, honestly.
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
@@ -33,6 +48,8 @@ import { BackRow, Commits, FieldRow } from "./PeopleKit";
 import PeopleScreen from "./PeopleScreen";
 import { usePeople } from "./usePeople";
 
+/** `Never` · `7 days` · … — every chip past the zero takes its label from
+ *  `format.ts`, so the cadence reads the same word everywhere. */
 const CADENCE_OPTIONS = CADENCE_CHIPS.map((days) => ({
   id: String(days),
   label: days === 0 ? CADENCE_NEVER : agoLabel(days),
@@ -62,6 +79,9 @@ export default function PersonEditor({
     partyId ? null : { name: "", role: "", avatar_color: null, cadence_days: 0 }
   );
 
+  // An edit's draft seeds from the row once the read lands; a new person's is
+  // ready immediately. The skeleton stands until then — never an empty form
+  // that could be saved over somebody.
   const seeded =
     draft ??
     (existing

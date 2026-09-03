@@ -1,3 +1,15 @@
+/*
+ * Source-level contract for the OCR recognition handler (#781).
+ *
+ * `packages/server/src/automation/manifest/enricher-templates.test.ts` owns the
+ * bundled copy's spine: the deterministic batch write and re-arm, seeding from
+ * an existing stamp, the born-digital PDF path against the real pdf.js, and
+ * the delegate turn's box stripping plus ACP identity stamp. This file owns
+ * the capture input validation, the region canonicalisation arithmetic
+ * (confidence range, loose-text fallback, reading order), the delegate
+ * refusals and prompt-revision bookkeeping, and the kind filter's effect on
+ * the cursor.
+ */
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { bytesContent, createHarness } from "./handler-harness.js";
@@ -27,10 +39,12 @@ function asset(
   };
 }
 
+/** The handler returns one of several shapes; tests read the payload loosely. */
 function outputOf(result: unknown): Record<string, unknown> {
   return (result as { output: Record<string, unknown> }).output;
 }
 
+/** Fixes the recognizer to one canned reply so only the shaping is under test. */
 function recognizing(reply: Record<string, unknown>): void {
   setPhotoOcrRuntimeForTests({
     weightsPresent: () => true,
@@ -362,6 +376,11 @@ describe("photo-ocr handler", () => {
     });
   });
 
+  // ── the engine profile the run belongs to (issue #807, Wave 5) ──────────
+  // Selection lives in policy, not the manifest, so the fire hands the
+  // handler the profile it resolved. The handler's job is to keep the LEDGER
+  // honest about it: stamp the profile, key the cursor by it, and never
+  // stamp a prompt revision it did not send.
   describe("engine profile", () => {
     const delegateInput = { variant: "delegate", delegateModel: "owner/pin" };
 
@@ -382,6 +401,7 @@ describe("photo-ocr handler", () => {
         model: "acp-confirmed@7",
         prompt_rev: "ocr-v1",
       });
+      // Two profiles are two rows, so the settled-check reads its own.
       expect(
         harness.reads.some((read) =>
           read.where?.some(

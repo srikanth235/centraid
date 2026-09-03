@@ -1,3 +1,13 @@
+// The band Locker has claimed, rendered (README-Locker §1, "Phone band").
+//
+// Anatomy and shared plate geometry: `PhotosBand.tsx` and
+// `kit/band-surface.ts`. This file renders `locker-band.ts` and adds nothing.
+//
+// WHEN THE VAULT IS LOCKED THIS COMPONENT IS NOT RENDERED AT ALL. That is
+// `LockerScreen.tsx`'s decision, not a prop here: the band is WITHDRAWN while
+// locked, at setup, when denied — not dimmed, not disabled (`shelves.ts`
+// `suppressesNavigation`). A navigation spine standing over a locked vault
+// advertises destinations that do not exist yet.
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -69,6 +79,9 @@ export default function LockerBand({
               key={destination.key}
               accessibilityRole="tab"
               accessibilityLabel={destination.label}
+              // The DESTINATION KEY, never the label: the label is copy a v-next
+              // handoff may re-word, and a flow that tapped it would then tap
+              // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.locker}${destination.key}`}
               accessibilityState={{ selected: active }}
               onPress={() => onSelect(destination.key)}

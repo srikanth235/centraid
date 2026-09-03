@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -268,4 +269,3 @@ describe("a held write speaks on the row that carries it", () => {
     expect(container.textContent).toContain(OPEN_TASK.title);
   });
 });
-// @vitest-environment jsdom

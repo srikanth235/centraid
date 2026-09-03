@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -382,4 +383,3 @@ describe("ARCHIVE IS NOT TRASH, and the rail keeps its six type rows", () => {
     expect(archived.purge_at).toBeUndefined();
   });
 });
-// @vitest-environment jsdom

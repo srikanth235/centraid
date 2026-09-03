@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -98,4 +99,3 @@ describe(ChipsBlock, () => {
     expect(picked).toStrictEqual(["b"]);
   });
 });
-// @vitest-environment jsdom

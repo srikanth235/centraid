@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
@@ -141,4 +142,3 @@ describe("in-editor writes keep the loaded body", () => {
     ).toBe(BODY);
   });
 });
-// @vitest-environment jsdom

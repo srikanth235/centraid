@@ -1,3 +1,6 @@
+// Pure-math helpers for faces (YuNet decode + SFace alignment). Separate from
+// src/capabilities/faces.ts so every formula is unit-testable — no ONNX/sharp.
+
 export function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
 }
@@ -8,12 +11,14 @@ export interface Point {
 }
 
 export interface YuNetLevelInput {
+  /** Grid stride in input-image pixels (YuNet 2023mar: 8, 16, 32). */
   stride: number;
   gridWidth: number;
   gridHeight: number;
   classScores: ArrayLike<number>;
   objectness: ArrayLike<number>;
   boxes: ArrayLike<number>;
+  /** Row-major 5-point landmarks relative to cell center, stride units. */
   landmarks?: ArrayLike<number>;
 }
 
@@ -23,6 +28,7 @@ export interface DecodedFace {
   landmarks?: Point[];
 }
 
+/** Score is `sqrt(cls * obj)`; box/landmark offsets are in stride units. */
 export function decodeYuNetLevel(
   input: YuNetLevelInput,
   scoreThreshold: number
@@ -79,6 +85,7 @@ export function decodeYuNetLevel(
   return results;
 }
 
+/** ArcFace/SFace 5-point template for a 112x112 crop (L-eye, R-eye, nose, L-mouth, R-mouth). */
 export const SFACE_TEMPLATE_112: readonly Point[] = [
   { x: 38.2946, y: 51.6963 },
   { x: 73.5318, y: 51.5014 },
@@ -88,12 +95,14 @@ export const SFACE_TEMPLATE_112: readonly Point[] = [
 ];
 
 export interface SimilarityTransform {
+  /** 2x2 scale-rotation matrix, row-major: [[a, b], [-b, a]]. */
   a: number;
   b: number;
   tx: number;
   ty: number;
 }
 
+/** Umeyama 2D similarity (no reflection): maps `src` onto `dst`. */
 export function computeSimilarityTransform(
   src: readonly Point[],
   dst: readonly Point[]
@@ -131,6 +140,7 @@ export function computeSimilarityTransform(
     srcVar += sx * sx + sy * sy;
   }
 
+  // No-reflection similarity: angle = atan2(sxy - syx, sxx + syy).
   const rotationNumerator = sxy - syx;
   const rotationDenominator = sxx + syy;
   const angle = Math.atan2(rotationNumerator, rotationDenominator);
@@ -169,6 +179,7 @@ export function warpAffine(
   outWidth: number,
   outHeight: number
 ): RawImage {
+  // Invert [a -b; b a] * p + t. det = a²+b²; identity if scale is 0.
   const det = forwardTransform.a ** 2 + forwardTransform.b ** 2;
   const inv =
     det === 0

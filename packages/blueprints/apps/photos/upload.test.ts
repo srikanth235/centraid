@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const stage = vi.hoisted(() => ({
@@ -175,4 +176,3 @@ describe("runUpload batch completeness", () => {
     ]);
   });
 });
-// @vitest-environment jsdom

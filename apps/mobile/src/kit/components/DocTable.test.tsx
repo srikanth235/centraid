@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -154,4 +155,3 @@ describe(DocTable, () => {
     expect(nodesOf(without, "span")).toHaveLength(4);
   });
 });
-// @vitest-environment jsdom

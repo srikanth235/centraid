@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -312,4 +313,3 @@ describe("the person screen's grant dashboard", () => {
     expect(sent).toStrictEqual([]);
   });
 });
-// @vitest-environment jsdom

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -524,4 +525,3 @@ describe("video playback is honest, not double-transported", () => {
     expect(html).toContain("<progress");
   });
 });
-// @vitest-environment jsdom

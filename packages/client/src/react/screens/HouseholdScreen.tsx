@@ -230,7 +230,6 @@ export default function HouseholdScreen(
       ? { onUpdateCompute: props.onUpdateDeviceCompute }
       : {}),
   });
-
   const [boundaryPromise, setBoundaryPromise] = useState<string>("");
   useEffect(() => {
     if (!hasRoster) return undefined;

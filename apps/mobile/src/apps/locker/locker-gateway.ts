@@ -1,3 +1,18 @@
+// THE ONLY DOOR THIS SEAT HAS INTO LOCKER, and it is the gateway's — never
+// the replica's.
+//
+// Every read here is an RPC to the app's own query handlers. Nothing touches
+// `MobileReplicaSession.read` and nothing is cached in SQLite: a passphrase, a
+// memory-session token, a one-shot permit and a revealed field are the four
+// things this seat must never hand a durable store (docs/mobile-offline.md,
+// "Locker is stricter than the ordinary replica plane"). The metadata writes —
+// star, tags, trash, restore — DO go through the replica's pending path, in
+// `locker-writes.ts`.
+//
+// The staged-import plane belongs in this file for the same promise: an import
+// payload is the file itself, every secret in it, so it must stay as far from
+// the durable outbox as a typed password is, and keeping every call that could
+// break that in one place is what makes the promise checkable.
 import type {
   StagedBatch,
   StagedRow,
@@ -58,6 +73,8 @@ export interface AuthRequest {
   label?: string;
 }
 
+/** The control plane. Passphrases are ARGUMENTS to this call and are never a
+ *  field of anything this app holds afterwards. */
 export function lockerAuth(request: AuthRequest): Promise<AuthPayload> {
   return appQuery<AuthPayload>("locker", "auth", {
     ...request,
@@ -86,6 +103,8 @@ export function lockerItem(
   });
 }
 
+/** Titles, usernames and addresses. Matching happens server-side over fields
+ *  the payload never returns; notes and secret values are not among them. */
 export function lockerSearch(term: string): Promise<RowsPayload> {
   return appQuery<RowsPayload>("locker", "search", { term });
 }
@@ -104,6 +123,14 @@ export interface AccessPayload {
   vaultDenied?: VaultDenial | null;
 }
 
+/**
+ * The receipt stream, under the grant's own `object_type` row filter.
+ *
+ * ONLINE-ONLY BY CONSTRUCTION: there is no cached history to fall back to and
+ * there must not be — a cached one would draw what this device happened to hold
+ * as the vault's whole record. NO ROW CARRIES A VALUE; the query answers acts,
+ * items and column NAMES, and `access-model.ts` projects them into lines.
+ */
 export function lockerAccess(
   sessionToken: string,
   limit: number = ACCESS_WINDOW
@@ -114,6 +141,14 @@ export function lockerAccess(
   });
 }
 
+// ─── The staged-import plane ────────────────────────────────────────────────
+//
+// The gateway's owner-tier workflow, where a password-manager CSV becomes
+// `locker.item` rows (`packages/vault/src/ingest/stage-file.ts`).
+//
+// DRAFT → REVIEW → PUBLISH: nothing reaches the vault until the draft is
+// published. Every call is a direct online request with no queue behind it, by
+// construction, because the payload is the member's file.
 const IMPORTS = "/centraid/_vault/imports";
 
 export interface StagedImport {
@@ -131,6 +166,8 @@ export interface PublishedImport {
   failed?: unknown[];
 }
 
+/** Stage one picked file into a reviewable draft. The text is the file, so it
+ *  is handed straight to the border and never held by this module. */
 export async function stageLockerImport(input: {
   filename: string;
   text: string;

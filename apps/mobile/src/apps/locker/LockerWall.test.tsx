@@ -1,3 +1,17 @@
+// The three walls, rendered (README-Locker §6; STATES.md Locker/First run).
+//
+// What this pins is what a future edit is likeliest to undo quietly:
+//
+//  - the first-run gate states the twelve-character rule and the fact that the
+//    passphrase cannot be revoked BEFORE the field, and its commit is DISABLED
+//    while the field is under the floor — a gate that arrives enabled has a
+//    floor that is decoration
+//  - the lock wall carries the facts table, so "why did it close on me" is a
+//    question asked once
+//  - neither gate draws a glyph in place of a sentence (§7)
+//  - denial is a receipt, a scope and the fact that nothing was deleted — and
+//    it offers NO retry, because there is nothing here to retry
+// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -136,4 +150,3 @@ describe("denial", () => {
     unmount();
   });
 });
-// @vitest-environment jsdom

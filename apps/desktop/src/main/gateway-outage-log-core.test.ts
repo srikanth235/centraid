@@ -76,6 +76,12 @@ describe("formatOutageLogFile / parseOutageLogFile", () => {
     expect(parseOutageLogFile(raw)).toHaveLength(2);
   });
 
+  /**
+   * The #665 read-compatibility promise: an on-disk schema-3 log carries a
+   * header line AND one `projection-mark` line per gateway from the retired
+   * Notifications dual-write. Neither is an event, so neither may be lost, mistaken for
+   * one, or make the read fail.
+   */
   it("reads an existing schema-3 log, ignoring its legacy projection marks", () => {
     const events = [
       event({ at: T0 }),

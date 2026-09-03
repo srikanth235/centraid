@@ -1,3 +1,4 @@
+// title-only-empty-body: a title change must not invent a body.
 import { describe, expect, it } from "vitest";
 
 import { editorWrite } from "./editor-write";

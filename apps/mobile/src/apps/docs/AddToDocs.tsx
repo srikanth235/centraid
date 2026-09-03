@@ -1,3 +1,15 @@
+// Add to Docs (Docs handoff Part 2 §13; #821) — four ways in on a
+// phone: Upload, a blank document, a folder, and Scan. Drag and paste are
+// pointer-only and absent here, deliberately.
+//
+// The two composing rows (blank document, folder) open their one field
+// inline and dispatch through the one write door (`useDocsWrite`): a blank
+// document is a real `upload` of an empty markdown body (the vault mints
+// empty bytes like any other; two blanks legitimately share them), and a
+// folder is the same `create-folder` the Folders shelf dispatches. Upload
+// and Scan are their own screens; this shelf's status sentence — "Nothing is
+// uploading" — is true here because uploads run on Bulk upload, never
+// behind this screen's back.
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";

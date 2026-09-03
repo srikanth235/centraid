@@ -16,14 +16,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
         with:
-          # Full history so git-grep-based directives can inspect all tracked files.
+          # Full history is required by git-grep-based governance directives.
           fetch-depth: 0
 
       - name: Run bash governance directives
         run: bash .governance/run.sh
 
-      # Native test runners (pytest / jest / go test) are an opt-in users add
-      # post-init by following kit/references/NATIVE_TESTS.md. They are
-      # not scaffolded by `governance init` — governance is a meta-layer over
-      # the project's code and the directive suite must not depend on the
-      # project's own toolchain.
+      # Native test runners are opt-in; governance itself must use the project's
+      # declared toolchain.

@@ -52,6 +52,7 @@ export function lintWorkflowSource(name, source) {
   const found = [];
   const lines = source.split("\n");
 
+  // governance-kit-managed workflows are digest-owned; policy fixes go upstream.
   if (/^#\s*governance-kit:managed/mu.test(source)) {
     console.log(
       `workflow-pins: ${name} is governance-kit:managed — policy is upstream, skipping`

@@ -1,3 +1,20 @@
+// Inject `Authorization: Bearer <gatewayToken>` (and the addressed vault) on
+// renderer traffic going to the configured gateway origin, for the requests
+// that cannot carry their own headers — `<img src>`, media, and other plain
+// subresource loads pointed at the gateway when it runs with
+// `auth.mode: "token"`. A request that already carries an Authorization
+// header (every `gateway-client` fetch) is left exactly as it is.
+//
+// This renderer frames nothing (#799), so it needs no CSP
+// `frame-ancestors` response rewrite.
+//
+// The hook is scoped to the configured gateway origin, so other traffic in
+// the renderer is untouched. Settings live in the main process; call
+// `refreshAuthInjector()` after saving so changes take effect without an
+// app restart.
+//
+// Pure rewrite rules live in `auth-injector-core.ts` (unit-tested without
+// Electron). This file only wires them onto `session.webRequest`.
 import { session } from "electron";
 import type { Session } from "electron";
 

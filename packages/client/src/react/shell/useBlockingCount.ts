@@ -32,7 +32,6 @@ export function useNotificationsCounts(): {
     load();
     const controller = new AbortController();
     void subscribeNotificationsChanges(load, controller.signal).catch(() => {});
-
     const stop = startVisibilityTicker(load, POLL_MS);
     window.addEventListener("focus", load);
     return () => {

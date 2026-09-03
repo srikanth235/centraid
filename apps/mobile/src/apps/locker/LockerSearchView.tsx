@@ -1,3 +1,14 @@
+// SEARCH — `locker/search` (README-Locker §6, "Search note").
+//
+// TITLE, USERNAME AND ADDRESS ONLY, AND IT SAYS SO. The §6 sentence is
+// verbatim on the screen, not in a help panel: a note routinely holds recovery
+// codes, so it is excluded BY DESIGN rather than by omission, and a member who
+// searches for one and finds nothing has to be told which of those two it was.
+//
+// The matching happens server-side over fields the payload never returns, and
+// the results are the same secret-free row the list draws.
+//
+// WINDOWED (#883 C4): two letters can match it all.
 import React, { useMemo, useState } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";

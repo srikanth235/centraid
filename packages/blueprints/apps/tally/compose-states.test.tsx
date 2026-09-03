@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, test } from "vitest";
 
 import {
@@ -158,4 +159,3 @@ describe("Tally’s composing routes", () => {
     });
   });
 });
-// @vitest-environment jsdom

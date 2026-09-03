@@ -1,3 +1,5 @@
+// People shell frame (#821): content is flex:1 ABOVE the claimed band + Home
+// capsule; no pushed screen dead-ends.
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
@@ -28,6 +30,7 @@ export default function PeopleScreen({
   const styles = useMemo(() => makeStyles(), []);
 
   const onDestination = (key: PeopleBandKey): void => {
+    // POP to PeopleHome, never push.
     navigation.popTo("PeopleHome", { destination: key });
   };
 

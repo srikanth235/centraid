@@ -1,3 +1,22 @@
+// ACCESS HISTORY AND IMPORT, EXERCISED (#882).
+//
+// What a plausible refactor could undo silently:
+//
+//  1. A REFUSED READ IS NOT AN EMPTY HISTORY. Denied, failed and "no receipt
+//     yet" are three answers; only one of them is a list, and the other two
+//     must leave the list `null` so nothing draws "nothing has happened" over a
+//     ledger it never got to read.
+//  2. AN EXPIRED SESSION LOCKS. The receipts read is session-bound like every
+//     other read here, so `authRequired` ends the session rather than blanking
+//     a screen inside a live-looking frame.
+//  3. THE IMPORT BRIDGE REFUSES OUT LOUD. A cancel says nothing; a file this
+//     phone will not read says which of the two refusals it was; a file the
+//     border recognised nothing in stages a draft that is named as a refusal
+//     rather than drawn as an empty review.
+//  4. NOTHING REACHES THE VAULT UNTIL PUBLISH, and a discard says nothing was
+//     written.
+//  5. A LOCK TAKES BOTH SURFACES WITH IT — the entries and the staged rows
+//     through the SHARED bag's own wipe, the companions beside them.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IMPORT_NO_ROWS } from "@centraid/blueprints/apps/locker/route-copy";

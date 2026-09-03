@@ -1,3 +1,10 @@
+/*
+ * Pure core for GATEWAY_TEST_CONNECTION (#382) — the ConnectFlow handshake
+ * ladder. Raw signals fold into `ConnectivityStage`s here;
+ * `gateway-connectivity.ts` owns the network calls, folding in sequence,
+ * skipping stages once one fails. Same electron-free split as
+ * `gateway-pairing-core.ts`.
+ */
 import {
   decodePairingTicket,
   isTicketExpired,
@@ -97,6 +104,14 @@ export function assembleReport(
   };
 }
 
+// ── url / gateway kind: reach → identify → auth ─────────────────────────
+/**
+ * Fold a `handshakeGateway` result into reach/identify/auth. It collapses all
+ * non-2xx into `reason: 'unreachable'` but its `detail` still carries
+ * `HTTP <status>` when a response DID arrive — the thread pulled here to split
+ * no-response (reach) from 401/403 (auth) from other bad responses (identify).
+ * Exceptions never match `HTTP <digits>` → true reach-failure.
+ */
 export function foldUrlIdentityStages(handshake: HandshakeResult): {
   stages: ConnectivityStage[];
   gateway?: ConnectivityGatewayInfo;

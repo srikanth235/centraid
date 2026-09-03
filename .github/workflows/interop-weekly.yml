@@ -1,7 +1,6 @@
 name: interop-weekly
 
-# #496 G5 / C5 — packages/backup test:interop was stranded (env-gated,
-# referenced by no workflow). Weekly schedule + manual dispatch.
+# Weekly interop coverage for packages/backup; schedule/manual only (#496).
 on:
   schedule:
     - cron: "0 9 * * 1" # Monday 09:00 UTC

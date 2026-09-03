@@ -1,3 +1,11 @@
+/**
+ * The renderer/main privilege boundary (#656, Layer 1F).
+ *
+ * These tests pin the things a bridge regression would silently change: the
+ * exact key set exposed to the renderer, the channel every member reaches
+ * for, the arguments it forwards, and the fact that nothing Electron-ish
+ * (least of all `ipcRenderer` itself) escapes into the exposed objects.
+ */
 import { describe, expect, it } from "vitest";
 
 import * as designTokens from "@centraid/design";
@@ -103,6 +111,13 @@ const EXPECTED_API_KEYS = [
   "updateProfileMetadata",
 ];
 
+/**
+ * Members that reach no bridge channel at all. `getHostCapabilities` is a pure
+ * synchronous snapshot — the desktop carries no on-device file-ASR adapter
+ * (#724) — so it cannot sit in `REQUEST_SURFACE`, which asserts every entry
+ * reaches exactly its declared channel. It is listed here so the coverage
+ * check below still counts it.
+ */
 const PURE_SURFACE = ["getHostCapabilities"];
 
 const EXPECTED_TOKEN_KEYS = [
@@ -119,6 +134,11 @@ const EXPECTED_TOKEN_KEYS = [
   "type",
 ];
 
+/**
+ * Every request member, with the channel it must reach and the single
+ * argument it must forward (`undefined` = the call takes no argument, so
+ * nothing may be forwarded).
+ */
 const REQUEST_SURFACE: Array<[string, ChannelName, unknown]> = [
   ["getSettings", Channel.SETTINGS_GET, undefined],
   ["saveSettings", Channel.SETTINGS_SAVE, { launchAtLogin: true }],
@@ -380,6 +400,9 @@ describe("CentraidTokens", () => {
     expect(exposed.cssText).toBe(`${FONT_FACE_CSS}\n${designTokens.toCss()}`);
   });
 
+  // The faces have to be DECLARED before the first `var(--font-sans)` lookup,
+  // and they have to point at the app's own bundle — a remote src would make
+  // the shell's typography depend on a network the desktop never promised.
   it("declares the bundled faces ahead of the tokens, from relative paths", () => {
     const { cssText } = createCentraidTokens(designTokens, FONT_FACE_CSS);
     expect(cssText.indexOf("@font-face")).toBeLessThan(
@@ -388,6 +411,8 @@ describe("CentraidTokens", () => {
     const sources = [...cssText.matchAll(/src: url\((?<href>[^)]+)\)/gu)].map(
       (match) => match.groups?.href
     );
+    // FOUR: v8 leaves one Instrument Sans face at 400/600, each in latin +
+    // latin-ext. The platform code stack has no `@font-face` rule at all.
     expect(sources).toHaveLength(4);
     expect(
       sources.filter((src) => src?.startsWith("fonts/") === true)

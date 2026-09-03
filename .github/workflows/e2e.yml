@@ -2,9 +2,8 @@
 # nightly jobs; mobile-e2e-ios intentionally excluded (macOS native binary risk).
 name: e2e
 
-# Nightly product lanes: desktop/web Playwright, mobile agent-e2e, pairing
-# journeys (loopback + cross-network relay), plus the unified test-health
-# report. Heavier than per-PR `ci` — schedule and workflow_dispatch only.
+# Nightly product lanes cover desktop/web Playwright, mobile agent-e2e, pairing,
+# and the unified report; this workflow is schedule/manual only.
 on:
   schedule:
     - cron: "0 6 * * *" # 06:00 UTC nightly

@@ -1,3 +1,6 @@
+// Two workflow reads, through `locker-gateway.ts`, never the replica. Neither
+// may grow a cached answer; both write through the store's one seam, so a lock
+// takes the entries and the staged rows with it via `wipeSecretState`.
 import {
   draftBatches,
   publishedCopy,
@@ -32,6 +35,11 @@ function emitBag(patch: Parameters<typeof setLockerSurfaceState>[0]): void {
   setLockerSurfaceState({ ...patch, bag: { ...readLockerVault().bag } });
 }
 
+/**
+ * A refusal leaves the list `null` and states itself: "we could not read the
+ * ledger" and "the ledger is empty" are two sentences an audit surface may
+ * never confuse.
+ */
 export async function loadLockerAccess(): Promise<void> {
   const vault = readLockerVault();
   const token = vault.bag.sessionToken;

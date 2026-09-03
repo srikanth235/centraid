@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -152,4 +153,3 @@ describe(BarsBlock, () => {
     expect(styleOf(spans.at(-1) ?? null).color).toBe(colors.net);
   });
 });
-// @vitest-environment jsdom

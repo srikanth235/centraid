@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, test } from "vitest";
 
 import { EXPORT_FOOT, SIMPLIFICATION } from "./compose-copy.ts";
@@ -201,4 +202,3 @@ describe("Tally’s composing routes — the tables and the doors", () => {
     });
   });
 });
-// @vitest-environment jsdom

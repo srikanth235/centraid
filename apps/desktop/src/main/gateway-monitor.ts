@@ -1,3 +1,10 @@
+/*
+ * Gateway heartbeat (main): probe health, fold through gateway-monitor-core,
+ * broadcast to windows, fire OS notifications (down/recovered, component error,
+ * version skew, crash loop). Main, not renderer: survives navigation, alerts
+ * land backgrounded. Health must NOT reach vault Notifications (#665) — that
+ * surface is for what the owner can resolve.
+ */
 import { BrowserWindow, Notification } from "electron";
 
 import { setTrayGatewayRunning } from "./app-chrome.js";
@@ -45,6 +52,7 @@ export interface OutageLogSnapshotEntry extends Omit<
   previousSession: boolean;
 }
 
+/** Internal alert-dedupe bookkeeping must stay out of the broadcast payload. */
 export interface GatewayRuntimeSnapshot extends Omit<
   GatewayRuntimeState,
   "componentAlerts" | "versionSkewAlertedAt"
@@ -199,6 +207,7 @@ async function tick(): Promise<void> {
   if (!probe.ok && activeGatewayKind === "local") {
     await reviveLocalGatewayIfDead(trackedState.gatewayId);
   }
+  // Piggybacked heartbeat (#528): power posture must not near 120s staleness.
   if (settings?.gatewayUrl) {
     void pushPowerContext(settings.gatewayUrl, settings.gatewayToken);
   }
@@ -209,6 +218,7 @@ async function tick(): Promise<void> {
     ? trackedState
     : applyProbe(trackedState, probe);
 
+  // No down-alert in first-run setup (#603); failed settings read still alerts.
   const inFirstRunSetup =
     settings !== undefined && settings.onboardingCompletedAt === undefined;
   const alert: GatewayAlertConfig = {
@@ -260,6 +270,8 @@ async function tick(): Promise<void> {
       : {}),
     now: Date.now(),
   });
+  // The durable log is the whole story for health (#665): no Notifications
+  // write follows it.
   outageHistory = persistOutageEvents(outageHistory, newOutageEvents);
 
   const {
@@ -281,6 +293,7 @@ async function tick(): Promise<void> {
     alertHistory,
   };
   broadcast(lastSnapshot);
+  // Tray set once at boot (#603); the heartbeat corrects it — no second poller.
   setTrayGatewayRunning(state.status === "up");
 }
 
@@ -302,6 +315,7 @@ function runTick(): Promise<void> {
 export function startGatewayMonitor(): void {
   if (timer) return;
   timer = setInterval(() => void runTick(), GATEWAY_RUNTIME_POLL_MS);
+  // The poller alone must not keep the process alive at quit.
   timer.unref?.();
   void runTick();
 }
@@ -311,6 +325,7 @@ export function stopGatewayMonitor(): void {
   timer = undefined;
 }
 
+/** Probes immediately when no broadcast has landed: first read never empty. */
 export async function getGatewayRuntimeSnapshot(): Promise<GatewayRuntimeSnapshot> {
   if (!lastSnapshot) await runTick();
   if (!lastSnapshot) throw new Error("gateway monitor produced no snapshot");

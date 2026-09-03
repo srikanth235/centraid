@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -324,4 +325,3 @@ describe("the details rail (§8)", () => {
     ]);
   });
 });
-// @vitest-environment jsdom

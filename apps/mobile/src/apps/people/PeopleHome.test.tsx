@@ -1,3 +1,18 @@
+// People's RNTL tier (#890 W5). ONE cold renderer for the app: the RN host
+// tree is expensive to boot, so every People claim needing a real accessibility
+// tree, a real responder, or real style resolution is consolidated here
+// (TESTING.md, "React Native component tests").
+//
+// WHAT ONLY THIS TIER CAN FALSIFY here:
+//  - the band's real `tab` nodes and the single lit `selected` trait;
+//  - the roster row's real accessible NAME and its star's `selected` trait —
+//    two controls on one row, told apart by RN, not by a DOM attribute;
+//  - a press that must reach a real `Pressable` before a route is asked for;
+//  - `FlashList`'s empty slot standing IN PLACE OF rows on first run.
+//
+// Device seams are the project's (`src/test/native-device-seams.ts`), FlashList
+// included. Every People component, blueprint projection and copy table stays
+// real; only the replica read layer — the device database — is substituted.
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { TextInput } from "react-native";
@@ -109,8 +124,13 @@ describe("People, on the real React Native host tree", () => {
 
     const tabs = screen.getAllByRole("tab");
     expect(tabs.length).toBeGreaterThan(1);
+    // Two lit places is the defect a props-echo stub cannot see: it renders
+    // each tab as its own `div` and never holds the band as one tree.
     expect(litTabs(tabs)).toHaveLength(1);
 
+    // A band tap POPS home with the destination named — it never pushes a
+    // second copy — and the press has to traverse the real responder tree to
+    // get there.
     fireEvent.press(screen.getByRole("tab", { name: "Touch" }));
     expect(navigated.calls).toStrictEqual([
       ["PeopleHome", { destination: "touch" }],
@@ -132,6 +152,9 @@ describe("People, on the real React Native host tree", () => {
     expect(names).toContain("Open Ada Lovelace");
     expect(names).toContain("Open Grace Hopper");
 
+    // The star is a second control ON the same row, and it carries a `selected`
+    // trait of its own. RN builds both nodes; the stub tier draws one `div`
+    // per prop bag and cannot say which control a screen reader would reach.
     const stars = screen
       .getAllByRole("button")
       .filter(

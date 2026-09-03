@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -405,4 +406,3 @@ describe(InsightsScreen, () => {
     expect(filled).toHaveLength(0);
   });
 });
-// @vitest-environment jsdom

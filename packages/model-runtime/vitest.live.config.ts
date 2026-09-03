@@ -1,5 +1,6 @@
 import { nodeProject } from "@centraid/test-kit/vitest";
 
+/** Real-weight evidence lane; setup must have populated runtime/ first. */
 export default nodeProject({
   test: {
     name: "@centraid/model-runtime-live",

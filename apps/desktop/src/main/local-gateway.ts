@@ -32,6 +32,10 @@ import type {
 import { phoneLinkStatus } from "./phone-link.js";
 import { templatesCacheDir } from "./settings.js";
 
+/**
+ * Electron local-gateway lifecycle (#351/#468): a detached child outliving the
+ * UI (H1–H4). Quit deliberately does NOT kill detached children.
+ */
 export interface LocalGatewayRuntime {
   url: string;
   token: string;

@@ -1,3 +1,9 @@
+// THE RECEIPTS, AS A LIST (README-Locker §1 `locker/access`, §2 "Receipts").
+//
+// AN AUDIT SURFACE NEVER INVENTS A ROW: the projection is the SHARED
+// `access-model.ts`. NO VALUE IS SHOWN — a reveal names the COLUMNS it opened
+// and stops. NO REFUSAL IS HIDDEN: a denial lists like an allowance. Offline,
+// refused and empty stay three facts, never one emptiness.
 import React, { useMemo } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
@@ -44,6 +50,7 @@ export default function LockerAccessView(
 ): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  // Windowed (#883 C4); these three withhold the LIST, not rows.
   const listing = !props.offline && !props.error && props.entries !== null;
   const entries = listing ? (props.entries ?? []) : [];
 

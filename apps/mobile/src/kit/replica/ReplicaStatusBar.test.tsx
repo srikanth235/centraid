@@ -1,3 +1,13 @@
+// Regression net for ReplicaStatusBar (#711).
+//
+// Sabotage-verified: dropping the `pending.length > 0 ?` guard for an
+// unconditional render makes the "hides the chip" test below fail — the chip
+// would stand at "Pending changes 0" forever, exactly the standing badge §18
+// forbids.
+//
+// react-native is mocked to plain DOM elements (the same approach
+// `EnrichmentConsent.test.tsx` uses) so this can run under jsdom.
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -269,6 +279,10 @@ describe("pending-changes chip visibility (issue #711)", () => {
   });
 
   it("says nothing at all when the replica is current", async () => {
+    // The whole point of the bar mounting on ~20 screens: on a settled
+    // replica it must not draw a row. Sabotage target — make the `label ||
+    // pending.length > 0` guard unconditional and this fails on the border,
+    // or restore the `Updated …`/`Refresh` pair and it fails on the text.
     replicaMock.reachability = "current";
     await render();
     expect(container.textContent).toBe("");
@@ -279,6 +293,7 @@ describe("pending-changes chip visibility (issue #711)", () => {
     await render();
     expect(container.textContent).toContain("Gateway asleep");
     expect(container.textContent).toContain("Wake help");
+    // Never the plain word: pull-to-refresh is that control already.
     expect(container.textContent).not.toContain("Refresh");
   });
 
@@ -321,6 +336,7 @@ describe("the pending sheet's body (issue #880 W2.3)", () => {
     expect(container.textContent).toContain("Expected version 3; found 5.");
     expect(container.textContent).toContain("Retry");
     expect(container.textContent).toContain("Discard");
+    // Never the raw state, and never a Cancel for a write already settled.
     expect(container.textContent).not.toContain("conflict");
     expect(container.textContent).not.toContain("Cancel");
   });
@@ -370,6 +386,7 @@ describe("what else the bar owes a member (issue #880)", () => {
     expect(container.textContent).toContain(
       "Change these under Backup health in Settings."
     );
+    // A refresh here would re-hit the same rule, so it must not be offered.
     expect(container.textContent).not.toContain("Sync now");
   });
 
@@ -427,4 +444,3 @@ describe("the outbox vocabulary (issue #880 W2.3)", () => {
     ).toBeUndefined();
   });
 });
-// @vitest-environment jsdom

@@ -1,3 +1,14 @@
+/*
+ * Crash capture (#351) — electron wiring around the pure core in
+ * crash-log-core.ts.
+ *
+ * The posture here is deliberate: log + persist + CONTINUE, never
+ * `process.exit()`. A desktop shell has long-lived background work
+ * (gateway monitor, reminder monitor, phone-link) that owners expect to
+ * keep running; one bad promise in one of them shouldn't take the whole
+ * app down. Electron's renderer/GPU process crashes are a separate
+ * concern (a different process) and are unaffected by this.
+ */
 import { appendFileSync, renameSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -56,6 +67,7 @@ export function installCrashHandlers(): void {
   process.on("unhandledRejection", (reason) => {
     recordCrash("unhandledRejection", reason);
   });
+  // Renderer / GPU / utility process exits (#468).
   app.on("render-process-gone", (_event, webContents, details) => {
     recordCrash(
       "render-process-gone",

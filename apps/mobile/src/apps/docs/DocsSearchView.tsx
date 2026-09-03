@@ -1,3 +1,19 @@
+// The Search shelf (handoff Part 2 §5; #821) — field first, then the
+// same rows as the drive.
+//
+// WHAT THIS SEARCH REACHES, honestly: the phone's replica indexes document
+// TITLES (packages/client — the core.document local-search shape), so this
+// field promises titles and nothing more (`MOBILE_SEARCH_PLACEHOLDER`; the
+// web's "Search titles and contents" constant explicitly says mobile "owes a
+// different sentence"). The state the handoff says no other app needs — what
+// the search could NOT read — is therefore the WHOLE drive here: every result
+// was matched on title and filing only, and the caption says so with the
+// spec's own sentence, count interpolated (`captionFor`'s searchUnreadable).
+//
+// States: idle · results · no results · refused (the replica cannot search
+// this entity) — plus offline, which for a LOCAL index is not a refusal:
+// the replica answers from this device, and the standing offline caption on
+// the drive shelves already carries that fact.
 import { useNavigation } from "@react-navigation/native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -36,9 +52,13 @@ export default function DocsSearchView({
   const [query, setQuery] = useState("");
   const [matchedIds, setMatchedIds] = useState<readonly string[] | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
+  // Monotonic ticket: a slow older search may never overwrite a newer answer.
   const ticket = useRef(0);
 
   const term = query.trim();
+  // Typing resets the answer in the HANDLER (never synchronously inside the
+  // effect — react-compiler's EffectSetState rule); the effect only runs the
+  // async search and lands its result.
   const onChangeQuery = (text: string): void => {
     ticket.current += 1;
     setQuery(text);
@@ -64,6 +84,8 @@ export default function DocsSearchView({
         );
       } catch (error) {
         if (mine !== ticket.current) return;
+        // The replica refused the search itself — a different sentence from
+        // "nothing matches", so it is never collapsed into the miss state.
         setMatchedIds(null);
         setRefusal(error instanceof Error ? error.message : String(error));
       }
@@ -74,6 +96,7 @@ export default function DocsSearchView({
     () => drive.documents.filter((doc) => !doc.trashed),
     [drive.documents]
   );
+  // Trashed documents never match (the manifest's own search rule).
   const results = useMemo(() => {
     if (!matchedIds) return [];
     const order = new Map(matchedIds.map((id, index) => [id, index]));
@@ -146,6 +169,10 @@ export default function DocsSearchView({
           offline={drive.offline}
           refresh={drive.refresh}
           empty={{ query: term }}
+          // Said on BOTH answers, not just the hit. A miss is exactly when the
+          // member needs to know the search never looked inside anything —
+          // withholding it there leaves "nothing matches" reading as "it is
+          // not in your vault".
           caption={captionFor(SEARCH, { searchUnreadable: active.length })}
           status={
             results.length > 0

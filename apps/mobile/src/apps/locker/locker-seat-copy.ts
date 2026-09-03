@@ -1,11 +1,29 @@
+// THE WORDS THIS SEAT ADDS, and only those.
+//
+// Every sentence Locker shares across seats lives in the blueprint's §6/§7
+// tables (`view-copy.ts`, `route-copy.ts`) and is imported verbatim. What is
+// here is what is TRUE ON A PHONE AND NOWHERE ELSE — the device credential,
+// the camera, the enrolment offer — because "a surface never teaches a
+// different fact about the same control" governs facts, and where the fact
+// differs by seat the words must differ with it
+// (docs/blueprint-seats.md, "search is not one behaviour").
+//
+// THE REGISTER IS §7's. Words: item, reveal, conceal, permit, receipt,
+// passphrase, device credential, alias, review, verdict, window. Never
+// "master password", never "secure", never a reassurance adjective, and never
+// a lock icon standing in for a sentence.
+/** The lock wall's second way in, where one has been enrolled. */
 export const DEVICE_UNLOCK = "Unlock with this device";
 
 export const DEVICE_ENROL = "Enrol a device credential";
 export const DEVICE_REVOKE = "Revoke it";
 
+/** Why a device credential is a second way in rather than a replacement. */
 export const DEVICE_NOTE =
   "A device credential is revocable and the passphrase is not · this phone holds a random secret, and the vault holds a verifier for it.";
 
+/** The enrolment offer, on the list, once a session is open — enrolling needs
+ *  one, so the offer cannot stand on the lock wall that asks for it. */
 export const DEVICE_OFFER = "This phone can hold a device credential.";
 
 export const MASKED_LABEL = "Locker is hidden while Centraid is away";
@@ -35,5 +53,8 @@ export const IMPORT_TOO_LARGE =
 export const IMPORT_UNREADABLE =
   "That file could not be read as text · a password-manager export is a CSV.";
 
+/** Where an export lands on a phone. The shared table says the file is written
+ *  on this device and never sent; this says which door it leaves through, which
+ *  is the fact a browser tab has no equivalent of. */
 export const EXPORT_HANDOFF =
   "Written here, then handed to the system sheet · this phone keeps no copy once you have chosen where it goes.";

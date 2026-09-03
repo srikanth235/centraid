@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -235,4 +236,3 @@ describe("the enrichment gate (issue #712 C2, re-homed into People's empty state
     expect(write).not.toHaveBeenCalled();
   });
 });
-// @vitest-environment jsdom

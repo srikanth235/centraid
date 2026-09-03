@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -143,4 +144,3 @@ describe("an album shares through the one grant kit", () => {
     expect(container.querySelector("dialog")).toBeNull();
   });
 });
-// @vitest-environment jsdom

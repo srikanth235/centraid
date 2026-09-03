@@ -24,6 +24,7 @@ export type {
 const STAR_PATH =
   "M12 3.8l2.6 5.2 5.7.9-4.1 4 1 5.7-5.2-2.8-5.2 2.8 1-5.7-4.1-4 5.7-.9z";
 
+/** Its own 44×44 target — pressing never opens the person. */
 export function StarButton({
   name,
   starred,
@@ -305,6 +306,7 @@ export function Commits({
       }}
     >
       {cells.map((cell, index) => (
+        // Position is identity: a fixed pair, never reordered.
         <View key={index} style={{ flex: 1 }}>
           {cell}
         </View>
@@ -380,6 +382,7 @@ export function VaultTag({ label }: { label: string }): React.JSX.Element {
   );
 }
 
+/** Back row: chevron + the DESTINATION's name, never "Back". */
 export function BackRow({
   destination,
   onPress,
@@ -408,6 +411,7 @@ export function BackRow({
   );
 }
 
+/** Count tiles: two-up; each filters or navigates — never a bare badge. */
 export function CountTiles({
   tiles,
   onSelect,

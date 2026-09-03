@@ -1,3 +1,13 @@
+/*
+ * W6.1 refusal proof (umbrella #842).
+ *
+ * These tests sign with REAL Ed25519 keys — deterministic ones, built from
+ * fixed seeds so a failure replays exactly — and then verify with the shipping
+ * verifier. Nothing is stubbed on the crypto path, so a verifier that stopped
+ * verifying cannot pass this file: the paired sabotage cases (unsigned,
+ * wrong-signed, tampered payload) only go green when a real signature check
+ * actually rejects them.
+ */
 import {
   createPrivateKey,
   createPublicKey,

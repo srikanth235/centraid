@@ -1,3 +1,10 @@
+// THE COMMONS PRODUCER, EXERCISED (#825 G-edit). Three claims:
+//  1. THE VERB EXISTS AT ALL — between #831 and the v17 rebuild no seat could
+//     mint an invitation, and a group drawing no share row restores that.
+//  2. THE GROUP SHARES ITSELF — its own subject, container and circle.
+//  3. OFFLINE DRAWS THE SENTENCE, NOT THE VERB; a refusal that came BACK from
+//     a reachable gateway is the other answer, in the gateway's own words.
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -146,4 +153,3 @@ describe("sharing a group from the phone", () => {
     expect(shareVerb()).toBeUndefined();
   });
 });
-// @vitest-environment jsdom

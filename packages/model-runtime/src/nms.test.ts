@@ -25,6 +25,8 @@ describe(iou, () => {
   });
 
   it("computes the standard intersection-over-union for a partial overlap", () => {
+    // a: [0,0]-[10,10] (area 100); b: [5,5]-[15,15] (area 100)
+    // intersection: [5,5]-[10,10] = 5x5 = 25; union = 100+100-25 = 175
     const a = { x: 0, y: 0, width: 10, height: 10 };
     const b = { x: 5, y: 5, width: 10, height: 10 };
     expect(iou(a, b)).toBeCloseTo(25 / 175, 10);

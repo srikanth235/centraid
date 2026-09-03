@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -247,4 +248,3 @@ describe("the phone's photo editor", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 });
-// @vitest-environment jsdom

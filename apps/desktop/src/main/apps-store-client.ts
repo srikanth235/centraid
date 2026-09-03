@@ -3,6 +3,7 @@ import { loadSettings } from "./settings.js";
 interface AuthCache {
   baseUrl: string;
   token: string | undefined;
+  /** The vault the client addresses (#289) — `x-centraid-vault`. */
   vaultId: string | undefined;
 }
 let cachedAuth: AuthCache | undefined;
@@ -38,6 +39,8 @@ function headers(
   const h: Record<string, string> = {};
   if (token) h.authorization = `Bearer ${token}`;
   if (contentType) h["content-type"] = contentType;
+  // The addressed vault (#289): `auth()` is always awaited before any
+  // `headers()` call, so the cache carries the current vault id.
   if (cachedAuth?.vaultId) h["x-centraid-vault"] = cachedAuth.vaultId;
   return h;
 }

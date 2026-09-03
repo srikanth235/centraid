@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -85,4 +86,3 @@ describe("docs file-kind colours", () => {
     expect(tintBg(meta.cv, 12)).not.toContain("var(--kind-pdf)");
   });
 });
-// @vitest-environment jsdom

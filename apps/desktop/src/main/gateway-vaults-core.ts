@@ -1,3 +1,11 @@
+/*
+ * Pure core for `GATEWAYS_LIST_VAULTS` (#376) — fetch + fold
+ * `GET /centraid/_vault/vaults` for a gateway the client is NOT (yet)
+ * addressing, powering the flat (gateway, vault) switcher. Same
+ * "electron-free pure core + injectable fetchImpl" split as
+ * `gateway-ops-core.ts`'s `fetchDiagnosticsText`.
+ */
+/** One row of `GET /centraid/_vault/vaults` (see `renderer/gateway-client-vault.ts`'s `VaultListEntry`). */
 export interface GatewayVaultEntry {
   vaultId: string;
   name: string;
@@ -44,6 +52,12 @@ export function foldVaultsResponse(
 const VAULTS_PATH = "/centraid/_vault/vaults";
 const DEFAULT_TIMEOUT_MS = 3000;
 
+/**
+ * Fetch + fold `GET /centraid/_vault/vaults` from `baseUrl`. `fetchImpl` is
+ * injectable for tests (same convention as `gateway-ops-core.ts`'s
+ * `fetchDiagnosticsText`); the real caller (`gateway-vaults.ts`) passes the
+ * global `fetch` and gets the ~3s abort-on-timeout behavior for free.
+ */
 export async function fetchGatewayVaults(
   baseUrl: string,
   token: string | undefined,

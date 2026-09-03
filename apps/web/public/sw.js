@@ -96,42 +96,9 @@
     }
   }
 
-  // Lazy per-app chunks (issue #505 inline apps) are `import()`ed from the entry
-  // JS, not referenced in index.html — so index parsing alone never precaches
-  // them and the FIRST offline app-open after a normal visit would fail. Crawl the
-  // entry/vendor JS transitively for further chunk references and cache them too,
-  // so an app opens offline even if it was never opened online first.
-  //
-  // Two subtleties the naive `/assets/*.js` match missed:
-  //   1. With the web app's default `base: '/'`, Vite emits the dynamic-import
-  //      chunk names as RELATIVE string literals (`assets/app-inline-….js`, no
-  //      leading slash) and prepends the base at runtime — so the browser fetches
-  //      `/assets/…`. Match both forms and normalise to that absolute request URL
-  //      (the exact key the fetch handler will look up), or every inline-app chunk
-  //      is silently skipped.
-  //   2. Inline apps ship their own lazy CSS chunks (`assets/app-inline-….css`).
-  //      Those must be precached too, else a never-opened app paints unstyled
-  //      offline. Match `.css` as well; only `.js` is re-crawled (CSS imports no
-  //      further chunks).
-  // Bounded by a seen set + a hard ceiling; best-effort per entry so one 404 never
-  // aborts the crawl.
-  //
-  // WHEN IT RUNS, AND WHY THAT MOVED (#883 C5). This used to run inside
-  // `install`'s waitUntil, so the worker was not INSTALLED — and the offline
-  // shell not durable — until the entire lazy chunk graph had been walked, one
-  // chunk at a time. On an UPDATE that is the worst possible place for it: the
-  // outgoing worker still controls a live page while the incoming one spends
-  // dozens of serial round trips on chunks nobody is waiting for. Install now
-  // caches the required shell and stops, so the offline guarantee lands in one
-  // `addAll`; the crawl moved to `activate`, where it is a top-up rather than a
-  // precondition. Offline behaviour is unchanged: the same chunk set lands in
-  // the same cache before the worker takes control (see the ordering note in
-  // the activate handler).
-  //
-  // HOW IT RUNS. Breadth-first in WAVES of at most CHUNK_CRAWL_FANOUT chunks
-  // fetched concurrently, recursing rather than looping so no await sits inside
-  // a loop. The fan-out cap is the resource contract: enough to fill a
-  // connection pool, low enough that the crawl cannot starve the page.
+  // Inline-app chunks are lazy imports absent from index.html; crawl JS transitively and precache CSS for first offline open (#505).
+  // Normalize relative Vite paths, bound the crawl, and run it in activate:
+  // install must finish the shell cache without waiting on the lazy graph (#883).
   const CHUNK_CRAWL_CEILING = 400;
   const CHUNK_CRAWL_FANOUT = 8;
   async function crawlAssetChunks(seeds, cache) {

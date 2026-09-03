@@ -1,3 +1,16 @@
+// THE FRAME EVERY LOCKER SURFACE SITS IN.
+//
+// It owns four things no screen should own twice: the boundary's mount
+// effects, the WALL, the band, and the switcher mask.
+//
+// THE WALL IS THE POINT. `shelves.suppressesNavigation` is asked once, here,
+// and when it answers true the children are not rendered at all — not dimmed,
+// not disabled, WITHDRAWN — and neither is the band. Ten routes therefore
+// cannot each forget to check: a Locker surface that wraps itself in this
+// frame cannot be reached behind a lock, because there is nothing behind it.
+//
+// `gatedShelf` decides WHICH wall: a vault with no passphrase is at setup,
+// full stop, whatever route the member last asked for.
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -42,12 +55,16 @@ const META = resolveAppMeta({
   colorKey: "rose",
 });
 
+/** Which route's word and ambient sentence the app bar carries. The keys are
+ *  `ROUTE_TITLE`'s own, so a route cannot invent a name for itself. */
 export type LockerRouteKey = keyof typeof ROUTE_TITLE;
 
 export interface LockerScreenProps {
   current: LockerBandDestinationKey;
   route: LockerRouteKey;
   onBack?: () => void;
+  /** The Viewer never draws the band — nor does a route that is a subject
+   *  rather than a place. */
   hideBand?: boolean;
   children: React.ReactNode;
 }
@@ -94,6 +111,7 @@ export default function LockerScreen({
       setMoreOpen(true);
       return;
     }
+    // popTo, never navigate: navigate would push a second copy of the list.
     navigation.popTo("LockerHome", { destination: key });
   };
 

@@ -5,6 +5,12 @@ import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import type * as TypeImport_detached from "./detached-gateway.js";
 
+/**
+ * What "Try again" has to survive (#660): after a burst of failed starts the
+ * supervisor latches, and ensureLocalGateway fails instantly without retrying
+ * — correct automatically, fatal on the error screen. Contract: fail to give-up,
+ * fix the cause, prove an explicit retry starts the gateway for real.
+ */
 const fixture = vi.hoisted(() => ({
   failWith: undefined as string | undefined,
   attempts: 0,
@@ -96,11 +102,14 @@ describe("local gateway manual retry suite", () => {
   it("gives up on repeated start failures without pointing at unreachable Settings", async () => {
     const { ensureLocalGateway } = await import("./local-gateway.js");
     await failUntilGivenUp(ensureLocalGateway);
+    // The guard answered from the latch — it never went near the gateway.
     expect(fixture.attempts).toBe(3);
 
     const message = await rejectionMessage(ensureLocalGateway("local"));
     expect(message).toMatch(/failed to start repeatedly and stopped retrying/u);
     expect(message).toContain(`last error: ${LOCKED}`);
+    // That screen has no navigation; the message must not send its reader
+    // anywhere they cannot go.
     expect(message).not.toContain("Settings");
     expect(fixture.attempts).toBe(3);
   });
@@ -126,6 +135,8 @@ describe("local gateway manual retry suite", () => {
     await failUntilGivenUp(ensureLocalGateway);
 
     fixture.failWith = "connection-secrets.bin is unreadable";
+    // Leaning on the button must not become a respawn loop; the second press
+    // gets the first's outcome.
     await expect(
       rejectionMessage(retryLocalGatewayStart("local"))
     ).resolves.toBe("connection-secrets.bin is unreadable");

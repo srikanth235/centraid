@@ -1,3 +1,11 @@
+// The pending sheet's WORDS and its verbs, in a pure module.
+//
+// The law behind them is one file for both seats
+// (`packages/blueprints/apps/_shared/pending-overlay.ts`): what a stopped
+// write says, which versions a conflict prints, and which of Retry/Discard it
+// may offer. This module adapts one outbox row to that law and adds nothing to
+// it, so the phone and the browser cannot drift into two vocabularies for the
+// same stopped write.
 import {
   pendingOverlayCanDiscard,
   pendingOverlayCanRetry,
@@ -85,6 +93,8 @@ export function pendingChangeExplanation(
   return change.reason;
 }
 
+/** Which doors this row actually has; drawing one that cannot fire is worse
+ *  than drawing none (protocol C1). */
 export interface PendingChangeVerbs {
   retry: boolean;
   discard: boolean;

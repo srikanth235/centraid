@@ -1,3 +1,12 @@
+/*
+ * Iroh-only gateway pairing (#555).
+ *
+ * The one-time ticket supplies the gateway's stable EndpointId plus a current
+ * relay hint. Redemption may enroll this device into several vaults at once;
+ * the first returned vault is the initial focus. We persist the EndpointId as
+ * connection identity, refresh the hint, and keep this device's iroh key in
+ * safeStorage under that EndpointId.
+ */
 import os from "node:os";
 
 import {

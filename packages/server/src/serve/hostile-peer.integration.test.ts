@@ -327,6 +327,7 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     const routeAfter = world.links.routeFor(PEER.vaultId);
     expect(routeAfter?.assertedAt).toBe(ts);
 
+    // A strictly newer timestamp is the ordering key, not randomness.
     const replay = await ask(connection, {
       method: "POST",
       target: "/centraid/_peer/route/assert",

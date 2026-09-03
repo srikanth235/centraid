@@ -1,3 +1,17 @@
+// THE BAND TALLY CLAIMS, pinned (Tally spec §1, "Phone band").
+//
+// Four claims a plausible refactor could undo silently:
+//
+//  1. THE FIVE WORDS ARE THE SPEC'S — Balances · Activity · Groups · Waiting ·
+//     More — and they come from the SHARED table, so the band, the desktop
+//     rail and the app bar cannot disagree about what a place is called.
+//  2. WAITING HOLDS A SLOT AND CARRIES NO COUNT. The sanctioned divergence is
+//     the slot; a badge on it is what the spec forbids outright, so nothing in
+//     the destination shape can hold a number.
+//  3. THE CAP IS FIVE, and it is enforced rather than assumed.
+//  4. EVERY MORE ROW LEADS SOMEWHERE. Export's door is on the custodian seat,
+//     so it leads to a screen saying where the act happens; a greyed control
+//     would teach that it is broken.
 import { describe, expect, it } from "vitest";
 
 import {

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -394,4 +395,3 @@ describe("Collections' per-section collapse", () => {
     });
   });
 });
-// @vitest-environment jsdom

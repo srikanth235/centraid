@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -243,4 +244,3 @@ describe("what the review promises before it trashes anything", () => {
     expect(review(cluster)).not.toContain("kit-btn primary");
   });
 });
-// @vitest-environment jsdom

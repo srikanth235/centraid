@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -111,4 +112,3 @@ describe(DistributionBlock, () => {
     expect(nodesOf(container, "span")).toHaveLength(0);
   });
 });
-// @vitest-environment jsdom

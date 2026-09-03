@@ -452,6 +452,8 @@ describe(isPendingBootProbe, () => {
   });
 
   it("stops suppressing once this launch has resolved the gateway either way", () => {
+    // Settings going unreadable AFTER the gateway has been seen is a genuine
+    // regression, not boot noise — it must still fold through to `down`.
     const up = applyProbe(initialRuntimeState(GW, T0), ok(T0 + 5000));
     expect(
       isPendingBootProbe(up, booting(T0 + 10_000, "settings unavailable"))

@@ -1,3 +1,14 @@
+// SPENDING — what the month went on, and the two figures a splitting tool
+// keeps apart.
+//
+// RESTRAINT IS THE DESIGN (gap register §6): six category rows and the
+// paid-versus-share pair. No trend, no chart beyond a proportion bar, no second
+// level of category. THE DIFFERENCE IS NOT A SAVING — it is carried in
+// balances, and the row says so rather than presenting it as money kept.
+//
+// NEITHER FOLD IS A BALANCE. Both run over the same decorated feed the Activity
+// list reads, so the pair can never disagree with the rows there; the one
+// balance engine stays on the query side.
 import React, { useEffect, useMemo } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 
@@ -35,6 +46,8 @@ export default function TallySpendingScreen({
     if (vault.activity === null) void loadTallyActivity();
   }, [vault.activity]);
 
+  // One stable empty feed, so the three folds below do not recompute on every
+  // render while the activity read is still in flight.
   const rows = vault.activity?.activity ?? NO_ROWS;
   const currency = vault.activity?.currency ?? vault.dashboard.currency;
   const totals = useMemo(

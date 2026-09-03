@@ -49,7 +49,6 @@ function Mark({
   iconKey: IconName;
   colorKey: ColorKey;
   size: number;
-
   className: string | undefined;
 }): JSX.Element {
   return (

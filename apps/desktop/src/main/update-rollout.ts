@@ -1,3 +1,12 @@
+/*
+ * Staged-rollout wiring (#468, I5/I6).
+ *
+ * Thin Electron-facing surface over `update-rollout-core.ts` —
+ * `update-watcher.ts` gates every announce through `admitUpdate`.
+ *
+ * Persists a stable per-install bucket id under userData so the time ramp
+ * is not re-rolled every check.
+ */
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";

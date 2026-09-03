@@ -1,3 +1,6 @@
+// Docs read layer (#821): the drive from this device's replica, same shape
+// as `usePeople`. SHARES ARE DECORATION, NEVER A FAILED DRIVE — denied share
+// reads resolve to `shared_with: null` per row; CUSTODY likewise decorates.
 import { useCallback, useMemo } from "react";
 
 import type { ReplicaValue } from "@centraid/client/replica/native";
@@ -41,6 +44,7 @@ export function useDocs(): UseDocsResult {
   const tags = useDocsEntity("core.tag");
   const concepts = useDocsEntity("core.concept");
   const schemes = useDocsEntity("core.concept_scheme");
+  // Decoration reads — never fail the drive; see header.
   const custody = useDocsEntity("blob.custody_state");
   const grants = useDocsEntity("share.circle_grant");
   const circles = useDocsEntity("social.circle");

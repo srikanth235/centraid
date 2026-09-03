@@ -1648,7 +1648,6 @@ export default function SettingsConnectionsScreen({
                       featured={sheet.featured}
                       busy={saving}
                       oauthCallbackUri={oauthCallbackUri}
-
                       existingLabels={[]}
                       onCancel={() =>
                         setSheet({

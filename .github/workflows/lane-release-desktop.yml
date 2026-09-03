@@ -1,15 +1,7 @@
 name: lane-release-desktop
 
-# A `release.yml` lane, not an independently-triggered workflow (#557) — the
-# `lane-` prefix marks that. It used to listen on `v*.*.*` itself, alongside two
-# other workflows watching the same tags with no shared notion of whether the
-# release as a whole succeeded.
-# I1–I3, I7, I11 / #501 — package desktop on version tags.
-# Signing/notarization is secret-gated. Without enrolled credentials:
-#   - jobs still build installers (unsigned scaffolding)
-#   - workflow artifacts upload always
-#   - GH Release attaches installers only when at least one signing group is present
-#     (avoids publishing Gatekeeper/SmartScreen-blocked "official" stable builds)
+# Reusable desktop release lane (#501, #557). Signing is secret-gated: unsigned
+# installers may be artifacts, but official releases require a signing group.
 
 on:
   workflow_call:

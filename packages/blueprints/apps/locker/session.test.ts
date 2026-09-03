@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -315,4 +316,3 @@ describe("the clipboard clears itself", () => {
     });
   });
 });
-// @vitest-environment jsdom

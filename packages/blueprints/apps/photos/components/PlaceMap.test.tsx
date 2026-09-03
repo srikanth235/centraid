@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -140,4 +141,3 @@ describe("the Places map", () => {
     expect(render({ points: [] })).toBe("");
   });
 });
-// @vitest-environment jsdom

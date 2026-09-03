@@ -1,3 +1,8 @@
+/*
+ * Pure crash-record formatting + rotation-decision logic (#351).
+ * Electron-free so it unit-tests as plain logic; `crash-log.ts` wires in
+ * `app.getPath('userData')` + real filesystem writes.
+ */
 export type CrashKind =
   | "uncaughtException"
   | "unhandledRejection"

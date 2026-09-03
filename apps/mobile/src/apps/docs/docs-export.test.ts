@@ -1,3 +1,4 @@
+// export-path-traversal: the share-sheet filename is a leaf, never a path.
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";

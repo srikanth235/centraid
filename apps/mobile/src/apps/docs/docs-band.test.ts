@@ -1,3 +1,4 @@
+// The claimed band's model rules (handoff Part 2 §"The band"; #821).
 import { describe, expect, it } from "vitest";
 
 import { MORE_ROWS } from "@centraid/blueprints/apps/docs/view-copy";
@@ -55,6 +56,7 @@ describe("docs band", () => {
       "What Docs may read",
       "Add a document",
     ]);
+    // Labels come FROM the shared table, so the sheet cannot drift from web.
     for (const row of DOCS_MORE_ROWS) {
       expect(MORE_ROWS.some((shared) => shared.label === row.label)).toBe(true);
     }

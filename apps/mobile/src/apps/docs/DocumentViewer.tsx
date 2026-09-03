@@ -1,3 +1,19 @@
+// The stage (Docs handoff Part 2 §8; #821) — a document on the dark
+// ground, "a mode with its own exit, and the one thing that drops the band"
+// (deviation 2: `DocsScreen`'s `hideBand`, passed here and nowhere else).
+// Every colour on it is a named stage token off the native theme.
+//
+// What actually renders is what this seat can actually render:
+//   * image  → expo-image off the gateway blob route (or the inline bytes);
+//   * video / audio → expo-video with its own native transport — the same
+//     machinery Photos' lightbox uses;
+//   * PDF → NOTHING pretends to be a page. This phone has no PDF renderer,
+//     so the stage states the fact with the document's own facts beside it
+//     and offers the file to an app that reads the kind. A mocked page here
+//     would be a fabrication (INTEGRATION-NOTES.md → choices).
+//
+// Prev / next step to the previous and next DOCUMENT in the current shelf
+// (the drive's active set, in its default changed-newest order).
 import { useNavigation } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -243,6 +259,7 @@ function StageAction({
   label: string;
   icon: string;
   net?: boolean;
+  /** Withheld, not doomed: the strip below says why (#880). */
   disabled?: boolean;
   hint?: string;
   onPress: () => void;
@@ -310,6 +327,9 @@ function StageMedia({
   ) {
     return <StageTransport uri={uri} styles={styles} />;
   }
+  // The honest state: no fabricated page. Either this phone cannot render
+  // the kind at all (there is no PDF renderer on this seat), or the bytes
+  // are out of reach — the sentence names which.
   const reason = uri
     ? `This phone cannot open ${kind.name} here. Docs holds it, versions it and files it — Open elsewhere hands the file to an app that reads this kind.`
     : "The bytes of this document are not on this device and the gateway is out of reach, so it cannot open right now.";

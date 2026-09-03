@@ -1,3 +1,13 @@
+// Inside one label (handoff Part 2 §3; #821). Same rows, same actions,
+// its own empty state and its own caption: "<name> is a label; taking it off
+// does not delete anything."
+//
+// The crumb row follows the frame's rule (README §Cross-app standardisation):
+// where the frame draws the back row, the LEADING crumbs render as plain text
+// — two controls for one job is one too many — and only the TRAILING crumb
+// stays interactive, because it carries the place menu (Rename folder, and
+// Delete folder in the `net` tone; the vault refuses a delete while the
+// folder still holds documents, and the refusal's own reason is surfaced).
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
@@ -38,6 +48,8 @@ export default function FolderView({
   const audiences = useDocsGrantAudiences();
   const [shareOpen, setShareOpen] = useState(false);
 
+  // The read's own name wins once it lands; the route param titles the first
+  // paint so the bar never waits a replica round trip.
   const liveName =
     drive.folders.find((folder) => folder.folder_id === folderId)?.name ??
     folderName;

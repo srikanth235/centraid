@@ -14,13 +14,21 @@ import {
 } from "./gateway-store.js";
 import { mergePersistedSettings } from "./settings-merge.js";
 
+/**
+ * `<userData>/centraid-settings.json`, mode 0600: UI prefs + active gateway
+ * pointer (#109), NOTHING else — connection state lives in gateway-store.ts,
+ * secrets in the keychain. `PersistedSettings` serializes; `DesktopSettings`
+ * adds active-gateway-derived fields (what IPC handlers read).
+ */
 export interface PersistedSettings {
   activeGatewayId: string;
+  /** Per-gateway vault pointer (#289), sent as `x-centraid-vault`; missing = gateway picks. */
   activeVaultByGateway?: Record<string, string>;
   onboardingCompletedAt?: string;
   gatewayAlertSeconds?: number;
   gatewayAlertsEnabled?: boolean;
   changelogSeenVersion?: string;
+  /** Absent → disabled: a fresh install never silently adds itself to login items. No-op on Linux (no Electron `setLoginItemSettings`). */
   launchAtLogin?: boolean;
   offerGatewayService?: boolean;
 }
@@ -39,6 +47,7 @@ export interface DesktopSettings {
   gatewayAlertsEnabled?: boolean;
   changelogSeenVersion?: string;
   launchAtLogin?: boolean;
+  /** Whether onboarding OFFERS the OS service install (H5 / #468); silent install forbidden. */
   offerGatewayService?: boolean;
 }
 
@@ -119,6 +128,7 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
   await fs.rename(tmp, file);
 }
 
+/** First-run keychain deferral (#603): the local gateway's `safeStorage` mint must not prompt before any UI, so with no `onboardingCompletedAt` resolveEffective returns empty local URL/token instead of booting. */
 let localGatewayStartRequested = false;
 
 export function requestLocalGatewayStart(): void {
@@ -137,6 +147,7 @@ async function resolveEffective(
     resolved = await resolveGateway(LOCAL_GATEWAY_ID);
   }
   if (!resolved) {
+    // Unreachable after `ensureLocalGateway`, but TypeScript cannot see it.
     throw new Error("Local gateway resolution failed unexpectedly.");
   }
   const deferLocalStart =
@@ -222,6 +233,7 @@ export async function setActiveGatewayId(id: string): Promise<DesktopSettings> {
   return saveSettings({ activeGatewayId: id });
 }
 
+/** Client-side pointer flip (#289): no server call, no re-root; `undefined` clears; keyed by gateway. */
 export async function setActiveVaultId(
   vaultId: string | undefined
 ): Promise<DesktopSettings> {

@@ -1,3 +1,11 @@
+/*
+ * APPS_OPEN handler core (issue #137 reveal-in-Finder; #865 hardening).
+ *
+ * Electron-free so the traversal gate is unit-testable without the electron
+ * module graph: `ipc.ts` supplies the live `resolveAppRevealDir` and
+ * `shell.openPath` deps. The id is validated BEFORE any path join — a
+ * renderer-supplied "../../" must never reach the filesystem.
+ */
 import { parseRevealableAppId } from "./ipc-core.js";
 
 export interface AppRevealDeps {

@@ -1,3 +1,8 @@
+/*
+ * The queue's law is tested once in `@centraid/blueprints`; only durability,
+ * order, and a value that came back corrupt are this seat's to get wrong, so
+ * that is what is pinned here (#883).
+ */
 import { describe, expect, it } from "vitest";
 
 import { nativeGrantIntentQueue } from "./grant-queue-store";

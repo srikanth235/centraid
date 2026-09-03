@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -341,4 +342,3 @@ describe("the capture-time OCR consent gate", () => {
     expect(container!.textContent).not.toContain("Extract on this phone");
   });
 });
-// @vitest-environment jsdom

@@ -103,6 +103,8 @@ describe(claimRevival, () => {
     const first = claimRevival(undefined, T0);
     const tooSoon = claimRevival(first.next, T0 + MIN_REVIVAL_INTERVAL_MS - 1);
     expect(tooSoon.allowed).toBe(false);
+    // A refusal must not consume a slot, or a chatty monitor would burn the
+    // whole budget in one second of ticks.
     expect(tooSoon.next).toStrictEqual(first.next);
   });
 
@@ -148,6 +150,8 @@ describe(claimManualRetry, () => {
       T0 + MANUAL_RETRY_FLOOR_MS - 1
     );
     expect(tooSoon.allowed).toBe(false);
+    // A refusal must not slide the floor forward, or holding the button down
+    // would keep pushing the next real attempt out of reach.
     expect(tooSoon.next).toBe(T0);
   });
 
@@ -158,6 +162,9 @@ describe(claimManualRetry, () => {
     expect(later.next).toBe(T0 + MANUAL_RETRY_FLOOR_MS);
   });
 
+  // The floor is the ONLY bound on an explicit retry: unlike the revival
+  // budget there is no exhaustion, because a person who has just fixed the
+  // cause must never be told they are out of tries.
   it("never runs out of tries", () => {
     let at = T0;
     let last: number | undefined;
