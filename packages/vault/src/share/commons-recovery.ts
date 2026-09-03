@@ -8,6 +8,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { uuidv7 } from "../ids.js";
 import type { ShareableItemType } from "./closure.js";
+import { isShareableItemType, shareOriginEntityType } from "./closure.js";
 import {
   commonsStateDigest,
   readCommonsChainHead,
@@ -71,10 +72,10 @@ interface RosterSeat {
 
 function localOwnerPartyId(db: DatabaseSync): string {
   const row = db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string } | undefined;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string } | undefined;
   if (!row) throw new Error("commons recovery needs a bootstrapped vault");
-  return row.owner_party_id;
+  return row.self_party_id;
 }
 
 /** Named divergence fault, if any. Read from the contact table, not the sync module. */
@@ -104,13 +105,17 @@ function localContainerId(
 ): string | undefined {
   const mapped = db
     .prepare(
-      `SELECT item_id FROM share_commons_lineage
-        WHERE grant_id = ? AND item_type = ? AND origin_item_id = ?`
+      `SELECT target_id FROM share_commons_lineage
+        WHERE grant_id = ? AND target_type = ? AND origin_item_id = ?`
     )
-    .get(grantId, containerType, originContainerId) as
-    | { item_id: string }
-    | undefined;
-  return mapped?.item_id;
+    .get(
+      grantId,
+      isShareableItemType(containerType)
+        ? shareOriginEntityType(containerType)
+        : containerType,
+      originContainerId
+    ) as { target_id: string } | undefined;
+  return mapped?.target_id;
 }
 
 function roster(

@@ -5,7 +5,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { resolveEntity } from "../schema/tables.js";
-import { evaluateConsent } from "./consent.js";
+import { evaluateAccess } from "./access.js";
 import { writeReceipt } from "./evidence.js";
 import type { Identity } from "./types.js";
 
@@ -121,7 +121,7 @@ function linkedAndVisible(
   for (const other of others) {
     const ref = resolveEntity(other.t, vault);
     if (!ref) continue;
-    const consent = evaluateConsent(
+    const access = evaluateAccess(
       vault,
       identity,
       ref.schema,
@@ -129,14 +129,14 @@ function linkedAndVisible(
       "read",
       purpose
     );
-    if (consent.decision === "allow") return true;
+    if (access.decision === "allow") return true;
   }
   return false;
 }
 
 function cardFor(vault: DatabaseSync, type: string, id: string): RefCard {
   const ref = resolveEntity(type, vault);
-  if (!ref || ref.file !== "vault") {
+  if (!ref) {
     return {
       type,
       id,
@@ -212,7 +212,7 @@ export function resolveRefCards(
       continue;
     }
     const ref = resolveEntity(type, vault);
-    if (!ref || ref.file !== "vault") {
+    if (!ref) {
       cards.push({
         type,
         id,
@@ -223,7 +223,7 @@ export function resolveRefCards(
       });
       continue;
     }
-    const direct = evaluateConsent(
+    const direct = evaluateAccess(
       vault,
       identity,
       ref.schema,

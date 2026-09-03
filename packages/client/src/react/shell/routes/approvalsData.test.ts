@@ -238,12 +238,12 @@ describe(humanizeActivityLabel, () => {
     ).toBe("Sync remove connection");
     expect(
       humanizeActivityLabel(
-        "act consent.app_ext_draft_drop",
+        "act access.app_ext_draft_drop",
         "deny",
         "agent.command",
         null
       )
-    ).toBe("Consent app ext draft drop");
+    ).toBe("Access app ext draft drop");
   });
 });
 

@@ -1,0 +1,162 @@
+# The vault ontology
+
+The ontology is the crux of Centraid: one person-owned model of a life, over which every app is a projection and through which every agent acts. This document is its **current state** — what the model is today, which of its commitments are enforced by code, and the register of places where the implementation and the design disagreed. The design itself is the published page at [centraid.dev/docs/ontology](https://centraid.dev/docs/ontology/), authored in [`scripts/docs-site/src/content/ontology-body.html`](../scripts/docs-site/src/content/ontology-body.html); this file is the engineering companion that keeps that page honest.
+
+Vocabulary is [glossary.md](glossary.md); rulings are [decisions.md](decisions.md) (search "Ontology v0 close (#916)", "Ontology reconciliation (#883)", "Grants v2", "Portable export custody"). History lives in receipts and issues, not here: the ontology package landed in [#252](https://github.com/srikanth235/centraid/issues/252), rule 10 in [#274](https://github.com/srikanth235/centraid/issues/274), the first audit in [#441](https://github.com/srikanth235/centraid/issues/441), the reconciliation in [#883](https://github.com/srikanth235/centraid/issues/883), and the v0 close in [#916](https://github.com/srikanth235/centraid/issues/916).
+
+## Where the truth lives
+
+| Question | Answer | Source |
+| --- | --- | --- |
+| What tables exist, what they are called, and what each row's life may be | The entity registry — an allow-list before it is a name table. Each entity declares its label, its lifecycle (`append-only` / `mutable` / `trash` / `machinery`), its revision retention, and whether it is a _projection_. An unregistered table is outside every export, replica trigger, access scope and Atlas census. | [`entity-catalog.ts`](../packages/vault/src/schema/entity-catalog.ts), resolved through [`tables.ts`](../packages/vault/src/schema/tables.ts) |
+| Which physical tables are deliberately **not** registered, and why | One map, one reason per table — the supertype index, blob custody internals, the replica plane, the locker's own unlock credential | [`local-tables.ts`](../packages/vault/src/schema/local-tables.ts) |
+| What each table looks like | The DDL modules, one per pack or band. The ladder is one rung: the modules carry the shipping shape. | [`packages/vault/src/schema/`](../packages/vault/src/schema/), ladder in [`migrate.ts`](../packages/vault/src/schema/migrate.ts) |
+| Which schemas are life data and which are plumbing | `ONTOLOGY_PACKS` versus `MACHINERY_BANDS` — explicit, so a new schema fails loud rather than mis-shelving | [`atlas.ts`](../packages/vault/src/schema/atlas.ts) |
+| Where every `(type, id)` pointer is, and which ones are deliberately not keys | `ENTITY_POINTERS` (14) and `ENTITY_REF_EXCLUSIONS` (13, each with its written reason). This is **metadata for Browse and for the closure test**, not a cleanup registry — the cleanup is the engine's. | [`entity-refs.ts`](../packages/vault/src/schema/entity-refs.ts) |
+| What the design says | The published page: thesis, entity map, §03 schema, principles, layer stack, ownership matrix, gateway contract, the ten rules | [`ontology-body.html`](../scripts/docs-site/src/content/ontology-body.html) |
+| Whether the page and the DDL agree | A test compares §03 column by column with `PRAGMA table_info` of a freshly migrated vault, the machinery list with the band declarations, and the version label with `ONTOLOGY_VERSION` | [`ontology-doc.test.ts`](../packages/vault/src/schema/ontology-doc.test.ts) over [`ontology-doc.ts`](../packages/vault/src/schema/ontology-doc.ts) |
+| What the model looks like over real rows | Operations → Vault Atlas: Kinds (census), Relations (the reference graph centred on `core.party`), Browse (receipted editor) | `packages/client/src/react/screens/AtlasScreen.tsx` |
+| The version | `ONTOLOGY_VERSION` (**1.0**), stamped on `agent_command` contracts only; the gateway refuses a command contract on any other version. The file's own version is `PRAGMA user_version` (1), a different number. No row carries a version. | [`migrate.ts`](../packages/vault/src/schema/migrate.ts) |
+
+## One file, three bands
+
+A vault is **one SQLite file**, `vault.db`, holding three bands ([#916](https://github.com/srikanth235/centraid/issues/916)):
+
+- **The model** — the `core` spine, seven life-domain packs, the `access` and `agent` planes, and the machinery bands (`share`, `sync`, `enrich`, `outbox`, `notifications`, `blob`).
+- **The audit band** ([`audit.ts`](../packages/vault/src/schema/audit.ts)) — `access_provenance`, `access_receipt`, `agent_command_invocation`, `agent_invocation_check`, `agent_evidence`, `agent_explanation`, and the archive manifests. Append-only **by trigger**: UPDATE and DELETE are refused by the engine, not by convention.
+- **The ledger band** ([`ledger.ts`](../packages/vault/src/schema/ledger.ts)) — the conversation transcript (`conversation ⊃ turn ⊃ item`), automation state, and the archive/digest rows that bound it. The vault package owns the DDL; `@centraid/server` owns the store code over it.
+
+The audit stream lived in a second file, `journal.db`, until #916. Splitting it was a size argument and it cost correctness: a receipt in another file is not atomic with the mutation it describes, and every pointer across the seam had to be a gateway promise instead of a foreign key. One file gives one ACID boundary — invocation, rows and receipt commit together — and makes `core_entity_revision.invocation_id` a real key. The size argument is answered where it belongs: each band declares a retention window in one place (`RETENTION_WINDOWS`: audit 365 days, ledger 90), and the archival pass proves custody of what it sealed before it prunes. Both bands are excluded from the portable export, the device replica and the support bundle **by band** (`local-tables.ts`), so there is no second list to maintain.
+
+One file also collapsed the backup protocol. A snapshot manifest now carries **exactly one `db` entry** (`vault.db`, with its sha256, WAL generation and base tick), and the WAL stream is addressed by generation: one **tick marker** per tick at `wal/tick/{generation}/{tick}`, recording the position the segment stream reached. The two-database coordination — the capture order, the coordinated break, the pair marker and the two-base same-tick refusal — is deleted, because a pair is what it existed to keep in step. Restore still replays to the newest marker the listing can _prove_ it reached, and no marker still means the base floor, so an idle stream stays distinguishable from a lost tail. `packages/backup/FORMAT.md` is the normative spec.
+
+## The shape today
+
+A fresh vault at `PRAGMA user_version = 1`: **150 base tables** (plus 18 FTS indexes and their shadow tables), 407 indexes, 590 triggers, 1 view. **110 tables are registered entities**; the other 40 are declared local, band-declared, or FTS.
+
+| Schema | Kind | Tables | What it holds | Bundled consumer |
+| --- | --- | --- | --- | --- |
+| `core` | spine | 21 registered (+ `core_entity`, `core_entity_kind` local) | vault, party, identifier, place, event, account, transaction, content item, derivative, document, attachment, activity, link, anchor, concept scheme, concept, tag, collection, collection entry, entity revision, share origin | every app |
+| `schedule` | pack | 8 | calendar, event extension, attendee, task, project, section, recurrence exception, exception attendee | Agenda, Tasks |
+| `social` | pack | 6 | contact channel, circle, circle member, thread, participant, message | People (channels), Tally and sharing (circles); **threads and messages have no surface, but do have writers** |
+| `knowledge` | pack | 2 | note, annotation | Notes; annotations are the memo mechanism everywhere |
+| `media` | pack | 6 | asset, face region, phash, memory, memory member, face cluster | Photos |
+| `people` | pack | 2 | profile, important date | People |
+| `locker` | pack | 5 registered (+ `locker_auth_credential` local by ruling) | item, address, alias, field, passkey | Locker |
+| `tally` | pack | 12 | friend, group, expense, split, recurring split, payer, line item, line allocation, recurring expense, settlement, obligation, nudge | Tally |
+| `access` | plane | 10 | app, agent, app ext, grant, grant scope, tombstone, scope request, policy, device, seed row | the gateway |
+| `agent` | plane | 2 | command, capability | the gateway |
+| `audit` | band | 8 (band-declared) | provenance, receipt, invocation, check, evidence, explanation, archive manifest, archive pass | the gateway |
+| `ledger` | band | 14 (band-declared) | conversations, turns, items, attachments, harness sessions, locks, workspace selection, health, provider consent, automation state and cursors, trigger ingress, archive, digest | app-engine |
+| `share` | machinery | 18 | authority, delivery config, fulfillment, party↔vault binding, circle grant, commons op log, cursors, and the four commons control tables registered in #916 | the grant plane, commons |
+| `sync` | machinery | 8 | connection, credential, cursor, run, health, external id, import batch, import row | connectors |
+| `enrich` | machinery | 5 | request, policy, policy rule, derivation, embedding | recognition automations |
+| `outbox`, `notifications`, `blob` | machinery | 2 + 1 + 2 registered (+ 11 blob tables local) | outbox items and grants; notices; custody state and rollup | the gateway |
+
+Domains the design carried and the implementation dropped, each for having **no consumer**: `home` and `business` in [#883](https://github.com/srikanth235/centraid/issues/883) (ruling O-domains; product case in the closed proposal [#885](https://github.com/srikanth235/centraid/issues/885)), then `health`, `finance`, the observation spine, the learn loop (`agent.correction` / `agent.judgment`), `consent.app_view`, `consent.export_job` and `schedule.availability_rule` in #916 (ruling ONT-06).
+
+**Lifecycle, as declared:** 13 trash, 10 append-only, 39 mutable, 48 machinery. **Projections** (a part of an entity, keyed by its parent, no supertype row): 11.
+
+## Commitments the code enforces
+
+Each row is a design commitment, where it is enforced, and the test that goes red when it is broken. A commitment with no row here is a wish, not a rule.
+
+| Commitment | Mechanism | Enforced by |
+| --- | --- | --- |
+| Only registered entities reach SQL, and every one has one member-facing name | `resolveEntity` is the single logical→physical translation; `assertRegistryLabels` runs on every open | `tables.ts`, `entity-labels.test.ts` |
+| Every physical table is either a registered entity or a declared local one, with a written reason | `LOCAL_TABLES` compared against `sqlite_master` | `local-tables.ts`, `lifecycle.test.ts` |
+| Every entity row has an id unique across the model, and every `(type, id)` pointer resolves | the `core_entity` supertype: membership triggers per entity table, composite `REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE` on every pointer pair | `entity.ts`, `entity-refs.test.ts`, `ontology-shape.test.ts` |
+| A pointer that is deliberately not a key says why | `ENTITY_REF_EXCLUSIONS` — 13 entries, each carrying its reason in prose | `entity-refs.ts`, `entity-refs.test.ts` |
+| Every row states what its life may be, and the schema matches | per-entity `lifecycle`; mutable ⇒ `updated_at NOT NULL DEFAULT` + touch trigger, trash ⇒ the `deleted_at`/`purge_at` pair with its CHECK, append-only ⇒ no UPDATE path | `entity-catalog.ts`, `lifecycle.test.ts` |
+| Evidence cannot be rewritten, and never leaves the machine | audit-band triggers refusing UPDATE/DELETE; band exclusion from export, replica and support bundle | `audit.ts`, `local-tables.ts`, `audit-band.test.ts` |
+| A receipt and the mutation it describes commit together | one file, one transaction, receipt written inside it | `audit-band.test.ts` |
+| The two append-heavy bands stay bounded without losing history | `RETENTION_WINDOWS` + the archive pass (seal into the CAS, prove custody, then prune) | `audit.ts`, `journal-archive.ts`, `retention.test.ts` |
+| Secrets are ciphertext at rest, never indexed, revealed only with a receipt | the sealed column class (`SEALED_COLUMNS`), the FTS DDL gate that refuses a sealed column | `sealed.ts`, `fts.ts` |
+| A portable export never carries a key in the clear, and an import re-seals under the target's own key | `sealed: "ciphertext-only"` by default; the DEK only inside a password-wrapped `custody/recovery-kit.json`; re-seal sweep on import | `portable-export.ts`, `portable-custody.ts`, `portable-sealed-custody.test.ts` |
+| Delete is a reversible trash with a grace window, and a purge is one act | the `deleted_at`/`purge_at` pair, purged by the standing sweep as a single DELETE the supertype cascades | per-pack DDL, `gateway/duties.ts` |
+| A person can be purged, and money and authority refuse it while they still name them | `core_party` trash pair + FK delete rules audited per column (RESTRICT on money and authority, SET NULL on attribution) + revoke-on-purge trigger | `entity-catalog.ts` (the 48-FK audit), `entity.ts` |
+| Every registered row change reaches every device | replica change-log triggers generated from the registry on open | `replica.ts`, `replica/change-log.test.ts` |
+| Bytes are rented, rows are owned: a content item with no live reference is reclaimable | `CONTENT_REFERENCES` enumerates every renting column | `content-references.ts` |
+| Money states its currency | `currency` on `tally_group`, `tally_expense` and `tally_settlement`, with triggers holding a grouped row to its group | `domains-tally.ts`, `ontology-shape.test.ts` |
+| Recurrence exceptions survive a series edit | keyed on `original_start_local` + `recurrence_semantics`, not a resolved UTC instant; attendee overrides are rows | `time-organize.ts`, `ontology-shape.test.ts` |
+| An unsupported RRULE is refused, never silently reinterpreted | `inspectRrule` / `assertSupportedRrule` at the write and import boundary | `packages/core/src/time/rrule-support.ts` |
+| A vault that a harness touched is still sound | `vaultDoctor`: page integrity, engine FKs, blob custody | `doctor.ts` |
+| A vault from the frozen corpus opens and keeps every row | the golden corpus under `packages/vault/tests/golden/issue-916` | `golden-vault.test.ts` |
+| One judgment, one mechanism | stars are a flags-scheme `core.tag`, memos are `knowledge.annotation`, employment is a `core.link` — with **no** mirror column anywhere | `commands/flags.ts`, `commands/annotations.ts`, `ontology-shape.test.ts` |
+| A command speaks the vault's ontology version | equality on `agent_command.ontology_version` at invocation | `gateway/execution.ts` |
+| Nothing outside the vault package writes vault SQL without a reason on the record | `bun run lint:vault-sql` — vocabulary derived from the registry, allow-list entries carry reasons, stale entries fail | `scripts/lint-vault-sql.mjs` |
+| The published page describes this schema | §03 tables, columns, flags and references compared with `PRAGMA table_info`; bands compared by name; version label compared with `ONTOLOGY_VERSION` | `ontology-doc.test.ts` |
+
+## The ten rules, as implemented
+
+The page's §11 states ten hard rules. This is where each stands in code.
+
+| Rule | Standing |
+| --- | --- |
+| R1 IDs immutable, meaningless | Held, and now unique across the model: every entity row is a `core_entity` row, so an id names one thing. Merges keep both rows and a `same-as` link (`commands/merge.ts`), and the merge folds constraint collisions by class rather than deleting the loser's rows. |
+| R2 Extend, don't fork | Held for every shipped domain: `people_profile`, `tally_friend`, `media_asset`, `schedule_event_ext` anchor a core row by UNIQUE FK. **Locker is the one written exemption** — an owner-only secret anchors nothing in core by design (its DDL header). |
+| R3 Relationships typed and temporal | Held for cross-entity meaning (`core.link`). Junction tables that carry state (`schedule_attendee.partstat`, `social_circle_member.capability`, `tally_expense_split.share_minor`, `core_collection_entry.position`) are typed rows, not the boolean junctions the rule forbids. |
+| R4 Writes are typed commands | Held. `atlas.*` is the only generic write and it rides the same pipeline. Raw SQL from outside the package is a lint failure with a reasoned allow-list. |
+| R5 Durable facts vs rebuildable projections | Held with two registered stored projections: `social_thread.last_message_at` (healed by sweep) and `blob_custody_*` (rebuilt). Tally stores no balance. The `media_asset.favorite` mirror is gone. |
+| R6 Consent travels with the data | Held; the authority answers live in one plane (`share.authority`, [#883](https://github.com/srikanth235/centraid/issues/883)), and the plane that answers "may this actor reach this data" is named `access`. A portable export carries policy and ciphertext, never a key. |
+| R7 Version the ontology explicitly | **Held, restated.** The version is a property of the file (`user_version`) and of the command contract (`agent_command.ontology_version`) — not of a row (ONT-04). |
+| R8 Lifecycle is declared, not adopted | **Held.** This rule replaced "corrections become durable judgment", whose loop had DDL, commands and no caller (ONT-06). Each entity declares its lifecycle and a test holds the schema to it. |
+| R9 (rule 10) One judgment, one mechanism | **Held with no exception.** The single registered mirror (`media.asset.favorite`) was deleted; Photos' star anchors on `media.asset`, Docs' on `core.document`. |
+| R10 Every app rides the paved road | Held: manifests become grants, reads are scoped, writes are commands, app-declared tables are an `ext.<app_id>.*` band inside `vault.db`. The registered-view half of the road left with the views nothing registered (ONT-06). |
+
+## Drift register
+
+The do-not-fix-quietly register for the ontology, in the manner of [design-divergences.md](design-divergences.md). Each row names the finding, the evidence, and its standing. A row is removed when its finding is gone from the code **and** nothing about the removal is worth remembering; it is kept as **fixed** when the mechanism that closed it is the thing a future reader needs. Nothing here is "deliberate" any more: [#916](https://github.com/srikanth235/centraid/issues/916) re-judged every deferred row on its merits and three of them — polymorphic references, the favorite mirror, the consent plane — had been filed as settled on nothing but a prior ruling.
+
+| Id | Finding | Standing |
+| --- | --- | --- |
+| **ONT-01** | The published page described a model eleven rungs behind the vault, and nothing compared the two. | **fixed** — §03 is generated from the live DDL and held equal by `ontology-doc.test.ts`; the page is `ontology v1.0` |
+| **ONT-02** | The vault package README cited a design file that does not exist in this repository, eleven schemas, 68 tables, and the retired per-app extension file. | **fixed** |
+| **ONT-03** | `media_asset.favorite` — a boolean on a domain table, the exact shape rule 10 calls a rejected review — was kept as a "single-writer mirror" for the Photos replica shape ([#419](https://github.com/srikanth235/centraid/issues/419), [#441](https://github.com/srikanth235/centraid/issues/441)). | **fixed** — the column is gone. A mirror is two truths and a postcondition asserting they agree is a test for a problem that need not exist. The star is a flags-scheme tag anchored on `media.asset`, the entity Photos shows; Docs anchors on `core.document`. Supersedes the #419/#441 mirror ruling. |
+| **ONT-04** | R7 said every row stamps `ontology_version`; two tables carried the column and the gateway checked it on command contracts alone. | **fixed** — one version scheme: file + contract. `core_party.ontology_version` dropped; `ONTOLOGY_VERSION` is `"1.0"` |
+| **ONT-05** | Two "owner" identities: the ontology anchored authority on parties, the gateway's owner model ([#726](https://github.com/srikanth235/centraid/issues/726)) says a party never confers authority. Nothing named the seam. | **fixed** — `core_vault.owner_party_id` → `self_party_id`, the vault's own party as the person-as-**data**. Authority stays gateway-side. The page and the glossary say so. |
+| **ONT-06** | Dormant mechanisms with registered DDL and no producer or consumer: `health.*`, `finance.*`, `core.observation`, `consent.app_view`, `consent.export_job`, `agent.correction`/`judgment`, `schedule.availability_rule`, `social.thread`/`message`. | **fixed** — O-domains' test applied evenly. All of the above left the model **except** `social.thread`/`message`, which have writers. `consent.policy` kept `retention`/`purpose`/`minimization` and dropped `residency`. Intent lives in issues, never in dormant DDL. |
+| **ONT-07** | `consent_app.origin` still admitted `'generated'`, unwritten since [#799](https://github.com/srikanth235/centraid/issues/799). | **fixed** — `CHECK (origin IN ('installed'))`. The same sweep removed `core_vault.status 'exported'`, `access_app.status 'suspended'` and `agent_capability.verb 'learn'`: CHECK values that were fiction, not vocabulary. Collapsing the column also exposed a reader that had been standing on it: `listInstalledApps()` selected `WHERE origin = 'installed'` to mean **bundled**, so once every enrolled app carried that value it returned all of them — shadowing each store app's own `app.json` identity and sending the install-time grant loop into bundle directories that recognition recipes do not have. The distinction lives where it still exists — the bundle manifest, not the enrollment row — so `build-gateway.ts` filters by `bundledAppIds`. |
+| **ONT-08** | Lifecycle by touch: 12 tables with the trash pair, ~40 mutable tables without `updated_at`, and nothing saying which tables were append-only by design. | **fixed** — every entity declares `append-only` / `mutable` / `trash` / `machinery`; `created_at`/`updated_at` have one shape (`NOT NULL DEFAULT` + touch trigger) across packs and bands alike; `lifecycle.test.ts` fails on any divergence. The ledger band is the one exemption, with its reason recorded in that test (its clock is engine epoch-ms). |
+| **ONT-09** | Five vocabularies for one polymorphic pointer (`target_`, `subject_`, `entity_`, `item_`, `from_`/`to_`), previously ruled survivable through the registry. | **fixed** — a pointer pair is `target_type` / `target_id`, asserted for all 14 by `entity-refs.test.ts`; `from_`/`to_` survives only where the pair genuinely has two ends (`core.link`). The registry-makes-it-survivable ruling was exactly the deference #916 had to reopen. |
+| **ONT-10** | Recurrence encoded two ways: RRULE text and `weekday_mask` (availability). | **removed** — the availability rule left with ONT-06, so there is one encoding. The RRULE subset is now explicit: unsupported parts are **refused** at the boundary rather than silently dropped (`rrule-support.ts`), which is what made the second encoding tempting. |
+| **ONT-11** | `core_party.kind` admits `animal` and the page did not say so. | **fixed** on the page |
+| **ONT-12** | Search coverage by touch: album, notebook, project, group and place names unindexed. | **fixed** — 18 FTS indexes, including the collections, projects, circles and places that were missing, and `deletedColumn` on `tally.expense` and `people.profile` so a trashed row leaves search too |
+| **ONT-13** | `tally_expense` had no currency column while `tally_obligation` and `core_transaction` carried one. | **fixed** — currency on `tally_group`, `tally_expense` and `tally_settlement`, held to the group by trigger (ruling R1) |
+| **ONT-14** | Cross-file pointers (`core_link.provenance_id`, `share_authority.receipt_id` → `journal.db`) were gateway-enforced and unswept. | **fixed** by removing the seam: there is one file. Where the pointer is still deliberately a value rather than a key, the reason is written in `ENTITY_REF_EXCLUSIONS` — the audit outlives its subject. |
+| **ONT-15** | Twenty physical tables outside the registry, each local or rebuildable by design, but the reason was a per-file comment. | **fixed** — `LOCAL_TABLES` is one map with one reason per table, and `lifecycle.test.ts` fails when a physical table is neither registered nor declared there. Four commons control tables that had been shelved as "device observation" turned out to be control truth and became registered entities. |
+
+## Was the starting design right?
+
+The spine was. Every domain that shipped anchored into it without forking identity: People is a profile on `core.party`, Tally is a decoration on `social.circle` with settlements that post to `core.transaction`, Docs is `core.document` over `core.content_item` filed by `core.tag`, Photos is `core.content_item` with capture context, and the one exemption (Locker) is written down. The universal joins (`tag`, `link`, `annotation`, `collection`, `attachment`) absorbed stars, memos, employment, albums, notebooks, receipts and folders, which is what they were for. The rules caught real drift four times — [#274](https://github.com/srikanth235/centraid/issues/274), [#441](https://github.com/srikanth235/centraid/issues/441), [#883](https://github.com/srikanth235/centraid/issues/883), [#916](https://github.com/srikanth235/centraid/issues/916) — and each time the fix was a mechanism, not a patch.
+
+Four things were started wrong, and the register above is their residue:
+
+1. **Breadth before consumers.** The foundation release modelled eight life domains at once; the page's own first-boundary advice ("do not add a third domain until export→reimport round-trips") was better than the plan that ignored it. Four domains and five mechanisms have now left for the same reason: no producer, no consumer.
+2. **A consent plane borrowed from a different product.** App grants, registered views, purpose policy and export jobs were modelled Solid/ODRL-style before Centraid's real authority model existed. That model turned out to be owner + device + one authority table ([#726](https://github.com/srikanth235/centraid/issues/726), [#883](https://github.com/srikanth235/centraid/issues/883)). What survives is the `access` plane: the machinery beneath manifests, and nothing else.
+3. **Conventions where declarations belonged.** A per-row version stamp, a soft-delete pair "adopted as tables are touched", a polymorphic pointer registry swept by hand — each was a convention, and a convention without a mechanism drifts by construction. The registry is where such things are declared, and the engine is where they are enforced: the supertype turned pointer hygiene from a sweep into a foreign key, and the lifecycle declaration turned timestamps from a habit into a test.
+4. **A second file for a size problem.** `journal.db` traded atomicity and referential integrity for a smaller sovereign asset. Retention was the answer all along; the split was a cost paid every transaction for a benefit that arrived once a year.
+
+What was missing was never a better model but a guard: nothing compared the design with the schema, so the design aged silently. The parity test closes that for the page, the lifecycle and closure tests close it for the conventions, and the SQL lint closes it for the door.
+
+## Adding or changing a table
+
+The admission checklist on the page (§11, [#310](https://github.com/srikanth235/centraid/issues/310) C6) still governs. In this repo that means, in the same PR:
+
+- the DDL in its pack or band module, with the entity's row in `core_entity` following from its membership trigger;
+- the registry entry with its label, blurb, **lifecycle** and revision retention — or a `projectionOf` declaration if the row is a part of an entity rather than an entity;
+- the entity-pointer entry if the table carries a `(type, id)` pair, or an exclusion **with its reason**;
+- the content-reference entry if it rents bytes; the FTS spec if it has text (with `deletedColumn` if it trashes);
+- the command pack and the app scope;
+- the §03 entry on the published page — the parity test prints the column tuples it expects;
+- and this document, if a commitment or a register row changes.
+
+## How this model is reviewed
+
+A model review that only reads is not a review. [#916](https://github.com/srikanth235/centraid/issues/916) established three practices, now part of the repo's conventions (see [AGENTS.md](../AGENTS.md)):
+
+- **A citation is not a justification.** Every "deliberate", "by design" or `#NNN`-ruled seam is re-judged on its merits for the product as it is now. A ruling explains why something was chosen, never whether it should stay. An item worth keeping gets an explicit question to the owner with options and a recommendation; an item that survives only because someone ruled it, with no consumer or security property depending on it, is a finding. This wave filed polymorphic references, the favorite mirror and the consent plane as settled on exactly that deference, and had to reopen all three.
+- **Mechanical sweeps are part of the review.** Every CHECK value against its writers; every FK's delete rule against its siblings; every table's timestamps against its lifecycle; every raw-SQL site outside the package. Reading found none of the dead CHECK values, none of the inconsistent delete rules, and none of the missing currency columns.
+- **An adversarial run against the real gateway is part of the review.** Twelve scenarios driven through the shipping command pipeline reproduced the merge that deleted a party's expense splits, the purge sweep that wedged on one refused row, the export that shipped the data-encryption key in the clear, and the revoke a trashed projection could evade. None of those were visible by reading.
+
+The corollary for a future wave: when a register row says **fixed**, the row names the mechanism, and the mechanism has a test in the commitments table above. A finding with no mechanism is not fixed; it is deferred, and it says so.

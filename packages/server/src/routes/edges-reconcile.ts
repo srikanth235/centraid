@@ -7,6 +7,7 @@
  * no-op (`removal.ts`).
  */
 
+import { grantPlacementAuthority } from "@centraid/vault";
 import type {
   moveOutOfVault,
   shareItemsToVault,
@@ -27,6 +28,14 @@ export interface DeliverGiveLocallyInput {
   audience: ShareVaultRef;
   share: typeof shareItemsToVault;
   move: typeof moveOutOfVault;
+  /**
+   * The party an edge's placement runs as (#916, adversarial review WEAK).
+   * `shareItemsToVault` now demands a LIVE `share_authority` in the ORIGIN over
+   * every item, naming the party the rows are being placed FOR — for an edge,
+   * the audience vault's own party. It is passed in rather than read here: the
+   * registry already knows it, and this file does not reach vault tables.
+   */
+  audiencePartyId: string;
 }
 
 /** Project the scope into the audience vault; release the source for a move. */
@@ -35,6 +44,15 @@ export function deliverGiveLocally(input: DeliverGiveLocallyInput): EdgeRow {
   let current = input.row;
 
   if (current.target_state !== "executed") {
+    // Record the owner's agreement in the ORIGIN VAULT before placing: the
+    // edge row lives in `gateway.db`, which the placement gate cannot read
+    // (#916).
+    grantPlacementAuthority(input.origin.vault, {
+      itemType: current.item_type,
+      itemIds,
+      audiencePartyId: input.audiencePartyId,
+      grantedAt: new Date().toISOString(),
+    });
     const result = input.share({
       origin: input.origin,
       originVaultId: current.origin_vault_id,
@@ -45,6 +63,11 @@ export function deliverGiveLocally(input: DeliverGiveLocallyInput): EdgeRow {
       // Threat 8's cross-owner gate has nothing to gate: edges are same-owner;
       // grants to another person ride the grant plane's own closure + policy.
       crossOwner: false,
+      authority: {
+        principalKind: "person",
+        principalId: input.audiencePartyId,
+        verb: "view",
+      },
     });
     current = applyEdgeSignal(input.db, current, input.facts, {
       type: "target-projected",

@@ -167,8 +167,8 @@ function tallyCommonsHome() {
     .prepare(
       `INSERT INTO core_party
          (party_id, kind, display_name, sort_name, birth_date,
-          avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', 'Family', 'Family', NULL, NULL, ?, ?, '1.4')`
+          avatar_content_id, created_at, updated_at)
+       VALUES (?, 'person', 'Family', 'Family', NULL, NULL, ?, ?)`
     )
     .run(memberPartyId, now, now);
   const created = stewardGateway.invoke(steward, {

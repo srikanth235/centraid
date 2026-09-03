@@ -22,9 +22,8 @@ function addParty(db: DatabaseSync, name: string, now: string): string {
   const partyId = uuidv7();
   db.prepare(
     `INSERT INTO core_party
-       (party_id, kind, display_name, sort_name, created_at, updated_at,
-        ontology_version)
-     VALUES (?, 'person', ?, ?, ?, ?, '1.4')`
+       (party_id, kind, display_name, sort_name, created_at, updated_at)
+     VALUES (?, 'person', ?, ?, ?, ?)`
   ).run(partyId, name, name, now, now);
   return partyId;
 }

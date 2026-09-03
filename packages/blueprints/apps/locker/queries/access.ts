@@ -1,11 +1,11 @@
 /**
- * Access history (README-Locker §1). ONLINE-ONLY: `consent.receipt` lives in
- * journal.db, not the replica, so `ctx.vault.authenticate` marks the run
+ * Access history (README-Locker §1). ONLINE-ONLY: `access.receipt` lives in
+ * the vault's audit band, not the replica, so `ctx.vault.authenticate` marks the run
  * ONLINE_ONLY and the gateway serves it. Never catch that — a flattened
  * ONLINE_ONLY draws an empty history as none.
  *
  * THE ROW FILTER IS THE BOUNDARY: `provenanceScopeFailure` guards
- * `consent.provenance` only, so app.json's rowFilter on `object_type` is all
+ * `access.provenance` only, so app.json's rowFilter on `object_type` is all
  * that holds this grant to Locker's own receipts.
  */
 
@@ -71,7 +71,7 @@ export default async function accessHandler({
     }
     const itemId = String(input?.item_id ?? "");
     const result = await ctx.vault.read({
-      entity: "consent.receipt",
+      entity: "access.receipt",
       where: [
         {
           column: "object_type",

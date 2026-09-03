@@ -11,6 +11,8 @@ import {
 } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../../packages/server/src/engine/stores/ledger-db.test-fixtures.js";
+
 const OWNER = "tests/perf/automation-fire.perf.test.ts";
 const FIRES = 10;
 
@@ -40,7 +42,7 @@ describe("automation-fire.perf", () => {
       delegateDispatcher: async () => "",
       close: async () => undefined,
     });
-    const journalDbFile = path.join(appsDir, "journal.db");
+    const ledgerDbFile = ledgerDbFileIn(appsDir);
     const started = performance.now();
     await Array.from({ length: FIRES }, (_, index) => index).reduce(
       async (previous, index) => {
@@ -49,7 +51,7 @@ describe("automation-fire.perf", () => {
           {
             automationRef: "notes/digest",
             appsDir,
-            journalDbFile,
+            ledgerDbFile,
             runId: `perf-fire-${index}`,
           },
           { openDispatch }

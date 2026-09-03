@@ -51,8 +51,8 @@ describe("duties-helpers", () => {
         db.vault
           .prepare(
             `INSERT INTO core_event
-             (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule, status, sequence, created_at, updated_at)
-           VALUES (?, 'evt-1@example.com', 'Meet', NULL, ?, NULL, NULL, NULL, 'confirmed', 0, ?, ?)`
+             (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule, status, sequence, recurrence_semantics, created_at, updated_at)
+           VALUES (?, 'evt-1@example.com', 'Meet', NULL, ?, NULL, NULL, NULL, 'confirmed', 0, 'floating', ?, ?)`
           )
           .run(id, now, now, now);
         return id;
@@ -75,9 +75,9 @@ describe("duties-helpers", () => {
     );
     expect(second).toBeNull();
     expect(inserts).toBe(1);
-    const prov = db.journal
+    const prov = db.audit
       .prepare(
-        `SELECT count(*) AS n FROM consent_provenance
+        `SELECT count(*) AS n FROM access_provenance
         WHERE entity_type = 'core.event' AND prov_activity = 'import.ics'`
       )
       .get() as { n: number };
@@ -105,8 +105,8 @@ describe("duties-helpers", () => {
     const other = uuidv7();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', 'Expired', ?, ?, '1.4')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES (?, 'person', 'Expired', ?, ?)`
       )
       .run(other, now, now);
     // An EXPIRED identity key still reads as expired.
@@ -138,14 +138,11 @@ describe("duties-helpers", () => {
     expect(result).toMatchObject({
       grantId,
       appId: "duty-app",
-      viewsRevoked: 0,
       parkedDropped: 3,
     });
     expect(dropped).toBe(3);
     const grant = db.vault
-      .prepare(
-        "SELECT status, revoked_at FROM consent_access_grant WHERE grant_id = ?"
-      )
+      .prepare("SELECT status, revoked_at FROM access_grant WHERE grant_id = ?")
       .get(grantId) as { status: string; revoked_at: string | null };
     expect(grant.status).toBe("revoked");
     expect(grant.revoked_at).toBeTruthy();

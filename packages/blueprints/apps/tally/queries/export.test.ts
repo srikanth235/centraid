@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import exportHandler from "./export.ts";
 
 const ROWS: Record<string, Array<Record<string, unknown>>> = {
-  "core.vault": [{ owner_party_id: "party-owner", base_currency: "GBP" }],
+  "core.vault": [{ self_party_id: "party-owner", base_currency: "GBP" }],
   "tally.friend": [{ party_id: "party-ana" }],
   "tally.group": [{ group_id: "group-flat", circle_id: "circle-flat" }],
   "social.circle": [{ circle_id: "circle-flat", name: "14 Sitwell Road" }],

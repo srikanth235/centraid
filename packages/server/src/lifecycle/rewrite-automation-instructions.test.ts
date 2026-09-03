@@ -7,11 +7,12 @@ import { validateManifest } from "@centraid/server/automation";
 import type { Row as AutomationRow } from "@centraid/server/automation";
 import {
   ConversationStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
 } from "@centraid/server/engine";
 import type { RunTurnFn } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../engine/stores/ledger-db.test-fixtures.js";
 import {
   cleanRewrittenInstructions,
   rewriteAutomationInstructions,
@@ -73,7 +74,7 @@ describe("rewrite-automation-instructions", () => {
     it("uses a tool-less denied-permission turn, persists, and records a thread card", async () => {
       const dir = await tempDir("automation-rewrite-");
       dirs.push(dir);
-      const journalDbFile = path.join(dir, "journal.db");
+      const ledgerDbFile = ledgerDbFileIn(dir);
       const persistPrompt = vi
         .fn<(prompt: string) => Promise<void>>()
         .mockResolvedValue(undefined);
@@ -105,7 +106,7 @@ describe("rewrite-automation-instructions", () => {
         row: row(dir),
         steering: "Only urgent mail.",
         revisionTurnId: "revision-1",
-        journalDbFile,
+        ledgerDbFile,
         harnessSessionDir: path.join(dir, "sessions"),
         runTurn,
         harnessPrefs: { kind: "codex" },
@@ -116,7 +117,7 @@ describe("rewrite-automation-instructions", () => {
       expect(result.prompt).toBe("Summarize only urgent mail.");
       expect(persistPrompt).toHaveBeenCalledWith("Summarize only urgent mail.");
 
-      const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+      const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
       expect(store.getTurn("revision-1")).toMatchObject({
         triggerKind: "interactive",
         summary: "Revised instructions",
@@ -140,14 +141,14 @@ describe("rewrite-automation-instructions", () => {
     it("records failure and does not persist an empty rewrite", async () => {
       const dir = await tempDir("automation-rewrite-fail-");
       dirs.push(dir);
-      const journalDbFile = path.join(dir, "journal.db");
+      const ledgerDbFile = ledgerDbFileIn(dir);
       const persistPrompt = vi.fn<(prompt: string) => Promise<void>>();
       await expect(
         rewriteAutomationInstructions({
           row: row(dir),
           steering: "Change it.",
           revisionTurnId: "revision-fail",
-          journalDbFile,
+          ledgerDbFile,
           harnessSessionDir: path.join(dir, "sessions"),
           runTurn: async () => ({ harnessKind: "codex" }),
           harnessPrefs: { kind: "codex" },
@@ -156,7 +157,7 @@ describe("rewrite-automation-instructions", () => {
         })
       ).rejects.toThrow(/empty/iu);
       expect(persistPrompt).not.toHaveBeenCalled();
-      const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+      const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
       expect(store.getTurn("revision-fail")).toMatchObject({
         ok: false,
         summary: "Instruction revision failed",
@@ -167,14 +168,14 @@ describe("rewrite-automation-instructions", () => {
     it("preserves a failed rewrite terminal, raw envelope, and usage for cold replay", async () => {
       const dir = await tempDir("automation-rewrite-terminal-fail-");
       dirs.push(dir);
-      const journalDbFile = path.join(dir, "journal.db");
+      const ledgerDbFile = ledgerDbFileIn(dir);
       const persistPrompt = vi.fn<(prompt: string) => Promise<void>>();
       await expect(
         rewriteAutomationInstructions({
           row: row(dir),
           steering: "Change it.",
           revisionTurnId: "revision-terminal-fail",
-          journalDbFile,
+          ledgerDbFile,
           harnessSessionDir: path.join(dir, "sessions"),
           runTurn: async (input) => {
             input.onEvent({
@@ -198,7 +199,7 @@ describe("rewrite-automation-instructions", () => {
         })
       ).rejects.toThrow("The rewriter refused.");
       expect(persistPrompt).not.toHaveBeenCalled();
-      const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+      const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
       expect(store.getTurn("revision-terminal-fail")).toMatchObject({
         ok: false,
         outputJson: '{"stopReason":"refusal","error":"The rewriter refused."}',

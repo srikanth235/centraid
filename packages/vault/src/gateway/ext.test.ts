@@ -58,7 +58,7 @@ function specs(): ExtTableSpec[] {
 }
 
 function appCred(): { cred: Credential; grantId: string } {
-  const app = enrollApp(db, { name: APP, origin: "generated" });
+  const app = enrollApp(db, { name: APP });
   const purpose = db.vault
     .prepare(`SELECT concept_id FROM core_concept WHERE notation = ?`)
     .get(PURPOSE) as { concept_id: string };
@@ -207,7 +207,6 @@ describe("ext", () => {
       gw.applyAppExt(owner, APP, specs());
       const stranger = enrollApp(db, {
         name: "other-app",
-        origin: "generated",
       });
       const cred: Credential = {
         kind: "app",
@@ -225,7 +224,7 @@ describe("ext", () => {
       expect(write.status).toBe("denied");
     });
 
-    test("ext rows link and tag like canonical entities; deleting sweeps links", () => {
+    test("ext rows are the app\u2019s own: they cannot be linked as entities", () => {
       gw.applyAppExt(owner, APP, specs());
       const party = gw.invoke(owner, {
         command: "core.add_party",
@@ -240,6 +239,11 @@ describe("ext", () => {
         },
         purpose: PURPOSE,
       }) as { output: { id: string } };
+      // AN EXT ROW IS AN APP'S, NOT AN ENTITY (#916). A link's endpoints are
+      // composite foreign keys into `core_entity`, and an ext-band table has
+      // no supertype row and never will — so the relation is refused rather
+      // than written and then swept. What used to happen instead was a link
+      // the dangling-link duty had to end-date when the app deleted its row.
       const link = gw.invoke(owner, {
         command: "core.link_entities",
         input: {
@@ -251,7 +255,7 @@ describe("ext", () => {
         },
         purpose: PURPOSE,
       });
-      expect(link.status).toBe("executed");
+      expect(link.status).toBe("failed");
 
       const del = gw.invoke(owner, {
         command: `ext.${APP}.delete`,
@@ -264,7 +268,7 @@ describe("ext", () => {
           `SELECT count(*) AS n FROM core_link WHERE valid_to IS NULL AND from_type = ?`
         )
         .get(`ext.${APP}.workout`) as { n: number };
-      expect(live.n).toBe(0); // the dangling-link duty end-dated it
+      expect(live.n).toBe(0);
     });
 
     test("search works over a searchable ext column (owner and granted app)", () => {

@@ -1,7 +1,7 @@
 /*
  * Fixtures for the bundled-manifest scope-denial sweep (#839): every bundled
  * manifest goes through its real validator into the SAME `scopeClamp`
- * `vault-plane.ts` builds, then through `evaluateConsent`. The agent's grant is
+ * `vault-plane.ts` builds, then through `evaluateAccess`. The agent's grant is
  * DELIBERATELY MAXIMAL so every denial is attributable to the manifest clamp
  * alone. It lives here because the vault package cannot depend on app-engine.
  */
@@ -15,11 +15,11 @@ import {
   bootstrapVault,
   createGrant,
   enrollAgent,
-  evaluateConsent,
+  evaluateAccess,
   openVaultDb,
 } from "@centraid/vault";
 import type {
-  ConsentDecision,
+  AccessDecision,
   FilterClause,
   Identity,
   ScopeSpec,
@@ -181,7 +181,7 @@ export function verbsOf(declared: ClampScope["verbs"]): Verb[] {
 }
 
 /**
- * `ConsentDeny.failing` is receipted: every deny must classify into exactly one
+ * `AccessDeny.failing` is receipted: every deny must classify into exactly one
  * of these six, and an unrecognised string fails. That is what CLOSED means.
  */
 
@@ -262,15 +262,8 @@ export function decide(
   table: string,
   verb: Verb,
   purpose = DEFAULT_PURPOSE
-): ConsentDecision {
-  return evaluateConsent(
-    sweep.db.vault,
-    identity,
-    schema,
-    table,
-    verb,
-    purpose
-  );
+): AccessDecision {
+  return evaluateAccess(sweep.db.vault, identity, schema, table, verb, purpose);
 }
 
 export function openSweepVault(): void {

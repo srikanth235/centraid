@@ -9,7 +9,8 @@ import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { VaultShareError } from "../errors.js";
 import { uuidv7 } from "../ids.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
-import { CLOSURE_FORMAT_VERSION } from "./closure.js";
+import { vaultIdentityPublicKey } from "../schema/vault-identity.js";
+import { CLOSURE_FORMAT_VERSION, shareOriginEntityType } from "./closure.js";
 import type { WireClosure } from "./closure.js";
 import type { CommonsCheckpointAttestation } from "./commons-chain.js";
 import {
@@ -43,6 +44,7 @@ import {
 } from "./commons.js";
 import type { ShareVaultRef } from "./placement.js";
 import { projectShareClosure } from "./project-closure.js";
+import { isSelfBinding } from "./self-binding.js";
 
 export interface CommonsBootstrap {
   grantId: string;
@@ -437,6 +439,46 @@ function sql(value: unknown): SQLInputValue {
   throw new Error("commons bootstrap contains a non-SQL value");
 }
 
+/**
+ * The roster bindings a wire carries, PLUS the steward's own identity (#916,
+ * R9). The steward's public key used to ride a `share_party_vault_binding` row
+ * naming its own vault — a self-binding, which the schema now refuses because
+ * it makes the member their own peer. The key is still what a member verifies
+ * the chain against, so it travels explicitly, derived from the vault's own
+ * identity seed rather than read back out of a row about someone else.
+ */
+function wireBindings(
+  steward: DatabaseSync,
+  circleId: string,
+  stewardVaultId: string,
+  identitySeed: Buffer,
+  now: string
+): Record<string, unknown>[] {
+  const rows = steward
+    .prepare(
+      `SELECT * FROM share_party_vault_binding
+        WHERE party_id IN (
+          SELECT party_id FROM social_circle_member WHERE circle_id = ?
+        )`
+    )
+    .all(circleId) as Record<string, unknown>[];
+  const self = steward
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!self?.self_party_id) return rows;
+  return [
+    ...rows,
+    {
+      binding_id: `self:${stewardVaultId}`,
+      party_id: self.self_party_id,
+      vault_id: stewardVaultId,
+      vault_public_key: vaultIdentityPublicKey(identitySeed).toString("base64"),
+      linked_at: now,
+      revoked_at: null,
+    },
+  ];
+}
+
 export function exportCommonsBootstrap(input: {
   steward: DatabaseSync;
   stewardVaultId: string;
@@ -475,14 +517,13 @@ export function exportCommonsBootstrap(input: {
         .prepare("SELECT * FROM core_party WHERE party_id = ?")
         .get(partyId) as Record<string, unknown>
   );
-  const bindings = input.steward
-    .prepare(
-      `SELECT * FROM share_party_vault_binding
-        WHERE party_id IN (
-          SELECT party_id FROM social_circle_member WHERE circle_id = ?
-        )`
-    )
-    .all(grant.circleId) as Record<string, unknown>[];
+  const bindings = wireBindings(
+    input.steward,
+    grant.circleId,
+    input.stewardVaultId,
+    input.identitySeed,
+    new Date().toISOString()
+  );
   const memberStates = input.steward
     .prepare(
       "SELECT * FROM share_commons_member_state WHERE grant_id = ? ORDER BY party_id"
@@ -576,6 +617,7 @@ export function exportCommonsIncrement(input: {
   grantId: string;
   memberVaultId: string;
   afterSequence: number;
+  identitySeed: Buffer;
 }): CommonsIncrement | undefined {
   const grant = readCommonsGrant(input.steward, input.grantId);
   if (grant.revokedAt) return undefined;
@@ -636,14 +678,13 @@ export function exportCommonsIncrement(input: {
         .prepare("SELECT * FROM core_party WHERE party_id = ?")
         .get(String(member["party_id"])) as Record<string, unknown>
   );
-  const bindings = input.steward
-    .prepare(
-      `SELECT * FROM share_party_vault_binding
-        WHERE party_id IN (
-          SELECT party_id FROM social_circle_member WHERE circle_id = ?
-        )`
-    )
-    .all(grant.circleId) as Record<string, unknown>[];
+  const bindings = wireBindings(
+    input.steward,
+    grant.circleId,
+    input.stewardVaultId,
+    input.identitySeed,
+    new Date().toISOString()
+  );
   const memberStates = input.steward
     .prepare(
       "SELECT * FROM share_commons_member_state WHERE grant_id = ? ORDER BY party_id"
@@ -724,6 +765,7 @@ export function exportCommonsSyncFrame(input: {
       grantId: input.grantId,
       memberVaultId: input.memberVaultId,
       afterSequence: input.afterSequence,
+      identitySeed: input.identitySeed,
     });
     if (increment) return { state: "increment", increment };
   }
@@ -747,15 +789,18 @@ export function applyCommonsTombstone(input: {
 
 function projectControl(db: DatabaseSync, wire: CommonsBootstrap): void {
   const parties = db.prepare(
+    // No `ontology_version` (#916, ruling ONT-04): the version is a property
+    // of the file and of the command contract, never of a projected row. A
+    // wire payload from a peer on an older build may still carry the key; it
+    // is simply not read.
     `INSERT INTO core_party
        (party_id, kind, display_name, sort_name, birth_date,
-        avatar_content_id, created_at, updated_at, ontology_version)
-     VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
+        avatar_content_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
      ON CONFLICT(party_id) DO UPDATE SET
        kind = excluded.kind, display_name = excluded.display_name,
        sort_name = excluded.sort_name, birth_date = excluded.birth_date,
-       updated_at = excluded.updated_at,
-       ontology_version = excluded.ontology_version`
+       updated_at = excluded.updated_at`
   );
   for (const party of wire.control.parties)
     parties.run(
@@ -765,8 +810,7 @@ function projectControl(db: DatabaseSync, wire: CommonsBootstrap): void {
       sql(party["sort_name"]),
       sql(party["birth_date"]),
       sql(party["created_at"]),
-      sql(party["updated_at"]),
-      sql(party["ontology_version"])
+      sql(party["updated_at"])
     );
   const circle = wire.control.circle;
   db.prepare(
@@ -797,7 +841,15 @@ function projectControl(db: DatabaseSync, wire: CommonsBootstrap): void {
       sql(row["added_at"]),
       sql(row["capability"])
     );
-  for (const row of wire.control.bindings)
+  for (const row of wire.control.bindings) {
+    if (
+      isSelfBinding(
+        db,
+        sql(row["party_id"]) as string,
+        sql(row["vault_id"]) as string
+      )
+    )
+      continue;
     db.prepare(
       `INSERT INTO share_party_vault_binding
          (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
@@ -813,6 +865,7 @@ function projectControl(db: DatabaseSync, wire: CommonsBootstrap): void {
       sql(row["linked_at"]),
       sql(row["revoked_at"])
     );
+  }
   const grant = wire.control.grant;
   db.prepare(
     `INSERT INTO share_circle_grant
@@ -1003,10 +1056,10 @@ export function applyCommonsBootstrap(input: {
     seatDb
       .prepare(
         `INSERT INTO core_share_origin
-           (item_type, item_id, origin_vault_id, origin_item_id,
+           (target_type, target_id, origin_vault_id, origin_item_id,
             shared_by, shared_at)
          VALUES ('social.circle', ?, ?, ?, ?, ?)
-         ON CONFLICT(item_type, item_id) DO UPDATE SET
+         ON CONFLICT(target_type, target_id) DO UPDATE SET
            origin_vault_id = excluded.origin_vault_id,
            origin_item_id = excluded.origin_item_id,
            shared_by = excluded.shared_by,
@@ -1022,14 +1075,14 @@ export function applyCommonsBootstrap(input: {
     projectTail(seatDb, input.wire);
     const lineage = seatDb.prepare(
       `INSERT INTO share_commons_lineage
-         (grant_id, item_type, item_id, origin_item_id)
+         (grant_id, target_type, target_id, origin_item_id)
        VALUES (?, ?, ?, ?)
-       ON CONFLICT(grant_id, item_type, item_id) DO NOTHING`
+       ON CONFLICT(grant_id, target_type, target_id) DO NOTHING`
     );
     for (const item of projection.items)
       lineage.run(
         input.wire.grantId,
-        item.itemType,
+        shareOriginEntityType(item.itemType),
         item.itemId,
         item.originItemId
       );
@@ -1078,15 +1131,18 @@ function projectIncrementControl(
 ): void {
   const control = increment.control;
   const parties = db.prepare(
+    // No `ontology_version` (#916, ruling ONT-04): the version is a property
+    // of the file and of the command contract, never of a projected row. A
+    // wire payload from a peer on an older build may still carry the key; it
+    // is simply not read.
     `INSERT INTO core_party
        (party_id, kind, display_name, sort_name, birth_date,
-        avatar_content_id, created_at, updated_at, ontology_version)
-     VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
+        avatar_content_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
      ON CONFLICT(party_id) DO UPDATE SET
        kind = excluded.kind, display_name = excluded.display_name,
        sort_name = excluded.sort_name, birth_date = excluded.birth_date,
-       updated_at = excluded.updated_at,
-       ontology_version = excluded.ontology_version`
+       updated_at = excluded.updated_at`
   );
   for (const party of control.parties)
     parties.run(
@@ -1096,8 +1152,7 @@ function projectIncrementControl(
       sql(party["sort_name"]),
       sql(party["birth_date"]),
       sql(party["created_at"]),
-      sql(party["updated_at"]),
-      sql(party["ontology_version"])
+      sql(party["updated_at"])
     );
   const circle = control.circle;
   db.prepare(
@@ -1128,7 +1183,15 @@ function projectIncrementControl(
       sql(row["added_at"]),
       sql(row["capability"])
     );
-  for (const row of control.bindings)
+  for (const row of control.bindings) {
+    if (
+      isSelfBinding(
+        db,
+        sql(row["party_id"]) as string,
+        sql(row["vault_id"]) as string
+      )
+    )
+      continue;
     db.prepare(
       `INSERT INTO share_party_vault_binding
          (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
@@ -1144,6 +1207,7 @@ function projectIncrementControl(
       sql(row["linked_at"]),
       sql(row["revoked_at"])
     );
+  }
   const grant = control.grant;
   db.prepare(
     `UPDATE share_circle_grant SET

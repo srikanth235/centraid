@@ -108,8 +108,8 @@ export function seedPhoto(
       `INSERT INTO media_asset
          (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id,
           place_id, camera_device_id, width, height, duration_s, exif_json,
-          favorite, archived_at, deleted_at, purge_at)
-       VALUES (?, ?, 'photo', ?, NULL, NULL, NULL, ?, 800, 600, NULL, NULL, 1, NULL, NULL, NULL)`
+          archived_at, deleted_at, purge_at)
+       VALUES (?, ?, 'photo', ?, NULL, NULL, NULL, ?, 800, 600, NULL, NULL, NULL, NULL, NULL)`
     )
     .run(assetId, contentId, now, boot.deviceId);
   return {
@@ -139,4 +139,44 @@ export function reclaimOrphans(db: VaultDb): string[] {
     sweepLocalOrphans(db, { graceWindowMs: 0, now: 1_000 }).deleted
   ).toEqual([]);
   return sweepLocalOrphans(db, { graceWindowMs: 0, now: 2_000 }).deleted;
+}
+
+/**
+ * A live `share_authority` over the items a placement is about to move
+ * (#916): `shareItemsToVault` is gated on one, so a fixture that shares has
+ * to say who was allowed to.
+ */
+export function placementAuthority(
+  origin: VaultDb,
+  itemType: string,
+  itemIds: readonly string[],
+  audiencePartyId = "audience-party"
+): {
+  principalKind: "person";
+  principalId: string;
+  verb: string;
+} {
+  const insert = origin.vault.prepare(
+    `INSERT OR IGNORE INTO share_authority
+       (authority_id, principal_kind, principal_id, subject_type, subject_id,
+        verb, duration, expires_at, decision, granted_at, granted_by)
+     VALUES (?, 'person', ?, ?, ?, 'view', 'standing', NULL, 'granted', ?, ?)`
+  );
+  const owner = origin.vault
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string };
+  for (const itemId of itemIds)
+    insert.run(
+      uuidv7(),
+      audiencePartyId,
+      itemType,
+      itemId,
+      nowIso(),
+      owner.self_party_id
+    );
+  return {
+    principalKind: "person",
+    principalId: audiencePartyId,
+    verb: "view",
+  };
 }

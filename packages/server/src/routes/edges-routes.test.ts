@@ -106,6 +106,7 @@ function household(): Household {
     enrollments,
     links,
     vaultFor,
+    partyIdFor: () => "edge-party",
   });
   return {
     gatewayDb,
@@ -290,6 +291,7 @@ describe("POST/GET /centraid/_gateway/edges", () => {
           : vaultId === PERSONAL
             ? house.personal
             : undefined,
+      partyIdFor: () => "edge-party",
       share: () => {
         throw new Error("the audience vault is read-only right now");
       },

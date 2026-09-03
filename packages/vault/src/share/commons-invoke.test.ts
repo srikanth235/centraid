@@ -24,8 +24,8 @@ describe("ordinary invoke is Commons-aware", () => {
       .prepare(
         `INSERT INTO core_party
          (party_id, kind, display_name, sort_name, birth_date,
-          avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', 'Bob', 'Bob', NULL, NULL, ?, ?, '1.4')`
+          avatar_content_id, created_at, updated_at)
+       VALUES (?, 'person', 'Bob', 'Bob', NULL, NULL, ?, ?)`
       )
       .run(bob, now, now);
     const reconciled = vi.fn<(grantId: string) => void>();

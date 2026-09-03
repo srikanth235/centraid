@@ -1,5 +1,7 @@
 // Every column renting a `core.content_item`'s bytes (#883): a missing entry
-// is bytes reclaimed under a live row. `onlyLive` is the trash clamp;
+// is bytes reclaimed under a live row. `health_workout.route_content_id` and
+// `consent_export_job.artifact_content_id` left with their tables (#916,
+// ruling ONT-06) — a renter that no longer exists cannot hold bytes down. `onlyLive` is the trash clamp;
 // `documentHead` is the head the sweep walks past instead (#352).
 
 export interface ContentReference {
@@ -19,8 +21,6 @@ export const CONTENT_REFERENCES: readonly ContentReference[] = [
   },
   { table: "social_message", column: "body_content_id" },
   { table: "core_collection", column: "cover_content_id" },
-  { table: "health_workout", column: "route_content_id" },
-  { table: "consent_export_job", column: "artifact_content_id" },
   {
     table: "media_asset",
     column: "content_id",

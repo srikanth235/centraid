@@ -295,12 +295,15 @@ describe("clusters", () => {
     // Exactly one row moved (the newcomer); the incumbent pair keeps the
     // cluster id it already displayed.
     expect(result.updated).toBe(1);
-    // The engine's counter ticks twice per written row (measured), so the
-    // load-bearing assertion is that writes scale with rows that MOVED, not
-    // with the size of the table — a wholesale reset would tick 12 here.
+    // The engine's counter ticks twice per written row (measured), and twice
+    // again since `media.asset_phash` became a declared-mutable table with a
+    // touch trigger (#916, ruling ONT-08) — the trigger's own UPDATE is a
+    // second write of the same row. The load-bearing assertion is unchanged:
+    // writes scale with rows that MOVED, not with the size of the table, and a
+    // wholesale reset would tick 24 here.
     const delta = totalChanges() - before;
     expect(delta).toBeGreaterThan(0);
-    expect(delta).toBeLessThanOrEqual(2 * result.updated);
+    expect(delta).toBeLessThanOrEqual(4 * result.updated);
     const stored = storedClusterIds();
     expect(stored.get("zz-late-asset")).toBe(stored.get(ids[0]!));
     expect(stored.get(ids[2]!)).toBeNull();

@@ -12,9 +12,15 @@ import type { DatabaseSync } from "node:sqlite";
 import type { LocalBlobStore } from "../blob/local.js";
 import { liveBlobShas } from "../blob/read.js";
 import { VaultShareError } from "../errors.js";
+import { LIVE_AUTHORITY_SQL } from "../grant/grant-store.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { placeBlob } from "./blobs.js";
 import type { BlobPlacement } from "./blobs.js";
+import {
+  isShareableItemType,
+  shareableItemTypeOfEntity,
+  shareOriginEntityType,
+} from "./closure.js";
 import type { ProjectedItem, ShareableItemType } from "./closure.js";
 import { projectShareClosure } from "./project-closure.js";
 import { readShareClosure } from "./read-closure.js";
@@ -44,6 +50,22 @@ export interface ShareItemsToVaultInput {
    * threat 8). Defaults false — only the edge plane opts in.
    */
   crossOwner?: boolean;
+  /**
+   * The AUTHORITY this placement runs under (#916, adversarial review WEAK).
+   * `shareItemsToVault` is a library export and was gated on NOTHING: any
+   * caller holding both vault handles could place rows in someone else's vault
+   * without an answer standing anywhere.
+   *
+   * Every item must carry a LIVE, granted `share_authority` before a byte
+   * lands. Naming the principal narrows that to "and it is THIS one's" — which
+   * a caller that resolved an audience can say and a fan-out over a circle
+   * cannot, so it is optional and never a way to widen.
+   */
+  authority?: {
+    principalKind: "person" | "circle" | "harness" | "device";
+    principalId: string;
+    verb: string;
+  };
 }
 
 export interface UnshareFromVaultInput {
@@ -82,9 +104,14 @@ export function readShareOrigin(
   const row = audience
     .prepare(
       `SELECT origin_vault_id, origin_item_id, shared_by, shared_at
-         FROM core_share_origin WHERE item_type = ? AND item_id = ?`
+         FROM core_share_origin WHERE target_type = ? AND target_id = ?`
     )
-    .get(itemType, itemId) as
+    .get(
+      isShareableItemType(itemType)
+        ? shareOriginEntityType(itemType)
+        : itemType,
+      itemId
+    ) as
     | {
         origin_vault_id: string;
         origin_item_id: string;
@@ -101,6 +128,36 @@ export function readShareOrigin(
     sharedBy: row.shared_by,
     sharedAt: row.shared_at,
   };
+}
+
+/**
+ * A LIVE answer over every item, in the origin, before anything is placed
+ * (#916). "The audience already has it" must never be how a share happens.
+ */
+function assertPlacementAuthority(input: ShareItemsToVaultInput): void {
+  const named = input.authority;
+  const stands = input.origin.vault.prepare(
+    `SELECT count(*) AS n FROM share_authority
+      WHERE subject_type = ? AND subject_id = ?
+        AND decision = 'granted' AND ${LIVE_AUTHORITY_SQL}
+        AND (? IS NULL OR (principal_kind = ? AND principal_id = ? AND verb = ?))`
+  );
+  for (const itemId of input.itemIds) {
+    const row = stands.get(
+      input.itemType,
+      itemId,
+      named ? 1 : null,
+      named?.principalKind ?? null,
+      named?.principalId ?? null,
+      named?.verb ?? null
+    ) as { n: number };
+    if (row.n === 0)
+      throw new VaultShareError(
+        named
+          ? `no live share authority lets ${named.principalKind} ${named.principalId} ${named.verb} ${input.itemType} ${itemId}`
+          : `no live share authority stands over ${input.itemType} ${itemId}: a placement carries what the member agreed to, never the caller's word for it`
+      );
+  }
 }
 
 export interface ShareItemsToVaultResult {
@@ -122,6 +179,7 @@ export function shareItemsToVault(
       "cannot share a vault into itself — sharing crosses a vault boundary"
     );
   }
+  assertPlacementAuthority(input);
   // Resolve out of the origin BEFORE touching the audience, so an unknown item
   // is refused with nothing placed anywhere.
   const closure = readShareClosure(input.origin.vault, {
@@ -159,7 +217,8 @@ export function unshareFromVault(
   input: UnshareFromVaultInput
 ): UnshareFromVaultResult {
   const audience = input.audience.vault;
-  if (!readShareOrigin(audience, input.itemType, input.itemId)) {
+  const origin = readShareOrigin(audience, input.itemType, input.itemId);
+  if (!origin) {
     return { removed: false, orphanedShas: [] };
   }
   // Savepoint when a caller already owns the audience transaction (commons
@@ -175,12 +234,33 @@ export function unshareFromVault(
       input.itemType,
       input.itemId
     );
+    const collected = new Set(removal.shas);
     audience
       .prepare(
-        "DELETE FROM core_share_origin WHERE item_type = ? AND item_id = ?"
+        "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
       )
-      .run(input.itemType, input.itemId);
-    shas = removal.shas;
+      .run(shareOriginEntityType(input.itemType), input.itemId);
+    // THE SHARE'S OWN MEMBERSHIP, NOT THE VAULT'S (#916, adversarial BUG-9).
+    // Removal walked LIVE membership — the album's collection entries — so an
+    // audience who trashed a projected photograph (which removes its entry)
+    // left removal nothing to find: the album went, and the asset and its
+    // bytes stayed behind to be restored afterwards. Every row a projection
+    // wrote carries a `core_share_origin` row now, so what the closure walk
+    // could not reach is swept here, from the SAME share, and only while it is
+    // reachable from nothing else in this vault.
+    for (const row of strandedProjections(audience, origin)) {
+      const itemType = shareableItemTypeOfEntity(row.target_type);
+      if (!itemType) continue;
+      const swept = deleteProjectedClosure(audience, itemType, row.target_id);
+      if (!swept.removed) continue;
+      for (const sha of swept.shas) collected.add(sha);
+      audience
+        .prepare(
+          "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
+        )
+        .run(row.target_type, row.target_id);
+    }
+    shas = [...collected];
     endReplicaCommit(audience, replicaCommit);
     audience.exec(nested ? "RELEASE unshare_from_vault" : "COMMIT");
   } catch (error) {
@@ -192,6 +272,39 @@ export function unshareFromVault(
   // reported live rather than guessed at.
   const live = liveBlobShas(audience);
   return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
+}
+
+/**
+ * Rows this share placed that nothing in the audience vault still reaches: not
+ * filed in a live collection, not the current content of a live document, not
+ * the bytes behind a live asset. A projected row the audience detached from
+ * its container is exactly this, and is what the live-membership walk missed.
+ */
+function strandedProjections(
+  audience: DatabaseSync,
+  origin: ShareOriginRecord
+): { target_type: string; target_id: string }[] {
+  return audience
+    .prepare(
+      `SELECT o.target_type, o.target_id FROM core_share_origin o
+        WHERE o.origin_vault_id = ? AND o.shared_by = ?
+          AND o.target_type IN ('media.asset','core.document','core.content_item')
+          AND NOT EXISTS (
+            SELECT 1 FROM core_collection_entry e
+             WHERE e.target_type = o.target_type AND e.target_id = o.target_id)
+          AND NOT EXISTS (
+            SELECT 1 FROM core_document d
+             WHERE o.target_type = 'core.content_item'
+               AND d.current_content_id = o.target_id)
+          AND NOT EXISTS (
+            SELECT 1 FROM media_asset a
+             WHERE o.target_type = 'core.content_item'
+               AND a.content_id = o.target_id)`
+    )
+    .all(origin.originVaultId, origin.sharedBy) as {
+    target_type: string;
+    target_id: string;
+  }[];
 }
 
 /**
@@ -216,7 +329,7 @@ export function moveOutOfVault(
     );
     source
       .prepare(
-        "DELETE FROM core_share_origin WHERE item_type = ? AND item_id = ?"
+        "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
       )
       .run(input.itemType, input.itemId);
     shas = removal.shas;

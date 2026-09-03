@@ -33,8 +33,8 @@ describe("atlasOrreryGeometry", () => {
     const tables = g.nodes.map((n) => n.physical);
     const hops = bfsHops("core_party", g.fkEdges, tables);
     expect(hops.get("core_party")).toBe(0);
-    expect(hops.get("core_observation")).toBe(1); // references core_party
-    expect(hops.get("health_vital")).toBe(2); // references core_observation
+    expect(hops.get("core_content_item")).toBe(1); // references core_party
+    expect(hops.get("media_asset")).toBe(2); // references core_content_item
     expect(hops.get("sync_connection")).toBeNull(); // island
   });
 
@@ -177,11 +177,11 @@ describe("detail-dial filter predicates", () => {
     const ctx = {
       center: "core_party",
       hops: new Map<string, number | null>(),
-      rows: new Map<string, number>([["health_vital", 3]]),
+      rows: new Map<string, number>([["media_asset", 3]]),
       edges: [] as AtlasFkEdge[],
     };
     expect(
-      visibleAtLevel("simple", node("health_vital", "health", "ontology"), ctx)
+      visibleAtLevel("simple", node("media_asset", "media", "ontology"), ctx)
     ).toBe(true);
     expect(
       visibleAtLevel(
@@ -194,7 +194,7 @@ describe("detail-dial filter predicates", () => {
     expect(
       visibleAtLevel(
         "simple",
-        node("consent_device", "consent", "machinery"),
+        node("access_device", "consent", "machinery"),
         ctx
       )
     ).toBe(false);
@@ -204,13 +204,13 @@ describe("detail-dial filter predicates", () => {
     const ctx = {
       center: "core_party",
       hops: new Map<string, number | null>([
-        ["consent_device", 2],
+        ["access_device", 2],
         ["sync_connection", null],
       ]),
       rows: new Map<string, number>(),
       edges: [] as AtlasFkEdge[],
     };
-    const reachable = node("consent_device", "consent", "machinery");
+    const reachable = node("access_device", "consent", "machinery");
     const island = node("sync_connection", "sync", "machinery");
     expect(visibleAtLevel("standard", reachable, ctx)).toBe(true);
     expect(visibleAtLevel("standard", island, ctx)).toBe(false); // unreachable machinery
@@ -219,21 +219,26 @@ describe("detail-dial filter predicates", () => {
 
   it("edgeVisibleAtLevel: needs both endpoints; drops self-refs; hides ghosts only at simple", () => {
     const visible = new Set([
-      "core_observation",
+      "core_content_item",
       "core_party",
-      "consent_device",
+      "access_device",
     ]);
-    const live = edge("core_observation", "subject_party_id", "core_party", {
+    const live = edge("core_content_item", "creator_party_id", "core_party", {
       fill: 10,
     });
-    const ghost = edge("core_observation", "cover_id", "core_party", {
+    const ghost = edge("core_content_item", "cover_content_id", "core_party", {
       notnull: false,
       fill: 0,
       ghost: true,
     });
-    const hidden = edge("core_observation", "note_id", "knowledge_note", {
-      fill: 3,
-    });
+    const hidden = edge(
+      "core_content_item",
+      "source_note_id",
+      "knowledge_note",
+      {
+        fill: 3,
+      }
+    );
     const self = edge("core_concept", "broader_id", "core_concept", {
       fill: 2,
       selfRef: true,

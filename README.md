@@ -43,8 +43,8 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
  │  dispatcher        (one path, every   fire spine  │
  │      │             harness kind)           │      │
  │      ▼                                     ▼      │
- │  vault plane: vault.db + journal.db  scheduler    │
- │  (consent-checked commands, receipts)             │
+ │  vault plane: vault.db          scheduler         │
+ │  (access-checked commands, receipts)              │
  └───────────────────────────────────────────────────┘
 ```
 
@@ -94,7 +94,7 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/client` | Browser-safe gateway client plus the React shell/UI shared by desktop and web. |
 | `packages/core` | Zero-dependency shared contracts: wire protocol, CBSF blob codecs, civil-time recurrence (`@centraid/core/protocol`, `/blob`, `/time`). |
 | `packages/server` | One backend: gateway daemon (`centraid-gateway`), app engine, automation fire spine, and ACP turn driver (`centraid-acp`). |
-| `packages/vault` | The personal ontology: `vault.db` + `journal.db` DDL, consent gateway, typed commands, sealed columns, sync/outbox spine. |
+| `packages/vault` | The personal ontology: `vault.db` DDL — the model plus the append-only audit and ledger bands — the access gateway, typed commands, sealed columns, sync/outbox spine. State and drift register: [docs/vault-ontology.md](docs/vault-ontology.md). |
 | `packages/tunnel` | iroh QUIC wire protocol — device tunnel + one-time pairing; the TS reference the Swift/Kotlin mobile ports mirror. |
 | `packages/blueprints` | The superapp's catalogue: 8 first-party system apps installed in place + 28 automation templates cloned into user-owned code. Renders on the element layer of `packages/design`. |
 | `packages/design` | The design system in two layers: the **token** vocabulary (colors, type, spacing, app metadata, icons) shared across desktop and mobile, and the **element** layer (`src/elements/**`, `kit.css`) — the browser substrate every app renders on, bundled with the client rather than served. |

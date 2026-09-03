@@ -108,7 +108,7 @@ describe("run-automation suite", () => {
       const result = await runAutomation({
         automationRef: "app/digest",
         appsDir: "/apps",
-        journalDbFile: "/j.db",
+        ledgerDbFile: "/j.db",
         runTurn: accountedRunTurn,
         providerEgressConsent,
         harness: "claude-code",
@@ -124,7 +124,7 @@ describe("run-automation suite", () => {
       expect(fireOpts).toMatchObject({
         automationRef: "app/digest",
         appsDir: "/apps",
-        journalDbFile: "/j.db",
+        ledgerDbFile: "/j.db",
         runId: "run-1",
         triggerKind: "scheduled",
         input: { x: 1 },
@@ -164,7 +164,7 @@ describe("run-automation suite", () => {
       await runAutomation({
         automationRef: "app/a",
         appsDir: "/apps",
-        journalDbFile: "/j.db",
+        ledgerDbFile: "/j.db",
         runTurn: accountedRunTurn,
         providerEgressConsent,
       });
@@ -199,7 +199,7 @@ describe("run-automation suite", () => {
       const result = await runAutomation({
         automationRef: "app/digest",
         appsDir: "/apps",
-        journalDbFile: "/j.db",
+        ledgerDbFile: "/j.db",
         runTurn: accountedRunTurn,
         providerEgressConsent,
         runId: "run-fire",
@@ -239,7 +239,7 @@ describe("run-automation suite", () => {
       const result = await runAutomation({
         automationRef: "app/digest",
         appsDir: "/apps",
-        journalDbFile: "/j.db",
+        ledgerDbFile: "/j.db",
         runTurn: accountedRunTurn,
         providerEgressConsent,
         runId: "run-fire",
@@ -274,7 +274,7 @@ describe("run-automation suite", () => {
       await runAutomation({
         automationRef: "app/digest",
         appsDir: "/apps",
-        journalDbFile: "/j.db",
+        ledgerDbFile: "/j.db",
         runTurn: accountedRunTurn,
         providerEgressConsent,
         runId: "run-fire",
@@ -305,7 +305,7 @@ describe("run-automation suite", () => {
       await runAutomation({
         automationRef: "app/digest",
         appsDir: "/apps",
-        journalDbFile: "/j.db",
+        ledgerDbFile: "/j.db",
         runTurn: accountedRunTurn,
         providerEgressConsent,
         runId: "run-fire",
@@ -346,7 +346,7 @@ describe("run-automation suite", () => {
         runAutomation({
           automationRef: "app/digest",
           appsDir: "/apps",
-          journalDbFile: "/j.db",
+          ledgerDbFile: "/j.db",
           runTurn: accountedRunTurn,
           providerEgressConsent,
           harness: "codex",
@@ -367,7 +367,7 @@ describe("run-automation suite", () => {
       await runAutomation({
         automationRef: "app/digest",
         appsDir: "/apps",
-        journalDbFile: "/j.db",
+        ledgerDbFile: "/j.db",
         runTurn: accountedRunTurn,
         providerEgressConsent,
         harness: "gemini",

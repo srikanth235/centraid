@@ -25,7 +25,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { ConversationStore } from "../../packages/server/src/engine/conversation/store.js";
-import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import {
   completeEnrichmentLease,
   enrichmentQueueDepth,
@@ -255,8 +254,7 @@ async function replicaProcessDeathMidSend(
  */
 function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
   const plane = chaos.plane();
-  ensureConversationLedger(plane.db.journal);
-  const store = new ConversationStore(() => plane.db.journal);
+  const store = new ConversationStore(() => plane.db.audit);
   const conversationId = "chaos-automation";
   store.createConversation({
     id: conversationId,
@@ -313,7 +311,7 @@ function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
 
   // BOUNDED RESOURCE USE: a chain of deaths leaves one row, not a pile.
   const rows = (
-    plane.db.journal
+    plane.db.audit
       .prepare("SELECT count(*) AS n FROM conversation_turn_locks")
       .get() as { n: number }
   ).n;
@@ -330,6 +328,17 @@ function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
 function modelRuntimeDeathHoldingLease(chaos: ComponentChaosWorld): void {
   const vault = chaos.plane().db.vault;
   const requestId = "chaos-enrich";
+  // The queue row's `(target_type, target_id)` is a composite key into
+  // `core_entity` since #916, so the subject has to exist before it can be
+  // asked about. The row itself is incidental to the claim under test — what
+  // matters is that a lease chain over a REAL subject converges.
+  vault
+    .prepare(
+      `INSERT INTO core_content_item
+         (content_id, media_type, content_uri, sha256, byte_size, created_at)
+       VALUES (?, 'application/pdf', ?, ?, 4096, ?)`
+    )
+    .run("content-chaos", "vault://content-chaos", "sha-content-chaos", iso(0));
   queueDeviceEnrichmentRequest(vault, {
     requestId,
     entityType: "core.content_item",

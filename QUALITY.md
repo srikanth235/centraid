@@ -2,6 +2,33 @@
 
 ## Open
 
+- **A golden-corpus re-freeze cannot be read as a diff, and the freezer's own
+  header says it should be.** `scripts/golden-vault/build.mjs` derives every
+  corpus id from a fixed seed for exactly that reason ("a corpus seeded with
+  `Date.now()` and random uuids re-freezes differently every run, so its diff is
+  unreadable and nobody can tell a re-freeze from a rewrite"), but the rows it
+  seeds hang off `bootstrapVault`, which mints real clock-based uuidv7s and
+  stamps real timestamps. So the owner party, the device, the vault row and all
+  nineteen seeded concepts change identity on every freeze: re-freezing the #916
+  corpus to answer the audit's F2 moved 350 of `manifest.json`'s lines, of which
+  three were the shape fix and the rest were fresh ids. Not fixed with F2
+  because making bootstrap deterministic means threading a seeded id source and
+  a fixed clock through `bootstrapVault` itself — a change to production code
+  for a test artefact's sake, which wants its own decision.
+
+- **`refreshEntityTriggers` refreshes a missing trigger, never a changed one.**
+  `packages/vault/src/schema/entity.ts` returns early when the kind count and
+  the trigger count already match the registry, and writes with `CREATE TRIGGER
+  IF NOT EXISTS`, so an existing vault opened by a build whose trigger BODY has
+  changed keeps the old body. The wave's own fix is the case in point: the
+  cross-kind guard added for audit F1 reaches a file created before it only
+  through a re-freeze or a fresh vault. It is not a v0 field problem — there are
+  no files in the field — and the new schema assertion in `golden-vault.test.ts`
+  makes the drift fail loudly rather than pass quietly. Fixing it properly means
+  comparing each stored `sqlite_master.sql` against the text the generator would
+  write and rewriting the mismatches, which is a change to what every vault open
+  does and belongs with whoever owns open-path cost.
+
 - **Ten web e2e specs still carry a hand-copied connected-session bootstrap.**
   `apps/web/tests/e2e/connect.ts` (#892) now owns that bootstrap, and
   `accessibility`, `pwa-offline-journey` and `web-pwa` import it. The other ten

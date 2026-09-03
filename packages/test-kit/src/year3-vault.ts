@@ -36,8 +36,8 @@ export interface Year3Sqlite {
 }
 
 export interface Year3VaultTarget {
+  /** The ONE file (#916): ontology, audit and ledger bands share this handle. */
   readonly vault: Year3Sqlite;
-  readonly journal: Year3Sqlite;
   readonly sealCell: (
     entity: string,
     column: string,
@@ -56,7 +56,7 @@ export interface Year3SeedCounts {
 /**
  * One deterministic generator for the year-3 row, chronology, custody, and
  * ledger axes. Scale lanes pass the full profile; PR tests use small counts
- * through the same statements. Callers checkpoint both databases before
+ * through the same statements. Callers checkpoint the file before
  * caching/copying the generated fixture (docs/traps/wal-checkpoint.md).
  */
 export function seedYear3Vault(
@@ -73,15 +73,34 @@ export function seedYear3Vault(
   const digest = (value: string): string =>
     createHash("sha256").update(value).digest("hex");
   const party = target.vault.prepare(
-    "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version) VALUES (?, 'person', ?, ?, ?, 'v0')"
+    "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES (?, 'person', ?, ?, ?)"
   );
   const content = target.vault.prepare(
     "INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, title, created_at) VALUES (?, 'image/jpeg', ?, ?, 4096, ?, ?)"
   );
   const photo = target.vault.prepare(
-    "INSERT INTO media_asset (asset_id, content_id, kind, captured_at, favorite) VALUES (?, ?, 'photo', ?, 0)"
+    "INSERT INTO media_asset (asset_id, content_id, kind, captured_at) VALUES (?, ?, 'photo', ?)"
+  );
+  // The star is a flags-scheme tag on the ASSET (#916) — `media_asset.favorite`
+  // is gone. One in fifty photos carries it, so the fixture still exercises the
+  // join every Photos surface now makes.
+  const flagsSchemeId = "year3-flags-scheme";
+  const starredConceptId = "year3-starred-concept";
+  const star = target.vault.prepare(
+    `INSERT INTO core_tag (tag_id, concept_id, target_type, target_id, tagged_at)
+     VALUES (?, ?, 'media.asset', ?, ?)`
   );
   target.vault.exec("BEGIN IMMEDIATE");
+  target.vault
+    .prepare(
+      "INSERT INTO core_concept_scheme (scheme_id, uri, title, version, created_at) VALUES (?, 'https://centraid.dev/schemes/flags', 'Flags', '1', ?)"
+    )
+    .run(flagsSchemeId, at(0));
+  target.vault
+    .prepare(
+      "INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, created_at) VALUES (?, ?, 'starred', 'Starred', ?)"
+    )
+    .run(starredConceptId, flagsSchemeId, at(0));
   for (let index = 0; index < counts.parties; index += 1) {
     const timestamp = at(index % 1_096);
     party.run(
@@ -101,7 +120,10 @@ export function seedYear3Vault(
       `Year 3 photo ${index}`,
       timestamp
     );
-    photo.run(id("year3-photo", index), contentId, timestamp);
+    const assetId = id("year3-photo", index);
+    photo.run(assetId, contentId, timestamp);
+    if (index % 50 === 0)
+      star.run(id("year3-star", index), starredConceptId, assetId, timestamp);
   }
   const lockerId = "year3-sealed-locker";
   const lockerColumns = [
@@ -153,22 +175,22 @@ export function seedYear3Vault(
       at(1),
       at(1)
     );
+  // ONE revision mechanism (#916, ONT-revisions): `locker_item_history` is
+  // gone. A snapshot records that a sealed column CHANGED, never its
+  // plaintext, so this row carries no sentinel.
   const revisionId = "year3-sealed-revision";
   target.vault
     .prepare(
-      `INSERT INTO locker_item_history
-       (revision_id, item_id, operation, title, password, changed_json, recorded_at)
-       VALUES (?, ?, 'update', 'Year 3 sealed canary', ?, '{"password":true}', ?)`
+      `INSERT INTO core_entity_revision
+       (revision_id, entity_type, entity_id, operation, snapshot_json,
+        recorded_at, undo_until)
+       VALUES (?, 'locker.item', ?, 'update', ?, ?, ?)`
     )
     .run(
       revisionId,
       lockerId,
-      target.sealCell(
-        "locker.item_history",
-        "password",
-        revisionId,
-        profile.sealedSentinels["locker.item_history.password"]!
-      ),
+      JSON.stringify({ title: "Year 3 sealed canary", password: true }),
+      at(1),
       at(1)
     );
   target.vault
@@ -224,18 +246,18 @@ export function seedYear3Vault(
   target.vault.exec("COMMIT");
 
   const owner = target.vault
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string };
-  const conversation = target.journal.prepare(
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string };
+  const conversation = target.vault.prepare(
     "INSERT INTO conversations (id, kind, user_id, app_id, title, turn_count, item_count, created_at, updated_at) VALUES (?, 'chat', ?, '_assistant', ?, ?, ?, ?, ?)"
   );
-  const turn = target.journal.prepare(
+  const turn = target.vault.prepare(
     "INSERT INTO turns (id, conversation_id, seq, trigger, ok, started_at, ended_at) VALUES (?, ?, ?, 'manual', 1, ?, ?)"
   );
-  const item = target.journal.prepare(
+  const item = target.vault.prepare(
     "INSERT INTO items (id, turn_id, ordinal, kind, role, text, started_at, ended_at) VALUES (?, ?, 0, 'message_in', 'user', ?, ?, ?)"
   );
-  target.journal.exec("BEGIN IMMEDIATE");
+  target.vault.exec("BEGIN IMMEDIATE");
   for (
     let conversationIndex = 0;
     conversationIndex < counts.conversations;
@@ -245,7 +267,7 @@ export function seedYear3Vault(
     const timestamp = Date.parse(at(conversationIndex % 1_096));
     conversation.run(
       conversationId,
-      owner.owner_party_id,
+      owner.self_party_id,
       `Year 3 conversation ${conversationIndex}`,
       counts.turnsPerConversation,
       counts.turnsPerConversation,
@@ -274,9 +296,8 @@ export function seedYear3Vault(
       );
     }
   }
-  target.journal.exec("COMMIT");
+  target.vault.exec("COMMIT");
   target.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-  target.journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 }
 
 /**
@@ -309,7 +330,6 @@ export function year3VaultProfile(
       "locker.item_field.value_sealed": sentinel(
         "locker.item_field.value_sealed"
       ),
-      "locker.item_history.password": sentinel("locker.item_history.password"),
       "locker.item_passkey.private_key": sentinel(
         "locker.item_passkey.private_key"
       ),

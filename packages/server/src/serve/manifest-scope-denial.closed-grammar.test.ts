@@ -208,12 +208,13 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
     test("[policy-forbids-purpose] a standing purpose rule bites before any grant", () => {
       sweep.db.vault
         .prepare(
-          `INSERT INTO consent_policy
-             (policy_id, kind, applies_schema, applies_table, rule_json,
-              retention_days, residency_region, effective_from, priority)
-           VALUES (?, 'purpose', 'social', NULL,
+          // R10 (#916): one dotted `entity`; a bare pack name is the whole pack.
+          `INSERT INTO access_policy
+             (policy_id, kind, entity, rule_json,
+              retention_days, effective_from, priority)
+           VALUES (?, 'purpose', 'social',
                    '{"allowed_purposes":["dpv:Billing"]}',
-                   NULL, NULL, '2020-01-01T00:00:00Z', 1)`
+                   NULL, '2020-01-01T00:00:00Z', 1)`
         )
         .run(uuidv7());
       const decision = decide(
@@ -229,7 +230,7 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       );
       expect(classifyDeny(decision.failing)).toBe("policy-forbids-purpose");
       sweep.db.vault
-        .prepare(`DELETE FROM consent_policy WHERE kind='purpose'`)
+        .prepare(`DELETE FROM access_policy WHERE kind='purpose'`)
         .run();
     });
 

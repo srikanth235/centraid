@@ -15,10 +15,10 @@ export interface HostBootstrap extends BootstrapResult {
 export function recoverVaultBootstrap(db: VaultDb): HostBootstrap | undefined {
   const vaultRow = db.vault
     .prepare(
-      "SELECT vault_id, owner_party_id, display_name FROM core_vault LIMIT 1"
+      "SELECT vault_id, self_party_id, display_name FROM core_vault LIMIT 1"
     )
     .get() as
-    | { vault_id: string; owner_party_id: string; display_name: string }
+    | { vault_id: string; self_party_id: string; display_name: string }
     | undefined;
   if (!vaultRow) return undefined;
 
@@ -27,15 +27,16 @@ export function recoverVaultBootstrap(db: VaultDb): HostBootstrap | undefined {
       // Full trust is an authority answer (#883), so the owner's recovery
       // device joins the device-kind row that carries it.
       `SELECT d.device_id AS device_id, d.public_key AS public_key
-         FROM consent_device d
+         FROM access_device d
          JOIN share_authority a
            ON a.principal_kind = 'device' AND a.principal_id = d.device_id
           AND a.subject_type = 'core.vault' AND a.subject_id = ''
           AND a.revoked_at IS NULL AND a.decision = 'granted'
+          AND (a.expires_at IS NULL OR a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
           AND a.verb = 'edit'
         WHERE d.owner_party_id = ? ORDER BY d.enrolled_at LIMIT 1`
     )
-    .get(vaultRow.owner_party_id) as
+    .get(vaultRow.self_party_id) as
     | { device_id: string; public_key: string }
     | undefined;
   if (!device) {
@@ -53,7 +54,7 @@ export function recoverVaultBootstrap(db: VaultDb): HostBootstrap | undefined {
   return {
     vaultId: vaultRow.vault_id,
     displayName: vaultRow.display_name,
-    ownerPartyId: vaultRow.owner_party_id,
+    ownerPartyId: vaultRow.self_party_id,
     deviceId: device.device_id,
     deviceKey: device.public_key,
     concepts,
@@ -246,7 +247,7 @@ export function updateEnrichSettings(
 export interface EnrolledApp {
   appId: string;
   signingKey: string;
-  /** Host-side enrollment key (Centraid app id), never the pretty name. Pretty name is `consent_app.display_name`. */
+  /** Host-side enrollment key (Centraid app id), never the pretty name. Pretty name is `access_app.display_name`. */
   name: string;
   status: string;
   riskCeiling: Risk;
@@ -265,7 +266,7 @@ export function lookupAppByName(
 ): EnrolledApp | undefined {
   const row = db.vault
     .prepare(
-      `SELECT app_id, name, signing_key, status, risk_ceiling FROM consent_app
+      `SELECT app_id, name, signing_key, status, risk_ceiling FROM access_app
         WHERE name = ? AND status = 'active' ORDER BY installed_at LIMIT 1`
     )
     .get(name) as
@@ -292,7 +293,6 @@ export function ensureAppEnrolled(
   db: VaultDb,
   name: string,
   options?: {
-    origin?: "installed" | "generated";
     riskCeiling?: Risk;
     displayName?: string;
   }
@@ -302,7 +302,7 @@ export function ensureAppEnrolled(
   if (existing) {
     db.vault
       .prepare(
-        `UPDATE consent_app SET display_name = ?
+        `UPDATE access_app SET display_name = ?
           WHERE app_id = ? AND (display_name IS NULL OR display_name != ?)`
       )
       .run(resolvedDisplayName, existing.appId, resolvedDisplayName);
@@ -310,7 +310,6 @@ export function ensureAppEnrolled(
   }
   const enrolled = enrollApp(db, {
     name,
-    origin: options?.origin ?? "generated",
     riskCeiling: options?.riskCeiling ?? "low",
     displayName: resolvedDisplayName,
   });
@@ -346,7 +345,7 @@ function grantSummariesBy(
   const grants = db.vault
     .prepare(
       `SELECT g.grant_id, g.purpose_concept_id, g.expires_at, c.notation
-         FROM consent_access_grant g
+         FROM access_grant g
          LEFT JOIN core_concept c ON c.concept_id = g.purpose_concept_id
         WHERE g.${granteeColumn} = ? AND g.status = 'active' ORDER BY g.granted_at`
     )
@@ -357,8 +356,8 @@ function grantSummariesBy(
     notation: string | null;
   }[];
   const scopeStmt = db.vault.prepare(
-    `SELECT schema_name, table_name, verbs, row_filter_json, field_mask_json
-       FROM consent_grant_scope WHERE grant_id = ?`
+    `SELECT entity, verbs, row_filter_json, field_mask_json
+       FROM access_grant_scope WHERE grant_id = ?`
   );
   return grants.map((g) => ({
     grantId: g.grant_id,
@@ -367,15 +366,18 @@ function grantSummariesBy(
     expiresAt: g.expires_at,
     scopes: (
       scopeStmt.all(g.grant_id) as {
-        schema_name: string;
-        table_name: string | null;
+        entity: string;
         verbs: string;
         row_filter_json: string | null;
         field_mask_json: string | null;
       }[]
     ).map((s) => ({
-      schema: s.schema_name,
-      table: s.table_name,
+      schema: s.entity.includes(".")
+        ? s.entity.slice(0, s.entity.indexOf("."))
+        : s.entity,
+      table: s.entity.includes(".")
+        ? s.entity.slice(s.entity.indexOf(".") + 1)
+        : null,
       verbs: s.verbs,
       ...(s.row_filter_json
         ? { rowFilter: JSON.parse(s.row_filter_json) as FilterClause[] }
@@ -405,7 +407,7 @@ export interface EnrolledAgent {
   status: string;
 }
 
-/** Automations enroll under Centraid app id; assistant under `_assistant`. Key is `consent_agent.enrollment_key`, not `display_name`. */
+/** Automations enroll under Centraid app id; assistant under `_assistant`. Key is `access_agent.enrollment_key`, not `display_name`. */
 export function lookupAgentByName(
   db: VaultDb,
   name: string
@@ -413,7 +415,7 @@ export function lookupAgentByName(
   const row = db.vault
     .prepare(
       `SELECT a.agent_id, a.party_id, p.display_name, a.status
-         FROM consent_agent a JOIN core_party p ON p.party_id = a.party_id
+         FROM access_agent a JOIN core_party p ON p.party_id = a.party_id
         WHERE a.enrollment_key = ? AND p.kind = 'agent' AND a.status = 'active'
         ORDER BY a.enrolled_at LIMIT 1`
     )
@@ -472,7 +474,7 @@ export function ensureAgentEnrolled(
 /** Pause the identity row. Grants MUST be revoked through the gateway first so the cascade runs. */
 export function markAgentRevoked(db: VaultDb, agentId: string): void {
   db.vault
-    .prepare(`UPDATE consent_agent SET status = 'revoked' WHERE agent_id = ?`)
+    .prepare(`UPDATE access_agent SET status = 'revoked' WHERE agent_id = ?`)
     .run(agentId);
 }
 
@@ -490,7 +492,7 @@ export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
   const rows = db.vault
     .prepare(
       `SELECT a.agent_id, a.enrollment_key, a.party_id, p.display_name, a.model_ref, a.enrolled_at
-         FROM consent_agent a JOIN core_party p ON p.party_id = a.party_id
+         FROM access_agent a JOIN core_party p ON p.party_id = a.party_id
         WHERE a.status = 'active' ORDER BY a.enrolled_at`
     )
     .all() as {
@@ -524,7 +526,7 @@ export function purposeConceptId(
 /** Retire the identity row. Grants MUST be revoked through the gateway first. Reinstall under the same name mints a fresh identity. */
 export function markAppRevoked(db: VaultDb, appId: string): void {
   db.vault
-    .prepare(`UPDATE consent_app SET status = 'revoked' WHERE app_id = ?`)
+    .prepare(`UPDATE access_app SET status = 'revoked' WHERE app_id = ?`)
     .run(appId);
 }
 
@@ -538,7 +540,7 @@ export interface InstalledAppRow {
 export function listInstalledApps(db: VaultDb): InstalledAppRow[] {
   const rows = db.vault
     .prepare(
-      `SELECT name, label FROM consent_app
+      `SELECT name, label FROM access_app
         WHERE origin = 'installed' AND status = 'active' ORDER BY installed_at`
     )
     .all() as { name: string; label: string | null }[];
@@ -554,7 +556,7 @@ export function setAppLabel(
   const trimmed = typeof label === "string" ? label.trim() : "";
   db.vault
     .prepare(
-      `UPDATE consent_app SET label = ? WHERE name = ? AND status = 'active'`
+      `UPDATE access_app SET label = ? WHERE name = ? AND status = 'active'`
     )
     .run(trimmed.length > 0 ? trimmed : null, appId);
 }
@@ -574,7 +576,7 @@ export function listEnrolledApps(db: VaultDb): AppSummary[] {
   const rows = db.vault
     .prepare(
       `SELECT app_id, name, status, origin, risk_ceiling, installed_at
-         FROM consent_app WHERE status = 'active' ORDER BY installed_at`
+         FROM access_app WHERE status = 'active' ORDER BY installed_at`
     )
     .all() as {
     app_id: string;

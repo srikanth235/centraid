@@ -73,9 +73,9 @@ describe("ingest", () => {
       rrule: "FREQ=WEEKLY;BYDAY=MO",
       status: "tentative",
     });
-    const prov = db.journal
+    const prov = db.audit
       .prepare(
-        `SELECT count(*) AS n FROM consent_provenance WHERE prov_activity='import.ics' AND agent_kind='import'`
+        `SELECT count(*) AS n FROM access_provenance WHERE prov_activity='import.ics' AND agent_kind='import'`
       )
       .get() as { n: number };
     expect(prov.n).toBe(2);

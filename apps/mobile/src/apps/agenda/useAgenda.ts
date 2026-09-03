@@ -139,7 +139,7 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
     eventExtensions: eventExtensions.rows,
     parties: parties.rows,
     calendars: calendars.rows,
-    ownerPartyId: value<string>(vault.rows[0] ?? {}, "owner_party_id"),
+    ownerPartyId: value<string>(vault.rows[0] ?? {}, "self_party_id"),
     ...queryState,
   };
 }

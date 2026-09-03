@@ -10,6 +10,8 @@
 //   GET    /centraid/_vault/imports/<batchId>          the batch's rows
 //   POST   /centraid/_vault/imports/<batchId>/publish  apply the draft
 //   POST   /centraid/_vault/imports/<batchId>/discard  drop the draft
+//   GET    /centraid/_vault/imports/export               ciphertext-only bundle
+//   POST   /centraid/_vault/imports/export               body {passphrase?}
 //   GET    /centraid/_vault/imports/connections        connection health
 //   POST   /centraid/_vault/imports/connections/<id>/status  {status: paused|active}
 
@@ -149,8 +151,13 @@ export function makeImportRouteHandler(
             return sendJson(res, 400, {
               error: "portable import requires replaceFreshVault: true",
             });
+          // The bundle's seal key rides password-wrapped (#630); the
+          // passphrase is the owner's and only passes through.
           const result = importPortableVault(plane.db, data, {
             replaceBootstrap: true,
+            ...(typeof body.passphrase === "string"
+              ? { passphrase: body.passphrase }
+              : {}),
           });
           return sendJson(res, 200, { portable: true, ...result });
         }
@@ -174,11 +181,20 @@ export function makeImportRouteHandler(
       }
 
       if (
-        method === "GET" &&
+        (method === "GET" || method === "POST") &&
         segments.length === 1 &&
         segments[0] === "export"
       ) {
-        const exported = await plane.gateway.exportPortableVault(owner);
+        // POST carries the custody-kit passphrase in a body; GET stays the
+        // key-free door, and a secret must never ride in a query string.
+        const passphrase =
+          method === "POST"
+            ? String((await readJson(req)).passphrase ?? "")
+            : "";
+        const exported = await plane.gateway.exportPortableVault(
+          owner,
+          passphrase.length > 0 ? { passphrase } : {}
+        );
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/zip");
         res.setHeader("Cache-Control", "no-store");
@@ -189,6 +205,7 @@ export function makeImportRouteHandler(
         res.setHeader("Content-Length", String(exported.bytes.length));
         res.setHeader("X-Centraid-Export-Id", exported.exportId);
         res.setHeader("X-Centraid-Receipt-Id", exported.receiptId);
+        res.setHeader("X-Centraid-Export-Sealed", exported.manifest.sealed);
         res.end(exported.bytes);
         return true;
       }

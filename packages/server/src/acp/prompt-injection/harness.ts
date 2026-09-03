@@ -7,11 +7,12 @@
  */
 
 import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
   ConversationStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
   ProviderEgressConsentStore,
 } from "@centraid/server/engine";
 import type { RunTurnFn } from "@centraid/server/engine";
@@ -228,14 +229,17 @@ export async function applyAttempt(
 async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
   const kind = provider as HarnessKind;
   const workdir = await tempDir("acp-inject-egress-");
-  const journalDbFile = `${workdir}/journal.db`;
+  // ONE FILE (#916): the ledger is a band of a migrated `vault.db`, so the
+  // harness mints one rather than pointing a store at a bare path.
+  openVaultDb({ dir: workdir }).close({ skipOptimize: true });
+  const ledgerDbFile = path.join(workdir, "vault.db");
   const automationRef = "demo/nightly";
-  const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+  const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
   store.ensureAutomationConversation(automationRef, "demo", "Nightly", "codex");
   store.close();
   // Ladder holds codex only; the injected provider is not a member.
   const consent = new ProviderEgressConsentStore(
-    makeJournalDbProvider(journalDbFile),
+    makeLedgerDbProvider(ledgerDbFile),
     (member) => member === "codex"
   );
   const before = consent.has(automationRef, kind, "automations");
@@ -248,7 +252,7 @@ async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
     workdir,
     runId: "run-inject",
     automationRef,
-    journalDbFile,
+    ledgerDbFile,
     runTurn,
     harness: kind,
     providerEgressConsent: consent,

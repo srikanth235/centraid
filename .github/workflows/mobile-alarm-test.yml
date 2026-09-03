@@ -89,6 +89,18 @@ jobs:
       # restored cache would install the UNMUTATED app and the suite would pass,
       # which this job reads as "the alarm did not sound" and fails on. That
       # would be a correct verdict about the wrong artifact — the worst kind.
+      #
+      # AND DELIBERATELY NO GRADLE/NATIVE CACHE EITHER, unlike the three lanes
+      # that share `android-gradle-v2-*` (#916). It would work — the mutation is
+      # an `EXPO_PUBLIC_*` value inlined at bundle time, and
+      # `android-emulator-install.sh` forces the bundle task with `--rerun`, so a
+      # warm native directory could not carry the unmutated JS. It is refused
+      # anyway: this is the one lane whose pass condition is a red suite, it runs
+      # weekly inside a 90-minute budget with nothing waiting on it, and a cold
+      # compile is the cheapest possible answer to "could the mutation have been
+      # cached away?". It also saves nothing, so it cannot thrash the shared
+      # entries the other three lanes trade.
+      #
       # Restore-then-save, for the reason already written above the apk and
       # gradle caches and not applied to this one: `actions/cache` declares
       # `post-if: success()`, so on a red lane the snapshot never saves and every

@@ -53,8 +53,8 @@ function addParty(
   db.prepare(
     `INSERT INTO core_party
        (party_id, kind, display_name, sort_name, birth_date,
-        avatar_content_id, created_at, updated_at, ontology_version)
-     VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?, '1.4')`
+        avatar_content_id, created_at, updated_at)
+     VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?)`
   ).run(partyId, name, name, now, now);
   return partyId;
 }
@@ -63,8 +63,25 @@ describe("commons lifecycle and logical cursors", () => {
   afterEach(closeOpenVaults);
 
   test("per-grant member offsets advance monotonically above one vault replica", () => {
-    const { audience } = household();
+    const { audience, audienceBoot } = household();
     const now = nowIso();
+    // A cursor hangs off a real grant (#916): `share_commons_cursor.grant_id`
+    // is a foreign key, so the seat has to hold the grant it is tracking.
+    const circleId = uuidv7();
+    audience.vault
+      .prepare(
+        `INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
+         VALUES (?, ?, 'Cursors', 'custom')`
+      )
+      .run(circleId, audienceBoot.ownerPartyId);
+    const grantRow = audience.vault.prepare(
+      `INSERT INTO share_circle_grant
+           (grant_id, circle_id, container_type, container_id, plane,
+            steward_party_id, created_at, chain_head_hash)
+         VALUES (?, ?, 'core.collection', ?, 'commons', ?, ?, '')`
+    );
+    for (const grantId of ["grant-a", "grant-b"])
+      grantRow.run(grantId, circleId, uuidv7(), audienceBoot.ownerPartyId, now);
     acknowledgeCommonsSeatCursor({
       steward: audience.vault,
       grantId: "grant-a",
@@ -845,8 +862,14 @@ describe("commons lifecycle and logical cursors", () => {
         now,
       })
     ).toMatchObject({ retained: false, grantIds: [grant.grantId] });
+    // A DIVERGENCE the audience's retained copy must keep: the star is one
+    // flags tag now (#916) and does not travel, so the origin's edit rides a
+    // column that does — the caption on the shared content item.
     origin.vault
-      .prepare("UPDATE media_asset SET favorite = 0 WHERE asset_id = ?")
+      .prepare(
+        `UPDATE core_content_item SET title = 'Re-titled at the origin'
+          WHERE content_id = (SELECT content_id FROM media_asset WHERE asset_id = ?)`
+      )
       .run(photo.assetId);
     compileCommons({
       steward: origin,
@@ -864,13 +887,17 @@ describe("commons lifecycle and logical cursors", () => {
     });
     expect(
       audience.vault
-        .prepare("SELECT favorite FROM media_asset WHERE asset_id = ?")
+        .prepare(
+          `SELECT c.title FROM media_asset a
+             JOIN core_content_item c ON c.content_id = a.content_id
+            WHERE a.asset_id = ?`
+        )
         .get(photo.assetId)
-    ).toMatchObject({ favorite: 1 });
+    ).not.toMatchObject({ title: "Re-titled at the origin" });
     expect(
       audience.vault
         .prepare(
-          "SELECT COUNT(*) AS n FROM core_share_origin WHERE item_type = 'media.asset' AND item_id = ?"
+          "SELECT COUNT(*) AS n FROM core_share_origin WHERE target_type = 'media.asset' AND target_id = ?"
         )
         .get(photo.assetId)
     ).toMatchObject({ n: 0 });
@@ -887,9 +914,13 @@ describe("commons lifecycle and logical cursors", () => {
     });
     expect(
       audience.vault
-        .prepare("SELECT favorite FROM media_asset WHERE asset_id = ?")
+        .prepare(
+          `SELECT c.title FROM media_asset a
+             JOIN core_content_item c ON c.content_id = a.content_id
+            WHERE a.asset_id = ?`
+        )
         .get(photo.assetId)
-    ).toMatchObject({ favorite: 1 });
+    ).not.toMatchObject({ title: "Re-titled at the origin" });
     expect(
       audience.vault
         .prepare(

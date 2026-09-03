@@ -207,10 +207,9 @@ export function snapshotSeat(seat: Seat): void {
 
 export function staleRestoreSeat(seat: Seat): void {
   seat.db.close();
-  for (const [source, target] of [
-    ["vault.backup.db", "vault.db"],
-    ["journal.backup.db", "journal.db"],
-  ] as const) {
+  // ONE FILE (#916): the backup is `vault.backup.db` and nothing else, so a
+  // stale restore cannot pair two copies taken at different instants.
+  for (const [source, target] of [["vault.backup.db", "vault.db"]] as const) {
     for (const suffix of ["-wal", "-shm"])
       rmSync(path.join(seat.dir, `${target}${suffix}`), { force: true });
     copyFileSync(
@@ -226,8 +225,8 @@ function knowParty(host: Seat, other: Seat): void {
     .prepare(
       `INSERT INTO core_party
          (party_id, kind, display_name, sort_name, birth_date,
-          avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?, '1.4')
+          avatar_content_id, created_at, updated_at)
+       VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?)
        ON CONFLICT(party_id) DO NOTHING`
     )
     .run(other.partyId, `Seat ${other.index}`, `Seat ${other.index}`, NOW, NOW);

@@ -107,7 +107,7 @@ describe("vault-plane consent", () => {
       // Enrolled but ungranted: a receipted consent deny, not a hang or a leak.
       const denied = await read();
       expect(denied.ok).toBe(false);
-      expect(denied.code).toBe("VAULT_CONSENT");
+      expect(denied.code).toBe("VAULT_ACCESS");
       // Unconditional: a plane that promises nothing asserts against "", which
       // every string contains. A conditional assertion would silently vanish
       // if a scenario ever dropped the field.
@@ -228,7 +228,7 @@ describe("vault-plane consent", () => {
       },
     });
     expect(deniedApp.ok).toBe(false);
-    expect(deniedApp.code).toBe("VAULT_CONSENT");
+    expect(deniedApp.code).toBe("VAULT_ACCESS");
     plane.approveGrant("tasks", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", verbs: "read" }],

@@ -22,7 +22,6 @@ export type SealKeyVerdict = "not-sealed" | "ok" | "missing" | "mismatch";
 
 export interface RestoredPairReport {
   vault: { integrity: string; foreignKeyViolations: number };
-  journal: { integrity: string; foreignKeyViolations: number };
   /** Receipts naming a vault table row absent from the restore. */
   receiptsChecked: number;
   danglingReceipts: {
@@ -91,15 +90,16 @@ export function verifyRestoredPair(
   destDir: string,
   recoveryKey?: Buffer | null
 ): RestoredPairReport {
+  // ONE file (#916): the audit band lives in `vault.db` beside the life data,
+  // so there is no second handle to integrity-check.
   const vault = checkFile(path.join(destDir, "vault.db"));
-  const journal = checkFile(path.join(destDir, "journal.db"));
   const sealKey = checkSealKey(destDir, vault.db, recoveryKey);
   const danglingReceipts: RestoredPairReport["danglingReceipts"] = [];
   let receiptsChecked = 0;
   try {
-    const rows = journal.db
+    const rows = vault.db
       .prepare(
-        `SELECT receipt_id, action, object_type, object_id FROM consent_receipt
+        `SELECT receipt_id, action, object_type, object_id FROM access_receipt
          WHERE object_id IS NOT NULL AND decision = 'allow'`
       )
       .all() as {
@@ -114,7 +114,7 @@ export function verifyRestoredPair(
     >();
     for (const row of rows) {
       const ref = resolveEntity(row.object_type, vault.db);
-      if (!ref || ref.file !== "vault") continue; // journal-side or abstract object
+      if (!ref) continue; // abstract object — nothing to look up
       receiptsChecked++;
       let target = existsStmt.get(ref.physical);
       if (target === undefined) {
@@ -139,16 +139,11 @@ export function verifyRestoredPair(
     }
   } finally {
     vault.db.close();
-    journal.db.close();
   }
   return {
     vault: {
       integrity: vault.integrity,
       foreignKeyViolations: vault.foreignKeyViolations,
-    },
-    journal: {
-      integrity: journal.integrity,
-      foreignKeyViolations: journal.foreignKeyViolations,
     },
     receiptsChecked,
     danglingReceipts,

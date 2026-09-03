@@ -1,23 +1,45 @@
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+
 // The one authority plane (#883 V-table): every standing answer about who may
 // do what — person, circle, harness, or the member's own device — is a row in
 // `share_authority`. App-strategy machinery, gateway-side enrollment
 // attenuation and runtime provider consent stay out of it (V-split).
 
-const SHARE_FULFILLMENT_COLUMNS = `
-  grant_id      TEXT NOT NULL REFERENCES share_authority(authority_id) ON DELETE CASCADE,
-  peer_vault_id TEXT NOT NULL,
-  state         TEXT NOT NULL CHECK (state IN
-    ('awaiting_channel','syncing','delivered','remove_sent','removed')),
-  updated_at    TEXT NOT NULL,
-  -- Latest note: a refusal reason, a transport error, why a removal stalled.
-  detail        TEXT,
-  -- When the subject first reached this peer. NULL = never delivered.
-  delivered_at  TEXT,
-  PRIMARY KEY (grant_id, peer_vault_id)`;
+// Polymorphic BOTH ways, so neither pair can carry a SQL foreign key. The
+// trigger on `core_entity` that revokes a purged subject's answers writes to
+// this table, so it is composed before that trigger (#916, E2).
+/**
+ * PRINCIPAL KINDS THAT ARE ROWS, and the entity kind each one's id lives in
+ * (#916, audit F3).
+ *
+ * `principal_id` carries no foreign key — it cannot, it is polymorphic on
+ * `principal_kind` — so `core_entity_revoke_on_purge` is what ends an answer
+ * whose PRINCIPAL is purged, and it generates its clause from this map. The
+ * clause was written for `person` alone, which left a circle-principal answer
+ * standing after `tally.delete_group` or `share/removal.ts` deleted the circle:
+ * a live answer whose audience no longer exists, which is exactly what the
+ * trigger says must not happen.
+ *
+ * The two kinds NOT here are not rows: a `harness` principal is an engine
+ * class (its ids are a closed vocabulary, see the CHECK below), and a `device`
+ * lives in the access plane, which is machinery rather than an ontology pack
+ * and so has no `core_entity` row to purge. `authority-principals.test.ts`
+ * holds the CHECK's vocabulary to being exactly this map plus those two, so a
+ * fifth principal kind cannot be added without answering the question.
+ */
+export const PRINCIPAL_ENTITY_KINDS: ReadonlyMap<string, string> = new Map([
+  ["person", "core.party"],
+  ["circle", "social.circle"],
+]);
 
-// Polymorphic BOTH ways, so neither pair can carry a SQL foreign key.
-const SHARE_AUTHORITY_DDL = `
-CREATE TABLE IF NOT EXISTS share_authority (
+/** Principal kinds whose id is not an entity id — see the map above. */
+export const NON_ENTITY_PRINCIPAL_KINDS: ReadonlySet<string> = new Set([
+  "harness",
+  "device",
+]);
+
+export const SHARE_AUTHORITY_DDL = `
+CREATE TABLE share_authority (
   authority_id   TEXT PRIMARY KEY,
   principal_kind TEXT NOT NULL CHECK (principal_kind IN
     ('person','circle','harness','device')),
@@ -46,9 +68,15 @@ CREATE TABLE IF NOT EXISTS share_authority (
   -- makes grant/grant-store.ts's non-null narrowing sound.
   granted_by     TEXT REFERENCES core_party(party_id),
   revoked_at     TEXT,
-  -- -> consent.receipt (journal.db). Cross-file, so engine-unenforceable and
-  -- gateway-validated like every other journal pointer; NULL until the receipt
-  -- is written, never a second copy of it.
+  -- Why the answer ended, when it ended for a reason the member did not state
+  -- in the moment (#916, E2): the purge of the subject revokes every live
+  -- answer about it through a trigger on \`core_entity\`, and 'subject-purged'
+  -- is what that trigger writes. NULL for an ordinary owner revoke, where the
+  -- receipt is the reason.
+  revoked_reason TEXT,
+  -- -> access.receipt, in the append-only audit band. A VALUE, not a key: an
+  -- audit outlives its subject (#916). NULL until the receipt is written,
+  -- never a second copy of it.
   receipt_id     TEXT,
   CHECK ((duration = 'until-date') = (expires_at IS NOT NULL)),
   CHECK (granted_by IS NOT NULL OR principal_kind IN ('harness','device')),
@@ -59,13 +87,19 @@ CREATE TABLE IF NOT EXISTS share_authority (
   CHECK (principal_kind <> 'harness'
          OR principal_id IN ('on-device','gateway','provider'))
 ) STRICT;
--- One LIVE answer per (principal x subject x verb x duration). Revoked rows are
--- history and are deliberately outside the constraint, so re-answering after a
--- revoke inserts rather than resurrecting — which is what makes the plane
--- auditable: a row is immutable except for \`revoked_at\`.
+-- One LIVE answer per (principal x subject x verb). Revoked rows are history
+-- and are deliberately outside the constraint, so re-answering after a revoke
+-- inserts rather than resurrecting — which is what makes the plane auditable:
+-- a row is immutable except for \`revoked_at\`.
+--
+-- \`duration\` LEFT THE KEY under #916 (R7 / review 6.2). With it in, the same
+-- principal could hold a 'standing' answer AND an 'until-date' answer to the
+-- same question at the same time, and every resolver had to pick one — so the
+-- constraint that exists to make "what did the member say" have ONE answer
+-- allowed two. Duration is part of the ANSWER, not of the question.
 CREATE UNIQUE INDEX IF NOT EXISTS share_authority_live_answer
   ON share_authority(principal_kind, principal_id, subject_type, subject_id,
-                     verb, duration)
+                     verb)
   WHERE revoked_at IS NULL;
 CREATE INDEX IF NOT EXISTS share_authority_subject
   ON share_authority(subject_type, subject_id) WHERE revoked_at IS NULL;
@@ -79,76 +113,38 @@ CREATE INDEX IF NOT EXISTS share_authority_granted_by
 -- config, not to the authority row — a ceiling is a property of how a subject
 -- is shipped, not of whether the member said yes). Absent row = the vault-wide
 -- default applies, exactly as a NULL \`share_grant.max_size_bytes\` did.
-CREATE TABLE IF NOT EXISTS share_delivery_config (
+CREATE TABLE share_delivery_config (
   grant_id       TEXT PRIMARY KEY
     REFERENCES share_authority(authority_id) ON DELETE CASCADE,
   max_size_bytes INTEGER CHECK (max_size_bytes IS NULL OR max_size_bytes >= 0)
 ) STRICT;
-`;
 
-// Rung six (#883): fold the legacy authority stores into the table above and
-// drop them in one pass. There is no baseline copy — a fresh file reaches this
-// shape by walking the rung once, so the copies select from empty tables.
-//
-// `defer_foreign_keys` is the in-transaction form of `foreign_keys=off`: the
-// plain pragma is a no-op inside a transaction, and every rung runs in one.
-//
-// `consent_device` DROPS A COLUMN, never rebuilds. Deferral defers VIOLATIONS,
-// not ACTIONS, and `DROP TABLE` fires every child's ON DELETE CASCADE — a
-// rebuild silently takes `blob_device_wrap_key` and `blob_device_content_key`
-// with it. Replica triggers drop first: SQLite refuses to drop a column a
-// trigger reads.
-export const SHARE_AUTHORITY_MIGRATION_DDL = `
-PRAGMA defer_foreign_keys = ON;
-
-${SHARE_AUTHORITY_DDL}
-
-INSERT INTO share_authority
-  (authority_id, principal_kind, principal_id, subject_type, subject_id, verb,
-   duration, expires_at, decision, granted_at, granted_by, revoked_at,
-   receipt_id)
-SELECT grant_id,
-       CASE audience_kind WHEN 'party' THEN 'person' ELSE 'circle' END,
-       audience_id, subject_type, subject_id, capability,
-       'standing', NULL, 'granted', granted_at, granted_by, revoked_at, NULL
-FROM share_grant;
-
-INSERT INTO share_delivery_config (grant_id, max_size_bytes)
-SELECT grant_id, max_size_bytes FROM share_grant WHERE max_size_bytes IS NOT NULL;
-
-INSERT INTO share_authority
-  (authority_id, principal_kind, principal_id, subject_type, subject_id, verb,
-   duration, expires_at, decision, granted_at, granted_by, revoked_at,
-   receipt_id)
-SELECT consent_id, 'harness', egress, 'enrich.scope', scope_ref, capability,
-       'standing', NULL, decision, decided_at, NULL, NULL, receipt_id
-FROM enrich_consent;
-
-INSERT INTO share_authority
-  (authority_id, principal_kind, principal_id, subject_type, subject_id, verb,
-   duration, expires_at, decision, granted_at, granted_by, revoked_at,
-   receipt_id)
-SELECT lower(hex(randomblob(16))), 'device', device_id, 'core.vault', '',
-       CASE trust WHEN 'full' THEN 'edit' ELSE 'view' END,
-       'standing', NULL,
-       CASE trust WHEN 'revoked' THEN 'declined' ELSE 'granted' END,
-       enrolled_at, owner_party_id, NULL, NULL
-FROM consent_device;
-
-CREATE TABLE share_fulfillment_new (${SHARE_FULFILLMENT_COLUMNS}
+-- Per-audience-vault DELIVERY state for one authority row. The FK's child
+-- column is the leftmost column of the primary key, which is the index cover
+-- schema/fk-index.test.ts requires.
+--
+-- \`delivered_at\` is the DURABLE memory of delivery, deliberately not derivable
+-- from \`state\`, which is a live freshness reading: an unreachable pass drops a
+-- \`delivered\` row to \`syncing\`. Revocation asks a different question — "did
+-- this peer ever receive the subject?" — and answering it from \`state\` settles
+-- a degraded grant \`removed\` while the audience still holds the projection
+-- (#846). Set once on first delivery, cleared only by a verified removal.
+CREATE TABLE share_fulfillment (
+  grant_id      TEXT NOT NULL
+    REFERENCES share_authority(authority_id) ON DELETE CASCADE,
+  peer_vault_id TEXT NOT NULL,
+  -- awaiting_channel means the peer vault is known and the link to it has
+  -- ended (#903). It is deliberately NOT narrowed out of this CHECK: that
+  -- state is still reachable — link, share, then unlink — and only the
+  -- retired reading of it ("waiting on an invitation to be claimed") is gone.
+  state         TEXT NOT NULL CHECK (state IN
+    ('awaiting_channel','syncing','delivered','remove_sent','removed')),
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  -- Latest note: a refusal reason, a transport error, why a removal stalled.
+  detail        TEXT,
+  -- When the subject first reached this peer. NULL = never delivered.
+  delivered_at  TEXT,
+  PRIMARY KEY (grant_id, peer_vault_id)
 ) STRICT;
-INSERT INTO share_fulfillment_new
-  (grant_id, peer_vault_id, state, updated_at, detail, delivered_at)
-SELECT grant_id, peer_vault_id, state, updated_at, detail, delivered_at
-FROM share_fulfillment;
-DROP TABLE share_fulfillment;
-ALTER TABLE share_fulfillment_new RENAME TO share_fulfillment;
-
-DROP TRIGGER IF EXISTS trg_replica_consent_device_ai;
-DROP TRIGGER IF EXISTS trg_replica_consent_device_au;
-DROP TRIGGER IF EXISTS trg_replica_consent_device_ad;
-ALTER TABLE consent_device DROP COLUMN trust;
-
-DROP TABLE share_grant;
-DROP TABLE enrich_consent;
+${touchUpdatedAt("share_fulfillment", ["grant_id", "peer_vault_id"])}
 `;

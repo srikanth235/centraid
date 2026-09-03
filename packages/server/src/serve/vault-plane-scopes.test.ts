@@ -194,7 +194,7 @@ describe("vault-plane install scopes + execution clamps", () => {
     });
     expect(read).toMatchObject({
       ok: false,
-      code: "VAULT_CONSENT",
+      code: "VAULT_ACCESS",
       error: expect.stringContaining(
         "execution manifest does not declare schedule.task"
       ),

@@ -231,9 +231,9 @@ describe("backup/recover", () => {
     })["revision_id"] as string;
     const ownerPartyId = (
       plane.db.vault
-        .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-        .get() as { owner_party_id: string }
-    ).owner_party_id;
+        .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+        .get() as { self_party_id: string }
+    ).self_party_id;
     const receiptGroupId = invoke(plane, "tally.create_group", {
       name: "Recovery receipt",
       icon: "🧾",
@@ -411,7 +411,7 @@ describe("backup/recover", () => {
     const vaultDir = path.join(layout.vaultDir, a.vaultId);
     expect(report.vaultDir).toBe(vaultDir);
     expect(existsSync(path.join(vaultDir, "vault.db"))).toBe(true);
-    expect(existsSync(path.join(vaultDir, "journal.db"))).toBe(true);
+    expect(existsSync(path.join(vaultDir, "vault.db"))).toBe(true);
     const restoredDb = new DatabaseSync(path.join(vaultDir, "vault.db"), {
       readOnly: true,
     });

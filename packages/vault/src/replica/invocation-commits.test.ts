@@ -44,7 +44,7 @@ function auditFor(invocationId: string): ReplicaInvocationAudit {
 }
 
 function recordJournalPrefix(db: VaultDb, invocationId: string): void {
-  db.journal
+  db.audit
     .prepare(
       `INSERT INTO agent_command_invocation (
          invocation_id, command_id, caller_id, grant_id, input_json, status, requested_at
@@ -185,7 +185,7 @@ describe("replica invocation commit receipt", () => {
 
       db = openVaultDb({ dir });
       expect(
-        db.journal
+        db.audit
           .prepare(
             `SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?`
           )
@@ -194,7 +194,7 @@ describe("replica invocation commit receipt", () => {
       // node:sqlite hands back null-prototype rows; spreading compares the column
       // data (which is the contract) without asserting the driver's prototype.
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             `SELECT count(*) AS n FROM agent_explanation WHERE invocation_id = ?`
           )
@@ -220,7 +220,7 @@ describe("replica invocation commit receipt", () => {
       db = openVaultDb({ dir });
       recordJournalPrefix(db, "invocation-handler-receipt");
       recordCommit(db, "invocation-handler-receipt");
-      writeReceipt(db.journal, {
+      writeReceipt(db.audit, {
         grantId: null,
         invocationId: "invocation-handler-receipt",
         action: "act test.command",
@@ -238,7 +238,7 @@ describe("replica invocation commit receipt", () => {
         readReplicaInvocationCommit(db.vault, "invocation-handler-receipt")
       ).toBeUndefined();
       expect(
-        db.journal
+        db.audit
           .prepare(
             `SELECT status FROM agent_command_invocation WHERE invocation_id = ?`
           )
@@ -284,7 +284,7 @@ describe("replica invocation commit receipt", () => {
 
       db = openVaultDb({ dir });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             `SELECT status FROM agent_command_invocation WHERE invocation_id = ?`
           )
@@ -334,7 +334,7 @@ describe("replica invocation commit receipt", () => {
 
       db = openVaultDb({ dir });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             `SELECT status FROM agent_command_invocation WHERE invocation_id = ?`
           )
@@ -369,7 +369,7 @@ describe("replica invocation commit receipt", () => {
       readReplicaInvocationCommit(db.vault, "invocation-provable")
     ).toBeUndefined();
     expect({
-      ...db.journal
+      ...db.audit
         .prepare(
           `SELECT status FROM agent_command_invocation WHERE invocation_id = ?`
         )

@@ -193,7 +193,7 @@
       "tunnel-wire-properties": 5,
       "tunnel-peer-target-differential": 9,
       "backup-format-archaeology": 3,
-      "schema-migration-corpus": 4,
+      "golden-vault-archaeology": 5,
       "hostile-peer-state-machine": 8,
       "agent-prompt-injection-red-team": 2,
       "replica-payload-hash-properties": 7,

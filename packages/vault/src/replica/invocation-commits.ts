@@ -12,7 +12,7 @@ import {
 import type { Identity } from "../gateway/types.js";
 import { nowIso } from "../ids.js";
 
-type InvocationDatabases = Pick<VaultDb, "vault" | "journal">;
+type InvocationDatabases = Pick<VaultDb, "vault" | "audit">;
 
 /** Keep each startup read/repair page small while still draining every page. */
 export const DEFAULT_REPLICA_INVOCATION_REPAIR_BATCH_SIZE = 128;
@@ -236,7 +236,7 @@ export interface FinalizedInvocationJournal {
 }
 
 /**
- * Finish (or verify) every mandatory post-commit audit row in one journal.db
+ * Finish (or verify) every mandatory post-commit audit row in one vault.db
  * transaction. Existing prefix rows from an older partial attempt are reused;
  * conflicting rows fail closed. Invocation status changes to `executed` only
  * in the same commit that makes checks/provenance/receipt/evidence/explanation
@@ -250,10 +250,10 @@ export function finalizeInvocationJournal(
   executedAt = nowIso()
 ): FinalizedInvocationJournal {
   validateAudit(audit);
-  const unit = beginSqlUnit(db.journal, "centraid_finalize_journal");
+  const unit = beginSqlUnit(db.audit, "centraid_finalize_journal");
   let changed = false;
   try {
-    const invocation = db.journal
+    const invocation = db.audit
       .prepare(
         `SELECT command_id, caller_id, grant_id, status, receipt_id
            FROM agent_command_invocation WHERE invocation_id = ?`
@@ -277,21 +277,21 @@ export function finalizeInvocationJournal(
     }
 
     changed =
-      ensurePostChecks(db.journal, invocationId, audit.postChecks) || changed;
-    changed = ensureProvenance(db.journal, invocationId, audit) || changed;
-    const receipt = ensureReceipt(db.journal, invocationId, commandId, audit);
+      ensurePostChecks(db.audit, invocationId, audit.postChecks) || changed;
+    changed = ensureProvenance(db.audit, invocationId, audit) || changed;
+    const receipt = ensureReceipt(db.audit, invocationId, commandId, audit);
     changed = receipt.changed || changed;
     changed =
-      ensureEvidence(db.journal, invocationId, audit.citations) || changed;
+      ensureEvidence(db.audit, invocationId, audit.citations) || changed;
     changed =
-      ensureExplanation(db.journal, invocationId, audit, receipt.receiptId) ||
+      ensureExplanation(db.audit, invocationId, audit, receipt.receiptId) ||
       changed;
 
     if (
       invocation.status !== "executed" ||
       invocation.receipt_id !== receipt.receiptId
     ) {
-      db.journal
+      db.audit
         .prepare(
           `UPDATE agent_command_invocation
               SET status = 'executed', executed_at = ?, receipt_id = ?
@@ -300,11 +300,11 @@ export function finalizeInvocationJournal(
         .run(executedAt, receipt.receiptId, invocationId);
       changed = true;
     }
-    assertAuditComplete(db.journal, invocationId, audit, receipt.receiptId);
-    commitSqlUnit(db.journal, unit);
+    assertAuditComplete(db.audit, invocationId, audit, receipt.receiptId);
+    commitSqlUnit(db.audit, unit);
     return { receiptId: receipt.receiptId, changed };
   } catch (error) {
-    rollbackSqlUnit(db.journal, unit);
+    rollbackSqlUnit(db.audit, unit);
     throw error;
   }
 }
@@ -447,7 +447,7 @@ export function reclaimProvenOrdinaryInvocationCommitsInTransaction(
   db: InvocationDatabases,
   limit = DEFAULT_REPLICA_INVOCATION_REPAIR_BATCH_SIZE
 ): number {
-  if (!db.vault.isTransaction || !db.journal.isTransaction) {
+  if (!db.vault.isTransaction || !db.audit.isTransaction) {
     throw new Error(
       "invocation commit reclamation requires both shared transactions"
     );
@@ -471,7 +471,7 @@ export function reclaimProvenOrdinaryInvocationCommitsInTransaction(
     )
     .all(limit) as unknown as ProvenOrdinaryCommitRow[];
   let reclaimed = 0;
-  const journalRow = db.journal.prepare(
+  const journalRow = db.audit.prepare(
     `SELECT command_id, status
        FROM agent_command_invocation
       WHERE invocation_id = ?`
@@ -546,8 +546,8 @@ export function repairReplicaInvocationCommits(
       try {
         const before = readReplicaInvocationCommit(db.vault, row.invocation_id);
         if (!before) continue;
-        // A group-commit stamp is deliberately provisional until journal.db
-        // commits. Always re-verify the journal proof, even when the stamp is
+        // A group-commit stamp is deliberately provisional until the audit
+        // band commits. Always re-verify that proof, even when the stamp is
         // present, before reclaiming the marker after a crash.
         finalizeReplicaInvocationCommit(db, row.invocation_id);
         result.finalized += 1;
@@ -736,7 +736,7 @@ function ensureProvenance(
   const rows = journal
     .prepare(
       `SELECT entity_type, entity_id, prov_activity, agent_kind, agent_id, used_json
-         FROM consent_provenance
+         FROM access_provenance
         WHERE json_extract(used_json, '$.invocation') = ?`
     )
     .all(invocationId) as unknown as Array<{
@@ -808,7 +808,7 @@ function ensureReceipt(
     .prepare(
       `SELECT receipt_id, grant_id, action, object_type, object_id,
               purpose_concept_id, decision, detail_json
-         FROM consent_receipt
+         FROM access_receipt
         WHERE invocation_id = ?
           AND object_type = 'agent.command'
           AND object_id = ?`
@@ -952,7 +952,7 @@ function assertAuditComplete(
     .get(invocationId) as { n: number };
   const provenance = journal
     .prepare(
-      `SELECT count(*) AS n FROM consent_provenance
+      `SELECT count(*) AS n FROM access_provenance
         WHERE json_extract(used_json, '$.invocation') = ?`
     )
     .get(invocationId) as { n: number };

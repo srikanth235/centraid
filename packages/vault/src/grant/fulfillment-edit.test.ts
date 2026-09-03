@@ -16,9 +16,8 @@ function addParty(db: DatabaseSync, name: string, now: string): string {
   const partyId = uuidv7();
   db.prepare(
     `INSERT INTO core_party
-       (party_id, kind, display_name, sort_name, created_at, updated_at,
-        ontology_version)
-     VALUES (?, 'person', ?, ?, ?, ?, '1.4')`
+       (party_id, kind, display_name, sort_name, created_at, updated_at)
+     VALUES (?, 'person', ?, ?, ?, ?)`
   ).run(partyId, name, name, now, now);
   return partyId;
 }
@@ -212,7 +211,24 @@ describe("grant/fulfillment-edit", () => {
     ).toBe(
       `core.add_document writes into docs.folder ${folderId}, which is shared for view only`
     );
+    // A REAL document to file (#916): a tag's (target_type, target_id) is a
+    // composite foreign key into the entity supertype.
     const documentId = uuidv7();
+    const documentContentId = uuidv7();
+    origin.vault
+      .prepare(
+        `INSERT INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, created_at)
+         VALUES (?, 'text/plain', 'data:text/plain,x', ?, 1, ?)`
+      )
+      .run(documentContentId, `sha-${documentContentId}`.padEnd(64, "0"), now);
+    origin.vault
+      .prepare(
+        `INSERT INTO core_document
+           (document_id, title, current_content_id, created_at, updated_at)
+         VALUES (?, 'Filed', ?, ?, ?)`
+      )
+      .run(documentId, documentContentId, now, now);
     origin.vault
       .prepare(
         `INSERT INTO core_tag

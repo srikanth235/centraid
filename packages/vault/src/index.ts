@@ -245,14 +245,12 @@ export {
   audienceExists,
   createShareGrant,
   declineShare,
-  listStandingShareAuthority,
   maskedPartiesForSubject,
   readShareGrant,
   readLiveShareGrant,
   readLiveShareRefusal,
   resolveGrantAudienceParties,
-  revokeAuthorityForPrincipal,
-  revokeAuthorityOverSubject,
+  grantPlacementAuthority,
   revokeShareGrant,
   revokeShareRefusal,
   listShareGrantsForAudience,
@@ -274,7 +272,6 @@ export {
   type ShareGrantRecord,
   type DeclineShareInput,
   type DeclineShareResult,
-  type RevokedAuthorityRow,
 } from "./grant/grant-store.js";
 // The closed declaration of what the plane may be asked (#883).
 export {
@@ -284,7 +281,6 @@ export {
   enforcementLocus,
   isRegisteredAuthority,
   registeredVerbs,
-  subjectRowExists,
   subjectWokenBy,
   wakeTypesForSubjectTypes,
   type AuthorityPrincipalKind,
@@ -464,7 +460,6 @@ export { jitterDelayMs } from "./timer-jitter.js";
 export {
   ONTOLOGY_VERSION,
   VAULT_MIGRATIONS,
-  JOURNAL_MIGRATIONS,
   migrate,
   VaultSchemaAheadError,
 } from "./schema/migrate.js";
@@ -474,13 +469,23 @@ export {
   entityDeclaration,
   assertRegistryLabels,
   assertVaultRegistryLabels,
+  LOCAL_TABLES,
   VAULT_ENTITIES,
-  JOURNAL_ENTITIES,
   VAULT_TABLES,
-  JOURNAL_TABLES,
   type EntityRef,
+  type EntityLifecycle,
   type VaultEntityDeclaration,
 } from "./schema/tables.js";
+// The two BANDS in `vault.db` beside the life data (#916): evidence and the
+// conversation ledger. Names only — a host excludes them by band from the
+// portable export, the replica and the support bundle, and the retention
+// windows say how long each keeps rows in the live file.
+export {
+  AUDIT_BAND_TABLES,
+  AUDIT_APPEND_ONLY_TABLES,
+  RETENTION_WINDOWS,
+} from "./schema/audit.js";
+export { LEDGER_BAND_TABLES } from "./schema/ledger.js";
 // The Vault Atlas mapping: table → kind → pack (#441).
 export {
   ONTOLOGY_PACKS,
@@ -576,11 +581,15 @@ export { REPLICA_SCHEMA_EPOCH } from "./schema/replica.js";
 // The engine-computed cascade every purge runs, exported so the
 // declared-writes gate unions it rather than have a manifest restate it.
 export {
+  ENTITY_POINTERS,
+  ENTITY_REF_EXCLUSIONS,
+  type EntityPointer,
+  type EntityRefPair,
+} from "./schema/entity-refs.js";
+export {
   PARTY_POINTER_REGISTRY,
-  POLY_REF_REGISTRY,
   type PartyPointer,
-  type PolyRefEntry,
-} from "./schema/poly-refs.js";
+} from "./schema/party-pointers.js";
 export {
   DEFAULT_REPLICA_MAX_VALUE_BYTES,
   readReplicaRow,
@@ -633,10 +642,10 @@ export {
 export { createGateway, Gateway } from "./gateway/gateway.js";
 export { GatewayError, DEFAULT_PURPOSE } from "./gateway/types.js";
 export {
-  evaluateConsent,
-  type ConsentAllow,
-  type ConsentDecision,
-} from "./gateway/consent.js";
+  evaluateAccess,
+  type AccessAllow,
+  type AccessDecision,
+} from "./gateway/access.js";
 export {
   compileFilters,
   compileReplicaHistoricalFilters,
@@ -801,8 +810,6 @@ export { scopeCovers, type ScopeExtent } from "./scope-extent.js";
 export { registerScheduleCommands } from "./commands/schedule.js";
 export { registerTaskCommands } from "./commands/tasks.js";
 export { registerSocialCommands } from "./commands/social.js";
-export { registerFinanceCommands } from "./commands/finance.js";
-export { registerHealthCommands } from "./commands/health.js";
 export { registerKnowledgeCommands } from "./commands/knowledge.js";
 export {
   registerAttachmentCommands,
@@ -829,7 +836,6 @@ export { registerEnrichCommands } from "./commands/enrich.js";
 export { registerOutboxCommands } from "./commands/outbox.js";
 // The ONE writer of the share half of the authority plane (#883).
 export { registerShareCommands, SHARE_COMMANDS } from "./commands/share.js";
-export { registerJudgmentCommands } from "./commands/judgment.js";
 // The Browse write trio: journalled row CRUD (#441).
 export {
   registerAtlasCommands,
@@ -927,9 +933,18 @@ export {
   encodeVector,
   decodeVector,
   cosine,
+  rankEmbeddingsWithVec,
   scanEmbeddings,
+  type RankEmbeddingsOptions,
   type SemanticHit,
 } from "./enrich/similarity.js";
+export {
+  PHOTO_EMBEDDING_TARGET_TYPE,
+  countPhotoEmbeddings,
+  rankLivePhotoEmbeddings,
+  type PhotoEmbeddingHit,
+  type PhotoRankOptions,
+} from "./enrich/photo-search.js";
 export { ENRICH_PUBLISHERS, tagNotation } from "./ingest/enrich-publishers.js";
 export { VISION_SCHEME_URI, DOCTYPE_SCHEME_URI } from "./schema/enrich.js";
 
@@ -994,6 +1009,7 @@ export {
 export {
   importVaultExport,
   canonicalJson,
+  type ImportVaultExportOptions,
   type VaultExport,
 } from "./gateway/portability.js";
 export {
@@ -1001,16 +1017,29 @@ export {
   importPortableVault,
   verifyPortableVault,
   type PortableExport,
+  type PortableExportOptions,
+  type PortableImportOptions,
   type PortableManifest,
   type PortableManifestFile,
 } from "./gateway/portable-export.js";
+
+// The portable bundle's password-wrapped seal-key custody kit (#630).
+export {
+  PORTABLE_CUSTODY_KIT_PATH,
+  custodyKitSealKey,
+  parsePortableCustodyKit,
+  wrapPortableCustodyKit,
+} from "./gateway/portable-custody.js";
+export type {
+  PortableCustodyKit,
+  WrappedPortableCustodyKit,
+} from "./gateway/portable-custody.js";
 export {
   exportIcs,
   exportVcards,
   exportTransactionsCsv,
   exportMarkdownDirectory,
 } from "./gateway/portable-adapters.js";
-export type { ViewDefinition, ViewJoin, ViewResult } from "./gateway/views.js";
 export {
   backupVault,
   checkpointVault,
@@ -1118,7 +1147,7 @@ export {
 // Bounded vault-side retention and its size ladder (#659 L1/L3/L4).
 // `runVaultMaintenance` is the single hookpoint a host sweep calls;
 // `decideVaultMaintenance` is the pure policy in front of it, shaped like
-// journal-limit.ts's ladder for `journal.db`.
+// journal-limit.ts's ladder for the ledger band.
 export {
   ENTITY_REVISION_PRUNE_CAP,
   pruneExpiredEntityRevisions,

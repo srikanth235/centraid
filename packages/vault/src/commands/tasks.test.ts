@@ -54,9 +54,9 @@ describe("tasks", () => {
       completed_at: null,
       owner_party_id: boot.ownerPartyId,
     });
-    const prov = db.journal
+    const prov = db.audit
       .prepare(
-        `SELECT count(*) AS n FROM consent_provenance
+        `SELECT count(*) AS n FROM access_provenance
         WHERE entity_type='schedule.task' AND entity_id=? AND prov_activity='command.schedule.add_task'`
       )
       .get(taskId) as { n: number };

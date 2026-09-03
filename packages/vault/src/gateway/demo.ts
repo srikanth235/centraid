@@ -3,8 +3,6 @@
 // the purge; receipts stay — history is never rewritten.
 
 import type { VaultDb } from "../db.js";
-import { nowIso } from "../ids.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { SEED_PURGE_ACTIVITY } from "../schema/seed.js";
 import { resolveEntity } from "../schema/tables.js";
 import { writeProvenance, writeReceipt } from "./evidence.js";
@@ -46,7 +44,7 @@ interface SeedRow {
 export function demoStatus(db: VaultDb): { appId: string; rows: number }[] {
   const rows = db.vault
     .prepare(
-      `SELECT app_id, count(*) AS n FROM consent_seed_row GROUP BY app_id ORDER BY app_id`
+      `SELECT app_id, count(*) AS n FROM access_seed_row GROUP BY app_id ORDER BY app_id`
     )
     .all() as { app_id: string; n: number }[];
   return rows.map((r) => ({ appId: r.app_id, rows: r.n }));
@@ -62,16 +60,15 @@ export function purgeDemoRows(
   owner: Identity,
   appId?: string
 ): DemoPurgeResult {
-  const now = nowIso();
   const rows = db.vault
     .prepare(
-      `SELECT seed_id, app_id, target_type, target_id FROM consent_seed_row
+      `SELECT seed_id, app_id, target_type, target_id FROM access_seed_row
         ${appId ? "WHERE app_id = ?" : ""} ORDER BY seed_id DESC`
     )
     .all(...(appId ? [appId] : [])) as unknown as SeedRow[];
 
   const dropSeed = db.vault.prepare(
-    "DELETE FROM consent_seed_row WHERE seed_id = ?"
+    "DELETE FROM access_seed_row WHERE seed_id = ?"
   );
 
   let purged = 0;
@@ -84,7 +81,7 @@ export function purgeDemoRows(
     const blocked: SeedRow[] = [];
     for (const row of remaining) {
       const ref = resolveEntity(row.target_type, db.vault);
-      if (!ref || ref.file !== "vault") {
+      if (!ref) {
         // Unresolvable (purged ext band): retire the registry entry.
         dropSeed.run(row.seed_id);
         missing += 1;
@@ -106,7 +103,6 @@ export function purgeDemoRows(
         else {
           purged += 1;
           purgedIds.push(row);
-          cleanupPolyRefs(db.vault, now, row.target_type, row.target_id);
         }
         dropSeed.run(row.seed_id);
         progressed = true;
@@ -123,18 +119,18 @@ export function purgeDemoRows(
 
   for (const row of purgedIds) {
     writeProvenance(
-      db.journal,
+      db.audit,
       owner,
       row.target_type,
       row.target_id,
       SEED_PURGE_ACTIVITY
     );
   }
-  const receiptId = writeReceipt(db.journal, {
+  const receiptId = writeReceipt(db.audit, {
     grantId: null,
     invocationId: null,
-    action: "act consent.demo_purge",
-    objectType: "consent.seed_row",
+    action: "act access.demo_purge",
+    objectType: "access.seed_row",
     objectId: appId ?? null,
     purpose: null,
     decision: "allow",

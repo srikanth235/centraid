@@ -75,6 +75,15 @@ const LIVE_ITEM = {
   password_set_at: "2026-01-01T00:00:00.000Z",
 };
 
+/*
+ * A revision's snapshot carries the item's SEALED cells exactly as the row held
+ * them — ciphertext under the item's own additional data, not the `«sealed»`
+ * placeholder a read shows. These stand in for it, so an assertion can say the
+ * payload never carries one.
+ */
+const OLD_CIPHERTEXT = "ct:v1:GdE9-old-password-ciphertext";
+const OLDER_CIPHERTEXT = "ct:v1:Qq70-older-password-ciphertext";
+
 describe("items: the window total and the alias read-back (#872)", () => {
   it("reports the vault's live count beside the window, so the foot line can say '300 of 312'", async () => {
     const { default: items } = await import("./queries/items.ts");
@@ -207,14 +216,47 @@ describe("item: the sidecars and the degradation rule (#872)", () => {
           created_at: "2026-08-01T00:00:00.000Z",
         },
       ],
-      "locker.item_history": [
+      // THE REAL SHAPE OF `core_entity_revision` (#916, D2): a pre-mutation
+      // SNAPSHOT of the item row, sealed cells and all, newest first. There is
+      // no `changed_json` and no separate `password` cell — what changed is
+      // what the state that superseded the snapshot says differently, and the
+      // snapshot's `password` is the item's own ciphertext, which nothing here
+      // may forward.
+      "core.entity_revision": [
+        // Newest first, as the handler's `orderBy` asks for. `rev-2` is the
+        // state before the password was rotated: its `password_set_at` is
+        // older than the item's, which is how a rotation is named without
+        // anything looking at the secret.
+        {
+          revision_id: "rev-2",
+          entity_type: "locker.item",
+          entity_id: "item-1",
+          operation: "update",
+          snapshot_json: JSON.stringify({
+            ...LIVE_ITEM,
+            password: OLD_CIPHERTEXT,
+            password_set_at: "2025-06-01T00:00:00.000Z",
+          }),
+          recorded_at: "2026-01-01T00:00:00.000Z",
+          undo_until: "2026-01-01T00:00:10.000Z",
+          undone_at: null,
+        },
+        // And `rev-1` is a rename that left the password alone — same
+        // `password_set_at` as the state that superseded it.
         {
           revision_id: "rev-1",
-          operation: "edit",
-          title: "Email",
-          password: "«sealed»",
-          changed_json: '{"password_rotated":true}',
-          recorded_at: "2026-08-02T00:00:00.000Z",
+          entity_type: "locker.item",
+          entity_id: "item-1",
+          operation: "update",
+          snapshot_json: JSON.stringify({
+            ...LIVE_ITEM,
+            username: "old@example.test",
+            password: OLDER_CIPHERTEXT,
+            password_set_at: "2025-06-01T00:00:00.000Z",
+          }),
+          recorded_at: "2025-09-01T00:00:00.000Z",
+          undo_until: "2025-09-01T00:00:10.000Z",
+          undone_at: null,
         },
       ],
     });
@@ -271,22 +313,68 @@ describe("item: the sidecars and the degradation rule (#872)", () => {
     expect(result.item.passkey.private_key).toBeUndefined();
   });
 
-  it("says a revision retains a previous password without returning it", async () => {
+  /*
+   * HISTORY IS REVISIONS (#916, D2). `locker_item_history` is gone and the
+   * gateway REFUSES `locker.item_history` as an unknown entity, so the read
+   * itself is the assertion: the mock answers `[]` for any entity it was not
+   * given, and a handler that went back to the dead table would hand back an
+   * empty pane AND fail the recorded-call assertions below.
+   */
+  it("reads the item's revisions, narrowed by entity type and id, newest first", async () => {
+    const { default: item } = await import("./queries/item.ts");
+    const ctx = detailCtx();
+    await item({ input: { item_id: "item-1" }, ctx });
+    const entities = ctx.calls.map((call) => call.entity);
+    expect(entities).toContain("core.entity_revision");
+    expect(entities).not.toContain("locker.item_history");
+    const read = ctx.calls.find(
+      (call) => call.entity === "core.entity_revision"
+    );
+    expect(read.where).toStrictEqual([
+      { column: "entity_type", op: "eq", value: "locker.item" },
+      { column: "entity_id", op: "eq", value: "item-1" },
+    ]);
+    expect(read.orderBy).toStrictEqual({ column: "recorded_at", dir: "desc" });
+    expect(read.limit).toBe(50);
+  });
+
+  it("names what changed, and never what it changed from", async () => {
     const { default: item } = await import("./queries/item.ts");
     const result = await item({
       input: { item_id: "item-1" },
       ctx: detailCtx(),
     });
     expect(result.item.history).toStrictEqual([
+      // The rotation, read off `password_set_at` — a PLAIN column the vault
+      // re-stamps only when a password is set.
+      {
+        revision_id: "rev-2",
+        operation: "update",
+        changed: { password: true },
+        recorded_at: "2026-01-01T00:00:00.000Z",
+      },
+      // The rename, which left the password alone.
       {
         revision_id: "rev-1",
-        operation: "edit",
-        title: "Email",
-        changed: { password_rotated: true },
-        recorded_at: "2026-08-02T00:00:00.000Z",
-        has_previous_password: true,
+        operation: "update",
+        changed: { username: true },
+        recorded_at: "2025-09-01T00:00:00.000Z",
       },
     ]);
+  });
+
+  it("opens the snapshot and never forwards it", async () => {
+    const { default: item } = await import("./queries/item.ts");
+    const result = await item({
+      input: { item_id: "item-1" },
+      ctx: detailCtx(),
+    });
+    // The snapshot's sealed cells are the item's own ciphertext, not the read
+    // placeholder. Neither the ciphertext nor the raw snapshot may ride out.
+    const payload = JSON.stringify(result);
+    expect(payload).not.toContain(OLD_CIPHERTEXT);
+    expect(payload).not.toContain(OLDER_CIPHERTEXT);
+    expect(payload).not.toContain("snapshot");
   });
 
   it("degrades a type this build does not know to a note that keeps its fields", async () => {
@@ -373,10 +461,9 @@ describe("item: a sealed sidecar row spends the item's permit (#873)", () => {
     expect(result.item.fields[0]).toMatchObject({ value: null, sealed: true });
   });
 
-  it("reveals a revision's previous password, and the passkey's key material", async () => {
+  it("reveals the passkey's key material", async () => {
     const { default: item } = await import("./queries/item.ts");
     const cases = [
-      ["locker.item_history", "rev-1", "password", "0ld-passw0rd"],
       ["locker.item_passkey", "item-1", "private_key", "MHcCAQEE-key"],
     ] as const;
     const runs = cases.map(async ([entity, entityId, column, value]) => {
@@ -408,6 +495,16 @@ describe("item: a sealed sidecar row spends the item's permit (#873)", () => {
     const settled = await Promise.all(
       [
         { entity: "core.party", entityId: "p-1", column: "secret" },
+        // THE DEAD ENTITY IS ONE OF THEM (#916, D2). `locker.item_history` was
+        // a sealed sidecar until the table was dropped; the gateway refuses it
+        // now, so the handler must not carry a caller's word for it into a
+        // reveal. Naming it here is what fails if `SIDECAR_COLUMNS` ever grows
+        // the row back.
+        {
+          entity: "locker.item_history",
+          entityId: "rev-1",
+          column: "password",
+        },
         {
           entity: "locker.item_field",
           entityId: "field-1",
@@ -444,9 +541,9 @@ describe("item: a sealed sidecar row spends the item's permit (#873)", () => {
         item_id: "item-1",
         ...auth,
         sidecar: {
-          entity: "locker.item_history",
-          entityId: "rev-1",
-          column: "password",
+          entity: "locker.item_field",
+          entityId: "field-1",
+          column: "value_sealed",
         },
       },
       ctx,
@@ -492,7 +589,7 @@ describe("access: the history of every auth, reveal and fill (#872)", () => {
 
   it("names the three kinds, newest first, and carries a fill's page origin", async () => {
     const { default: access } = await import("./queries/access.ts");
-    const ctx = ctxOf({ "consent.receipt": receipts });
+    const ctx = ctxOf({ "access.receipt": receipts });
     const result = await access({ input: {}, ctx });
     expect(result.entries.map((entry) => entry.kind)).toStrictEqual([
       "fill",
@@ -506,7 +603,7 @@ describe("access: the history of every auth, reveal and fill (#872)", () => {
 
   it("lists a refusal like an allowance — the boundary receipts both", async () => {
     const { default: access } = await import("./queries/access.ts");
-    const ctx = ctxOf({ "consent.receipt": receipts });
+    const ctx = ctxOf({ "access.receipt": receipts });
     const result = await access({ input: {}, ctx });
     expect(result.entries[2]).toMatchObject({
       kind: "auth",
@@ -517,10 +614,10 @@ describe("access: the history of every auth, reveal and fill (#872)", () => {
 
   it("narrows the read to Locker's own object types, and to one item when asked", async () => {
     const { default: access } = await import("./queries/access.ts");
-    const ctx = ctxOf({ "consent.receipt": receipts });
+    const ctx = ctxOf({ "access.receipt": receipts });
     await access({ input: { item_id: "item-1" }, ctx });
     expect(
-      ctx.calls.find((call) => call.entity === "consent.receipt")?.where
+      ctx.calls.find((call) => call.entity === "access.receipt")?.where
     ).toStrictEqual([
       {
         column: "object_type",
@@ -533,10 +630,7 @@ describe("access: the history of every auth, reveal and fill (#872)", () => {
 
   it("is behind the lock: a locked session gets no history", async () => {
     const { default: access } = await import("./queries/access.ts");
-    const ctx = ctxOf(
-      { "consent.receipt": receipts },
-      { authenticated: false }
-    );
+    const ctx = ctxOf({ "access.receipt": receipts }, { authenticated: false });
     const result = await access({ input: {}, ctx });
     expect(result).toMatchObject({ entries: [], authRequired: true });
     expect(ctx.calls).toStrictEqual([]);

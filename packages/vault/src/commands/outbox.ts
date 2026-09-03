@@ -12,10 +12,10 @@ import { partyForReach } from "./contact-reach.js";
 /** The vault owner's party id. */
 function ownerPartyId(ctx: HandlerCtx): string {
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (!owner?.owner_party_id) throw new Error("vault has no owner");
-  return owner.owner_party_id;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!owner?.self_party_id) throw new Error("vault has no owner");
+  return owner.self_party_id;
 }
 
 /** Reach lives on channels and identity keys in the register; one call asks
@@ -122,7 +122,7 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
   }
   if (input.subject_type && input.subject_id) {
     const ref = resolveEntity(input.subject_type, ctx.db);
-    if (!ref || ref.file !== "vault")
+    if (!ref)
       throw new Error(
         `subject_type names unknown entity "${input.subject_type}"`
       );

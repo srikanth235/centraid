@@ -82,9 +82,9 @@ describe("agent-owner-cap suite", () => {
     decision: string;
     detail: Record<string, unknown>;
   } {
-    const row = vault.db.journal
+    const row = vault.db.audit
       .prepare(
-        `SELECT decision, detail_json FROM consent_receipt
+        `SELECT decision, detail_json FROM access_receipt
         WHERE action = 'act schedule.add_task' ORDER BY receipt_id DESC LIMIT 1`
       )
       .get() as { decision: string; detail_json: string | null };

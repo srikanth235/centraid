@@ -71,9 +71,9 @@ describe("replica-intent-attribution suite", () => {
 
   /** The one receipt the invocation left, decoded. */
   function receiptDetail(vault: VaultPlane): Record<string, unknown> {
-    const row = vault.db.journal
+    const row = vault.db.audit
       .prepare(
-        `SELECT detail_json FROM consent_receipt
+        `SELECT detail_json FROM access_receipt
         WHERE action = 'act schedule.add_task' AND decision = 'allow'
         ORDER BY receipt_id DESC LIMIT 1`
       )

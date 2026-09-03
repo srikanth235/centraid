@@ -1,15 +1,23 @@
 // governance: allow-repo-hygiene file-size-limit (#408) the WAL capture loop is one correctness argument — detectors, capture, rollover, generation lifecycle and crash-ordering rules all lean on each other's invariants; splitting them would scatter the proof across files that only ever change together
 /*
  * In-process WAL segment shipper (#408): each tick copies the committed
- * byte-delta of `vault.db-wal` / `journal.db-wal` into local segment files,
- * which the gateway's uploader seals and drains (`@centraid/backup` wal-format
- * owns the object format).
+ * byte-delta of `vault.db-wal` into local segment files, which the gateway's
+ * uploader seals and drains (`@centraid/backup` wal-format owns the object
+ * format).
+ *
+ * ONE FILE (#916): the audit and ledger bands live in `vault.db`, so there is
+ * one stream, one generation and one base — and no cross-database instant to
+ * coordinate. What used to be the pair's whole argument (cut the journal
+ * first, re-base both together, seal a pair marker) is now a property of the
+ * file: a receipt and the row it names commit in ONE transaction, so no cut
+ * can separate them.
  *
  * Two invariants carry the correctness argument. I1 — the gateway's
- * synchronous command pipeline is vault.db's only writer (journal.db also has
- * out-of-process ledger writers, tolerated below). I2 — nobody checkpoints but
- * this shipper, always TRUNCATE, so the WAL is append-only between our
- * checkpoints and offsets are never reused within a group.
+ * synchronous command pipeline is the only IN-PROCESS writer (app-engine
+ * workers and the key-admin CLI write out of process; tolerated below). I2 —
+ * nobody checkpoints but this shipper, always TRUNCATE, so the WAL is
+ * append-only between our checkpoints and offsets are never reused within a
+ * group.
  *
  * I2 is VERIFIED, NOT ENFORCED (#411 action 1): every capture re-checks WAL
  * salts, the offset chain and main-file identity, and ANY foreign checkpoint
@@ -19,9 +27,9 @@
  * that no gateway write interleaves is event-loop atomicity over a synchronous
  * `node:sqlite`, so one `await` destroys it with every test still green.
  *
- * journal.db's subprocess writers make two defenses load-bearing: segments end
- * on COMMIT boundaries (`lastCommitBoundary`), and every TRUNCATE is bracketed
- * by a `PRAGMA data_version` reading (`settleWal` + `truncate`) — see those
+ * The subprocess writers make two defenses load-bearing: segments end on
+ * COMMIT boundaries (`lastCommitBoundary`), and every TRUNCATE is bracketed by
+ * a `PRAGMA data_version` reading (`settleWal` + `truncate`) — see those
  * functions for why.
  *
  * Crash ordering (G7): segment fsync happens BEFORE the state-file offset
@@ -58,22 +66,19 @@ import {
   newWalGeneration,
   parseWalCloserKey,
   parseWalSegmentKey,
-  WAL_CAPTURE_ORDER,
   WAL_DB_FILES,
-  WAL_DB_NAMES,
   walGroupCloserKey,
   WAL_HEADER_BYTES,
   scanWalPrefix,
-  walPairMarkerKey,
   walSalts,
   walSegmentKey,
+  walTickMarkerKey,
 } from "@centraid/backup";
 import type {
-  WalDbName,
   WalGroupCloser,
-  WalPairMarker,
-  WalPairPosition,
   WalSegmentAddress,
+  WalStreamPosition,
+  WalTickMarker,
 } from "@centraid/backup";
 
 import type { VaultDb } from "./db.js";
@@ -136,19 +141,17 @@ interface DbStreamState {
   /** Set by `close()` after a final ship+truncate; cleared on next start. */
   closedClean: boolean;
   /**
-   * Captured files of THIS stream were deleted without upload (backup
-   * unconfigured). The stream has holes, so the moment a backend appears it
-   * MUST break to a fresh generation BEFORE its stale base is registered — a
-   * restore of a holed stream silently lands on the old base. Persisted: the
-   * transition can span restarts.
+   * Captured files were deleted without upload (backup unconfigured). The
+   * stream has holes, so the moment a backend appears it MUST break to a fresh
+   * generation BEFORE its stale base is registered — a restore of a holed
+   * stream silently lands on the old base. Persisted: the transition can span
+   * restarts.
    */
   discarded?: boolean;
   /**
-   * A coordinated break that could not complete (the sibling's checkpoint came
-   * back busy after this one had truncated). The stream is FROZEN until the
-   * break lands: nothing captures, rolls, or ships. Persisted — otherwise the
-   * next boot resumes a stream whose sibling is mid-break, and the pair of
-   * bases that eventually registers would be two different instants.
+   * A break that could not complete (the checkpoint came back busy). The stream
+   * is FROZEN until it lands: nothing captures, rolls, or ships. Persisted —
+   * otherwise the next boot resumes a stream whose base was never re-cloned.
    */
   breakPending?: string;
 }
@@ -172,18 +175,18 @@ interface ShipperState {
   version: 1;
   /** Monotonicized tick clock — survives restarts and wall-clock rewinds. */
   lastTickMs: number;
-  dbs: Partial<Record<WalDbName, DbStreamState>>;
+  /** The one stream. Absent before the first-run base is minted. */
+  stream?: DbStreamState;
   /**
    * Foreign checkpoints detected and healed across ALL generations (#411
-   * action 1; see `FOREIGN_CHECKPOINT_REASONS`). TOP-LEVEL, not per-stream: a
-   * break REPLACES both stream records (`mintBase`), so a per-stream counter
-   * would reset on the very event it counts. Optional so a pre-#411
-   * `state.json` defaults to 0 on load; `undefined` reads as 0 everywhere.
+   * action 1; see `FOREIGN_CHECKPOINT_REASONS`). TOP-LEVEL, not inside the
+   * stream record: a break REPLACES that record (`mintBase`), so a counter
+   * living in it would reset on the very event it counts.
    */
   foreignCheckpointCount?: number;
-  /** The most recent foreign checkpoint: when (tick ms), which database, and
-   *  the break reason — drives the gateway's degraded window. */
-  lastForeignCheckpoint?: { atMs: number; db: WalDbName; reason: string };
+  /** The most recent foreign checkpoint: when (tick ms) and the break reason —
+   *  drives the gateway's degraded window. */
+  lastForeignCheckpoint?: { atMs: number; reason: string };
 }
 
 /**
@@ -197,10 +200,9 @@ interface ShipperState {
  * `backup-enabled-after-discard` are OUR OWN re-bases;
  * `checkpoint-raced-writer` is a foreign WRITER inside OUR checkpoint's lock
  * window, not a foreign checkpointer; `wal-exceeds-safe-capture-window` is an
- * oversized transaction we chose to re-base past;
+ * oversized transaction we chose to re-base past; and
  * `wal-checksum-invalid-before-captured-offset` is corruption of ambiguous
- * cause; and `coordinated:*` is the SIBLING re-basing in lockstep, which would
- * double-count one event.
+ * cause.
  */
 const FOREIGN_CHECKPOINT_REASONS: ReadonlySet<string> = new Set([
   "main-db-file-changed-without-our-checkpoint",
@@ -214,7 +216,7 @@ function isNonNegativeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
-function isStreamState(value: unknown, db: WalDbName): value is DbStreamState {
+function isStreamState(value: unknown): value is DbStreamState {
   if (typeof value !== "object" || value === null) return false;
   const stream = value as Record<string, unknown>;
   if (
@@ -224,13 +226,11 @@ function isStreamState(value: unknown, db: WalDbName): value is DbStreamState {
     return false;
   }
   const generation = stream["generation"];
-  if (stream["baseName"] !== `bases/${db}/${generation}.db`) return false;
+  if (stream["baseName"] !== `bases/${generation}.db`) return false;
   if (
     stream["retiredBaseName"] !== undefined &&
     (typeof stream["retiredBaseName"] !== "string" ||
-      !new RegExp(`^bases/${db}/[0-9a-f]{32}\\.db$`, "u").test(
-        stream["retiredBaseName"]
-      ))
+      !/^bases\/[0-9a-f]{32}\.db$/u.test(stream["retiredBaseName"]))
   ) {
     return false;
   }
@@ -291,7 +291,8 @@ function isShipperState(value: unknown): value is ShipperState {
   const state = value as Record<string, unknown>;
   if (state["version"] !== 1 || !isNonNegativeInteger(state["lastTickMs"]))
     return false;
-  if (typeof state["dbs"] !== "object" || state["dbs"] === null) return false;
+  if (state["stream"] !== undefined && !isStreamState(state["stream"]))
+    return false;
   // Optional fields, absent on pre-#411 state files: tolerate absence but
   // reject a malformed shape.
   if (
@@ -304,18 +305,10 @@ function isShipperState(value: unknown): value is ShipperState {
     const lfc = state["lastForeignCheckpoint"];
     if (typeof lfc !== "object" || lfc === null) return false;
     const rec = lfc as Record<string, unknown>;
-    if (
-      !isNonNegativeInteger(rec["atMs"]) ||
-      !WAL_DB_NAMES.includes(rec["db"] as WalDbName) ||
-      typeof rec["reason"] !== "string"
-    ) {
+    if (!isNonNegativeInteger(rec["atMs"]) || typeof rec["reason"] !== "string")
       return false;
-    }
   }
-  const dbs = state["dbs"] as Record<string, unknown>;
-  return WAL_DB_NAMES.every(
-    (db) => dbs[db] === undefined || isStreamState(dbs[db], db)
-  );
+  return true;
 }
 
 export interface WalTickReport {
@@ -323,14 +316,14 @@ export interface WalTickReport {
   /** Object keys of segments captured this tick (local, durable). */
   shipped: string[];
   /** Groups closed this tick (rollover checkpoints). */
-  rolled: { db: WalDbName; group: number; endOffset: number }[];
+  rolled: { group: number; endOffset: number }[];
   /** Generation breaks with their reasons (fresh base minted). */
-  breaks: { db: WalDbName; reason: string }[];
-  /** Pair-marker object keys written this tick (at most one). */
+  breaks: { reason: string }[];
+  /** Tick-marker object keys written this tick (at most one). */
   markers: string[];
-  /** Databases whose checkpoint returned busy (retried next tick). */
-  busy: WalDbName[];
-  errors: { db: WalDbName; message: string }[];
+  /** The checkpoint returned busy and is retried next tick. */
+  busy: boolean;
+  errors: { message: string }[];
 }
 
 export interface UploadableWalFile {
@@ -341,12 +334,11 @@ export interface UploadableWalFile {
   kind: "segment" | "closer" | "marker";
   addr?: WalSegmentAddress;
   closer?: WalGroupCloser;
-  marker?: WalPairMarker;
+  marker?: WalTickMarker;
   bytes: number;
 }
 
 export interface PendingBase {
-  db: WalDbName;
   generation: string;
   file: string;
   sha256: string;
@@ -527,7 +519,7 @@ export class WalShipper {
     } catch {
       /* fresh or unreadable — start over via generation init */
     }
-    return { version: 1, lastTickMs: 0, dbs: {} };
+    return { version: 1, lastTickMs: 0 };
   }
 
   /** Durable state write — G7 step 2 (always AFTER the segment fsync). */
@@ -565,24 +557,21 @@ export class WalShipper {
       rmSync(path.join(this.dir, "bases"), { recursive: true, force: true });
       return;
     }
-    for (const db of WAL_DB_NAMES) {
-      const stream = this.state.dbs[db];
-      if (!stream) continue;
-      const groupDir = this.groupDir(db, stream.generation, stream.group);
-      if (!existsSync(groupDir)) continue;
-      for (const name of readdirSync(groupDir)) {
-        const addr = this.parseSegmentFileName(
-          db,
-          stream.generation,
-          stream.group,
-          name
+    const stream = this.state.stream;
+    if (!stream) return;
+    const groupDir = this.groupDir(stream.generation, stream.group);
+    if (!existsSync(groupDir)) return;
+    for (const name of readdirSync(groupDir)) {
+      const addr = this.parseSegmentFileName(
+        stream.generation,
+        stream.group,
+        name
+      );
+      if (addr && addr.endOffset > stream.offset) {
+        rmSync(path.join(groupDir, name), { force: true });
+        this.log.warn(
+          `wal-ship: dropped unacknowledged segment ${name} (crash residue)`
         );
-        if (addr && addr.endOffset > stream.offset) {
-          rmSync(path.join(groupDir, name), { force: true });
-          this.log.warn(
-            `wal-ship: dropped unacknowledged segment ${db}/${name} (crash residue)`
-          );
-        }
       }
     }
   }
@@ -593,29 +582,28 @@ export class WalShipper {
    * change can never desync the builder from these parsers.
    */
   private parseSegmentFileName(
-    db: WalDbName,
     generation: string,
     group: number,
     name: string
   ): WalSegmentAddress | null {
     if (!name.endsWith(".seg")) return null;
     return parseWalSegmentKey(
-      `wal/${db}/${generation}/${String(group).padStart(8, "0")}/${name.slice(0, -4)}`
+      `wal/vault/${generation}/${String(group).padStart(8, "0")}/${name.slice(0, -4)}`
     );
   }
 
   // ──────────────────────────────────────────────────────────────────── paths
 
-  private walPath(db: WalDbName): string {
-    return path.join(this.db.dir, `${WAL_DB_FILES[db]}-wal`);
+  private walPath(): string {
+    return path.join(this.db.dir, `${WAL_DB_FILES.vault}-wal`);
   }
 
-  private dbPath(db: WalDbName): string {
-    return path.join(this.db.dir, WAL_DB_FILES[db]);
+  private dbPath(): string {
+    return path.join(this.db.dir, WAL_DB_FILES.vault);
   }
 
-  private dbHeaderSha256(db: WalDbName): string {
-    const fd = openSync(this.dbPath(db), "r");
+  private dbHeaderSha256(): string {
+    const fd = openSync(this.dbPath(), "r");
     try {
       const header = Buffer.alloc(100);
       const bytes = readSync(fd, header, 0, header.length, 0);
@@ -627,15 +615,10 @@ export class WalShipper {
     }
   }
 
-  private handle(db: WalDbName): DatabaseSync {
-    return db === "vault" ? this.db.vault : this.db.journal;
-  }
-
-  private groupDir(db: WalDbName, generation: string, group: number): string {
+  private groupDir(generation: string, group: number): string {
     return path.join(
       this.dir,
       "segments",
-      db,
       generation,
       String(group).padStart(8, "0")
     );
@@ -645,16 +628,9 @@ export class WalShipper {
     return path.join(this.dir, baseName);
   }
 
-  /** `markers/{vaultGeneration}-{journalGeneration}/` — one dir per BASE PAIR. */
-  private markerDir(
-    vaultGeneration: string,
-    journalGeneration: string
-  ): string {
-    return path.join(
-      this.dir,
-      "markers",
-      `${vaultGeneration}-${journalGeneration}`
-    );
+  /** `markers/{generation}/` — one dir per base. */
+  private markerDir(generation: string): string {
+    return path.join(this.dir, "markers", generation);
   }
 
   // ────────────────────────────────────────────────────────────────── ticking
@@ -674,116 +650,97 @@ export class WalShipper {
       rolled: [],
       breaks: [],
       markers: [],
-      busy: [],
+      busy: false,
       errors: [],
     };
   }
 
   /**
-   * One capture pass, four phases over BOTH databases: (1) decide which
-   * databases break, BEFORE a byte ships under a condemned generation; (2)
-   * capture, journal FIRST, for the rest, with their cadence/rollover checks
-   * (which may REQUEST a break); (3) ONE coordinated break if either asked —
-   * they re-base together or not at all; (4) the end-of-tick pair marker.
+   * One capture pass, four phases: (1) decide whether the stream must break,
+   * BEFORE a byte ships under a condemned generation; (2) capture, with the
+   * cadence/rollover checks (which may REQUEST a break); (3) the break if one
+   * was asked for; (4) the end-of-tick marker.
    *
    * Synchronous end to end, and it must stay that way: the guarantee that no
-   * gateway write lands between the journal's cut and the vault's is
-   * event-loop atomicity over a synchronous `node:sqlite` (I1), not a lock. One
-   * `await` anywhere destroys it, and no test would fail.
+   * gateway write lands inside a cut is event-loop atomicity over a synchronous
+   * `node:sqlite` (I1), not a lock. One `await` anywhere destroys it, and no
+   * test would fail.
    */
   tick(): WalTickReport {
     if (this.closed) throw new Error("WalShipper is closed");
     const report = this.newReport();
-    const reasons = this.resolveBreakReasons();
+    let reason = this.resolveBreakReason();
 
-    for (const db of WAL_CAPTURE_ORDER) {
-      if (reasons[db] !== undefined) continue;
-      const stream = this.state.dbs[db]!;
+    if (reason === undefined) {
+      const stream = this.state.stream!;
       try {
-        const captured = this.capture(db, stream, report);
-        if (captured.kind === "error") continue;
-        if (captured.kind === "break") {
-          reasons[db] = captured.reason;
-          continue;
-        }
-        // A generation roll IS the base snapshot. A REQUEST, not an inline
-        // break — the pair re-bases in one tick or not at all.
-        if (report.tickMs - stream.baseCreatedAtMs >= this.baseIntervalMs()) {
-          reasons[db] = "base-cadence";
-          continue;
-        }
-        // Group rollover bounds the WAL, segment sizes and restart recovery.
-        // Local-only, never network-coupled (G4); one that catches a racing
-        // writer requests a break of its own.
-        if (stream.lastSize > this.threshold()) {
-          this.rollover(db, stream, reasons, report);
+        const captured = this.capture(stream, report);
+        if (captured.kind === "break") reason = captured.reason;
+        else if (captured.kind === "ok") {
+          // A generation roll IS the base snapshot.
+          if (report.tickMs - stream.baseCreatedAtMs >= this.baseIntervalMs()) {
+            reason = "base-cadence";
+          } else if (stream.lastSize > this.threshold()) {
+            // Group rollover bounds the WAL, segment sizes and restart
+            // recovery. Local-only, never network-coupled (G4); one that
+            // catches a racing writer requests a break of its own.
+            reason = this.rollover(stream, report);
+          }
         }
       } catch (error) {
         report.errors.push({
-          db,
           message: error instanceof Error ? error.message : String(error),
         });
         this.log.warn(
-          `wal-ship: ${db} tick failed: ${report.errors.at(-1)!.message}`
+          `wal-ship: tick failed: ${report.errors.at(-1)!.message}`
         );
       }
     }
 
-    this.coordinatedBreak(reasons, report);
+    if (reason !== undefined) this.breakGeneration(reason, report);
     this.enforceLocalBudget(report);
-    this.writePairMarker(report);
+    this.writeTickMarker(report);
     this.persistState();
     return report;
   }
 
   /**
-   * Phase 1: which databases must break, and why. Nothing ships, nothing
+   * Phase 1: must the stream break, and why. Nothing ships, nothing
    * checkpoints — a stream whose detector fired must not ship another byte
    * under its current generation, and one with a deferred break must not ship
    * at all until that break lands.
    */
-  private resolveBreakReasons(): Partial<Record<WalDbName, string>> {
-    const reasons: Partial<Record<WalDbName, string>> = {};
-    for (const db of WAL_CAPTURE_ORDER) {
-      const stream = this.state.dbs[db];
-      if (!stream) {
-        reasons[db] = "first-run";
-        continue;
-      }
-      if (stream.breakPending !== undefined) {
-        reasons[db] = stream.breakPending;
-        continue;
-      }
-      if (stream.closedClean) {
-        // Clean shutdown left the WAL empty, so whatever exists now is a fresh
-        // WAL for the already-advanced group.
-        stream.closedClean = false;
-        stream.salt1 = null;
-        stream.salt2 = null;
-        stream.lastSize = 0;
-      }
-      // G5 detectors — evaluated BEFORE anything ships under this generation.
-      const reason = this.detectForeign(db, stream);
-      if (reason) reasons[db] = reason;
+  private resolveBreakReason(): string | undefined {
+    const stream = this.state.stream;
+    if (!stream) return "first-run";
+    if (stream.breakPending !== undefined) return stream.breakPending;
+    if (stream.closedClean) {
+      // Clean shutdown left the WAL empty, so whatever exists now is a fresh
+      // WAL for the already-advanced group.
+      stream.closedClean = false;
+      stream.salt1 = null;
+      stream.salt2 = null;
+      stream.lastSize = 0;
     }
-    return reasons;
+    // G5 detectors — evaluated BEFORE anything ships under this generation.
+    return this.detectForeign(stream) ?? undefined;
   }
 
   /** Returns a break reason, or null when the stream is intact. */
-  private detectForeign(db: WalDbName, stream: DbStreamState): string | null {
+  private detectForeign(stream: DbStreamState): string | null {
     // Between OUR checkpoints every write goes to the WAL, so the main file
     // must be byte-stable. A change means someone else checkpointed frames we
     // may never have observed — unrecoverable for this stream, catchable no
     // other way.
-    const dbStat = statSync(this.dbPath(db));
+    const dbStat = statSync(this.dbPath());
     if (
       dbStat.size !== stream.dbSize ||
       dbStat.mtimeMs !== stream.dbMtimeMs ||
-      this.dbHeaderSha256(db) !== stream.dbHeaderSha256
+      this.dbHeaderSha256() !== stream.dbHeaderSha256
     ) {
       return "main-db-file-changed-without-our-checkpoint";
     }
-    const walPath = this.walPath(db);
+    const walPath = this.walPath();
     if (!existsSync(walPath)) {
       return stream.offset > 0 || stream.lastSize > 0
         ? "wal-file-vanished"
@@ -792,7 +749,7 @@ export class WalShipper {
     const size = statSync(walPath).size;
     if (size < stream.lastSize) return "wal-shrank-without-our-checkpoint";
     if (size >= WAL_HEADER_BYTES && stream.salt1 !== null) {
-      const header = this.readWalRange(db, 0, WAL_HEADER_BYTES);
+      const header = this.readWalRange(0, WAL_HEADER_BYTES);
       const salts = walSalts(header);
       if (salts.salt1 !== stream.salt1 || salts.salt2 !== stream.salt2) {
         return "wal-salts-changed-without-our-checkpoint";
@@ -801,8 +758,8 @@ export class WalShipper {
     return null;
   }
 
-  private readWalRange(db: WalDbName, start: number, end: number): Uint8Array {
-    const fd = openSync(this.walPath(db), "r");
+  private readWalRange(start: number, end: number): Uint8Array {
+    const fd = openSync(this.walPath(), "r");
     try {
       const buf = Buffer.alloc(end - start);
       let at = 0;
@@ -820,7 +777,7 @@ export class WalShipper {
   /**
    * A micro read-lock over the byte copy (#411 action 2) — belt-and-suspenders
    * to `capture`'s after-the-fact detection, NEVER a replacement for it. A
-   * foreign checkpointer (journal.db is multi-process: app-engine workers, the
+   * foreign checkpointer (the vault is multi-process: app-engine workers, the
    * key-admin CLI) could RESTART or TRUNCATE the WAL mid-copy; an open WAL read
    * snapshot holds a read mark no checkpointer in any process can reset past,
    * so a foreign TRUNCATE returns busy and leaves bytes and salts untouched.
@@ -836,10 +793,10 @@ export class WalShipper {
    * Acquisition failure is not fatal: return null and copy WITHOUT the pin —
    * post-copy detection is the correctness mechanism.
    */
-  private acquireWalReadLock(db: WalDbName): { release: () => void } | null {
+  private acquireWalReadLock(): { release: () => void } | null {
     let conn: DatabaseSync | undefined;
     try {
-      conn = new DatabaseSync(this.dbPath(db), { readOnly: true });
+      conn = new DatabaseSync(this.dbPath(), { readOnly: true });
       // `BEGIN` is DEFERRED and takes no read mark until a read runs; the
       // SELECT is what materializes the snapshot and grabs the WAL read mark.
       conn.exec("BEGIN");
@@ -868,7 +825,7 @@ export class WalShipper {
         /* nothing was acquired */
       }
       this.log.warn(
-        `wal-ship: ${db} capture read-lock unavailable ` +
+        `wal-ship: capture read-lock unavailable ` +
           `(${error instanceof Error ? error.message : String(error)}) — ` +
           `relying on post-copy race detection`
       );
@@ -881,12 +838,8 @@ export class WalShipper {
    * local segment. G7 ordering: segment bytes fsync, then state fsync, so after
    * this returns `offset` only ever names durably-captured bytes.
    */
-  private capture(
-    db: WalDbName,
-    stream: DbStreamState,
-    report: WalTickReport
-  ): CaptureResult {
-    const walPath = this.walPath(db);
+  private capture(stream: DbStreamState, report: WalTickReport): CaptureResult {
+    const walPath = this.walPath();
     if (!existsSync(walPath)) return { kind: "ok" };
     const fd = openSync(walPath, "r");
     let bytes: Buffer;
@@ -906,7 +859,7 @@ export class WalShipper {
       // read. A reset in the sliver before this is still caught by the
       // re-stat/header compare below; the pin closes the far larger window of
       // the multi-syscall copy.
-      readLock = this.acquireWalReadLock(db);
+      readLock = this.acquireWalReadLock();
       bytes = Buffer.alloc(head);
       let at = 0;
       while (at < head) {
@@ -962,7 +915,7 @@ export class WalShipper {
     if (boundary <= stream.offset) return { kind: "ok" };
 
     const addr: WalSegmentAddress = {
-      db,
+      db: "vault",
       generation: stream.generation,
       group: stream.group,
       startOffset: stream.offset,
@@ -973,7 +926,7 @@ export class WalShipper {
     // codec (wal-format) owns widths and field order, so the builder and the
     // parsers in listUploadable/startupHygiene can never drift.
     const file = path.join(
-      this.groupDir(db, stream.generation, stream.group),
+      this.groupDir(stream.generation, stream.group),
       `${path.posix.basename(walSegmentKey(addr))}.seg`
     );
     try {
@@ -982,7 +935,6 @@ export class WalShipper {
       // G4: the segment did not become durable, so the offset must not move
       // and NOTHING may checkpoint — the failure surfaces as backpressure.
       report.errors.push({
-        db,
         message: `segment write failed (${error instanceof Error ? error.message : String(error)}) — WAL retained`,
       });
       return { kind: "error" };
@@ -1003,8 +955,8 @@ export class WalShipper {
    * gateway writes through), and bumped by another connection or process — the
    * only writers we cannot see any other way.
    */
-  private dataVersion(db: WalDbName): number {
-    const row = this.handle(db).prepare("PRAGMA data_version").get() as {
+  private dataVersion(): number {
+    const row = this.db.vault.prepare("PRAGMA data_version").get() as {
       data_version: number;
     };
     return row.data_version;
@@ -1031,20 +983,19 @@ export class WalShipper {
    * there is nothing left to ship and truncating destroys nothing.
    */
   private settleWal(
-    db: WalDbName,
     stream: DbStreamState,
     report: WalTickReport
   ): SettleResult {
-    const walPath = this.walPath(db);
+    const walPath = this.walPath();
     for (let pass = 0; pass < TRUNCATE_SETTLE_PASSES; pass++) {
-      const dvBefore = this.dataVersion(db); // BEFORE the stat — see above.
-      const foreign = this.detectForeign(db, stream);
+      const dvBefore = this.dataVersion(); // BEFORE the stat — see above.
+      const foreign = this.detectForeign(stream);
       if (foreign) return { kind: "break", reason: foreign };
       const size = existsSync(walPath) ? statSync(walPath).size : 0;
       if (size <= stream.offset)
         return { kind: "ready", dataVersion: dvBefore };
       const offsetBefore = stream.offset;
-      const captured = this.capture(db, stream, report);
+      const captured = this.capture(stream, report);
       if (captured.kind === "error") return { kind: "retry" };
       if (captured.kind === "break") return captured;
       if (stream.offset === offsetBefore)
@@ -1054,7 +1005,7 @@ export class WalShipper {
     // untruncated is merely wasteful; truncating without a settled stat could
     // fold away committed bytes we never shipped, which is unrecoverable.
     this.log.warn(
-      `wal-ship: ${db} WAL will not settle for a checkpoint — retrying next tick`
+      "wal-ship: WAL will not settle for a checkpoint — retrying next tick"
     );
     return { kind: "retry" };
   }
@@ -1075,10 +1026,11 @@ export class WalShipper {
    * 0 and overwrites bytes IN PLACE without the file even growing, destroying
    * the append-only offset chain every segment address is built on.
    */
-  private truncate(db: WalDbName, dvBefore: number): TruncateResult | null {
-    const handle = this.handle(db);
-    const preflightReason = this.state.dbs[db]
-      ? (this.detectForeign(db, this.state.dbs[db]!) ?? undefined)
+  private truncate(dvBefore: number): TruncateResult | null {
+    const handle = this.db.vault;
+    const stream = this.state.stream;
+    const preflightReason = stream
+      ? (this.detectForeign(stream) ?? undefined)
       : undefined;
     handle.exec(`PRAGMA busy_timeout = ${CHECKPOINT_BUSY_MS}`);
     try {
@@ -1086,12 +1038,12 @@ export class WalShipper {
         busy: number;
       };
       if (row.busy !== 0) return null;
-      const size = existsSync(this.walPath(db))
-        ? statSync(this.walPath(db)).size
+      const size = existsSync(this.walPath())
+        ? statSync(this.walPath()).size
         : 0;
       if (size !== 0) return null; // not fully truncated — treat as busy
       return {
-        raced: this.dataVersion(db) !== dvBefore,
+        raced: this.dataVersion() !== dvBefore,
         ...(preflightReason === undefined
           ? {}
           : { untrustedReason: preflightReason }),
@@ -1102,11 +1054,11 @@ export class WalShipper {
   }
 
   /** Refresh the main-db identity right after a checkpoint we performed. */
-  private recordDbStat(db: WalDbName, stream: DbStreamState): void {
-    const st = statSync(this.dbPath(db));
+  private recordDbStat(stream: DbStreamState): void {
+    const st = statSync(this.dbPath());
     stream.dbSize = st.size;
     stream.dbMtimeMs = st.mtimeMs;
-    stream.dbHeaderSha256 = this.dbHeaderSha256(db);
+    stream.dbHeaderSha256 = this.dbHeaderSha256();
   }
 
   /**
@@ -1116,43 +1068,39 @@ export class WalShipper {
    * committed bytes SILENTLY.
    */
   private rollover(
-    db: WalDbName,
     stream: DbStreamState,
-    reasons: Partial<Record<WalDbName, string>>,
     report: WalTickReport
-  ): void {
-    const captured = this.capture(db, stream, report);
-    if (captured.kind === "error") return;
-    if (captured.kind === "break") {
-      reasons[db] = captured.reason;
-      return;
-    }
-    const settled = this.settleWal(db, stream, report);
-    if (settled.kind === "break") {
-      reasons[db] = settled.reason;
-      return;
-    }
+  ): string | undefined {
+    const captured = this.capture(stream, report);
+    if (captured.kind === "error") return undefined;
+    if (captured.kind === "break") return captured.reason;
+    const settled = this.settleWal(stream, report);
+    if (settled.kind === "break") return settled.reason;
     if (settled.kind === "retry") {
       // Either the capture failed or the WAL would not settle. Both mean: do
       // not checkpoint, and do not treat this stream as cleanly cut.
-      report.busy.push(db);
-      return;
+      report.busy = true;
+      return undefined;
     }
-    const result = this.truncate(db, settled.dataVersion);
+    const result = this.truncate(settled.dataVersion);
     if (result === null) {
-      report.busy.push(db);
-      return;
+      report.busy = true;
+      return undefined;
     }
-    this.finishTruncate(db, stream, result, reasons, report, { trusted: true });
+    const reason = this.finishTruncate(stream, result, report, {
+      trusted: true,
+    });
     // Narrow the crash window between "WAL truncated" and "state knows"; a
     // crash inside it is still detected on restart (shrunken WAL ⇒ break).
     this.persistState();
+    return reason;
   }
 
   /**
-   * The post-TRUNCATE half of a rollover, extracted because the aborted
-   * coordinated break reuses it: once a WAL is truncated its bookkeeping MUST
-   * catch up, or the next tick reads a fresh WAL from a stale offset.
+   * The post-TRUNCATE half of a rollover, extracted because a deferred break
+   * reuses it: once a WAL is truncated its bookkeeping MUST catch up, or the
+   * next tick reads a fresh WAL from a stale offset. Returns the break reason
+   * the truncate itself established, if any.
    *
    * `result.raced` (from `truncate`'s `data_version` bracket) means another
    * connection committed between the reading that proved the WAL held nothing
@@ -1166,23 +1114,20 @@ export class WalShipper {
    * one over folded-away frames would be a forgery. It is frozen instead.
    */
   private finishTruncate(
-    db: WalDbName,
     stream: DbStreamState,
     result: TruncateResult,
-    reasons: Partial<Record<WalDbName, string>>,
     report: WalTickReport,
     opts: { trusted: boolean }
-  ): void {
+  ): string | undefined {
     const raced = result.raced;
-    if (result.untrustedReason !== undefined)
-      reasons[db] = result.untrustedReason;
+    let reason = result.untrustedReason;
     if (raced) {
       this.log.warn(
-        `wal-ship: ${db} checkpoint raced a foreign writer (data_version moved across the ` +
-          `TRUNCATE) — its committed frames may have been folded into the main database ` +
-          `unshipped; breaking generation`
+        "wal-ship: checkpoint raced a foreign writer (data_version moved across the " +
+          "TRUNCATE) — its committed frames may have been folded into the main database " +
+          "unshipped; breaking generation"
       );
-      reasons[db] = "checkpoint-raced-writer";
+      reason = "checkpoint-raced-writer";
     }
     if (
       opts.trusted &&
@@ -1194,19 +1139,19 @@ export class WalShipper {
       // through this marker, so a group counter that advanced without one would
       // silently wall off everything after it.
       const closerKey = walGroupCloserKey({
-        db,
+        db: "vault",
         generation: stream.generation,
         group: stream.group,
         endOffset: stream.offset,
       });
       writeFileDurable(
         path.join(
-          this.groupDir(db, stream.generation, stream.group),
+          this.groupDir(stream.generation, stream.group),
           `${path.posix.basename(closerKey)}.mrk`
         ),
         new Uint8Array(0)
       );
-      report.rolled.push({ db, group: stream.group, endOffset: stream.offset });
+      report.rolled.push({ group: stream.group, endOffset: stream.offset });
       stream.group += 1;
       stream.offset = 0;
     }
@@ -1215,144 +1160,93 @@ export class WalShipper {
     stream.lastSize = 0;
     stream.salt1 = null;
     stream.salt2 = null;
-    this.recordDbStat(db, stream);
+    this.recordDbStat(stream);
+    return reason;
   }
 
   /**
-   * Re-base BOTH databases in ONE tick — the most order-sensitive function in
-   * the feature.
+   * Re-base: TRUNCATE, then clone the WAL-quiet main file as a fresh
+   * generation's base.
    *
-   * When EITHER database needs a fresh generation, BOTH get one: two bases from
-   * two instants have no coordinated restore point, and a journal base minted
-   * after the vault's contains receipts for rows living only in the vault's
-   * SEGMENTS. The base pair must itself be one instant.
+   * The order is load-bearing. A base's effective instant is its TRUNCATE, not
+   * its `copyFileSync`: everything committed before the checkpoint is folded
+   * into the main file the clone reads, and everything after lands in the fresh
+   * generation's WAL and ships as segments. So `baseTickMs` names a real
+   * instant of the database, and no committed byte can fall between the two.
    *
-   * The order, and why each half is load-bearing:
+   * A busy checkpoint FREEZES the stream (`breakPending`) rather than cloning:
+   * a clone taken while the old WAL still holds unshipped committed frames
+   * would anchor a base that no segment chain continues.
    *
-   * 1. Journal's TRUNCATE first. A base's effective instant is its TRUNCATE,
-   *    not its `copyFileSync`. With journal cut at t1 and vault at t2 > t1, no
-   *    vault row can commit in [t1, t2) at all (synchronous tick, and the
-   *    command pipeline is vault.db's only writer — I1), so base(vault) ==
-   *    vault@t1, and since receipts commit only after their vault transaction,
-   *    a dangling receipt is not constructible. Cloning the journal first while
-   *    truncating the vault first looks right and is ordered WRONG.
-   * 2. BOTH truncates before EITHER clone — not for the ordering proof but for
-   *    the BUSY ABORT: `truncate()` returns null on a busy handle and a clone
-   *    cannot be undone, so discovering the vault busy after cloning the
-   *    journal would strand the uncoordinated pair this exists to forbid.
-   * 3. The generation receipts LAST, after both clones: `writeReceipt` commits
-   *    to journal.db, and one landing between the truncates would be a journal
-   *    write the vault's base could not account for.
+   * The break's receipt goes LAST, after the clone: it is a vault write, and
+   * one landing between the truncate and the clone would be a write the base
+   * could not account for.
    *
-   * Every step is SYNCHRONOUS. One `await` and the "no vault commit can
-   * interleave" argument evaporates with every test still green.
+   * Every step is SYNCHRONOUS. One `await` and the "no commit can interleave"
+   * argument evaporates with every test still green.
    */
-  private coordinatedBreak(
-    reasons: Partial<Record<WalDbName, string>>,
-    report: WalTickReport
-  ): void {
-    if (WAL_CAPTURE_ORDER.every((db) => reasons[db] === undefined)) return;
-    const trigger = WAL_CAPTURE_ORDER.find((db) => reasons[db] !== undefined)!;
-    for (const db of WAL_CAPTURE_ORDER)
-      reasons[db] ??= `coordinated:${reasons[trigger]!}`;
-
-    const truncated: Partial<Record<WalDbName, TruncateResult>> = {};
-    for (const db of WAL_CAPTURE_ORDER) {
-      // Read `data_version` here rather than in `settleWal`: a breaking stream
-      // may be CONDEMNED, so there is no settling to do. The bracket still
-      // covers the checkpoint's lock window, which the ABORT path needs —
-      // `abortBreak` may finish a trusted stream as an ordinary rollover and
-      // must not write a closer over frames a racer got folded away.
-      const result = this.truncate(db, this.dataVersion(db));
-      if (result === null) {
-        report.busy.push(db);
-        this.abortBreak(db, reasons, truncated, report);
-        return;
-      }
-      truncated[db] = result;
+  private breakGeneration(reason: string, report: WalTickReport): void {
+    // Read `data_version` here rather than in `settleWal`: a breaking stream
+    // may be CONDEMNED, so there is no settling to do. The bracket still covers
+    // the checkpoint's lock window, which the DEFER path needs — it may finish
+    // a trusted stream as an ordinary rollover and must not write a closer over
+    // frames a racer got folded away.
+    const result = this.truncate(this.dataVersion());
+    if (result === null) {
+      report.busy = true;
+      this.deferBreak(reason);
+      return;
     }
-    const olds = {
-      vault: this.state.dbs.vault,
-      journal: this.state.dbs.journal,
-    };
-    for (const db of WAL_CAPTURE_ORDER) this.mintBase(db, reasons[db]!, report);
-    // Tally the foreign checkpoints THIS break healed (#411 action 1): one per
-    // database that INDEPENDENTLY established a foreign reason, since the
-    // coordinated sibling carries `coordinated:*` and is excluded. Success path
-    // only — a deferred break counts once, when its retry lands — and BEFORE
-    // `persistState`, so the counter is durable.
-    for (const db of WAL_CAPTURE_ORDER) {
-      const reason = reasons[db]!;
-      if (!FOREIGN_CHECKPOINT_REASONS.has(reason)) continue;
+    const old = this.state.stream;
+    this.mintBase(reason, report);
+    // Tally the foreign checkpoints THIS break healed (#411 action 1). Success
+    // path only — a deferred break counts once, when its retry lands — and
+    // BEFORE `persistState`, so the counter is durable.
+    if (FOREIGN_CHECKPOINT_REASONS.has(reason)) {
       this.state.foreignCheckpointCount =
         (this.state.foreignCheckpointCount ?? 0) + 1;
-      this.state.lastForeignCheckpoint = { atMs: report.tickMs, db, reason };
+      this.state.lastForeignCheckpoint = { atMs: report.tickMs, reason };
     }
-    if (
-      olds.vault &&
-      olds.journal &&
-      olds.vault.basePending &&
-      olds.journal.basePending
-    ) {
-      // A pair still at its pending base is not registered ⇒ not restorable
-      // ⇒ its pair markers are dead weight, exactly like its segments.
-      this.dropLocalMarkers(olds.vault.generation, olds.journal.generation);
+    if (old?.basePending) {
+      // A base still pending is not registered ⇒ not restorable ⇒ its markers
+      // are dead weight, exactly like its segments.
+      this.dropLocalMarkers(old.generation);
     }
     this.persistState();
-    for (const db of WAL_CAPTURE_ORDER) this.emitBreakReceipt(db, reasons[db]!);
+    this.emitBreakReceipt(reason);
   }
 
   /**
-   * `truncate()` came back busy after its predecessor in WAL_CAPTURE_ORDER had
-   * already truncated. Nothing has been CLONED (which is why both truncates
-   * precede both clones), so no uncoordinated base pair can escape — but the
-   * truncated stream must be tidied and BOTH are FROZEN (`breakPending`) until
-   * the break lands next tick.
+   * `truncate()` came back busy. Nothing has been CLONED (which is why the
+   * truncate precedes the clone), so no base can escape anchored to a stream
+   * that kept running — but the stream is FROZEN (`breakPending`) until the
+   * break lands next tick.
    */
-  private abortBreak(
-    busy: WalDbName,
-    reasons: Partial<Record<WalDbName, string>>,
-    truncated: Partial<Record<WalDbName, TruncateResult>>,
-    report: WalTickReport
-  ): void {
-    for (const db of WAL_CAPTURE_ORDER) {
-      const result = truncated[db];
-      const stream = this.state.dbs[db];
-      if (result === undefined || !stream) continue;
-      // A partial pair break can never authenticate a group end: the sibling
-      // did not cut, so a closer here would certify a one-sided instant.
-      this.finishTruncate(db, stream, result, reasons, report, {
-        trusted: false,
-      });
-    }
-    // AFTER finishTruncate — it may have upgraded a reason to
-    // `checkpoint-raced-writer`, and that is the reason the retry must carry.
-    for (const db of WAL_CAPTURE_ORDER) {
-      const stream = this.state.dbs[db];
-      if (stream) stream.breakPending = reasons[db]!;
-    }
+  private deferBreak(reason: string): void {
+    const stream = this.state.stream;
+    if (stream) stream.breakPending = reason;
     this.log.warn(
-      `wal-ship: coordinated generation break DEFERRED — ${busy}'s checkpoint is busy ` +
-        `(reason: ${reasons[busy]}); both streams are frozen until the retry lands`
+      `wal-ship: generation break DEFERRED — the checkpoint is busy ` +
+        `(reason: ${reason}); the stream is frozen until the retry lands`
     );
     this.persistState();
   }
 
   /**
-   * Clone one database's WAL-quiet main file as a fresh generation's base
-   * (reflink where supported; the main file is immutable until our next
-   * checkpoint, so even a slow copy reads a stable file), hash it, and reset
-   * the stream. `baseCreatedAtMs` is the TICK, identical for both databases —
-   * that equality IS the coordination the manifest carries as `baseTickMs`.
-   * The caller has already TRUNCATED both; synchronous on purpose.
+   * Clone the WAL-quiet main file as a fresh generation's base (reflink where
+   * supported; the main file is immutable until our next checkpoint, so even a
+   * slow copy reads a stable file), hash it, and reset the stream.
+   * `baseCreatedAtMs` is the TICK — the instant the manifest carries as
+   * `baseTickMs`, and the one every replayed segment layers on. The caller has
+   * already TRUNCATED; synchronous on purpose.
    */
-  private mintBase(db: WalDbName, reason: string, report: WalTickReport): void {
-    const old = this.state.dbs[db];
+  private mintBase(reason: string, report: WalTickReport): void {
+    const old = this.state.stream;
     const generation = newWalGeneration(this.random);
-    const baseName = path.join("bases", db, `${generation}.db`);
+    const baseName = path.join("bases", `${generation}.db`);
     const baseAbs = this.basePath(baseName);
     mkdirSync(path.dirname(baseAbs), { recursive: true });
-    const reflinked = cloneDbFile(this.dbPath(db), baseAbs);
+    const reflinked = cloneDbFile(this.dbPath(), baseAbs);
     if (!reflinked && !this.warnedPlainClone) {
       this.warnedPlainClone = true;
       this.log.warn(
@@ -1368,8 +1262,8 @@ export class WalShipper {
     }
     fsyncDirBestEffort(path.dirname(baseAbs));
     const sha256 = sha256File(baseAbs);
-    const dbStat = statSync(this.dbPath(db));
-    this.state.dbs[db] = {
+    const dbStat = statSync(this.dbPath());
+    this.state.stream = {
       generation,
       group: 0,
       offset: 0,
@@ -1379,7 +1273,7 @@ export class WalShipper {
       pageSize: old?.pageSize ?? null,
       dbSize: dbStat.size,
       dbMtimeMs: dbStat.mtimeMs,
-      dbHeaderSha256: this.dbHeaderSha256(db),
+      dbHeaderSha256: this.dbHeaderSha256(),
       baseName,
       ...(old ? { retiredBaseName: old.baseName } : {}),
       baseCreatedAtMs: report.tickMs,
@@ -1387,15 +1281,13 @@ export class WalShipper {
       basePending: true,
       closedClean: false,
     };
-    report.breaks.push({ db, reason });
-    this.log.info(
-      `wal-ship: ${db} generation break (${reason}) → ${generation}`
-    );
+    report.breaks.push({ reason });
+    this.log.info(`wal-ship: generation break (${reason}) → ${generation}`);
     if (old) {
       if (old.basePending) {
         // Never uploaded ⇒ the old generation was never restorable; its
         // local segments are dead weight.
-        this.dropLocalGeneration(db, old.generation);
+        this.dropLocalGeneration(old.generation);
       }
       // The grandparent's base retires now; `old`'s clone stays one break
       // longer (see retiredBaseName — an in-flight snapshot may be reading it).
@@ -1405,20 +1297,19 @@ export class WalShipper {
     }
   }
 
-  /** The break's consent receipt — a journal.db write, so: after BOTH clones. */
-  private emitBreakReceipt(db: WalDbName, reason: string): void {
-    const stream = this.state.dbs[db]!;
+  /** The break's receipt — a vault write, so: after the clone. */
+  private emitBreakReceipt(reason: string): void {
+    const stream = this.state.stream!;
     try {
-      writeReceipt(this.db.journal, {
+      writeReceipt(this.db.audit, {
         grantId: null,
         invocationId: null,
-        action: "act consent.backup_wal_generation",
+        action: "act access.backup_wal_generation",
         objectType: "core.vault",
         objectId: null,
         purpose: null,
         decision: "allow",
         detail: {
-          db,
           reason,
           generation: stream.generation,
           baseSha256: stream.baseSha256,
@@ -1432,91 +1323,71 @@ export class WalShipper {
   }
 
   /**
-   * The end-of-tick pair marker (FORMAT.md § WAL segments): what BOTH databases
-   * had shipped when the tick ended.
+   * The end-of-tick marker (FORMAT.md § WAL segments): where the stream stood
+   * when the tick ended.
    *
-   * Written LAST — after captures, rollovers AND the coordinated break —
-   * because it must describe where the tick ENDED; a marker pairing the
-   * journal's post-tick position with the vault's pre-tick one makes every
-   * later restore walk back a tick.
+   * Written LAST — after captures, rollovers AND the break — because it must
+   * describe where the tick ENDED; a marker naming a pre-rollover position
+   * makes every later restore walk back a tick.
    *
-   * Exactly ONE marker per (vaultGeneration, journalGeneration, tick): the
-   * nonce derives from that triple, so two different payloads under it would
-   * reuse a (key, nonce) pair — GCM's one fatal sin. The local path IS that
-   * triple, so a tick re-run after a crash overwrites in place.
+   * Exactly ONE marker per (generation, tick): the nonce derives from that
+   * pair, so two different payloads under it would reuse a (key, nonce) pair —
+   * GCM's one fatal sin. The local path IS that pair, so a tick re-run after a
+   * crash overwrites in place.
    *
    * Two ticks need no marker: one where nothing moved, and one ending in a
-   * BREAK, which leaves both databases at (0, 0) of fresh generations — that IS
-   * their base pair. The cost of the second is one tick of PITR depth on a
-   * generation that retires anyway, paid to keep once-per-key airtight.
+   * BREAK, which leaves the stream at (0, 0) of a fresh generation — that IS
+   * its base. The cost of the second is one tick of PITR depth on a generation
+   * that retires anyway, paid to keep once-per-key airtight.
    */
-  private writePairMarker(report: WalTickReport): void {
-    // A marker is a proof about BOTH cuts. Any per-db error, busy checkpoint,
-    // or generation break means this tick did not establish such a proof.
-    if (
-      report.errors.length > 0 ||
-      report.busy.length > 0 ||
-      report.breaks.length > 0
-    )
+  private writeTickMarker(report: WalTickReport): void {
+    // A marker is a proof about a cut. An error, a busy checkpoint or a
+    // generation break means this tick did not establish one.
+    if (report.errors.length > 0 || report.busy || report.breaks.length > 0)
       return;
     if (report.shipped.length === 0 && report.rolled.length === 0) return;
-    const vault = this.state.dbs.vault;
-    const journal = this.state.dbs.journal;
-    if (!vault || !journal) return;
-    const position = (s: DbStreamState): WalPairPosition => ({
-      group: s.group,
-      endOffset: s.offset,
-    });
-    const marker: WalPairMarker = {
-      vaultGeneration: vault.generation,
-      journalGeneration: journal.generation,
-      tickMs: report.tickMs,
-      vault: position(vault),
-      journal: position(journal),
+    const stream = this.state.stream;
+    if (!stream) return;
+    const position: WalStreamPosition = {
+      group: stream.group,
+      endOffset: stream.offset,
     };
-    const atFloor = (p: WalPairPosition): boolean =>
-      p.group === 0 && p.endOffset === 0;
-    if (atFloor(marker.vault) && atFloor(marker.journal)) return;
-    const key = walPairMarkerKey(marker);
+    // The floor IS the base; a marker for it would say nothing.
+    if (position.group === 0 && position.endOffset === 0) return;
+    const marker: WalTickMarker = {
+      generation: stream.generation,
+      tickMs: report.tickMs,
+      position,
+    };
+    const key = walTickMarkerKey(marker);
     writeFileDurable(
       path.join(
-        this.markerDir(marker.vaultGeneration, marker.journalGeneration),
+        this.markerDir(marker.generation),
         `${path.posix.basename(key)}.tick`
       ),
       new TextEncoder().encode(
-        JSON.stringify({
-          v: 1,
-          tickMs: marker.tickMs,
-          vault: marker.vault,
-          journal: marker.journal,
-        })
+        JSON.stringify({ v: 1, tickMs: marker.tickMs, position })
       )
     );
     report.markers.push(key);
   }
 
   /** Delete one generation's local segment tree, keeping the byte counter exact. */
-  private dropLocalGeneration(db: WalDbName, generation: string): void {
-    const dir = path.join(this.dir, "segments", db, generation);
+  private dropLocalGeneration(generation: string): void {
+    const dir = path.join(this.dir, "segments", generation);
     this.localSegmentBytes -= this.walkSegmentBytes(dir);
     if (this.localSegmentBytes < 0) this.localSegmentBytes = 0;
     rmSync(dir, { recursive: true, force: true });
   }
 
-  /** Delete one BASE PAIR's local markers (markers are pair-scoped, not per-db). */
-  private dropLocalMarkers(
-    vaultGeneration: string,
-    journalGeneration: string
-  ): void {
-    rmSync(this.markerDir(vaultGeneration, journalGeneration), {
-      recursive: true,
-      force: true,
-    });
+  /** Delete one generation's local markers. */
+  private dropLocalMarkers(generation: string): void {
+    rmSync(this.markerDir(generation), { recursive: true, force: true });
   }
 
   /**
    * Local disk budget (design Q4): over budget, trade PITR depth for disk —
-   * break both generations and DROP the superseded ones' local segments,
+   * break the generation and DROP the superseded one's local segments,
    * registered or not. The space MUST actually free, or this fires every tick:
    * a per-minute break is a whole-DB copy per minute, the exact wear cliff this
    * feature exists to delete.
@@ -1531,91 +1402,66 @@ export class WalShipper {
       `wal-ship: local segments ${this.localSegmentBytes} bytes exceed budget ` +
         `${this.localBudgetBytes} — rolling generations (PITR history traded for disk)`
     );
-    // WAL_CAPTURE_ORDER, not WAL_DB_NAMES (which is vault-first — the WRONG
-    // order): the break this requests cuts the journal before the vault.
-    const olds: Partial<Record<WalDbName, string>> = {};
-    const reasons: Partial<Record<WalDbName, string>> = {};
-    for (const db of WAL_CAPTURE_ORDER) {
-      const stream = this.state.dbs[db];
-      if (!stream) continue;
-      olds[db] = stream.generation;
-      reasons[db] = "local-budget";
-    }
-    this.coordinatedBreak(reasons, report);
-    for (const db of WAL_CAPTURE_ORDER) {
-      const old = olds[db];
-      const fresh = this.state.dbs[db];
-      if (old !== undefined && fresh && fresh.generation !== old) {
-        // The break itself only drops never-registered history; the budget
-        // path must free REGISTERED generations' local files too (see doc).
-        this.dropLocalGeneration(db, old);
-      }
-    }
-    if (olds.vault !== undefined && olds.journal !== undefined) {
-      this.dropLocalMarkers(olds.vault, olds.journal);
+    const old = this.state.stream?.generation;
+    if (old === undefined) return;
+    this.breakGeneration("local-budget", report);
+    const fresh = this.state.stream;
+    if (fresh && fresh.generation !== old) {
+      // The break itself only drops never-registered history; the budget path
+      // must free a REGISTERED generation's local files too (see doc).
+      this.dropLocalGeneration(old);
+      this.dropLocalMarkers(old);
     }
   }
 
   // ─────────────────────────────────────────────────────── controlled points
 
   /**
-   * A controlled checkpoint of both databases: ship the remainder, then
-   * TRUNCATE with the same raced-writer verification as a rollover.
+   * A controlled checkpoint: ship the remainder, then TRUNCATE with the same
+   * raced-writer verification as a rollover.
    */
   checkpointNow(): WalTickReport {
     if (this.closed) throw new Error("WalShipper is closed");
     const report = this.newReport();
-    const reasons = this.resolveBreakReasons();
-    for (const db of WAL_CAPTURE_ORDER) {
-      if (reasons[db] !== undefined) continue;
-      this.rollover(db, this.state.dbs[db]!, reasons, report);
-    }
-    this.coordinatedBreak(reasons, report);
-    this.writePairMarker(report);
+    let reason = this.resolveBreakReason();
+    if (reason === undefined)
+      reason = this.rollover(this.state.stream!, report);
+    if (reason !== undefined) this.breakGeneration(reason, report);
+    this.writeTickMarker(report);
     this.persistState();
     return report;
   }
 
   /**
-   * Explicit generation roll (journal archival, backup-enable, restore-takeover,
+   * Explicit generation roll (band archival, backup-enable, restore-takeover,
    * tests). By default the old generation ships its pending bytes first so PITR
-   * history stays maximal; `captureFirst: false` skips that for the
-   * journal-archival hook, whose WAL holds the archival VACUUM's whole-database
-   * rewrite that the fresh base already contains.
+   * history stays maximal; `captureFirst: false` skips that for the archival
+   * hook, whose WAL holds the archival VACUUM's whole-database rewrite that the
+   * fresh base already contains.
    */
   rollGeneration(
-    db: WalDbName,
     reason: string,
     opts: { captureFirst?: boolean } = {}
   ): WalTickReport {
     if (this.closed) throw new Error("WalShipper is closed");
     const report = this.newReport();
-    const reasons = this.resolveBreakReasons();
     // Whatever the detectors already condemned must not ship another byte,
     // whatever the caller wants.
-    const condemned = new Set(
-      WAL_CAPTURE_ORDER.filter((d) => reasons[d] !== undefined)
-    );
-    reasons[db] ??= reason;
-    for (const other of WAL_CAPTURE_ORDER)
-      reasons[other] ??= `coordinated:${reason}`;
-    // Both streams ship pending committed bytes under their OLD generation, so
-    // PITR history stays maximal. `captureFirst: false` skips that for the
-    // NAMED database only — the SIBLING's WAL holds no VACUUM burst, so losing
-    // its pending bytes would be a needless gap.
-    for (const target of WAL_CAPTURE_ORDER) {
-      if (condemned.has(target)) continue;
-      if (target === db && opts.captureFirst === false) continue;
-      const stream = this.state.dbs[target];
-      // A stream holed by capture-then-discard ships nothing either: more
-      // bytes only widen a hole in a generation about to retire.
-      if (stream && stream.discarded !== true) {
-        const captured = this.capture(target, stream, report);
-        if (captured.kind === "break") reasons[target] = captured.reason;
-      }
+    let effective = this.resolveBreakReason() ?? reason;
+    const stream = this.state.stream;
+    // A stream holed by capture-then-discard ships nothing either: more bytes
+    // only widen a hole in a generation about to retire.
+    if (
+      effective === reason &&
+      opts.captureFirst !== false &&
+      stream &&
+      stream.discarded !== true
+    ) {
+      const captured = this.capture(stream, report);
+      if (captured.kind === "break") effective = captured.reason;
     }
-    this.coordinatedBreak(reasons, report);
-    this.writePairMarker(report);
+    this.breakGeneration(effective, report);
+    this.writeTickMarker(report);
     this.persistState();
     return report;
   }
@@ -1631,18 +1477,14 @@ export class WalShipper {
    * on reopen — degraded to a fresh base, never a silent gap.
    */
   close(): WalTickReport {
-    for (const db of WAL_DB_NAMES) {
-      try {
-        this.handle(db).exec("PRAGMA optimize");
-      } catch {
-        // Best-effort maintenance, mirroring VaultDb.close().
-      }
+    try {
+      this.db.vault.exec("PRAGMA optimize");
+    } catch {
+      // Best-effort maintenance, mirroring VaultDb.close().
     }
     const report = this.checkpointNow();
-    for (const db of WAL_DB_NAMES) {
-      const stream = this.state.dbs[db];
-      if (stream && !report.busy.includes(db)) stream.closedClean = true;
-    }
+    const stream = this.state.stream;
+    if (stream && !report.busy) stream.closedClean = true;
     this.persistState();
     this.closed = true;
     return report;
@@ -1662,76 +1504,68 @@ export class WalShipper {
         .filter((e) => e.isDirectory() && re.test(e.name))
         .map((e) => e.name)
         .sort();
-    for (const db of WAL_DB_NAMES) {
-      const dbRoot = path.join(segRoot, db);
-      if (!existsSync(dbRoot)) continue;
-      for (const generation of dirsIn(dbRoot, /^[0-9a-f]{32}$/u)) {
-        const genRoot = path.join(dbRoot, generation);
-        for (const groupName of dirsIn(genRoot, /^\d{8}$/u)) {
-          const groupRoot = path.join(genRoot, groupName);
-          const group = Math.trunc(Number(groupName));
-          for (const name of readdirSync(groupRoot).sort()) {
-            const full = path.join(groupRoot, name);
-            const addr = this.parseSegmentFileName(db, generation, group, name);
-            if (addr) {
+    for (const generation of dirsIn(segRoot, /^[0-9a-f]{32}$/u)) {
+      const genRoot = path.join(segRoot, generation);
+      for (const groupName of dirsIn(genRoot, /^\d{8}$/u)) {
+        const groupRoot = path.join(genRoot, groupName);
+        const group = Math.trunc(Number(groupName));
+        for (const name of readdirSync(groupRoot).sort()) {
+          const full = path.join(groupRoot, name);
+          const addr = this.parseSegmentFileName(generation, group, name);
+          if (addr) {
+            out.push({
+              file: full,
+              key: walSegmentKey(addr),
+              kind: "segment",
+              addr,
+              bytes: statSync(full).size,
+            });
+            continue;
+          }
+          if (name.endsWith(".mrk")) {
+            const closer = parseWalCloserKey(
+              `wal/vault/${generation}/${groupName}/${name.slice(0, -4)}`
+            );
+            if (closer) {
               out.push({
                 file: full,
-                key: walSegmentKey(addr),
-                kind: "segment",
-                addr,
-                bytes: statSync(full).size,
+                key: walGroupCloserKey(closer),
+                kind: "closer",
+                closer,
+                bytes: 0,
               });
-              continue;
-            }
-            if (name.endsWith(".mrk")) {
-              const closer = parseWalCloserKey(
-                `wal/${db}/${generation}/${groupName}/${name.slice(0, -4)}`
-              );
-              if (closer) {
-                out.push({
-                  file: full,
-                  key: walGroupCloserKey(closer),
-                  kind: "closer",
-                  closer,
-                  bytes: 0,
-                });
-              }
             }
           }
         }
       }
     }
-    // Pair markers LAST, so a tick's marker drains after the segments and
-    // closers it describes. Not correctness (an orphan marker is merely
-    // unsatisfiable) but the reverse order costs a tick of RPO per drain.
+    // Markers LAST, so a tick's marker drains after the segments and closers it
+    // describes. Not correctness (an orphan marker is merely unsatisfiable) but
+    // the reverse order costs a tick of RPO per drain.
     const markerRoot = path.join(this.dir, "markers");
     if (existsSync(markerRoot)) {
-      for (const pair of dirsIn(markerRoot, /^[0-9a-f]{32}-[0-9a-f]{32}$/u)) {
-        const pairDir = path.join(markerRoot, pair);
-        const vaultGeneration = pair.slice(0, 32);
-        const journalGeneration = pair.slice(33);
-        for (const name of readdirSync(pairDir).sort()) {
+      for (const generation of dirsIn(markerRoot, /^[0-9a-f]{32}$/u)) {
+        const genDir = path.join(markerRoot, generation);
+        for (const name of readdirSync(genDir).sort()) {
           if (!name.endsWith(".tick")) continue;
           const tickMs = Math.trunc(Number(name.slice(0, -5)));
           if (!Number.isInteger(tickMs)) continue;
-          const full = path.join(pairDir, name);
-          let payload: { vault?: WalPairPosition; journal?: WalPairPosition };
+          const full = path.join(genDir, name);
+          let payload: { position?: WalStreamPosition };
           try {
             payload = JSON.parse(readFileSync(full, "utf8")) as typeof payload;
           } catch {
             continue; // unreadable residue — never a reason to wedge the drain
           }
-          if (!payload.vault || !payload.journal) continue;
-          const marker: WalPairMarker = {
-            vaultGeneration,
-            journalGeneration,
+          if (!payload.position) continue;
+          const marker: WalTickMarker = {
+            generation,
             tickMs,
-            vault: payload.vault,
-            journal: payload.journal,
+            position: payload.position,
           };
           out.push({
             file: full,
-            key: walPairMarkerKey(marker),
+            key: walTickMarkerKey(marker),
             kind: "marker",
             marker,
             bytes: 0,
@@ -1754,76 +1588,53 @@ export class WalShipper {
    * stream holed; the BackupService breaks the generation before registering
    * its base, since a restore of a holed stream lands on the stale base.
    */
-  noteStreamDiscarded(db: WalDbName): void {
-    const stream = this.state.dbs[db];
+  noteStreamDiscarded(): void {
+    const stream = this.state.stream;
     if (stream && !stream.discarded) {
       stream.discarded = true;
       this.persistState();
     }
   }
 
-  /** Streams holed by capture-then-discard — roll these before registering. */
-  discardedStreams(): WalDbName[] {
-    return WAL_DB_NAMES.filter((db) => this.state.dbs[db]?.discarded === true);
+  /** Holed by capture-then-discard — roll before registering. */
+  streamDiscarded(): boolean {
+    return this.state.stream?.discarded === true;
   }
 
-  /** Bases whose generation still needs a registered snapshot. */
-  pendingBases(): PendingBase[] {
-    const out: PendingBase[] = [];
-    for (const db of WAL_DB_NAMES) {
-      const stream = this.state.dbs[db];
-      if (stream?.basePending) {
-        out.push({
-          db,
-          generation: stream.generation,
-          file: this.basePath(stream.baseName),
-          sha256: stream.baseSha256,
-          createdAtMs: stream.baseCreatedAtMs,
-        });
-      }
-    }
-    return out;
+  /** The base, when it still needs a registered snapshot. */
+  pendingBase(): PendingBase | null {
+    const stream = this.state.stream;
+    return stream?.basePending ? this.baseOf(stream) : null;
   }
 
-  /** Every current base (for manifest assembly), pending or not. */
-  currentBases(): PendingBase[] {
-    const out: PendingBase[] = [];
-    for (const db of WAL_DB_NAMES) {
-      const stream = this.state.dbs[db];
-      if (stream) {
-        out.push({
-          db,
-          generation: stream.generation,
-          file: this.basePath(stream.baseName),
-          sha256: stream.baseSha256,
-          createdAtMs: stream.baseCreatedAtMs,
-        });
-      }
-    }
-    return out;
+  /** The current base (for manifest assembly), pending or not. */
+  currentBase(): PendingBase | null {
+    const stream = this.state.stream;
+    return stream ? this.baseOf(stream) : null;
+  }
+
+  private baseOf(stream: DbStreamState): PendingBase {
+    return {
+      generation: stream.generation,
+      file: this.basePath(stream.baseName),
+      sha256: stream.baseSha256,
+      createdAtMs: stream.baseCreatedAtMs,
+    };
   }
 
   /**
-   * Are the two current bases a coherent pair — both present, cloned in ONE
-   * tick, no break mid-flight? A snapshot MUST NOT be registered when this is
-   * false: a manifest pairing bases from two instants risks a journal newer
-   * than its vault.
+   * Is the base one a snapshot may be registered against — present, and no
+   * break mid-flight? A manifest registered over a frozen stream would anchor
+   * a base whose successor segments are about to be dropped.
    */
-  basesCoordinated(): boolean {
-    const vault = this.state.dbs.vault;
-    const journal = this.state.dbs.journal;
-    return (
-      vault !== undefined &&
-      journal !== undefined &&
-      vault.breakPending === undefined &&
-      journal.breakPending === undefined &&
-      vault.baseCreatedAtMs === journal.baseCreatedAtMs
-    );
+  baseReady(): boolean {
+    const stream = this.state.stream;
+    return stream !== undefined && stream.breakPending === undefined;
   }
 
   /** The gateway registered a snapshot anchoring this generation's base. */
-  noteBaseRegistered(db: WalDbName, generation: string): void {
-    const stream = this.state.dbs[db];
+  noteBaseRegistered(generation: string): void {
+    const stream = this.state.stream;
     if (stream && stream.generation === generation) {
       stream.basePending = false;
       this.persistState();
@@ -1831,39 +1642,31 @@ export class WalShipper {
   }
 
   status(): {
-    dbs: Partial<
-      Record<
-        WalDbName,
-        {
-          generation: string;
-          group: number;
-          offset: number;
-          basePending: boolean;
-        }
-      >
-    >;
+    stream?: {
+      generation: string;
+      group: number;
+      offset: number;
+      basePending: boolean;
+    };
     localBytes: number;
     /** Foreign checkpoints detected and healed over this shipper's whole life;
      *  a churn signal the gateway surfaces through backup health. */
     foreignCheckpointCount: number;
-    lastForeignCheckpoint?: { atMs: number; db: WalDbName; reason: string };
+    lastForeignCheckpoint?: { atMs: number; reason: string };
   } {
-    const localBytes = this.localSegmentBytes;
-    const dbs: ReturnType<WalShipper["status"]>["dbs"] = {};
-    for (const db of WAL_DB_NAMES) {
-      const s = this.state.dbs[db];
-      if (s) {
-        dbs[db] = {
-          generation: s.generation,
-          group: s.group,
-          offset: s.offset,
-          basePending: s.basePending,
-        };
-      }
-    }
+    const s = this.state.stream;
     return {
-      dbs,
-      localBytes,
+      ...(s
+        ? {
+            stream: {
+              generation: s.generation,
+              group: s.group,
+              offset: s.offset,
+              basePending: s.basePending,
+            },
+          }
+        : {}),
+      localBytes: this.localSegmentBytes,
       foreignCheckpointCount: this.state.foreignCheckpointCount ?? 0,
       ...(this.state.lastForeignCheckpoint
         ? { lastForeignCheckpoint: this.state.lastForeignCheckpoint }

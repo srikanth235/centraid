@@ -203,8 +203,8 @@ describe(projectDrive, () => {
         origins: {
           origins: [
             {
-              item_type: "core.document",
-              item_id: "doc-lease",
+              target_type: "core.document",
+              target_id: "doc-lease",
               origin_vault_id: "vault-alice",
               origin_item_id: "doc-far-away",
               shared_at: 1_788_183_726_358,
@@ -239,8 +239,8 @@ describe(projectDrive, () => {
 
 describe(originsByDocument, () => {
   const origin = {
-    item_type: "core.document",
-    item_id: "doc-1",
+    target_type: "core.document",
+    target_id: "doc-1",
     origin_vault_id: "vault-alice",
     origin_item_id: "doc-far-away",
     shared_at: 1_788_183_726_358,
@@ -298,7 +298,9 @@ describe(originsByDocument, () => {
     // The table is shared with Photos and every other placed kind; Docs may
     // only ever claim its own rows out of it.
     const map = originsByDocument({
-      origins: [{ ...origin, item_type: "media.asset", item_id: "asset-1" }],
+      origins: [
+        { ...origin, target_type: "media.asset", target_id: "asset-1" },
+      ],
       bindings: [binding],
       parties: [party],
     });

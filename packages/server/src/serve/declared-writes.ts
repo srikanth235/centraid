@@ -3,11 +3,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import {
-  JOURNAL_TABLES,
-  PARTY_POINTER_REGISTRY,
-  POLY_REF_REGISTRY,
-} from "@centraid/vault";
+import { ENTITY_POINTERS, PARTY_POINTER_REGISTRY } from "@centraid/vault";
 
 export function entityForPhysical(
   physical: string,
@@ -22,29 +18,36 @@ export function entityForPhysical(
   return undefined;
 }
 
-export function journalEntities(): Set<string> {
-  return new Set(
-    Object.entries(JOURNAL_TABLES).flatMap(([schema, tables]) =>
-      tables.map((table) => `${schema}.${table}`)
-    )
-  );
-}
-
+/**
+ * What the ENGINE writes on every dispatch, whatever the action declared.
+ *
+ * `core.entity_revision` joined it in #916 (ruling ONT-revisions): the
+ * pre-mutation snapshot moved out of seven call sites into the pipeline
+ * (`gateway/revision-capture.ts`), which captures through generated triggers.
+ * An action cannot declare a write it does not make.
+ *
+ * The audit band — `access_receipt`, `access_provenance` and the agent evidence
+ * tables — is BAND-EXCLUDED from the entity registry
+ * (`schema/local-tables.ts`), so a receipt write has no logical name for an
+ * action to declare and never reaches `observed` in the first place; it is out
+ * of the comparison by construction rather than by exemption.
+ */
 export function engineCascadeEntities(): Set<string> {
-  const cascade = journalEntities();
-  cascade.add("consent.app");
-  return cascade;
+  return new Set(["access.app", "core.entity_revision"]);
 }
 
 // This cascade and `partyRepointEntities` are unioned per-action, never by
 // default: `core_tag` is an ordinary app write and nearly every table carries a
 // `core_party` FK, so a blanket union would exempt most of the product.
+/** The entity-pointer tables (#916, rung ten): every `(type, id)` mechanism
+ *  that is now a composite foreign key into `core_entity`. A purge cascades
+ *  through them, so an action that purges writes them without declaring them. */
 export function polyRefCascadeEntities(
   entities: Iterable<string>
 ): Set<string> {
   const all = [...entities];
   const cascade = new Set<string>();
-  for (const entry of POLY_REF_REGISTRY) {
+  for (const entry of ENTITY_POINTERS) {
     const entity = entityForPhysical(entry.table, all);
     if (entity) cascade.add(entity);
   }

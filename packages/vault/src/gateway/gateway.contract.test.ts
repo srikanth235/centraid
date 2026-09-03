@@ -78,8 +78,8 @@ describe("gateway", () => {
           { entity: "core.party", purpose: "dpv:ServiceProvision" }
         )
       ).toThrow(/unknown caller/u);
-      const receipts = db.journal
-        .prepare("SELECT count(*) AS n FROM consent_receipt")
+      const receipts = db.audit
+        .prepare("SELECT count(*) AS n FROM access_receipt")
         .get() as {
         n: number;
       };
@@ -103,9 +103,9 @@ describe("gateway", () => {
         purpose: "dpv:ServiceProvision",
       });
       expect(result.rows.length).toBeGreaterThan(0);
-      const receipt = db.journal
+      const receipt = db.audit
         .prepare(
-          "SELECT decision, action, object_type, grant_id FROM consent_receipt WHERE receipt_id = ?"
+          "SELECT decision, action, object_type, grant_id FROM access_receipt WHERE receipt_id = ?"
         )
         .get(result.receiptId) as {
         decision: string;
@@ -134,9 +134,9 @@ describe("gateway", () => {
           purpose: "dpv:HealthMonitoring",
         })
       ).toThrow(/deny/u);
-      const deny = db.journal
+      const deny = db.audit
         .prepare(
-          `SELECT count(*) AS n FROM consent_receipt WHERE decision='deny'`
+          `SELECT count(*) AS n FROM access_receipt WHERE decision='deny'`
         )
         .get() as { n: number };
       expect(deny.n).toBe(1);
@@ -231,9 +231,9 @@ describe("gateway", () => {
         onProvenanceCommitted: (entityTypes = []) => {
           const placeholders = entityTypes.map(() => "?").join(",");
           const provenanceRows = (
-            db.journal
+            db.audit
               .prepare(
-                `SELECT count(*) AS n FROM consent_provenance
+                `SELECT count(*) AS n FROM access_provenance
                 WHERE entity_type IN (${placeholders})`
               )
               .get(...entityTypes) as { n: number }
@@ -260,7 +260,7 @@ describe("gateway", () => {
 
     test("group commit crosses exactly one vault + journal commit pair", () => {
       const vaultExec = vi.spyOn(db.vault, "exec");
-      const journalExec = vi.spyOn(db.journal, "exec");
+      const journalExec = vi.spyOn(db.audit, "exec");
       const outcomes = gw.invokeBatch(
         Array.from(
           { length: 10 },
@@ -288,7 +288,7 @@ describe("gateway", () => {
       // node:sqlite hands back null-prototype rows; spreading compares the column
       // data (which is the contract) without asserting the driver's prototype.
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             `SELECT count(*) AS n FROM agent_command_invocation
             WHERE invocation_id LIKE 'batch-invocation-%' AND status = 'executed'`
@@ -389,7 +389,7 @@ describe("gateway", () => {
         .prepare("SELECT status, sequence FROM core_event WHERE event_id = ?")
         .get(eventId);
       expect(event).toMatchObject({ status: "tentative", sequence: 0 });
-      const checks = db.journal
+      const checks = db.audit
         .prepare(
           "SELECT phase, passed FROM agent_invocation_check WHERE invocation_id = ?"
         )
@@ -397,19 +397,19 @@ describe("gateway", () => {
       expect(checks.filter((c) => c.phase === "pre")).toHaveLength(4);
       expect(checks.filter((c) => c.phase === "post")).toHaveLength(2);
       expect(checks.every((c) => c.passed === 1)).toBe(true);
-      const prov = db.journal
+      const prov = db.audit
         .prepare(
-          `SELECT count(*) AS n FROM consent_provenance WHERE entity_type='core.event' AND entity_id=?`
+          `SELECT count(*) AS n FROM access_provenance WHERE entity_type='core.event' AND entity_id=?`
         )
         .get(eventId) as { n: number };
       expect(prov.n).toBe(1);
-      const expl = db.journal
+      const expl = db.audit
         .prepare(
           "SELECT summary FROM agent_explanation WHERE invocation_id = ?"
         )
         .get(outcome.invocationId) as { summary: string };
       expect(expl.summary).toContain("schedule.propose_event");
-      const inv = db.journal
+      const inv = db.audit
         .prepare(
           "SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?"
         )
@@ -435,7 +435,7 @@ describe("gateway", () => {
         n: number;
       };
       expect(events.n).toBe(0);
-      const inv = db.journal
+      const inv = db.audit
         .prepare(
           "SELECT status FROM agent_command_invocation WHERE invocation_id = ?"
         )
@@ -443,7 +443,7 @@ describe("gateway", () => {
       expect(inv.status).toBe("failed");
       // The raw technical predicate is still recorded in the checks-table
       // audit trail, unaffected by the friendly outward message.
-      const check = db.journal
+      const check = db.audit
         .prepare(
           `SELECT predicate FROM agent_invocation_check WHERE invocation_id = ? AND passed = 0`
         )
@@ -635,45 +635,53 @@ describe("gateway", () => {
           )
           .get(),
       }).toStrictEqual({ n: 0 });
-      const replicaReceipt = db.journal
+      const replicaReceipt = db.audit
         .prepare(
-          "SELECT detail_json FROM consent_receipt WHERE invocation_id = ?"
+          "SELECT detail_json FROM access_receipt WHERE invocation_id = ?"
         )
         .get(invocationId) as { detail_json: string };
       expect(JSON.parse(replicaReceipt.detail_json)).not.toHaveProperty(
         "output"
       );
 
-      // Rewind only the derived journal side to model a process dying after
-      // vault.db COMMIT and before any post-check/S5 row committed. The marker
+      // Rewind only the derived audit side to model a process dying after the
+      // vault COMMIT and before any post-check/S5 row committed. The marker
       // remains the canonical proof and carries redacted reconstruction data.
-      db.journal
+      //
+      // The band is append-only and lets rows out ONLY through the archive
+      // pass (#916), which is exactly the door a crash does not use — so the
+      // rewind opens it deliberately, and shuts it again.
+      db.audit
+        .prepare("INSERT INTO audit_archive_pass (active) VALUES (1)")
+        .run();
+      db.audit
         .prepare(
           `UPDATE agent_command_invocation
             SET status = 'checked', executed_at = NULL, receipt_id = NULL
           WHERE invocation_id = ?`
         )
         .run(invocationId);
-      db.journal
+      db.audit
         .prepare(`DELETE FROM agent_evidence WHERE invocation_id = ?`)
         .run(invocationId);
-      db.journal
+      db.audit
         .prepare(`DELETE FROM agent_explanation WHERE invocation_id = ?`)
         .run(invocationId);
-      db.journal
+      db.audit
         .prepare(
           `DELETE FROM agent_invocation_check WHERE invocation_id = ? AND phase = 'post'`
         )
         .run(invocationId);
-      db.journal
-        .prepare(`DELETE FROM consent_receipt WHERE invocation_id = ?`)
+      db.audit
+        .prepare(`DELETE FROM access_receipt WHERE invocation_id = ?`)
         .run(invocationId);
-      db.journal
+      db.audit
         .prepare(
-          `DELETE FROM consent_provenance
+          `DELETE FROM access_provenance
           WHERE json_extract(used_json, '$.invocation') = ?`
         )
         .run(invocationId);
+      db.audit.prepare("DELETE FROM audit_archive_pass").run();
       db.vault
         .prepare(
           `UPDATE replica_invocation_commit
@@ -684,7 +692,7 @@ describe("gateway", () => {
 
       // Abort late in repair. Every earlier insert must roll back with it, the
       // proof stamp must remain NULL, and replay must not claim success.
-      db.journal.exec(`
+      db.audit.exec(`
       CREATE TRIGGER fail_repair_evidence
       BEFORE INSERT ON agent_evidence
       BEGIN
@@ -700,11 +708,11 @@ describe("gateway", () => {
           intentId: "offline-intent-crash-gap",
         })
       ).toThrow(/synthetic repair crash/u);
-      db.journal.exec("DROP TRIGGER fail_repair_evidence");
+      db.audit.exec("DROP TRIGGER fail_repair_evidence");
 
       const count = (table: string, where = "invocation_id = ?"): number =>
         (
-          db.journal
+          db.audit
             .prepare(`SELECT count(*) AS n FROM ${table} WHERE ${where}`)
             .get(invocationId) as {
             n: number;
@@ -719,10 +727,10 @@ describe("gateway", () => {
           `invocation_id = ? AND phase = 'post'`
         ),
         provenance: count(
-          "consent_provenance",
+          "access_provenance",
           `json_extract(used_json, '$.invocation') = ?`
         ),
-        receipts: count("consent_receipt"),
+        receipts: count("access_receipt"),
         evidence: count("agent_evidence"),
         explanations: count("agent_explanation"),
       });
@@ -736,7 +744,7 @@ describe("gateway", () => {
       // node:sqlite hands back null-prototype rows; spreading compares the column
       // data (which is the contract) without asserting the driver's prototype.
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             `SELECT status, executed_at, receipt_id
              FROM agent_command_invocation WHERE invocation_id = ?`
@@ -776,7 +784,7 @@ describe("gateway", () => {
         explanations: 1,
       });
       expect(
-        db.journal
+        db.audit
           .prepare(
             `SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?`
           )
@@ -799,8 +807,8 @@ describe("gateway", () => {
 
     test("post-canonical finalization failure retries the marker without a second write", () => {
       const invocationId = "offline-intent-finalize-ambiguous";
-      db.journal.exec(`CREATE TEMP TRIGGER fail_finalization_receipt
-      BEFORE INSERT ON consent_receipt BEGIN
+      db.audit.exec(`CREATE TEMP TRIGGER fail_finalization_receipt
+      BEFORE INSERT ON access_receipt BEGIN
         SELECT RAISE(ABORT, 'synthetic post-canonical finalization failure');
       END`);
 
@@ -827,7 +835,7 @@ describe("gateway", () => {
           .get(invocationId),
       }).toStrictEqual({ journal_finalized_at: null });
 
-      db.journal.exec("DROP TRIGGER fail_finalization_receipt");
+      db.audit.exec("DROP TRIGGER fail_finalization_receipt");
       gw = createGateway(db);
       registerScheduleCommands(gw);
       const retry = gw.invoke(owner, {
@@ -849,7 +857,7 @@ describe("gateway", () => {
         n: 1,
       });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             "SELECT status FROM agent_command_invocation WHERE invocation_id = ?"
           )
@@ -859,8 +867,8 @@ describe("gateway", () => {
 
     test("ordinary post-canonical recovery preserves receipt replay output", () => {
       const invocationId = "ordinary-finalize-ambiguous";
-      db.journal.exec(`CREATE TEMP TRIGGER fail_ordinary_finalization_receipt
-      BEFORE INSERT ON consent_receipt BEGIN
+      db.audit.exec(`CREATE TEMP TRIGGER fail_ordinary_finalization_receipt
+      BEFORE INSERT ON access_receipt BEGIN
         SELECT RAISE(ABORT, 'synthetic ordinary finalization failure');
       END`);
 
@@ -893,7 +901,7 @@ describe("gateway", () => {
         receiptDetail: { output: { event_id: event.event_id } },
       });
 
-      db.journal.exec("DROP TRIGGER fail_ordinary_finalization_receipt");
+      db.audit.exec("DROP TRIGGER fail_ordinary_finalization_receipt");
       gw = createGateway(db);
       registerScheduleCommands(gw);
       const retry = gw.invoke(owner, {
@@ -945,22 +953,10 @@ describe("gateway", () => {
       }).toStrictEqual({ n: 0 });
     });
 
-    test("judgment veto blocks an otherwise-valid call", () => {
-      db.vault
-        .prepare(
-          `INSERT INTO agent_judgment (judgment_id, subject_scope, rule_json, confidence, active, learned_at)
-         VALUES ('j1', 'schedule.propose_event', '{"veto_command":"schedule.propose_event"}', 1.0, 1, ?)`
-        )
-        .run(new Date().toISOString());
-      const outcome = gw.invoke(owner, {
-        command: "schedule.propose_event",
-        input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
-      });
-      expect(outcome.status).toBe("failed");
-      assert(outcome.status === "failed");
-      expect(outcome.reason).toContain("judgment");
-    });
+    // The judgment veto left with `agent.judgment` (#916, ruling ONT-06): the
+    // learn loop had a table, commands and no caller, so no correction was
+    // ever distilled into a rule and no call was ever vetoed. R08 gets a test
+    // again when it gets a producer.
   });
 
   describe("confirmation routing + revocation + sweeps", () => {
@@ -1037,8 +1033,8 @@ describe("gateway", () => {
       expect(outcome.status).toBe("executed");
       expect(decisionChanges).toStrictEqual([true, false]);
       if (outcome.status !== "executed") return;
-      const receipt = db.journal
-        .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")
+      const receipt = db.audit
+        .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
         .get(outcome.receiptId) as { detail_json: string };
       expect(JSON.parse(receipt.detail_json).confirmation.confirmedBy).toBe(
         boot.ownerPartyId
@@ -1083,7 +1079,7 @@ describe("gateway", () => {
         invocationId: request.invocationId,
       });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             "SELECT count(*) AS n FROM agent_command_invocation WHERE invocation_id = ?"
           )
@@ -1168,8 +1164,8 @@ describe("gateway", () => {
       });
       expect(outcome.status).toBe("executed");
       if (outcome.status !== "executed") return;
-      const receipt = db.journal
-        .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")
+      const receipt = db.audit
+        .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
         .get(outcome.receiptId) as { detail_json: string };
       expect(JSON.parse(receipt.detail_json).risk).toBe("medium");
     });
@@ -1182,27 +1178,27 @@ describe("gateway", () => {
       });
       expect(outcome.status).toBe("executed");
       if (outcome.status !== "executed") return;
-      const receipt = db.journal
+      const receipt = db.audit
         .prepare(
-          "SELECT purpose_concept_id FROM consent_receipt WHERE receipt_id = ?"
+          "SELECT purpose_concept_id FROM access_receipt WHERE receipt_id = ?"
         )
         .get(outcome.receiptId) as { purpose_concept_id: string | null };
       expect(receipt.purpose_concept_id).toBe("dpv:ServiceProvision");
       // A purposeless read rides the same default and still receipts it.
       const read = gw.read(cred, { entity: "schedule.calendar" });
-      const readReceipt = db.journal
+      const readReceipt = db.audit
         .prepare(
-          "SELECT purpose_concept_id FROM consent_receipt WHERE receipt_id = ?"
+          "SELECT purpose_concept_id FROM access_receipt WHERE receipt_id = ?"
         )
         .get(read.receiptId) as { purpose_concept_id: string | null };
       expect(readReceipt.purpose_concept_id).toBe("dpv:ServiceProvision");
     });
 
-    test("consent.policy purpose rules still evaluate when a purpose IS supplied (issue #306)", () => {
+    test("access.policy purpose rules still evaluate when a purpose IS supplied (issue #306)", () => {
       db.vault
         .prepare(
-          `INSERT INTO consent_policy (policy_id, kind, applies_schema, applies_table, rule_json, retention_days, residency_region, effective_from, priority)
-         VALUES (?, 'purpose', 'schedule', NULL, '{"allowed_purposes":["dpv:ServiceProvision"]}', NULL, NULL, '2020-01-01T00:00:00Z', 1)`
+          `INSERT INTO access_policy (policy_id, kind, entity, rule_json, retention_days, effective_from, priority)
+         VALUES (?, 'purpose', 'schedule', '{"allowed_purposes":["dpv:ServiceProvision"]}', NULL, '2020-01-01T00:00:00Z', 1)`
         )
         .run(uuidv7());
       const { cred } = grantedAgent();
@@ -1288,9 +1284,9 @@ describe("gateway", () => {
         )
       ).toMatchObject({ status: "sending" });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
-            `SELECT count(*) AS n FROM consent_receipt
+            `SELECT count(*) AS n FROM access_receipt
             WHERE invocation_id = ? AND decision = 'deny'`
           )
           .get(parked.invocationId),
@@ -1320,7 +1316,7 @@ describe("gateway", () => {
         n: 0,
       });
       expect({
-        ...db.journal
+        ...db.audit
           .prepare(
             "SELECT count(*) AS n FROM agent_explanation WHERE invocation_id = ?"
           )
@@ -1397,7 +1393,7 @@ describe("gateway", () => {
       // revocation cascade removed this durable parked payload.
       db.vault
         .prepare(
-          `UPDATE consent_access_grant
+          `UPDATE access_grant
             SET status = 'revoked', revoked_at = ?
           WHERE grant_id = ?`
         )
@@ -1436,8 +1432,8 @@ describe("gateway", () => {
           purpose: "dpv:ServiceProvision",
         }).rows
       ).toHaveLength(2);
-      const before = db.journal
-        .prepare("SELECT count(*) AS n FROM consent_receipt")
+      const before = db.audit
+        .prepare("SELECT count(*) AS n FROM access_receipt")
         .get() as {
         n: number;
       };
@@ -1449,8 +1445,8 @@ describe("gateway", () => {
           purpose: "dpv:ServiceProvision",
         })
       ).toThrow(/deny/u);
-      const after = db.journal
-        .prepare("SELECT count(*) AS n FROM consent_receipt")
+      const after = db.audit
+        .prepare("SELECT count(*) AS n FROM access_receipt")
         .get() as {
         n: number;
       };

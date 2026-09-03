@@ -19,8 +19,6 @@
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
-import { ONTOLOGY_VERSION } from "../schema/migrate.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { annotate } from "./annotations.js";
 import {
   loadEntityRevision,
@@ -49,10 +47,10 @@ function actorPartyId(ctx: HandlerCtx): string {
 /** The vault owner's party id. */
 function ownerPartyId(ctx: HandlerCtx): string {
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (!owner?.owner_party_id) throw new Error("vault has no owner");
-  return owner.owner_party_id;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!owner?.self_party_id) throw new Error("vault has no owner");
+  return owner.self_party_id;
 }
 
 /** The vault's base currency, for debts stored as minor units. */
@@ -197,10 +195,14 @@ const PERSON_EXISTS_SQL = `
    WHERE pr.party_id = :party_id AND p.kind = 'person'
      AND pr.deleted_at IS NULL`;
 const PERSON_TRASHED_SQL = `
+  -- RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5). The trash window is a
+  -- PROMISE that the row goes; a restore after it lapsed resurrects data the
+  -- member was told had been deleted, and races the sweep for it.
   SELECT count(*) AS n FROM people_profile pr
     JOIN core_party p ON p.party_id = pr.party_id
    WHERE pr.party_id = :party_id AND p.kind = 'person'
-     AND pr.deleted_at IS NOT NULL`;
+     AND pr.deleted_at IS NOT NULL
+     AND (pr.purge_at IS NULL OR pr.purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 const PERSON_ANY_SQL = `
   SELECT count(*) AS n FROM people_profile pr
     JOIN core_party p ON p.party_id = pr.party_id
@@ -352,10 +354,10 @@ function addPerson(ctx: HandlerCtx): Record<string, unknown> {
   const partyId = ctx.newId();
   ctx.db
     .prepare(
-      `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?, ?)`
+      `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at)
+       VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?)`
     )
-    .run(partyId, input.display_name, ctx.now, ctx.now, ONTOLOGY_VERSION);
+    .run(partyId, input.display_name, ctx.now, ctx.now);
   ctx.wrote("core.party", partyId);
   const profileId = ctx.newId();
   ctx.db
@@ -1340,17 +1342,10 @@ const ADD_RELATIONSHIP: CommandDefinition = {
           .prepare(
             `INSERT INTO core_party
                (party_id, kind, display_name, sort_name, birth_date, avatar_content_id,
-                created_at, updated_at, ontology_version)
-             VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`
+                created_at, updated_at)
+             VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?)`
           )
-          .run(
-            targetId,
-            targetKind,
-            input.name,
-            ctx.now,
-            ctx.now,
-            ONTOLOGY_VERSION
-          );
+          .run(targetId, targetKind, input.name, ctx.now, ctx.now);
         ctx.wrote("core.party", targetId);
       }
     }
@@ -1771,7 +1766,6 @@ const DELETE_LIST: CommandDefinition = {
     ctx.db
       .prepare("DELETE FROM core_concept WHERE concept_id = ?")
       .run(input.list_id);
-    cleanupPolyRefs(ctx.db, ctx.now, "core.concept", input.list_id);
     ctx.wrote("core.concept", input.list_id);
     return { list_id: input.list_id };
   },

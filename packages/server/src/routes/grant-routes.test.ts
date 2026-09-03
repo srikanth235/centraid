@@ -108,9 +108,8 @@ function world(options: { linked?: boolean } = {}): World {
   priya.vault.vault
     .prepare(
       `INSERT INTO core_party
-         (party_id, kind, display_name, sort_name, created_at, updated_at,
-          ontology_version)
-       VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?, '1.4')`
+         (party_id, kind, display_name, sort_name, created_at, updated_at)
+       VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?)`
     )
     .run(raviParty, now, now);
   if (options.linked !== false)

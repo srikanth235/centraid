@@ -203,9 +203,9 @@ describe("seal-custody", () => {
   test("reseal is receipted in the journal", () => {
     addLogin();
     const { receiptId } = resealVaultKey(db);
-    const row = db.journal
+    const row = db.audit
       .prepare(
-        "SELECT action, decision, detail_json FROM consent_receipt WHERE receipt_id = ?"
+        "SELECT action, decision, detail_json FROM access_receipt WHERE receipt_id = ?"
       )
       .get(receiptId) as {
       action: string;
@@ -316,9 +316,9 @@ describe("seal-custody", () => {
       purpose: PURPOSE,
     });
     expect(out.status).toBe("failed");
-    const receipts = db.journal
+    const receipts = db.audit
       .prepare(
-        "SELECT detail_json FROM consent_receipt ORDER BY receipt_id DESC LIMIT 1"
+        "SELECT detail_json FROM access_receipt ORDER BY receipt_id DESC LIMIT 1"
       )
       .get() as { detail_json: string };
     expect(receipts.detail_json).not.toContain(secret);
@@ -340,9 +340,9 @@ describe("seal-custody", () => {
     expect(code).toMatch(/^\d{6}$/u); // the live caller gets the real 6 digits
 
     // …but the journal receipt (a durable, replayable store) must not hold it.
-    const receipt = db.journal
+    const receipt = db.audit
       .prepare(
-        "SELECT detail_json FROM consent_receipt ORDER BY receipt_id DESC LIMIT 1"
+        "SELECT detail_json FROM access_receipt ORDER BY receipt_id DESC LIMIT 1"
       )
       .get() as { detail_json: string };
     expect(receipt.detail_json).not.toContain(code);
@@ -378,9 +378,9 @@ describe("seal-custody", () => {
       status: "executed",
       output: { item_id: itemId },
     });
-    const receipt = db.journal
+    const receipt = db.audit
       .prepare(
-        "SELECT detail_json FROM consent_receipt WHERE action = 'act locker.star_item' ORDER BY receipt_id DESC LIMIT 1"
+        "SELECT detail_json FROM access_receipt WHERE action = 'act locker.star_item' ORDER BY receipt_id DESC LIMIT 1"
       )
       .get() as { detail_json: string } | undefined;
     expect(JSON.parse(receipt?.detail_json ?? "{}")).toMatchObject({

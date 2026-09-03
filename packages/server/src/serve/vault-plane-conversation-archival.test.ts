@@ -2,7 +2,6 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { ensureConversationLedger } from "@centraid/server/engine";
 // Sweep wiring for the conversation-ledger archival engine (#438
 // decision 7): the daily archival block in `runSweep` must invoke conversation
 // archival alongside journal archival and roll ONE shared journal generation
@@ -66,8 +65,7 @@ describe("vault-plane-conversation-archival", () => {
     expect(plane.walShipper).toBeDefined();
 
     const now = Date.now();
-    ensureConversationLedger(plane.db.journal);
-    seedAgedAutomation(plane.db.journal, now);
+    seedAgedAutomation(plane.db.audit, now);
 
     // Count generation rolls without disturbing the shipper's state.
     let rolls = 0;
@@ -85,7 +83,7 @@ describe("vault-plane-conversation-archival", () => {
     // Phase A wrote an archive index row (the aged contiguous range t0..t1); the
     // live head t2 stayed. On a local-only vault custody is proven immediately, so
     // phase B pruned the raw rows in the same pass.
-    const archiveRows = plane.db.journal
+    const archiveRows = plane.db.audit
       .prepare(`SELECT seq_from, seq_to, pruned_at FROM conversation_archive`)
       .all() as {
       seq_from: number;
@@ -96,7 +94,7 @@ describe("vault-plane-conversation-archival", () => {
     expect(archiveRows[0]).toMatchObject({ seq_from: 0, seq_to: 1 });
     expect(archiveRows[0]!.pruned_at).not.toBeNull();
 
-    const remaining = plane.db.journal
+    const remaining = plane.db.audit
       .prepare(
         `SELECT id FROM turns WHERE conversation_id = 'app/digest' ORDER BY seq`
       )
@@ -104,7 +102,7 @@ describe("vault-plane-conversation-archival", () => {
     expect(remaining.map((r) => r.id)).toStrictEqual(["t2"]);
 
     // A digest row now backs Insights for the pruned range.
-    const digest = plane.db.journal
+    const digest = plane.db.audit
       .prepare(
         `SELECT run_count FROM conversation_digest WHERE conversation_id = 'app/digest'`
       )

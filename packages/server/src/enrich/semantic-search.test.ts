@@ -242,26 +242,24 @@ describe("semantic-search", () => {
 
   test("a row whose model has a different width cannot turn a search into an error", async () => {
     const planted = plantedVault({ withVec: true });
-    // A leftover row from a wider model, same model key — the shape that makes
-    // `vec_distance_cosine` raise if the width guard is missing.
+    // A leftover row from a WIDER generation under the same model key — the
+    // shape that makes `vec_distance_cosine` raise if the width guard is
+    // missing. It rides a real asset because every embedding row points at a
+    // live entity; a width mismatch is not an orphan.
     planted.db.vault
       .prepare(
-        `INSERT INTO enrich_embedding
-           (embedding_id, target_type, target_id, model, dim, vector, created_at)
-         VALUES (?, 'media.asset', ?, ?, 3, ?, ?)`
+        "UPDATE enrich_embedding SET dim = 3, vector = ? WHERE target_id = ?"
       )
-      .run(
-        uuidv7(),
-        "orphan-wide-asset",
-        MODEL,
-        encodeVector([0.1, 0.2, 0.3]),
-        nowIso()
-      );
+      .run(encodeVector([0.1, 0.2, 0.3]), planted.assetIds[2]!);
     const outcome = await searchPhotosByText(planted.db, {
       embedQuery: embedQuery(),
       query: "a wide sunny shore",
     });
-    expect(outcome.status).toBe("ok");
+    if (outcome.status !== "ok") throw new Error("unreachable");
+    // Skipped, not scored 0 and not raised: the width guard leaves it out.
+    expect(outcome.hits.map((hit) => hit.assetId)).toStrictEqual(
+      planted.assetIds.slice(0, 2)
+    );
     planted.db.close();
   });
 

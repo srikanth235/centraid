@@ -71,16 +71,20 @@ export interface LockerPasskey {
   has_private_key?: boolean;
 }
 
-/** One durable history entry (#872). Previous passwords are sealed in the
- *  history row and never ride this payload. */
+/**
+ * One durable revision of an item (#872, ported to `core.entity_revision` in
+ * #916 D2). It NAMES A CHANGE AND ITS TIME AND NOTHING ELSE: the snapshot the
+ * vault kept is opened in the query layer, its sealed cells are never compared
+ * and never forwarded, and there is no address here a reveal permit could be
+ * minted for. A password this item was rotated away from survives sealed in
+ * that snapshot and leaves the vault only through a confirmed `locker.export`.
+ */
 export interface LockerRevision {
   revision_id: string;
   operation: string;
-  title?: string | null;
+  /** Column NAMES that the state superseding this snapshot says differently. */
   changed?: Record<string, unknown>;
   recorded_at: string;
-  /** True when this revision retains the password the item had before. */
-  has_previous_password?: boolean;
 }
 
 /** One row of Locker's access history: an auth, a reveal, or a fill. */
@@ -202,8 +206,7 @@ export interface LockerDetail {
   /** ADDITIONAL addresses; `url` above stays the primary one. */
   addresses?: LockerAddress[];
   passkey?: LockerPasskey | null;
-  /** Newest first. A retained previous password is reported as PRESENT and
-   *  never carried (`has_previous_password`). */
+  /** Newest first. What changed and when — never what it changed from. */
   history?: LockerRevision[];
   /** Attachment METADATA — the bytes ride the content spine, unsealed. */
   attachments?: {

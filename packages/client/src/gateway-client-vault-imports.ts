@@ -72,15 +72,25 @@ export async function vaultImportStage(input: {
   return readJson(res, "stage import");
 }
 
-/** Download the verified all-data portable bundle. */
-export async function vaultPortableExport(): Promise<{
+/**
+ * Download the verified all-data portable bundle.
+ *
+ * With a passphrase the bundle carries a password-wrapped custody kit and its
+ * sealed cells can be restored elsewhere (#630); without one it is
+ * ciphertext-only and an import of its secrets is refused. The passphrase goes
+ * in a POST body, never a query string.
+ */
+export async function vaultPortableExport(passphrase?: string): Promise<{
   blob: Blob;
   filename: string;
 }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/imports/export", {
-    method: "GET",
-    headers: authHeaders(token),
+    method: passphrase ? "POST" : "GET",
+    headers: passphrase
+      ? authHeaders(token, "application/json")
+      : authHeaders(token),
+    ...(passphrase ? { body: JSON.stringify({ passphrase }) } : {}),
   });
   if (!res.ok) {
     await readJson(res, "export portable vault");

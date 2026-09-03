@@ -6,7 +6,9 @@
  * reach them, or the deterministic-nonce idempotency contract breaks. SQLite
  * itself replays and validates on open; never re-implement replay here.
  *
- * Two rules, both forced by journal.db's out-of-process writers:
+ * Two rules, both forced by vault.db's out-of-process writers (the app-engine
+ * workers and the automation runner write it too, not only the gateway's
+ * command pipeline):
  *
  * 1. Segments end on commit boundaries. UNCOMMITTED trailing frames are NOT
  *    append-only — a rollback rewinds and the next transaction overwrites them,
@@ -24,23 +26,13 @@
 
 import { decrypt, deriveNonce, encryptWithNonce } from "./crypto.js";
 
-/** Format-bearing: object keys embed these names. */
-export type WalDbName = "vault" | "journal";
-export const WAL_DB_NAMES: readonly WalDbName[] = ["vault", "journal"];
-
-/**
- * The order both databases MUST be cut in, everywhere. Journal FIRST: a receipt
- * commits to journal.db only after its vault.db transaction did, so the reverse
- * order manufactures dangling receipts. Named because `WAL_DB_NAMES` is the
- * WRONG order and any ordering-sensitive loop reaching for it is silently wrong.
- */
-export const WAL_CAPTURE_ORDER: readonly WalDbName[] = ["journal", "vault"];
+/** Format-bearing: object keys embed this name. The vault is the ONE database
+ * the protocol ships; the name stays in the key because a restore reads the
+ * address, not a convention. */
+export type WalDbName = "vault";
 
 /** `vault` ↔ `vault.db` (manifest entry path / on-disk name). */
-export const WAL_DB_FILES: Record<WalDbName, string> = {
-  vault: "vault.db",
-  journal: "journal.db",
-};
+export const WAL_DB_FILES: Record<WalDbName, string> = { vault: "vault.db" };
 
 export interface WalSegmentAddress {
   db: WalDbName;
@@ -53,9 +45,9 @@ export interface WalSegmentAddress {
   /** Exclusive, on a commit boundary. Always > startOffset. */
   endOffset: number;
   /**
-   * Capture tick (monotonicized wall-clock ms). Which tick a coordinated restore
-   * cuts at is decided by the `WalPairMarker`, never the listing: an absent
-   * segment and an absent write look identical.
+   * Capture tick (monotonicized wall-clock ms). Which tick a restore cuts at is
+   * decided by the `WalTickMarker`, never the listing: an absent segment and an
+   * absent write look identical.
    */
   tickMs: number;
 }
@@ -68,30 +60,28 @@ export interface WalGroupCloser {
   endOffset: number;
 }
 
-/** One database's position at the end of a tick. */
-export interface WalPairPosition {
+/** The stream's position at the end of a tick. */
+export interface WalStreamPosition {
   group: number;
   /** Bytes of `group` durably captured; 0 when it has just opened. */
   endOffset: number;
 }
 
 /**
- * What BOTH databases had shipped at `tickMs`, sealed by the shipper, because a
- * LISTING cannot tell an IDLE database from one whose newest objects are GONE —
- * both look like a stream that ends. An idle vault must not hold a busy journal
- * back; a vault whose tail was lost MUST, or the journal carries receipts for
- * rows the restore lacks. Only the producer knows, and the seal is why a
- * provider can withhold this but never forge it.
+ * Where the vault's stream had reached at `tickMs`, sealed by the shipper,
+ * because a LISTING cannot tell an IDLE database from one whose newest objects
+ * are GONE — both look like a stream that ends. Only the producer knows, and
+ * the seal is why a provider can withhold this but never forge it: a restore
+ * that cannot PROVE it reassembled the marked position walks back to one it
+ * can, and says so.
  *
- * Both generations live in the KEY, so restore LISTs exactly its base pair's
- * markers, already tick-ordered, and GC decides from the key alone.
+ * The generation lives in the KEY, so restore LISTs exactly its base's markers,
+ * already tick-ordered, and GC decides from the key alone.
  */
-export interface WalPairMarker {
-  vaultGeneration: string;
-  journalGeneration: string;
+export interface WalTickMarker {
+  generation: string;
   tickMs: number;
-  vault: WalPairPosition;
-  journal: WalPairPosition;
+  position: WalStreamPosition;
 }
 
 const GENERATION_RE = /^[0-9a-f]{32}$/u;
@@ -151,61 +141,46 @@ export function walDbPrefix(db: WalDbName): string {
   return `wal/${db}/`;
 }
 
-/** Pair marker: `wal/tick/{vaultGeneration}-{journalGeneration}/{tick:013}`. */
-export function walPairMarkerKey(marker: {
-  vaultGeneration: string;
-  journalGeneration: string;
-  tickMs: number;
-}): string {
-  assertValidPairAddress(marker);
-  return `${walPairMarkerPrefix(marker.vaultGeneration, marker.journalGeneration)}${pad(marker.tickMs, 13)}`;
+/** Tick marker: `wal/tick/{generation}/{tick:013}`. */
+export function walTickMarkerKey(addr: WalTickMarkerAddress): string {
+  assertValidTickAddress(addr);
+  return `${walTickMarkerPrefix(addr.generation)}${pad(addr.tickMs, 13)}`;
 }
 
-/** One BASE PAIR's markers — the only ones a restore may use. */
-export function walPairMarkerPrefix(
-  vaultGeneration: string,
-  journalGeneration: string
-): string {
-  if (
-    !GENERATION_RE.test(vaultGeneration) ||
-    !GENERATION_RE.test(journalGeneration)
-  ) {
-    throw new Error(
-      `invalid wal generation pair "${vaultGeneration}-${journalGeneration}"`
-    );
-  }
-  return `wal/tick/${vaultGeneration}-${journalGeneration}/`;
+/** One BASE's markers — the only ones a restore of it may use. */
+export function walTickMarkerPrefix(generation: string): string {
+  if (!GENERATION_RE.test(generation))
+    throw new Error(`invalid wal generation "${generation}"`);
+  return `wal/tick/${generation}/`;
 }
 
-/** Every pair marker (GC discovery; the key names both generations). */
-export function walPairMarkerRootPrefix(): string {
+/** Every tick marker (GC discovery; the key names its generation). */
+export function walTickMarkerRootPrefix(): string {
   return "wal/tick/";
 }
 
 const SEGMENT_KEY_RE =
-  /^wal\/(?<db>vault|journal)\/(?<generation>[0-9a-f]{32})\/(?<group>\d{8})\/(?<startOffset>\d{12})-(?<endOffset>\d{12})-(?<tickMs>\d{13})$/u;
+  /^wal\/(?<db>vault)\/(?<generation>[0-9a-f]{32})\/(?<group>\d{8})\/(?<startOffset>\d{12})-(?<endOffset>\d{12})-(?<tickMs>\d{13})$/u;
 const CLOSER_KEY_RE =
-  /^wal\/(?<db>vault|journal)\/(?<generation>[0-9a-f]{32})\/(?<group>\d{8})\/closed-(?<endOffset>\d{12})$/u;
-const PAIR_MARKER_KEY_RE =
-  /^wal\/tick\/(?<vaultGeneration>[0-9a-f]{32})-(?<journalGeneration>[0-9a-f]{32})\/(?<tickMs>\d{13})$/u;
+  /^wal\/(?<db>vault)\/(?<generation>[0-9a-f]{32})\/(?<group>\d{8})\/closed-(?<endOffset>\d{12})$/u;
+const TICK_MARKER_KEY_RE =
+  /^wal\/tick\/(?<generation>[0-9a-f]{32})\/(?<tickMs>\d{13})$/u;
 
-/** Everything a pair-marker key carries. */
-export interface WalPairMarkerAddress {
-  vaultGeneration: string;
-  journalGeneration: string;
+/** Everything a tick-marker key carries. */
+export interface WalTickMarkerAddress {
+  generation: string;
   tickMs: number;
 }
 
-/** Null for keys that are not pair markers. */
-export function parseWalPairMarkerKey(
+/** Null for keys that are not tick markers. */
+export function parseWalTickMarkerKey(
   key: string
-): WalPairMarkerAddress | null {
-  const m = PAIR_MARKER_KEY_RE.exec(key);
+): WalTickMarkerAddress | null {
+  const m = TICK_MARKER_KEY_RE.exec(key);
   if (!m) return null;
   const g = m.groups!;
   return {
-    vaultGeneration: g.vaultGeneration!,
-    journalGeneration: g.journalGeneration!,
+    generation: g.generation!,
     tickMs: Math.trunc(Number(g.tickMs!)),
   };
 }
@@ -278,17 +253,12 @@ function assertValidCloser(closer: WalGroupCloser): void {
   }
 }
 
-function assertValidPairAddress(addr: WalPairMarkerAddress): void {
-  if (
-    !GENERATION_RE.test(addr.vaultGeneration) ||
-    !GENERATION_RE.test(addr.journalGeneration)
-  ) {
-    throw new Error(
-      `invalid wal generation pair "${addr.vaultGeneration}-${addr.journalGeneration}"`
-    );
+function assertValidTickAddress(addr: WalTickMarkerAddress): void {
+  if (!GENERATION_RE.test(addr.generation)) {
+    throw new Error(`invalid wal generation "${addr.generation}"`);
   }
   if (!Number.isInteger(addr.tickMs) || addr.tickMs < 0) {
-    throw new Error(`invalid wal pair marker tick ${addr.tickMs}`);
+    throw new Error(`invalid wal tick marker tick ${addr.tickMs}`);
   }
 }
 
@@ -297,14 +267,14 @@ function assertValidPairAddress(addr: WalPairMarkerAddress): void {
 // everything below keeps unit/contract coverage via wal-format.test.ts instead.
 // Stryker disable all
 
-// `WalPairPosition` is pair-marker PAYLOAD, never a KEY, so its validator sits
+// `WalStreamPosition` is tick-marker PAYLOAD, never a KEY, so its validator sits
 // on this side of the ownership line (#656 Layer 1C).
-function assertValidPosition(pos: WalPairPosition, db: WalDbName): void {
+function assertValidPosition(pos: WalStreamPosition): void {
   if (!Number.isInteger(pos.group) || pos.group < 0) {
-    throw new Error(`invalid ${db} marker group ${pos.group}`);
+    throw new Error(`invalid marker group ${pos.group}`);
   }
   if (!Number.isInteger(pos.endOffset) || pos.endOffset < 0) {
-    throw new Error(`invalid ${db} marker offset ${pos.endOffset}`);
+    throw new Error(`invalid marker offset ${pos.endOffset}`);
   }
 }
 
@@ -347,7 +317,7 @@ export function walSalts(header: Uint8Array): { salt1: number; salt2: number } {
  * commit frame has a non-zero size field at header bytes 4..8. Returns
  * `baseOffset` when no commit frame completes.
  *
- * The ONLY frame-level knowledge in the feature: journal.db's out-of-process
+ * The ONLY frame-level knowledge in the feature: vault.db's out-of-process
  * writers leave non-append-only tails, so shipping past the last commit forks
  * the stream from the file.
  */
@@ -472,7 +442,7 @@ function nonceInfo(addr: WalSegmentAddress): string {
 function segmentAad(vaultId: string, addr: WalSegmentAddress): Uint8Array {
   // Binds ciphertext to its full address and vault, so a provider swapping two
   // same-size segments fails the tag check. `tickMs` MUST be here — it alone
-  // decides point-in-time and coordinated cuts (G8), and unbound, a segment
+  // decides the point-in-time cut and which marker proves it, and unbound, a segment
   // copied onto a FORGED-tick key would still authenticate. The tag must cover
   // every field the planner trusts.
   return new Uint8Array(
@@ -559,17 +529,17 @@ export function openWalCloser(
   if (plain.length !== 0) throw new Error("openWalCloser: unexpected payload");
 }
 
-function pairNonceInfo(addr: WalPairMarkerAddress): string {
-  return `centraid-backup:wal-nonce:tick:${addr.vaultGeneration}:${addr.journalGeneration}:${addr.tickMs}`;
+function tickNonceInfo(addr: WalTickMarkerAddress): string {
+  return `centraid-backup:wal-nonce:tick:${addr.generation}:${addr.tickMs}`;
 }
 
-function pairAad(vaultId: string, addr: WalPairMarkerAddress): Uint8Array {
+function tickAad(vaultId: string, addr: WalTickMarkerAddress): Uint8Array {
   // Every field of the key, `tick` included: it alone decides which marker a
   // point-in-time restore selects, so a relabelled marker would make restore
-  // trust a LATER pair position at an EARLIER tick.
+  // trust a LATER position at an EARLIER tick.
   return new Uint8Array(
     Buffer.from(
-      `centraid-wal/1:${vaultId}:tick:${addr.vaultGeneration}:${addr.journalGeneration}:${addr.tickMs}`,
+      `centraid-wal/1:${vaultId}:tick:${addr.generation}:${addr.tickMs}`,
       "utf8"
     )
   );
@@ -580,67 +550,59 @@ function pairAad(vaultId: string, addr: WalPairMarkerAddress): Uint8Array {
  * address, so two different payloads under one address reuse a (key, nonce)
  * pair. This is what makes an honest retry converge byte-identically.
  */
-function pairPayload(marker: WalPairMarker): Uint8Array {
-  const pos = (p: WalPairPosition): string =>
-    `{"endOffset":${p.endOffset},"group":${p.group}}`;
+function tickPayload(marker: WalTickMarker): Uint8Array {
   return new TextEncoder().encode(
-    `{"journal":${pos(marker.journal)},"tickMs":${marker.tickMs},"v":1,"vault":${pos(marker.vault)}}`
+    `{"position":{"endOffset":${marker.position.endOffset},"group":${marker.position.group}},"tickMs":${marker.tickMs},"v":1}`
   );
 }
 
-/** Deterministic: same address + positions ⇒ same object. */
-export function sealWalPairMarker(
+/** Deterministic: same address + position ⇒ same object. */
+export function sealWalTickMarker(
   dataKey: Uint8Array,
   vaultId: string,
-  marker: WalPairMarker
+  marker: WalTickMarker
 ): Uint8Array {
-  assertValidPairAddress(marker);
-  assertValidPosition(marker.vault, "vault");
-  assertValidPosition(marker.journal, "journal");
-  const nonce = deriveNonce(dataKey, pairNonceInfo(marker));
+  assertValidTickAddress(marker);
+  assertValidPosition(marker.position);
+  const nonce = deriveNonce(dataKey, tickNonceInfo(marker));
   return encryptWithNonce(
     dataKey,
     nonce,
-    pairPayload(marker),
-    pairAad(vaultId, marker)
+    tickPayload(marker),
+    tickAad(vaultId, marker)
   );
 }
 
 /** The payload-vs-key `tickMs` check is belt and braces over the AAD. */
-export function openWalPairMarker(
+export function openWalTickMarker(
   dataKey: Uint8Array,
   vaultId: string,
-  addr: WalPairMarkerAddress,
+  addr: WalTickMarkerAddress,
   sealed: Uint8Array
-): WalPairMarker {
-  const plain = decrypt(dataKey, sealed, pairAad(vaultId, addr));
+): WalTickMarker {
+  const plain = decrypt(dataKey, sealed, tickAad(vaultId, addr));
   const parsed = JSON.parse(new TextDecoder().decode(plain)) as {
     v?: number;
     tickMs?: number;
-    vault?: WalPairPosition;
-    journal?: WalPairPosition;
+    position?: WalStreamPosition;
   };
   if (parsed.v !== 1)
-    throw new Error(`openWalPairMarker: unknown payload version ${parsed.v}`);
+    throw new Error(`openWalTickMarker: unknown payload version ${parsed.v}`);
   if (parsed.tickMs !== addr.tickMs) {
     throw new Error(
-      `openWalPairMarker: payload tick ${parsed.tickMs} disagrees with key tick ${addr.tickMs}`
+      `openWalTickMarker: payload tick ${parsed.tickMs} disagrees with key tick ${addr.tickMs}`
     );
   }
-  if (!parsed.vault || !parsed.journal)
-    throw new Error("openWalPairMarker: missing positions");
-  const marker: WalPairMarker = {
-    vaultGeneration: addr.vaultGeneration,
-    journalGeneration: addr.journalGeneration,
+  if (!parsed.position) throw new Error("openWalTickMarker: missing position");
+  const marker: WalTickMarker = {
+    generation: addr.generation,
     tickMs: addr.tickMs,
-    vault: { group: parsed.vault.group, endOffset: parsed.vault.endOffset },
-    journal: {
-      group: parsed.journal.group,
-      endOffset: parsed.journal.endOffset,
+    position: {
+      group: parsed.position.group,
+      endOffset: parsed.position.endOffset,
     },
   };
-  assertValidPosition(marker.vault, "vault");
-  assertValidPosition(marker.journal, "journal");
+  assertValidPosition(marker.position);
   return marker;
 }
 
@@ -653,9 +615,9 @@ export interface WalReplayPlan {
   lastTickMs: number;
   /**
    * The plan stopped at a hole rather than the requested cut. NOT the
-   * coordination signal: a stream whose newest objects are gone has no hole, and
-   * one wholly gone lists nothing. Coordination is pair markers' job; this says
-   * only that one chain broke before the cut.
+   * truncation signal: a stream whose newest objects are gone has no hole, and
+   * one wholly gone lists nothing. Proving the tip is the tick markers' job;
+   * this says only that the chain broke before the cut.
    */
   truncatedByHole: boolean;
 }
@@ -680,16 +642,13 @@ export interface WalStreamListing {
  */
 export function planWalReplay(
   listing: WalStreamListing,
-  opts: { generation: string; db: WalDbName; cutTickMs?: number }
+  opts: { generation: string; cutTickMs?: number }
 ): WalReplayPlan {
   const cut = opts.cutTickMs ?? Number.POSITIVE_INFINITY;
   const relevant = listing.segments
     // Filter by PITR eligibility BEFORE resolving duplicate starts, or a longer
     // post-cut retry hides a shorter same-start segment durable at the cut.
-    .filter(
-      (s) =>
-        s.db === opts.db && s.generation === opts.generation && s.tickMs <= cut
-    )
+    .filter((s) => s.generation === opts.generation && s.tickMs <= cut)
     .sort(
       (a, b) =>
         a.group - b.group ||
@@ -698,9 +657,7 @@ export function planWalReplay(
     );
   const closerEnd = new Map<number, number>();
   for (const c of listing.closers) {
-    if (c.db === opts.db && c.generation === opts.generation) {
-      closerEnd.set(c.group, c.endOffset);
-    }
+    if (c.generation === opts.generation) closerEnd.set(c.group, c.endOffset);
   }
 
   const planned: WalSegmentAddress[] = [];
@@ -748,7 +705,6 @@ export function planWalReplay(
   };
 }
 
-const EMPTY_LISTING: WalStreamListing = { segments: [], closers: [] };
 const EMPTY_PLAN: WalReplayPlan = {
   segments: [],
   lastTickMs: -1,
@@ -756,7 +712,7 @@ const EMPTY_PLAN: WalReplayPlan = {
 };
 
 /**
- * What a planned chain REACHES, in the terms a pair marker records. The
+ * What a planned chain REACHES, in the terms a tick marker records. The
  * normalization is the point: a chain ending at group N's AUTHENTICATED closer
  * is `(N+1, 0)`, matching the shipper after a rollover, while the same offset
  * with the closer MISSING is only `(N, end)` and fails that marker. That is the
@@ -765,14 +721,13 @@ const EMPTY_PLAN: WalReplayPlan = {
 export function reachedPosition(
   plan: WalReplayPlan,
   listing: WalStreamListing,
-  opts: { db: WalDbName; generation: string }
-): WalPairPosition {
+  opts: { generation: string }
+): WalStreamPosition {
   const last = plan.segments[plan.segments.length - 1];
   // No planned segment ⇒ the base itself, always group 0, offset 0.
   if (!last) return { group: 0, endOffset: 0 };
   const closed = listing.closers.some(
     (c) =>
-      c.db === opts.db &&
       c.generation === opts.generation &&
       c.group === last.group &&
       c.endOffset === last.endOffset
@@ -782,132 +737,68 @@ export function reachedPosition(
     : { group: last.group, endOffset: last.endOffset };
 }
 
-/** What `planCoordinatedReplay` decided, and how short of the tip. */
-export interface CoordinatedReplayResult {
-  plans: Record<WalDbName, WalReplayPlan>;
+/** What `planMarkedReplay` decided, and how short of the tip. */
+export interface MarkedReplayResult {
+  /** Replay plan for the chosen cut; empty at the base floor. */
+  plan: WalReplayPlan;
   /**
-   * The single tick BOTH databases were cut at; -1 at the base floor, which is
-   * itself coordinated since both bases come from one tick.
+   * The tick the stream was cut at; -1 at the base floor, which is itself a
+   * capture instant (the base was cloned in one).
    */
-  coordinatedCutMs: number;
+  cutTickMs: number;
   /**
-   * Newest marker at or before the cut; -1 when none. `coordinatedCutMs <
+   * Newest marker at or before the requested cut; -1 when none. `cutTickMs <
    * newestMarkerTickMs` is the real "tip NOT restorable" signal.
    */
   newestMarkerTickMs: number;
-  /** False when only one database has a generation. */
-  coordinated: boolean;
 }
 
 /**
- * The coordinated two-database cut (G8). Walk markers newest-first and take the
- * first BOTH databases can PROVE they reached; none satisfiable ⇒ the base pair,
- * coherent because both bases are minted in one tick.
+ * The marked cut. Walk markers newest-first and take the first the stream can
+ * PROVE it reached; none satisfiable ⇒ the base, which is always a coherent
+ * instant.
  *
- * Never drive this from the listing: it cannot tell IDLE from LOST. "Smaller
- * reached tick" regresses an idle vault; each database's own tip lets a lost
- * vault tail hand back a journal carrying receipts for absent rows. A provider
- * CAN withhold markers and roll the restore back — G6 degradation, defended by
- * freshness signals, not by the format.
+ * Never drive this from the listing alone: it cannot tell IDLE from LOST. A
+ * shipped-but-unmarked tail is indistinguishable from a tail the provider
+ * deleted, so replaying to the listing's end would silently trust a stream that
+ * was cut short. A provider CAN withhold markers and roll the restore back —
+ * G6 degradation, defended by freshness signals, not by the format.
  */
-export function planCoordinatedReplay(opts: {
-  listingByDb: Partial<Record<WalDbName, WalStreamListing>>;
-  generationByDb: Partial<Record<WalDbName, string>>;
-  /** EXACTLY this base pair, already authenticated. Order irrelevant. */
-  markers?: readonly WalPairMarker[];
+export function planMarkedReplay(opts: {
+  listing: WalStreamListing;
+  generation: string;
+  /** EXACTLY this base's markers, already authenticated. Order irrelevant. */
+  markers?: readonly WalTickMarker[];
   cutTickMs?: number;
-}): CoordinatedReplayResult {
-  const { listingByDb, generationByDb } = opts;
+}): MarkedReplayResult {
   const cut = opts.cutTickMs ?? Number.POSITIVE_INFINITY;
-  const plan = (
-    db: WalDbName,
-    generation: string,
-    cutTickMs: number
-  ): WalReplayPlan =>
-    planWalReplay(listingByDb[db] ?? EMPTY_LISTING, {
-      db,
-      generation,
-      ...(Number.isFinite(cutTickMs) ? { cutTickMs } : {}),
-    });
-
-  if (
-    generationByDb.vault === undefined ||
-    generationByDb.journal === undefined
-  ) {
-    // Not a pair: nothing to coordinate. Unreachable from a real snapshot, but
-    // direct callers use the planner single-sided.
-    const plans = {} as Record<WalDbName, WalReplayPlan>;
-    let reached = -1;
-    for (const db of WAL_DB_NAMES) {
-      const generation = generationByDb[db];
-      plans[db] =
-        generation === undefined ? EMPTY_PLAN : plan(db, generation, cut);
-      reached = Math.max(reached, plans[db].lastTickMs);
-    }
-    return {
-      plans,
-      coordinatedCutMs: reached,
-      newestMarkerTickMs: -1,
-      coordinated: false,
-    };
-  }
-
-  const generations = {
-    vault: generationByDb.vault,
-    journal: generationByDb.journal,
-  };
-  // Re-filter by generation even though restore LISTs a pair-scoped prefix:
-  // positions are believed ABSOLUTELY, and a marker from another base pair
-  // describes offsets into a different stream.
+  // Re-filter by generation even though restore LISTs a generation-scoped
+  // prefix: positions are believed ABSOLUTELY, and a marker from another
+  // generation describes offsets into a different stream.
   const candidates = [...(opts.markers ?? [])]
-    .filter(
-      (m) =>
-        m.vaultGeneration === generations.vault &&
-        m.journalGeneration === generations.journal &&
-        m.tickMs <= cut
-    )
+    .filter((m) => m.generation === opts.generation && m.tickMs <= cut)
     .sort((a, b) => b.tickMs - a.tickMs);
   const newestMarkerTickMs = candidates[0]?.tickMs ?? -1;
 
   for (const marker of candidates) {
-    const plans = {} as Record<WalDbName, WalReplayPlan>;
-    let satisfied = true;
-    for (const db of WAL_DB_NAMES) {
-      const generation = generations[db];
-      const candidate = plan(db, generation, marker.tickMs);
-      // A hole before the marker's tick means broken, not merely short — the
-      // recorded position cannot be trusted even if the arithmetic lines up.
-      if (candidate.truncatedByHole) {
-        satisfied = false;
-        break;
-      }
-      const at = reachedPosition(candidate, listingByDb[db] ?? EMPTY_LISTING, {
-        db,
-        generation,
-      });
-      const want = marker[db];
-      if (at.group !== want.group || at.endOffset !== want.endOffset) {
-        satisfied = false;
-        break;
-      }
-      plans[db] = candidate;
-    }
-    if (satisfied) {
-      return {
-        plans,
-        coordinatedCutMs: marker.tickMs,
-        newestMarkerTickMs,
-        coordinated: true,
-      };
+    const plan = planWalReplay(opts.listing, {
+      generation: opts.generation,
+      cutTickMs: marker.tickMs,
+    });
+    // A hole before the marker's tick means broken, not merely short — the
+    // recorded position cannot be trusted even if the arithmetic lines up.
+    if (plan.truncatedByHole) continue;
+    const at = reachedPosition(plan, opts.listing, {
+      generation: opts.generation,
+    });
+    if (
+      at.group === marker.position.group &&
+      at.endOffset === marker.position.endOffset
+    ) {
+      return { plan, cutTickMs: marker.tickMs, newestMarkerTickMs };
     }
   }
 
-  // Fall to the base pair: both bases were cloned in ONE tick, so this floor is
-  // itself a coordinated instant.
-  return {
-    plans: { vault: EMPTY_PLAN, journal: EMPTY_PLAN },
-    coordinatedCutMs: -1,
-    newestMarkerTickMs,
-    coordinated: true,
-  };
+  // Fall to the base: it was cloned at one instant, so this floor is coherent.
+  return { plan: EMPTY_PLAN, cutTickMs: -1, newestMarkerTickMs };
 }

@@ -164,7 +164,7 @@ export interface SharedMember {
 }
 
 interface OriginRow {
-  item_id: string;
+  target_id: string;
   origin_vault_id: string;
   shared_at?: number | string | null;
 }
@@ -487,7 +487,7 @@ export async function readOriginsByDocument({
   try {
     const origins = await ctx.vault.read({
       entity: "core.share_origin",
-      where: [{ column: "item_type", op: "eq", value: DOCUMENT_TARGET_TYPE }],
+      where: [{ column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE }],
       orderBy: { column: "shared_at", dir: "desc" },
       limit,
       purpose,
@@ -506,7 +506,7 @@ export async function readOriginsByDocument({
       originRows.map((o) => {
         const partyId = partyByVault.get(o.origin_vault_id) ?? null;
         return [
-          o.item_id,
+          o.target_id,
           {
             vault_id: o.origin_vault_id,
             party_id: partyId,

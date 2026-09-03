@@ -1,10 +1,15 @@
 // #892 — the doctor has to FAIL on a broken vault, or it is a slower no-op.
 //
-// Every assertion here corrupts a real vault in a way the engine cannot catch
-// on its own and then requires the sweep to name it. A test that only proved
-// "a healthy vault is healthy" would pass just as happily against a doctor that
-// returned `{ ok: true }` unconditionally, which is the exact failure mode a
-// structural checker is prone to.
+// Every assertion here corrupts a real vault in a way an ordinary command
+// could not and then requires the sweep to name it. A test that only proved
+// "a healthy vault is healthy" would pass just as happily against a doctor
+// that returned `{ ok: true }` unconditionally, which is the exact failure
+// mode a structural checker is prone to.
+//
+// Since the entity supertype landed (#916) the polymorphic pointers the old
+// sweep walked by hand are REAL composite foreign keys, so the engine refuses
+// a dangling pointer at write time and `PRAGMA foreign_key_check` is what
+// finds one that got in behind its back.
 
 import { describe, expect, it } from "vitest";
 
@@ -28,25 +33,42 @@ describe(vaultDoctor, () => {
       expect(report.ok).toBe(true);
       expect(report.findings).toStrictEqual([]);
       // A vacuous pass is the risk: prove the sweep had something to sweep.
-      expect(report.checked.polyRefPairs).toBeGreaterThan(0);
-      expect(formatDoctorReport(report)).toContain(
-        "polymorphic reference pair"
-      );
+      expect(report.checked.foreignKeys).toBeGreaterThan(0);
+      expect(formatDoctorReport(report)).toContain("foreign key");
     } finally {
       db.close();
     }
   });
 
-  it("catches a polymorphic pointer whose target row was hard-deleted", () => {
+  it("refuses the dangling polymorphic pointer at write time (#916)", () => {
     const db = freshVault();
     try {
-      // `enrich_derivation` is in POLY_REF_REGISTRY: it points at a canonical row
-      // through a (target_type, target_id) pair SQLite knows nothing about, which
-      // is why #441 had to sweep it by hand — and why a missed sweep is invisible
-      // until something like this looks. #724 W2 names the consequence: a stamp
-      // for a purged target claims a derivation that was never done for whatever
-      // row later reuses the id.
+      // The old #441 orphan vector: a derivation stamped for a target row that
+      // does not exist. `(target_type, target_id)` is now a composite FK into
+      // `core_entity`, so the engine — not a hand-written registry walk — is
+      // the check, and it refuses.
+      expect(() =>
+        db.vault
+          .prepare(
+            `INSERT INTO enrich_derivation
+               (derivation_id, target_type, target_id, variant, capability, model, produced_at)
+             VALUES (?, 'core.document', ?, 'caption', 'vision', 'fake@1', '2026-01-01T00:00:00.000Z')`
+          )
+          .run(uuidv7(), uuidv7())
+      ).toThrow(/FOREIGN KEY/iu);
+      expect(vaultDoctor(db).ok).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("catches a pointer written behind the engine's back", () => {
+    const db = freshVault();
+    try {
       const missing = uuidv7();
+      // Exactly how a corrupt file arrives: bytes restored from elsewhere, or
+      // a writer that turned the enforcement off. The doctor is the last look.
+      db.vault.exec("PRAGMA foreign_keys = OFF");
       db.vault
         .prepare(
           `INSERT INTO enrich_derivation
@@ -54,33 +76,13 @@ describe(vaultDoctor, () => {
            VALUES (?, 'core.document', ?, 'caption', 'vision', 'fake@1', '2026-01-01T00:00:00.000Z')`
         )
         .run(uuidv7(), missing);
+      db.vault.exec("PRAGMA foreign_keys = ON");
 
       const report = vaultDoctor(db);
       expect(report.ok).toBe(false);
-      const finding = report.findings.find((f) => f.class === "poly-refs");
+      const finding = report.findings.find((f) => f.class === "foreign-keys");
       expect(finding).toBeDefined();
-      expect(finding?.detail).toContain("enrich_derivation");
-      expect(finding?.sample.join(",")).toContain(missing);
-    } finally {
-      db.close();
-    }
-  });
-
-  it("does not flag a pointer whose logical type this build cannot resolve", () => {
-    const db = freshVault();
-    try {
-      // An extension band or a newer schema can legitimately carry a type this
-      // build has never heard of. Calling that an orphan would make the doctor
-      // fail on exactly the forward-compatible vaults the golden-vault gate
-      // exists to open.
-      db.vault
-        .prepare(
-          `INSERT INTO enrich_derivation
-             (derivation_id, target_type, target_id, variant, capability, model, produced_at)
-           VALUES (?, 'some.futuretype', ?, 'caption', 'vision', 'fake@1', '2026-01-01T00:00:00.000Z')`
-        )
-        .run(uuidv7(), uuidv7());
-      expect(vaultDoctor(db).ok).toBe(true);
+      expect(finding?.sample).toContain("enrich_derivation");
     } finally {
       db.close();
     }
@@ -89,6 +91,7 @@ describe(vaultDoctor, () => {
   it("formats a failing report as a readable block and throws it", () => {
     const db = freshVault();
     try {
+      db.vault.exec("PRAGMA foreign_keys = OFF");
       db.vault
         .prepare(
           `INSERT INTO enrich_derivation
@@ -96,8 +99,9 @@ describe(vaultDoctor, () => {
            VALUES (?, 'core.document', ?, 'caption', 'vision', 'fake@1', '2026-01-01T00:00:00.000Z')`
         )
         .run(uuidv7(), uuidv7());
+      db.vault.exec("PRAGMA foreign_keys = ON");
       expect(() => assertVaultHealthy(db)).toThrow(/vault doctor/u);
-      expect(formatDoctorReport(vaultDoctor(db))).toMatch(/\[poly-refs\]/u);
+      expect(formatDoctorReport(vaultDoctor(db))).toMatch(/\[foreign-keys\]/u);
     } finally {
       db.close();
     }

@@ -51,8 +51,7 @@ function quoteIdentifier(value: string): string {
 
 function shapeOf(vault: DatabaseSync, entity: string): EntityShape {
   const ref = resolveEntity(entity, vault);
-  if (!ref || ref.file !== "vault")
-    throw new Error(`unknown replica entity "${entity}"`);
+  if (!ref) throw new Error(`unknown replica entity "${entity}"`);
   const info = vault
     .prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`)
     .all() as unknown as ColumnInfo[];

@@ -1,0 +1,540 @@
+// The CONVERSATION LEDGER band (#190, #438) — `conversation ⊃ turn ⊃ item`,
+// the append-heavy transcript of every chat, build and automation run.
+//
+// It lives in the vault file like every other band (#916, one file): the vault
+// package owns every table in vault.db, and the engine (packages/server) owns
+// the STORE CODE over these tables and receives the vault connection. The band
+// is MACHINERY, registered names-only: it is excluded from the portable export
+// and from the replica BY BAND, exactly as the audit band is.
+//
+// The band is MUTABLE, unlike `audit` — a turn is amended as it streams — so
+// it carries no append-only triggers. Retention is not optional: the
+// archive/prune pass declared in `audit.ts` (`RETENTION_WINDOWS`) seals cold
+// turn ranges into a content-addressed segment in the blob CAS and prunes the
+// raw rows, which is what keeps the sovereign file small now that there is
+// only one of them.
+//
+// `turns.conversation_id`, `items.turn_id` and `attachments.item_id` are
+// CASCADE foreign keys; `turns.parent_turn_id` stays a plain column because a
+// sub-run's parent may be recorded after this row in one batch. None of this
+// is reachable from a handler `db` or from the `vault_sql` tool.
+
+/** Every physical table of the `ledger` band. */
+export const LEDGER_BAND_TABLES: readonly string[] = [
+  "conversations",
+  "turns",
+  "items",
+  "attachments",
+  "conversation_harness_sessions",
+  "conversation_turn_locks",
+  "conversation_workspace_selection",
+  "harness_health",
+  "conversation_provider_consent",
+  "automation_state",
+  "automation_trigger_cursor",
+  "trigger_ingress",
+  "conversation_archive",
+  "conversation_digest",
+];
+
+export const LEDGER_DDL = `
+
+CREATE TABLE conversations (
+  id                 TEXT PRIMARY KEY,
+  kind               TEXT NOT NULL,
+  user_id            TEXT NOT NULL,
+  app_id             TEXT,
+  automation_id      TEXT,
+  title              TEXT NOT NULL DEFAULT '',
+  harness_kind       TEXT,
+  harness_session_id TEXT,
+  harness_usage_json TEXT,
+  hydration_count    INTEGER NOT NULL DEFAULT 0,
+  last_hydrated_at   INTEGER,
+  turn_count         INTEGER NOT NULL DEFAULT 0,
+  item_count         INTEGER NOT NULL DEFAULT 0,
+  pinned             INTEGER NOT NULL DEFAULT 0,
+  archived           INTEGER NOT NULL DEFAULT 0,
+  created_at         INTEGER NOT NULL,
+  updated_at         INTEGER NOT NULL,
+  CHECK (kind IN ('chat','automation','build'))
+) STRICT;
+CREATE INDEX idx_conversations_user_updated
+  ON conversations(user_id, pinned DESC, updated_at DESC);
+CREATE INDEX idx_conversations_app
+  ON conversations(app_id, updated_at DESC);
+CREATE INDEX idx_conversations_automation
+  ON conversations(automation_id);
+
+CREATE TABLE turns (
+  id                       TEXT PRIMARY KEY,
+  conversation_id          TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  seq                      INTEGER NOT NULL,
+  parent_turn_id           TEXT,
+  trigger                  TEXT NOT NULL,
+  trigger_origin           TEXT,
+  note                     TEXT,
+  summary                  TEXT,
+  output_json              TEXT,
+  retry_of                 TEXT,
+  idempotency_key          TEXT,
+  -- Explicit handoff-cost marker (D4): estimated canonical-ledger prompt
+  -- tokens injected on this turn, separate from ACP-reported usage.
+  hydration_tokens         INTEGER,
+  ok                       INTEGER NOT NULL DEFAULT 0,
+  error                    TEXT,
+  feedback                 TEXT,
+  pinned                   INTEGER NOT NULL DEFAULT 0,
+  started_at               INTEGER NOT NULL,
+  ended_at                 INTEGER,
+  total_input_tokens       INTEGER,
+  total_output_tokens      INTEGER,
+  total_cache_read_tokens  INTEGER,
+  total_cache_write_tokens INTEGER,
+  total_cost_usd           REAL,
+  step_count               INTEGER,
+  tool_count               INTEGER,
+  CHECK (trigger IN ('scheduled','manual','replay','on_failure','compile','interactive')),
+  CHECK (feedback IS NULL OR feedback IN ('up','down'))
+) STRICT;
+CREATE INDEX idx_turns_conversation
+  ON turns(conversation_id, seq);
+CREATE INDEX idx_turns_started
+  ON turns(started_at DESC);
+CREATE INDEX idx_turns_parent
+  ON turns(parent_turn_id);
+-- Idempotency lookup (issue #420, Wave 6): a duplicate turn POST with the
+-- same key on the same conversation resolves to the already-recorded turn
+-- instead of re-running. Not UNIQUE — automations/legacy rows leave it NULL.
+CREATE INDEX idx_turns_idempotency
+  ON turns(conversation_id, idempotency_key);
+
+CREATE TABLE items (
+  id                 TEXT PRIMARY KEY,
+  turn_id            TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+  ordinal            INTEGER NOT NULL,
+  call_id            TEXT,
+  batch_id           INTEGER,
+  kind               TEXT NOT NULL,
+  role               TEXT,
+  text               TEXT,
+  name               TEXT,
+  args_json          TEXT,
+  output_json        TEXT,
+  raw_json           TEXT,
+  child_turn_id      TEXT,
+  model              TEXT,
+  harness            TEXT,
+  -- ACP semantic thought_level confirmed for this call. NULL means the
+  -- harness did not confirm a selectable effort; never infer a default.
+  effort             TEXT,
+  input_tokens       INTEGER,
+  output_tokens      INTEGER,
+  cache_read_tokens  INTEGER,
+  cache_write_tokens INTEGER,
+  cost_usd           REAL,
+  -- Provenance for cost_usd (issue #514): 'harness' = harness/ACP reported USD;
+  -- 'estimated' = catalog (model-pricing). NULL = legacy or unpriced.
+  cost_source        TEXT,
+  app_id             TEXT,
+  ok                 INTEGER NOT NULL DEFAULT 1,
+  error              TEXT,
+  started_at         INTEGER NOT NULL,
+  ended_at           INTEGER,
+  duration_ms        INTEGER,
+  CHECK (kind IN ('message_in','step','tool','delegate')),
+  CHECK (cost_source IS NULL OR cost_source IN ('harness','estimated'))
+) STRICT;
+CREATE INDEX idx_items_by_turn
+  ON items(turn_id, ordinal);
+CREATE UNIQUE INDEX idx_items_turn_call
+  ON items(turn_id, call_id) WHERE call_id IS NOT NULL;
+CREATE INDEX idx_items_by_model
+  ON items(model, started_at DESC);
+/*
+ * Covering index for run_summary's three dominant-* rollups (issue #659
+ * G8). Each is a correlated GROUP BY over one turn's step/delegate items, run
+ * once per turn per Insights query — seven of them per dashboard load. With
+ * only idx_items_by_turn the planner found the turn's items by index and
+ * then fetched EVERY matching row from the table to read kind, model,
+ * harness, effort, and the two token columns. Carrying those in the index
+ * makes each rollup an index-only scan.
+ *
+ * PARTIAL on the two kinds the view actually aggregates, so the hot
+ * streaming inserts — message_in and tool items — do not pay to maintain it.
+ */
+CREATE INDEX idx_items_run_rollup
+  ON items(turn_id, model, harness, effort, input_tokens, output_tokens)
+  WHERE kind IN ('step','delegate');
+
+CREATE TABLE attachments (
+  id         TEXT PRIMARY KEY,
+  item_id    TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  hash       TEXT NOT NULL,
+  mime       TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  source     TEXT,
+  filename   TEXT,
+  -- Harness-created files stay in their workspace. The hash verifies the
+  -- referenced bytes; no duplicate is copied into the blob CAS.
+  workspace_path TEXT,
+  created_at INTEGER NOT NULL
+) STRICT;
+CREATE INDEX idx_attachments_item
+  ON attachments(item_id);
+CREATE INDEX idx_attachments_hash
+  ON attachments(hash);
+
+-- ACP resume handles are bindings to the canonical conversation ledger,
+-- never the ledger identity itself. Retaining one row per observed
+-- harness/session lets A → B → A resume A and hydrate only the canonical
+-- turn delta past A's watermark.
+CREATE TABLE conversation_harness_sessions (
+  id                    TEXT PRIMARY KEY,
+  conversation_id       TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  harness_kind           TEXT NOT NULL,
+  acp_session_id        TEXT NOT NULL,
+  usage_snapshot_json   TEXT,
+  hydrated_through_seq  INTEGER NOT NULL DEFAULT -1,
+  status                TEXT NOT NULL DEFAULT 'warm',
+  last_used_at          INTEGER NOT NULL,
+  created_at            INTEGER NOT NULL,
+  UNIQUE (conversation_id, harness_kind, acp_session_id),
+  CHECK (status IN ('active','warm','cold','stale'))
+) STRICT;
+CREATE INDEX idx_conversation_harness_latest
+  ON conversation_harness_sessions(conversation_id, harness_kind, status, last_used_at DESC);
+
+-- Cross-process single writer. The in-process queue improves UX; this row
+-- is the correctness boundary shared by a gateway and worker processes.
+CREATE TABLE conversation_turn_locks (
+  conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+  lock_token      TEXT NOT NULL,
+  acquired_at     INTEGER NOT NULL
+) STRICT;
+
+-- The workspace choice is an enum resolved by the host to Centraid-owned
+-- roots. Raw client paths never become durable authority. Additional roots
+-- are recorded as explicit per-conversation consent.
+CREATE TABLE conversation_workspace_selection (
+  conversation_id             TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+  primary_kind                TEXT NOT NULL,
+  additional_directories_json TEXT NOT NULL DEFAULT '[]',
+  updated_at                  INTEGER NOT NULL,
+  CHECK (primary_kind IN ('vault-data','app','draft'))
+) STRICT;
+
+-- Persistent harness circuit breakers. One row per workspace context,
+-- harness and failure class keeps an auth outage independent from a later
+-- transport wedge and prevents one broken project from sidelining a
+-- harness everywhere on the device.
+CREATE TABLE harness_health (
+  workspace_context    TEXT NOT NULL,
+  harness_kind          TEXT NOT NULL,
+  failure_class        TEXT NOT NULL,
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,
+  breaker_until        INTEGER,
+  half_open_claimed_at INTEGER,
+  last_error           TEXT,
+  last_failure_at      INTEGER,
+  last_ok_at           INTEGER,
+  PRIMARY KEY (workspace_context, harness_kind, failure_class),
+  CHECK (failure_class IN ('spawn','auth','init','timeout','quota','wedge','exit','unknown'))
+) STRICT;
+CREATE INDEX idx_harness_health_breaker
+  ON harness_health(workspace_context, harness_kind, breaker_until);
+
+-- Explicit provider-egress grants. Direct consent and ladder-derived
+-- consent are separate rows: removing a harness from one subsystem ladder
+-- revokes only that subsystem's forward grant and never erases a direct
+-- conversation × provider decision.
+CREATE TABLE conversation_provider_consent (
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  harness_kind     TEXT NOT NULL,
+  source          TEXT NOT NULL,
+  subsystem       TEXT NOT NULL,
+  granted_at      INTEGER NOT NULL,
+  revoked_at      INTEGER,
+  PRIMARY KEY (conversation_id, harness_kind, source, subsystem),
+  CHECK (
+    (source = 'direct' AND subsystem = '')
+    OR
+    (source = 'ladder' AND subsystem IN ('assistant','ask','builder','automations'))
+  )
+) STRICT;
+CREATE INDEX idx_conversation_provider_consent_active
+  ON conversation_provider_consent(conversation_id, harness_kind, subsystem, revoked_at);
+
+CREATE TABLE automation_state (
+  automation_id TEXT NOT NULL,
+  key           TEXT NOT NULL,
+  value_json    TEXT,
+  updated_at    INTEGER NOT NULL,
+  PRIMARY KEY (automation_id, key)
+) STRICT;
+
+CREATE TABLE automation_trigger_cursor (
+  automation_id TEXT NOT NULL,
+  trigger_index INTEGER NOT NULL,
+  source_kind   TEXT NOT NULL,
+  position_json TEXT,
+  pending_json  TEXT,
+  window_from  INTEGER,
+  window_to    INTEGER,
+  skipped      INTEGER NOT NULL DEFAULT 0,
+  gap_reason   TEXT,
+  updated_at   INTEGER NOT NULL,
+  PRIMARY KEY (automation_id, trigger_index)
+) STRICT;
+CREATE INDEX idx_automation_trigger_cursor_updated
+  ON automation_trigger_cursor(updated_at);
+
+CREATE TABLE trigger_ingress (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  source        TEXT NOT NULL,
+  source_key    TEXT NOT NULL,
+  delivery_id   TEXT NOT NULL,
+  received_at   INTEGER NOT NULL,
+  payload_json  TEXT,
+  payload_ref   TEXT,
+  expires_at    INTEGER NOT NULL,
+  UNIQUE (source, source_key, delivery_id),
+  CHECK (source IN ('webhook','poll')),
+  CHECK (payload_json IS NOT NULL OR payload_ref IS NOT NULL)
+) STRICT;
+CREATE INDEX idx_trigger_ingress_source_position
+  ON trigger_ingress(source_key, id);
+CREATE INDEX idx_trigger_ingress_expiry
+  ON trigger_ingress(expires_at);
+
+-- #438 ledger-band archival index. The ledger grows at machine speed; these
+-- two cold-state tables let it converge to the recent working set. A
+-- turn-range idle past the archive window (default 90d) serializes to a
+-- content-addressed SEGMENT in the vault blob CAS; raw turns/items prune only
+-- after that segment's custody is proven. History changes TEMPERATURE, never
+-- existence — true deletion stays the consent/delete path (hence the CASCADE).
+--
+-- conversation_archive: one row per archived turn-range segment. A whole idle
+-- conversation archives as one (or a few bounded) segment(s); an eternal
+-- automation thread archives aged ranges while the thread stays live. The
+-- segment_sha256 blobs are CAS GC ROOTS (conversationArchiveShas) — the
+-- reconcile sweep must treat them as reachable or it would delete the only
+-- durable copy of pruned rows. pruned_at is the custody-gate LATCH: NULL until
+-- the raw rows are deleted, which happens only once the segment is durably
+-- replicated (remote tier) or resident in the local CAS (local-only vault).
+-- attachment_hashes_json is the JSON array of content hashes the archived
+-- items reference, so ConversationStore.referencedHashes() keeps the
+-- app-engine BlobStore bytes pinned across a prune.
+CREATE TABLE conversation_archive (
+  id                     TEXT PRIMARY KEY,
+  conversation_id        TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  seq_from               INTEGER NOT NULL,
+  seq_to                 INTEGER NOT NULL,
+  from_time              INTEGER NOT NULL,
+  to_time                INTEGER NOT NULL,
+  turn_count             INTEGER NOT NULL,
+  item_count             INTEGER NOT NULL,
+  segment_sha256         TEXT NOT NULL CHECK (length(segment_sha256) = 64),
+  segment_bytes          INTEGER NOT NULL CHECK (segment_bytes >= 0),
+  plaintext_bytes        INTEGER NOT NULL CHECK (plaintext_bytes >= 0),
+  attachment_hashes_json TEXT NOT NULL DEFAULT '[]',
+  pruned_at              INTEGER,
+  created_at             INTEGER NOT NULL
+) STRICT;
+CREATE INDEX idx_conversation_archive_conv
+  ON conversation_archive(conversation_id, seq_from);
+CREATE INDEX idx_conversation_archive_sha
+  ON conversation_archive(segment_sha256);
+-- Partial index for the prune sweep's "not yet pruned" scan.
+CREATE INDEX idx_conversation_archive_unpruned
+  ON conversation_archive(pruned_at) WHERE pruned_at IS NULL;
+
+-- conversation_digest: one row per conversation, UPSERTED at archive time,
+-- covering ONLY the archived portion (live turns still come from the
+-- run_summary view). Insights and the Executions feed union live run_summary
+-- aggregates with these digest rollups, so pruning raw rows is invisible to
+-- every dashboard — the numbers before archive == digest+live after prune.
+-- models_json / efforts_json keep the confirmed semantic breakdowns
+-- truthful once item rows are gone. first_started_at/last_ended_at
+-- bound the archived span (digests carry no per-day grain — day-grain series
+-- coarsen archived rollups only beyond the archive horizon; see insights-store).
+CREATE TABLE conversation_digest (
+  conversation_id          TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+  kind                     TEXT NOT NULL,
+  app_id                   TEXT,
+  automation_ref           TEXT,
+  automation_name          TEXT,
+  title                    TEXT NOT NULL DEFAULT '',
+  first_started_at         INTEGER,
+  last_ended_at            INTEGER,
+  run_count                INTEGER NOT NULL DEFAULT 0,
+  ok_count                 INTEGER NOT NULL DEFAULT 0,
+  err_count                INTEGER NOT NULL DEFAULT 0,
+  retry_count              INTEGER NOT NULL DEFAULT 0,
+  total_input_tokens       INTEGER NOT NULL DEFAULT 0,
+  total_output_tokens      INTEGER NOT NULL DEFAULT 0,
+  total_cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+  total_cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+  total_hydration_tokens   INTEGER NOT NULL DEFAULT 0,
+  total_cost_usd           REAL NOT NULL DEFAULT 0,
+  step_count               INTEGER NOT NULL DEFAULT 0,
+  tool_count               INTEGER NOT NULL DEFAULT 0,
+  models_json              TEXT NOT NULL DEFAULT '[]',
+  efforts_json             TEXT NOT NULL DEFAULT '[]',
+  updated_at               INTEGER NOT NULL
+) STRICT;
+CREATE INDEX idx_conversation_digest_automation
+  ON conversation_digest(automation_ref);
+
+
+CREATE TRIGGER conversation_item_count_ai
+  AFTER INSERT ON items BEGIN
+  UPDATE conversations
+     SET item_count = item_count + 1
+   WHERE id = (SELECT conversation_id FROM turns WHERE id = new.turn_id);
+END;
+
+CREATE TRIGGER conversation_item_count_ad
+  AFTER DELETE ON items BEGIN
+  UPDATE conversations
+     SET item_count = MAX(item_count - 1, 0)
+   WHERE id = (SELECT conversation_id FROM turns WHERE id = old.turn_id);
+END;
+
+CREATE VIEW run_summary AS
+  SELECT
+t.id             AS run_id,
+c.kind           AS kind,
+CASE WHEN c.kind = 'automation' THEN c.automation_id END AS automation_ref,
+CASE
+  WHEN c.kind = 'automation' AND instr(c.automation_id, '/') > 1
+    THEN substr(c.automation_id, 1, instr(c.automation_id, '/') - 1)
+  ELSE c.app_id
+END              AS app_id,
+-- The automation's display name (issue: orphaned runs showing the raw
+-- ref) — conversations.title is refreshed when the stable automation
+-- conversation is ensured and outlives the automation manifest being
+-- deleted. NULLIF empties it out since the column defaults to ''.
+CASE WHEN c.kind = 'automation' THEN NULLIF(c.title, '') END AS automation_name,
+t.trigger        AS trigger,
+t.trigger_origin AS trigger_origin,
+t.ok             AS ok,
+t.pinned         AS pinned,
+t.summary        AS summary,
+t.note           AS note,
+t.error          AS error,
+t.retry_of       AS retry_of,
+(SELECT i.model FROM items i
+  WHERE i.turn_id = t.id AND i.model IS NOT NULL AND i.kind IN ('step','delegate')
+  GROUP BY i.model
+  ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
+  LIMIT 1)       AS model,
+-- Dominant harness kind for the Insights harness breakdown (issue #514).
+(SELECT i.harness FROM items i
+  WHERE i.turn_id = t.id AND i.harness IS NOT NULL AND i.kind IN ('step','delegate')
+  GROUP BY i.harness
+  ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
+  LIMIT 1)       AS harness,
+-- Effort is recorded only after ACP confirms thought_level. Picking
+-- the dominant confirmed value mirrors the model/harness rollups.
+(SELECT i.effort FROM items i
+  WHERE i.turn_id = t.id AND i.effort IS NOT NULL AND i.kind IN ('step','delegate')
+  GROUP BY i.effort
+  ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
+  LIMIT 1)       AS effort,
+t.started_at               AS started_at,
+t.ended_at                 AS ended_at,
+t.total_input_tokens       AS total_input_tokens,
+t.total_output_tokens      AS total_output_tokens,
+t.total_cache_read_tokens  AS total_cache_read_tokens,
+t.total_cache_write_tokens AS total_cache_write_tokens,
+t.hydration_tokens          AS hydration_tokens,
+t.total_cost_usd           AS total_cost_usd,
+t.step_count               AS step_count,
+t.tool_count               AS tool_count
+  FROM turns t
+  JOIN conversations c ON c.id = t.conversation_id
+  WHERE t.ended_at IS NOT NULL;
+
+CREATE VIRTUAL TABLE fts_conversation USING fts5(
+  conversation_id UNINDEXED,
+  title,
+  body,
+  tokenize = "unicode61 remove_diacritics 2"
+);
+
+CREATE TRIGGER fts_conversation_conv_ai
+  AFTER INSERT ON conversations WHEN new.kind IN ('chat','build') BEGIN
+  INSERT INTO fts_conversation(conversation_id, title, body)
+    VALUES (new.id, new.title, '');
+END;
+
+CREATE TRIGGER fts_conversation_conv_au
+  AFTER UPDATE OF title ON conversations WHEN new.kind IN ('chat','build') BEGIN
+  DELETE FROM fts_conversation WHERE conversation_id = old.id;
+  INSERT INTO fts_conversation(conversation_id, title, body)
+    SELECT new.id, new.title,
+      (SELECT COALESCE(group_concat(i.text, ' '), '')
+         FROM items i JOIN turns t ON t.id = i.turn_id
+        WHERE t.conversation_id = new.id AND i.text IS NOT NULL AND i.text <> '');
+END;
+
+CREATE TRIGGER fts_conversation_conv_ad
+  AFTER DELETE ON conversations BEGIN
+  DELETE FROM fts_conversation WHERE conversation_id = old.id;
+END;
+
+/*
+ * Item insert is INCREMENTAL (issue #659 G4). Deleting the row and
+ * re-deriving body by joining items↔turns and group_concat-ing the WHOLE
+ * conversation — inside the streaming write transaction, on every
+ * text-bearing item — is O(conversation) per insert, so indexing a
+ * thread costs O(n²) and the cost grows with the thread the user is
+ * actively using. Appending the one new item's text is O(text) and
+ * produces exactly the same body string, because that derivation is
+ * itself an insertion-ordered group_concat with the same ' ' separator.
+ *
+ * Rows exist only for 'chat'/'build' conversations (see conv_ai and the
+ * backfill), so the UPDATE self-selects the same conversations the old
+ * INSERT…WHERE c.kind IN ('chat','build') did. DROP+CREATE so an existing
+ * vault picks up the new body maintenance instead of keeping the recompute.
+ */
+CREATE TRIGGER fts_conversation_item_ai
+  AFTER INSERT ON items WHEN new.text IS NOT NULL AND new.text <> '' BEGIN
+  UPDATE fts_conversation
+     SET body = CASE WHEN body = '' THEN new.text ELSE body || ' ' || new.text END
+   WHERE conversation_id = (SELECT conversation_id FROM turns WHERE id = new.turn_id);
+END;
+
+/*
+ * Append-only maintenance would leave a pruned message's words searchable,
+ * so deletion — the rare path (ledger prune, #438) — pays the re-derivation
+ * the insert path no longer does. Two triggers because SQLite fires row
+ * triggers for ON DELETE CASCADE only under recursive_triggers: a direct
+ * item delete is caught by item_ad, and the turn-level prune (which
+ * cascades to items) by turn_ad. Both no-op when no fts row exists, so an
+ * automation conversation and a fully cascading conversation delete pay
+ * nothing — the latter's row removal belongs to fts_conversation_conv_ad.
+ */
+CREATE TRIGGER fts_conversation_item_ad
+  AFTER DELETE ON items WHEN old.text IS NOT NULL AND old.text <> '' BEGIN
+  UPDATE fts_conversation
+     SET body = (SELECT COALESCE(group_concat(i.text, ' '), '')
+                   FROM items i JOIN turns t ON t.id = i.turn_id
+                  WHERE t.conversation_id = fts_conversation.conversation_id
+                    AND i.text IS NOT NULL AND i.text <> '')
+   WHERE conversation_id = (SELECT conversation_id FROM turns WHERE id = old.turn_id);
+END;
+
+CREATE TRIGGER fts_conversation_turn_ad
+  AFTER DELETE ON turns BEGIN
+  UPDATE fts_conversation
+     SET body = (SELECT COALESCE(group_concat(i.text, ' '), '')
+                   FROM items i JOIN turns t ON t.id = i.turn_id
+                  WHERE t.conversation_id = fts_conversation.conversation_id
+                    AND i.text IS NOT NULL AND i.text <> '')
+   WHERE conversation_id = old.conversation_id;
+END;
+
+
+`;

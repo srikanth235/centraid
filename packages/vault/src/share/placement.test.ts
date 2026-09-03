@@ -17,6 +17,7 @@ import {
   closeOpenVaults,
   household,
   seedPhoto,
+  placementAuthority,
 } from "./placement-fixture.js";
 import {
   moveOutOfVault,
@@ -46,6 +47,7 @@ describe("placement suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
       now: () => 1_700_000_000_000,
     });
 
@@ -53,7 +55,7 @@ describe("placement suite", () => {
     // touches the owner's vault.
     const projected = audience.vault
       .prepare(
-        `SELECT a.asset_id, a.kind, a.favorite, a.width, a.place_id, a.camera_device_id,
+        `SELECT a.asset_id, a.kind, a.width, a.place_id, a.camera_device_id,
               c.title, c.sha256, c.creator_party_id, c.origin_device_id
          FROM media_asset a JOIN core_content_item c ON c.content_id = a.content_id
         WHERE a.asset_id = ?`
@@ -62,7 +64,15 @@ describe("placement suite", () => {
     expect(projected.kind).toBe("photo");
     expect(projected.title).toBe("Photo a");
     expect(projected.sha256).toBe(photo.sha256);
-    expect(projected.favorite).toBe(1);
+    // THE STAR DOES NOT TRAVEL (#916): it is one `starred` flags tag, and a
+    // tag is the ORIGIN member's judgment about their own copy.
+    expect(
+      audience.vault
+        .prepare(
+          "SELECT count(*) AS n FROM core_tag WHERE target_type = 'media.asset' AND target_id = ?"
+        )
+        .get(result.items[0]!.itemId)
+    ).toMatchObject({ n: 0 });
     expect(projected.width).toBe(800);
     // Cross-vault FK columns are projected NULL — the origin's party/device
     // graph never crosses the boundary.
@@ -128,6 +138,7 @@ describe("placement suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
 
     expect(result.items[0]!.itemId).toBe(photo.assetId);
@@ -157,6 +168,7 @@ describe("placement suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
 
     expect(result.blobs.map((b) => b.mode)).toStrictEqual(["linked", "linked"]);
@@ -185,6 +197,7 @@ describe("placement suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
 
     expect(result.blobs.map((b) => b.mode)).toStrictEqual(["copied", "copied"]);
@@ -230,6 +243,7 @@ describe("placement suite", () => {
         itemType: "media.asset",
         itemIds: [photo.assetId],
         sharedBy: member,
+        authority: placementAuthority(origin, "media.asset", [photo.assetId]),
         now: () => at,
       });
 
@@ -303,6 +317,7 @@ describe("placement suite", () => {
       itemType: "core.document",
       itemIds: [documentId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "core.document", [documentId]),
     });
     expect(
       plainSqliteRow(

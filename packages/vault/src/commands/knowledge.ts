@@ -13,7 +13,6 @@
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { sha256Hex } from "../ids.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { assertTextBodyWithinBudget } from "./inline-body-guard.js";
 import { RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { releaseContentIfUnreferenced } from "./media.js";
@@ -23,10 +22,10 @@ import { recordRevision } from "./revisions.js";
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (!owner?.owner_party_id) throw new Error("vault has no owner");
-  return owner.owner_party_id;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!owner?.self_party_id) throw new Error("vault has no owner");
+  return owner.self_party_id;
 }
 
 const MEDIA_TYPE: Record<string, string> = {
@@ -575,7 +574,6 @@ function deleteNotebook(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare("DELETE FROM core_collection WHERE collection_id = ?")
     .run(input.notebook_id);
-  cleanupPolyRefs(ctx.db, ctx.now, "core.collection", input.notebook_id);
   ctx.wrote("core.collection", input.notebook_id);
   ctx.cite({
     claim: `notebook ${input.notebook_id} deleted; ${filed.n} member notes unfiled, none destroyed`,
@@ -689,8 +687,10 @@ const RESTORE_NOTE: CommandDefinition = {
   preconditions: [
     {
       name: "note_in_trash",
+      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM knowledge_note
-             WHERE note_id = :note_id AND deleted_at IS NOT NULL`,
+             WHERE note_id = :note_id AND deleted_at IS NOT NULL
+               AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
       column: "n",
       op: "eq",
       value: 1,

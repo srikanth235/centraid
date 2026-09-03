@@ -67,7 +67,8 @@ describe("grant/fulfillment", () => {
     expect(delivered.steps[0]?.projected).toHaveLength(1);
     expect(
       readFulfillment(home.origin.vault, grant.grantId, AUDIENCE_VAULT)
-    ).toMatchObject({ state: "delivered", updatedAt: now, detail: null });
+      // `updated_at` is the touch trigger's since #916.
+    ).toMatchObject({ state: "delivered", detail: null });
     expect(audienceTitles(home.audience.vault)).toStrictEqual(["Photo a"]);
 
     // The origin edits the caption. Divergence is a bug, not the resting
@@ -107,7 +108,7 @@ describe("grant/fulfillment", () => {
     ]);
     expect(
       readFulfillment(home.origin.vault, grant.grantId, AUDIENCE_VAULT)
-    ).toMatchObject({ state: "removed", updatedAt: revokedAt });
+    ).toMatchObject({ state: "removed" });
     // Hard delete: no projection, no lineage row, no tombstone of any kind.
     expect(audienceTitles(home.audience.vault)).toStrictEqual([]);
     expect(

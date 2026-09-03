@@ -16,7 +16,12 @@ import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
-import { closeOpenVaults, household, seedPhoto } from "./placement-fixture.js";
+import {
+  closeOpenVaults,
+  household,
+  placementAuthority,
+  seedPhoto,
+} from "./placement-fixture.js";
 import { shareItemsToVault } from "./placement.js";
 import { projectShareClosure } from "./project-closure.js";
 import { readShareClosure } from "./read-closure.js";
@@ -87,6 +92,7 @@ describe("closure split", () => {
       itemType: "core.document",
       itemIds: [first, second],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "core.document", [first, second]),
     });
 
     expect(shared.items.map((item) => item.itemId)).toStrictEqual([
@@ -117,6 +123,11 @@ describe("closure split", () => {
       itemType: "media.asset",
       itemIds: photos.map((photo) => photo.assetId),
       sharedBy: "member-priya",
+      authority: placementAuthority(
+        origin,
+        "media.asset",
+        photos.map((photo) => photo.assetId)
+      ),
       now: () => 1_700_000_000_000,
     });
 
@@ -131,7 +142,7 @@ describe("closure split", () => {
       rowsOf(
         audience,
         `SELECT COUNT(*) AS n FROM core_share_origin
-          WHERE item_type = 'media.asset' AND shared_at = 1700000000000`
+          WHERE target_type = 'media.asset' AND shared_at = 1700000000000`
       )
     ).toStrictEqual([{ n: 3 }]);
   });
@@ -177,6 +188,7 @@ describe("closure split", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
       now: () => Date.parse("2026-08-08T00:00:00.000Z"),
     });
 
@@ -231,6 +243,7 @@ describe("closure split", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-sid",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
     expect(
       rowsOf(audience, "SELECT COUNT(*) AS n FROM enrich_request")
@@ -260,6 +273,7 @@ describe("closure split", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
 
     expect(
@@ -302,11 +316,16 @@ describe("closure split", () => {
     });
 
     expect(overWire).toStrictEqual(inProcess);
+    // `updated_at` is a LOCAL fact (#916, ruling ONT-08): the projector writes
+    // the origin's columns and the receiving vault stamps when the row landed
+    // in IT. Two separately-projected vaults are stamped microseconds apart,
+    // and that difference is the column doing its job — the claim under test
+    // is that the wire path projects the same CONTENT as the in-process one.
     for (const sql of [
-      "SELECT * FROM core_content_item",
-      "SELECT * FROM core_content_derivative",
-      "SELECT * FROM media_asset",
-      "SELECT * FROM core_share_origin",
+      "SELECT content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at FROM core_content_item",
+      "SELECT derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at FROM core_content_derivative",
+      "SELECT asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, place_id, camera_device_id, width, height, duration_s, exif_json, source_asset_id, archived_at, deleted_at, purge_at FROM media_asset",
+      "SELECT target_type, target_id, origin_vault_id, origin_item_id, shared_by, shared_at FROM core_share_origin",
       `SELECT target_type, target_id, reason, contribution_variant, requested_at
          FROM enrich_request`,
     ]) {
@@ -333,6 +352,54 @@ describe("closure split", () => {
     expect(
       rowsOf(audience, "SELECT COUNT(*) AS n FROM core_content_item")
     ).toStrictEqual([{ n: 0 }]);
+  });
+
+  // #916, audit F1. Entity ids are ONE namespace, and the ids on the wire are
+  // PEER-CONTROLLED: an id the audience already holds as a place is not free
+  // for an incoming asset just because `media_asset` has no row under it. The
+  // membership trigger refuses the cross-kind collision outright, so `freeId`
+  // has to ask `core_entity` — asking only the destination table left the
+  // projection to abort mid-closure on a share that is perfectly legal.
+  test("an id the audience holds under ANOTHER kind is minted fresh, not reused", () => {
+    const { origin, originBoot, audience } = household();
+    const photo = seedPhoto(origin, originBoot, "collision");
+    // The audience's own, unrelated place — filed under the id the origin's
+    // asset happens to carry.
+    audience.vault
+      .prepare(
+        `INSERT INTO core_place (place_id, name, created_at) VALUES (?, 'Beach', ?)`
+      )
+      .run(photo.assetId, nowIso());
+
+    const shared = shareItemsToVault({
+      origin,
+      originVaultId: "vault-priya",
+      audience,
+      itemType: "media.asset",
+      itemIds: [photo.assetId],
+      sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
+    });
+
+    const projectedId = shared.items[0]!.itemId;
+    expect(projectedId).not.toBe(photo.assetId);
+    // The place is untouched, and still the only holder of that entity id.
+    expect(
+      rowsOf(
+        audience,
+        `SELECT entity_type FROM core_entity WHERE entity_id = '${photo.assetId}'`
+      )
+    ).toStrictEqual([{ entity_type: "core.place" }]);
+    expect(
+      rowsOf(audience, "SELECT COUNT(*) AS n FROM core_place")
+    ).toStrictEqual([{ n: 1 }]);
+    // ...and the asset really landed, under its own id.
+    expect(
+      rowsOf(
+        audience,
+        `SELECT entity_type FROM core_entity WHERE entity_id = '${projectedId}'`
+      )
+    ).toStrictEqual([{ entity_type: "media.asset" }]);
   });
 
   test("an empty item set is refused before anything is read", () => {

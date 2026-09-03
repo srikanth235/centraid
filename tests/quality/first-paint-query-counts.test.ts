@@ -16,7 +16,6 @@ import {
 } from "@centraid/vault";
 
 import { ConversationHistoryStore } from "../../packages/server/src/engine/conversation/history.js";
-import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import type { WorkspaceProvider } from "../../packages/server/src/engine/stores/vault-workspace.js";
 import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
@@ -102,16 +101,10 @@ async function screenHttpHarness(
   };
 }
 
-function seedSmallYear3(db: {
-  vault: DatabaseSync;
-  journal: DatabaseSync;
-  sealKey: Buffer;
-}): void {
-  ensureConversationLedger(db.journal);
+function seedSmallYear3(db: { vault: DatabaseSync; sealKey: Buffer }): void {
   seedYear3Vault(
     {
       vault: db.vault,
-      journal: db.journal,
       sealCell: (entity, column, rowId, plaintext) =>
         sealValue(
           db.sealKey,
@@ -141,10 +134,10 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
     const db = await createTestVault();
     seedSmallYear3(db);
     const device = db.vault
-      .prepare("SELECT device_id, public_key FROM consent_device LIMIT 1")
+      .prepare("SELECT device_id, public_key FROM access_device LIMIT 1")
       .get() as { device_id: string; public_key: string };
     const gateway = createGateway(db);
-    const counter = countReadStatements(db.vault, db.journal);
+    const counter = countReadStatements(db.vault);
     const moduleUrl = pathToFileURL(
       path.resolve("packages/blueprints/apps/photos/queries/library.ts")
     ).href;
@@ -200,7 +193,7 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
     });
     try {
       seedSmallYear3(plane.db);
-      const counter = countReadStatements(plane.db.vault, plane.db.journal);
+      const counter = countReadStatements(plane.db.vault);
       const requests = await screenHttpHarness({
         "/centraid/_vault/notifications": () =>
           plane.notificationsSummary(true),
@@ -230,10 +223,10 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
   test("Atlas runs the exact stats/pulse first paint within budget", async () => {
     const db = await createTestVault();
     seedSmallYear3(db);
-    const counter = countReadStatements(db.vault, db.journal);
+    const counter = countReadStatements(db.vault);
     const requests = await screenHttpHarness({
-      "/centraid/_vault/atlas/stats": () => atlasCensus(db.vault, db.journal),
-      "/centraid/_vault/atlas/pulse": () => atlasPulse(db.journal),
+      "/centraid/_vault/atlas/stats": () => atlasCensus(db.vault),
+      "/centraid/_vault/atlas/pulse": () => atlasPulse(db.vault),
     });
     try {
       await requests.request("/centraid/_vault/atlas/stats");
@@ -255,23 +248,23 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
     const db = await createTestVault();
     seedSmallYear3(db);
     const owner = db.vault
-      .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-      .get() as { owner_party_id: string };
+      .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+      .get() as { self_party_id: string };
     const workspace: WorkspaceProvider = () => ({
       vaultId: "quality-vault",
-      ownerPartyId: owner.owner_party_id,
+      ownerPartyId: owner.self_party_id,
       appsDir: `${db.dir}/apps`,
-      journal: () => db.journal,
-      journalDbFile: `${db.dir}/journal.db`,
+      journal: () => db.audit,
+      ledgerDbFile: `${db.dir}/vault.db`,
       harnessSessionDir: `${db.dir}/harness-sessions`,
     });
     const store = new ConversationHistoryStore(workspace);
-    const conversation = db.journal
+    const conversation = db.audit
       .prepare(
         "SELECT id FROM conversations WHERE app_id = '_assistant' ORDER BY id LIMIT 1"
       )
       .get() as { id: string };
-    const counter = countReadStatements(db.vault, db.journal);
+    const counter = countReadStatements(db.vault);
     const requests = await screenHttpHarness({
       [`/centraid/_vault/assistant/conversations/${conversation.id}`]: () =>
         store.getSession("_assistant", conversation.id),

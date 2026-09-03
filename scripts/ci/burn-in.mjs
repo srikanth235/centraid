@@ -24,9 +24,29 @@
  * are skipped with a printed reason rather than silently dropped, because a skip
  * nobody can see is indistinguishable from a check that never looked.
  *
+ * WHY IT SHARDS. The guarantee is per-FILE — three isolated runs of each — so
+ * it costs the SUM of the files, on one runner, sequentially, while the rung-2
+ * budget is a SPAN (`scripts/ci/pr-gate-wall-clock.mjs`: `max(completed_at) −
+ * min(started_at)`). A wave that rewrites 237 suites at once is ~53 minutes of
+ * that sum and blew a 15-minute span it was the only lane over. `--shard i/N`
+ * deals the same sorted list across N runners: every file still runs, still
+ * three times, still alone, still with its disagreement red — only the span
+ * shrinks, because a span over jobs in parallel is the longest one, not the
+ * total. This is arithmetic on the budget's own definition, not relief from it.
+ *
+ * THE PARTITION MUST NOT LEAK. A sharded gate's failure mode is #556's: a file
+ * that lands in no shard is never run and reports green by absence. Two things
+ * refuse it. The deal is `index % N` over a SORTED copy, so the shards are a
+ * true partition of one list by construction rather than N independent guesses;
+ * and `N` is `strategy.job-total` in the workflow, which is the matrix's own
+ * length, so the divisor cannot drift from the number of runners that exist.
+ * An out-of-range `i` is a hard error rather than an empty slice, because an
+ * empty slice exits 0 and that is the silence the guarantee cannot survive.
+ *
  * Usage:
  *   node scripts/ci/burn-in.mjs [--base origin/main] [--runs 3] [--list]
  *   node scripts/ci/burn-in.mjs --files packages/core/src/a.test.ts
+ *   node scripts/ci/burn-in.mjs --shard 3/8
  */
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -122,21 +142,97 @@ export function partitionChangedFiles(stdout) {
 }
 
 /**
- * The nearest ancestor directory that owns a `package.json`.
+ * Parse a `--shard i/N` value into its two integers.
+ *
+ * Every malformed shape is an error rather than a default, because each of them
+ * has a silent-green reading: `0/8` and `9/8` both select nothing, `3/0` divides
+ * the list by zero, and a non-integer `N` would put files in no shard at all.
+ * The lane's whole value is that it looked, so it must refuse to run rather than
+ * run over an empty slice.
+ *
+ * @param {string} value The raw `--shard` argument.
+ * @returns {{shard: number, total: number}} The 1-based leg and the matrix size.
+ * @throws {Error} When the value is not `i/N` with `1 <= i <= N`.
+ */
+export function parseShard(value) {
+  const match = /^(?<shard>\d+)\/(?<total>\d+)$/u.exec(String(value).trim());
+  if (!match)
+    throw new Error(`--shard wants "i/N", got ${JSON.stringify(value)}`);
+  const shard = Number(match.groups.shard);
+  const total = Number(match.groups.total);
+  if (total < 1) throw new Error(`--shard total must be >= 1, got ${total}`);
+  if (shard < 1 || shard > total)
+    throw new Error(`--shard ${shard}/${total} is out of range: 1..${total}`);
+  return { shard, total };
+}
+
+/**
+ * The slice of the candidate list one shard owns.
+ *
+ * Sorted first so the deal does not depend on the order the caller handed in —
+ * `git diff --name-only` is already path-sorted, but `--files` is whatever a
+ * person typed, and a partition that changes with input order is one whose
+ * shards can overlap and leave gaps. Dealt round-robin rather than in
+ * contiguous blocks: neighbouring paths are the same package and therefore
+ * similar cost, so `index % N` mixes the expensive suites across the runners
+ * instead of stacking them all onto one.
+ *
+ * @param {string[]} files Every burn-in candidate.
+ * @param {number} shard 1-based leg number.
+ * @param {number} total Number of legs.
+ * @returns {string[]} This leg's files, a subset of `files`.
+ */
+export function selectShard(files, shard, total) {
+  if (total <= 1) return [...files];
+  return [...files].sort().filter((_, index) => index % total === shard - 1);
+}
+
+/**
+ * The config filenames that make a directory a Vitest project rather than
+ * merely a package. Vite's own name is included because `apps/desktop` and
+ * `apps/web` carry their Vitest settings in `vite.config.ts`.
+ */
+const VITEST_PROJECT_CONFIGS = Object.freeze([
+  "vitest.config.ts",
+  "vitest.config.mts",
+  "vitest.config.js",
+  "vitest.config.mjs",
+  "vite.config.ts",
+  "vite.config.mts",
+  "vite.config.js",
+  "vite.config.mjs",
+]);
+
+/**
+ * The nearest ancestor directory Vitest can actually be invoked in.
  *
  * Vitest resolves aliases, setup files and environment from the project it is
  * invoked in, so a test run from the repo root can pass or fail for reasons
  * that have nothing to do with the test. Running from the owning package is
  * what makes the three runs comparable to the run the suite does.
  *
+ * A `package.json` ALONE does not make a project (#916). Every blueprint under
+ * `packages/blueprints/apps/*` carries one — a private manifest declaring a dev
+ * dependency, with no Vitest config and no `include` — so the walk stopped
+ * there, vitest collected zero files from a directory that owns 206 tests, and
+ * every blueprint suite in the diff was reported as "failed all 3 runs — the
+ * test is broken". It is #915's own regression one level down: the fix there
+ * taught the planner that `scripts/**` is not a Vitest project, and the same
+ * question was never asked of a nested package. The probe is `package.json` AND
+ * a config, which is exactly what vitest needs to find the test it was handed.
+ *
  * @param {string} file Repository-relative path.
- * @param {(candidate: string) => boolean} hasPackageJson Existence probe, injected for tests.
- * @returns {string} Repository-relative package directory (`.` for the root).
+ * @param {(candidate: string) => boolean} hasFile Existence probe, injected for tests.
+ * @returns {string} Repository-relative project directory (`.` for the root).
  */
-export function nearestPackageDir(file, hasPackageJson) {
+export function nearestVitestProjectDir(file, hasFile) {
   let dir = path.dirname(file);
   while (dir && dir !== "." && dir !== path.sep) {
-    if (hasPackageJson(path.join(dir, "package.json"))) return dir;
+    if (
+      hasFile(path.join(dir, "package.json")) &&
+      VITEST_PROJECT_CONFIGS.some((name) => hasFile(path.join(dir, name)))
+    )
+      return dir;
     dir = path.dirname(dir);
   }
   return ".";
@@ -215,21 +311,21 @@ export const RUNNERS = Object.freeze([
 /**
  * The run plan for one candidate: which runner, from where, with what filter.
  *
- * Anything the table does not claim is a package-owned Vitest test, and runs
- * from its owning package for the reason nearestPackageDir documents.
+ * Anything the table does not claim is a project-owned Vitest test, and runs
+ * from its owning project for the reason nearestVitestProjectDir documents.
  *
  * @param {string} file Repository-relative path.
- * @param {(candidate: string) => boolean} hasPackageJson Existence probe, injected for tests.
+ * @param {(candidate: string) => boolean} hasFile Existence probe, injected for tests.
  * @returns {{runner: "node"|"vitest", cwd: string, filter: string, config?: string}} Run plan.
  */
-export function planRun(file, hasPackageJson) {
+export function planRun(file, hasFile) {
   for (const entry of RUNNERS) {
     if (!file.startsWith(entry.prefix)) continue;
     if (entry.runner === "node")
       return { runner: "node", cwd: ".", filter: file };
     return { runner: "vitest", cwd: ".", filter: file, config: entry.config };
   }
-  const dir = nearestPackageDir(file, hasPackageJson);
+  const dir = nearestVitestProjectDir(file, hasFile);
   return {
     runner: "vitest",
     cwd: dir,
@@ -255,10 +351,19 @@ export function argvFor(plan) {
 }
 
 function parseArgs(argv) {
-  const out = { base: "origin/main", runs: 3, files: null, list: false };
+  const out = {
+    base: "origin/main",
+    runs: 3,
+    files: null,
+    list: false,
+    shard: 1,
+    total: 1,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--base" && argv[i + 1]) out.base = argv[++i];
     else if (argv[i] === "--runs" && argv[i + 1]) out.runs = Number(argv[++i]);
+    else if (argv[i] === "--shard" && argv[i + 1])
+      Object.assign(out, parseShard(argv[++i]));
     else if (argv[i] === "--files" && argv[i + 1])
       out.files = argv[++i]
         .split(",")
@@ -294,19 +399,30 @@ function changedTestFiles(base) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const { files, skipped } = args.files
+  const { files: candidates, skipped } = args.files
     ? partitionChangedFiles(args.files.join("\n"))
     : partitionChangedFiles(changedTestFiles(args.base));
 
   for (const entry of skipped) {
     console.log(`burn-in: skipping ${entry.file} — ${entry.why}`);
   }
+  const files = selectShard(candidates, args.shard, args.total);
+  // Say the denominator out loud on every leg. A sharded gate is only as honest
+  // as its arithmetic, and "30 of 237" printed N times is what lets a reader
+  // add the legs up and see that nothing fell between them.
+  const of =
+    args.total > 1
+      ? ` (shard ${args.shard}/${args.total}: ${files.length} of ${candidates.length} candidate(s))`
+      : "";
   if (files.length === 0) {
     console.log(
-      "burn-in: nothing to burn in (no added or modified Vitest test files)"
+      candidates.length === 0
+        ? `burn-in: nothing to burn in (no added or modified Vitest test files)${of}`
+        : `burn-in: this shard's slice is empty — ${candidates.length} candidate(s) across ${args.total} shards${of}`
     );
     return;
   }
+  console.log(`burn-in: ${files.length} file(s) to burn in${of}`);
   const plans = files.map((file) => ({
     file,
     plan: planRun(file, (candidate) => existsSync(path.join(root, candidate))),
@@ -338,7 +454,7 @@ function main() {
 
   if (failures.length === 0) {
     console.log(
-      `burn-in: ${files.length} file(s) each passed ${args.runs}/${args.runs} runs in isolation`
+      `burn-in: ${files.length} file(s) each passed ${args.runs}/${args.runs} runs in isolation${of}`
     );
     return;
   }
@@ -351,5 +467,13 @@ function main() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
-  main();
+  try {
+    main();
+  } catch (error) {
+    // A bad `--shard` is a wiring bug in the workflow, and the only wrong
+    // answer is a quiet zero: that is a leg reporting green over files it never
+    // selected. Named, and red.
+    console.error(`::error title=New-test burn-in::${error.message}`);
+    process.exitCode = 2;
+  }
 }

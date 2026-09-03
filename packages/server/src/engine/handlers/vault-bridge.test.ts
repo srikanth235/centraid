@@ -194,7 +194,7 @@ describe("ctx.vault worker channel", () => {
       codeDirOverride: async (appId) => path.join(codeRoot, appId),
       vaultFor: () => async () => ({
         ok: false,
-        code: "VAULT_CONSENT",
+        code: "VAULT_ACCESS",
         error: "deny (receipt r123): no active grant covers schedule read",
       }),
     });
@@ -205,7 +205,7 @@ describe("ctx.vault worker channel", () => {
     });
     expect(out.isError).toBe(false);
     expect(out.structuredContent).toMatchObject({
-      deniedCode: "VAULT_CONSENT",
+      deniedCode: "VAULT_ACCESS",
     });
     expect((out.structuredContent as { message: string }).message).toContain(
       "receipt r123"

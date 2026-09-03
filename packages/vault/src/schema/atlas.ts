@@ -1,37 +1,37 @@
 // The Vault Atlas mapping (#441): table → kind → pack. DERIVED from
-// `VAULT_TABLES`/`JOURNAL_TABLES`, never hand-listed; all this module adds is
-// ONTOLOGY packs (life data) versus MACHINERY bands (plumbing).
+// `VAULT_TABLES`, never hand-listed; all this module adds is ONTOLOGY packs
+// (life data) versus MACHINERY bands (plumbing).
 
-import {
-  JOURNAL_ENTITIES,
-  JOURNAL_TABLES,
-  VAULT_ENTITIES,
-  VAULT_TABLES,
-  entityDeclaration,
-} from "./tables.js";
+import { VAULT_ENTITIES, VAULT_TABLES, entityDeclaration } from "./tables.js";
 
 export type AtlasPackKind = "ontology" | "machinery";
 
 /** Explicit, so a NEW schema fails loud rather than mis-shelving (#441). */
 export const ONTOLOGY_PACKS: readonly string[] = [
   "core",
-  "health",
-  "finance",
   "schedule",
   "social",
   "knowledge",
   "media",
-  // `home`/`business` are deliberately out of the ontology (#883, #885).
+  // `home`/`business` (#883, #885) and `health`/`finance` (#916, ruling
+  // ONT-06) are deliberately out of the ontology — dropped for having no
+  // consumer, not shelved as machinery.
   "people",
   "locker",
   "tally",
 ];
 
-/** `consent` and `agent` name tables in BOTH files and are machinery in each,
- * so keying on schema alone is correct. */
+/** Every band that is plumbing rather than life data. `audit` and `ledger` are
+ * BAND-DECLARED rather than registry-declared: their physical names do not
+ * follow `<band>_<table>`, so their table lists live in their band modules. */
 export const MACHINERY_BANDS: readonly string[] = [
-  "consent",
+  "access",
   "agent",
+  // The two append-heavy bands that joined the one file under #916. Both are
+  // NAMED on the ontology page and excluded from the export and the replica by
+  // band (schema/local-tables.ts).
+  "audit",
+  "ledger",
   "sync",
   "enrich",
   "outbox",
@@ -42,8 +42,6 @@ export const MACHINERY_BANDS: readonly string[] = [
 
 export const ATLAS_PACK_LABELS: Readonly<Record<string, string>> = {
   core: "Core",
-  health: "Health",
-  finance: "Finance",
   schedule: "Schedule",
   social: "Social",
   knowledge: "Knowledge",
@@ -51,8 +49,10 @@ export const ATLAS_PACK_LABELS: Readonly<Record<string, string>> = {
   people: "People",
   locker: "Locker",
   tally: "Tally",
-  consent: "Consent",
+  access: "Access",
   agent: "Agents",
+  audit: "Audit",
+  ledger: "Ledger",
   sync: "Sync",
   enrich: "Enrichment",
   outbox: "Outbox",
@@ -69,10 +69,7 @@ export const ATLAS_PACK_LABELS: Readonly<Record<string, string>> = {
 export const ATLAS_KIND_FRIENDLY: Readonly<
   Record<string, { name: string; blurb: string }>
 > = Object.fromEntries(
-  [
-    ...Object.entries(VAULT_ENTITIES),
-    ...Object.entries(JOURNAL_ENTITIES),
-  ].flatMap(([schema, entities]) =>
+  Object.entries(VAULT_ENTITIES).flatMap(([schema, entities]) =>
     Object.entries(entities).flatMap(([table, declaration]) =>
       declaration.blurb === undefined
         ? []
@@ -110,7 +107,6 @@ export interface AtlasTableEntry {
   schema: string;
   table: string;
   physical: string;
-  file: "vault" | "journal";
   pack: string;
   packKind: AtlasPackKind;
   packLabel: string;
@@ -122,11 +118,7 @@ export interface AtlasTableEntry {
   blurb?: string;
 }
 
-function entryFor(
-  schema: string,
-  table: string,
-  file: "vault" | "journal"
-): AtlasTableEntry {
+function entryFor(schema: string, table: string): AtlasTableEntry {
   const packKind = packKindOf(schema);
   if (packKind === undefined) {
     // Fail loud rather than mis-shelve: a new pack is added by hand.
@@ -148,7 +140,6 @@ function entryFor(
     schema,
     table,
     physical: `${schema}_${table}`,
-    file,
     pack: schema,
     packKind,
     packLabel: ATLAS_PACK_LABELS[schema] ?? humanizeKind(schema),
@@ -165,10 +156,7 @@ function entryFor(
 export function atlasTables(): AtlasTableEntry[] {
   const out: AtlasTableEntry[] = [];
   for (const [schema, tables] of Object.entries(VAULT_TABLES)) {
-    for (const table of tables) out.push(entryFor(schema, table, "vault"));
-  }
-  for (const [schema, tables] of Object.entries(JOURNAL_TABLES)) {
-    for (const table of tables) out.push(entryFor(schema, table, "journal"));
+    for (const table of tables) out.push(entryFor(schema, table));
   }
   return out;
 }

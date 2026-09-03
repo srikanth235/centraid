@@ -147,8 +147,8 @@ describe("B6 Commons peer plane", () => {
       .prepare(
         `INSERT INTO core_party
            (party_id, kind, display_name, sort_name, birth_date,
-            avatar_content_id, created_at, updated_at, ontology_version)
-         VALUES (?, 'person', 'Peer member', 'Peer member', NULL, NULL, ?, ?, '1.4')
+            avatar_content_id, created_at, updated_at)
+         VALUES (?, 'person', 'Peer member', 'Peer member', NULL, NULL, ?, ?)
          ON CONFLICT(party_id) DO NOTHING`
       )
       .run(member.ownerPartyId, now, now);

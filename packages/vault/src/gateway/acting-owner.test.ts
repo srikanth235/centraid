@@ -82,9 +82,9 @@ describe("acting-owner suite", () => {
   }
 
   function receiptDetail(action: string): Record<string, unknown> {
-    const row = db.journal
+    const row = db.audit
       .prepare(
-        `SELECT detail_json FROM consent_receipt
+        `SELECT detail_json FROM access_receipt
         WHERE action = ? ORDER BY receipt_id DESC LIMIT 1`
       )
       .get(action) as { detail_json: string | null } | undefined;
@@ -172,9 +172,9 @@ describe("acting-owner suite", () => {
     expect(receiptDetail("act schedule.propose_event")).toMatchObject({
       actingOwner: SID,
     });
-    const provenance = db.journal
+    const provenance = db.audit
       .prepare(
-        `SELECT agent_kind FROM consent_provenance ORDER BY prov_id DESC LIMIT 1`
+        `SELECT agent_kind FROM access_provenance ORDER BY prov_id DESC LIMIT 1`
       )
       .get() as { agent_kind: string };
     expect(provenance.agent_kind).toBe("ai_agent");

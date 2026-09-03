@@ -28,7 +28,7 @@ describe("tally", () => {
     };
     me = (
       db.vault
-        .prepare("SELECT owner_party_id AS id FROM core_vault LIMIT 1")
+        .prepare("SELECT self_party_id AS id FROM core_vault LIMIT 1")
         .get() as {
         id: string;
       }

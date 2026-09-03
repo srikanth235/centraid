@@ -51,7 +51,7 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "core.tag",
     "core.concept",
     "core.concept_scheme",
-    "consent.provenance",
+    "access.provenance",
     "blob.custody_state",
     // The Shared shelf: where a document came from, and whose vault that was.
     "core.share_origin",
@@ -66,10 +66,12 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "locker.item_field",
     "locker.item_address",
     "locker.item_passkey",
-    "locker.item_history",
+    // The item pane's history section reads the shared revision ledger; the
+    // per-app `locker.item_history` table is gone (#916).
+    "core.entity_revision",
     "core.attachment",
     "core.content_item",
-    "consent.receipt",
+    "access.receipt",
   ],
   notes: [
     "core.content_item",

@@ -370,6 +370,10 @@ jobs:
       # contracts, and every law in the registry is wired to a real enforcer.
       - run: bun run lint:engine-conformance
       - run: bun run lint:law-registry
+      # The vault registry is an allow-list from outside the vault too: raw SQL
+      # naming a physical vault table lives in packages/vault or in an entry of
+      # the linter's allow-list with a reason (review lens 8.1).
+      - run: bun run lint:vault-sql
       # Quality-knob ratchet — tighten-only vs origin/main. The schema-export
       # half is a standing fingerprint check rather than a diff-scoped one, so
       # #915 moved it to the weekly hygiene lane; see hygiene.yml.
@@ -860,9 +864,31 @@ jobs:
           if-no-files-found: warn
   new-test-burn-in:
     runs-on: ubuntu-latest
-    # Three runs of a handful of files. The cap is generous against a PR that
-    # adds many suites at once; over it, the honest answer is to split the PR.
-    timeout-minutes: 25
+    # #916 — sized to a SHARD, and lowered rather than raised. The old 25 was a
+    # cap on the whole list and the note above it said that over the cap "the
+    # honest answer is to split the PR". That advice was wrong about which
+    # quantity was too big. The guarantee is per-file and therefore costs the
+    # SUM of the files; the rung-2 budget this lane broke is a SPAN
+    # (`pr-gate-wall-clock.mjs`: `max(completed_at) − min(started_at)`, "not the
+    # sum: those jobs run in parallel"). A sum measured against a span is a
+    # missing dimension, not an oversized PR, and splitting the PR would have
+    # bought nothing: two branches of 120 files each would run the same 53
+    # minutes on the same one runner, twice.
+    #
+    # 20 rather than 15 so a cold turbo cache — the build step below is seconds
+    # on a hit and minutes on a miss — cannot cancel a leg that is merely
+    # unlucky. That ordering is the point: at 20 the lane finishes and says
+    # something, and `check`'s 15-minute wall-clock gate then judges the span
+    # with a verdict in hand. At 25 this lane was cancelled mid-file and the
+    # gate had to judge a lane that never spoke.
+    timeout-minutes: 20
+    strategy:
+      # A leg's failure must not cancel its siblings: the disagreement this lane
+      # hunts is per-file, so a red leg is a finding about one file and the other
+      # legs' findings are still owed to the author on the same run.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - id: start
         run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
@@ -878,18 +904,29 @@ jobs:
       # @centraid/* imports when a test is run from its own package directory.
       - name: Build packages so a per-package vitest run resolves
         run: bun run turbo run build --filter='./packages/*'
-      - name: Run every added or modified test three times, alone
-        run: node scripts/ci/burn-in.mjs --base origin/main --runs 3
+      # NOTHING IS SKIPPED BY SHARDING. `--runs 3` is unchanged, every file still
+      # runs alone, and every candidate lands in exactly one leg: the script
+      # deals a SORTED copy of the list by `index % N`, so the legs are a
+      # partition of one list rather than N independent guesses at it.
+      #
+      # `strategy.job-total` — not a hand-typed 8 — is the divisor on purpose.
+      # It IS the length of the matrix above, so adding or removing a leg cannot
+      # leave a stale `N` behind, and a stale `N` is precisely how a sharded gate
+      # loses files in silence and reports green over the ones it never ran
+      # (#556's shape, one level down). An out-of-range leg is a hard error in
+      # the script rather than an empty slice, for the same reason.
+      - name: Burn in shard ${{ matrix.shard }}, three times each, alone
+        run: node scripts/ci/burn-in.mjs --base origin/main --runs 3 --shard ${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Write lane evidence
         if: always()
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane new-test-burn-in --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness,concurrency --surfaces vault-core,gateway
+          node scripts/test-report/write-evidence.mjs --lane new-test-burn-in-${{ matrix.shard }} --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness,concurrency --surfaces vault-core,gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: pr-evidence-new-test-burn-in
+          name: pr-evidence-new-test-burn-in-${{ matrix.shard }}
           path: artifacts/
           retention-days: 7
           if-no-files-found: warn
@@ -1008,13 +1045,13 @@ jobs:
       # falsify "this diff broke the phone": the pairing canary, one home-app
       # journey (`notes-library`), and cold start — 8 minutes warm.
       #
-      # A COLD CACHE IS NOW A NAMED LANE FAILURE, NOT A SIXTY-MINUTE WAIT. When the
-      # apk restore misses, this job used to compile a release build inside the leg
-      # (16m21s on 0655a1b7, inside a 27-minute job) and every PR behind it paid the
-      # same. The shell is banked by `candidate.yml`'s `mobile-canary-android` on
-      # every push to main, so a miss means that lane has not run for this native +
-      # JS fingerprint yet — a statement about the pipeline, which the pipeline
-      # should say out loud in seconds rather than discover in an hour.
+      # A COLD APK IS A REBUILD, NOT A LANE FAILURE (#916, owner-ruled). An apk
+      # miss means `candidate.yml`'s `mobile-canary-android` has not run for this
+      # native + JS fingerprint yet, which for a PR that touches mobile JS is
+      # true BY CONSTRUCTION — that lane is rung 3 and runs post-merge. The
+      # reconstruct-on-miss argument is written out in full beside the caches in
+      # the job below; what keeps it affordable is that the rebuild reuses the
+      # banked gradle and native directories instead of recompiling them.
       #
       # The committed leg script sits literally inside this job block, which is where
       # scripts/lint-e2e-wiring.mjs reads it from.
@@ -1037,9 +1074,26 @@ jobs:
     runs-on: ubuntu-latest
     # The SUITE's own 8-minute budget (flows/pr-gate-budget.md) is what fails a
     # slow run, because it fails while evidence can still be written. This is an
-    # outer backstop only — but it no longer has to sit above a cold gradle
-    # release build, because a cold cache fails fast above instead of building.
-    timeout-minutes: 20
+    # outer backstop only, and it MUST sit above the cold path, because a job
+    # cancelled by this timeout loses every verdict it had written (#557).
+    # Priced for the worst case the lane accepts: setup and cache restores, a
+    # cold-apk rebuild, the suite's own 8-minute ceiling, and job overhead. The
+    # cold-apk rebuild was a FULL native compile at 11m19s (run 33467906385)
+    # because the gradle cache restored no task outputs and no native build
+    # directory at all; the caching restructure below is aimed squarely at that
+    # number, and the first run on the new `android-gradle-v2-` keys is what
+    # measures it. The timeout stays at 30 until a measurement says otherwise —
+    # tightening it on a projection would be trading a slow lane for a cancelled
+    # one, and a job this timeout cancels loses every verdict it had written
+    # (#557). The warm-apk path is unchanged at ~11 min and never approaches it.
+    #
+    # A COLD REBUILD MAY STILL EXCEED THE RUNG-2 SPAN BUDGET, AND THAT REMAINS A
+    # KNOWN, OWNER-ACCEPTED COST (#916). `tests/budgets.json#suiteWallClock.lanes.pr-gate`
+    # is 15.0 min of ELAPSED SPAN across `check`'s needs and is tighten-only. The
+    # budget is not widened to match: the overrun is reported by
+    # `scripts/ci/pr-gate-wall-clock.mjs` on the run that spends it, which is the
+    # honest place for it to show up, and it is how the restructure gets scored.
+    timeout-minutes: 30
     steps:
       - id: start
         run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
@@ -1113,53 +1167,134 @@ jobs:
       #                  "built from a different commit's JS", which under the
       #                  release artifact is the common case rather than the rare
       #                  one.
-      #   gradle build   restore-keys ON. A partial match is a warm build
-      #     directory   DIRECTORY, not an artifact: gradle re-checks every task's
-      #                  inputs against the current tree, so a JS-only change
-      #                  re-runs only the bundle and packaging tasks and a native
-      #                  change rebuilds what it must. Nothing stale can survive
-      #                  a task-input check, which is why restore-keys is safe on
-      #                  this one and refused on the other.
+      #   gradle +       restore-keys ON. A partial match is a warm build
+      #     native        DIRECTORY, not an artifact: gradle re-checks every
+      #     directories   task's declared inputs against the current tree, so a
+      #                   task whose inputs moved re-runs. That is why
+      #                   restore-keys is safe on this one and refused on the
+      #                   other. The one task whose declared inputs do NOT cover
+      #                   everything that changes it is the JS bundle, and it is
+      #                   forced to re-run rather than trusted — see below.
       #
       # Both are populated on `main` by `candidate.yml`'s `mobile-canary-android`
       # (rung 3), so a PR normally restores rather than compiles.
+      #
+      # WHAT THE GRADLE CACHE BUYS, AND WHY IT BOUGHT NOTHING UNTIL #916. The
+      # sentence that used to sit here claimed a warm gradle directory reduced a
+      # JS-only rebuild to "bundle and packaging tasks"; the sentence that
+      # replaced it said the opposite. Both were describing a cache that could
+      # not work, for three independent reasons — and fixing any one alone still
+      # leaves a full native compile, which is why this moved as one change
+      # across `ci.yml`, `candidate.yml` and `e2e.yml` together:
+      #
+      #   1. `org.gradle.caching` was UNSET, so gradle's build cache was off and
+      #      `~/.gradle/caches` preserved dependencies and artifact transforms
+      #      but no task OUTPUTS. It is now `true` in
+      #      `apps/mobile/android/gradle.properties`, where the reasoning lives;
+      #      the entries land in `~/.gradle/caches/build-cache-1`, inside the
+      #      path this step was already restoring.
+      #   2. THE LIBRARY MODULES WERE NOT CACHED AT ALL. React Native and Expo
+      #      autolink each library as a gradle subproject rooted at
+      #      `node_modules/<lib>/android`, so its class output lands in
+      #      `node_modules/<lib>/android/build` and its CMake/ninja intermediates
+      #      in `node_modules/<lib>/android/.cxx` — a dozen of the autolinked
+      #      modules compile C or C++, and the app itself gets a CMake build from
+      #      React Native's `default-app-setup/CMakeLists.txt`, staged in
+      #      `apps/mobile/android/app/.cxx`. That is where the
+      #      eleven minutes were. Measured on run 33405430819: the gradle cache
+      #      restored in 41s and the job was still compiling
+      #      `react-native-quick-crypto`'s C sources twenty-five minutes later,
+      #      because nothing it restored had ever contained a C object file.
+      #   3. `apps/mobile/android/.gradle` was not cached either, and without it
+      #      the two build directories that WERE cached got DELETED before the
+      #      first task ran. Gradle's stale-output cleanup removes anything under
+      #      a project's build directory that its own execution history does not
+      #      claim, and that history lives in `.gradle`. Restoring outputs
+      #      without the record that vouches for them is a slower way of
+      #      restoring nothing.
+      #
+      # The key namespace is `android-gradle-v2-` for exactly that reason: a v1
+      # entry names a different path set, and a `restore-keys` match against one
+      # would hand this lane build directories with no `.gradle` beside them —
+      # the shape that gets deleted at task-graph time. All three Android lanes
+      # cut over in the same change. A lane that saves a directory another lane
+      # does not restore is worse than no cache.
+      #
+      # A STALE JS BUNDLE CANNOT RIDE IN ON THIS. Now that gradle arrives with an
+      # execution history it can legitimately report tasks UP-TO-DATE, and
+      # `createBundleReleaseJsAndAssets` under-declares: React Native annotates
+      # its sources as a file tree under `apps/mobile` only, while
+      # `js-bundle-fingerprint.mjs` correctly counts the four workspace packages
+      # and `bun.lock` as bundle inputs too. So the bundle task is forced with
+      # `--rerun` in `apps/mobile/scripts/android-emulator-install.sh` — the full
+      # argument is written there, next to the invocation it constrains.
       - name: Restore the built Android app
         id: android_app
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e-android
           key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
-      # #915 Wave 1 — A COLD SHELL FAILS IN SECONDS WITH A NAME. The apk key
-      # folds the native fingerprint AND the JS bundle fingerprint, and
-      # `candidate.yml`'s `mobile-canary-android` banks that exact key on every
-      # push to `main`. A miss therefore means one of two pipeline facts, not a
-      # product fact: the canary has not yet run for this fingerprint, or it ran
-      # and did not bank. Either way the honest lane verdict is "this gate could
-      # not be answered cheaply", and the honest cost is one minute rather than
-      # the sixteen-minute release build this job used to absorb silently
-      # (0655a1b7, 60732d30: a 0s restore and a 16m21s build inside a 27m job).
-      #
-      # It writes its own case id so the evidence says WHY, and it fails the job
-      # so the miss is visible instead of amortised across everybody's PR.
-      - name: A cold Android shell is a lane failure, not an hour of building
-        if: steps.android_app.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          printf '%s\n' '[{"id":"cold-cache","verdict":"failed","durationMs":0,"attempts":1}]' > artifacts/mobile-device-gate-cases.json
-          echo "::error title=mobile-device-gate cold cache::no banked Android release shell for this native+JS fingerprint (key android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}). candidate.yml's mobile-canary-android banks it on every push to main; if that lane is red or has not run for this fingerprint, fix THAT rather than paying a cold release build on every PR behind this one."
-          exit 1
-      - name: Restore the Android gradle build directory
+      # The path list is IDENTICAL in `candidate.yml` and `e2e.yml`, restore and
+      # save alike. `!node_modules/@centraid/**` is not decoration: bun symlinks
+      # every workspace package into `node_modules`, so `@centraid/mobile` IS
+      # `apps/mobile`, and without the exclusion the scoped glob would archive
+      # `apps/mobile/android/build` a second time under a second name.
+      - name: Restore the Android gradle and native build directories
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            apps/mobile/android/app/build
-            apps/mobile/android/build
             ~/.gradle/caches
-          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+            apps/mobile/android/.gradle
+            apps/mobile/android/build
+            apps/mobile/android/app/build
+            apps/mobile/android/app/.cxx
+            apps/mobile/modules/*/android/build
+            node_modules/*/android/build
+            node_modules/*/android/.cxx
+            node_modules/@*/*/android/build
+            node_modules/@*/*/android/.cxx
+            !node_modules/@centraid/**
+          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
           restore-keys: |
-            android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
-            android-gradle-${{ runner.os }}-
+            android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
+            android-gradle-v2-${{ runner.os }}-
+      # ON A COLD SHELL THIS LANE RECONSTRUCTS IT. OWNER-RULED (#916), reversing
+      # the earlier rule that a miss was a lane failure.
+      #
+      # The reversal is not a preference, it is arithmetic. The apk key folds the
+      # JS bundle fingerprint, so it names the CONTENT of `apps/mobile/src`,
+      # `packages/{core,client,design,blueprints}` and `bun.lock`. The only lane
+      # that banks that key is `candidate.yml`'s `mobile-canary-android`, which
+      # is rung 3 and runs POST-MERGE. A PR that touches mobile JS therefore
+      # produces a key no pre-merge run could ever have banked — so a
+      # fail-on-miss gate is unpassable by construction for exactly the PRs it
+      # exists to check, and passes only for the PRs that do not need it. A gate
+      # that can only be green when it has nothing to say is not a gate.
+      #
+      # THERE IS NO BUILD STEP HERE, AND THAT IS THE POINT. The build recipe is
+      # `apps/mobile/scripts/android-emulator-install.sh`, sourced by all three
+      # Android lanes; on a miss it runs `:app:assembleRelease` (one ABI, lint
+      # excluded), `adb install`s the result, copies it to
+      # `~/.cache/centraid-mobile-e2e-android` — the same path this cache
+      # restores, so everything downstream is agnostic to how the apk got there —
+      # stamps the JS hash it was built from, and sets `built=true`. Because that
+      # script also installs, it needs a booted device, so the build necessarily
+      # happens inside the emulator step below. `mobile-canary-android` has no
+      # build step for the same reason. Hoisting a `./gradlew` call into a step
+      # of its own here would be a SECOND recipe for one artifact, and the two
+      # would drift.
+      #
+      # WHAT THE ORDERING HAS TO GUARANTEE is only that both restores precede the
+      # emulator step, so the build the script may run finds a warm gradle
+      # directory. Both do, immediately above. The gradle key's `restore-keys`
+      # prefix is the NATIVE fingerprint alone, so a JS-only PR still matches
+      # `main`'s banked directory even though its apk key cannot.
+      #
+      # `ANDROID_CACHE_HIT` on the emulator step below reports THE RESTORE, never
+      # "is there an apk". A rebuilt shell reports a MISS and must: that env var
+      # is precisely what selects the script's cold path, so reporting a rebuild
+      # as a hit would send it to the warm path to install an apk that does not
+      # exist yet. Nothing downstream reads it for any other question.
       # Restore-then-save, for the reason already written above the apk and
       # gradle caches and not applied to this one: `actions/cache` declares
       # `post-if: success()`, so on a red lane the snapshot never saves and every
@@ -1242,12 +1377,11 @@ jobs:
               -path '*/maestro-debug/*-configure-gateway' \
               -prune -exec rm -rf {} +
           fi
-      # BANK WHAT THIS RUN COMPILED. Until now only `mobile-canary` saved, so a
-      # PR could restore a shell only if main had already built that exact
-      # `apk_key` — and the key names the JS bundle, so any PR touching JS
-      # missed it and paid a full cold release build inside this job. On
-      # 0655a1b7 and again on 60732d30 the restore was a 0s miss and the build
-      # cost 16m21s of a 27m job.
+      # BANK WHAT THIS RUN COMPILED, under the SAME key the restore above missed
+      # on. This is the other half of the reconstruct-on-miss rule: without it a
+      # branch would pay the native compile again on every push, because only
+      # `mobile-canary-android` writes that key and it does not run until after
+      # the merge.
       #
       # Saving here does not help the push that paid for it; it helps the NEXT
       # push on the same branch, which is the common shape — a receipt edit, a
@@ -1257,27 +1391,50 @@ jobs:
       #
       # `if: always()` and gated on `built` for the same reason the canary's is:
       # a red suite still leaves the next push a warm build, and a run that
-      # restored rather than compiled has nothing new to bank.
-      #
-      # #915 — with one leg and a cold cache failing fast above, this now only
-      # ever banks a shell the run legitimately built (a `workflow_dispatch`
-      # forcing the lane on, say). The `built` gate is what keeps a run that
-      # restored rather than compiled from re-saving what it was given.
+      # restored rather than compiled has nothing new to bank. `built=true` is
+      # written by `android-emulator-install.sh` only on the path that actually
+      # ran gradle, so the gate cannot re-save a shell the run was handed.
       - name: Save the built Android app
         if: always() && steps.emu.outputs.built == 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e-android
           key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
-      - name: Save the Android gradle build directory
-        if: always()
+      # BANK THE WARM DIRECTORIES ONLY WHEN THIS RUN ACTUALLY COMPILED. Gated on
+      # `gradle_ran`, not `built`, and the two differ in both directions:
+      #
+      #   apk HIT, no gradle    `gradle_ran` unset → SAVE SKIPPED. This is the
+      #                         fix for the barren re-bank recorded in
+      #                         receipts/issue-905-client-e2e-escape-hatch.md and
+      #                         seen on run 33370541215: the save used to be
+      #                         unconditional, so a run that never invoked gradle
+      #                         banked a directory holding no fresh native output
+      #                         — and because `restore-keys` resolve to the most
+      #                         RECENTLY created match, that empty entry then
+      #                         shadowed the warm one. The cache could not
+      #                         self-correct.
+      #   build died mid-way    `gradle_ran` set, `built` unset → SAVED. A run
+      #                         that failed in the C compiler still leaves warm
+      #                         `.cxx` and module build directories, and they are
+      #                         valid inputs for the next run whatever the suite
+      #                         went on to say.
+      - name: Save the Android gradle and native build directories
+        if: always() && steps.emu.outputs.gradle_ran == 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            apps/mobile/android/app/build
-            apps/mobile/android/build
             ~/.gradle/caches
-          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+            apps/mobile/android/.gradle
+            apps/mobile/android/build
+            apps/mobile/android/app/build
+            apps/mobile/android/app/.cxx
+            apps/mobile/modules/*/android/build
+            node_modules/*/android/build
+            node_modules/*/android/.cxx
+            node_modules/@*/*/android/build
+            node_modules/@*/*/android/.cxx
+            !node_modules/@centraid/**
+          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1296,25 +1453,22 @@ jobs:
           path: tests/agent-e2e-mobile/ledger/durations.json
           retention-days: 30
           if-no-files-found: warn
-      # `--cases` only when a step wrote one: the cold-cache guard above emits a
-      # single `cold-cache` case so the evidence says WHY the lane is red, and a
-      # normal run has no case file to pass.
+      # No `--cases`: the only step that ever wrote a case file by hand was the
+      # cold-cache guard, and reconstructing the shell replaced it (#916). Every
+      # case this lane reports now comes from the harness, which is where a case
+      # about the product belongs.
       - name: Write lane evidence
         if: always()
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: |
           set -euo pipefail
-          cases=()
-          if [ -f artifacts/mobile-device-gate-cases.json ]; then
-            cases=(--cases artifacts/mobile-device-gate-cases.json)
-          fi
           node scripts/test-report/write-evidence.mjs \
             --lane mobile-device-gate --rung 2 --platform android \
             --verdict auto --job-status "${{ job.status }}" \
             --started-at "$LANE_STARTED_AT" --budget-ms 480000 \
             --qualities journey,correctness,offline \
-            --surfaces mobile,tunnel-pairing "${cases[@]+"${cases[@]}"}"
+            --surfaces mobile,tunnel-pairing
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1759,6 +1913,11 @@ jobs:
         coverage,
         mutation-pr,
         # #915 Wave 1 — every added or modified Vitest file, three times, alone.
+        # #916 — sharded across a matrix, and still ONE entry here: a matrix job's
+        # `needs` result is the roll-up of its legs, so a single red or cancelled
+        # leg reds this aggregator. There is no merge step to guard, unlike
+        # `coverage-shard`, because each leg is its own verdict rather than a
+        # blob somebody else reassembles.
         new-test-burn-in,
         mobile-smoke,
         mobile-device-gate,

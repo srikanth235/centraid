@@ -294,9 +294,9 @@ describe("merge", () => {
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES ('dup-a', 'person', 'J. Smith', ?, ?, '1.1'), ('dup-b', 'person', 'j. smith', ?, ?, '1.1'),
-              ('solo', 'person', 'Unique Name', ?, ?, '1.1')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('dup-a', 'person', 'J. Smith', ?, ?), ('dup-b', 'person', 'j. smith', ?, ?),
+              ('solo', 'person', 'Unique Name', ?, ?)`
       )
       .run(now, now, now, now, now, now);
     db.vault

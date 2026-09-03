@@ -19,7 +19,7 @@ import type {
   TurnStreamEvent,
 } from "@centraid/server/engine";
 
-import { journalConversationStore } from "../journal-stores.js";
+import { ledgerConversationStore } from "../ledger-stores.js";
 
 const REWRITE_SYSTEM = [
   "Rewrite one automation instruction document.",
@@ -101,7 +101,7 @@ export interface RewriteAutomationInstructionsOptions {
   row: AutomationRow;
   steering: string;
   revisionTurnId?: string;
-  journalDbFile: string;
+  ledgerDbFile: string;
   harnessSessionDir: string;
   runTurn: RunTurnFn;
   harnessPrefs: HarnessPrefs;
@@ -120,7 +120,7 @@ export interface RewriteAutomationInstructionsResult {
 export async function rewriteAutomationInstructions(
   opts: RewriteAutomationInstructionsOptions
 ): Promise<RewriteAutomationInstructionsResult> {
-  const store = journalConversationStore(opts.journalDbFile);
+  const store = ledgerConversationStore(opts.ledgerDbFile);
   const conversationId = store.ensureAutomationConversation(
     opts.row.ref,
     opts.row.ownerApp,

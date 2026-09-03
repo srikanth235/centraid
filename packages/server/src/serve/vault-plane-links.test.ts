@@ -111,7 +111,7 @@ describe("vault-plane cross-references", () => {
       payload: { entity: "knowledge.note", purpose },
     });
     expect(darkRead.ok).toBe(false);
-    expect(darkRead.code).toBe("VAULT_CONSENT");
+    expect(darkRead.code).toBe("VAULT_ACCESS");
     const survivors = plane.db.vault
       .prepare(
         `SELECT (SELECT count(*) FROM knowledge_note WHERE note_id = ?)

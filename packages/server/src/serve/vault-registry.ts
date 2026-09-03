@@ -331,7 +331,7 @@ export class VaultRegistry {
       cacheBytes: Math.floor(budget.cacheBytes / this.planes.size),
     };
     for (const plane of this.planes.values()) {
-      for (const db of [plane.db.vault, plane.db.journal]) {
+      for (const db of [plane.db.vault, plane.db.audit]) {
         applyVaultFootprint(db, perVault);
       }
     }

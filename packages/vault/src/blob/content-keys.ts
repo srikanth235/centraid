@@ -73,7 +73,7 @@ export class BlobContentKeyRegistry {
   resolvePairedDevice(identity: string): string {
     const row = this.db
       .prepare(
-        `SELECT device_id FROM consent_device
+        `SELECT device_id FROM access_device
           WHERE device_id = ? OR public_key = ?
           LIMIT 1`
       )
@@ -97,13 +97,13 @@ export class BlobContentKeyRegistry {
     trust: "full" | "readonly";
   }): string {
     const existing = this.db
-      .prepare("SELECT device_id FROM consent_device WHERE public_key = ?")
+      .prepare("SELECT device_id FROM access_device WHERE public_key = ?")
       .get(input.identity) as { device_id: string } | undefined;
     const now = nowIso();
     if (existing) {
       this.db
         .prepare(
-          `UPDATE consent_device SET name = ?, platform = ?
+          `UPDATE access_device SET name = ?, platform = ?
             WHERE device_id = ?`
         )
         .run(input.name, input.platform ?? null, existing.device_id);
@@ -118,7 +118,7 @@ export class BlobContentKeyRegistry {
     const deviceId = uuidv7();
     this.db
       .prepare(
-        `INSERT INTO consent_device
+        `INSERT INTO access_device
            (device_id, owner_party_id, name, platform, public_key, enrolled_at)
          VALUES (?, ?, ?, ?, ?, ?)`
       )
@@ -177,7 +177,7 @@ export class BlobContentKeyRegistry {
     const sha = assertSha(sha256);
     const resolvedDeviceId = this.resolvePairedDevice(deviceId);
     const device = this.db
-      .prepare("SELECT public_key FROM consent_device WHERE device_id = ?")
+      .prepare("SELECT public_key FROM access_device WHERE device_id = ?")
       .get(resolvedDeviceId) as { public_key: string };
     const contentKey = this.getOrCreate(sha);
     const keyRow = this.db
@@ -224,7 +224,7 @@ export class BlobContentKeyRegistry {
   revokeDevice(deviceId: string): number {
     const row = this.db
       .prepare(
-        "SELECT device_id, owner_party_id FROM consent_device WHERE device_id = ? OR public_key = ? LIMIT 1"
+        "SELECT device_id, owner_party_id FROM access_device WHERE device_id = ? OR public_key = ? LIMIT 1"
       )
       .get(deviceId, deviceId) as
       | { device_id: string; owner_party_id: string }
@@ -232,7 +232,7 @@ export class BlobContentKeyRegistry {
     if (!row) return 0;
     const devices = this.db
       .prepare(
-        "SELECT device_id, public_key FROM consent_device ORDER BY device_id"
+        "SELECT device_id, public_key FROM access_device ORDER BY device_id"
       )
       .all() as { device_id: string; public_key: string }[];
     for (const device of devices) this.deviceWrapState(device.device_id);

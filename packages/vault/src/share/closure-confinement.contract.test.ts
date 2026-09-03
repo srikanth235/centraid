@@ -213,7 +213,20 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
        VALUES (?, ?, ?, ?, ?, ?)`
     );
     add.run(uuidv7(), collectionId, "media.asset", photo.assetId, 0, now);
-    add.run(uuidv7(), collectionId, "core.person", uuidv7(), 1, now);
+    // A REAL row of a kind that cannot cross (#916): the entry's (type, id) is
+    // a composite foreign key into `core_entity` now, so a made-up type is
+    // refused by the engine long before the closure sees it — which is a
+    // different guarantee from this one, and does not replace it.
+    const eventId = uuidv7();
+    origin.vault
+      .prepare(
+        `INSERT INTO core_event
+           (event_id, summary, dtstart, status, sequence, recurrence_semantics,
+            created_at, updated_at)
+         VALUES (?, 'Dinner', '2026-01-01T10:00:00', 'confirmed', 0, 'floating', ?, ?)`
+      )
+      .run(eventId, now, now);
+    add.run(uuidv7(), collectionId, "core.event", eventId, 1, now);
 
     expect(() =>
       readShareClosure(origin.vault, {
@@ -221,8 +234,6 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
         itemType: "core.collection",
         itemIds: [collectionId],
       })
-    ).toThrow(
-      "collection entry type core.person cannot cross a vault boundary"
-    );
+    ).toThrow("collection entry type core.event cannot cross a vault boundary");
   });
 });

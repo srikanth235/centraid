@@ -9,8 +9,8 @@ export function addKnownParty(steward: Side, member: Side, now: string): void {
     .prepare(
       `INSERT INTO core_party
          (party_id, kind, display_name, sort_name, birth_date,
-          avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?, '1.4')
+          avatar_content_id, created_at, updated_at)
+       VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?)
        ON CONFLICT(party_id) DO NOTHING`
     )
     .run(member.ownerPartyId, member.label, member.label, now, now);

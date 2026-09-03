@@ -8,7 +8,6 @@ import { createHmac } from "node:crypto";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition } from "../gateway/types.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { SEALED_PLACEHOLDER } from "../schema/sealed.js";
 import { replaceMemo } from "./annotations.js";
 import { setStarred } from "./flags.js";
@@ -20,7 +19,7 @@ import {
   setConnection,
   setTags,
 } from "./locker-shared.js";
-import { mintTemplateFields, recordHistory } from "./locker-sidecars.js";
+import { mintTemplateFields } from "./locker-sidecars.js";
 import { LOCKER_ITEM_TYPES } from "./locker-types.js";
 
 // The domain vocabulary moved to `locker-shared.js` when the write surface
@@ -89,8 +88,10 @@ const ITEM_EXISTS_SQL =
   "SELECT count(*) AS n FROM locker_item WHERE item_id = :item_id";
 const ITEM_LIVE_SQL =
   "SELECT count(*) AS n FROM locker_item WHERE item_id = :item_id AND deleted_at IS NULL";
-const ITEM_TRASHED_SQL =
-  "SELECT count(*) AS n FROM locker_item WHERE item_id = :item_id AND deleted_at IS NOT NULL";
+// RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
+const ITEM_TRASHED_SQL = `SELECT count(*) AS n FROM locker_item
+   WHERE item_id = :item_id AND deleted_at IS NOT NULL
+     AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
 function plusDays(iso: string, days: number): string {
   const d = new Date(iso);
@@ -224,11 +225,6 @@ const ADD_ITEM: CommandDefinition = {
     // as empty template rows the member fills in, which is also what lets an
     // unknown type degrade to a note that still carries them.
     mintTemplateFields(ctx, itemId, type);
-    recordHistory(ctx, itemId, {
-      operation: "create",
-      title: String(input.title),
-      changed: { type },
-    });
     ctx.cite({
       claim: `"${String(input.title)}" saved to your locker`,
       entityType: LOCKER_ITEM_TYPE,
@@ -335,18 +331,6 @@ const EDIT_ITEM: CommandDefinition = {
       .run(params);
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
     if (Array.isArray(input.tags)) setTags(ctx, itemId, input.tags as string[]);
-    recordHistory(ctx, itemId, {
-      operation: "edit",
-      title: row.title,
-      ...(rotated && previousPassword != null ? { previousPassword } : {}),
-      changed: {
-        fields: changed,
-        ...(rotated ? { password_rotated: true } : {}),
-        ...(input.title == null ? {} : { title: true }),
-        ...(Array.isArray(input.tags) ? { tags: true } : {}),
-        ...(input.alias == null ? {} : { alias: true }),
-      },
-    });
     return { item_id: itemId };
   },
 };
@@ -472,13 +456,11 @@ const PURGE_ITEM: CommandDefinition = {
       "locker_item_field",
       "locker_item_address",
       "locker_item_passkey",
-      "locker_item_history",
       "locker_item_alias",
     ]) {
       ctx.db.prepare(`DELETE FROM ${table} WHERE item_id = ?`).run(itemId);
     }
     ctx.db.prepare("DELETE FROM locker_item WHERE item_id = ?").run(itemId);
-    cleanupPolyRefs(ctx.db, ctx.now, LOCKER_ITEM_TYPE, itemId);
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
     return { item_id: itemId };
   },

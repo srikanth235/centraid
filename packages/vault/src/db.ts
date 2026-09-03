@@ -1,4 +1,10 @@
-// One vault owns vault.db/journal.db/blobs/; only the gateway holds these.
+// One vault owns vault.db and blobs/; only the gateway holds these.
+//
+// ONE FILE (#916). The sibling `journal.db` is gone: the audit band and the
+// conversation-ledger band are bands of vault.db like every other, so a write
+// and its receipt share one transaction and a pointer between them is a real
+// foreign key. Size is answered by RETENTION (schema/audit.ts,
+// `RETENTION_WINDOWS`), not by a second file.
 
 import { mkdirSync, statfsSync } from "node:fs";
 import path from "node:path";
@@ -27,7 +33,7 @@ import { initializeReplicaProtocol } from "./replica/change-log.js";
 import { repairReplicaInvocationCommits } from "./replica/invocation-commits.js";
 import { registerContentTextFn } from "./schema/fts.js";
 import type { KeyStore } from "./schema/key-store.js";
-import { JOURNAL_MIGRATIONS, migrate, migrateVault } from "./schema/migrate.js";
+import { migrateVault } from "./schema/migrate.js";
 import {
   ephemeralSealKey,
   resolveSealKey,
@@ -46,7 +52,13 @@ import type { VaultFootprintBudget } from "./vault-footprint.js";
 
 export interface VaultDb {
   vault: DatabaseSync;
-  journal: DatabaseSync;
+  /**
+   * The AUDIT BAND's connection — the same handle as `vault`, named for what
+   * an audit writer is doing (#916). A writer that means "this is evidence,
+   * not model state" says so at the call site; there is no second file to get
+   * wrong any more.
+   */
+  audit: DatabaseSync;
   dir: string;
   /** DEK for sealed columns (#293); outside export/backup/copy. */
   sealKey: Buffer;
@@ -122,7 +134,7 @@ function openFile(
       db.exec(`PRAGMA synchronous = ${synchronous}`);
       applyVaultFootprint(db, footprint);
       db.exec("PRAGMA temp_store = MEMORY");
-      // Workers open journal.db by path — wait for locks.
+      // Workers open the vault by path — wait for locks.
       db.exec("PRAGMA busy_timeout = 30000");
       // WAL-shipper exclusive (#408): foreign checkpoint = whole-DB re-upload.
       db.exec("PRAGMA wal_autocheckpoint = 0");
@@ -162,7 +174,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   assertVaultFootprint(options.footprint);
   const footprint = options.footprint;
   let vault: DatabaseSync;
-  let journal: DatabaseSync;
   let local: LocalBlobStore;
   if (dir === undefined) {
     vault = openFile(
@@ -171,7 +182,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       footprint,
       options.loadExtensions
     );
-    journal = openFile(":memory:", "FULL", footprint);
     local = options.blobStore ?? new MemoryBlobStore();
   } else {
     mkdirSync(dir, { recursive: true });
@@ -181,7 +191,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       footprint,
       options.loadExtensions
     );
-    journal = openFile(path.join(dir, "journal.db"), "FULL", footprint);
     local = options.blobStore ?? new FsBlobStore(path.join(dir, "blobs"));
   }
   // Must exist before migrations (FTS triggers).
@@ -189,15 +198,13 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   registerHammingFn(vault);
   registerCosineFn(vault);
   migrateVault(vault);
-  migrate(journal, JOURNAL_MIGRATIONS);
   // Durable write choke (#406), after every fresh-schema open.
   initializeReplicaProtocol(vault);
   // Unprovable marker fails CLOSED.
   try {
-    repairReplicaInvocationCommits({ vault, journal });
+    repairReplicaInvocationCommits({ vault, audit: vault });
   } catch (error) {
     vault.close();
-    journal.close();
     throw error;
   }
   // After migration (#298): sealed vault refuses a regenerated key.
@@ -317,7 +324,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
 
   const api: VaultDb = {
     vault,
-    journal,
+    audit: vault,
     dir: dir ?? ":memory:",
     sealKey,
     identitySeed,
@@ -338,14 +345,8 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
         } catch {
           // best-effort maintenance.
         }
-        try {
-          journal.exec("PRAGMA optimize");
-        } catch {
-          // best-effort maintenance.
-        }
       }
       vault.close();
-      journal.close();
     },
   };
   return api;

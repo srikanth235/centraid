@@ -135,25 +135,26 @@ interface ParkedDenialReceiptRow {
 }
 
 /**
- * Read a journal-proven terminal denial for a formerly parked invocation.
- * This check deliberately does not depend on vault settlement: journal.db is
- * the first side committed by confirmation denial, so it is the recovery
- * authority if the process dies before payload deletion/outcome publication.
+ * Read an audit-proven terminal denial for a formerly parked invocation.
+ * This check deliberately does not depend on vault settlement: the audit band
+ * is what a confirmation denial commits, so a durable denial row is the
+ * recovery authority if the process dies before payload deletion/outcome
+ * publication.
  */
 export function readDurableParkedDenial(
   db: VaultDb,
   invocationId: string
 ): DurableParkedDenial | undefined {
-  const invocation = db.journal
+  const invocation = db.audit
     .prepare(
       "SELECT status FROM agent_command_invocation WHERE invocation_id = ?"
     )
     .get(invocationId) as { status: string } | undefined;
   if (invocation?.status !== "failed") return undefined;
-  const receipts = db.journal
+  const receipts = db.audit
     .prepare(
       `SELECT receipt_id, detail_json
-         FROM consent_receipt
+         FROM access_receipt
         WHERE invocation_id = ? AND decision = 'deny'
         ORDER BY receipt_id`
     )
@@ -200,14 +201,14 @@ export function recordDurableParkedDenial(
   input: RecordDurableParkedDenialInput
 ): DurableParkedDenial {
   const { payload } = input;
-  db.journal.exec("BEGIN IMMEDIATE");
+  db.audit.exec("BEGIN IMMEDIATE");
   try {
     const existing = readDurableParkedDenial(db, payload.invocationId);
     if (existing) {
-      db.journal.exec("COMMIT");
+      db.audit.exec("COMMIT");
       return existing;
     }
-    const invocation = db.journal
+    const invocation = db.audit
       .prepare(
         "SELECT status, command_id FROM agent_command_invocation WHERE invocation_id = ?"
       )
@@ -224,7 +225,7 @@ export function recordDurableParkedDenial(
         `parked invocation ${payload.invocationId} is already ${invocation.status}`
       );
     }
-    const receiptId = writeReceipt(db.journal, {
+    const receiptId = writeReceipt(db.audit, {
       grantId: payload.grantId,
       invocationId: payload.invocationId,
       action: `act ${payload.commandName}`,
@@ -239,27 +240,27 @@ export function recordDurableParkedDenial(
       },
     });
     writeExplanation(
-      db.journal,
+      db.audit,
       payload.invocationId,
       input.reason === "owner denied confirmation"
         ? `Owner denied ${payload.commandName} at confirmation.`
         : `${payload.commandName} could not be confirmed: ${input.reason}.`
     );
-    db.journal
+    db.audit
       .prepare(
         `UPDATE agent_command_invocation
             SET status = 'failed', receipt_id = ?
           WHERE invocation_id = ?`
       )
       .run(receiptId, payload.invocationId);
-    db.journal.exec("COMMIT");
+    db.audit.exec("COMMIT");
     return {
       invocationId: payload.invocationId,
       receiptId,
       reason: input.reason,
     };
   } catch (error) {
-    db.journal.exec("ROLLBACK");
+    db.audit.exec("ROLLBACK");
     throw error;
   }
 }

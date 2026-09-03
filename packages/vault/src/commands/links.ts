@@ -5,7 +5,7 @@
 // come free as a reverse read. Unlink is temporal, not destructive: history is
 // never rewritten (R3); the gateway's dangling-link sweep end-dates the rest.
 
-import { evaluateConsent } from "../gateway/consent.js";
+import { evaluateAccess } from "../gateway/access.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { resolveEntity } from "../schema/tables.js";
@@ -44,7 +44,7 @@ function requireEndpoint(
   id: string
 ): void {
   const ref = resolveEntity(type, ctx.db);
-  if (!ref || ref.file !== "vault") {
+  if (!ref) {
     throw new Error(`${role}_type names unknown entity "${type}"`);
   }
   if (
@@ -58,7 +58,7 @@ function requireEndpoint(
     .prepare(`SELECT 1 AS x FROM "${ref.physical}" WHERE "${pk}" = ?`)
     .get(id);
   if (!live) throw new Error(`no ${type} with id ${id}`);
-  const consent = evaluateConsent(
+  const access = evaluateAccess(
     ctx.db,
     ctx.identity,
     ref.schema,
@@ -66,8 +66,8 @@ function requireEndpoint(
     "read",
     ctx.purpose
   );
-  if (consent.decision === "deny") {
-    throw new Error(`grant does not cover read of ${type}: ${consent.failing}`);
+  if (access.decision === "deny") {
+    throw new Error(`grant does not cover read of ${type}: ${access.failing}`);
   }
 }
 

@@ -9,9 +9,9 @@ import { promises as fs, statfsSync } from "node:fs";
 import type { Dirent } from "node:fs";
 import path from "node:path";
 
-/** Wire identifiers. `ledger` is `journal.db`: audit ladder AND conversation ledger. */
+/** Wire identifiers. `vault-db` is the ONE file (#916): the ontology, the
+ *  audit band and the conversation ledger band all live in `vault.db`. */
 export type LocalComponentId =
-  | "ledger"
   | "vault-db"
   | "attachments"
   | "apps"
@@ -131,11 +131,6 @@ async function fileBytes(
   return sizes.reduce((total, size) => total + size, 0);
 }
 
-const LEDGER_FILES = [
-  "journal.db",
-  "journal.db-wal",
-  "journal.db-shm",
-] as const;
 const VAULT_DB_FILES = ["vault.db", "vault.db-wal", "vault.db-shm"] as const;
 
 async function dirComponent(
@@ -155,11 +150,6 @@ async function scanVault(
   entry: LocalUsageVaultEntry
 ): Promise<LocalVaultUsage> {
   const components: LocalComponentUsage[] = [
-    {
-      component: "ledger",
-      bytes: await fileBytes(entry.dir, LEDGER_FILES),
-      files: null,
-    },
     {
       component: "vault-db",
       bytes: await fileBytes(entry.dir, VAULT_DB_FILES),

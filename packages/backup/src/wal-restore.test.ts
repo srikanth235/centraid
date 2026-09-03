@@ -1,12 +1,12 @@
 import fss, { promises as fs } from "node:fs";
-// governance: allow-repo-hygiene file-size-limit (#408) the replay e2e suite drives one real mini-shipper fixture through every damage/PITR/coordination case; sharding would duplicate the shipper per file
+// governance: allow-repo-hygiene file-size-limit (#408) the replay e2e suite drives one real mini-shipper fixture through every damage/PITR/marker case; sharding would duplicate the shipper per file
 /*
  * End-to-end WAL replay (FORMAT.md § WAL segments — /1, #408) over the REAL
  * pipeline. Row sets are compared against capture-time snapshots: the restore
  * must equal what the live database ACTUALLY held, not merely pass an integrity
  * check. The damage cases are the point — a corrupt, missing or forged object
- * degrades to an EARLIER CONSISTENT state (G6), coordinated across both
- * databases (G8), never a corrupt or mixed one.
+ * degrades to an EARLIER CONSISTENT state (G6) the tick markers can still
+ * PROVE, never a corrupt or half-applied one.
  */
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -22,18 +22,17 @@ import {
   openWalSegment,
   parseWalSegmentKey,
   sealWalCloser,
-  sealWalPairMarker,
   sealWalSegment,
+  sealWalTickMarker,
   WAL_DB_FILES,
   walGroupCloserKey,
-  walPairMarkerKey,
   walSegmentKey,
+  walTickMarkerKey,
 } from "./wal-format.js";
 import type {
-  WalDbName,
   WalGroupCloser,
-  WalPairMarker,
   WalSegmentAddress,
+  WalTickMarker,
 } from "./wal-format.js";
 import { replayWalSegments } from "./wal-restore.js";
 
@@ -61,6 +60,8 @@ interface CapturedSegment {
 class MiniShipper {
   readonly captured: CapturedSegment[] = [];
   readonly closers: WalGroupCloser[] = [];
+  /** One per tick that moved the stream — what the real shipper writes. */
+  readonly markers: WalTickMarker[] = [];
   /** PITR ground truth. */
   readonly rowsAtTick = new Map<number, string[]>();
   private readonly conn: DatabaseSync;
@@ -73,11 +74,10 @@ class MiniShipper {
 
   constructor(
     dir: string,
-    readonly dbName: WalDbName,
     public generation: string,
     private readonly clock: TickClock
   ) {
-    this.dbPath = path.join(dir, WAL_DB_FILES[dbName]);
+    this.dbPath = path.join(dir, WAL_DB_FILES.vault);
     this.walPath = `${this.dbPath}-wal`;
     this.conn = new DatabaseSync(this.dbPath);
     this.conn.exec("PRAGMA journal_mode=WAL");
@@ -134,21 +134,49 @@ class MiniShipper {
     return new Uint8Array(fss.readFileSync(this.dbPath));
   }
 
-  /** What a pair marker records; after `rollover()`, `(g+1, 0)` — where a
+  /** What a tick marker records; after `rollover()`, `(g+1, 0)` — where a
    * replay chain normalizes at group g's authentic closer. */
   position(): { group: number; endOffset: number } {
     return { group: this.group, endOffset: this.offset };
   }
 
-  /** `[offset, lastCommitBoundary)` of the live WAL as one segment. */
+  /** `[offset, lastCommitBoundary)` of the live WAL as one segment, then the
+   * end-of-tick marker: the shipper writes both or the tick is not selectable. */
   tick(tickMs: number = this.clock.next()): number {
+    this.capture(tickMs);
+    this.mark(tickMs);
+    return tickMs;
+  }
+
+  /** Capture the tail, then TRUNCATE-checkpoint: the WAL must actually reach
+   * 0 bytes, which is the closer's invariant. The marker lands AFTER the group
+   * advance, so it records `(g+1, 0)`. */
+  rollover(tickMs: number = this.clock.next()): number {
+    this.capture(tickMs);
+    this.checkpointTruncate();
+    if (fss.statSync(this.walPath).size !== 0) {
+      throw new Error("TRUNCATE checkpoint left a non-empty WAL");
+    }
+    this.closers.push({
+      db: "vault",
+      generation: this.generation,
+      group: this.group,
+      endOffset: this.offset,
+    });
+    this.group += 1;
+    this.offset = 0;
+    this.mark(tickMs);
+    return tickMs;
+  }
+
+  private capture(tickMs: number): void {
     if (!this.baseTaken) throw new Error("tick() before base()");
     const wal = new Uint8Array(fss.readFileSync(this.walPath));
     const boundary = lastCommitBoundary(wal, 0, this.pageSize);
     if (boundary <= this.offset)
       throw new Error("tick() with no new committed WAL bytes");
     const addr: WalSegmentAddress = {
-      db: this.dbName,
+      db: "vault",
       generation: this.generation,
       group: this.group,
       startOffset: this.offset,
@@ -158,26 +186,20 @@ class MiniShipper {
     this.captured.push({ addr, bytes: wal.slice(this.offset, boundary) });
     this.offset = boundary;
     this.rowsAtTick.set(tickMs, this.rows());
-    return tickMs;
   }
 
-  /** Capture the tail, then TRUNCATE-checkpoint: the WAL must actually reach
-   * 0 bytes, which is the closer's invariant. */
-  rollover(tickMs?: number): number {
-    const usedTick = this.tick(tickMs);
-    this.checkpointTruncate();
-    if (fss.statSync(this.walPath).size !== 0) {
-      throw new Error("TRUNCATE checkpoint left a non-empty WAL");
-    }
-    this.closers.push({
-      db: this.dbName,
+  /** A tick that moved no bytes still records where the stream stands — that
+   * repeat is what keeps an idle vault from reading as a truncated one. */
+  markIdle(tickMs: number): void {
+    this.mark(tickMs);
+  }
+
+  private mark(tickMs: number): void {
+    this.markers.push({
       generation: this.generation,
-      group: this.group,
-      endOffset: this.offset,
+      tickMs,
+      position: this.position(),
     });
-    this.group += 1;
-    this.offset = 0;
-    return usedTick;
   }
 
   close(): void {
@@ -210,41 +232,13 @@ async function shipToStore(
         sealWalCloser(DATA_KEY, VAULT_ID, closer)
       )
     ),
-  ]);
-}
-
-/** Bases precede the first tick, so the pair's base tick is 0. */
-const BASE_TICK = 0;
-
-/** Call AFTER both databases have ticked: mixing one's post-tick position with
- * the other's pre-tick one is a lie every later restore walks back from. */
-function markPair(
-  markers: WalPairMarker[],
-  vault: MiniShipper,
-  journal: MiniShipper,
-  tickMs: number
-): void {
-  markers.push({
-    vaultGeneration: vault.generation,
-    journalGeneration: journal.generation,
-    tickMs,
-    vault: vault.position(),
-    journal: journal.position(),
-  });
-}
-
-async function shipMarkers(
-  store: ObjectStore,
-  markers: WalPairMarker[]
-): Promise<void> {
-  await Promise.all(
-    markers.map((marker) =>
+    ...ship.markers.map((marker) =>
       store.put(
-        walPairMarkerKey(marker),
-        sealWalPairMarker(DATA_KEY, VAULT_ID, marker)
+        walTickMarkerKey(marker),
+        sealWalTickMarker(DATA_KEY, VAULT_ID, marker)
       )
-    )
-  );
+    ),
+  ]);
 }
 
 function readRows(dbPath: string): string[] {
@@ -298,12 +292,7 @@ async function buildVaultScenario(): Promise<VaultScenario> {
   const store = new FsObjectStore(await tempDir("backup-wal-store-"));
   const clock = new TickClock();
   const gen = "e7".repeat(16);
-  const ship = new MiniShipper(
-    await tempDir("backup-wal-ship-"),
-    "vault",
-    gen,
-    clock
-  );
+  const ship = new MiniShipper(await tempDir("backup-wal-ship-"), gen, clock);
   ship.insert("r1", "r2");
   const base = ship.base();
   const baseRows = ship.rows();
@@ -343,7 +332,7 @@ async function restoreVault(sc: VaultScenario, pointInTimeMs?: number) {
     dataKey: DATA_KEY,
     vaultId: VAULT_ID,
     destDir,
-    generationByDb: { vault: sc.gen },
+    generation: sc.gen,
     ...(pointInTimeMs === undefined ? {} : { pointInTimeMs }),
   });
   return {
@@ -360,7 +349,7 @@ describe("replayWalSegments — tip and point-in-time restore", () => {
 
     expect(rows).toStrictEqual(sc.liveRows);
     expect(rows).toStrictEqual(["r1", "r2", "r3", "r4", "r5", "r6", "r7"]);
-    const vault = outcome.perDb.vault;
+    const vault = outcome;
     expect(vault.integrityCheck).toBe("ok");
     expect(vault.foreignKeyViolations).toBe(0);
     expect(vault.segmentsApplied).toBe(5);
@@ -369,9 +358,6 @@ describe("replayWalSegments — tip and point-in-time restore", () => {
     expect(vault.truncated).toBe(false);
     expect(vault.generation).toBe(sc.gen);
     expect(outcome.damaged).toStrictEqual([]);
-    // No generation: skipped, never assumed to be SQLite.
-    expect(outcome.perDb.journal.integrityCheck).toBe("skipped");
-    expect(outcome.perDb.journal.generation).toBeNull();
     await expect(
       fs.access(path.join(destDir, ".wal-restore-spool"))
     ).rejects.toThrow(/ENOENT/u);
@@ -386,39 +372,34 @@ describe("replayWalSegments — tip and point-in-time restore", () => {
 
     const atT2 = await restoreVault(sc, t2);
     expect(atT2.rows).toStrictEqual(sc.rowsAt.get(t2));
-    expect(atT2.outcome.perDb.vault.segmentsApplied).toBe(2);
-    expect(atT2.outcome.perDb.vault.groupsApplied).toBe(1);
-    expect(atT2.outcome.perDb.vault.truncated).toBe(false);
-    expect(atT2.outcome.perDb.vault.integrityCheck).toBe("ok");
+    expect(atT2.outcome.segmentsApplied).toBe(2);
+    expect(atT2.outcome.groupsApplied).toBe(1);
+    expect(atT2.outcome.truncated).toBe(false);
+    expect(atT2.outcome.integrityCheck).toBe("ok");
 
     const atT3 = await restoreVault(sc, t3);
     expect(atT3.rows).toStrictEqual(sc.rowsAt.get(t3));
-    expect(atT3.outcome.perDb.vault.segmentsApplied).toBe(3);
-    expect(atT3.outcome.perDb.vault.groupsApplied).toBe(1);
+    expect(atT3.outcome.segmentsApplied).toBe(3);
+    expect(atT3.outcome.groupsApplied).toBe(1);
 
     const atT4 = await restoreVault(sc, t4);
     expect(atT4.rows).toStrictEqual(sc.rowsAt.get(t4));
-    expect(atT4.outcome.perDb.vault.segmentsApplied).toBe(4);
-    expect(atT4.outcome.perDb.vault.groupsApplied).toBe(2);
+    expect(atT4.outcome.segmentsApplied).toBe(4);
+    expect(atT4.outcome.groupsApplied).toBe(2);
 
     // Before the first tick: the base alone.
     const atBase = await restoreVault(sc, t1 - 500);
     expect(atBase.rows).toStrictEqual(sc.baseRows);
-    expect(atBase.outcome.perDb.vault.segmentsApplied).toBe(0);
-    expect(atBase.outcome.perDb.vault.lastTickMs).toBe(-1);
-    expect(atBase.outcome.perDb.vault.integrityCheck).toBe("ok");
+    expect(atBase.outcome.segmentsApplied).toBe(0);
+    expect(atBase.outcome.lastTickMs).toBe(-1);
+    expect(atBase.outcome.integrityCheck).toBe("ok");
   });
 
   test("an empty stream (base only, no segments) restores the base intact", async () => {
     const store = new FsObjectStore(await tempDir("backup-wal-store-"));
     const clock = new TickClock();
     const gen = "f1".repeat(16);
-    const ship = new MiniShipper(
-      await tempDir("backup-wal-ship-"),
-      "vault",
-      gen,
-      clock
-    );
+    const ship = new MiniShipper(await tempDir("backup-wal-ship-"), gen, clock);
     ship.insert("only-1", "only-2");
     const base = ship.base();
     ship.close();
@@ -430,13 +411,13 @@ describe("replayWalSegments — tip and point-in-time restore", () => {
       dataKey: DATA_KEY,
       vaultId: VAULT_ID,
       destDir,
-      generationByDb: { vault: gen },
+      generation: gen,
     });
     expect(readRows(path.join(destDir, WAL_DB_FILES.vault))).toStrictEqual([
       "only-1",
       "only-2",
     ]);
-    expect(outcome.perDb.vault).toMatchObject({
+    expect(outcome).toMatchObject({
       segmentsApplied: 0,
       groupsApplied: 0,
       lastTickMs: -1,
@@ -453,7 +434,6 @@ describe("replayWalSegments — a logically inconsistent restore is a FAILED res
     const gen = "c3".repeat(16);
     const ship = new MiniShipper(
       await tempDir("backup-wal-ship-"),
-      "vault",
       gen,
       new TickClock()
     );
@@ -482,7 +462,7 @@ describe("replayWalSegments — a logically inconsistent restore is a FAILED res
         dataKey: DATA_KEY,
         vaultId: VAULT_ID,
         destDir,
-        generationByDb: { vault: gen },
+        generation: gen,
       })
     ).rejects.toThrow(/vault\.db failed foreign_key_check .*1 violation/u);
   });
@@ -492,7 +472,6 @@ describe("replayWalSegments — a logically inconsistent restore is a FAILED res
     const gen = "c4".repeat(16);
     const ship = new MiniShipper(
       await tempDir("backup-wal-ship-"),
-      "vault",
       gen,
       new TickClock()
     );
@@ -515,11 +494,11 @@ describe("replayWalSegments — a logically inconsistent restore is a FAILED res
       dataKey: DATA_KEY,
       vaultId: VAULT_ID,
       destDir,
-      generationByDb: { vault: gen },
+      generation: gen,
     });
-    expect(outcome.perDb.vault.foreignKeyViolations).toBe(0);
-    expect(outcome.perDb.vault.integrityCheck).toBe("ok");
-    expect(outcome.perDb.vault.segmentsApplied).toBe(1);
+    expect(outcome.foreignKeyViolations).toBe(0);
+    expect(outcome.integrityCheck).toBe("ok");
+    expect(outcome.segmentsApplied).toBe(1);
   });
 });
 
@@ -539,7 +518,7 @@ describe("replayWalSegments — damage degrades to an earlier consistent state (
 
     const { outcome, rows } = await restoreVault(sc);
     expect(rows).toStrictEqual(sc.rowsAt.get(t1)); // earlier CONSISTENT state, not tip
-    const vault = outcome.perDb.vault;
+    const vault = outcome;
     expect(vault.integrityCheck).toBe("ok");
     expect(vault.truncated).toBe(true);
     expect(vault.segmentsApplied).toBe(1);
@@ -555,10 +534,10 @@ describe("replayWalSegments — damage degrades to an earlier consistent state (
 
     const { outcome, rows } = await restoreVault(sc);
     expect(rows).toStrictEqual(sc.rowsAt.get(t1));
-    expect(outcome.perDb.vault.truncated).toBe(true);
-    expect(outcome.perDb.vault.segmentsApplied).toBe(1);
-    expect(outcome.perDb.vault.lastTickMs).toBe(t1);
-    expect(outcome.perDb.vault.integrityCheck).toBe("ok");
+    expect(outcome.truncated).toBe(true);
+    expect(outcome.segmentsApplied).toBe(1);
+    expect(outcome.lastTickMs).toBe(t1);
+    expect(outcome.integrityCheck).toBe("ok");
     // A deleted object never appears in the LIST, so the planner sees the hole
     // up front and `damaged` stays empty.
     expect(outcome.damaged).toStrictEqual([]);
@@ -571,10 +550,10 @@ describe("replayWalSegments — damage degrades to an earlier consistent state (
 
     const { outcome, rows } = await restoreVault(sc);
     expect(rows).toStrictEqual(sc.baseRows);
-    expect(outcome.perDb.vault.segmentsApplied).toBe(0);
-    expect(outcome.perDb.vault.lastTickMs).toBe(-1);
-    expect(outcome.perDb.vault.truncated).toBe(true);
-    expect(outcome.perDb.vault.integrityCheck).toBe("ok");
+    expect(outcome.segmentsApplied).toBe(0);
+    expect(outcome.lastTickMs).toBe(-1);
+    expect(outcome.truncated).toBe(true);
+    expect(outcome.integrityCheck).toBe("ok");
     expect(outcome.damaged).toContain(firstKey);
   });
 
@@ -587,7 +566,7 @@ describe("replayWalSegments — damage degrades to an earlier consistent state (
     const { outcome, rows } = await restoreVault(sc);
     // Group 0 incomplete → group 1's pages must NOT be applied.
     expect(rows).toStrictEqual(sc.rowsAt.get(t2));
-    const vault = outcome.perDb.vault;
+    const vault = outcome;
     expect(vault.segmentsApplied).toBe(2);
     expect(vault.groupsApplied).toBe(1);
     expect(vault.lastTickMs).toBe(t2);
@@ -596,285 +575,83 @@ describe("replayWalSegments — damage degrades to an earlier consistent state (
     expect(outcome.damaged).toContain(tailKey);
   });
 
-  test("a bit-flipped (forged) group CLOSER keeps the group but never advances past it", async () => {
+  test("a bit-flipped (forged) group CLOSER never advances past its group", async () => {
     const sc = await buildVaultScenario();
-    const t3 = sc.ticks[2]!;
+    const t2 = sc.ticks[1]!;
     await flipByteInStore(sc.store, sc.closerKeys[0]!);
 
     const { outcome, rows } = await restoreVault(sc);
-    // Group 0 authenticates through t3, but with no AUTHENTIC closer the group
-    // is unclosed: group 1 is never applied, intact or not.
-    expect(rows).toStrictEqual(sc.rowsAt.get(t3));
-    const vault = outcome.perDb.vault;
-    expect(vault.segmentsApplied).toBe(3);
-    expect(vault.groupsApplied).toBe(1);
-    expect(vault.lastTickMs).toBe(t3);
-    expect(vault.truncated).toBe(true);
-    expect(vault.integrityCheck).toBe("ok");
+    // Group 0's segments all authenticate, but with no AUTHENTIC closer the
+    // group is unclosed: group 1 is never applied, intact or not. The t3 marker
+    // records the post-rollover (1, 0), which an unclosed chain cannot reach —
+    // so the restore lands on t2, the newest tick it can still PROVE.
+    expect(rows).toStrictEqual(sc.rowsAt.get(t2));
+    expect(outcome.segmentsApplied).toBe(2);
+    expect(outcome.groupsApplied).toBe(1);
+    expect(outcome.lastTickMs).toBe(t2);
+    expect(outcome.truncated).toBe(true);
+    expect(outcome.integrityCheck).toBe("ok");
     // A rejected closer is an unclosed group, not segment damage.
     expect(outcome.damaged).toStrictEqual([]);
   });
 
   test("a DELETED group closer behaves identically to a forged one", async () => {
     const sc = await buildVaultScenario();
-    const t3 = sc.ticks[2]!;
+    const t2 = sc.ticks[1]!;
     await sc.store.delete(sc.closerKeys[0]!);
 
     const { outcome, rows } = await restoreVault(sc);
-    expect(rows).toStrictEqual(sc.rowsAt.get(t3));
-    expect(outcome.perDb.vault.groupsApplied).toBe(1);
-    expect(outcome.perDb.vault.truncated).toBe(true);
-    expect(outcome.perDb.vault.integrityCheck).toBe("ok");
+    expect(rows).toStrictEqual(sc.rowsAt.get(t2));
+    expect(outcome.groupsApplied).toBe(1);
+    expect(outcome.lastTickMs).toBe(t2);
+    expect(outcome.truncated).toBe(true);
+    expect(outcome.integrityCheck).toBe("ok");
   });
 });
 
-// ─── two databases, one store: coordinated damage cut (G8) ───────
+// ─── tick markers: what a LISTING cannot tell you (#408) ───────
 
-describe("replayWalSegments — coordinated two-database restore (G8)", () => {
-  interface PairScenario {
+/**
+ * A listing that simply ends is indistinguishable from an idle vault, so the
+ * marker — sealed by the producer, per tick — is the only thing that can say
+ * which. These are the cases where every named object is present and the
+ * restore is still wrong without it.
+ */
+describe("replayWalSegments — the marker decides the cut, not the listing", () => {
+  const GEN = "10".repeat(16);
+
+  interface Stream {
     store: FsObjectStore;
-    genVault: string;
-    genJournal: string;
-    baseVault: Uint8Array;
-    baseJournal: Uint8Array;
-    ticks: number[];
-    vaultSegKeys: string[];
-    journalSegKeys: string[];
-    vaultRowsAt: Map<number, string[]>;
-    journalRowsAt: Map<number, string[]>;
-    markers: WalPairMarker[];
+    ship: MiniShipper;
+    base: Uint8Array;
   }
 
-  async function buildPairScenario(): Promise<PairScenario> {
+  async function newStream(): Promise<Stream> {
     const store = new FsObjectStore(await tempDir("backup-wal-store-"));
-    const clock = new TickClock();
-    const genVault = "aa".repeat(16);
-    const genJournal = "bb".repeat(16);
-    const vault = new MiniShipper(
-      await tempDir("backup-wal-shipv-"),
-      "vault",
-      genVault,
-      clock
+    const ship = new MiniShipper(
+      await tempDir("backup-wal-ship-"),
+      GEN,
+      new TickClock()
     );
-    const journal = new MiniShipper(
-      await tempDir("backup-wal-shipj-"),
-      "journal",
-      genJournal,
-      clock
-    );
-    vault.insert("v-base");
-    journal.insert("j-base");
-    const baseVault = vault.base();
-    const baseJournal = journal.base();
-
-    const ticks: number[] = [];
-    const markers: WalPairMarker[] = [];
-    for (let round = 1; round <= 3; round++) {
-      vault.insert(`v${round}`);
-      journal.insert(`j${round}`);
-      // One capture instant: the pair marker, written once both settle, is what
-      // makes that instant SELECTABLE at restore time.
-      const tickMs = clock.next();
-      vault.tick(tickMs);
-      journal.tick(tickMs);
-      markPair(markers, vault, journal, tickMs);
-      ticks.push(tickMs);
-    }
-    await shipToStore(store, vault);
-    await shipToStore(store, journal);
-    await shipMarkers(store, markers);
-    const scenario: PairScenario = {
-      store,
-      genVault,
-      genJournal,
-      baseVault,
-      baseJournal,
-      ticks,
-      vaultSegKeys: vault.captured.map((c) => walSegmentKey(c.addr)),
-      journalSegKeys: journal.captured.map((c) => walSegmentKey(c.addr)),
-      vaultRowsAt: vault.rowsAtTick,
-      journalRowsAt: journal.rowsAtTick,
-      markers,
-    };
-    vault.close();
-    journal.close();
-    return scenario;
+    return { store, ship, base: ship.base() };
   }
 
-  async function restorePair(sc: PairScenario) {
-    const destDir = await tempDir("backup-wal-dest-");
-    await fs.writeFile(path.join(destDir, WAL_DB_FILES.vault), sc.baseVault);
-    await fs.writeFile(
-      path.join(destDir, WAL_DB_FILES.journal),
-      sc.baseJournal
-    );
-    const outcome = await replayWalSegments({
-      store: sc.store,
-      dataKey: DATA_KEY,
-      vaultId: VAULT_ID,
-      destDir,
-      generationByDb: { vault: sc.genVault, journal: sc.genJournal },
-      baseTickMsByDb: { vault: BASE_TICK, journal: BASE_TICK },
-    });
-    return {
-      outcome,
-      vaultRows: readRows(path.join(destDir, WAL_DB_FILES.vault)),
-      journalRows: readRows(path.join(destDir, WAL_DB_FILES.journal)),
-    };
-  }
-
-  test("intact streams restore both databases to the shared tip tick", async () => {
-    const sc = await buildPairScenario();
-    const t3 = sc.ticks[2]!;
-    const { outcome, vaultRows, journalRows } = await restorePair(sc);
-    expect(vaultRows).toStrictEqual(sc.vaultRowsAt.get(t3));
-    expect(journalRows).toStrictEqual(sc.journalRowsAt.get(t3));
-    expect(outcome.perDb.vault.lastTickMs).toBe(t3);
-    expect(outcome.perDb.journal.lastTickMs).toBe(t3);
-    expect(outcome.perDb.vault.integrityCheck).toBe("ok");
-    expect(outcome.perDb.journal.integrityCheck).toBe("ok");
-    expect(outcome.damaged).toStrictEqual([]);
-  });
-
-  test("damage in vault's stream re-cuts the INTACT journal to the same tick", async () => {
-    const sc = await buildPairScenario();
-    const [t1] = sc.ticks as [number];
-    const damagedKey = sc.vaultSegKeys[1]!; // vault's t2 segment
-    await flipByteInStore(sc.store, damagedKey);
-
-    const { outcome, vaultRows, journalRows } = await restorePair(sc);
-    expect(vaultRows).toStrictEqual(sc.vaultRowsAt.get(t1));
-    expect(outcome.perDb.vault.lastTickMs).toBe(t1);
-    // …and the journal, intact through t3, is re-cut to t1: ONE capture
-    // instant, never a mixed pair.
-    expect(journalRows).toStrictEqual(sc.journalRowsAt.get(t1));
-    expect(outcome.perDb.journal.lastTickMs).toBe(t1);
-    expect(outcome.perDb.journal.segmentsApplied).toBe(1);
-    expect(outcome.perDb.vault.truncated).toBe(true);
-    expect(outcome.perDb.journal.truncated).toBe(true);
-    expect(outcome.perDb.vault.integrityCheck).toBe("ok");
-    expect(outcome.perDb.journal.integrityCheck).toBe("ok");
-    expect(outcome.damaged).toStrictEqual([damagedKey]);
-  });
-
-  test("damage in vault's FIRST segment forces both databases back to their bases", async () => {
-    const sc = await buildPairScenario();
-    await sc.store.delete(sc.vaultSegKeys[0]!);
-
-    const { outcome, vaultRows, journalRows } = await restorePair(sc);
-    expect(vaultRows).toStrictEqual(["v-base"]);
-    expect(journalRows).toStrictEqual(["j-base"]);
-    expect(outcome.perDb.vault.lastTickMs).toBe(-1);
-    expect(outcome.perDb.journal.lastTickMs).toBe(-1);
-    expect(outcome.perDb.journal.segmentsApplied).toBe(0);
-    expect(outcome.perDb.vault.integrityCheck).toBe("ok");
-    expect(outcome.perDb.journal.integrityCheck).toBe("ok");
-  });
-});
-
-// ─── the receipt pair: what coordination is FOR (#408) ───────
-
-/** A pair keeping `receipt:X` without `X` is a DANGLING RECEIPT: the one outcome
- * two-database coordination makes unconstructible. `verifyRestoredPair` does
- * this for real; backup cannot import vault, so it is modelled here. */
-function danglingReceipts(destDir: string): string[] {
-  const vaultRows = new Set(readRows(path.join(destDir, WAL_DB_FILES.vault)));
-  return readRows(path.join(destDir, WAL_DB_FILES.journal))
-    .filter((v) => v.startsWith("receipt:"))
-    .map((v) => v.slice("receipt:".length))
-    .filter((named) => !vaultRows.has(named));
-}
-
-describe("replayWalSegments — a dangling receipt must be unconstructible (G8)", () => {
-  const V0 = "10".repeat(16);
-  const J0 = "20".repeat(16);
-  const J1 = "21".repeat(16);
-
-  interface ReceiptPair {
-    store: FsObjectStore;
-    vault: MiniShipper;
-    journal: MiniShipper;
-    clock: TickClock;
-    markers: WalPairMarker[];
-  }
-
-  async function newPair(
-    genVault: string,
-    genJournal: string
-  ): Promise<ReceiptPair> {
-    const store = new FsObjectStore(await tempDir("backup-wal-store-"));
-    const clock = new TickClock();
-    return {
-      store,
-      clock,
-      markers: [],
-      vault: new MiniShipper(
-        await tempDir("backup-wal-shipv-"),
-        "vault",
-        genVault,
-        clock
-      ),
-      journal: new MiniShipper(
-        await tempDir("backup-wal-shipj-"),
-        "journal",
-        genJournal,
-        clock
-      ),
-    };
-  }
-
-  /** ONE tick, JOURNAL FIRST — the capture order the no-dangling-receipt
-   * argument rests on. */
-  function writePair(p: ReceiptPair, row: string): number {
-    p.vault.insert(row);
-    p.journal.insert(`receipt:${row}`);
-    const tickMs = p.clock.next();
-    p.journal.tick(tickMs);
-    p.vault.tick(tickMs);
-    markPair(p.markers, p.vault, p.journal, tickMs);
-    return tickMs;
-  }
-
-  /** Only the JOURNAL moved; the vault's position carries unchanged. */
-  function journalOnlyTick(p: ReceiptPair, row: string): number {
-    p.journal.insert(row);
-    const tickMs = p.journal.tick();
-    markPair(p.markers, p.vault, p.journal, tickMs);
-    return tickMs;
-  }
-
-  async function ship(p: ReceiptPair): Promise<void> {
-    await shipToStore(p.store, p.vault);
-    await shipToStore(p.store, p.journal);
-    await shipMarkers(p.store, p.markers);
-  }
-
-  async function restorePair(
-    p: ReceiptPair,
-    bases: { vault: Uint8Array; journal: Uint8Array },
-    generations: { vault: string; journal: string },
-    opts: {
-      baseTicks?: { vault: number; journal: number };
-      walTipTickMs?: number;
-      pointInTimeMs?: number;
-    } = {}
+  async function restore(
+    stream: Stream,
+    opts: { walTipTickMs?: number; pointInTimeMs?: number } = {}
   ): Promise<{
     destDir: string;
+    rows: string[];
     outcome: Awaited<ReturnType<typeof replayWalSegments>>;
   }> {
     const destDir = await tempDir("backup-wal-dest-");
-    await fs.writeFile(path.join(destDir, WAL_DB_FILES.vault), bases.vault);
-    await fs.writeFile(path.join(destDir, WAL_DB_FILES.journal), bases.journal);
+    await fs.writeFile(path.join(destDir, WAL_DB_FILES.vault), stream.base);
     const outcome = await replayWalSegments({
-      store: p.store,
+      store: stream.store,
       dataKey: DATA_KEY,
       vaultId: VAULT_ID,
       destDir,
-      generationByDb: generations,
-      baseTickMsByDb: opts.baseTicks ?? {
-        vault: BASE_TICK,
-        journal: BASE_TICK,
-      },
+      generation: GEN,
       ...(opts.walTipTickMs === undefined
         ? {}
         : { walTipTickMs: opts.walTipTickMs }),
@@ -882,261 +659,146 @@ describe("replayWalSegments — a dangling receipt must be unconstructible (G8)"
         ? {}
         : { pointInTimeMs: opts.pointInTimeMs }),
     });
-    return { destDir, outcome };
-  }
-
-  /**
-   * The journal breaks its generation ALONE and the provider loses the vault's
-   * only segment: nothing is hole-truncated and the pair mixes base(V0) with
-   * base(J1). Coordinated bases forbid it — both generations break in one tick,
-   * and a pair from two instants is refused before a byte moves.
-   */
-  async function buildIndependentBreakPair(): Promise<{
-    p: ReceiptPair;
-    bases: { vault: Uint8Array; journal: Uint8Array };
-    baseTicks: { vault: number; journal: number };
-  }> {
-    const p = await newPair(V0, J0);
-    const baseVault = p.vault.base();
-    p.journal.base();
-    writePair(p, "v42");
-    // The journal alone re-bases, at a base tick AFTER the vault's.
-    const baseJournal = p.journal.rebase(J1);
-    await ship(p);
     return {
-      p,
-      bases: { vault: baseVault, journal: baseJournal },
-      baseTicks: { vault: BASE_TICK, journal: 1000 },
+      destDir,
+      rows: readRows(path.join(destDir, WAL_DB_FILES.vault)),
+      outcome,
     };
   }
 
-  test("an independently-broken journal base + a LOST vault segment is REFUSED, never restored", async () => {
-    const { p, bases, baseTicks } = await buildIndependentBreakPair();
-    await p.store.delete(walSegmentKey(p.vault.captured[0]!.addr));
-
-    await expect(
-      restorePair(p, bases, { vault: V0, journal: J1 }, { baseTicks })
-    ).rejects.toThrow(/bases are from DIFFERENT ticks/u);
-  });
-
-  test("the DAMAGED variant is refused identically — `truncatedByHole` was never the fix", async () => {
-    const { p, bases, baseTicks } = await buildIndependentBreakPair();
-    await flipByteInStore(p.store, walSegmentKey(p.vault.captured[0]!.addr));
-
-    await expect(
-      restorePair(p, bases, { vault: V0, journal: J1 }, { baseTicks })
-    ).rejects.toThrow(/bases are from DIFFERENT ticks/u);
-  });
-
-  test("a pair that cannot even PROVE its bases share a tick is refused too", async () => {
-    const { p, bases } = await buildIndependentBreakPair();
-    const destDir = await tempDir("backup-wal-dest-");
-    await fs.writeFile(path.join(destDir, WAL_DB_FILES.vault), bases.vault);
-    await fs.writeFile(path.join(destDir, WAL_DB_FILES.journal), bases.journal);
-    await expect(
-      replayWalSegments({
-        store: p.store,
-        dataKey: DATA_KEY,
-        vaultId: VAULT_ID,
-        destDir,
-        generationByDb: { vault: V0, journal: J1 },
-      })
-    ).rejects.toThrow(/does not record a base tick for both databases/u);
-  });
-
-  /**
-   * Coordinated bases are NECESSARY BUT NOT SUFFICIENT: both streams are gapless
-   * and the provider simply lost the vault's newest two segments. A listing
-   * cannot tell "stopped changing" from "newest objects gone", so without a pair
-   * marker the journal sails ahead, carrying receipts for absent rows.
-   */
-  test("a LOST TAIL of vault segments (no hole, no damage) cuts BOTH databases back", async () => {
-    const p = await newPair(V0, J0);
-    const bases = { vault: p.vault.base(), journal: p.journal.base() };
+  test("a LOST TAIL of segments (no hole, no damage) cuts back to the last provable tick", async () => {
+    const stream = await newStream();
     const ticks: number[] = [];
-    for (let round = 1; round <= 5; round++)
-      ticks.push(writePair(p, `v${round}`));
-    await ship(p);
-
-    // Drop the vault's two newest segments — the listing simply ends.
+    for (let round = 1; round <= 5; round++) {
+      stream.ship.insert(`v${round}`);
+      ticks.push(stream.ship.tick());
+    }
+    await shipToStore(stream.store, stream.ship);
+    // Drop the two newest segments — the listing simply ends.
     await Promise.all(
-      p.vault.captured
+      stream.ship.captured
         .slice(-2)
-        .map((capture) => p.store.delete(walSegmentKey(capture.addr)))
+        .map((capture) => stream.store.delete(walSegmentKey(capture.addr)))
     );
+    stream.ship.close();
 
-    const { destDir, outcome } = await restorePair(p, bases, {
-      vault: V0,
-      journal: J0,
-    });
-    expect(danglingReceipts(destDir)).toStrictEqual([]);
-    // ONE instant: the newest tick the vault can still PROVE, not the journal's.
-    expect(outcome.coordinatedCutMs).toBe(ticks[2]);
-    expect(outcome.perDb.vault.lastTickMs).toBe(ticks[2]);
-    expect(outcome.perDb.journal.lastTickMs).toBe(ticks[2]);
+    const { rows, outcome } = await restore(stream);
+    expect(outcome.cutTickMs).toBe(ticks[2]);
+    expect(outcome.lastTickMs).toBe(ticks[2]);
     // …and says so — the signal restore-verify escalates on.
     expect(outcome.newestMarkerTickMs).toBe(ticks[4]);
-    expect(outcome.perDb.vault.truncated).toBe(true);
-    expect(outcome.perDb.journal.truncated).toBe(true);
-    expect(readRows(path.join(destDir, WAL_DB_FILES.vault))).toStrictEqual([
-      "v1",
-      "v2",
-      "v3",
-    ]);
+    expect(outcome.truncated).toBe(true);
+    expect(rows).toStrictEqual(["v1", "v2", "v3"]);
   });
 
-  /** An idle database is NOT a missing one: a "no segments ⇒ stuck at base" rule
-   * discards a quiet afternoon of history, so the marker decides, not the list. */
-  test("an IDLE vault does not hold a busy journal back (the regression guard)", async () => {
-    const p = await newPair(V0, J0);
-    const bases = { vault: p.vault.base(), journal: p.journal.base() };
-    for (let round = 1; round <= 2; round++) writePair(p, `v${round}`);
-    const vaultRowsAtIdle = p.vault.rows();
+  test("an IDLE vault is not a truncated one — later markers repeat its position", async () => {
+    const stream = await newStream();
+    stream.ship.insert("v1");
+    stream.ship.tick();
+    stream.ship.insert("v2");
+    const busyTick = stream.ship.tick();
+    const liveRows = stream.ship.rows();
+    // Quiet afternoon: ticks with no new bytes ship no segment, only a marker
+    // repeating the position the stream already reached.
+    let idleTick = busyTick;
+    for (let round = 0; round < 5; round++) {
+      idleTick = busyTick + 1000 * (round + 1);
+      stream.ship.markIdle(idleTick);
+    }
+    await shipToStore(stream.store, stream.ship);
+    stream.ship.close();
 
-    let lastTick = 0;
-    for (let round = 3; round <= 10; round++)
-      lastTick = journalOnlyTick(p, `j${round}`);
-    const liveJournalRows = p.journal.rows();
-    await ship(p);
-
-    const { destDir, outcome } = await restorePair(p, bases, {
-      vault: V0,
-      journal: J0,
-    });
-    expect(outcome.coordinatedCutMs).toBe(lastTick);
-    expect(outcome.perDb.journal.lastTickMs).toBe(lastTick);
-    expect(outcome.perDb.journal.truncated).toBe(false);
-    expect(readRows(path.join(destDir, WAL_DB_FILES.journal))).toStrictEqual(
-      liveJournalRows
-    );
-    expect(readRows(path.join(destDir, WAL_DB_FILES.vault))).toStrictEqual(
-      vaultRowsAtIdle
-    );
-    expect(danglingReceipts(destDir)).toStrictEqual([]);
+    const { rows, outcome } = await restore(stream);
+    expect(outcome.cutTickMs).toBe(idleTick);
+    expect(outcome.newestMarkerTickMs).toBe(idleTick);
+    expect(outcome.lastTickMs).toBe(busyTick);
+    expect(outcome.truncated).toBe(false);
+    expect(rows).toStrictEqual(liveRows);
   });
 
-  test("a vault that NEVER ships a segment does not hold the journal back either", async () => {
-    const p = await newPair(V0, J0);
-    const bases = { vault: p.vault.base(), journal: p.journal.base() };
-    let lastTick = 0;
-    for (let round = 1; round <= 10; round++)
-      lastTick = journalOnlyTick(p, `j${round}`);
-    const liveJournalRows = p.journal.rows();
-    await ship(p);
-
-    const { destDir, outcome } = await restorePair(p, bases, {
-      vault: V0,
-      journal: J0,
-    });
-    expect(outcome.coordinatedCutMs).toBe(lastTick);
-    expect(outcome.perDb.journal.lastTickMs).toBe(lastTick);
-    expect(outcome.perDb.vault.segmentsApplied).toBe(0);
-    expect(outcome.perDb.vault.truncated).toBe(false);
-    expect(readRows(path.join(destDir, WAL_DB_FILES.journal))).toStrictEqual(
-      liveJournalRows
-    );
-  });
-
-  /** Deleted markers are the QUIETEST failure: no hole, no damage, and a
-   * silently hours-old vault. `walTipTickMs` closes it — the restore still
-   * succeeds at the older point (G6), but it must say so. */
-  test("DELETED pair markers: the restore still succeeds, and reports itself TRUNCATED", async () => {
-    const p = await newPair(V0, J0);
-    const bases = { vault: p.vault.base(), journal: p.journal.base() };
+  test("DELETED markers: the restore still succeeds, and reports itself TRUNCATED", async () => {
+    // The QUIETEST failure: no hole, no damage, and a silently hours-old vault.
+    // `walTipTickMs` closes it — the restore degrades (G6) but must say so.
+    const stream = await newStream();
     const ticks: number[] = [];
-    for (let round = 1; round <= 3; round++)
-      ticks.push(writePair(p, `v${round}`));
-    await ship(p);
-    const registeredTip = ticks[2]!;
-
+    for (let round = 1; round <= 3; round++) {
+      stream.ship.insert(`v${round}`);
+      ticks.push(stream.ship.tick());
+    }
+    await shipToStore(stream.store, stream.ship);
     // ONLY the markers; every segment and closer survives.
     await Promise.all(
-      p.markers.map((marker) => p.store.delete(walPairMarkerKey(marker)))
+      stream.ship.markers.map((marker) =>
+        stream.store.delete(walTickMarkerKey(marker))
+      )
     );
+    stream.ship.close();
+    const registeredTip = ticks[2]!;
 
-    const { destDir, outcome } = await restorePair(
-      p,
-      bases,
-      { vault: V0, journal: J0 },
-      { walTipTickMs: registeredTip }
-    );
-    expect(danglingReceipts(destDir)).toStrictEqual([]);
-    expect(outcome.coordinatedCutMs).toBe(-1);
-    expect(readRows(path.join(destDir, WAL_DB_FILES.vault))).toStrictEqual([]); // the base pair, empty
-    // LOUD: the store acknowledged tick 3000 and cannot honour it.
+    const { rows, outcome } = await restore(stream, {
+      walTipTickMs: registeredTip,
+    });
+    expect(outcome.cutTickMs).toBe(-1);
+    expect(rows).toStrictEqual([]); // the base, empty
+    // LOUD: the store acknowledged the tip and cannot honour it.
     expect(outcome.newestMarkerTickMs).toBe(-1); // nothing left to even ask
-    expect(outcome.expectedCutMs).toBe(registeredTip); // the tip still holds it to account
-    expect(outcome.perDb.vault.truncated).toBe(true);
-    expect(outcome.perDb.journal.truncated).toBe(true);
+    expect(outcome.expectedCutMs).toBe(registeredTip);
+    expect(outcome.truncated).toBe(true);
   });
 
   test("an intact store MEETS its registered tip — no false truncation", async () => {
-    const p = await newPair(V0, J0);
-    const bases = { vault: p.vault.base(), journal: p.journal.base() };
+    const stream = await newStream();
     const ticks: number[] = [];
-    for (let round = 1; round <= 3; round++)
-      ticks.push(writePair(p, `v${round}`));
-    await ship(p);
+    for (let round = 1; round <= 3; round++) {
+      stream.ship.insert(`v${round}`);
+      ticks.push(stream.ship.tick());
+    }
+    await shipToStore(stream.store, stream.ship);
+    stream.ship.close();
 
-    const { outcome } = await restorePair(
-      p,
-      bases,
-      { vault: V0, journal: J0 },
-      { walTipTickMs: ticks[2]! }
-    );
-    expect(outcome.coordinatedCutMs).toBe(ticks[2]);
+    const { outcome } = await restore(stream, { walTipTickMs: ticks[2]! });
+    expect(outcome.cutTickMs).toBe(ticks[2]);
     expect(outcome.expectedCutMs).toBe(ticks[2]);
-    expect(outcome.perDb.vault.truncated).toBe(false);
-    expect(outcome.perDb.journal.truncated).toBe(false);
+    expect(outcome.truncated).toBe(false);
   });
 
   test("a tip NEWER than the requested point-in-time is not a truncation", async () => {
     // A PITR cuts early on purpose: held to a tip outside its own window, every
     // historical restore would report itself damaged.
-    const p = await newPair(V0, J0);
-    const bases = { vault: p.vault.base(), journal: p.journal.base() };
+    const stream = await newStream();
     const ticks: number[] = [];
-    for (let round = 1; round <= 3; round++)
-      ticks.push(writePair(p, `v${round}`));
-    await ship(p);
+    for (let round = 1; round <= 3; round++) {
+      stream.ship.insert(`v${round}`);
+      ticks.push(stream.ship.tick());
+    }
+    await shipToStore(stream.store, stream.ship);
+    stream.ship.close();
 
-    const { outcome } = await restorePair(
-      p,
-      bases,
-      { vault: V0, journal: J0 },
-      { walTipTickMs: ticks[2]!, pointInTimeMs: ticks[0]! }
-    );
-    expect(outcome.coordinatedCutMs).toBe(ticks[0]);
+    const { outcome } = await restore(stream, {
+      walTipTickMs: ticks[2]!,
+      pointInTimeMs: ticks[0]!,
+    });
+    expect(outcome.cutTickMs).toBe(ticks[0]);
     expect(outcome.expectedCutMs).toBe(ticks[0]);
-    expect(outcome.perDb.vault.truncated).toBe(false);
+    expect(outcome.truncated).toBe(false);
   });
 
-  /** A lost tail GROUP CLOSER is invisible to everything else: the marker says
-   * `(N+1, 0)` where the chain can only claim `(N, end)`. */
-  test("a lost TAIL group closer makes its marker unsatisfiable and walks the pair back", async () => {
-    const p = await newPair(V0, J0);
-    const bases = { vault: p.vault.base(), journal: p.journal.base() };
-    const t1 = writePair(p, "v1");
+  test("a lost TAIL group closer makes its marker unsatisfiable and walks the cut back", async () => {
+    // Invisible to everything else: the marker says `(N+1, 0)` where the chain
+    // can only claim `(N, end)`.
+    const stream = await newStream();
+    stream.ship.insert("v1");
+    const t1 = stream.ship.tick();
+    stream.ship.insert("v2");
+    const t2 = stream.ship.rollover();
+    await shipToStore(stream.store, stream.ship);
+    await stream.store.delete(walGroupCloserKey(stream.ship.closers[0]!));
+    stream.ship.close();
 
-    // Both roll at t2; the vault's closer vanishes.
-    p.vault.insert("v2");
-    p.journal.insert("receipt:v2");
-    const t2 = p.clock.next();
-    p.journal.rollover(t2);
-    p.vault.rollover(t2);
-    markPair(p.markers, p.vault, p.journal, t2);
-    await ship(p);
-    await p.store.delete(walGroupCloserKey(p.vault.closers[0]!));
-
-    const { destDir, outcome } = await restorePair(p, bases, {
-      vault: V0,
-      journal: J0,
-    });
-    expect(outcome.coordinatedCutMs).toBe(t1);
+    const { rows, outcome } = await restore(stream);
+    expect(outcome.cutTickMs).toBe(t1);
     expect(outcome.newestMarkerTickMs).toBe(t2);
-    expect(danglingReceipts(destDir)).toStrictEqual([]);
-    expect(readRows(path.join(destDir, WAL_DB_FILES.vault))).toStrictEqual([
-      "v1",
-    ]);
+    expect(outcome.truncated).toBe(true);
+    expect(rows).toStrictEqual(["v1"]);
   });
 });

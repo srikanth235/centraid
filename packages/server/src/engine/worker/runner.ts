@@ -56,7 +56,6 @@ interface VaultCallMessage {
     | "read"
     | "search"
     | "invoke"
-    | "query"
     | "describe"
     | "parked"
     | "changes"
@@ -148,9 +147,6 @@ const vault = {
   },
   invoke(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("invoke", request);
-  },
-  query(view: string, purpose: string): Promise<unknown> {
-    return vaultCall("query", { view, purpose });
   },
   describe(): Promise<unknown> {
     return vaultCall("describe", {});

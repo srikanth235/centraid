@@ -172,8 +172,9 @@ describe("vault-registry scenarios", () => {
     const first = registry.list()[0]!;
 
     const ws = registry.get(first.vaultId)!.workspace;
-    // Harness scratch is NOT under the vault dir (journal.db is source of
-    // truth; this is disposable) — it's the per-vault `-cache` sibling.
+    // Harness scratch is NOT under the vault dir (vault.db is the one
+    // sovereign file; this is disposable) — it's the per-vault `-cache`
+    // sibling.
     expect(
       ws.harnessSessionDir.startsWith(path.join(root, first.vaultId) + path.sep)
     ).toBe(false);
@@ -250,7 +251,7 @@ describe("vault-registry scenarios", () => {
       bridge(readReq)
     );
     expect(denied.ok).toBe(false);
-    expect(denied.code).toBe("VAULT_CONSENT");
+    expect(denied.code).toBe("VAULT_ACCESS");
 
     // Two "clients" on two vaults, concurrently — neither disturbs the other.
     const [a, b] = await Promise.all([
@@ -477,15 +478,19 @@ describe("vault-registry scenarios", () => {
       registry.rescan();
       expect(registry.failedMounts()).toStrictEqual(failed);
 
-      // The directory becomes mountable (valid DB pair copied in).
-      await fs.copyFile(
-        path.join(donorRoot, donorVaultId, "vault.db"),
-        path.join(badDir, "vault.db")
-      );
-      await fs.copyFile(
-        path.join(donorRoot, donorVaultId, "journal.db"),
-        path.join(badDir, "journal.db")
-      );
+      // Mountable now: the one sovereign file plus its -wal sibling (#408
+      // leaves recent writes in the WAL, so a bare vault.db would bootstrap
+      // EMPTY under a fresh id).
+      await forEachSequentially(["vault.db", "vault.db-wal"], async (name) => {
+        await fs
+          .copyFile(
+            path.join(donorRoot, donorVaultId, name),
+            path.join(badDir, name)
+          )
+          .catch((error) => {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          });
+      });
 
       // Past the backoff window, the next scan retries.
       vi.advanceTimersByTime(31_000);
@@ -562,16 +567,13 @@ describe("vault-registry scenarios", () => {
     // under a new id instead of colliding.
     const dupeDir = path.join(root, "dupe-of-first");
     await fs.mkdir(dupeDir, { recursive: true });
-    await forEachSequentially(
-      ["vault.db", "journal.db", "vault.db-wal", "journal.db-wal"],
-      async (name) => {
-        await fs
-          .copyFile(path.join(firstDir, name), path.join(dupeDir, name))
-          .catch((error) => {
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-          });
-      }
-    );
+    await forEachSequentially(["vault.db", "vault.db-wal"], async (name) => {
+      await fs
+        .copyFile(path.join(firstDir, name), path.join(dupeDir, name))
+        .catch((error) => {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        });
+    });
 
     registry.rescan();
 

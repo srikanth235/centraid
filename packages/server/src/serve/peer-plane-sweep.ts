@@ -32,6 +32,8 @@ export interface PeerPlaneSweepOptions {
   db: GatewayDatabase;
   links: VaultLinksStore;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
+  /** The vault's own party — the principal an edge placement runs as (#916). */
+  partyIdFor: (vaultId: string) => string | undefined;
   commonsVaults?: () => readonly {
     vaultId: string;
     db: VaultDb;
@@ -91,7 +93,11 @@ export function createPeerPlaneSweep(
       // The share outbox drains WITHOUT a dial since #825: its one surviving
       // obligation is a same-owner placement between two vaults open here.
       const effects = drainShareEffects(
-        { db: options.db, vaultFor: options.vaultFor },
+        {
+          db: options.db,
+          vaultFor: options.vaultFor,
+          partyIdFor: options.partyIdFor,
+        },
         { limit: rowLimit }
       );
       const commons = options.commonsVaults

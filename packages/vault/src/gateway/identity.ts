@@ -34,8 +34,8 @@ interface DeviceRow extends DeviceIdentityRow {
 // read in ONE statement: this runs per invocation against a tighten-only
 // first-paint budget. `device-trust.ts` owns the mapping.
 const DEVICE_IDENTITY_SQL = `SELECT device_id, owner_party_id, public_key,
-    ${deviceTrustScalarSql("consent_device.device_id")} AS trust
-  FROM consent_device WHERE device_id = ?`;
+    ${deviceTrustScalarSql("access_device.device_id")} AS trust
+  FROM access_device WHERE device_id = ?`;
 
 function deviceRow(
   vault: DatabaseSync,
@@ -57,7 +57,7 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
   if (cred.kind === "app") {
     const row = vault
       .prepare(
-        "SELECT app_id, signing_key, status FROM consent_app WHERE app_id = ?"
+        "SELECT app_id, signing_key, status FROM access_app WHERE app_id = ?"
       )
       .get(cred.appId) as AppRow | undefined;
     if (
@@ -81,7 +81,7 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
     const device = deviceRow(vault, cred.deviceId, cred.deviceKey);
     const row = vault
       .prepare(
-        "SELECT agent_id, party_id, status FROM consent_agent WHERE agent_id = ?"
+        "SELECT agent_id, party_id, status FROM access_agent WHERE agent_id = ?"
       )
       .get(cred.agentId) as AgentRow | undefined;
     if (!row || row.status !== "active")
@@ -100,12 +100,9 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
   }
   const device = deviceRow(vault, cred.deviceId, cred.deviceKey);
   const owner = vault
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (
-    !owner?.owner_party_id ||
-    owner.owner_party_id !== device.owner_party_id
-  ) {
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!owner?.self_party_id || owner.self_party_id !== device.owner_party_id) {
     throw new GatewayError("identity", "unknown caller");
   }
   return {

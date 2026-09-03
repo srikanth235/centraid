@@ -60,8 +60,8 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
   ],
   "core.share_origin": [
     {
-      item_type: "core.document",
-      item_id: "doc-sent",
+      target_type: "core.document",
+      target_id: "doc-sent",
       origin_vault_id: "vault-ravi",
       shared_at: 1_772_000_000_000,
     },
@@ -115,7 +115,7 @@ function ctxOf({ deniedEntities = new Set<string>() } = {}) {
   >(async ({ entity, where }) => {
     if (deniedEntities.has(entity))
       throw Object.assign(new Error("scope awaiting owner approval"), {
-        code: "VAULT_CONSENT",
+        code: "VAULT_ACCESS",
       });
     const rows = ROWS[entity] ?? [];
     return { rows: where ? rows.filter((r) => matches(r, where)) : rows };

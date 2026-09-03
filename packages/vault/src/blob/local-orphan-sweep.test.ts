@@ -12,6 +12,7 @@ import {
   household,
   reclaimOrphans,
   seedPhoto,
+  placementAuthority,
 } from "../share/placement-fixture.js";
 import { shareItemsToVault, unshareFromVault } from "../share/placement.js";
 import { sweepLocalOrphans } from "./local-orphan-sweep.js";
@@ -31,6 +32,7 @@ describe("local-orphan-sweep suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
     unshareFromVault({
       audience,
@@ -182,6 +184,7 @@ describe("local-orphan-sweep suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
     const sharedIno = statSync(casPath(audience, photo.sha256)).ino;
 

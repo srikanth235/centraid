@@ -65,7 +65,7 @@ Each grant's entry carries: `steward` (the escalating presence + silence duratio
 
 | Path | Role |
 | --- | --- |
-| `vault.db` / `journal.db` | Data + audit/ledger — query with tools, do not treat as greppable logs |
+| `vault.db` | Data plus the audit and ledger bands — query with tools, do not treat as greppable logs |
 | `gateway.db` preferences / settings | Config ([config-ownership.md](config-ownership.md)) |
 | Browser devtools console | Ephemeral client noise; useful but not canonical |
 

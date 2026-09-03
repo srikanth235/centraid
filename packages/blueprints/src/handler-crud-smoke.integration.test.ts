@@ -267,7 +267,7 @@ function scopedSeededCtx(manifest: AppJson) {
                 ? [
                     {
                       vault_id: "seed-vault",
-                      owner_party_id: "seed-owner",
+                      self_party_id: "seed-owner",
                       base_currency: "USD",
                     },
                   ]

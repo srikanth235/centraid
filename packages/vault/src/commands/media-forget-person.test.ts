@@ -243,9 +243,9 @@ describe("media.forget_person", () => {
   test("a destructive act leaves an audit trail: one provenance entry per forgotten region", () => {
     const seeded = seed();
     invoke("media.forget_person", { party_id: seeded.ana });
-    const provenance = db.journal
+    const provenance = db.audit
       .prepare(
-        `SELECT entity_id FROM consent_provenance
+        `SELECT entity_id FROM access_provenance
           WHERE entity_type = 'media.face_region' ORDER BY entity_id`
       )
       .all() as { entity_id: string }[];

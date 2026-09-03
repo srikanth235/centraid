@@ -217,16 +217,16 @@ describe("Docs, on the real React Native host tree", () => {
     replicaRows.byEntity.set("core.share_origin", [
       {
         __rowId: "o1",
-        item_type: "core.document",
-        item_id: "d1",
+        target_type: "core.document",
+        target_id: "d1",
         origin_vault_id: "vault-alice",
         origin_item_id: "far-away-1",
         shared_at: Date.parse("2026-08-31T13:42:06.358Z"),
       },
       {
         __rowId: "o2",
-        item_type: "core.document",
-        item_id: "d2",
+        target_type: "core.document",
+        target_id: "d2",
         origin_vault_id: "vault-stranger",
         origin_item_id: "far-away-2",
         shared_at: Date.parse("2026-08-02T09:00:00.000Z"),

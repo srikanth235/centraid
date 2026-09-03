@@ -149,9 +149,9 @@ describe("outbox-executor", () => {
       severity: "info",
     });
     // The drain is receipted through outbox.record_result.
-    const receipts = plane.db.journal
+    const receipts = plane.db.audit
       .prepare(
-        `SELECT count(*) AS n FROM consent_receipt
+        `SELECT count(*) AS n FROM access_receipt
         WHERE action = 'act outbox.record_result' AND decision = 'allow'`
       )
       .get() as { n: number };

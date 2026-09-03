@@ -16,7 +16,6 @@
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
-import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import { replaceMemo } from "./annotations.js";
 import { bindContactReach, partyForReach } from "./contact-reach.js";
 import { writeExtractedText } from "./enrich.js";
@@ -97,8 +96,12 @@ const EXPENSE_EXISTS_SQL =
 // cannot mutate or re-trash a row already on its way out (#441).
 const EXPENSE_LIVE_SQL =
   "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id AND deleted_at IS NULL";
-const EXPENSE_TRASHED_SQL =
-  "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id AND deleted_at IS NOT NULL";
+// RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5): the trash window is a
+// promise that the row goes, and a restore past it resurrects what the member
+// was told had been deleted.
+const EXPENSE_TRASHED_SQL = `SELECT count(*) AS n FROM tally_expense
+   WHERE expense_id = :expense_id AND deleted_at IS NOT NULL
+     AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 const EXPENSE_ANY_SQL =
   "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id";
 
@@ -363,9 +366,13 @@ interface ResolvedFx {
 function resolveNewExpenseFx(
   ctx: HandlerCtx,
   input: FxInput,
-  amountMinor: number
+  amountMinor: number,
+  groupId?: string | null
 ): ResolvedFx {
-  const base = baseCurrency(ctx);
+  // A GROUPED expense is in its group's currency (#916, R1) — the vault's base
+  // currency is the answer only for a group-less 1:1, where there is no
+  // shared ledger to agree with.
+  const base = groupCurrency(ctx, groupId) ?? baseCurrency(ctx);
   const originalCurrency = (input.original_currency ?? base).toUpperCase();
   const settlementCurrency = (input.settlement_currency ?? base).toUpperCase();
   const originalAmount = input.original_amount_minor ?? amountMinor;
@@ -396,6 +403,18 @@ function resolveNewExpenseFx(
   };
 }
 
+/** The currency a group's ledger is kept in, or `null` for a group-less row. */
+function groupCurrency(
+  ctx: HandlerCtx,
+  groupId: string | null | undefined
+): string | null {
+  if (!groupId) return null;
+  const row = ctx.db
+    .prepare("SELECT currency FROM tally_group WHERE group_id = ?")
+    .get(groupId) as { currency: string } | undefined;
+  return row?.currency ?? null;
+}
+
 /** Insert one expense row with its FX provenance and split provenance. */
 function insertExpenseRow(
   ctx: HandlerCtx,
@@ -415,17 +434,20 @@ function insertExpenseRow(
   ctx.db
     .prepare(
       `INSERT INTO tally_expense
-        (expense_id, group_id, description, amount_minor, paid_by, spent_on,
+        (expense_id, group_id, description, amount_minor, currency, paid_by, spent_on,
          category, split_method, split_params_json, created_at,
          original_amount_minor, original_currency,
          settlement_currency, rate_scaled, rate_scale, rate_source, rate_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       expenseId,
       row.groupId,
       row.description,
       row.amountMinor,
+      // `amount_minor` IS the settlement currency (#916, R1): shares of it
+      // inherit that by construction, so no split or payer carries a column.
+      row.fx.settlementCurrency,
       row.paidBy,
       row.spentOn,
       row.category,
@@ -564,10 +586,10 @@ const ADD_FRIEND: CommandDefinition = {
     if (!found) {
       ctx.db
         .prepare(
-          `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-           VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?, ?)`
+          `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at)
+           VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?)`
         )
-        .run(partyId, input.name, ctx.now, ctx.now, ONTOLOGY_VERSION);
+        .run(partyId, input.name, ctx.now, ctx.now);
       ctx.wrote("core.party", partyId);
       if (reach) {
         const channelId = ctx.newId();
@@ -616,6 +638,11 @@ const CREATE_GROUP: CommandDefinition = {
       name: { type: "string", minLength: 1 },
       icon: { type: "string", minLength: 1 },
       color: { type: "string" },
+      // THE GROUP'S CURRENCY (#916, R1): the ledger everyone in the group
+      // reads is denominated in one currency, and every expense in it agrees.
+      // Defaults to the vault's base currency, which is what a member who
+      // never thinks about currency means.
+      currency: { type: "string", minLength: 3, maxLength: 3 },
       member_ids: { type: "array", items: { type: "string", minLength: 1 } },
     },
   },
@@ -641,6 +668,7 @@ const CREATE_GROUP: CommandDefinition = {
       name: string;
       icon: string;
       color?: string;
+      currency?: string;
       member_ids: string[];
     };
     const owner = ownerPartyId(ctx);
@@ -661,9 +689,16 @@ const CREATE_GROUP: CommandDefinition = {
     const groupId = ctx.newId();
     ctx.db
       .prepare(
-        "INSERT INTO tally_group (group_id, circle_id, icon, color, created_at) VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO tally_group (group_id, circle_id, icon, color, currency, created_at) VALUES (?, ?, ?, ?, ?, ?)"
       )
-      .run(groupId, circleId, input.icon, input.color ?? "#0FA678", ctx.now);
+      .run(
+        groupId,
+        circleId,
+        input.icon,
+        input.color ?? "#0FA678",
+        (input.currency ?? baseCurrency(ctx)).toUpperCase(),
+        ctx.now
+      );
     ctx.wrote("tally.group", groupId);
     // The owner is always a member; friends are added by party id.
     const members = new Set<string>([owner, ...input.member_ids.map(String)]);
@@ -947,7 +982,7 @@ const ADD_EXPENSE: CommandDefinition = {
       category: input.category,
       splitMethod: splitMethodOf(input.split_method, input.line_items),
       splitParamsJson: splitParamsJson(input.split_params),
-      fx: resolveNewExpenseFx(ctx, input, amountMinor),
+      fx: resolveNewExpenseFx(ctx, input, amountMinor, groupId),
     });
     writePayers(ctx, expenseId, groupId, payers, allowed);
     writeSplits(ctx, expenseId, groupId, amountMinor, input.splits, allowed);
@@ -1050,7 +1085,7 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
       amountMinor,
       input.payers
     );
-    const fx = resolveNewExpenseFx(ctx, input, amountMinor);
+    const fx = resolveNewExpenseFx(ctx, input, amountMinor, groupId);
 
     const minted = ctx.blobs.claimStaged(input.staged_sha, {
       title: `${input.description} receipt`,
@@ -1517,6 +1552,12 @@ const SETTLE_UP: CommandDefinition = {
       from_party: { type: "string", minLength: 1 },
       to_party: { type: "string", minLength: 1 },
       amount_minor: { type: "integer", minimum: 1 },
+      // WHAT WAS PAID, IN WHAT (#916, R1 / adversarial BUG-5). A settlement
+      // carried no currency at all and the transaction it emitted was
+      // hard-coded to the vault's base currency, so paying off a EUR group in
+      // EUR posted as USD. Defaults to the group's currency where there is a
+      // group, the vault's base where there is not.
+      currency: { type: "string", minLength: 3, maxLength: 3 },
       group_id: { type: "string", minLength: 1 },
       paid_on: { type: "string" },
     },
@@ -1543,6 +1584,7 @@ const SETTLE_UP: CommandDefinition = {
       from_party: string;
       to_party: string;
       amount_minor: number;
+      currency?: string;
       group_id?: string;
       paid_on?: string;
     };
@@ -1554,9 +1596,31 @@ const SETTLE_UP: CommandDefinition = {
         .get(input.group_id) as { n: number };
       if (g.n !== 1) throw new Error("group not found");
     }
+    // MEMBERSHIP (#916, adversarial BUG-4). `add_expense` has always refused a
+    // payer or participant outside the group; `settle_up` checked nothing, so
+    // a payment could be recorded between two people who are not on the
+    // ledger it lands in — and then counted in its balances.
+    const allowed = participantScope(ctx, input.group_id ?? null);
+    for (const partyId of [input.from_party, input.to_party])
+      if (!allowed.has(partyId))
+        throw new Error(
+          input.group_id
+            ? "a settlement is between two members of the group"
+            : "a settlement is between you and a Tally friend"
+        );
     const settlementId = ctx.newId();
     const paidOn = input.paid_on ?? ctx.now.slice(0, 10);
     const amount = Math.round(input.amount_minor);
+    const currency = (
+      input.currency ??
+      groupCurrency(ctx, input.group_id) ??
+      baseCurrency(ctx)
+    ).toUpperCase();
+    const groupIn = groupCurrency(ctx, input.group_id);
+    if (groupIn !== null && currency !== groupIn)
+      throw new Error(
+        `this group's ledger is in ${groupIn}: a settlement in ${currency} cannot be counted in it`
+      );
 
     // The owner's money actually moved: emit the canonical transaction and
     // bind it. Friend-to-friend settlements touch no owner pool.
@@ -1580,7 +1644,7 @@ const SETTLE_UP: CommandDefinition = {
           accountId,
           `${paidOn}T00:00:00Z`,
           amount,
-          baseCurrency(ctx),
+          currency,
           ownerPays ? "debit" : "credit",
           otherId,
           `Tally settlement${other ? ` — ${other.display_name}` : ""}`,
@@ -1591,8 +1655,8 @@ const SETTLE_UP: CommandDefinition = {
 
     ctx.db
       .prepare(
-        `INSERT INTO tally_settlement (settlement_id, group_id, from_party, to_party, amount_minor, paid_on, txn_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO tally_settlement (settlement_id, group_id, from_party, to_party, amount_minor, currency, paid_on, txn_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         settlementId,
@@ -1600,13 +1664,21 @@ const SETTLE_UP: CommandDefinition = {
         input.from_party,
         input.to_party,
         amount,
+        currency,
         paidOn,
         txnId,
         ctx.now
       );
     ctx.wrote("tally.settlement", settlementId);
+    // AN OVERPAYMENT IS SAID OUT LOUD (#916, adversarial review). Paying more
+    // than the open position is legitimate — people round up, or pay ahead —
+    // but it silently flips the debt, so the receipt records that it did.
+    const open = openPositionMinor(ctx, input);
     ctx.cite({
-      claim: "Payment recorded",
+      claim:
+        open !== null && amount > open
+          ? `Payment recorded — ${amount} ${currency} against an open position of ${open}, which settles it and leaves a credit`
+          : "Payment recorded",
       entityType: "tally.settlement",
       entityId: settlementId,
     });
@@ -1619,6 +1691,43 @@ const SETTLE_UP: CommandDefinition = {
     return { settlement_id: settlementId, txn_id: txnId };
   },
 };
+
+/**
+ * What `from_party` owed `to_party` before this payment, in minor units, or
+ * `null` when the ledger cannot be read as one position (mixed currencies).
+ * Used only to MARK an overpayment in the receipt — never to refuse one.
+ */
+function openPositionMinor(
+  ctx: HandlerCtx,
+  input: { from_party: string; to_party: string; group_id?: string }
+): number | null {
+  const scope = input.group_id ? "AND e.group_id = ?" : "";
+  const bind = input.group_id ? [input.group_id] : [];
+  const owed = ctx.db
+    .prepare(
+      `SELECT COALESCE(SUM(s.share_minor), 0) AS n
+         FROM tally_expense_split s
+         JOIN tally_expense e ON e.expense_id = s.expense_id
+        WHERE s.party_id = ? AND e.paid_by = ? AND e.deleted_at IS NULL ${scope}`
+    )
+    .get(input.from_party, input.to_party, ...bind) as { n: number };
+  const back = ctx.db
+    .prepare(
+      `SELECT COALESCE(SUM(s.share_minor), 0) AS n
+         FROM tally_expense_split s
+         JOIN tally_expense e ON e.expense_id = s.expense_id
+        WHERE s.party_id = ? AND e.paid_by = ? AND e.deleted_at IS NULL ${scope}`
+    )
+    .get(input.to_party, input.from_party, ...bind) as { n: number };
+  const paid = ctx.db
+    .prepare(
+      `SELECT COALESCE(SUM(amount_minor), 0) AS n FROM tally_settlement
+        WHERE from_party = ? AND to_party = ? AND deleted_at IS NULL
+          ${input.group_id ? "AND group_id = ?" : ""}`
+    )
+    .get(input.from_party, input.to_party, ...bind) as { n: number };
+  return Number(owed.n) - Number(back.n) - Number(paid.n);
+}
 
 const BIND_TXN: CommandDefinition = {
   name: "tally.bind_txn",

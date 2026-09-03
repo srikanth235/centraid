@@ -1,8 +1,8 @@
 /*
- * Who a replica shape is FOR (#726). `consent_access_grant` selects a
+ * Who a replica shape is FOR (#726). `access_grant` selects a
  * grantee two ways — `app_id` or `grantee_party_id` — and this module is the
  * only place that difference is visible. Everything downstream
- * (`evaluateConsent`, row filters, field masks, `projectReplicaPage`) works on
+ * (`evaluateAccess`, row filters, field masks, `projectReplicaPage`) works on
  * whichever comes back, because none of it ever knew which axis it was on.
  */
 
@@ -25,10 +25,10 @@ export function readGrantees(
     .prepare(
       `SELECT DISTINCT a.app_id, a.name AS app_name, a.signing_key,
               c.notation AS purpose
-         FROM consent_app a
-         JOIN consent_access_grant g ON g.app_id = a.app_id
+         FROM access_app a
+         JOIN access_grant g ON g.app_id = a.app_id
          JOIN core_concept c ON c.concept_id = g.purpose_concept_id
-         JOIN consent_grant_scope s ON s.grant_id = g.grant_id
+         JOIN access_grant_scope s ON s.grant_id = g.grant_id
         WHERE a.status = 'active'
           AND g.status = 'active' AND g.revoked_at IS NULL
           AND (g.expires_at IS NULL OR g.expires_at > ?)

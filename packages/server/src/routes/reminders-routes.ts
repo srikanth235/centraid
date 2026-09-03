@@ -59,12 +59,11 @@ export function makeRemindersRouteHandler(
         return sendJson(
           res,
           200,
-          buildDailyBrief(vaults.current().db, {
-            date,
-            from,
-            to,
-            timeZone,
-          })
+          buildDailyBrief(
+            vaults.current().gateway,
+            vaults.current().ownerCredential,
+            { date, from, to, timeZone }
+          )
         );
       }
       const pendingInvitations = devicePairing
@@ -79,7 +78,8 @@ export function makeRemindersRouteHandler(
           })
         : [];
       const reminders = computeDueReminders(
-        vaults.current().db,
+        vaults.current().gateway,
+        vaults.current().ownerCredential,
         nowIso(),
         undefined,
         pendingInvitations

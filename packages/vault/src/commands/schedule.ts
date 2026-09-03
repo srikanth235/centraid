@@ -120,6 +120,24 @@ const PROPOSE_EVENT: CommandDefinition = {
   handler: proposeEvent,
 };
 
+/**
+ * WHAT `dtstart` MEANS (#916, R2 / review 3.3). 'zoned' says it is a real
+ * instant expanded in `start_tz`, so both halves have to be there; an event
+ * arriving with no zone is FLOATING — a wall clock — and saying 'zoned'
+ * anyway is what the schema's CHECK now refuses. The default follows the
+ * input rather than a constant, because the caller who omits a zone is
+ * telling us which of the two this is.
+ */
+export function eventSemantics(input: {
+  recurrence_semantics?: string;
+  start_tz?: string;
+  dtstart?: string;
+}): string {
+  if (input.recurrence_semantics !== undefined)
+    return input.recurrence_semantics;
+  return input.start_tz && input.dtstart?.endsWith("Z") ? "zoned" : "floating";
+}
+
 function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     summary: string;
@@ -158,7 +176,7 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
       ctx.now,
       ctx.now,
       input.end_tz ?? input.start_tz ?? null,
-      input.recurrence_semantics ?? "zoned"
+      eventSemantics(input)
     );
   ctx.wrote("core.event", eventId);
   const remindersJson =
@@ -538,8 +556,10 @@ const RESTORE_EVENT: CommandDefinition = {
   preconditions: [
     {
       name: "event_trashed",
+      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM core_event
-             WHERE event_id = :event_id AND deleted_at IS NOT NULL`,
+             WHERE event_id = :event_id AND deleted_at IS NOT NULL
+               AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
       column: "n",
       op: "eq",
       value: 1,

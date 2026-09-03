@@ -37,10 +37,10 @@ interface ReceiptRow {
 }
 
 function receiptsFor(grantId: string): ReceiptRow[] {
-  return db.journal
+  return db.audit
     .prepare(
       `SELECT grant_id, action, object_type, object_id, decision, detail_json
-         FROM consent_receipt WHERE grant_id = ? ORDER BY receipt_id`
+         FROM access_receipt WHERE grant_id = ? ORDER BY receipt_id`
     )
     .all(grantId) as unknown as ReceiptRow[];
 }
@@ -60,10 +60,9 @@ describe("commands/share", () => {
     db.vault
       .prepare(
         `INSERT INTO core_party
-           (party_id, kind, display_name, sort_name, created_at, updated_at,
-            ontology_version)
+           (party_id, kind, display_name, sort_name, created_at, updated_at)
          VALUES (?, 'person', 'Ravi', 'Ravi', '2026-01-01T00:00:00.000Z',
-                 '2026-01-01T00:00:00.000Z', '1.4')`
+                 '2026-01-01T00:00:00.000Z')`
       )
       .run(ravi);
     // A person is grantable only through a live link (#903), so every grant
@@ -119,7 +118,7 @@ describe("commands/share", () => {
         .get("share.grant") as { command_id: string }
     ).command_id;
     expect(
-      db.journal
+      db.audit
         .prepare(
           `SELECT count(*) AS n FROM agent_command_invocation
             WHERE command_id = ? AND status = 'executed'`
@@ -270,10 +269,9 @@ describe("commands/share", () => {
     db.vault
       .prepare(
         `INSERT INTO core_party
-           (party_id, kind, display_name, sort_name, created_at, updated_at,
-            ontology_version)
+           (party_id, kind, display_name, sort_name, created_at, updated_at)
          VALUES (?, 'person', 'Uma', 'Uma', '2026-01-01T00:00:00.000Z',
-                 '2026-01-01T00:00:00.000Z', '1.4')`
+                 '2026-01-01T00:00:00.000Z')`
       )
       .run(uma);
 

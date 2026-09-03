@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { makeJournalDbProvider } from "../../stores/gateway-db.js";
+import { makeLedgerDbProvider } from "../../stores/gateway-db.js";
 import { ConversationStore } from "../store.js";
 import { runConversationArchival } from "./index.js";
 import {
@@ -349,7 +349,7 @@ describe("referencedHashes union", () => {
       ).n
     ).toBe(0);
 
-    const store = new ConversationStore(makeJournalDbProvider(dbPath));
+    const store = new ConversationStore(makeLedgerDbProvider(dbPath));
     const hashes = store.referencedHashes();
     expect(hashes.has(liveHash)).toBe(true);
     expect(hashes.has(archivedHash)).toBe(true); // still pinned though pruned

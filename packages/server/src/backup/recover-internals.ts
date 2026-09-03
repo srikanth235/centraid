@@ -138,19 +138,15 @@ export function recoveredAsOfMs(
   walReplay: WalReplayOutcome,
   row: SnapshotRow
 ): number {
-  return walReplay.coordinatedCutMs >= 0
-    ? walReplay.coordinatedCutMs
-    : row.createdAt * 1000;
+  return walReplay.cutTickMs >= 0 ? walReplay.cutTickMs : row.createdAt * 1000;
 }
 
 /** Truncated = not replayable to the newest ACKNOWLEDGED tick. */
 export function walReplayTruncated(walReplay: WalReplayOutcome): boolean {
   const shortOfTip =
     walReplay.expectedCutMs >= 0 &&
-    walReplay.coordinatedCutMs < walReplay.expectedCutMs;
-  return (
-    shortOfTip || Object.values(walReplay.perDb).some((db) => db.truncated)
-  );
+    walReplay.cutTickMs < walReplay.expectedCutMs;
+  return shortOfTip || walReplay.truncated;
 }
 
 export function currentVersions(): RestoreCurrentVersions {

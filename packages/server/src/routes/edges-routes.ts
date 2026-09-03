@@ -60,6 +60,8 @@ export interface EdgesRouteDeps {
   enrollments: EnrollmentStore;
   links: VaultLinksStore;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
+  /** The vault's own party — the principal an edge placement runs as (#916). */
+  partyIdFor: (vaultId: string) => string | undefined;
   share?: typeof shareItemsToVault;
   move?: typeof moveOutOfVault;
 }
@@ -161,6 +163,7 @@ function effectDeps(
   return {
     db: deps.gatewayDatabase,
     vaultFor: deps.vaultFor,
+    partyIdFor: deps.partyIdFor,
     ...(deps.share ? { share: deps.share } : {}),
     ...(deps.move ? { move: deps.move } : {}),
   };

@@ -252,7 +252,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
     const tagRows = (tags.rows ?? []) as unknown as RawTag[];
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
     const schemeRows = (schemes.rows ?? []) as unknown as RawScheme[];
-    const ownerPartyId = String((vault.rows ?? [])[0]?.owner_party_id ?? "");
+    const ownerPartyId = String((vault.rows ?? [])[0]?.self_party_id ?? "");
 
     const relationLinks = outgoing.filter(
       (link) =>

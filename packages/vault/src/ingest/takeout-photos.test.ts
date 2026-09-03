@@ -175,7 +175,7 @@ describe("takeout photo import", () => {
   const assets = (): Record<string, unknown>[] =>
     db.vault
       .prepare(
-        `SELECT a.asset_id, a.kind, a.captured_at, a.capture_group_id, a.favorite,
+        `SELECT a.asset_id, a.kind, a.captured_at, a.capture_group_id,
                 a.place_id, c.title, c.sha256
            FROM media_asset a JOIN core_content_item c ON c.content_id = a.content_id
           ORDER BY c.title`
@@ -207,17 +207,18 @@ describe("takeout photo import", () => {
     // Sidecar time, caption, star and place all landed on the still.
     expect(still.captured_at).toBe("2019-06-22T20:16:07.000Z");
     expect(still.kind).toBe("photo");
-    expect(still.favorite).toBe(1);
     expect(still.place_id).not.toBeNull();
-    // The favorite column mirrors the canonical starred tag (#441).
+    // THE STAR IS ONE TAG, ON THE ASSET (#916): the sidecar's `favorited`
+    // arrives as a boolean and LANDS as the star, where the column and the tag
+    // used to be two truths kept in step by a helper importers forgot to call.
     const starred = db.vault
       .prepare(
-        `SELECT count(*) AS n FROM core_tag t
+        `SELECT t.target_id AS id FROM core_tag t
            JOIN core_concept c ON c.concept_id = t.concept_id
-          WHERE t.target_type = 'core.content_item' AND c.notation = 'starred'`
+          WHERE t.target_type = 'media.asset' AND c.notation = 'starred'`
       )
-      .get() as { n: number };
-    expect(starred.n).toBe(1);
+      .all() as { id: string }[];
+    expect(starred.map((row) => row.id)).toStrictEqual([still.asset_id]);
 
     // Live Photo: the still and its motion part share one capture group.
     expect(motion.kind).toBe("video");
@@ -249,9 +250,9 @@ describe("takeout photo import", () => {
       [still.asset_id as string, motion.asset_id as string].sort()
     );
 
-    const prov = db.journal
+    const prov = db.audit
       .prepare(
-        `SELECT count(*) AS n FROM consent_provenance
+        `SELECT count(*) AS n FROM access_provenance
           WHERE prov_activity = 'import.takeout' AND entity_type = 'media.asset'
             AND agent_kind = 'import'`
       )

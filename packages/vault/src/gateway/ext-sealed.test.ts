@@ -158,7 +158,7 @@ describe("ext-sealed", () => {
     installApp();
     const secret = "ghp_never_in_journal";
     addCredential(secret);
-    const rows = db.journal
+    const rows = db.audit
       .prepare("SELECT input_json FROM agent_command_invocation")
       .all() as {
       input_json: string;

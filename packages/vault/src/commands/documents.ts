@@ -25,7 +25,6 @@ import {
 } from "../blob/mint.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { writeExtractedText } from "./enrich.js";
 import { setStarred, starredExistsSql } from "./flags.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
@@ -46,10 +45,10 @@ export const DOCUMENT_TARGET_TYPE = "core.document";
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (!owner?.owner_party_id) throw new Error("vault has no owner");
-  return owner.owner_party_id;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!owner?.self_party_id) throw new Error("vault has no owner");
+  return owner.self_party_id;
 }
 
 function purgeAt(now: string): string {
@@ -457,8 +456,10 @@ const RESTORE_DOCUMENT: CommandDefinition = {
   preconditions: [
     {
       name: "document_in_trash",
+      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM core_document
-             WHERE document_id = :document_id AND deleted_at IS NOT NULL`,
+             WHERE document_id = :document_id AND deleted_at IS NOT NULL
+               AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
       column: "n",
       op: "eq",
       value: 1,
@@ -1115,7 +1116,6 @@ function deleteFolder(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare("DELETE FROM core_concept WHERE concept_id = ?")
     .run(input.folder_id);
-  cleanupPolyRefs(ctx.db, ctx.now, "core.concept", input.folder_id);
   ctx.wrote("core.concept", input.folder_id);
   return { folder_id: input.folder_id };
 }

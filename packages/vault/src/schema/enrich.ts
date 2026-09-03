@@ -214,20 +214,23 @@
 //     LOWEST `region_id` in it, so unchanged membership never shuffles the id
 //     a shelf displays.
 
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+
 export const ENRICH_DDL = `
-CREATE TABLE IF NOT EXISTS media_asset_phash (
+CREATE TABLE media_asset_phash (
   asset_id TEXT PRIMARY KEY REFERENCES media_asset(asset_id) ON DELETE CASCADE,
   phash    TEXT NOT NULL CHECK (length(phash) BETWEEN 4 AND 64),
   -- Near-duplicate cluster projection (issue #352 phase 3/4) — see header.
   cluster_id  TEXT,
-  computed_at TEXT NOT NULL
+  computed_at TEXT NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_media_asset_phash_cluster
   ON media_asset_phash(cluster_id) WHERE cluster_id IS NOT NULL;
 
 -- Memories v0 (issue #724 W7) — see the header above for the three kinds,
 -- the honest-absence rule, and the deterministic-id scheme.
-CREATE TABLE IF NOT EXISTS media_memory (
+CREATE TABLE media_memory (
   memory_id   TEXT PRIMARY KEY,
   kind        TEXT NOT NULL CHECK (kind IN ('on-this-day','trip','similar')),
   -- A cheap, join-free hint the shelf can print without a second query — see
@@ -237,11 +240,12 @@ CREATE TABLE IF NOT EXISTS media_memory (
   -- 'MM-DD', 'on-this-day' rows only.
   day_key     TEXT CHECK (kind = 'on-this-day' OR day_key IS NULL),
   -- The trip's modal AWAY place. 'trip' rows only.
-  place_id    TEXT REFERENCES core_place(place_id)
+  place_id    TEXT REFERENCES core_place(place_id) ON DELETE SET NULL
                 CHECK (kind = 'trip' OR place_id IS NULL),
   started_at  TEXT,
   ended_at    TEXT,
-  computed_at TEXT NOT NULL
+  computed_at TEXT NOT NULL,
+  FOREIGN KEY (memory_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_media_memory_kind ON media_memory(kind);
 CREATE INDEX IF NOT EXISTS idx_media_memory_day_key
@@ -251,24 +255,25 @@ CREATE INDEX IF NOT EXISTS idx_media_memory_day_key
 CREATE INDEX IF NOT EXISTS idx_media_memory_place
   ON media_memory(place_id) WHERE place_id IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS media_memory_member (
+CREATE TABLE media_memory_member (
   memory_id TEXT NOT NULL REFERENCES media_memory(memory_id) ON DELETE CASCADE,
   asset_id  TEXT NOT NULL REFERENCES media_asset(asset_id) ON DELETE CASCADE,
   -- Display order within the memory (capture order). Not UNIQUE per memory:
   -- ties (same captured_at) share an ordinal rather than an arbitrary
   -- tiebreak deciding which photo "comes first".
   ordinal   INTEGER NOT NULL CHECK (ordinal >= 0),
+  created_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   PRIMARY KEY (memory_id, asset_id)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_media_memory_member_asset
   ON media_memory_member(asset_id);
 
-CREATE TABLE IF NOT EXISTS enrich_policy (
+CREATE TABLE enrich_policy (
   domain     TEXT PRIMARY KEY CHECK (domain IN ('photos','docs')),
   -- 'local' and 'model' are the pre-#712 tier names, kept legal here as a
   -- read compatibility shim only — see the header comment above.
   tier       TEXT NOT NULL CHECK (tier IN ('off','device','gateway','local','model')),
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 -- Backfill for vaults that predate this table (bootstrap seeds fresh ones);
 -- guarded the same way as the vision/doctype schemes below.
@@ -281,7 +286,7 @@ SELECT 'docs', 'gateway', datetime('now')
  WHERE NOT EXISTS (SELECT 1 FROM enrich_policy WHERE domain = 'docs')
    AND EXISTS (SELECT 1 FROM core_vault);
 
-CREATE TABLE IF NOT EXISTS enrich_embedding (
+CREATE TABLE enrich_embedding (
   embedding_id TEXT PRIMARY KEY,
   target_type  TEXT NOT NULL,
   target_id    TEXT NOT NULL,
@@ -289,12 +294,14 @@ CREATE TABLE IF NOT EXISTS enrich_embedding (
   dim          INTEGER NOT NULL CHECK (dim > 0),
   vector       BLOB NOT NULL,
   created_at   TEXT NOT NULL,
-  UNIQUE (target_type, target_id, model)
+  UNIQUE (target_type, target_id, model),
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_enrich_embedding_entity
   ON enrich_embedding(target_type, target_id);
 
-CREATE TABLE IF NOT EXISTS enrich_derivation (
+CREATE TABLE enrich_derivation (
   derivation_id TEXT PRIMARY KEY,
   target_type   TEXT NOT NULL,
   target_id     TEXT NOT NULL,
@@ -316,14 +323,16 @@ CREATE TABLE IF NOT EXISTS enrich_derivation (
   model         TEXT NOT NULL,
   payload_json  TEXT CHECK (payload_json IS NULL OR json_valid(payload_json)),
   produced_at   TEXT NOT NULL,
-  UNIQUE (target_type, target_id, variant, profile)
+  UNIQUE (target_type, target_id, variant, profile),
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 -- The backfill selector's index: "everything this capability produced under
 -- some model", which is the query a version bump asks of the whole library.
 CREATE INDEX IF NOT EXISTS idx_enrich_derivation_model
   ON enrich_derivation(capability, model);
 
-CREATE TABLE IF NOT EXISTS enrich_request (
+CREATE TABLE enrich_request (
   request_id          TEXT PRIMARY KEY,
   target_type         TEXT NOT NULL,
   target_id           TEXT,
@@ -367,7 +376,12 @@ CREATE TABLE IF NOT EXISTS enrich_request (
   -- enabled enricher, and it is now unrepresentable.
   CHECK (reason <> 'manual'
          OR capability IS NOT NULL
-         OR required_capability IS NOT NULL)
+         OR required_capability IS NOT NULL),
+  -- \`target_id\` stays NULLable — a search-miss names a TYPE and no row — so
+  -- the composite key is enforced only when both halves are present, which is
+  -- SQLite's MATCH SIMPLE default (#916).
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_enrich_request_open
   ON enrich_request(target_type, requested_at) WHERE drained_at IS NULL;
@@ -377,6 +391,8 @@ CREATE INDEX IF NOT EXISTS idx_enrich_request_capability
 CREATE INDEX IF NOT EXISTS idx_enrich_request_leaseable
   ON enrich_request(required_capability, lease_expires_at, requested_at)
   WHERE drained_at IS NULL AND required_capability IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_enrich_request_target
+  ON enrich_request(target_type, target_id);
 
 INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version)
 SELECT lower(hex(randomblob(16))), 'urn:centraid:vision', 'Vision tags (machine)', 'centraid', '1'
@@ -396,7 +412,7 @@ SELECT lower(hex(randomblob(16))), 'urn:centraid:doctype', 'Document types (mach
 -- The unnamed-face grouping projection. See the header above for why identity
 -- is NOT here (it lives in media_face_region.party_id / core_party) and why
 -- this table is safe to recompute wholesale.
-CREATE TABLE IF NOT EXISTS media_face_cluster (
+CREATE TABLE media_face_cluster (
   -- One row per grouped region — a region is in at most one cluster, so the
   -- region is the key and "not in this table" is the honest way to say a face
   -- is ungrouped (named, answered, or alone). No nullable cluster column, no
@@ -404,23 +420,24 @@ CREATE TABLE IF NOT EXISTS media_face_cluster (
   region_id   TEXT PRIMARY KEY REFERENCES media_face_region(region_id) ON DELETE CASCADE,
   -- The group's LOWEST region_id (deterministic — see the header).
   cluster_id  TEXT NOT NULL,
-  computed_at TEXT NOT NULL
+  computed_at TEXT NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_media_face_cluster_cluster
   ON media_face_cluster(cluster_id);
 -- ─── end issue #724 W5 ────────────────────────────────────────────────────
 
 -- ─── issue #807 (generic enrichment) ──────────────────────────────────────
--- The policy cascade's rule store and the egress-consent ledger. See the
--- header above for what each answers and, crucially, what neither does: no
--- reader of these tables decides whether work may run — decideEnrichmentGate
--- stays the one gate.
-CREATE TABLE IF NOT EXISTS enrich_policy_rule (
+-- The policy cascade's rule store. The egress-consent ledger it shipped beside
+-- is gone (#883, ruling V-table): an egress answer is an answer like any other
+-- and lives in \`share_authority\` as a 'harness' principal. No reader of this
+-- table decides whether work may run — decideEnrichmentGate stays the one gate.
+CREATE TABLE enrich_policy_rule (
   rule_id    TEXT PRIMARY KEY,
   -- The cascade levels, least to most specific. scope_type names a LEVEL,
   -- not an ontology entity, so (scope_type, scope_ref) is deliberately NOT
   -- the vault's polymorphic (X_type, X_id) shape and is not swept on purge
-  -- (schema/poly-refs.ts): a rule whose collection is gone matches no item the
+  -- (schema/entity-refs.ts): a rule whose collection is gone matches no item the
   -- resolver ever walks, so it is inert rather than dangling.
   scope_type TEXT NOT NULL CHECK (scope_type IN ('vault','domain','collection','item')),
   -- '' at vault scope; the domain name, collection id, or target id below it.
@@ -435,7 +452,7 @@ CREATE TABLE IF NOT EXISTS enrich_policy_rule (
   profile    TEXT,
   trigger_on TEXT CHECK (trigger_on IS NULL
     OR trigger_on IN ('on-ingest','on-view','on-demand')),
-  updated_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   CHECK ((scope_type = 'vault') = (scope_ref = '')),
   CHECK (enabled IS NOT NULL OR profile IS NOT NULL OR trigger_on IS NOT NULL),
   UNIQUE (scope_type, scope_ref, capability)
@@ -445,27 +462,11 @@ CREATE TABLE IF NOT EXISTS enrich_policy_rule (
 CREATE INDEX IF NOT EXISTS idx_enrich_policy_rule_capability
   ON enrich_policy_rule(capability);
 
-CREATE TABLE IF NOT EXISTS enrich_consent (
-  consent_id TEXT PRIMARY KEY,
-  capability TEXT NOT NULL CHECK (length(capability) BETWEEN 1 AND 64),
-  -- A property of the ENGINE, never of who asked — see the header.
-  egress     TEXT NOT NULL CHECK (egress IN ('on-device','gateway','provider')),
-  -- '' = this vault, i.e. the answer covers every scope. Same empty-string
-  -- argument as enrich_policy_rule.scope_ref above: a NULL here would let
-  -- one vault-wide answer be recorded twice under a UNIQUE index.
-  scope_ref  TEXT NOT NULL,
-  -- A declined answer is a DECISION and stays a row: forgetting it would make
-  -- "already asked and told no" indistinguishable from "never asked", and the
-  -- consent doctrine is asked once, answered once.
-  decision   TEXT NOT NULL CHECK (decision IN ('granted','declined')),
-  decided_at TEXT NOT NULL,
-  -- → consent.receipt (journal.db). Cross-file, so engine-unenforceable and
-  -- gateway-validated like every other journal pointer (schema/journal.ts);
-  -- NULL until the receipt is written, never a second copy of it.
-  receipt_id TEXT,
-  UNIQUE (capability, egress, scope_ref)
-) STRICT;
 -- ─── end issue #807 ───────────────────────────────────────────────────────
+${touchUpdatedAt("media_asset_phash", "asset_id")}
+${touchUpdatedAt("media_face_cluster", "region_id")}
+${touchUpdatedAt("enrich_policy", "domain")}
+${touchUpdatedAt("enrich_policy_rule", "rule_id")}
 `;
 
 /** Scheme URIs the enrichment publishers create concepts under. */

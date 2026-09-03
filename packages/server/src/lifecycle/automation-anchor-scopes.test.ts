@@ -222,14 +222,14 @@ describe("automation-anchor-scopes", () => {
   test("every anchor read is receipted through the consent gateway", () => {
     const { db, vault } = anchoredTaskFixture();
     const before = (
-      db.journal.prepare("SELECT count(*) AS n FROM consent_receipt").get() as {
+      db.audit.prepare("SELECT count(*) AS n FROM access_receipt").get() as {
         n: number;
       }
     ).n;
     resolveAutomationAnchors(vault, "@[core.link_anchor/anchor-1]");
-    const rows = db.journal
+    const rows = db.audit
       .prepare(
-        `SELECT object_type, action, purpose_concept_id AS purpose, decision FROM consent_receipt
+        `SELECT object_type, action, purpose_concept_id AS purpose, decision FROM access_receipt
         ORDER BY rowid DESC LIMIT ?`
       )
       .all(4) as {
@@ -239,7 +239,7 @@ describe("automation-anchor-scopes", () => {
       decision: string;
     }[];
     const after = (
-      db.journal.prepare("SELECT count(*) AS n FROM consent_receipt").get() as {
+      db.audit.prepare("SELECT count(*) AS n FROM access_receipt").get() as {
         n: number;
       }
     ).n;
@@ -258,16 +258,39 @@ describe("automation-anchor-scopes", () => {
 
   test("an anchor source type that only names an Object member fails closed", () => {
     const { db, vault } = anchoredTaskFixture();
-    db.vault
-      .prepare(
-        `UPDATE core_link SET from_type = 'constructor' WHERE link_id = 'link-1'`
-      )
-      .run();
-    // `SEARCHABLE['constructor']` inherits an `Object` member: a lookup that
-    // trusts inherited members passes the guard and then throws a bare
-    // `TypeError` when spread.
+
+    // First guard, and why the row below is forged in memory: `(from_type,
+    // from_id)` is a composite FK into the entity supertype (#916).
     expect(() =>
-      resolveAutomationAnchors(vault, "@[core.link_anchor/anchor-1]")
+      db.vault
+        .prepare(
+          `UPDATE core_link SET from_type = 'constructor' WHERE link_id = 'link-1'`
+        )
+        .run()
+    ).toThrow(/FOREIGN KEY/iu);
+
+    // Second guard: hand the resolver such a row anyway.
+    // `SEARCHABLE['constructor']` inherits an `Object` member, so a lookup
+    // trusting inherited members would pass and then throw a bare TypeError.
+    const forged: AnchorVaultReads = {
+      credential: vault.credential,
+      gateway: {
+        ...vault.gateway,
+        read: (credential, request) => {
+          const answer = vault.gateway.read(credential, request);
+          if (request.entity !== "core.link") return answer;
+          return {
+            ...answer,
+            rows: answer.rows.map((row) => ({
+              ...row,
+              from_type: "constructor",
+            })),
+          };
+        },
+      } as typeof vault.gateway,
+    };
+    expect(() =>
+      resolveAutomationAnchors(forged, "@[core.link_anchor/anchor-1]")
     ).toThrow(AutomationAnchorError);
   });
 

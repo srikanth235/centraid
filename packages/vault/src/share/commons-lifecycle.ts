@@ -25,6 +25,7 @@ import type {
   CreateCommonsGrantInput,
 } from "./commons.js";
 import type { ShareVaultRef } from "./placement.js";
+import { isSelfBinding } from "./self-binding.js";
 
 export interface CommonsMemberRecord {
   partyId: string;
@@ -224,20 +225,21 @@ export function upsertCommonsMember(input: {
                 "base64"
               )
             : null);
-        db.prepare(
-          `INSERT INTO share_party_vault_binding
+        if (!isSelfBinding(db, input.member.partyId, input.member.vaultId))
+          db.prepare(
+            `INSERT INTO share_party_vault_binding
              (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
            VALUES (?, ?, ?, ?, ?, NULL)
            ON CONFLICT(party_id, vault_id) DO UPDATE SET
              vault_public_key = COALESCE(excluded.vault_public_key, vault_public_key),
              revoked_at = NULL`
-        ).run(
-          uuidv7(),
-          input.member.partyId,
-          input.member.vaultId,
-          publicKey,
-          input.now
-        );
+          ).run(
+            uuidv7(),
+            input.member.partyId,
+            input.member.vaultId,
+            publicKey,
+            input.now
+          );
       }
       if (!existing || existing.capability !== input.member.capability) {
         const siblings = db

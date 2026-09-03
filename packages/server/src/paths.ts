@@ -7,7 +7,8 @@
  * a zero-vault registry is legal and stores open lazily.
  *
  * The vault is the unit (#280): everything personal lives inside
- * `<vaultDir>/<vaultId>/` — the sovereign pair (`vault.db` + `journal.db`),
+ * `<vaultDir>/<vaultId>/` — the sovereign file (`vault.db`, the one file since
+ * #916),
  * `apps/`, and the `code/` git store. Gateway state is `gateway.db`, secrets
  * are KeyStore envelopes under `keys/`, and cache and logs are separate
  * disposable directories.
@@ -26,7 +27,7 @@ export interface GatewayPaths {
   /**
    * Root for the per-vault DISPOSABLE harness cache
    * (`<cacheDir>/<vaultId>/harness-sessions/`). Kept OUTSIDE `vaultDir` so the
-   * sovereign tree holds only the pair, app data, and code: this cache is
+   * sovereign tree holds only the vault file, app data, and code: this cache is
    * derived, safe to wipe, and never backed up. Omit for a `-cache` sibling.
    */
   cacheDir?: string;

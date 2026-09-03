@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   ConversationStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
   ProviderEgressConsentStore,
 } from "@centraid/server/engine";
 import type {
@@ -14,6 +14,7 @@ import type {
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../../engine/stores/ledger-db.test-fixtures.js";
 import type { HarnessKind } from "../types.ts";
 import { startLiveDispatch } from "./run-automation-live-dispatch.ts";
 import type { LiveDispatch } from "./run-automation-live-dispatch.ts";
@@ -44,8 +45,8 @@ describe("automation provider-egress consent", () => {
     runTurn: ReturnType<typeof vi.fn<RunTurnFn>>;
   }> {
     const workdir = await tempDir("centraid-automation-consent-");
-    const journalDbFile = `${workdir}/journal.db`;
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const ledgerDbFile = ledgerDbFileIn(workdir);
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     store.ensureAutomationConversation(
       "demo/nightly",
       "demo",
@@ -54,7 +55,7 @@ describe("automation provider-egress consent", () => {
     );
     store.close();
     const consent = new ProviderEgressConsentStore(
-      makeJournalDbProvider(journalDbFile),
+      makeLedgerDbProvider(ledgerDbFile),
       (kind) => opts.ladderMembers.includes(kind)
     );
     opts.seed?.(consent);
@@ -66,7 +67,7 @@ describe("automation provider-egress consent", () => {
       workdir,
       runId: "run-1",
       automationRef: "demo/nightly",
-      journalDbFile,
+      ledgerDbFile,
       runTurn,
       harness: opts.harness,
       providerEgressConsent: consent,

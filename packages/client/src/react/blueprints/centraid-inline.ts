@@ -402,7 +402,7 @@ async function loadShareTargets(
       .catch(() => undefined),
     loadLinkDestinations(ownVaultId),
   ]);
-  const ownerPartyId = vaultResult?.rows[0]?.values["owner_party_id"];
+  const ownerPartyId = vaultResult?.rows[0]?.values["self_party_id"];
   const linkedByParty = new Map(
     links.map((link) => [link.partyId, link.vaultId])
   );
@@ -473,7 +473,7 @@ async function loadShareCircles(
       .read("people", { entity: "core.vault", limit: 1 })
       .catch(() => undefined),
   ]);
-  const ownerPartyId = vault?.rows[0]?.values["owner_party_id"];
+  const ownerPartyId = vault?.rows[0]?.values["self_party_id"];
   if (typeof ownerPartyId !== "string") return [];
   const ownedCircles = new Set(
     (circles?.rows ?? []).flatMap((row) => {

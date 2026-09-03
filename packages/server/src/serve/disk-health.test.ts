@@ -119,12 +119,10 @@ describe(createDiskHealthProbe, () => {
     expect((await probe()).status).toBe("ok");
   });
 
-  it("includes per-vault DB size in the detail, summed from vault.db + journal.db + their -wal files", async () => {
+  it("includes per-vault DB size in the detail, summed from vault.db + its -wal file", async () => {
     const sizes: Record<string, number> = {
-      "/vaults/v1/vault.db": 10 * MIB,
+      "/vaults/v1/vault.db": 15 * MIB,
       "/vaults/v1/vault.db-wal": 1 * MIB,
-      "/vaults/v1/journal.db": 5 * MIB,
-      // journal.db-wal deliberately absent — fileSize() below returns 0 for it.
     };
     const probe = createDiskHealthProbe({
       rootDir: "/vaults",
@@ -137,7 +135,7 @@ describe(createDiskHealthProbe, () => {
     expect(result.detail).toContain("16.0 MB");
   });
 
-  it("never statSyncs into a blob CAS directory — only the four fixed filenames", async () => {
+  it("never statSyncs into a blob CAS directory — only the two fixed filenames", async () => {
     const seen: string[] = [];
     const probe = createDiskHealthProbe({
       rootDir: "/vaults",
@@ -150,12 +148,7 @@ describe(createDiskHealthProbe, () => {
     });
     await probe();
     expect(seen.sort()).toStrictEqual(
-      [
-        "/vaults/v1/vault.db",
-        "/vaults/v1/vault.db-wal",
-        "/vaults/v1/journal.db",
-        "/vaults/v1/journal.db-wal",
-      ].sort()
+      ["/vaults/v1/vault.db", "/vaults/v1/vault.db-wal"].sort()
     );
   });
 });

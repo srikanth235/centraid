@@ -579,7 +579,7 @@ export class LockerAuthentication {
     objectId: string | null = null,
     detail?: Record<string, unknown>
   ): void {
-    writeReceipt(this.db.journal, {
+    writeReceipt(this.db.audit, {
       grantId: null,
       invocationId: null,
       action: `authenticate locker.${operation}`,

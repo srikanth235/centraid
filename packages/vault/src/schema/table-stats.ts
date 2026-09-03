@@ -118,7 +118,7 @@ function estimateBreakdown(db: DatabaseSync): TableSizeEntry[] {
   return entries.sort((a, b) => (b.rows ?? 0) - (a.rows ?? 0));
 }
 
-/** Per-table size breakdown of one open database (vault.db or journal.db). */
+/** Per-table size breakdown of the open vault. */
 export function dbSizeBreakdown(db: DatabaseSync): DbSizeBreakdown {
   const { pageCount, pageSize, fileBytesTotal } = fileTotals(db);
   try {

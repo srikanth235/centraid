@@ -42,8 +42,8 @@ function addParty(
   db.prepare(
     `INSERT INTO core_party
        (party_id, kind, display_name, sort_name, birth_date,
-        avatar_content_id, created_at, updated_at, ontology_version)
-     VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?, '1.4')`
+        avatar_content_id, created_at, updated_at)
+     VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?)`
   ).run(partyId, name, name, now, now);
   return partyId;
 }

@@ -13,8 +13,8 @@ describe("ontology.scale", () => {
     const db = await createTestVault();
     const insertParty = db.vault.prepare(
       `INSERT INTO core_party
-      (party_id, kind, display_name, created_at, updated_at, ontology_version)
-     VALUES (?, 'person', ?, ?, ?, '1.2')`
+      (party_id, kind, display_name, created_at, updated_at)
+     VALUES (?, 'person', ?, ?, ?)`
     );
     db.vault
       .prepare(

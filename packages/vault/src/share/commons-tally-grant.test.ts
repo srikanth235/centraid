@@ -16,8 +16,8 @@ function addParty(
   db.prepare(
     `INSERT INTO core_party
        (party_id, kind, display_name, sort_name, birth_date,
-        avatar_content_id, created_at, updated_at, ontology_version)
-     VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?, '1.4')`
+        avatar_content_id, created_at, updated_at)
+     VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?)`
   ).run(partyId, name, name, now, now);
   return partyId;
 }
@@ -69,7 +69,7 @@ describe("incremental Tally commons sharing", () => {
     origin.vault
       .prepare(
         `INSERT INTO core_share_origin
-           (item_type, item_id, origin_vault_id, origin_item_id,
+           (target_type, target_id, origin_vault_id, origin_item_id,
             shared_by, shared_at)
          VALUES ('social.circle', ?, 'another-vault', ?,
                  'commons:another-grant', ?)`

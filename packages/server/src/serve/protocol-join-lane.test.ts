@@ -165,9 +165,8 @@ function linkSeat(world: JoinWorld, seat: Seat): string {
   const db = world.origin.plane.db.vault;
   db.prepare(
     `INSERT INTO core_party
-       (party_id, kind, display_name, sort_name, created_at, updated_at,
-        ontology_version)
-     VALUES (?, 'person', ?, ?, ?, ?, '1.4')`
+       (party_id, kind, display_name, sort_name, created_at, updated_at)
+     VALUES (?, 'person', ?, ?, ?, ?)`
   ).run(partyId, seat.label, seat.label, now, now);
   db.prepare(
     `INSERT INTO share_party_vault_binding

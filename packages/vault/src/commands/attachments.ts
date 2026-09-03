@@ -11,6 +11,7 @@ import {
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
+import { releaseContentIfUnreferenced } from "./media.js";
 
 /**
  * Logical name → PK column; the physical table underscores the dot. Also an
@@ -24,8 +25,6 @@ const SUBJECT_PK: Record<string, string> = {
   "knowledge.note": "note_id",
   "social.thread": "thread_id",
   "social.message": "message_id",
-  "health.vital": "vital_id",
-  "finance.recurring_series": "series_id",
   "media.asset": "asset_id",
   // Locker is byte-bearing (#872): one allow-list entry, not a second attach
   // command. HONEST BOUNDARY — the bytes ride the content spine and are NOT
@@ -231,7 +230,10 @@ const DETACH: CommandDefinition = {
   outputSchema: {
     type: "object",
     required: ["attachment_id"],
-    properties: { attachment_id: { type: "string" } },
+    properties: {
+      attachment_id: { type: "string" },
+      content_released: { type: "integer" },
+    },
   },
   preconditions: [
     {
@@ -244,7 +246,6 @@ const DETACH: CommandDefinition = {
   ],
   postconditions: [
     {
-      // The content item is canonical and deduped; detach never touches it.
       name: "attachment_removed",
       sql: "SELECT count(*) AS n FROM core_attachment WHERE attachment_id = :attachment_id",
       column: "n",
@@ -257,13 +258,38 @@ const DETACH: CommandDefinition = {
   handler: detach,
 };
 
+/**
+ * THE LAST REFERENCE RELEASES THE BYTES (#916, adversarial BUG-6).
+ *
+ * "The content item is canonical and deduped; detach never touches it" was
+ * true of the DEDUPE and wrong about the LIFECYCLE: an attachment that minted
+ * its own content item — a receipt photographed into Tally, a file dropped on
+ * a note — was the only thing referencing it, so detaching left a content row
+ * with no referrer, no trash pair, and bytes no sweep would ever reclaim. The
+ * count is the same one `media.delete_asset` already takes.
+ */
 function detach(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { attachment_id: string };
+  const attachment = ctx.db
+    .prepare("SELECT content_id FROM core_attachment WHERE attachment_id = ?")
+    .get(input.attachment_id) as { content_id: string } | undefined;
   ctx.db
     .prepare("DELETE FROM core_attachment WHERE attachment_id = ?")
     .run(input.attachment_id);
   ctx.wrote("core.attachment", input.attachment_id);
-  return { attachment_id: input.attachment_id };
+  const released = attachment
+    ? releaseContentIfUnreferenced(ctx, attachment.content_id)
+    : false;
+  if (released)
+    ctx.cite({
+      claim: `nothing else references content ${attachment?.content_id ?? ""}: its bytes go to the storage sweep`,
+      entityType: "core.content_item",
+      entityId: attachment?.content_id ?? "",
+    });
+  return {
+    attachment_id: input.attachment_id,
+    content_released: released ? 1 : 0,
+  };
 }
 
 export function registerAttachmentCommands(gateway: Gateway): void {

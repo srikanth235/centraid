@@ -188,22 +188,17 @@ function projectLedger(
       to_party: mappedParty(partyIds, settlement.to_party),
       txn_id: null,
     });
-  for (const recurring of closure.recurring) {
-    const splits = JSON.parse(String(recurring.splits_json)) as Array<
-      Record<string, unknown>
-    >;
+  for (const recurring of closure.recurring)
     insert(audience, "tally_recurring_expense", {
       ...recurring,
       group_id: groupId,
       paid_by: mappedParty(partyIds, recurring.paid_by),
-      splits_json: JSON.stringify(
-        splits.map((split) => ({
-          ...split,
-          party_id: mappedParty(partyIds, split.party_id),
-        }))
-      ),
     });
-  }
+  for (const split of closure.recurringSplits)
+    insert(audience, "tally_recurring_expense_split", {
+      ...split,
+      party_id: mappedParty(partyIds, split.party_id),
+    });
   for (const exception of closure.exceptions)
     insert(audience, "schedule_recurrence_exception", exception);
 }
@@ -251,7 +246,7 @@ function mappedParty(ids: Map<string, string>, value: unknown): string {
 /** Every re-owned row points here. */
 export function ownerPartyId(db: DatabaseSync): string {
   const owner = db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string };
-  return owner.owner_party_id;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string };
+  return owner.self_party_id;
 }

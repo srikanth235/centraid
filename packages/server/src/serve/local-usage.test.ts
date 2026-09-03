@@ -32,8 +32,7 @@ describe("local-usage", () => {
     await fs.mkdir(path.join(vaultDir, "apps", "tasks"), { recursive: true });
     await fs.mkdir(path.join(vaultDir, "code"), { recursive: true });
     await fs.writeFile(path.join(vaultDir, "vault.db"), "v".repeat(300));
-    await fs.writeFile(path.join(vaultDir, "journal.db"), "j".repeat(1000));
-    await fs.writeFile(path.join(vaultDir, "journal.db-wal"), "w".repeat(200));
+    await fs.writeFile(path.join(vaultDir, "vault.db-wal"), "w".repeat(1200));
     await fs.writeFile(
       path.join(vaultDir, "blobs", "ab", "cd.bin"),
       "b".repeat(5000)
@@ -98,9 +97,8 @@ describe("local-usage", () => {
       const byComponent = new Map(
         vault.components.map((c) => [c.component, c.bytes])
       );
-      // The ledger is journal.db + its WAL; vault.db is its own component.
-      expect(byComponent.get("ledger")).toBe(1200);
-      expect(byComponent.get("vault-db")).toBe(300);
+      // ONE file (#916): `vault-db` is vault.db + its WAL, ledger band and all.
+      expect(byComponent.get("vault-db")).toBe(1500);
       expect(byComponent.get("attachments")).toBe(5000);
       expect(byComponent.get("apps")).toBe(400);
       expect(byComponent.get("code")).toBe(50);

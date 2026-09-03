@@ -437,6 +437,45 @@ describe("push-wake-routes", () => {
     expect(send).toHaveBeenCalledOnce();
   });
 
+  test("PushWakeRelay costs one idle tick three receipts, not five", async () => {
+    // #916 routed the reminder scan through the gateway, so this timer is a
+    // WRITER: every read appends an access.receipt. It used to ask twice for
+    // the same two entities — `computeDueReminders` then `nextReminderFireAt`,
+    // same instant, same rows — and commit all five receipts separately, which
+    // is what pushed idle disk writes past their budget. One scan, one commit.
+    const clock = useFakeClock();
+    const { plane, enrollments, database, vaults } = await wakeFixture();
+    enrollments.enroll({
+      endpointId: "receipt-phone",
+      label: "Receipt phone",
+      ownerLabel: "Priya",
+      vaultIds: [plane.boot.vaultId],
+    });
+    const send = vi.fn<typeof fetch>(
+      async () => new Response("{}", { status: 200 })
+    );
+    const relay = new PushWakeRelay(vaults, enrollments, database, send);
+    relays.push(relay);
+    const receipts = (): number =>
+      (
+        plane.db.vault
+          .prepare(
+            "SELECT COUNT(*) AS n FROM access_receipt WHERE action = 'read'"
+          )
+          .get() as { n: number }
+      ).n;
+
+    relay.start(); // attach() arms the first scan synchronously
+    const afterFirstScan = receipts();
+    notifyReplicaCommit(plane.db.vault);
+    await clock.advance(10_000);
+    await flushMicrotasks();
+
+    // schedule.task, schedule.event_ext, tally.recurring_expense — once each.
+    expect(receipts() - afterFirstScan).toBe(3);
+    expect(plane.db.vault.isTransaction).toBe(false);
+  });
+
   test("PushWakeRelay stop clears due-arm debounce so closed vaults do not throw", async () => {
     const clock = useFakeClock();
     const { plane, enrollments, database, vaults } = await wakeFixture();

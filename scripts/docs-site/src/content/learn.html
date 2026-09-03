@@ -206,9 +206,10 @@
             That inversion is the sovereignty story. A <b>vault</b> is a directory of SQLite files
             on a machine you control: <code>vault.db</code> holds every schema of the ontology —
             the whole model, in one ACID boundary, so a single transaction can commit provenance,
-            core rows and domain rows together with foreign keys engine-enforced. Alongside it,
-            <code>journal.db</code> is the append-only audit stream — receipts, provenance, command
-            invocations — kept separate so it can grow fast without ever touching the model.
+            core rows and domain rows together with foreign keys engine-enforced. The append-only
+            audit stream — receipts, provenance, command invocations — is a band inside that same
+            file, so a receipt can never survive without the change it describes; it is held small
+            by a declared retention window rather than by living somewhere else.
           </p>
           <p>
             Three SQLite features do real work here. <b>WAL</b> mode

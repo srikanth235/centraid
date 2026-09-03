@@ -52,8 +52,8 @@ describe("VaultPlane ordinary Commons commands", () => {
       .prepare(
         `INSERT INTO core_party
          (party_id, kind, display_name, sort_name, birth_date,
-          avatar_content_id, created_at, updated_at, ontology_version)
-         VALUES (?, 'person', 'Asha', 'Asha', NULL, NULL, ?, ?, '1.4')`
+          avatar_content_id, created_at, updated_at)
+         VALUES (?, 'person', 'Asha', 'Asha', NULL, NULL, ?, ?)`
       )
       .run(member.boot.ownerPartyId, now, now);
     const created = await steward.invoke(steward.ownerCredential, {
@@ -178,6 +178,7 @@ describe("VaultPlane ordinary Commons commands", () => {
       db: gatewayDb,
       links,
       vaultFor,
+      partyIdFor: () => "edge-party",
       commonsVaults: () =>
         [steward, member].map((plane) => ({
           vaultId: plane.boot.vaultId,
@@ -197,8 +198,8 @@ describe("VaultPlane ordinary Commons commands", () => {
       .prepare(
         `INSERT INTO core_party
          (party_id, kind, display_name, sort_name, birth_date,
-          avatar_content_id, created_at, updated_at, ontology_version)
-         VALUES (?, 'person', 'Asha', 'Asha', NULL, NULL, ?, ?, '1.4')`
+          avatar_content_id, created_at, updated_at)
+         VALUES (?, 'person', 'Asha', 'Asha', NULL, NULL, ?, ?)`
       )
       .run(member.boot.ownerPartyId, now, now);
     const created = await steward.invoke(steward.ownerCredential, {

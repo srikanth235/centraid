@@ -76,7 +76,7 @@ describe("manifest vault block", () => {
         ...base,
         vault: {
           purpose: "dpv:Billing",
-          scopes: [{ schema: "finance", verbs: "write" }],
+          scopes: [{ schema: "tally", verbs: "write" }],
         },
       })
     ).toThrow(/verbs/u);

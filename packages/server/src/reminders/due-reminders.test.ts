@@ -51,9 +51,9 @@ describe("due-reminders", () => {
       due_at: "2026-07-10T09:00:00.000Z",
       remind_before_min: 15,
     });
-    const tooEarly = computeDueReminders(db, "2026-07-10T08:44:00.000Z");
+    const tooEarly = computeDueReminders(gw, owner, "2026-07-10T08:44:00.000Z");
     expect(tooEarly).toStrictEqual([]);
-    const dueNow = computeDueReminders(db, "2026-07-10T08:45:00.000Z");
+    const dueNow = computeDueReminders(gw, owner, "2026-07-10T08:45:00.000Z");
     expect(dueNow).toHaveLength(1);
     expect(dueNow[0]).toMatchObject({
       kind: "task",
@@ -73,7 +73,7 @@ describe("due-reminders", () => {
       due_at: "2026-07-10T09:00:00.000Z",
       remind_before_min: 10,
     });
-    expect(nextReminderFireAt(db, "2026-07-10T08:00:00.000Z")).toBe(
+    expect(nextReminderFireAt(gw, owner, "2026-07-10T08:00:00.000Z")).toBe(
       "2026-07-10T08:50:00.000Z"
     );
   });
@@ -89,9 +89,29 @@ describe("due-reminders", () => {
       task_id: taskId,
       status: "completed",
     });
-    expect(computeDueReminders(db, "2026-07-10T09:00:00.000Z")).toStrictEqual(
-      []
-    );
+    expect(
+      computeDueReminders(gw, owner, "2026-07-10T09:00:00.000Z")
+    ).toStrictEqual([]);
+  });
+
+  // #916 review-A 8.2: trash is invisible, not merely un-listed.
+  test("a trashed task fires no reminder", () => {
+    const outcome = invoke("schedule.add_task", {
+      title: "Call the dentist",
+      due_at: "2026-07-10T09:00:00.000Z",
+      remind_before_min: 15,
+    });
+    const taskId = (outcome as { output: { task_id: string } }).output.task_id;
+    expect(
+      computeDueReminders(gw, owner, "2026-07-10T08:45:00.000Z")
+    ).toHaveLength(1);
+    invoke("schedule.delete_task", { task_id: taskId });
+    expect(
+      computeDueReminders(gw, owner, "2026-07-10T08:45:00.000Z")
+    ).toStrictEqual([]);
+    expect(
+      nextReminderFireAt(gw, owner, "2026-07-10T08:00:00.000Z")
+    ).toBeUndefined();
   });
 
   test("a reminder goes stale well after its due time and stops firing", () => {
@@ -100,9 +120,9 @@ describe("due-reminders", () => {
       due_at: "2026-01-01T09:00:00.000Z",
       remind_before_min: 10,
     });
-    expect(computeDueReminders(db, "2026-07-10T09:00:00.000Z")).toStrictEqual(
-      []
-    );
+    expect(
+      computeDueReminders(gw, owner, "2026-07-10T09:00:00.000Z")
+    ).toStrictEqual([]);
   });
 
   test("an event reminder fires from reminders_json, keyed per lead time", () => {
@@ -117,7 +137,11 @@ describe("due-reminders", () => {
     const eventId = (outcome as { output: { event_id: string } }).output
       .event_id;
 
-    const tenMinBefore = computeDueReminders(db, "2026-07-06T08:50:00.000Z");
+    const tenMinBefore = computeDueReminders(
+      gw,
+      owner,
+      "2026-07-06T08:50:00.000Z"
+    );
     expect(tenMinBefore).toHaveLength(1);
     expect(tenMinBefore[0]).toMatchObject({
       kind: "event",
@@ -125,7 +149,7 @@ describe("due-reminders", () => {
       minutesBefore: 10,
     });
 
-    const atStart = computeDueReminders(db, "2026-07-06T09:00:00.000Z");
+    const atStart = computeDueReminders(gw, owner, "2026-07-06T09:00:00.000Z");
     expect(atStart).toHaveLength(2);
     expect(atStart.map((r) => r.key).sort()).toStrictEqual(
       [`event:${eventId}:0`, `event:${eventId}:10`].sort()
@@ -133,10 +157,13 @@ describe("due-reminders", () => {
   });
 
   test("a recurring event's reminder fires on each occurrence", () => {
+    // `start_tz` is what makes this ZONED (#916, ONT-recur): a zoneless event
+    // is a floating wall clock, and the reminder below asserts an instant.
     const outcome = invoke("schedule.propose_event", {
       summary: "Weekly standup",
       dtstart: "2026-07-06T09:00:00.000Z",
       dtend: "2026-07-06T09:15:00.000Z",
+      start_tz: "Etc/UTC",
       calendar_id: calendarId,
       rrule: "FREQ=WEEKLY",
       reminders: [{ minutes_before: 10 }],
@@ -145,7 +172,7 @@ describe("due-reminders", () => {
     const eventId = (outcome as { output: { event_id: string } }).output
       .event_id;
 
-    const nextWeek = computeDueReminders(db, "2026-07-13T08:50:00.000Z");
+    const nextWeek = computeDueReminders(gw, owner, "2026-07-13T08:50:00.000Z");
     expect(nextWeek).toHaveLength(1);
     expect(nextWeek[0]).toMatchObject({
       kind: "event",
@@ -155,7 +182,7 @@ describe("due-reminders", () => {
     });
     expect(nextWeek[0]?.key).toContain("2026-07-13T09:00:00.000Z");
 
-    expect(nextReminderFireAt(db, "2026-07-07T12:00:00.000Z")).toBe(
+    expect(nextReminderFireAt(gw, owner, "2026-07-07T12:00:00.000Z")).toBe(
       "2026-07-13T08:50:00.000Z"
     );
   });
@@ -171,8 +198,8 @@ describe("due-reminders", () => {
     const eventId = (outcome as { output: { event_id: string } }).output
       .event_id;
     invoke("schedule.cancel_event", { event_id: eventId });
-    expect(computeDueReminders(db, "2026-07-06T09:00:00.000Z")).toStrictEqual(
-      []
-    );
+    expect(
+      computeDueReminders(gw, owner, "2026-07-06T09:00:00.000Z")
+    ).toStrictEqual([]);
   });
 });

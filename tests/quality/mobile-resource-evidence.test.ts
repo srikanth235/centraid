@@ -26,8 +26,6 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import { ensureConversationLedger } from "@centraid/server/engine";
-
 import { AnomalyLedger } from "../../packages/server/src/serve/anomaly-ledger.js";
 import { GatewayLogStore } from "../../packages/server/src/serve/gateway-log-store.js";
 import { HealthRegistry } from "../../packages/server/src/serve/health-registry.js";
@@ -79,11 +77,9 @@ async function measure(): Promise<Record<ResourceMetric, number>> {
   });
   try {
     const db = plane.db;
-    ensureConversationLedger(db.journal);
     seedYear3Vault(
       {
         vault: db.vault,
-        journal: db.journal,
         sealCell: (_entity, _column, _rowId, plaintext) => plaintext,
       },
       SEED

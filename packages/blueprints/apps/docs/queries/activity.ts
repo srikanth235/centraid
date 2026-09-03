@@ -15,7 +15,7 @@ export default async function activityHandler({ input, ctx }: HandlerArgs) {
   if (!documentId) return { events: [] };
   try {
     const result = await ctx.vault.read({
-      entity: "consent.provenance",
+      entity: "access.provenance",
       where: [
         { column: "entity_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
         { column: "entity_id", op: "eq", value: documentId },

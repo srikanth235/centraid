@@ -118,7 +118,7 @@ describe("backup-sources", () => {
     return createHash("sha256").update(bytes).digest("hex");
   }
 
-  test("a fresh vault (no blobs, no code store, nothing sealed) yields only the two staged DB entries", async () => {
+  test("a fresh vault (no blobs, no code store, nothing sealed) yields only the staged DB entry", async () => {
     const plane = await openPlane();
     const bundleDir = await tempDir("backup-sources-bundle");
     const captured = capturingLogger();
@@ -130,11 +130,8 @@ describe("backup-sources", () => {
       log: captured.log,
     });
 
-    expect(entries.map((e) => e.kind)).toStrictEqual(["db", "db"]);
-    expect(entries.map((e) => e.path)).toStrictEqual([
-      "vault.db",
-      "journal.db",
-    ]);
+    expect(entries.map((e) => e.kind)).toStrictEqual(["db"]);
+    expect(entries.map((e) => e.path)).toStrictEqual(["vault.db"]);
     // Key FILE is minted on first open; the fingerprint stamp is the real "ever sealed" signal — no stamp, no seal-key entry.
     expect(entries.some((e) => e.kind === "seal-key")).toBe(false);
     expect(
@@ -167,7 +164,7 @@ describe("backup-sources", () => {
 
   test(
     "a vault with real blobs, a real published app, and a real sealed value " +
-      "yields entries in FORMAT.md order: db, db, blobs…, git-bundle",
+      "yields entries in FORMAT.md order: db, blobs…, git-bundle",
     async () => {
       const plane = await openPlane();
       const bundleDir = await tempDir("backup-sources-bundle");
@@ -220,7 +217,6 @@ describe("backup-sources", () => {
 
       expect(entries.map((e) => e.kind)).toStrictEqual([
         "db",
-        "db",
         "blob",
         "blob",
         "git-bundle",
@@ -233,7 +229,6 @@ describe("backup-sources", () => {
       );
       expect(entries.map((e) => e.path)).toStrictEqual([
         "vault.db",
-        "journal.db",
         ...expectedBlobPaths,
         "apps.bundle",
       ]);
@@ -266,7 +261,7 @@ describe("backup-sources", () => {
       expect(smallBlobEntry.absolutePath.startsWith(bundleDir)).toBe(false);
 
       // `git bundle verify` needs a repo context — run against the bare repo (full `--all` bundle has no prerequisites).
-      const bundleEntry = entries[4]!;
+      const bundleEntry = entries.find((e) => e.kind === "git-bundle")!;
       const bareRepoDir = path.join(plane.codeStoreRoot, "apps.git");
       await expect(
         run(["bundle", "verify", bundleEntry.absolutePath], {
@@ -348,14 +343,14 @@ describe("backup-sources", () => {
       bundleDir,
       log: silentLogger,
     });
-    expect(first.map((e) => e.path)).toStrictEqual(["vault.db", "journal.db"]);
+    expect(first.map((e) => e.path)).toStrictEqual(["vault.db"]);
 
     const second = await assembleSourceEntries({
       plane,
       bundleDir,
       log: silentLogger,
     });
-    expect(second.map((e) => e.path)).toStrictEqual(["vault.db", "journal.db"]);
+    expect(second.map((e) => e.path)).toStrictEqual(["vault.db"]);
     await expect(fs.readdir(bundleDir)).resolves.toStrictEqual([]);
     for (const entry of second) {
       expect(entry.absolutePath).toContain(path.join("wal-ship", "bases"));
@@ -363,27 +358,23 @@ describe("backup-sources", () => {
       expect(entry.walGeneration).toMatch(/^[0-9a-f]{32}$/u);
       expect(entry.baseTickMs).toBeGreaterThan(0);
     }
-    expect(second[0]!.baseTickMs).toBe(second[1]!.baseTickMs);
   });
 
-  test("assembly REFUSES an uncoordinated base pair rather than registering it", async () => {
+  test("assembly REFUSES to register a snapshot with no pinned base", async () => {
     const plane = await openPlane();
     const bundleDir = await tempDir("backup-sources-bundle");
     plane.walTick();
 
-    // Two bases from two ticks — no coordinated restore point (newer base holds receipts for rows that live only in the older one's SEGMENTS). Assert here regardless of the shipper's own generation pairing.
+    // A busy checkpoint can leave the base unpinned. Registering anyway would
+    // anchor a manifest to a base that does not exist — every restore point
+    // since the last one, lost.
     const shipper = plane.walShipper!;
-    const real = shipper.currentBases.bind(shipper);
-    shipper.currentBases = () => {
-      const bases = real();
-      return bases.map((b, i) =>
-        i === 0 ? { ...b, createdAtMs: b.createdAtMs + 60_000 } : b
-      );
-    };
+    const real = shipper.currentBase.bind(shipper);
+    shipper.currentBase = () => null;
     await expect(
       assembleSourceEntries({ plane, bundleDir, log: silentLogger })
-    ).rejects.toThrow(/bases are from different ticks/u);
-    shipper.currentBases = real;
+    ).rejects.toThrow(/vault base is not pinned/u);
+    shipper.currentBase = real;
   });
 
   test("the code-store bundle is REUSED untouched while refs are unchanged, and REGENERATED when they move", async () => {

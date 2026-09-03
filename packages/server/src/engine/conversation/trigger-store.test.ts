@@ -1,17 +1,14 @@
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { makeJournalDbProvider } from "../stores/gateway-db.js";
+import { makeLedgerDbProvider } from "../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import { AutomationTriggerStore } from "./trigger-store.js";
 
 function store(): AutomationTriggerStore {
   return new AutomationTriggerStore(
-    makeJournalDbProvider(
-      path.join(tempDirSync("centraid-trigger-store-"), "journal.db")
-    )
+    makeLedgerDbProvider(ledgerDbFileIn(tempDirSync("centraid-trigger-store-")))
   );
 }
 

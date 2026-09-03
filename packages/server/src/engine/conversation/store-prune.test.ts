@@ -1,17 +1,14 @@
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { makeJournalDbProvider } from "../stores/gateway-db.js";
+import { makeLedgerDbProvider } from "../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import { ConversationStore } from "./store.js";
 
 function newStore(): ConversationStore {
   const dir = tempDirSync("centraid-conv-store-prune-");
-  return new ConversationStore(
-    makeJournalDbProvider(path.join(dir, "journal.db"))
-  );
+  return new ConversationStore(makeLedgerDbProvider(ledgerDbFileIn(dir)));
 }
 
 function seedAutomationTurn(

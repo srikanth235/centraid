@@ -1,7 +1,7 @@
 // Consent memory for the install-grant top-up (#308 A3/A4): tombstone rows
 // survive revocation (only an explicit owner approval clears one), and a
 // manifest widened beyond what was ever consented gets a blocking
-// `consent_scope_request`, not an auto-grant — the top-up cannot be steered
+// `access_scope_request`, not an auto-grant — the top-up cannot be steered
 // by the actor it contains.
 
 import type { VaultDb } from "./db.js";
@@ -19,7 +19,7 @@ export interface ScopeTriple {
 }
 
 export interface GranteeKey {
-  /** consent_app.app_id (row uuid). */
+  /** access_app.app_id (row uuid). */
   appId?: string;
   /** core_party.party_id. */
   granteePartyId?: string;
@@ -62,10 +62,10 @@ export function writeScopeTombstones(
 ): number {
   const existing = new Set(listScopeTombstones(db, grantee).map(tripleKey));
   const insert = db.vault.prepare(
-    `INSERT INTO consent_scope_tombstone
-       (tombstone_id, app_id, grantee_party_id, schema_name, table_name, verbs,
+    `INSERT INTO access_scope_tombstone
+       (tombstone_id, app_id, grantee_party_id, entity, verbs,
         row_filter_json, field_mask_json, revoked_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const now = nowIso();
   let written = 0;
@@ -76,8 +76,7 @@ export function writeScopeTombstones(
       uuidv7(),
       grantee.appId ?? null,
       grantee.granteePartyId ?? null,
-      scope.schema,
-      scope.table ?? null,
+      dottedEntity(scope),
       scope.verbs,
       scope.rowFilter ? JSON.stringify(scope.rowFilter) : null,
       scope.fieldMask ? JSON.stringify(scope.fieldMask) : null,
@@ -90,16 +89,28 @@ export function writeScopeTombstones(
 
 interface TombstoneRow {
   tombstone_id: string;
-  schema_name: string;
-  table_name: string | null;
+  /** The dotted encoding `access_grant_scope.entity` carries (#916, R10). */
+  entity: string;
   verbs: string;
   row_filter_json: string | null;
   field_mask_json: string | null;
 }
 
+/** `{schema, table}` → the one dotted name the access plane stores. */
+function dottedEntity(scope: Pick<ScopeTriple, "schema" | "table">): string {
+  // `== null` on purpose: the type says `string | undefined`, but a scope
+  // triple can arrive from app-manifest JSON where `table: null` is
+  // expressible, so the null arm is a runtime case the type does not see.
+  return scope.table == null ? scope.schema : `${scope.schema}.${scope.table}`;
+}
+
 const tombstoneExtent = (row: TombstoneRow): ScopeTriple => ({
-  schema: row.schema_name,
-  ...(row.table_name === null ? {} : { table: row.table_name }),
+  schema: row.entity.includes(".")
+    ? row.entity.slice(0, row.entity.indexOf("."))
+    : row.entity,
+  ...(row.entity.includes(".")
+    ? { table: row.entity.slice(row.entity.indexOf(".") + 1) }
+    : {}),
   verbs: row.verbs as ScopeTriple["verbs"],
   ...(row.row_filter_json
     ? { rowFilter: JSON.parse(row.row_filter_json) as FilterClause[] }
@@ -113,8 +124,8 @@ function tombstoneRows(db: VaultDb, grantee: GranteeKey): TombstoneRow[] {
   const { where, param } = granteeClause(grantee);
   return db.vault
     .prepare(
-      `SELECT tombstone_id, schema_name, table_name, verbs, row_filter_json, field_mask_json
-         FROM consent_scope_tombstone WHERE ${where}`
+      `SELECT tombstone_id, entity, verbs, row_filter_json, field_mask_json
+         FROM access_scope_tombstone WHERE ${where}`
     )
     .all(param) as unknown as TombstoneRow[];
 }
@@ -138,7 +149,7 @@ export function clearScopeTombstones(
   scopes: readonly ScopeTriple[]
 ): void {
   const del = db.vault.prepare(
-    "DELETE FROM consent_scope_tombstone WHERE tombstone_id = ?"
+    "DELETE FROM access_scope_tombstone WHERE tombstone_id = ?"
   );
   for (const row of tombstoneRows(db, grantee)) {
     const tombstone = tombstoneExtent(row);
@@ -154,7 +165,7 @@ export function clearAllScopeTombstones(
 ): void {
   const { where, param } = granteeClause(grantee);
   db.vault
-    .prepare(`DELETE FROM consent_scope_tombstone WHERE ${where}`)
+    .prepare(`DELETE FROM access_scope_tombstone WHERE ${where}`)
     .run(param);
 }
 
@@ -164,9 +175,7 @@ export function hasGrantHistory(db: VaultDb, grantee: GranteeKey): boolean {
   const param = grantee.appId ?? grantee.granteePartyId;
   if (!param) throw new Error("grant history needs an app or a grantee party");
   const row = db.vault
-    .prepare(
-      `SELECT 1 AS x FROM consent_access_grant WHERE ${column} = ? LIMIT 1`
-    )
+    .prepare(`SELECT 1 AS x FROM access_grant WHERE ${column} = ? LIMIT 1`)
     .get(param);
   return row !== undefined;
 }
@@ -184,7 +193,7 @@ export function openScopeRequest(
 ): string {
   const open = db.vault
     .prepare(
-      `SELECT request_id, scopes_json FROM consent_scope_request
+      `SELECT request_id, scopes_json FROM access_scope_request
         WHERE plane = ? AND app_id = ? AND decided_at IS NULL`
     )
     .get(input.plane, input.appId) as
@@ -195,7 +204,7 @@ export function openScopeRequest(
     if (open.scopes_json !== scopesJson) {
       db.vault
         .prepare(
-          `UPDATE consent_scope_request SET scopes_json = ?, purpose = ?, requested_at = ?
+          `UPDATE access_scope_request SET scopes_json = ?, purpose = ?, requested_at = ?
             WHERE request_id = ?`
         )
         .run(scopesJson, input.purpose, nowIso(), open.request_id);
@@ -205,7 +214,7 @@ export function openScopeRequest(
   const requestId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO consent_scope_request
+      `INSERT INTO access_scope_request
          (request_id, plane, app_id, purpose, scopes_json, requested_at, decided_at, decision)
        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)`
     )
@@ -228,7 +237,7 @@ export function closeObsoleteScopeRequest(
 ): void {
   db.vault
     .prepare(
-      `DELETE FROM consent_scope_request WHERE plane = ? AND app_id = ? AND decided_at IS NULL`
+      `DELETE FROM access_scope_request WHERE plane = ? AND app_id = ? AND decided_at IS NULL`
     )
     .run(plane, appId);
 }
@@ -237,7 +246,7 @@ export function listOpenScopeRequests(db: VaultDb): ScopeRequestSummary[] {
   const rows = db.vault
     .prepare(
       `SELECT request_id, plane, app_id, purpose, scopes_json, requested_at
-         FROM consent_scope_request WHERE decided_at IS NULL ORDER BY requested_at`
+         FROM access_scope_request WHERE decided_at IS NULL ORDER BY requested_at`
     )
     .all() as {
     request_id: string;
@@ -271,7 +280,7 @@ export function markScopeRequestDecided(
 ): void {
   db.vault
     .prepare(
-      `UPDATE consent_scope_request SET decided_at = ?, decision = ? WHERE request_id = ? AND decided_at IS NULL`
+      `UPDATE access_scope_request SET decided_at = ?, decision = ? WHERE request_id = ? AND decided_at IS NULL`
     )
     .run(nowIso(), decision, requestId);
 }

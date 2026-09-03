@@ -435,7 +435,6 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       sourceDir = await tempDir("interop-source-");
       await fs.mkdir(path.join(sourceDir, "blobs"), { recursive: true });
       makeSqliteDbFile(path.join(sourceDir, "vault.db"), ["v1", "v2", "v3"]);
-      makeSqliteDbFile(path.join(sourceDir, "journal.db"), ["j1"]);
       await fs.writeFile(
         path.join(sourceDir, "blobs", "photo.bin"),
         pseudoRandomBuffer(40_000, 3)
@@ -454,15 +453,6 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
           absolutePath: path.join(sourceDir, "vault.db"),
           sha256: await fileSha256(path.join(sourceDir, "vault.db")),
           walGeneration: "11".repeat(16),
-          baseTickMs: BASE_TICK,
-        },
-        {
-          path: "journal.db",
-          kind: "db",
-          absolutePath: path.join(sourceDir, "journal.db"),
-          sha256: await fileSha256(path.join(sourceDir, "journal.db")),
-          // Same tick as the vault base: restore refuses a pair without it.
-          walGeneration: "22".repeat(16),
           baseTickMs: BASE_TICK,
         },
         {
@@ -519,9 +509,6 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
         "v1",
         "v2",
         "v3",
-      ]);
-      expect(readSqliteRows(path.join(destDir, "journal.db"))).toStrictEqual([
-        "j1",
       ]);
       await Promise.all(
         entries

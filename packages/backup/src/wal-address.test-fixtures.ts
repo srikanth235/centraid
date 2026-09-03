@@ -12,10 +12,8 @@ export const hex32: fc.Arbitrary<string> = fc
   .uint8Array({ minLength: 16, maxLength: 16 })
   .map((b) => Buffer.from(b).toString("hex"));
 
-export const dbName: fc.Arbitrary<WalDbName> = fc.constantFrom(
-  "vault",
-  "journal"
-);
+/** One database, so this is a constant — the key still names it. */
+export const dbName: fc.Arbitrary<WalDbName> = fc.constant("vault");
 
 export const segmentAddr: fc.Arbitrary<WalSegmentAddress> = fc
   .record({

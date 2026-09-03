@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../../engine/stores/ledger-db.test-fixtures.js";
 import { readEngineProfile } from "../../enrich/engine-profiles.js";
 import type { Manifest } from "../manifest/manifest.js";
 import {
@@ -58,11 +59,11 @@ async function writeAutomation(
 
 describe("enrichment tier gate", () => {
   let appsDir: string;
-  let journalDbFile: string;
+  let ledgerDbFile: string;
 
   beforeEach(async () => {
     appsDir = await tempDir("centraid-enrich-gate-");
-    journalDbFile = path.join(appsDir, "journal.db");
+    ledgerDbFile = ledgerDbFileIn(appsDir);
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -94,7 +95,7 @@ describe("enrichment tier gate", () => {
       {
         automationRef: "photos/face-finder",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         ...(options.resolveEnrichPolicy
           ? { resolveEnrichPolicy: options.resolveEnrichPolicy }
           : {}),
@@ -195,7 +196,7 @@ describe("enrichment tier gate", () => {
       {
         automationRef: "photos/face-finder",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         resolveEnrichPolicy: () => "gateway",
       },
       { openDispatch: countingDispatch(opened) }
@@ -221,7 +222,7 @@ describe("enrichment tier gate", () => {
     const opened: OpenDispatchArgs[] = [];
 
     const { outcome } = await runFire(
-      { automationRef: "photos/face-finder", appsDir, journalDbFile },
+      { automationRef: "photos/face-finder", appsDir, ledgerDbFile },
       { openDispatch: countingDispatch(opened) }
     );
 
@@ -480,7 +481,7 @@ describe("enrichment tier gate", () => {
       {
         automationRef: "photos/face-finder",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
       },
       { openDispatch: countingDispatch([]) }
     );

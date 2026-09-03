@@ -164,7 +164,7 @@ vi.mock(
           request.entity === "core.party"
             ? mocks.parties
             : request.entity === "core.vault"
-              ? [{ owner_party_id: "owner" }]
+              ? [{ self_party_id: "owner" }]
               : request.entity === "social.circle"
                 ? mocks.circles
                 : request.entity === "social.circle_member"

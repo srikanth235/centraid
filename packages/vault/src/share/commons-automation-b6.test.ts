@@ -74,8 +74,8 @@ describe("B6 Commons-writing automation ownership", () => {
         .prepare(
           `INSERT INTO core_party
              (party_id, kind, display_name, sort_name, birth_date,
-              avatar_content_id, created_at, updated_at, ontology_version)
-           VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?, '1.4')`
+              avatar_content_id, created_at, updated_at)
+           VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?)`
         )
         .run(
           member.ownerPartyId,
@@ -195,8 +195,8 @@ function bootstrapCredential(db: VaultDb): Credential {
   const row = db.vault
     .prepare(
       `SELECT d.device_id, d.public_key
-         FROM consent_device d
-         JOIN core_vault v ON v.owner_party_id = d.owner_party_id
+         FROM access_device d
+         JOIN core_vault v ON v.self_party_id = d.owner_party_id
         LIMIT 1`
     )
     .get() as { device_id: string; public_key: string };

@@ -17,7 +17,7 @@ const OWNER = "tests/perf/vault-write.perf.test.ts";
 // 250 core_party commits): p50 0.26 ms, p95 0.70 ms, max 3.0 ms. This write is
 // fsync-bound, so a Pi-class / CI disk runs it 2–3× slower (baseline ~2 ms).
 // Budget = ~3× that CI-representative baseline = 6 ms. Falsifiable: a real
-// regression (double-syncing, journal.db receipt per write, synchronous flip)
+// regression (double-syncing, a second-file receipt per write, synchronous flip)
 // pushes p95 well past 6 ms while staying clear of disk jitter.
 const LATENCY_BUDGET_MS = 6;
 // Fsync baseline: WAL + synchronous=FULL fsyncs the -wal on each COMMIT, so the
@@ -38,8 +38,8 @@ describe("vault-write.perf", () => {
     const db = await createTestVault();
     const statement = db.vault.prepare(
       `INSERT INTO core_party
-       (party_id, kind, display_name, created_at, updated_at, ontology_version)
-     VALUES (?, 'person', ?, ?, ?, '1.2')`
+       (party_id, kind, display_name, created_at, updated_at)
+     VALUES (?, 'person', ?, ?, ?)`
     );
     const samples: number[] = [];
     for (let index = 0; index < 250; index += 1) {

@@ -62,7 +62,7 @@ function registryRows(
   return vault
     .prepare(
       `SELECT app_id, band, table_name, physical, spec_json, status
-         FROM consent_app_ext WHERE app_id = ? AND band = ? ORDER BY table_name`
+         FROM access_app_ext WHERE app_id = ? AND band = ? ORDER BY table_name`
     )
     .all(appId, band) as unknown as RegistryRow[];
 }
@@ -90,10 +90,7 @@ function pkColumn(vault: DatabaseSync, physical: string): string {
 function referencable(logical: string): boolean {
   const ref = resolveEntity(logical);
   return (
-    ref !== undefined &&
-    ref.file === "vault" &&
-    ref.schema !== "consent" &&
-    ref.schema !== "agent"
+    ref !== undefined && ref.schema !== "consent" && ref.schema !== "agent"
   );
 }
 
@@ -153,7 +150,7 @@ function dropExtTable(db: VaultDb, row: RegistryRow, now: string): void {
   db.vault.exec(`DROP TABLE IF EXISTS "${row.physical}"`);
   db.vault
     .prepare(
-      "DELETE FROM consent_app_ext WHERE app_id = ? AND band = ? AND table_name = ?"
+      "DELETE FROM access_app_ext WHERE app_id = ? AND band = ? AND table_name = ?"
     )
     .run(row.app_id, row.band, row.table_name);
   sweepDroppedType(db, extLogical(row.app_id, row.table_name, row.band), now);
@@ -211,7 +208,7 @@ export function applyExtBand(
         }
         db.vault
           .prepare(
-            `INSERT INTO consent_app_ext (app_id, band, table_name, physical, spec_json, status, created_at, updated_at)
+            `INSERT INTO access_app_ext (app_id, band, table_name, physical, spec_json, status, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`
           )
           .run(
@@ -235,7 +232,7 @@ export function applyExtBand(
       }
       db.vault
         .prepare(
-          `UPDATE consent_app_ext SET spec_json = ?, status = 'active', updated_at = ?
+          `UPDATE access_app_ext SET spec_json = ?, status = 'active', updated_at = ?
             WHERE app_id = ? AND band = ? AND table_name = ?`
         )
         .run(specJson, now, appId, band, spec.name);
@@ -456,7 +453,7 @@ export function retainExtBand(db: VaultDb, appId: string): string[] {
   if (rows.length > 0) {
     db.vault
       .prepare(
-        `UPDATE consent_app_ext SET status = 'retained', updated_at = ? WHERE app_id = ? AND band = 'live'`
+        `UPDATE access_app_ext SET status = 'retained', updated_at = ? WHERE app_id = ? AND band = 'live'`
       )
       .run(nowIso(), appId);
   }
@@ -480,7 +477,7 @@ export function extSearchable(
   try {
     const row = vault
       .prepare(
-        `SELECT physical, spec_json FROM consent_app_ext WHERE app_id = ? AND band = 'live' AND table_name = ?`
+        `SELECT physical, spec_json FROM access_app_ext WHERE app_id = ? AND band = 'live' AND table_name = ?`
       )
       .get(ext.appId, ext.table) as
       | { physical: string; spec_json: string }
@@ -525,7 +522,7 @@ function requireBandRow(
 ): { physical: string; spec: ExtTableSpec } {
   const row = ctx.db
     .prepare(
-      `SELECT physical, spec_json, status FROM consent_app_ext
+      `SELECT physical, spec_json, status FROM access_app_ext
         WHERE app_id = ? AND band = ? AND table_name = ?`
     )
     .get(appId, band, table) as
@@ -692,7 +689,7 @@ export function extAppIds(vault: DatabaseSync): string[] {
   try {
     const rows = vault
       .prepare(
-        `SELECT DISTINCT app_id FROM consent_app_ext WHERE band = 'live' AND status = 'active' ORDER BY app_id`
+        `SELECT DISTINCT app_id FROM access_app_ext WHERE band = 'live' AND status = 'active' ORDER BY app_id`
       )
       .all() as { app_id: string }[];
     return rows.map((r) => r.app_id);
@@ -711,11 +708,11 @@ export function assertExtSchemaOwnership(appId: string, schema: string): void {
   }
 }
 
-/** Recreate missing ext physicals from registry rows (import path): artifact supplies `consent_app_ext` first, then this plants tables (both bands; draft arrives empty), then rows load. FK resolves at DML time — order within a band is irrelevant. */
+/** Recreate missing ext physicals from registry rows (import path): artifact supplies `access_app_ext` first, then this plants tables (both bands; draft arrives empty), then rows load. FK resolves at DML time — order within a band is irrelevant. */
 export function recreateExtTables(db: VaultDb): string[] {
   const rows = db.vault
     .prepare(
-      `SELECT app_id, band, table_name, physical, spec_json, status FROM consent_app_ext
+      `SELECT app_id, band, table_name, physical, spec_json, status FROM access_app_ext
         ORDER BY app_id, band, table_name`
     )
     .all() as unknown as RegistryRow[];
@@ -759,7 +756,7 @@ export function extPhysicalNames(vault: DatabaseSync): string[] {
   try {
     const rows = vault
       .prepare(
-        `SELECT physical FROM consent_app_ext WHERE band = 'live' ORDER BY physical`
+        `SELECT physical FROM access_app_ext WHERE band = 'live' ORDER BY physical`
       )
       .all() as { physical: string }[];
     return rows.map((r) => r.physical);

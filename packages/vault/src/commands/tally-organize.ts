@@ -22,10 +22,9 @@ interface TemplateRow {
   settlement_currency: string;
   paid_by: string;
   category: string;
-  splits_json: string;
   rrule: string;
   anchor_start: string;
-  time_zone: string;
+  tz: string;
   rate_scaled: number | null;
   rate_scale: number | null;
   rate_source: string | null;
@@ -159,7 +158,7 @@ const SAVE_RECURRING: CommandDefinition = {
       "splits",
       "rrule",
       "anchor_start",
-      "time_zone",
+      "tz",
     ],
     additionalProperties: false,
     properties: {
@@ -174,7 +173,8 @@ const SAVE_RECURRING: CommandDefinition = {
       splits: SPLITS,
       rrule: STRING,
       anchor_start: STRING,
-      time_zone: STRING,
+      // ONE NAME FOR A ZONE (#916, R4): the column and the input agree.
+      tz: STRING,
       rate_scaled: { type: "integer", minimum: 1 },
       rate_scale: { type: "integer", minimum: 0, maximum: 12 },
       rate_source: STRING,
@@ -204,7 +204,7 @@ const SAVE_RECURRING: CommandDefinition = {
       splits: WeightedSplit[];
       rrule: string;
       anchor_start: string;
-      time_zone: string;
+      tz: string;
       rate_scaled?: number;
       rate_scale?: number;
       rate_source?: string;
@@ -220,10 +220,10 @@ const SAVE_RECURRING: CommandDefinition = {
         `INSERT INTO tally_recurring_expense
           (template_id, group_id, description, original_amount_minor,
            original_currency, settlement_currency, paid_by, category,
-           splits_json, rrule, anchor_start, time_zone, rate_scaled,
+           rrule, anchor_start, tz, rate_scaled,
            rate_scale, rate_source, rate_date, status,
            last_materialized_start, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                  NULL, ?, ?)
          ON CONFLICT(template_id) DO UPDATE SET
            group_id = excluded.group_id, description = excluded.description,
@@ -231,8 +231,8 @@ const SAVE_RECURRING: CommandDefinition = {
            original_currency = excluded.original_currency,
            settlement_currency = excluded.settlement_currency,
            paid_by = excluded.paid_by, category = excluded.category,
-           splits_json = excluded.splits_json, rrule = excluded.rrule,
-           anchor_start = excluded.anchor_start, time_zone = excluded.time_zone,
+           rrule = excluded.rrule,
+           anchor_start = excluded.anchor_start, tz = excluded.tz,
            rate_scaled = excluded.rate_scaled, rate_scale = excluded.rate_scale,
            rate_source = excluded.rate_source, rate_date = excluded.rate_date,
            status = excluded.status, updated_at = excluded.updated_at`
@@ -246,10 +246,9 @@ const SAVE_RECURRING: CommandDefinition = {
         input.settlement_currency.toUpperCase(),
         input.paid_by,
         input.category,
-        JSON.stringify(input.splits),
         input.rrule,
         input.anchor_start,
-        input.time_zone,
+        input.tz,
         input.rate_scaled ?? null,
         input.rate_scale ?? (input.rate_scaled ? RATE_SCALE : null),
         input.rate_source ?? null,
@@ -258,6 +257,29 @@ const SAVE_RECURRING: CommandDefinition = {
         ctx.now,
         ctx.now
       );
+    // THE SPLIT IS ROWS (#916, D3 / review 10.4). It was a JSON array of
+    // {party_id, weight}, which put party ids where identity merge could not
+    // see them, the purge cascade could not reach them, and no constraint
+    // could hold their shares to the amount. Weights are resolved to minor
+    // units against the template's own settlement amount, exactly as an
+    // expense's splits are — a materialized occurrence re-allocates them
+    // proportionally when its amount differs.
+    const templateAmount = convertCurrencyMinor(
+      input.original_amount_minor,
+      input.rate_scaled ?? 10 ** RATE_SCALE,
+      input.rate_scale ?? RATE_SCALE
+    );
+    ctx.db
+      .prepare(
+        "DELETE FROM tally_recurring_expense_split WHERE template_id = ?"
+      )
+      .run(templateId);
+    const writeSplit = ctx.db.prepare(
+      `INSERT INTO tally_recurring_expense_split
+         (template_id, party_id, share_minor) VALUES (?, ?, ?)`
+    );
+    for (const split of allocatedSplits(templateAmount, input.splits))
+      writeSplit.run(templateId, split.party_id, split.share_minor);
     ctx.wrote("tally.recurring_expense", templateId);
     return { template_id: templateId, preview };
   },
@@ -279,24 +301,30 @@ function allocatedSplits(total: number, splits: WeightedSplit[]) {
   });
 }
 
+/**
+ * THE KEY IS THE SERIES-LOCAL WALL CLOCK (#916, R5 / review 3.1). Keying on
+ * the resolved UTC instant made an exception a function of the series' anchor
+ * and zone rather than of the occurrence, so moving the series orphaned every
+ * skip on it and the skipped occurrences came back.
+ */
 function exceptionFor(
   ctx: HandlerCtx,
   templateId: string,
-  originalStart: string
+  originalStartLocal: string
 ): { action: "skip" | "override"; override: Record<string, unknown> } | null {
   const row = ctx.db
     .prepare(
       `SELECT action, override_json FROM schedule_recurrence_exception
         WHERE target_type = 'tally.recurring_expense' AND target_id = ?
           AND (
-            (scope = 'occurrence' AND original_start = ?)
-            OR (scope = 'future' AND original_start <= ?)
+            (scope = 'occurrence' AND original_start_local = ?)
+            OR (scope = 'future' AND original_start_local <= ?)
           )
         ORDER BY CASE scope WHEN 'occurrence' THEN 0 ELSE 1 END,
-                 original_start DESC
+                 original_start_local DESC
         LIMIT 1`
     )
-    .get(templateId, originalStart, originalStart) as
+    .get(templateId, originalStartLocal, originalStartLocal) as
     | { action: "skip" | "override"; override_json: string | null }
     | undefined;
   return row
@@ -345,7 +373,8 @@ const MATERIALIZE: CommandDefinition = {
       rangeTo: new Date(
         Date.parse(input.original_start) + 86_400_000
       ).toISOString(),
-      timeZone: template.time_zone,
+      timeZone: template.tz,
+      semantics: "zoned",
       maxInstances: 2,
     }).find((item) => item.originalStart === input.original_start);
     if (!occurrence)
@@ -353,7 +382,7 @@ const MATERIALIZE: CommandDefinition = {
     const exception = exceptionFor(
       ctx,
       template.template_id,
-      input.original_start
+      occurrence.wallStart
     );
     if (exception?.action === "skip") return { status: "skipped" };
     const override = exception?.override ?? {};
@@ -388,17 +417,18 @@ const MATERIALIZE: CommandDefinition = {
     ctx.db
       .prepare(
         `INSERT INTO tally_expense
-          (expense_id, group_id, description, amount_minor, paid_by, spent_on,
+          (expense_id, group_id, description, amount_minor, currency, paid_by, spent_on,
            category, created_at, original_amount_minor, original_currency,
            settlement_currency, rate_scaled, rate_scale, rate_source,
            rate_date, recurring_template_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         expenseId,
         template.group_id,
         String(override.description ?? template.description),
         amount,
+        settlementCurrency,
         template.paid_by,
         spentOn,
         String(override.category ?? template.category),
@@ -419,9 +449,21 @@ const MATERIALIZE: CommandDefinition = {
           (expense_id, party_id, paid_minor) VALUES (?, ?, ?)`
       )
       .run(expenseId, template.paid_by, amount);
+    const templateSplits = ctx.db
+      .prepare(
+        `SELECT party_id, share_minor FROM tally_recurring_expense_split
+          WHERE template_id = ? ORDER BY party_id`
+      )
+      .all(template.template_id) as {
+      party_id: string;
+      share_minor: number;
+    }[];
     for (const split of allocatedSplits(
       amount,
-      JSON.parse(template.splits_json) as WeightedSplit[]
+      templateSplits.map((row) => ({
+        party_id: row.party_id,
+        weight: row.share_minor,
+      }))
     )) {
       ctx.db
         .prepare(
@@ -474,7 +516,7 @@ const EDIT_OCCURRENCE: CommandDefinition = {
       action: "skip" | "override";
       override?: Record<string, unknown>;
     };
-    templateById(ctx, input.template_id);
+    const template = templateById(ctx, input.template_id);
     if (input.scope === "series") {
       if (input.action === "skip") {
         ctx.db
@@ -509,16 +551,34 @@ const EDIT_OCCURRENCE: CommandDefinition = {
               ctx.now,
               input.template_id
             );
+        // A SERIES EDIT MAY NOT STRAND ITS EXCEPTIONS (#916, review 3.1 /
+        // adversarial BUG-3). Changing the rule re-expands the series, and any
+        // exception whose wall clock is no longer an occurrence stops matching
+        // — the skip disappears and the occurrence the member removed comes
+        // back. The edit is refused, with the count, rather than doing that
+        // quietly.
+        const stranded = strandedExceptions(ctx, input.template_id);
+        if (stranded > 0)
+          throw new Error(
+            `this change to the series leaves ${stranded} occurrence exception(s) matching nothing: remove or re-anchor them first`
+          );
       }
     } else {
+      // THE OCCURRENCE HAS TO EXIST (#916, adversarial BUG-3): an exception
+      // for a date the series never lands on was accepted and simply never
+      // matched anything.
+      const wallStart = occurrenceWallStart(template, input.original_start);
+      if (wallStart === null)
+        throw new Error("start is not an occurrence in this series");
       const exceptionId = ctx.newId();
       ctx.db
         .prepare(
           `INSERT INTO schedule_recurrence_exception
-            (exception_id, target_type, target_id, original_start, scope,
+            (exception_id, target_type, target_id, original_start_local,
+             recurrence_semantics, scope,
              action, override_json, created_at, updated_at)
-           VALUES (?, 'tally.recurring_expense', ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(target_type, target_id, original_start, scope)
+           VALUES (?, 'tally.recurring_expense', ?, ?, 'zoned', ?, ?, ?, ?, ?)
+           ON CONFLICT(target_type, target_id, original_start_local, scope)
            DO UPDATE SET action = excluded.action,
              override_json = excluded.override_json,
              updated_at = excluded.updated_at`
@@ -526,7 +586,7 @@ const EDIT_OCCURRENCE: CommandDefinition = {
         .run(
           exceptionId,
           input.template_id,
-          input.original_start,
+          wallStart,
           input.scope,
           input.action,
           input.action === "override"
@@ -541,6 +601,60 @@ const EDIT_OCCURRENCE: CommandDefinition = {
     return { template_id: input.template_id, scope: input.scope };
   },
 };
+
+/**
+ * The series-local wall clock of the occurrence starting at `instant`, or
+ * `null` when the series has no occurrence there.
+ */
+function occurrenceWallStart(
+  template: TemplateRow,
+  instant: string
+): string | null {
+  const at = Date.parse(instant);
+  if (Number.isNaN(at)) return null;
+  return (
+    expandRecurrence({
+      rrule: template.rrule,
+      start: template.anchor_start,
+      rangeFrom: instant,
+      rangeTo: new Date(at + 86_400_000).toISOString(),
+      timeZone: template.tz,
+      semantics: "zoned",
+      maxInstances: 2,
+    }).find((item) => item.originalStart === instant)?.wallStart ?? null
+  );
+}
+
+/** Exceptions on this template whose wall clock no longer lands on an
+ *  occurrence of the series as it now stands. */
+function strandedExceptions(ctx: HandlerCtx, templateId: string): number {
+  const template = templateById(ctx, templateId);
+  const rows = ctx.db
+    .prepare(
+      `SELECT original_start_local FROM schedule_recurrence_exception
+        WHERE target_type = 'tally.recurring_expense' AND target_id = ?
+          AND scope = 'occurrence'`
+    )
+    .all(templateId) as { original_start_local: string }[];
+  if (rows.length === 0) return 0;
+  const from = rows.map((row) => row.original_start_local).sort()[0] as string;
+  const to = rows
+    .map((row) => row.original_start_local)
+    .sort()
+    .at(-1) as string;
+  const live = new Set(
+    expandRecurrence({
+      rrule: template.rrule,
+      start: template.anchor_start,
+      rangeFrom: from,
+      rangeTo: new Date(Date.parse(to) + 86_400_000).toISOString(),
+      timeZone: template.tz,
+      semantics: "zoned",
+      maxInstances: 1000,
+    }).map((item) => item.wallStart)
+  );
+  return rows.filter((row) => !live.has(row.original_start_local)).length;
+}
 
 export function registerTallyOrganizeCommands(gateway: Gateway): void {
   gateway.registerCommand(SAVE_RECURRING);

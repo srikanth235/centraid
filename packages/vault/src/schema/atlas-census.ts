@@ -57,7 +57,6 @@ export interface AtlasCensusPack {
   pack: string;
   packLabel: string;
   packKind: AtlasPackKind;
-  file: "vault" | "journal";
   tables: AtlasCensusTable[];
   /** Pack totals — rows always; bytes null when any member is byte-less. */
   rows: number;
@@ -68,7 +67,7 @@ export interface AtlasCensusPayload {
   generatedAt: string;
   /** `dbstat` (byte breakdown) or `estimate` (row counts only) — honest. */
   method: TableStatsMethod;
-  /** Whole-file size, vault.db + journal.db. */
+  /** Whole-file size. */
   fileBytesTotal: number;
   packs: AtlasCensusPack[];
   totals: {
@@ -87,23 +86,12 @@ export interface AtlasCensusPayload {
  * documented `estimate` fallback); rows are a COUNT(*) per table (the dbstat
  * method omits rows by design, and the census header wants "214 people").
  */
-export function atlasCensus(
-  vault: DatabaseSync,
-  journal: DatabaseSync
-): AtlasCensusPayload {
+export function atlasCensus(vault: DatabaseSync): AtlasCensusPayload {
   const vaultBreak = dbSizeBreakdown(vault);
-  const journalBreak = dbSizeBreakdown(journal);
   const bytesOf = new Map<string, { bytes?: number; pages?: number }>();
   for (const t of vaultBreak.tables)
     bytesOf.set(t.table, { bytes: t.bytes, pages: t.pages });
-  for (const t of journalBreak.tables)
-    bytesOf.set(t.table, { bytes: t.bytes, pages: t.pages });
-  // A single method label for the payload: `estimate` if EITHER file fell back
-  // (bytes are then null everywhere — no faked breakdown).
-  const method: TableStatsMethod =
-    vaultBreak.method === "dbstat" && journalBreak.method === "dbstat"
-      ? "dbstat"
-      : "estimate";
+  const method: TableStatsMethod = vaultBreak.method;
 
   const byPack = new Map<string, AtlasCensusPack>();
   let totalRows = 0;
@@ -114,21 +102,15 @@ export function atlasCensus(
   // Atlas states ROW COUNTS, the grant surfaces LIVE grants: a revoked answer
   // is history the plane keeps, so the two differ by design (#883).
   const entries = atlasTables();
-  // Counted per FILE, in one compound statement per file, so registering a
-  // table costs the census a COUNT(*) scan but never a new statement (#873).
-  const countsByFile = {
-    vault: countRowsBatched(
-      vault,
-      entries.filter((e) => e.file === "vault").map((e) => e.physical)
-    ),
-    journal: countRowsBatched(
-      journal,
-      entries.filter((e) => e.file === "journal").map((e) => e.physical)
-    ),
-  };
+  // One compound statement for the whole file, so registering a table costs
+  // the census a COUNT(*) scan but never a new statement (#873).
+  const counts = countRowsBatched(
+    vault,
+    entries.map((e) => e.physical)
+  );
 
   for (const entry of entries) {
-    const rows = countsByFile[entry.file].get(entry.physical) ?? 0;
+    const rows = counts.get(entry.physical) ?? 0;
     const size = method === "dbstat" ? bytesOf.get(entry.physical) : undefined;
     const bytes = size?.bytes ?? null;
     const pages = size?.pages ?? null;
@@ -143,14 +125,13 @@ export function atlasCensus(
       pages,
     };
 
-    const key = `${entry.file}:${entry.pack}`;
+    const key = entry.pack;
     let pack = byPack.get(key);
     if (!pack) {
       pack = {
         pack: entry.pack,
         packLabel: entry.packLabel,
         packKind: entry.packKind,
-        file: entry.file,
         tables: [],
         rows: 0,
         bytes: method === "dbstat" ? 0 : null,
@@ -179,7 +160,7 @@ export function atlasCensus(
   return {
     generatedAt: new Date().toISOString(),
     method,
-    fileBytesTotal: vaultBreak.fileBytesTotal + journalBreak.fileBytesTotal,
+    fileBytesTotal: vaultBreak.fileBytesTotal,
     packs,
     totals: { rows: totalRows, bytes: totalBytes, kinds, populatedKinds },
   };

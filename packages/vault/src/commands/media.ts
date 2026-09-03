@@ -11,7 +11,6 @@ import {
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { CONTENT_REFERENCES } from "../schema/content-references.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import {
   loadEntityRevision,
   markEntityRevisionUndone,
@@ -20,21 +19,19 @@ import {
 import { setStarred, starredExistsSql } from "./flags.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 
-// Star rides the canonical content item, not the asset (#274 / #441 A2.1). `media_asset.favorite` is a single-writer mirror; postcondition asserts they agree.
-const CONTENT_ITEM_TARGET_TYPE = "core.content_item";
-
-/** Mirror the favorite bit onto the content item's starred flags tag. */
-function mirrorFavoriteToTag(
-  ctx: HandlerCtx,
-  assetId: string,
-  favorite: number
-): void {
-  const row = ctx.db
-    .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
-    .get(assetId) as { content_id: string } | undefined;
-  if (!row) return;
-  setStarred(ctx, CONTENT_ITEM_TARGET_TYPE, row.content_id, favorite === 1);
-}
+/**
+ * THE STAR IS ONE TAG ON THE ASSET (#916).
+ *
+ * There were two truths and a mirror between them: a `media_asset.favorite`
+ * column and a `starred` flags tag on the asset's CONTENT ITEM, kept in step
+ * by a helper every writer had to remember to call — and which the importers
+ * and the share projection did not. Two photographs of the same bytes also
+ * shared one content item, so starring one starred the other.
+ *
+ * The column is gone and the tag anchors on `media.asset`: the entity Photos
+ * actually shows, the one a member points at when they say "this one".
+ */
+const ASSET_TARGET_TYPE = "media.asset";
 
 /** Soft-deleted bytes linger this long before the lifecycle sweep purges. */
 const PURGE_AFTER_DAYS = 30;
@@ -42,10 +39,10 @@ const PURGE_AFTER_DAYS = 30;
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (!owner?.owner_party_id) throw new Error("vault has no owner");
-  return owner.owner_party_id;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!owner?.self_party_id) throw new Error("vault has no owner");
+  return owner.self_party_id;
 }
 
 /** Deps for media writes outside the command pipeline (#721). Same row/rules as `media.add_asset`. */
@@ -546,9 +543,8 @@ const UPDATE_ASSET: CommandDefinition = {
       captured_at: { type: "string" },
       // The caption lives on the canonical content item as its title.
       title: { type: "string" },
-      // First-class asset state (#419): favorite and archive are boolean
-      // columns so the replica shape is self-contained — no core_tag
-      // reconstruction. update_asset stays the general editor.
+      // The star is a `starred` flags tag on the asset (#916); the input
+      // stays a boolean because that is what a member's toggle is.
       favorite: { type: "integer", enum: [0, 1] },
       archived: { type: "integer", enum: [0, 1] },
     },
@@ -577,24 +573,12 @@ const UPDATE_ASSET: CommandDefinition = {
                            ELSE EXISTS(SELECT 1 FROM media_asset a JOIN core_content_item c ON c.content_id = a.content_id
                                         WHERE a.asset_id = :asset_id AND c.title = :title) END)
               AND (SELECT CASE WHEN :favorite IS NULL THEN 1
-                           ELSE EXISTS(SELECT 1 FROM media_asset WHERE asset_id = :asset_id AND favorite = :favorite) END)
+                           WHEN :favorite = 1 THEN ${starredExistsSql(ASSET_TARGET_TYPE, ":asset_id")}
+                           ELSE NOT ${starredExistsSql(ASSET_TARGET_TYPE, ":asset_id")} END)
               AND (SELECT CASE WHEN :archived IS NULL THEN 1
                            WHEN :archived = 1 THEN EXISTS(SELECT 1 FROM media_asset WHERE asset_id = :asset_id AND archived_at IS NOT NULL)
                            ELSE EXISTS(SELECT 1 FROM media_asset WHERE asset_id = :asset_id AND archived_at IS NULL) END)
             ) AS n`,
-      column: "n",
-      op: "eq",
-      value: 1,
-    },
-    {
-      // When this edit touched favorite, the column and the canonical starred
-      // tag must agree (#441); a no-op when favorite was untouched.
-      name: "favorite_mirrors_tag",
-      sql: `SELECT (CASE WHEN :favorite IS NULL THEN 1
-                    ELSE (SELECT count(*) FROM media_asset a
-                           WHERE a.asset_id = :asset_id
-                             AND (a.favorite = 1) = ${starredExistsSql(CONTENT_ITEM_TARGET_TYPE, "a.content_id")})
-                    END) AS n`,
       column: "n",
       op: "eq",
       value: 1,
@@ -618,12 +602,8 @@ function updateAsset(ctx: HandlerCtx): Record<string, unknown> {
       .prepare("UPDATE media_asset SET captured_at = ? WHERE asset_id = ?")
       .run(input.captured_at, input.asset_id);
   }
-  if (input.favorite !== undefined) {
-    ctx.db
-      .prepare("UPDATE media_asset SET favorite = ? WHERE asset_id = ?")
-      .run(input.favorite, input.asset_id);
-    mirrorFavoriteToTag(ctx, input.asset_id, input.favorite);
-  }
+  if (input.favorite !== undefined)
+    setStarred(ctx, ASSET_TARGET_TYPE, input.asset_id, input.favorite === 1);
   if (input.archived !== undefined) {
     ctx.db
       .prepare("UPDATE media_asset SET archived_at = ? WHERE asset_id = ?")
@@ -920,8 +900,10 @@ const RESTORE_ASSET: CommandDefinition = {
     {
       // Restoring a live asset fails loudly — trash is the only source.
       name: "asset_is_trashed",
+      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM media_asset
-             WHERE asset_id = :asset_id AND deleted_at IS NOT NULL`,
+             WHERE asset_id = :asset_id AND deleted_at IS NOT NULL
+               AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
       column: "n",
       op: "eq",
       value: 1,
@@ -1090,21 +1072,17 @@ function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
       .run(collection.collection_id, collection.collection_id);
     ctx.wrote("core.collection", collection.collection_id);
   }
-  // Face regions have no ON DELETE CASCADE (the phash sidecar does), so they go
-  // by hand with the same face-region poly sweep (#724) — no orphan face vector
-  // may outlive the photograph it was cut from.
-  const faceRegions = ctx.db
-    .prepare("SELECT region_id FROM media_face_region WHERE asset_id = ?")
-    .all(input.asset_id) as { region_id: string }[];
-  for (const region of faceRegions)
-    cleanupPolyRefs(ctx.db, ctx.now, "media.face_region", region.region_id);
+  // Face regions have no ON DELETE CASCADE from the asset, so they go by hand;
+  // everything that POINTS AT a region (vectors, derivation stamps) is a
+  // composite foreign key into `core_entity` since #916, so the engine
+  // cascades those away as each region row goes — no orphan face vector may
+  // outlive the photograph it was cut from.
   ctx.db
     .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
     .run(input.asset_id);
   ctx.db
     .prepare("DELETE FROM media_asset WHERE asset_id = ?")
     .run(input.asset_id);
-  cleanupPolyRefs(ctx.db, ctx.now, "media.asset", input.asset_id);
   ctx.wrote("media.asset", input.asset_id);
   const released = releaseContentNow(ctx, asset.content_id);
   ctx.cite({
@@ -1134,8 +1112,11 @@ const SET_FAVORITE: CommandDefinition = {
   },
   preconditions: [
     {
-      name: "asset_exists",
-      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id",
+      // A TRASHED asset is not editable (#916, adversarial BUG-7): the
+      // precondition asked only that the row exist, so Photos could star and
+      // archive a photograph the member had already thrown away.
+      name: "live_asset_exists",
+      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id AND deleted_at IS NULL",
       column: "n",
       op: "eq",
       value: 1,
@@ -1143,19 +1124,12 @@ const SET_FAVORITE: CommandDefinition = {
   ],
   postconditions: [
     {
+      // ONE truth (#916): the star is the tag, and the tag says what was asked.
       name: "favorite_applied",
-      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id AND favorite = :favorite",
-      column: "n",
-      op: "eq",
-      value: 1,
-    },
-    {
-      // Column and canonical starred tag must never disagree — the column is a
-      // mirror, the tag is the truth (#441).
-      name: "favorite_mirrors_tag",
-      sql: `SELECT count(*) AS n FROM media_asset a
-             WHERE a.asset_id = :asset_id
-               AND (a.favorite = 1) = ${starredExistsSql(CONTENT_ITEM_TARGET_TYPE, "a.content_id")}`,
+      sql: `SELECT (CASE WHEN :favorite = 1
+                         THEN ${starredExistsSql(ASSET_TARGET_TYPE, ":asset_id")}
+                         ELSE NOT ${starredExistsSql(ASSET_TARGET_TYPE, ":asset_id")}
+                    END) AS n`,
       column: "n",
       op: "eq",
       value: 1,
@@ -1168,10 +1142,7 @@ const SET_FAVORITE: CommandDefinition = {
 
 function setFavorite(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { asset_id: string; favorite: number };
-  ctx.db
-    .prepare("UPDATE media_asset SET favorite = ? WHERE asset_id = ?")
-    .run(input.favorite, input.asset_id);
-  mirrorFavoriteToTag(ctx, input.asset_id, input.favorite);
+  setStarred(ctx, ASSET_TARGET_TYPE, input.asset_id, input.favorite === 1);
   ctx.wrote("media.asset", input.asset_id);
   return { asset_id: input.asset_id, favorite: input.favorite };
 }
@@ -1195,8 +1166,9 @@ const SET_ARCHIVED: CommandDefinition = {
   },
   preconditions: [
     {
-      name: "asset_exists",
-      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id",
+      // A TRASHED asset is not editable (#916, adversarial BUG-7).
+      name: "live_asset_exists",
+      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id AND deleted_at IS NULL",
       column: "n",
       op: "eq",
       value: 1,
@@ -1803,6 +1775,10 @@ const FORGET_PERSON: CommandDefinition = {
   idempotency: "retry-safe",
   risk: "high",
   confirm: true,
+  // NOTHING IS KEPT (#916): a pre-mutation snapshot of a forgotten face is a
+  // copy of exactly what the member asked to be destroyed, sitting where the
+  // next export would carry it out.
+  erasure: true,
   handler: forgetPerson,
 };
 
@@ -1825,16 +1801,16 @@ function forgetPerson(ctx: HandlerCtx): Record<string, unknown> {
     embeddings += Number(
       (countVectors.get(region.region_id) as { n: number }).n
     );
-    // Projection first (it FKs the region), then the region, then the registry
-    // sweep for every polymorphic pointer — which is what carries the vectors
-    // and stamps away, through the one registry complete by construction.
+    // Projection first (it FKs the region), then the region: every
+    // polymorphic pointer at the region — its vectors, its derivation stamps —
+    // is a composite foreign key into `core_entity` (#916), so the engine
+    // carries them away with it, through a set complete by construction.
     ctx.db
       .prepare("DELETE FROM media_face_cluster WHERE region_id = ?")
       .run(region.region_id);
     ctx.db
       .prepare("DELETE FROM media_face_region WHERE region_id = ?")
       .run(region.region_id);
-    cleanupPolyRefs(ctx.db, ctx.now, "media.face_region", region.region_id);
     // One provenance entry per forgotten region: the audit trail of a
     // destructive act is the one thing that must survive it.
     ctx.wrote("media.face_region", region.region_id);

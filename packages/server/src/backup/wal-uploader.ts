@@ -7,15 +7,14 @@ import {
   deriveDataKey,
   masterKeyForEpoch,
   openManifest,
-  parseWalPairMarkerKey,
   parseWalSegmentKey,
   parseWalCloserKey,
+  parseWalTickMarkerKey,
   sealWalCloser,
-  sealWalPairMarker,
   sealWalSegment,
-  WAL_DB_NAMES,
+  sealWalTickMarker,
   walDbPrefix,
-  walPairMarkerRootPrefix,
+  walTickMarkerRootPrefix,
 } from "@centraid/backup";
 import type { BackupProvider, Keyring } from "@centraid/backup";
 import type { RuntimeLogger } from "@centraid/server/engine";
@@ -26,7 +25,8 @@ export interface DrainResult {
   uploaded: number;
   bytes: number;
   discarded: number;
-  /** Recorded only after the PUT resolves: it becomes a floor. */
+  /** Per WAL generation, recorded only after the PUT resolves: it becomes a
+   *  floor. */
   markerTips: Record<string, number>;
 }
 
@@ -60,32 +60,16 @@ async function applyAvailableInOrder<T>(
   }
 }
 
-export function walPairKey(
-  vaultGeneration: string,
-  journalGeneration: string
-): string {
-  return `${vaultGeneration}-${journalGeneration}`;
-}
-
-/** Runs when NO backend is configured: the shipper's rollovers bound the WALs,
+/** Runs when NO backend is configured: the shipper's rollovers bound the WAL,
  *  so its output still needs a consumer. */
 export function discardWalFiles(plane: VaultPlane): DrainResult {
   const shipper = plane.walShipper;
   if (!shipper) return { uploaded: 0, bytes: 0, discarded: 0, markerTips: {} };
   const items = shipper.listUploadable();
-  const holedDbs = new Set<Parameters<typeof shipper.noteStreamDiscarded>[0]>();
-  for (const item of items) {
-    if (item.kind === "segment") holedDbs.add(item.addr!.db);
-    else if (item.kind === "closer") holedDbs.add(item.closer!.db);
-    else {
-      // Holes BOTH streams: this tick is no longer a coordinated restore point.
-      holedDbs.add("vault");
-      holedDbs.add("journal");
-    }
-  }
   // Intent BEFORE deletion: the reverse order loses files while state calls the
-  // base sound.
-  for (const db of holedDbs) shipper.noteStreamDiscarded(db);
+  // base sound. Any dropped object — segment, closer or marker — holes the
+  // stream: the tick it belonged to stops being a restorable point.
+  if (items.length > 0) shipper.noteStreamDiscarded();
   for (const item of items) shipper.noteUploaded(item);
   // It breaks the generation before a stale base can be registered: restoring a
   // holed stream lands on the base, which is quiet truncation.
@@ -143,20 +127,11 @@ export async function drainWalFiles(opts: {
         item.closer!
       );
     } else {
-      // A pair marker seals under ONE epoch — the one its manifest names, or restore
-      // cannot open it. Asserted, not assumed.
+      // A tick marker seals under its generation's epoch — the one its manifest
+      // names — or restore cannot open it.
       const marker = item.marker!;
-      const vaultEpoch = opts.epochForGeneration(marker.vaultGeneration);
-      const journalEpoch = opts.epochForGeneration(marker.journalGeneration);
-      if (vaultEpoch !== journalEpoch) {
-        throw new Error(
-          `wal drain: pair marker ${item.key} spans key epochs (vault ${vaultEpoch}, ` +
-            `journal ${journalEpoch}) — the two generations must break together and pin to one ` +
-            "epoch; refusing to seal a marker its manifest could not open"
-        );
-      }
-      sealed = sealWalPairMarker(
-        dataKeyFor(marker.vaultGeneration),
+      sealed = sealWalTickMarker(
+        dataKeyFor(marker.generation),
         opts.vaultId,
         marker
       );
@@ -164,9 +139,8 @@ export async function drainWalFiles(opts: {
     await store.put(item.key, sealed);
     if (item.kind === "marker") {
       // AFTER the PUT resolved: this is a floor held to at every verification.
-      const marker = item.marker!;
-      const key = walPairKey(marker.vaultGeneration, marker.journalGeneration);
-      markerTips[key] = Math.max(markerTips[key] ?? -1, marker.tickMs);
+      const { generation, tickMs } = item.marker!;
+      markerTips[generation] = Math.max(markerTips[generation] ?? -1, tickMs);
     }
     shipper.noteUploaded(item);
     uploaded++;
@@ -189,8 +163,8 @@ export async function pruneWalGenerations(opts: {
 }): Promise<{ deletedObjects: number; keptGenerations: Set<string> }> {
   const shipper = opts.plane.walShipper;
   const keep = new Set<string>();
-  if (shipper)
-    for (const base of shipper.currentBases()) keep.add(base.generation);
+  const live = shipper?.currentBase();
+  if (live) keep.add(live.generation);
 
   const cache = opts.manifestGenerationCache;
   const rows = await opts.provider.listSnapshots(opts.targetId);
@@ -231,27 +205,22 @@ export async function pruneWalGenerations(opts: {
   });
 
   let deletedObjects = 0;
-  await applyInOrder(WAL_DB_NAMES, async (db) => {
-    const doomed: string[] = [];
-    await applyAvailableInOrder(store.list(walDbPrefix(db)), (obj) => {
-      const gen =
-        parseWalSegmentKey(obj.key)?.generation ??
-        parseWalCloserKey(obj.key)?.generation;
-      if (gen !== undefined && !keep.has(gen)) doomed.push(obj.key);
-    });
-    await applyInOrder(doomed, async (key) => {
-      await store.delete(key);
-      deletedObjects++;
-    });
+  const doomed: string[] = [];
+  await applyAvailableInOrder(store.list(walDbPrefix("vault")), (obj) => {
+    const gen =
+      parseWalSegmentKey(obj.key)?.generation ??
+      parseWalCloserKey(obj.key)?.generation;
+    if (gen !== undefined && !keep.has(gen)) doomed.push(obj.key);
   });
-  // Pair markers need their own pass; one dies with EITHER generation.
+  await applyInOrder(doomed, async (key) => {
+    await store.delete(key);
+    deletedObjects++;
+  });
+  // Markers live outside the stream prefix, so they need their own pass.
   const doomedMarkers: string[] = [];
-  await applyAvailableInOrder(store.list(walPairMarkerRootPrefix()), (obj) => {
-    const addr = parseWalPairMarkerKey(obj.key);
-    if (!addr) return;
-    if (!keep.has(addr.vaultGeneration) || !keep.has(addr.journalGeneration)) {
-      doomedMarkers.push(obj.key);
-    }
+  await applyAvailableInOrder(store.list(walTickMarkerRootPrefix()), (obj) => {
+    const addr = parseWalTickMarkerKey(obj.key);
+    if (addr && !keep.has(addr.generation)) doomedMarkers.push(obj.key);
   });
   await applyInOrder(doomedMarkers, async (key) => {
     await store.delete(key);

@@ -94,7 +94,7 @@ describe("flow", () => {
     }).toStrictEqual({
       n: 0,
     });
-    const journal = db.journal
+    const journal = db.audit
       .prepare(
         "SELECT input_json FROM agent_command_invocation WHERE input_json LIKE '%staged_sha%'"
       )

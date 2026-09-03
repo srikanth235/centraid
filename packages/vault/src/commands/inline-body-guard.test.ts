@@ -120,8 +120,8 @@ describe("inline-body-guard", () => {
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES ('p2', 'person', 'Other', ?, ?, '1.3')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('p2', 'person', 'Other', ?, ?)`
       )
       .run(now, now);
     const other = { party_id: "p2" };
@@ -161,7 +161,7 @@ describe("inline-body-guard", () => {
     db.vault
       .prepare(
         `INSERT INTO knowledge_note (note_id, author_party_id, title, body_content_id, format, pinned, created_at, updated_at)
-       VALUES ('note-1', (SELECT owner_party_id FROM core_vault LIMIT 1), 'Legacy', ?, 'plain', 0, ?, ?)`
+       VALUES ('note-1', (SELECT self_party_id FROM core_vault LIMIT 1), 'Legacy', ?, 'plain', 0, ?, ?)`
       )
       .run(contentId, new Date().toISOString(), new Date().toISOString());
 

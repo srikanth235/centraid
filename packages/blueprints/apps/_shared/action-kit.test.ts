@@ -63,7 +63,7 @@ describe("the shared vault-action run", () => {
 
   it("turns a thrown refusal into a 200 denial carrying reason and code", async () => {
     const error = Object.assign(new Error("no consent"), {
-      code: "VAULT_CONSENT",
+      code: "VAULT_ACCESS",
     });
     const result = await runVaultAction(throwingCtx(error), {
       command: "schedule.add_task",
@@ -71,7 +71,7 @@ describe("the shared vault-action run", () => {
     });
     expect(result.status).toBe(200);
     expect(JSON.stringify(result.body)).toBe(
-      '{"status":"denied","reason":"no consent","code":"VAULT_CONSENT"}'
+      '{"status":"denied","reason":"no consent","code":"VAULT_ACCESS"}'
     );
   });
 

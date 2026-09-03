@@ -334,9 +334,9 @@ describe("backup", () => {
     // #630 P1/P5: receipt graph (expense, OCR, lines, allocations, attach) must survive.
     const ownerPartyId = (
       h.plane.db.vault
-        .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-        .get() as { owner_party_id: string }
-    ).owner_party_id;
+        .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+        .get() as { self_party_id: string }
+    ).self_party_id;
     const receiptGroupId = invoke(h.plane, "tally.create_group", {
       name: "Backup receipt",
       icon: "🧾",
@@ -429,7 +429,6 @@ describe("backup", () => {
     );
     const [result] = jsonLines(out) as [{ seq: number; entries: string[] }];
     expect(result.entries).toContain("vault.db");
-    expect(result.entries).toContain("journal.db");
     expect(result.entries).toContain("apps.bundle");
     expect(result.entries).not.toContain("seal.key");
     expect(existsSync(path.join(destDir, "RESTORE_QUARANTINE.json"))).toBe(
@@ -448,10 +447,6 @@ describe("backup", () => {
     await fs.copyFile(
       path.join(destDir, "vault.db"),
       path.join(adoptedDir, "vault.db")
-    );
-    await fs.copyFile(
-      path.join(destDir, "journal.db"),
-      path.join(adoptedDir, "journal.db")
     );
     await fs.cp(path.join(destDir, "blobs"), path.join(adoptedDir, "blobs"), {
       recursive: true,

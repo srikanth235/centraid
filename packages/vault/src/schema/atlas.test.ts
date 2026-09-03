@@ -14,15 +14,10 @@ import {
   atlasTablesByPhysical,
   packKindOf,
 } from "./atlas.js";
-import { JOURNAL_TABLES, VAULT_TABLES } from "./tables.js";
+import { VAULT_TABLES } from "./tables.js";
 
 function registrySize(): number {
-  const vault = Object.values(VAULT_TABLES).reduce((n, t) => n + t.length, 0);
-  const journal = Object.values(JOURNAL_TABLES).reduce(
-    (n, t) => n + t.length,
-    0
-  );
-  return vault + journal;
+  return Object.values(VAULT_TABLES).reduce((n, t) => n + t.length, 0);
 }
 
 describe("atlas", () => {
@@ -34,9 +29,6 @@ describe("atlas", () => {
     for (const [schema, tables] of Object.entries(VAULT_TABLES)) {
       for (const t of tables) logicalFromRegistry.add(`${schema}.${t}`);
     }
-    for (const [schema, tables] of Object.entries(JOURNAL_TABLES)) {
-      for (const t of tables) logicalFromRegistry.add(`${schema}.${t}`);
-    }
     const logicalFromAtlas = new Set(entries.map((e) => e.logical));
     expect(logicalFromAtlas).toStrictEqual(logicalFromRegistry);
   });
@@ -44,10 +36,7 @@ describe("atlas", () => {
   test("every registered schema is classified — no unclassified pack slips through", () => {
     // atlasTables() throws on an unclassified schema; reaching here proves the
     // whole registry classifies. Additionally assert the union is exhaustive.
-    const schemas = new Set([
-      ...Object.keys(VAULT_TABLES),
-      ...Object.keys(JOURNAL_TABLES),
-    ]);
+    const schemas = new Set(Object.keys(VAULT_TABLES));
     for (const schema of schemas) {
       expect(packKindOf(schema)).toBeDefined();
       expect(ATLAS_PACK_LABELS[schema]).toBeTypeOf("string");
@@ -64,7 +53,9 @@ describe("atlas", () => {
     expect(packKindOf("people")).toBe("ontology");
     expect(packKindOf("media")).toBe("ontology");
     expect(packKindOf("core")).toBe("ontology");
-    expect(packKindOf("consent")).toBe("machinery");
+    expect(packKindOf("access")).toBe("machinery");
+    expect(packKindOf("audit")).toBe("machinery");
+    expect(packKindOf("ledger")).toBe("machinery");
     expect(packKindOf("blob")).toBe("machinery");
     expect(packKindOf("outbox")).toBe("machinery");
     expect(packKindOf("share")).toBe("machinery");
@@ -94,9 +85,9 @@ describe("atlas", () => {
     expect(party.friendly).not.toBe(party.label); // the name overrode "Party".
 
     // A machinery kind is NAMED and carries no blurb.
-    const provenance = byLogical.get("consent.provenance")!;
-    expect(provenance.friendly).toBe("Provenance");
-    expect(provenance.blurb).toBeUndefined();
+    const app = byLogical.get("access.app")!;
+    expect(app.friendly).toBe("Installed apps");
+    expect(app.blurb).toBeUndefined();
     const authority = byLogical.get("share.authority")!;
     expect(authority.friendly).toBe("Access answers");
     expect(authority.blurb).toBeUndefined();
@@ -108,15 +99,7 @@ describe("atlas", () => {
     const party = byLogical.get("core.party");
     expect(party).toBeDefined();
     expect(party!.physical).toBe("core_party");
-    expect(party!.file).toBe("vault");
     expect(party!.packKind).toBe("ontology");
     expect(byPhysical.get("core_party")).toStrictEqual(party);
-
-    // A journal-file audit table maps to its physical name and machinery shelf.
-    const prov = byLogical.get("consent.provenance");
-    expect(prov).toBeDefined();
-    expect(prov!.physical).toBe("consent_provenance");
-    expect(prov!.file).toBe("journal");
-    expect(prov!.packKind).toBe("machinery");
   });
 });

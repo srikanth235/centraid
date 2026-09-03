@@ -41,7 +41,7 @@ export interface BackupTargetState {
   /** A foreign checkpoint forces a generation break (#411). A churn signal,
    *  never a correctness failure. */
   walForeignCheckpointCount?: number;
-  walLastForeignCheckpoint?: { atMs: number; db: string; reason: string };
+  walLastForeignCheckpoint?: { atMs: number; reason: string };
 }
 
 export interface BackupState {

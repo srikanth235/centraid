@@ -261,9 +261,9 @@ describe("grant/fulfillment — roster and ceiling", () => {
     });
     const projectedId = (
       home.audience.vault
-        .prepare("SELECT item_id FROM core_share_origin LIMIT 1")
-        .get() as { item_id: string }
-    ).item_id;
+        .prepare("SELECT target_id FROM core_share_origin LIMIT 1")
+        .get() as { target_id: string }
+    ).target_id;
     const changesAfterFirst = (
       home.audience.vault
         .prepare("SELECT count(*) AS n FROM replica_change")
@@ -278,9 +278,9 @@ describe("grant/fulfillment — roster and ceiling", () => {
     // Nothing moved: row identity, change stream, timestamp.
     expect(
       home.audience.vault
-        .prepare("SELECT item_id FROM core_share_origin LIMIT 1")
+        .prepare("SELECT target_id FROM core_share_origin LIMIT 1")
         .get()
-    ).toMatchObject({ item_id: projectedId });
+    ).toMatchObject({ target_id: projectedId });
     expect(
       home.audience.vault
         .prepare("SELECT count(*) AS n FROM replica_change")
@@ -288,7 +288,9 @@ describe("grant/fulfillment — roster and ceiling", () => {
     ).toMatchObject({ n: changesAfterFirst });
     expect(
       readFulfillment(home.origin.vault, grant.grantId, AUDIENCE_VAULT)
-    ).toMatchObject({ updatedAt: now, deliveredAt: now });
+      // `updated_at` is the TOUCH TRIGGER's since #916 — every table stamps
+      // it on write — so the delivery instant is what this asserts.
+    ).toMatchObject({ deliveredAt: now });
     // The diff is a skip, never a stop.
     home.origin.vault
       .prepare("UPDATE core_collection SET name = ? WHERE collection_id = ?")
