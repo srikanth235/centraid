@@ -44,9 +44,9 @@ const UNVERSIONED_SCHEMA = -1;
  * override (a cached workflow path); otherwise the host's scratch dir, which
  * survives between local runs and so gives a warm build on the second run.
  *
- * ONE way to name the cache: every rig calls this rather than repeating the
- * env-var-or-temp-dir dance, which is how `artifacts/year3-cache` ended up
- * spelled out in rig bodies in the first place.
+ * ONE way to name the cache: a rig calls this rather than spelling out a path
+ * or repeating the env-var-or-temp-dir dance, so no rig can cache somewhere CI
+ * does not look.
  */
 export function year3FixtureCacheRoot(): string {
   return (

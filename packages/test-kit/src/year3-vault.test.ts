@@ -258,7 +258,7 @@ describe("golden year-3 vault", () => {
   });
 
   test("materializing hits the cache the second time and misses after a bump", async () => {
-    const root = await tempDir("year3-cache-");
+    const root = await tempDir("year3-fixture-cache-");
     const profile = goldenYear3Profile();
     let builds = 0;
     const generate = async (): Promise<void> => {
