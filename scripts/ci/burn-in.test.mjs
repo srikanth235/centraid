@@ -4,8 +4,10 @@ import test from "node:test";
 import {
   argvFor,
   nearestPackageDir,
+  parseShard,
   partitionChangedFiles,
   planRun,
+  selectShard,
   skipReason,
   verdictForRuns,
 } from "./burn-in.mjs";
@@ -136,6 +138,61 @@ test("argvFor names the runner's own invocation, not a generic one", () => {
     "src/a.test.ts",
     "--no-coverage",
   ]);
+});
+
+test("the shards partition the list: every file once, none twice, none lost", () => {
+  // The property, not an example: a sharded gate's failure mode is a file in no
+  // shard, which never runs and reports green by absence (#916).
+  const files = Array.from(
+    { length: 237 },
+    (_, index) => `packages/p${index % 7}/src/a${index}.test.ts`
+  );
+  for (const total of [1, 2, 3, 8, 237, 400]) {
+    const legs = Array.from({ length: total }, (_, index) =>
+      selectShard(files, index + 1, total)
+    );
+    const seen = legs.flat();
+    assert.deepEqual(
+      [...seen].sort(),
+      [...files].sort(),
+      `N=${total} must cover every file exactly once`
+    );
+    assert.equal(
+      new Set(seen).size,
+      seen.length,
+      `N=${total} must not overlap`
+    );
+    // Round-robin, so no leg can be handed a run's worth more than another.
+    const sizes = legs.map((leg) => leg.length);
+    assert.ok(
+      Math.max(...sizes) - Math.min(...sizes) <= 1,
+      `N=${total} balance`
+    );
+  }
+});
+
+test("the deal does not depend on the order the caller handed in", () => {
+  const files = ["c.test.ts", "a.test.ts", "b.test.ts", "d.test.ts"];
+  const reversed = files.toReversed();
+  for (let shard = 1; shard <= 3; shard += 1) {
+    assert.deepEqual(
+      selectShard(files, shard, 3),
+      selectShard(reversed, shard, 3)
+    );
+  }
+});
+
+test("a malformed or out-of-range shard is an error, never an empty slice", () => {
+  assert.deepEqual(parseShard("3/8"), { shard: 3, total: 8 });
+  assert.deepEqual(parseShard(" 1/1 "), { shard: 1, total: 1 });
+  // Each of these selects nothing, and "nothing" exits 0 — the silent green a
+  // burn-in cannot survive.
+  assert.throws(() => parseShard("0/8"), /out of range/u);
+  assert.throws(() => parseShard("9/8"), /out of range/u);
+  assert.throws(() => parseShard("3/0"), /must be >= 1/u);
+  assert.throws(() => parseShard("3"), /wants "i\/N"/u);
+  assert.throws(() => parseShard("a/b"), /wants "i\/N"/u);
+  assert.throws(() => parseShard(""), /wants "i\/N"/u);
 });
 
 test("three green runs pass; any disagreement is red", () => {
