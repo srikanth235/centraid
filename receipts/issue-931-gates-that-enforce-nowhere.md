@@ -681,6 +681,35 @@ shipped predicate and read the 128 excluded files for DOM calls, markup and
 prose-shaped string literals rather than trusting the list — which is what
 surfaced the remaining finding.
 
+**2026-09-03 — re-verification 2, head `729926091`** (delta `294e5ed87..729926091`).
+
+Verdict: REFUTED — one narrow finding; both earlier findings are fixed.
+
+- Fixed and re-swept: `CLIENT_COPY_EXCEPTIONS` is checked before the patterns, so
+  `replica/rebootstrap-copy.ts`, `gateway-client-edges.ts` and the worker's own
+  third find `gateway-client-push.ts` (line 133, `showNotification` body) are
+  surfaces again. Re-probed all 800 tracked `packages/client` paths: 674 demand
+  evidence, 126 do not, and every prose-shaped literal left in the 126 is a thrown
+  diagnostic, consistent with the rule now stated in the script header. My three
+  borderlines check out: `grep -rn ShellReplicaWriteResult packages/ apps/` returns
+  nothing outside `shell-session.ts` and its tests, and the two Error subclasses are
+  prefixed diagnostics.
+- Finding — `scripts/validate-ui-receipt.mjs:93`: the new exclusion is
+  `/(?:inlineQueryCtx|inline-query-ctx-core[\w.-]*)\.ts$/u`, but
+  `git ls-files | grep -c inline-query-ctx-core` is **0**. The second alternative is
+  a prefix wildcard over files that do not exist, so it cannot have been "READ and
+  confirmed to render nothing" as the header and `## Decisions` both claim, and it
+  pre-exempts #922 wave 1's unwritten modules from this gate — the class #931 is
+  about. `inlineQueryCtx.ts` itself is clean (one thrown diagnostic, line 50) and
+  the by-name exclusion of it stands. Fix: drop the `inline-query-ctx-core[\w.-]*`
+  alternative and its test path until the file exists and can be read.
+- Gates on `729926091`: `format:check` clean · root `lint` clean · `scripts:test`
+  613 pass/0 fail · `validate-ui-receipt.test.mjs` 7 pass · `.governance/run.sh`
+  22/22 · `self-audit.sh 931` PASS. `lint:product` is 40/41: `check:ui-receipt`
+  two-dot-diffs against `origin/main`, which advanced to `f782cfb6d` (#948) after
+  this base, so it sees other work's `apps/mobile/**/*.tsx`. Stale base, not this
+  slice — the branch's own 34 files contain zero surfaces.
+
 ## Session
 
 ### Identifiers
