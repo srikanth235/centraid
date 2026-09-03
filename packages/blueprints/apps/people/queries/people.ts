@@ -30,6 +30,7 @@ import {
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
 import { PENDING_OVERLAY_FIELDS } from "../../_shared/pending-overlay.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { readLiveBindings } from "./_shared.ts";
 
 /** Forwarded verbatim, so the roster can draw the pending chip (#864). */
@@ -106,16 +107,7 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         limit: window + 1,
         purpose,
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept",
-        purpose,
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept_scheme",
-        purpose,
-      }),
+      ...conceptTaxonomyReads(ctx.vault, purpose),
     ]);
 
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];

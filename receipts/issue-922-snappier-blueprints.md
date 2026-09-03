@@ -772,6 +772,29 @@ Numbers for the search signal: the replica FTS default window is **100** rows (`
 
 Files this follow-up changed: `packages/client/src/replica/search.ts`, `packages/client/src/replica/store-core.ts`, `packages/client/src/replica/types.ts`, `packages/client/src/replica/read-plan-truncation.test.ts`, `packages/client/src/react/blueprints/inlineQueryCtx.ts`, `packages/client/src/react/blueprints/centraid-inline.ts`, `apps/mobile/src/lib/replica/multi-vault-reader.ts`, `apps/mobile/src/lib/replica/multi-vault-reader.test.ts`, `apps/mobile/src/lib/replica/multi-vault-session.ts`, `receipts/issue-922-snappier-blueprints.md`.
 
+### Sonar duplication
+
+SonarCloud failed the wave PR at **8.5 % duplicated new code** against a 3 % ceiling. Part of that is the Metro adapter, which its own de-duplication commit removes; this paragraph accounts for the part that is 0a's.
+
+The cause is honest and worth stating plainly: the `core.concept` + `core.concept_scheme` pair was already copy-pasted into six query handlers across Docs and People before this issue touched them. Adding `acceptTruncation: true` to each copy rewrote those lines, so an old duplication became *new* duplicated code — Sonar is right about the shape, and the flag is what made it visible. Two smaller repeats came with the same sweep: five whole-entity request literals restated across fourteen Photos screens, and one reader-construction block inside this slice's own new test.
+
+Three extractions, no behaviour change anywhere — same entities, same `acceptTruncation`, same purpose, and the reads stay SEPARATE so each keeps its own truncation verdict and the honesty line still fires per read:
+
+- `packages/blueprints/apps/_shared/taxonomy-reads.ts` — `conceptTaxonomyReads(vault, purpose)` returns the two promises unawaited, so each of the six call sites keeps them inside the `Promise.all` its destructuring already expects, in the same position.
+- `apps/mobile/src/apps/photos/photo-entity-reads.ts` — the five request literals as module constants (`PHOTO_ENTITY_READS`), replacing 34 `useMemo(() => ({ … }), [])` hooks across 14 Photos screens whose only job was to give a constant a stable identity. A module constant is as stable as an identity gets, so `useReplicaQuery`'s effect keys on it exactly as before.
+- `apps/mobile/src/lib/replica/multi-vault-reader.test.ts` — one local `mount()` helper for the mounted plane the three new truncation cases each built inline.
+
+The two `history.ts` handlers took the pair in the opposite order (`[schemes, concepts]`); their destructuring is flipped to the helper's order rather than the helper gaining a second shape.
+
+Measured with the same scan the root ran, over the wave diff's ADDED source lines (`git diff --unified=0 e2f277da3..HEAD`, whitespace-normalised, identical blocks of ≥ 8 lines, `.ts`/`.tsx` only):
+
+| | added source lines | duplicated | share |
+| --- | --- | --- | --- |
+| before (`abdb176ab`) | 2,499 | 157 | **6.3 %** |
+| after | 2,489 | 27 | **1.1 %** |
+
+The residual 27 lines are the scan's own artifact, not an extractable block: a run of eight consecutive `acceptTruncation: true,` lines, one per read, inside three handlers whose `Promise.all` happens to open that many reads in a row (`tasks/board.ts`, `people/person.ts`, `notes/library.ts`). The reads around them are all different entities with different filters; only the flag line repeats, and a line-based scan cannot tell that apart from a copied block. Nothing to extract, and E2 deletes those lines outright when each read declares its own window.
+
 ## User impact
 
 **One new line, and one refusal a member will never see.** Nothing a shipped screen shows changes in this slice except this: when a list is cut short by its window, the seat now says so on its one status line — `Showing the newest 1,000; more not loaded` — instead of drawing a shorter list that looks complete. That is the whole visible surface. A member with fewer than a thousand contacts, notes or photographs in any one entity sees nothing new at all, because nothing was ever hidden from them.

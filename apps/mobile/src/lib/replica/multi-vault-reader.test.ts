@@ -1185,28 +1185,34 @@ describe(MultiVaultReplicaReader, () => {
  * the short-page case beside them so a verdict that simply said `true` fails.
  */
 describe("mounted read truncation", () => {
-  const openBulk = (
-    count: number
-  ): { reader: MultiVaultReplicaReader; close: () => void } => {
+  /** One mounted plane over the given vault files, in mount order. */
+  const mount = (
+    root: string,
+    ...vaults: Array<{ vaultId: string; label: string; file: string }>
+  ): MultiVaultReplicaReader =>
+    new MultiVaultReplicaReader(
+      new NodeSqliteDriver(path.join(root, "mounted.db")),
+      vaults.map((vault) => ({
+        vaultId: vault.vaultId,
+        label: vault.label,
+        canWrite: true,
+        databaseName: vault.file,
+      }))
+    );
+
+  const openBulk = (count: number): MultiVaultReplicaReader => {
     const root = tempDirSync(`centraid-mounted-truncation-${count}-`);
     const personal = path.join(root, "personal.db");
     seedBulkDocuments(personal, "personal", count);
-    const reader = new MultiVaultReplicaReader(
-      new NodeSqliteDriver(path.join(root, "mounted.db")),
-      [
-        {
-          vaultId: "personal",
-          label: "Personal",
-          canWrite: true,
-          databaseName: personal,
-        },
-      ]
-    );
-    return { reader, close: () => reader.close() };
+    return mount(root, {
+      vaultId: "personal",
+      label: "Personal",
+      file: personal,
+    });
   };
 
   test("a window the statement fills is reported with the window applied", async () => {
-    const { reader, close } = openBulk(12);
+    const reader = openBulk(12);
     const result = await reader.read("docs", {
       entity: "core.document",
       limit: 5,
@@ -1214,11 +1220,11 @@ describe("mounted read truncation", () => {
     expect(result.rows).toHaveLength(5);
     expect(result.truncated).toBe(true);
     expect(result.appliedLimit).toBe(5);
-    close();
+    reader.close();
   });
 
   test("a page under the window hides nothing and says nothing", async () => {
-    const { reader, close } = openBulk(3);
+    const reader = openBulk(3);
     const result = await reader.read("docs", {
       entity: "core.document",
       limit: 50,
@@ -1227,7 +1233,7 @@ describe("mounted read truncation", () => {
     expect(result.rows.length).toBeLessThan(50);
     expect(result.truncated).toBeUndefined();
     expect(result.appliedLimit).toBeUndefined();
-    close();
+    reader.close();
   });
 
   test("badge composition leaving more than asked is truncation too", async () => {
@@ -1263,22 +1269,10 @@ describe("mounted read truncation", () => {
         })
       );
     extra.close();
-    const reader = new MultiVaultReplicaReader(
-      new NodeSqliteDriver(path.join(root, "mounted.db")),
-      [
-        {
-          vaultId: "personal",
-          label: "Personal",
-          canWrite: true,
-          databaseName: personal,
-        },
-        {
-          vaultId: "family",
-          label: "Family",
-          canWrite: true,
-          databaseName: family,
-        },
-      ]
+    const reader = mount(
+      root,
+      { vaultId: "personal", label: "Personal", file: personal },
+      { vaultId: "family", label: "Family", file: family }
     );
     // Two composed rows: the badged pair the vaults share, and the distinct one.
     const whole = await reader.read("docs", {

@@ -37,6 +37,7 @@ import {
   InCloudOriginalError,
   openDeviceOriginal,
 } from "./device-media";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import { faceReviewCounts, photoLibraryCounts } from "./photos-library-counts";
 import { protectedAssetIdsFromPins } from "./photos-library-pins";
 import { styles } from "./PhotosLibrary.styles";
@@ -106,24 +107,12 @@ export default function PhotosLibrary({
   const { session } = useReplica();
   const { refreshing, refreshNow } = useReplicaRefresh();
   const { assets } = usePhotoTimeline();
-  const collections = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.collection" }), [])
-  );
-  const faces = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "media.face_region" }), [])
-  );
-  const places = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.place" }), [])
-  );
+  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
+  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
+  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
   const entries = useReplicaQuery(
     "photos",
-    useMemo(
-      () => ({ acceptTruncation: true, entity: "core.collection_entry" }),
-      []
-    )
+    PHOTO_ENTITY_READS.collectionEntries
   );
   const [keptAlbums, setKeptAlbums] = useState<string[]>([]);
   const [pinsReady, setPinsReady] = useState(false);

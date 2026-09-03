@@ -15,6 +15,7 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import {
   readCustodyByContent,
   readLabelsByDocument,
@@ -46,18 +47,9 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
     // Owner-curated and small, so unbounded; they bound the rest.
-    const [concepts, schemes] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept",
-        purpose,
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept_scheme",
-        purpose,
-      }),
-    ]);
+    const [concepts, schemes] = await Promise.all(
+      conceptTaxonomyReads(ctx.vault, purpose)
+    );
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
     const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
 

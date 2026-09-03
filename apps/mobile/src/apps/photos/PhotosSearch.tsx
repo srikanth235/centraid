@@ -40,6 +40,7 @@ import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
 import type { PhotosScreenProps } from "../../navigation";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import PhotosSearchEmptyState from "./PhotosSearchEmptyState";
 import PhotosSearchRestingState from "./PhotosSearchRestingState";
 import PhotoTimeline from "./PhotoTimeline";
@@ -121,29 +122,14 @@ export function PhotosSearchView({
   // query rather than navigating the member away.
   const [attempt, setAttempt] = useState(0);
 
-  const collections = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.collection" }), [])
-  );
+  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
   const entries = useReplicaQuery(
     "photos",
-    useMemo(
-      () => ({ acceptTruncation: true, entity: "core.collection_entry" }),
-      []
-    )
+    PHOTO_ENTITY_READS.collectionEntries
   );
-  const faces = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "media.face_region" }), [])
-  );
-  const parties = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
-  );
-  const places = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.place" }), [])
-  );
+  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
+  const parties = useReplicaQuery("photos", PHOTO_ENTITY_READS.parties);
+  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
   const contentItems = useReplicaQuery(
     "photos",
     useMemo(() => ({ acceptTruncation: true, entity: "core.content_item" }), [])

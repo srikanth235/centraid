@@ -61,6 +61,7 @@ import { MediaPage } from "./MediaPage";
 import { EDITOR_TITLE, editorMeta } from "./photo-edit-model";
 import { saveEditAsNewPhotograph } from "./photo-edit-save";
 import type { EditPlan } from "./photo-edit-save";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import { PhotoEditor } from "./PhotoEditor";
 import { PhotoFilmstrip } from "./PhotoFilmstrip";
 import { PhotoInfoSheet } from "./PhotoInfoSheet";
@@ -141,29 +142,14 @@ export default function PhotoLightbox({
   // Live: switching from wifi to cellular mid-session must gate the next photo.
   const networkType = useNetworkState().type;
   const { assets } = usePhotoTimeline();
-  const collections = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.collection" }), [])
-  );
+  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
   const entries = useReplicaQuery(
     "photos",
-    useMemo(
-      () => ({ acceptTruncation: true, entity: "core.collection_entry" }),
-      []
-    )
+    PHOTO_ENTITY_READS.collectionEntries
   );
-  const places = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.place" }), [])
-  );
-  const faces = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "media.face_region" }), [])
-  );
-  const parties = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
-  );
+  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
+  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
+  const parties = useReplicaQuery("photos", PHOTO_ENTITY_READS.parties);
   // By asset identity, never raw index: this timeline is still loading, so
   // device pages land after mount and shift every index.
   const [currentId, setCurrentId] = useState(route.params.assetId);

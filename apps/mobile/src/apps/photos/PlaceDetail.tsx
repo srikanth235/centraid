@@ -18,6 +18,7 @@ import {
 } from "../../kit/replica/write-outcome";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { assetsAtPlace, placeNameAt, unnamedPlaceAt } from "./places-model";
@@ -32,10 +33,7 @@ export default function PlaceDetail({
   const { refreshing, refreshNow } = useReplicaRefresh();
   const { session } = useReplica();
   const { assets: timelineAssets } = usePhotoTimeline();
-  const places = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.place" }), [])
-  );
+  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
   const { placeKey, placeName } = route.params;
   const [naming, setNaming] = useState(false);
   const [typed, setTyped] = useState("");

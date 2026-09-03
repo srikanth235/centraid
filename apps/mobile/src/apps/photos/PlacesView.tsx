@@ -13,6 +13,7 @@ import { TEST_ID_PREFIXES, TEST_IDS } from "../../kit/test-ids";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import PhotosScreen from "./PhotosScreen";
 import { noLocationCard, placeCards } from "./places-model";
 import { tileGround } from "./tile-overlays";
@@ -26,10 +27,7 @@ export default function PlacesView({
 }: PhotosScreenProps<"PlacesView">): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const places = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.place" }), [])
-  );
+  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
   const { assets } = usePhotoTimeline();
   const cards = useMemo(
     () => placeCards(assets, places.rows),

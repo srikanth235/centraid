@@ -10,6 +10,7 @@ import {
   RELATIONS_SCHEME_URI,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 
 const REVISES_RELATION = "revises";
 // Caps runaway growth.
@@ -55,18 +56,9 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
     const doc = ((docRes.rows ?? []) as unknown as DocumentRow[])[0];
     if (!doc) return { versions: [] };
 
-    const [schemes, concepts] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept_scheme",
-        purpose,
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept",
-        purpose,
-      }),
-    ]);
+    const [concepts, schemes] = await Promise.all(
+      conceptTaxonomyReads(ctx.vault, purpose)
+    );
     const revisesConceptId = findSchemeConcept(
       (schemes.rows ?? []) as unknown as SchemeRow[],
       (concepts.rows ?? []) as unknown as ConceptRow[],

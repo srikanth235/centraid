@@ -19,6 +19,7 @@ import {
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
 import { PENDING_OVERLAY_FIELDS } from "../../_shared/pending-overlay.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { readPersonShareLinks } from "./_shared.ts";
 
 interface RawProfile {
@@ -235,16 +236,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         ],
         purpose,
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept",
-        purpose,
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept_scheme",
-        purpose,
-      }),
+      ...conceptTaxonomyReads(ctx.vault, purpose),
       ctx.vault.read({ acceptTruncation: true, entity: "core.vault", purpose }),
       // Null when the sharing plane is unreadable — never a thrown denial.
       readPersonShareLinks(ctx.vault, partyId),

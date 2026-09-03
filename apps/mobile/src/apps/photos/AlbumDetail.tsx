@@ -33,6 +33,7 @@ import {
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
 import { makeStyles } from "./AlbumDetail.styles";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import { usePhotoGrantEntry } from "./photo-grants";
 import {
   batchAddToAlbum,
@@ -60,16 +61,10 @@ export default function AlbumDetail({
   const { session } = replica;
   const { refreshing, refreshNow } = useReplicaRefresh();
   const timeline = usePhotoTimeline();
-  const collections = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "core.collection" }), [])
-  );
+  const collections = useReplicaQuery("photos", PHOTO_ENTITY_READS.collections);
   const entries = useReplicaQuery(
     "photos",
-    useMemo(
-      () => ({ acceptTruncation: true, entity: "core.collection_entry" }),
-      []
-    )
+    PHOTO_ENTITY_READS.collectionEntries
   );
   const [selection, setSelection] = useState(new Set<string>());
   const [renameOpen, setRenameOpen] = useState(false);

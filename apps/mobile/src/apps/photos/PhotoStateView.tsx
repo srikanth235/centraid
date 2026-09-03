@@ -24,6 +24,7 @@ import GrantSheet from "../../kit/share/GrantSheet";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import { photosPendingLine } from "./photos-pending";
 import {
   batchFavorite,
@@ -65,10 +66,7 @@ export default function PhotoStateView({
   const params = route.params;
   const mode = params.mode;
   // Person mode: confirmed faces, not an asset flag — same join FaceReview/PhotosCollectionsView use; one call site, kept local.
-  const faces = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ acceptTruncation: true, entity: "media.face_region" }), [])
-  );
+  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
   // Lineage for purge ORDER only (#711): timeline has no `source_asset_id`; vault refuses a source while a copy still names it.
   const trashedRows = useReplicaQuery(
     "photos",

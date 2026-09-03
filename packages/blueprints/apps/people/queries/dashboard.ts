@@ -23,6 +23,7 @@ import {
   STARRED_NOTATION,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import {
   daysSinceContact,
   daysUntilMonthDay,
@@ -102,16 +103,7 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         limit: window,
         purpose,
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept",
-        purpose,
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept_scheme",
-        purpose,
-      }),
+      ...conceptTaxonomyReads(ctx.vault, purpose),
     ]);
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];

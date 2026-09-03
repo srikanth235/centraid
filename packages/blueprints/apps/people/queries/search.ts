@@ -16,6 +16,7 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 
 interface PartyHit {
   party_id?: string;
@@ -132,16 +133,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         ],
         purpose,
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept",
-        purpose,
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.concept_scheme",
-        purpose,
-      }),
+      ...conceptTaxonomyReads(ctx.vault, purpose),
     ]);
 
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
