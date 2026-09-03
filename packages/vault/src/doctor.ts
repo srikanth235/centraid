@@ -94,7 +94,7 @@ function foreignKeyCount(vault: DatabaseSync): number {
   let total = 0;
   for (const table of tables) {
     total += vault
-      .prepare(`PRAGMA foreign_key_list("${table.name}")`)
+      .prepare(`PRAGMA foreign_key_list(${JSON.stringify(table.name)})`)
       .all().length;
   }
   return total;

@@ -128,6 +128,7 @@ Receipt, independent audit, and the repo-wide gates (W4) — the audit returned 
 - **F5 — `mobile-device-gate` could not be passed by this PR, or by any like it.** The lane hard-failed on an apk cache miss (`G-cold-cache-is-a-lane-failure`), and its key folds the native fingerprint AND the JS bundle fingerprint — the latter a content hash over `packages/core/src`, `packages/client/src`, `packages/design/src`, `packages/blueprints/{src,apps}`, `apps/mobile/src` and `bun.lock`. This wave changes 74 files under those pathspecs, so its key is new by construction. The only writer of that key is `candidate.yml`'s `mobile-canary-android`, which is rung 3 and states of itself that "the merge already happened". The gate therefore demanded a cache entry that only a post-merge lane could produce, on exactly the PRs it exists to check, and no ordering of lanes fixes it — the canary cannot run first. Owner-ruled reversal: a miss reconstructs the shell. No build step was added, because there is not a second recipe to write — `apps/mobile/scripts/android-emulator-install.sh` already builds, installs and banks the artifact when `ANDROID_CACHE_HIT != true`, and all three Android lanes source it; removing the guard was the change. A rebuilt shell still reports a miss, because that variable is what selects the cold path. The apk cache keeps its refusal of `restore-keys` — a partial match there installs a stale binary, which is the one thing it must never do.
 - **F6 — the rung-2 wall clock was 25.3 min against 15.0, and all of it was one lane.** `new-test-burn-in` runs every added-or-modified test file three times alone; this wave changes 237 of them, and the lane was cancelled at its 25-minute timeout having finished 116 — so it blew the budget AND produced no verdict. The budget is tighten-only and was not touched. `scripts/ci/pr-gate-wall-clock.mjs` measures `max(completed_at) − min(started_at)`, the span rather than the sum, and says why: summing "would punish parallelism, which is the one thing that makes the gate fast". Parallelism is therefore the relief the budget itself sanctions, so the lane is sharded across a matrix of 8 — every file still runs three times, still alone, and `--runs 3` is unchanged. `--shard i/N` partitions a SORTED list by `index % N`, so the legs are one list cut N ways rather than N independent guesses, and same-package neighbours (same cost) spread across runners instead of piling onto one. The divisor is `strategy.job-total`, the matrix's own length, so adding a leg cannot leave a stale `N` behind. Every malformed shard shape is a hard error rather than an empty pass, because a shard that silently selects nothing is a green that means nothing. Measured span without the lane is 9.25 min, which is the real floor; 8 legs put it at ~7.3 min expected and ~8.8 min pessimistic, both under that floor, and a diff of twice this size would still fit. `check.needs` keeps ONE entry: a matrix job's result is the roll-up of its legs, so a red or cancelled leg still reds the gate. The workflow half of this landed in `b30a7b34`, whose message describes only the `mobile-device-gate` reversal — the two changes were in the same file and were staged together in error.
 - **F7 — reconstructing the shell was only affordable once the Android cache was fixed, and it was broken three ways.** F5's reversal made a miss rebuild, and a rebuild measured 11m19s of full native compile against a 15-minute span budget — so the `js-bundle-fingerprint.mjs` promise that a miss costs a repackage was not true, and had not been true. Three causes, each of which alone still left a full compile. `org.gradle.caching` was unset, so `~/.gradle/caches` carried dependencies and transforms but no task **outputs**. The autolinked React Native and Expo libraries compile under `node_modules/<lib>/android/build` with CMake intermediates in `node_modules/<lib>/android/.cxx` (61 packages ship a gradle subproject; a dozen compile C or C++), and none of it was cached — which is why a run could restore the cache in 41 seconds and still be in the C compiler twenty-five minutes later. And `apps/mobile/android/.gradle` was not cached, so gradle's stale-output cleanup **deleted** the two build directories that were: that cleanup removes anything under a build directory its execution history does not vouch for, and the history lives in `.gradle`. The three lanes that share these entries (`ci.yml`, `candidate.yml`, `e2e.yml`) move to one `android-gradle-v2-*` namespace together with byte-identical path lists, because a lane that saves a shape another lane does not restore is worse than no cache. The save is gated on `gradle_ran` rather than `built`: on an apk-cache hit gradle never ran, the unconditional save banked a barren directory, and since `restore-keys` resolve to the most recently created match, that empty entry then shadowed the warm one — the cache could not self-correct. Restoring gradle's execution history unmasks one hazard and it is closed explicitly: `BundleHermesCTask.sources` is scoped to `apps/mobile`, while the bundle also contains the four workspace packages, so a workspace-only change moves the apk key without moving that task's declared inputs and a restored bundle would have been reused. `android-emulator-install.sh` forces that one task with `--rerun`. The apk cache is untouched and still refuses `restore-keys`. **The speedup is estimated, not measured** — no Android SDK here — at roughly 3–5 min for the rebuild and 14–16 min for the lane, which is at the budget rather than comfortably under it; the first run after `mobile-canary-android` banks a `v2` entry on `main` is the measurement.
+- **F8 — the SonarCloud gate named two ratings and no findings, so the rules were run locally instead.** `sonarcloud.io` is refused by this environment's egress policy and the analysis is server-side Autoscan, so the D Security / C Reliability verdict arrived with nothing to act on. `eslint-plugin-sonarjs` **is** the SonarJS analyser, so the full rule set was run — untyped and type-aware — over exactly the PR's non-excluded changed files. Four defects, all real: `gateway/execution.ts` built a 14-entry `ENTITY_POINTERS` walk on every foreign-key failure and fed it to `(pairs.length > 0 ? "" : "")`, both branches identical (S3923). The walk was deleted rather than completed, because it could never have produced anything — it passes `pointer.table`, a PHYSICAL name, to `resolveEntity`, which returns `undefined` for anything without a dot, so `pairs` is always empty; finishing the sentence would have been writing new code to fix a second latent bug, not restoring a lost one. `gateway/sealed-artifact.ts` cast `JSON.parse(value)` to `Record<string, unknown>` (S3403); the `null` guard the rule calls dead is correct at runtime and stays, but the ARRAY case passed `typeof === "object"`, was iterated, and reported `payload_json:0` as an unexpected sealed value — a legitimate import refused for a numeric field name that does not exist. `install-memory.ts`'s `scope.table === null` is unreachable by type and real at runtime (manifest JSON can express `table: null`), so it collapses to `== null`, which `oxlint.config.ts` permits. And `commands/atlas.ts` interpolated caller-supplied JSON keys as SQL identifiers: `guardWriteTarget` checked the table and refused sealed column NAMES but never checked the keys against the real column set, so a key carrying a quote escaped the identifier and wrote a sealed column — reproduced end to end, the `password` cell going from `NULL` to a caller-supplied value. It now rejects any column not in `tableInfo`, ahead of the sealed check. Those `prepare()` lines are not new in this wave; the fix is folded in because the bypass is reachable and the diff is small. `schema/ontology-doc.ts` and `doctor.ts` route their PRAGMA identifiers through `JSON.stringify` like every sibling. **The Security D itself is unresolved**: no Vulnerability-class rule fired locally, and the only rules `eslint-plugin-sonarjs` cannot reproduce are the closed-source taint engine's — so the finding needs the dashboard, not another sweep.
 - **F4 — the `verify` CI job's perf lane never ran.** `packages/server/scripts/bench-low-end.mjs` sent `ontology_version: "1.3"` in both of its `core.party` insert bodies. ONT-04 dropped `core_party.ontology_version` (the ontology version is a property of a command — `agent_command.ontology_version` — never of a row), so the gateway answered `400 table core_party has no column named ontology_version` and the harness threw `warmup write failed` before measuring anything. Both lines are deleted; nothing replaces them, because the column is gone rather than renamed.
 
 ## User impact
@@ -274,10 +275,13 @@ The owner directed this change set onto the branch ahead of the remaining proces
 
 Every path in `git status --short` for this change set (586 files besides this receipt: 38 added, 24 deleted, 4 renamed, 520 modified; 20,234 insertions and 19,405 deletions).
 
-### repository root (8)
+### repository root (11)
 
 ```
+.github/workflows/candidate.yml
 .github/workflows/ci.yml
+.github/workflows/e2e.yml
+.github/workflows/mobile-alarm-test.yml
 AGENTS.md
 ARCHITECTURE.md
 CHANGELOG.md
@@ -287,9 +291,12 @@ SECURITY.md
 package.json
 ```
 
-### apps (13)
+### apps (16)
 
 ```
+apps/mobile/android/gradle.properties
+apps/mobile/native-fingerprints.json
+apps/mobile/scripts/android-emulator-install.sh
 apps/mobile/src/apps/agenda/useAgenda.ts
 apps/mobile/src/apps/docs/DocsHome.test.tsx
 apps/mobile/src/apps/docs/DocumentVersions.tsx
@@ -921,9 +928,11 @@ packages/vault/src/share/self-binding.ts
 packages/vault/src/share/sql.ts
 ```
 
-### scripts (14)
+### scripts (16)
 
 ```
+scripts/ci/burn-in.mjs
+scripts/ci/burn-in.test.mjs
 scripts/corpora/backup-format-census.json
 scripts/corpora/schema-epoch-census.json
 scripts/corpora/vault-corpus.ts

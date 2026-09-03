@@ -81,4 +81,46 @@ describe("sealed-artifact suite", () => {
     );
     expect(audit.unexpected).toStrictEqual(["ext.notes.secrets.token"]);
   });
+
+  // A STAGED PAYLOAD IS UNTRUSTED JSON, NOT AN OBJECT (#916). The audit read
+  // `JSON.parse(payload_json)` through an `as Record<string, unknown>` cast
+  // that the runtime does not honour: `JSON.parse("null")` is `null`, and
+  // `Object.entries(null)` throws — so a bundle carrying the four bytes `null`
+  // in `sync.import_row.payload_json` crashed the pre-import seal audit
+  // instead of refusing or ignoring the row. An ARRAY passed `typeof
+  // "object"` and was audited with numeric "field" names.
+  test("a staged payload that is not a JSON object is audited, not a crash", () => {
+    for (const payload of ["null", "[]", `["${secret}"]`, "42", '"text"']) {
+      const audit = auditArtifactSealedValues(
+        artifactOf({
+          "sync.import_row": [
+            {
+              import_row_id: "i1",
+              entity_type: "locker.item",
+              payload_json: payload,
+            },
+          ],
+        })
+      );
+      expect(audit.unexpected).toStrictEqual([]);
+      expect(sealedArtifactTotal(audit)).toBe(0);
+    }
+  });
+
+  test("a staged payload that IS an object still audits its sealed fields", () => {
+    const audit = auditArtifactSealedValues(
+      artifactOf({
+        "sync.import_row": [
+          {
+            import_row_id: "i1",
+            entity_type: "locker.item",
+            payload_json: JSON.stringify({ nowhere: secret }),
+          },
+        ],
+      })
+    );
+    expect(audit.unexpected).toStrictEqual([
+      "sync.import_row.payload_json:nowhere",
+    ]);
+  });
 });

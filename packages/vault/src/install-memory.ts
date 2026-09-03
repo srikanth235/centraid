@@ -98,9 +98,10 @@ interface TombstoneRow {
 
 /** `{schema, table}` → the one dotted name the access plane stores. */
 function dottedEntity(scope: Pick<ScopeTriple, "schema" | "table">): string {
-  return scope.table === undefined || scope.table === null
-    ? scope.schema
-    : `${scope.schema}.${scope.table}`;
+  // `== null` on purpose: the type says `string | undefined`, but a scope
+  // triple can arrive from app-manifest JSON where `table: null` is
+  // expressible, so the null arm is a runtime case the type does not see.
+  return scope.table == null ? scope.schema : `${scope.schema}.${scope.table}`;
 }
 
 const tombstoneExtent = (row: TombstoneRow): ScopeTriple => ({

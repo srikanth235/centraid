@@ -14,6 +14,7 @@ import { browseDependents } from "../schema/atlas-browse-refs.js";
 import {
   primaryKeyColumns,
   resolveBrowseTable,
+  tableInfo,
 } from "../schema/atlas-browse.js";
 import { packKindOf } from "../schema/atlas.js";
 import { sealedColumnsOf } from "../schema/sealed.js";
@@ -35,8 +36,9 @@ function bindable(table: string, column: string, value: unknown): Bindable {
 }
 
 /**
- * Resolve the logical name (reject unknown), refuse sealed-column writes, and
- * refuse machinery bands unless `unlockMachinery: true`.
+ * Resolve the logical name (reject unknown), refuse writes to a column the
+ * table does not have, refuse sealed-column writes, and refuse machinery bands
+ * unless `unlockMachinery: true`.
  */
 function guardWriteTarget(
   vault: DatabaseSync,
@@ -50,6 +52,20 @@ function guardWriteTarget(
     throw new Error(
       `${table} is a machinery band — read-only by default; resend with unlockMachinery:true to edit`
     );
+  }
+  // A COLUMN NAME IS AN IDENTIFIER, AND THE SEAL CHECK ONLY GUARDS REAL ONES.
+  // The write statements interpolate these keys into quoted identifiers, so a
+  // key carrying a double quote used to close the quote and smuggle a second
+  // assignment in — `type" = "type", "password` set a sealed column while the
+  // sealed set, asked about the whole crafted key, said no. Every touched
+  // column is matched against the table's live column set FIRST: the crafted
+  // key is not a column, so it never reaches the interpolation, and an
+  // ordinary typo gets this refusal instead of a SQLite syntax error.
+  const real = new Set(tableInfo(vault, ref.physical).map((c) => c.name));
+  for (const col of touched) {
+    if (!real.has(col)) {
+      throw new Error(`${table}: unknown column ${JSON.stringify(col)}`);
+    }
   }
   const sealed = new Set(sealedColumnsOf(logical, vault));
   for (const col of touched) {

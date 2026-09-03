@@ -111,24 +111,33 @@ function describeTable(
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
     .get(physical) as { sql: string } | undefined;
   if (!master) return undefined;
-  const info = db.prepare(`PRAGMA table_info(${physical})`).all() as {
+  // Identifiers reach PRAGMA as SQL string literals (`JSON.stringify`), the
+  // one form the rest of the vault's PRAGMA sites use — see `filters.ts`,
+  // `revision-capture.ts`, `entity.ts`, `merge-fold.ts`, `duties.ts`.
+  const info = db
+    .prepare(`PRAGMA table_info(${JSON.stringify(physical)})`)
+    .all() as {
     name: string;
     type: string;
     notnull: number;
     pk: number;
   }[];
   const foreignKeys = db
-    .prepare(`PRAGMA foreign_key_list(${physical})`)
+    .prepare(`PRAGMA foreign_key_list(${JSON.stringify(physical)})`)
     .all() as { from: string; table: string }[];
   const uniqueSingles = new Set<string>();
-  const indexes = db.prepare(`PRAGMA index_list(${physical})`).all() as {
+  const indexes = db
+    .prepare(`PRAGMA index_list(${JSON.stringify(physical)})`)
+    .all() as {
     name: string;
     unique: number;
     origin: string;
   }[];
   for (const index of indexes) {
     if (!index.unique || index.origin === "pk") continue;
-    const cols = db.prepare(`PRAGMA index_info(${index.name})`).all() as {
+    const cols = db
+      .prepare(`PRAGMA index_info(${JSON.stringify(index.name)})`)
+      .all() as {
       name: string;
     }[];
     if (cols.length === 1) uniqueSingles.add(cols[0]!.name);

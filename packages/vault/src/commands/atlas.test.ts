@@ -258,6 +258,84 @@ describe("atlas", () => {
     expect((out as { reason: string }).reason).toMatch(/sealed/u);
   });
 
+  // A COLUMN NAME IS AN IDENTIFIER (#916). The write statements interpolate the
+  // caller's JSON keys into quoted identifiers, so a key carrying a double
+  // quote closed the quote and smuggled a second assignment into the SET list
+  // — the sealed set, asked about the whole crafted key, said no, and the
+  // sealed column was written in plaintext anyway. The guard matches every
+  // touched key against the table's live columns BEFORE the seal check.
+  test("a crafted column name cannot smuggle a write past the sealed check", () => {
+    const now = new Date().toISOString();
+    db.vault
+      .prepare(
+        `INSERT INTO locker_item (item_id, type, title, compromised, created_at, updated_at)
+       VALUES ('L3','login','GitHub',0,?,?)`
+      )
+      .run(now, now);
+    const out = invoke("atlas.update_row", {
+      table: "locker.item",
+      id: "L3",
+      set: { 'type" = "type", "password': "plaintext" },
+    });
+    expect(out.status).toBe("failed");
+    expect((out as { reason: string }).reason).toMatch(/unknown column/u);
+    // The point of the refusal: the sealed column is still untouched.
+    const raw = db.vault
+      .prepare(`SELECT password FROM locker_item WHERE item_id = 'L3'`)
+      .get() as { password: string | null };
+    expect(raw.password).toBeNull();
+  });
+
+  test("the same escape is refused on insert_row", () => {
+    const out = invoke("atlas.insert_row", {
+      table: "locker.item",
+      values: {
+        item_id: "L4",
+        type: "login",
+        title: "GitHub",
+        compromised: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        "title\") VALUES ('x'); --": "plaintext",
+      },
+    });
+    expect(out.status).toBe("failed");
+    expect((out as { reason: string }).reason).toMatch(/unknown column/u);
+    const count = db.vault
+      .prepare(`SELECT COUNT(*) AS n FROM locker_item WHERE item_id = 'L4'`)
+      .get() as { n: number };
+    expect(count.n).toBe(0);
+  });
+
+  test("an unknown column is a clean refusal, not a SQLite error", () => {
+    const out = invoke("atlas.update_row", {
+      table: "core.concept_scheme",
+      id: "S9",
+      set: { titel: "typo" },
+    });
+    expect(out.status).toBe("failed");
+    const reason = (out as { reason: string }).reason;
+    expect(reason).toMatch(/unknown column "titel"/u);
+    expect(reason).not.toMatch(/syntax error|no such column/iu);
+  });
+
+  test("an ordinary write to a real column still succeeds", () => {
+    const now = new Date().toISOString();
+    db.vault
+      .prepare(
+        `INSERT INTO locker_item (item_id, type, title, compromised, created_at, updated_at)
+       VALUES ('L5','login','Before',0,?,?)`
+      )
+      .run(now, now);
+    const out = invoke("atlas.update_row", {
+      table: "locker.item",
+      id: "L5",
+      set: { title: "After" },
+    });
+    expect(out.status).toBe("executed");
+    expect(browseRow(db.vault, "locker.item", "L5").row["title"]).toBe("After");
+  });
+
   test("machinery bands are read-only unless explicitly unlocked", () => {
     const locked = invoke("atlas.insert_row", {
       table: "blob.custody_state",

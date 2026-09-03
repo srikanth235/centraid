@@ -23,7 +23,6 @@ import {
   readDurableParkedDenial,
   readDurableParkedPayload,
 } from "../replica/parked.js";
-import { ENTITY_POINTERS } from "../schema/entity-refs.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import {
   isSealedValue,
@@ -123,9 +122,14 @@ function rollbackInvocationTransaction(
  * KEY into `core_entity` since rung ten, so the engine refuses the write at
  * the statement, for all fifteen, and `polymorphicDenial` below turns its
  * one-line complaint back into something a member can act on.
+ *
+ * The denial names the PAIR that failed, not the registry: an earlier draft
+ * also walked `ENTITY_POINTERS` to list the fourteen pointer tables, on every
+ * foreign-key failure, and appended nothing. Naming them would not diagnose
+ * this failure either — the member supplied a `(type, id)`, and which tables
+ * happen to carry pointers is not what is wrong with it.
  */
 export function polymorphicDenial(
-  vault: DatabaseSync,
   writes: { entityType: string; entityId: string }[],
   error: unknown
 ): string | null {
@@ -134,15 +138,10 @@ export function polymorphicDenial(
   // Name the pair the caller most likely got wrong: the last entity written.
   const write = writes.at(-1);
   const named = write ? `${write.entityType} ${write.entityId}: ` : "";
-  const pairs = [...ENTITY_POINTERS]
-    .filter((pointer) => resolveEntity(pointer.table, vault) !== undefined)
-    .map((pointer) => pointer.table);
   return (
     `${named}a polymorphic pointer names an entity that does not exist. ` +
     `Every (type, id) pair is a foreign key into core_entity — the pair has to ` +
-    `name a live row of a registered entity` +
-    (pairs.length > 0 ? "" : "") +
-    "."
+    `name a live row of a registered entity.`
   );
 }
 

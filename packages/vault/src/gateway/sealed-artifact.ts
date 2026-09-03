@@ -91,13 +91,20 @@ function auditStagedPayload(
   value: unknown
 ): void {
   if (typeof value !== "string") return;
-  let payload: Record<string, unknown>;
+  // The guard is LOAD-BEARING, and the type has to admit it: `JSON.parse` of a
+  // bundle's `payload_json` returns `unknown`, and a portable import can carry
+  // the four bytes `null` (or an array — `typeof [] === "object"`, whose keys
+  // would be audited as numeric "field" names). Both are staged rows this
+  // audit has nothing to say about, not crashes on `Object.entries`.
+  let parsed: unknown;
   try {
-    payload = JSON.parse(value) as Record<string, unknown>;
+    parsed = JSON.parse(value);
   } catch {
     return;
   }
-  if (typeof payload !== "object" || payload === null) return;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+    return;
+  const payload = parsed as Record<string, unknown>;
   const fields = sealedPayloadFieldsOf(String(row["entity_type"] ?? ""));
   for (const [field, item] of Object.entries(payload)) {
     if (!isSealedValue(item)) continue;

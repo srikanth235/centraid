@@ -131,15 +131,16 @@ describe("execution", () => {
 
   test("polymorphicDenial turns the engine's complaint into a readable denial", () => {
     const denial = polymorphicDenial(
-      db.vault,
       [{ entityType: "core.tag", entityId: "tag-1" }],
       new Error("FOREIGN KEY constraint failed")
     );
     expect(denial).toContain("core.tag tag-1");
     expect(denial).toContain("core_entity");
+    // The sentence ends where it says it does — no dangling clause.
+    expect(denial).toMatch(/name a live row of a registered entity\.$/u);
     // Not every failure is a polymorphic one.
     expect(
-      polymorphicDenial(db.vault, [], new Error("UNIQUE constraint failed"))
+      polymorphicDenial([], new Error("UNIQUE constraint failed"))
     ).toBeNull();
   });
 
