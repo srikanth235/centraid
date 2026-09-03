@@ -129,17 +129,34 @@ jobs:
         with:
           path: ~/.cache/centraid-mobile-e2e-android
           key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
-      - name: Restore the Android gradle build directory
+      # THE PATH LIST AND THE `v2` KEY NAMESPACE ARE SHARED WITH `ci.yml`'s
+      # `mobile-device-gate` AND `e2e.yml`'s `mobile-e2e-android` (#916), restore
+      # and save alike. THIS lane is the one that banks them for the other two,
+      # so a divergence here is not a local inefficiency — it is a PR gate
+      # restoring a shape nobody wrote. The full argument (gradle's build cache,
+      # the autolinked library build and `.cxx` directories, and why
+      # `apps/mobile/android/.gradle` has to travel with them or the rest is
+      # deleted before the first task runs) is written once, above the matching
+      # step in `ci.yml`.
+      - name: Restore the Android gradle and native build directories
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            apps/mobile/android/app/build
-            apps/mobile/android/build
             ~/.gradle/caches
-          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+            apps/mobile/android/.gradle
+            apps/mobile/android/build
+            apps/mobile/android/app/build
+            apps/mobile/android/app/.cxx
+            apps/mobile/modules/*/android/build
+            node_modules/*/android/build
+            node_modules/*/android/.cxx
+            node_modules/@*/*/android/build
+            node_modules/@*/*/android/.cxx
+            !node_modules/@centraid/**
+          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
           restore-keys: |
-            android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
-            android-gradle-${{ runner.os }}-
+            android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
+            android-gradle-v2-${{ runner.os }}-
       - name: AVD cache
         id: avd_cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -211,15 +228,36 @@ jobs:
         with:
           path: ~/.cache/centraid-mobile-e2e-android
           key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
-      - name: Save the Android gradle build directory
-        if: always()
+      # Gated on `gradle_ran`, not `built` (#916). This lane's own apk cache can
+      # HIT — on a re-run, or when the fingerprints did not move since the last
+      # push to main — and an unconditional save then banked a directory holding
+      # no fresh native output. Because `restore-keys` resolve to the most
+      # RECENTLY created match, that empty entry SHADOWED the warm one for every
+      # PR gate afterwards, which is why the situation never self-corrected
+      # (receipts/issue-905-client-e2e-escape-hatch.md; run 33370541215 restored
+      # the apk in 4s, skipped the apk save, and banked the gradle directory
+      # anyway). `gradle_ran=true` is written by `android-emulator-install.sh` as
+      # soon as it commits to a gradle invocation, so a build that dies in the C
+      # compiler still banks its warm `.cxx` — that output is worth having
+      # whatever the roster went on to say — and a run that only restored banks
+      # nothing.
+      - name: Save the Android gradle and native build directories
+        if: always() && steps.emu.outputs.gradle_ran == 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            apps/mobile/android/app/build
-            apps/mobile/android/build
             ~/.gradle/caches
-          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+            apps/mobile/android/.gradle
+            apps/mobile/android/build
+            apps/mobile/android/app/build
+            apps/mobile/android/app/.cxx
+            apps/mobile/modules/*/android/build
+            node_modules/*/android/build
+            node_modules/*/android/.cxx
+            node_modules/@*/*/android/build
+            node_modules/@*/*/android/.cxx
+            !node_modules/@centraid/**
+          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

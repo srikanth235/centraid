@@ -1045,13 +1045,13 @@ jobs:
       # falsify "this diff broke the phone": the pairing canary, one home-app
       # journey (`notes-library`), and cold start — 8 minutes warm.
       #
-      # A COLD CACHE IS NOW A NAMED LANE FAILURE, NOT A SIXTY-MINUTE WAIT. When the
-      # apk restore misses, this job used to compile a release build inside the leg
-      # (16m21s on 0655a1b7, inside a 27-minute job) and every PR behind it paid the
-      # same. The shell is banked by `candidate.yml`'s `mobile-canary-android` on
-      # every push to main, so a miss means that lane has not run for this native +
-      # JS fingerprint yet — a statement about the pipeline, which the pipeline
-      # should say out loud in seconds rather than discover in an hour.
+      # A COLD APK IS A REBUILD, NOT A LANE FAILURE (#916, owner-ruled). An apk
+      # miss means `candidate.yml`'s `mobile-canary-android` has not run for this
+      # native + JS fingerprint yet, which for a PR that touches mobile JS is
+      # true BY CONSTRUCTION — that lane is rung 3 and runs post-merge. The
+      # reconstruct-on-miss argument is written out in full beside the caches in
+      # the job below; what keeps it affordable is that the rebuild reuses the
+      # banked gradle and native directories instead of recompiling them.
       #
       # The committed leg script sits literally inside this job block, which is where
       # scripts/lint-e2e-wiring.mjs reads it from.
@@ -1076,18 +1076,23 @@ jobs:
     # slow run, because it fails while evidence can still be written. This is an
     # outer backstop only, and it MUST sit above the cold path, because a job
     # cancelled by this timeout loses every verdict it had written (#557).
-    # Priced for the worst case the lane now accepts: setup and cache restores
-    # ~1.6 min, a cold-apk/warm-gradle release build ~11.3 min (measured 11m19s
-    # on run 33467906385), the suite's own 8-minute ceiling, and ~1.5 min of
-    # overhead — ~22.4 min, so 30 with margin for an AVD-snapshot miss. The warm
-    # path is unchanged at ~11 min and never approaches this.
+    # Priced for the worst case the lane accepts: setup and cache restores, a
+    # cold-apk rebuild, the suite's own 8-minute ceiling, and job overhead. The
+    # cold-apk rebuild was a FULL native compile at 11m19s (run 33467906385)
+    # because the gradle cache restored no task outputs and no native build
+    # directory at all; the caching restructure below is aimed squarely at that
+    # number, and the first run on the new `android-gradle-v2-` keys is what
+    # measures it. The timeout stays at 30 until a measurement says otherwise —
+    # tightening it on a projection would be trading a slow lane for a cancelled
+    # one, and a job this timeout cancels loses every verdict it had written
+    # (#557). The warm-apk path is unchanged at ~11 min and never approaches it.
     #
-    # THIS IS ABOVE THE RUNG-2 SPAN BUDGET AND THAT IS A KNOWN, OWNER-ACCEPTED
-    # COST (#916). `tests/budgets.json#suiteWallClock.lanes.pr-gate` is 15.0 min
-    # of ELAPSED SPAN across `check`'s needs, it is tighten-only, and a cold
-    # rebuild here blows it. The budget is not widened to match: the overrun is
-    # reported by `scripts/ci/pr-gate-wall-clock.mjs` on the run that spends it,
-    # which is the honest place for it to show up.
+    # A COLD REBUILD MAY STILL EXCEED THE RUNG-2 SPAN BUDGET, AND THAT REMAINS A
+    # KNOWN, OWNER-ACCEPTED COST (#916). `tests/budgets.json#suiteWallClock.lanes.pr-gate`
+    # is 15.0 min of ELAPSED SPAN across `check`'s needs and is tighten-only. The
+    # budget is not widened to match: the overrun is reported by
+    # `scripts/ci/pr-gate-wall-clock.mjs` on the run that spends it, which is the
+    # honest place for it to show up, and it is how the restructure gets scored.
     timeout-minutes: 30
     steps:
       - id: start
@@ -1162,45 +1167,97 @@ jobs:
       #                  "built from a different commit's JS", which under the
       #                  release artifact is the common case rather than the rare
       #                  one.
-      #   gradle build   restore-keys ON. A partial match is a warm build
-      #     directory   DIRECTORY, not an artifact: gradle re-checks every task's
-      #                  inputs against the current tree, so nothing stale can
-      #                  survive a task-input check. That is why restore-keys is
-      #                  safe on this one and refused on the other.
+      #   gradle +       restore-keys ON. A partial match is a warm build
+      #     native        DIRECTORY, not an artifact: gradle re-checks every
+      #     directories   task's declared inputs against the current tree, so a
+      #                   task whose inputs moved re-runs. That is why
+      #                   restore-keys is safe on this one and refused on the
+      #                   other. The one task whose declared inputs do NOT cover
+      #                   everything that changes it is the JS bundle, and it is
+      #                   forced to re-run rather than trusted — see below.
       #
       # Both are populated on `main` by `candidate.yml`'s `mobile-canary-android`
       # (rung 3), so a PR normally restores rather than compiles.
       #
-      # WHAT THE GRADLE CACHE DOES NOT BUY, because the sentence that used to sit
-      # here claimed otherwise: a warm gradle directory does NOT reduce a
-      # JS-only rebuild to "bundle and packaging tasks". `org.gradle.caching` is
-      # unset, so gradle's build cache is off and `~/.gradle/caches` preserves
-      # dependencies and transforms but no task outputs; and the cached paths
-      # cover no native build directory — React Native library modules build
-      # under `node_modules/<lib>/android/build` with NDK intermediates in
-      # `.cxx/`, and neither path is cached by any workflow here. Measured on run
-      # 33405430819: the gradle cache restored in 41s and the job was still
-      # compiling `react-native-quick-crypto`'s C sources twenty-five minutes
-      # later. So an apk miss costs a native compile, not a repackage. Making it
-      # a repackage is a caching restructure across four workflows, not a line
-      # change, and until it lands the cold path is priced honestly above.
+      # WHAT THE GRADLE CACHE BUYS, AND WHY IT BOUGHT NOTHING UNTIL #916. The
+      # sentence that used to sit here claimed a warm gradle directory reduced a
+      # JS-only rebuild to "bundle and packaging tasks"; the sentence that
+      # replaced it said the opposite. Both were describing a cache that could
+      # not work, for three independent reasons — and fixing any one alone still
+      # leaves a full native compile, which is why this moved as one change
+      # across `ci.yml`, `candidate.yml` and `e2e.yml` together:
+      #
+      #   1. `org.gradle.caching` was UNSET, so gradle's build cache was off and
+      #      `~/.gradle/caches` preserved dependencies and artifact transforms
+      #      but no task OUTPUTS. It is now `true` in
+      #      `apps/mobile/android/gradle.properties`, where the reasoning lives;
+      #      the entries land in `~/.gradle/caches/build-cache-1`, inside the
+      #      path this step was already restoring.
+      #   2. THE LIBRARY MODULES WERE NOT CACHED AT ALL. React Native and Expo
+      #      autolink each library as a gradle subproject rooted at
+      #      `node_modules/<lib>/android`, so its class output lands in
+      #      `node_modules/<lib>/android/build` and its CMake/ninja intermediates
+      #      in `node_modules/<lib>/android/.cxx` — a dozen of the autolinked
+      #      modules compile C or C++, and the app itself gets a CMake build from
+      #      React Native's `default-app-setup/CMakeLists.txt`, staged in
+      #      `apps/mobile/android/app/.cxx`. That is where the
+      #      eleven minutes were. Measured on run 33405430819: the gradle cache
+      #      restored in 41s and the job was still compiling
+      #      `react-native-quick-crypto`'s C sources twenty-five minutes later,
+      #      because nothing it restored had ever contained a C object file.
+      #   3. `apps/mobile/android/.gradle` was not cached either, and without it
+      #      the two build directories that WERE cached got DELETED before the
+      #      first task ran. Gradle's stale-output cleanup removes anything under
+      #      a project's build directory that its own execution history does not
+      #      claim, and that history lives in `.gradle`. Restoring outputs
+      #      without the record that vouches for them is a slower way of
+      #      restoring nothing.
+      #
+      # The key namespace is `android-gradle-v2-` for exactly that reason: a v1
+      # entry names a different path set, and a `restore-keys` match against one
+      # would hand this lane build directories with no `.gradle` beside them —
+      # the shape that gets deleted at task-graph time. All three Android lanes
+      # cut over in the same change. A lane that saves a directory another lane
+      # does not restore is worse than no cache.
+      #
+      # A STALE JS BUNDLE CANNOT RIDE IN ON THIS. Now that gradle arrives with an
+      # execution history it can legitimately report tasks UP-TO-DATE, and
+      # `createBundleReleaseJsAndAssets` under-declares: React Native annotates
+      # its sources as a file tree under `apps/mobile` only, while
+      # `js-bundle-fingerprint.mjs` correctly counts the four workspace packages
+      # and `bun.lock` as bundle inputs too. So the bundle task is forced with
+      # `--rerun` in `apps/mobile/scripts/android-emulator-install.sh` — the full
+      # argument is written there, next to the invocation it constrains.
       - name: Restore the built Android app
         id: android_app
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e-android
           key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
-      - name: Restore the Android gradle build directory
+      # The path list is IDENTICAL in `candidate.yml` and `e2e.yml`, restore and
+      # save alike. `!node_modules/@centraid/**` is not decoration: bun symlinks
+      # every workspace package into `node_modules`, so `@centraid/mobile` IS
+      # `apps/mobile`, and without the exclusion the scoped glob would archive
+      # `apps/mobile/android/build` a second time under a second name.
+      - name: Restore the Android gradle and native build directories
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            apps/mobile/android/app/build
-            apps/mobile/android/build
             ~/.gradle/caches
-          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+            apps/mobile/android/.gradle
+            apps/mobile/android/build
+            apps/mobile/android/app/build
+            apps/mobile/android/app/.cxx
+            apps/mobile/modules/*/android/build
+            node_modules/*/android/build
+            node_modules/*/android/.cxx
+            node_modules/@*/*/android/build
+            node_modules/@*/*/android/.cxx
+            !node_modules/@centraid/**
+          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
           restore-keys: |
-            android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
-            android-gradle-${{ runner.os }}-
+            android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
+            android-gradle-v2-${{ runner.os }}-
       # ON A COLD SHELL THIS LANE RECONSTRUCTS IT. OWNER-RULED (#916), reversing
       # the earlier rule that a miss was a lane failure.
       #
@@ -1343,15 +1400,41 @@ jobs:
         with:
           path: ~/.cache/centraid-mobile-e2e-android
           key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
-      - name: Save the Android gradle build directory
-        if: always()
+      # BANK THE WARM DIRECTORIES ONLY WHEN THIS RUN ACTUALLY COMPILED. Gated on
+      # `gradle_ran`, not `built`, and the two differ in both directions:
+      #
+      #   apk HIT, no gradle    `gradle_ran` unset → SAVE SKIPPED. This is the
+      #                         fix for the barren re-bank recorded in
+      #                         receipts/issue-905-client-e2e-escape-hatch.md and
+      #                         seen on run 33370541215: the save used to be
+      #                         unconditional, so a run that never invoked gradle
+      #                         banked a directory holding no fresh native output
+      #                         — and because `restore-keys` resolve to the most
+      #                         RECENTLY created match, that empty entry then
+      #                         shadowed the warm one. The cache could not
+      #                         self-correct.
+      #   build died mid-way    `gradle_ran` set, `built` unset → SAVED. A run
+      #                         that failed in the C compiler still leaves warm
+      #                         `.cxx` and module build directories, and they are
+      #                         valid inputs for the next run whatever the suite
+      #                         went on to say.
+      - name: Save the Android gradle and native build directories
+        if: always() && steps.emu.outputs.gradle_ran == 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            apps/mobile/android/app/build
-            apps/mobile/android/build
             ~/.gradle/caches
-          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+            apps/mobile/android/.gradle
+            apps/mobile/android/build
+            apps/mobile/android/app/build
+            apps/mobile/android/app/.cxx
+            apps/mobile/modules/*/android/build
+            node_modules/*/android/build
+            node_modules/*/android/.cxx
+            node_modules/@*/*/android/build
+            node_modules/@*/*/android/.cxx
+            !node_modules/@centraid/**
+          key: android-gradle-v2-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

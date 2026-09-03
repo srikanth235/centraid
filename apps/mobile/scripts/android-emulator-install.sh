@@ -42,6 +42,12 @@
 #   - GITHUB_OUTPUT receives `built=true` only when this run actually compiled a
 #     fresh apk, so the cache-save step knows there is something new to bank (a
 #     cache-hit run must not re-save what it just restored).
+#   - GITHUB_OUTPUT receives `gradle_ran=true` as soon as this run COMMITS to a
+#     gradle invocation, whether or not that invocation ends in an apk. It gates
+#     the gradle/native-directory save, which is a different question from
+#     `built`: a build that dies in the C compiler still leaves a warm `.cxx` and
+#     warm module build directories worth banking, and a run that restored the
+#     apk leaves nothing at all (#916).
 
 build_type="${CENTRAID_MOBILE_BUILD:-release}"
 
@@ -60,15 +66,22 @@ test -n "$js_bundle_hash" || {
 }
 js_stamp="$HOME/.cache/centraid-mobile-e2e-android/js-bundle.hash"
 
+# `bundle_rerun` is the one task a warm build directory is NOT allowed to
+# shortcut. See the long note above the gradle invocation in the cold path.
 case "$build_type" in
   release)
     gradle_task=":app:assembleRelease"
+    bundle_rerun=(":app:createBundleReleaseJsAndAssets" "--rerun")
     apk_glob='*/outputs/apk/release/*.apk'
     cached_apk="$HOME/.cache/centraid-mobile-e2e-android/app-release.apk"
     expected_package="dev.centraid.mobile"
     ;;
   debug)
     gradle_task=":app:assembleDebug"
+    # `debug` is a debuggable variant, so the React Native gradle plugin never
+    # registers a bundle task for it — the JS comes from Metro at runtime. There
+    # is nothing to force.
+    bundle_rerun=()
     apk_glob='*/outputs/apk/debug/*.apk'
     cached_apk="$HOME/.cache/centraid-mobile-e2e-android/app-debug.apk"
     expected_package="dev.centraid.mobile.debug"
@@ -162,8 +175,37 @@ else
   # override below. If AGP ever renames these tasks the build fails loudly with
   # "Task not found" rather than quietly resuming a 4-minute lint, which is the
   # failure mode to want.
+  #
+  # THE JS BUNDLE IS THE ONE TASK A WARM BUILD DIRECTORY MAY NOT SHORTCUT
+  # (#916). Since the caching restructure, the three Android lanes restore
+  # `apps/mobile/android/.gradle` alongside the build directories, so gradle
+  # arrives with an execution history and can legitimately report tasks
+  # UP-TO-DATE. `createBundleReleaseJsAndAssets` declares its sources as a file
+  # tree under `apps/mobile` ONLY — that is React Native's own annotation, in
+  # `BundleHermesCTask.sources` — while `js-bundle-fingerprint.mjs` correctly
+  # counts `packages/{core,client,design,blueprints}` and `bun.lock` as bundle
+  # inputs too. A PR that changes only a workspace package therefore moves the
+  # apk key (so the apk cache misses, so we are here) without moving that task's
+  # declared inputs, and a restored, history-vouched bundle would be reused: a
+  # stale Hermes bundle inside a freshly packaged apk, which is exactly the
+  # false pass #892 built the JS fingerprint to prevent, re-entering through the
+  # other cache.
+  #
+  # `--rerun` is a built-in task option (gradle 7.6+), so it applies to the task
+  # it follows and to nothing else: the bundle and hermesc always run against
+  # this checkout, every other task in `assembleRelease` stays eligible for
+  # UP-TO-DATE and FROM-CACHE. The guarantee is structural — it does not depend
+  # on a dependency's input annotations being right.
+  #
+  # Announce the compile BEFORE it starts. `built=true` below says "an apk
+  # exists"; `gradle_ran=true` says "this runner produced native output worth
+  # banking", which is a different question and is answered even by a build that
+  # fails halfway. The lanes gate their gradle-directory save on this one, so an
+  # apk-cache HIT no longer re-banks a barren directory over a warm one
+  # (receipts/issue-905-client-e2e-escape-hatch.md, run 33370541215).
+  echo 'gradle_ran=true' >> "$GITHUB_OUTPUT"
   ( cd apps/mobile/android \
-    && EXPO_PUBLIC_CENTRAID_FRAME_PROBE=1 ./gradlew "$gradle_task" \
+    && EXPO_PUBLIC_CENTRAID_FRAME_PROBE=1 ./gradlew "${bundle_rerun[@]}" "$gradle_task" \
       -PreactNativeArchitectures=x86_64 \
       -x lintVitalAnalyzeRelease -x lintVitalReportRelease \
       --console=plain --stacktrace )
