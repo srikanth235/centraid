@@ -1,9 +1,3 @@
-# I1 / I10 — electron-builder packaging (issue #468 / #501)
-# appId uses the decided reverse-DNS root dev.centraid (J5).
-# Signing/notarization is secret-gated in CI (release-desktop.yml).
-# Workflows use --publish never; softprops attaches artifacts to the GH Release.
-# electron-builder still emits latest*.yml + blockmaps into release/ for the updater.
-
 appId: dev.centraid.desktop
 productName: Centraid
 copyright: Copyright © Centraid
@@ -15,9 +9,7 @@ directories:
 files:
   - dist/**/*
   - package.json
-  # Tray assets live at the package root and are loaded at runtime via
-  # `../icon.png` from dist/main.js — they must be packed or the menu-bar icon
-  # is empty in a built app. iconTemplate.png (+ @2x) is the macOS template.
+  # Tray assets are resolved from dist/main.js via ../icon.png.
   - icon.png
   - iconTemplate.png
   - iconTemplate@2x.png
@@ -26,7 +18,6 @@ files:
 extraMetadata:
   main: dist/main.js
 
-# I10: ZIP (updater) + DMG (humans) on macOS; per-user NSIS on Windows.
 mac:
   category: public.app-category.productivity
   target:
@@ -38,15 +29,13 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.inherit.plist
-  # I2: set CSC_LINK / APPLE_API_* in CI when enrolled; identity null = unsigned scaffold
+  # CI supplies signing secrets; null keeps local builds unsigned.
   identity: null
 
 win:
   target:
     - target: nsis
       arch: [x64, arm64]
-  # I3: Azure Trusted Signing via env in CI when enrolled (AZURE_* secrets)
-
 nsis:
   oneClick: true
   perMachine: false
@@ -56,14 +45,11 @@ linux:
   target:
     - AppImage
   category: Office
-  # I10: version-less filename so self-update overwrites in place
+  # Keep the filename stable so self-update overwrites in place.
   artifactName: Centraid-${arch}.${ext}
 
-# Metadata only — CI never --publish; GH Release is softprops (single publisher).
 publish:
   provider: github
   releaseType: release
   owner: srikanth235
   repo: centraid
-
-# electron-updater channel: stable by default; beta tags use channel beta (D5)

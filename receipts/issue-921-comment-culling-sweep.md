@@ -334,6 +334,8 @@ node scripts/check-comment-density-ratchet.mjs       # after final --write: shar
   directives and comments embedded in generated CSS/HTML strings were retained.
 - The earlier fixture drift in `automation-event-sources.test-fixtures.ts` was
   restored to `origin/main`; the final diff leaves fixture files unchanged.
+- YAML cleanup removed redundant packaging notes while retaining tray-asset,
+  signing, and stable-updater-filename constraints.
 
 ## Audit
 
