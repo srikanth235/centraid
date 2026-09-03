@@ -188,21 +188,51 @@ export function selectShard(files, shard, total) {
 }
 
 /**
- * The nearest ancestor directory that owns a `package.json`.
+ * The config filenames that make a directory a Vitest project rather than
+ * merely a package. Vite's own name is included because `apps/desktop` and
+ * `apps/web` carry their Vitest settings in `vite.config.ts`.
+ */
+const VITEST_PROJECT_CONFIGS = Object.freeze([
+  "vitest.config.ts",
+  "vitest.config.mts",
+  "vitest.config.js",
+  "vitest.config.mjs",
+  "vite.config.ts",
+  "vite.config.mts",
+  "vite.config.js",
+  "vite.config.mjs",
+]);
+
+/**
+ * The nearest ancestor directory Vitest can actually be invoked in.
  *
  * Vitest resolves aliases, setup files and environment from the project it is
  * invoked in, so a test run from the repo root can pass or fail for reasons
  * that have nothing to do with the test. Running from the owning package is
  * what makes the three runs comparable to the run the suite does.
  *
+ * A `package.json` ALONE does not make a project (#916). Every blueprint under
+ * `packages/blueprints/apps/*` carries one — a private manifest declaring a dev
+ * dependency, with no Vitest config and no `include` — so the walk stopped
+ * there, vitest collected zero files from a directory that owns 206 tests, and
+ * every blueprint suite in the diff was reported as "failed all 3 runs — the
+ * test is broken". It is #915's own regression one level down: the fix there
+ * taught the planner that `scripts/**` is not a Vitest project, and the same
+ * question was never asked of a nested package. The probe is `package.json` AND
+ * a config, which is exactly what vitest needs to find the test it was handed.
+ *
  * @param {string} file Repository-relative path.
- * @param {(candidate: string) => boolean} hasPackageJson Existence probe, injected for tests.
- * @returns {string} Repository-relative package directory (`.` for the root).
+ * @param {(candidate: string) => boolean} hasFile Existence probe, injected for tests.
+ * @returns {string} Repository-relative project directory (`.` for the root).
  */
-export function nearestPackageDir(file, hasPackageJson) {
+export function nearestVitestProjectDir(file, hasFile) {
   let dir = path.dirname(file);
   while (dir && dir !== "." && dir !== path.sep) {
-    if (hasPackageJson(path.join(dir, "package.json"))) return dir;
+    if (
+      hasFile(path.join(dir, "package.json")) &&
+      VITEST_PROJECT_CONFIGS.some((name) => hasFile(path.join(dir, name)))
+    )
+      return dir;
     dir = path.dirname(dir);
   }
   return ".";
@@ -281,21 +311,21 @@ export const RUNNERS = Object.freeze([
 /**
  * The run plan for one candidate: which runner, from where, with what filter.
  *
- * Anything the table does not claim is a package-owned Vitest test, and runs
- * from its owning package for the reason nearestPackageDir documents.
+ * Anything the table does not claim is a project-owned Vitest test, and runs
+ * from its owning project for the reason nearestVitestProjectDir documents.
  *
  * @param {string} file Repository-relative path.
- * @param {(candidate: string) => boolean} hasPackageJson Existence probe, injected for tests.
+ * @param {(candidate: string) => boolean} hasFile Existence probe, injected for tests.
  * @returns {{runner: "node"|"vitest", cwd: string, filter: string, config?: string}} Run plan.
  */
-export function planRun(file, hasPackageJson) {
+export function planRun(file, hasFile) {
   for (const entry of RUNNERS) {
     if (!file.startsWith(entry.prefix)) continue;
     if (entry.runner === "node")
       return { runner: "node", cwd: ".", filter: file };
     return { runner: "vitest", cwd: ".", filter: file, config: entry.config };
   }
-  const dir = nearestPackageDir(file, hasPackageJson);
+  const dir = nearestVitestProjectDir(file, hasFile);
   return {
     runner: "vitest",
     cwd: dir,

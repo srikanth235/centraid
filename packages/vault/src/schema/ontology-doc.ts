@@ -7,14 +7,14 @@
 // described `consent.share`, `social.contact_card` and the dropped home and
 // business domains — because nothing compared it with the DDL. This module is
 // the comparison: `liveOntologyDoc` derives the doc's shape from the registry
-// plus `PRAGMA table_info`, and `parseOntologyDocSchemas` reads the page's
-// array back. `ontology-doc.test.ts` asserts the two agree, table by table and
+// plus `PRAGMA table_info`, and `parseOntologyDocSchemas` PARSES the page's
+// array back — the page is data and is never executed, see `parseDataLiteral`.
+// `ontology-doc.test.ts` asserts the two agree, table by table and
 // column by column, so the page cannot claim a column the vault does not have
 // or omit one it does. Prose (purpose, standards) stays hand-written; only the
 // structural half is generated and checked.
 
 import type { DatabaseSync } from "node:sqlite";
-import { runInNewContext } from "node:vm";
 
 import { MACHINERY_BANDS, ONTOLOGY_PACKS } from "./atlas.js";
 import { AUDIT_BAND_TABLES } from "./audit.js";
@@ -224,26 +224,193 @@ function extractArray(html: string, name: string): string {
   if (start < 0) throw new Error(`ontology page: no \`const ${name} = [\``);
   const end = html.indexOf("\n];", start);
   if (end < 0) throw new Error(`ontology page: \`${name}\` never closes`);
-  return html.slice(start + `const ${name} =`.length, end + 3);
+  // Up to and including the `]`, never the `;`: what comes back is one value,
+  // not a statement, because `parseDataLiteral` refuses trailing text.
+  return html.slice(start + `const ${name} =`.length, end + 2);
 }
 
-/** The page's `SCHEMAS` array, evaluated in an empty sandbox. */
+/**
+ * THE PAGE IS DATA, SO IT IS READ AND NEVER RUN (#916).
+ *
+ * Both arrays used to reach `node:vm`'s `runInNewContext`: whatever the slice
+ * held was EXECUTED, and an empty sandbox is not a security boundary — it
+ * shares the process, so a `while(true)` or a `process.mainModule` walk
+ * authored into the page ran with the test runner's privileges. Nothing about
+ * the data needs evaluation. `parseDataLiteral` reads the one grammar §03 is
+ * written in — arrays, objects, strings, numbers, the three keywords — and
+ * refuses every other token, so a call, an identifier or a template literal is
+ * a parse error where it used to be code.
+ *
+ * The parser also builds its values HERE, which retires the structured clone
+ * the sandbox needed: vm returns another realm's arrays, and those fail
+ * `toStrictEqual` on prototype alone.
+ */
 export function parseOntologyDocSchemas(html: string): DocSchemaEntry[] {
-  return realmLocal(runInNewContext(extractArray(html, "SCHEMAS")));
+  return parseDataLiteral(extractArray(html, "SCHEMAS")) as DocSchemaEntry[];
 }
 
 /** The page's `MACHINERY` array — bands named, never described. */
 export function parseOntologyDocMachinery(html: string): DocMachineryEntry[] {
-  return realmLocal(runInNewContext(extractArray(html, "MACHINERY")));
+  return parseDataLiteral(
+    extractArray(html, "MACHINERY")
+  ) as DocMachineryEntry[];
+}
+
+/** Where the scanner stopped, so a page typo names a line rather than an offset. */
+function positionOf(source: string, index: number): string {
+  const before = source.slice(0, index);
+  const line = before.split("\n").length;
+  return `line ${line}, column ${index - before.lastIndexOf("\n")}`;
 }
 
 /**
- * A sandbox evaluates into its own realm, so its arrays fail a strict
- * equality against ours on prototype alone; a structured clone lands the
- * data in this realm as plain values.
+ * A JS data literal, parsed rather than evaluated. The subset is exactly what
+ * §03 is hand-authored in — JSON plus single-quoted strings, bare keys and
+ * trailing commas — because the page stays readable prose-first; JSON quoting
+ * would make its 91 KB of column tuples unwritable.
  */
-function realmLocal<T>(value: unknown): T {
-  return structuredClone(value) as T;
+export function parseDataLiteral(source: string): unknown {
+  let at = 0;
+
+  const fail = (what: string): never => {
+    throw new Error(`ontology page: ${what} at ${positionOf(source, at)}`);
+  };
+
+  const skipTrivia = (): void => {
+    while (at < source.length && /\s/u.test(source[at]!)) at++;
+  };
+
+  const readString = (): string => {
+    const quote = source[at];
+    at++;
+    let out = "";
+    while (at < source.length && source[at] !== quote) {
+      if (source[at] === "\\") {
+        at += 2; // past the backslash and the character it escapes
+        const escaped = source[at - 1];
+        if (escaped === undefined) fail("a string escape runs off the end");
+        if (escaped === "u") {
+          const hex = source.slice(at, at + 4);
+          if (!/^[0-9a-f]{4}$/iu.test(hex)) fail("a bad \\u escape");
+          out += String.fromCodePoint(Number.parseInt(hex, 16));
+          at += 4;
+        } else {
+          // Everything else is the character itself, as JS reads it: `\'` and
+          // `\"` close nothing, `\n` is a newline, an unknown escape is literal.
+          out +=
+            { n: "\n", r: "\r", t: "\t", b: "\b", f: "\f" }[escaped!] ??
+            escaped;
+        }
+      } else {
+        out += source[at];
+        at++;
+      }
+    }
+    if (at >= source.length) fail("a string never closes");
+    at++;
+    return out;
+  };
+
+  const readKey = (): string => {
+    if (source[at] === "'" || source[at] === '"') return readString();
+    const match = /^[A-Za-z_$][\w$]*/u.exec(source.slice(at));
+    if (!match) fail("a property name that is not an identifier or a string");
+    at += match![0].length;
+    return match![0];
+  };
+
+  const readValue = (): unknown => {
+    skipTrivia();
+    const c = source[at];
+    if (c === undefined) return fail("the literal ends early");
+    if (c === "[") return readArray();
+    if (c === "{") return readObject();
+    if (c === "'" || c === '"') return readString();
+    for (const [word, value] of [
+      ["true", true],
+      ["false", false],
+      ["null", null],
+    ] as const) {
+      if (source.startsWith(word, at)) {
+        at += word.length;
+        return value;
+      }
+    }
+    // Scanned character by character rather than by regular expression: the
+    // input is a 91 KB page and a scanner has no backtracking to reason about.
+    const start = at;
+    if (source[at] === "-") at++;
+    const digits = (): number => {
+      const from = at;
+      while (at < source.length && source[at]! >= "0" && source[at]! <= "9")
+        at++;
+      return at - from;
+    };
+    if (digits() === 0)
+      return fail(`\`${c}\` starts no value the page may contain`);
+    if (source[at] === ".") {
+      at++;
+      if (digits() === 0) fail("a number with no digits after its point");
+    }
+    return Number(source.slice(start, at));
+  };
+
+  /** One `,` between entries, one optional before the close, and no more. */
+  const readSeparator = (close: string): boolean => {
+    skipTrivia();
+    if (source[at] === ",") {
+      at++;
+      skipTrivia();
+      return source[at] !== close;
+    }
+    if (source[at] !== close) fail(`a missing \`,\` before \`${close}\``);
+    return false;
+  };
+
+  const readArray = (): unknown[] => {
+    at++;
+    const out: unknown[] = [];
+    skipTrivia();
+    while (source[at] !== "]") {
+      if (at >= source.length) fail("an array never closes");
+      out.push(readValue());
+      if (!readSeparator("]")) break;
+    }
+    skipTrivia();
+    if (source[at] !== "]") fail("an array never closes");
+    at++;
+    return out;
+  };
+
+  const readObject = (): Record<string, unknown> => {
+    at++;
+    const out: Record<string, unknown> = {};
+    skipTrivia();
+    while (source[at] !== "}") {
+      if (at >= source.length) fail("an object never closes");
+      const key = readKey();
+      skipTrivia();
+      if (source[at] !== ":") fail(`no \`:\` after \`${key}\``);
+      at++;
+      // `__proto__` as a plain key: a page entry cannot reach a prototype.
+      Object.defineProperty(out, key, {
+        value: readValue(),
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+      if (!readSeparator("}")) break;
+    }
+    skipTrivia();
+    if (source[at] !== "}") fail("an object never closes");
+    at++;
+    return out;
+  };
+
+  const parsed = readValue();
+  skipTrivia();
+  if (at < source.length) fail("trailing text after the literal");
+  return parsed;
 }
 
 /** The §03 tuple for one live column, ready to paste into the page. */

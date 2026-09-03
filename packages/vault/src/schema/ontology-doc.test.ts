@@ -16,6 +16,7 @@ import {
   docColumnTuple,
   liveMachineryTables,
   liveOntologyDoc,
+  parseDataLiteral,
   parseOntologyDocMachinery,
   parseOntologyDocSchemas,
 } from "./ontology-doc.js";
@@ -125,5 +126,60 @@ describe("the ontology page matches the live schema", () => {
     ]) {
       expect(arrays, retired).not.toContain(`'${retired}'`);
     }
+  });
+});
+
+// The page used to reach `node:vm`, so anything authored into §03 RAN with the
+// test runner's privileges. It is parsed now: the grammar it is written in is
+// accepted, and everything that could execute is a parse error (#916).
+describe("the page is parsed, never executed", () => {
+  it("reads the grammar §03 is hand-authored in", () => {
+    expect(
+      parseDataLiteral(
+        `[{ id:'core', n:2, ok:true, gone:null,
+            desc:'CHECK in (\\'active\\',\\'locked\\') · <span class="k">x</span>',
+            cols:[['vault_id','TEXT','PK',''],], },]`
+      )
+    ).toStrictEqual([
+      {
+        id: "core",
+        n: 2,
+        ok: true,
+        gone: null,
+        desc: `CHECK in ('active','locked') · <span class="k">x</span>`,
+        cols: [["vault_id", "TEXT", "PK", ""]],
+      },
+    ]);
+  });
+
+  it("refuses every token that would evaluate", () => {
+    for (const hostile of [
+      "[process.mainModule]",
+      "[require('node:fs')]",
+      "['a'].concat(['b'])",
+      "[`template`]",
+      "[] ; process.exit(1)",
+      "[1 + 1]",
+      "[function () {}]",
+    ]) {
+      expect(() => parseDataLiteral(hostile), hostile).toThrow(
+        /ontology page:/u
+      );
+    }
+  });
+
+  it("refuses a malformed literal rather than guessing at it", () => {
+    for (const broken of ["['unterminated", "[1,,2]", "{a 1}", "[", "{"]) {
+      expect(() => parseDataLiteral(broken), broken).toThrow(/ontology page:/u);
+    }
+  });
+
+  it("keeps a `__proto__` key as data", () => {
+    const parsed = parseDataLiteral(`{'__proto__':{'polluted':1}}`) as Record<
+      string,
+      unknown
+    >;
+    expect(Object.getPrototypeOf(parsed)).toBe(Object.prototype);
+    expect(({} as { polluted?: number }).polluted).toBeUndefined();
   });
 });
