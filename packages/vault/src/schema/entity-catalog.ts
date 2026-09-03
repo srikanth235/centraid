@@ -72,11 +72,20 @@ export const VAULT_ENTITIES: EntityRegistry = {
       label: "Content",
       blurb: "Files and media you've saved.",
       lifecycle: "trash",
+      // A note body is a `data:` URI in `content_uri`, so this row is where
+      // the ontology keeps long member TEXT (#922, SB-text). Past 1 MiB the
+      // value has stopped being a body and is a document: it takes the blob
+      // path, and both clients name the absence.
+      replicaValues: { textCeilingBytes: 1_024 * 1_024 },
     },
     content_derivative: {
       lifecycle: "mutable",
       label: "Derivatives",
       blurb: "Thumbnails and previews made from content.",
+      // `text_content` is a document's extracted text or a recording's
+      // transcript — what a Docs screen renders offline. Same ceiling as the
+      // body it came from; picture variants carry a sha, not bytes.
+      replicaValues: { textCeilingBytes: 1_024 * 1_024 },
     },
     document: {
       label: "Documents",
@@ -519,7 +528,13 @@ export const VAULT_ENTITIES: EntityRegistry = {
   // beside it as `enrich.consent` are rows of `share.authority` since #883 —
   // one plane for every standing answer — and are registered there.
   enrich: {
-    embedding: { label: "Embeddings", lifecycle: "machinery" },
+    embedding: {
+      label: "Embeddings",
+      lifecycle: "machinery",
+      // The ONE genuinely binary column in the registry: little-endian
+      // float32 vectors. Deferred by declaration, not by weight (#922).
+      replicaValues: { lazyColumns: ["vector"] },
+    },
     request: { label: "Enrichment requests", lifecycle: "machinery" },
     policy: { label: "Enrichment policy", lifecycle: "machinery" },
     derivation: { label: "Enrichment provenance", lifecycle: "machinery" },

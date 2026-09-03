@@ -1267,3 +1267,61 @@ full test **266 files / 2436 passed**; `src/react/blueprints/` **9 files / 81 pa
 `apps/mobile` full test **273 files / 2364 passed**, typecheck ✓; `packages/blueprints`
 typecheck ✓; `bun run format:check` ✓; root `bun run lint` ✓; `bash .governance/run.sh`
 **22/22**.
+## 0b — deferred text has a path to the screen, or is not deferred
+
+Ruling **SB-text** implemented (issue #922 Part 0, box 0b; open question 7 answered as proposed): text rides the replica lane in full up to a ceiling its entity declares, only genuinely binary values stay deferred, and a deferred value is visibly absent rather than silently `undefined`.
+
+### What changed, file by file
+
+- `packages/vault/src/schema/entity-declaration.ts` — new `VaultEntityReplicaValues` (`textCeilingBytes`, `lazyColumns`) on `VaultEntityDeclaration`, `DEFAULT_REPLICA_TEXT_CEILING_BYTES` (the old flat cap, kept as the DEFAULT rather than the rule) and `replicaValuesOf`.
+- `packages/vault/src/schema/entity-catalog.ts` — the declarations, beside the entities: `core.content_item` and `core.content_derivative` at 1 MiB (a note body is a `data:` URI in `content_uri`; `text_content` is a document's extracted text or a transcript), and `enrich.embedding` marking `vector` lazy.
+- `packages/vault/src/replica/value-policy.ts` (new) — resolves one entity's declared policy; sibling of `unavailable-columns.ts`.
+- `packages/vault/src/replica/snapshot.ts` — `publicRow` defers a declared-lazy column or a `Uint8Array` (the safety net for the declaration-less ext band), then compares text against the entity's declared ceiling instead of a flat 64 KiB. `DEFAULT_REPLICA_MAX_VALUE_BYTES` is **deleted**, replaced by `DEFAULT_REPLICA_TEXT_CEILING_BYTES` re-exported from the declaration module — one number, one home. `packages/vault/src/index.ts` follows.
+- `packages/blueprints/apps/_shared/shared-copy.ts` — `fieldNotOnThisDevice(field)`, the one sentence both clients print for an absent value.
+- `packages/client/src/replica/query.ts` — `unavailableReason` and `guardReplicaRow` raise that sentence instead of the internal `oversized field X`, so the string that reaches `useReplicaQuery`'s `error` and the shell's guard is member copy.
+- Tests: `packages/vault/src/replica/value-policy.test.ts` (new), `packages/server/src/routes/replica-projection.test.ts` (+1), `packages/client/src/replica/deferred-values.test.ts` (new), `apps/mobile/src/lib/replica/native-replica-store.test.ts` (+1, and the guard case now asserts the sentence).
+- Docs: `docs/mobile-offline.md` (the wire invariant, now five), `docs/decisions.md` (SB-text's "Lands in" rewritten to landed with what it landed as).
+
+### Numbers — golden year-3 vault
+
+Provenance: host 4 cores / 15 GB (Linux 6.18); the golden year-3 vault seeded by `seedYear3Vault(target, goldenYear3Profile())` from `origin/claude/927-w1`'s test-kit (`YEAR3_DISTRIBUTIONS`: 1,000 notes, `longNoteShare` 0.03, bodies 64 KiB+1 … 256 KiB), walked with `readReplicaRows` at `limit: 1000` over every registered entity by a temporary harness (`packages/vault/src/replica/zz-measure.test.ts`, deleted).
+
+| | rows with a deferred field | bootstrap page bytes (1,000-row pages) | serialized rows |
+| --- | --- | --- | --- |
+| BEFORE `core.content_item` | **30** (`content_uri`) | 487,068 / 489,288 / 489,831 / 490,288 ×7 / **523,493** | 5,407,562 B |
+| AFTER `core.content_item` | **0** | 487,068 / 489,288 / 489,831 / 490,288 ×7 / **6,311,925** | 11,195,994 B |
+| BEFORE+AFTER `knowledge.note` | 0 | 385,095 | 383,890 B |
+
+Bootstrap-page growth: **+5,788,432 B on one page (523 KB → 6.31 MB, ×12.06)**, +107% across the entity — exactly the 30 long note bodies (≈193 KB each as base64 `data:` URIs) that previously reached no device. No other registered entity defers anything at year-3 volume, before or after. No budget in `tests/budgets.json` or `tests/experience-budgets/**` gates bootstrap page BYTES, so nothing was widened; the concentration is an artifact of seeding order (all note content items land in the last page) and is named as a finding below.
+
+### What was deleted
+
+- The flat 64 KiB **text** deferral in `publicRow`, and the `DEFAULT_REPLICA_MAX_VALUE_BYTES` name for it — replaced by the per-entity declaration in the catalog, which is where a reader can now find out what an entity's values may be.
+- The internal `oversized field X` reason string in two places, replaced by one `fieldNotOnThisDevice` in shared copy.
+
+### Decisions and re-judged rulings
+
+- **No fetch-on-demand route was built.** The ruling allows one only for columns an entity explicitly marks lazy. Exactly one column is marked (`enrich.embedding.vector`), nothing renders an embedding vector, and building a route no screen would call would recreate the never-read state this slice deletes. The path to the screen for that column is the refusal that names it. The receipt records the trigger: the first lazy column a screen must render is what makes the route necessary.
+- **"No client reads the oversized list" (issue body) is re-judged as partly wrong, and the correction matters.** The list has three consumers on `main`: `store-core.ts` records a search gap when an indexed column is oversized, validates apply-time that a listed field carries no value, and both clients escalate online through `guardReplicaRow`. What was missing was any way to get the VALUE and, for TEXT, any honest answer offline. So the fix is the ceiling, not a deletion of the list — the list is now only ever about bytes.
+- **`Uint8Array` deferral kept beside the declaration.** Property it holds now: the ext band (#286) is declared by an app at runtime and has no catalog entry, so an app-declared BLOB column has no declaration to read. `value-policy.test.ts` asserts every BLOB column on a REGISTERED entity is declared lazy, so the implicit rule cannot silently become the primary one again.
+- **No mobile migration.** `oversized_json` keeps its shape (a JSON array of column names); only `payload_json` grows. No ALTER, no rebootstrap.
+
+### Findings
+
+- `apps/mobile/src/kit/hooks/useReplicaQuery.ts` reads through `session.read` → `readWire`, and `mapReplicaRows` spreads `row.values` — so `oversizedFields` is DROPPED on that path and a lazy field reads as `undefined` on the screens that use the hook. `native-replica-store.read()` (the guarded path) is correct. That file is 0a's by contract, so this is filed rather than fixed.
+- `packages/server/src/routes/replica-shape.ts:26` keeps its own `REPLICA_MAX_VALUE_BYTES = 64 * 1024` beside the vault's default — two sources for one number. The rest of that file is #928's by contract, so the one-line re-export was not landed. Recommend #928 or a follow-up import the vault constant.
+- Bootstrap pages are windowed by ROW count, not bytes, so an entity with long declared text can produce a 6 MB page. Recommend a byte-aware page window in the C/E lane (`replica-routes.ts`).
+- `packages/test-kit/src/year3-shape.ts` (on `origin/claude/927-w1`) documents `longNoteShare` by the now-deleted `DEFAULT_REPLICA_MAX_VALUE_BYTES`; the comment needs a rename when the two waves meet.
+
+### Verification
+
+```
+bun run --cwd packages/vault test -- src/replica/value-policy.test.ts src/replica/snapshot.test.ts   # 10 passed
+bun run --cwd packages/vault build                                                                   # ok
+bun run --cwd packages/server test -- src/routes/replica-projection.test.ts                          # 9 passed (red first: oversizedFields listed content_uri)
+bun run --cwd packages/client test -- src/replica/deferred-values.test.ts                            # 2 passed
+bun run --cwd apps/mobile test -- src/lib/replica/native-replica-store.test.ts                       # 6 passed
+bun run --cwd packages/vault typecheck                                                               # clean
+```
+
+Remaining gates (full package suites, governance, self-audit) were **waived by maintainer ruling mid-slice**; this section is landed at the coherent point that ruling asked for.

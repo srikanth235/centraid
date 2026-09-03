@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 
+import { fieldNotOnThisDevice } from "@centraid/blueprints/apps/_shared/shared-copy";
 import { OnlineOnlyError } from "@centraid/client/replica/native";
 import type { ReplicaSnapshot } from "@centraid/client/replica/native";
 
@@ -90,6 +91,33 @@ describe(NativeReplicaStore, () => {
       const row = result.rows[0]!;
       expect(row.title).toBe("Moonlit campsite");
       expect(() => row.caption).toThrow(OnlineOnlyError);
+      // #922 0b: an absent value NAMES itself. Before this the phone had no
+      // sentence for the state at all, and an oversized field escalated with
+      // an internal string no screen could show.
+      expect(() => row.caption).toThrow(fieldNotOnThisDevice("caption"));
+    } finally {
+      await store.close();
+    }
+  });
+
+  // #922 0b, ruling SB-text: a note body is a `data:` URI on
+  // `core.content_item`, and that entity declares a 1 MiB text ceiling, so a
+  // bootstrap page carries it whole. Under the old flat 64 KiB cap this row
+  // arrived with `content_uri` stripped and nothing on the phone fetched it.
+  test("a bootstrapped note body over 64 KiB is readable in full offline", async () => {
+    const store = NativeReplicaStore.create(new NodeSqliteDriver(), "vault-a");
+    try {
+      const body = "a".repeat(200 * 1_024);
+      const uri = `data:text/markdown;base64,${Buffer.from(body, "utf8").toString("base64")}`;
+      const page = snapshot();
+      page.shapes[0]!.entities[0]!.columns.push("content_uri");
+      page.rows[0]!.values["content_uri"] = uri;
+      await store.bootstrap(page);
+      const result = await store.read({
+        shapeId: "shape-photos",
+        entity: "core.content_item",
+      });
+      expect(result.rows[0]!["content_uri"]).toBe(uri);
     } finally {
       await store.close();
     }

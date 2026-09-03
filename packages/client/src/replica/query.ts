@@ -1,4 +1,5 @@
 import { PENDING_OVERLAY_FIELDS } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { fieldNotOnThisDevice } from "@centraid/blueprints/apps/_shared/shared-copy";
 
 import type { OnlineOnlyGuard } from "./errors.js";
 import { OnlineOnlyError, ReplicaProtocolError } from "./errors.js";
@@ -18,7 +19,7 @@ function unavailableReason(
   row: ReplicaRowEnvelope,
   column: string
 ): string | undefined {
-  if (row.oversizedFields.includes(column)) return `oversized field ${column}`;
+  if (row.oversizedFields.includes(column)) return fieldNotOnThisDevice(column);
   if (row.hasUnavailableFields && !(column in row.values))
     return "undisclosed unavailable field";
   return undefined;
@@ -343,7 +344,7 @@ export function guardReplicaRow(
     return { ...envelope.values };
   const unavailable = new Map<string, string>();
   for (const field of envelope.oversizedFields)
-    unavailable.set(field, `oversized field ${field}`);
+    unavailable.set(field, fieldNotOnThisDevice(field));
   const fail = (field?: PropertyKey): never => {
     const reason =
       typeof field === "string" ? unavailable.get(field) : undefined;
