@@ -714,3 +714,129 @@ host it. Its change is one expression — `cacheRoot` now comes from
 value by construction — and it is covered by the root `typecheck`
 (`tsc -p tests`) plus a line-by-line read of the mount block. Saying so
 explicitly rather than claiming a run that did not happen.
+
+### Audit (re-verification, 2026-09-03)
+
+Verdict: PASS
+
+Second fresh-context verifier, worktree `claude/927-w1c-golden-vault` at
+`a81f739a` (one commit on `6c242d62`; `origin/main` has since moved to
+`7d47fee4`, so everything below is `git diff origin/main...HEAD` three-dot).
+All four findings of the audit above are fixed, and the fixes were checked
+against the artifact rather than against the prose.
+
+Findings: none.
+
+The four fixes, verified:
+
+1. **The god file is gone.** `year3-shape.ts` 167 / `year3-distributions.ts`
+   344 / `year3-vault.ts` 461 lines, all under the 625 limit;
+   `bash .governance/run.sh` is 22/22 with `repo-hygiene` green. The "no
+   importer changed" claim holds: `grep -rn "year3-shape\|year3-distributions"`
+   outside `packages/test-kit/src` returns only this receipt, and every
+   consumer in the tree still imports `@centraid/test-kit/year3-vault`
+   (`import-routes.test.ts`, `gateway-request-volume.perf.test.ts`,
+   `factories.ts`, four scale rigs). No import-only edit appears anywhere in
+   the diff.
+2. **The Verification section is fenced.** Two `sh` blocks, the first labelled
+   superseded, plus the fix block. The receipt diff is `+440 / −0` — a pure
+   append — and `doc-integrity` is green, so nothing above w1c is rewritten.
+3. **The cache-root claim is now true.** `grep -rn "CENTRAID_YEAR3_CACHE_DIR"`
+   over the tree: one read, in `year3FixtureCacheRoot()`. `artifacts/year3-cache`
+   survives only in `.github/workflows/e2e.yml` (four lines, w2's) and in one
+   prose comment in `year3-vault.ts`.
+4. **The README discloses the filler.** The "Replica rows on a phone" row names
+   `replicaRows` as a single `schedule.task` shape and routes the realistic mix
+   to w3.
+5. **The `vault.db` figure is restated as a sample** and reproduces as one: my
+   cold build measured a FOURTH value, 106,307,584 B, outside the three the
+   section lists. "About 101 MiB" is the only honest form, as written.
+
+Falsification 1 — **build the golden vault cold and check the shape claims
+against the database**. `CENTRAID_YEAR3_CACHE_DIR=/tmp/y3-verify2`, cache
+purged, `large-vault` run, then `node:sqlite` read-only over the cached
+`vault.db`. Every row in § Numbers reproduced exactly: `core_party` 5,001,
+`media_asset` 10,000, `core_content_item` 11,000, `knowledge_note` 1,000,
+note bodies > 64 KiB **30** (3.0 % of 1,000 = the declared `longNoteShare`),
+`core_event` 1,096 spanning 2023-01-01 → 2025-12-31 with exactly **365** in the
+2025 window, `schedule_task` 50,000, `access_receipt` **365** over 365 distinct
+days 2025-01-01 → 2025-12-31 with `seq` 1…365 unbroken,
+`share_party_vault_binding` 12 (all `revoked_at IS NULL`), `share_authority` 14
+= 12 `person`/`view` + 1 `circle`/`edit` + 1 `device`/`edit`, `social_circle` 1,
+`tally_group` 1, `social_circle_member` 12, `automation_state` 200,
+`automation_trigger_cursor` 200, `core_tag` 200, `replica_change` 78,376. Both
+needles reach exactly one row through the product's own FTS indexes. The three
+replica artifacts hold 50,000 `replica_row` each with outboxes of 1 / 10 / 40
+queued, at 33,304,576 / 33,312,768 / 33,325,056 B — the three byte counts § Numbers
+lists, to the byte. The `keys/` directory finding 6 predicts is there in the
+cache root.
+
+Falsification 2 — **the split changed no importer** (above, item 1): the two
+greps come back empty outside the kit's own `src/`, and the diff touches no
+import line outside `year3-vault.ts`, `year3-replica.ts` and the two rigs whose
+cache-root conversion is the described change.
+
+Two things the root asked to be confirmed rather than taken:
+
+- **`photos-timeline.scale.test.ts` is red AT THE BASE, and this slice neither
+  caused nor masked it.** `packages/vault/src/schema/domains-social-knowledge-media.ts:168`
+  removed `media_asset.favorite` (#916, ONT-03) and
+  `migrate.test.ts:207` asserts its absence; the rig's own
+  `INSERT INTO media_asset (…, favorite)` is byte-identical at `origin/main`
+  (line 111) and at HEAD (line 112, shifted only by the comment this slice
+  adds). Reproduced: `bun run test:scale -- tests/scale/photos-timeline.scale.test.ts`
+  → `Error: table media_asset has no column named favorite`, 1 failed, 16 s.
+  A #916-fallout / #927 w3 finding, not this slice's.
+- **`large-vault`'s ceiling was not widened and the fixture build is inside the
+  timed window.** `SEED_BUDGET_MS = 30_000` and `READ_BUDGET_MS = 2_000` are
+  unchanged context lines in the diff; `started` is taken before
+  `await goldenYear3Vault()` and `seedMs` after it, so the materialize cost is
+  what the budget scores. Measured here: cold 24 s wall / 19.75 s test body,
+  warm 6 s wall / 429 ms body. The headroom is real but thin, as the section
+  says; how w2 handles it is the root's call.
+
+Also checked and holding: the appended section names every one of the 13
+non-receipt files in the diff and nothing outside the slice contract is touched
+(no `.github/`, no product code, no `tests/floors.json`, `tests/claims.json`,
+`tests/budgets.json` or `classification-ratchet.json`); the six `expect` lines
+and four read queries of `large-vault` are byte-identical to the base; the
+`replica-bootstrap` additions are purely additive `test.each` cases; every
+`deliberate`/`by design` seam in the section names a concrete property (the
+opt-in distributions protect what `photos-timeline` and `restore-10gib`
+measure; the kit↔vault non-dependency is the cycle; the two re-judged rulings
+each state what depends on them now); the three `oxlint-disable-next-line
+no-await-in-loop` suppressions each carry a reason and
+`no-unjustified-suppressions` is green; no budget, floor, allowlist or ratchet
+number moved and no test is skipped, quarantined or deleted; binary tripwire
+clean (no `-\t-` row in `--numstat`, no NUL byte in any changed file).
+
+Gates run (all under the shared lock, on this session's container, Linux,
+node 22, `/tmp` scratch):
+
+```sh
+bun run format:check                                # clean, 5360 files
+bun run lint                                        # pass
+bun run lint:vault-sql                              # ok — 490 refs / 4249 files / 42 allow-listed
+bun run --cwd packages/test-kit test                # 5 files, 76 tests passed, 24.4 s
+bun run --cwd packages/test-kit typecheck           # pass
+bun run typecheck                                   # root, 25/25 tasks + tsc -p tests, pass
+bun run lint:product                                # 36/39 — see base-lag note
+bash .governance/run.sh                             # 22/22 directives passed
+bun run test:scale -- tests/scale/large-vault.scale.test.ts       # 1 passed; cold 24 s wall, warm 6 s wall
+bun run test:scale -- tests/scale/replica-bootstrap.scale.test.ts # 5 passed, 43 s wall
+bun run test:scale -- tests/scale/photos-timeline.scale.test.ts   # 1 failed — base-state red (above)
+```
+
+`lint:product`'s three reds are BASE LAG, not this slice: `lint:ledgers`
+(`tests/floors.json` flow `blueprint-app-entity-tripwire-law` "removed"),
+`lint:quality-knobs` (`tests/quality/classification-ratchet.json`) and
+`test:ratchet` all compare against `origin/main`, which moved to `7d47fee4`
+with #928 after this branch's base. `git diff origin/main...HEAD` touches none
+of those three files.
+
+`restore-10gib.scale.test.ts` was not run — a ~90-minute rig. Its change is one
+expression and was judged by reading: `cacheRoot` is `year3FixtureCacheRoot()`,
+the profile passed to `materializeYear3Fixture` is the unchanged `YEAR3`, and
+the materialized directory is copied to a private `sourceDir` before any blob
+is written, so the shared persistent cache root holds only the vault, never the
+10 GiB store.
