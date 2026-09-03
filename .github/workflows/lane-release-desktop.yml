@@ -4,7 +4,6 @@ name: lane-release-desktop
 # `lane-` prefix marks that. It used to listen on `v*.*.*` itself, alongside two
 # other workflows watching the same tags with no shared notion of whether the
 # release as a whole succeeded.
-#
 # I1–I3, I7, I11 / #501 — package desktop on version tags.
 # Signing/notarization is secret-gated. Without enrolled credentials:
 #   - jobs still build installers (unsigned scaffolding)

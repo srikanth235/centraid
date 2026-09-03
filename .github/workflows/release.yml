@@ -1,20 +1,17 @@
 name: release
 
 # The single entry point for cutting a release (#557).
-#
 # Three workflows used to listen on the same `v*.*.*` tags independently —
 # release-desktop, release-gateway-image and npm-gateway-publish — plus a fourth
 # on `companion-v*`. Cutting a tag produced three or four unrelated runs with no
 # shared notion of whether "the release" succeeded: npm could publish while
 # desktop packaging failed, and nothing anywhere said the release was broken.
 # You had to know to check four places.
-#
 # Now one tag produces one run, and `release-check` is the single red/green for
 # it. Each surface stays in its own `lane-release-*.yml` file and declares the
 # secrets it accepts, so a lane can only ever receive the credentials for its own
 # platform — stronger isolation than five peer workflows that could each read
 # every repo secret.
-#
 # Enforced by policy (6) of scripts/lint-workflow-pins.mjs: only this workflow
 # may listen on `push: tags`.
 
@@ -95,7 +92,6 @@ jobs:
   # never one. Before it, the release SHA was implicitly "whatever HEAD is when
   # publish.mjs runs" — a tag could be cut on a commit no deep rung had ever
   # exercised, and nothing in the chain would have said so.
-  #
   # Two ways to be a candidate, and both are checked because both are true: the
   # tag is the CURRENT `refs/candidates/latest`, or it appears in the promotion
   # history `candidate.yml` publishes to gh-pages at
@@ -103,7 +99,6 @@ jobs:
   # cutting a release takes minutes and `main` keeps moving: a tag cut on
   # yesterday's promoted candidate is exactly right, and requiring "equal to the
   # newest" would refuse it.
-  #
   # The same rule is enforced BEFORE the tag exists, by
   # `scripts/release/prepare.mjs` (and `release:classify --require-candidate`),
   # so the normal way to meet it is to be told at prepare time rather than to
@@ -232,7 +227,6 @@ jobs:
 
   # Deliberately NOT reached by a `v*.*.*` tag. The store pipeline is manual by
   # design (J7): a desktop version bump must not auto-submit to TestFlight/Play.
-  #
   # `surfaces: mobile` is required EXACTLY — this lane is the one that must not
   # ride along on `all`. `surfaces` defaults to `all`, so accepting it here would
   # mean re-running release.yml to repackage a desktop installer also burns EAS
@@ -265,7 +259,6 @@ jobs:
   # peer workflows each reported separately, so a partial release — npm shipped,
   # desktop broken — looked like three greens and one red in four different
   # places, with nothing naming the release itself as bad.
-  #
   # `skipped` passes (a `companion-v*` tag legitimately skips every product
   # lane); `cancelled` fails.
   release-check:

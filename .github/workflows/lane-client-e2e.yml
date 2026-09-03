@@ -4,7 +4,6 @@ name: lane-client-e2e
 # prefix marks that. Kept in its own file rather than inlined because three jobs
 # of Playwright/keyring setup would dominate ci.yml; the small lanes (docs,
 # web-build, iroh-wasm, companion-static, oauth-worker) are jobs there instead.
-#
 # L1 / E2 — path-filtered client e2e on PRs. Full suites stay on nightly e2e.yml.
 # Promotion rule: if a nightly-only area burns us twice, move it here.
 

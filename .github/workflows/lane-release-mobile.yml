@@ -5,7 +5,6 @@ name: lane-release-mobile
 # #501 / J1 / J7 — secret-gated store pipeline scaffold (EAS Build + Submit).
 # Human enrollment residual: Expo token, Play upload key, ASC credentials
 # (docs/enrollment.md). Never runs `eas update` (J7 store-only routine path).
-#
 # Default: workflow_dispatch only — does not auto-publish on every desktop tag.
 
 on:

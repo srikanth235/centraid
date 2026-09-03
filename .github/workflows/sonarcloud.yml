@@ -6,18 +6,15 @@ name: sonarcloud
 # keep the Autoscan PR gate honest therefore only existed on whatever a
 # maintainer had last applied by hand from a laptop keychain. This lane applies
 # them from the repo instead.
-#
 # Analysis itself stays SonarCloud **Automatic Analysis** (Autoscan), per
 # docs/toolchain.md#sonarcloud-autoscan: SonarCloud refuses a CI-side scanner
 # run while Automatic Analysis is enabled on the project, so this workflow
 # configures the project and lets Autoscan scan. It is a configuration lane, not
 # a scanner lane.
-#
 # #557 — not a `pull_request` workflow: `ci.yml` is the single open-PR entry
 # point, and a project-configuration apply is not a per-PR gate. Push-to-main on
 # the configurator itself, plus a weekly re-apply so UI drift is corrected, plus
 # manual dispatch.
-#
 # SONAR_TOKEN is optional: it is a personal SonarCloud token with project
 # administer, absent on forks and on any clone of this repo. Every step is
 # gated on its presence through an env indirection (the `secrets` context is not

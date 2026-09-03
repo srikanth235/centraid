@@ -64,7 +64,6 @@ jobs:
   # 06:00 cron fired. Thirty consecutive red nights (2026-08-03 → 09-01) is what
   # the old arrangement produced, and none of them could distinguish a product
   # regression from a dependency merge four hours earlier.
-  #
   # The fallback chain, and which one fired, is printed to the step summary by
   # scripts/ci/resolve-candidate.mjs: dispatch input → `refs/candidates/latest`
   # → the last green `ci.yml` run on main → this workflow's own SHA. The third
@@ -220,7 +219,6 @@ jobs:
       # is not a PWA. The projects are declared in playwright.config.ts but appended
       # only when CENTRAID_WEB_CROSS_BROWSER=1, so the default `bun run e2e` stays
       # Chromium-only and does not fail on a missing browser download.
-      #
       # DELIBERATELY NOT in test-health-report's needs: this lane has never run, so
       # its first green run is the measurement, not a regression baseline. Promote it
       # into the report (and the nightly tracking issue) once it has one.
@@ -342,7 +340,6 @@ jobs:
       # must not pay the ~32-minute compile; a config-plugin, native-module,
       # bundle-id, or autolinked-pod change must. The cache key (built below) has
       # two independent parts:
-      #
       #   fp<hash>  @expo/fingerprint over the native inputs ONLY — config
       #             plugins, autolinked native modules (read from node_modules,
       #             so the install MUST run first), the bare apps/mobile/ios
@@ -360,7 +357,6 @@ jobs:
       #             still not be reused; this component forces that rebuild. It
       #             subsumes the old key's raw ImageOS (the Xcode/SDK version is
       #             the part of the image that actually matters here).
-      #
       # Deliberately NOT caching turbo here. A per-sha key never hits, so every
       # run would SAVE a fresh multi-hundred-MB blob; against GitHub's 10 GB
       # per-repo budget with LRU eviction, the natural victim is the .app entry
@@ -447,7 +443,6 @@ jobs:
       # change forces a rebuild. No `restore-keys`: a partial-match fallback is
       # exactly the stale-binary false-pass this must never allow — the key is
       # all-or-nothing.
-      #
       # restore + save are SPLIT rather than the one-step `actions/cache`, because
       # that action declares `post-if: success()` — it saves only when the whole
       # job succeeded. On a lane that is currently red that means the cache never
@@ -476,7 +471,6 @@ jobs:
       # exactly the path a pods cache exists to serve. It is also why the
       # `hermesc` the injection path below needs is banked beside the `.app`
       # rather than restored with the Pods that built it.
-      #
       # ONE STEP REPLACES THREE (#915 Wave 2). "Build and install", "Save" and
       # "Install the cached app" were three mutually exclusive branches spelled
       # as workflow `if:` conditions, which is a branch no test can reach. The
@@ -518,7 +512,6 @@ jobs:
       # resolves through tests/agent-e2e-mobile/roster.json to the `ios-depth`
       # suite, whose members each name the iOS fact that earns their place
       # (flows/ios-depth-budget.md).
-      #
       # THE FLAGS ARE THE WIRING (#915 Wave 2). They sit on the invocation line
       # because scripts/lint-e2e-wiring.mjs derives what this lane schedules by
       # reading it; a runner that picked its suite from an environment variable
@@ -690,7 +683,6 @@ jobs:
       # The one task whose declared inputs do not cover everything that changes
       # it is the JS bundle, and `apps/mobile/scripts/android-emulator-install.sh`
       # forces it with `--rerun` rather than trusting it.
-      #
       # #916 — the path list and the `v2` key namespace are shared verbatim with
       # `ci.yml`'s `mobile-device-gate` and `candidate.yml`'s
       # `mobile-canary-android`, restore and save alike; all three moved in one
@@ -1069,7 +1061,6 @@ jobs:
           retention-days: 14
 
       # #892 Phase 3 — LANE HEALTH, AND THE CHRONIC-RED RULE.
-      #
       # Two decisions this repo has been making on memory. The promotion rule
       # ("a nightly-only area that burns us twice moves to the PR lane",
       # lane-client-e2e.yml) counts nothing; and its inverse — a REQUIRED lane whose
@@ -1077,13 +1068,11 @@ jobs:
       # re-run habit devalues all nineteen lanes at once. This job measures
       # first-attempt pass rate per lane over the last 40 completed `main` runs and
       # puts the table on the run page.
-      #
       # The chronic-red half is the enforcement: a lane red on main for more than
       # three days fails this job unless it carries an UNEXPIRED entry in
       # tests/quarantine.json#lanes — the same declared/attributed/expiring discipline
       # tests/quarantine.json has applied to tests since #545, extended to lanes,
       # which had no equivalent and so simply stayed red.
-      #
       # Nightly rather than per-PR because it reads api.github.com, and the PR loop
       # must not acquire a dependency on it (the rule test:citations already follows).
       - name: Write lane evidence
@@ -1173,21 +1162,18 @@ jobs:
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       # #892 Phase 2 — DATA SAFETY OVER TIME FINALLY HAS A LANE.
-      #
       # `tests/agent-e2e-compat/flows/install-upgrade-lifecycle.mjs` has existed since
       # #842 W5.4. It asserts, in as many words, "upgrade did not preserve the old
       # vault's data" — the #1 risk for a local-first sovereign vault — and it was
       # referenced by NO WORKFLOW. Its sibling `released-binary-skew.mjs` was in the
       # same position: version skew is proved in this repo as range arithmetic
       # (`mobile-gateway-skew.test.ts`) and never as two real binaries talking.
-      #
       # Both are written to skip-with-citation rather than fabricate a pass, so this
       # job is green and LOUD from its first run: with no published release the
       # runners emit their `blocked-external` reasons as warnings and exit 0. What
       # changes tonight is that the citation is on a run page instead of in a file
       # nobody executes, and the day a release exists the lanes start driving real
       # binaries with no further wiring.
-      #
       # `--json` on `gh release view` rather than parsing HTML, and a `|| true` so a
       # repo with no releases at all resolves to empty instead of failing the job:
       # "there is no previous release" is the state the runners are built to report.
@@ -1539,7 +1525,6 @@ jobs:
       # `packages/server/src/serve/protocol-join-lane.test.ts` at WIDTH
       # (CENTRAID_JOIN_SEATS), where each case boots a real `serve()` daemon, mounts
       # N vaults, and opens one iroh tunnel client per seat.
-      #
       # Its own job (restore-year3 pattern) for three reasons: N real iroh endpoints
       # per case must not compete with the 30-minute quality-performance-scale
       # budget protected by #587 C1; a correctness rig has no volume/duration
@@ -1766,7 +1751,6 @@ jobs:
   # Public nightly HTML (same Pages tree as main; no per-PR slots).
   # #496 E2 — main-only so branch workflow_dispatch cannot red the workflow
   # with "Branch … is not allowed to deploy to github-pages".
-  #
   # #557 — a FAILED report job must still publish. The report's whole purpose is
   # to show red, and `test-health-report` fails on its own honesty exits
   # (orphaned failed evidence, silent all-clear, grey creep) *after* writing
@@ -1774,7 +1758,6 @@ jobs:
   # suppressed the page that would have shown the failure — Pages served a
   # three-day-stale green report while #556 tracked a red lane. Mirrors
   # ci.yml's publish-report, which had this right.
-  #
   # `skipped` is still excluded: single-lane dispatch (suite != all/report)
   # skips the report job, and publishing then would false-alarm the "HTML
   # missing" tracking issue below (#496 review). The `Require report HTML`
@@ -1909,7 +1892,6 @@ jobs:
           exit 1
 
   # #915 Wave 0 — ONE ROLLING ISSUE PER LANE, REWRITTEN IN PLACE.
-  #
   # What this replaces: `nightly-failure-issue`, which commented on a single
   # `[nightly] e2e lane red — tracking` issue every morning. Thirteen of those
   # were opened and closed as noise, because an issue that says "something was
@@ -1920,7 +1902,6 @@ jobs:
   # stale. This iterates `toJSON(needs)` with jq instead: a lane added to `needs:`
   # is covered automatically, which is the #557 lesson applied to the body as
   # well as to the `if:`.
-  #
   # One issue per lane, updated (never commented, never re-created), so
   # `[nightly] lane red — mobile-e2e-ios` is a thing you can open, read as the
   # lane's CURRENT condition, and close when the lane is green. The body comes

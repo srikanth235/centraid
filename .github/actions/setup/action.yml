@@ -8,22 +8,18 @@ description: >-
 # 5 copies of the ~12-line Cargo cache block (3 of them byte-identical inside a
 # single file). Copies drift silently — a cache key fixed in one lane and missed
 # in four others produces no error, just slower jobs nobody attributes.
-#
 # #637 — Cargo caches use restore on every ref and save only from `main`, so
 # PR branches stop re-saving multi-GB cargo-* duplicates into the 10 GB pool.
 # Turbo remote cache remains opt-in per job; `turbo.json` hashes `RUNNER_OS`
 # so Linux/macOS never share `native/*.node` artifacts.
-#
 # The version is read from package.json at run time with `sed` rather than
 # `node -p`, because this action runs BEFORE any toolchain is installed — the
 # only thing guaranteed present is the shell. `shell: bash` resolves to git-bash
 # on Windows runners, where sed is also available.
-#
 # Requires actions/checkout to have run first (package.json must be on disk).
 # That is also why checkout cannot move in here: a composite action has to be on
 # disk already to be resolved, so `checkout` + `setup` is the irreducible
 # two-line prologue.
-#
 # Enforced repo-wide by scripts/lint-workflow-pins.mjs, which fails if any
 # workflow reintroduces a literal `bun-version:`.
 

@@ -1,18 +1,15 @@
 name: hygiene
 
 # Rung 5, the weekly hygiene lane (#915 Wave 4).
-#
 # Seven tighten-only ratchets over the TEST SUITE's own quality — comment
 # density, assertion-matcher families, fixed sleeps, skips, environment-red
 # sites, the type floor, the schema/export fingerprint. They protect the suite
 # from the agents; none of them proves the phone works, and charging every push
 # for them (10.2 s for comment density alone) bought latency nobody used.
-#
 # Every one is a STANDING check over the whole tree — a count, an inventory, a
 # fingerprint — never a diff-scoped one. That property is what makes a weekly
 # run against `main` see exactly what a per-push run would have seen: the move
 # costs detection latency (push → ≤ 7 days) and nothing else.
-#
 # ci.yml lines 295-313 (#782) rule that "enforced by the pre-push hook" is
 # enforcement in name only. This lane is not that regression, it is the third
 # tier the ruling implies: it runs in CI, against main, on a schedule, and
@@ -20,7 +17,6 @@ name: hygiene
 # and `test:comment-density` had no CI job at all before this — weekly is
 # strictly more enforcement than it had. See docs/decisions.md, "Gate and
 # ledger diet".
-#
 # `schedule:` + `workflow_dispatch:` only: ci.yml is the one workflow allowed
 # to listen on `pull_request` (#557, enforced by lint:workflow-pins rule 5).
 

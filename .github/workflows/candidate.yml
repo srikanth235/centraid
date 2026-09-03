@@ -5,19 +5,16 @@ name: candidate
 
 # RUNG 3 OF THE QUALITY LADDER (#915). One question: **is this SHA a build we
 # would hand to a device?**
-#
 #   rung 2  ci.yml `check`  — can this land? Blocks the merge. ≤ 15 min.
 #   rung 3  THIS            — is the merged tree promotable? ≤ 45 min.
 #   rung 4  e2e.yml         — does the promoted candidate hold under depth?
 #   rung 5  the weeklies    — does it survive time and live dependencies?
-#
 # Nothing here blocks a merge: the merge already happened. What it produces is a
 # CANDIDATE — `refs/candidates/latest` plus `artifacts/candidate.json` — and
 # every deeper rung, and the release chain, consumes that instead of the tip of
 # `main`. Before this existed, a red nightly could not distinguish "the product
 # regressed" from "the 04:00 dependency merge broke the build", which is most of
 # why thirty consecutive red nights carried no information.
-#
 # The lanes here are the ones #915 took OFF the merge gate — desktop Playwright,
 # the gateway package smoke, the macOS desktop journey, the full mutation seed
 # set, CodeQL and the Rust supply chain — plus the Android roster that used to
@@ -25,7 +22,6 @@ name: candidate
 # of a human waiting on review. `mobile-ios-smoke` is the one lane that is new
 # rather than moved: every candidate now carries an iOS verdict, because the iOS
 # `.app` is a separate artifact and Android's green says nothing about it.
-#
 # Deliberately NOT a `pull_request` trigger: ci.yml is the only workflow allowed
 # to listen on open-PR events (scripts/lint-workflow-pins.mjs rule 5).
 on:
@@ -295,7 +291,6 @@ jobs:
   # Android" is not evidence about it. Before this lane the first iOS answer of
   # the day arrived from the nightly, against a tree that had already absorbed a
   # day of merges, which is exactly the attribution problem rung 3 exists to end.
-  #
   # Ten minutes WARM: the shell is restored by NATIVE fingerprint and this SHA's
   # JavaScript is injected into it, so no compilation sits inside the suite's
   # clock. See apps/mobile/scripts/ios-simulator-install.sh and
@@ -505,7 +500,6 @@ jobs:
   # The "twice-burned promotion rule" recorded in lane-client-e2e.yml is what
   # would move it back to rung 2, and `scripts/ci/lane-health.mjs` now counts
   # the burns instead of leaving them to memory.
-  #
   # This launches the desktop journey, NOT a signed packaged build. Booting the
   # signed installer's own journey stays coupled to lane-release-desktop.yml,
   # where the Azure/Apple secrets live. It needs no xvfb + gnome-keyring
@@ -564,7 +558,6 @@ jobs:
   # attributable to ONE commit rather than a night's worth of them. The nightly
   # full run in e2e.yml stays — it is the scheduled sweep that catches a seed
   # rotting without any commit touching its watch list.
-  #
   # It is also where `mutation-pr` sends the PRs whose affected-seed set ran past
   # the rung-2 cap (scripts/ci/mutation-cap.mjs): "deferred to rung 3" names this
   # job, so removing it would make that deferral a lie.
@@ -674,7 +667,6 @@ jobs:
   # not model). It ran on a weekly cron in `security.yml`; #915 moved it here so
   # a candidate is not promotable with an unreviewed injection sink in it, and so
   # the answer arrives attributed to one commit rather than to a week.
-  #
   # `build-mode` is deliberately not set. All three languages default to the
   # no-build database (CodeQL reads source directly rather than observing a
   # compiler), so no Rust toolchain setup is needed — the three crates,
@@ -723,7 +715,6 @@ jobs:
   # registries. Off the PR loop for the same reason codeql is — installing two
   # cargo binaries is minutes — and on rung 3 rather than a weekly cron so a
   # promoted build is one whose dependency posture was checked.
-  #
   # The unsafe-edge ratchet also runs on every PR (`check:push`): it needs no
   # toolchain, so there is no reason to defer it. It is repeated here only so one
   # place reports the whole Rust posture.
@@ -772,7 +763,6 @@ jobs:
   # `check`: `success | skipped` is satisfied, anything else — `cancelled`
   # included — is not, and an EMPTY result list refuses to pass rather than
   # returning 0 because it never looked (#556).
-  #
   # On green the pointer moves and the record is published. On red the pointer
   # STAYS WHERE IT IS — that is the entire value of a candidate: the deep rungs
   # keep testing the last build somebody would have handed to a device, instead

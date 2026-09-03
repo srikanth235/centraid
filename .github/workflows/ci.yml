@@ -22,7 +22,6 @@ permissions:
 # ci.yml is the ONLY workflow that listens on `pull_request` (#557). Everything
 # a PR must satisfy is a job here, so all of it rolls up into the single
 # required `check`.
-#
 # Before this, ten workflows each listened on `pull_request` independently. To
 # stay affordable each carried its own `paths:` filter — and that is precisely
 # what made them unrequirable: a workflow filtered out of a PR reports no
@@ -31,13 +30,11 @@ permissions:
 # oauth-worker, dependency-review) could go red with the merge button still
 # green. As path-gated *jobs* they skip cleanly — GitHub counts a skipped job as
 # satisfied — and `check` aggregates them explicitly.
-#
 # Two lanes are big enough to keep their own file and are invoked with
 # `workflow_call`; the rest are jobs below. Deploys stay OUT of here: they own
 # their own secrets and environments (see web.yml, oauth-worker.yml, release-*),
 # and merging those into one file would put every publishing credential in one
 # blast radius.
-#
 # Wall-clock plan: static (format/lint/typecheck) and verify (build/tests/
 # coverage) run in parallel, alongside whichever path-gated lanes the diff woke.
 # Each uses turbo's GitHub-backed remote cache (+ Cargo cache on verify) so warm
@@ -46,7 +43,6 @@ jobs:
   # One paths-filter table for the whole repo. Previously these globs lived in
   # six `on: paths:` blocks with 20 lines duplicated verbatim between each
   # file's push: and pull_request: halves.
-  #
   # #892 Phase 3 — THIS TABLE IS LOAD-BEARING AND IS NOW LINTED. `check` treats
   # `skipped` as a pass (that is what makes a path-gated lane requirable at all),
   # so a path no filter names wakes no lane and merges green, unexercised — #890
@@ -312,7 +308,6 @@ jobs:
       # name only. These are all offline, deterministic Node scripts with no
       # toolchain beyond `bun install`, so they cost a few seconds each and belong
       # on the required per-PR loop.
-      #
       # Deliberately NOT here (tracked in #781 for the excluded lanes):
       #   - `design:gallery` — needs a downloaded Playwright browser; that is an
       #     install + network dependency, not a static check.
@@ -396,7 +391,6 @@ jobs:
       # the uninstrumented suite while the `coverage-shard` / `coverage` pair scores
       # the floors in parallel. Both are in `check`'s needs, so nothing became
       # advisory — only the ORDER in which answers arrive changed.
-      #
       # What stayed here rather than moving: everything that needs the built dist and
       # is not instrumentation — the tunnel's native and byte-plane contracts, the
       # user-facing qualities lane, the mobile boot-condition tier, and the two perf
@@ -477,7 +471,6 @@ jobs:
       # SESSION reports rather than the state a fixture was handed. It rides here
       # for the same reason `test:qualities` does: it needs the `bun run build`
       # above, because it drives the packages by their published entry points.
-      #
       # ~145 s of Linux time, and that is the trade the E-device-only ruling
       # names: a simulator minute on macOS costs roughly 600x a vitest second, so
       # the state grid moving down a tier is what pays for the device roster
@@ -536,13 +529,11 @@ jobs:
       # #892 Phase 1 — the instrumented half, fanned out. `bun run coverage` on one
       # runner was 20m15s; four shards each score a quarter of the test files and the
       # merge job reassembles the blobs.
-      #
       # A SHARD IS NOT A SMALLER GATE. It runs under `vitest.shard.config.ts`, which
       # is the root config MINUS `coverage.thresholds`, because a shard sees only its
       # slice: `packages/cli/**` measures 0% on the shard holding no CLI tests, so
       # per-shard floors would either red every run or have to be lowered into
       # meaninglessness. Every floor is evaluated exactly once, on the merged report.
-      #
       # The hazard that introduces is #556's: a merge assembled from fewer blobs than
       # were dispatched measures a smaller world and passes more easily. Two things
       # close it — this job is an ordinary (not `always()`) dependency of `coverage`,
@@ -584,7 +575,6 @@ jobs:
       # The blob is the shard's entire product. `if-no-files-found: error` rather
       # than the default warning: a silently absent blob is precisely the partial
       # world the merge guard exists to refuse, and failing here names the shard.
-      #
       # `include-hidden-files` is NOT optional. Vitest's blob reporter writes to
       # `.vitest-reports/`, and upload-artifact excludes any path with a
       # dot-prefixed segment by default — so the first run of this lane wrote
@@ -652,7 +642,6 @@ jobs:
       # It cannot come back here: sharding DOES move the metric, because it sums
       # per-file wall spans and a shard's files run concurrently, so this lane
       # scored the runner rather than the suite (#905).
-      #
       # On the merge gate the merged report is the only place the whole suite's
       # shape can be seen, so the collection tripwire rides here: a collection
       # error is a "do not merge" answer, not a coverage observation (#842 W0.3).
@@ -785,7 +774,6 @@ jobs:
   # #532 — per-PR mutation on affected property-defended seeds only. Skips when
   # the diff touches none of the seed watch paths; enforces mutation floors on
   # packages that ran.
-  #
   # #892 Phase 1 — THIS LANE WAS BIMODAL AND THE SWITCH WAS THE WRONG ONE. It
   # measured either 4m30s of build plus ZERO mutation (no affected seeds) or
   # 19m27s of full-seed run — and the second mode fired because `package.json`
@@ -846,7 +834,6 @@ jobs:
       # months. Three runs, alone, and any DISAGREEMENT between them is red — not
       # just a failure, because the file that passes twice and fails once is the
       # expensive one and the one a single run cannot see.
-      #
       # `fetch-depth: 0` because the file list is a merge-base diff, not a tip diff:
       # what matters is what THIS branch changed, not what main moved underneath it.
       - name: Write lane evidence
@@ -874,7 +861,6 @@ jobs:
     # missing dimension, not an oversized PR, and splitting the PR would have
     # bought nothing: two branches of 120 files each would run the same 53
     # minutes on the same one runner, twice.
-    #
     # 20 rather than 15 so a cold turbo cache — the build step below is seconds
     # on a hit and minutes on a miss — cannot cancel a leg that is merely
     # unlucky. That ordering is the point: at 20 the lane finishes and says
@@ -908,7 +894,6 @@ jobs:
       # runs alone, and every candidate lands in exactly one leg: the script
       # deals a SORTED copy of the list by `index % N`, so the legs are a
       # partition of one list rather than N independent guesses at it.
-      #
       # `strategy.job-total` — not a hand-typed 8 — is the divisor on purpose.
       # It IS the length of the matrix above, so adding or removing a leg cannot
       # leave a stale `N` behind, and a stale `N` is precisely how a sharded gate
@@ -931,11 +916,9 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  # ---------------------------------------------------------------------------
   # Path-gated lanes. Each was its own `pull_request` workflow until #557; the
   # steps are unchanged, only the trigger moved. A lane the diff does not touch
   # reports `skipped`, which `check` treats as satisfied.
-  # ---------------------------------------------------------------------------
 
   # #915 Wave 1 — `client-e2e` AND `gateway-package` ARE GONE FROM RUNG 2.
   # Both were `workflow_call` callers into lanes that still exist and are still
@@ -945,7 +928,6 @@ jobs:
   # Playwright journey and a container smoke test are questions about a build we
   # would hand to a device, not about whether a diff can land, and each was
   # ~25-30 minutes of a 15-minute merge budget for a secondary surface.
-  #
   # The promotion rule recorded in lane-client-e2e.yml is unchanged and is now
   # counted rather than remembered: `scripts/ci/lane-health.mjs` tallies the
   # times a rung-3 lane caught something the merge gate had already called
@@ -1009,13 +991,11 @@ jobs:
       # artifact, on the same `mobile` path filter, so the two never disagree
       # about a break — the Debug compile could only ever be the slower, weaker
       # half of a claim already made.
-      #
       # The `android/app/src/debug` and `debugOptimized` source sets Release never
       # touches are the one thing that went with it. They are dev-client scaffolding
       # (#890 W1 moved every lane off the dev client), and `ci:native-state` still
       # ratchets the committed native trees, so a change to them is not
       # unobserved — it is unCOMPILED, which is the trade being made here.
-      #
       # The job's own header rationale ("fails before an expensive macOS build")
       # went stale at the same time: since #890 W4 the mobile gate is Android on
       # Linux, and there is no macOS build on the PR loop to fail before.
@@ -1025,17 +1005,14 @@ jobs:
       # BUILDS and nothing about whether it works, and the nightly's first device
       # signal arrived after merge. A feedback loop that contradicts surface priority
       # is the defect; this job is the fix.
-      #
       # Android, per D1 (docs/decisions.md#mobile-testing-890): Linux runners expose
       # /dev/kvm so the emulator is hardware-accelerated and the gate costs Linux
       # minutes rather than the macOS multiplier, and Maestro's UIAutomator2 driver
       # is the stabler of the two. iOS is the nightly's depth platform, never a
       # per-PR duplicate.
-      #
       # It runs the RELEASE artifact (#890 W1), so none of the dev-client machinery
       # — Metro, the dev launcher, the bundle prewarm, the developer-menu sheet —
       # exists on this path.
-      #
       # ONE LEG, EIGHT MINUTES WARM (#915 Wave 1). #905 split the critical five
       # across two matrix legs because in sequence they measured ~795s against a
       # 720s deadline. #915 makes the smaller cut instead: the RESILIENCE leg
@@ -1044,7 +1021,6 @@ jobs:
       # the Android depth. What stays on the merge gate is the smallest set that can
       # falsify "this diff broke the phone": the pairing canary, one home-app
       # journey (`notes-library`), and cold start — 8 minutes warm.
-      #
       # A COLD APK IS A REBUILD, NOT A LANE FAILURE (#916, owner-ruled). An apk
       # miss means `candidate.yml`'s `mobile-canary-android` has not run for this
       # native + JS fingerprint yet, which for a PR that touches mobile JS is
@@ -1052,7 +1028,6 @@ jobs:
       # reconstruct-on-miss argument is written out in full beside the caches in
       # the job below; what keeps it affordable is that the rebuild reuses the
       # banked gradle and native directories instead of recompiling them.
-      #
       # The committed leg script sits literally inside this job block, which is where
       # scripts/lint-e2e-wiring.mjs reads it from.
       - name: Write lane evidence
@@ -1086,7 +1061,6 @@ jobs:
     # tightening it on a projection would be trading a slow lane for a cancelled
     # one, and a job this timeout cancels loses every verdict it had written
     # (#557). The warm-apk path is unchanged at ~11 min and never approaches it.
-    #
     # A COLD REBUILD MAY STILL EXCEED THE RUNG-2 SPAN BUDGET, AND THAT REMAINS A
     # KNOWN, OWNER-ACCEPTED COST (#916). `tests/budgets.json#suiteWallClock.lanes.pr-gate`
     # is 15.0 min of ELAPSED SPAN across `check`'s needs and is tighten-only. The
@@ -1114,7 +1088,6 @@ jobs:
           java-version: "17"
       # TWO fingerprints, and the difference between them is the whole
       # build-once-run-many contract (#892 Phase 0):
-      #
       #   hash    native inputs only. Keys the GRADLE BUILD DIRECTORY, so a
       #           JS-only PR restores a warm native compile and re-runs only the
       #           bundle and packaging tasks.
@@ -1159,7 +1132,6 @@ jobs:
           exit 1
       # #890 W1, build-once-run-many. Two caches with DIFFERENT fallback rules,
       # and the difference is the whole point:
-      #
       #   apk cache      exact key, NO restore-keys. A partial match here would
       #                  install a stale binary and pass, which is the one thing
       #                  this must never do. #892 — the key carries the JS bundle
@@ -1175,10 +1147,8 @@ jobs:
       #                   other. The one task whose declared inputs do NOT cover
       #                   everything that changes it is the JS bundle, and it is
       #                   forced to re-run rather than trusted — see below.
-      #
       # Both are populated on `main` by `candidate.yml`'s `mobile-canary-android`
       # (rung 3), so a PR normally restores rather than compiles.
-      #
       # WHAT THE GRADLE CACHE BUYS, AND WHY IT BOUGHT NOTHING UNTIL #916. The
       # sentence that used to sit here claimed a warm gradle directory reduced a
       # JS-only rebuild to "bundle and packaging tasks"; the sentence that
@@ -1186,7 +1156,6 @@ jobs:
       # not work, for three independent reasons — and fixing any one alone still
       # leaves a full native compile, which is why this moved as one change
       # across `ci.yml`, `candidate.yml` and `e2e.yml` together:
-      #
       #   1. `org.gradle.caching` was UNSET, so gradle's build cache was off and
       #      `~/.gradle/caches` preserved dependencies and artifact transforms
       #      but no task OUTPUTS. It is now `true` in
@@ -1212,14 +1181,12 @@ jobs:
       #      claim, and that history lives in `.gradle`. Restoring outputs
       #      without the record that vouches for them is a slower way of
       #      restoring nothing.
-      #
       # The key namespace is `android-gradle-v2-` for exactly that reason: a v1
       # entry names a different path set, and a `restore-keys` match against one
       # would hand this lane build directories with no `.gradle` beside them —
       # the shape that gets deleted at task-graph time. All three Android lanes
       # cut over in the same change. A lane that saves a directory another lane
       # does not restore is worse than no cache.
-      #
       # A STALE JS BUNDLE CANNOT RIDE IN ON THIS. Now that gradle arrives with an
       # execution history it can legitimately report tasks UP-TO-DATE, and
       # `createBundleReleaseJsAndAssets` under-declares: React Native annotates
@@ -1260,7 +1227,6 @@ jobs:
             android-gradle-v2-${{ runner.os }}-
       # ON A COLD SHELL THIS LANE RECONSTRUCTS IT. OWNER-RULED (#916), reversing
       # the earlier rule that a miss was a lane failure.
-      #
       # The reversal is not a preference, it is arithmetic. The apk key folds the
       # JS bundle fingerprint, so it names the CONTENT of `apps/mobile/src`,
       # `packages/{core,client,design,blueprints}` and `bun.lock`. The only lane
@@ -1270,7 +1236,6 @@ jobs:
       # fail-on-miss gate is unpassable by construction for exactly the PRs it
       # exists to check, and passes only for the PRs that do not need it. A gate
       # that can only be green when it has nothing to say is not a gate.
-      #
       # THERE IS NO BUILD STEP HERE, AND THAT IS THE POINT. The build recipe is
       # `apps/mobile/scripts/android-emulator-install.sh`, sourced by all three
       # Android lanes; on a miss it runs `:app:assembleRelease` (one ABI, lint
@@ -1283,13 +1248,11 @@ jobs:
       # build step for the same reason. Hoisting a `./gradlew` call into a step
       # of its own here would be a SECOND recipe for one artifact, and the two
       # would drift.
-      #
       # WHAT THE ORDERING HAS TO GUARANTEE is only that both restores precede the
       # emulator step, so the build the script may run finds a warm gradle
       # directory. Both do, immediately above. The gradle key's `restore-keys`
       # prefix is the NATIVE fingerprint alone, so a JS-only PR still matches
       # `main`'s banked directory even though its apk key cannot.
-      #
       # `ANDROID_CACHE_HIT` on the emulator step below reports THE RESTORE, never
       # "is there an apk". A rebuilt shell reports a MISS and must: that env var
       # is precisely what selects the script's cold path, so reporting a rebuild
@@ -1382,13 +1345,11 @@ jobs:
       # branch would pay the native compile again on every push, because only
       # `mobile-canary-android` writes that key and it does not run until after
       # the merge.
-      #
       # Saving here does not help the push that paid for it; it helps the NEXT
       # push on the same branch, which is the common shape — a receipt edit, a
       # doc fix, a workflow tweak, none of which move the JS fingerprint. Actions
       # cache scoping keeps a branch's entry to that branch and its children, so
       # this cannot serve a stale shell to main or to an unrelated PR.
-      #
       # `if: always()` and gated on `built` for the same reason the canary's is:
       # a red suite still leaves the next push a warm build, and a run that
       # restored rather than compiled has nothing new to bank. `built=true` is
@@ -1402,7 +1363,6 @@ jobs:
           key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
       # BANK THE WARM DIRECTORIES ONLY WHEN THIS RUN ACTUALLY COMPILED. Gated on
       # `gradle_ran`, not `built`, and the two differ in both directions:
-      #
       #   apk HIT, no gradle    `gradle_ran` unset → SAVE SKIPPED. This is the
       #                         fix for the barren re-bank recorded in
       #                         receipts/issue-905-client-e2e-escape-hatch.md and
@@ -1788,7 +1748,6 @@ jobs:
       # ruleset). Every gate above is in `needs:`, so a lane that goes red turns
       # this red — including the eight that could not gate a merge at all before
       # #557. Reads results only; re-runs no install or tests.
-      #
       # `skipped` is a PASS on purpose: that is what a path-gated lane reports when
       # the diff does not touch it. `cancelled` is a FAIL — a dead runner is not a
       # green build. publish-report is best-effort UX and is deliberately absent.
@@ -1797,7 +1756,6 @@ jobs:
       # browser — an install + network dependency, not a static check. This
       # path-gated job pays that install only when a design-relevant path changes,
       # mirroring how lane-client-e2e.yml provisions the same pinned browser.
-      #
       # THE `system-ui` CAUSE IS FIXED; THE CROSS-PLATFORM CLAIM IS UNMEASURED.
       # #781 recorded this lane as red because the retired fixtures hardcoded
       # `system-ui`, which resolves to a different physical font per OS, and the
@@ -1806,7 +1764,6 @@ jobs:
       # ceiling). #799 removed that cause: every lane now loads the product's own
       # vendored Instrument Sans `.woff2`, and each capture FAILS LOUDLY if the
       # family does not resolve, so no baseline can bake in a fallback face.
-      #
       # The baselines were then re-pinned from a LINUX x64 container — the same
       # renderer this job uses — so this lane should be green. What has NOT been
       # measured is the reverse: whether darwin `check:push` now agrees with them.
@@ -1867,14 +1824,12 @@ jobs:
       # so the job never ran, could never go red, and existed only as YAML that
       # reviewers had to read past. The parking NOTE was the valuable half and it now
       # lives where a parked thing belongs, in an issue rather than in a dead job:
-      #
       #   Windows first-run founding never leaves onboarding-view.
       #   `shouldUseFileFallback()` throws when `safeStorage.isEncryptionAvailable()`
       #   is false on any non-Linux platform, and the job did not set
       #   `CENTRAID_INSECURE_DEVICE_SECRETS=1`. Restoring the lane means fixing
       #   founding on `windows-latest` first (#846 P12 / #850), then re-adding the
       #   job with the `desktop` path filter.
-      #
       # #915 Wave 1 — `desktop-e2e-macos` MOVED TO RUNG 3 (`candidate.yml`). #892
       # asked whether a 10x-multiplier runner belongs on the PR loop at all and
       # answered "while it is advisory, yes, because otherwise the twice-burned

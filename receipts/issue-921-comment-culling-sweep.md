@@ -336,6 +336,8 @@ node scripts/check-comment-density-ratchet.mjs       # after final --write: shar
   restored to `origin/main`; the final diff leaves fixture files unchanged.
 - YAML cleanup removed redundant packaging notes while retaining tray-asset,
   signing, and stable-updater-filename constraints.
+- `.github` cleanup removed 114 separator/blank-comment lines only; workflow
+  rationale for cache coupling, release gates, permissions, and security remains.
 
 ## Audit
 

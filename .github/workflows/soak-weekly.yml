@@ -1,7 +1,6 @@
 name: soak-weekly
 
 # #842 W3.4 — the long-run soak's real duration.
-#
 # `tests/scale/long-run-soak.scale.test.ts` runs on every nightly at its 0.75
 # minute default, where it gates the always-true invariants (no refusals, no
 # transport errors, descriptors bounded). What it CANNOT do there is judge
@@ -10,7 +9,6 @@ name: soak-weekly
 # growth ceilings only assert at `>= declaredSoakMinutes`, and why this lane
 # exists — a multi-hour run is the only thing that turns those ceilings into a
 # real distribution rather than a single sample.
-#
 # `declaredSoakMinutes` is 10, not 240: ten minutes is the longest run the
 # ceilings were actually derived from, and stating a ceiling at a duration
 # nobody has measured is the guess this rig exists to replace. Raise it once
