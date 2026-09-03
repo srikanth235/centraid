@@ -1,8 +1,3 @@
-/**
- * Native QUIC tunnel perf budget (#496 PD1).
- * Runs when the native module is present; otherwise skipIf so default CI is not
- * painted solid without evidence (B2). JS fallback remains tunnel-throughput.
- */
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -24,8 +19,6 @@ const nativeCandidates = [
 const nativePath = nativeCandidates.find((p) => existsSync(path.resolve(p)));
 const hasNative = Boolean(nativePath);
 
-// Cold dylib load on nightly runners routinely exceeds 500 ms; 5 s still
-// catches a catastrophic hang without flaking cold boots.
 const BUDGET_MS = rigBudgetMs(OWNER);
 
 describe("tunnel-native.perf", () => {
@@ -39,14 +32,10 @@ describe("tunnel-native.perf", () => {
       const durationMs = performance.now() - started;
       expect(addon).toBeTruthy();
       expect(addon).toBeTypeOf("object");
-      // Surface at least one export so a stub empty module fails.
       expect(
         Object.keys(addon as object).length +
           (typeof addon === "function" ? 1 : 0)
       ).toBeGreaterThan(0);
-      // #659 R4 — sustained-drift gate over this rig's own 30-sample
-      // nightly history. Null until the history is deep enough; a null is
-      // "no opinion yet", never a pass.
       const drift = await rigDriftBudgetMs("perf", OWNER);
       const passed = durationMs < BUDGET_MS;
       const withinDrift = drift === null || durationMs <= drift;
@@ -72,8 +61,6 @@ describe("tunnel-native.perf", () => {
     }
   );
 
-  // Inverse of the load test: only runs when the binary is absent so the report
-  // records an honest "no evidence" rather than a tautology that always passes.
   test.skipIf(hasNative)(
     "documents native module absence when binary is not on disk",
     () => {

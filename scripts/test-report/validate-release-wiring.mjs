@@ -1,30 +1,12 @@
-/**
- * Structural gate for the release lane (#656 Layer 1F).
- *
- * `release.yml` plus five `lane-release-*.yml` files are ~880 lines of YAML with
- * zero structural validation, and `lint:actions` (actionlint) is not part of
- * `check:pr`. Their load-bearing invariants are documented only in comments, so
- * the failure mode is silent: a lane added without adding it to
- * `release-check.needs` still shows a green "release-check" while that surface
- * is broken — exactly the four-separate-reds problem #557 set out to end.
- *
- * This asserts the shipped wiring the way `validate-nightly-wiring.mjs` does —
- * over the real YAML text, not a reimplementation of it, and without a YAML
- * parser dependency the repo does not declare.
- */
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
 
-/** Strip YAML comments so prose cannot satisfy or trip a structural check. */
 function stripComments(text) {
   return text
     .split("\n")
     .map((line) => {
-      // Only strip a `#` that starts a comment, not one inside a quoted string.
-      // Release YAML has no `#` inside quotes today; a conservative rule that
-      // keeps quoted hashes is cheaper than a parser.
       let quote = null;
       for (let i = 0; i < line.length; i += 1) {
         const ch = line[i];
@@ -41,10 +23,6 @@ function stripComments(text) {
     .join("\n");
 }
 
-/**
- * Split the `jobs:` mapping into `{ id → body }`. Job ids are the two-space
- * keys under `jobs:`; a body runs to the next such key.
- */
 function jobBlocks(text) {
   const lines = text.split("\n");
   const start = lines.findIndex((line) => /^jobs:\s*$/u.test(line));
@@ -67,7 +45,6 @@ function jobBlocks(text) {
   return blocks;
 }
 
-/** Names listed under a lane's `on.workflow_call.secrets:` mapping. */
 function declaredLaneSecrets(text) {
   const secretsIdx = text.indexOf("\n    secrets:");
   if (secretsIdx === -1) return new Set();
@@ -89,7 +66,6 @@ function declaredLaneSecrets(text) {
   return names;
 }
 
-/** Secret names a `uses:` job forwards in its own `secrets:` block. */
 function forwardedSecrets(jobBody) {
   const idx = jobBody.indexOf("\n    secrets:");
   if (idx === -1) return new Set();
@@ -106,11 +82,6 @@ function forwardedSecrets(jobBody) {
   return names;
 }
 
-/**
- * Assert the release lane's structural contract.
- * @param {string} [root] Repository root to inspect.
- * @returns {string[]} Human-readable violations; empty means the lane is sound.
- */
 export function lintReleaseWiring(root = REPO_ROOT) {
   const errors = [];
   const workflowDir = path.join(root, ".github/workflows");
@@ -125,8 +96,6 @@ export function lintReleaseWiring(root = REPO_ROOT) {
   }
   const release = stripComments(readFileSync(releasePath, "utf8"));
 
-  // (1) One entry point. Only release.yml may listen on pushed tags — otherwise
-  // one tag fans out into unrelated runs with no shared red/green again.
   for (const name of files) {
     if (name === "release.yml") continue;
     const text = stripComments(
@@ -146,21 +115,17 @@ export function lintReleaseWiring(root = REPO_ROOT) {
   if (!/^ {2,}tags:\s*$/mu.test(release))
     errors.push("release.yml no longer listens on `push: tags`");
 
-  // (2) A tag is immutable: never cancel a release mid-flight.
   if (!/cancel-in-progress:\s*false/u.test(release))
     errors.push(
       "release.yml concurrency must set cancel-in-progress: false — a tag is immutable"
     );
 
-  // (3) Least privilege at the workflow level; lanes widen per job.
   const headPermissions = release.slice(0, release.indexOf("\njobs:"));
   if (!/^permissions:\s*\n\s+contents:\s*read\s*$/mu.test(headPermissions))
     errors.push(
       "release.yml must default to workflow-level `permissions: contents: read`"
     );
 
-  // (4) `secrets: inherit` would hand a lane every repo secret and undo the
-  // per-lane credential isolation the lane files exist to provide.
   if (/secrets:\s*inherit/u.test(release))
     errors.push(
       "release.yml must not use `secrets: inherit` — each lane declares the secrets it accepts"
@@ -172,8 +137,6 @@ export function lintReleaseWiring(root = REPO_ROOT) {
     return errors;
   }
 
-  // (5) Every lane file is reachable from release.yml, and every lane job
-  // points at a file that exists.
   const laneFiles = files.filter((name) => name.startsWith("lane-release-"));
   const calledLanes = new Map();
   for (const [id, body] of jobs) {
@@ -193,8 +156,6 @@ export function lintReleaseWiring(root = REPO_ROOT) {
       );
   }
 
-  // (6) A lane is reusable-only. A lane with its own trigger would resurrect
-  // the pre-#557 "one tag, four runs" split.
   for (const lane of laneFiles) {
     const text = stripComments(
       readFileSync(path.join(workflowDir, lane), "utf8")
@@ -209,7 +170,6 @@ export function lintReleaseWiring(root = REPO_ROOT) {
     }
   }
 
-  // (7) Secret isolation: a lane can only receive what it declares.
   for (const [id, lane] of calledLanes) {
     if (!files.includes(lane)) continue;
     const declared = declaredLaneSecrets(
@@ -223,9 +183,6 @@ export function lintReleaseWiring(root = REPO_ROOT) {
     }
   }
 
-  // (8) THE aggregator-completeness property. `release-check` is the single
-  // red/green for a release; a lane missing from its `needs:` is a surface that
-  // can fail while the release reports success.
   const check = jobs.get("release-check");
   if (check) {
     const needs = /needs:\s*\[(?<list>[^\]]*)\]/u.exec(check);
@@ -246,11 +203,6 @@ export function lintReleaseWiring(root = REPO_ROOT) {
       errors.push(
         "release-check must run with `if: always()` or a failed lane skips the aggregator entirely"
       );
-    // `skipped` passes (a companion-only tag skips every product lane);
-    // `cancelled` must fail — a dead runner is not a pass. Compare the whole
-    // passing case arm, not a substring: `success | skipped | cancelled` still
-    // contains `success | skipped`, and that widening is precisely the change
-    // this assertion exists to stop.
     const arm = /\n\s*(?<arm>[^\n)]*?)\)\s*;;/u.exec(check);
     if (arm?.groups?.arm.trim() !== "success | skipped")
       errors.push(
@@ -264,8 +216,6 @@ export function lintReleaseWiring(root = REPO_ROOT) {
     errors.push("release.yml missing the release-check aggregator job");
   }
 
-  // (9) The mobile store lane is opt-in by name (J7). Accepting `all` would let
-  // a desktop repackage burn EAS quota and auto-submit to TestFlight/Play.
   const mobile = jobs.get("mobile");
   if (mobile) {
     const condition = /if:\s*>?(?<body>[\s\S]*?)\n\s{4}[a-z]/u.exec(mobile);
@@ -284,8 +234,6 @@ export function lintReleaseWiring(root = REPO_ROOT) {
     errors.push("release.yml missing the mobile lane job");
   }
 
-  // (10) Per-job permissions REPLACE the workflow block, so a lane that widens
-  // must restate what it still needs.
   const npm = jobs.get("gateway-npm");
   if (npm) {
     if (!/id-token:\s*write/u.test(npm))

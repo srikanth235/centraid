@@ -1,24 +1,4 @@
 #!/usr/bin/env node
-// Rule-weight gate for apps/mobile (#679).
-//
-// The v4 handoff draws EVERY border and rule as `border: 1px solid <token>`.
-// React Native's `StyleSheet.hairlineWidth` is not that: it is one PHYSICAL
-// pixel, so on a 3× phone it resolves to 0.33pt — a third of the specified
-// edge. Surfaces in this system sit only a few percent off the page by design
-// (a tile's `bgElev` is a 3% step off `bg`), which leaves the EDGE doing most
-// of the work of separating a plate from the page. At a third strength the
-// plate read as missing rather than subtle, which is exactly how the launcher
-// tiles, the band, and the Photos chrome all ended up looking washed out on
-// device while matching the handoff in a simulator screenshot.
-//
-// The one rule weight is `borders.hairline` from @centraid/design, re-exported
-// directly by apps/mobile/src/kit/theme. The registry carries the value; this
-// gate only makes the wrong spelling unrepresentable.
-//
-// Like the logical-inset gate, this is a source scan rather than a runtime
-// test: nothing throws and nothing warns when a border is drawn a third too
-// thin — the pixels are simply wrong. Comments and string bodies are blanked
-// first, so the token's own prose (and this file's) can name the trap.
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -26,7 +6,6 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const MOBILE_SRC = path.join("apps", "mobile", "src");
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".expo"]);
 
-/** Blank comments and string bodies, preserving offsets so lines still match. */
 function blankNonCode(source) {
   return source
     .replace(/\/\*[\s\S]*?\*\//gu, (m) => m.replace(/[^\n]/gu, " "))
@@ -46,12 +25,9 @@ function walk(directory, out = []) {
   return out;
 }
 
-/** Findings for one file's source text. Exported so the test can drive it. */
 export function scanSource(source, label = "<source>") {
   const code = blankNonCode(source);
   const findings = [];
-  // The identifier in any form: `StyleSheet.hairlineWidth`, a destructured
-  // `hairlineWidth`, or a test mock that re-declares it as a StyleSheet field.
   const identifier = /\bhairlineWidth\b/gu;
   let match = identifier.exec(code);
   while (match !== null) {

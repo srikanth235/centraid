@@ -1,30 +1,3 @@
-/*
- * W8.1 diagnostics leak canary (#842).
- *
- * The sibling of the T3 sealed canary in `user-facing-qualities.test.ts`,
- * pointed at the one artifact designed to leave the machine. T3 asks "can
- * a sealed column reach a product surface"; this asks the harder version:
- * a REALISTIC vault is seeded with sentinels of every class a support
- * bundle could plausibly carry — sealed columns, person names, the
- * owner-authored vault name, emails, phone numbers, a payment card, note
- * bodies, absolute paths, URLs with credentials in the query, a bearer
- * token, the vault's own seal key and identity seed — those values are
- * then pushed through the paths that actually interpolate owner data
- * (gateway log lines, health details, anomaly messages, the config
- * summary), the bundle is rendered at BOTH redaction levels, and every
- * sentinel is swept for.
- *
- * The sweep alone would pass on an empty document, which is the failure
- * mode this file exists to avoid, so the usefulness assertions are the
- * other half of the gate and are as specific as the leak assertions: the
- * bundle must still name the failing component, its error count, the
- * anomaly codes and their recurrence, the log component/level histogram,
- * the storage sizing, and the redaction accounting.
- *
- * Determinism: sentinels come from a seeded generator and the clock is
- * injected. Two runs produce byte-identical bundles.
- */
-
 import { createHash } from "node:crypto";
 
 import { afterAll, describe, expect, test } from "vitest";
@@ -48,7 +21,6 @@ import {
 
 const CLOCK_START = Date.parse("2026-08-21T09:00:00.000Z");
 
-/** Seeded, no `Math.random`: the sentinel corpus is reproducible. */
 function seededHex(label: string, length: number): string {
   return createHash("sha256")
     .update(`842-w8-canary:${label}`)
@@ -56,11 +28,6 @@ function seededHex(label: string, length: number): string {
     .slice(0, length);
 }
 
-/**
- * One sentinel per leak CLASS. The class label is what a failure message
- * names, so a red run says which kind of data escaped, not just which
- * string.
- */
 const SENTINELS = {
   "person-name": "Priyanka Raghunathan",
   "vault-name": "Kitchen table archive",
@@ -109,19 +76,12 @@ async function buildRig(): Promise<Rig> {
   seedYear3Vault(
     {
       vault: db.vault,
-      // The canary does not need real sealing to test the BUNDLE: the
-      // sentinels must be absent from the bundle whether the column is
-      // sealed at rest or not. Storing them in the clear is the stronger
-      // starting position — if the bundle cannot leak a plaintext row it
-      // certainly cannot leak a sealed one.
       sealCell: (_entity, _column, _rowId, plaintext) => plaintext,
     },
     { parties: 12, photos: 24, conversations: 2, turnsPerConversation: 2 }
   );
   const profile = year3VaultProfile();
 
-  // A person row and a note row carrying sentinels, exactly where a real
-  // vault would hold them.
   db.vault
     .prepare(
       "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES (?, 'person', ?, ?, ?)"
@@ -133,8 +93,6 @@ async function buildRig(): Promise<Rig> {
       "2026-01-01T00:00:00.000Z"
     );
 
-  // The gateway log store, fed the way production feeds it: message
-  // templates with owner values interpolated in.
   const logs = new GatewayLogStore();
   const logger = logs.wrap({
     info: () => undefined,
@@ -162,8 +120,6 @@ async function buildRig(): Promise<Rig> {
   logger.info(`blob: handle ${SENTINELS["opaque-handle"]} missing`);
   for (const message of emitted) logger.info(message);
 
-  // Health, with owner data interpolated into a component detail — the
-  // shape `reportDegraded(component, detail)` genuinely produces.
   const health = new HealthRegistry({ now: () => CLOCK_START });
   health.reportDegraded(
     "storage-latency",
@@ -174,7 +130,6 @@ async function buildRig(): Promise<Rig> {
     `checkpoint of "${SENTINELS["vault-name"]}" stalled: ${SENTINELS["note-body"]}`
   );
 
-  // Anomalies, recorded from a real Error whose message carries sentinels.
   let tick = 0;
   const anomalies = new AnomalyLedger({
     now: () => {
@@ -244,12 +199,6 @@ async function buildRig(): Promise<Rig> {
   };
 }
 
-/*
- * The rig opens a real vault plane and seeds it; building it once and
- * sharing it across the cases keeps this file inside the quality lane's
- * budget. Every case is read-only against it — the two that mutate work on
- * a copy of the built bundle, never on the rig.
- */
 let rigPromise: Promise<Rig> | undefined;
 
 function getRig(): Promise<Rig> {
@@ -269,10 +218,7 @@ describe("W8.1 diagnostics leak canary", () => {
       {
         const rendered = renderSupportBundle({ ...rig.input, level });
         assertNoLeak(rendered.text, rig.sealedSentinels);
-        // The seeded fixture's own sealed-column sentinel prefix, swept as
-        // a family rather than value by value.
         expect(rendered.text).not.toContain("CENTRAID-SEALED-");
-        // Owner-authored names sampled straight out of the live vault.
         expect(rendered.text).not.toContain("Year 3 person");
         expect(rendered.text).not.toContain(rig.diagnosticsVaultName);
         expect(() => JSON.parse(rendered.text)).not.toThrow();
@@ -285,18 +231,15 @@ describe("W8.1 diagnostics leak canary", () => {
     {
       const rendered = renderSupportBundle(rig.input);
       const bundle = rendered.bundle;
-      // Identity of the build that failed.
       expect(bundle.gateway.version).toBe("0.42.1");
       expect(bundle.gateway.protocolVersion).toBe(11);
       expect(bundle.runtime.platform).toBe("linux");
-      // The failing component, by name, with its error count.
       expect(bundle.health.status).toBe("error");
       const failing = bundle.health.components.find(
         (component) => component.component === "storage-latency"
       );
       expect(failing?.status).toBe("error");
       expect(failing?.errorCount).toBeGreaterThan(0);
-      // What went wrong, how often, and where in the code.
       expect(bundle.anomalies.count).toBe(3);
       expect(bundle.anomalies.histogram["vault.mount.schema-mismatch"]).toBe(2);
       expect(bundle.anomalies.histogram["disk.full.append"]).toBe(1);
@@ -304,7 +247,6 @@ describe("W8.1 diagnostics leak canary", () => {
       expect(mount.component).toBe("serve.vault-registry");
       expect(mount.facts).toStrictEqual({ attempt: 2, epoch: 7 });
       expect((mount.stack as string[]).length).toBeGreaterThan(0);
-      // The log tail keeps its shape and its grep handles.
       expect(bundle.logs.count).toBeGreaterThanOrEqual(9);
       expect(Object.keys(bundle.logs.byLevel).toSorted()).toStrictEqual([
         "error",
@@ -317,15 +259,12 @@ describe("W8.1 diagnostics leak canary", () => {
       expect(
         bundle.logs.groups.every((group) => group.digests.length > 0)
       ).toBe(true);
-      // Storage sizing survives, so "how big is this vault" is answerable.
       const storage = bundle.storage[0] as Record<string, unknown>;
       expect(storage.vaultDbBytes).toBeGreaterThan(0);
       const counts = storage.tableRowCounts as Record<string, number>;
       expect(Object.keys(counts).length).toBeGreaterThan(3);
-      // Non-secret config survives.
       expect(JSON.stringify(bundle.config)).toContain('"provider":"s3"');
       expect(JSON.stringify(bundle.config)).toContain('"mountedVaults":1');
-      // And the document is a real document.
       expect(rendered.bytes).toBeGreaterThan(2000);
       expect(bundle.redaction.leaves).toBeGreaterThan(60);
       expect(
@@ -362,7 +301,6 @@ describe("W8.1 diagnostics leak canary", () => {
     const rig = await getRig();
     {
       const bundle = buildSupportBundle({ ...rig.input, level: "standard" });
-      // A lane that copied the owner's vault name straight through.
       const leaky = {
         ...bundle,
         disclosure: [...bundle.disclosure, SENTINELS["vault-name"]],
@@ -381,10 +319,6 @@ describe("W8.1 diagnostics leak canary", () => {
   });
 
   test("the bundle is deterministic under a fixed clock and salt", async () => {
-    // Determinism is a property of the BUILDER, not of two independently
-    // created vaults: a fresh vault mints a new id and lands a different
-    // number of bytes on disk, so rendering two rigs would only prove
-    // SQLite is nondeterministic. Same input, same salt, same bytes.
     const rig = await getRig();
     expect(renderSupportBundle(rig.input).text).toBe(
       renderSupportBundle(rig.input).text
@@ -394,23 +328,6 @@ describe("W8.1 diagnostics leak canary", () => {
     );
   });
 
-  /*
-   * REGRESSION LOCK for #846 P8, formerly the pin
-   * "the legacy owner-facing diagnostics bundle still emits the vault name
-   * verbatim".
-   *
-   * `GET /centraid/_gateway/diagnostics` used to be assembled by a second
-   * builder (`gateway-diagnostics.ts`) that redacted only the `config`
-   * object, by key name: the owner-authored vault name rode out verbatim in
-   * `vaults[].name` and the log tail was embedded raw — in the one artifact
-   * that module's own header told a person to attach to a support request.
-   * That builder is retired; the endpoint now serves THIS bundle, which is
-   * allowlist-by-construction.
-   *
-   * The composition below is `build-gateway.ts`'s `buildDiagnostics` closure
-   * over a real vault plane, level and all. If the endpoint is ever rewired
-   * back to a hand-assembled structure, this goes red.
-   */
   test("the diagnostics endpoint document carries no owner-authored name", async () => {
     const dir = await tempDir("quality-w8-endpoint-");
     const plane = openVaultPlane({
@@ -444,23 +361,16 @@ describe("W8.1 diagnostics leak canary", () => {
         config: { accessToken: SENTINELS["bearer-token"] },
       });
       const text = renderSupportBundle(input).text;
-      // The key-name redaction that always worked, still working.
       expect(text).not.toContain(SENTINELS["bearer-token"]);
-      // The half that did not: owner-authored names are gone from the
-      // document this endpoint hands out.
       expect(text).not.toContain(SENTINELS["vault-name"]);
       expect(text).not.toContain(SENTINELS["person-name"]);
       assertNoLeak(text);
-      // Still useful: the bundle names the vault it describes and its
-      // storage sizing, it just does not name it in the owner's words.
       const parsed = JSON.parse(text) as {
         storage: { vaultId: unknown; name?: unknown }[];
         redaction: { level: string };
       };
       expect(parsed.storage).toHaveLength(1);
       expect(parsed.storage[0]?.vaultId).toBeTypeOf("string");
-      // `name` is carried in the INPUT so the tripwire can refuse it, and is
-      // emitted by no policy.
       expect(parsed.storage[0]).not.toHaveProperty("name");
       expect(parsed.redaction.level).toBe("standard");
     } finally {

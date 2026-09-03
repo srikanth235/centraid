@@ -1,13 +1,3 @@
-/**
- * Pure helpers for the test-health report inventory signals (#464 backlog).
- * Kept free of I/O so unit tests drive the real logic without regenerating HTML.
- */
-
-/**
- * Extract unhandled/uncaught Vitest errors from a Jest-compatible vitest JSON
- * report. Also detects success=false with zero failed assertions (the EPIPE
- * class of "all tests green, process still fails").
- */
 export function extractUnhandledErrors(vitest) {
   if (!vitest || typeof vitest !== "object") return [];
   const messages = [];
@@ -26,7 +16,6 @@ export function extractUnhandledErrors(vitest) {
     for (const assertion of file.assertionResults ?? file.tests ?? []) {
       if (assertion.status === "failed") failedAssertions += 1;
     }
-    // Suite-level failure with no assertions often means load/runtime error.
     if (
       file.status === "failed" &&
       !(file.assertionResults ?? file.tests ?? []).some(
@@ -54,12 +43,6 @@ export function extractUnhandledErrors(vitest) {
   return [...new Set(messages)];
 }
 
-/**
- * Summarize matrix cell states so "lane ran and failed" is distinct from
- * "no evidence / not run" in the report model. `expected-grey` (#781) is a
- * named, budgeted absence — counted on its own, never inside `cellsMissing`,
- * so the nightly zero-grey exit stays red for every UNregistered grey.
- */
 export function summarizeCellStates(cells) {
   const counts = {
     cellsPassed: 0,
@@ -98,13 +81,6 @@ export function summarizeCellStates(cells) {
   return counts;
 }
 
-/**
- * Worst-status-wins precedence for evidence items that share an owner path.
- * Platform-keyed evidence (#781: `MAESTRO_PLATFORM` suffixes the artifact
- * filename, not the owner) yields one item per platform for the same owner —
- * a naive `Map` kept whichever file sorted last, so a green Android verdict
- * silently masked a red iOS one. Lower index = worse.
- */
 const EVIDENCE_SEVERITY = [
   "infra-mismatch",
   "failed",
@@ -117,15 +93,9 @@ const EVIDENCE_SEVERITY = [
 
 function evidenceSeverityRank(status) {
   const rank = EVIDENCE_SEVERITY.indexOf(String(status ?? ""));
-  // Unknown statuses sort like "missing": never able to mask a real result.
   return rank === -1 ? EVIDENCE_SEVERITY.indexOf("missing") : rank;
 }
 
-/**
- * Map owner path → the WORST evidence item recorded for that owner, so a
- * multi-platform owner (one flow, iOS + Android verdicts) reports its worst
- * platform rather than its last-written file.
- */
 export function worstEvidenceByOwner(items, { normalizeOwner } = {}) {
   const norm =
     typeof normalizeOwner === "function"
@@ -146,20 +116,6 @@ export function worstEvidenceByOwner(items, { normalizeOwner } = {}) {
   return byOwner;
 }
 
-/**
- * Reclassify registered no-evidence cells as `expected-grey` (#781): a named,
- * budgeted absence for cells whose owner has no evidence lane at all. The
- * exemption is deliberately narrow so it cannot weaken the zero-grey gate:
- *
- * - void for a registration whose lane HAS a start marker (the lane exists —
- *   a grey cell under a real lane stays red);
- * - only the no-evidence states qualify; real evidence (pass/fail/flaky/
- *   stale) always keeps its state;
- * - only enumerated cell ids qualify — an unregistered grey cell stays red.
- *
- * Returns the (mutated-copy) cells plus the applied ids and the owners whose
- * silence is expected while their lane does not exist.
- */
 export function applyExpectedGrey(cells, registrations, laneMarkers = {}) {
   const reclassifiable = new Set([
     "missing",
@@ -191,11 +147,6 @@ export function applyExpectedGrey(cells, registrations, laneMarkers = {}) {
   return { cells: next, applied: applied.sort(), expectedAbsentOwners };
 }
 
-/**
- * Resolve a Playwright JSON reporter `suite.file` to the repository-relative
- * owner key used by the matrix. Playwright emits paths relative to
- * `config.rootDir` (normally the project's testDir), including bare basenames.
- */
 export function resolvePlaywrightOwner(
   value,
   { repoRoot = "", configRoot = "", registeredOwners = [] } = {}
@@ -226,7 +177,6 @@ export function resolvePlaywrightOwner(
   return stripRepository(file);
 }
 
-/** Flatten Playwright JSON while preserving the reporter's retry classification. */
 export function collectPlaywrightEvidence(
   report,
   { lane = "playwright", resolveOwner = (value) => value } = {}
@@ -294,19 +244,13 @@ export function collectPlaywrightEvidence(
   return evidence;
 }
 
-/**
- * Detect whole-file env gates that mean the owner never runs on default CI
- * (no special CENTRAID_* flags). Used by matrix validation and report inventory.
- */
 export function detectDefaultCiEnvGate(source) {
   if (typeof source !== "string" || !source.trim()) return null;
-  // describe.skipIf(process.env.FOO !== '1')
   const skipIfNeq = source.match(
     /describe\.skipIf\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)/u
   );
   if (skipIfNeq)
     return { env: skipIfNeq.groups?.env, kind: "skipIf-env-not-1" };
-  // describe.skipIf(!enabled) where enabled = process.env.X === '1' nearby
   const enabled =
     source.match(
       /const\s+\w+\s*=\s*process\.env\.(?<env>[A-Z0-9_]+)\s*===\s*['"]1['"]/u
@@ -317,9 +261,6 @@ export function detectDefaultCiEnvGate(source) {
   if (enabled && /describe\.skipIf\(\s*!?\w+\s*\)/u.test(source)) {
     return { env: enabled.groups?.env, kind: "skipIf-enabled-flag" };
   }
-  // if (process.env.FOO !== '1') { t.skip / test.skip / describe.skip / return }
-  // Covers disk-full.integration.test.ts style: env check then t.skip in the
-  // test callback (whole owner is a no-op on default CI without the flag).
   const skipCall = "(?:test|it|t|describe)\\.skip";
   const early =
     source.match(
@@ -338,10 +279,6 @@ export function detectDefaultCiEnvGate(source) {
       /if\s*\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,200}?\breturn\b/u
     );
   if (early) return { env: early.groups?.env, kind: "early-env-return" };
-  // A skip/run conditional that mentions an environment variable but does not
-  // match a supported whole-owner shape must be loud. Returning an explicit
-  // unknown kind lets validation fail closed instead of preserving a false
-  // solid cell.
   const inlineUnknown = source.match(
     /\.(?:skipIf|runIf)\(\s*[\s\S]{0,120}?process\.env\.(?<env>[A-Z0-9_]+)/u
   );
@@ -364,7 +301,6 @@ export function detectDefaultCiEnvGate(source) {
   return null;
 }
 
-/** Inventory solid/partial cell owners that are whole-file env-gated off default CI. */
 export async function collectEnvGatedOwners(manifest, { root, readFile }) {
   const rows = await Promise.all(
     Object.entries(manifest.cellOwners ?? {}).map(
@@ -390,7 +326,7 @@ export async function collectEnvGatedOwners(manifest, { root, readFile }) {
             };
           }
         } catch {
-          // missing file is a matrix validation error, not inventory
+          // Intentionally empty.
         }
         return undefined;
       }
@@ -399,10 +335,6 @@ export async function collectEnvGatedOwners(manifest, { root, readFile }) {
   return rows.filter((row) => row !== undefined);
 }
 
-/**
- * Collect every owner path registered on the matrix (cellOwners + flows).
- * Used to detect orphaned e2e evidence that would otherwise drop on the floor (#535 F3).
- */
 export function collectRegisteredOwners(manifest) {
   const owners = new Set();
   for (const cellOwner of Object.values(manifest?.cellOwners ?? {})) {
@@ -415,10 +347,6 @@ export function collectRegisteredOwners(manifest) {
   return owners;
 }
 
-/**
- * Evidence JSON whose owner is not registered on any matrix cell/flow.
- * @returns {{ unmapped: object[], failedUnmapped: object[], unmappedEvidence: number }} Unmapped rows and counts.
- */
 export function findUnmappedEvidence(
   results,
   manifest,
@@ -446,12 +374,6 @@ export function findUnmappedEvidence(
   };
 }
 
-/**
- * Declared owners for which a full run produced no evidence key at all.
- * `ignoreOwners` names owners whose silence is a registered, budgeted absence
- * (#781 expected-grey): they are excluded only while their lane does not
- * exist — the caller must not pass them once the lane has a start marker.
- */
 export function findUnmatchedOwners(
   results,
   manifest,
@@ -471,15 +393,6 @@ export function findUnmatchedOwners(
     .sort();
 }
 
-/**
- * Reconcile evidence-producing needs.* job conclusions against report summary.
- * When any needed job failed but summary.failed is 0, the report must not
- * present an implicit all-clear (#535 F5).
- *
- * @param {Record<string, { result?: string }>|null|undefined} needs GHA needs.* map (or job-conclusions.json).
- * @param {{ failed?: number }|null|undefined} summary Report evidence summary with failed count.
- * @param {{ evidenceJobs?: string[] }} [options] Optional allowlist of job names to consider.
- */
 export function reconcileJobConclusions(needs, summary, options = {}) {
   const evidenceJobs = options.evidenceJobs ?? null;
   const failedJobs = [];
@@ -500,10 +413,6 @@ export function reconcileJobConclusions(needs, summary, options = {}) {
   };
 }
 
-/**
- * Ratchet cellsMissing vs the prior durable-history point (#535 F5).
- * historyPoints: oldest-first series *excluding* the current run.
- */
 export function cellsMissingRatchet(currentMissing, historyPoints) {
   const current = Number(currentMissing ?? 0);
   const priorPoints = (historyPoints ?? []).filter(
@@ -517,10 +426,6 @@ export function cellsMissingRatchet(currentMissing, historyPoints) {
   return { prior, current, delta, rose: delta > 0 };
 }
 
-/**
- * Identity-aware cell regression detection. Counts can stay flat while one
- * repaired cell is replaced by a newly-grey or newly-red cell.
- */
 export function cellIdentityRegressions(
   { missingCellIds = [], failedCellIds = [] },
   historyPoints

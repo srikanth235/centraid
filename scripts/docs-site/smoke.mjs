@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-/**
- * Static checks on dist/docs-site — run after `bun run docs:build`.
- *
- *  1. Every expected clean route and shared asset exists.
- *  2. Every internal href/src in every page resolves to a file in the dist
- *     (anchors and external URLs skipped).
- *  3. Indexed pages carry the baseline SEO head: title, description, canonical,
- *     Open Graph, Twitter, and JSON-LD.
- *  4. The homepage links to canonical `/docs/<route>/` URLs, never the old
- *     docs subdomain or `.html` docs filenames.
- *  5. No page resurrects retired Duaility branding.
- */
 import { access, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -126,9 +114,6 @@ const tagAttr = (html, tag, attr, value, readAttr = "content") => {
 const titleValues = new Map();
 const descriptionValues = new Map();
 
-// Page validation records duplicate titles/descriptions against the first page
-// encountered. Keep that reporting order deterministic even though each page's
-// link checks fan out below.
 const validatePage = async (index) => {
   const page = pages[index];
   if (!page) return;

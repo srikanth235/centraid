@@ -1,20 +1,3 @@
-/*
- * The WRITE-shaped arrangements (#890 W3): pending, conflict, parked, denied.
- *
- * They share one spine — a write goes into the real `SqliteIntentStore`, the
- * drain ships it against a real gateway, and the suites read the outcome the
- * session reports — while the read-shaped states (dayone, offline, stale) live
- * beside them in `boot-conditions.ts`. The split is the repo's 500-line file
- * cap; the two halves are one tier and share `seedRow`, `enumerate` and the
- * status helpers from there.
- *
- * Every arrangement here carries its NEGATIVE half through the SAME session and
- * the SAME drain — a second write on a live transport, a row nobody touched, an
- * ordinary action beside the parking one, a write made before the revocation —
- * because an arrangement that can only produce one answer proves nothing about
- * which half produced it.
- */
-
 import type { ActionCall, AppRecipe, SeededRow } from "./apps.js";
 import {
   intentIdOf,
@@ -26,7 +9,6 @@ import type { PendingEntry } from "./boot-conditions.js";
 import type { MobileGateway } from "./gateway.js";
 import type { MobileSeat } from "./seat.js";
 
-/** PENDING — a write in the durable outbox with the gateway unreachable. */
 export async function arrangePending(
   gateway: MobileGateway,
   seat: MobileSeat,
@@ -54,9 +36,6 @@ export async function arrangePending(
       recipe.appId,
       await queuedCall(gateway, seat, recipe, "cut", seeds[0])
     )) as { intentId: string; status?: string; reason?: string };
-    // Read the outbox WHILE the transport is still cut. Restoring it first
-    // would let the very next write's drain ship this intent, and the suite
-    // would be asking a settled queue what it used to hold.
     const pendingWhileCut =
       (await seat.session.pendingChanges()) as PendingEntry[];
     queuedStatusWhileCut = statusOf(pendingWhileCut, queuedResult.intentId);
@@ -70,9 +49,6 @@ export async function arrangePending(
   } finally {
     seat.restore();
   }
-  // The negative: the SAME shape of write, on a live transport, through the
-  // same session. If it also reported itself queued, "queued" would be what
-  // this write always says rather than what the outage made it say.
   const live = await seat.session.write(
     recipe.appId,
     await queuedCall(gateway, seat, recipe, "live", seeds[1])
@@ -90,7 +66,6 @@ export async function arrangePending(
   };
 }
 
-/** CONFLICT — a queued local edit and a server change on the same row. */
 export async function arrangeConflict(
   gateway: MobileGateway,
   seat: MobileSeat,
@@ -109,9 +84,6 @@ export async function arrangeConflict(
     contested = intentIdOf(
       await seat.session.write(recipe.appId, recipe.editSeeded(contestedRow))
     );
-    // The negative rides the SAME session, the SAME action and the SAME drain —
-    // only its row is left alone, so anything the contested intent reports that
-    // this one does not is attributable to the server change.
     untouched = intentIdOf(
       await seat.session.write(recipe.appId, recipe.editSeeded(untouchedRow))
     );
@@ -127,12 +99,6 @@ export async function arrangeConflict(
   };
 }
 
-/**
- * A second device edits the contested row. When the vault PARKS that edit —
- * every Agenda event command carries `confirm: true` — the owner confirms it,
- * because a parked ask has not moved the row and would leave the phone's
- * precondition nothing to collide with.
- */
 async function applyServerEdit(
   gateway: MobileGateway,
   recipe: AppRecipe,
@@ -163,7 +129,6 @@ async function applyServerEdit(
   }
 }
 
-/** PARKED — a write the vault holds for the owner's confirmation. */
 export async function arrangeParked(
   gateway: MobileGateway,
   seat: MobileSeat,
@@ -176,9 +141,6 @@ export async function arrangeParked(
   pending: PendingEntry[];
 }> {
   const row = await seedRow(gateway, seat, recipe, "parked-seed");
-  // The negative first: an ORDINARY write of the same app, through the same
-  // session and the same drain, must not park. A tier where everything parked
-  // would pass the positive half on its own.
   const ordinary = intentIdOf(
     await seat.session.write(
       recipe.appId,
@@ -198,7 +160,6 @@ export async function arrangeParked(
   };
 }
 
-/** DENIED — the owner revokes the app while a write waits behind an outage. */
 export async function arrangeDenied(
   gateway: MobileGateway,
   seat: MobileSeat,
@@ -215,8 +176,6 @@ export async function arrangeDenied(
         await seedRow(gateway, seat, recipe, "denied-revoked"),
       ]
     : [undefined, undefined];
-  // The negative runs BEFORE the revocation: the same write, the same session,
-  // against an app the owner still trusts.
   const allowed = intentIdOf(
     await seat.session.write(
       recipe.appId,

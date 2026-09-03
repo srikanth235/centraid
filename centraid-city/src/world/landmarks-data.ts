@@ -1,20 +1,5 @@
-// landmarks-data.ts — consent, vault, wal, backup. See KIT_API.md.
-//
-// Every builder below calls ONLY documented kit.* members with documented signatures.
-// Positioning for members that don't document x/y/z opts (most non-box/drum/dome
-// builders) is done by setting `.position` / `.rotation` on the returned Object3D —
-// that's plain three.js, not an invented kit API.
-//
-// Flagged: none of these builders were invented. The one spec instruction that could
-// not be satisfied as written is `wal-conveyor`'s scrolling belt texture — the
-// landmark dispatch object (see world.ts "Bespoke landmark geometry") does not pass
-// `convTex` to landmarks, so the belt is built as static geometry instead of pushing
-// `{ type: 'conveyor', tex }` into `animated` (which would crash on `a.tex.offset.x`
-// with an undefined texture).
-
 import type { LandmarkBuilder } from "../core/types.js";
 
-// small local helper — angle math only, not a kit member.
 function ring(
   count: number,
   radius: number
@@ -28,7 +13,6 @@ function ring(
 }
 
 export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
-  // ---------------------------------------------------------------- consent
   "consent-arch"({ g, w, h, d, color, kit }) {
     const pierW = Math.max(1.2, w * 0.18);
     const gap = Math.max(1.5, w - pierW * 2);
@@ -54,14 +38,12 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     coping.position.y = pierH + h * 0.22;
     g.add(coping);
 
-    // glowing scan curtain filling the gate opening
     const curtain = kit.signBand(gap * 0.82, pierH * 0.9, color, {
       y: pierH * 0.45,
       z: 0,
     });
     g.add(curtain);
 
-    // guard booths flanking the gate
     const boothL = kit.box(1.6, 2.3, 1.6, kit.mat.plaster, {
       y: 1.15,
       x: -(gap / 2 + pierW + 1.4),
@@ -74,7 +56,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     });
     g.add(boothL, boothR);
 
-    // boom barrier arms, raised
     const barL = kit.box(2.6, 0.15, 0.15, kit.mat.brass, { y: 1.1 });
     barL.position.x = -(gap / 2 + pierW + 0.6);
     barL.position.z = d * 0.35;
@@ -97,14 +78,12 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     });
     g.add(deck);
 
-    // low rim
     const rimN = kit.box(w, 0.4, 0.2, kit.mat.darkSlate, { windows: false });
     rimN.position.set(0, liftH + deckT + 0.2, d / 2);
     const rimS = kit.box(w, 0.4, 0.2, kit.mat.darkSlate, { windows: false });
     rimS.position.set(0, liftH + deckT + 0.2, -d / 2);
     g.add(rimN, rimS);
 
-    // parked crates, neutral bodies
     for (let i = 0; i < 3; i++) {
       const crate = kit.crateStack(1.3, 1.1, 1.3, kit.mat.timber, {});
       crate.position.set(
@@ -115,7 +94,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
       g.add(crate);
     }
 
-    // small district plaque, the one accent touch
     const plaque = kit.signBand(w * 0.35, 0.4, color, {
       y: liftH + deckT + 0.5,
       z: d / 2 + 0.05,
@@ -141,7 +119,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     g.add(roof);
   },
 
-  // ------------------------------------------------------------------ vault
   "vault-core"({ g, w, h, d, color, kit }) {
     const r = Math.max(2.5, Math.min(w, d) * 0.5);
     const bodyH = h * 0.6;
@@ -152,7 +129,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     dome.position.y = bodyH;
     g.add(dome);
 
-    // radiating spoke walls at plinth level
     const spokeLen = Math.max(2, w * 0.4);
     const spokes = ring(6, 0);
     for (const s of spokes) {
@@ -169,7 +145,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
       g.add(spoke);
     }
 
-    // ring of glowing ports (FKs into core_party)
     const ports = ring(10, r * 0.98);
     for (const p of ports) {
       g.add(kit.beacon(p.x, bodyH * 0.5, p.z, color, 0.28));
@@ -207,7 +182,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     cap.position.y = h * 0.95;
     g.add(cap);
 
-    // stacked openwork grid frames
     const half = mastW / 2;
     for (let lvl = 1; lvl <= 3; lvl++) {
       const y = (h * 0.95 * lvl) / 4;
@@ -235,8 +209,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     door.position.set(0, h * 0.42, d / 2 + 0.25);
     g.add(door);
 
-    // radial bolts around the door — ring() gives a 2D circle; reuse it as the
-    // door's local x/y (the door faces along +z, so bolts sit in the x/y plane).
     const bolts = ring(10, doorR * 0.82);
     for (const b of bolts) {
       const bolt = kit.drum(0.14, 0.14, 0.18, kit.mat.brass, { seg: 8 });
@@ -245,7 +217,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
       g.add(bolt);
     }
 
-    // minimal light — a single dim beacon at the door hub
     g.add(kit.beacon(0, h * 0.42, d / 2 + 0.5, color, 0.2));
   },
 
@@ -265,7 +236,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
       g.add(st);
       stelae.push({ x: st.position.x, z: st.position.z });
     }
-    // low connecting walls between consecutive stelae
     for (let i = 0; i < stelae.length; i++) {
       const a = stelae[i];
       const b = stelae[(i + 1) % stelae.length];
@@ -283,7 +253,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     }
   },
 
-  // -------------------------------------------------------------------- wal
   "wal-conveyor"({ g, w, h, kit }) {
     const beltLen = Math.max(4, w * 1.4);
     const gallery = kit.box(beltLen, 0.7, 2, kit.mat.steel, {
@@ -298,7 +267,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     cover.position.set(0, h * 0.45 + 0.55, 0);
     g.add(cover);
 
-    // trestle legs, rising with the incline
     const legN = 5;
     for (let i = 0; i < legN; i++) {
       const t = i / (legN - 1);
@@ -311,7 +279,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
       g.add(leg);
     }
 
-    // hopper at the high end — a battered mass flipped to funnel downward
     const hopper = kit.wedge(1.8, 1.6, 1.8, kit.mat.darkSlate);
     hopper.rotation.x = Math.PI;
     hopper.position.set(
@@ -320,8 +287,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
       0
     );
     g.add(hopper);
-
-    // NOTE: no scrolling texture — landmarks don't receive `convTex` (see file header).
   },
 
   "wal-checkpointer"({ g, w, h, d, color, kit }) {
@@ -366,7 +331,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     roof.position.y = bodyH;
     g.add(roof);
 
-    // angled chute aimed away from the body
     const chute = kit.box(Math.max(3, w * 0.9), 0.6, 1.3, kit.mat.steel, {
       windows: false,
     });
@@ -374,7 +338,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     chute.rotation.z = -0.32;
     g.add(chute);
 
-    // rails
     const rail1 = kit.box(w * 1.1, 0.15, 0.15, kit.mat.steel, {
       windows: false,
     });
@@ -385,7 +348,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     rail2.position.set(bodyW * 0.2, 0.1, -0.9);
     g.add(rail1, rail2);
 
-    // queued segment crates
     for (let i = 0; i < 4; i++) {
       const crate = kit.crateStack(1.1, 1, 1.1, kit.mat.timber, {});
       crate.position.set(
@@ -397,7 +359,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     }
   },
 
-  // ---------------------------------------------------------------- backup
   "backup-bunker1"({ g, w, h, d, kit }) {
     const berm = kit.wedge(w * 1.1, h * 0.75, d * 1.1, kit.mat.concrete);
     g.add(berm);
@@ -432,7 +393,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
       g.add(cap);
       tops.push({ x, z });
     }
-    // link bridge between the first two silos
     const a = tops[0];
     const b = tops[1];
     const len = Math.hypot(b.x - a.x, b.z - a.z);
@@ -459,7 +419,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     chimney.position.set(bodyW * 0.3, bodyH, bodyD * 0.15);
     g.add(chimney);
 
-    // records annex, small domestic wing
     const annex = kit.box(w * 0.3, bodyH * 0.7, d * 0.35, kit.mat.plaster, {
       y: (bodyH * 0.7) / 2,
       x: bodyW * 0.65,

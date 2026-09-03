@@ -1,48 +1,14 @@
 #!/usr/bin/env node
-/**
- * The body of a rolling per-lane issue, when the report cannot supply one (#915).
- *
- * WHY A FALLBACK EXISTS AT ALL. The rolling issue's body is supposed to come
- * from `scripts/test-report/rolling-issue-body.mjs`, rendered from the same
- * attention-queue model as the report's §3, so the issue and the page can never
- * disagree. But the alerting path runs precisely when things are broken — the
- * report job is one of the lanes that can be red, and a red `test-health-report`
- * leaves no `summary.json` to render from. An alerting path that throws when
- * the report is missing is #556 restated: a lane red with no trace anywhere.
- *
- * So this writes the smaller, always-available truth: which lane, what verdict
- * GitHub recorded, whether it is parked and until when, and the run to read.
- * It never invents a case list. A body that says "the report did not render" is
- * information; a body that fabricates cell-level detail is not.
- *
- * Usage:
- *   node scripts/ci/rolling-issue-fallback-body.mjs \
- *     --lane mobile-e2e-ios --rung 4 --result failure \
- *     --run-url https://github.com/o/r/actions/runs/1 [--out /tmp/body.md]
- */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
-/** Lane parks, merged into the quarantine ledger by #915 Wave 4. */
 const QUARANTINE_PATHS = [path.join(root, "tests/quarantine.json")];
 
-/**
- * The park entry covering a lane, or null.
- *
- * Still takes a LIST of ledgers, in priority order, so a future split needs no
- * second edit; today there is one. An entry whose `expires` has passed is
- * deliberately still returned: an expired park is the loudest thing this body
- * can say, and hiding it would turn a missed deadline into silence.
- *
- * @param {Record<string, unknown>} ledgers Parsed `{lanes: {...}}` objects, in priority order.
- * @param {string} lane The lane (GitHub job id) to look up.
- * @returns {{issue?: number, expires?: string, why?: string} | null} The park, or null.
- */
 export function parkFor(ledgers, lane) {
   for (const ledger of ledgers) {
     const lanes = /** @type {Record<string, unknown>} */ (
-      /** @type {Record<string, unknown>} */ (ledger ?? {}).lanes ?? {}
+      (ledger ?? {}).lanes ?? {}
     );
     const entry = lanes[lane];
     if (entry && typeof entry === "object")
@@ -53,12 +19,6 @@ export function parkFor(ledgers, lane) {
   return null;
 }
 
-/**
- * Render the rolling issue body.
- *
- * @param {{lane: string, rung: string|number, result: string, runUrl: string, today: string, park: {issue?: number, expires?: string, why?: string}|null}} input What is known about tonight.
- * @returns {string} Markdown.
- */
 export function renderFallbackBody({
   lane,
   rung,

@@ -3,12 +3,6 @@ import { describe, expect, test } from "vitest";
 import { baseMatrix, REAL_FILE } from "./claims-fixture.mjs";
 import { validateAppAxes } from "./validate-app-axes.mjs";
 
-/**
- * The app-axis half of the claims law, in the shape these suites were written
- * against. #915 retired `validate-matrix.mjs`; `validateAppAxes` is the rule
- * set these cases actually exercise, and the fixture declares its own flow ids
- * rather than inheriting a repo-wide set.
- */
 async function validateMatrix(claims, options = {}) {
   const flowIds = new Set(
     (claims.flows ?? []).map((flow) => flow.id).concat(["vault-core-flow"])
@@ -16,12 +10,6 @@ async function validateMatrix(claims, options = {}) {
   return { errors: await validateAppAxes(claims, options, flowIds) };
 }
 
-/**
- * #839 Wave 0 — the app-shaped axes (gaps G6, G7, G16). Each case is the
- * SABOTAGE of one closure rule: the grids are total (a cell may not go
- * missing), closed against disk (the app axis is what is bundled, the state
- * partition is what the manifest designs), and every citation is followable.
- */
 describe("app axes: seats, grid B, grid D, engines, consent", () => {
   test("accepts the well-formed axes", async () => {
     const { errors } = await validateMatrix(baseMatrix(), {
@@ -218,9 +206,6 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
       status: "held",
       ...(citation === undefined ? {} : { citation }),
     });
-    // The happy shape: tally designs every state and can own none until the
-    // ruling that cleared its interface is answered, so the cell says exactly
-    // that instead of joining the undifferentiated grey.
     matrix.appStates.apps[6].states.dayone = held("#839");
     const accepted = await validateMatrix(matrix, {
       checkFiles: false,
@@ -230,7 +215,6 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
       accepted.errors.some((e) => e.includes("appStates tally.dayone"))
     ).toBe(false);
 
-    // A hold with no ruling behind it is just a gap that stopped being counted.
     matrix.appStates.apps[6].states.dayone = held();
     const uncited = await validateMatrix(matrix, {
       checkFiles: false,

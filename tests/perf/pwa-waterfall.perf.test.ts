@@ -8,11 +8,6 @@ import { perfBudgets } from "../../apps/web/tests/e2e/perf-budgets.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/pwa-waterfall.perf.test.ts";
-// Produced by the web-e2e Playwright job (perf-waterfall.spec.ts) and handed to
-// this lane as an artifact. This is a CHROMIUM PWA request-waterfall report, not
-// an on-device mobile measurement — the file was previously mislabeled
-// "mobile-fast-path"; it gates web.performance, and mobile.performance stays a
-// gap (see tests/matrix.json notes) until real on-device budgets exist.
 const input = "artifacts/perf-input/pwa-waterfall-report.json";
 
 interface WaterfallReport {
@@ -20,12 +15,6 @@ interface WaterfallReport {
     cold: { requestCount: number; transferBytes: number };
     warmToColdByteRatio: number;
   };
-  // An app open is an inline route in the shell window (#799 retired the
-  // served-app iframe). `grandTotalTransferBytes` is what came off the WIRE and
-  // is 0 while the service worker answers the app's chunks from Cache Storage;
-  // `encodedBodyBytes` is the DECODED weight of those same bodies (Cache
-  // Storage holds decoded bodies, so it is raw size, not a wire figure) and is
-  // the number that grows when an app gets heavier. Both are gated.
   appOpen: {
     cold: {
       requestCount: number;
@@ -55,10 +44,6 @@ async function readWaterfall(): Promise<WaterfallReport | undefined> {
 
 const waterfall = await readWaterfall();
 
-// The artifact is only ever missing when the upstream web-e2e job did not run or
-// failed to publish it. Locally that is expected (skip). In CI it means the gate
-// silently guarded nothing — the exact defect this reorg is closing — so fail
-// hard instead of skipping into a false green.
 if (process.env.CI && !waterfall) {
   throw new Error(
     `${OWNER}: missing ${input}. The nightly web-e2e job must publish the PWA ` +
@@ -72,9 +57,6 @@ describe("pwa-waterfall.perf", () => {
     "the real #404 PWA fast-path browser budgets gate the nightly lane",
     async () => {
       const report = waterfall!;
-      // #659 R4 — sustained-drift gate over this rig's own 30-sample
-      // nightly history. Null until the history is deep enough; a null is
-      // "no opinion yet", never a pass.
       const drift = await rigDriftBudgetMs("perf", OWNER);
       const passed =
         report.shell.cold.requestCount <= perfBudgets.shell.maxRequests &&
@@ -89,10 +71,6 @@ describe("pwa-waterfall.perf", () => {
           perfBudgets.appOpen.cold.maxEncodedBytes &&
         report.appOpen.cold.totalRequestCount <=
           perfBudgets.appOpen.cold.maxTotalRequests &&
-        // A cold open that loaded nothing is a broken measurement, not a fast
-        // one. A bare `> 0` would not catch the realistic version of that —
-        // the app chunk getting preloaded or folded into `boot`, leaving one
-        // incidental byte in the window — so this is a real floor.
         report.appOpen.cold.encodedBodyBytes >=
           perfBudgets.appOpen.cold.minEncodedBytes &&
         report.appOpen.warm.requestCount <=

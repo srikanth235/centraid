@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-/**
- * `bun run test:report:smoke` (#915 Wave 3).
- *
- * Renders the whole page twice from the committed fixture root and asserts
- * that every section §0–§11 is present with zero validation errors, and that a
- * parked lane and a lane that wrote nothing render as `parked` and
- * `no evidence` rather than as red or as blank.
- *
- * It runs on rung 1 (`check:push`) and rung 2, which is why it drives the
- * generator's exported functions rather than a subprocess: it has to be fast,
- * and a fixture the generator cannot read is exactly the failure it is for.
- */
 
 import path from "node:path";
 
@@ -20,7 +8,6 @@ import { renderReport } from "./render/index.mjs";
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const FIXTURES = path.join(ROOT, "scripts/test-report/fixtures");
 
-/** Every section the page owes a reader, by anchor and by heading. */
 export const REQUIRED_SECTIONS = Object.freeze([
   ['id="verdict"', "§0 verdict lamp"],
   ['id="ship"', "§1 blockers"],
@@ -36,7 +23,6 @@ export const REQUIRED_SECTIONS = Object.freeze([
   ['id="read"', "§11 how to read this"],
 ]);
 
-/** The fixture flags, so the tests and this CLI drive the same inputs. */
 export function fixtureOptions(overrides = {}) {
   return parseFlags(
     [
@@ -59,7 +45,6 @@ export function fixtureOptions(overrides = {}) {
   );
 }
 
-/** Render the fixture root and return the model and the HTML. */
 export async function renderFixture(overrides = {}) {
   const model = await collectModel(
     fixtureOptions(overrides),
@@ -68,7 +53,6 @@ export async function renderFixture(overrides = {}) {
   return { model, html: renderReport(model) };
 }
 
-/** The checks, as a list of failures — empty means green. */
 export async function smokeFailures() {
   const failures = [];
   const { model, html } = await renderFixture();
@@ -94,8 +78,6 @@ export async function smokeFailures() {
   if (/url\((?!data:)/u.test(html))
     failures.push("the page fetches something at runtime");
 
-  // A second root where the ONLY evidence is a park: the page must still
-  // render, and it must not call the night shippable.
   const parkedOnly = await renderFixture({
     evidence: path.join(FIXTURES, "evidence-parked-only"),
   });

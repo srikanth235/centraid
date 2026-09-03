@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-// Native consumer-design gate (#690, #747).
-//
-// The canonical design package owns literal values. Product code consumes its
-// typed lowering (`colors`, `radii`, and `t(role)`), just as desktop/PWA CSS
-// consumes custom properties. The two native adapter files own platform
-// lowering; every other production file is a consumer with zero literal debt.
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -23,7 +17,6 @@ const LOWERING_OWNER_SUFFIXES = [
   path.join("kit", "theme", "resolve.ts"),
 ];
 
-/** Blank comments while preserving offsets for useful line numbers. */
 function blankComments(src) {
   return src
     .replace(/\/\*[\s\S]*?\*\//gu, (match) => match.replace(/[^\n]/gu, " "))

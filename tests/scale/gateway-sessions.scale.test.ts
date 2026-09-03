@@ -5,10 +5,6 @@ import path from "node:path";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
-/**
- * Gateway multi-session headroom (#496 PE1).
- * Spins many concurrent session-shaped HTTP probes against a real serve().
- */
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { serve } from "../../packages/server/src/serve/serve.js";
@@ -26,8 +22,6 @@ describe("gateway-sessions.scale scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-scale-${crypto.randomUUID()}-`);
     handle = await serve({
-      // A fresh vaultDir auto-founds Personal at construction (#603),
-      // which is all the fixture needs — no named init vault any more.
       paths: { vaultDir: path.join(dataDir, "vault") },
       token: "scale-admin-token",
     });
@@ -50,9 +44,6 @@ describe("gateway-sessions.scale scenarios", () => {
     );
     const durationMs = performance.now() - started;
     const ok = results.every((s) => s !== 401 && s !== 403 && s < 500);
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed = ok && durationMs < BUDGET_MS;
     const withinDrift = drift === null || durationMs <= drift;

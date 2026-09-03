@@ -1,34 +1,4 @@
 #!/usr/bin/env node
-/**
- * Rust supply-chain gate (issue #842 W7.2): `cargo audit` for known
- * advisories and `cargo deny` for licences, duplicate versions, and banned or
- * unknown-registry sources, run over every first-party crate lockfile.
- *
- * The TypeScript side already has OSV over `bun.lock` (scripts/ci/
- * osv-lockfile-scan.mjs) and dependency-review on the PR diff. The Rust side
- * had neither, while shipping the code that terminates a QUIC connection from
- * an unauthenticated peer. This closes that asymmetry.
- *
- * ============================== AVAILABILITY ==============================
- *
- * `cargo-audit` and `cargo-deny` are separate cargo subcommand binaries. This
- * script has exactly three outcomes and no fourth:
- *
- *   RAN + CLEAN   → exit 0.
- *   RAN + FINDING → exit 1.
- *   NOT INSTALLED → a loud SKIPPED block naming the exact install command,
- *                   exit 0 by default, exit 1 under `--require`.
- *
- * There is deliberately no "installed but quietly not run" outcome: once a
- * tool probes as available, every crate must produce a run record, and a
- * missing record fails the gate. A guarded skip that could be mistaken for a
- * pass is worse than no lane at all.
- *
- * CI passes `--require`, because the workflow installs both tools — so in CI
- * a missing binary is an infrastructure failure and must be red, not skipped.
- *
- * Usage:  node scripts/security/rust-supply-chain.mjs [--require] [--root <dir>]
- */
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
@@ -38,10 +8,6 @@ import { pathToFileURL } from "node:url";
 const DEFAULT_ROOT = path.resolve(import.meta.dirname, "../..");
 const SKIP_DIRS = new Set(["target", "node_modules", ".git", "dist", "build"]);
 
-/**
- * The two subcommands, with the exact command that unblocks each. Pinned
- * `--locked` installs so a CI runner cannot drift its own advisory tooling.
- */
 export const RUST_SUPPLY_CHAIN_TOOLS = Object.freeze([
   Object.freeze({
     id: "cargo-audit",
@@ -50,7 +16,6 @@ export const RUST_SUPPLY_CHAIN_TOOLS = Object.freeze([
       "audit",
       "--deny",
       "warnings",
-      // Same two unmaintained iroh transitives as deny.toml [advisories].ignore.
       "--ignore",
       "RUSTSEC-2023-0089",
       "--ignore",
@@ -62,8 +27,6 @@ export const RUST_SUPPLY_CHAIN_TOOLS = Object.freeze([
   Object.freeze({
     id: "cargo-deny",
     subcommand: "deny",
-    // One shared policy at the repo root rather than three drifting copies;
-    // cargo-deny only auto-discovers a `deny.toml` beside the crate.
     argsFor: (/** @type {string} */ root) => [
       "deny",
       "--all-features",
@@ -76,13 +39,6 @@ export const RUST_SUPPLY_CHAIN_TOOLS = Object.freeze([
   }),
 ]);
 
-/**
- * Classify a `cargo <sub> --version` probe. cargo reports a missing
- * subcommand on stderr with a zero-ish exit in some versions and non-zero in
- * others, so the text is what decides, not the code alone.
- * @param {{status: number|null, stdout?: string, stderr?: string, error?: unknown}} probe Spawn result.
- * @returns {"available"|"missing"|"broken"} Classification.
- */
 export function classifyProbe(probe) {
   if (probe.error) return "missing";
   const text = `${probe.stdout ?? ""}${probe.stderr ?? ""}`;
@@ -91,14 +47,8 @@ export function classifyProbe(probe) {
   return "broken";
 }
 
-/**
- * Locate crates that own a `Cargo.lock` — the unit both tools consume.
- * @param {string} root Repository root.
- * @returns {string[]} Repo-relative crate directories.
- */
 export function discoverLockedCrates(root) {
   const found = [];
-  /** @param {string} dir Directory to walk. */
   const walk = (dir) => {
     let entries;
     try {
@@ -113,7 +63,7 @@ export function discoverLockedCrates(root) {
         statSync(path.join(child, "Cargo.lock"));
         found.push(path.relative(root, child).split(path.sep).join("/"));
       } catch {
-        // Not a locked crate root; keep descending.
+        // Intentionally empty.
       }
       walk(child);
     }
@@ -122,13 +72,6 @@ export function discoverLockedCrates(root) {
   return found.sort();
 }
 
-/**
- * Decide the process exit code from the collected records. Split out from the
- * IO so the "available but did not run" rule is testable without cargo.
- * @param {{tool: string, crate: string|null, outcome: string}[]} records Run records.
- * @param {{require: boolean, crates: string[]}} context Gate configuration.
- * @returns {{code: number, reasons: string[]}} Exit decision.
- */
 export function decideExit(records, context) {
   const reasons = [];
   for (const tool of RUST_SUPPLY_CHAIN_TOOLS) {
@@ -146,7 +89,6 @@ export function decideExit(records, context) {
       reasons.push(`${tool.id} failed to execute; the gate cannot pass on it`);
       continue;
     }
-    // The load-bearing rule: an available tool owes one record per crate.
     const ran = new Set(
       mine.filter((r) => r.outcome !== "skipped").map((r) => r.crate)
     );
@@ -166,11 +108,6 @@ export function decideExit(records, context) {
   return { code: reasons.length === 0 ? 0 : 1, reasons };
 }
 
-/**
- * Execute the gate.
- * @param {{root?: string, require?: boolean, run?: Function, probe?: Function}} [options] Injection seams for tests.
- * @returns {{records: {tool: string, crate: string|null, outcome: string}[], crates: string[], lines: string[]}} Result.
- */
 export function runRustSupplyChain(options = {}) {
   const root = options.root ?? DEFAULT_ROOT;
   const probe =
@@ -186,7 +123,6 @@ export function runRustSupplyChain(options = {}) {
       spawnSync("cargo", args, { encoding: "utf8", cwd, stdio: "inherit" }));
 
   const crates = discoverLockedCrates(root);
-  /** @type {{tool: string, crate: string|null, outcome: string}[]} */
   const records = [];
   const lines = [];
 

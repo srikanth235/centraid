@@ -1,14 +1,4 @@
 #!/usr/bin/env node
-// Design-token zero-debt gate (#630 Wave 0; type/radius closure in #747).
-//
-// Raw hex colors and literal font-family stacks in client/blueprint CSS are
-// design-system forks. The checked-in budget is now empty; comparison remains
-// so any attempted allowance is visible in review and the gate still explains
-// stale or widened entries. Comments are stripped so issue references such as
-// #505 are not mistaken for colors.
-//
-// Run with `--write` to rewrite the budget from the current tree (the only
-// sanctioned way to record a decrease).
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -22,8 +12,6 @@ const TARGETS = [
   "apps/web/src",
   "apps/extension/static",
 ];
-// The CSS debt ledger is `tests/budgets.json#designTokenCss.budgets` since
-// #915 Wave 4, and it is still deliberately EMPTY — see docs/traps/design-tokens.md.
 const BUDGET_FILE = path.join(ROOT, "tests/budgets.json");
 const BUDGET_SECTION = "designTokenCss";
 const BUDGET_SECTION_PATH = "tests/budgets.json";
@@ -39,27 +27,9 @@ export const METRICS = [
   "retiredTypeAxis",
 ];
 
-/** The eight app-icon hues (`palette.ts`). Kept as a literal list rather than
- * imported so this script stays a dependency-free .mjs the pre-commit hook can
- * run before any package is built. */
 const PALETTE_HUES = "amber|forest|indigo|ochre|rose|slate|teal|violet";
 
-/** `--c-<hue>` is an icon FILL. As `color:` on the shell's own surfaces the
- * fills measure 2.04–5.03:1 on light and 3.12–8.44:1 on dark — 17 of 32 cells
- * below AA, and amber misses even the 3:1 non-text floor. The solved rung
- * `--c-<hue>-text` exists for type, so a `color:` (or its `-webkit-` fill
- * twin) that names a bare hue is off-contract.
- *
- * Reach and limits: this sees the `color:` declaration itself, including one
- * wrapped in `color-mix()`. It cannot see a hue laundered through an
- * intermediate custom property (`--au-hue: var(--c-rose)` then
- * `color: var(--au-hue)`) — that indirection is what the split
- * fill/ink variable pairs in the client exist to keep honest, and what the
- * `--c-*-text` grids in packages/design/src/contrast.test.ts measure. */
 function countPaletteHueAsText(css) {
-  // `declarations()` has no left boundary, so it cannot be reused here:
-  // `color` is a suffix of `background-color`, `border-color`,
-  // `border-top-color`… all of which are FILLS and stay on the raw hue.
   const ink =
     /(?<![\w-])(?:color|-webkit-text-fill-color)\s*:\s*(?<value>[^;}]+)/giu;
   const bare = new RegExp(
@@ -71,9 +41,6 @@ function countPaletteHueAsText(css) {
   ).length;
 }
 
-/** The two-weight chrome rule (DESIGN.md, typography.ts):
- * 400 + 600. `normal` is 400. 700 exists only in `marketingType`, which
- * is web-only and outside the chrome — so it counts as debt here. */
 const SANCTIONED_WEIGHTS = new Set(["400", "600", "normal", "inherit"]);
 
 const declarations = (css, property) => [
@@ -84,10 +51,6 @@ const declarations = (css, property) => [
 
 const isTokened = (value) => value.includes("var(--");
 
-/** The ramp's role names, in `typography.ts` order. The four v9 additions
- * (#765) — the held `label-on` pair, the `annot-label` pair and `band` — are
- * ramp roles like any other; a `font:` naming one is the tokened form, and
- * leaving them out of this list counted every correct use as debt. */
 const TYPE_ROLE_NAMES =
   "display|title|reading|body|body-strong|label-on|small|small-strong|control|eyebrow|mono|annot-label|annot-label-on|band";
 const TYPE_ROLE = new RegExp(
@@ -99,19 +62,6 @@ const TYPE_SIZE_ROLE = new RegExp(
   "u"
 );
 
-/** A `--t-<key>` is a `font` **shorthand** — family, weight, size and
- * line-height at once — so it cannot serve a rule that wants only the size.
- * `--t-<key>-size` is the composable rung that can (#686, typography.ts), and
- * it is the sanctioned form here. A length literal is still debt.
- *
- * Carve-outs: `inherit` (an explicit cascade decision) and any `var(...)` (the
- * size rungs plus surface-local sizing knobs).
- *
- * Counted DESPITE being a `var()`: `font-size: var(--t-body)`. That names the
- * shorthand where a size belongs; the declaration is invalid and is dropped
- * whole, so the element silently keeps its inherited size. Nothing throws and
- * nothing logs — exactly the failure the `-size` rungs exist to prevent, so it
- * must not hide inside the `var()` carve-out. */
 const SHORTHAND_AS_SIZE = /var\(\s*--t-(?!.*-size\s*[),])[\w-]+\s*[),]/u;
 
 function countRawFontSize(css) {
@@ -143,13 +93,6 @@ function countRawFontWeight(css) {
   return declarationsWithWeight + shorthandWeights;
 }
 
-/** Every radius declaration is closed over the shared scale. The only
- * non-rung value is the 26%-of-box app-mark geometry documented in radii.ts.
- * Semantic values emitted by the design registry (`--tile-*`) and the
- * per-instance app-chip radius derived from iconChipRadius() are shared
- * implementation, not local scales. `inherit` carries an already-validated
- * parent value. Literals, arbitrary variables, fallbacks and token arithmetic
- * are all debt: `calc(var(--r-md) * .55)` is another scale wearing a token. */
 function countRawRadius(css) {
   const matches = [
     ...declarations(css, "border-radius"),

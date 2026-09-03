@@ -1,17 +1,3 @@
-// The half `selfTest()` cannot cover (#905 Part 2).
-//
-// `lint-app-conformance.mjs` runs its rules against inline fixtures before it
-// touches the tree, which proves the RULES work. It cannot prove the PARSERS do
-// — a parser that quietly returns an empty table makes every rule vacuous, and
-// the linter would report green on a tree it never read. So these tests run the
-// parsers against the REAL committed sources and assert they came back with the
-// tables this repo actually ships, by name.
-//
-// That is deliberately a coupling to current content. It is the coupling that
-// matters: the day `deep-links.ts` is reformatted so its nesting no longer
-// matches, this file fails with "the parser found nothing" rather than the gate
-// silently passing everything.
-
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -56,9 +42,7 @@ test("Home's switch parses to a navigator for every launcher route", () => {
 
 test("the deep-link parser reads both table shapes", () => {
   const table = parseDeepLinks(read("apps/mobile/src/deep-links.ts"));
-  // `Notes: "apps/notes"` — a navigator that is one screen and one path.
   assert.equal(table.Notes.path, "apps/notes");
-  // `Photos: { screens: { PhotosHome: "photos", … } }` — the nested shape.
   assert.equal(table.Photos.screens.PhotosHome, "photos");
 });
 
@@ -69,8 +53,6 @@ test("the testID vocabulary carries every declared landmark", () => {
 });
 
 test("a parser that finds nothing reports undefined, never an empty table", () => {
-  // The no-op guard, from the parser side: `main()` turns each of these into a
-  // refusal to pass. An empty object here would instead make every rule vacuous.
   assert.equal(parseRegistryIds("// nothing"), undefined);
   assert.equal(parseCatalogRoutes("// nothing"), undefined);
   assert.equal(parseHomeNavigation("// nothing"), undefined);

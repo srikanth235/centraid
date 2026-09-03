@@ -1,19 +1,5 @@
-/**
- * The lane health board's model (#915 Wave 3, §4).
- *
- * One row per registered lane on rungs 2–5, whether or not it wrote evidence.
- * A registered lane that said nothing is `no-evidence` — the honest word — and
- * a lane with an unexpired park is `parked` whatever it observed, so the
- * verdict is computed over the lanes that are actually being watched.
- *
- * The demote / promote / park rules of #915 read this table, so the numbers it
- * carries (pass rate on candidates, p95 against the rung budget, consecutive
- * reds) are computed here once rather than in the renderer.
- */
-
 import { laneSeverity } from "./severity.mjs";
 
-/** The 30-run history codes the sparkline draws. */
 export const RUN_CODES = Object.freeze({
   passed: 1,
   failed: 0,
@@ -21,7 +7,6 @@ export const RUN_CODES = Object.freeze({
   "no-evidence": 3,
 });
 
-/** The p95 of a list of numbers, or null when there is nothing to measure. */
 export function p95(values) {
   const sorted = values
     .filter((value) => Number.isFinite(value))
@@ -32,12 +17,6 @@ export function p95(values) {
   ];
 }
 
-/**
- * The trailing history for one lane, newest last, as verdict words.
- * @param {object[]} history durable history points, oldest first
- * @param {string} lane the lane id
- * @param {string} tonight tonight's verdict word
- */
 export function laneHistory(history, lane, tonight, limit = 30) {
   const past = history
     .map((point) => point.lanes?.[lane]?.verdict ?? "no-evidence")
@@ -45,7 +24,6 @@ export function laneHistory(history, lane, tonight, limit = 30) {
   return [...past, tonight].slice(-limit);
 }
 
-/** The pass rate over the runs that actually ran (parked and absent excluded). */
 export function passRate(words) {
   const ran = words.filter((word) => word === "passed" || word === "failed");
   return ran.length === 0
@@ -55,7 +33,6 @@ export function passRate(words) {
       );
 }
 
-/** How many candidates in a row this lane has been red, counting back. */
 export function consecutiveReds(words) {
   let count = 0;
   for (let index = words.length - 1; index >= 0; index -= 1) {
@@ -65,10 +42,6 @@ export function consecutiveReds(words) {
   return count;
 }
 
-/**
- * Build the lane board.
- * @param {{laneRegistry: object[], evidence: Map<string, object>, previousEvidence: Map<string, object>, history: object[], claims: object}} input the lane registry, tonight's and last night's evidence, the history and the claims file
- */
 export function buildLaneBoard({
   laneRegistry,
   evidence,
@@ -102,10 +75,6 @@ export function buildLaneBoard({
       platform: lane.platform,
       status: tonight?.parked ? "parked" : lane.status,
       severity: laneSeverity(lane, claimRows),
-      // A lane whose p95 has walked past its rung budget is red on its own
-      // account, with the number to cut to — the budget is a bound, not a
-      // verdict (docs/decisions.md G-deadline), so it degrades rather than
-      // failing the product claim.
       verdict: verdict === "passed" && overBudget ? "degraded" : verdict,
       observedVerdict: verdict,
       durationMs: tonight?.durationMs ?? null,
@@ -145,7 +114,6 @@ export function buildLaneBoard({
   };
 }
 
-/** The most recent candidate SHA on which this lane passed. */
 function lastGreenSha(history, lane, tonight) {
   if (tonight?.verdict === "passed") return tonight.candidate ?? null;
   for (let index = history.length - 1; index >= 0; index -= 1) {
@@ -156,7 +124,6 @@ function lastGreenSha(history, lane, tonight) {
   return null;
 }
 
-/** The candidate on which the current red streak started. */
 function firstRedSha(history, lane, tonight, verdict) {
   if (verdict !== "failed") return null;
   let sha = tonight?.candidate ?? null;
@@ -168,7 +135,6 @@ function firstRedSha(history, lane, tonight, verdict) {
   return sha;
 }
 
-/** The night this lane's park began, from the history. */
 function parkStart(history, lane) {
   let start = null;
   for (let index = history.length - 1; index >= 0; index -= 1) {
@@ -179,7 +145,6 @@ function parkStart(history, lane) {
   return start;
 }
 
-/** Hours since the first red of the current streak, against the 24 h SLA. */
 function redAgeHours(history, lane, verdict) {
   if (verdict !== "failed") return null;
   let nights = 0;
@@ -187,7 +152,5 @@ function redAgeHours(history, lane, verdict) {
     if (history[index].lanes?.[lane]?.verdict !== "failed") break;
     nights += 1;
   }
-  // Nights are the only resolution the durable history carries; a first red
-  // tonight is reported as 0 h and ages in 24 h steps from there.
   return nights * 24;
 }

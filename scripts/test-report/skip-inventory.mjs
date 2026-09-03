@@ -1,23 +1,3 @@
-/**
- * The skip budget (#656 Layer 2).
- *
- * Every deliberate hole in the suite — `test.skip`, `describe.skipIf`, `.todo`,
- * a runtime `t.skip()`, or a `CENTRAID_*` / `CLAWGNITION_*` env gate — is a
- * quality claim the author gets to make by hand. So it is the one thing agents
- * are still allowed to declare, and the price of declaring it is an inventory
- * entry in `tests/inventory.json#skips` citing an open tracking issue, a
- * reason, and a date by which the hole is closed or re-argued (#915 Wave 4).
- *
- * Two mechanical consequences:
- *   - an UNINVENTORIED skip fails `check:pr` (it cannot be added quietly), and
- *   - the total is a DOWN-ONLY ratchet: `_budget` must always equal the
- *     discovered count, so removing a skip permanently lowers the ceiling and
- *     adding one is impossible without editing the budget in the same change.
- *
- * Sites are keyed `<path>#<ordinal>` (ordinal = nth skip site in that file) so
- * the key survives the line drift that any edit above it would cause.
- */
-
 import { glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -29,24 +9,13 @@ import {
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-// The deadline a newly inventoried skip carries when nothing more specific is
-// known (#915 Wave 4). Every hole in the suite now has a date by which it is
-// closed or re-argued; `lint:ledgers` fails on a past one.
 const DEFAULT_EXPIRY = "2026-12-01";
 
-/**
- * Ordered detectors; the first match on a line wins so one line yields exactly
- * one site and the kind is deterministic.
- */
 export const SKIP_PATTERNS = [
   { kind: "static-skip", pattern: /\b(?:test|it|describe|suite)\.skip\s*\(/u },
   { kind: "todo", pattern: /\b(?:test|it|describe|suite)\.todo\s*\(/u },
   { kind: "conditional-skip", pattern: /\b\w+\.(?:skipIf|runIf)\s*\(/u },
   { kind: "runtime-skip", pattern: /\b(?:t|ctx|context)\.skip\s*\(/u },
-  // An opt-in gate: the suite (or its strictness) is off unless the flag is
-  // set. `!== "1"` is always a gate; `=== "1"` counts only when it names a gate
-  // variable, so an `if (FLAG === "1") console.info(...)` diagnostic is not
-  // mistaken for a hole in the suite.
   {
     kind: "env-gate",
     pattern:
@@ -59,7 +28,6 @@ export const SKIP_PATTERNS = [
   },
 ];
 
-/** Globs scanned for skip sites. Test files only — src is not a skip surface. */
 export const SCAN_INCLUDE = [
   "packages/*/src/**/*.test.ts",
   "packages/*/src/**/*.test.tsx",
@@ -72,22 +40,12 @@ export const SCAN_INCLUDE = [
   "tests/**/*.test.ts",
   "tests/**/*.test.mjs",
   "tests/agent-e2e-*/flows/*.mjs",
-  // Recursive: a script test one directory down (`scripts/gateway-package/`,
-  // `apps/mobile/scripts/`) is a test like any other, and a single-segment glob
-  // silently exempted it from the budget — an invisible skip is the exact
-  // failure this gate exists to prevent.
   "scripts/**/*.test.mjs",
   "apps/*/scripts/**/*.test.mjs",
 ];
 
-/**
- * `scripts/test-report/**` is excluded on purpose: those files are the skip
- * DETECTORS, and their fixtures quote every pattern above as string literals.
- * Inventorying a detector's own test data would make the budget meaningless.
- */
 export const SCAN_EXCLUDE = ["node_modules/", "dist/", "scripts/test-report/"];
 
-/** Extract every skip site in one file. Pure. */
 export function scanSkipSites(file, source) {
   if (typeof source !== "string" || !source) return [];
   const sites = [];
@@ -107,7 +65,6 @@ export function scanSkipSites(file, source) {
   return sites;
 }
 
-/** Walk the scan globs and return every skip site in the repository. */
 export async function discoverSkipSites({
   root: cwd = root,
   include = SCAN_INCLUDE,
@@ -133,11 +90,6 @@ export async function discoverSkipSites({
   return scanned.flat();
 }
 
-/**
- * Check the discovered population against the committed inventory.
- * `trackingIssues` is `matrix.trackingIssues` — a skip must cite an issue that
- * is registered there and still open.
- */
 export function validateSkipInventory(
   inventory,
   sites,
@@ -211,12 +163,6 @@ export function validateSkipInventory(
   return { errors, warnings, count: sites.length };
 }
 
-/**
- * Rewrite the inventory in place: refresh lines/kinds/snippets, drop entries
- * whose skip is gone, and stub in new sites with a null issue so validation
- * still fails until a human cites one. The budget is only ever LOWERED here —
- * a new skip must be paid for by editing `_budget` by hand.
- */
 export function reconcileInventory(inventory, sites) {
   const previous = inventory?.sites ?? {};
   const next = {};
@@ -228,9 +174,6 @@ export function reconcileInventory(inventory, sites) {
       snippet: site.snippet,
       issue: entry.issue ?? null,
       reason: entry.reason ?? "",
-      // The deadline #915 Wave 4 gave every inventory exception. `--write`
-      // carries it through rather than reseeding it, so a re-scan never
-      // silently extends a hole's life.
       expires: entry.expires ?? DEFAULT_EXPIRY,
     };
   }

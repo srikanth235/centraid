@@ -1,18 +1,4 @@
 #!/usr/bin/env node
-/**
- * The per-lane rolling issue body (#915 Wave 0 + Wave 3).
- *
- * One issue per lane, rewritten in place, never re-created — and written from
- * the SAME attention-queue model §3 renders, so the issue and the page cannot
- * disagree about who owes what by when. That is the whole point: the previous
- * daily tracking issue carried a hand-maintained job list that covered neither
- * `fuzz-parsers` nor `dast-scan`, so the one part a reader would act on was
- * also the part most likely to be stale.
- *
- *   node scripts/test-report/rolling-issue-body.mjs \
- *     --lane <id> --summary dist/test-report/summary.json \
- *     [--evidence artifacts/evidence] [--report-url <url>]
- */
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -21,15 +7,8 @@ import { readEvidenceDir } from "./read-evidence.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 
-/** The marker that makes the body idempotent: one issue, rewritten in place. */
 export const ROLLING_MARKER = "<!-- centraid-rolling-lane-issue -->";
 
-/**
- * Render the body.
- *
- * @param {{lane: string, summary: object, evidence: object|null, reportUrl?: string}} input the lane, tonight's summary, its evidence and the report URL
- * @returns {string} GitHub-flavoured markdown
- */
 export function renderRollingIssueBody({
   lane,
   summary,
@@ -113,7 +92,6 @@ export function renderRollingIssueBody({
   return lines.join("\n");
 }
 
-/** `--flag value` pairs. */
 function parseFlags(argv) {
   const flags = {};
   for (let index = 0; index < argv.length; index += 1) {

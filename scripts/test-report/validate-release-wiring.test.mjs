@@ -7,31 +7,12 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { lintReleaseWiring } from "./validate-release-wiring.mjs";
 
-/**
- * The point of a linter test is the FAIL path: a structural gate that cannot
- * reject anything is worse than no gate, because it reports green. Every test
- * below sabotages one real invariant in a copy of the shipped workflows and
- * asserts the specific violation is named.
- */
 const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
 const WORKFLOW_DIR = path.join(REPO_ROOT, ".github/workflows");
 const RELEASE_FILES = readdirSync(WORKFLOW_DIR).filter(
   (name) => name === "release.yml" || name.startsWith("lane-release-")
 );
 
-/**
- * Copy the real release workflows into a scratch root, optionally rewriting
- * one of them, and lint the result.
- * @param {Record<string, (text: string) => string>} [edits] file → mutation.
- * @returns {string[]} Violations.
- */
-/**
- * A GitHub `${{ … }}` expression cannot be written as a plain string literal
- * (`no-template-curly-in-string`), so build it from a template literal with the
- * `$` escaped.
- * @param {string} name Secret name.
- * @returns {string} The YAML value text.
- */
 function secretExpr(name) {
   return `\${{ secrets.${name} }}`;
 }
@@ -57,17 +38,12 @@ describe("validate-release-wiring", () => {
   });
 
   test("an isolated copy of the shipped workflows is also clean", () => {
-    // Guards the fixture itself: if this were red, every failure below would be
-    // unattributable to its sabotage.
     expect(lintFixture()).toStrictEqual([]);
   });
 
   test("rejects a lane dropped from the release-check aggregator", () => {
     const errors = lintFixture({
-      "release.yml": (text) =>
-        // #915 gave release-check a `require-candidate` gate and reflowed the
-        // list across lines; the sabotage drops `mobile` from wherever it sits.
-        text.replace(/^\s*mobile,$/mu, ""),
+      "release.yml": (text) => text.replace(/^\s*mobile,$/mu, ""),
     });
     expect(errors).toContain(
       "release-check.needs is missing job mobile — that lane could fail while the release reports success"
@@ -90,7 +66,6 @@ describe("validate-release-wiring", () => {
   test("rejects an aggregator that skips when a lane fails", () => {
     const errors = lintFixture({
       "release.yml": (text) =>
-        // Drop `if: always()` from release-check, wherever the list wraps.
         text.replace(
           /^\s*if: always\(\)\n(?=\s*runs-on: ubuntu-latest\n\s*timeout-minutes)/mu,
           ""
@@ -251,8 +226,6 @@ describe("validate-release-wiring", () => {
   });
 
   test("rejects a gateway-npm job that forgets to restate contents: read", () => {
-    // Job-level permissions REPLACE the workflow block, so dropping the restate
-    // silently removes checkout's read access.
     const errors = lintFixture({
       "release.yml": (text) =>
         text.replace("      contents: read\n      # OIDC", "      # OIDC"),
@@ -276,8 +249,6 @@ describe("validate-release-wiring", () => {
   });
 
   test("a comment mentioning an invariant cannot satisfy it", () => {
-    // Comments are stripped before matching, so prose about cancel-in-progress
-    // does not stand in for the setting.
     const errors = lintFixture({
       "release.yml": (text) =>
         text.replace(

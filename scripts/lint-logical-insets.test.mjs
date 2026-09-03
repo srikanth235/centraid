@@ -22,8 +22,6 @@ test("the gate catches the legacy pair inside StyleSheet.create", () => {
 });
 
 test("the gate ignores `start`/`end` that are not style keys", () => {
-  // Domain fields (recurrence ranges, link-token offsets, foreground-service
-  // handles) live all over apps/mobile and must not be rewritten.
   assert.deepEqual(
     scanSource(
       `interface Range { start: string; end: string }
@@ -36,8 +34,6 @@ test("the gate ignores `start`/`end` that are not style keys", () => {
 });
 
 test("the gate leaves the surviving margin/padding/border logical props alone", () => {
-  // RN still parses and applies these (propsConversions.h reads "marginStart",
-  // "paddingEnd", "borderStartWidth", …); only the POSITION pair is dead.
   assert.deepEqual(
     scanSource(
       `const styles = StyleSheet.create({

@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-// TypeScript program topology guard (issue #619).
-//
-// Typecheck is only meaningful when every source and test file belongs to a
-// program, and emitted libraries must never package their own tests. This
-// catches the structural configuration regressions that ordinary `tsc` calls
-// cannot see: a green source-only program says nothing about excluded tests.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -73,11 +67,6 @@ function includesTests(parsed, tests) {
   return tests.every((file) => files.has(file));
 }
 
-/**
- * Check the tsconfig topology of every workspace under `root`. Pure over the
- * tree it is given (returns failures, never exits) — exported so the fail path
- * is testable.
- */
 export function lintTsconfigs(root = ROOT) {
   const failures = [];
   for (const workspace of workspaceDirs(root)) {

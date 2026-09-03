@@ -67,14 +67,7 @@ describe("conversation-ledger.scale", () => {
     const remaining = Array.from({ length: conversations }, (_, index) =>
       countTurns(journal, `history-${index}`)
     ).reduce((sum, count) => sum + count, 0);
-    // Baseline (2026-07-19, darwin arm64): ~1.8 s to digest/archive/prune 7.3k
-    // turns. The stated 60 s budget is a generous CI-safe ceiling; the point is
-    // that it is now ASSERTED (it was recorded but never checked, so it could
-    // never fail) and thus falsifiable against a real archival-throughput regression.
     const DURATION_BUDGET_MS = 60_000;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       remaining === 0 &&

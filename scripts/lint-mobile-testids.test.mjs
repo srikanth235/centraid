@@ -1,14 +1,3 @@
-// The testID-contract linter's own tests (issue #890 W2).
-//
-// `lint-mobile-testids.mjs` runs a `selfTest()` on every invocation, which keeps
-// the two RULES executable spec at the point of use. These tests cover what a
-// self-test structurally cannot: the SILENT-NO-OP GUARDS, which live in `main`
-// and are about the linter's discovery going stale rather than about a rule, and
-// the disk-facing readers whose stale grammar is what makes a guard fire.
-//
-// The fixtures are deliberately violating on purpose — see the exclusion of
-// `*.test.mjs` from both this linter's and lint-e2e-flows.mjs's rosters.
-
 import assert from "node:assert/strict";
 // oxlint-disable-next-line no-restricted-imports -- (#890) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered at creation via t.after below.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -26,7 +15,6 @@ import {
   templateLines,
 } from "./lint-mobile-testids.mjs";
 
-/** A Maestro chunk as a flow writes one: a template with an `appId`/`---` head. */
 const chunk = (body) => `await ctx.run(\`appId: x\n---\n${body}\n\`);`;
 
 const VOCABULARY_SRC = [
@@ -44,14 +32,10 @@ const vocabulary = () => parseVocabulary(VOCABULARY_SRC);
 
 const APPLIED = [
   { rel: "a.tsx", text: "<View testID={TEST_IDS.home.band} />" },
-  // The `${…}` here MUST stay an uninterpolated literal: it is the source text a
-  // component writes to build a family member, and the linter looks for exactly
-  // that accessor.
   // oxlint-disable-next-line no-template-curly-in-string
   { rel: "b.tsx", text: "testID={`${TEST_ID_PREFIXES.homeTile}${id}`}" },
 ];
 
-/** A throwaway repo root; `t.after` owns the removal (see the import note). */
 function fixtureRoot(t) {
   const root = mkdtempSync(path.join(tmpdir(), "centraid-testid-lint-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -90,7 +74,6 @@ test("a declared-but-unapplied id fails", () => {
   const result = lintTestIds({
     flows: [{ rel: "f.mjs", text: chunk('- tapOn:\n    id: "home-band"') }],
     vocabulary: vocabulary(),
-    // Only the prefix is applied; `TEST_IDS.home.band` is rendered nowhere.
     sources: [APPLIED[1]],
   });
   assert.deepEqual(rules(result), ["unapplied-id"]);
@@ -129,8 +112,6 @@ test("a clean tree passes, and a family member resolves through its prefix", () 
 });
 
 test("an id spelled as a literal in source resolves without a vocabulary entry", () => {
-  // FrameProbe's `perf-*` pair predates the vocabulary; a literal in production
-  // source is still proof the handle exists.
   const result = lintTestIds({
     flows: [
       { rel: "f.mjs", text: chunk('- copyTextFrom:\n    id: "legacy-id"') },
@@ -200,11 +181,7 @@ test("isAllowed does not reach back past the previous step", () => {
   assert.equal(isAllowed(text, ids[1].line, "missing-id"), false);
 });
 
-// ── the grammar readers, whose staleness is what makes a guard fire ─────────
-
 test("a JS object's `id:` field is not read as a Maestro selector", () => {
-  // lib/failure-class.mjs names its failure classes `{ id: "…" }` in plain JS;
-  // reading those as selectors would fail the lane on files that select nothing.
   const { ids, chunks } = collectFlowIds(
     'const classes = [{ id: "chunk-timeout-before-any-assertion" }];'
   );
@@ -257,18 +234,11 @@ test("parseVocabulary reads nested groups into dotted accessors", () => {
 });
 
 test("a vocabulary shape the reader cannot parse yields zero entries", () => {
-  // This is the empty-vocabulary guard's trigger: `main` FAILS on zero ids
-  // rather than passing every rule vacuously.
   assert.deepEqual(
     parseVocabulary("export const TEST_IDS = { a: 1 };").ids,
     []
   );
 });
-
-// ── the silent-no-op guards ────────────────────────────────────────────────
-//
-// Each guard is a counter reaching zero. The counters are asserted here against
-// the shapes that produce them; `main` turns each zero into `process.exit(1)`.
 
 test("guard: zero flow files discovered when the scan directory is gone", (t) => {
   assert.deepEqual(discoverFlowFiles(fixtureRoot(t)), []);
@@ -279,8 +249,6 @@ test("guard: zero source files discovered when the source tree is gone", (t) => 
 });
 
 test("guard: zero Maestro chunks when the template grammar goes stale", () => {
-  // A flow whose YAML stopped being a template literal parses to nothing —
-  // which must read as broken, not as clean.
   const result = lintTestIds({
     flows: [
       { rel: "f.mjs", text: 'await ctx.run("appId: x\\n---\\n- tapOn: A");' },

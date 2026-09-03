@@ -1,26 +1,5 @@
-/**
- * The lane evidence contract (#915 Wave 3, contract C2).
- *
- * Every lane on rungs 2–5 writes exactly one `artifacts/evidence/<lane>.json`
- * describing what it proved on one candidate. The nightly report is a pure
- * function of a directory of these files plus `tests/claims.json`, so this
- * module is the only place the shape is defined: `write-evidence.mjs`
- * validates on write, `read-evidence.mjs` validates on read, and a file that
- * fails either check is an error the report renders — never a file that is
- * silently dropped.
- *
- * The vocabulary is deliberately four words. `passed` and `failed` are what a
- * lane observed; `parked` is a failure the parks ledger has already put a date
- * on, so it does not count toward the verdict; `no-evidence` is the honest
- * word for a lane that claimed cells and then said nothing. There is no
- * "flaky", no "stale" and no "partial" — a run either falsified the claim or
- * did not (#915 supersedes the twelve-state legend of #864).
- */
-
-/** Bumped only when a field changes meaning; readers refuse a newer schema. */
 export const EVIDENCE_SCHEMA_VERSION = 1;
 
-/** The whole cell vocabulary. Nothing else may appear as a lane verdict. */
 export const VERDICTS = Object.freeze([
   "passed",
   "failed",
@@ -28,10 +7,8 @@ export const VERDICTS = Object.freeze([
   "no-evidence",
 ]);
 
-/** Per-case verdicts. A case may be skipped; a lane may not. */
 export const CASE_VERDICTS = Object.freeze(["passed", "failed", "skipped"]);
 
-/** Platforms a lane can run against. `any` means the lane is host-agnostic. */
 export const PLATFORMS = Object.freeze([
   "android",
   "ios",
@@ -43,24 +20,20 @@ export const PLATFORMS = Object.freeze([
   "any",
 ]);
 
-/** The rungs of the ladder that write evidence (rungs 0–1 are local hooks). */
 export const RUNGS = Object.freeze([2, 3, 4, 5]);
 
 const LANE_PATTERN = /^[a-z0-9][a-z0-9._-]*$/u;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/u;
 
-/** True when `value` parses as an ISO-8601 instant. */
 function isInstant(value) {
   return typeof value === "string" && Number.isFinite(Date.parse(value));
 }
 
-/** True when `value` is a finite, non-negative number. */
 function isCount(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
-/** Collect the errors in one `cases[]` entry. */
 function caseErrors(entry, index, push) {
   const at = `cases[${index}]`;
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
@@ -84,7 +57,6 @@ function caseErrors(entry, index, push) {
   }
 }
 
-/** Collect the errors in the `parked` block. */
 function parkedErrors(parked, push) {
   if (parked === null || parked === undefined) return;
   if (typeof parked !== "object" || Array.isArray(parked)) {
@@ -99,7 +71,6 @@ function parkedErrors(parked, push) {
   }
 }
 
-/** Collect the errors in the `tags` block. */
 function tagErrors(tags, push) {
   if (tags === undefined) return;
   if (!tags || typeof tags !== "object" || Array.isArray(tags)) {
@@ -115,13 +86,7 @@ function tagErrors(tags, push) {
   }
 }
 
-/**
- * Validate one evidence object against the contract.
- * @param {unknown} obj the parsed contents of an evidence file
- * @returns {{ok: boolean, errors: string[]}} every problem, never just the first
- */
 export function validateEvidence(obj) {
-  /** @type {string[]} */
   const errors = [];
   const push = (message) => errors.push(message);
 
@@ -182,11 +147,6 @@ export function validateEvidence(obj) {
   return { ok: errors.length === 0, errors };
 }
 
-/**
- * The evidence file name for a lane. Lane ids are already filesystem-safe by
- * the pattern above; this exists so writer and reader cannot disagree.
- * @param {string} lane the lane id, already filesystem-safe by the id pattern
- */
 export function evidenceFileName(lane) {
   return `${lane}.json`;
 }

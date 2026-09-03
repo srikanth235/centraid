@@ -11,7 +11,6 @@
         </p>
       </section>
 
-      <!-- §01 WHY -->
       <section class="sec wrap" id="why">
         <p class="eyebrow r">§01 · why</p>
         <h2 class="r" style="--d: 0.06s">A snapshot is <em>everything, sealed.</em></h2>
@@ -67,7 +66,6 @@
         </p>
       </section>
 
-      <!-- §02 SETUP -->
       <section class="dark" id="setup">
         <div class="wrap">
           <p class="eyebrow r">§02 · setup</p>
@@ -95,7 +93,7 @@ backup: {
             The same shape covers both cases the config supports: a <b>local-folder provider</b> —
             an external drive or a mounted network share, the zero-setup default — and a
             <b>remote provider</b> speaking the open storage protocol, where <code>endpoint</code> and
-            <code>apiKey</code> are all the gateway needs to know. <b>Clawgnition</b> is the first
+            <code>apiKey</code> are all the gateway needs to know. <b>Clawgnition</b> is the firs
             commercial one: client-side encryption (the same as the local case — Clawgnition never
             gets a key), S3-direct writes straight to Cloudflare R2, zero-egress restores.
           </p>
@@ -132,14 +130,13 @@ backup: {
             </div>
           </div>
           <p class="note r" style="--d: 0.3s; margin-top: 16px">
-            The keyring (<code>keyringPath</code>) is the one file in this whole setup that isn't
+            The keyring (<code>keyringPath</code>) is the one file in this whole setup that isn'
             just convenience: it holds the key material that makes every snapshot readable. It's
             covered on its own, next.
           </p>
         </div>
       </section>
 
-      <!-- §03 RECOVERY KIT -->
       <section class="sec wrap" id="kit">
         <p class="eyebrow r">§03 · the recovery kit</p>
         <h2 class="r" style="--d: 0.06s">Export it now. <em>Not when you need it.</em></h2>
@@ -166,7 +163,6 @@ backup: {
         </p>
       </section>
 
-      <!-- §04 RESTORE -->
       <section class="dark" id="restore">
         <div class="wrap">
           <p class="eyebrow r">§04 · restore</p>
@@ -191,7 +187,7 @@ backup: {
             verb, <code>centraid-gateway recover</code>, and the desktop wraps the very same service
             in a first-run gate: <b>Start fresh</b>, or <b>Recover my vault</b>. Drop the kit, enter
             your <b>Access key</b>, <b>Find my vault</b>, then <b>Recover this vault</b> — and if the
-            provider prices egress, a metered-recovery confirm stands between you and the first
+            provider prices egress, a metered-recovery confirm stands between you and the firs
             billed byte. What you watch is three honest stages —
             <b>Fetching your vault → Replaying recent changes → Warming previews</b> — before
             <b>Enter Centraid</b>. Underneath, the engine walks discovering → fetching → replaying →
@@ -247,7 +243,6 @@ backup: {
         </div>
       </section>
 
-      <!-- §05 HEALTH -->
       <section class="sec wrap" id="health">
         <p class="eyebrow r">§05 · health</p>
         <h2 class="r" style="--d: 0.06s">Cadence, custody and proof. <em>One screen.</em></h2>
@@ -265,21 +260,21 @@ backup: {
           </p>
           <p>
             A collapsed <b>Diagnostics</b> panel holds the levers and the raw clocks: <b>Verify
-            now</b>, <b>Back up now</b>, and a four-cell grid — <b>Newest snapshot</b>, <b>Last
-            verification</b>, <b>Newest WAL segment</b>, <b>Outbox drained</b> — plus per-vault
+            now</b>, <b>Back up now</b>, and a four-cell grid — <b>Newest snapshot</b>, <b>Las
+            verification</b>, <b>Newest WAL segment</b>, <b>Outbox drained</b> — plus per-vaul
             policy and <b>what the provider holds</b>: provider-attested (or raw-bucket computed)
             object and byte totals, recent snapshots, the WAL/PITR span, prune history, and any
-            missing or orphaned objects. A weekly reconciliation runs before eviction can trust
-            remote custody; if a provider silently loses an attachment, the gateway demotes that
+            missing or orphaned objects. A weekly reconciliation runs before eviction can trus
+            remote custody; if a provider silently loses an attachment, the gateway demotes tha
             replica immediately and pins any remaining local copy — it never auto-deletes an orphan.
             “Confirmed when offsite” is a completion policy, not a long-held request: a provider
             outage never rolls back a durable local claim.
           </p>
           <p>
             Verification is the one the protocol insists on, because the provider contract is
-            explicit that providers verify nothing on your behalf — no chunk-existence check at
+            explicit that providers verify nothing on your behalf — no chunk-existence check a
             commit, no manifest parsing, no server-side integrity sweep. That is the deliberate
-            division of labor: the provider owns durability and lifecycle bookkeeping, the client
+            division of labor: the provider owns durability and lifecycle bookkeeping, the clien
             owns knowing whether the bytes are actually still good. On <code>verifyEveryDays</code>,
             the gateway HEADs every object the newest manifest references and downloads + decrypts a
             random sample, recomputing their keyed ids. A backup you've never verified is a backup
@@ -288,7 +283,6 @@ backup: {
         </div>
       </section>
 
-      <!-- §06 PROVIDER ECOSYSTEM -->
       <section class="dark" id="providers">
         <div class="wrap">
           <p class="eyebrow r">§06 · provider ecosystem</p>
@@ -318,13 +312,12 @@ backup: {
           </p>
           <p class="aside r" style="--d: 0.24s">
             Normative text lives in the protocol source, not here: <code>packages/backup/PROTOCOL.md</code>
-            (the provider seam) and <code>packages/backup/FORMAT.md</code> (the snapshot format
+            (the provider seam) and <code>packages/backup/FORMAT.md</code> (the snapshot forma
             itself). This chapter is the tour; those are the spec.
           </p>
         </div>
       </section>
 
-      <!-- §07 CAVEATS -->
       <section class="sec wrap" id="caveats">
         <p class="eyebrow r">§07 · honest caveats</p>
         <h2 class="r" style="--d: 0.06s">What backups <em>don't</em> smooth over.</h2>
@@ -339,7 +332,7 @@ backup: {
             <h3>Purge means purge</h3>
             <p>
               Deleting a target is soft and undoable within a declared window. <b>Purge</b> is not —
-              it's a one-way erasure that permanently blocks undelete, and the protocol requires it
+              it's a one-way erasure that permanently blocks undelete, and the protocol requires i
               to run through the provider's own interactive session, never an api-key call. A
               compromised gateway credential cannot destroy your backup history; only you, logged in
               directly, can.

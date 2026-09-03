@@ -1,30 +1,5 @@
 #!/usr/bin/env node
 // governance: allow-repo-hygiene file-size-limit (#738) one cross-tree scanner owns every shared-engine reach-past rule and its demonstrated-red pending-overlay tripwire
-// ENGINE CONFORMANCE — one gate per shared engine (issue #712 E1).
-//
-// docs/blueprint-seats.md "Shared engines" says four things are built once and
-// never per app: placement (A), custody (B), consent (C) and triage (D), plus
-// the search scaffold and the refusal grammar. Each of those had a doc
-// sentence and no mechanical check, so the only cost of ignoring one was a
-// reviewer noticing. This file is that cost.
-//
-// WHY ONE SCRIPT RATHER THAN FOUR VITEST FILES. Every one of these rules is
-// CROSS-TREE: the same law binds `packages/blueprints/apps/**` (browser ES
-// modules), `apps/mobile/src/**` (Expo) and `packages/client/src/**` (the web
-// shell), and no single vitest project sees all three. #686 already chose the
-// lightweight `scripts/lint-*.mjs` + `check:push` route over authoring
-// governance-kit directives for exactly this shape of rule; this follows that
-// precedent. The two checks that ARE single-package stay where they are as
-// vitest source scans and are NOT duplicated here:
-//
-//   * `packages/blueprints/src/placement-registry.test.ts` — A4 (the union
-//     mirrors vault's `ShareableItemType`) and A7 inside the blueprints tree.
-//   * `packages/blueprints/src/no-inference-client.test.ts` — the provider-SDK
-//     half of C, widened in this pass to the mobile tree.
-//
-// EVERY CHECK IS A TRIPWIRE, NOT A PROOF. They read source text. An author
-// determined to dodge one can compute a string. The point is to catch the
-// ordinary "I copy-pasted the shape into my app" mistake.
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -38,7 +13,6 @@ import { blankComments, scanRefusalGrammar } from "./lib/disabled-controls.mjs";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".expo", ".next"]);
 
-/** Every surface tree a blueprint app or a client shell lives in. */
 const SOURCE_ROOTS = [
   path.join("packages", "blueprints", "apps"),
   path.join("packages", "client", "src"),
@@ -57,8 +31,6 @@ function walk(directory, out = []) {
   return out;
 }
 
-/** Every scanned file, as `{ label, code }` with comments blanked (string
- *  bodies intact — these checks read attribute values). */
 function surfaceFiles(root = ROOT) {
   const files = [];
   for (const rel of SOURCE_ROOTS) {
@@ -72,16 +44,10 @@ function surfaceFiles(root = ROOT) {
   return files;
 }
 
-/** Line number of a byte offset, 1-based. */
 const lineOf = (code, index) => code.slice(0, index).split("\n").length;
 
-/** Quoted literals out of a `const NAME = [...]` array, by source scan — the
- *  same technique `placement-registry.test.ts` uses on vault's closure. */
 function literalArray(file, name) {
   const source = readFileSync(file, "utf8");
-  // `= [` specifically — a type annotation may itself end in `[]`
-  // (`readonly PlacementEntity[]`), so the opening bracket is found from the
-  // assignment onwards, never from the declaration's start.
   const match = source.match(new RegExp(`const ${name}[^=]*=\\s*\\[`, "u"));
   if (!match) throw new Error(`${name} not found in ${file}`);
   const start = match.index + match[0].length - 1;
@@ -91,21 +57,6 @@ function literalArray(file, name) {
   const body = source.slice(start, end);
   return [...body.matchAll(/"(?<name>[^"]+)"/gu)].map((m) => m[1]);
 }
-
-// ─── ENGINE A — placement ────────────────────────────────────────────────────
-//
-// `apps/_shared/placement-registry.ts` is the ONE answer to "what can be
-// placed into an audience vault, and which app owns it". The registry test
-// already proves the union mirrors vault's minus `locker.item`; what nothing
-// checked is the OTHER half — a placement UI built OUTSIDE the registry. Any
-// surface naming an `itemType` the registry does not carry is that UI.
-//
-// SCOPED TO THE `itemType` SPELLING, deliberately. `"locker.item"` is a real
-// row type that Approvals, the palette, the replica readers and Locker's own
-// queries all name legitimately (`packages/client/src/react/shell/routes/
-// approvalsData.ts`, `apps/locker/queries/*`) — a blanket ban on the string
-// would be a ban on Locker existing. What A7 forbids is placing one, and the
-// verb for that is exactly `itemType`.
 
 const REGISTRY_PATH = path.join(
   "packages",
@@ -120,8 +71,6 @@ function checkPlacement(root, files) {
     path.join(root, REGISTRY_PATH),
     "PLACEMENT_REGISTRY"
   );
-  // The registry literal interleaves itemType/appId/label; the item types are
-  // the ones shaped `<domain>.<entity>`, which app ids and labels are not.
   const placeable = new Set(
     registry.filter((v) => /^[a-z_]+\.[a-z_]+$/u.test(v))
   );
@@ -138,9 +87,6 @@ function checkPlacement(root, files) {
     )) {
       const itemType = m.groups.t;
       if (placeable.has(itemType)) continue;
-      // A7 gets its own sentence, because "locker.item is missing from the
-      // registry" is a DECISION, not an omission someone should fix by
-      // adding a row.
       findings.push(
         itemType === "locker.item"
           ? `${label}:${lineOf(code, m.index)}: passes \`locker.item\` as a ` +
@@ -159,29 +105,6 @@ function checkPlacement(root, files) {
   return findings;
 }
 
-// ─── ENGINE B — custody ──────────────────────────────────────────────────────
-//
-// `apps/mobile/src/kit/transfer/**` and `kit/storage/**` are the frame's door
-// to moving and releasing bytes. `packages/blueprints/src/blueprint-seats.test.ts`
-// gates the WEB blueprint tree (record-only apps may not import `kit/transfer`)
-// and the mobile tree had no equivalent — so an app could reach past the frame
-// straight into the sqlite ledger or the radio policy and nothing said a word.
-//
-// TWO CLASSES OF REACH-PAST, ENFORCED DIFFERENTLY:
-//
-//   * The custody PROJECTIONS (`blob_custody_state`, `blob.custody_rollup`).
-//     `kit/storage/custody-status.ts` owns the read; no app may name either.
-//     ZERO allowlist — this half is genuinely closed today.
-//   * The transfer ENGINE internals (`lib/upload/native-queue`, `native-policy`).
-//     `kit/transfer/transfer-queue.ts` and `transfer-policy.ts` own these.
-//     Two Photos modules still reach them directly; they are a RATCHET, listed
-//     with a reason, and the list may only shrink.
-//
-// NOT gated: `lib/upload/media-producer`, `enqueue`, `expo-native`,
-// `native-digest`. Those are the PRODUCER side — an app handing bytes in — and
-// are legitimately app-facing today (Docs' scans and Photos' saves both use
-// them). If the frame ever owns a producer door too, they move up here.
-
 const MOBILE_APPS = path.join("apps", "mobile", "src", "apps");
 
 const CUSTODY_PROJECTIONS = ["blob_custody_state", "custody_rollup"];
@@ -190,7 +113,6 @@ const TRANSFER_INTERNALS = [
   "lib/upload/native-policy",
 ];
 
-/** Ratchet — may shrink, never grow. Each entry states WHY it is still here. */
 const TRANSFER_INTERNAL_RATCHET = new Map([
   [
     path.join(MOBILE_APPS, "photos", "timeline-engine.ts"),
@@ -229,7 +151,6 @@ function checkCustody(_root, files) {
       );
     }
   }
-  // The ratchet may only shrink: a stale entry is a lie about the tree.
   for (const [label] of TRANSFER_INTERNAL_RATCHET) {
     const entry = files.find((f) => f.label === label);
     if (!entry) {
@@ -247,15 +168,6 @@ function checkCustody(_root, files) {
   }
   return findings;
 }
-
-// ─── ENGINE C — consent ──────────────────────────────────────────────────────
-//
-// `apps/_shared/consent-gate.ts` types `domain` as `EnrichDomain`, so a Locker
-// consent gate is already a TYPE error at the call site (C4). The type alone
-// is not enough for one reason: the blueprint app tree carries its own ambient
-// globals and is compiled by each shell's bundler, not by the package's own
-// `tsc`, so a `domain="locker"` in an app `.tsx` can ship without a typechecker
-// ever having an opinion. This is the check that has one.
 
 const CONSENT_GATE_PATH = path.join(
   "packages",
@@ -285,17 +197,6 @@ function checkConsent(root, files) {
   return findings;
 }
 
-// ─── ENGINE D — triage ───────────────────────────────────────────────────────
-//
-// One verb answers a face proposal: `media.answer_face_proposal`, with three
-// answers. The `media.confirm_face` / `media.reject_face` pair it replaced is
-// RETIRED, not deprecated-beside-it — `reject` was a DELETE, which is not a
-// state, so the enricher could re-propose the same stranger for ever.
-//
-// The second half is the triage surfaces' own refusal grammar: a queue control
-// that goes inert without saying why leaves the member stuck at "1 of 54" with
-// no next move.
-
 const RETIRED_TRIAGE_VERBS = ["media.confirm_face", "media.reject_face"];
 
 const TRIAGE_SURFACES = [
@@ -319,15 +220,6 @@ const TRIAGE_SURFACES = [
   path.join("apps", "mobile", "src", "apps", "photos", "DuplicateReview.tsx"),
 ];
 
-/**
- * KNOWN GAPS, stated rather than silently excluded. Both are the SAME defect
- * in two clients: Face review's "Name →" goes inert when the library holds no
- * other named person, and neither client says so inline (web reaches for a
- * `title` tooltip, which "Shared engines" 5 forbids by name; native says
- * nothing at all). They are ratcheted rather than fixed here because
- * `apps/photos/**` in both trees is owned by a concurrent agent in this pass —
- * see the receipt. A NEW reasonless control in a triage surface still fails.
- */
 const TRIAGE_REFUSAL_GAPS = new Set([
   `${path.join("packages", "blueprints", "apps", "photos", "components", "FaceReview.tsx")}:399`,
   `${path.join("apps", "mobile", "src", "apps", "photos", "FaceReview.tsx")}:522`,
@@ -365,24 +257,6 @@ function checkTriage(root, files) {
   return findings;
 }
 
-// ─── THE REFUSAL GRAMMAR ─────────────────────────────────────────────────────
-//
-// SCOPED, AND SAID SO. A repo-wide "every disabled control states a reason"
-// check produces ~44 findings on the mobile tree today, most of them controls
-// where the refusal IS the label (a lightbox's previous-photo arrow on the
-// first photo, a tile-size step at the smallest size). That gate would be
-// noise, and noise gets suppressed rather than obeyed.
-//
-// So it runs over a NAMED list: the frame surfaces of the shared engines —
-// where a refusal is a POLICY the member cannot see the shape of, and a
-// missing sentence is a dead end rather than an obvious one.
-//
-// WHAT THIS DOES NOT COVER, on purpose: every other mobile screen
-// (`Approvals`, `Capture`, `Settings`, `VaultsSwitcher`, …), the whole web
-// blueprint tree except the triage surfaces above, and any refusal computed
-// inside a child component. Widening it means first deciding what a paging
-// arrow at the end of a list is supposed to say.
-
 const REFUSAL_SURFACES = [
   path.join("apps", "mobile", "src", "kit", "components", "ConsentGate.tsx"),
   path.join("apps", "mobile", "src", "screens", "BackupHealth.tsx"),
@@ -405,13 +279,6 @@ function checkRefusalGrammar(root) {
   return findings;
 }
 
-// ─── ENGINE H — pending-write overlay ──────────────────────────────────────
-//
-// The durable outbox is part of every local read. Blueprint apps declare row
-// projection only; browser/native shells attach identity and status. These
-// spellings name the app-owned stores #738 removed and therefore cannot
-// return under a new component without failing the cross-tree gate.
-
 const PENDING_OVERLAY_APPS = [
   "agenda",
   "docs",
@@ -431,19 +298,12 @@ const HANDROLLED_PENDING_STORES = [
   "pendingNotebookIds",
 ];
 
-// This second vocabulary tripwire catches ordinary renamed variants of the
-// stores above wherever they are declared (binding, hook tuple, property, or
-// class field). The dataflow check below covers arbitrary collection names.
 const SOURCE_IDENTIFIER = /\b[A-Za-z_$][\w$]*\b/gu;
 const PENDING_COLLECTION_STATE = /(?:pending|queued|optimistic|overlay)/iu;
 const PENDING_COLLECTION_VALUE =
   /(?:rows|adds|ids|writes|mutations|expenses|records|items|byIntent|list|map|set)$/iu;
 const SHARED_PENDING_COLLECTION_VERBS = new Set(["enrichPendingRows"]);
 
-// The architectural boundary is independent of local naming. App surfaces may
-// declare projections through apps/_shared/pending-overlay, but they may not
-// construct, read, or fold the outbox engine directly. A store called
-// `stagedEntities` is still caught when it reaches past that declaration door.
 const PENDING_ENGINE_REACH_PAST = [
   "IntentQueue",
   "applyOptimisticMutations",
@@ -476,13 +336,6 @@ function escapeRegularExpression(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
-/**
- * Reject an app-owned collection populated from a replica write result even
- * when every local identifier avoids pending/queued/overlay vocabulary. This
- * is the semantic hand-overlay shape #738 removes: durable query results are
- * the row store, so write acknowledgements must never be folded into hook
- * state for presentation.
- */
 function writeBackedCollectionFindings(label, code) {
   const findings = [];
   const assignedWriteResults = [
@@ -545,9 +398,6 @@ export function scanPendingOverlayFiles(files) {
         );
     }
     const reportedCollections = new Set();
-    // Importing the shared engine's own `enrichPendingRows` verb is adoption,
-    // not ownership of a local collection. Mask only static import clauses;
-    // declarations and uses in the app body remain visible to the tripwire.
     const declarationCode = maskStaticImports(code);
     findings.push(...writeBackedCollectionFindings(label, declarationCode));
     for (const match of declarationCode.matchAll(SOURCE_IDENTIFIER)) {
@@ -574,14 +424,6 @@ export function scanPendingOverlayFiles(files) {
           `optimistic mutation — pending-projection.ts is the one declaration door`
       );
     for (const reachPast of PENDING_ENGINE_REACH_PAST) {
-      // A WHOLE NAME, not a substring. `GrantIntentQueue` is the grant plane's
-      // own durable store — declared frame-level in `_shared` because the
-      // authority plane is app-agnostic infrastructure (ruling V-replica),
-      // which is exactly where this lane wants a shared declaration to be —
-      // and a substring match read it as a reach into the outbox engine's
-      // `IntentQueue`. An import clause still spells the bare name, so
-      // aliasing cannot dodge the rule; only a DIFFERENT name passes, which is
-      // what a different thing having a different name is for.
       const match = new RegExp(
         `\\b${escapeRegularExpression(reachPast)}\\b`,
         "u"
@@ -613,29 +455,6 @@ function checkPendingOverlay(root, files) {
   return findings;
 }
 
-// ─── ENGINE S — search status ────────────────────────────────────────────────
-//
-// `apps/_shared/search-scaffold.ts` owns the honest search states: resting /
-// searching / ready / unreachable. The union is the WHOLE point of the engine —
-// "unreachable" exists so a scope that could not be asked is never passed off
-// as "no results" — and a second copy of it is a second answer to that
-// question. `deriveSearchStatus` is the only thing allowed to produce one.
-//
-// TWO SHAPES OF FORK, AND THE HONEST LINE BETWEEN THEM:
-//
-//   * RE-DECLARING the union (a `type`/`const` naming all four states) outside
-//     the scaffold. Always a fork, wherever it is.
-//   * IMPORTING `SearchStatus` from something other than the scaffold. This one
-//     is NOT automatically wrong: a module may RE-EXPORT the scaffold's type as
-//     a local convenience (`apps/people/types.ts` does, and that is still one
-//     owner — the type has a single declaration site). What the check forbids
-//     is importing the name from a module that DECLARES its own. So the rule
-//     resolves the specifier and asks which of the two it is.
-//
-// The consequence of drawing the line there: the three photos entries below
-// clear together the moment `apps/photos/search.ts` re-exports instead of
-// re-declaring. That is one edit, and it is the fix.
-
 const SEARCH_SCAFFOLD_PATH = path.join(
   "packages",
   "blueprints",
@@ -646,13 +465,8 @@ const SEARCH_SCAFFOLD_PATH = path.join(
 const SEARCH_SCAFFOLD_SPECIFIER = /_shared\/search-scaffold(?:\.tsx?)?$/u;
 const SEARCH_STATUS_STATES = ["resting", "searching", "ready", "unreachable"];
 
-/** Ratchet — may shrink, never grow. Each entry states WHY it is still here.
- *  EMPTY since #883 B6: `apps/photos/search.ts` re-exports the scaffold's type
- *  instead of re-declaring it, which cleared its two importers with it — the
- *  one edit this lane's header said was the fix. */
 const SEARCH_STATUS_RATCHET = new Map();
 
-/** True when `file` re-exports the scaffold's `SearchStatus` rather than owning one. */
 function reExportsSearchStatus(code) {
   return [
     ...code.matchAll(
@@ -665,7 +479,6 @@ function reExportsSearchStatus(code) {
   );
 }
 
-/** Every search-status fork in `files`, before the ratchet is applied. */
 export function scanSearchStatusFiles(files) {
   const byLabel = new Map(files.map((file) => [file.label, file]));
   const findings = [];
@@ -674,7 +487,6 @@ export function scanSearchStatusFiles(files) {
   for (const { label, code } of files) {
     if (label === SEARCH_SCAFFOLD_PATH || /\.(?:test|spec)\./u.test(label))
       continue;
-    // (a) a second declaration of the union.
     for (const m of code.matchAll(
       /\b(?:type|const|enum)\s+(?<name>[A-Za-z_$][\w$]*)\b[^;]{0,400}/gu
     )) {
@@ -688,7 +500,6 @@ export function scanSearchStatusFiles(files) {
           `type and call \`deriveSearchStatus\` instead`
       );
     }
-    // (b) importing the name from a module that owns its own declaration.
     for (const m of code.matchAll(
       /import\s+(?:type\s+)?\{(?<clause>[^}]*)\}\s*from\s*["'](?<spec>[^"']+)["']/gu
     )) {
@@ -704,8 +515,6 @@ export function scanSearchStatusFiles(files) {
         `${resolvedBase}.tsx`,
         path.join(resolvedBase, "index.ts"),
       ];
-      // A sibling import inside `_shared` spells the owner `./search-scaffold.ts`,
-      // which no specifier pattern can recognise — resolve and compare instead.
       if (candidates.includes(SEARCH_SCAFFOLD_PATH)) continue;
       const resolved = candidates
         .map((candidate) => byLabel.get(candidate))
@@ -728,8 +537,6 @@ function checkSearchStatus(_root, files) {
   const byLabel = new Map(files.map((file) => [file.label, file]));
   const findings = [];
   const owner = byLabel.get(SEARCH_SCAFFOLD_PATH);
-  // Anti-vacuity: every rule above is anchored on the scaffold still declaring
-  // the union. If that file moves or is emptied, the whole gate passes silently.
   if (
     !owner ||
     !SEARCH_STATUS_STATES.every((state) => owner.code.includes(`"${state}"`))
@@ -760,20 +567,6 @@ function checkSearchStatus(_root, files) {
   return findings;
 }
 
-// ─── ENGINE E — selection ────────────────────────────────────────────────────
-//
-// `apps/_shared/selection-engine.ts` owns what a multi-select DOES: toggle one,
-// extend a range from the anchor, select all, drop keys that no longer exist,
-// and run a batch collecting per-target failures. Every one of those has a
-// wrong version that looks right — a range that forgets the anchor after a
-// filter change, a select-all that includes rows the member cannot see, a batch
-// that stops at the first error and leaves the shelf half applied.
-//
-// So the rule is not "prefer the engine", it is: an APP TREE may not declare
-// this machinery at all. Calling the engine's verbs is adoption and is fine;
-// declaring or assigning one of those names locally is a second implementation.
-// Both app trees are covered — the web blueprint and its mobile twin.
-
 const SELECTION_ENGINE_PATH = path.join(
   "packages",
   "blueprints",
@@ -790,10 +583,6 @@ const SELECTION_ENGINE_VERBS = [
   "runSelectionBatch",
 ];
 
-/** Ratchet — may shrink, never grow. Each entry states WHY it is still here.
- *  EMPTY since #883 B6: Photos' adapter is `buildPhotoSelectionActions` and
- *  imports the engine's verb under the engine's own name, so the call site
- *  names which table of actions it is looking at. */
 const SELECTION_RATCHET = new Map();
 
 const APP_TREE_PREFIXES = [
@@ -801,7 +590,6 @@ const APP_TREE_PREFIXES = [
   `${path.join("apps", "mobile", "src", "apps")}${path.sep}`,
 ];
 
-/** Every app-local selection implementation in `files`, before the ratchet. */
 export function scanSelectionFiles(files) {
   const findings = [];
   for (const { label, code } of files) {
@@ -813,9 +601,6 @@ export function scanSelectionFiles(files) {
       continue;
     const body = maskStaticImports(code);
     for (const verb of SELECTION_ENGINE_VERBS) {
-      // A declaration (`function f`, `const f =`) or a property/method bearing
-      // the verb's name. A CALL — `runSelectionBatch(keys, …)` — matches
-      // neither, which is exactly the adoption this gate wants to see.
       const declaration = new RegExp(
         `(?:function|const|let|var)\\s+${verb}\\b|\\b${verb}\\s*[:=]\\s*(?:async\\s+)?(?:function\\b|\\()`,
         "gu"
@@ -835,8 +620,6 @@ export function scanSelectionFiles(files) {
 function checkSelection(_root, files) {
   const findings = [];
   const owner = files.find((file) => file.label === SELECTION_ENGINE_PATH);
-  // Anti-vacuity: forbidding an app-local copy only means something while the
-  // one shared implementation still exists and still exports every verb.
   if (owner) {
     for (const verb of SELECTION_ENGINE_VERBS) {
       if (
@@ -873,25 +656,10 @@ function checkSelection(_root, files) {
   return findings;
 }
 
-// ─── COMPONENT EXISTENCE ─────────────────────────────────────────────────────
-//
-// The kit already has the primitive. A raw `<dialog>`, a class-less `<button>`
-// or a style-less `<Pressable>` is a second one that will not move when the kit
-// does. This is a DEBT LEDGER, not a ban: the counts in
-// `scripts/component-existence-ledger.mjs` are what the tree carries today,
-// asserted as EQUAL so a new instance and an uncounted cleanup both fail.
-// Nothing may be added; wave 5 shrinks it.
-
 const COMPONENT_LEDGER_PATH = "scripts/component-existence-ledger.mjs";
 
-/** Repo-relative label with `/` separators, so ledger keys are platform-stable. */
 const posix = (label) => label.split(path.sep).join("/");
 
-/**
- * The full text of the opening tag beginning at `start`, read across lines and
- * ignoring `>` inside strings or JSX expression braces (`onClick={() => …}`),
- * so an attribute three lines down still counts as being on the tag.
- */
 function openingTagText(code, start) {
   let braces = 0;
   let quote = null;
@@ -910,7 +678,6 @@ function openingTagText(code, start) {
   return code.slice(start);
 }
 
-/** Per-file count of `<tag` openings whose full opening tag lacks `attribute`. */
 export function countBareTags(code, tag, attribute) {
   let count = 0;
   for (const m of code.matchAll(new RegExp(`<${tag}[\\s>/]`, "gu"))) {
@@ -926,31 +693,11 @@ const WEB_SURFACE_PREFIXES = [
   "apps/web/src/",
 ];
 
-/**
- * THE KIT MODALS THEMSELVES. The ledger counts SECOND primitives — a raw
- * `<dialog>` that will not move when the kit does — so the file that IS a kit
- * modal is not debt, and ledgering it would be a line the burn-down could
- * never remove. They are named here rather than budgeted, so an unnamed one
- * still fails (#883 B9).
- *
- * THERE ARE TWO, ONE PER PROGRAM, AND THE WALL BETWEEN THEM IS DELIBERATE.
- * Blueprint app sources are authored against the blueprints ambients and spell
- * their sibling imports with `.ts` extensions; the client program does not
- * enable `allowImportingTsExtensions` — which is why
- * `apps/_shared/grant-transport.ts` takes no relative import at all and why
- * `inline-app-module-stub.d.ts` exists. `KitModal.tsx` imports
- * `./modal-kit.ts`, so the shell cannot compile it. What is genuinely one
- * computation is shared and is NOT duplicated: `apps/_shared/modal-kit.ts` —
- * the platform trap, the platform's own dismissal, and the return of focus —
- * is an import-free leaf that BOTH wrappers call. Each entry is prop plumbing
- * over that one law (#883 B9, wave 5).
- */
 const KIT_MODAL_OWNERS = new Set([
   "packages/blueprints/apps/_shared/KitModal.tsx",
   "packages/client/src/react/ui/ShellModal.tsx",
 ]);
 
-/** One ledger lane: how to count it, where, and what the kit offers instead. */
 const COMPONENT_LEDGERS = [
   {
     name: "raw <dialog>",
@@ -1016,25 +763,6 @@ export function scanComponentExistence(files, lanes = COMPONENT_LEDGERS) {
   return findings;
 }
 
-// ─── ENGINE K — the action kit ───────────────────────────────────────────────
-//
-// `apps/_shared/action-kit.ts` owns what a bundled action DOES: hand one typed
-// command to `ctx.vault`, pass the outcome back verbatim, and turn a thrown
-// refusal into `{status: "denied", reason, code}` at HTTP 200. Before #883 the
-// third move was copied byte-for-byte into 128 of the 131 handlers and
-// paraphrased in three more — so "every app answers a denial the same way" was
-// true only for as long as nobody wrote a 132nd handler by copying the wrong
-// one. This lane is what makes it structural.
-//
-// SCOPED TO THE BUNDLED WEB HANDLERS, deliberately. `automations/**` handlers
-// are cloned into the member's own `code/` store and edited there, so a rule
-// that bound them would be a rule about the member's code, not ours.
-//
-// THREE FINDINGS, ONE RULE. A handler must IMPORT the kit; it must not carry a
-// `catch` statement of its own (`.catch(…)` on a best-effort promise is not
-// one, and Notes' send-to-tasks needs it); and it must not spell the string
-// `"denied"`, which is the taxonomy's own word.
-
 const ACTION_KIT_PATH = path.join(
   "packages",
   "blueprints",
@@ -1052,11 +780,8 @@ const ACTION_KIT_SPECIFIER = /_shared\/action-kit(?:\.tsx?)?["']/u;
 const BLUEPRINT_ACTION =
   /^packages[\\/]blueprints[\\/]apps[\\/][^\\/]+[\\/]actions[\\/][^\\/]+\.ts$/u;
 
-/** Ratchet — may shrink, never grow. Each entry states WHY it is still here.
- *  Seeded EMPTY: every one of the 131 handlers is on the kit. */
 const ACTION_KIT_RATCHET = new Map();
 
-/** Every action handler that has not adopted the kit, before the ratchet. */
 export function scanActionKitFiles(files) {
   const findings = [];
   for (const { label, code } of files) {
@@ -1068,7 +793,6 @@ export function scanActionKitFiles(files) {
           `dispatches through \`runVaultAction\`, which is the one place a thrown ` +
           `refusal becomes an outcome the surface can narrate`
       );
-    // `}` first, so `.catch(() => undefined)` on a best-effort promise passes.
     const statement = code.match(/\}\s*catch\s*\(/u);
     if (statement?.index !== undefined)
       findings.push(
@@ -1090,8 +814,6 @@ export function scanActionKitFiles(files) {
 function checkActionKit(_root, files) {
   const findings = [];
   const owner = files.find((file) => file.label === ACTION_KIT_PATH);
-  // Anti-vacuity: forbidding a hand-rolled taxonomy means nothing once the one
-  // shared implementation stops exporting the verbs the handlers call.
   if (owner) {
     for (const verb of ACTION_KIT_VERBS) {
       if (
@@ -1137,29 +859,6 @@ function checkActionKit(_root, files) {
   return findings;
 }
 
-// ─── ENGINE V — concept-scheme vocabulary ────────────────────────────────────
-//
-// A blueprint cannot ask the vault for a scheme BY NAME: it reads
-// `core.concept_scheme` and matches the URI. So every surface that wanted a
-// star, a folder, a list or a free-form label carried its own copy of the
-// string — twenty declarations across seven files for seven schemes. A typo in
-// one is not a crash, it is a silently empty shelf, which is the worst failure
-// a projection has. `apps/_shared/concept-scheme-kit.ts` is the one owner now.
-//
-// TWO FINDINGS. (a) any of the kit's own URIs spelled outside it — the copies
-// that existed. (b) any `https://centraid.dev/schemes/…` literal outside it —
-// the copy that has not been written yet, of a scheme the kit does not name.
-//
-// SCOPED TO THE BLUEPRINT TREE. `apps/mobile/src/apps/**` carries its own
-// copies of three of these URIs and cannot import a `.ts` source module from
-// this package under every one of its build modes; folding the native seat in
-// is its own change, not a string swap.
-//
-// TEST FILES ARE IN SCOPE — a stale copy in a fixture is how a suite goes on
-// passing against a scheme the vault no longer mints. The kit's OWN co-located
-// test is the one exemption: its literals are the mirror assertion against the
-// vault commands, which is the whole reason the kit may carry them at all.
-
 const BUNDLED_APPS_DIR_NAME = path.join("packages", "blueprints", "apps");
 
 const SCHEME_KIT_PATH = path.join(
@@ -1177,18 +876,10 @@ const SCHEME_KIT_TEST_PATH = path.join(
   "concept-scheme-kit.test.ts"
 );
 const BLUEPRINT_APPS_PREFIX = `${path.join("packages", "blueprints", "apps")}${path.sep}`;
-/** `export const <NAME>_SCHEME_URI = "…"` in the kit — the vocabulary itself. */
 const SCHEME_URI_DECLARATION = /_SCHEME_URI\s*=\s*(?<uri>"[^"]+")/gu;
 const SCHEME_URI_SHAPE =
   /["'](?<uri>https:\/\/centraid\.dev\/schemes\/[^"']+)["']/gu;
 
-/**
- * RAW text, not `surfaceFiles`' comment-blanked copy. `blankComments` is
- * string-unaware, so the `//` inside `"https://centraid.dev/schemes/flags"`
- * reads as a line comment and blanks the rest of the line — which would make
- * this lane pass over the exact literal it exists to find. The other engines
- * read attribute values and identifiers, where blanking is what they want.
- */
 function blueprintAppFiles(root) {
   const dir = path.join(root, BUNDLED_APPS_DIR_NAME);
   return walk(dir).map((absolute) => ({
@@ -1197,10 +888,8 @@ function blueprintAppFiles(root) {
   }));
 }
 
-/** Ratchet — may shrink, never grow. Seeded EMPTY: no copy is left. */
 const SCHEME_URI_RATCHET = new Map();
 
-/** Every scheme URI spelled outside the kit, before the ratchet. */
 export function scanConceptSchemeFiles(files, kitLabel = SCHEME_KIT_PATH) {
   const kit = files.find((file) => file.label === kitLabel);
   const owned = kit
@@ -1243,7 +932,6 @@ function checkConceptSchemes(root) {
   const files = blueprintAppFiles(root);
   const findings = [];
   const kit = files.find((file) => file.label === SCHEME_KIT_PATH);
-  // Anti-vacuity: the whole lane is anchored on the kit still naming schemes.
   const owned = kit ? [...kit.code.matchAll(SCHEME_URI_DECLARATION)] : [];
   if (owned.length < 5)
     findings.push(
@@ -1268,26 +956,6 @@ function checkConceptSchemes(root) {
   return findings;
 }
 
-// ─── ENGINE W — declared writes ──────────────────────────────────────────────
-//
-// `app.json`'s `writes:` is the action's claim about which vault tables its
-// command touches, and every one of the 131 was an empty array — a claim of
-// nothing, which is neither true nor checkable. #883 filled them from the
-// commands themselves; this lane keeps them honest in the two ways a text file
-// goes wrong: a name that is not a vault entity at all (a typo, or a table
-// dropped from the ontology — `tally.expense_receipt` and the `home.*` /
-// `business.*` domains went this wave), and an action that quietly goes back
-// to declaring nothing.
-//
-// NOT CHECKED HERE: declared ⊇ observed. That comparison needs the running
-// vault, so it belongs to a server-side gate over receipts, not to a text
-// scanner. What this lane guarantees that gate is a well-formed left-hand side.
-//
-// The vault's own registry is the vocabulary; it is read by source scan for the
-// same reason `placement-registry.test.ts` reads vault's `ShareableItemType`
-// that way — a blueprint may not import vault, and the alternative is a third
-// copy of the table list.
-
 const VAULT_TABLES_PATH = path.join(
   "packages",
   "vault",
@@ -1295,11 +963,6 @@ const VAULT_TABLES_PATH = path.join(
   "schema",
   "entity-catalog.ts"
 );
-/**
- * An action whose command writes NO vault row, with the reason. Ledger, not
- * exemption: an entry whose action starts writing something fails, and so does
- * an empty `writes:` that is not listed.
- */
 const WRITES_NONE_LEDGER = new Map([
   [
     "locker/export",
@@ -1308,21 +971,6 @@ const WRITES_NONE_LEDGER = new Map([
   ],
 ]);
 
-/**
- * Every `schema.table` in vault's canonical registry, by source scan.
- *
- * READS THE DECLARATIONS, NOT THE DERIVED VIEWS. `VAULT_TABLES` and
- * `JOURNAL_TABLES` are `tableNamesOf(VAULT_ENTITIES)` since #883's O-label
- * rung — the registry grew a per-entity label and the bare-name views became
- * a projection of it — so a scan looking for `schema: ["a", "b"]` literals
- * found nothing and this whole lane went vacuous behind its own anti-vacuity
- * guard. The entity registries are the one place a table is added or removed,
- * which is what a text scanner has to read.
- *
- * The shape is `schema: { table: { label, blurb? }, … }`, so the walk is one
- * brace level deeper than the old one: schema keys at depth 1, table keys at
- * depth 2, and nothing below that (a label is a string, not a nested object).
- */
 export function vaultEntityNames(root = ROOT) {
   const source = blankComments(
     readFileSync(path.join(root, VAULT_TABLES_PATH), "utf8")
@@ -1337,7 +985,6 @@ export function vaultEntityNames(root = ROOT) {
     for (let i = open; i < source.length; i++) {
       const char = source[i];
       if (char === '"' || char === "'" || char === "`") {
-        // A label's own braces would otherwise be counted as structure.
         const quote = char;
         for (i++; i < source.length; i++) {
           if (source[i] === "\\") i++;
@@ -1354,7 +1001,6 @@ export function vaultEntityNames(root = ROOT) {
         if (depth === 1) schema = null;
         continue;
       }
-      // A key sits immediately before its `:` at the depth it belongs to.
       const key = /^(?<name>[A-Za-z_][\w]*)\s*:/u.exec(source.slice(i));
       if (!key) continue;
       if (depth === 1) schema = key.groups.name;
@@ -1368,7 +1014,6 @@ export function vaultEntityNames(root = ROOT) {
 function checkDeclaredWrites(root) {
   const findings = [];
   const entities = vaultEntityNames(root);
-  // Anti-vacuity: an empty or tiny vocabulary would pass every declaration.
   if (entities.size < 100 || !entities.has("core.content_item"))
     return [
       `${VAULT_TABLES_PATH}: read ${entities.size} entity names — the declared-writes ` +
@@ -1430,9 +1075,6 @@ function checkDeclaredWrites(root) {
   return findings;
 }
 
-// ─── driver ──────────────────────────────────────────────────────────────────
-
-/** Every engine's findings, keyed by engine. Exported for the test. */
 export function scanEngineConformance(root = ROOT) {
   const files = surfaceFiles(root);
   if (files.length < 200) {

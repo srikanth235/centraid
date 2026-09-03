@@ -4,7 +4,6 @@ import { parseDay, readQuarantine, validateQuarantine } from "./quarantine.mjs";
 
 const NOW = Date.parse("2026-07-31T12:00:00Z");
 
-/** A well-formed entry; individual tests override one field at a time. */
 const entry = (overrides = {}) => ({
   owner: "packages/tunnel/src/native-relay.test.ts",
   issue: 657,

@@ -1,25 +1,3 @@
-// Memories v0 (issue #724 W7) at a year-3 photo library.
-//
-// Sibling to `photos-timeline.scale.test.ts` (same registration shape, same
-// lane) rather than an extension of it: that rig owns the timeline's OWN
-// reads (ordered page, day-bucket GROUP BY); this one owns the Memories
-// standing-sweep cost, which walks the whole live asset set plus the phash
-// sidecar and writes a fresh projection — a different shape of work,
-// worth its own line in the nightly history.
-//
-// Volume table (kept with the rig, per docs/coding-standards.md):
-//
-//   | Axis                      | Value  | Why                                    |
-//   | -------------------------- | ------ | -------------------------------------- |
-//   | media assets                | 50,000 | matches photos-timeline's own envelope |
-//   | span                       | ~3 years (1,090 days) | enough distinct month-days for real on-this-day groups |
-//   | trip blocks                | ~27    | a 5-day away block every 40 days       |
-//   | capture-group / phash pairs | ~1,500 | exercises the 'similar' union-find path |
-//
-// `rebuildMemories` is called DIRECTLY (not through `gateway.sweep`, which
-// also runs lifecycle/enrichment duties this rig does not own) so the
-// measurement is exactly this sweep's own cost.
-
 import { describe, expect, onTestFinished, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
@@ -32,12 +10,9 @@ import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 const OWNER = "tests/scale/photos-memories.scale.test.ts";
 const ASSET_COUNT = 50_000;
 const DAY_MS = 86_400_000;
-// ~3 years, matching photos-timeline.scale.test.ts's own envelope.
 const TOTAL_DAYS = 1_090;
 const ASSETS_PER_DAY = Math.ceil(ASSET_COUNT / TOTAL_DAYS);
 const START = Date.parse("2024-01-01T00:00:00.000Z");
-// A 5-day away block every 40 days — enough distinct trips (~27 over the
-// span) without every day being "away", which would make "home" undetectable.
 const TRIP_BLOCK_EVERY_DAYS = 40;
 const TRIP_BLOCK_LENGTH_DAYS = 5;
 const AWAY_PLACE_COUNT = 4;
@@ -101,8 +76,6 @@ describe("photos-memories.scale", () => {
           ).toISOString();
           const assetId = `memscale-asset-${key}`;
           const contentId = `memscale-content-${key}`;
-          // Every 50th asset starts a Live-Photo-style capture-group pair —
-          // exercises the 'similar' union-find's capture_group_id source.
           const captureGroupId = index % 50 === 0 ? `live-${key}` : null;
           insertContent.run(
             contentId,
@@ -111,10 +84,6 @@ describe("photos-memories.scale", () => {
             at
           );
           insertAsset.run(assetId, contentId, at, place, captureGroupId);
-          // Every 200th asset seeds a pre-clustered phash pair — exercises
-          // the 'similar' union-find's cluster_id source. cluster_id is
-          // stamped directly (this rig measures rebuildMemories, not
-          // recomputeDuplicateClusters, which owns its own scale rig).
           if (index % 200 === 0) {
             insertPhash.run(assetId, "a".repeat(16), `cluster-${key}`, at);
           } else if (index % 200 === 1) {
@@ -133,9 +102,6 @@ describe("photos-memories.scale", () => {
       db.vault.exec("ROLLBACK");
       throw error;
     }
-    // Companions for the capture-group pairs, in a second bounded pass
-    // (simplest correct way to set a value that depends on the PREVIOUS
-    // row's own generated id without restructuring the loop above).
     db.vault.exec("BEGIN");
     const updateCaptureGroup = db.vault.prepare(
       `UPDATE media_asset SET capture_group_id = ? WHERE asset_id = ?`
@@ -195,9 +161,6 @@ describe("photos-memories.scale", () => {
       `sustained drift: ${coldMs}ms vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
     ).toBe(true);
     expect(coldMs).toBeLessThan(BUDGET_MS);
-    // Every kind produced real work at this volume, not a trivially empty
-    // projection — the same "prove it is not vacuous" assertion
-    // phash-clustering.scale.test.ts makes for its own clusters.
     expect(result.onThisDay).toBeGreaterThan(0);
     expect(result.trips).toBeGreaterThan(0);
     expect(result.similar).toBeGreaterThan(0);

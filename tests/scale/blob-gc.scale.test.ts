@@ -37,10 +37,6 @@ describe("blob-gc.scale", () => {
     onTestFinished(() => db.close());
 
     const remote = new MemoryBlobStore();
-    // The local tier is the real filesystem-backed CAS the vault ships in
-    // production (FsBlobStore), so eviction actually deletes bytes off disk and
-    // the has/stat checks below hit real files — not an in-memory map for both
-    // tiers. Remote stays in-memory (it stands in for offsite object storage).
     const local = new FsBlobStore(await tempDir("blob-gc-local-"));
     const budget = { bytes: Number.MAX_SAFE_INTEGER };
     const cache = new BlobCache(db.vault, local, {
@@ -48,10 +44,6 @@ describe("blob-gc.scale", () => {
     });
     const custody = new BlobCustody(local, () => ({ store: remote }), cache);
     const shasByState = new Map(STATES.map((state) => [state, [] as string[]]));
-    // 5k objects (3k of them resident on the real FsBlobStore). The custody scan +
-    // eviction — the thing under test — is measured separately below and stays
-    // sub-second; the bound here keeps fixture seeding (one fsync per real CAS
-    // file) comfortably inside the nightly scale timeout on slow CI disks.
     const count = 5_000;
     const perState = count / STATES.length;
     let protectedLocalBytes = 0;
@@ -119,11 +111,6 @@ describe("blob-gc.scale", () => {
       Object.fromEntries(STATES.map((state) => [state, perState]))
     );
 
-    // Heal durable replica evidence from the large remote inventory before the
-    // explicitly authorized post-reconciliation eviction pass. Pending blobs
-    // deliberately model the post-promotion state: their staging rows are gone,
-    // but the durable outbox obligation remains. The new budget keeps exactly
-    // the local-only and pending-offsite bytes.
     cache.replica.heal(
       "cas",
       new Set(await remote.list()),
@@ -136,19 +123,12 @@ describe("blob-gc.scale", () => {
     const eligible = shasByState.get("replicated")!;
     const localOnly = shasByState.get("local-only")!;
     const pending = shasByState.get("pending-offsite")!;
-    // Data-loss guard (the fix this cell protects): a blob whose staging row is
-    // gone but which still has a durable blob_outbox obligation is UNEVICTABLE
-    // even though the remote already holds a copy. Assert both the on-disk bytes
-    // survived AND the outbox rows are intact after the eviction pass.
     const outboxRemaining = (
       db.vault.prepare("SELECT count(*) AS n FROM blob_outbox").get() as {
         n: number;
       }
     ).n;
     const DURATION_BUDGET_MS = 30_000;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       evicted.evictedBlobs === perState &&
@@ -189,8 +169,6 @@ describe("blob-gc.scale", () => {
       eligible.every((sha) => !local.hasSync(sha) && remote.hasSync(sha))
     ).toBe(true);
     expect(localOnly.every((sha) => local.hasSync(sha))).toBe(true);
-    // Pending-outbox bytes must remain on local disk — evicting them is the
-    // silent data loss this guard exists to catch.
     expect(pending.every((sha) => local.hasSync(sha))).toBe(true);
     expect(outboxRemaining).toBe(perState);
     expect(
@@ -202,14 +180,6 @@ describe("blob-gc.scale", () => {
     expect(durationMs).toBeLessThan(DURATION_BUDGET_MS);
   });
 
-  // ── issue #659 S2: the same scan at a year-3 CAS ──────────────────────
-  //
-  // The test above proves eviction is right on REAL files; this one proves the
-  // work is BOUNDED at volume. Its local tier is in-memory on purpose: at
-  // 100k objects the fixture's fsync-per-file seeding costs ~6 minutes and
-  // measures the disk, not the code under test, while every cost this rig
-  // exists to bound — the custody refresh, the live-set derivation behind it,
-  // and the eviction pass — is driven by the ROW count, which is real here.
   test("the custody scan and eviction pass stay bounded at 100k objects", async () => {
     const db = openVaultDb();
     await db.blobTransfers.close();
@@ -276,7 +246,6 @@ describe("blob-gc.scale", () => {
     const evicted = custody.evictAfterReconcile();
     const durationMs = performance.now() - started;
 
-    // Correctness is unchanged at volume: exactly the remotely proven bytes go.
     expect(evicted.evictedBlobs).toBe(perState);
     expect(replicated.every((sha) => !local.hasSync(sha))).toBe(true);
     expect(localOnly.every((sha) => local.hasSync(sha))).toBe(true);

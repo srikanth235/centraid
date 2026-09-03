@@ -1,33 +1,3 @@
-/**
- * Deterministically-environment-red inventory (#781).
- *
- * The class this covers sits between the two existing ledgers: the flake
- * quarantine owns NONdeterministic failures and the skip budget owns declared
- * skips, so a test that fails EVERY time in a known environment — the
- * wal-shipper [G4] chmod injection that root ignored, fixed as an instance in
- * #782 — had no inventory, no expiry, and no gate. The mechanism decided here
- * is a hybrid, not a quarantine kind: quarantining excludes the owner from the
- * required checks everywhere, which deletes live coverage on every environment
- * where the test is green to silence the one where it is red. Instead the test
- * must carry an ENV GUARD (`skipIf(predicate)` or a runtime `t.skip`), which
- * makes it honest at runtime everywhere — red becomes a visible, reported skip
- * — and the guard site must be inventoried HERE, which makes the class
- * visible: `tests/inventory.json#envRed` records the environment predicate, the guard
- * mechanism, an open issue, and an expiry or revisit trigger, under a
- * down-only budget.
- *
- * The guard site itself is also a skip site, so it independently lands in
- * `tests/inventory.json#skips` — that budget counts holes; this one records WHY the hole
- * is environment-shaped and when to look again. What no static scan can find
- * is the UNguarded instance (G4's chmod named no platform or uid), so the
- * contract is: the moment such a red is diagnosed, the fix is either an
- * environment-independent rewrite (as #782 did) or a guard — and a guard
- * cannot land uninventoried, because this gate scans for environment
- * predicates (`process.platform` / `process.arch` / `process.getuid` /
- * `process.geteuid` comparisons) in test files exactly as skip-inventory scans
- * for skips.
- */
-
 import { glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -41,12 +11,6 @@ import { SCAN_EXCLUDE, SCAN_INCLUDE } from "./skip-inventory.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-/**
- * Ordered detectors; the first match on a line wins so one line yields exactly
- * one site. Comparisons only: `platform: process.platform` in an evidence
- * payload, `expect(x).toBe(os.platform())` as an env-relative expected value,
- * and a `process.geteuid = () => 0` mock are not environment guards.
- */
 export const ENV_GUARD_PATTERNS = [
   {
     kind: "platform-guard",
@@ -63,28 +27,18 @@ export const ENV_GUARD_PATTERNS = [
   },
 ];
 
-/** How an inventoried site keeps its test honest in the red environment. */
 export const GUARD_MECHANISMS = new Set([
-  // `test.skipIf(predicate)` / `describe.skipIf` / `runIf` — collection-time.
   "skipIf",
-  // `t.skip("reason")` inside the test body — reported to the runner.
   "runtime-skip",
-  // The test still runs but asserts strictly less in the red environment
-  // (e.g. latency without the fsync count off linux). Not mechanically
-  // checkable; the `environment` sentence must say what is not asserted.
   "reduced-assertion",
-  // The inverse arm: in the environment where the evidence MUST exist, a
-  // missing prerequisite throws instead of skipping into a false green.
   "hard-fail",
 ]);
 
-/** Mechanical cross-checks for the guard mechanisms that have one. */
 const GUARD_EVIDENCE = new Map([
   ["skipIf", /\b\w+\.(?:skipIf|runIf)\s*\(/u],
   ["runtime-skip", /\b(?:t|ctx|context)\.skip\s*\(/u],
 ]);
 
-/** Extract every environment-guard site in one file. Pure. */
 export function scanEnvGuardSites(file, source) {
   if (typeof source !== "string" || !source) return [];
   const sites = [];
@@ -106,11 +60,6 @@ export function scanEnvGuardSites(file, source) {
   return sites;
 }
 
-/**
- * Walk the SAME globs skip-inventory scans (one population, two ledgers) and
- * return every environment-guard site plus the source of each file that has
- * one, so validation can check that the inventoried test names still exist.
- */
 export async function discoverEnvGuardSites({
   root: cwd = root,
   include = SCAN_INCLUDE,
@@ -143,12 +92,6 @@ export async function discoverEnvGuardSites({
   return { sites, sources };
 }
 
-/**
- * Check the discovered population against the committed inventory.
- *
- * `nowMs` is a parameter rather than a `Date.now()` call so the gate's own
- * tests can prove the expiry boundary instead of asserting around it.
- */
 export function validateEnvRedInventory(
   inventory,
   sites,
@@ -273,12 +216,6 @@ export function validateEnvRedInventory(
   return { errors, warnings, count: sites.length };
 }
 
-/**
- * Rewrite the inventory in place: refresh lines/kinds/snippets, drop entries
- * whose guard is gone, and stub in new sites with null fields so validation
- * still fails until a human documents them. The budget is only ever LOWERED
- * here — a new environment hole must be paid for by editing `_budget` by hand.
- */
 export function reconcileInventory(inventory, sites) {
   const previous = inventory?.sites ?? {};
   const next = {};

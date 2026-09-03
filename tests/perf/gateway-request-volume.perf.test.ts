@@ -13,46 +13,13 @@ import { serve } from "../../packages/server/src/serve/serve.js";
 import type { GatewayServeHandle } from "../../packages/server/src/serve/serve.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
-/**
- * GATEWAY REQUEST LATENCY AT VOLUME (issue #883 C1).
- *
- * `tests/perf/gateway-request.perf.test.ts` measures the same core routes
- * against an EMPTY vault in a forked child. Its budget entries said so, and
- * tests/experience-budgets/README.md is blunt about what that buys: "a budget
- * measured on an empty vault is a bundle/transport ratchet only and cannot
- * catch an O(vault-size) regression". Two of gateway.json's most-quoted
- * numbers — `requestToFirstByte` and `coreRouteP95Ms` — were in exactly that
- * state.
- *
- * This is the volume half. It seeds a bounded year-3 approximation through the
- * SHARED fixture generator (`seedYear3Vault`, the same one the quality lane
- * uses) and then measures:
- *
- *   - the three core routes' p95, gated against `coreRouteP95Ms`;
- *   - a windowed replica bootstrap page, which unlike the core routes DOES
- *     read domain rows — published as the witness that the vault really is
- *     big, not gated, because its cost is a function of the page size the
- *     caller asks for;
- *   - cold start on the SEEDED vault directory, gated against
- *     `gatewayColdStartMs`. The empty-vault lane forks a child and measures
- *     the same key; this one answers the question that key exists for — does
- *     a full vault make the gateway slower to open?
- *
- * The gateway runs IN THIS PROCESS rather than in a forked child, because the
- * seed has to reach the vault the gateway serves. That makes the absolute
- * numbers a floor relative to the forked-child lane (no IPC, warm module
- * graph), which is why this rig gates the same ceilings rather than tightening
- * them on its own evidence.
- */
 const OWNER = "tests/perf/gateway-request-volume.perf.test.ts";
 const CORE_ROUTES = {
   gatewayInfo: "/centraid/_gateway/info",
   apps: "/centraid/_apps",
   health: "/centraid/_gateway/health",
 } as const;
-/** Samples per route. Serial: this is a latency measurement, not a load test. */
 const SAMPLES = 30;
-/** Rows the seeded vault carries. See the `volume` string in gateway.json. */
 const SEED_COUNTS = {
   parties: 5_000,
   photos: 10_000,
@@ -76,7 +43,6 @@ function percentile(samples: readonly number[], fraction: number): number {
   return sorted[index] ?? Number.NaN;
 }
 
-/** p95 of `SAMPLES` serial GETs of one route. */
 async function routeP95(
   handle: GatewayServeHandle,
   route: string,
@@ -117,8 +83,6 @@ describe("gateway-request-volume.perf", () => {
       throw new Error("the auto-founded Personal vault is not mounted");
 
     const seedStarted = performance.now();
-    // The conversation ledger lives in the journal DB and is created lazily by
-    // the conversation store; the fixture writes turns straight into it.
     seedYear3Vault(
       {
         vault: plane.db.vault,
@@ -157,16 +121,12 @@ describe("gateway-request-volume.perf", () => {
       keyof typeof CORE_ROUTES,
       number
     >;
-    // The witness lane: a windowed bootstrap page reads real rows out of the
-    // seeded vault, so a genuinely empty vault could not produce this number.
     const bootstrapP95Ms = await routeP95(
       handle,
       "/centraid/_vault/replica/bootstrap?window=200",
       token
     );
 
-    // Cold start on the SEEDED directory: close the gateway and reopen the
-    // same vault from disk.
     await handle.close();
     open = false;
     const coldStarted = performance.now();
@@ -179,8 +139,6 @@ describe("gateway-request-volume.perf", () => {
     expect(reopened.status).toBe(200);
 
     const slowestP95Ms = Math.max(...Object.values(routeP95s));
-    // Only the three route identities — `coreRouteP95Ms` also carries the
-    // entry's `status`/`volume`/`probe` prose, and a Math.max over those is NaN.
     const loosestCeilingMs = Math.max(
       ...Object.keys(CORE_ROUTES).map(
         (identity) =>
@@ -194,9 +152,6 @@ describe("gateway-request-volume.perf", () => {
     );
     const coldPassed =
       coldStartMs < budgets.metrics.gatewayColdStartMs.ceilingMs;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample nightly
-    // history. Null until the history is deep enough; a null is "no opinion
-    // yet", never a pass.
     const drift = await rigDriftBudgetMs("perf", OWNER);
     const withinDrift = drift === null || slowestP95Ms <= drift;
     await recordQualityResult({

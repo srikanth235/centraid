@@ -1,36 +1,9 @@
-// Device-role script for the cross-network-relay flow (flows/cross-network-relay.mjs).
-//
-// Runs INSIDE the "device" Docker container, on a bridge network with no
-// route to the gateway's container/network — see the flow file for why that
-// topology forces `@centraid/tunnel` to actually negotiate iroh's real
-// hole-punch/relay path instead of dialing a loopback address directly, the
-// way the other two flows in this tier do (lib/harness.mjs's `newDevice()`
-// passes `relays: 'disabled'`; this script deliberately does NOT).
-//
-// Talks to its parent process (the flow, running on the host) over stdout
-// only: every diagnostic goes to stderr, and exactly one line of JSON is
-// printed to stdout at the end, so `docker run` capture in the flow can
-// `JSON.parse(stdout.trim())` without scraping log noise.
-//
-// Env in:
-//   PAIR_TICKET   — the raw base64url `centraid-gw-pair` ticket (required)
-//   PROBE_TARGET  — HTTP target for the one tunneled request
-//                   (default: /centraid/_vault/vaults)
-//
-// JSON out (stdout, one line):
-//   { paired, vaultId, vaultName, probeStatus, enrollment, replayRefused, replayError,
-//     path: { isRelay, isIp, remoteAddr, rttMs } | null, error? }
-
 import { createTunnelClient, tunnelRequest } from "@centraid/tunnel";
 
 function log(...args) {
   console.error("[device-redeem]", ...args);
 }
 
-/** Decode the pasteable one-line token — mirror of lib/harness.mjs's parseTicket
- * and pairing-store.ts's own decoder. Duplicated here (rather than imported)
- * so this script has exactly one dependency (`@centraid/tunnel`) and runs
- * standalone inside the container with nothing else on the module path. */
 function parseTicket(raw) {
   const payload = JSON.parse(
     Buffer.from(raw.trim(), "base64url").toString("utf8")
@@ -43,12 +16,6 @@ function parseTicket(raw) {
 
 function selectedPath(connection) {
   const paths = connection.paths();
-  // No `?? paths[0]` fallback: paths() reports every CANDIDATE path, and only
-  // the one flagged isSelected is actually carrying data. Falling back to the
-  // first candidate would let an unvalidated direct address be reported to
-  // the flow as "the selected path" — exactly the claim this whole harness
-  // exists to make honestly. If nothing is flagged, say so and let the flow
-  // fail loudly rather than assert on a guess.
   const selected = paths.find((p) => p.isSelected);
   if (!selected) {
     if (paths.length > 0) {
@@ -78,9 +45,6 @@ async function main() {
     `ticket parsed: vault "${payload.vaultName}", expires ${new Date(payload.exp).toISOString()}`
   );
 
-  // No `relays: 'disabled'` override — this is the whole point of the flow:
-  // use whatever createTunnelClient's real default does (n0 production
-  // preset, per packages/tunnel/src/client.ts).
   const device = await createTunnelClient();
   log(`device identity: ${device.endpointId}`);
 
@@ -128,9 +92,6 @@ async function main() {
           devices.find((row) => row.endpointId === device.endpointId) ?? null;
       }
       log(`gateway.db roster → ${roster.status}`);
-      // Read paths AFTER the request has actually round-tripped data, so
-      // path selection (direct vs relay) has settled rather than reporting
-      // a pre-handshake candidate.
       out.path = selectedPath(connection);
       log("selected path:", JSON.stringify(out.path));
     } finally {

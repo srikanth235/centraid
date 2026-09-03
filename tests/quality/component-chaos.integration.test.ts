@@ -1,27 +1,3 @@
-/*
- * SEEDED COMPOSITION-CHAOS LANE (umbrella #842, W3.2).
- *
- * W3.1 breaks the LINK between two healthy components. This lane breaks the
- * COMPONENTS while the system is mid-work — the gateway, the replica, the
- * automation worker, the model runtime — and asserts that the system converges
- * rather than corrupting or wedging.
- *
- * Everything here is real: a real vault plane on a real directory (stopped and
- * REOPENED FROM DISK for the restart faults), the real replica-intent route
- * over a real loopback HTTP hop, the real durable client outbox on a real
- * file, the real persisted automation turn-claim, and the real device
- * enrichment lease queue. The two lease-shaped faults use each primitive's
- * INJECTABLE clock rather than waiting out a TTL, so the lane has no
- * wall-clock sleep and asserts no timing.
- *
- * REPLAY. The schedule is the same seeded cover/sample design as W3.1 and the
- * #842 W1.1 crash lane, so a red case replays from the seed in its own name:
- *
- *     CENTRAID_CHAOS_SEED=0x3a7c1e05 bunx vitest run \
- *       --config vitest.quality.config.ts \
- *       tests/quality/component-chaos.integration.test.ts
- */
-
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { ConversationStore } from "../../packages/server/src/engine/conversation/store.js";
@@ -47,19 +23,12 @@ import {
 } from "./component-faults.js";
 import type { ComponentFaultId } from "./component-faults.js";
 
-// Every case boots (and some reboot) a real vault on disk. Above the node
-// default deliberately, as a file budget rather than a per-test cap.
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
 
-/** A fixed instant. Never `Date.now()` — a lease law read off the wall clock
- * is a different test every run, and these are all clock-shaped. */
 const T0 = Date.parse("2026-08-21T00:00:00.000Z");
 const MINUTE = 60_000;
-/** `ConversationStore.acquireTurnLock` treats a claim older than this as dead. */
 const TURN_LOCK_STALE_MS = 30 * MINUTE;
-/** `leaseNextEnrichmentRequest` default TTL. */
 const LEASE_TTL_MS = 10 * MINUTE;
-/** How many consecutive worker deaths the bounded-resource claim survives. */
 const DEATHS = 3;
 
 const worlds: ComponentChaosWorld[] = [];
@@ -84,7 +53,6 @@ interface OutcomeAnswer {
   outcome: { intentId: string; status: string } | undefined;
 }
 
-/** Enqueue, claim, and submit one intent; returns the route's answer. */
 async function sendOnce(
   chaos: ComponentChaosWorld,
   queue: import("../../packages/client/src/replica/intents.js").IntentQueue,
@@ -101,12 +69,6 @@ async function sendOnce(
   return chaos.submit(claimed);
 }
 
-/*
- * THE GATEWAY DIES INSIDE DISPATCH. The vault command already committed; the
- * outcome row never did. The plane is then reopened from disk and the client
- * retries under the SAME intent id. Exactly-once here is the canonical commit
- * marker doing its job — a retry that re-executed would leave two tasks.
- */
 async function gatewayRestartMidDispatch(
   chaos: ComponentChaosWorld
 ): Promise<void> {
@@ -127,12 +89,9 @@ async function gatewayRestartMidDispatch(
     "chaos-gw-b",
     "across the crash"
   );
-  // Not terminal: admission survived, the outcome did not, so the client is
-  // told the work is still in flight rather than that it failed.
   expect(crashed.status).toBe(202);
   expect(crashed.outcome?.status).toBe("in-flight");
 
-  // A REAL restart: the plane is stopped and reopened from the same directory.
   chaos.restartGateway();
   chaos.setBackend("healthy");
   await queue.transportFailed("chaos-gw-b", "gateway restart");
@@ -145,7 +104,6 @@ async function gatewayRestartMidDispatch(
     { intentId: "chaos-gw-b", status: "executed" } as never,
   ]);
 
-  // Converged, not corrupted: one row per intent across a real restart.
   expect(chaos.taskTitles()).toStrictEqual([
     "across the crash",
     "before the crash",
@@ -154,11 +112,6 @@ async function gatewayRestartMidDispatch(
   await expect(queue.pending()).resolves.toStrictEqual([]);
 }
 
-/*
- * THE GATEWAY IS DEGRADED, NOT DEAD. Its backend answers the product's own
- * non-terminal `retryable` for the whole window. Nothing may be applied and
- * nothing may be lost; recovery drains the outbox exactly once.
- */
 async function gatewayBackendDegraded(
   chaos: ComponentChaosWorld
 ): Promise<void> {
@@ -172,10 +125,8 @@ async function gatewayBackendDegraded(
   );
   expect(refused.status).toBe(202);
   expect(refused.outcome?.status).toBe("in-flight");
-  // Refused as a state, never as a half-applied write.
   expect(chaos.taskTitles()).toStrictEqual([]);
   expect(chaos.executedOutcomeCount()).toBe(0);
-  // The work is still owed: the durable outbox kept it.
   await queue.transportFailed("chaos-degraded", "degraded backend");
   expect(
     (await queue.pending()).map((intent) => intent.intentId)
@@ -194,12 +145,6 @@ async function gatewayBackendDegraded(
   await expect(queue.pending()).resolves.toStrictEqual([]);
 }
 
-/*
- * THE REPLICA'S PROCESS DIES with an intent CLAIMED and unanswered. The outbox
- * is a real file, so closing it is a real death: the reopened store must still
- * hold the claim, the product's own `recoverSending` must return it to queued,
- * and the replay must apply exactly once under the same id and payload hash.
- */
 async function replicaProcessDeathMidSend(
   chaos: ComponentChaosWorld
 ): Promise<void> {
@@ -214,7 +159,6 @@ async function replicaProcessDeathMidSend(
   expect(claimed?.state).toBe("sending");
   first.close();
 
-  // Reopened from the same file — a restart, not a fresh install.
   const reopened = chaos.openOutbox();
   const survivors = await reopened.queue.pending();
   expect(survivors.map((intent) => intent.intentId)).toStrictEqual([
@@ -225,8 +169,6 @@ async function replicaProcessDeathMidSend(
   const recovered = await reopened.queue.recoverSending();
   expect(recovered.map((intent) => intent.state)).toStrictEqual(["queued"]);
   const replayed = await reopened.queue.claimNext();
-  // Same identity AND same payload hash: recovery replays the work, it does
-  // not re-derive it, so the gateway's dedupe can recognise it.
   expect(replayed?.intentId).toBe(claimed?.intentId);
   expect(replayed?.payloadHash).toBe(claimed?.payloadHash);
 
@@ -237,8 +179,6 @@ async function replicaProcessDeathMidSend(
     { intentId: "chaos-replica", status: "executed" } as never,
   ]);
 
-  // A second delivery of the very same claim (the classic post-crash double
-  // send) is a dedupe hit, not a second task.
   const duplicate = await chaos.submit(replayed);
   expect(duplicate.outcome?.status).toBe("executed");
   expect(chaos.taskTitles()).toStrictEqual(["claimed when the phone died"]);
@@ -246,12 +186,6 @@ async function replicaProcessDeathMidSend(
   await expect(reopened.queue.pending()).resolves.toStrictEqual([]);
 }
 
-/*
- * AN AUTOMATION WORKER DIES HOLDING THE RUN CLAIM. The claim is persisted
- * cross-process state, so nothing cleans it up when the worker vanishes. The
- * law is two-sided: a LIVE claim cannot be stolen, and a DEAD one is reclaimed
- * at a bounded lease age rather than wedging the conversation forever.
- */
 function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
   const plane = chaos.plane();
   const store = new ConversationStore(() => plane.db.audit);
@@ -265,13 +199,11 @@ function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
   });
 
   expect(store.acquireTurnLock(conversationId, "worker-a", T0)).toBe(true);
-  // A live claim is not stealable — this is the single-writer guarantee.
   expect(
     store.acquireTurnLock(conversationId, "worker-b", T0 + MINUTE),
     "a live automation claim was stolen"
   ).toBe(false);
 
-  // worker-a dies here, holding the claim and releasing nothing.
   expect(
     store.acquireTurnLock(
       conversationId,
@@ -280,7 +212,6 @@ function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
     ),
     "a claim inside its lease was reclaimed early"
   ).toBe(false);
-  // BOUNDED: the wedge ends by itself at the lease age; it is not forever.
   expect(
     store.acquireTurnLock(
       conversationId,
@@ -290,7 +221,6 @@ function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
     "a dead worker wedged the conversation past its lease"
   ).toBe(true);
 
-  // The dead worker can neither revive its claim...
   expect(
     store.refreshTurnLock(
       conversationId,
@@ -298,7 +228,6 @@ function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
       T0 + TURN_LOCK_STALE_MS + 2 * MINUTE
     )
   ).toBe(false);
-  // ...nor release the successor's.
   store.releaseTurnLock(conversationId, "worker-a");
   expect(
     store.acquireTurnLock(
@@ -309,7 +238,6 @@ function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
     "a dead worker's release freed the successor's claim"
   ).toBe(false);
 
-  // BOUNDED RESOURCE USE: a chain of deaths leaves one row, not a pile.
   const rows = (
     plane.db.audit
       .prepare("SELECT count(*) AS n FROM conversation_turn_locks")
@@ -318,20 +246,9 @@ function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
   expect(rows, "turn-claim rows after the worker chain").toBe(1);
 }
 
-/*
- * A MODEL-RUNTIME WORKER DIES HOLDING AN ENRICHMENT LEASE, repeatedly. Same
- * two-sided law as the automation claim, plus the queue-shape claim that makes
- * it a bounded-resource statement: a job re-leased after N deaths is still ONE
- * job with N+1 attempts, never N copies, and the dead worker's late completion
- * cannot drain the successor's work.
- */
 function modelRuntimeDeathHoldingLease(chaos: ComponentChaosWorld): void {
   const vault = chaos.plane().db.vault;
   const requestId = "chaos-enrich";
-  // The queue row's `(target_type, target_id)` is a composite key into
-  // `core_entity` since #916, so the subject has to exist before it can be
-  // asked about. The row itself is incidental to the claim under test — what
-  // matters is that a lease chain over a REAL subject converges.
   vault
     .prepare(
       `INSERT INTO core_content_item
@@ -365,7 +282,6 @@ function modelRuntimeDeathHoldingLease(chaos: ComponentChaosWorld): void {
       lease?.attempt,
       "attempts must count deaths, not multiply jobs"
     ).toBe(death + 1);
-    // No double-hand-out while the lease is live.
     expect(
       leaseNextEnrichmentRequest(vault, {
         deviceId: "thief",
@@ -375,9 +291,7 @@ function modelRuntimeDeathHoldingLease(chaos: ComponentChaosWorld): void {
       "a live enrichment lease was handed to a second worker"
     ).toBeNull();
 
-    // The worker dies here: no contribution, no release.
     at += LEASE_TTL_MS + MINUTE;
-    // The dead worker's late completion is refused and drains nothing.
     expect(
       completeEnrichmentLease(vault, {
         requestId,
@@ -389,8 +303,6 @@ function modelRuntimeDeathHoldingLease(chaos: ComponentChaosWorld): void {
     ).toBe(false);
   }
 
-  // Converged shape: exactly one job, available again, never drained by a
-  // worker that did no work.
   const depth = enrichmentQueueDepth(vault, iso(at));
   expect(depth.total, "one job per request, whatever died holding it").toBe(1);
   expect(depth.leased, "no live lease survives its dead owner").toBe(0);
@@ -428,7 +340,6 @@ describe("seeded composition-chaos lane: replay and coverage", () => {
     expect(chaosSchedule(COMPONENT_FAULT_IDS, 0xc0_ff_ee_01)).not.toStrictEqual(
       chaosSchedule(COMPONENT_FAULT_IDS, 0x0d_15_ea_5e)
     );
-    // Cover mode is a permutation, so no fault can quietly leave the lane.
     expect(
       chaosSchedule(COMPONENT_FAULT_IDS, 7)
         .map((entry) => entry.fault)
@@ -436,9 +347,6 @@ describe("seeded composition-chaos lane: replay and coverage", () => {
     ).toStrictEqual([...COMPONENT_FAULT_IDS].sort());
   });
 
-  // Every component #842 W3.2 names is degraded by at least one fault, and
-  // every catalog fault has a scenario. A component that lost its fault would
-  // otherwise leave a hole this lane silently reads as green.
   test("every named component is degraded by a scenario in this lane", () => {
     for (const component of COMPONENTS_UNDER_CHAOS) {
       expect(

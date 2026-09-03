@@ -1,48 +1,15 @@
 #!/usr/bin/env node
-/**
- * The candidate pointer's payload (#915 Wave 1, contract C1).
- *
- * WHAT A CANDIDATE IS. Rung 3 asks one question — "is this SHA a build we would
- * hand to a device?" — and until now nothing in the repo could answer it, so the
- * nightly ran against whatever happened to be at the tip of `main` and a red
- * night could not distinguish a product regression from the 04:00 dependency
- * merge. A candidate is the answer written down: a SHA, the moment it was
- * promoted, the SHA it replaced, and the verdict of every lane that voted.
- *
- * `refs/candidates/latest` is the pointer; this file is the receipt. The nightly,
- * the weeklies and the release chain all read one or the other, so the shape is
- * a contract rather than a convenience — see PLAN C1 and docs/release.md.
- *
- * Usage:
- *   node scripts/ci/write-candidate.mjs --sha <40hex> --run-id 1 --run-url URL \
- *     [--previous <40hex>] [--needs <path to toJSON(needs)>] \
- *     [--out artifacts/candidate.json] [--history <path to candidates.json>]
- */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-/** How many promotions the durable history keeps. */
 export const HISTORY_LIMIT = 200;
 
-/**
- * Turn GitHub's `toJSON(needs)` into the candidate's per-lane verdicts.
- *
- * `skipped` becomes `skipped` rather than `passed`: a lane that did not run has
- * no opinion, and recording it as a pass is how a candidate comes to claim
- * proof it never had.
- *
- * @param {unknown} needs Parsed `toJSON(needs)`.
- * @returns {Record<string, {verdict: string, durationMs: number}>} Lane verdicts.
- */
 export function laneVerdicts(needs) {
-  /** @type {Record<string, {verdict: string, durationMs: number}>} */
   const out = {};
   if (!needs || typeof needs !== "object") return out;
-  for (const [lane, value] of Object.entries(
-    /** @type {Record<string, {result?: string}>} */ (needs)
-  )) {
+  for (const [lane, value] of Object.entries(needs)) {
     if (lane === "promote") continue;
     const result = value?.result ?? "unknown";
     out[lane] = {
@@ -58,12 +25,6 @@ export function laneVerdicts(needs) {
   return out;
 }
 
-/**
- * The candidate record.
- *
- * @param {{sha: string, previousSha: string|null, runId: string, runUrl: string, promotedAt: string, lanes: Record<string, unknown>}} input Fields.
- * @returns {Record<string, unknown>} The C1-shaped record.
- */
 export function buildCandidate({
   sha,
   previousSha,
@@ -93,21 +54,8 @@ export function buildCandidate({
   };
 }
 
-/**
- * Append a promotion to the durable history, newest first, bounded.
- *
- * Bounded because gh-pages is a git tree and an unbounded array becomes a diff
- * nobody can read; 200 promotions is well past any window the rules ask about
- * (the longest is trailing 30) while still covering a slow month.
- *
- * @param {unknown} existing Parsed candidates.json, or anything unparseable.
- * @param {{sha: string, promotedAt: string}} entry The new promotion.
- * @returns {{schema: number, candidates: {sha: string, promotedAt: string}[]}} The new history.
- */
 export function appendHistory(existing, entry) {
-  const previous = Array.isArray(
-    /** @type {{candidates?: unknown}} */ (existing)?.candidates
-  )
+  const previous = Array.isArray(existing?.candidates)
     ? /** @type {{candidates: {sha: string, promotedAt: string}[]}} */ (
         existing
       ).candidates

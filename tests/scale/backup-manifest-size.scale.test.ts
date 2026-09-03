@@ -1,23 +1,3 @@
-// The backup manifest's size bound (issue #659 S6).
-//
-// `sealManifest` (packages/backup/src/manifest.ts) rebuilds the WHOLE
-// `chunkIndex` — one `{id, size}` per chunk in the snapshot — into the public
-// envelope of EVERY manifest, and the envelope is written out in full on
-// every generation. That is O(vault) bytes uploaded per snapshot, and it is
-// invisible until someone's vault is large: nothing in the suite measured it.
-//
-// Volume table (kept with the rig):
-//
-//   | Axis                | Value             | Why                          |
-//   | ------------------- | ----------------- | ---------------------------- |
-//   | chunk index entries | 25k / 50k / 100k  | ~16 MiB chunks ⇒ 100k ≈ 1.5 TB |
-//   | manifest entries    | index / 8         | a file per ~8 chunks         |
-//
-// Two laws, both about GROWTH rather than a single number: the per-chunk cost
-// stays inside a byte budget, and doubling the vault at most doubles the
-// manifest. Either one breaking means a manifest that grows faster than the
-// data it describes.
-
 import path from "node:path";
 
 import { describe, expect, test } from "vitest";
@@ -31,14 +11,6 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/backup-manifest-size.scale.test.ts";
 const VOLUMES = [25_000, 50_000, 100_000] as const;
-/**
- * Bytes one chunk may cost in the stored manifest, measured 2026-07-31 at
- * 205 B/chunk on the volumes below: ~90 B for the public `chunkIndex` entry
- * (`{"id":"<64 hex>","size":16777216}`) plus ~115 B for that chunk's id
- * inside the base64 sealed payload. The ceiling is tighten-only, so it is set
- * just above the measurement — enough to absorb noise, not enough to hide a
- * third copy of the chunk list appearing in the envelope.
- */
 const BYTES_PER_CHUNK_BUDGET = 230;
 
 function chunkIndexOf(count: number): { id: string; size: number }[] {
@@ -93,14 +65,9 @@ describe("backup-manifest-size.scale", () => {
 
     const largest = VOLUMES[VOLUMES.length - 1] as number;
     const bytesPerChunk = (sizes.get(largest) as number) / largest;
-    // Doubling the vault must at most double the manifest — anything above
-    // ~2x means a term that is superlinear in vault size.
     const doublingRatio =
       (sizes.get(100_000) as number) / (sizes.get(50_000) as number);
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       bytesPerChunk < BYTES_PER_CHUNK_BUDGET && doublingRatio < 2.2;
@@ -133,8 +100,6 @@ describe("backup-manifest-size.scale", () => {
 
     expect(bytesPerChunk).toBeLessThan(BYTES_PER_CHUNK_BUDGET);
     expect(doublingRatio).toBeLessThan(2.2);
-    // And the smaller steps agree, so the bound is a curve rather than one
-    // lucky point.
     expect(
       (sizes.get(50_000) as number) / (sizes.get(25_000) as number)
     ).toBeLessThan(2.2);

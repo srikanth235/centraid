@@ -1,30 +1,3 @@
-/**
- * Scoped diff-coverage runner (#576).
- *
- * Produces the coverage map `diff-coverage.mjs` scores, doing the least work
- * that can produce a correct verdict:
- *
- *   1. No instrumentable file changed (docs, config, tests-only)? Skip
- *      everything — `evaluateDiffCoverage` already passes a zero-line diff, so
- *      running 5,948 tests to learn that is pure cost.
- *   2. Otherwise run ONLY the vitest projects owning the changed files,
- *      instrumented, via vitest.diff-coverage.config.ts.
- *
- * Measured on this repo (M-series Mac): the full instrumented run is 418s on
- * every push. Scoped to the one package a gateway change touches it is 219s,
- * and a diff with no instrumentable source in it — docs, config, workflow, or
- * tests-only — costs 3s, almost all of it the `git fetch`.
- *
- * The full repo-wide `bun run coverage` remains the authority: it is what the
- * CI `verify` job runs, what enforces the seeded floors, and what catches a
- * file covered only by another package's tests. This lane is the fast local
- * preview of that gate, not a replacement for it.
- *
- * Usage:
- *   node scripts/test-report/diff-coverage-run.mjs
- *   node scripts/test-report/diff-coverage-run.mjs --dependents
- *   node scripts/test-report/diff-coverage-run.mjs --base origin/main
- */
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -33,10 +6,6 @@ import { isInstrumentableSource } from "./diff-coverage.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-/**
- * @param {string[]} argv Raw argv slice.
- * @returns {{ base: string | null; dependents: boolean }} Parsed options.
- */
 export function parseArgs(argv) {
   const out = { base: /** @type {string | null} */ (null), dependents: false };
   for (let i = 0; i < argv.length; i++) {
@@ -46,10 +15,6 @@ export function parseArgs(argv) {
   return out;
 }
 
-/**
- * @param {string[]} args git arguments.
- * @returns {string} stdout, or '' when git fails.
- */
 function git(args) {
   try {
     return execFileSync("git", args, {
@@ -63,12 +28,6 @@ function git(args) {
   }
 }
 
-/**
- * Mirrors diff-coverage.mjs's own base resolution so the two lanes can never
- * score against different merge bases.
- * @param {string | null} explicit Explicit --base value.
- * @returns {string | null} A resolvable ref, or null.
- */
 export function resolveBase(explicit) {
   if (explicit) return explicit;
   for (const candidate of ["origin/main", "main", "origin/master", "master"]) {
@@ -77,12 +36,6 @@ export function resolveBase(explicit) {
   return null;
 }
 
-/**
- * Changed paths across the merge-base range plus the working tree, matching the
- * union diff-coverage.mjs scores locally (committed + staged + unstaged).
- * @param {string} baseRef Base ref.
- * @returns {string[]} Repo-relative paths, deduped.
- */
 export function changedFiles(baseRef) {
   const names = [
     ...git(["diff", "--name-only", `${baseRef}...HEAD`]).split("\n"),
@@ -92,11 +45,6 @@ export function changedFiles(baseRef) {
   return [...new Set(names.map((n) => n.trim()).filter(Boolean))];
 }
 
-/**
- * Map a repo-relative source path to the workspace directory owning it.
- * @param {string} filePath Repo-relative path.
- * @returns {string | null} e.g. "packages/server", or null.
- */
 export function workspaceDirOf(filePath) {
   const m = /^(?<workspaceDir>(?:packages|apps|tools)\/[^/]+)\//u.exec(
     filePath
@@ -104,15 +52,9 @@ export function workspaceDirOf(filePath) {
   return m?.groups?.workspaceDir ?? null;
 }
 
-/**
- * @param {string} dir Workspace directory.
- * @returns {string | null} The package name vitest uses as its project name.
- */
 export function projectNameOf(dir) {
   const manifest = path.join(root, dir, "package.json");
   if (!existsSync(manifest)) return null;
-  // A workspace with no vitest config contributes no project to the root run,
-  // so naming it in --project would make vitest fail on an unknown project.
   const hasVitest = [
     "vitest.config.ts",
     "vitest.config.mts",
@@ -127,24 +69,12 @@ export function projectNameOf(dir) {
   }
 }
 
-/**
- * Expand package-level project names to any companion Vitest projects that
- * own a deliberately separate transform/runtime lane.
- * @param {string[]} names Package-level Vitest project names.
- * @returns {string[]} Concrete project names accepted by `--project`.
- */
 export function vitestProjectNames(names) {
   return names.flatMap((name) =>
     name === "@centraid/mobile" ? [name, "@centraid/mobile-rn"] : [name]
   );
 }
 
-/**
- * Expand a package set to include everything that depends on it, using turbo as
- * the authority so this agrees with `test:affected:full`.
- * @param {string} baseRef Base ref.
- * @returns {string[] | null} Package names, or null when turbo cannot answer.
- */
 function dependentsOf(baseRef) {
   const res = spawnSync(
     "bun",
@@ -163,11 +93,6 @@ function dependentsOf(baseRef) {
   }
 }
 
-/**
- * @param {string} command Command to run.
- * @param {string[]} args Arguments.
- * @returns {number} Exit status.
- */
 export function run(command, args) {
   const res = spawnSync(command, args, { cwd: root, stdio: "inherit" });
   return res.status ?? 1;
@@ -176,9 +101,6 @@ export function run(command, args) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  // Best-effort: a stale origin/main only makes the diff larger, never wrong.
-  // NOT --depth=1 — against a full local clone that truncates origin/main into
-  // a shallow ref and destroys the merge base (#568 learned this the hard way).
   git(["fetch", "--no-tags", "origin", "main"]);
 
   const baseRef = resolveBase(args.base);
@@ -196,7 +118,6 @@ function main() {
     return 0;
   }
 
-  /** @type {Set<string>} */
   const projects = new Set();
   for (const file of instrumentable) {
     const dir = workspaceDirOf(file);
@@ -229,8 +150,6 @@ function main() {
     `diff-coverage-run: ${testProjectNames.length} project(s) — ${testProjectNames.join(", ")}`
   );
 
-  // Handler tests load built workers from dist, so dist must match src. turbo
-  // caches this, so it is ~free on a repeat run.
   const buildStatus = run("bun", [
     "run",
     "turbo",
@@ -257,8 +176,6 @@ function main() {
   ]);
 }
 
-// Same invoke-guard as diff-coverage.mjs / ratchet-floors.mjs so the helpers
-// above are importable under vitest without triggering the full run.
 const isMain =
   process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
 if (isMain) {

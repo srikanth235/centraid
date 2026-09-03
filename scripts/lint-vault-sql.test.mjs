@@ -1,14 +1,3 @@
-// The vault-SQL linter's own tests (vault-ontology review, lens 8.1).
-//
-// `lint-vault-sql.mjs` runs a `selfTest()` on every invocation, which keeps the
-// RULE executable spec at the point of use. These tests cover what a self-test
-// structurally cannot: the disk-facing readers — the registry parser and the
-// comment stripper — whose stale grammar is what makes the linter pass
-// vacuously, and the allow-list's own honesty properties.
-//
-// The fixtures are deliberately violating on purpose — see the `*.test.*` role
-// in the linter, which is also why this file may spell `FROM core_event`.
-
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -46,8 +35,6 @@ test("the registry reader joins schema and entity into the physical name", () =>
       "};",
     ].join("\n")
   );
-  // Stops at the registry's own closing brace: journal tables are a different
-  // database and must not join the vocabulary.
   assert.deepEqual(parsed, ["core_party", "core_event", "blob_custody_state"]);
 });
 
@@ -102,8 +89,6 @@ test("every SQL clause that can introduce a table is matched", () => {
 });
 
 test("a join predicate is not read as a table reference", () => {
-  // `ON` is deliberately not a keyword here; if it were, every join predicate
-  // would name a table and the linter would fail on files that are clean.
   assert.deepEqual(
     collectTableReferences('q("SELECT 1 FROM t ON core_event.id = t.id")', [
       "core_event",
@@ -135,7 +120,6 @@ test("the allow-list reports which of its entries are still earning their place"
     roles: [],
   });
   assert.deepEqual(rules(result), []);
-  // `clean.ts` is absent, which is what makes the stale-allowance guard fire.
   assert.deepEqual([...result.allowed], ["used.ts"]);
 });
 
@@ -150,8 +134,6 @@ test("every shipped allow-list entry carries a reason and a distinct path", () =
 });
 
 test("the three life-data readers the review named are NOT allow-listed", () => {
-  // They read life data with no consent check and no receipt; the linter must
-  // keep failing on them until they move behind the gateway.
   for (const file of [
     "packages/server/src/brief/daily-brief.ts",
     "packages/server/src/reminders/due-reminders.ts",

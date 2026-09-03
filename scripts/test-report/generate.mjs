@@ -1,22 +1,3 @@
-/**
- * The nightly report generator — the CLI shell (#915 Wave 3).
- *
- * Everything of substance lives elsewhere: `collect.mjs` does the reading,
- * `read-model.mjs` turns it into a model with no I/O, and `render/` turns the
- * model into one self-contained HTML page. This file only wires them, so the
- * honesty suites and `report:smoke` can drive it against a fixture root and
- * the model and the renderer can each be tested on their own.
- *
- * Flags (all optional; every input renders honestly when absent):
- *   --evidence <dir>            tonight's lane evidence (artifacts/evidence)
- *   --evidence-previous <dir>   the previous night's, for the deltas
- *   --candidate <file>          artifacts/candidate.json
- *   --claims <file>             tests/claims.json
- *   --history <dir>             artifacts/report-history
- *   --output <dir>              dist/test-report
- *   --scope <nightly|main|pr>   what this run is allowed to claim
- */
-
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -39,7 +20,6 @@ import { writeSummarySidecars } from "./summary-markdown.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 
-/** `--flag value` pairs, with the repo-root defaults every lane relies on. */
 export function parseFlags(argv, env = process.env) {
   const flags = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -75,7 +55,6 @@ export function parseFlags(argv, env = process.env) {
   };
 }
 
-/** Read every input and build the model. Exported so the smoke test can too. */
 export async function collectModel(options, now = new Date()) {
   const { claims, errors: claimErrors } = loadClaims(options.claims);
   if (!claims)
@@ -135,7 +114,6 @@ export async function collectModel(options, now = new Date()) {
       ? `test-report/nightly/runs/${options.runSlug}/`
       : null,
   };
-  // §5 reads per-flow results out of tonight's cases, whichever lane wrote them.
   model.caseResults = new Map();
   for (const entry of tonight.lanes.values()) {
     for (const observed of entry.cases ?? [])
@@ -144,7 +122,6 @@ export async function collectModel(options, now = new Date()) {
   return model;
 }
 
-/** The `summary.json` sidecar: the shape the job summary and release lane read. */
 export function buildSummary(model) {
   return {
     schema: 1,
@@ -166,8 +143,6 @@ export function buildSummary(model) {
     generatedAt: model.generatedAt,
     label: model.night,
     validationErrorCount: model.validationErrors.length,
-    // The durable-history whitelist reads these back; a night before #915
-    // carries none of them and reads as null rather than as zero.
     lanes: Object.fromEntries(
       model.lanes.map((row) => [
         row.lane,

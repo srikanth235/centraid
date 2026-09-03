@@ -1,27 +1,4 @@
 #!/usr/bin/env node
-// The rung-5 hygiene lane (#915 Wave 4).
-//
-// Seven gates are tighten-only ratchets over the TEST SUITE's own quality —
-// comment density, assertion-matcher families, fixed sleeps, skips,
-// environment-red sites, the type floor and the schema/export fingerprint.
-// They protect the suite from the agents; none of them can prove the phone
-// works. Charging every push for them bought latency nobody used.
-//
-// Every one of them is a STANDING check over the whole tree — a count, an
-// inventory, a fingerprint — not a diff-scoped one. That is the property that
-// makes a weekly run on `main` see exactly what a per-push run would see, and
-// it is why this move costs detection latency (push → ≤ 7 days) and nothing
-// else. `test:comment-density` in particular had no CI job at all before this,
-// so weekly is strictly more enforcement than it had.
-//
-// This is deliberately NOT the "enforced by the pre-push hook is enforcement
-// in name only" regression the #782 comment block in ci.yml warns about: this
-// lane runs in CI, against main, on a schedule, and files a rolling issue when
-// it is red. Nothing depends on a developer's hook. See docs/decisions.md
-// "Gate and ledger diet".
-//
-// Writes `artifacts/hygiene/summary.json` so the workflow can render a job
-// summary and file one rolling issue naming exactly which ratchets are red.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -29,10 +6,6 @@ import { runGates } from "./lint-product.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 
-/**
- * The weekly membership. Longest-first (`test:comment-density` is 10.2 s and
- * dominates; everything else is under 4 s).
- */
 export const HYGIENE_GATES = Object.freeze([
   "test:comment-density",
   "test:hygiene-ratchet",
@@ -43,12 +16,6 @@ export const HYGIENE_GATES = Object.freeze([
   "lint:schema-export",
 ]);
 
-/**
- * The machine-readable verdict for one run of the lane.
- * @param {Array<{name: string, code: number, ms: number}>} results One entry per gate, as `runGates` returns them.
- * @param {string} at ISO timestamp the lane started at.
- * @returns {{schema: number, lane: string, rung: number, at: string, verdict: string, red: string[], gates: Array<{gate: string, verdict: string, durationMs: number}>}} The lane's machine-readable verdict.
- */
 export function summarize(results, at) {
   const gates = [...results]
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -69,12 +36,6 @@ export function summarize(results, at) {
   };
 }
 
-/**
- * One row per gate, verdict and cost. Shared by the job summary and the
- * rolling issue so the two can never disagree about what ran.
- * @param {ReturnType<typeof summarize>} summary The lane's verdict.
- * @returns {string} A markdown table, one row per gate.
- */
 export function gateTable(summary) {
   return [
     "| Gate | Verdict | Duration |",
@@ -86,23 +47,10 @@ export function gateTable(summary) {
   ].join("\n");
 }
 
-/**
- * The job summary: what ran, how it went, how long it took.
- * @param {ReturnType<typeof summarize>} summary The lane's verdict.
- * @returns {string} Markdown for `$GITHUB_STEP_SUMMARY`.
- */
 export function summaryMarkdown(summary) {
   return `### Weekly hygiene ratchets — ${summary.verdict}\n\n${gateTable(summary)}\n`;
 }
 
-/**
- * The rolling issue's body. One issue per lane, replaced in place every week,
- * so the body always states the lane's CURRENT condition rather than growing a
- * thread nobody reads (#915 Wave 0's rule, applied here).
- * @param {ReturnType<typeof summarize>} summary The lane's verdict.
- * @param {string} runUrl Link back to the Actions run that produced it.
- * @returns {string} The rolling issue's whole body.
- */
 export function issueBody(summary, runUrl) {
   const lines = [
     `The weekly hygiene ratchets were red on ${summary.at}.`,

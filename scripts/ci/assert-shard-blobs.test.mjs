@@ -19,8 +19,6 @@ test("a missing shard is refused and named", () => {
 });
 
 test("a shard-count mismatch is a different, nameable error", () => {
-  // The blobs say 6-way, the lane dispatched 8-way: the matrix and the shard
-  // argument drifted apart. Merging would score a world nobody chose.
   const errors = checkShardBlobs(blobs(6), 8);
   assert.ok(
     errors.some((e) => /6-way split but this lane dispatched 8/u.test(e))
@@ -34,8 +32,6 @@ test("a duplicated shard is caught even when the count happens to match", () => 
     "blob-2-3.json",
     "blob-3-3.json",
   ];
-  // Same file name twice cannot happen on one disk, so exercise the real
-  // shape: a directory listing that repeats an index.
   const errors = checkShardBlobs(files, 3);
   assert.ok(errors.some((e) => /appears more than once/u.test(e)));
 });

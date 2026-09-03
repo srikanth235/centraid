@@ -1,13 +1,3 @@
-/**
- * §4 lane health board and §5 journeys (#915 Wave 3).
- *
- * §4 is the page the promotion and demotion rules read from, so every number
- * the rules use is on it: pass rate on candidates with the demote flag, p95
- * against the rung budget, the last green SHA, and the 30-run history. The
- * filters, the name search and the `/` `e` `?` keys are the only script on the
- * page, and it is inert without JavaScript — every row is already in the HTML.
- */
-
 import {
   budgetBar,
   escapeHtml,
@@ -20,7 +10,6 @@ import {
   table,
 } from "./util.mjs";
 
-/** §4. */
 export function renderLaneBoard(model) {
   const rows = model.lanes
     .map((row, index) => {
@@ -97,7 +86,6 @@ export function renderLaneBoard(model) {
   );
 }
 
-/** §5 — every committed flow, grouped by the suite whose budget bounds it. */
 export function renderJourneys(model) {
   const rows = model.journeys
     .map((suite) => {

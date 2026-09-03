@@ -10,7 +10,6 @@ test("shipped hygiene gates pass the structural contract", () => {
 
 test("ci.yml rolls gitleaks and osv-scanner into the required check job", () => {
   const ci = readRepoFile(".github/workflows/ci.yml");
-  // Slice from the check job's needs list specifically.
   const checkBlock = ci.slice(ci.indexOf("\n  check:"));
   assert.match(checkBlock, /\bgitleaks\b/u);
   assert.match(checkBlock, /\bosv-scanner\b/u);

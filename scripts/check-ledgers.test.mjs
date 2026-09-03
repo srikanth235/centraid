@@ -1,15 +1,4 @@
 import assert from "node:assert/strict";
-// Unit tests for the ledger validator (#915 Wave 4).
-//
-// The interesting cases are the ones that only exist BECAUSE of the merge: the
-// base-side fallback to the pre-merge file paths (without it every ratchet in
-// the repo goes silent for exactly one commit), the per-section waiver scope
-// (merging seven files must not merge seven waivers), and the serializer that
-// keeps a scanner's `--write` output byte-identical to what oxfmt would print.
-//
-// Each case builds a throwaway git repository, commits the PRE-MERGE tree, and
-// then runs the validator over a POST-MERGE working tree against that commit —
-// which is the exact situation the merge commit itself is in.
 import { execFileSync } from "node:child_process";
 // oxlint-disable-next-line no-restricted-imports -- (#915) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered in the `after` hook below. Same pattern as scripts/check-comment-density-ratchet.test.mjs.
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -36,7 +25,6 @@ const MUTATION = { "packages/a": 80 };
 const CLAIMS = { flows: [{ id: "f1", owner: "a.ts", minimumTests: 4 }] };
 const ROSTER = { suites: { "pr-gate": { budgetMs: 480_000 } } };
 
-/** A repo whose HEAD holds the PRE-MERGE ledgers, ready for a merged head. */
 function preMergeRepo() {
   const root = mkdtempSync(path.join(tmpdir(), "ledgers-"));
   roots.push(root);
@@ -63,7 +51,6 @@ function preMergeRepo() {
   return { root, write };
 }
 
-/** The merged four-file tree, with `overrides` folded into the sections. */
 function writeMerged(write, overrides = {}) {
   write("tests/floors.json", {
     coverage: overrides.coverage ?? COVERAGE,
@@ -278,10 +265,7 @@ describe("serializeLedger", () => {
   });
 
   test("the trailing comma counts toward the 80-column budget", () => {
-    // Exactly the boundary the pins hit: 80 columns without a comma, 81 with.
     const key = "apps/desktop/src/main/gateway-monitor-notifications.test.ts";
-    // At the pins' real depth (inventory → commentDensity → files) the entry
-    // is 80 columns bare and 81 with its comma, so only the non-final one wraps.
     const out = serializeLedger({
       commentDensity: { files: { [key]: [267, 2828], z: [1, 2] } },
     });

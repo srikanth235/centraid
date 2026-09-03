@@ -1,41 +1,3 @@
-/**
- * The open-citation gate (#864 Wave 0).
- *
- * Every ledger in `tests/` buys a deliberate hole with the same currency: a
- * GitHub issue number. `matrix.json` gaps, revisit triggers, app-seat and
- * app-state gaps, the consent ledger's missing adversaries, the skip budget,
- * the env-red inventory, and the flake quarantine all say "this is unfinished,
- * and #N is where it is being finished." The existing validators already refuse
- * a citation whose issue is CLOSED — but they read that state out of
- * `matrix.trackingIssues`, a hand-maintained snapshot of the world. So the one
- * failure they cannot see is the snapshot going stale: an issue closes on
- * GitHub, nobody edits the ledger, and every gate keeps passing while ~100
- * exceptions cite a dead tracker. That is exactly what happened before this
- * gate existed.
- *
- * This check closes that loop by asking GitHub itself. Two rules:
- *
- *   1. Every CITATION — a `trackingIssue` field anywhere in the matrix, a
- *      "tracked under #N" / "tracked gap (#N" claim in prose, a skip, env-red,
- *      or quarantine `issue` — must name an issue that is still open.
- *   2. Every `trackingIssues` entry that DECLARES `state: "open"` must really
- *      be open, because that declaration is what the offline validators trust.
- *
- * A bare `#N` that is not one of those forms is left alone on purpose: closed
- * issues are legitimate PROVENANCE ("originally #656", "#535 Phase 5", "the
- * ruling that held it"), and a gate that forbade them would push authors to
- * delete history rather than keep it. Only the live-tracking claim is checked.
- *
- * Network-dependent, so it is NIGHTLY-ONLY: the PR lane must not grow a
- * dependency on api.github.com. For the same reason an unreachable API is a
- * HARD FAILURE that says the check did not run — a silent pass here would
- * restore precisely the blind spot the gate exists to remove.
- *
- * Usage:  GITHUB_TOKEN=… node scripts/test-report/validate-citations-open.mjs
- * Exit:   0 clean, 1 on a closed citation, a stale ledger state, or an
- *         unreachable API.
- */
-
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -43,14 +5,8 @@ const root = path.resolve(import.meta.dirname, "../..");
 
 export const REPO = "srikanth235/centraid";
 
-/**
- * The prose forms that make a live tracking CLAIM, as opposed to provenance.
- * "Tracked under #864", "tracked gap (#864, originally #656)", "Remaining
- * depth tracked under #864" all match; "originally #656" does not.
- */
 const TRACKING_PHRASE = /\btracked\s+(?:under|gap)\s*\(?\s*#(?<issue>\d+)/giu;
 
-/** Blocks of the matrix that are a REGISTRY of issues, not citations of them. */
 const REGISTRY_KEYS = new Set(["trackingIssues"]);
 
 function addCitation(citations, issue, where) {
@@ -60,18 +16,6 @@ function addCitation(citations, issue, where) {
   citations.get(number).push(where);
 }
 
-/**
- * Walk one parsed ledger and collect every live-tracking citation in it.
- * Structural (`trackingIssue`, `issue`) and prose (`tracked under #N`) forms
- * are collected by shape rather than by an enumerated list of paths, so a new
- * grid added to the matrix is covered the day it lands instead of the day
- * someone remembers to extend this file. Pure.
- *
- * @param {unknown} node parsed JSON
- * @param {string} where dotted path of `node`, used verbatim in failures
- * @param {Map<number, string[]>} citations accumulator: issue -> citation sites
- * @returns {Map<number, string[]>} the same accumulator
- */
 export function collectCitations(node, where, citations = new Map()) {
   if (typeof node === "string") {
     for (const match of node.matchAll(TRACKING_PHRASE))
@@ -94,14 +38,6 @@ export function collectCitations(node, where, citations = new Map()) {
   return citations;
 }
 
-/**
- * The `trackingIssues` entries that CLAIM to be open. These are not citations,
- * but every offline validator reads its notion of "still open" from them, so a
- * stale entry silently re-opens the hole this gate closes.
- *
- * @param {object} matrix parsed tests/claims.json
- * @returns {number[]} issue numbers declared open, ascending
- */
 export function declaredOpenIssues(matrix) {
   return Object.entries(matrix?.trackingIssues ?? {})
     .filter(([, record]) => record?.state === "open")
@@ -110,15 +46,6 @@ export function declaredOpenIssues(matrix) {
     .sort((a, b) => a - b);
 }
 
-/**
- * Resolve each issue's state through the REST API. `fetchImpl` is injected so
- * the gate's own tests drive every branch — open, closed, transport failure,
- * non-200 — without a network.
- *
- * @param {number[]} issues issue numbers to resolve
- * @param {{ fetchImpl: typeof fetch, token: string, repo?: string }} options injected fetch, the API token, and the repository to ask
- * @returns {Promise<{ states: Map<number, string>, unreachable: Array<{ issue: number, reason: string }> }>} resolved states, plus the issues the API could not answer for
- */
 export async function resolveIssueStates(
   issues,
   { fetchImpl, token, repo = REPO }
@@ -154,13 +81,6 @@ export async function resolveIssueStates(
   return { states, unreachable };
 }
 
-/**
- * Turn resolved states into failures. Pure, so the message a human reads on a
- * red nightly is itself unit-tested.
- *
- * @param {{ citations: Map<number, string[]>, declaredOpen: number[], states: Map<number, string>, unreachable: Array<{ issue: number, reason: string }> }} input the collected citations, the ledger's open claims, and what the API answered
- * @returns {string[]} one error per stale citation or unresolved issue
- */
 export function reportCitationErrors({
   citations,
   declaredOpen,
@@ -190,14 +110,6 @@ export function reportCitationErrors({
   return errors;
 }
 
-/**
- * The whole gate over already-parsed inputs. Separated from `main` so the tests
- * exercise the real control flow (including the missing-token refusal) without
- * touching the filesystem or the network.
- *
- * @param {{ sources: Record<string, object>, matrix: object, token?: string, fetchImpl?: typeof fetch, repo?: string }} options the parsed ledgers keyed by path, the matrix, the API token, and an optional injected fetch
- * @returns {Promise<{ errors: string[], checked: number }>} the failures to print and how many issues were resolved
- */
 export async function validateOpenCitations({
   sources,
   matrix,
@@ -235,12 +147,8 @@ export async function validateOpenCitations({
   };
 }
 
-/** The ledgers this gate reads, relative to the repository root. */
 export const LEDGERS = [
   "tests/claims.json",
-  // #915 Wave 4 merged tests/skips.json and tests/env-red.json into the
-  // inventory ledger; every `issue` citation in either section is still walked,
-  // because the walk is over the parsed document rather than a fixed key path.
   "tests/inventory.json",
   "tests/quarantine.json",
 ];

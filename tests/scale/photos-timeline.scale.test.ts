@@ -19,22 +19,6 @@ import {
 
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
-// Photos-specific companion to large-vault.scale.test.ts (issue #721 C1):
-// that rig proves the whole-vault "daily use" mix stays bounded at 10k
-// photos alongside contacts/events/notes. This rig isolates the Photos
-// surface at 5x that volume — the media asset queries a native replica
-// bootstrap and timeline cold-load actually issue — and adds a SECOND,
-// DEGENERATE corpus (10k captures on one calendar day) because "spread
-// evenly over 3 years" and "all shot at a wedding in one afternoon" stress
-// the same captured_at index in opposite ways: the first is wide and
-// shallow, the second is one bucket, deep. The near-duplicate phash sweep
-// itself is already owned, at real volume, by phash-clustering.scale.test.ts
-// (90k assets through the live gateway sweep) — this rig does not repeat it.
-// `sectionPhotoAssets` itself (apps/mobile) is proven at the same
-// 10k-one-day volume by
-// apps/mobile/src/apps/photos/timeline-10k-one-day.test.ts; this rig only
-// owns the VAULT-side cost, since tests/scale cannot import a different
-// workspace's app code.
 const OWNER = "tests/scale/photos-timeline.scale.test.ts";
 const PHOTO_COUNT = 50_000;
 const ONE_DAY_PHOTO_COUNT = 10_000;
@@ -44,8 +28,6 @@ const ONE_DAY_READ_BUDGET_MS = 1_000;
 const DAY_BUCKET_BUDGET_MS = 2_000;
 const YEAR3 = year3VaultProfile();
 const YEAR3_SEAL_KEY = Buffer.alloc(32, 0x50);
-// Outside year3's own 2023-01-01..~2025-12-31 multiYearStart window, so the
-// degenerate one-day corpus cannot collide with a seeded row's own day.
 const ONE_DAY = "2020-06-15T00:00:00.000Z";
 
 function id(prefix: string, index: number): string {
@@ -61,9 +43,6 @@ describe("photos-timeline.scale", () => {
     const started = performance.now();
     const profile = {
       ...YEAR3,
-      // Small everywhere else so seed time is dominated by the Photos
-      // surface this rig exists to measure, not by contacts/events/notes
-      // large-vault.scale.test.ts already owns.
       conversations: 5,
       parties: 200,
       photos: PHOTO_COUNT,
@@ -112,14 +91,10 @@ describe("photos-timeline.scale", () => {
        VALUES (?, ?, 'photo', ?, 0)`
     );
 
-    // The degenerate one-day corpus. Seeded and timed separately from the
-    // year-3 photos above: this is a distinct distribution, not more of the
-    // same one, and its own seed cost is worth recording on its own line.
     const oneDayStarted = performance.now();
     db.vault.exec("BEGIN IMMEDIATE");
     for (let index = 0; index < ONE_DAY_PHOTO_COUNT; index += 1) {
       const contentId = id("one-day-content", index);
-      // 6s apart: 10,000 * 6s ≈ 16.7h, safely inside one calendar day.
       const at = new Date(Date.parse(ONE_DAY) + index * 6_000).toISOString();
       insertContent.run(
         contentId,
@@ -134,9 +109,6 @@ describe("photos-timeline.scale", () => {
     const oneDaySeedMs = performance.now() - oneDayStarted;
     const seedMs = performance.now() - started;
 
-    // Query 1: the ordered page a replica bootstrap / timeline cold-load
-    // actually issues (large-vault.scale.test.ts's own recentPhotos query),
-    // over 5x its photo volume.
     const pageStarted = performance.now();
     const page = db.vault
       .prepare(
@@ -146,10 +118,6 @@ describe("photos-timeline.scale", () => {
       .all();
     const pageReadMs = performance.now() - pageStarted;
 
-    // Query 2: the SAME ordered page, restricted to the one-day corpus alone
-    // — every row shares the date's first 10 characters, so a captured_at
-    // index that only pays off on high-cardinality prefixes would show up
-    // here as a scan, not a seek.
     const oneDayReadStarted = performance.now();
     const oneDayPage = db.vault
       .prepare(
@@ -160,10 +128,6 @@ describe("photos-timeline.scale", () => {
       .all();
     const oneDayReadMs = performance.now() - oneDayReadStarted;
 
-    // Query 3: the vault-side equivalent of the mobile timeline's own
-    // day-grouping (apps/mobile's sectionPhotoAssets buckets by day in JS;
-    // this is the same bucketing pushed into SQL) over the FULL corpus —
-    // 60k rows spanning both the wide year-3 spread and the one-day spike.
     const bucketStarted = performance.now();
     const dayBuckets = db.vault
       .prepare(

@@ -1,72 +1,4 @@
 #!/usr/bin/env node
-/**
- * THE SHELL↔APP CONFORMANCE GATE (#905 Part 2).
- *
- * WHY THIS EXISTS. Four tables in three trees have to agree before a launcher
- * tile can reach a screen:
- *
- *   packages/design/src/apps.ts               the registry — who exists at all
- *   apps/mobile/src/screens/home/catalog.ts   the launcher route per app id
- *   apps/mobile/src/screens/Home.tsx          the switch that navigates
- *   apps/mobile/src/deep-links.ts             the `centraid://` path table
- *
- * Nothing linked them. Each could move alone and stay green, and the failure is
- * the family this whole issue is about: a verdict reported without being earned.
- * A registered app whose route is missing from `catalog.ts` never reaches the
- * grid at all — and `buildLauncherItems` drops it SILENTLY (`route ? [...] : []`),
- * so the launcher renders seven tiles where eight are registered and every test
- * that derives its expectation from the catalog agrees with the defect.
- *
- * `apps/mobile/app-conformance.json` is the fifth table that pins the other
- * four, and this is what holds them against it. It is also what makes the
- * coverage claim in #905 Part 2 true rather than aspirational: **a new app is
- * covered the day it registers, or the PR that registers it fails here.** No
- * per-app authoring, no roster to remember to extend.
- *
- * SIX RULES.
- *
- *   registry-complete   The manifest's app ids and the registry's are exact
- *     complements, BOTH WAYS. A registered app with no row is the uncovered
- *     app #9; a row for an app nobody registers is a claim about nothing, which
- *     reads like coverage and is not.
- *   route-registered    Each row's `route` is what `catalog.ts` maps that id to.
- *     This is the rule that catches the silent `flatMap` drop above.
- *   navigates           Home's switch answers each row's `route` by navigating
- *     to its declared `navigator` (and `screen`, where the row declares one).
- *     A tile that opens the wrong cover is a product bug no unit sees, because
- *     each half is individually correct.
- *   deep-link-routed    `deep-links.ts` maps that same navigator/screen pair to
- *     the row's `centraid://` path. Tile and link must land on ONE screen; the
- *     two tables are written 300 lines apart and share no type.
- *   handles-declared    The row's `tile` and `landmark` ids resolve in
- *     `apps/mobile/src/kit/test-ids.ts` — the tile under the `homeTile` family
- *     prefix, the landmark exactly. An app with no arrival handle cannot be
- *     asserted on by the device layer, so the manifest may not claim it can.
- *   seed-declared       `seeded` is true exactly when
- *     `packages/blueprints/apps/<id>/seed.js` exists. The device lane seeds
- *     every scenario that ships one before it pairs (`seed-demo-corpus.mjs`), so
- *     a row that lies about its fixture is a journey that will fail on an app
- *     behaving correctly — which is precisely how #905's corpus defect read.
- *
- * WHAT THIS CANNOT SEE, said plainly: it matches text, not a render tree. It
- * proves the tables agree, not that the screen mounts. That second claim belongs
- * to the generated sweep in `apps/mobile/src/screens/Home.test.tsx` (the
- * shell↔app contract mounted against the real registry) and, for the parts only
- * a device can answer, to the Maestro layer. This is the cheap tripwire in front
- * of both — the same relation `lint-mobile-testids.mjs` has to the flows it
- * guards.
- *
- * Following lint-path-filters.mjs and lint-mobile-testids.mjs: A SILENT NO-OP IS
- * A FAILURE. Zero manifest rows, zero registry ids, an unreadable source table,
- * or an empty testID vocabulary each FAIL rather than pass — every one is the
- * shape this linter takes once a table it parses has been reformatted out from
- * under it, and "we found nothing to check" must never read as "nothing is
- * wrong". A self-test of every rule runs first on inline fixtures, so the linter
- * cannot rot into always-passing.
- *
- * Offline, no TypeScript dependency (line/brace scanning, the convention of
- * `lint-workflow-pins.mjs`), ~20 ms.
- */
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -81,17 +13,8 @@ const DEEP_LINKS_PATH = "apps/mobile/src/deep-links.ts";
 const TEST_IDS_PATH = "apps/mobile/src/kit/test-ids.ts";
 const BLUEPRINTS_DIR = "packages/blueprints/apps";
 
-/** The launcher tile handle family, mirrored from `TEST_ID_PREFIXES.homeTile`. */
 const HOME_TILE_PREFIX = "home-tile-";
 
-// ---------------------------------------------------------------- parsing ---
-//
-// Every parser below returns `undefined` when it cannot find its table, and
-// every caller turns that into a FAILURE rather than an empty result. That
-// asymmetry is the whole no-op guard: a reformatted source must red the gate,
-// not quietly satisfy it.
-
-/** Registered app ids, in registry order. `id: "notes"` inside `BUILTIN_APPS`. */
 export function parseRegistryIds(source) {
   const ids = [...source.matchAll(/^\s*id: "(?<id>[a-z0-9-]+)",$/gmu)].map(
     (match) => match.groups.id
@@ -99,7 +22,6 @@ export function parseRegistryIds(source) {
   return ids.length > 0 ? ids : undefined;
 }
 
-/** `{ [appId]: routeKind }` from `catalog.ts`'s `NATIVE_ROUTES` table. */
 export function parseCatalogRoutes(source) {
   const table = braceBlock(source, "const NATIVE_ROUTES");
   if (table === undefined) return undefined;
@@ -111,12 +33,6 @@ export function parseCatalogRoutes(source) {
   return Object.keys(routes).length > 0 ? routes : undefined;
 }
 
-/**
- * `{ [routeKind]: { navigator, screen } }` from Home's `openItem` switch.
- *
- * Each arm is `case "<kind>":` followed by one `navigation.navigate(...)`, so
- * the parse is: split on `case "`, read the navigate call in the arm's own text.
- */
 export function parseHomeNavigation(source) {
   const arms = source.split(/\bcase "/u).slice(1);
   if (arms.length === 0) return undefined;
@@ -138,12 +54,6 @@ export function parseHomeNavigation(source) {
   return Object.keys(table).length > 0 ? table : undefined;
 }
 
-/**
- * `{ [navigator]: { path?, screens? } }` from `LINKING.config.screens`.
- *
- * A navigator is either `Notes: "apps/notes"` (one screen, one path) or a
- * `{ screens: { … } }` block. Both shapes are read, because the app ships both.
- */
 export function parseDeepLinks(source) {
   const screens = braceBlock(source, "screens:");
   if (screens === undefined) return undefined;
@@ -165,7 +75,6 @@ export function parseDeepLinks(source) {
   return Object.keys(table).length > 0 ? table : undefined;
 }
 
-/** Every kebab-case string literal declared in `test-ids.ts` — the vocabulary. */
 export function parseTestIds(source) {
   const ids = new Set(
     [...source.matchAll(/"(?<id>[a-z][a-z0-9-]*)"/gu)].map(
@@ -175,11 +84,6 @@ export function parseTestIds(source) {
   return ids.size > 0 ? ids : undefined;
 }
 
-/**
- * The `{ … }` following the first line containing `opener`, brace-matched.
- * Returned WITHOUT the outer braces. `undefined` when the opener is absent —
- * the signal that the table this linter reads has moved.
- */
 function braceBlock(source, opener) {
   const at = source.indexOf(opener);
   if (at < 0) return undefined;
@@ -196,13 +100,6 @@ function braceBlock(source, opener) {
   return undefined;
 }
 
-// ------------------------------------------------------------------ rules ---
-
-/**
- * Every problem, as a flat list of sentences. Pure: the caller reads the trees
- * and hands the parsed tables in, which is what lets the self-test drive every
- * rule off fixtures rather than off this repo's current (passing) state.
- */
 export function lintConformance({
   manifest,
   registryIds,
@@ -276,13 +173,6 @@ export function lintConformance({
   return errors;
 }
 
-// -------------------------------------------------------------- self-test ---
-
-/**
- * Drive every rule off fixtures before touching the tree. Without this the
- * linter's own passing is unfalsifiable: a parser that silently returns an
- * empty table makes the rules vacuous, and the repo would report green.
- */
 function selfTest() {
   const good = {
     manifest: {
@@ -336,8 +226,6 @@ function selfTest() {
       );
   }
 }
-
-// ------------------------------------------------------------------- main ---
 
 function read(relative) {
   return readFileSync(path.resolve(ROOT, relative), "utf8");

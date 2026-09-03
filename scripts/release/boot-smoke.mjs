@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-/**
- * L2 / E3 — structural boot-the-artifact smoke (issue #468).
- *
- * Full packaged-app CDP attach needs electron-builder output + display.
- * This gate always runs on PRs and asserts the *packaged surface* is present:
- *   - desktop dist/main.js + preload.cjs + renderer/react-boot.js
- *   - preload bridge keys that CentraidApi must expose (parsed from source)
- *   - electron-builder.yml appId is dev.centraid.desktop
- *
- * When CENTRAID_PACKAGED_APP is set to a path, optionally spawn it
- * (future extension). Failure here means the artifact cannot boot.
- */
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -32,8 +20,6 @@ const preload = path.join(desktop, "dist/preload.cjs");
 const renderer = path.join(desktop, "dist/renderer/react-boot.js");
 const builderYml = path.join(desktop, "electron-builder.yml");
 const preloadSrc = path.join(desktop, "src/preload.ts");
-// The bridge KEYS moved to the Electron-free core when preload.ts was split
-// for testability (#656 Layer 1F); preload.ts keeps only the exposure call.
 const preloadCoreSrc = path.join(desktop, "src/main/preload-core.ts");
 
 ok(existsSync(mainJs), "dist/main.js exists (packaged main entry)");
@@ -75,7 +61,6 @@ if (existsSync(desktopPkg)) {
     Boolean(pkg.devDependencies?.["electron-builder"]),
     "electron-builder pinned in desktop package.json"
   );
-  // Runtime dep (packaged app loads it) — not a build-only devDependency.
   ok(
     Boolean(
       pkg.dependencies?.["electron-updater"] ||
@@ -109,15 +94,10 @@ ok(
 
 if (existsSync(preloadSrc)) {
   const src = readFileSync(preloadSrc, "utf8");
-  // Structural: every preload must expose CentraidApi; silent missing bridge
-  // is the failure mode L2 calls out.
   ok(
     /exposeInMainWorld\(['"]CentraidApi['"]/u.test(src),
     "preload exposes CentraidApi"
   );
-  // Look for the keys wherever the bridge is actually defined: the core when
-  // it exists, otherwise preload.ts itself. Checking only preload.ts would
-  // have silently passed once the definitions moved out of it.
   const bridgeSrc = existsSync(preloadCoreSrc)
     ? readFileSync(preloadCoreSrc, "utf8")
     : src;
@@ -131,7 +111,6 @@ if (existsSync(preload)) {
   ok(cjs.includes("CentraidApi"), "built preload still contains CentraidApi");
 }
 
-// Detached gateway pure core must ship (H2–H7)
 const detached = path.join(desktop, "src/main/detached-gateway-core.ts");
 ok(existsSync(detached), "detached-gateway-core.ts present (H2–H7 pure core)");
 

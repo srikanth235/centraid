@@ -1,9 +1,3 @@
-// Fail-path proof for `bun run check:reachability` (issue #750).
-//
-// Drives the analyzer against synthetic workspaces via its injectable root.
-// Uses `mkdtempSync` rather than `@centraid/test-kit`'s `tempDir()` for the
-// same reason as scripts/lint-protocol-routes.test.mjs: this lane runs under
-// `node --test`, where the kit's vitest hooks throw.
 import assert from "node:assert/strict";
 // oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered at creation via t.after below.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -18,7 +12,6 @@ import {
 
 const CONFIG = { modules: ["packages/core/src/share/*.ts"], allowlist: [] };
 
-/** Build a throwaway repo root containing `files` (relative path → contents). */
 function fixture(t, files) {
   const root = mkdtempSync(path.join(tmpdir(), "centraid-share-reach-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -87,9 +80,6 @@ test("an export with no reachers at all fails, even when re-exported by the barr
   assert.match(offenses[0].why, /no reachers at all/u);
 });
 
-// Same-file rule: a value-position use inside the declaring production module
-// is a production reach (knip's `ignoreExportsUsedInFile` convention). The
-// gate still catches capabilities invoked nowhere — in-file or out.
 test("a same-file value use inside the production declaring module is a production reacher", (t) => {
   const root = fixture(t, {
     "packages/core/src/share/cap.ts": `${CAP}capability();\n`,
@@ -115,8 +105,6 @@ test("a same-file value use behind `export { local as exported }` counts under t
   );
 });
 
-// Regression guard: the usage walk must not count a declaration's own name as
-// a use, or every export would look same-file reached.
 test("a declaration with no use beyond its own declaration still fails", (t) => {
   const root = fixture(t, {
     "packages/core/src/share/cap.ts": `${CAP}export const CAP_LIMIT = 4;\nexport class CapBox {}\n`,
@@ -304,12 +292,6 @@ test("an allowlist entry without a reason is a config error", (t) => {
   assert.match(result.configErrors[0], /non-empty reason/u);
 });
 
-// Default exports (#880). Every screen-level sharing component on the phone —
-// ShareSheet, GrantSheet, QuickAddPerson — is `export default`, and the pair
-// that reaches it is `import ShareSheet from "./ShareSheet"`. Before the
-// analyzer bound those two halves together, the import clause carried no named
-// bindings, so the caller was invisible and every such component was reported
-// as dead: the gate would have been unusable over the sharing UI.
 const DEFAULT_CAP = "export default function capability() {\n  return 1;\n}\n";
 
 test("a default import is a production caller of the module's default export", (t) => {

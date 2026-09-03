@@ -1,24 +1,3 @@
-// The Photos viewer on the phone — open, page both directions, expose the
-// capability rows, phrase the location, and get back out.
-//
-// SELECTOR RULE (#890 W2): CHROME is found by handle, CONTENT by its own words.
-// Two PERCENTAGE-COORDINATE GESTURES lived here until W2 and are gone:
-//
-//   - `swipe: { start: "80%,30%", end: "20%,30%" }` paged the viewer by dragging
-//     across the middle of the screen. It is correct until a layout moves, and a
-//     layout edit is then indistinguishable from a paging regression. It is now
-//     a swipe FROM `photos-viewer-pager`, the horizontal pager itself — the
-//     anchor `kit/test-ids.ts` names for exactly this retirement.
-//   - `tapOn: { point: "10%,50%" }` dismissed the anchored menu by hitting a
-//     stable left-stage point outside its card. The backdrop is deliberately
-//     hidden from the modal's accessibility subtree, which is why there was no
-//     selector for it; `shell-menu-backdrop` is that selector now
-//     (`kit/components/AnchoredMenu.tsx` says so at the handle).
-//
-// The menu's own seven rows, the disabled/enabled state of `Previous
-// photograph`, and the info sheet's place phrasing stay asserted as COPY: each
-// is a promise the screen publishes, not a way of finding it.
-
 import { copyFile, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -138,12 +117,9 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Photos.*")}
     "viewer-roundtrip"
   );
 
-  // UI-impact evidence for #816 (check:ui-receipt): the phrase-first info
-  // sheet, published where the desktop journeys publish theirs.
   const uiImpactDir = "artifacts/e2e/ui-impact";
   const screenshot = async () => {
     const frames = await readdir(ctx.state.screenshotsDir);
-    // The frame is `<name>.png`, unprefixed — see `pairing-canary.mjs` (#905).
     const infoFrame = frames.find((frame) => frame === "place-phrase-info.png");
     if (infoFrame === undefined)
       throw new Error("place-phrase-info frame was not captured");

@@ -7,17 +7,6 @@ import {
   validateReportRegistries,
 } from "./validate-report-registries.mjs";
 
-/**
- * #839 Wave 5 — the derivation locks under grids E and G.
- *
- * Each case sabotages ONE way a hand-maintained lane list rots: a law deleted
- * from its suite, a law added without a declaration, a journey removed from a
- * runner, a budget that drifted from the ceiling the runner enforces, a
- * journey file on disk nobody declares. Every one of them must be an error —
- * because the alternative is a report that renders a shorter grid and calls it
- * progress.
- */
-
 const JOIN_SOURCE = [
   'test("law one holds", async () => {});',
   "test(",
@@ -92,13 +81,6 @@ const SOURCES = {
   "flows/b.mjs": "// b\n",
 };
 
-/**
- * The roster half of the fixture (#915). Journeys are no longer declared in a
- * registry block — the roster declares suites and the report derives §5 from
- * them — so the journey rule is COMPLETENESS: every committed flow the roster
- * calls `scheduled` is scheduled by some suite, and every scheduled file
- * exists.
- */
 const SUITES = [
   {
     id: "budgeted",
@@ -246,9 +228,6 @@ describe("validateReportRegistries", () => {
   });
 
   test("a flow the roster declares promoting needs no suite", async () => {
-    // The roster's own `status` is the deliberate exception: an exploratory or
-    // promoting flow is committed on purpose without a lane, and saying so in
-    // the roster is what makes that visible rather than silent.
     const errors = await run(baseMatrix(), {
       suites: [{ ...SUITES[0], flows: ["a.mjs"] }],
       roster: {

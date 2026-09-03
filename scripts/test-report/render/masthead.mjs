@@ -1,15 +1,5 @@
-/**
- * §0 — masthead, verdict lamp, and the sticky rail (#915 Wave 3).
- *
- * The first screen has to answer "can we ship the candidate?" without
- * scrolling: the night and the candidate it ran on, how old the evidence is,
- * how much of the 90-minute budget it spent, the lamp, one sentence of why,
- * the delta against last night, and the single change that would flip it.
- */
-
 import { escapeHtml } from "./util.mjs";
 
-/** `2h 14m`, or `unknown` when nothing dated the evidence. */
 export function ageWords(ms) {
   if (!Number.isFinite(ms)) return "unknown";
   const minutes = Math.round(ms / 60_000);
@@ -18,7 +8,6 @@ export function ageWords(ms) {
     : `${minutes}m`;
 }
 
-/** The masthead's meta line. */
 function meta(model) {
   const bits = [
     `<span><span class="k">night</span> <span class="v">${escapeHtml(model.night)}</span></span>`,
@@ -47,7 +36,6 @@ function meta(model) {
   return bits.join("");
 }
 
-/** The masthead and the verdict lamp. */
 export function renderMasthead(model) {
   const { verdict, why, flip } = model.verdict;
   const counts = model.counts;
@@ -79,7 +67,6 @@ export function renderMasthead(model) {
 </div>`;
 }
 
-/** The sticky rail: section index, the state legend, and the keys. */
 export function renderRail(model) {
   const entries = [
     [

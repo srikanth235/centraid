@@ -75,8 +75,6 @@ test("every job is checked, not just the first", () => {
 });
 
 test("a step key that merely looks like a job key is not treated as one", () => {
-  // `with:` / `env:` blocks sit at 8+ spaces; only 2-space keys under `jobs:`
-  // are jobs. A regression here would demand timeout-minutes on a `with:` map.
   const source = `name: x
 jobs:
   build:
@@ -101,9 +99,6 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 `;
-  // No timeout-minutes and a bare SHA with no version comment — both would be
-  // violations in a repo-owned workflow. Editing a kit file breaks its
-  // integrity digest, so the lint must not demand a change it cannot make.
   assert.deepEqual(lintWorkflowSource("governance.yml", source), []);
 });
 
@@ -118,9 +113,6 @@ test("a hand-rolled bun install is rejected — the setup action owns it", () =>
 });
 
 test("a named-step install is caught too, not just `- run:`", () => {
-  // The 33 copies this replaced were not uniformly shaped: npm-gateway-publish
-  // spelled it `- name: Install JS deps` / `run: bun install …`, which a
-  // `- run:`-anchored pattern would have walked straight past.
   const source = clean.replace(
     "      - run: bun test\n",
     "      - name: Install JS deps\n        run: bun install --frozen-lockfile\n"
@@ -174,9 +166,6 @@ ${clean.slice(clean.indexOf("jobs:"))}`;
 });
 
 test("a `pull_request` mention that is not a trigger is not flagged", () => {
-  // `github.event.pull_request.number` in a concurrency group, and the word in
-  // a comment, are both fine — only a two-space `pull_request:` key is a
-  // trigger.
   const source = `name: security
 # not a pull_request gate
 concurrency:
@@ -189,9 +178,6 @@ ${clean.slice(clean.indexOf("jobs:"))}`;
 });
 
 test("a job that calls a reusable workflow is exempt from timeout-minutes", () => {
-  // GitHub REJECTS timeout-minutes on a `uses:` job — the bound belongs to the
-  // called workflow's jobs, which this linter checks when it walks that file.
-  // Demanding it here would make the workflow unparseable.
   const source = `name: ci
 jobs:
   client-e2e:
@@ -233,8 +219,6 @@ ${clean.slice(clean.indexOf("jobs:"))}`;
 });
 
 test("a `tags:` key inside a job is not mistaken for a trigger", () => {
-  // docker/metadata-action takes a `tags:` input. Only a header-level, 4-space
-  // `tags:` under `push:` is a trigger.
   const source = `name: lane-release-gateway-image
 on:
   workflow_call:
@@ -260,8 +244,6 @@ jobs:
 const RUST_SHA = "2c7215f132e9ebf062739d9130488b56d53c060c";
 
 test("a SHA-pinned rust-toolchain without `toolchain:` is rejected", () => {
-  // The exact shape that failed `security.yml` on main: rule (1) says pin by
-  // SHA, and pinning removes the ref the action read its toolchain from.
   const source = clean.replace(
     "      - run: bun test\n",
     `      - uses: dtolnay/rust-toolchain@${RUST_SHA} # stable\n      - run: cargo build\n`
@@ -280,9 +262,6 @@ test("a SHA-pinned rust-toolchain with `toolchain:` as a child key is clean", ()
 });
 
 test("`toolchain:` is found in the `- name:` step form too, where `with:` is a sibling of `uses:`", () => {
-  // `- name:` / `uses:` / `with:` puts `with:` at the SAME indent as `uses:`,
-  // not deeper — the shape `lane-release-gateway-npm.yml` uses. A scan that
-  // stops at equal indent reports a false positive here.
   const source = clean.replace(
     "      - run: bun test\n",
     `      - name: Install Rust toolchain\n        uses: dtolnay/rust-toolchain@${RUST_SHA} # stable\n        with:\n          toolchain: stable\n      - run: cargo build\n`

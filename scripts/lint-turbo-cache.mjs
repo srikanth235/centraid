@@ -1,35 +1,10 @@
 #!/usr/bin/env node
-/**
- * Turbo cache-correctness linter (#892 Phase 0).
- *
- * ONE RULE: no task may declare an output that is a git-TRACKED path.
- *
- * Why it is worth a gate. Turbo hashes a package's tracked files to build a
- * task's cache key, and it writes a task's declared `outputs` into the cache
- * artifact. When a path is both, the task's key depends on the task's own
- * product: a cache hit overwrites the committed file with the cached copy, a
- * rebuild that is not byte-exact moves the key, and the entry carries the file's
- * bytes on every save and restore whether or not the build produced them. Turbo
- * documents the overlap as undefined behaviour, and — this is the part that
- * makes it a linter rather than a comment — it never errors. It just stops
- * caching, which is indistinguishable from "the build is slow".
- *
- * This is exactly what `src/generated/centraid_web_iroh_bg.wasm` was: a
- * committed 1.9 MB artifact listed as an output of the generic `build` task, so
- * every package's build cache entry was shaped by it and `@centraid/web`'s
- * carried it.
- *
- * Offline, no turbo invocation, ~30 ms: it reads `turbo.json` and asks git which
- * of the resolved paths are tracked. It belongs next to the other repo linters
- * on the per-PR loop.
- */
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 
-/** Strip `//` line comments so JSON.parse accepts turbo's JSONC. */
 export function stripJsonComments(source) {
   let out = "";
   let inString = false;
@@ -65,15 +40,6 @@ export function stripJsonComments(source) {
   return out;
 }
 
-/**
- * Compile one turbo output glob to a RegExp.
- *
- * Hand-rolled rather than pulled from a matcher package on purpose: turbo's
- * output syntax here is `dist/**`, `native/*.node` and literal paths, and adding
- * a dependency to a repo linter that `knip` audits for undeclared deps costs
- * more than the twelve lines it saves. `**` crosses separators, `*` and `?` do
- * not; a leading `!` is turbo's negation and is handled by the caller.
- */
 export function globToRegExp(glob) {
   let source = "";
   let i = 0;
@@ -81,8 +47,6 @@ export function globToRegExp(glob) {
     const ch = glob[i];
     if (ch === "*" && glob[i + 1] === "*") {
       if (i + 2 >= glob.length) {
-        // Trailing `dir/**` covers the directory itself and everything beneath
-        // it, which is how turbo treats an output tree.
         if (source.endsWith("/")) source = `${source.slice(0, -1)}(?:/.*)?`;
         else source += ".*";
         i += 2;
@@ -113,14 +77,6 @@ export function globToRegExp(glob) {
   return new RegExp(`^${source}$`, "u");
 }
 
-/**
- * Tracked paths a declared output would cover, resolved against each workspace.
- *
- * @param {string} glob a turbo `outputs` entry, package-relative
- * @param {string[]} packageDirs repo-relative workspace directories
- * @param {string[]} tracked repo-relative tracked paths
- * @returns {string[]} the offenders
- */
 export function trackedMatches(glob, packageDirs, tracked) {
   if (glob.startsWith("!")) return [];
   const patterns = packageDirs.map((dir) => globToRegExp(`${dir}/${glob}`));
@@ -144,7 +100,6 @@ export function lintTurboOutputs(turboConfig, packageDirs, tracked) {
   return errors;
 }
 
-/** Repo-relative tracked paths. */
 function trackedPaths() {
   const out = execFileSync("git", ["ls-files", "-z"], {
     cwd: root,
@@ -154,13 +109,6 @@ function trackedPaths() {
   return out.split("\0").filter(Boolean);
 }
 
-/**
- * Workspace directories, from the root package.json `workspaces` globs.
- *
- * Bun accepts both the array form and the `{ packages: [...] }` object form
- * (this repo uses the latter, because it also carries a `catalog:`), so accept
- * either rather than silently resolving no workspaces and passing vacuously.
- */
 export function workspaceDirs(workspaces, listDir) {
   const patterns = Array.isArray(workspaces)
     ? workspaces
@@ -185,8 +133,6 @@ export function workspaceDirs(workspaces, listDir) {
 function main() {
   const source = readFileSync(path.join(root, "turbo.json"), "utf8");
   const config = JSON.parse(stripJsonComments(source));
-  // A workspace whose own turbo.json extends the root one can re-introduce the
-  // overlap locally, so walk those too rather than trusting the root file alone.
   const configs = [["turbo.json", config]];
   for (const workspace of ["packages", "apps"]) {
     let entries = [];
@@ -205,7 +151,7 @@ function main() {
           ),
         ]);
       } catch {
-        // No per-package turbo.json is the normal case.
+        // Intentionally empty.
       }
     }
   }

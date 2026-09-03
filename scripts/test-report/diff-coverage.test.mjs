@@ -66,7 +66,6 @@ describe("isInstrumentableSource", () => {
     );
     expect(isInstrumentableSource("README.md")).toBe(false);
     expect(isInstrumentableSource("scripts/x.mjs")).toBe(false);
-    // Package-root tooling configs are outside the executable include roots.
     expect(isInstrumentableSource("packages/vault/stryker.config.mjs")).toBe(
       false
     );
@@ -98,7 +97,6 @@ describe("lineHits + scoreDiffCoverage", () => {
 
     const changed = parseUnifiedDiffAddedLines(sampleDiff);
     const score = scoreDiffCoverage(changed, coverageMap);
-    // Only packages/vault/src/foo.ts counts (test file + README filtered).
     expect(score.total).toBe(3);
     expect(score.covered).toBe(2);
     expect(score.uncovered).toEqual([
@@ -121,7 +119,6 @@ describe("lineHits + scoreDiffCoverage", () => {
       ["packages/vault/src/foo.ts", new Set([11, 99, 100])],
     ]);
     const score = scoreDiffCoverage(changed, coverageMap);
-    // Lines 99–100 are comments / outside the statement map → not in total.
     expect(score.total).toBe(1);
     expect(score.covered).toBe(1);
     expect(score.uncovered).toEqual([]);

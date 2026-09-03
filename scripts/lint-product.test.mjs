@@ -1,15 +1,10 @@
 #!/usr/bin/env node
-// The bundle's runner (#915 Wave 4). `scripts/ci/gate-classes.test.mjs` owns
-// the membership contract; this file owns the behaviour that makes bundling
-// safe to do at all: every gate runs even after one fails, and a failing
-// gate's own output is reproduced verbatim under its own name.
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import { HYGIENE_GATES, issueBody, summarize } from "./hygiene-lane.mjs";
 import { runGates } from "./lint-product.mjs";
 
-/** A fake gate runner: names ending in `-red` fail, everything else passes. */
 const fakeRun = (name) =>
   Promise.resolve({
     name,

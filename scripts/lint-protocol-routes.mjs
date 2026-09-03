@@ -1,19 +1,10 @@
 #!/usr/bin/env node
-/**
- * Route-literal drift check (issue #504 batch 2).
- *
- * Fails when apps/extension (or packages/cli) hard-codes a path that is
- * already defined in @centraid/core/protocol ROUTES, instead of importing it.
- * Gateway/app-engine still contain many historical literals — those migrate
- * gradually; the extension + product CLI are the drift-prone consumers.
- */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 
-// Keep in sync with packages/core/src/protocol/routes.ts ROUTES values.
 const ROUTE_PATHS = [
   "/centraid/_gateway/info",
   "/centraid/_gateway/health",
@@ -51,10 +42,6 @@ function walk(dir, out = []) {
   return out;
 }
 
-/**
- * Scan `scopes` under `scanRoot` for hard-coded route literals. Pure over the
- * filesystem tree it is given — exported so the fail path is testable.
- */
 export function findRouteLiterals(scanRoot = root, scopes = SCOPES) {
   const violations = [];
   for (const scope of scopes) {
@@ -67,10 +54,7 @@ export function findRouteLiterals(scanRoot = root, scopes = SCOPES) {
     }
     for (const file of files) {
       const text = readFileSync(file, "utf8");
-      // Files that import ROUTES from protocol are allowed to only use ROUTES.*
-      // — any remaining string literal matching a known path is a violation.
       for (const route of ROUTE_PATHS) {
-        // Match quoted string literals exactly equal to the route (or route + query).
         const re = new RegExp(
           `['"\`]${route.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?:\\?[^'"\`]*)?['"\`]`,
           "u"

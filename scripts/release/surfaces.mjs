@@ -1,24 +1,3 @@
-/**
- * Release surface catalog (issue #512).
- * One product version stamps the monorepo; ship selection is per surface.
- */
-
-/** @typedef {'tag' | 'store' | 'continuous' | 'sideline'} SurfaceCadence */
-
-/**
- * @typedef {{
- *   id: string;
- *   title: string;
- *   cadence: SurfaceCadence;
- *   defaultOnProductTag: boolean;
- *   workflow?: string;
- *   tagPattern?: string;
- *   secretGroups: string[];
- *   notes: string;
- * }} ReleaseSurface
- */
-
-/** @type {ReleaseSurface[]} */
 export const RELEASE_SURFACES = [
   {
     id: "desktop",
@@ -103,20 +82,12 @@ export const RELEASE_SURFACES = [
   },
 ];
 
-/**
- * @returns {string[]} Surface ids that ship by default on a product tag.
- */
 export function defaultShipSurfaceIds() {
   return RELEASE_SURFACES.filter((s) => s.defaultOnProductTag).map((s) => s.id);
 }
 
-/**
- * @param {string[]} ids Surface ids to resolve from the catalog.
- * @returns {{ ok: true; surfaces: ReleaseSurface[] } | { ok: false; error: string }} Resolved surfaces or error.
- */
 export function resolveShipSurfaces(ids) {
   const byId = new Map(RELEASE_SURFACES.map((s) => [s.id, s]));
-  /** @type {ReleaseSurface[]} */
   const surfaces = [];
   for (const id of ids) {
     const s = byId.get(id);
@@ -131,18 +102,6 @@ export function resolveShipSurfaces(ids) {
   return { ok: true, surfaces };
 }
 
-/**
- * Human + machine matrix for prepare/status.
- * @param {{ shipIds?: string[] }} [opts] Optional ship-set override (defaults to tag defaults).
- * @returns {{
- *   productVersionRule: string;
- *   protocolRule: string;
- *   buildNumberRule: string;
- *   defaultShip: string[];
- *   shipThisCycle: string[];
- *   surfaces: Array<ReleaseSurface & { inDefaultShip: boolean; inThisShip: boolean }>;
- * }} Matrix object for CLI/prepare JSON.
- */
 export function buildSurfaceMatrix(opts = {}) {
   const shipIds = opts.shipIds ?? defaultShipSurfaceIds();
   const shipSet = new Set(shipIds);

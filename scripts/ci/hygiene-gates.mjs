@@ -1,33 +1,13 @@
-/**
- * Structural contract for the three high-signal hygiene gates (#671).
- *
- * Asserts the shipped workflow YAML and config files still wire:
- *   1. gitleaks (secrets) on the ci.yml PR path + check rollup
- *   2. osv-scanner (lockfile SCA) on the ci.yml PR path + check rollup
- *   3. trivy (image) on the gateway image release lane after build
- *
- * Offline, no network — companions lint-workflow-pins rather than replacing it.
- */
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-/**
- * Read a UTF-8 file relative to the monorepo root.
- * @param {string} rel Path from repo root.
- * @returns {string} File contents.
- */
 export function readRepoFile(rel) {
   return readFileSync(path.join(root, rel), "utf8");
 }
 
-/**
- * Validate that the three hygiene gates remain wired in shipped configs.
- * @returns {{ ok: boolean, errors: string[] }} Whether the contract holds and any violations.
- */
 export function checkHygieneGates() {
   const errors = [];
 
@@ -76,9 +56,6 @@ export function checkHygieneGates() {
   if (!/\.gitleaks\.toml/u.test(ci)) {
     errors.push("ci.yml gitleaks job must pass --config .gitleaks.toml");
   }
-  // Anchor on the top-level `check` job definition, not the first "check:"
-  // substring — gate names like `check:reachability` in earlier jobs would
-  // otherwise capture the wrong slice.
   const checkJob = ci.slice(ci.indexOf("\n  check:"));
   if (!/\bgitleaks\b/u.test(checkJob)) {
     errors.push("ci.yml `check` needs: list must include gitleaks");

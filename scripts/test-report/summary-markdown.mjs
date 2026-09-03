@@ -1,21 +1,7 @@
-/**
- * Markdown views of the test-health summary for Actions Job Summary (and
- * optional sidecars). Rendering helpers stay pure; writeSummarySidecars is
- * the only I/O entry.
- */
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export const REPORT_COMMENT_MARKER = "<!-- centraid-test-health-report -->";
-/**
- * The Job Summary block, rendered from the #915 `summary.json` shape:
- * `{schema, verdict, why, flip, blockers[], deltas{}, parks[], candidate,
- * generatedAt}`. A night recorded before #915 carries none of these fields and
- * renders as UNKNOWN with zero counts rather than as a false all-clear.
- *
- * @param {object} summary - payload from generate.mjs `summary.json`
- * @param {{ reportUrl?: string, runUrl?: string, title?: string }} [meta] - links and heading for the rendered block
- */
 export function renderSummaryMarkdown(summary, meta = {}) {
   const s = summary && typeof summary === "object" ? summary : {};
   const title = meta.title ?? "Night Watch";
@@ -70,20 +56,11 @@ export function renderSummaryMarkdown(summary, meta = {}) {
   return lines.join("\n");
 }
 
-/**
- * Build public Pages URL for a report slot.
- * @param {{ owner: string, repo: string, slot: string }} opts
- * slot e.g. `main`, `nightly` (PR slots are not published)
- */
 export function publicReportUrl({ owner, repo, slot }) {
   const clean = String(slot).replace(/^\/+|\/+$/gu, "");
   return `https://${owner}.github.io/${repo}/test-report/${clean}/`;
 }
 
-/**
- * From generate.mjs coverage rows, list scopes under their line floor.
- * @param {Array<{ scope: string, lines: number|null, lineFloor?: number|null }>} coverageRows - coverage rows to check
- */
 export function coverageScopesBelowFloor(coverageRows) {
   const below = [];
   for (const row of coverageRows ?? []) {
@@ -95,7 +72,6 @@ export function coverageScopesBelowFloor(coverageRows) {
   return below;
 }
 
-/** Write summary.json + summary.md next to the HTML report. */
 export async function writeSummarySidecars(
   reportDir,
   summaryPayload,

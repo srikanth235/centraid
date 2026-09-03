@@ -10,7 +10,6 @@ import {
   updateTrackingIssue,
 } from "./file-tracking-issue.mjs";
 
-/** Record every `gh` invocation and reply from a scripted queue. */
 function fakeGh(replies) {
   const calls = [];
   const queue = [...replies];
@@ -143,8 +142,6 @@ test("reports failure when even the unlabelled create fails", () => {
 });
 
 test("a failed search opens a new issue rather than going silent", () => {
-  // `gh issue list` can fail transiently. Losing the alert is worse than a
-  // possible duplicate, so a failed lookup must not short-circuit the file.
   const gh = fakeGh([fail, ok]);
   const result = fileTrackingIssue({
     run: gh.run,

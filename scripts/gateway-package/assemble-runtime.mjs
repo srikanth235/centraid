@@ -1,14 +1,4 @@
 #!/usr/bin/env node
-/**
- * Assemble a production-lean gateway runtime tree for the Docker image.
- *
- * External observer tooling (issue #504): copies only the gateway install
- * set (package.json + dist + skills) plus the post-production node_modules
- * tree. Does not mutate product main.
- *
- * Usage:
- *   node scripts/gateway-package/assemble-runtime.mjs --root=<monorepo> --out=<dir>
- */
 
 import {
   cpSync,
@@ -27,7 +17,6 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-/** Must stay aligned with scripts/gateway-package/trace.mjs. */
 export const GATEWAY_WORKSPACE_PACKAGES = [
   "packages/server",
   "packages/backup",
@@ -38,7 +27,6 @@ export const GATEWAY_WORKSPACE_PACKAGES = [
   "packages/vault",
 ];
 
-/** Package directory names under packages/ that belong in the runtime. */
 const KEEP_CENTRAID_NAMES = new Set(
   GATEWAY_WORKSPACE_PACKAGES.map((p) => p.replace(/^packages\//u, ""))
 );
@@ -75,7 +63,7 @@ function walkRm(dir, pred) {
         if (readdirSync(full).length === 0)
           rmSync(full, { recursive: true, force: true });
       } catch {
-        // race / non-empty
+        // Intentionally empty.
       }
     } else if (pred(full, name, st)) {
       rmSync(full, { recursive: true, force: true });
@@ -83,21 +71,6 @@ function walkRm(dir, pred) {
   }
 }
 
-/**
- * Node's cpSync({dereference:false}) rewrites relative symlinks as absolute
- * paths into the *source* tree. Bun's node_modules is almost entirely
- * symlinks into node_modules/.bun/… — after copy those become absolute
- * /src/node_modules/.bun/… links. Deleting them empties the runtime tree.
- *
- * Strategy:
- * 1. Remap any absolute target under `root` → same relative path under `out`.
- * 2. Rewrite every remaining link as relative so the tree is relocatable.
- * 3. Force @centraid/* → ../../packages/<name> (lean package copies).
- * 4. Drop links that still resolve outside `out` (apps/desktop etc.).
- *
- * @param {string} out runtime root
- * @param {string} root monorepo root that was copied from
- */
 export function rewriteRuntimeSymlinks(out, root) {
   const outAbs = realpathSync(path.resolve(out));
   const rootAbs = realpathSync(path.resolve(root));
@@ -105,14 +78,12 @@ export function rewriteRuntimeSymlinks(out, root) {
   const scope = path.join(nmDest, "@centraid");
   mkdirSync(scope, { recursive: true });
 
-  /** Map a path under the source monorepo into the runtime tree. */
   const mapIntoOut = (resolved) => {
     const norm = path.normalize(resolved);
     const relFromRoot = path.relative(rootAbs, norm);
     if (!relFromRoot.startsWith("..") && !path.isAbsolute(relFromRoot)) {
       return path.join(outAbs, relFromRoot);
     }
-    // Already under out (or equivalent via /var vs /private/var)?
     const relFromOut = path.relative(outAbs, norm);
     if (!relFromOut.startsWith("..") && !path.isAbsolute(relFromOut)) {
       return path.join(outAbs, relFromOut);
@@ -128,7 +99,7 @@ export function rewriteRuntimeSymlinks(out, root) {
         return path.join(outAbs, rOut);
       }
     } catch {
-      // dangling
+      // Intentionally empty.
     }
     return null;
   };
@@ -153,7 +124,6 @@ export function rewriteRuntimeSymlinks(out, root) {
       : path.resolve(path.dirname(full), target);
     const mapped = mapIntoOut(resolved);
     if (mapped === null) {
-      // Host monorepo apps/*, random absolute paths — not in the image.
       rmSync(full, { recursive: true, force: true });
       return;
     }
@@ -167,7 +137,6 @@ export function rewriteRuntimeSymlinks(out, root) {
     try {
       symlinkSync(rel, full);
     } catch (error) {
-      // Another walk step may race; replace aggressively.
       if (
         error &&
         typeof error === "object" &&
@@ -182,7 +151,6 @@ export function rewriteRuntimeSymlinks(out, root) {
     }
   };
 
-  // Walk all of node_modules (including .bun) so bun's store links survive.
   const walk = (dir) => {
     let names;
     try {
@@ -207,7 +175,6 @@ export function rewriteRuntimeSymlinks(out, root) {
   };
   if (existsSync(nmDest)) walk(nmDest);
 
-  // Drop non-closure workspace names, then force lean package links.
   if (existsSync(scope)) {
     for (const name of readdirSync(scope)) {
       if (!KEEP_CENTRAID_NAMES.has(name)) {
@@ -225,7 +192,6 @@ export function rewriteRuntimeSymlinks(out, root) {
     symlinkSync(path.relative(scope, pkgDir), linkPath);
   }
 
-  // Sanity: every kept @centraid name must resolve under out/packages.
   for (const name of KEEP_CENTRAID_NAMES) {
     const linkPath = path.join(scope, name);
     const target = readlinkSync(linkPath);
@@ -249,17 +215,11 @@ export function rewriteRuntimeSymlinks(out, root) {
   }
 }
 
-/**
- * @param {{ root: string; out: string; packagesOnly?: boolean }} opts
- *   packagesOnly: skip node_modules copy (Dockerfile re-installs production deps;
- *   bun's .bun store cannot be relocated by symlink rewrite alone).
- */
 export function assembleRuntime({ root, out, packagesOnly = false }) {
   if (!root || !out) throw new Error("--root and --out are required");
   if (existsSync(out)) rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
 
-  // Minimal root package.json — workspaces only the gateway closure.
   const rootPkg = JSON.parse(
     readFileSync(path.join(root, "package.json"), "utf8")
   );
@@ -271,8 +231,6 @@ export function assembleRuntime({ root, out, packagesOnly = false }) {
         version: rootPkg.version ?? "0.0.0",
         private: true,
         type: "module",
-        // Root depends on gateway so bun hoists production deps (esbuild, ajv, …)
-        // into node_modules for Node's resolver — workspaces alone leave only .bun.
         dependencies: {
           "@centraid/server": "workspace:*",
         },
@@ -296,8 +254,6 @@ export function assembleRuntime({ root, out, packagesOnly = false }) {
     mkdirSync(dest, { recursive: true });
     const pkgJsonPath = path.join(src, "package.json");
     const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
-    // Drop devDependencies so a packages-only + production install does not
-    // require @centraid/test-kit / @centraid/web workspace packages.
     const runtimePkg = { ...pkgJson };
     delete runtimePkg.devDependencies;
     delete runtimePkg.scripts;
@@ -308,8 +264,6 @@ export function assembleRuntime({ root, out, packagesOnly = false }) {
     if (!copyIfExists(path.join(src, "dist"), path.join(dest, "dist"))) {
       throw new Error(`${pkg}/dist missing — build gateway closure first`);
     }
-    // Ship package.json "files" assets (blueprints manifest/apps, gateway skills,
-    // tunnel native/*.node, …). Skip README and other markdown docs.
     const filesField = Array.isArray(pkgJson.files) ? pkgJson.files : undefined;
     if (filesField) {
       for (const entry of filesField) {
@@ -317,7 +271,6 @@ export function assembleRuntime({ root, out, packagesOnly = false }) {
         if (entry === "dist" || entry === "README.md" || entry.endsWith(".md"))
           continue;
         if (entry.includes("*")) {
-          // e.g. tunnel "native/*.node" — copy matching files only.
           const slash = entry.lastIndexOf("/");
           const dirRel = slash === -1 ? "." : entry.slice(0, slash);
           const pattern = slash === -1 ? entry : entry.slice(slash + 1);
@@ -340,12 +293,10 @@ export function assembleRuntime({ root, out, packagesOnly = false }) {
         copyIfExists(path.join(src, entry), path.join(dest, entry));
       }
     } else {
-      // Fallback when package.json has no "files" field.
       copyIfExists(path.join(src, "skills"), path.join(dest, "skills"));
     }
   }
 
-  // Remove stray test artifacts under packages.
   walkRm(path.join(out, "packages"), (full, name) => {
     if (name.endsWith(".test.js") || name.endsWith(".test.d.ts")) return true;
     if (name === "src" && statSync(full).isDirectory()) return true;
@@ -353,9 +304,6 @@ export function assembleRuntime({ root, out, packagesOnly = false }) {
   });
 
   if (!packagesOnly) {
-    // Host/local path: copy + rewrite (tests use this). Docker prefers
-    // packagesOnly + fresh bun install — bun's .bun content-addressed store
-    // does not relocate cleanly via symlink rewrite.
     const nmSrc = path.join(root, "node_modules");
     const nmDest = path.join(out, "node_modules");
     if (!existsSync(nmSrc)) {

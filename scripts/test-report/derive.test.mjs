@@ -11,14 +11,6 @@ import {
   readSuiteRunners,
 } from "./derive.mjs";
 
-/**
- * #915 split the report's inputs in two: what a machine cannot derive lives in
- * `tests/claims.json`, and everything else is read off the repo at report time.
- * These cases hold that line — a derivation that silently returns nothing is
- * indistinguishable from a repo with nothing in it, and the constitution's
- * `coverage-scope-reachability` directive reads one of them.
- */
-
 describe("the claims file", () => {
   test("the committed file validates", () => {
     const { claims, errors } = loadClaims();

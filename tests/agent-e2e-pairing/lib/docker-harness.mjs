@@ -1,91 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single Docker-orchestration harness for the pairing e2e rig; the network/boot/exec/teardown surface is one cohesive unit
-// Docker-backed harness for the cross-network-relay flow — see
-// flows/cross-network-relay.mjs / .md for the ceremony itself. This module
-// only knows how to stand up two non-interconnected Docker networks, boot
-// the real daemon in one of them, and run the device role in the other; the
-// mint/redeem/assert logic stays in the flow file, same split as
-// lib/harness.mjs vs flows/*.mjs.
-//
-// Three things this file had to prove empirically before any of the above
-// was worth writing (see the flow's .md for the full writeup):
-//
-//   1. The container needs the LINUX build of @number0/iroh's native
-//      addon. The host's `bun install` only fetches the optional platform
-//      package matching the HOST (e.g. darwin-arm64 on a Mac) — the
-//      container (linux, whatever arch `docker run` defaults to, which
-//      matches the Docker daemon's host, not necessarily the CI runner
-//      unless they're the same machine) needs its own
-//      `@number0/iroh-linux-<arch>-gnu`. ensureNativeAddon() detects and
-//      fetches it additively (a new node_modules/@number0/* sibling,
-//      nothing removed) if missing.
-//   2. The gateway daemon shells out to a real `git` binary
-//      (worktree-store/git.ts) on boot; node:22-bookworm-slim doesn't ship
-//      one. apt-get installed once per gateway container start.
-//   3. Isolation has to be enforced on THREE fronts, not one, and proven on
-//      all of them. The docker-internal path first: on at least one real
-//      Docker installation (OrbStack — see the flow .md) user-defined
-//      bridge networks do NOT isolate each other by default, so this
-//      harness does not trust the driver and adds explicit DOCKER-USER DROP
-//      rules for the two subnets. But that alone is NOT enough, as this
-//      flow's first run on a GitHub-hosted runner showed: both containers
-//      NAT out through the host's single public NIC, iroh's relay-observed
-//      address for the gateway is therefore the HOST's public IP, and a
-//      dial to it matches no subnet rule. So the harness also drops traffic
-//      from both test subnets to every host address (DOCKER-USER *and*
-//      INPUT — see the comment at the insert site for why both).
-//
-//      And THAT still wasn't enough, which is the finding that produced the
-//      third front. On an Azure-hosted GitHub runner (CI run 29733737906)
-//      the flow reported ISOLATED and then selected a DIRECT path to
-//      20.116.79.56:64512. That address is the runner's PUBLIC, NAT-mapped
-//      address — the one the n0 relay observes and hands out as the peer's
-//      direct candidate. It exists on NO local interface (Azure NATs it
-//      upstream), so hostAddresses() — which enumerates `ip -4 -o addr
-//      show` — structurally cannot see it and no address-based DROP rule
-//      could ever have covered it. Discovering it would need an external
-//      lookup service and would vary per runner; a moving target is not a
-//      foundation for a hard gate. So the third front blocks by TRANSPORT
-//      instead, which is host-independent: every direct path iroh can build
-//      is QUIC over UDP, whereas the n0 relay's data path is a WebSocket
-//      over TLS over TCP 443 (iroh-relay 1.0.2's client.rs rewrites the
-//      relay URL's scheme to `wss` and dials with TcpStream::connect — there
-//      is no QUIC in the relay transport at all). Both test subnets
-//      therefore DROP all UDP except dport 53 (DNS), which leaves the relay
-//      entirely untouched and every direct candidate — enumerable or not —
-//      with nowhere to land. That asymmetry is the whole trick, and it's why
-//      this degrades correctly: these rules cannot break the connection,
-//      only its directness.
-//
-//      Deliberately NOT allowed: iroh's QUIC address discovery on UDP 7842
-//      (DEFAULT_RELAY_QUIC_PORT, iroh-relay/src/defaults.rs). QAD is how a
-//      peer learns its own public NAT-mapped address — the very mechanism
-//      that produced 20.116.79.56 above — so blocking it attacks the failure
-//      at its source rather than only blocking the dial that follows.
-//
-//      All three fronts are proven before the ceremony runs, by probes that
-//      dial each path rather than re-testing the rule just installed: raw
-//      TCP for the two address-based fronts, and a self-validating UDP echo
-//      probe (control datagram first, so silence is evidence of blocking
-//      rather than of a probe server that never came up) for the port-class
-//      front. The one ACCEPT that probe needs — the echo server's replies
-//      come FROM a test subnet, so our own DROP rules would eat them — is
-//      scoped to the probe and deleted before the ceremony starts, with its
-//      absence read back out of `iptables -S`. The ceremony must not run with
-//      a probe-shaped hole in the very block it exists to prove closed.
-//
-//      That ACCEPT has to outrank the HOST-ADDRESS drops, not just the
-//      port-class one, and getting this wrong is the third correction this
-//      design has needed. CI run 29743139605 failed the control because the
-//      exception was inserted inside the port-class block and therefore landed
-//      BELOW the host-address DROPs: the control dials a host address, so the
-//      echo server's reply carries src=<test subnet>, dst=<that host address>,
-//      which is exactly what those DROPs match. The blocked packet was the
-//      REPLY, not the request — "the control comes from the host, which no
-//      rule matches" is true only of the outbound direction. The exception is
-//      therefore inserted LAST of all (block (d)), so it evaluates FIRST. It
-//      does not weaken the test: it matches --sport 9999, while every probe
-//      REQUEST leaves from an ephemeral port, so the requests still fall
-//      through to the DROPs they exist to exercise.
 
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
@@ -105,35 +18,7 @@ const NODE_IMAGE = "node:22-bookworm-slim";
 const GATEWAY_CLI_REL = "packages/server/dist/cli/cli.js";
 const DEVICE_SCRIPT_REL = "tests/agent-e2e-pairing/lib/device-redeem.mjs";
 const GW_DATA_DIR = "/tmp/gw-data";
-// The ONLY UDP destination port anything here legitimately needs: 53, or the
-// containers can't resolve the relay hostnames at all.
-//
-// Notably NOT 443, and the reason matters enough to write down, because the
-// intuitive guess ("QUIC, so UDP 443") is wrong and an earlier revision of
-// this file encoded that guess as a firewall rule. In iroh 1.0.2 /
-// iroh-relay 1.0.2 (the versions all three of this repo's lockfiles pin) the
-// relay-carried DATA path is a WebSocket over TLS over TCP 443:
-// iroh-relay/src/client.rs rewrites the relay URL's `https` scheme to `wss`
-// and dials with TcpStream::connect, and the production relay URLs
-// (https://use1-1.relay.n0.iroh.link etc.) carry no explicit port. There is
-// no QUIC in the relay data transport at all. So these rules — which touch
-// only UDP — cannot break the relay, and that is precisely why the flow
-// degrades correctly: block every UDP escape and the relay still carries the
-// connection over TCP.
-//
-// The only UDP the relay speaks is QUIC address discovery (QAD), on
-// DEFAULT_RELAY_QUIC_PORT = 7842 (iroh-relay/src/defaults.rs), driven by the
-// QadIpv4/QadIpv6 probes in net_report/reportgen.rs. That is deliberately NOT
-// allowed: QAD is the mechanism by which a peer learns its own public
-// NAT-mapped address, i.e. the exact mechanism that produced the
-// 20.116.79.56 direct candidate which defeated the previous fix. Blocking it
-// attacks the failure at its source rather than only blocking the dial it
-// leads to. (STUN/3478 does not appear here either — it's gone in iroh 1.0.x;
-// the surviving `re_stun` identifiers are vestigial names that now drive QAD.)
 const ALLOWED_UDP_DPORTS = [53];
-// In-container port the isolation probe's UDP echo server listens on. Named
-// here because the port-class rules need to know it: see the ACCEPT carved for
-// its replies at the insert site.
 const PROBE_UDP_PORT = 9999;
 
 function run(cmd, args, opts = {}) {
@@ -162,7 +47,6 @@ async function sh(cmd, args, opts = {}) {
 }
 
 async function shQuiet(cmd, args, opts = {}) {
-  // Best-effort teardown step: never throw, just report.
   try {
     await sh(cmd, args, opts);
   } catch (error) {
@@ -172,7 +56,6 @@ async function shQuiet(cmd, args, opts = {}) {
   }
 }
 
-/** Firewall rules and teardown steps must settle in the exact supplied order. */
 function applyInOrder(values, apply) {
   let index = 0;
   return Array.from(values).reduce(
@@ -181,13 +64,6 @@ function applyInOrder(values, apply) {
   );
 }
 
-/**
- * Confirm the container image can load @centraid/tunnel's native iroh
- * addon; fetch the missing linux platform package if the host's own `bun
- * install` (which only resolves optionalDependencies for the HOST platform)
- * didn't already provide it. Purely additive — writes a new sibling under
- * node_modules/@number0/, never touches the host's own platform package.
- */
 async function ensureNativeAddon() {
   const archMap = { arm64: "arm64", x64: "x64" };
   const arch = archMap[process.arch];
@@ -241,9 +117,6 @@ async function ensureNativeAddon() {
     ]);
   }
 
-  // Verified, not assumed: actually load @centraid/tunnel inside a
-  // throwaway container and confirm the native addon resolves before
-  // trusting the rest of the flow to it.
   const { code, stdout, stderr } = await run("docker", [
     "run",
     "--rm",
@@ -269,14 +142,6 @@ async function ensureNativeAddon() {
 }
 
 async function dockerNetworkCreate(name) {
-  // --ipv6=false matters beyond tidiness: on at least one host (OrbStack —
-  // see the flow .md), containers get a REAL globally-routable IPv6 address
-  // (NDP-proxied from the host's own WAN prefix, not a Docker-private ULA),
-  // so two containers on "isolated" IPv4-only networks could still dial
-  // each other directly over IPv6 and never touch the relay path this flow
-  // exists to exercise. Forcing IPv4-only removes that escape hatch
-  // entirely rather than trying to firewall an address range that varies
-  // by host/ISP.
   await sh("docker", [
     "network",
     "create",
@@ -292,7 +157,6 @@ async function dockerNetworkCreate(name) {
     "--format",
     "{{range .IPAM.Config}}{{.Subnet}}\n{{end}}",
   ]);
-  // IPv4 + IPv6 subnets are both listed; take the IPv4 one (contains a dot).
   const subnet = inspectOut
     .split("\n")
     .map((s) => s.trim())
@@ -302,17 +166,6 @@ async function dockerNetworkCreate(name) {
   return subnet;
 }
 
-/**
- * Poll `docker logs <name>` for the readiness lines lib/harness.mjs's
- * spawnDaemon waits for.
- *
- * The daemon no longer prints a loopback bearer (`token:`) to stdout
- * (issue #568 / cli.test.ts). This flow never dials the host HTTP surface —
- * mint/list go through `docker exec … pair/devices` against the container
- * data dir — so readiness is just listener + endpoint id. Pair tickets still
- * embed a live EndpointTicket because the CLI mints through the running
- * daemon once those lines appear.
- */
 async function waitForGatewayReady(
   containerName,
   logFile,
@@ -362,24 +215,6 @@ async function waitForGatewayReady(
   return waitForNextReadinessCheck();
 }
 
-/**
- * Host IPv4 addresses a container could route to INSTEAD of the peer's
- * docker-internal IP — the escape hatch that made this flow's first
- * GitHub-Actions run report a direct path (see the flow .md). Enumerated at
- * run time inside the privileged host-network helper, because the set is
- * host-specific (an Azure runner has one public NIC address; a laptop has
- * several).
- *
- * Interfaces deliberately skipped:
- *   - `lo`: never a cross-container path.
- *   - `docker0` / `br-*`: these ARE the bridge gateways the test networks use
- *     as their next hop. Dropping traffic *to* them would cut the containers'
- *     legitimate internet egress (apt-get, the n0 relays) along with the
- *     escape hatch — and they're not an escape hatch anyway, since anything
- *     forwarded through them toward the peer subnet is already covered by the
- *     subnet-to-subnet rules.
- *   - `veth*`: the host-side halves of container pairs, same reasoning.
- */
 async function hostAddresses(fwName) {
   const out = await sh("docker", [
     "exec",
@@ -392,7 +227,6 @@ async function hostAddresses(fwName) {
   ]);
   const addrs = [];
   for (const line of out.split("\n")) {
-    // "2: eth0    inet 10.1.0.4/16 brd 10.1.255.255 scope global eth0"
     const m = line.match(
       /^\d+:\s+(?<iface>\S+)\s+inet\s+(?<addr>\d+\.\d+\.\d+\.\d+)\//u
     );
@@ -412,7 +246,6 @@ async function hostAddresses(fwName) {
   return addrs;
 }
 
-/** Probe script body: dial every target concurrently, report one verdict each. */
 function probeScript(targets) {
   return `
     const net = require('net');
@@ -436,14 +269,6 @@ function probeScript(targets) {
   `;
 }
 
-/**
- * UDP counterpart of probeScript: send one datagram per target and wait for
- * the echo server to send it back. UDP has no connect handshake, so the ONLY
- * positive signal available is a reply actually coming back — which is why
- * every caller of this has to establish a control first (see
- * verifyNetworksIsolated). Silence on its own means "no reply", and "no reply"
- * is only evidence of blocking once something has proven a reply was possible.
- */
 function udpProbeScript(targets) {
   return `
     const dgram = require('dgram');
@@ -471,7 +296,6 @@ function udpProbeScript(targets) {
   `;
 }
 
-/** Run one probe container/exec and parse its single JSON verdict line. */
 async function runProbe(dockerArgs, script, what) {
   const { code, stdout } = await run("docker", [
     ...dockerArgs,
@@ -488,62 +312,8 @@ async function runProbe(dockerArgs, script, what) {
   }
 }
 
-/**
- * Raw cross-network probes — isolation proven topologically, independent of
- * the app under test.
- *
- * FOUR classes of probe, because each one covers a front the others structurally
- * cannot, and because the original single probe was tautological: it dialed
- * only the peer's docker-internal IP, which is exactly and only the traffic
- * the subnet-to-subnet DROP rules block. It therefore re-tested the rule that
- * had just been installed and could not observe the host-routed path that
- * actually carried a direct connection on CI.
- *
- *   1. TCP docker-internal — netB → netA container IP (the original probe).
- *   2. TCP host-routed — netB → each host address, at a port published from the
- *      netA probe server. Publishing is what makes this reachable at all in
- *      the absence of the DROP rules, so it's a strictly harder test than the
- *      unpublished topology the ceremony itself runs on.
- *   3/4. The UDP counterparts of both, at a published UDP port on the same
- *      probe server. These are what actually exercise the port-class DROP
- *      rules, and they matter because the escape that broke this flow on an
- *      Azure runner was QUIC/UDP to an address no rule of class (1)/(2) could
- *      ever have named (see the module docstring). "The TCP probe was blocked"
- *      was only ever evidence for, not proof of, "no UDP path exists"; now the
- *      UDP path is measured directly.
- *
- * Any probe getting through fails the flow, naming which path leaked.
- *
- * The UDP probes are self-validating, because a UDP probe on its own cannot
- * tell "blocked" from "the echo server never came up" — both look like
- * silence, and a silently-broken probe would report ISOLATED for entirely the
- * wrong reason. So a CONTROL runs first, from the privileged host-network
- * helper: it sends the same datagrams to the same two target classes and
- * REQUIRES replies. Only once the server has demonstrably answered is silence
- * from netB treated as evidence of blocking; if the control is silent, this
- * throws instead of reporting isolation it hasn't earned.
- *
- * What makes the control work is NOT that its source address is the host and
- * therefore matches no rule of ours. That is true of the control's outbound
- * datagram and false of the reply, which is the packet that actually has to
- * survive: the echo server sits on netA, so its reply carries src=<subnetA>
- * and dst=<the host address the control dialed> — matching the (c) host-address
- * DROP head-on. CI run 29743139605 failed the control on exactly that. The
- * control works only because the probe's `--sport` ACCEPT is inserted AFTER
- * blocks (b) and (c) and so outranks them; see block (d) at the insert site.
- * That ACCEPT is the caller's to retire the moment this returns — see the
- * removal right after the call site. Nothing in here should be relied on to
- * still be in force once the ceremony starts.
- */
 async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
   const probeServerName = `pairing-relay-isoprobe-${crypto.randomBytes(3).toString("hex")}`;
-  // High random ports so concurrent runs on one host don't collide; `docker
-  // run` fails loudly rather than silently sharing if one is already bound.
-  // This randomness is uniqueness across concurrent runs (like the
-  // randomBytes container-name suffix above), not exploration — a seeded draw
-  // would hand every concurrent run the same port, recreating the collision.
-  // crypto.randomInt keeps it out of Math.random's determinism seam, and the
-  // chosen port appears in every probe label this function reports.
   const hostPort = crypto.randomInt(30000, 50000);
   const udpHostPort = crypto.randomInt(30000, 50000);
   await sh("docker", [
@@ -585,8 +355,6 @@ async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
         port: hostPort,
       })),
     ];
-    // The UDP targets mirror the TCP ones one-for-one: same two classes, same
-    // server, so a leak on either transport is reported in the same shape.
     const udpTargets = [
       {
         label: `udp docker-internal ${ip}:${PROBE_UDP_PORT}`,
@@ -600,10 +368,6 @@ async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
       })),
     ];
 
-    // CONTROL first — from the host-network helper, which our rules don't
-    // match, so every one of these MUST come back. Anything silent here means
-    // the probe itself is broken (server not listening, publish not wired up)
-    // and the netB run below would be meaningless.
     const control = await runProbe(
       ["exec", fwName],
       udpProbeScript(udpTargets),
@@ -645,29 +409,12 @@ async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
           `that isn't actually isolated.`
       );
     }
-    // Honest status: the per-target reason is preserved rather than flattened
-    // to a single word, so "blocked (timeout)" and "blocked (ECONNREFUSED)"
-    // stay distinguishable in the log and the verdict file.
     return `ISOLATED — ${results.map((r) => `${r.label}: ${r.verdict}`).join("; ")}`;
   } finally {
     await shQuiet("docker", ["rm", "-f", probeServerName]);
   }
 }
 
-/**
- * Read the live rule set back and confirm the probe's `--sport` ACCEPT
- * exceptions are gone, so the ceremony runs with no probe-shaped hole in the
- * port-class block.
- *
- * `iptables -S` renders the rules it would need to recreate the chain, so a
- * surviving exception shows up verbatim as `--sport <PROBE_UDP_PORT>`. Any
- * ACCEPT still matching that is reported with the chain and the full rule
- * text, since the failure mode this guards against — the removal silently not
- * happening — would otherwise be invisible.
- *
- * Scoped to THIS run's subnets, so an unrelated pre-existing host rule that
- * happens to mention the same port can't fail the flow.
- */
 async function verifyProbeExceptionsRemoved(fwName, subnets) {
   const survivors = [];
   await Promise.all(
@@ -697,22 +444,6 @@ async function verifyProbeExceptionsRemoved(fwName, subnets) {
   return `no --sport ${PROBE_UDP_PORT} ACCEPT remains in DOCKER-USER or INPUT (iptables -S read back)`;
 }
 
-/**
- * Run the cross-network-relay flow: build → native-addon preflight →
- * isolated networks (+ proof) → gateway container boot → exec the flow body
- * → verdict → teardown (containers, firewall rules, networks — all
- * best-effort in a `finally`, run-scoped names so concurrent runs never
- * collide).
- *
- * ctx surface:
- *   ctx.gateway                 — { url, token, endpointId } of the live daemon
- *   ctx.netB                    — the device-side network name (for docker run --network)
- *   ctx.gatewayExec(args)       — run the admin CLI inside the gateway container
- *   ctx.mintTicket(opts)        — pair → { raw, payload }
- *   ctx.runDevice(opts)         — run lib/device-redeem.mjs in a fresh container on netB;
- *                                  opts: { ticket, probeTarget }; returns the parsed JSON line
- *   ctx.note(msg)                — observation preserved in verdict.md
- */
 export async function runFlow(slug, fn) {
   await ensureBuilt();
   await ensureNativeAddon();
@@ -746,12 +477,6 @@ export async function runFlow(slug, fn) {
 
   const notes = [];
   let error, result;
-  // Each successfully-inserted DOCKER-USER/INPUT rule gets its exact `-D` teardown
-  // args pushed here as it's inserted — NOT a single boolean flipped after
-  // both inserts succeed. These rules land directly in the HOST's real
-  // netfilter tables (the helper container runs --privileged --network
-  // host), so if the first insert succeeds and the second throws, the first
-  // must still be torn down; a single "both-or-nothing" flag would leak it.
   const firewallRulesInserted = [];
   const t0 = Date.now();
 
@@ -762,10 +487,6 @@ export async function runFlow(slug, fn) {
       `  subnets : ${netA}=${state.subnetA} ${netB}=${state.subnetB}`
     );
 
-    // Explicit isolation (see module docstring point 3) — DOCKER-USER is
-    // Docker's documented hook chain for user firewall rules, evaluated
-    // before Docker's own bridge rules, so this holds regardless of
-    // whether the driver's own default isolation does.
     await sh("docker", [
       "run",
       "-d",
@@ -786,53 +507,14 @@ export async function runFlow(slug, fn) {
       "apt-get update -qq >/dev/null 2>&1 && " +
         "apt-get install -y -qq iptables iproute2 >/dev/null 2>&1",
     ]);
-    // Generic over the match: callers pass the full match-args array and the
-    // -j target, so an address rule, a port-class DROP and its ACCEPT
-    // exceptions all go through this one path rather than a parallel one.
     const insertRule = async (chain, matchArgs, target) => {
       const rule = [...matchArgs, "-j", target];
       const deleteArgs = ["exec", fwName, "iptables", "-D", chain, ...rule];
       await sh("docker", ["exec", fwName, "iptables", "-I", chain, ...rule]);
-      // Recorded immediately after THIS insert succeeds, not after all of
-      // them — so a throw partway through still leaves everything that
-      // landed queued for teardown.
       firewallRulesInserted.push(deleteArgs);
-      // Returned so a caller can retire a rule EARLY (see the probe-exception
-      // removal below); the returned array is the same object that's queued
-      // for teardown, so removing it from the queue is an identity check.
       return deleteArgs;
     };
 
-    // (a) Port-class rules: the front that address-based rules structurally
-    // cannot cover. See the module docstring — the direct path that survived
-    // (b) and (c) on an Azure runner went to the runner's PUBLIC, NAT-mapped
-    // address, which appears on no local interface and so can never be
-    // enumerated by (c). Rather than chase an address that varies per runner
-    // and needs an external lookup to discover, block by TRANSPORT, which is
-    // host-independent. Everything iroh does to reach a peer DIRECTLY is
-    // QUIC over UDP; the n0 relay's data path is a WebSocket over TLS over
-    // TCP 443 (see ALLOWED_UDP_DPORTS for the sources). So the policy is
-    // simply: DROP all UDP out of each test subnet except DNS. TCP is
-    // untouched, so apt-get and — crucially — the relay itself keep working.
-    // Blocking UDP wholesale also blocks iroh's QUIC address discovery on
-    // 7842, which is intended: that is how a peer learns the public
-    // NAT-mapped address that defeated the previous fix.
-    //
-    // ORDER, which silently inverts if you get it wrong: `iptables -I` inserts
-    // at position 1, so the LAST rule inserted is the FIRST evaluated. The
-    // catch-all DROP therefore has to be inserted BEFORE its ACCEPT
-    // exception, so that the ACCEPT ends up ahead of it. Resulting evaluation
-    // order within this block, top-first: ACCEPT dport 53, DROP udp.
-    //
-    // This whole block is also inserted before (b) and (c) for the same
-    // reason at a larger scale: those address-based DROP rules must land
-    // nearer position 1 than the ACCEPT exception here, so an address (c)
-    // covers stays covered rather than being let through by this ACCEPT.
-    //
-    // The probe's own ACCEPT exception is NOT here — it has to outrank (c) as
-    // well, so it is inserted after (c). See the block below (c) for why.
-    //
-    // Both chains, for the same two-fates reason spelled out at (c).
     await applyInOrder(["DOCKER-USER", "INPUT"], async (chain) => {
       await applyInOrder([state.subnetA, state.subnetB], async (subnet) => {
         await insertRule(chain, ["-s", subnet, "-p", "udp"], "DROP");
@@ -850,10 +532,6 @@ export async function runFlow(slug, fn) {
         `${ALLOWED_UDP_DPORTS.join("/")} (relay is TCP 443, so it is unaffected)`
     );
 
-    // (b) Peer-subnet rules: the docker-internal path. DOCKER-USER is
-    // Docker's documented hook chain for user firewall rules, evaluated
-    // before Docker's own bridge rules, so this holds regardless of whether
-    // the driver's own default isolation does.
     await insertRule(
       "DOCKER-USER",
       ["-s", state.subnetA, "-d", state.subnetB],
@@ -865,25 +543,6 @@ export async function runFlow(slug, fn) {
       "DROP"
     );
 
-    // (c) Host-address rules: the escape hatch that made this flow's first
-    // run on a GitHub-hosted runner select a DIRECT path despite (b) being
-    // in force. Both containers NAT out through the host's single public
-    // NIC, so iroh's relay-observed public address for the gateway is the
-    // HOST's public IP — a destination (b) doesn't match, since it isn't in
-    // either test subnet. (This covers only host addresses that actually
-    // appear on a local interface; the ones that don't are what (a) is for.)
-    //
-    // Installed into BOTH chains on purpose, because a packet a container
-    // sends to a host address has two possible fates and only one of them
-    // reaches DOCKER-USER:
-    //   - un-NAT'd/hairpinned back toward a container → routed as FORWARD →
-    //     DOCKER-USER (and, with the destination already rewritten to the
-    //     peer's container IP by then, (a) catches it too);
-    //   - delivered to the host itself → routed as INPUT, which DOCKER-USER
-    //     never sees. Hence the INPUT copy.
-    // Between them the two chains cover both outcomes by construction rather
-    // than by assuming which one a given host's netfilter path produces.
-    // No `-p`, so TCP and UDP (i.e. QUIC) alike.
     const hostAddrs = await hostAddresses(fwName);
     if (hostAddrs.length === 0) {
       throw new Error(
@@ -902,49 +561,6 @@ export async function runFlow(slug, fn) {
       `  hostaddr: DROP ${hostAddrs.join(", ")} from both test subnets`
     );
 
-    // (d) The probe's ONE exception, inserted LAST so it evaluates FIRST —
-    // ahead of (c), (b) and (a) alike. It is not part of the relay path; it
-    // belongs to the PROBE, and it is retired the moment the probe is done
-    // (see the removal after verifyNetworksIsolated). It exists because the
-    // isolation probe's UDP echo server lives on netA, so its REPLY datagrams
-    // originate from a test subnet and our own DROP rules would eat them — the
-    // control run would then be silent for reasons that have nothing to do
-    // with isolation, i.e. exactly the false-ISOLATED failure mode the control
-    // exists to rule out.
-    //
-    // It sits above (c) rather than merely above (a), and that placement is
-    // the whole point of this block being here instead of up there. An earlier
-    // revision inserted it inside (a), which put it BELOW (c), and CI run
-    // 29743139605 failed the control on precisely that: the control dials a
-    // HOST address, so the echo server's reply carries src=<subnetA>
-    // sport=9999 and dst=<hostAddr> — which is exactly what (c) drops
-    // (`-s <subnet> -d <hostAddr> -j DROP`, in both chains). The reply, not
-    // the request, was the packet being blocked; the error message's premise
-    // ("from the host network, which no isolation rule matches") was true of
-    // the outbound datagram and false of the return one. The docker-internal
-    // control leg passed in that same run and is the tell: its reply goes to
-    // the bridge address 172.x.0.1, which hostAddresses() deliberately skips,
-    // so no (c) rule named it.
-    //
-    // Why this does NOT defeat the test it exists to enable:
-    //   - The netB host-routed UDP probe sends from an EPHEMERAL source port
-    //     (Linux 32768-60999, so never 9999) to the published dport. It
-    //     therefore does not match `--sport 9999`, falls through to (c)'s
-    //     `-s <subnetB> -d <hostAddr>` DROP, and is still blocked. The probe
-    //     still proves exactly what it claims.
-    //   - The netB docker-internal UDP probe likewise carries dport 9999, not
-    //     sport 9999, so it falls through to (b)'s subnet-to-subnet DROP.
-    //   - Both TCP probes are untouched: this rule is `-p udp`.
-    //   - The only packet the exemption admits is the echo server's reply, and
-    //     the exemption is retired before the ceremony starts, with its absence
-    //     read back out of `iptables -S` (verifyProbeExceptionsRemoved).
-    //
-    // The netB copy of the rule is dead weight — no echo server ever runs on
-    // netB — but it is kept for symmetry with every other rule here and is
-    // retired on the same schedule, so it is never open during the ceremony.
-    //
-    // These stay in firewallRulesInserted until they are actually removed, so
-    // the failure path needs no second teardown.
     const probeExceptionRules = [];
     await applyInOrder(["DOCKER-USER", "INPUT"], async (chain) => {
       await applyInOrder([state.subnetA, state.subnetB], async (subnet) => {
@@ -969,23 +585,11 @@ export async function runFlow(slug, fn) {
     );
     console.log(`  isolate : ${isolationVerdict}`);
 
-    // The probe is done, so its affordance goes away before the ceremony
-    // starts. Bookkeeping is explicit rather than implicit: each rule is
-    // spliced out of firewallRulesInserted only AFTER its `-D` actually
-    // succeeded, so a failure here leaves the entry queued and the `finally`
-    // retries it — and a success can't produce a double `-D`.
     await applyInOrder(probeExceptionRules, async (deleteArgs) => {
       await sh("docker", deleteArgs);
       const queued = firewallRulesInserted.indexOf(deleteArgs);
       if (queued >= 0) firewallRulesInserted.splice(queued, 1);
     });
-    // Asserted, not assumed — and asserted the only way that's actually
-    // falsifiable. A post-removal UDP re-probe would be worthless here: taking
-    // the --sport ACCEPT away also removes the echo server's ability to reply
-    // at all, so silence becomes guaranteed by construction whether or not the
-    // DROP works, and the probe would no longer be self-validating. Reading
-    // the live rule set back is cheap (two execs, no wall-clock to speak of)
-    // and proves exactly the claim being made.
     const closedVerdict = await verifyProbeExceptionsRemoved(fwName, [
       state.subnetA,
       state.subnetB,
@@ -1108,9 +712,6 @@ export async function runFlow(slug, fn) {
   } catch (caughtError) {
     error = caughtError;
   } finally {
-    // Best-effort teardown, all of it — a failed cleanup step must not mask
-    // the flow's actual pass/fail result, and must not stop later cleanup
-    // steps from running.
     const { stdout: finalLogs } = await run("docker", ["logs", gwName]);
     if (finalLogs)
       await fs
@@ -1127,8 +728,6 @@ export async function runFlow(slug, fn) {
       ]);
     }
     await shQuiet("docker", ["rm", "-f", gwName]);
-    // Sweep any device containers that survived a mid-run crash (docker run
-    // --rm should already have cleaned these up on normal exit).
     const { stdout: strayList } = await run("docker", [
       "ps",
       "-a",
@@ -1144,12 +743,6 @@ export async function runFlow(slug, fn) {
         .filter(Boolean),
       async (name) => shQuiet("docker", ["rm", "-f", name])
     );
-    // Remove exactly whatever was actually inserted, regardless of where in
-    // setup a failure happened — each entry is independent and carries its
-    // own chain, so a crash partway through the (a)/(b)/(c) rule sets above
-    // still tears down every rule that landed. These live in the HOST's real
-    // netfilter tables; leaking one would silently affect later jobs on the
-    // same runner.
     await applyInOrder(firewallRulesInserted, async (deleteArgs) =>
       shQuiet("docker", deleteArgs)
     );

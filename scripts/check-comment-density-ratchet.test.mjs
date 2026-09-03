@@ -1,10 +1,3 @@
-// Fail-path proof for the #861 comment-density enforcement trio.
-//
-// Drives the ratchet, the block bound, and the comment-only prover against
-// synthetic trees through their injectable roots. Uses `mkdtempSync` rather
-// than `@centraid/test-kit`'s `tempDir()`: that module registers a vitest
-// `afterAll` at import time and throws under `node --test`, which is the runner
-// this lane uses. Same pattern as scripts/lint-css-classes.test.mjs.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 // oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered at creation via t.after below.
@@ -21,7 +14,6 @@ import {
 import { commentOnlyDiff } from "./comment-only-diff.mjs";
 import { lintCommentBlocks } from "./lint-comment-blocks.mjs";
 
-/** Build a throwaway root containing `files` (relative path → contents). */
 function fixture(t, files) {
   const root = mkdtempSync(path.join(tmpdir(), "centraid-comment-density-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -36,7 +28,6 @@ function fixture(t, files) {
 const codeLine = (i) => `const value${i} = ${i};`;
 const commentLine = "// Obligation stated for the next editor, in this file.";
 
-/** 45 non-blank lines, roughly half of them comment — far over the 15% cap. */
 function commentHeavy() {
   const lines = [];
   for (let i = 0; i < 30; i += 1) {
@@ -46,7 +37,6 @@ function commentHeavy() {
   return `${lines.join("\n")}\n`;
 }
 
-/** 61 non-blank lines with one comment — comfortably under the cap. */
 function commentLight() {
   const lines = [commentLine];
   for (let i = 0; i < 60; i += 1) lines.push(codeLine(i));

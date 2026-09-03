@@ -13,16 +13,6 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/gateway-request.perf.test.ts";
 
-// --- Budgets ---------------------------------------------------------------
-// Both measured 2026-07-19 (darwin arm64) against the gateway running in a
-// FORKED CHILD (see gateway-idle-server.mjs), self-reporting its own CPU.
-//
-// Request p95 baseline ≈ 40 ms (60 GETs of /centraid/_apps). Budget = ~3× = 120.
-// Idle CPU baseline ≈ 1–3 ms of CPU per second of wall-clock over a 5 s idle
-// window (the 1 s idle-poll costs ~nothing). Budget = ~3× a conservative
-// baseline. The OLD test measured the VITEST process over 500 ms with a 300 ms
-// (60%-of-a-core) ceiling — shorter than the poll period and on the wrong
-// process, so the idle-poll defect could never breach it.
 const experienceBudget = JSON.parse(
   readFileSync(path.resolve("tests/experience-budgets/gateway.json"), "utf8")
 ) as {
@@ -71,8 +61,6 @@ describe("gateway-request.perf", () => {
       Object.entries(CORE_ROUTES),
       async ([identity, route]) => {
         const samples: number[] = [];
-        // Sequential samples measure the latency an owner sees for one request;
-        // concurrent bursts turn this into a throughput/queueing benchmark.
         await forEachSequentially(Array.from({ length: 30 }), async () => {
           const started = performance.now();
           const response = await fetch(`${ready.url}${route}`, {
@@ -104,9 +92,6 @@ describe("gateway-request.perf", () => {
     const idleCpuMs = (idle.cpuUserUs + idle.cpuSystemUs) / 1_000;
     const idleCpuMsPerSecond = idleCpuMs / (idle.wallMs / 1_000);
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("perf", OWNER);
     const routePassed = Object.entries(routeP95).every(
       ([identity, value]) =>

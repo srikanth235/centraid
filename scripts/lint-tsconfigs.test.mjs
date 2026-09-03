@@ -1,10 +1,3 @@
-// Fail-path proof for `bun run lint:tsconfigs` (issue #656 Layer 1F).
-//
-// Drives the linter against a synthetic workspace tree via its injectable root.
-// Uses `mkdtempSync` rather than `@centraid/test-kit`'s `tempDir()`: that module
-// registers a vitest `afterAll` at import time and throws
-// ("Vitest failed to find the current suite") under `node --test`, which is the
-// runner this lane uses. Same pattern as scripts/gateway-package/*.test.mjs.
 import assert from "node:assert/strict";
 // oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered at creation via t.after below.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -18,7 +11,6 @@ const BASE = JSON.stringify({
   compilerOptions: { module: "esnext", moduleResolution: "bundler" },
 });
 
-/** Build a throwaway repo root containing `files` (relative path → contents). */
 function fixture(t, files) {
   const root = mkdtempSync(path.join(tmpdir(), "centraid-tsconfigs-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));

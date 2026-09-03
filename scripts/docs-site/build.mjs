@@ -1,12 +1,4 @@
 #!/usr/bin/env node
-/**
- * Centraid docs build.
- *
- * Astro owns the authored docs pages and emits static HTML into
- * dist/docs-site. A second pass normalizes section anchors for Pagefind and
- * runs Pagefind over that output so the header search box gets a durable
- * static full-text index with no server.
- */
 import { spawn } from "node:child_process";
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -36,9 +28,6 @@ function run(command, args) {
   });
 }
 
-// The site is served under DOCS_SITE_BASE_PATH (e.g. "/docs" on the apex
-// domain, "/" locally) — the same value astro.config.mjs feeds Astro's `base`.
-// Bake it into the index hrefs so results link correctly in both trees.
 function basePrefix() {
   const raw = process.env.DOCS_SITE_BASE_PATH || "/";
   return raw.endsWith("/") ? raw : `${raw}/`;
@@ -91,11 +80,6 @@ async function normalizePagefindAnchors() {
 }
 
 async function buildSearchIndex() {
-  // Pagefind's Node API instead of `bun x pagefind` — the dependency is now a
-  // real import the lockfile pins and knip can trace, not an opaque subprocess.
-  // Flag parity with the old CLI call: --force-language en, --include-characters
-  // '._:/<>-', --site outDir (addDirectory), --output-subdir pagefind
-  // (writeFiles outputPath). --quiet maps to the API's default (no logging).
   const { errors, index } = await pagefind.createIndex({
     forceLanguage: "en",
     includeCharacters: "._:/<>-",

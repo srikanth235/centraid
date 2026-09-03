@@ -1,14 +1,3 @@
-/**
- * `renderReport(model) -> html` (#915 Wave 3).
- *
- * One self-contained HTML file: the generated token sheet and the authored
- * component layer inline, the faces already inlined as `data:` URIs by the
- * emitter, no runtime fetches, both themes. The only script is the lane
- * board's filters and keys, and the page is complete without it — every row is
- * already in the markup, so an archived run read years later still says
- * everything it said tonight.
- */
-
 import { designSystemCss, REPORT_CSS } from "../report-theme.mjs";
 import { renderAdversaries, renderTrends } from "./adversaries.mjs";
 import { renderEvidence, renderHowToRead } from "./evidence.mjs";
@@ -22,7 +11,6 @@ import {
 } from "./questions.mjs";
 import { escapeHtml } from "./util.mjs";
 
-/** The lane board's filters, name search, expand-all and the three keys. */
 const PAGE_SCRIPT = `
 (function(){
   var table = document.getElementById('laneTable');
@@ -93,11 +81,6 @@ const PAGE_SCRIPT = `
 })();
 `;
 
-/**
- * Render the whole page.
- * @param {object} model the output of `buildModel`
- * @returns {string} one self-contained HTML document
- */
 export function renderReport(model) {
   const title = `Night Watch — ${model.night} — ${model.verdict.verdict}`;
   return `<!doctype html>

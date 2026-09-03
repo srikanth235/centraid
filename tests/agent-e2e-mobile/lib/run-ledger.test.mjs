@@ -1,13 +1,3 @@
-// Unit pins for the mobile run ledger (#890).
-//
-// Every assertion here defends a number a later budget will be derived from. A
-// window that silently stops bounding, or a percentile that is off by one rank,
-// does not fail loudly on a device — it produces a plausible ceiling nobody can
-// tell is wrong.
-//
-// No `tempDir()` from @centraid/test-kit: that helper registers its removal as
-// a vitest `afterAll` at import time and there is no vitest here. These tests
-// name their own file under the OS temp dir and remove it themselves.
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -64,13 +54,11 @@ test("appendRunRecord round-trips a record through the file", async () => {
 });
 
 test("appendRunRecord bounds the window per flow×platform", () => {
-  // Pure path, so the bound is asserted without 501 file writes.
   let ledger = { version: 1, records: [] };
   for (let i = 0; i < MAX_RECORDS_PER_KEY + 25; i += 1) {
     ledger = boundedAppend(ledger, record({ durationMs: i }));
   }
   expect(ledger.records.length).toBe(MAX_RECORDS_PER_KEY);
-  // Oldest dropped, newest kept: the window has to be the RECENT rig.
   expect(ledger.records[0].durationMs).toBe(25);
   expect(ledger.records.at(-1).durationMs).toBe(MAX_RECORDS_PER_KEY + 24);
 });
@@ -142,8 +130,6 @@ test("summarize separates the infra failure rate from the total", () => {
   const summary = summarize(ledger);
   const ios = summary["tests/agent-e2e-mobile/flows/home-loads.mjs::ios"];
   expect(ios.failureRate).toBe(0.75);
-  // The whole reason the ledger stores a class: a rig problem and a product
-  // regression must not average into one indistinguishable number.
   expect(ios.infraFailureRate).toBe(0.5);
 });
 
@@ -172,7 +158,6 @@ test("CENTRAID_MOBILE_LEDGER overrides the committed path", () => {
   expect(
     ledgerPathFromEnv({ CENTRAID_MOBILE_LEDGER: "/tmp/elsewhere.json" })
   ).toBe("/tmp/elsewhere.json");
-  // A blank override is an unset override, not a write to the repo root.
   expect(ledgerPathFromEnv({ CENTRAID_MOBILE_LEDGER: "  " })).toMatch(
     /durations\.json$/u
   );

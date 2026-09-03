@@ -12,29 +12,12 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/vault-write.perf.test.ts";
 
-// --- Budgets ---------------------------------------------------------------
-// Latency baseline (2026-07-19, darwin arm64, on-disk WAL + synchronous=FULL,
-// 250 core_party commits): p50 0.26 ms, p95 0.70 ms, max 3.0 ms. This write is
-// fsync-bound, so a Pi-class / CI disk runs it 2–3× slower (baseline ~2 ms).
-// Budget = ~3× that CI-representative baseline = 6 ms. Falsifiable: a real
-// regression (double-syncing, a second-file receipt per write, synchronous flip)
-// pushes p95 well past 6 ms while staying clear of disk jitter.
 const LATENCY_BUDGET_MS = 6;
-// Fsync baseline: WAL + synchronous=FULL fsyncs the -wal on each COMMIT, so the
-// steady-state single-DB commit cost is ~1 fdatasync/write (open + bootstrap
-// syncs amortize toward zero over 500 writes). The known low-end defect was
-// "4 fsyncs/write"; this ceiling sits BELOW 4 so a regression to it fails, and
-// above the ~1–2 WAL+FULL steady state so the honest current path passes. The
-// exact count is measured by the Linux strace path below and recorded each run.
 const FSYNC_BUDGET = 3;
 const FSYNC_TRACE_WRITES = 500;
 
 describe("vault-write.perf", () => {
   test("journalled vault writes stay within the nightly latency and fsync budget", async () => {
-    // Measure latency against a REAL vault (createTestVault === openVaultDb +
-    // bootstrapVault, on-disk WAL + FULL) writing a canonical ontology table so
-    // the durable replica-protocol triggers fire in-transaction — a genuine
-    // journalled write, not a bare INSERT into an ad-hoc table.
     const db = await createTestVault();
     const statement = db.vault.prepare(
       `INSERT INTO core_party
@@ -54,9 +37,6 @@ describe("vault-write.perf", () => {
       samples[Math.floor(samples.length * 0.95)] ?? Number.POSITIVE_INFINITY;
 
     const fsyncsPerWrite = await traceFsyncsPerWrite();
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("perf", OWNER);
     const passed =
       p95Ms < LATENCY_BUDGET_MS &&
@@ -97,19 +77,6 @@ describe("vault-write.perf", () => {
   });
 });
 
-/**
- * Count fsync/fdatasync per write on the REAL vault write path via strace.
- *
- * SQLite issues its commit syncs from C (fdatasync on Linux, fcntl F_FULLFSYNC
- * on macOS), so a node:fs monkey-patch cannot observe them and named ESM
- * imports snapshot anyway — a syscall tracer is the only honest counter. strace
- * exists on Linux; the nightly perf lane installs it (.github/workflows/e2e.yml).
- *
- * Off Linux (darwin dev boxes) the fsync assertion cannot run, so it is skipped
- * and only latency is asserted. In CI on Linux a missing strace is a HARD
- * failure — silently returning `undefined` there would let the fsync gate
- * guard nothing, which is the defect this reorg closes.
- */
 async function traceFsyncsPerWrite(): Promise<number | undefined> {
   const straceAvailable =
     process.platform === "linux" &&

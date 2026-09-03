@@ -10,7 +10,6 @@
         </p>
       </section>
 
-      <!-- §01 WHAT AN APP IS -->
       <section class="sec wrap" id="model">
         <p class="eyebrow r">§01 · the model</p>
         <h2 class="r" style="--d: 0.06s">No private database. <em>On purpose.</em></h2>
@@ -18,12 +17,12 @@
           <p>
             A Centraid app has <b>no database of its own</b>. The per-app
             <code>data.sqlite</code> of earlier designs is deliberately dead: every row an app shows
-            comes from the vault through its granted scopes, and every mutation is a typed vault
+            comes from the vault through its granted scopes, and every mutation is a typed vaul
             command. Handlers hold no file handle — they reach the canon through
             <code>ctx.vault</code>, and consent is enforced on the host side of that boundary.
           </p>
           <p>
-            When an app genuinely needs its own tables — a game's score sheet, a niche tracker — it
+            When an app genuinely needs its own tables — a game's score sheet, a niche tracker — i
             declares an <b>ext band</b>: registered tables the gateway creates inside
             <code>vault.db</code> from the manifest, under the app's namespace (apps never run DDL).
             Ext tables may point <i>into</i> the canonical model; the canon never points back.
@@ -31,14 +30,13 @@
             can see, not a separate file you forget.
           </p>
           <p class="aside">
-            Why the ontology can absorb almost everything without ext tables — and the rule that
+            Why the ontology can absorb almost everything without ext tables — and the rule tha
             keeps flags, memos and links canonical:
             <a href="../ontology/#rules">Ontology § implementation rules →</a>
           </p>
         </div>
       </section>
 
-      <!-- §02 BLUEPRINTS -->
       <section class="dark" id="blueprints">
         <div class="wrap">
           <p class="eyebrow r">§02 · the blueprints</p>
@@ -125,7 +123,6 @@
         </div>
       </section>
 
-      <!-- §03 ANATOMY -->
       <section class="sec wrap" id="anatomy">
         <p class="eyebrow r">§03 · anatomy</p>
         <h2 class="r" style="--d: 0.06s">Small enough to <em>read in an evening.</em></h2>
@@ -201,7 +198,6 @@
         </div>
       </section>
 
-      <!-- §04 INSTALLING -->
       <section class="dark" id="install">
         <div class="wrap">
           <p class="eyebrow r">§04 · installing</p>
@@ -211,7 +207,7 @@
           <p class="lede r" style="--d: 0.12s">
             You don't clone or fork an app into your vault. Installing from <b>Discover</b> writes
             one consent record and the scopes the app's manifest asks for — nothing is copied. The
-            code keeps running from the shipped release and upgrades with it; there is no per-vault
+            code keeps running from the shipped release and upgrades with it; there is no per-vaul
             snapshot to go stale.
           </p>
           <div class="artifact r" style="--d: 0.16s; max-width: 660px; margin-top: 8px">
@@ -246,14 +242,14 @@
               into <b>Read</b> and <b>Add &amp; change</b> so a grant is a sentence you can read
               before you sign it. Install and the app pins to Home and opens straight away.
               <b>Uninstall</b> is the mirror image — "Removes the app and revokes its access. Your
-              data stays in your vault." — the consent row is tombstoned and the grants drop, but
+              data stays in your vault." — the consent row is tombstoned and the grants drop, bu
               every row and receipt it wrote is still yours; reinstalling is a fresh consent, not a
               recovery.
             </p>
             <p>
               And no, you don't build one by describing it — not yet. The machinery that once did
               still exists: it's the compiler that turns an automation's plain-language instructions
-              into a deterministic plan, and behind a developer flag it can still edit app code. But
+              into a deterministic plan, and behind a developer flag it can still edit app code. Bu
               there is no user-facing "describe an app and watch it appear" surface in this release.
               Apps arrive with the release; the one thing you still start from a template and copy
               into your vault is an <a class="u" href="../data/#automations">automation</a>.
@@ -262,7 +258,6 @@
         </div>
       </section>
 
-      <!-- §05 ATTACH & LINK -->
       <section class="sec wrap" id="linking">
         <p class="eyebrow r">§05 · attach &amp; link</p>
         <h2 class="r" style="--d: 0.06s">
@@ -279,7 +274,7 @@
           <p>
             Inline references are links with an anchor: type <code>@</code> in Notes and the mention
             pins to a text span that survives editing. Every app renders references through the same
-            resolver — a card that knows whether its target is live, trashed, missing, or simply not
+            resolver — a card that knows whether its target is live, trashed, missing, or simply no
             readable under your grant. A link you're not allowed to see through says so, instead of
             leaking a title.
           </p>
@@ -291,7 +286,6 @@
         </div>
       </section>
 
-      <!-- §06 AGENTS DRIVE APPS -->
       <section class="sec wrap" id="agents">
         <p class="eyebrow r">§06 · agents drive apps</p>
         <h2 class="r" style="--d: 0.06s">
@@ -315,7 +309,6 @@
         </div>
       </section>
 
-      <!-- §07 MOBILE -->
       <section class="sec wrap" id="mobile">
         <p class="eyebrow r">§07 · on the phone</p>
         <h2 class="r" style="--d: 0.06s">Written once, <em>worn twice.</em></h2>

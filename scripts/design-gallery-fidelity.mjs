@@ -1,51 +1,8 @@
 #!/usr/bin/env bun
-// The RTL and CJK fidelity lanes of `design-gallery.mjs` (issue #839, gap G13).
-//
-// WHAT THESE LANES CLAIM, AND WHY THEY ARE NOT PHOTOGRAPHED
-//
-// DESIGN.md § Responsive Behavior binds every component to survive RTL, and
-// § Typography binds the one face to carry "mandatory CJK fallbacks". Nothing
-// checked either. `lint:logical-insets` reads apps/mobile SOURCE for the one
-// dead React Native spelling; the shell's own rendered result — what a member
-// in Riyadh or Osaka actually gets — was unfenced.
-//
-// These lanes re-render the SAME surface the SH lane photographs (the built
-// shell's `#ui-preview` gallery, the product's own React blocks under the
-// product's own token lowering) with the document direction flipped and with
-// the copy replaced by CJK text, then read the RESULT back out of the engine.
-// There is no fixture: #799 deleted the hand-written HTML-and-stylesheet
-// vocabulary this gate used to photograph, and re-inventing one under a new
-// name would be the same defect wearing an `dir="rtl"` attribute.
-//
-// They take no baseline. A pixel baseline of the mirrored gallery would need
-// regenerating on every copy edit and would fence an APPEARANCE, where what
-// the rulebook actually binds is a set of invariants — a rule that mirrors, a
-// number that keeps its order, a stack that names a CJK face. Those are read
-// as values, so they are asserted as values.
-//
-// THE JUDGMENT IS PURE. Every `judge*` below takes plain records and returns
-// findings, so `design-gallery-fidelity.test.mjs` can flip an input and prove
-// the lane fails. Only `collect*` and `probe*` touch a page.
-//
-// The design-system facts this module needs (the sans stack, the legal type
-// triples, the face assertion) are PASSED IN rather than imported, the same
-// division `design-gallery-lowering.mjs` keeps: the gate script owns the
-// contract half, this module owns the rendering half.
 
-/** Japanese copy for the CJK lane. Kana + kanji + a full-width stop, which is
- *  the metric case: none of them exist in Instrument Sans, so every glyph here
- *  is answered by the stack's fallback half or by nothing at all. */
 export const CJK_SAMPLE =
   "設定は保存されました。写真と文書はこの端末にあります。同期は待機中です。";
 
-/** The bidi probe. A hyphenated date after an Arabic word is the exact run
- *  DESIGN.md's numeric role exists for: UAX#9's W2 turns the ASCII digits
- *  into Arabic numbers, the hyphens stay neutral, and the groups order
- *  right-to-left — `2026-08-21` renders as `21-08-2026` — unless the role
- *  pins its own direction and isolates. The isolated clone carries the date
- *  alone (the register's honest content); the control carries the word too,
- *  because a bare ASCII date has no reordering pressure to survive (W4 merges
- *  hyphen-joined European digits into one run even in an RTL paragraph). */
 export const BIDI_PROBE_WORD = "مساء";
 export const BIDI_PROBE_NUMERALS = "2026-08-21";
 
@@ -55,7 +12,6 @@ const PHYSICAL_PAIRS = Object.freeze([
   ["border-width", "borLeft", "borRight"],
 ]);
 
-/** A human-readable name for one collected element. */
 export function label(record) {
   const classes = record.classes
     ? `.${record.classes.split(/\s+/u).join(".")}`
@@ -64,7 +20,6 @@ export function label(record) {
   return `${record.tag}${classes}[${record.index}]${text ? ` “${text}”` : ""}`;
 }
 
-/** px string → number, or null when the value is not a length. */
 function px(value) {
   const parsed = Number(value.replace(/px$/u, ""));
   return value.endsWith("px") && Number.isFinite(parsed) ? parsed : null;
@@ -77,13 +32,6 @@ function sameLength(a, b, tolerance = 0.5) {
   return Math.abs(left - right) <= tolerance;
 }
 
-/**
- * Zip two renders of the same tree by element index. The DOM is identical
- * across renders by construction (nothing but `dir`, `lang` and text nodes
- * moves), so a mismatch here means the collector, not the product, is wrong —
- * and a silently misaligned zip would compare one element's padding against
- * another's and call it a mirroring bug.
- */
 export function alignRenders(first, second) {
   if (first.length !== second.length)
     throw new Error(
@@ -99,17 +47,6 @@ export function alignRenders(first, second) {
   });
 }
 
-/**
- * DESIGN.md § Responsive Behavior — "Under RTL the stem mirrors, which is only
- * true while every rule uses logical properties", and § Do's and Don'ts — "Do
- * not … write a physical direction property where a logical one exists".
- *
- * A logical rule SWAPS its physical sides when the inline axis flips; a
- * physical one does not move at all. So the test is not "is this value
- * asymmetric" (source lint's question) but "did the asymmetry follow the
- * reader" — which is a fact about the rendered result and needs no access to
- * the stylesheet that produced it.
- */
 export function judgeMirroredBoxes(pairs) {
   const findings = [];
   for (const { first: ltr, second: rtl } of pairs) {
@@ -126,9 +63,6 @@ export function judgeMirroredBoxes(pairs) {
       );
     }
     if (ltr.startOffset === null || rtl.startOffset === null) continue;
-    // A box whose own width changed cannot be compared by its start offset:
-    // an inline-end anchor resolves through the width, so a reflowed box moves
-    // for a reason that is not a direction bug. Skipped rather than guessed.
     if (Math.abs(ltr.width - rtl.width) > 0.5) continue;
     if (Math.abs(ltr.startOffset - rtl.startOffset) > 1)
       findings.push(
@@ -138,14 +72,6 @@ export function judgeMirroredBoxes(pairs) {
   return findings;
 }
 
-/**
- * The same rule, read off `text-align`. `start`/`end` compute to themselves
- * and follow the reader; `left`/`right` compute to themselves and do not.
- *
- * Only the element that INTRODUCES the physical value is named — the value
- * inherits, so reporting every descendant would bury the one rule at fault
- * under its own subtree.
- */
 export function judgePhysicalAlignment(records) {
   const findings = [];
   for (const record of records) {
@@ -159,17 +85,6 @@ export function judgePhysicalAlignment(records) {
   return findings;
 }
 
-/**
- * DESIGN.md § Typography — "The numeric role also declares its own reading
- * direction: `--t-mono-direction` `ltr` and `--t-mono-bidi` `isolate`, set
- * once on the role, never per span. A number is not a word."
- *
- * The register announces itself with `font-variant-numeric: tabular-nums`
- * (`--t-mono-numeric`), which is the only place the registry spends that
- * property. `direction` inherits and `unicode-bidi` does not, so a digit-
- * bearing leaf inside an isolated mono element is correctly covered by its
- * ancestor and is not reported twice.
- */
 export function judgeNumericIsolation(records) {
   const findings = [];
   for (const record of records) {
@@ -188,21 +103,6 @@ export function judgeNumericIsolation(records) {
   return findings;
 }
 
-/**
- * The other half of the same sentence — "a layout container must never carry
- * the numeric face … it would flip its own inline axis along with it"
- * (`packages/design/src/typography.ts`, `typeModifiers`). A text leaf that
- * isolates is the mechanism working; a flex or grid box that isolates has
- * pinned the arrangement of its CHILDREN to `ltr`, which is the mirroring bug
- * the isolate was supposed to prevent.
- *
- * `isolate` alone does not identify the register: the HTML standard's UA
- * stylesheet computes `unicode-bidi: isolate` on every plain block element
- * (`div`, `section`, …), and that default follows the page direction and is
- * harmless. The register's signature is the PAIR — an isolate whose
- * `direction` computes `ltr` while the page renders RTL is one the register
- * (or a hand-written pin) put there, and only that one freezes the children.
- */
 export function judgeIsolatedContainers(records) {
   const findings = [];
   const boxy = new Set(["block", "flex", "grid", "list-item", "table"]);
@@ -218,13 +118,6 @@ export function judgeIsolatedContainers(records) {
   return findings;
 }
 
-/**
- * The mechanism, exercised rather than read. Both clones carry the same real
- * element's computed style; the control has its isolation removed. If the
- * isolated date does not read year-first as written, or if removing the
- * isolation changes nothing, then the tokens are present and inert — which is
- * the failure a value assertion cannot see.
- */
 export function judgeBidiProbe(probe) {
   const findings = [];
   if (probe.isolated.year === null || probe.isolated.day === null)
@@ -233,10 +126,6 @@ export function judgeBidiProbe(probe) {
     findings.push(
       `bidi probe: under the numeric register the year rendered at x=${probe.isolated.year.toFixed(1)} and the day at x=${probe.isolated.day.toFixed(1)} — the date did not stay in calendar order`
     );
-  // The control only says something while it is genuinely un-isolated. If the
-  // clone's own paragraph never became RTL there is no reordering pressure to
-  // survive, and claiming the isolate is inert would be the lane inventing a
-  // failure rather than reading one.
   if (probe.controlDirection !== "rtl") return findings;
   if (
     probe.control.year !== null &&
@@ -249,8 +138,6 @@ export function judgeBidiProbe(probe) {
   return findings;
 }
 
-/** Compare two font-family lists as the registry writes them, not as the
- *  engine quotes them. */
 export function normalizeStack(stack) {
   return stack
     .split(",")
@@ -259,19 +146,6 @@ export function normalizeStack(stack) {
     .join(", ");
 }
 
-/**
- * DESIGN.md § Typography — "display, reading, UI, and numerics all draw from
- * the same stack with mandatory CJK fallbacks", and `--font-code` "is reached
- * only by fenced code, inline literals, file paths, keyboard chips, and
- * secrets".
- *
- * The claim stops at the STACK, deliberately. The product ships no CJK bytes
- * (`fonts.ts` bundles Instrument Sans and fetches nothing), so which physical
- * face answers `'Hiragino Sans'` is the host's business and a headless Linux
- * runner has none of them. What the product owes a CJK reader is that the
- * stack asks for the right faces in the registry's order before it reaches a
- * generic — and that is exactly what is read back here.
- */
 export function judgeCjkStack(records, sansStack) {
   const findings = [];
   const expected = normalizeStack(sansStack);
@@ -286,13 +160,6 @@ export function judgeCjkStack(records, sansStack) {
   return findings;
 }
 
-/**
- * Invariant 2 — "One ramp, one face." A role's size and leading are the
- * token's, so swapping Latin copy for CJK may change how many LINES a block
- * takes and must change nothing about the rungs themselves. An element that
- * moved rung under CJK is reading its metrics off the glyphs (`line-height:
- * normal` is the usual way in), which is the ramp quietly becoming two ramps.
- */
 export function judgeTypeStability(pairs) {
   const findings = [];
   for (const { first: latin, second: cjk } of pairs) {
@@ -306,18 +173,6 @@ export function judgeTypeStability(pairs) {
   return findings;
 }
 
-// ---------------------------------------------------------------------------
-// The page half
-// ---------------------------------------------------------------------------
-
-// The three functions below run INSIDE the page. Playwright ships them by
-// source text, so they close over nothing and read every value through
-// `getPropertyValue` — the one accessor every engine spells the same way, and
-// the reason `design-gallery-fidelity.test.mjs` can smoke them against a jsdom
-// document instead of trusting a browser nobody has watched run them.
-
-/** One record per element in the host subtree, in document order. Invisible
- *  elements are kept (and flagged) so both renders index identically. */
 export function collectInPage({ dir: direction, host: hostSelector }) {
   const root = document.querySelector(hostSelector);
   const read = (element, property) =>
@@ -340,9 +195,6 @@ export function collectInPage({ dir: direction, host: hostSelector }) {
     let ownText = "";
     for (const node of element.childNodes)
       if (node.nodeType === 3) ownText += node.nodeValue ?? "";
-    // Only the register's pair counts as cover: the UA stylesheet isolates
-    // every plain block element, so a bare `isolate` ancestor proves nothing
-    // about the digits' reading direction.
     let ancestorIsolated = false;
     for (let node = parent; node !== null; node = node.parentElement) {
       if (
@@ -384,16 +236,10 @@ export function collectInPage({ dir: direction, host: hostSelector }) {
   });
 }
 
-/** Clone one real numeric-register element twice — once as it is, once with
- *  its isolation removed — and read back where each run landed. */
 export function probeBidiInPage({ host: hostSelector, numerals, word }) {
   const root = document.querySelector(hostSelector);
   const read = (element, property) =>
     getComputedStyle(element).getPropertyValue(property);
-  // The register's full signature, not just the isolate: the UA stylesheet
-  // isolates plain block elements, and `font-variant-numeric` inherits, so
-  // without the `direction: ltr` half this would clone some page-direction
-  // container instead of a mono leaf.
   const source = [...root.querySelectorAll("*")].find(
     (element) =>
       read(element, "font-variant-numeric").includes("tabular-nums") &&
@@ -436,9 +282,6 @@ export function probeBidiInPage({ host: hostSelector, numerals, word }) {
   };
 }
 
-/** Swap every text node in the surface for CJK copy of its own length. The
- *  STRUCTURE is untouched: this is the product's own gallery reading in
- *  Japanese, not a second gallery. */
 export function localizeInPage({ host: hostSelector, sample: source }) {
   const root = document.querySelector(hostSelector);
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -447,9 +290,6 @@ export function localizeInPage({ host: hostSelector, sample: source }) {
   while (node !== null) {
     const length = (node.nodeValue ?? "").trim().length;
     if (length > 0) {
-      // Half the Latin length: a CJK glyph is about twice as wide, so the
-      // block keeps its measure instead of doubling and re-wrapping the whole
-      // surface into a shape no locale produces.
       const take = Math.max(1, Math.ceil(length / 2));
       let text = "";
       while (text.length < take) {
@@ -472,11 +312,6 @@ async function settle(page) {
   );
 }
 
-/**
- * Run both lanes on their own page and return every finding. The page is the
- * caller's to close; nothing here writes a baseline, so a finding is the only
- * output.
- */
 export async function runFidelityLanes(page, origin, options) {
   const {
     host,

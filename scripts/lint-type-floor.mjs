@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-// The 11px type floor (issue #708 §"One type ramp") — a source-scan gate,
-// not a budget. `packages/design/src/eleven-px-floor.test.ts` proves the
-// RAMP itself (`toCss()` / `toNativeTheme()`) never drops below 11px, but it
-// has no visibility into a hardcoded literal a consumer stylesheet writes on
-// its own — `.deviceListCurrent { font-size: 9.5px }` shipped straight past
-// that test the same day the ramp landed. This gate closes that hole by
-// scanning the CONSUMERS directly: hardcoded CSS `font-size` (px or rem) in
-// the three CSS surfaces that draw from the ramp, plus React Native
-// `fontSize:` numeric literals in the mobile app, which has no CSS layer for
-// the other gate to see at all.
-//
-// Zero tolerance, not a ratchet budget (contrast lint-container-opacity.mjs):
-// the 11px floor is DESIGN.md's own invariant ("Nothing falls below 11px" —
-// packages/design/src/typography.ts's header), not a migration surface with
-// legitimate pre-existing debt to shrink over time. Every violation this
-// gate finds gets fixed in the same change that adds the gate.
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
 
@@ -48,10 +32,6 @@ function lineOf(src, index) {
   return src.slice(0, index).split("\n").length;
 }
 
-/** Blank `/* … *\/` (CSS) or `//` + `/* *\/` (JS/TS) comment bodies to
- *  spaces, preserving newlines/length so line numbers stay accurate and a
- *  size mentioned in prose (like this file's own header) is never mistaken
- *  for a real declaration. */
 function blankCssComments(src) {
   return src.replace(/\/\*[\s\S]*?\*\//gu, (m) => m.replace(/[^\n]/gu, " "));
 }
@@ -61,12 +41,6 @@ function blankJsComments(src) {
     .replace(/(?<!:)\/\/[^\n]*/gu, (m) => " ".repeat(m.length));
 }
 
-// ── CSS: hardcoded `font-size` below the floor ──────────────────────────────
-//
-// Only a bare numeric literal (`px` or `rem`) counts — `var(--t-*-size)`,
-// `calc(...)`, `clamp(...)`, and keyword values (`inherit`/`unset`/`initial`)
-// are either already routed through the ramp or aren't a text size at all,
-// and `0` is the empty/reset value, not a shrunk text size.
 const CSS_FONT_SIZE_RE =
   /(?<![\w-])font-size\s*:\s*(?<value>[0-9.]+)(?<unit>px|rem)\s*[;}]/gu;
 
@@ -106,13 +80,6 @@ export function lintTypeFloorCss(root = ROOT, targets = CSS_TARGETS) {
   return { findings, filesScanned, missingTarget: null };
 }
 
-// ── Mobile: hardcoded React Native `fontSize:` below the floor ─────────────
-//
-// A bare numeric literal only — `fontSize: variable`, `fontSize:
-// theme.type.body.fontSize`, and similar expressions aren't a literal this
-// gate can misjudge, so they're left alone (out of scope, not silently
-// passed: a non-numeric fontSize is either already routed through the native
-// adapter or isn't a plain constant this gate can reason about).
 const TS_FONT_SIZE_RE =
   /(?<![\w-])fontSize\s*:\s*(?<value>-?[0-9.]+)\s*[,;}]/gu;
 

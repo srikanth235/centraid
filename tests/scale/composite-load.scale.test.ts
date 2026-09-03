@@ -24,53 +24,11 @@ import type {
 } from "../helpers/composite-workload.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
-/**
- * COMPOSITE LOAD (issue #842 W4.1).
- *
- * Every perf and scale rig in this repo before this one measures a single
- * dimension against a quiet host: `gateway-sessions` fans 40 session probes at
- * an otherwise idle gateway, `blob-egress` streams 128 MiB at an otherwise idle
- * gateway, `replica-bootstrap` walks 50,000 rows at an otherwise idle gateway.
- * A household does none of those things alone. A phone uploads a burst of
- * photos WHILE a laptop catches up its replica WHILE someone searches WHILE an
- * automation fires WHILE an agent answers — and the interference between them
- * is exactly the cost that a per-dimension rig cannot see.
- *
- * This rig runs both halves in ONE process against ONE real `serve()` gateway
- * so the comparison is apples to apples:
- *
- *   1. SOLO — each lane alone, back to back. This is the per-dimension world
- *      the existing rigs measure, re-measured HERE on THIS machine so the
- *      composite number is compared against a baseline from the same host and
- *      the same run, not against a constant measured on someone's laptop.
- *   2. COMPOSITE — every lane at once, same op counts, plus the two in-process
- *      lanes (harness turn dispatch and the automation missed-window scan) so
- *      the CPU is contended the way a real gateway's is.
- *
- * The headline budget is therefore a RATIO, not a duration —
- * `compositeMs / soloMs` — because a ratio measured on the same host in the
- * same run is the only form of this budget that survives moving between a
- * developer laptop and a CI runner, and because it answers the actual product
- * question: does putting the household's activities together cost more than
- * doing them one after another? The second gate is an absolute ceiling on the
- * slowest lane under composition, which is the starvation check. See the
- * comment at `worstByFactor` below for why the obvious third candidate — a
- * per-lane p95 ratio — is published but deliberately NOT gated.
- *
- * Refusals are permitted and are NOT failures — a gateway that sheds load with
- * a typed refusal is behaving correctly (that is W4.2's subject). What fails
- * here is an UNTYPED refusal, a transport error, or a lane that did not finish
- * its ops.
- */
 const OWNER = "tests/scale/composite-load.scale.test.ts";
 
-/** Ops per HTTP lane, in each of the two phases. */
 const OPS = 20;
-/** In-flight requests per lane. Two: the household, not a load generator. */
 const LANE_CONCURRENCY = 2;
-/** Harness turn dispatches fanned during the composite phase. */
 const TURNS = 128;
-/** Automations whose missed windows are scanned during the composite phase. */
 const AUTOMATIONS = 200;
 
 interface CeilingFile {
@@ -96,13 +54,6 @@ async function httpLanes(
   ]);
 }
 
-/**
- * The two lanes that are not HTTP. Both drive real product code: `runTurn` is
- * the shipped harness registry (with a scripted backend, as
- * `harness-sessions.scale.test.ts` does — a rig that spawned real model
- * adapters would measure a vendor's queue, not this product), and
- * `computeMissedWindows` is the shipped scheduler ledger scan.
- */
 async function inProcessLanes(): Promise<{
   turnsMs: number;
   automationsMs: number;
@@ -167,9 +118,6 @@ describe("composite-load.scale", () => {
       ceilings.metrics.compositeLoadFactor.ceilingThroughputFactor;
     const ceilingWorstLaneP95Ms =
       ceilings.metrics.compositeLoadFactor.ceilingWorstLaneP95Ms;
-    // #883 C2 item 4. The worst-lane ceiling only ever fences whichever lane
-    // happens to be slowest, so the READ lane the blob-reference CTE work
-    // touches gets its own number rather than hiding behind the write lane's.
     const ceilingRefSearchP95Ms =
       ceilings.metrics.refSearchUnderComposition.ceilingP95Ms;
     const refSearch = () =>
@@ -179,8 +127,6 @@ describe("composite-load.scale", () => {
     const gateway = await bootCompositeGateway("composite-load-");
     onTestFinished(() => gateway.close());
 
-    // Phase 1 — SOLO. Sequential so no lane contends with another; this is
-    // the per-dimension baseline the existing rigs represent, measured here.
     const soloStarted = performance.now();
     const solo: LaneResult[] = [];
     await forEachSequentially(
@@ -197,7 +143,6 @@ describe("composite-load.scale", () => {
     );
     const soloMs = performance.now() - soloStarted;
 
-    // Phase 2 — COMPOSITE. Every lane at once, plus the in-process lanes.
     const compositeStarted = performance.now();
     const [composite, inProcess] = await Promise.all([
       httpLanes(gateway, 201),
@@ -217,28 +162,6 @@ describe("composite-load.scale", () => {
         factor: soloP95 > 0 ? compositeP95 / soloP95 : Number.NaN,
       };
     });
-    // ── Choosing the budget shape ─────────────────────────────────────────
-    //
-    // The obvious budget — per-lane `compositeP95 / soloP95` — was measured
-    // first and REJECTED as a gate, because the first run showed why it does
-    // not work: the `browse` lane's solo p95 is ~5 ms, so its ratio under
-    // composition is x49 while its absolute p95 is 234 ms. A ratio over a
-    // near-zero denominator fences scheduler noise, not composition, and a
-    // gate that flakes is a gate that gets widened. The per-lane factors are
-    // still COMPUTED AND PUBLISHED below — they are the interesting finding —
-    // they are simply not the thing that fails the build.
-    //
-    // What gates instead, and why each is the honest form of the question:
-    //
-    //   throughputFactor = compositeMs / soloMs — does putting the household's
-    //   activities together cost MORE than doing them one after another? A
-    //   gateway that overlaps work lands well below 1.0; a gateway that has
-    //   serialized behind one lock lands at or above 1.0. Denominator is a
-    //   whole phase, so it is stable.
-    //
-    //   worstLaneP95Ms — an ABSOLUTE ceiling on the slowest lane under
-    //   composition. This is the starvation gate: it fires when any one lane
-    //   is pushed past what an owner would tolerate, whatever its solo cost.
     const worstByFactor = factors.reduce((left, right) =>
       right.factor > left.factor ? right : left
     );

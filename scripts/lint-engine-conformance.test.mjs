@@ -18,8 +18,6 @@ import {
   vaultEntityNames,
 } from "./lint-engine-conformance.mjs";
 
-// The gate over the real tree. Every engine is green today; this is the
-// assertion the sabotage runs were checked against.
 test("every shared engine conforms in the real tree", () => {
   for (const [engine, findings] of Object.entries(scanEngineConformance())) {
     assert.deepEqual(findings, [], `engine ${engine}`);
@@ -121,8 +119,6 @@ test("pending overlay gate rejects arbitrary hook state fed by a write result", 
   assert.match(findings[0], /one row store/u);
 });
 
-// ── the action-kit gate, driven with fixtures ────────────────────────────────
-
 const ACTION = "packages/blueprints/apps/tasks/actions/probe.ts";
 
 test("action-kit gate rejects a hand-rolled error taxonomy", () => {
@@ -138,7 +134,6 @@ test("action-kit gate rejects a hand-rolled error taxonomy", () => {
       }`,
     },
   ]);
-  // No kit import, a catch statement of its own, and the taxonomy's own word.
   assert.equal(findings.length, 3);
   assert.match(findings[0], /does not import/u);
   assert.match(findings[1], /catches its own vault error/u);
@@ -146,8 +141,6 @@ test("action-kit gate rejects a hand-rolled error taxonomy", () => {
 });
 
 test("action-kit gate passes an adopter, `.catch` on a best-effort promise included", () => {
-  // Notes' send-to-tasks shape: the backlink is deliberately best-effort, and
-  // swallowing ITS failure is not a second error taxonomy.
   assert.deepEqual(
     scanActionKitFiles([
       {
@@ -184,8 +177,6 @@ test("action-kit gate leaves queries, tests and non-blueprint trees alone", () =
   );
 });
 
-// ── the concept-scheme gate, driven with fixtures ────────────────────────────
-
 const SCHEME_KIT = "packages/blueprints/apps/_shared/concept-scheme-kit.ts";
 const SCHEME_KIT_FILE = {
   label: SCHEME_KIT,
@@ -210,8 +201,6 @@ test("concept-scheme gate rejects a second copy of a URI the kit owns", () => {
 });
 
 test("concept-scheme gate rejects a scheme the kit does not carry yet", () => {
-  // The half that keeps the vocabulary from forking again: a NEW scheme
-  // spelled in an app is a copy nobody has had the chance to duplicate yet.
   const findings = scanConceptSchemeFiles(
     [
       SCHEME_KIT_FILE,
@@ -246,11 +235,7 @@ test("concept-scheme gate passes an importer and ignores other trees", () => {
   );
 });
 
-// ── the declared-writes vocabulary ───────────────────────────────────────────
-
 test("the vault entity registry is read whole, not partially", () => {
-  // The declared-writes lane compares every `writes:` entry against this set;
-  // a scan that drifted to a handful of names would pass anything.
   const names = vaultEntityNames();
   assert.ok(names.size > 100, `only ${names.size} entities`);
   for (const entity of [
@@ -260,12 +245,9 @@ test("the vault entity registry is read whole, not partially", () => {
     "share.authority",
   ])
     assert.ok(names.has(entity), entity);
-  // Retired this wave — a stale name would pass a declaration that cannot happen.
   for (const gone of ["tally.expense_receipt", "social.contact_card"])
     assert.ok(!names.has(gone), gone);
 });
-
-// ── the search-status gate, driven with fixtures ─────────────────────────────
 
 const SCAFFOLD = "packages/blueprints/apps/_shared/search-scaffold.ts";
 const SCAFFOLD_FILE = {
@@ -304,8 +286,6 @@ test("search-status gate rejects importing the type through a re-declaring modul
     SCAFFOLD_FILE,
     {
       label: "packages/blueprints/apps/photos/search.ts",
-      // The declaration itself is reported separately; this asserts the
-      // IMPORTER is caught too, because it is consuming the wrong owner.
       code: 'export type SearchStatus = "resting" | "searching" | "ready" | "unreachable";',
     },
     {
@@ -320,7 +300,6 @@ test("search-status gate rejects importing the type through a re-declaring modul
 });
 
 test("search-status gate permits importing through a module that re-exports the scaffold's type", () => {
-  // One declaration site, one owner: `apps/people/types.ts` does exactly this.
   assert.deepEqual(
     scanSearchStatusFiles([
       SCAFFOLD_FILE,
@@ -349,8 +328,6 @@ test("search-status gate permits the sibling import inside _shared", () => {
     []
   );
 });
-
-// ── the selection gate, driven with fixtures ─────────────────────────────────
 
 test("selection gate rejects an app-local select-all", () => {
   const findings = scanSelectionFiles([
@@ -406,8 +383,6 @@ test("selection gate leaves _shared and test files alone", () => {
     []
   );
 });
-
-// ── the component-existence ledger, driven with fixtures ─────────────────────
 
 test("an opening tag is read across lines, braces and strings", () => {
   const spread = `<button
@@ -467,8 +442,6 @@ test("component-existence ledger rejects an instance it does not carry", () => {
 });
 
 test("component-existence ledger also rejects an uncounted CLEANUP", () => {
-  // The half that makes it a ratchet rather than a cap: fixing one instance
-  // without lowering the number leaves the ledger lying about the tree.
   const findings = scanComponentExistence(
     [
       {
@@ -514,8 +487,6 @@ test("component-existence ledger passes at exactly the seeded count", () => {
     []
   );
 });
-
-// ── the refusal-grammar scanner, driven with fixtures ────────────────────────
 
 test("a control disabled by a structural condition with no reason fails", () => {
   const findings = scanRefusalGrammar(
@@ -570,8 +541,6 @@ test("a selected-state flag alone is exempt — it is not a refusal", () => {
 });
 
 test("an in-flight flag mixed with a structural one still fails", () => {
-  // This is the shape that hides real refusals: `busy || people.length === 0`
-  // reads as an in-flight guard at a glance and is not one.
   assert.equal(
     scanRefusalGrammar(
       `<Pressable disabled={busy || people.length === 0} />`,
@@ -582,8 +551,6 @@ test("an in-flight flag mixed with a structural one still fails", () => {
 });
 
 test("a generic primitive forwarding its own `disabled` prop is exempt", () => {
-  // `kit/components/Button.tsx` — the reason belongs at the call site that
-  // computed the refusal, not inside the thing that paints it.
   assert.deepEqual(
     scanRefusalGrammar(
       `<Pressable accessibilityState={{ disabled }} onPress={onPress} />`,
@@ -594,8 +561,6 @@ test("a generic primitive forwarding its own `disabled` prop is exempt", () => {
 });
 
 test("accessibilityState={{disabled:...}} is caught on its own", () => {
-  // A control can go inert for a screen reader without ever spelling
-  // `disabled=` — the a11y state is the whole refusal in that case.
   assert.equal(
     scanRefusalGrammar(
       `<Pressable accessibilityState={{ disabled: quotaExceeded }} />`,
@@ -606,8 +571,6 @@ test("accessibilityState={{disabled:...}} is caught on its own", () => {
 });
 
 test("comments do not count as an explanation to the member", () => {
-  // The duplicate-review row carried its reason in a `//` comment for months.
-  // A comment is a note to the next author, not a sentence the member reads.
   assert.equal(
     scanRefusalGrammar(
       `// inert because the vault is read-only for this member — reason

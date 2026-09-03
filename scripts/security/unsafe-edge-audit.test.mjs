@@ -1,12 +1,3 @@
-/**
- * Tests for the Rust unsafe-edge audit (issue #842 W7.2).
- *
- * The lane reports zero unsafe sites today, and a gate that reports zero
- * because it never looks is indistinguishable from one that reports zero
- * because the tree is clean. So every rule here is exercised against a seeded
- * fixture tree that really does contain `unsafe` — the demonstrated-red is
- * intrinsic to the suite, not a one-off manual run.
- */
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,12 +15,6 @@ import {
 const FIXTURE_ROOT = path.join(tmpdir(), "centraid-unsafe-edge-fixtures");
 const CARGO = '[package]\nname = "fixture"\n';
 
-/**
- * Build a throwaway crate tree under a fixed, deterministic path.
- * @param {string} name Fixture name, used as the directory.
- * @param {Record<string, string>} files Relative path → contents.
- * @returns {string} The tree root.
- */
 function fixture(name, files) {
   const root = path.join(FIXTURE_ROOT, name);
   rmSync(root, { recursive: true, force: true });
@@ -179,8 +164,6 @@ test("a ledger entry naming a crate that no longer exists fails", () => {
 });
 
 test("the real repository is clean and fully ledgered", () => {
-  // Not a fixture: this asserts the shipped gate is green on the tree as it
-  // stands, so a red run here means real Rust changed.
   const result = auditUnsafeEdges();
   assert.deepEqual(result.findings, []);
   assert.deepEqual(Object.keys(result.counts).toSorted(), [

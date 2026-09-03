@@ -69,9 +69,6 @@ describe("ontology.scale", () => {
     const partyCount = pageCount("core.party", "party_id");
     const relationCount = pageCount("core.link", "link_id");
     const durationMs = performance.now() - started;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       partyCount === 10_001 && relationCount === 9_999 && durationMs < 10_000;

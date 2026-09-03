@@ -1,21 +1,7 @@
-/**
- * §8 adversaries and §9 trends (#915 Wave 3).
- *
- * §8 is the three falsifiers the author did not write: mutation seeds against
- * their floors, every fuzz target, and the engine registry with the property
- * flow that owns each engine or the honest "no owner".
- *
- * §9 draws a series only once it has fourteen candidates behind it, with the
- * trailing-30 interquartile band and an emphasised endpoint. "No trend yet" is
- * gone: a series with too few points is a number in §10, not an empty chart.
- */
-
 import { escapeHtml, pill, section, table } from "./util.mjs";
 
-/** The minimum candidates a series needs before it earns a chart. */
 export const TREND_MINIMUM_POINTS = 14;
 
-/** §8. */
 export function renderAdversaries(model) {
   const { seeds, mutation, fuzzTargets, fuzz, engines } = model.adversaries;
   const scoreBySeed = new Map(mutation.map((row) => [row.id, row]));
@@ -70,7 +56,6 @@ export function renderAdversaries(model) {
   );
 }
 
-/** The trailing interquartile band of a series. */
 export function band(values) {
   const sorted = [...values].sort((a, b) => a - b);
   return {
@@ -79,7 +64,6 @@ export function band(values) {
   };
 }
 
-/** One trend card, drawn as inline SVG so the archive needs no script. */
 function chart(trend) {
   const data = trend.points;
   const width = 300;
@@ -125,7 +109,6 @@ function chart(trend) {
 </div>`;
 }
 
-/** §9. */
 export function renderTrends(model) {
   const drawable = model.trends.filter(
     (trend) => (trend.points ?? []).length >= TREND_MINIMUM_POINTS

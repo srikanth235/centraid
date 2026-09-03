@@ -1,12 +1,3 @@
-/**
- * Tests for the Rust supply-chain gate (issue #842 W7.2).
- *
- * `cargo-audit` and `cargo-deny` are not installed everywhere, so the gate's
- * availability handling is the part most likely to rot into a silent pass.
- * These drive it through injected probe/run seams and pin every outcome —
- * including the one that matters most: a tool that probes as AVAILABLE but
- * produces no result for a crate must FAIL, never skip.
- */
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,12 +14,6 @@ import {
 
 const FIXTURE_ROOT = path.join(tmpdir(), "centraid-rust-supply-chain-fixtures");
 
-/**
- * Build a tree of locked crates under a fixed, deterministic path.
- * @param {string} name Fixture name.
- * @param {string[]} crates Relative crate directories.
- * @returns {string} The tree root.
- */
 function lockedCrates(name, crates) {
   const root = path.join(FIXTURE_ROOT, name);
   rmSync(root, { recursive: true, force: true });
@@ -55,8 +40,6 @@ const TOOL_IDS = RUST_SUPPLY_CHAIN_TOOLS.map((t) => t.id);
 test.after(() => rmSync(FIXTURE_ROOT, { recursive: true, force: true }));
 
 test("classifyProbe reads the 'no such command' text, not just the exit code", () => {
-  // cargo has reported a missing subcommand with both zero and non-zero status
-  // across releases, which is why the text decides.
   assert.equal(classifyProbe(MISSING), "missing");
   assert.equal(classifyProbe({ ...MISSING, status: 0 }), "missing");
 });
@@ -85,17 +68,12 @@ test("discoverLockedCrates returns nothing when no crate is locked", () => {
 
 const CRATES = ["a/one", "b/two"];
 
-/**
- * @param {string} outcome Outcome recorded for every tool/crate pair.
- * @returns {{tool: string, crate: string, outcome: string}[]} Records.
- */
 function allRecords(outcome) {
   return TOOL_IDS.flatMap((tool) =>
     CRATES.map((crate) => ({ tool, crate, outcome }))
   );
 }
 
-/** @returns {{tool: string, crate: null, outcome: string}[]} Skip records. */
 function skipRecords() {
   return TOOL_IDS.map((tool) => ({ tool, crate: null, outcome: "skipped" }));
 }
@@ -133,8 +111,6 @@ test("the same skip FAILS under --require, which is what CI passes", () => {
 });
 
 test("AVAILABLE BUT DID NOT RUN fails — the rule this gate exists for", () => {
-  // The dangerous shape: the tool is installed, one crate silently produced no
-  // record, and the run still looked green. It must not.
   const records = TOOL_IDS.map((tool) => ({
     tool,
     crate: "a/one",
@@ -160,7 +136,6 @@ test("a tool that fails to execute fails the gate", () => {
 
 test("runRustSupplyChain runs each available tool once per locked crate", () => {
   const root = lockedCrates("run-all", ["a/one", "b/two"]);
-  /** @type {string[][]} */
   const invocations = [];
   const result = runRustSupplyChain({
     root,
@@ -183,7 +158,6 @@ test("runRustSupplyChain runs each available tool once per locked crate", () => 
 
 test("cargo-deny is pointed at the single repo-root policy file", () => {
   const root = lockedCrates("deny-config", ["a/one"]);
-  /** @type {string[][]} */
   const invocations = [];
   runRustSupplyChain({
     root,

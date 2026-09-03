@@ -30,8 +30,6 @@ test("classifyTask: a local hit is attributed to the local cache", () => {
 });
 
 test("classifyTask: an unrecognised shape is unknown, never a hit", () => {
-  // A cache report that rounds an unfamiliar summary toward "it worked" is
-  // worse than no report — it answers the question wrongly and confidently.
   assert.equal(classifyTask({}).status, "unknown");
   assert.equal(
     classifyTask({ cache: { status: "SOMETHING-NEW" } }).status,
@@ -68,7 +66,6 @@ test("summarize: hit rate is over classified tasks only", () => {
   assert.equal(result.hits, 1);
   assert.equal(result.misses, 1);
   assert.equal(result.unknown, 1);
-  // 1 hit out of 2 classified — the unknown row does not silently count either way.
   assert.equal(result.hitRate, 0.5);
   assert.equal(result.missMs, 3_000);
 });

@@ -1,17 +1,7 @@
-/* Shared contracts for the city package.
- *
- * The package follows the same seam as PGSimCity: core owns the content and
- * contracts, sim is renderer-independent, world owns Three.js, and ui owns
- * the browser surface. Keeping these types here prevents those layers from
- * reaching through one another's implementation details.
- */
-
 import type * as THREE from "three";
 
 export type ThreeNamespace = typeof import("three");
 
-// Kit options are an intentionally open contract: landmark lanes pass small,
-// primitive-specific option bags and the kit validates/coerces them at runtime.
 // oxlint-disable-next-line typescript/no-explicit-any -- (#704) open kit option bags are the documented landmark boundary.
 export type KitOptions = Record<string, any>;
 

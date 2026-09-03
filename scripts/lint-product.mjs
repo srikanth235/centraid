@@ -1,42 +1,7 @@
 #!/usr/bin/env node
-// The rung-1 product/contract bundle (#915 Wave 4).
-//
-// `check:push` listed 59 gate names. Thirty-eight of them run in under a
-// second each and exist only because a gate needs a name in package.json —
-// they are not thirty-eight decisions a developer makes, they are one:
-// "does this diff satisfy the repo's contracts?". Naming them individually
-// cost the reader a 59-line command and cost the runner thirty-eight
-// concurrency slots that the long poles wanted.
-//
-// So they collapse into one name, `lint:product`, run here at full machine
-// parallelism (they are tiny single-threaded node processes; the pool that
-// runs `check:push` is deliberately capped at four because several of ITS
-// members are themselves parallel).
-//
-// WHAT THIS DELIBERATELY DOES NOT DO: import each gate's module and call an
-// exported check function in-process. Every one of these scripts is a CLI
-// whose work runs behind an `import.meta.filename` main guard and ends in
-// `process.exit`, so hosting them in one process means monkey-patching
-// `process.exit` and `process.argv` per gate. A bundle that swallows one
-// gate's failure is strictly worse than the ~3 seconds it saves, and
-// `check:push`'s wall clock is bounded by `test:affected` either way — the
-// win this bundle exists for is the name count, not the clock. Each gate is
-// therefore spawned exactly as `check:push` used to spawn it (`bun run
-// <gate>`), with the same per-gate buffered output, so failure attribution is
-// bit-identical to what `scripts/ci/run-gates.mjs` reported before.
-//
-// The membership list is a contract: `scripts/ci/gate-classes.json` classifies
-// every gate, and `scripts/ci/gate-classes.test.mjs` fails if a member is
-// unclassified, is hygiene-class (those belong to the weekly lane), or is also
-// named separately in `check:push`.
 import { spawn } from "node:child_process";
 import { availableParallelism } from "node:os";
 
-/**
- * The bundle's membership. Ordered longest-first the way `run-gates.mjs`
- * orders its own list, so the pool starts the slowest members while the
- * shorter ones fill in behind them.
- */
 export const PRODUCT_GATES = Object.freeze([
   "test:ratchet",
   "lint:engine-conformance",
@@ -81,11 +46,6 @@ export const PRODUCT_GATES = Object.freeze([
 
 const secs = (ms) => (ms / 1000).toFixed(1);
 
-/**
- * Spawn one root package script, buffering its output.
- * @param {string} name The root package script to run, e.g. `lint:hairline`.
- * @returns {Promise<{name: string, code: number, ms: number, out: string}>} The gate's exit code, wall clock, and combined output.
- */
 function runOne(name) {
   return new Promise((resolve) => {
     const t0 = Date.now();
@@ -93,7 +53,6 @@ function runOne(name) {
       stdio: ["ignore", "pipe", "pipe"],
       env: process.env,
     });
-    /** @type {Buffer[]} */
     const chunks = [];
     child.stdout.on("data", (c) => chunks.push(c));
     child.stderr.on("data", (c) => chunks.push(c));
@@ -111,22 +70,12 @@ function runOne(name) {
   });
 }
 
-/**
- * Run every named gate at bounded concurrency, printing a progress line per
- * gate and the full buffered output of each failure at the end. Every gate
- * runs even after one fails: one pass tells you everything that is wrong.
- *
- * @param {readonly string[]} names The gates to run, longest-first.
- * @param {{jobs?: number, label?: string, write?: (s: string) => void, run?: typeof runOne}} [options] Pool size, the noun used in progress lines, the sink for those lines, and the gate runner (injected by the tests).
- * @returns {Promise<{results: Array<{name: string, code: number, ms: number, out: string}>, failed: string[], ms: number}>} Every gate's result, the names that failed, and the lane's wall clock.
- */
 export async function runGates(names, options = {}) {
   const write = options.write ?? ((s) => process.stderr.write(s));
   const run = options.run ?? runOne;
   const label = options.label ?? "gates";
   const jobs = Math.max(1, options.jobs ?? Math.max(2, availableParallelism()));
   const started = Date.now();
-  /** @type {Array<{name: string, code: number, ms: number, out: string}>} */
   const results = [];
   let cursor = 0;
   let running = 0;

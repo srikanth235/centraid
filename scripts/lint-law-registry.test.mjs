@@ -1,13 +1,3 @@
-// Fail-path proof for `bun run lint:law-registry` (issue #656 Layer 4).
-//
-// A registry lint that cannot go red reads as protection while providing none,
-// so every rule below is stated as "this violation is rejected" rather than
-// "the real repo passes".
-//
-// Uses `mkdtempSync` rather than `@centraid/test-kit`'s `tempDir()`: that
-// module registers a vitest `afterAll` at import time and throws under
-// `node --test`, which is the runner this lane uses. Same pattern as
-// scripts/lint-protocol-routes.test.mjs.
 import assert from "node:assert/strict";
 // oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered at creation via t.after below.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -96,9 +86,6 @@ test("a duplicate is caught even before the registry key exists", (t) => {
   const violations = run(root, { laws: undefined });
   assert.equal(violations.length, 1);
   assert.match(violations[0], /one law, one home/u);
-  // The missing key is a notice, not a violation: the owner/orphan checks are
-  // reported as inactive rather than silently passing, and the check that does
-  // not need the registry still gates.
   const notices = noticesFor(root, { laws: undefined });
   assert.equal(notices.length, 1);
   assert.match(notices[0], /owner and orphan checking is NOT/u);

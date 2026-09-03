@@ -1,7 +1,3 @@
-// The judgment half of the RTL + CJK gallery lanes (#839, gap G13).
-//
-// Every test here flips ONE input of a passing record and proves the lane goes
-// red for it. A gate nobody has watched fail is a gate nobody knows is wired.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -26,7 +22,6 @@ import {
 const SANS =
   "'Instrument Sans', 'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif";
 
-/** A record with every field a judge reads, in its passing state. */
 function record(overrides = {}) {
   return {
     ancestorIsolated: false,
@@ -55,8 +50,6 @@ function record(overrides = {}) {
   };
 }
 
-// ── Logical boxes ────────────────────────────────────────────────────────
-
 test("an asymmetric box that swaps its sides under RTL is logical", () => {
   const ltr = record({ padLeft: "16px", padRight: "4px" });
   const rtl = record({ padLeft: "4px", padRight: "16px" });
@@ -64,8 +57,6 @@ test("an asymmetric box that swaps its sides under RTL is logical", () => {
 });
 
 test("an asymmetric box that keeps its sides under RTL is physical", () => {
-  // The sabotage: the same pair, unmoved. This is what a `padding-left` rule
-  // renders as, and it is the only difference from the case above.
   const ltr = record({ padLeft: "16px", padRight: "4px" });
   const rtl = record({ padLeft: "16px", padRight: "4px" });
   const findings = judgeMirroredBoxes(alignRenders([ltr], [rtl]));
@@ -99,8 +90,6 @@ test("a positioned box anchored logically keeps its start offset", () => {
 });
 
 test("a positioned box anchored to a physical edge is caught", () => {
-  // `right: -3px` on a 92px-wide parent: 84px from the inline start under
-  // LTR, and -3px from it under RTL, because the dot never moved.
   const ltr = record({ classes: "iconDot", startOffset: 84, width: 11 });
   const rtl = record({ classes: "iconDot", startOffset: -3, width: 11 });
   const findings = judgeMirroredBoxes(alignRenders([ltr], [rtl]));
@@ -127,8 +116,6 @@ test("a drifted tree is a lane bug, not a product finding", () => {
   assert.throws(() => alignRenders([record()], []), /different trees/u);
 });
 
-// ── Physical alignment ───────────────────────────────────────────────────
-
 test("logical text alignment passes and physical text alignment fails", () => {
   assert.deepEqual(judgePhysicalAlignment([record({ textAlign: "end" })]), []);
   assert.deepEqual(
@@ -143,12 +130,9 @@ test("logical text alignment passes and physical text alignment fails", () => {
 });
 
 test("only the rule that introduced the physical value is named", () => {
-  // The value inherits; a whole card's subtree would otherwise be reported.
   const heir = record({ parentTextAlign: "left", textAlign: "left" });
   assert.deepEqual(judgePhysicalAlignment([heir]), []);
 });
-
-// ── Numeric isolation ────────────────────────────────────────────────────
 
 const numeric = (overrides = {}) =>
   record({
@@ -210,8 +194,6 @@ test("a text leaf may isolate; a layout container may not", () => {
 });
 
 test("the UA stylesheet's default isolate on a plain block is not the register's", () => {
-  // Chromium computes `unicode-bidi: isolate` on every `div`/`section`; that
-  // default follows the page direction (rtl here) and pins nothing.
   assert.deepEqual(
     judgeIsolatedContainers([
       numeric({ childDisplays: ["inline", "block"], direction: "rtl" }),
@@ -220,10 +202,7 @@ test("the UA stylesheet's default isolate on a plain block is not the register's
   );
 });
 
-// ── The bidi probe ───────────────────────────────────────────────────────
-
 const PASSING_PROBE = {
-  // Un-isolated in the RTL paragraph, the date's groups flip: day leftmost.
   control: { day: 10, year: 48 },
   controlDirection: "rtl",
   isolated: { day: 48, year: 10 },
@@ -272,8 +251,6 @@ test("text that did not lay out is reported rather than passed", () => {
   );
 });
 
-// ── The CJK lane ─────────────────────────────────────────────────────────
-
 test("quoting is not a difference between two font stacks", () => {
   assert.equal(
     normalizeStack(`"Instrument Sans", 'Noto Sans JP', sans-serif`),
@@ -320,23 +297,12 @@ test("a role that holds its rung under CJK copy passes", () => {
 });
 
 test("a role that reads its leading off the glyphs is caught", () => {
-  // `line-height: normal` is the usual way in: the rung follows the face that
-  // answered the CJK run instead of the token.
   const latin = record();
   const cjk = record({ ownText: "設定は保存", typeTriple: "400|13px|21px" });
   const findings = judgeTypeStability(alignRenders([latin], [cjk]));
   assert.equal(findings.length, 1);
   assert.match(findings[0], /type moved under CJK copy/u);
 });
-
-// ── The page half, smoked ────────────────────────────────────────────────
-//
-// `collectInPage`, `probeBidiInPage` and `localizeInPage` are shipped to the
-// browser by source text, so they close over nothing — which is what lets them
-// run here against a jsdom document. jsdom does no layout, so this proves the
-// SHAPE and not the geometry: every element indexed once, in document order,
-// carrying the fields the judges read. The geometry is the browser's to
-// answer, and `design:gallery` is where it answers it.
 
 async function mount(html) {
   const { JSDOM } = await import("jsdom");
@@ -356,13 +322,8 @@ test("the collector indexes the host subtree once, in document order", async () 
     records.map((entry) => `${entry.index}:${entry.tag}.${entry.classes}`),
     ["0:main.", "1:p.a", "2:span.b", "3:i."]
   );
-  // Own text, not the subtree's: the span contributes "x" and not "xy".
   assert.equal(records[2].ownText, "x");
   assert.equal(records[1].ownText, "12 Aug");
-  // Whether an ANCESTOR isolates is answered by the cascade, which jsdom does
-  // not implement faithfully (it reports the child's inline `unicode-bidi` on
-  // the parent). The walk is smoked for shape only; what the flag MEANS is
-  // pinned on the judge above, where it is a plain input.
   assert.equal(typeof records[3].ancestorIsolated, "boolean");
   assert.equal(records[0].startOffset, null);
   assert.equal(records[2].childDisplays.length, 1);
@@ -400,7 +361,6 @@ test("the CJK localizer swaps copy and leaves the structure alone", async () => 
     CJK_SAMPLE.includes(host.querySelector("b").textContent[0]),
     true
   );
-  // A whitespace-only node carries no copy to swap and is left alone.
   assert.equal(host.querySelector("span").textContent, " ");
   assert.equal(document_.documentElement.lang, "ja");
 });

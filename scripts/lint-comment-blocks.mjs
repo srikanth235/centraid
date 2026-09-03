@@ -1,15 +1,4 @@
 #!/usr/bin/env node
-// Comment block-length bound (#861) — WARN-ONLY.
-//
-// The density ratchet bounds how much comment a file carries; this bounds how
-// much a reader must swallow in one gulp. A ten-line ceiling is the essay
-// tripwire: past it a block has stopped stating an obligation and started
-// explaining itself. The one legitimate long form is the file-top orientation
-// header — the mental model to load before reading the file — so a block that
-// starts before the first code token gets fifteen.
-//
-// Warn-only: block length is a surrogate, and the deletion test cannot be
-// counted. Promotion to a gate would be a separate ruling on #861.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -25,17 +14,10 @@ import {
 export const BLOCK_LIMIT = 10;
 export const HEADER_LIMIT = 15;
 
-/**
- * Blocks in `text`: one multi-line comment is one block; consecutive `//`
- * comments form one block until a non-comment code line breaks the run. Blank
- * lines do not break it — a paragraph gap inside a wall of prose is still one
- * wall.
- */
 export function commentBlocks(text, fileName) {
   const { sourceFile, ranges } = commentRanges(text, fileName);
   const lines = text.split("\n");
   const lineOf = (pos) => sourceFile.getLineAndCharacterOfPosition(pos).line;
-  // First token start, leading trivia skipped: everything before it is header.
   const firstCodeStart = sourceFile.getStart(sourceFile);
   const blocks = [];
   let run = null;

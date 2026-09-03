@@ -9,22 +9,13 @@ import { findCollectionErrors } from "./collection-tripwire.mjs";
 const SCRIPT = path.join(import.meta.dirname, "collection-tripwire.mjs");
 const FIXTURES = path.join(import.meta.dirname, "fixtures");
 
-// Both fixtures are verbatim `vitest run --reporter=json` output for
-// `apps/mobile/src/lib/replica/node-sqlite-driver.jsdom.test.ts`: healthy, and
-// with the node:sqlite externalization plugin removed from the test-kit node
-// preset — the exact defect that made
-// `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` uncollectable
-// (#842). They are real reports rather than hand-written shapes so the gate is
-// pinned to what Vitest actually emits, not to what this script assumed.
 const HEALTHY = path.join(FIXTURES, "vitest-healthy.json");
 const COLLECTION_ERROR = path.join(FIXTURES, "vitest-collection-error.json");
 
-/** Parse a fixture report. */
 function load(fixture) {
   return JSON.parse(readFileSync(fixture, "utf8"));
 }
 
-/** Run the gate CLI over a report path. */
 function runGate(reportPath, ...extra) {
   return spawnSync(
     process.execPath,
@@ -119,29 +110,10 @@ test("a missing report is 'not measured' locally and fatal under --require-repor
   assert.match(strict.stderr, /is missing, so no file could be scored/u);
 });
 
-// The wiring, not the scoring. `--require-report` is a promise that the report
-// EXISTS by the time the gate runs, and nothing checked that the lane asking for
-// it also writes one. `verify` asked for it while `test:suite` ran
-// `--reporter=default` alone: the suite went green, 1502 files and 18162 tests
-// passed, and the job's last step failed on an artifact no step in it produced.
-// A deterministic red on a job in `check`'s needs, so the required check could
-// not pass on any run that reached the step (#906). Derived from the shipped
-// YAML the way lint-e2e-wiring is, so a new lane inherits the check.
 const CI_YML = path.join(import.meta.dirname, "../../.github/workflows/ci.yml");
 const PACKAGE_JSON = path.join(import.meta.dirname, "../../package.json");
 const REPORT_PATH = "artifacts/test-results/vitest.json";
 
-/**
- * Job name → its executable lines, read by indentation. Jobs sit at 2 spaces and
- * a `- run:` (or a `run: |` block's body) is anything deeper.
- *
- * COMMENTS ARE STRIPPED, and that is the whole correctness of this check. The
- * first draft kept them and passed against the very defect it was written for:
- * `verify`'s header comment contains the words "`bun run coverage` alone at
- * 20m15s", so a check looking for a producer invocation found one in prose. A
- * wiring check that reads commentary is the same class of mistake as the wiring
- * it is checking.
- */
 function jobsWithRunLines(source) {
   const jobs = new Map();
   let current = null;
@@ -161,7 +133,6 @@ function jobsWithRunLines(source) {
 
 test("every lane that demands --require-report also runs a script that writes the report", () => {
   const scripts = JSON.parse(readFileSync(PACKAGE_JSON, "utf8")).scripts;
-  // The scripts that actually produce the artifact the gate reads.
   const producers = Object.entries(scripts)
     .filter(([, body]) => body.includes(`--outputFile=${REPORT_PATH}`))
     .map(([name]) => name);

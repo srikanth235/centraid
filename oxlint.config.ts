@@ -5,22 +5,6 @@ import vitest from "ultracite/oxlint/vitest";
 
 import { typeAwareOnlyRules } from "./scripts/lint-types-rules.mjs";
 
-// ---------------------------------------------------------------------------
-// #656 Layer 4 — test seams as merge blockers.
-//
-// TESTING.md says "prefer the kit". Prose does not survive contact with an
-// agent writing the twentieth test file of a session, so the three seams whose
-// hand-rolled forms actually caused defects are mechanical here. Each entry
-// names the kit helper that replaces it; a ban with no shorter alternative is
-// just friction, so the helper landed first.
-//
-// `Date.now()` is deliberately NOT on this list. oxlint 1.76 has no
-// `no-restricted-syntax`, so the defect's real shape — wall clock read *inside*
-// an assertion's expected value — is not expressible; only a blanket property
-// ban is. That ban would touch 162 call sites, of which the sampled majority
-// are relative offsets (`Date.now() + 60_000`), unique id suffixes, and elapsed
-// measurement in perf rigs. A fake clock makes those wrong, not better, so the
-// rule would buy a rename and no determinism. See docs/coding-standards.md.
 const TEST_SEAM_PROPERTIES = [
   {
     property: "mkdtemp",
@@ -84,9 +68,6 @@ const TEST_SEAM_IMPORTS = {
       message: TEMP_DIR_IMPORT_MESSAGE,
     },
   ],
-  // An override replaces the root rule's configuration rather than merging
-  // with it, so the repo-wide deep-import ban is restated here. Dropping it
-  // would silently ungate every test file.
   patterns: [
     {
       group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
@@ -96,36 +77,14 @@ const TEST_SEAM_IMPORTS = {
   ],
 };
 
-// The vitest-owned test files. Playwright's e2e specs match the same shape but
-// run under a different runner with no `onTestFinished`, so they are switched
-// back off in the last override.
 const VITEST_TEST_FILES = [
   "**/*.{test,spec}.{ts,tsx}",
-  // #781 — `.test.mjs` was invisible to the seam rules (11 files carried raw
-  // mkdtemp*). Widened, not carved: node:test-runner files that genuinely
-  // cannot import the kit (tempDir() registers a vitest afterAll at import
-  // time) suppress per-line with a justification instead of being excluded
-  // here wholesale.
   "**/*.test.mjs",
   "**/*.test-fixtures.ts",
   "tests/helpers/**/*.ts",
-  // #781 — the agent-e2e harness/flow sources drive the nightly journeys and
-  // had the same seam exposure (Math.random ports in the pairing harness);
-  // they are test infrastructure, so the seam rules apply.
   "tests/agent-e2e-*/**/*.mjs",
 ];
 
-// Hermes compatibility, kept separate so the mobile/time-engine *test* files
-// can carry both this and the seam rules — an override replaces a rule's
-// configuration, so the two lists have to be spread together rather than
-// layered.
-// `toSorted` alone, because it is the only absence anything measured (#905):
-// the device threw on it, and #903's polyfill header reaches the same finding
-// from the engine side while recording that this Hermes build DOES ship
-// `toReversed`, `toSpliced`, `with` and `findLast`. Those four were briefly
-// banned here as a precaution; a gate that fails a build over a method the
-// engine implements is wrong rather than cautious, so they are gone.
-// `scripts/lint-hermes-array-surface.mjs` carries the full reasoning.
 const HERMES_ARRAY_PROPERTIES = [
   {
     property: "toSorted",
@@ -134,21 +93,11 @@ const HERMES_ARRAY_PROPERTIES = [
   },
 ] as const;
 
-// Ultracite is the reviewed policy seed; Oxlint is the only routine lint
-// command and this file is the repository's only lint configuration.
-// core + react are extended, while vitest is NOT: it applies
-// entirely through "overrides", and an extended preset's overrides outrank the
-// consumer's, so `extends: [vitest]` would leave no way to say "these rules,
-// but not on the Playwright specs". Its override is therefore spliced into
-// `overrides` below verbatim — same rules, same glob — which makes ordering
-// ours. See TESTING.md, "ultracite vitest preset (#573)".
 export default defineConfig({
   extends: [core, react],
   options: {
     denyWarnings: true,
     reportUnusedDisableDirectives: "deny",
-    // The pinned TypeScript compiler owns compiler diagnostics. The separate
-    // compatibility pass in scripts/lint-types.sh admits only proven rules.
     typeAware: false,
     typeCheck: false,
   },
@@ -158,46 +107,17 @@ export default defineConfig({
     "**/node_modules/**",
     "apps/oauth-worker/worker-configuration.d.ts",
     "apps/web/src/generated/**",
-    // Release-generated recognition bundles carry minified/transformed module
-    // imports that are not authored lint input. Their source modules are
-    // linted under packages/model-runtime and the emitted handlers have
-    // manifest, behavior, and size conformance tests.
     "packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js",
     "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",
     "packages/blueprints/automations/embed-text/automations/embed-text/handler.js",
     "packages/blueprints/automations/faces/automations/faces/handler.js",
-    // `place-names` (#816) is the same kind of artefact for a different reason:
-    // no model, but a vendored settlement table inlined into the bundle. Its
-    // authored halves — the handler and the lookup — are linted under
-    // packages/model-runtime.
     "packages/blueprints/automations/place-names/automations/place-names/handler.js",
     "packages/blueprints/automations/transcript/automations/transcript/handler.js",
   ]),
   rules: {
-    // Ultracite's core preset contains type-aware rules. They cannot execute
-    // with options.typeAware=false, so force the complete pinned engine
-    // surface off here; scripts/lint-types.sh admits eight rules explicitly.
     ...Object.fromEntries(typeAwareOnlyRules.map((rule) => [rule, "off"])),
-    // Rules ultracite 7.9's presets newly enable. Issue #210 fixed this
-    // repo's profile as correctness + suspicious + perf with explicit
-    // opinions, so these are pinned off rather than silently adopted. The
-    // count after each is what turning it back on would cost today, so a
-    // family can be adopted on its own terms later.
-    //
-    // The jsx-a11y family was the first to be adopted on its own terms
-    // (#573): all ten rules are back on the preset's defaults and their 223
-    // sites are fixed with native elements, not suppressions. Nothing from
-    // that family belongs in this list again. Families C-F followed; what is
-    // left in this list is what survived being audited, not what was skipped.
-    //
-    // Every loop must declare whether its work is independent (concurrent) or
-    // intentionally ordered. Raw awaits in loops obscure that contract, so the
-    // rule applies equally to production code and test scenarios. Ordered work
-    // belongs behind a named, tested primitive; independent work uses bounded
-    // or unbounded concurrency as its resource contract permits. #573
     "no-await-in-loop": "error",
 
-    // Repo profile (#210).
     "arrow-body-style": "off",
     "class-methods-use-this": "off",
     complexity: "off",
@@ -250,9 +170,6 @@ export default defineConfig({
     "promise/no-promise-in-callback": "off",
     "promise/prefer-await-to-callbacks": "off",
     "promise/prefer-await-to-then": "off",
-    // react/react-compiler already validates referential stability across the
-    // repository. Enabling these older heuristic rules as well would duplicate
-    // that owner and flag constructions the compiler proves safe.
     "react-perf/jsx-no-new-function-as-prop": "off",
     "react/exhaustive-deps": "error",
     "react/jsx-curly-brace-presence": "off",
@@ -280,9 +197,6 @@ export default defineConfig({
     "typescript/no-inferrable-types": "off",
     "typescript/no-invalid-void-type": "off",
     "typescript/no-non-null-assertion": "off",
-    // Keep this compatibility boundary visible even though the catalog above
-    // also disables it: tsgolint removes assertions still required by
-    // TypeScript 5.9 under noUncheckedIndexedAccess and in typed mocks.
     "typescript/no-unnecessary-type-assertion": "off",
     "typescript/parameter-properties": "off",
     "unicorn/catch-error-name": "error",
@@ -323,35 +237,20 @@ export default defineConfig({
   },
   overrides: [
     {
-      // The client package root is intentionally the single public contract
-      // barrel. Consumers import this boundary rather than reaching into
-      // implementation modules; the no-barrel rule remains active elsewhere.
       files: ["packages/client/src/index.ts"],
       rules: {
         "oxc/no-barrel-file": "off",
       },
     },
     {
-      // This deliberate negative fixture proves the corresponding type-aware
-      // rules emit. Disable only the ordinary equivalents so the fixture
-      // remains linted by every unrelated rule.
       files: ["scripts/fixtures/lint-types/invalid.ts"],
       rules: {
         "no-throw-literal": "off",
         "prefer-promise-reject-errors": "off",
       },
     },
-    // The vitest preset applies through `overrides`, and an extended preset's
-    // overrides outrank the consumer's — so extending it leaves no way to say
-    // "not these files". Its single override is therefore spliced in here
-    // verbatim (rules unchanged, glob unchanged: wholesale adoption) purely so
-    // the Playwright exclusion below can be ordered after it.
     ...vitest.overrides,
     {
-      // Blueprint automation handlers execute under the gateway's handler
-      // runtime. Connector pagination/batching is intentionally sequential,
-      // because each cursor or page token depends on the prior response.
-      // Every other rule from the root profile still applies.
       files: ["packages/blueprints/automations/**/handler.js"],
       env: {
         browser: false,
@@ -363,8 +262,6 @@ export default defineConfig({
       },
     },
     {
-      // Blueprint app handlers and seeds execute in the gateway's Bun/Node
-      // runtime; app roots and kit modules remain browser-profiled.
       files: [
         "packages/blueprints/apps/**/actions/*.js",
         "packages/blueprints/apps/**/queries/*.js",
@@ -377,17 +274,6 @@ export default defineConfig({
       },
     },
     {
-      // #915 Wave 2 — `shQuote` was USED and never imported in
-      // `tests/agent-e2e-mobile/flows/share-intent-in.mjs`, and it survived six
-      // passing assertions before throwing. Nothing caught it statically: a
-      // `promoting` member that has never run on a device is exactly where an
-      // unimported name lives, because nothing at any tier evaluates the module
-      // body. A bespoke "every referenced helper is imported" lint was tried and
-      // reverted — it needs a scope chain and fired on 29 of 37 files — and
-      // `no-undef` is the rule that already has one. Scoped to this tree, whose
-      // files are all Node ESM scripts, so the environment below is the whole
-      // configuration the rule needs to be right here without being enabled
-      // repo-wide (where TypeScript's own checker already answers it).
       files: ["tests/agent-e2e-*/**/*.mjs"],
       env: {
         browser: false,
@@ -399,14 +285,6 @@ export default defineConfig({
       },
     },
     {
-      // The one file in that tree that legitimately names browser and MV3
-      // globals: `extension-companion.mjs` serialises callbacks INTO the page
-      // and into the extension's service worker (`page.waitForFunction`,
-      // `worker.evaluate`), where `document` and `chrome` exist and the Node
-      // process's globals do not. Declaring exactly those two here keeps the
-      // rule above meaningful — turning on the whole `browser` env would let a
-      // genuine `document` typo in a Node-side flow pass unnoticed, which is
-      // the class of defect the rule was enabled for.
       files: ["tests/agent-e2e-pairing/flows/extension-companion.mjs"],
       globals: {
         chrome: "readonly",
@@ -414,15 +292,6 @@ export default defineConfig({
       },
     },
     {
-      // The two rules in the preset that trade assertion precision for
-      // brevity, and the only two that contradict a rule this repo already
-      // documents: TESTING.md's test convention says "Prefer specific matchers
-      // and meaningful expected values over `toBeTruthy()`". `expect(x).toBe(true)`
-      // asserts x is exactly the boolean true; `expect(x).toBeTruthy()` also
-      // passes for 1, 'x', [], {}. Autofixing the preset over this suite
-      // rewrites 1,117 `toBe(true)` and 720 `toBe(false)` into strictly weaker
-      // assertions. Everything else in the preset is adopted as-is; these two
-      // are held off deliberately. See TESTING.md, "ultracite vitest preset (#573)".
       files: [
         "**/*.{test,spec}.{ts,tsx,js,jsx}",
         "**/__tests__/**/*.{ts,tsx,js,jsx}",
@@ -431,33 +300,11 @@ export default defineConfig({
       rules: {
         "vitest/prefer-to-be-falsy": "off",
         "vitest/prefer-to-be-truthy": "off",
-        // The rule defaults to jest's signature, where `expect` takes exactly
-        // one argument. vitest's takes an optional second one — the message
-        // printed when the assertion fails, e.g.
-        // `expect(res.status, JSON.stringify(body)).toBe(400)`. Complying with
-        // the default would mean deleting those messages, which is the opposite
-        // of the "clear failure output" rule in TESTING.md. This corrects the
-        // rule for the runner rather than relaxing it: everything else it
-        // checks still applies.
         "vitest/valid-expect": ["error", { maxArgs: 2 }],
-        // The preset's default is 5. This suite is deliberately built around
-        // integration-shaped tests that drive one scenario and then assert the
-        // whole resulting state — splitting those to satisfy a count would mean
-        // re-running the setup per assertion, which changes what is under test
-        // and slows the suite for no coverage gain. Measured sensitivity across
-        // the suite: max 5 -> 2030 findings, 10 -> 448, 15 -> 162, 20 -> 68,
-        // 30 -> 26. The reviewed ceiling is 31: it still catches sprawling
-        // tests while allowing one behavior-focused integration scenario to
-        // assert a compact contract matrix without a count-driven split.
         "vitest/max-expects": ["error", { max: 31 }],
       },
     },
     {
-      // The vitest glob `**/*.{test,spec}.*` also catches the Playwright e2e
-      // specs — a different runner with its own `test`/`expect`. Left in scope,
-      // `prefer-importing-vitest-globals` autofixes a `from 'vitest'` import on
-      // top of the `@playwright/test` one and the files stop parsing. This is
-      // about which runner owns the file, not about opting out of a rule.
       files: ["apps/desktop/tests/e2e/**", "apps/web/tests/e2e/**"],
       plugins: ["vitest"],
       rules: Object.fromEntries(
@@ -467,18 +314,6 @@ export default defineConfig({
       ),
     },
     {
-      // react/react-compiler was adopted repo-wide in #573 (714 real sites
-      // fixed once the exhaustive-deps disables that made the compiler bail
-      // per-component were stripped). These seven app-roots are the one
-      // scoped exemption: the #505 imperative-shell architecture keeps all
-      // state in refs (stateRef/logicRef/dashRef), lazily constructed during
-      // render and mutated in place, which the compiler can never verify —
-      // unmasking them reports 473 findings that are the design, not bugs.
-      // Making them compiler-clean is a per-app state-model rewrite, tracked
-      // in #573's receipt as follow-up work; laundering the refs through
-      // useState just to satisfy the rule would be linter-gaming. Note
-      // photos/app-root.tsx is NOT here — it had the same shape and was
-      // genuinely converted, proving this list is architectural, not a dodge.
       files: [
         "packages/blueprints/apps/agenda/app-root.tsx",
         "packages/blueprints/apps/docs/app-root.tsx",
@@ -543,30 +378,12 @@ export default defineConfig({
       },
     },
     {
-      // The mobile app and time-engine execute in Hermes. The Expo 57 / RN
-      // 0.86 runtime used by the reviewed iOS build does not implement these
-      // ES2023 Array helpers: `toSorted` caused the native Photos cover to
-      // redbox in the exact-HEAD journey, and time-engine is bundled into
-      // native Agenda/Tally. Keep compatibility mechanical rather than relying
-      // on Node-based unit tests, whose newer Array prototype masks the bug.
-      //
-      // THIS GLOB IS THE FAST SIGNAL, NOT THE GATE (#905). It covers the two
-      // trees an author is most likely to be editing, and it is a guess about
-      // reachability — the guess that failed, when eight crashing sites turned
-      // out to live in `packages/blueprints` and two more in `packages/client`.
-      // `bun run lint:hermes-surface` walks the import graph out of
-      // `apps/mobile/src` and checks what the bundle ACTUALLY reaches (793
-      // modules today), so widening this list is never the way to cover a new
-      // package: the walker already does, and derives it rather than guessing.
       files: ["apps/mobile/src/**", "packages/core/src/time/**"],
       rules: {
         "no-restricted-properties": ["error", ...HERMES_ARRAY_PROPERTIES],
       },
     },
     {
-      // #656 Layer 4 — the test seams. Ordered after the Hermes override so it
-      // wins on files both globs match; the next override puts Hermes back for
-      // mobile/time-engine test files specifically.
       files: VITEST_TEST_FILES,
       rules: {
         "no-restricted-properties": ["error", ...TEST_SEAM_PROPERTIES],
@@ -574,10 +391,6 @@ export default defineConfig({
       },
     },
     {
-      // Mobile and time-engine test files need both lists. They are Node
-      // processes, so the Hermes entries gate nothing here — but a rule that
-      // silently stopped applying to half a tree because two globs overlapped
-      // is exactly the "reads as protection" failure this layer is about.
       files: [
         "apps/mobile/src/**/*.{test,spec}.{ts,tsx}",
         "apps/mobile/src/**/*.test-fixtures.ts",
@@ -594,9 +407,6 @@ export default defineConfig({
       },
     },
     {
-      // Playwright, not vitest: no `onTestFinished`, so none of the kit
-      // helpers the seam rules point at exist for these files. Same reasoning
-      // as the vitest-rule exclusion above — which runner owns the file.
       files: ["apps/desktop/tests/e2e/**", "apps/web/tests/e2e/**"],
       rules: {
         "no-restricted-properties": "off",

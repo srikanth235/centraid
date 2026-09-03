@@ -1,20 +1,9 @@
 #!/usr/bin/env node
-/**
- * Syntax-level module scanner for the sharing-plane reachability check (#750).
- *
- * Split out of `check-share-reachability.mjs` so neither file exceeds the
- * repo-hygiene line ceiling: this module owns the TypeScript AST walk that
- * turns one source file into an import/export/usage record, and the analyzer
- * next door owns the graph resolution that consumes those records. It parses
- * with the repo-pinned TypeScript compiler at syntax level only — no type
- * checking, no program construction, no new dependencies.
- */
 
 import ts from "typescript";
 
 const bump = (map, key) => map.set(key, (map.get(key) ?? 0) + 1);
 
-/** Syntax-level extraction of one module's imports, exports, and identifier usage. */
 export function parseModule(absPath, text) {
   const sourceFile = ts.createSourceFile(
     absPath,
@@ -31,12 +20,6 @@ export function parseModule(absPath, text) {
     reexports: [], // { spec, star, names: [{ imported, exported, typeOnly }], typeOnly }
     exportList: [], // { local, exported, typeOnly } — `export { a as b }` with no specifier
     localExports: new Map(), // exported name → "value" | "type"
-    // The identifier a `default` export is declared under, when it has one
-    // (`export default function ShareSheet`, `export default ShareSheet`).
-    // `default` is not a usable identifier, so the analyzer's same-file rule
-    // has to look the declaration up under this name instead. Anonymous
-    // defaults (`export default () => …`) leave it undefined, which is
-    // correct: nothing in the file can reference them.
     defaultLocal: undefined,
     declKinds: new Map(), // top-level declaration name → "value" | "type"
     valueUse: new Map(), // identifier → count of value-position uses
@@ -73,9 +56,6 @@ export function parseModule(absPath, text) {
       const clause = stmt.importClause;
       if (!clause) continue; // side-effect import: no bindings, no reach
       const clauseTypeOnly = clause.isTypeOnly === true;
-      // `import ShareSheet from "./ShareSheet"` binds the target's `default`
-      // export. Skipping this clause is what made every default-exported
-      // component look unreached no matter how many screens mounted it.
       if (clause.name) {
         info.imports.push({
           spec,
@@ -129,8 +109,6 @@ export function parseModule(absPath, text) {
             })),
           });
         }
-        // `export * as ns from` (NamespaceExport) is not used in this repo's
-        // sharing plane; a consumer of it would not be resolved.
       } else if (stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
         for (const el of stmt.exportClause.elements) {
           info.exportList.push({
@@ -143,8 +121,6 @@ export function parseModule(absPath, text) {
       continue;
     }
 
-    // `export default <expression>`. `export = x` (isExportEquals) is CommonJS
-    // interop and has no import form in this repo, so it is not a capability.
     if (ts.isExportAssignment(stmt)) {
       if (stmt.isExportEquals !== true) {
         info.localExports.set("default", "value");
@@ -164,8 +140,6 @@ export function parseModule(absPath, text) {
       ts.isClassDeclaration(stmt) ||
       ts.isEnumDeclaration(stmt)
     ) {
-      // `export default function ShareSheet` is exported as `default`, never
-      // as `ShareSheet` — importers cannot name it, so neither may the graph.
       if (isDefault) {
         info.localExports.set("default", "value");
         if (stmt.name) info.defaultLocal = stmt.name.text;
@@ -188,12 +162,6 @@ export function parseModule(absPath, text) {
     }
   }
 
-  // The *name* node of a top-level declaration is not a use of that
-  // declaration — without this set, `export const X = 1` would record a
-  // `valueUse` for `X` and every export would look self-reached. Binding
-  // patterns contribute their bound identifiers only; initializers and
-  // computed keys still walk normally. Imported locals are unaffected because
-  // the walk returns early on import declarations.
   const declaredNameNodes = new Set();
   const collectNameNodes = (name) => {
     if (ts.isIdentifier(name)) declaredNameNodes.add(name);
@@ -223,9 +191,6 @@ export function parseModule(absPath, text) {
     }
   }
 
-  // Usage walk: count value-position vs type-position identifier uses, plus
-  // `ns.member` accesses, skipping import/export statements and member-name
-  // positions so `foo.bar` never counts as a use of a local `bar`.
   const recordUse = (name, inType) => {
     bump(inType ? info.typeUse : info.valueUse, name);
   };
@@ -237,10 +202,6 @@ export function parseModule(absPath, text) {
 
   const visit = (node, inTypeBefore) => {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return;
-    // `export default ShareSheet` names the declaration the way
-    // `export { ShareSheet as default }` does — a re-export site, not a call.
-    // Counting it would rescue every default export under the same-file rule,
-    // which is the same defect `declaredNameNodes` exists to prevent.
     if (ts.isExportAssignment(node) && ts.isIdentifier(node.expression)) return;
     if (declaredNameNodes.has(node)) return;
     const inType =

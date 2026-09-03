@@ -1,4 +1,3 @@
-// W5.3 (#842) — unit pins for the released-binary skew judge. `node --test`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 

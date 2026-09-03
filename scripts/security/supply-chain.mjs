@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-/**
- * W6.2 — supply-chain artifact CLI (umbrella #842).
- *
- * Subcommands:
- *   sbom               write a deterministic CycloneDX 1.6 BOM of bun.lock
- *   verify-sbom        re-check a BOM against the lockfile as it is now
- *   provenance         write an in-toto/SLSA v1 statement over real artifacts
- *   manifest           write (and, when enrolled, sign) the release manifest
- *                      the desktop updater verifies
- *   verify             the release gate: BOM + provenance + signature together
- *
- * Every timestamp is derived from the commit, never from the wall clock, so two
- * runs of the same commit produce byte-identical documents.
- *
- * Exit codes: 0 pass (or a LOUDLY-cited guarded skip), 1 fail.
- */
 
 import { spawnSync } from "node:child_process";
 import { createPrivateKey, createPublicKey } from "node:crypto";
@@ -43,7 +27,6 @@ import {
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-/** Parse `--flag value` pairs. Unknown flags are an error, not a silent ignore. */
 function parseArgs(argv, allowed) {
   const out = {};
   for (let i = 0; i < argv.length; i += 1) {
@@ -68,17 +51,12 @@ function fail(message) {
   process.exit(1);
 }
 
-/**
- * A guarded skip: exits 0, but says exactly what is missing and what would
- * unblock it. Never used for a state where the input WAS available.
- */
 function skip(what, unblock) {
   console.warn(`supply-chain: SKIPPED — ${what}`);
   console.warn(`supply-chain: unblock by ${unblock}`);
   process.exit(0);
 }
 
-/** Commit time as ISO-8601. The one source of "now" this tool accepts. */
 function commitTimestamp(explicit) {
   if (typeof explicit === "string") return explicit;
   const epoch = process.env.SOURCE_DATE_EPOCH;
@@ -114,7 +92,6 @@ function lockfilePackages() {
   return packages;
 }
 
-/** Every shippable regular file in a directory, sorted, with its real digests. */
 function artifactDigests(dir) {
   if (!existsSync(dir)) fail(`artifact directory not found: ${dir}`);
   const names = readdirSync(dir)
@@ -133,7 +110,6 @@ function writeJson(target, document) {
   console.info(`supply-chain: wrote ${path.relative(root, target)}`);
 }
 
-/** Load the release signing key from the environment (base64 raw 32-byte seed). */
 function signingKey() {
   const seed = process.env.CENTRAID_RELEASE_SIGNING_KEY;
   if (seed === undefined || seed === "") return null;
@@ -276,8 +252,6 @@ const COMMANDS = {
       );
     const envelope = signDocument(manifest, key.privateKey, key.publicKey);
     const check = verifyDocument(manifest, envelope, key.publicKey);
-    // Sign-then-verify with the same material: a signer that emits bytes nobody
-    // ever checked is how an unverifiable release ships looking green.
     if (!check.ok)
       fail(
         `self-verification of the freshly signed manifest failed: ${check.reason}`
@@ -313,8 +287,6 @@ const COMMANDS = {
       options["public-key"] ?? process.env.CENTRAID_RELEASE_PUBLIC_KEY;
     if (typeof publicKey !== "string" || publicKey === "") {
       if (existsSync(signaturePath))
-        // The signature IS here; refusing to check it would be the vacuous pass
-        // this gate exists to prevent.
         fail(
           "a signed manifest is present but no public key was supplied — pass --public-key or set CENTRAID_RELEASE_PUBLIC_KEY"
         );
@@ -334,8 +306,6 @@ const COMMANDS = {
       publicKey
     );
     if (!result.ok) fail(`release manifest signature: ${result.reason}`);
-    // A validly-signed manifest for the WRONG version is exactly the replay the
-    // updater refuses at install time; catch it here rather than shipping it.
     if (
       typeof options.version === "string" &&
       manifest.version !== options.version
@@ -347,7 +317,6 @@ const COMMANDS = {
   },
 };
 
-/** GitHub's SLSA-recommended builder id, or a local marker outside Actions. */
 function defaultBuilderId() {
   const server = process.env.GITHUB_SERVER_URL;
   const repo = process.env.GITHUB_REPOSITORY;

@@ -1,26 +1,14 @@
-// Spec for the failure-path screen digest (#905). Run by the
-// `test-report-scripts` vitest project, which already includes
-// `tests/agent-e2e-mobile/lib/**` — beside `spawn-redaction.test.mjs`.
-//
-// The digest's whole job is to survive whatever Maestro wrote, while an error
-// is already in flight, without becoming the failure. So the cases are the
-// shapes that break a naive walker, plus the two real screens it exists to tell
-// apart: Home's `DayOne` branch and Home's `LauncherGrid` branch, which the log
-// cannot currently distinguish because `HOME_READY_MARKER` renders in both.
-
 import { describe, expect, it } from "vitest";
 
 import { digestHierarchy, digestLines } from "./hierarchy-digest.mjs";
 
 const node = (attributes, children = []) => ({ attributes, children });
 
-/** The first-run branch: `DayOne`, and NOT one launcher tile. */
 const dayOne = node({}, [
   node({ "resource-id": "dev.centraid.mobile:id/day-one" }),
   node({ text: "All apps and places" }),
 ]);
 
-/** The branch a flow's `Open Notes.*` tap needs. */
 const springboard = node({}, [
   node({ "resource-id": "dev.centraid.mobile:id/launcher-grid" }, [
     node({
@@ -42,7 +30,6 @@ describe("the screen digest", () => {
     const grid = digestHierarchy(springboard);
     expect(grid).toContain("id:home-tile-notes");
     expect(grid).not.toContain("id:day-one");
-    // The label the flow's regex matches, beside the handle it did not name.
     expect(grid).toContain('"Open Notes, 16 notes"');
   });
 
@@ -50,7 +37,6 @@ describe("the screen digest", () => {
     expect(
       digestHierarchy(node({ "resource-id": "dev.centraid.mobile:id/photos" }))
     ).toStrictEqual(["id:photos"]);
-    // Already bare (iOS, and Maestro's own synthetic nodes) passes through.
     expect(digestHierarchy(node({ resourceId: "photos" }))).toStrictEqual([
       "id:photos",
     ]);
@@ -80,7 +66,6 @@ describe("the screen digest", () => {
   });
 
   it("survives the shapes a naive walker dies on", () => {
-    // A bare array of roots, a flat node with no `attributes`, null children.
     expect(
       digestHierarchy([node({ text: "a" }), node({ text: "b" })])
     ).toStrictEqual(['"a"', '"b"']);
@@ -101,8 +86,6 @@ describe("the screen digest", () => {
   });
 
   it("finds the tree inside a CLI's banner", () => {
-    // `maestro hierarchy` prints its own preamble before the JSON; parsing the
-    // raw capture would degrade to "no hierarchy" on a device that answered.
     const captured = `Running on emulator-5554\n${JSON.stringify(
       node({ "resource-id": "day-one" })
     )}\n`;

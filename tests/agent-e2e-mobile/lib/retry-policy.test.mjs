@@ -1,10 +1,3 @@
-// Unit pins for the classified retry (#890 W6).
-//
-// This module's entire value is what it REFUSES, so the refusals are what is
-// pinned. A regression that made `decideRetry` permissive would not fail any
-// device lane — it would make the lanes quieter, which is exactly why it has to
-// fail here.
-
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -40,8 +33,6 @@ describe("decideRetry", () => {
   });
 
   test("a product failure is NEVER retried", () => {
-    // The load-bearing refusal: an assertVisible timeout is the exact shape a
-    // real regression takes, so retrying it is how a suite forgives itself.
     const verdict = decideRetry({
       record: record({ failureClass: "product" }),
       alreadyRetried: false,
@@ -60,15 +51,12 @@ describe("decideRetry", () => {
   });
 
   test("a missing record is treated as product", () => {
-    // A retry decided on absent evidence is a retry decided on nothing.
     const verdict = decideRetry({ record: null, alreadyRetried: false });
     expect(verdict.retry).toBe(false);
     expect(verdict.reason).toMatch(/unknown/u);
   });
 
   test("the retry is capped at one, even for infrastructure", () => {
-    // "Retry until green" is the thing being forbidden. A flow that needs two
-    // attempts is not flaky, it is broken, and the cap is what makes that visible.
     const verdict = decideRetry({
       record: record({ failureClass: "infrastructure" }),
       alreadyRetried: true,
@@ -93,9 +81,6 @@ describe("decideRetry", () => {
 
 describe("lastRecord", () => {
   async function withLedger(records, run) {
-    // Seeded, per docs/coding-standards.md's test seams: an unseeded draw makes
-    // a failure unreproducible from the failing run's own output. The value only
-    // has to make the scratch filename unique within this file.
     const file = path.join(
       tmpdir(),
       `centraid-retry-${process.pid}-${scratch.token()}.json`
@@ -129,8 +114,6 @@ describe("lastRecord", () => {
   });
 
   test("an absent or corrupt ledger yields null, and therefore no retry", async () => {
-    // The ledger is instrumentation; it must never be able to fail a suite, and
-    // it must never be able to buy one a retry it did not earn.
     expect(await lastRecord("cold-start.mjs", "android", "/nonexistent")).toBe(
       null
     );

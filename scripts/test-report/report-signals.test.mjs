@@ -285,9 +285,6 @@ describe("renderSummaryMarkdown", () => {
   });
 
   test("a night recorded before #915 reads UNKNOWN rather than as an all-clear", () => {
-    // The durable series carries summaries written by the previous generator.
-    // None of them has a verdict, and rendering that as "ok" would be the
-    // silent all-clear the whole report exists to make impossible.
     const md = renderSummaryMarkdown({
       passed: 5,
       generatedAt: "2026-07-19T00:00:00.000Z",

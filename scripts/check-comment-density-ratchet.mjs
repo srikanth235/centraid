@@ -1,25 +1,4 @@
 #!/usr/bin/env node
-// The comment-density ratchet (#861) — BLOCKING.
-//
-// Doctrine (docs/coding-standards.md, "Comments face forward") governs what a
-// comment may say. This gate governs how much. The metric is CHARACTER SHARE:
-// non-whitespace characters inside TypeScript-parser comment ranges over
-// non-whitespace characters of the whole file. Lines are gameable — fuse three
-// comment lines into one wrapped sentence and a line count falls while the
-// prose is unchanged — and whitespace is gameable in the other direction, so
-// neither side of the ratio counts it.
-//
-// Comment ranges come from the parser, not a regex: every comment is leading
-// trivia of some token, so recursing to leaf tokens and taking
-// `getLeadingCommentRanges` at each one catches trailing comments (they lead
-// the NEXT token), JSX comments, and the file-end comments carried by the EOF
-// token. Ranges dedupe by `pos` because a token's trivia is reachable from
-// more than one node.
-//
-// Enforcement is a per-file pin, down-only. Any rise fails; `--write`
-// recomputes and can only ever LOWER a pin, so it cannot launder a regression.
-// A deliberate raise is a hand edit to the baseline carrying an
-// approved-deviation note in the receipt.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -33,19 +12,10 @@ import {
 } from "./check-ledgers.mjs";
 
 export const ROOT = path.resolve(import.meta.dirname, "..");
-// The pins live in the merged inventory ledger since #915 Wave 4. The bespoke
-// serializer that made `--write` output survive `format:check` moved with them
-// and became `serializeLedger` in scripts/check-ledgers.mjs, generalised to
-// nested sections: an all-number array is filled to 80 columns exactly as
-// oxfmt fills it, so 3,600 `[commentChars, totalChars]` pairs stay one per
-// line instead of spreading over four.
 export const BASELINE_REL = `${INVENTORY_PATH}#commentDensity`;
 export const BASELINE_SECTION = "commentDensity";
 
-// Percent, held as an integer so the cap comparison stays exact.
 export const CAP_PERCENT = 15;
-// Below this a file is too short for a share to mean anything — a 12-line
-// constants module with one orientation line is not a density problem.
 export const CAP_MIN_LINES = 40;
 export const GLOBAL_TARGET_PERCENT = 10;
 
@@ -62,8 +32,6 @@ const SEED_COMMENT =
 const SEED_DEVIATION =
   "Seeded 2026-08-25 on the #861 Wave 0 tree: 3,638 files, global character share 24.31%, global line density 14.83%, 1,975 files above the 15% cap. Every pin here is expected to fall — the sweep waves under #861 are what lower them, and --write re-pins them as they do.";
 
-// The date by which the density ratchet itself is re-argued (#915 Wave 4:
-// every inventory section carries a deadline, not only its rows).
 const SEED_EXPIRY = "2026-12-01";
 
 const SEED_ALLOWLIST = {
@@ -71,7 +39,6 @@ const SEED_ALLOWLIST = {
     "prose contracts registry — the prose IS the payload (#861)",
 };
 
-/** Git-tracked TS/TSX under the measured targets, `.d.ts` excluded. */
 export function trackedFiles(root = ROOT) {
   return execFileSync("git", ["-C", root, "ls-files", "-z", "--", ...TARGETS], {
     maxBuffer: 256 * 1024 * 1024,
@@ -82,10 +49,6 @@ export function trackedFiles(root = ROOT) {
     .sort();
 }
 
-/**
- * Every comment range in `text`, deduped by `pos`. Recursion stops at leaf
- * tokens: leading trivia of a leaf is where the parser hangs every comment.
- */
 export function commentRanges(text, fileName) {
   const sourceFile = ts.createSourceFile(
     fileName,
@@ -116,7 +79,6 @@ export function commentRanges(text, fileName) {
 
 const nonWhitespace = (text) => text.replace(/\s/gu, "").length;
 
-/** Character share plus the line figures that feed the global trend line. */
 export function measureFile(text, fileName) {
   const { sourceFile, ranges } = commentRanges(text, fileName);
   const lines = text.split("\n");
@@ -142,7 +104,6 @@ export function measureFile(text, fileName) {
   };
 }
 
-/** True when the file is long enough to be judged against the 15% cap. */
 export const capEligible = (measurement) =>
   measurement.nonBlankLines >= CAP_MIN_LINES;
 
@@ -176,7 +137,6 @@ export function measureTree({ root = ROOT, files } = {}) {
   return { measured, totals };
 }
 
-/** Exact rise test — integer cross-multiplication, never a rounded ratio. */
 export const rose = (pin, measurement) =>
   measurement.commentChars * pin[1] > pin[0] * measurement.totalChars;
 
@@ -188,10 +148,6 @@ const RISE_REMEDY =
 const CAP_REMEDY =
   "cut the comment back, or record an approved deviation in the receipt and allowlist the file with a reason if its prose is the payload";
 
-/**
- * Failures, most-specific first. A pinned path missing from disk is ignored —
- * `--write` prunes it; a deletion is not a density regression.
- */
 export function verifyRatchet(baseline, measured) {
   const pins = baseline.files ?? {};
   const allowlist = baseline.allowlist ?? {};
@@ -216,11 +172,6 @@ export function verifyRatchet(baseline, measured) {
   return failures;
 }
 
-/**
- * Recompute the pins. New files enter, deleted files fall out, pins that came
- * down are lowered — and a pin that rose is KEPT, never raised, so the gate
- * still fails on the next verify run.
- */
 export function reconcileRatchet(baseline, measured) {
   const pins = baseline.files ?? {};
   const files = {};
@@ -239,9 +190,6 @@ export function reconcileRatchet(baseline, measured) {
     files[rel] = [measurement.commentChars, measurement.totalChars];
   }
   return {
-    // Key order and the shared section fields survive a `--write`: the ledger
-    // rule (#915 Wave 4) is that a population budget carries its own issue and
-    // expiry, and a re-pin must not quietly drop the deadline.
     next: {
       _comment: baseline._comment ?? SEED_COMMENT,
       _entries: baseline._entries ?? "population",

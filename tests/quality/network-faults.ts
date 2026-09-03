@@ -1,45 +1,12 @@
-/**
- * Network-adversity catalog for the tunnel plane (issue #842 W3.1).
- *
- * The tunnel plane is proven on a COOPERATIVE network: every existing suite
- * (`peer-plane.test.ts`, `hostile-peer.integration.test.ts`, the #839 join
- * lane) dials a real iroh endpoint over a loopback that never drops, delays,
- * or moves. This catalog names the adversity a real link supplies, and the
- * invariant each fault is there to falsify.
- *
- * ── WHERE A FAULT CAN HONESTLY BE INJECTED ──────────────────────────────────
- *
- * QUIC's entire job is to convert packet loss and reordering into delay,
- * eventual delivery, or a failed connection. So a suite sitting ABOVE an iroh
- * `Connection` cannot inject "packet loss" without lying about the transport:
- * dropping bytes from an ordered stream models a corrupt QUIC implementation,
- * not a lossy network. What adversity actually looks like from above the
- * stream abstraction is exactly the `in-process` tier below — added latency,
- * jitter, arrival-shape changes, a throttled direction, an aborted stream, a
- * dropped connection, a changed address.
- *
- * The two genuinely sub-QUIC faults are therefore recorded at the
- * `needs-netem` tier rather than staged vacuously. They need a privileged
- * runner (`tc qdisc … netem loss/reorder` inside a network namespace, or two
- * real hosts); `netemUnblock` states the exact condition. `network-chaos.
- * integration.test.ts` asserts that the runnable schedule excludes them AND
- * that claiming the rig exists (`CENTRAID_NET_CHAOS_NETEM=1`) FAILS while no
- * driver is wired — "available but did not run" must never read as green.
- */
-
 export type NetworkFaultTier = "in-process" | "needs-netem";
 
-/** Which layer the fault is applied at, for the receipt and the messages. */
 export type NetworkFaultScope = "stream" | "connection" | "endpoint";
 
 export interface NetworkFault {
-  /** Stable id; also the replay token printed in the test name. */
   readonly id: string;
   readonly tier: NetworkFaultTier;
   readonly scope: NetworkFaultScope;
-  /** What is actually done to the transport. */
   readonly injection: string;
-  /** The invariant this fault exists to falsify. */
   readonly invariant: string;
 }
 
@@ -144,22 +111,16 @@ export const NETWORK_FAULT_BY_ID: Readonly<
   NETWORK_FAULTS.map((fault) => [fault.id, fault])
 ) as Record<NetworkFaultId, NetworkFault>;
 
-/** The faults this lane can actually inject in-process, in catalog order. */
 export const RUNNABLE_NETWORK_FAULT_IDS: readonly NetworkFaultId[] =
   NETWORK_FAULTS.filter((fault) => fault.tier === "in-process").map(
     (fault) => fault.id
   );
 
-/** The faults that need a privileged runner, in catalog order. */
 export const BLOCKED_NETWORK_FAULT_IDS: readonly NetworkFaultId[] =
   NETWORK_FAULTS.filter((fault) => fault.tier === "needs-netem").map(
     (fault) => fault.id
   );
 
-/**
- * The exact condition that unblocks the `needs-netem` tier. Cited by the lane
- * when it reports the blocked faults, so the skip is loud rather than silent.
- */
 export const NETEM_UNBLOCK =
   "a privileged Linux runner able to create a network namespace and attach " +
   "`tc qdisc add dev <veth> root netem loss <p>% reorder <p>%` between two " +
@@ -167,5 +128,4 @@ export const NETEM_UNBLOCK =
   "process does not request it, and no netem driver is wired, so the two " +
   "sub-QUIC faults are declared here rather than staged vacuously.";
 
-/** The env flag that CLAIMS the netem rig exists. Claiming it must not be free. */
 export const NETEM_ENV = "CENTRAID_NET_CHAOS_NETEM";

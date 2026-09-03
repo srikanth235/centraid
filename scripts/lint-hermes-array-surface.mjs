@@ -1,23 +1,4 @@
 #!/usr/bin/env node
-/**
- * The ES2023 Array surface Hermes does not implement, checked against what the
- * PHONE ACTUALLY BUNDLES rather than against a hand-written glob (#905).
- *
- * `oxlint.config.ts` has banned `toSorted` since the native Photos cover
- * redboxed on it, and the ban was never wrong — its `files` glob was
- * `apps/mobile/src/**` plus `packages/core/src/time/**`, and the eight sites
- * that took the Docs cover down on a device were all in `packages/blueprints`.
- * A glob cannot express "everything the mobile bundle reaches", so the glob was
- * a guess about reachability, and the guess is what failed. This walks the
- * import graph instead: the answer is derived, so it cannot drift.
- *
- * Node's Array prototype has every one of these, which is why thousands of unit
- * tests pass over code that cannot render on a phone. Only a device or this
- * gate can see it.
- *
- * What is measured and what is assumed is spelt out on `MISSING` below; the
- * name of this file overstates it, and the map is the honest version.
- */
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -27,8 +8,6 @@ import ts from "typescript";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-/** Where a bundled module can live. Nothing under `tests/` or `scripts/` is
- *  reachable from Metro, so the walk never needs to enter them. */
 const SOURCE_ROOTS = ["apps", "packages"];
 const SKIP_DIRS = new Set([
   "node_modules",
@@ -42,44 +21,15 @@ const SKIP_DIRS = new Set([
   ".next",
 ]);
 
-/** Where the bundle starts. Every phone-reachable module is downstream of one
- *  of these; nothing else in the repo is entered by Metro. */
 const ENTRY_DIRS = ["apps/mobile/src"];
 
-/**
- * Array methods absent from the reviewed Hermes runtime (Expo 57 / RN 0.86).
- *
- * ONE name, because one is what the evidence supports (#905). `toSorted` is
- * the method the device actually threw on — `AllShelf`'s own frame,
- * `[...labels].toSorted(...)`, `undefined is not a function` on the phone —
- * and #903's `apps/mobile/polyfills/array-to-sorted.js` reaches the same
- * finding from the engine side: it names the build (Static Hermes
- * 250829098.0.16) and the upstream PR still open for this one method, and
- * records that the engine DOES ship `toReversed`, `toSpliced`, `with` and
- * `findLast`.
- *
- * Those four were briefly banned here too. That was a generalization from the
- * single `toSorted` throw by family resemblance — "Hermes ships no ES2023
- * change-array-by-copy" — and nothing ever measured it. A gate that fails a
- * build over a method the engine implements is not a cautious gate, it is a
- * wrong one, and it makes every other name on this list less believable. So
- * the list is what is known.
- *
- * `with` is out for a second, independent reason: `.with(` is a common builder
- * verb, and a property-name check cannot tell `array.with(0, x)` from a fluent
- * API's own `with`. Reaching that one needs a type checker, which this is not.
- */
 const MISSING = new Map([
   ["toSorted", "sort a fresh array with .sort() instead"],
 ]);
 
 const SOURCE_RE = /\.tsx?$/u;
-/** Tests never reach a device; they run in Node, where these all exist. */
 const TEST_RE = /\.(?:test|test-fixtures|spec)\.tsx?$|\/__tests__\//u;
 
-/** Relative to the root under analysis — `root` is injectable so the walk can
- *  be exercised over a fixture repo, which is the only way to test the
- *  reachability rule itself rather than today's tree. */
 const relTo = (root, abs) => path.relative(root, abs).replaceAll("\\", "/");
 
 function listSourceFiles(root) {
@@ -102,7 +52,6 @@ function listSourceFiles(root) {
   return files;
 }
 
-/** Workspace package name → directory, from each workspace's own package.json. */
 function buildWorkspaceMap(root) {
   const map = new Map();
   for (const sub of SOURCE_ROOTS) {
@@ -121,18 +70,13 @@ function buildWorkspaceMap(root) {
         if (typeof pkg.name === "string")
           map.set(pkg.name, path.join(base, name));
       } catch {
-        // not a package manifest we can read; nothing to map
+        // Intentionally empty.
       }
     }
   }
   return map;
 }
 
-/**
- * One module's outgoing VALUE import specifiers plus every banned property it
- * names. Type-only imports are skipped: they are erased before Metro sees them,
- * so a module reached only for its types ships no code and cannot throw.
- */
 function scanModule(abs, text) {
   const source = ts.createSourceFile(
     abs,
@@ -166,9 +110,6 @@ function scanModule(abs, text) {
       specs.push(node.arguments[0].text);
     }
 
-    // The AST, never a regex: a banned name inside a comment or a string is
-    // not a call, and this gate must not cry wolf on prose that discusses it —
-    // this file's own header names all five.
     if (
       ts.isPropertyAccessExpression(node) &&
       MISSING.has(node.name.text) &&
@@ -231,9 +172,6 @@ export function runHermesArraySurface(root = ROOT) {
         );
       }
     }
-    // A bare specifier that is not a workspace package is a node_module. Metro
-    // bundles those too, but they are not ours to rewrite and a vendored
-    // polyfill is the answer there, not a lint.
     return null;
   };
 

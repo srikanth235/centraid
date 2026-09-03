@@ -1,8 +1,3 @@
-// Unit pins for the mobile flow failure classifier (#890).
-//
-// The classifier is the only thing standing between the run ledger and a suite
-// that forgives itself, and it never runs on a device — so if it is not pinned
-// here it is not pinned anywhere.
 import { expect, test } from "vitest";
 
 import {
@@ -23,8 +18,6 @@ test("every infrastructure signal is reachable through its own example", () => {
       verdict.class,
       `${signal.id} did not classify as infrastructure`
     ).toBe("infrastructure");
-    // First-match, not merely "some entry matched": a signal whose example is
-    // swallowed by a looser entry above it is dead code that reads as covered.
     expect(
       verdict.signal,
       `${signal.id}'s example was claimed by ${verdict.signal}`
@@ -39,7 +32,6 @@ test("no two signals share an id", () => {
 });
 
 test("an assertVisible timeout with assertions run is a PRODUCT failure", () => {
-  // The whole point of the module: this is what a regression looks like.
   const verdict = classifyFailure({
     error: new Error(
       'maestro test exited 1: Assertion is false: "All apps and places" is visible'
@@ -60,8 +52,6 @@ test("a chunk timeout with zero assertions run is INFRASTRUCTURE", () => {
 });
 
 test("the same chunk timeout AFTER an assertion ran is product", () => {
-  // A flow that observed something and then wedged is a flow whose product
-  // path is implicated; only "never got to look" earns the infra verdict.
   const verdict = classifyFailure({
     error: new Error("maestro test exceeded the 720000ms process timeout"),
     assertionsRun: 2,
@@ -79,10 +69,6 @@ test("an unknown error defaults to PRODUCT, never infrastructure", () => {
 });
 
 test("a flow script that throws its own ReferenceError is HARNESS, not product", () => {
-  // #870, exactly: `flows/share-intent-in.mjs` used `shQuote` without importing
-  // it, threw at its own line 75 after six assertions had passed, and the
-  // nightly recorded a product failure — i.e. said the app was broken when the
-  // journey was. No claim was exercised, so it is neither class the file had.
   const error = new Error("shQuote is not defined");
   error.stack = [
     "ReferenceError: shQuote is not defined",
@@ -96,10 +82,6 @@ test("a flow script that throws its own ReferenceError is HARNESS, not product",
 });
 
 test("a harness-class failure is never retried", () => {
-  // `retry-policy.mjs` retries `infrastructure` alone, so the new class is
-  // correct there by construction — asserted rather than assumed, because a
-  // later widening of that condition would silently start re-running a crash
-  // that reproduces every time.
   expect(
     decideRetry({
       record: { failureClass: "harness", failureReason: "flow crash" },
@@ -109,8 +91,6 @@ test("a harness-class failure is never retried", () => {
 });
 
 test("a non-zero maestro exit with zero assertions is still product", () => {
-  // A regression on a flow's first assertion produces exactly this shape.
-  // Classifying it infra would hide the class of defect the suite exists for.
   const verdict = classifyFailure({
     error: new Error("maestro --udid X test flow.yaml exited 1"),
     assertionsRun: 0,

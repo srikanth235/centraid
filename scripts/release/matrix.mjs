@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-/**
- * Print the release surface matrix (issue #512).
- *
- *   node scripts/release/matrix.mjs [--json] [--surfaces a,b,c]
- */
 import {
   buildSurfaceMatrix,
   defaultShipSurfaceIds,
@@ -12,7 +7,6 @@ import {
 
 function parseArgs(argv) {
   let json = false;
-  /** @type {string[] | null} */
   let shipIds = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--json") json = true;

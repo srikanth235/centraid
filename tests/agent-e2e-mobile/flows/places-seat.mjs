@@ -1,25 +1,3 @@
-// The Places seat on the phone (issue #781; defect class #787).
-//
-// What only a device can falsify here: the seeded replica's REAL `core_place`
-// rows (physical `geo_lat`/`geo_lng` columns, no web-handler rename) reaching
-// all three Places surfaces. #787 was exactly this seam: the map drew pins
-// while the shelf read "No places yet" because the shelf keyed on columns the
-// vault never ships — a defect no unit or component fixture proved, because
-// every fixture used the column names the code expected.
-//
-// Three claims, in order:
-//   1. THE SHELF RENDERS FROM THE SEEDED VAULT: the Collections "Places" rail
-//      opens a shelf whose own header counts a non-zero number of places and
-//      whose cards each publish a "<name>, N photographs" label.
-//   2. THE MAP DRAWS THE SAME DATA and rests on its privacy sentence — the
-//      map fetches nothing, and says so.
-//   3. A PIN READS OUT: pressing a pin replaces the resting sentence with
-//      that place's readout, so the pins are real controls, not decoration.
-//
-// Every assertion is on copy or an accessibilityLabel only the asserted
-// screen publishes (issue #483's non-vacuous rules; this file is listed in
-// scripts/lint-e2e-flows.mjs).
-
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
   AWAIT_LAUNCHER,

@@ -1,8 +1,4 @@
 import assert from "node:assert/strict";
-/**
- * Real-path tests for the external info probe (issue #504 packaging).
- * Run: node --test scripts/gateway-package/probe.test.mjs
- */
 import { createServer } from "node:http";
 import { test } from "node:test";
 

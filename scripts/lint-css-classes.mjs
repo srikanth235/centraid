@@ -1,34 +1,8 @@
 #!/usr/bin/env node
-// CSS-module reference check — catches `className={styles.foo}` where the
-// imported module has no `.foo` rule.
-//
-// Why this exists: it is the one class of frontend bug that EVERY existing gate
-// passes. A missing CSS-module local is plain `undefined` at runtime, so:
-//   - `typecheck` passes — CSS-module declarations type locals as a permissive
-//     index signature, not a literal union of the rules that exist;
-//   - `test` passes — vitest's `classNameStrategy: 'non-scoped'` makes
-//     `styles.foo === 'foo'`, so a test selecting `.foo` still matches even
-//     when no rule backs it;
-//   - `build` passes — an unused/absent local is not an error.
-// The element simply renders unstyled and nobody finds out. CSS-CONVENTIONS.md
-// ("Verify before committing") asks for this to be eyeballed; eyeballs missed
-// 10 of them, so it is automated here.
-//
-// Direction is deliberate: we check REFERENCED-but-undefined (always a bug),
-// not DEFINED-but-unreferenced (legitimately noisy — descendant-only rules,
-// `[data-*]` attribute hooks, and the `:global` contracts the conventions
-// permit all look "unused" to a grep).
-//
-// Following scripts/lint-types.sh: a silent no-op FAILS rather than passing —
-// if this ever scans zero files or resolves zero modules, the check is broken,
-// not clean.
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-// Every *.module.css in the repo lives under here. If that changes, add the
-// root — an unlisted directory is unchecked, exactly like lint-types.sh's
-// TARGETS list.
 const TARGETS = ["packages/client/src/react", "packages/blueprints/apps"];
 
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
@@ -43,21 +17,12 @@ function walk(dir, out = []) {
   return out;
 }
 
-/** Strip CSS comments so a class named only inside one isn't counted as defined. */
 function definedClasses(css) {
   const stripped = css.replace(/\/\*[\s\S]*?\*\//gu, "");
-  // Leading [a-zA-Z] excludes `0.5px` / `11.5px` numerics; `-` and `_` are
-  // legal in idents but cannot start one here (authored camelCase per
-  // CSS-CONVENTIONS "Component modules").
   const matches = [...stripped.matchAll(/\.(?<className>[a-zA-Z][\w-]*)/gu)];
   return new Set(matches.map((m) => m.groups?.className ?? ""));
 }
 
-/**
- * Strip import lines and whole-line comments before scanning reads.
- * `import chrome from './chrome.module.css'` and a JSDoc line mentioning
- * `chrome.module.css` both otherwise self-match as a read of `chrome.module`.
- */
 function scannableBody(src) {
   return src
     .split("\n")
@@ -65,11 +30,6 @@ function scannableBody(src) {
     .join("\n");
 }
 
-/**
- * Scan `targets` under `root` for className reads with no backing CSS rule.
- * Pure over the tree it is given (returns, never exits) — exported so the
- * fail path is testable. `missingTarget` is the non-existent TARGETS entry.
- */
 export function lintCssClasses(root = ROOT, targets = TARGETS) {
   const findings = [];
   const dynamic = [];
@@ -110,8 +70,6 @@ export function lintCssClasses(root = ROOT, targets = TARGETS) {
         modulesResolved += 1;
         const defined = definedClasses(readFileSync(cssPath, "utf8"));
 
-        // Dynamic access defeats static analysis. Report it so the check can
-        // never quietly become partial; there are zero today.
         if (new RegExp(`\\b${alias}\\[`, "u").test(body)) {
           dynamic.push(`${rel} — ${alias}[…] computed access is unverifiable`);
         }
@@ -146,7 +104,6 @@ function main() {
     process.exit(1);
   }
 
-  // Silent-no-op guard (see header): a pass that checked nothing is a failure.
   if (filesScanned === 0 || modulesResolved === 0) {
     console.error(
       `FAIL — scanned ${filesScanned} file(s), resolved ${modulesResolved} CSS module(s). ` +

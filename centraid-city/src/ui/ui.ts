@@ -1,9 +1,4 @@
-// ui.ts — every DOM overlay: loading screen, HUD stats, inspector, tour, minimap, toast.
-// All copy comes from core/content.ts; this module never invents strings — the one exception
-// is SECTION_LABELS below, which names the groupings core/content.ts only refers to by key.
 // governance: allow-repo-hygiene file-size-limit — the DOM overlay selectors and
-// callback-driven APIs form one cohesive browser boundary; splitting them would scatter
-// the shared panel state without changing the package seam. Revisit in #704.
 
 import type * as THREE from "three";
 import type { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -51,8 +46,6 @@ function sec(text: string): HTMLDivElement {
   return h;
 }
 
-/* ---------------------------------------------------------------- loading */
-
 export function createLoading(
   meta: CityMeta,
   onDone: () => void
@@ -87,10 +80,6 @@ export function createLoading(
   return { finish };
 }
 
-/* ---------------------------------------------------------------- HUD stats */
-
-// core/content.ts owns the stat ids; map them onto sim values by keyword so a content
-// content author's naming choices can't break the HUD.
 interface StatDisplay {
   v: number;
   dp: number;
@@ -156,8 +145,6 @@ export function createHud(hudStats: HudStat[], meta: CityMeta): HudApi {
     },
   };
 }
-
-/* ---------------------------------------------------------------- inspector */
 
 export function createInspector({
   onFocus,
@@ -232,7 +219,6 @@ export function createInspector({
       current = v;
     },
     refreshState(state) {
-      // cheap live refresh of just the state rows
       const rows = body.querySelectorAll(".kv span");
       state.forEach(([, v], i) => {
         if (rows[i]) rows[i].textContent = v;
@@ -241,22 +227,11 @@ export function createInspector({
   };
 }
 
-/* ---------------------------------------------------------------- tour */
-
-// Chapters carry a `section` key; this names the sections for the Contents panel. A key
-// with no entry here falls back to the raw key, so core/content.ts can add a section without
-// this module having to know about it first.
 const SECTION_LABELS = new Map([
   ["walkthrough", "The walkthrough"],
   ["scenarios", "Scenarios"],
 ]);
 
-// The tour is browsed like a book on one axis: the horizontal dots in the card footer
-// are the pages of the chapter you are in. Chapters themselves are only ever reached
-// from the Contents panel, which lists every chapter — any row jumps to its first page.
-// The position is mirrored into location.hash so a page is bookmarkable. Every entry
-// path — Contents row, page dot, Prev/Next, deep link — funnels through go(), so
-// onEnter() runs exactly once per position no matter how it was reached.
 export function createTour(
   chapters: TourChapter[],
   {
@@ -280,8 +255,6 @@ export function createTour(
   let pidx = 0;
   let syncingHash = false;
 
-  // `pages` is the schema; a chapter that still carries a single `body` (or nothing at
-  // all) is read as a one-page chapter so the app keeps working against older content.
   const pagesOf = (c: TourChapter): NonNullable<TourChapter["pages"]> => {
     const p = c && Array.isArray(c.pages) ? c.pages.filter(Boolean) : null;
     if (p && p.length) return p;
@@ -290,12 +263,6 @@ export function createTour(
   const pageList = list.map(pagesOf);
   const lastPage = (i) => pageList[i].length - 1;
 
-  /* -------- page dots (real buttons, one per page of the CURRENT chapter) -------- */
-
-  // Page counts differ per chapter, so the strip is rebuilt whenever the chapter
-  // changes rather than being drawn once. A one-page chapter shows no strip at all — a
-  // lone dot would read as a control rather than as progress. Chapters themselves are
-  // navigated from the Contents panel, not from here.
   let dotEls = [];
   let dotsFor = -1;
 
@@ -320,16 +287,11 @@ export function createTour(
     }
   }
 
-  /* -------- contents panel -------- */
-
   const countEl = $("tocCount");
   if (countEl)
     countEl.textContent = list.length ? `${list.length} chapters` : "";
 
   listEl.textContent = "";
-  // Sections are drawn as headings between rows rather than as a nested list, so the
-  // chapter rows stay one flat, arrow-through sequence and rowEls[i] still means
-  // chapter i. Ungrouped chapters simply get no heading.
   let openSection = null;
   const rowEls = list.map((c, i) => {
     if (c.section && c.section !== openSection) {
@@ -387,8 +349,6 @@ export function createTour(
     else openPanel();
   }
 
-  /* -------- deep links -------- */
-
   function setHash(hash) {
     if (location.hash === hash) return;
     if (hash) {
@@ -398,13 +358,10 @@ export function createTour(
         syncingHash = false;
       }, 0);
     } else if (location.hash) {
-      // clearing: replaceState leaves no history entry and fires no hashchange
       history.replaceState(null, "", location.pathname + location.search);
     }
   }
 
-  // `#chapter-7` is the chapter (page 1); `#chapter-7/2` is a page within it. The lazy
-  // head means an id is only split on a trailing `/<digits>`.
   function parseHash(): { i: number; p: number } {
     const raw = decodeURIComponent(location.hash.replace(/^#/u, ""));
     if (!raw) return { i: -1, p: 0 };
@@ -415,7 +372,6 @@ export function createTour(
     return { i: list.findIndex((c) => c.id === m.groups.id), p };
   }
 
-  // Back/forward, a pasted link, or a cold load all land here.
   function applyHash() {
     const { i, p } = parseHash();
     if (i >= 0) {
@@ -433,8 +389,6 @@ export function createTour(
     applyHash();
   });
 
-  /* -------- chapter + page navigation -------- */
-
   function render(chapterChanged) {
     const c = list[idx];
     if (!c) return;
@@ -447,7 +401,6 @@ export function createTour(
     $("tourTitle").textContent = c.title || "";
     $("tourBody").textContent = page.body || "";
 
-    // the dot strip belongs to the chapter, the active dot to the page
     const dotsHadFocus = dots.contains(document.activeElement);
     if (chapterChanged || dotsFor !== idx) buildDots(idx);
     dotEls.forEach((b, p) => {
@@ -481,14 +434,11 @@ export function createTour(
       pageIndex: pidx,
       pageCount: pages.length,
       chapterChanged: !!chapterChanged,
-      // a page may walk the reader to its own building; otherwise the chapter's shot stands
       buildingId: page.buildingId || c.buildingId,
-      // flow focus is per page: an absent `flows` means "release the spotlight", not "keep"
       flows: page.flows || c.flows || null,
     });
   }
 
-  // p is clamped into the target chapter, so Infinity means "the last page of it".
   function go(i, p = 0) {
     if (!list.length) return;
     if (i >= list.length) return stop();
@@ -514,8 +464,6 @@ export function createTour(
     onExit();
   }
 
-  // Reading flow: a page turn that runs off the end of a chapter carries on into the
-  // next chapter's first page, and off the front into the previous chapter's last page.
   function nextPage() {
     if (idx < 0) return go(0, 0);
     if (pidx < lastPage(idx)) go(idx, pidx + 1);
@@ -528,7 +476,6 @@ export function createTour(
     else if (idx > 0) go(idx - 1, Number.POSITIVE_INFINITY);
   }
 
-  // Up/Down stay inside the chapter — they never cross a boundary.
   function pageIn(delta) {
     if (idx < 0) return;
     const p = pidx + delta;
@@ -565,8 +512,6 @@ export function createTour(
     },
   };
 }
-
-/* ---------------------------------------------------------------- misc */
 
 export function createToast(): (text: string, ms?: number) => void {
   const el = $("toast");
@@ -639,7 +584,6 @@ export function createMinimap(
       }
     }
 
-    // camera position + look direction
     const cx = toPx(camera.position.x);
     const cy = toPx(camera.position.z);
     const tx = toPx(controls.target.x);

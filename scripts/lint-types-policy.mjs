@@ -47,10 +47,6 @@ if (
   );
 }
 
-// The installed engine package publishes its implemented-rule manifest in the
-// bundled README. Compare that engine-owned surface with the reviewed catalog
-// so a newly implemented rule cannot be omitted merely because the local
-// catalog and the command assembled from it still agree with each other.
 const installedTypeAwareRules = [
   ...installedTypeAwareReadme.matchAll(
     /^- \[x\] \[(?<rule>[^\]]+)\]\([^)]+\)$/gmu
@@ -151,9 +147,6 @@ const fixtureBaseArgs = [
   "--type-aware",
   "--format=json",
   "--disable-nested-config",
-  // Ordinary lint owns directive hygiene. This pass disables ordinary rules
-  // with -A all, so it cannot meaningfully decide whether their directives
-  // are unused.
   "--report-unused-disable-directives-severity=allow",
   "-A",
   "all",

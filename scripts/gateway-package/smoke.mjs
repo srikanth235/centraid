@@ -1,19 +1,4 @@
 #!/usr/bin/env node
-/**
- * Packaged-gateway install smoke (issue #504 packaging Phase B).
- *
- * External observer: starts an isolated data dir (host mode), or probes an
- * already-running base URL (container mode). Hits /centraid/_gateway/info,
- * dumps logs on failure. Does not branch product main on "is smoke".
- *
- * Usage:
- *   node scripts/gateway-package/smoke.mjs [--gateway-bin <path>] [--port 0]
- *   node scripts/gateway-package/smoke.mjs --base-url http://127.0.0.1:8787
- *
- * Prefer an already-built gateway for host mode:
- *   bun run --cwd packages/server build
- *   node scripts/gateway-package/smoke.mjs
- */
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
@@ -97,8 +82,6 @@ async function hostMode() {
 
   let baseUrl = `http://${host}:${port || 18787}`;
   const deadline = Date.now() + 20_000;
-  // Read the child output and probe one interval at a time; concurrent probes
-  // would only blur which observation selected the smoke target URL.
   const waitForListener = async () => {
     if (Date.now() >= deadline) return;
     const m = output.match(/https?:\/\/127\.0\.0\.1:\d+/u);
@@ -113,7 +96,7 @@ async function hostMode() {
       });
       if (early.ok) return;
     } catch {
-      // not up
+      // Intentionally empty.
     }
     await sleep(200);
     return waitForListener();
@@ -127,7 +110,7 @@ async function hostMode() {
   try {
     child.kill("SIGKILL");
   } catch {
-    // already dead
+    // Intentionally empty.
   }
 
   writeFileSync(logPath, output);

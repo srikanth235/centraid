@@ -235,8 +235,6 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
         sqlStatements: counter.value(),
         httpRequests: requests.value(),
       });
-      // The graph is deliberately lazy after first paint; prove its separately
-      // requested payload stays bounded without charging it to first paint.
       expect(atlasGraph(db.vault).nodes.length).toBeGreaterThan(0);
     } finally {
       await requests.close();

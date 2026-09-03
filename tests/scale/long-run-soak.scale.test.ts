@@ -20,82 +20,16 @@ import {
 import type { SoakSample } from "../helpers/composite-workload.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
-/**
- * LONG-RUN SOAK (issue #842 W3.4).
- *
- * Everything else in the perf and scale lanes is a sprint: seed a fixture,
- * measure one pass, tear it down. A whole class of defect is invisible to a
- * sprint because it only shows up in the SECOND hour — a listener added per
- * request and never removed, a prepared-statement cache with no bound, a
- * journal that grows without being pruned, a temp file per upload that is never
- * unlinked, an event loop that gets a little slower every cycle. Those are the
- * defects an owner meets as "my machine is fine on Monday and hot on Friday",
- * and this repo had nothing that could see them.
- *
- * This rig runs the household workload in a LOOP against one long-lived
- * `serve()` gateway and watches five growth axes between cycles:
- *
- *   - memory        — RSS, heap, and the external/ArrayBuffer arenas where
- *                     blob and CAS buffers live
- *   - fd / handles  — open descriptors held by the process
- *   - DB bloat      — every SQLite file the gateway owns, including -wal/-shm
- *   - latency creep — per-cycle wall clock, first third vs last third
- *   - refusals      — a gateway that starts shedding load as it ages has
- *                     degraded even if every number above stayed flat
- *
- * ── Duration, and the honest limit of what runs here ────────────────────────
- *
- * `CENTRAID_SOAK_MINUTES` sets the wall-clock target; it defaults to a short
- * setting so the rig ALWAYS RUNS, including on the nightly scale lane. That is
- * deliberate and is the difference between a rig and a wish: a soak that only
- * existed behind an env var nobody sets is a lane that silently stopped
- * running, and a rig that skipped itself when the var is unset would be a
- * vacuous green. At the short default it proves the loop, the sampler and the
- * invariants all work, and it catches a gross leak.
- *
- * It does NOT prove the absence of a slow leak. Slope over ~45 s of cycles is
- * dominated by cache warming, so the GROWTH ceilings are asserted only at or
- * above `declaredSoakMinutes` (see tests/experience-budgets/gateway.json) —
- * exactly the pattern `restore-10gib.scale.test.ts` uses for its 10 GiB
- * ceilings. Below that the growth axes are measured and PUBLISHED but do not
- * gate, while the always-true invariants (every cycle completed, no transport
- * error, no untyped refusal, descriptors under an absolute ceiling) gate at
- * every duration. The real answer needs the weekly lane; see the BLOCKED
- * section in the receipt for this issue.
- *
- * Determinism: cycle workloads are seeded from the cycle index, never from the
- * clock. Elapsed time decides only WHEN TO STOP looping — never what work to
- * do — and there is no fixed sleep anywhere: each cycle waits on its own
- * requests, not on a timer.
- */
 const OWNER = "tests/scale/long-run-soak.scale.test.ts";
 
-/** Wall-clock target in minutes. The weekly lane sets this to hours. */
 const SOAK_MINUTES = (() => {
   const raw = Number(process.env.CENTRAID_SOAK_MINUTES ?? "0.75");
   return Number.isFinite(raw) && raw > 0 ? raw : 0.75;
 })();
 
-/**
- * Cycles run even if the clock target is already met. Slope and first-third /
- * last-third medians need samples; nine post-warmup cycles is the floor at
- * which those statistics mean anything at all.
- */
 const MIN_CYCLES = 12;
-/**
- * Cycles discarded before the growth axes are computed. A fresh gateway fills
- * page cache, compiles statements and grows its WAL on the first passes; that
- * is start-up cost, not a leak, and including it would make every soak look
- * like it was leaking.
- */
 const WARMUP_CYCLES = 3;
-/** Ops per lane per cycle. Small: the axis under test is TIME, not volume. */
 const OPS_PER_LANE = 3;
-/**
- * Vitest per-test runaway guard — NOT a budget. The soak stops on its own
- * clock target; this only bounds a run that has stopped making progress, and
- * is sized for the weekly lane's multi-hour `CENTRAID_SOAK_MINUTES`.
- */
 const RUNAWAY_GUARD_MS = 36_000_000;
 
 interface CeilingFile {
@@ -130,9 +64,6 @@ describe("long-run-soak.scale", () => {
       const transportErrors: string[] = [];
       const refusals: Record<string, number> = {};
 
-      // The loop condition reads the clock — the ONE legitimate use, and it
-      // decides only when to stop, never what work to do. The workload for
-      // cycle N is seeded from N.
       for (
         let cycle = 0;
         cycle < MIN_CYCLES || performance.now() - started < soakMs;
@@ -210,14 +141,12 @@ describe("long-run-soak.scale", () => {
         0
       );
 
-      // Always-true invariants — these gate at EVERY duration.
       const invariantsHeld =
         samples.length >= MIN_CYCLES &&
         transportErrors.length === 0 &&
         untyped.length === 0 &&
         (maxDescriptors === null ||
           maxDescriptors <= ceilings.ceilingOpenDescriptors);
-      // Growth ceilings — asserted only at or above the declared duration.
       const growthHeld =
         !atDeclaredDuration ||
         (latencyCreepFactor <= ceilings.ceilingLatencyCreepFactor &&
@@ -325,9 +254,6 @@ describe("long-run-soak.scale", () => {
           maxDescriptors <= ceilings.ceilingOpenDescriptors,
         `descriptor ceiling: peaked at ${maxDescriptors} open descriptors, ceiling ${ceilings.ceilingOpenDescriptors}`
       ).toBe(true);
-      // Unconditional assertion on a boolean rather than a conditional expect:
-      // the growth ceilings are stated AT declaredSoakMinutes, and
-      // `growthHeld` already encodes that a shorter run reports without gating.
       expect(
         growthHeld,
         `soak growth ceilings (asserted only at >= ${ceilings.declaredSoakMinutes} min; this run was ${SOAK_MINUTES} min): ` +

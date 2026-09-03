@@ -1,24 +1,3 @@
-/**
- * Composition-level fault catalog (issue #842 W3.2).
- *
- * W3.1 breaks the LINK between two healthy components. This catalog breaks the
- * COMPONENTS while the system is mid-work: a gateway that restarts between
- * durable admission and settlement, a gateway whose backend is degraded but
- * still answering, a replica whose process dies with work claimed, an
- * automation worker that dies holding a run claim, and a model-runtime worker
- * that dies holding an enrichment lease.
- *
- * Each entry names the component, what is done to it AT WHAT MOMENT, and the
- * one thing that must be true afterwards. The shared shape of every invariant
- * is CONVERGENCE RATHER THAN CORRUPTION OR WEDGING: the system may lose time,
- * never work, and a dead participant must not hold the system hostage forever.
- *
- * The two lease-shaped faults are asserted through injectable clocks
- * (`ConversationStore.acquireTurnLock(…, now)`, `leaseNextEnrichmentRequest({
- * now })`) rather than by waiting out a real TTL, so the whole catalog runs on
- * the PR path with no wall-clock sleep and no timing assertion anywhere.
- */
-
 export type ComponentId =
   | "gateway"
   | "replica"
@@ -26,12 +5,9 @@ export type ComponentId =
   | "model-runtime";
 
 export interface ComponentFault {
-  /** Stable id; also the replay token printed in the test name. */
   readonly id: string;
   readonly component: ComponentId;
-  /** What is done, and at which moment of the in-flight work. */
   readonly injection: string;
-  /** What must hold afterwards. */
   readonly invariant: string;
 }
 
@@ -89,11 +65,6 @@ export const COMPONENT_FAULT_BY_ID: Readonly<
   COMPONENT_FAULTS.map((fault) => [fault.id, fault])
 ) as Record<ComponentFaultId, ComponentFault>;
 
-/**
- * Components named by #842 W3.2 that this lane degrades in-process. A
- * component with no entry here would be a silent hole, so the lane asserts
- * this list against the catalog.
- */
 export const COMPONENTS_UNDER_CHAOS: readonly ComponentId[] = [
   "gateway",
   "replica",

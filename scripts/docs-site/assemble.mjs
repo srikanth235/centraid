@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-/**
- * Assemble the deployable site tree that wrangler.json serves
- * (assets.directory = ./dist/site):
- *   dist/site/       ← home landing (scripts/home-site/public)
- *   dist/site/docs/  ← docs (dist/docs-site, built with base /docs)
- *   dist/site/city/  ← City (centraid-city, built with base /city/)
- * plus an authoritative root _headers whose rules are site-absolute.
- *
- * Run after the docs build. `bun run docs:bundle` chains the two, and that is
- * the build command Cloudflare runs before `wrangler deploy` — deployment lives
- * in Cloudflare's Git integration, not in a GitHub Actions job.
- */
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -20,9 +8,6 @@ const homePublic = path.join(repoRoot, "scripts", "home-site", "public");
 const cityOut = path.join(repoRoot, "centraid-city", "dist");
 const siteDir = path.join(repoRoot, "dist", "site");
 
-// Cloudflare Workers static assets reads ONE _headers at the assets root; its
-// rules are site-absolute, so they must carry the /docs/ prefix of the combined
-// tree (the inert copy at dist/site/docs/_headers is ignored).
 const headers = `# Pagefind search bundle — hashed filenames, safe to pin forever.
 /docs/pagefind/*
   Cache-Control: public, max-age=31536000, immutable

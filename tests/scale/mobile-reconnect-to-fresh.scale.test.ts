@@ -1,18 +1,3 @@
-/**
- * The CLIENT-SIDE TERM of reconnect-to-fresh, at year-3 phone volume. Method,
- * scope and ceiling: `tests/experience-budgets/mobile.json`. The number is a
- * LOWER BOUND on what the owner feels — no network RTT, no device flash, no
- * render.
- *
- * It gates on WALL CLOCK, which is why it is here rather than in the mobile
- * package's own suite: `bun run test` drives 29 turbo tasks across four
- * threads, and under that contention this probe measured 3,292 ms against its
- * 1,800 ms ceiling while measuring 482 ms alone. The nightly scale lane runs
- * `fileParallelism: false` in a forked pool, which is the isolation a
- * wall-clock budget needs to mean anything. Its untimed sibling — a session
- * with no shape catalog must refuse rather than answer empty (#883 D1) — stays
- * in the ordinary suite next to the fixture both share.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -70,7 +55,6 @@ describe("reconnect-to-fresh probe", () => {
       const rows = corpus();
       const gateway = createGateway()
         .on("/replica/bootstrap", () => json(bootstrapPage(rows)))
-        // The bootstrap's own convergence replay finds nothing.
         .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })));
       const feed = createFeed();
       const appState = createAppState();
@@ -104,25 +88,20 @@ describe("reconnect-to-fresh probe", () => {
         appState.send("background");
         expect(feed.active).toBe(false);
 
-        // Queued now; served on the resume pull.
         gateway
           .on("/changes", () => json(missedBatch()))
           .on("/changes", () =>
             json(noChanges({ epoch: "replica-1", seq: 2 }))
           );
 
-        // The first instant the phone could know it is back.
         const started = performance.now();
         appState.send("active");
         expect(feed.active).toBe(true);
 
-        // Stop on the SCREEN'S read, not the delta: resume is asynchronous,
-        // so polling is the only honest observer.
         let freshMs = Number.NaN;
         let framesPolled = 0;
         for (;;) {
           framesPolled += 1;
-          // Sequential by necessity: each poll observes what the last left.
           // oxlint-disable-next-line no-await-in-loop
           const page = await session.read(APP_ID, {
             entity: ENTITY,

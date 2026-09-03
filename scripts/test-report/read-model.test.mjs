@@ -15,13 +15,6 @@ import {
 import { laneSeverity } from "./model/severity.mjs";
 import { computeVerdict } from "./read-model.mjs";
 
-/**
- * The verdict is the one number a reader acts on, and every way it could lie
- * is a way this page becomes the thing #915 replaced: a lamp that says
- * SHIPPABLE while nothing ran, or RED every night until nobody looks.
- */
-
-/** A lane board row, with the fields the rules read. */
 function row(overrides = {}) {
   return {
     lane: "a-lane",

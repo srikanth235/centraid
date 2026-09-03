@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Structural smoke for the continuous web PWA build (issue #501).
- * Asserts apps/web/dist has installable surface after `bun run web:build`.
- */
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";

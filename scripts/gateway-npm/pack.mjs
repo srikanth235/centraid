@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * Pack the gateway publish set for npm (issue #509).
- * Rewrites workspace:* → concrete versions; does not publish.
- *
- * Usage:
- *   node scripts/gateway-npm/pack.mjs [--out artifacts/npm-packs] [--dry-run]
- */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -58,7 +51,6 @@ function main() {
     };
   });
 
-  /** @type {Record<string, string>} */
   const versionByName = {};
   for (const dir of order) {
     const p = readPkg(dir);
@@ -70,7 +62,6 @@ function main() {
     `gateway-npm pack: ${order.length} package(s) → ${out}${dryRun ? " (dry-run)" : ""}`
   );
 
-  /** @type {string[]} */
   const tarballs = [];
   for (const dir of order) {
     const srcPkg = readPkg(dir);
@@ -82,13 +73,11 @@ function main() {
     fs.rmSync(staging, { recursive: true, force: true });
     fs.mkdirSync(staging, { recursive: true });
 
-    // Copy packable tree from package files field + package.json
     const pkgRoot = path.join(ROOT, "packages", dir);
     const files = Array.isArray(srcPkg.files)
       ? srcPkg.files
       : ["dist", "README.md"];
     for (const rel of files) {
-      // Support globs like native/*.node by copying parent dir patterns simply:
       if (rel.includes("*")) {
         const parent = path.dirname(rel);
         const base = path.basename(rel);
@@ -97,7 +86,6 @@ function main() {
         const destDir = path.join(staging, parent);
         fs.mkdirSync(destDir, { recursive: true });
         for (const name of fs.readdirSync(fromDir)) {
-          // crude glob: only * as suffix/prefix on basename
           const re = new RegExp(
             "^" + base.replace(/\./gu, "\\.").replace(/\*/gu, ".*") + "$",
             "u"
@@ -128,7 +116,6 @@ function main() {
     );
 
     if (dryRun) {
-      // npm pack --dry-run from staging
       const r = spawnSync("npm", ["pack", "--dry-run", "--json"], {
         cwd: staging,
         encoding: "utf8",

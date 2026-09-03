@@ -1,10 +1,3 @@
-/**
- * FTS5 search-expression fuzz targets (#839 G10).
- *
- * The two targets that eat bytes a search box chose: the gateway + replica
- * MATCH compilers, and the mirror property that the replica compiler produces
- * the same program as the canonical gateway.
- */
 import { utf8 } from "./mutate.mjs";
 import {
   assertFtsGrammar,
@@ -14,9 +7,6 @@ import {
   invariant,
 } from "./targets-support.mjs";
 
-/** @typedef {import('./targets-support.mjs').FuzzTarget} FuzzTarget */
-
-/** @type {FuzzTarget[]} */
 export const SEARCH_TARGETS = [
   {
     id: "fts-match",
@@ -113,8 +103,6 @@ export const SEARCH_TARGETS = [
         try {
           replica = replicaFtsMatchExpression(query);
         } catch {
-          // A refusal is the replica's way of saying "no searchable words";
-          // the gateway says the same thing by returning null.
           refused = true;
         }
         invariant(

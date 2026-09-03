@@ -1,53 +1,12 @@
 #!/usr/bin/env node
-// The vault's registry is an allow-list, held from outside the vault too
-// (vault-ontology review, lens 8.1).
-//
-// Why this exists: every physical table is declared once, in
-// `packages/vault/src/schema/entity-catalog.ts`, and the gateway is the only
-// door to them — where consent is resolved, a receipt is written, and soft-
-// deleted rows are filtered out. A `db.vault.prepare("SELECT … FROM
-// core_event")` written ANYWHERE ELSE walks past all three at once, and nothing
-// in the type system notices: the string is just a string. Not hypothetical —
-// the review found life-data readers doing exactly this, serving trashed rows
-// with no consent check and no receipt.
-//
-//   RULE raw-vault-sql   No file outside `packages/vault` may name a physical
-//     vault table inside raw SQL, unless it is in the ALLOW-LIST below with a
-//     reason. The table vocabulary is READ FROM the registry, never hand-listed
-//     here, so a table added tomorrow is covered the day it is declared.
-//
-// The allow-list is the whole design. Plane machinery legitimately lives outside
-// the vault and owns tables the vault does not manage (share, replica, broker,
-// notices); restore, doctor and quarantine work *below* the gateway by
-// definition. Each is named with one clause saying why. A product surface that
-// just wants to read life data is NOT on the list, and adding it there is the
-// change a reviewer gets to argue with.
-//
-// WHAT THIS CANNOT SEE, said plainly: it matches text, not a query plan. SQL
-// assembled from fragments, a table name held in a variable, or a view over a
-// vault table all read as clean — the cheap tripwire in front of review, exactly
-// like lint-mobile-testids.mjs, not a proof.
-//
-// Following that linter: A SILENT NO-OP IS A FAILURE. Zero tables parsed, zero
-// source files discovered, zero references found, an allow-list entry naming a
-// missing file, or an entry whose file no longer speaks SQL each FAIL rather
-// than pass — every one is the shape this linter takes once its readers or the
-// tree moved under it, and an allowance that has outlived its reason is how an
-// allow-list rots into a permission slip.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
-/** The registry. The one place a physical table name is declared. */
 const REGISTRY = "packages/vault/src/schema/entity-catalog.ts";
 
-/**
- * Vault-plane storage that is NOT in the registry: the replica mirror and the
- * blob/share/consent/sync/outbox/notice machinery. Prefix-matched — these
- * families grow by table, and the whole family has one owner.
- */
 // prettier-ignore
 const PHYSICAL_PREFIXES = [
   "blob_", "replica_", "share_", "consent_", "access_",
@@ -59,15 +18,8 @@ const SKIP_DIRS = new Set([
   ".git", ".turbo", "artifacts", "build", "dist", "node_modules",
 ]);
 const SOURCE_EXT = /\.(?:[cm]?[jt]sx?)$/u;
-/** The vault owns its own tables; that is the point. */
 const VAULT_DIR = "packages/vault/";
 
-/**
- * Whole trees of TEST code, allowed by role rather than by file. A suite that
- * asserts the gateway actually wrote `core_event` has to read `core_event`;
- * listing several hundred such files one by one would bury the handful of
- * production allowances that are the reason this linter exists.
- */
 const TEST_ROLES = [
   {
     pattern: /\.test\.[cm]?[jt]sx?$/u,
@@ -87,12 +39,7 @@ const TEST_ROLES = [
   },
 ];
 
-/**
- * Production files allowed to speak SQL, each with the clause that earns it.
- * Seeded from the review's own census; anything not here fails.
- */
 export const ALLOW_LIST = {
-  // ── the replica plane: a local mirror the vault does not manage ──
   "apps/mobile/src/lib/replica/sqlite-intent-store.ts":
     "owns the phone's replica intent outbox tables",
   "packages/client/src/replica/store-core.ts":
@@ -107,7 +54,6 @@ export const ALLOW_LIST = {
     "streams the change log rows that ARE the replica protocol",
   "packages/server/src/routes/replica-shape.ts":
     "answers what a replica may hold, from the change log's own state",
-  // ── the share / commons plane: server-owned tables, not vault entities ──
   "packages/server/src/serve/gateway-schema.ts":
     "creates the server-owned share-plane tables themselves",
   "packages/server/src/routes/edges-routes.ts":
@@ -140,7 +86,6 @@ export const ALLOW_LIST = {
     "reports the commons plane's own health counters",
   "packages/server/src/serve/commons-recovery-invites.ts":
     "issues steward recovery invitations from commons bindings",
-  // ── connection broker + outbox: the sync plane's own storage ──
   "packages/server/src/serve/connection-broker.ts":
     "owns sync_connection and its credential rows",
   "packages/server/src/serve/broker-health.ts":
@@ -152,7 +97,6 @@ export const ALLOW_LIST = {
   "packages/server/src/serve/outbox-executor.ts":
     "drains outbox_item, the table it owns",
   "packages/server/src/serve/notices.ts": "owns notifications_notice",
-  // ── below the gateway by definition: plane, doctor, backup, quarantine ──
   "packages/server/src/serve/vault-plane.ts":
     "mounts vaults and reads plane state before any gateway exists",
   "packages/server/src/serve/vault-quarantine.ts":
@@ -167,7 +111,6 @@ export const ALLOW_LIST = {
     "reads vault identity before a gateway can be built",
   "packages/server/src/serve/support-bundle-source.ts":
     "must read the person names it then redacts",
-  // ── harnesses and fixtures that are test code by role, not by suffix ──
   "packages/server/src/acp/prompt-injection/harness.ts":
     "seeds the throwaway vault the injection corpus runs against",
   "packages/server/src/serve/outbox-executor-test-kit.ts":
@@ -178,22 +121,10 @@ export const ALLOW_LIST = {
     "is a peer-give suite's fixture builder",
   "packages/server/src/serve/vault-plane.test-fixtures.ts":
     "is a vault-plane suite's fixture builder",
-  // ── this linter ──
   "scripts/lint-vault-sql.mjs":
     "its own fixtures name physical tables on purpose",
 };
 
-// ── the vocabulary ─────────────────────────────────────────────────────────
-
-/**
- * Physical table names from `VAULT_ENTITIES` — `schema_entity`, the same join
- * `tableNamesOf` performs at runtime. Read line-by-line rather than with a TS
- * parser to keep this script dependency-free like its siblings; the registry is
- * a literal object by construction. A shape it cannot read yields zero names,
- * which the empty-vocabulary guard turns into a failure.
- *
- * Exported so the sibling test can drive it on fixtures.
- */
 export function parseVaultTables(text) {
   const start = text.indexOf("export const VAULT_ENTITIES");
   if (start < 0) return [];
@@ -213,7 +144,6 @@ export function parseVaultTables(text) {
   return names;
 }
 
-/** Source files to scan, relative to `root`, discovered from disk. */
 export function discoverSourceFiles(root = ROOT) {
   const out = [];
   const walk = (abs) => {
@@ -232,14 +162,6 @@ export function discoverSourceFiles(root = ROOT) {
   return out;
 }
 
-// ── the grammar ────────────────────────────────────────────────────────────
-
-/**
- * The file with its comments removed, string and template bodies kept intact.
- * Prose quotes SQL constantly in this repo ("FKs into core_party"), and a
- * comment naming a table is a comment, not a query. Strings are preserved
- * because a query IS a string.
- */
 export function stripComments(text) {
   let out = "";
   let i = 0;
@@ -278,17 +200,9 @@ export function stripComments(text) {
   return out;
 }
 
-// Uppercase keywords only: raw SQL in this repo is written `FROM core_event`,
-// while English prose that happens to precede a table name ("into core_party")
-// is lower-case. `ON` is deliberately absent — `JOIN x ON y.id` would make every
-// join predicate look like a table reference.
 const TABLE_RE =
   /\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"'[]?(?<table>[a-z][a-z0-9_]*)/gu;
 
-/**
- * Physical vault tables a file names in raw SQL, with the line of each first
- * mention. `tables` is the registry vocabulary; prefixes are applied on top.
- */
 export function collectTableReferences(text, tables) {
   const known = new Set(tables);
   const stripped = stripComments(text);
@@ -306,17 +220,6 @@ export function collectTableReferences(text, tables) {
   return [...found].map(([table, line]) => ({ table, line }));
 }
 
-// ── the rule ───────────────────────────────────────────────────────────────
-
-/**
- * Hold the tree against the allow-list. Pure: the caller reads the disk, this
- * decides. `files` is `{ rel, text }[]`; `allow` is the `{ file, reason }[]`
- * and `roles` the `{ pattern, reason }[]`.
- *
- * @returns `{ findings, references, allowed }` — `allowed` is the set of
- *   allow-list files that actually still contain vault SQL, which is how the
- *   caller catches an allowance that has outlived its reason.
- */
 export function lintVaultSql({
   files,
   tables,
@@ -353,10 +256,6 @@ export function lintVaultSql({
   return { findings, references, allowed: used };
 }
 
-// ── self-test: the rule, exercised before it judges the repo ───────────────
-// A linter that silently stops enforcing is worse than none. Runs on every
-// invocation (µs); the guards and the readers are covered more thoroughly by
-// the sibling `lint-vault-sql.test.mjs`.
 function selfTest() {
   const tables = ["core_event", "schedule_task"];
   const allow = { "ok.ts": "owns the table" };
@@ -406,8 +305,6 @@ function selfTest() {
       process.exit(1);
     }
   }
-  // The registry reader is half the linter; a shape it cannot read yields zero
-  // names and every file then passes vacuously.
   const parsed = parseVaultTables(
     [
       "export const VAULT_ENTITIES: EntityRegistry = {",
@@ -465,7 +362,6 @@ function main() {
         `The SQL grammar or the registry reader is stale, not clean.`
     );
 
-  // An allowance that has outlived its reason is how an allow-list rots.
   for (const [file, reason] of Object.entries(ALLOW_LIST)) {
     if (!existsSync(path.resolve(ROOT, file)))
       fail(`ALLOW_LIST names ${file}, which does not exist. Remove the entry.`);
@@ -495,5 +391,4 @@ function main() {
   );
 }
 
-// Run as a CLI; stay importable (the pure functions) without side effects.
 if (import.meta.url === `file://${process.argv[1]}`) main();

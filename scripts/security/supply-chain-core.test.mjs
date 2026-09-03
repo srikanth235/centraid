@@ -1,11 +1,3 @@
-/**
- * W6.2 unit tests (umbrella #842).
- *
- * Every crypto assertion below runs against a REAL Ed25519 keypair built from a
- * fixed 32-byte seed — deterministic, so a failure replays byte-identically,
- * but never a stub. Each positive case is paired with a sabotage case, so a
- * verifier that stopped verifying cannot pass this file.
- */
 import assert from "node:assert/strict";
 import { createPrivateKey, createPublicKey } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -33,7 +25,6 @@ import {
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-/** Deterministic Ed25519 keypair from a one-byte seed fill. */
 function keypair(seedByte) {
   const privateKey = createPrivateKey({
     key: Buffer.concat([
@@ -99,8 +90,6 @@ test("parseBunLock refuses to report an empty inventory silently", () => {
 });
 
 test("parseBunLock reads the repo's real bun.lock", () => {
-  // A fixture-only parser test would still pass after bun changed its lockfile
-  // grammar; this is the assertion that notices.
   const { packages, errors } = parseBunLock(
     readFileSync(path.join(root, "bun.lock"), "utf8")
   );
@@ -137,7 +126,6 @@ test("buildSbom is deterministic and derives its serial from content", () => {
   assert.equal(first.bomFormat, "CycloneDX");
   assert.equal(first.specVersion, "1.6");
   assert.equal(first.components.length, 3);
-  // A different lockfile must not reuse the serial.
   const changed = buildSbom({ ...input, packages: input.packages.slice(1) });
   assert.notEqual(changed.serialNumber, first.serialNumber);
 });
@@ -165,7 +153,6 @@ test("verifySbom accepts a matching BOM and REFUSES drift in both directions", (
   });
   assert.equal(verifySbom(bom, packages).ok, true);
 
-  // Sabotage 1: a dependency was added to the lockfile after the BOM was cut.
   const added = verifySbom(bom, [
     ...packages,
     { name: "evil", version: "9.9.9", integrity: null, workspace: false },
@@ -173,12 +160,10 @@ test("verifySbom accepts a matching BOM and REFUSES drift in both directions", (
   assert.equal(added.ok, false);
   assert.deepEqual(added.missing, ["evil@9.9.9"]);
 
-  // Sabotage 2: the BOM lists something the lockfile does not.
   const stale = verifySbom(bom, packages.slice(1));
   assert.equal(stale.ok, false);
   assert.equal(stale.extra.length, 1);
 
-  // Sabotage 3: not a BOM at all.
   assert.equal(verifySbom({ hello: "world" }, packages).ok, false);
 });
 
@@ -234,13 +219,11 @@ test("verifyProvenance accepts real digests and REFUSES every way they can lie",
   });
   assert.equal(verifyProvenance(statement, actual, { builderId }).ok, true);
 
-  // Sabotage 1: the artifact was swapped after the statement was signed.
   const tampered = { ...actual, "b.dmg": sha256Hex("something else entirely") };
   const swapped = verifyProvenance(statement, tampered);
   assert.equal(swapped.ok, false);
   assert.match(swapped.reasons.join(" "), /b\.dmg digest mismatch/u);
 
-  // Sabotage 2: an extra artifact slipped into the release, unattested.
   const smuggled = verifyProvenance(statement, {
     ...actual,
     "extra.sh": sha256Hex("payload"),
@@ -248,18 +231,15 @@ test("verifyProvenance accepts real digests and REFUSES every way they can lie",
   assert.equal(smuggled.ok, false);
   assert.match(smuggled.reasons.join(" "), /extra\.sh is not covered/u);
 
-  // Sabotage 3: an attested subject is simply absent.
   const absent = verifyProvenance(statement, { "a.exe": actual["a.exe"] });
   assert.equal(absent.ok, false);
 
-  // Sabotage 4: built somewhere else.
   const elsewhere = verifyProvenance(statement, actual, {
     builderId: "https://evil.invalid/builder",
   });
   assert.equal(elsewhere.ok, false);
   assert.match(elsewhere.reasons.join(" "), /is not the expected/u);
 
-  // Sabotage 5: a statement of the wrong type must not be waved through.
   assert.equal(
     verifyProvenance({ _type: "something/else", subject: [] }, actual).ok,
     false
@@ -295,7 +275,6 @@ test("REFUSAL: a signature by another key does not verify against the release ke
     attacker.publicKey
   );
   assert.equal(verifyDocument(manifest, forged, release.publicKey).ok, false);
-  // Even after relabelling the envelope with the release key's id, the maths fails.
   const relabelled = { ...forged, keyId: keyIdFor(release.publicKey) };
   assert.deepEqual(verifyDocument(manifest, relabelled, release.publicKey), {
     ok: false,
@@ -363,8 +342,6 @@ test("REFUSAL: malformed envelopes and keys are rejected before verification", (
 });
 
 test("buildReleaseManifest emits the exact schema the shipped updater pins", () => {
-  // The updater refuses any other tag; drifting them apart here would ship a
-  // release nothing can install, so the constant is asserted as a literal.
   assert.equal(RELEASE_MANIFEST_SCHEMA, "centraid.release-manifest/1");
   const manifest = buildReleaseManifest("0.6.0", [
     { name: "b.dmg", sha512: "QQ==" },
@@ -378,8 +355,6 @@ test("buildReleaseManifest emits the exact schema the shipped updater pins", () 
 });
 
 test("release metadata files are excluded from the digest set", () => {
-  // A manifest that listed itself could never verify: writing it changes its
-  // own bytes.
   assert.ok(RELEASE_METADATA_FILES.has("centraid-release-manifest.json"));
   assert.ok(RELEASE_METADATA_FILES.has("centraid-release-manifest.sig.json"));
 });

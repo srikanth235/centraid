@@ -6,14 +6,8 @@ import { validateAppScenarios } from "./validate-app-scenarios.mjs";
 import { validateReportRegistries } from "./validate-report-registries.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
-/**
- * The three client seats (docs/blueprint-seats.md). A seat is WHERE bytes live
- * and which way they flow — orthogonal to form factor — so the set is closed
- * by product doctrine, not by what happens to be built.
- */
 const SEAT_IDS = ["origin", "custodian", "viewer"];
 
-/** GitHub-style heading slug, so a `file.md#anchor` citation is checkable. */
 function headingSlug(heading) {
   return heading
     .trim()
@@ -22,7 +16,6 @@ function headingSlug(heading) {
     .replaceAll(/\s+/gu, "-");
 }
 
-/** Every heading anchor a markdown document actually offers. */
 async function documentAnchors(cwd, docPath) {
   const source = await readFile(path.join(cwd, docPath), "utf8");
   return new Set(
@@ -32,7 +25,6 @@ async function documentAnchors(cwd, docPath) {
   );
 }
 
-/** The bundled blueprint ids on disk — the one authority for every app axis. */
 async function bundledAppIds(cwd) {
   const ids = [];
   for await (const manifest of glob("packages/blueprints/apps/*/app.json", {
@@ -43,7 +35,6 @@ async function bundledAppIds(cwd) {
   return ids.filter((id) => !id.startsWith("_")).sort();
 }
 
-/** True when `target` exists under `cwd`. */
 async function fileExists(cwd, target) {
   try {
     await access(path.join(cwd, target));
@@ -53,11 +44,6 @@ async function fileExists(cwd, target) {
   }
 }
 
-/**
- * The `states` block of a bundled app manifest — the design's own word on
- * which honest states the app owes — or the error explaining why grid D has
- * nothing to mirror.
- */
 async function readManifestStates(cwd, appId) {
   const manifestPath = `packages/blueprints/apps/${appId}/app.json`;
   try {
@@ -72,19 +58,6 @@ async function readManifestStates(cwd, appId) {
   }
 }
 
-/**
- * #839 Wave 0 (gaps G6, G7, G16) — the app-shaped axes: `seats`, `appSeats`
- * (grid B), `appStates` (grid D), the full `engineRegistry`, and the
- * `consentLedger`. Every one of them is TOTAL AND CLOSED in the same sense as
- * `appEngines`: the app axis must equal what is on disk, every app owes a cell
- * for every seat and every designed state, and the state partition must MIRROR
- * that app's own `app.json#states` block. An absence is a validation error, so
- * "we forgot" cannot render as "not applicable".
- *
- * Lifted out of `validate-matrix.mjs` — which stays the law's entry point and
- * calls this as one step of `validateMatrix` — purely so neither file outgrows
- * the repo-hygiene file-size limit.
- */
 export async function validateAppAxes(matrix, options, flowIds) {
   const errors = [];
   const cwd = options.root ?? root;
@@ -92,9 +65,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
   const issues = matrix.trackingIssues ?? {};
   const openIssue = (issue) => issues[String(issue)]?.state === "open";
 
-  // Every disk check is DEFERRED into one `Promise.all`: these blocks name
-  // hundreds of paths, and a validator that stats them one await at a time is
-  // needlessly serial. Each deferred check resolves to an error string or null.
   const deferred = [];
   function requirePath(target, message) {
     if (!checkFiles) return;
@@ -104,9 +74,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
       )
     );
   }
-  // One anchor cache, keyed by the PROMISE so concurrent citations of the same
-  // document read it once. A citation pointing at a heading the doc does not
-  // have reads as doctrine while protecting nothing.
   const anchorCache = new Map();
   function anchorsFor(docPath) {
     if (!anchorCache.has(docPath))
@@ -153,7 +120,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
 
   const [expectedApps, manifestStates] = await Promise.all([
     checkFiles ? bundledAppIds(cwd) : null,
-    // Grid D mirrors each app's own manifest, so read them all up front.
     checkFiles && Array.isArray(matrix.appStates?.apps)
       ? Promise.all(
           matrix.appStates.apps.map(async (app) => [
@@ -163,7 +129,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
         ).then((entries) => new Map(entries))
       : new Map(),
   ]);
-  /** The app axis of a grid must equal the bundled apps, in any order. */
   function checkAppAxis(block, declared) {
     if (!expectedApps) return;
     const actual = [...declared].sort();
@@ -173,7 +138,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
       );
   }
 
-  // ---- Grid B: app × seat -------------------------------------------------
   const appSeats = matrix.appSeats;
   if (!appSeats || !Array.isArray(appSeats.apps)) {
     errors.push("matrix has no appSeats grid");
@@ -211,9 +175,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
           const citation = String(cell.citation ?? "");
           const issueRef = /^#(?<issue>\d+)$/u.exec(citation);
           if (issueRef) {
-            // A held interface cites the RULING that held it; that issue is
-            // closed once the clearing landed, so state is not checked here —
-            // only that the reference is a registered, followable one.
             if (!issues[issueRef.groups.issue])
               errors.push(
                 `${label} skip cites unregistered issue ${citation}; add it to trackingIssues`
@@ -232,7 +193,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
     checkAppAxis("appSeats", declared);
   }
 
-  // ---- Grid D: app × designed state ---------------------------------------
   const appStates = matrix.appStates;
   if (!appStates || !Array.isArray(appStates.apps)) {
     errors.push("matrix has no appStates grid");
@@ -255,8 +215,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
           `appStates app id missing or duplicated: ${app?.id ?? "(missing)"}`
         );
       declared.add(app?.id);
-      // The manifest is the design's own word on which states this app owes;
-      // the grid may not disagree with it, in either direction.
       const manifest = manifestStates.get(app?.id);
       if (manifest?.error) errors.push(manifest.error);
       const designed = new Set(manifest?.states?.designed);
@@ -284,13 +242,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
             errors.push(`${label} owner must be a repository-relative path`);
           else requirePath(cell.owner, `${label} owner does not exist`);
         } else if (cell.status === "held") {
-          // A HELD state is designed, unbuilt, and NOT a gap: the interface it
-          // would belong to was cleared by a ruling, so no owner can exist
-          // until that ruling's redesign lands. The citation is that ruling —
-          // registered so it is followable, and NOT required to be open,
-          // because the issue closes when the clearing lands while the hold
-          // itself continues. Silence is the thing this forbids: a held cell
-          // renders with its citation rather than vanishing into the grey.
           const citation = String(cell.citation ?? "");
           const issueRef = /^#(?<issue>\d+)$/u.exec(citation);
           if (!issueRef)
@@ -323,7 +274,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
     checkAppAxis("appStates", declared);
   }
 
-  // ---- The 19-engine registry ---------------------------------------------
   const registry = matrix.engineRegistry;
   const seedIds = new Set(MUTATION_SEEDS.map((seed) => seed.id));
   if (!Array.isArray(registry) || !registry.length) {
@@ -360,8 +310,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
       if (typeof engine?.appEngineColumn !== "boolean")
         errors.push(`${label} does not say whether it is an appEngines column`);
     }
-    // The two registries are one fact seen twice: every engine that claims a
-    // grid-C column must actually have one, and vice versa.
     const claimed = registry
       .filter((engine) => engine?.appEngineColumn)
       .map((engine) => engine?.id)
@@ -375,7 +323,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
       );
   }
 
-  // ---- The consent ledger (8 permission layers) ---------------------------
   const ledger = matrix.consentLedger;
   if (Array.isArray(ledger)) {
     if (ledger.length !== 8)
@@ -464,13 +411,6 @@ export async function validateAppAxes(matrix, options, flowIds) {
     errors.push("matrix has no consentLedger");
   }
 
-  // #839 Wave 5 — grids E and G rest on two more registry blocks, `joinLaws`
-  // and `journeys`. Their locks read the owning suites and Maestro runners off
-  // disk (see `validate-report-registries.mjs`), so they ride the same
-  // `checkFiles` switch as every other on-disk check here; `options` carries
-  // the root through unchanged. `checkReportRegistries: false` lets a fixture
-  // that exercises an unrelated rule opt out without also disabling the file
-  // checks it does need — the real matrix never passes it.
   if (checkFiles && options.checkReportRegistries !== false)
     errors.push(...(await validateReportRegistries(matrix, options)));
 

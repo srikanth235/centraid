@@ -1,43 +1,4 @@
 #!/usr/bin/env node
-// SEAT-VERB linter (issue #890 W5). The third of the three #890 linters, after
-// lint-e2e-wiring (does anything RUN this flow?) and lint-mobile-testids (does
-// the thing this flow selects EXIST?). This one asks the question those two
-// cannot: is there a journey for every act only this seat can perform?
-//
-// Why it exists. `packages/blueprints/apps/*/app.json` declares `seats.originActs`
-// — the acts only the phone can do: a camera, a scanner, a voice capture, an
-// autofill provider. Each is by construction a device-only claim, and until this
-// register there was no way to answer "are all critical journeys covered?"
-// except by reading eight manifests and eighteen flows and holding them in your
-// head. The answer, once asked mechanically, was: five acts declared, zero
-// journeys. That is not a failure of this linter; it is what the linter is for.
-//
-// The rules:
-//
-//   RULE registered      Every `<app>.<act>` a manifest declares has a row in
-//     tests/agent-e2e-mobile/origin-acts.json. A NEW APP OR A NEW VERB CANNOT
-//     LAND without a journey or a conscious gap — that is the whole point.
-//
-//   RULE no-phantom      Every row names an act some manifest still declares. A
-//     verb deleted from a manifest must not leave a coverage claim behind.
-//
-//   RULE owned-is-real   An `owner` row names a flow file that EXISTS and that
-//     tests/agent-e2e-mobile/roster.json schedules. An owner nothing runs is the
-//     same defect lint-e2e-wiring catches from the other side, and the two must
-//     agree or the register is a second place for the truth to be wrong.
-//
-//   RULE dated-gap       A `gap` row carries `since` (an ISO date), a
-//     `trackingIssue` registered and OPEN in tests/claims.json, and a `blocker`
-//     that is a paragraph, not a shrug. An undated gap is indistinguishable from
-//     an oversight, and the audit ritual has nothing to read.
-//
-//   RULE stale-gap       A gap older than STALE_AFTER_DAYS fails, so the register
-//     cannot become a place where things are put to be forgotten. The remedy is
-//     never to bump the date: it is to write the journey, or to re-date the row
-//     WITH a re-stated blocker, which is a deliberate act somebody signs.
-//
-// Following lint-e2e-flows.mjs: a silent no-op is a FAILURE, and a self-test of
-// the rules runs first so the linter cannot rot into always-passing.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -48,13 +9,8 @@ const REGISTER_PATH = "tests/agent-e2e-mobile/origin-acts.json";
 const ROSTER_PATH = "tests/agent-e2e-mobile/roster.json";
 const MATRIX_PATH = "tests/claims.json";
 
-// A year. Long enough that a genuinely blocked act is not busywork, short
-// enough that no gap outlives the person who understood it. Re-dating is a
-// deliberate act with a re-stated blocker, never a bump.
 const STALE_AFTER_DAYS = 365;
 
-/** Every `<app>.<act>` the shipped manifests declare. Read from disk, never
- * listed here: a hand-kept app list is how a new app escapes a gate. */
 export function declaredActs(root = ROOT) {
   const acts = new Map();
   const appsDir = path.resolve(root, APPS_DIR);
@@ -75,7 +31,6 @@ export function declaredActs(root = ROOT) {
 }
 
 const dayMs = 24 * 60 * 60 * 1000;
-/** Whole days between an ISO date and `now`, or null when unparseable. */
 export function ageInDays(since, now = Date.now()) {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(String(since ?? ""))) return null;
   const parsed = Date.parse(`${since}T00:00:00Z`);
@@ -83,7 +38,6 @@ export function ageInDays(since, now = Date.now()) {
   return Math.floor((now - parsed) / dayMs);
 }
 
-/** The rule engine. Pure over an injected world so the self-test can drive it. */
 export function lintSeatVerbs({
   acts,
   register,
@@ -198,7 +152,6 @@ export function lintSeatVerbs({
   return findings;
 }
 
-// ---- self-test: the rules on fixtures, before judging the repo.
 function selfTest() {
   const base = {
     acts: new Map([
@@ -360,8 +313,6 @@ function main() {
   const roster = JSON.parse(read(ROSTER_PATH));
   const matrix = JSON.parse(read(MATRIX_PATH));
 
-  // Silent-no-op guards. Each of these reads as "clean" if unchecked: a moved
-  // manifest directory, an emptied register, a roster that stopped declaring.
   if (acts.size === 0) {
     console.error(
       `\nFAIL — discovered zero originActs under ${APPS_DIR}. Either every app ` +

@@ -1,9 +1,4 @@
-// world.ts — scene construction: sky, ground, district plates, building silhouettes,
-// particle flows. ALL geometry (plate rects, building positions/sizes/kinds/colors) comes
-// from core/content.ts; this module only knows how to render it.
 // governance: allow-repo-hygiene file-size-limit — scene build, flow system, and the
-// animation registry share the THREE material/instancing state they allocate. Splitting
-// them means exporting that state; tracked for the TypeScript conversion in #704.
 
 import * as THREE from "three";
 
@@ -22,8 +17,6 @@ import type {
 import { makeKit } from "./kit.js";
 import { LANDMARKS } from "./landmarks.js";
 
-/* ------------------------------------------------------------------ textures */
-
 function canvas2d(w, h) {
   const c = document.createElement("canvas");
   c.width = w;
@@ -31,8 +24,6 @@ function canvas2d(w, h) {
   return { c, g: c.getContext("2d") };
 }
 
-// Facade windows. Bottom 8% of the texture is deliberately blank so roof/floor faces
-// can be UV-mapped into it (no windows on rooftops).
 function makeWindowTexture() {
   const W = 256;
   const H = 512;
@@ -65,15 +56,12 @@ function makeWindowTexture() {
   return t;
 }
 
-// Blueprint-paper ground: a fine grid, one tile == GROUND_TILE_UNITS world units square,
-// with a faint sub-grid inside so it reads as elegant drafting paper rather than graph paper.
 const GROUND_TILE_UNITS = 4;
 function makeGroundTexture() {
   const S = 512;
   const { c, g } = canvas2d(S, S);
   g.fillStyle = "#e9eef4";
   g.fillRect(0, 0, S, S);
-  // very faint paper mottling so it isn't a flat void
   g.fillStyle = "rgba(150,168,190,.05)";
   for (let i = 0; i < 24; i++) {
     const rx = Math.random() * S;
@@ -83,7 +71,6 @@ function makeGroundTexture() {
     g.arc(rx, ry, rr, 0, Math.PI * 2);
     g.fill();
   }
-  // sub-grid: quarters of the tile (≈1 world unit), barely-there
   g.strokeStyle = "rgba(96,122,152,.10)";
   g.lineWidth = 1;
   const subs = 4;
@@ -96,7 +83,6 @@ function makeGroundTexture() {
     g.lineTo(S, p);
     g.stroke();
   }
-  // major grid: tile edges (≈GROUND_TILE_UNITS world units), a touch darker than the base
   g.strokeStyle = "rgba(80,104,134,.28)";
   g.lineWidth = 1.5;
   g.strokeRect(0.75, 0.75, S - 1.5, S - 1.5);
@@ -155,7 +141,6 @@ function makeSkyTexture(night) {
   return t;
 }
 
-// A single soft radial blob, reused (scaled + repositioned) for every cloud sprite.
 function makeCloudTexture() {
   const S = 128;
   const { c, g } = canvas2d(S, S);
@@ -196,8 +181,6 @@ function makeLabelTexture(text, color) {
   return { tex: t, aspect: cv.c.width / h };
 }
 
-/* ------------------------------------------------------------------ geometry helpers */
-
 function roundedRectShape(w, d, r) {
   const s = new THREE.Shape();
   const x = -w / 2;
@@ -215,8 +198,6 @@ function roundedRectShape(w, d, r) {
   return s;
 }
 
-// Box UVs so window density is roughly constant in world units, and roof/floor faces
-// land in the blank band at the bottom of the window texture.
 function facadeUVs(geo, w, h, d) {
   const uv = geo.attributes.uv;
   const U = 2.4; // world units per window column
@@ -229,7 +210,6 @@ function facadeUVs(geo, w, h, d) {
     const rv = sv / (rows * V);
     const base = 0.08;
     const span = 0.92;
-    // BoxGeometry face vertex order: (0,1) (1,1) (0,0) (1,0)
     set(start + 0, 0, base + span * rv);
     set(start + 1, ru, base + span * rv);
     set(start + 2, 0, base);
@@ -275,9 +255,6 @@ function prismGeometry(w, h, d) {
   return g;
 }
 
-// Flat road ribbons on the ground, following the same district-to-district routes as the
-// particle flows (see FLOW_PLAN). One merged, indexed, single-material mesh — cheap to draw.
-// Duplicate/reverse edges (e.g. clients↔gateway request+response) collapse to a single ribbon.
 function buildRoadsMesh(
   flowPlan: Array<[string, string, keyof Palette, string, number]>,
   byId: Map<string, WorldDistrict>,
@@ -300,7 +277,6 @@ function buildRoadsMesh(
     const b = new THREE.Vector3(B.center.x, roadY, B.center.z);
     const dist = a.distanceTo(b);
     if (dist < 1) continue;
-    // same lateral bow the flows use, flattened onto the ground plane
     const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
     const perp = new THREE.Vector3(b.z - a.z, 0, -(b.x - a.x))
       .normalize()
@@ -352,8 +328,6 @@ function buildRoadsMesh(
   return mesh;
 }
 
-/* ------------------------------------------------------------------ world */
-
 const DEFAULT_PALETTE: Palette = {
   requests: "#39c5ea",
   harness: "#5b7cfa",
@@ -365,27 +339,16 @@ const DEFAULT_PALETTE: Palette = {
   automation: "#ad8b00",
 };
 
-// Engine-side routing graph. A flow is only created when both districts exist in core/content.ts.
-//
-// Two independent paths share this graph, and the colors are load-bearing:
-//   * the HARNESS path (palette.harness / palette.consent — blue + violet) is OPTIONAL. It only
-//     lights up when a turn is actually running a runner.
-//   * the DIRECT + SYNC path (palette.requests / palette.wal / palette.sync — cyan, amber,
-//     green) is ALWAYS running and never touches the runtime. Multi-device sync lives here:
-//     gateway → vault → WAL → harbor → device, and back. Do not paint any leg of it 'harness'.
 const FLOW_PLAN: Array<[string, string, keyof Palette, string, number]> = [
   ["clients", "gateway", "requests", "request", 0.9],
-  // --- harness path (optional)
   ["gateway", "runtime", "harness", "harness", 0.6],
   ["runtime", "consent", "consent", "tool", 0.5],
   ["consent", "vault", "harness", "toolPass", 0.5],
   ["vault", "gateway", "harness", "result", 0.5],
-  // --- direct path (no runtime involvement)
   ["gateway", "apps", "requests", "appReq", 0.55],
   ["apps", "vault", "requests", "appWrite", 0.5],
   ["gateway", "vault", "requests", "directRead", 0.45],
   ["vault", "gateway", "requests", "directResult", 0.4],
-  // --- durability + sync path (no runtime involvement)
   ["vault", "wal", "wal", "wal", 0.35],
   ["wal", "sync", "sync", "ship", 0.5],
   ["wal", "sync", "sync", "replica", 0.66],
@@ -393,7 +356,6 @@ const FLOW_PLAN: Array<[string, string, keyof Palette, string, number]> = [
   ["clients", "sync", "sync", "devicePush", 0.8],
   ["sync", "vault", "sync", "replicaMerge", 0.55],
   ["wal", "backup", "sync", "backup", 0.7],
-  // --- blobs, automation, response
   ["apps", "cas", "blob", "blob", 0.6],
   ["cas", "backup", "blob", "blobBackup", 0.6],
   ["automation", "gateway", "automation", "automation", 0.6],
@@ -457,7 +419,6 @@ export function createWorld(content: CityContent): WorldApi {
   };
   const glowMat = glowMatImpl;
 
-  /* ---------------- sky */
   const skyDay = new THREE.Mesh(
     new THREE.SphereGeometry(700, 40, 24),
     new THREE.MeshBasicMaterial({
@@ -480,7 +441,6 @@ export function createWorld(content: CityContent): WorldApi {
   );
   scene.add(skyDay, skyNight);
 
-  // A few very soft, far-off cloud sprites — day-only (faded out at night alongside the sky).
   const clouds: THREE.Sprite[] = [];
   const cloudTex = makeCloudTexture();
   const CLOUD_LAYOUT = [
@@ -509,7 +469,6 @@ export function createWorld(content: CityContent): WorldApi {
 
   scene.fog = new THREE.Fog(0x8fb6d4, 320, 1300);
 
-  /* ---------------- lights */
   const hemi = new THREE.HemisphereLight(0xbcd8f5, 0x1b2433, 0.62);
   const sun = new THREE.DirectionalLight(0xfff2dc, 1.9);
   sun.position.set(-90, 130, 70);
@@ -527,9 +486,7 @@ export function createWorld(content: CityContent): WorldApi {
   const ambient = new THREE.AmbientLight(0x6f88ad, 0.22);
   scene.add(hemi, sun, sun.target, ambient);
 
-  /* ---------------- ground (with a hole punched for any "pit" district) */
   const pitDistrict = (content.districts || []).find((d) => d.id === "vault");
-  // size + centre the ground on the plan the content author laid out
   let gx0 = -80;
   let gx1 = 80;
   let gz0 = -80;
@@ -550,8 +507,6 @@ export function createWorld(content: CityContent): WorldApi {
     const hole = new THREE.Path();
     const hw = p.w / 2 + 2;
     const hd = p.d / 2 + 2;
-    // Shape space (x, y) maps to world (x, -y) once the mesh is rotated -90° about X,
-    // and the shape itself is centred on the plan, so holes are plan-relative.
     const cx = p.x - groundCx;
     const cy = -(p.z - groundCz);
     hole.moveTo(cx - hw, cy - hd);
@@ -564,9 +519,6 @@ export function createWorld(content: CityContent): WorldApi {
   const groundGeo = new THREE.ShapeGeometry(groundShape, 12);
   groundGeo.translate(groundCx, -groundCz, 0);
   {
-    // ShapeGeometry UVs are raw shape-space (== world-unit) coordinates; scale so one
-    // texture repeat spans exactly GROUND_TILE_UNITS world units (grid stays crisp at any
-    // ground extent, independent of the district layout).
     const uv = groundGeo.attributes.uv;
     for (let i = 0; i < uv.count; i++)
       uv.setXY(
@@ -588,15 +540,12 @@ export function createWorld(content: CityContent): WorldApi {
   ground.receiveShadow = true;
   root.add(ground);
 
-  /* ---------------- districts */
   const districts: WorldDistrict[] = [];
   const byId = new Map<string, WorldDistrict>();
   const labels: THREE.Sprite[] = [];
   const animated: AnimationRecord[] = [];
   const activityNodes = new Map<string, THREE.Material[]>(); // districtId → [material]
 
-  // Shared landmark kit: bespoke geometry primitives used by landmarks.ts so every
-  // building gets its own architecture instead of a shared `kind` silhouette.
   const kit = makeKit(THREE, { facadeMat, plainMat, glowMat, animated });
   const PIT_Y = -5;
 
@@ -610,7 +559,6 @@ export function createWorld(content: CityContent): WorldApi {
 
     const color = d.color || palette.requests;
 
-    // plate: extruded rounded rect with a bevel
     const shape = roundedRectShape(
       d.plate.w,
       d.plate.d,
@@ -638,7 +586,6 @@ export function createWorld(content: CityContent): WorldApi {
     plate.userData.pick = { kind: "district", districtId: d.id };
     group.add(plate);
 
-    // rim light strip
     const rimGeo = new THREE.ExtrudeGeometry(
       roundedRectShape(
         d.plate.w + 1.4,
@@ -654,7 +601,6 @@ export function createWorld(content: CityContent): WorldApi {
     group.add(rim);
 
     if (isPit) {
-      // pit walls between world ground (y=0) and the sunken plate
       const wallMat = plainMat("#6d7b91", { rough: 0.95 });
       const depth = -PIT_Y + 1.4;
       const hw = d.plate.w / 2 + 2;
@@ -672,7 +618,6 @@ export function createWorld(content: CityContent): WorldApi {
       mk(1, depth, hd * 2, d.plate.x + hw, y, d.plate.z);
     }
 
-    // label sprite
     const { tex, aspect } = makeLabelTexture(d.name || d.id, color);
     const sprite = new THREE.Sprite(
       new THREE.SpriteMaterial({
@@ -700,7 +645,6 @@ export function createWorld(content: CityContent): WorldApi {
       buildings: [],
       label: sprite,
       activity: 0,
-      // flow-spotlight (see setFlowFocus): -1 muted … 0 neutral … +1 lifted
       rimMat,
       focusW: 0,
       focusTarget: 0,
@@ -709,7 +653,6 @@ export function createWorld(content: CityContent): WorldApi {
     byId.set(d.id, rec);
     activityNodes.set(d.id, []);
 
-    // building coordinate space: absolute world, or relative to the plate?
     const list = d.buildings || [];
     const fits = (rel) => {
       let n = 0;
@@ -760,7 +703,6 @@ export function createWorld(content: CityContent): WorldApi {
       rec.buildings.push(brec);
     }
 
-    // ontology star: link the first vault building to its neighbours
     if (isPit && rec.buildings.length > 2) {
       const pts = [];
       const hub = rec.buildings[0].top;
@@ -788,9 +730,6 @@ export function createWorld(content: CityContent): WorldApi {
     }
   }
 
-  /* ---------------- scenery derived from content geometry */
-
-  // Consent parking lot beside the consent gate.
   let parkPoint: THREE.Vector3 | null = null;
   const consent = byId.get("consent");
   if (consent) {
@@ -831,7 +770,6 @@ export function createWorld(content: CityContent): WorldApi {
     consent.parkRing = ring;
   }
 
-  // Replica island at the far end of any bridge (Sync Harbor).
   let islandPoint: THREE.Vector3 | null = null;
   for (const rec of districts) {
     for (const b of rec.buildings) {
@@ -854,7 +792,6 @@ export function createWorld(content: CityContent): WorldApi {
       ring.rotation.x = -Math.PI / 2;
       ring.position.set(islandPoint.x, 2.2, islandPoint.z);
       root.add(ring);
-      // standby replicas
       for (let i = 0; i < 3; i++) {
         const a = -0.9 + i * 0.9;
         const st = new THREE.Mesh(
@@ -881,7 +818,6 @@ export function createWorld(content: CityContent): WorldApi {
     if (islandPoint) break;
   }
 
-  // Cloud barge departing the CAS warehouse.
   let barge: THREE.Group | null = null;
   const cas = byId.get("cas");
   if (cas) {
@@ -911,12 +847,10 @@ export function createWorld(content: CityContent): WorldApi {
     root.add(barge);
   }
 
-  /* ---------------- roads (flat ribbons on the ground, under the particle flows) */
   const ROAD_Y = 0.035; // just above the ground plane — avoids z-fighting
   const roadMesh = buildRoadsMesh(FLOW_PLAN, byId, ROAD_Y);
   if (roadMesh) root.add(roadMesh);
 
-  /* ---------------- flows */
   const flows: FlowRuntime[] = [];
   const mkFlow = (
     a: THREE.Vector3,
@@ -933,14 +867,10 @@ export function createWorld(content: CityContent): WorldApi {
     );
     const dist = a.distanceTo(b);
     curve.v1.y += dist * height + 6;
-    // small lateral bow so opposite-direction flows don't overlap
     const perp = new THREE.Vector3(b.z - a.z, 0, -(b.x - a.x))
       .normalize()
       .multiplyScalar(dist * 0.08);
     curve.v1.add(perp);
-    // Bigger than the original 0.62 so flows read clearly against the light day ground;
-    // MeshBasicMaterial is unlit (already "fully emissive"), so day/night is handled by
-    // brightening the color itself rather than adding a lighting response.
     const geo = new THREE.OctahedronGeometry(0.85, 0);
     const baseColor = new THREE.Color(colorHex);
     const hsl = { h: 0, s: 0, l: 0 };
@@ -950,8 +880,6 @@ export function createWorld(content: CityContent): WorldApi {
       Math.min(1, hsl.s * 1.1 + 0.08),
       Math.min(0.78, hsl.l * 1.3 + 0.12)
     );
-    // `transparent` is on from the start so setFlowFocus can fade a flow down without
-    // ever swapping/rebuilding the material (a material swap would recompile the program).
     const mat = new THREE.MeshBasicMaterial({
       color: dayColor.clone(),
       toneMapped: false,
@@ -978,11 +906,9 @@ export function createWorld(content: CityContent): WorldApi {
       dayColor,
       from: null,
       to: null,
-      // flow-spotlight (see setFlowFocus): -1 muted … 0 neutral … +1 spotlit.
       focusW: 0,
       focusTarget: 0,
     };
-    // park everything off-screen initially
     const m = new THREE.Matrix4().makeScale(0, 0, 0);
     for (let i = 0; i < capacity; i++) mesh.setMatrixAt(i, m);
     mesh.instanceMatrix.needsUpdate = true;
@@ -1031,18 +957,6 @@ export function createWorld(content: CityContent): WorldApi {
     f.to = "island";
   }
 
-  /* ---------------- flow spotlight
-   *
-   * setFlowFocus(roles) makes the flows named in `roles` dominant and everything else a
-   * quiet background presence, so a guided chapter can point at exactly one data path.
-   *
-   * State is one signed weight per flow (and per district): -1 = fully muted,
-   * 0 = neutral / cleared, +1 = fully spotlit. `focusTarget` is what setFlowFocus asks for;
-   * `focusW` chases it inside update() at FOCUS_EASE, so a page turn reads as a lens
-   * shifting rather than a switch flipping. Nothing here allocates or rebuilds anything:
-   * it only modulates the existing per-flow material colour/opacity, the instance scale,
-   * and the spawn rate.
-   */
   const FOCUS_EASE = 6; // w += (target - w) * min(1, dt * FOCUS_EASE) → ~95% in 0.5s
   const FOCUS_RATE_GAIN = 1.6; // spotlit spawn rate ×(1 + 1.6) = ×2.6
   const FOCUS_RATE_FLOOR = 5.5; // …and never below 5.5 particles/s, so a quiet role still streams
@@ -1068,8 +982,6 @@ export function createWorld(content: CityContent): WorldApi {
     const wanted = new Set();
     for (const r of list) if (typeof r === "string" && r) wanted.add(r);
 
-    // Unknown role strings are a no-op: if nothing in the list names a real flow we clear
-    // rather than muting the whole city.
     let matched = 0;
     if (wanted.size) {
       for (const f of flows) if (wanted.has(f.role)) matched++;
@@ -1085,7 +997,6 @@ export function createWorld(content: CityContent): WorldApi {
       const on = wanted.has(f.role);
       f.focusTarget = on ? 1 : -1;
       if (!on) continue;
-      // lift the districts this path connects (endpoints may be scenery ids like 'park')
       const a = byId.get(f.from);
       const b = byId.get(f.to);
       if (a) a.focusTarget = 1;
@@ -1098,7 +1009,6 @@ export function createWorld(content: CityContent): WorldApi {
     roadFocusTarget = focusActive ? 1 : 0;
   }
 
-  // Roads compose two independent dimmers: day/night, and the flow spotlight.
   function applyRoadTint() {
     if (!roadMesh) return;
     _roadColor
@@ -1109,7 +1019,6 @@ export function createWorld(content: CityContent): WorldApi {
     (roadMesh.material as THREE.MeshStandardMaterial).color.copy(_roadColor);
   }
 
-  /* ---------------- hover / select outline */
   const outlineGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
   const mkOutline = (hex, w) => {
     const o = new THREE.LineSegments(
@@ -1145,7 +1054,6 @@ export function createWorld(content: CityContent): WorldApi {
     o.visible = true;
   }
 
-  /* ---------------- day / night */
   let night = 0;
   const dayFog = new THREE.Color(0x8fb6d4);
   const nightFog = new THREE.Color(0x0d1626);
@@ -1172,7 +1080,6 @@ export function createWorld(content: CityContent): WorldApi {
   }
   applyNight(0);
 
-  /* ---------------- per-frame update */
   const _v = new THREE.Vector3();
   const _m = new THREE.Matrix4();
   const _q = new THREE.Quaternion();
@@ -1182,7 +1089,6 @@ export function createWorld(content: CityContent): WorldApi {
   const _tmpColor = new THREE.Color();
 
   function update(dt: number, elapsed: number, sim?: Sim): void {
-    // animated building details
     for (const a of animated) {
       if (a.type === "crane") {
         const active = sim ? sim.pulses.crane : 0;
@@ -1208,14 +1114,11 @@ export function createWorld(content: CityContent): WorldApi {
           a.mat.userData.baseOpacity *
           (0.25 + 1.5 * act * (0.7 + 0.3 * Math.sin(elapsed * 4 + a.phase)));
       } else if (a.type === "spin") {
-        // kit.ts: fans, flywheels, weathervanes, radar rotors
         a.obj.rotation[a.axis || "y"] += dt * a.speed;
       } else if (a.type === "bob") {
-        // kit.ts: hanging trolleys, flags, floats
         a.obj.position.y =
           a.base + Math.sin(elapsed * a.speed + a.phase) * a.amp;
       } else if (a.type === "reciprocate") {
-        // kit.ts: piston rods
         a.obj.position[a.axis || "y"] =
           a.base + Math.sin(elapsed * a.speed + a.phase) * a.amp;
       }
@@ -1246,7 +1149,6 @@ export function createWorld(content: CityContent): WorldApi {
       );
     }
 
-    // flow spotlight: ease every weight one step, then apply it to districts + roads.
     const ease = Math.min(1, dt * FOCUS_EASE);
     roadFocusW += (roadFocusTarget - roadFocusW) * ease;
     if (roadMesh && (roadFocusW > 0.001 || roadFocusTarget > 0))
@@ -1256,14 +1158,12 @@ export function createWorld(content: CityContent): WorldApi {
       const up = Math.max(0, rec.focusW);
       const down = Math.max(0, -rec.focusW);
       if (up < 0.001 && down < 0.001) continue;
-      // rim glow: base is whatever applyNight computed, then lifted / eased back
       const rimBase = rec.rimMat.userData.baseOpacity * (0.55 + 0.75 * night);
       rec.rimMat.opacity = rimBase * (1 + 0.9 * up) * (1 - 0.45 * down);
       rec.label.material.opacity =
         (0.85 + 0.15 * night) * (1 + 0.17 * up) * (1 - 0.4 * down);
     }
 
-    // flows
     for (const f of flows) {
       f.focusW += (f.focusTarget - f.focusW) * ease;
       const up = Math.max(0, f.focusW);
@@ -1271,21 +1171,17 @@ export function createWorld(content: CityContent): WorldApi {
       const scaleMul = 1 + FOCUS_SCALE_GAIN * up - MUTE_SCALE_CUT * down;
       let rate = sim ? sim.rates[f.role] || 0 : 4;
       if (up > 0.001) {
-        // spotlit: denser, and floored so a path the sim is running slowly still streams
         rate = Math.max(
           rate * (1 + FOCUS_RATE_GAIN * up),
           FOCUS_RATE_FLOOR * up
         );
       }
       if (down > 0.001) rate *= 1 - MUTE_RATE_CUT * down;
-      // Day mode gets the brighter/more-saturated color so particles read against the light
-      // ground; night mode eases back to the original (already-good) saturated color.
       _tmpColor.copy(f.dayColor).lerp(f.baseColor, night);
       if (f.dynamic === "replica" && sim) {
         const bad = Math.min(1, sim.stats.lag / 20);
         _tmpColor.lerp(_dirtyColor, bad);
       }
-      // spotlight sits on top of the day/night colour, never replaces it
       if (up > 0.001) _tmpColor.lerp(_whiteColor, FOCUS_WHITEN * up);
       if (down > 0.001) _tmpColor.lerp(_muteColor, MUTE_WASH * down);
       f.mat.color.copy(_tmpColor);
@@ -1348,8 +1244,6 @@ export function createWorld(content: CityContent): WorldApi {
   };
 }
 
-/* ------------------------------------------------------------------ building kinds */
-
 function buildBuilding(
   b: CityBuilding,
   districtColor: string,
@@ -1407,8 +1301,6 @@ function buildBuilding(
     return m;
   };
 
-  // Bespoke landmark geometry wins over the generic `kind` silhouette. Each landmark
-  // depicts what its subsystem actually does; `kind` remains the fallback.
   const landmark = LANDMARKS[b.id];
   if (landmark) {
     try {
@@ -1459,7 +1351,6 @@ function buildBuilding(
       g.add(mast);
       beacon(0, h + h * 0.28, 0, "#e5484d", 0.42);
       roofUnits(upW, h, d * 0.7, 2);
-      // ground-floor entrance glow
       const ent = new THREE.Mesh(
         new THREE.BoxGeometry(w * 0.4, 2.2, 0.3),
         glowMat(color, 0.6)
@@ -1486,7 +1377,6 @@ function buildBuilding(
       );
       lantern.position.y = h * 0.92 + h * 0.08;
       g.add(lantern);
-      // colonnade + steps on the +z face
       const pn = Math.max(3, Math.round(w / 4));
       for (let i = 0; i < pn; i++) {
         const p = new THREE.Mesh(
@@ -1522,7 +1412,6 @@ function buildBuilding(
       const upper = boxed(w * 0.82, h * 0.4, d * 0.82, color);
       upper.position.y = h * 0.6 + (h * 0.4) / 2;
       roofUnits(w * 0.82, h, d * 0.82, 3);
-      // WAL Works slabs carry a conveyor
       if (districtId === "wal")
         addConveyor(g, w, d, convTex, plainMat, animated);
       break;
@@ -1593,8 +1482,6 @@ function buildBuilding(
       const rot = new THREE.Group();
       rot.position.y = 1.6;
       g.add(rot);
-      // NOTE: crane parts deliberately do not cast shadows — the shadow map is baked once
-      // (renderer.shadowMap.autoUpdate = false) and a frozen shadow under a turning jib reads wrong.
       const mast = new THREE.Mesh(
         new THREE.BoxGeometry(1.5, h, 1.5),
         plainMat("#f5a623", { rough: 0.5, metal: 0.3 })
@@ -1774,7 +1661,6 @@ function buildBuilding(
     }
   }
 
-  // per-district activity light on top of every building
   const actMat = glowMat(color, 0.5);
   const act = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), actMat);
   act.position.set(w * 0.32, h + 1.1, d * 0.32);

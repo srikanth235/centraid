@@ -1,24 +1,3 @@
-/*
- * Backup-format archaeology corpus (umbrella #842, slice B3, W1.4).
- *
- * For every backup snapshot format the corpus covers, a deterministically
- * seeded vault is sealed through the REAL backup engine and restored with
- * TODAY's code, and the restored plaintext census must match the committed
- * golden. This is the "can we still read ourselves" guarantee: the day the
- * reader stops opening a format's bytes, the restore throws here.
- *
- * Today the format string is pre-release ('centraid-snapshot/2') and is the
- * only readable AND writable format, so the member is sealed live rather than
- * frozen as a >5 MB binary golden (a schema-only vault already exceeds the
- * repo-hygiene ceiling — see ./backup-corpus-fixture.ts). The growth-guard
- * enforces that every currently-readable format is a corpus member and that the
- * set only grows; scripts/corpora/backup-format-census.json documents how a
- * format bump adds (and never removes) a member.
- *
- * Bite proof (demonstrated-red): tamper the expected census, or drop the format
- * from READABLE_SNAPSHOT_FORMATS's coverage, and an assertion fails.
- */
-
 import { createHash } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
@@ -71,7 +50,6 @@ async function fileSha256(file: string): Promise<string> {
     .digest("hex");
 }
 
-/** Seal a built member into a fresh LocalBackupProvider store; returns the pieces a restore needs. */
 async function sealCorpusVault(): Promise<{
   provider: LocalBackupProvider;
   targetId: string;
@@ -113,19 +91,15 @@ async function sealCorpusVault(): Promise<{
 
 describe("backup-format archaeology corpus", () => {
   test("growth-guard: every currently-readable format is a covered corpus member", () => {
-    // A new readable format that is not added to the manifest fails here; the
-    // manifest is the append-only ledger of formats the corpus must keep reading.
     for (const format of READABLE_SNAPSHOT_FORMATS) {
       expect(manifest.formats).toContain(format);
     }
-    // The current writable format must be a member (a bump forces a new one).
     expect(manifest.formats).toContain(SNAPSHOT_FORMAT_V2);
     expect(manifest.expectedCensus).toStrictEqual(EXPECTED_CENSUS);
   });
 
   test("a sealed member restores with today's code to the committed census", async () => {
     const { provider, targetId, keyring, format } = await sealCorpusVault();
-    // The member seals as the current format, which the corpus covers.
     expect(format).toBe(SNAPSHOT_FORMAT_V2);
     expect(manifest.formats).toContain(format);
 
@@ -146,7 +120,6 @@ describe("backup-format archaeology corpus", () => {
     expect(report.vault.foreignKeyViolations).toBe(0);
     expect(report.danglingReceipts).toStrictEqual([]);
 
-    // The restored plaintext census matches the golden — we can still read the bytes.
     expect(censusVault(destDir)).toStrictEqual(manifest.expectedCensus);
   });
 

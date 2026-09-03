@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-/**
- * D2 publish half — only after maintainer authorization (docs/release.md D1).
- *
- *   node scripts/release/publish.mjs --version 0.2.1 --issue 501 \
- *     [--surfaces desktop,gateway-image,gateway-npm] [--dry-run] [--beta] [--push]
- *
- * - Requires --issue N (governance commit suffix; refuse #0)
- * - Bumps monorepo + mobile native numbers via sync-versions.mjs (all stamps)
- * - Records ship surface set (does not invent surface-local versions)
- * - Moves CHANGELOG Unreleased into the versioned section
- * - Creates annotated tag vX.Y.Z (or vX.Y.Z-beta.N with --beta)
- * - Does NOT push unless --push is passed
- *
- * Tag push fans out to tag-triggered workflows. Mobile remains dispatch-opt-in.
- * Never bump version only to fix a failed build — rebuild / retry tag instead.
- */
 
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
@@ -36,7 +20,6 @@ let dryRun = false;
 let beta = false;
 let doPush = false;
 let betaN = 1;
-/** @type {string[] | null} */
 let shipIds = null;
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--version") version = args[++i];
@@ -139,7 +122,7 @@ if (!dryRun) {
     writeFileSync(bodyPath, body + "\n");
     writeFileSync(shipPath, JSON.stringify(shipManifest, null, 2) + "\n");
   } catch {
-    /* optional */
+    // Intentionally empty.
   }
 }
 

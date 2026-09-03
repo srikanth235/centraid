@@ -7,16 +7,6 @@ import {
   validateOpenCitations,
 } from "./validate-citations-open.mjs";
 
-/**
- * Unit tests for the open-citation gate (#864 Wave 0).
- *
- * The gate's whole value is that it CANNOT pass quietly, so the cases that
- * matter most here are the unhappy ones: a closed citation must name its
- * number, and an unreachable API must fail loudly rather than degrade into a
- * green run. Every case injects `fetch`, so the suite stays hermetic.
- */
-
-/** A fetch double: `states` maps issue number to a GitHub issue state. */
 function fakeFetch(states) {
   return async (url) => {
     const issue = Number(url.split("/").at(-1));
@@ -160,7 +150,6 @@ describe("validateOpenCitations", () => {
       sources,
       matrix: matrixWith(42, "open"),
       token: "t",
-      // 42 is absent from the double, so the fake returns 404.
       fetchImpl: fakeFetch({}),
     });
     expect(errors).toHaveLength(1);

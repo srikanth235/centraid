@@ -1,10 +1,6 @@
-// The full pairing ceremony, every component in its real process — see the
-// .md next to this file for intent.
 import { runFlow } from "../lib/harness.mjs";
 
 await runFlow("device-pairing-lifecycle", async (ctx) => {
-  // 1. A fresh daemon auto-founds Personal (#603); tickets default to it.
-  // Mint the pasteable ticket for it through the live daemon.
   const { payload } = await ctx.mintTicket({ vault: "Personal" });
   if (payload.vaultName !== "Personal") {
     throw new Error(`ticket names vault "${payload.vaultName}"`);
@@ -17,7 +13,6 @@ await runFlow("device-pairing-lifecycle", async (ctx) => {
     `minted ticket ${payload.t} (expires ${new Date(payload.exp).toISOString()})`
   );
 
-  // 2. A never-seen device redeems it.
   const device = await ctx.newDevice();
   const paired = await device.pairGateway(payload.gw, {
     ticketId: payload.t,
@@ -40,7 +35,6 @@ await runFlow("device-pairing-lifecycle", async (ctx) => {
     `device ${device.endpointId.slice(0, 10)}… enrolled (gateway v${paired.version})`
   );
 
-  // 3. The durable gateway.db enrollment is visible to the admin CLI.
   const roster = await ctx.requestJson(
     device,
     "GET",
@@ -60,12 +54,10 @@ await runFlow("device-pairing-lifecycle", async (ctx) => {
     throw new Error(`devices list does not show ${device.endpointId}`);
   }
 
-  // 4. Enrollment admits the tunnel.
   const probe = await ctx.request(device, "/centraid/_vault/vaults");
   if (probe.status !== 200) throw new Error(`tunneled probe → ${probe.status}`);
   ctx.note("enrolled device tunnels: GET /centraid/_vault/vaults → 200");
 
-  // 5. The ticket burned on success.
   const replay = await device.pairGateway(payload.gw, {
     ticketId: payload.t,
     secret: payload.s,
@@ -75,7 +67,6 @@ await runFlow("device-pairing-lifecycle", async (ctx) => {
   if (replay.ok) throw new Error("replayed ticket redeemed twice");
   ctx.note(`replay refused (${replay.error})`);
 
-  // 6. Restart: permanent identity + persisted enrollment.
   const endpointBefore = ctx.gateway.endpointId;
   await ctx.restartGateway();
   if (ctx.gateway.endpointId !== endpointBefore) {
@@ -90,7 +81,6 @@ await runFlow("device-pairing-lifecycle", async (ctx) => {
     "daemon restarted: same EndpointId, device still enrolled, tunnel works"
   );
 
-  // 7. Revocation shuts the door.
   const revoked = await ctx.requestJson(
     device,
     "DELETE",

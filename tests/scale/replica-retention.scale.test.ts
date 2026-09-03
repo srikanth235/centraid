@@ -13,46 +13,14 @@ import type { VaultDb } from "@centraid/vault";
 
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
-/**
- * HOW MUCH HISTORY DOES 100,000 ENTRIES BUY? (issue #883 C6.)
- *
- * The change log is capped at `REPLICA_RETENTION_DAYS` of age AND
- * `REPLICA_RETENTION_MAX_ENTRIES` of volume, whichever bites first. A phone
- * that is away longer than the retained window cannot be caught up with
- * deltas: it re-bootstraps its whole library. The days number is the promise
- * the gateway makes on the wire; the entries number is what a churn-heavy
- * vault actually gets.
- *
- * Year-3 churn is not evenly spread. Repeated edits land on a few hot rows —
- * the task you keep re-titling, the note you keep re-saving — and every one of
- * those edits used to burn an entry that a catch-up replay would collapse
- * anyway. This rig measures what that costs, in the only unit that matters to
- * the member: DAYS OF HISTORY a returning phone can still resume from.
- *
- * It runs the same synthetic year of writes twice on two vaults:
- *
- *   BASELINE — the pre-#883 sweep, transcribed below. Under count pressure it
- *     deleted every superseded entry in the pressured prefix and ADVANCED THE
- *     FLOOR past it, so relieving volume pressure cost history directly.
- *   SHIPPED — `pruneReplicaChanges`, which folds those same entries into their
- *     survivors and leaves the floor alone.
- *
- * Both sweep on the same cadence with the same caps. The reported number is
- * days between the floor (the oldest cursor still servable) and "now".
- */
 const OWNER = "tests/scale/replica-retention.scale.test.ts";
 const DAY_MS = 24 * 60 * 60 * 1_000;
-/** Simulated days of writing. Longer than the age window, so both caps bite. */
 const DAYS = 45;
-/** Writes per simulated day at year-3 volume. */
 const WRITES_PER_DAY = 4_000;
-/** Distinct rows the churn lands on: a small hot set inside a large vault. */
 const HOT_ROWS = 400;
 const COLD_ROWS = 20_000;
-/** Share of each day's writes that hit the hot set. */
 const HOT_SHARE = 0.9;
 
-/** Deterministic, so a regression is a real one and not a reseed. */
 function makeRandom(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -67,11 +35,6 @@ function open(): VaultDb {
   return db;
 }
 
-/**
- * One simulated day of writes, through the protocol-only append path: this
- * rig measures RETENTION, not trigger projection, and appending directly
- * keeps a 180,000-write year inside a test budget.
- */
 function writeDay(db: VaultDb, day: number, random: () => number): void {
   const changedAt = new Date(Date.UTC(2027, 0, 1) + day * DAY_MS).toISOString();
   const vault = db.vault;
@@ -93,11 +56,6 @@ function writeDay(db: VaultDb, day: number, random: () => number): void {
   vault.exec("COMMIT");
 }
 
-/**
- * The pre-#883 count branch, verbatim in behaviour: collapse the superseded
- * entries in the pressured window, delete the rest of that prefix, and move
- * the floor to its end. Kept here ONLY as the measurement's baseline.
- */
 function baselinePrune(db: VaultDb, now: Date, maxEntries: number): void {
   const vault = db.vault;
   const epoch = currentReplicaLogState(vault).epoch;
@@ -200,11 +158,6 @@ function baselinePrune(db: VaultDb, now: Date, maxEntries: number): void {
   vault.exec("COMMIT");
 }
 
-/**
- * Days between the oldest entry a cursor at the floor can still read and the
- * end of the run. This is the resumable window, not merely what is on disk:
- * an entry below the floor is unreachable even while it exists.
- */
 function daysOfHistory(db: VaultDb, now: Date): number {
   const state = currentReplicaLogState(db.vault);
   const oldest = db.vault
@@ -225,7 +178,6 @@ describe("replica-retention.scale", () => {
     const baselineWindow: number[] = [];
     const started = performance.now();
     for (let day = 0; day < DAYS; day += 1) {
-      // The same stream on both vaults: only the sweep differs.
       writeDay(shipped, day, makeRandom(day + 1));
       writeDay(baseline, day, makeRandom(day + 1));
       const at = new Date(Date.UTC(2027, 0, 1) + day * DAY_MS);
@@ -234,46 +186,25 @@ describe("replica-retention.scale", () => {
         maxEntries: REPLICA_RETENTION_MAX_ENTRIES,
       });
       baselinePrune(baseline, at, REPLICA_RETENTION_MAX_ENTRIES);
-      // Measured after EVERY sweep, because a phone comes back on a day of
-      // its own choosing. The window a sweep leaves behind is what it finds.
       shippedWindow.push(daysOfHistory(shipped, at));
       baselineWindow.push(daysOfHistory(baseline, at));
     }
     const durationMs = performance.now() - started;
 
-    // Steady state only: the first 30 days cannot have 30 days of history.
     const steady = (values: number[]): number[] =>
       values.slice(REPLICA_RETENTION_DAYS);
     const shippedWorst = Math.min(...steady(shippedWindow));
     const baselineWorst = Math.min(...steady(baselineWindow));
 
-    // The number that matters is the WORST day to come back on, not the best:
-    // relieving entry pressure used to drop the resumable window to nothing.
     expect(shippedWorst).toBeGreaterThan(baselineWorst);
-    // Compaction may buy back the days the entry cap was taking, never more
-    // than the age window promises on the wire.
     expect(shippedWorst).toBeLessThanOrEqual(REPLICA_RETENTION_DAYS);
-    // A cursor at the far edge of the retained window still resolves, rather
-    // than throwing the retention verdict at a returning phone.
     const floor = currentReplicaLogState(shipped.vault).floor;
     expect(() =>
       readReplicaChanges(shipped.vault, { since: floor })
     ).not.toThrow();
-    // Measured (this rig, 45 days x 4,000 writes, 90% of them on 400 hot rows,
-    // cap 100,000): the entry cap alone left a WORST-DAY window of 5.0 days,
-    // because the sweep that relieved volume pressure took the floor with it.
-    // Folding that same churn holds 28.0 days -- the whole age window, less
-    // the day-granularity edge of this rig's clock. Nothing was tightened:
-    // REPLICA_RETENTION_DAYS and REPLICA_RETENTION_MAX_ENTRIES are unchanged,
-    // and the measurement is what says they now mean what they say.
     expect(shippedWorst).toBeGreaterThanOrEqual(REPLICA_RETENTION_DAYS - 2);
     expect(shippedWorst).toBeGreaterThan(baselineWorst * 3);
 
-    // #659 R4 — the sustained-drift gate over this rig's own 30-sample nightly
-    // history. This rig has no absolute ceiling (its budget entry says why: the
-    // number it gates is a window in DAYS, and the wall clock is dominated by
-    // seeding 360,000 writes twice), so the trailing median is the only thing
-    // with an opinion about duration. `null` is "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("scale", OWNER);
     const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({

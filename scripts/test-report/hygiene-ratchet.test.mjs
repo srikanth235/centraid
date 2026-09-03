@@ -42,9 +42,6 @@ describe("countHygieneSites", () => {
   });
 
   test("bare .not.toHaveBeenCalled() is exempt, negated-with is not", () => {
-    // There is no toHaveBeenCalledWith equivalent of "never called", so naming
-    // arguments in the negated-bare shape would WEAKEN the assertion — it would
-    // start permitting a call with different arguments (QUALITY.md #496).
     expect(countHygieneSites("expect(fn).not.toHaveBeenCalled();")).toEqual({
       toBeTruthyFalsy: 0,
       toHaveBeenCalled: 0,
@@ -83,12 +80,6 @@ describe("countHygieneSites", () => {
 });
 
 describe("discoverHygieneCounts", () => {
-  /**
-   * Write one file (creating parents) under a scratch root.
-   * @param {string} root Scratch root.
-   * @param {string} file Repo-relative path.
-   * @param {string} source File contents.
-   */
   function writeFixture(root, file, source) {
     const target = path.join(root, file);
     mkdirSync(path.dirname(target), { recursive: true });
@@ -108,7 +99,6 @@ describe("discoverHygieneCounts", () => {
       "apps/mobile/src/screens/Screen.test.tsx",
       "expect(fn).toHaveBeenCalled();\nexpect(other).not.toHaveBeenCalled();"
     );
-    // Not a test file: nothing here is counted.
     writeFixture(
       root,
       "packages/vault/src/thing.ts",
@@ -181,8 +171,6 @@ describe("validateHygieneBudgets", () => {
   });
 
   test("under budget fails too, so an improvement tightens the ceiling", () => {
-    // Mirrors the skip budget: the number must EQUAL the measured count, or
-    // slack accumulates and the ratchet stops being down-only.
     const { errors } = validateHygieneBudgets(
       { budgets: { toBeTruthyFalsy: 2, toHaveBeenCalled: 9 } },
       discovered({ toBeTruthyFalsy: 2, toHaveBeenCalled: 4 })
@@ -231,8 +219,6 @@ describe("reconcileBudgets", () => {
       },
       { toBeTruthyFalsy: 4, toHaveBeenCalled: 7 }
     );
-    // Slack is taken up; a REGRESSION is not laundered — toHaveBeenCalled stays
-    // at 2, so the gate keeps failing until someone raises it by hand.
     expect(next.budgets).toEqual({ toBeTruthyFalsy: 4, toHaveBeenCalled: 2 });
     expect(next._comment).toBe("kept");
   });

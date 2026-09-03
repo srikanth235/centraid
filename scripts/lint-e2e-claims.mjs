@@ -1,27 +1,3 @@
-// EVERY DEVICE FLOW NAMES ITS CLAIM (#905).
-//
-// Device E2E is the most expensive and least reliable instrument in this repo.
-// The only thing that keeps such a suite from rotting into a slow duplicate of
-// the unit tests is a rule with teeth: a flow must be able to answer "what
-// merges wrongly if this passes when it shouldn't?" — and a flow that cannot
-// answer it should be deleted rather than run for years.
-//
-// The convention already existed and was almost entirely unobserved. When this
-// linter was written, ONE flow of twenty-two carried a `**Claim:**` line
-// (`pairing-canary.md`); five had no companion doc at all. `cold-start` was one
-// of the five, and it is the cautionary case: it asserts only
-// `HOME_READY_MARKER`, which `demo-corpus.mjs` documents as rendering in BOTH
-// the DayOne branch and the LauncherGrid branch. On run 33469364358 it passed —
-// median 16074 ms — against a Home carrying "Nothing in here yet" and not one
-// launcher tile, while three sibling flows failed on that same screen. A flow
-// whose claim nobody had to write down had quietly stopped making one.
-//
-// THE PIN LIST IS DOWN-ONLY, like `tests/inventory.json#commentDensity`. A gate
-// that lands with a backlog is not a weakened gate; a gate whose backlog is
-// allowed to grow is. Adding a flow to `claim-pins.json` fails this linter —
-// only removals are accepted — so the only way to add a device flow is to say
-// what it catches.
-
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
@@ -30,23 +6,12 @@ import { flowPath, loadRoster } from "../tests/agent-e2e-mobile/lib/roster.mjs";
 const FLOWS_DIR = "tests/agent-e2e-mobile/flows";
 const PINS = "tests/agent-e2e-mobile/flows/claim-pins.json";
 
-/** The line a doc must carry. Bold so it survives a reader skimming, and
- *  prefix-anchored so prose that merely mentions a claim cannot satisfy it. */
 const CLAIM = /^\*\*Claim:\*\*\s*(?<claim>\S.*)$/mu;
 
-/** Short enough that it is a claim and not a design doc. A sentence that needs
- *  more than this is describing the flow, which the rest of the doc is for. */
 const MAX_CLAIM = 400;
 
-/** A claim has to say what breaks, so it cannot be a restatement of the name. */
 const MIN_CLAIM = 40;
 
-/**
- * Flow slugs, discovered — never hand-listed, so a new flow is covered the day
- * it lands. Returns `undefined` rather than `[]` when the directory yields
- * nothing, because an empty roster is how a text-scanning linter rots into
- * always-passing.
- */
 export function discoverFlows(entries) {
   const flows = entries
     .filter((name) => name.endsWith(".mjs"))
@@ -55,28 +20,16 @@ export function discoverFlows(entries) {
   return flows.length > 0 ? flows : undefined;
 }
 
-/** The claim a doc declares, or `undefined`. */
 export function claimOf(source) {
   return CLAIM.exec(source ?? "")?.groups?.claim?.trim();
 }
 
-/**
- * Every violation, as printable strings. Pure: the caller does the reading, so
- * the rules are testable on inline fixtures before they touch the tree.
- */
 export function lintClaims({ flows, docs, pins, rostered = {} }) {
   const errors = [];
   const pinned = new Set(pins);
   for (const flow of flows) {
     const claim = claimOf(docs[flow]);
     const isPinned = pinned.has(flow);
-    // RULE agrees (#915 Wave 2) — `roster.json` is now the single source for
-    // what a journey claims, and the companion doc's bold line is a MIRROR of
-    // it. Two sentences that are allowed to drift are how a report comes to
-    // cite one claim while a reader is reading another; asserting they are the
-    // same string is what makes "the roster is the source" true rather than
-    // stated. A pinned flow has no line to mirror, which is the whole content
-    // of its pin.
     const declared = rostered[flow];
     if (declared === undefined)
       errors.push(
@@ -114,7 +67,6 @@ export function lintClaims({ flows, docs, pins, rostered = {} }) {
   return errors;
 }
 
-/** The pin list may only shrink. */
 export function lintRatchet(pins, baseline) {
   const added = pins.filter((pin) => !baseline.includes(pin));
   return added.length === 0
@@ -176,9 +128,6 @@ function selfTest() {
   ];
   for (const testCase of cases) {
     const errors = lintClaims({
-      // Every legacy case predates RULE agrees and is about the doc line alone,
-      // so each flow is rostered with whatever claim its own doc states. The two
-      // cases below vary that deliberately.
       rostered: Object.fromEntries(
         (testCase.input.flows ?? []).map((flow) => [
           flow,
@@ -213,7 +162,7 @@ function main() {
     try {
       docs[flow] = readFileSync(path.join(FLOWS_DIR, `${flow}.md`), "utf8");
     } catch {
-      /* a flow with no doc is a violation, reported below */
+      // Intentionally empty.
     }
   }
   const pinned = JSON.parse(readFileSync(PINS, "utf8"));

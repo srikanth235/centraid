@@ -1,18 +1,7 @@
 #!/usr/bin/env node
-/**
- * External info probe for packaged gateway smoke (issue #504).
- * Shared by host-process smoke and container / --base-url mode.
- */
 
 export const INFO_PATH = "/centraid/_gateway/info";
 
-/**
- * Probe a running gateway base URL.
- * @param {string} baseUrl Base URL of the gateway (e.g. http://127.0.0.1:8787).
- * @param {{ timeoutMs?: number }} [opts] Optional fetch timeout override.
- * @returns {Promise<{ ok: boolean; status?: number; detail: string }>} Whether
- *   the listener answered (200/401) and a status/body detail string.
- */
 export async function probeGatewayInfo(baseUrl, opts = {}) {
   const timeoutMs = opts.timeoutMs ?? 5_000;
   const url = `${baseUrl.replace(/\/$/u, "")}${INFO_PATH}`;
@@ -21,7 +10,6 @@ export async function probeGatewayInfo(baseUrl, opts = {}) {
   try {
     const res = await fetch(url, { signal: ac.signal });
     const body = await res.json().catch(() => null);
-    // 200 or 401 both prove the listener (auth may be required).
     let ok = res.status === 200 || res.status === 401;
     if (res.status === 200 && body && typeof body.version !== "string")
       ok = false;
@@ -40,18 +28,11 @@ export async function probeGatewayInfo(baseUrl, opts = {}) {
   }
 }
 
-/**
- * Poll until the gateway answers or deadline.
- * @param {string} baseUrl Base URL of the gateway to poll.
- * @param {{ deadlineMs?: number; intervalMs?: number }} [opts] Poll deadline and interval.
- */
 export async function waitForGatewayInfo(baseUrl, opts = {}) {
   const deadlineMs = opts.deadlineMs ?? 30_000;
   const intervalMs = opts.intervalMs ?? 200;
   const deadline = Date.now() + deadlineMs;
   let last = { ok: false, detail: "not attempted" };
-  // Poll attempts must stay serial: each timeout-bounded probe represents one
-  // observation before the next retry interval starts.
   const poll = async () => {
     if (Date.now() >= deadline) return last;
     last = await probeGatewayInfo(baseUrl, { timeoutMs: 2_000 });

@@ -6,11 +6,6 @@ const ACTIVE_SCHEME = /(?:javascript|vbscript|data|https?):/iu;
 const EXTERNAL_HREF = /\s(?:href|xlink:href)\s*=\s*["'](?!#)/iu;
 const XML_FEATURE = /<\?(?:xml)?|<!DOCTYPE|<!ENTITY/iu;
 
-/**
- * Iconify is a build-time network input, not trusted source code. Reject any
- * markup capable of navigation, scripting, external resource loading, CSS,
- * or animation before it reaches React's dangerouslySetInnerHTML constant.
- */
 export function assertSafeConnectorSvg(svg, source = "SVG") {
   const refusal =
     XML_FEATURE.test(svg) ||

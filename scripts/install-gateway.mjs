@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * Centraid gateway installer — npm path (issue #509).
- * Invoked by scripts/install-gateway.sh for curl|bash hosting.
- *
- * Stages (OpenClaw-like): check Node → npm install package or local packs →
- * print next steps. Never silently installs OS services.
- */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -48,7 +41,6 @@ function listPackFiles(fromPackDir) {
   const dir = path.resolve(fromPackDir);
   if (!fs.existsSync(dir)) throw new Error(`pack dir missing: ${dir}`);
   const manifestPath = path.join(dir, "manifest.json");
-  /** @type {string[]} */
   let packFiles = [];
   if (fs.existsSync(manifestPath)) {
     const m = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
@@ -110,7 +102,6 @@ function main(argv) {
     process.exit(1);
   }
 
-  /** @type {string[]} */
   const npmArgs = ["install"];
   if (useGlobal) npmArgs.push("-g");
   else {
@@ -137,8 +128,6 @@ function main(argv) {
   const r = spawnSync("npm", npmArgs, { stdio: "inherit", env: process.env });
   if (r.status !== 0) process.exit(r.status ?? 1);
 
-  // npm --prefix puts bins under <prefix>/node_modules/.bin; global under npm bin -g.
-  // Symlink into <prefix>/bin for OpenClaw-like PATH (~/.centraid/bin).
   let binPath = "";
   if (useGlobal) {
     const gbin = (

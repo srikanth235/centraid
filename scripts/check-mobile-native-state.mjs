@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * Path-filtered native-state gate for `check:pr` (#646).
- *
- * When any path under `apps/mobile/` is in the merge-base..HEAD (or working tree)
- * change set vs `origin/main`, runs `bun run --cwd apps/mobile ci:native-state`.
- * Otherwise no-ops so non-mobile PRs stay cheap.
- */
 import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 
@@ -51,7 +44,6 @@ function changedPaths() {
     ["diff", "--name-only", `${mergeBase}...HEAD`],
     { cwd: root, encoding: "utf8" }
   );
-  // Also include unstaged/staged so pre-push sees dirty mobile trees.
   const unstaged = execFileSync("git", ["diff", "--name-only"], {
     cwd: root,
     encoding: "utf8",
@@ -66,7 +58,6 @@ function changedPaths() {
     .filter(Boolean);
 }
 
-/** Does a changed-path list touch the mobile app? Pure — exported for tests. */
 export function mobileAffected(paths) {
   return paths.some((p) => p === "apps/mobile" || p.startsWith("apps/mobile/"));
 }

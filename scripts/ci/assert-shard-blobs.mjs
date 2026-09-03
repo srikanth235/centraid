@@ -1,25 +1,4 @@
 #!/usr/bin/env node
-/**
- * Fail-closed guard for the sharded coverage lane (#892 Phase 1).
- *
- * THE FAILURE THIS EXISTS TO MAKE IMPOSSIBLE. Splitting `bun run coverage`
- * across N runners means the gates downstream — the coverage floors, the matrix
- * `minimumTests` floors, `test:suite-wall-clock`, `test:collection-tripwire` —
- * all score a report assembled from blobs. If a blob is missing (a shard that
- * died, an artifact that failed to upload, a matrix whose size was changed in
- * one place and not the other), the merged report is a SMALLER WORLD and every
- * one of those gates passes more easily. Nothing is red; the suite is simply
- * partly absent. That is #556's shape exactly, and it is the specific risk the
- * split introduces, so it gets its own guard rather than a comment.
- *
- * The check is deliberately about IDENTITY, not count. Vitest names each blob
- * `blob-<index>-<total>.json`, so this can assert the exact set {1..N} of total
- * N — which catches "two runners both ran shard 3" and "the matrix says 8 and
- * the blobs say 6" as different, nameable errors instead of one arithmetic
- * coincidence.
- *
- * Usage: node scripts/ci/assert-shard-blobs.mjs --expect 8 [--dir .vitest-reports]
- */
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
@@ -27,13 +6,6 @@ const root = path.resolve(import.meta.dirname, "../..");
 
 const BLOB_NAME = /^blob-(?<index>\d+)-(?<total>\d+)\.json$/u;
 
-/**
- * Compare the blobs on disk against the shard count that was dispatched.
- *
- * @param {string[]} files directory listing
- * @param {number} expected shard count the lane dispatched
- * @returns {string[]} human-readable errors; empty means the world is whole
- */
 export function checkShardBlobs(files, expected) {
   const errors = [];
   if (!Number.isInteger(expected) || expected < 1) {

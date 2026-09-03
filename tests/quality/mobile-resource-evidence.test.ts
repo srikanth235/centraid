@@ -1,26 +1,3 @@
-/*
- * W8.2 mobile resource evidence ledger (#842).
- *
- * The numbers that decide whether Centraid is well-behaved on a phone —
- * battery drain per foreground hour, peak resident memory under a photo
- * import, cold start on a five-year-old Android — need a real device.
- * This repo has none, and buying one is not a thing a test can do. Those
- * lanes are `blocked-external`, and `resource-evidence.ts` makes a blocked
- * lane state its own unblock condition rather than quietly not existing.
- *
- * What IS honestly measurable here is the storage and payload footprint,
- * because the SQLite layout on a phone is the same layout as on this host.
- * Those rows are `derived` — a host proxy, never a device claim — and this
- * file is the `recomputedBy` they name: it re-measures each one against a
- * freshly seeded vault and fails when the ledger and the machine disagree
- * beyond the tolerance the row itself records. A number nobody recomputes
- * decays into a claim; this is the mechanism that stops that.
- *
- * Determinism: the fixture is the seeded year-3 generator at fixed counts
- * and the bundle clock is injected, so the measurements move only when the
- * product does.
- */
-
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -46,7 +23,6 @@ import { seedYear3Vault } from "../../packages/test-kit/src/year3-vault.js";
 
 const LEDGER_PATH = "tests/mobile-resource-evidence.json";
 const CLOCK = Date.parse("2026-08-21T09:00:00.000Z");
-/** Fixture scale the derived rows are normalised against. */
 const SEED = {
   parties: 200,
   photos: 800,
@@ -61,7 +37,6 @@ async function loadLedger(): Promise<ResourceLedger> {
   ) as ResourceLedger;
 }
 
-/** Re-measure the three host-proxy rows against a freshly seeded vault. */
 async function measure(): Promise<Record<ResourceMetric, number>> {
   const dir = await tempDir("quality-w8-resource-");
   const plane = openVaultPlane({
@@ -125,8 +100,6 @@ async function measure(): Promise<Record<ResourceMetric, number>> {
       "vault-bytes-per-1k-items": Math.round((pageBytes / items) * 1000),
       "sync-bytes-per-pass": JSON.stringify(changes).length,
       "support-bundle-bytes": bundle.bytes,
-      // Device metrics are not measurable here; the ledger carries them as
-      // blocked rows and this map never claims a number for them.
       "battery-drain-pct-per-hour": Number.NaN,
       "peak-rss-mb": Number.NaN,
       "cold-start-ms": Number.NaN,
@@ -151,10 +124,6 @@ describe("W8.2 mobile resource evidence ledger", () => {
     );
     for (const [surface, metric] of REQUIRED_RESOURCE_LANES)
       expect(lanes, `${surface}/${metric}`).toContain(`${surface}/${metric}`);
-    // A blocked row is a citation, not a shrug: it names what is missing and
-    // the exact condition that would produce the number. Asserted over the
-    // whole set at once so a ledger with zero blocked rows cannot pass by
-    // running the body zero times.
     const blockedRows = ledger.observations.filter(
       (row) => row.method === "blocked-external"
     );

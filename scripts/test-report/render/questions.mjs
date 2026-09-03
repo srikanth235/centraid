@@ -1,11 +1,3 @@
-/**
- * §1 blockers, §2 since yesterday, §3 attention queue (#915 Wave 3).
- *
- * The three questions the page exists to answer, in order. §1 is only S1 and
- * S2 — everything else waits for §3 — and every row carries the bounds a
- * bisection needs before anyone opens a log.
- */
-
 import {
   escapeHtml,
   issueLink,
@@ -16,7 +8,6 @@ import {
   table,
 } from "./util.mjs";
 
-/** §1 — what is holding the candidate. */
 export function renderBlockers(model) {
   const rows =
     model.blockers.length === 0
@@ -57,7 +48,6 @@ export function renderBlockers(model) {
   );
 }
 
-/** One of §2's six columns. */
 function column(title, tone, entries, empty) {
   const items =
     entries.length === 0
@@ -71,7 +61,6 @@ function column(title, tone, entries, empty) {
   return `<div class="card col ${tone}"><h4>${escapeHtml(title)} <span class="n">${entries.length}</span></h4><ul>${items}</ul></div>`;
 }
 
-/** §2 — six columns, computed candidate to candidate. */
 export function renderSinceYesterday(model) {
   const since = model.since;
   const body = `<div class="changes">
@@ -98,7 +87,6 @@ ${column("Budget pressure", "", since.budgetPressure, "no lane is over 80 % of i
   );
 }
 
-/** §3 — one row per lane, oldest first, each with a concrete deadline. */
 export function renderAttention(model) {
   const rows =
     model.attention.length === 0

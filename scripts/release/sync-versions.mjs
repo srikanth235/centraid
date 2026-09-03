@@ -1,15 +1,4 @@
 #!/usr/bin/env node
-/**
- * Single-source monorepo version → workspace package.jsons + mobile native
- * project numbers (issue #501 / #468 J6).
- *
- * Canonical string: root package.json `version`.
- * Native build number: major*1e6 + minor*1e3 + patch (version-core.cjs).
- *
- *   node scripts/release/sync-versions.mjs [--version X.Y.Z] [--dry-run]
- *
- * When --version is omitted, re-stamps natives/workspaces to match root.
- */
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -22,9 +11,6 @@ const { nativeBuildNumber } = require(
   path.join(root, "apps/mobile/src/version-core.cjs")
 );
 
-/**
- * Patch Android build.gradle versionCode / versionName.
- */
 export function patchAndroidVersions(gradleText, semver, buildNumber) {
   let next = gradleText.replace(
     /versionCode\s+\d+\b/u,
@@ -40,9 +26,6 @@ export function patchAndroidVersions(gradleText, semver, buildNumber) {
   };
 }
 
-/**
- * Patch iOS pbxproj MARKETING_VERSION / CURRENT_PROJECT_VERSION.
- */
 export function patchIosPbxproj(pbxText, semver, buildNumber) {
   let next = pbxText.replace(
     /CURRENT_PROJECT_VERSION = \d+;/gu,
@@ -59,9 +42,6 @@ export function patchIosPbxproj(pbxText, semver, buildNumber) {
   };
 }
 
-/**
- * Patch Info.plist CFBundleVersion / CFBundleShortVersionString.
- */
 export function patchInfoPlist(plistText, semver, buildNumber) {
   let next = plistText.replace(
     /(?<openTag><key>CFBundleVersion<\/key>\s*<string>)[^<]+(?<closeTag><\/string>)/u,
@@ -107,7 +87,6 @@ export function runSyncVersions({
   }
   const build = nativeBuildNumber(ver);
 
-  /** @param {string} filePath @param {string} content */
   function write(filePath, content) {
     if (dryRun) return;
     writeFileSync(filePath, content);

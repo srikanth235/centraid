@@ -1,22 +1,3 @@
-/**
- * Merge a generated test-health report into a Pages site tree.
- *
- * Usage:
- *   node scripts/test-report/prepare-pages-site.mjs \
- *     --report dist/test-report \
- *     --site site \
- *     --slot main
- *
- * Copies report files to site/test-report/<slot>/ and writes a small landing
- * page at site/index.html that links known slots (main + nightly).
- *
- * With --date (and optionally --run-id), the report is ALSO archived into a
- * dated run slot at site/test-report/<slot>/runs/<date>-<runId>/ and this
- * run's summary.json is appended to an append-only JSON series under
- * site/test-report/history/. The plain <slot>/ path keeps serving the newest
- * report so already-published URLs never break. Dated slots are pruned to
- * --keep (default 30) most recent; the JSON series is never pruned.
- */
 import {
   cp,
   mkdir,
@@ -41,11 +22,6 @@ const runDate = normalizeDate(flags.date);
 const runId = sanitizeSegment(flags["run-id"] ?? "");
 const runUrl = String(flags["run-url"] ?? "");
 const keep = Math.max(1, Number(flags.keep ?? 30) || 30);
-// #915 C1 — the immutable copy carries the evidence directory that produced
-// it. Tonight's report needs LAST night's evidence to compute a
-// candidate-to-candidate delta, and the only durable place to read it from is
-// the dated slot the nightly already publishes. Without this the delta would
-// have to be recomputed from the HTML, which is not a data source.
 const evidenceDir = flags.evidence
   ? path.resolve(flags.evidence)
   : path.join(root, "artifacts/evidence");
@@ -64,8 +40,6 @@ const dest = path.join(siteDir, "test-report", slot);
 await mkdir(dest, { recursive: true });
 await cp(reportDir, dest, { recursive: true });
 
-// Main slot clarity (#535 F7): ensure the per-push page states its scope and
-// links to nightly even when the HTML was generated without --scope main.
 if (slot === "main") {
   await ensureMainScopeBanner(path.join(dest, "index.html"));
 }
@@ -77,8 +51,6 @@ if (runSlug) {
   await rm(archived, { recursive: true, force: true });
   await mkdir(archived, { recursive: true });
   await cp(reportDir, archived, { recursive: true });
-  // Best-effort: a run with no evidence directory (a PR-scoped report, say)
-  // publishes without one, and the next night reads it as no previous evidence.
   await cp(evidenceDir, path.join(archived, "evidence"), {
     recursive: true,
   }).catch(() => {});
@@ -104,7 +76,6 @@ if (runSlug) {
   series = Array.isArray(index?.entries) ? index.entries : [];
 }
 
-// Pages must not run Jekyll (underscored dirs / raw HTML).
 await writeFile(path.join(siteDir, ".nojekyll"), "", "utf8");
 
 const slots = await listSlots(path.join(siteDir, "test-report"));
@@ -113,7 +84,6 @@ const landing = renderLanding(slots, {
   generatedAt: new Date().toISOString(),
   highlight: slot,
   series,
-  // Link only the dated slots whose HTML actually survives pruning.
   retained: await retainedSlugs(series),
 });
 await writeFile(path.join(siteDir, "index.html"), landing, "utf8");
@@ -127,7 +97,6 @@ console.log(
   `pages site: landing lists ${slots.length} slot(s), ${series.length} history entr(ies)`
 );
 
-/** Append this run to the durable JSON series; never drops earlier entries. */
 async function appendSeries({
   historyDir,
   summary,
@@ -187,7 +156,6 @@ function summarizeEntry(record) {
   };
 }
 
-/** Series entries whose archived HTML is still on disk (the rest were pruned). */
 async function retainedSlugs(seriesLocal) {
   const kept = new Set();
   await Promise.all(
@@ -197,14 +165,13 @@ async function retainedSlugs(seriesLocal) {
         await stat(path.join(siteDir, entry.reportPath, "index.html"));
         kept.add(entry.slug);
       } catch {
-        // pruned
+        // Intentionally empty.
       }
     })
   );
   return kept;
 }
 
-/** Keep the `keep` newest dated slots; older HTML is dropped (JSON series stays). */
 async function pruneRuns(runsDir, keepLocal) {
   const entries = (
     await readdir(runsDir, { withFileTypes: true }).catch(() => [])
@@ -234,7 +201,6 @@ async function listSlots(base) {
     await Promise.all(
       entries.map(async (entry) => {
         if (!entry.isDirectory()) return;
-        // Dated archives and the JSON series are listed from the history index.
         if (!prefix && entry.name === "history") return;
         if (entry.name === "runs") return;
         const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
@@ -392,10 +358,6 @@ function parseFlags(args) {
   return result;
 }
 
-/**
- * Inject a per-push scope banner + nightly link into main-slot HTML when the
- * generator did not already render one (ci.yml can also pass TEST_REPORT_SCOPE=main).
- */
 async function ensureMainScopeBanner(indexPath) {
   let html;
   try {
@@ -406,10 +368,6 @@ async function ensureMainScopeBanner(indexPath) {
   if (html.includes("/test-report/nightly/") && html.includes("per-push"))
     return;
   const banner = `<p class="lede scope">This is the <strong>per-push / main</strong> slot (CI after merge). It does not include nightly desktop/web/mobile/pairing e2e, perf, or scale. Full product lanes: <a href="../nightly/">/test-report/nightly/</a>.</p>`;
-  // Land it where the generator itself renders this banner (#862): inside
-  // `main`, after the verdict bar's honesty banners and above the section
-  // index. Splicing on `<body>` would put it OUTSIDE `main.page`, where the
-  // page has no column and the banner renders full-bleed against the ground.
   const next = html.includes('<nav class="toc"')
     ? html.replace('<nav class="toc"', `${banner}<nav class="toc"`)
     : html.includes('<main class="page">')

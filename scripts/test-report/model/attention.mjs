@@ -1,20 +1,10 @@
-/**
- * Blockers, since-yesterday and the attention queue (#915 Wave 3, §1–§3).
- *
- * All three read the same rows, which is the point: the per-lane rolling issue
- * (`rolling-issue-body.mjs`) is rendered from `buildAttention()` too, so the
- * issue body and §3 cannot disagree about who owes what by when.
- */
-
 import { SEVERITY_RANK } from "./severity.mjs";
 
-/** Add whole days to a YYYY-MM-DD date. */
 export function addDays(date, days) {
   const parsed = Date.parse(`${date}T00:00:00Z`);
   return new Date(parsed + days * 86_400_000).toISOString().slice(0, 10);
 }
 
-/** Whole days from `from` to `to`, both YYYY-MM-DD. */
 export function dayGap(from, to) {
   const a = Date.parse(`${from}T00:00:00Z`);
   const b = Date.parse(`${to}T00:00:00Z`);
@@ -23,10 +13,6 @@ export function dayGap(from, to) {
     : null;
 }
 
-/**
- * §1 — S1 and S2 reds only, with the bisection bounds already computed.
- * @param {{rows: object[], today: string}} input the lane board rows and the night being reported
- */
 export function buildBlockers({ rows, today }) {
   return rows
     .filter(
@@ -54,12 +40,6 @@ export function buildBlockers({ rows, today }) {
     );
 }
 
-/**
- * §3 — one row per lane needing a human, oldest first, each with a concrete
- * deadline: owned-by, fix-or-park-by, the park's expiry, or a revisit trigger.
- * iOS and Android are separate lanes, so they are always separate rows.
- * @param {{rows: object[], today: string, sla: number}} input the lane board rows and the night being reported
- */
 export function buildAttention({ rows, today, sla = 24 }) {
   const queue = [];
   for (const row of rows) {
@@ -96,8 +76,6 @@ export function buildAttention({ rows, today, sla = 24 }) {
       why: row.firstFailingCase ?? "",
     });
   }
-  // Oldest first: the age of the debt is what the queue is sorted by, with
-  // severity breaking ties so an S1 never sits below an S4 of the same age.
   return queue.sort(
     (a, b) =>
       (b.ageDays ?? b.ageHours / 24) - (a.ageDays ?? a.ageHours / 24) ||
@@ -105,11 +83,6 @@ export function buildAttention({ rows, today, sla = 24 }) {
   );
 }
 
-/**
- * §2 — six columns, computed candidate-to-candidate so every entry is a code
- * change rather than weather.
- * @param {{rows: object[], previousEvidence: Map<string, object>, today: string}} input the lane board rows and the night being reported
- */
 export function buildSinceYesterday({ rows, previousEvidence, today }) {
   const newRed = [];
   const newGreen = [];

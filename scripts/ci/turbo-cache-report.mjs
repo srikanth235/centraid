@@ -1,36 +1,4 @@
 #!/usr/bin/env node
-/**
- * Run a turbo task and report what the cache actually did (#892 Phase 0).
- *
- * THE QUESTION THIS EXISTS TO ANSWER. `bun run build` measured ~4.5 minutes in
- * five separate CI lanes, four of which pass `turbo-cache: "true"`. Nobody could
- * say why, because turbo's default output says `cache miss, executing <hash>`
- * per task and nothing about WHY the hash moved or whether the remote was even
- * reachable — and a lane that silently degrades to "no remote cache" looks
- * exactly like a lane whose inputs genuinely changed. Five lanes pay that per
- * run; one investigation should settle it, and an investigation needs numbers.
- *
- * WHAT IT PRINTS. `--summarize` makes turbo write a run summary to
- * `.turbo/runs/<id>.json`; this reads the newest one and reports:
- *
- *   - per task: `hit (local)` / `hit (remote)` / `MISS`, plus duration
- *   - the aggregate hit rate and the wall time spent inside misses
- *   - the GLOBAL hash inputs, because a global-hash change invalidates every
- *     task at once and is the single most common cause of a whole-graph miss —
- *     it is also the one thing per-task output can never show you
- *
- * The table goes to `$GITHUB_STEP_SUMMARY` when it exists, so the answer is on
- * the run page rather than buried in a log fold.
- *
- * IT DOES NOT GATE. `--min-hit-rate` exists and is deliberately unused by any
- * lane: there is no measured baseline yet, and a threshold invented before the
- * first measurement is the kind of number this repo's budgets are supposed to be
- * the opposite of. Seed it from real runs, then ratchet.
- *
- * Usage:
- *   node scripts/ci/turbo-cache-report.mjs --task build [-- <extra turbo args>]
- *   node scripts/ci/turbo-cache-report.mjs --report-only
- */
 import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
@@ -44,17 +12,6 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "../..");
 const RUNS_DIR = path.join(root, ".turbo/runs");
 
-/**
- * Classify one summary task entry.
- *
- * Turbo's summary shape has moved across majors (`cache.status`/`cache.source`
- * in 2.x, a bare `cacheState` before it), so read defensively and report
- * `unknown` rather than silently counting an unrecognised shape as a hit — a
- * cache report that rounds toward "it worked" is worse than none.
- *
- * @param {Record<string, unknown>} task one entry from a turbo run summary
- * @returns {{ status: "hit" | "miss" | "unknown", source: string }} the cache verdict and, on a hit, which cache served it
- */
 export function classifyTask(task) {
   const cache = task?.cache ?? task?.cacheState?.local ?? null;
   if (cache && typeof cache === "object") {
@@ -70,13 +27,6 @@ export function classifyTask(task) {
   return { status: "unknown", source: "-" };
 }
 
-/**
- * How long a task's execution took.
- *
- * turbo 2.x records `startTime`/`endTime` epoch millis; older summaries carried
- * a `duration`. Read both, and fall back to 0 rather than NaN so one unfamiliar
- * entry cannot poison the aggregate.
- */
 export function taskDurationMs(execution) {
   if (!execution || typeof execution !== "object") return 0;
   if (Number.isFinite(execution.duration)) return Number(execution.duration);
@@ -88,7 +38,6 @@ export function taskDurationMs(execution) {
   return 0;
 }
 
-/** Summarize a turbo run summary object into rows plus totals. */
 export function summarize(summary) {
   const rows = (summary?.tasks ?? []).map((task) => {
     const { status, source } = classifyTask(task);
@@ -108,14 +57,11 @@ export function summarize(summary) {
     hits,
     misses: misses.length,
     unknown,
-    // Hit rate over CLASSIFIED tasks only, and `unknown` reported beside it, so
-    // an unreadable summary shape cannot inflate the number.
     hitRate: rows.length - unknown > 0 ? hits / (rows.length - unknown) : 0,
     missMs: misses.reduce((sum, r) => sum + r.durationMs, 0),
   };
 }
 
-/** Markdown for the Job Summary. */
 export function renderReport(result, globalHashInputs) {
   const pct = (result.hitRate * 100).toFixed(1);
   const lines = [
@@ -199,9 +145,6 @@ function main() {
 
   const summary = newestSummary();
   if (!summary) {
-    // The build's own exit status still governs; a missing summary is a
-    // reporting gap, not a build failure, and saying so beats pretending the
-    // cache was measured.
     console.warn(
       "::warning title=Turbo cache unmeasured::no .turbo/runs summary was written; cache behaviour was not measured this run"
     );

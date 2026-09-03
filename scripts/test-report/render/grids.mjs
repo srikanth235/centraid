@@ -1,15 +1,3 @@
-/**
- * §6 coverage grid and §7 promises × surfaces (#915 Wave 3).
- *
- * §6's three modes are the old report's Product, States and Scenarios tabs.
- * All three rows come from the same model, so the toggle is a display switch
- * rather than three separately-computed grids.
- *
- * §7 is the old Infrastructure tab, re-derived: the join of every lane's
- * declared qualities × surfaces with tonight's verdicts. A cell names the
- * lanes behind it, and a cell with no lane is `no evidence`, never blank.
- */
-
 import { escapeHtml, section } from "./util.mjs";
 
 const STATE_LETTERS = Object.freeze({
@@ -22,7 +10,6 @@ const STATE_LETTERS = Object.freeze({
   denied: "n",
 });
 
-/** §6. */
 export function renderCoverage(model) {
   const { platforms, rows } = model.coverage;
   const header = `<div class="h">app</div>${platforms.map((column) => `<div class="h">${escapeHtml(column.label)}</div>`).join("")}`;
@@ -89,7 +76,6 @@ export function renderCoverage(model) {
   );
 }
 
-/** §7. */
 export function renderPromises(model) {
   const { qualities, surfaces, cells, counts } = model.promises;
   const header = `<div class="h"></div>${surfaces.map((surface) => `<div class="h">${escapeHtml(surface.label)}</div>`).join("")}`;

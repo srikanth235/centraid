@@ -286,7 +286,7 @@ table.mx{border-collapse:collapse;width:100%;min-width:960px;font-size:.8rem}
 /* The docs shell zeroes horizontal padding on section.dark to full-bleed its
    own bands (docs.css). This page insets its content via the section's own
    padding, so re-assert the horizontal inset — a higher-specificity selector
-   than the shell's `section.dark` — for both light and dark sections. Without
+   than the shell's `section.dark` — for both light and dark sections. Withou
    this, dark sections (§02 map, §09 flow, …) run flush to the column edge. */
 body.ontology-page section{padding-left:26px;padding-right:26px}
 @media (max-width:700px){body.ontology-page section{padding-left:18px;padding-right:18px}}

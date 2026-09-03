@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-/**
- * Fetch connector brand SVGs from Iconify and rewrite connectorBrandMarks.tsx.
- *
- * Browse: https://icon-sets.iconify.design/
- * Usage:  node scripts/fetch-connector-brand-icons.mjs
- */
 import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";

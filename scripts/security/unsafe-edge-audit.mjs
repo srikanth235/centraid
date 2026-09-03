@@ -32,26 +32,13 @@ import { pathToFileURL } from "node:url";
 const DEFAULT_ROOT = path.resolve(import.meta.dirname, "../..");
 const LEDGER = path.join(import.meta.dirname, "rust-unsafe-ledger.json");
 
-/** Directories never worth walking: build output and vendored trees. */
 const SKIP_DIRS = new Set(["target", "node_modules", ".git", "dist", "build"]);
 
 /** How many lines above an `unsafe` site a `// SAFETY:` note may sit. */
 const SAFETY_LOOKBACK = 5;
 
-/**
- * Matches the four shapes `unsafe` takes in Rust: a block, a function, a trait
- * impl, and an `extern` block. Word-bounded so `unsafely_named_thing` and the
- * substring inside an identifier do not count.
- * @type {RegExp}
- */
 const UNSAFE_RE = /(?<![A-Za-z0-9_])unsafe(?![A-Za-z0-9_])/u;
 
-/**
- * Strip the trailing part of a line that sits inside a `//` comment, so the
- * word `unsafe` appearing in prose is not counted as a site.
- * @param {string} line Raw source line.
- * @returns {string} The code portion of the line.
- */
 export function codePortion(line) {
   const idx = line.indexOf("//");
   return idx === -1 ? line : line.slice(0, idx);
@@ -71,12 +58,6 @@ export function hasSafetyNote(lines, index) {
   return false;
 }
 
-/**
- * Find every `unsafe` site in one Rust source.
- * @param {string} source File contents.
- * @param {string} file Path used in the reported finding.
- * @returns {{file: string, line: number, text: string, justified: boolean}[]} Sites.
- */
 export function scanRustSource(source, file) {
   const lines = source.split("\n");
   const sites = [];
@@ -92,12 +73,6 @@ export function scanRustSource(source, file) {
   return sites;
 }
 
-/**
- * Recursively collect `.rs` files under a directory.
- * @param {string} dir Directory to walk.
- * @param {string[]} acc Accumulator.
- * @returns {string[]} Absolute paths of Rust sources.
- */
 function collectRustFiles(dir, acc = []) {
   let entries;
   try {
@@ -116,14 +91,8 @@ function collectRustFiles(dir, acc = []) {
   return acc;
 }
 
-/**
- * Locate every first-party crate (a directory holding a `Cargo.toml`).
- * @param {string} root Repository root.
- * @returns {string[]} Crate directories, repo-relative and POSIX-separated.
- */
 export function discoverCrates(root) {
   const found = [];
-  /** @param {string} dir Directory to walk. */
   const walk = (dir) => {
     let entries;
     try {
@@ -139,7 +108,7 @@ export function discoverCrates(root) {
         statSync(path.join(child, "Cargo.toml"));
         found.push(path.relative(root, child).split(path.sep).join("/"));
       } catch {
-        // Not a crate root; keep descending.
+        // Intentionally empty.
       }
       walk(child);
     }
@@ -148,27 +117,17 @@ export function discoverCrates(root) {
   return found.sort();
 }
 
-/**
- * Run the audit.
- * @param {{root?: string, ledger?: Record<string, number>}} [options] Overrides for tests.
- * @returns {{ok: boolean, findings: string[], counts: Record<string, number>}} Result.
- */
 export function auditUnsafeEdges(options = {}) {
   const root = options.root ?? DEFAULT_ROOT;
   const ledger =
-    options.ledger ??
-    /** @type {{crates: Record<string, number>}} */ (
-      JSON.parse(readFileSync(LEDGER, "utf8"))
-    ).crates;
+    options.ledger ?? JSON.parse(readFileSync(LEDGER, "utf8")).crates;
 
   const crates = discoverCrates(root);
   const findings = [];
-  /** @type {Record<string, number>} */
   const counts = {};
 
   for (const crate of crates) {
     const files = collectRustFiles(path.join(root, crate));
-    /** @type {{file: string, line: number, text: string, justified: boolean}[]} */
     const sites = [];
     for (const file of files) {
       const relative = path.relative(root, file).split(path.sep).join("/");

@@ -20,7 +20,6 @@ import {
   resolveVerdict,
 } from "./write-evidence.mjs";
 
-/** A minimal valid evidence object; tests mutate one field at a time. */
 function sample(overrides = {}) {
   return {
     schema: EVIDENCE_SCHEMA_VERSION,

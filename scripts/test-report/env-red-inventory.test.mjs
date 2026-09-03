@@ -19,8 +19,6 @@ const trackingIssues = {
   656: { url: "https://example.test/656", state: "closed" },
 };
 
-// 2026-08-15T00:00:00Z — the gate takes nowMs as a parameter so these tests
-// prove the expiry boundary instead of asserting around Date.now().
 const NOW = Date.parse("2026-08-15T00:00:00Z");
 
 const GUARDED_SOURCE = [
@@ -79,8 +77,6 @@ describe("scanEnvGuardSites", () => {
 
   test("non-comparison environment reads are not guards", () => {
     const source = [
-      // Evidence payload, env-relative expected value, and a uid MOCK — the
-      // shapes the real tree contains that must NOT demand inventory entries.
       "results.push({ platform: process.platform });",
       "expect(bundle.runtime.platform).toBe(os.platform());",
       "process.geteuid = () => 0; // pretend we are root",
@@ -310,8 +306,6 @@ describe("reconcileInventory", () => {
     expect(Object.keys(next.sites)).toEqual(["a.test.ts#1", "b.test.ts#1"]);
     expect(next.sites["a.test.ts#1"].issue).toBe(781);
     expect(next.sites["a.test.ts#1"].line).toBe(1);
-    // A brand-new site is stubbed undocumented, so validation still fails
-    // until a human writes the predicate — --write cannot launder a new hole.
     expect(next.sites["b.test.ts#1"].issue).toBeNull();
     expect(next.sites["b.test.ts#1"].guard).toBeNull();
     expect(next._budget).toBe(2);

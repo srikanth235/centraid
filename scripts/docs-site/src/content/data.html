@@ -11,7 +11,6 @@
         </p>
       </section>
 
-      <!-- §01 THE VAULT -->
       <section class="sec wrap" id="vault">
         <p class="eyebrow r">§01 · the vault</p>
         <h2 class="r" style="--d: 0.06s">A directory you can <em>copy out.</em></h2>
@@ -80,27 +79,26 @@
             directory, verify hashes, done.
           </p>
           <p>
-            Only the two append-only bands grow without a natural ceiling, and they are kept
+            Only the two append-only bands grow without a natural ceiling, and they are kep
             bounded without ever dropping history. Idle conversations are <b>digested</b>, their turn-ranges
             serialized into sealed gzip segments and archived to the same content-addressed store
             every blob uses — through the same vault blob door. The raw rows are pruned
             <i>only</i> behind a <b>custody latch</b>: once the segment is provably replicated, or,
             on a vault that's on this device only, provably present in the local store. Reopen an
             archived thread and its turns <b>rehydrate lazily</b> from the segment, folded back in
-            sequence and marked <b>from-archive</b> — read-only, because the past doesn't get
+            sequence and marked <b>from-archive</b> — read-only, because the past doesn't ge
             rewritten. Insights never notice the difference: the digests stand in for whatever was
             pruned.
           </p>
           <p class="aside">
             Manual key custody commands are in <a href="../start/#backup">Start § back up the
             keys</a>; the full offsite backup story — snapshots, the recovery kit, restore and
-            quarantine — has its own chapter: <a href="../backups/">Backups →</a>. How requests get
+            quarantine — has its own chapter: <a href="../backups/">Backups →</a>. How requests ge
             scoped to a vault: <a href="../devices/#addressing">Devices § addressing</a>.
           </p>
         </div>
       </section>
 
-      <!-- §02 THE ONTOLOGY -->
       <section class="dark" id="ontology">
         <div class="wrap">
           <p class="eyebrow r">§02 · the ontology</p>
@@ -156,7 +154,6 @@
         </div>
       </section>
 
-      <!-- §03 CONSENT -->
       <section class="sec wrap" id="consent">
         <p class="eyebrow r">§03 · consent</p>
         <h2 class="r" style="--d: 0.06s">
@@ -217,13 +214,12 @@
           </div>
         </div>
         <p class="aside r" style="--d: 0.24s">
-          Revoke a grant and the cascade is total: sessions killed, projections dark, the app's ext
+          Revoke a grant and the cascade is total: sessions killed, projections dark, the app's ex
           band retained then purged. Your rows, history and receipts remain.
           <a href="../ontology/#gateway">The gateway contract →</a>
         </p>
       </section>
 
-      <!-- §04 THE OUTBOX -->
       <section class="dark" id="outbox">
         <div class="wrap">
           <p class="eyebrow r">§04 · the outbox</p>
@@ -262,13 +258,12 @@
           </div>
           <p class="note r" style="--d: 0.24s; margin-top: 22px">
             Sent things become rows: an email that drains binds back to a canonical
-            <code>social.message</code> — your outbound acts are first-class history, not
+            <code>social.message</code> — your outbound acts are first-class history, no
             fire-and-forget JSON.
           </p>
         </div>
       </section>
 
-      <!-- §05 SEALED COLUMNS -->
       <section class="sec wrap" id="sealed">
         <p class="eyebrow r">§05 · sealed columns</p>
         <h2 class="r" style="--d: 0.06s">Some cells are <em>ciphertext even to you.</em></h2>
@@ -276,14 +271,14 @@
           <p>
             Passwords, TOTP seeds, card numbers, OAuth tokens: columns declared <b>sealed</b> are
             AES-256-GCM ciphertext at rest, sealed inside the same write transaction that creates
-            them. Ordinary reads get a placeholder. Getting plaintext requires the explicit
+            them. Ordinary reads get a placeholder. Getting plaintext requires the explici
             <code>reveal</code> verb — a distinct scope apps must declare, receipted per item, so
             "the app looked at this password, at this time" is a fact in your journal.
           </p>
           <p>
             The discipline is structural, not polite: sealed columns are barred from the search
             index by construction, journal entries carry keyed hash tokens instead of values, and
-            error paths are scrubbed. The sealing key lives beside — not inside — the vault
+            error paths are scrubbed. The sealing key lives beside — not inside — the vaul
             directory, with export, restore and rotation as receipted shell ceremonies.
           </p>
           <p class="aside">
@@ -294,7 +289,6 @@
         </div>
       </section>
 
-      <!-- §06 CONNECTIONS & SYNC -->
       <section class="dark" id="connections">
         <div class="wrap">
           <p class="eyebrow r">§06 · connections &amp; sync</p>
@@ -302,7 +296,7 @@
           <p class="lede r" style="--d: 0.12s">
             External services connect through a broker the gateway owns, and external rows enter
             through a staging band you review. Two mechanisms, one discipline: nothing crosses the
-            border unattributed. This <b>connector sync</b> — pulling the outside world in — is not
+            border unattributed. This <b>connector sync</b> — pulling the outside world in — is no
             the offline <b>device replica</b> that keeps a phone or browser working without a
             connection; that lives in the <a href="../devices/">Devices chapter</a>.
           </p>
@@ -344,7 +338,7 @@
                   Nine optional enrichers — photo captioning, document text extraction, face
                   proposals, trip albums, renewal reminders and friends — derive new rows
                   <i>into tables the ontology already has</i>, attributed and re-derivable, under
-                  per-class standing consent. Derived data is never a parallel store you can't
+                  per-class standing consent. Derived data is never a parallel store you can'
                   audit.
                 </p>
               </div>
@@ -358,7 +352,6 @@
         </div>
       </section>
 
-      <!-- §07 AUTOMATIONS -->
       <section class="sec wrap" id="automations">
         <p class="eyebrow r">§07 · automations</p>
         <h2 class="r" style="--d: 0.06s">Agents on a clock, <em>with a paper trail.</em></h2>
@@ -404,7 +397,6 @@
         </div>
       </section>
 
-      <!-- §08 THE ASSISTANT -->
       <section class="dark" id="assistant">
         <div class="wrap">
           <p class="eyebrow r">§08 · the assistant</p>
@@ -412,7 +404,7 @@
             The payoff: one brain over <em>the whole record.</em>
           </h2>
           <p class="lede r" style="--d: 0.12s">
-            Silo-free data is only worth the trouble if something can think across it. The assistant
+            Silo-free data is only worth the trouble if something can think across it. The assistan
             is an owner-plane agent with exactly three tools — and the restraint is the design.
           </p>
           <div class="grid cols-3" style="margin-top: 28px">
@@ -452,7 +444,6 @@
         </div>
       </section>
 
-      <!-- §09 BLOBS -->
       <section class="sec wrap" id="blobs">
         <p class="eyebrow r">§09 · bytes &amp; blobs</p>
         <h2 class="r" style="--d: 0.06s">Own the meaning, <em>rent the bytes.</em></h2>
@@ -475,7 +466,7 @@
           <p>
             With the vault <b>Hosted</b>, the local store becomes a <b>bounded cache</b>, not a
             second full copy: a budget (yours to set, or derived from free disk) caps the spool,
-            tiny previews are pinned so the grid always renders, and everything else ages out
+            tiny previews are pinned so the grid always renders, and everything else ages ou
             least-recently-used — but nothing is ever evicted unless the remote provably holds it,
             and imports back-pressure rather than drop when the uplink can't keep up. Remote blobs
             are sealed in ranged-readable encrypted frames, compressed when the bytes allow, so
@@ -486,7 +477,6 @@
         </div>
       </section>
 
-      <!-- §10 SEARCH -->
       <section class="sec wrap" id="search">
         <p class="eyebrow r">§10 · search</p>
         <h2 class="r" style="--d: 0.06s">One index over <em>everything the model knows.</em></h2>

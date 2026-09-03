@@ -1,17 +1,3 @@
-/**
- * W6.3 unit tests (umbrella #842) — the dependency-behaviour and CI-egress
- * ratchets.
- *
- * Both gates are ledger-backed, and a ledger-backed gate has one classic
- * failure mode: it goes green because the ledger absorbed the finding. So every
- * drift direction gets its own sabotage case here, including the two that make
- * a ledger a ratchet rather than an allowlist — a stale entry must FAIL, and a
- * bare entry with no written reason must FAIL.
- *
- * The last two tests run the real gates against the real repo, so a change to
- * bun.lock or to .github/workflows/ that the ledgers do not cover is caught by
- * this file and not only by CI.
- */
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -34,19 +20,15 @@ import {
 const here = import.meta.dirname;
 const root = path.resolve(here, "../..");
 
-/** An in-memory package as `collectInstallHooks` would report it. */
 function entry(name, commands, dir = "/nowhere") {
   return { name, version: "1.0.0", dir, commands };
 }
 
-/** `fingerprintHooks` with the filesystem replaced by a table. */
 function fingerprintWith(target, files) {
   return fingerprintHooks(target, (file) => files[file] ?? null);
 }
 
 test("INSTALL_HOOKS covers the hooks a package manager runs, and not `prepare`", () => {
-  // `prepare` is not run for registry dependencies, so including it would bury
-  // three real findings under ~95 irrelevant ones.
   assert.deepEqual(INSTALL_HOOKS, ["preinstall", "install", "postinstall"]);
 });
 
@@ -63,8 +45,6 @@ test("referencedScripts finds the local files a hook command invokes", () => {
 });
 
 test("fingerprintHooks digests the script BYTES, not only the command string", () => {
-  // This is the behaviour layer's whole claim: a republished tarball can keep
-  // `postinstall: node install.js` and change what install.js does.
   const target = {
     ...entry("p", { postinstall: "node install.js" }),
     dir: "/pkg",
@@ -248,9 +228,6 @@ test("REFUSAL: trustedDependencies is what actually EXECUTES, so it must be ledg
 });
 
 test("REFUSAL: `--print-ledger` output does not self-approve", () => {
-  // The generator writes the SHAPE; the review is a sentence a human writes.
-  // Pasting the generated block straight in must stay red, or the ratchet is a
-  // one-command rubber stamp.
   const observed = [
     {
       ...entry("fresh", { postinstall: "node x.js" }),
@@ -259,9 +236,6 @@ test("REFUSAL: `--print-ledger` output does not self-approve", () => {
     },
   ];
   const generated = ledgerFor(observed);
-  // The marker below is the assertion's SUBJECT — the generator's unreviewed
-  // placeholder — not a promise this file makes. A tracker ref would imply the
-  // placeholder is tracked work, so the per-line waiver is the honest form.
   assert.match(generated.fresh.reason, /TODO/u); // governance: allow-no-orphan-todos asserts on the generator's placeholder text
   const result = auditLifecycle({
     observed,
@@ -430,7 +404,6 @@ test("the shipped lifecycle ledger describes this repo's real node_modules", () 
     observed.length > 0,
     "no install hooks found at all — the collector or the tree changed shape"
   );
-  // The load-bearing claim: nothing here is trusted to execute at install time.
   assert.deepEqual(manifest.trustedDependencies ?? [], []);
 });
 

@@ -11,15 +11,7 @@ const ITERATIONS = 20;
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 
 await runFlow("mobile-volume-proof", async (ctx) => {
-  // Home only exists behind onboarding since #603, and this flow's own repeat
-  // loop never clears state — so it has to establish the paired state itself
-  // rather than inherit whatever a previously-run flow happened to leave on the
-  // device. configureGateway clears state, redeems a one-time ticket and lands
-  // on Home; every relaunch below then measures a warm, paired launch.
   await ctx.configureGateway();
-  // Same reason as cold-start.mjs: a staged reuse launch would otherwise run
-  // inside the wall clock below, adding a launch the 20-relaunch budget never
-  // measured.
   await ctx.flush();
   const started = performance.now();
   await ctx.run(

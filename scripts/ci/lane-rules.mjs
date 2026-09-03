@@ -1,32 +1,7 @@
 #!/usr/bin/env node
-/**
- * The lane-health rules table, as code (#915).
- *
- * The issue states six mechanical rules and their automatic actions. They live
- * here rather than inside `lane-health.mjs` so each one is a pure function with
- * a fixture beside it: a rule that decides to demote a required lane, or to
- * declare the night a HOLD, has to be readable and testable without a network.
- *
- * | Signal | Rule | Action |
- * | --- | --- | --- |
- * | pass rate on candidates, trailing 30 | rung-2 lane < 99 % | `[lanes] demote <lane>` |
- * | escapes | rung ≥ 3 catches what rung 2 missed, twice in 30 days | `[lanes] promote <lane>` |
- * | consecutive reds on candidates | 3 | park required, 14-day expiry, rolling issue |
- * | park expired | — | counts as red again |
- * | p95 > rung budget | — | lane red, with the number to cut to |
- * | > 3 parks, or any park > 30 days | — | verdict HOLD |
- */
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-/**
- * The ladder's p95 budgets, in milliseconds, keyed by rung.
- *
- * Read from `tests/budgets.json#rungs` rather than held as a literal here
- * (#915 Wave 4): the ladder's own budgets are ratcheted like every other
- * ceiling, so cutting one is free and widening one is a reviewed edit with an
- * approvedDeviation. `_`-prefixed keys are prose, not rungs.
- */
 export const RUNG_BUDGET_MS = Object.freeze(
   Object.fromEntries(
     Object.entries(
@@ -40,7 +15,6 @@ export const RUNG_BUDGET_MS = Object.freeze(
   )
 );
 
-/** Which rung a workflow's lanes sit on. */
 export const WORKFLOW_RUNG = Object.freeze({
   "ci.yml": 2,
   "candidate.yml": 3,
@@ -51,27 +25,12 @@ export const WORKFLOW_RUNG = Object.freeze({
   "hygiene.yml": 5,
 });
 
-/** How long a park may stand before it is itself the problem. */
 export const MAX_PARK_DAYS = 30;
-/** How many parks the ladder tolerates before the report holds. */
 export const MAX_PARKED_LANES = 3;
-/** Consecutive reds on candidates before a park becomes mandatory. */
 export const PARK_AFTER_REDS = 3;
-/** The pass rate a rung-2 lane must hold to stay on the merge gate. */
 export const RUNG2_PASS_FLOOR = 0.99;
-/** Escapes in the trailing window before a lane is promoted toward rung 2. */
 export const PROMOTE_AFTER_ESCAPES = 2;
 
-/**
- * The p-th percentile of a sample, nearest-rank.
- *
- * Nearest-rank rather than interpolation because the samples are whole runs and
- * "the 95th percentile run took N" is a statement about a run that happened.
- *
- * @param {number[]} values Sample.
- * @param {number} p Percentile in [0,1].
- * @returns {number|null} The value, or null for an empty sample.
- */
 export function percentile(values, p) {
   const sorted = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
   if (!sorted.length) return null;
@@ -79,14 +38,7 @@ export function percentile(values, p) {
   return sorted[rank - 1];
 }
 
-/**
- * Per-lane durations, in milliseconds, across the given runs.
- *
- * @param {{jobs: {name: string, startedAt?: string, completedAt?: string}[]}[]} runs Runs with per-job timestamps.
- * @returns {Map<string, number[]>} Lane → durations.
- */
 export function laneDurations(runs) {
-  /** @type {Map<string, number[]>} */
   const out = new Map();
   for (const run of runs) {
     for (const job of run.jobs ?? []) {
@@ -102,25 +54,7 @@ export function laneDurations(runs) {
   return out;
 }
 
-/**
- * Escapes: a lane red on rung ≥ 3 for a SHA whose rung-2 gate was green.
- *
- * THE APPROXIMATION, STATED. A true escape is "a case rung 2 could have run and
- * did not, that rung 3 caught". Nothing in the Actions API carries case ids
- * across workflows, so this counts the coarser, strictly-larger thing: a red
- * lane on a candidate/nightly run whose `head_sha` also has a fully green
- * `ci.yml` run. That over-counts (the rung-2 gate may have had no lane capable
- * of catching it at all) and never under-counts, which is the correct direction
- * for a signal whose action is "consider promoting this lane". The report says
- * so beside the number; do not quietly tighten the rule without replacing the
- * approximation with case ids from the evidence files.
- *
- * @param {{headSha: string, jobs: {name: string, conclusion: string}[]}[]} deepRuns Rung ≥ 3 runs.
- * @param {Set<string>} greenRung2Shas SHAs whose rung-2 gate was entirely green.
- * @returns {Map<string, number>} Lane → escape count.
- */
 export function countEscapes(deepRuns, greenRung2Shas) {
-  /** @type {Map<string, number>} */
   const out = new Map();
   for (const run of deepRuns) {
     if (!greenRung2Shas.has(run.headSha)) continue;
@@ -134,12 +68,6 @@ export function countEscapes(deepRuns, greenRung2Shas) {
   return out;
 }
 
-/**
- * The SHAs whose rung-2 gate reported no failure.
- *
- * @param {{headSha: string, jobs: {conclusion: string}[]}[]} runs Rung-2 runs.
- * @returns {Set<string>} Green SHAs.
- */
 export function greenShas(runs) {
   const out = new Set();
   for (const run of runs) {
@@ -154,7 +82,6 @@ export function greenShas(runs) {
   return out;
 }
 
-/** Whole days between two ISO dates (YYYY-MM-DD), or null. */
 export function daysBetween(from, to) {
   const a = Date.parse(`${from}T00:00:00Z`);
   const b = Date.parse(`${to}T00:00:00Z`);
@@ -162,22 +89,6 @@ export function daysBetween(from, to) {
   return Math.round((b - a) / 86_400_000);
 }
 
-/**
- * Apply every rule and return the findings, worst kind first.
- *
- * Each finding carries the issue title the caller should open or update, so the
- * workflow step is a loop rather than a second copy of the rules.
- *
- * @param {object} input Everything the rules read.
- * @param {Map<string, {attempts: number, passed: number, rate: number}>} input.rates Pass rates on the primary workflow.
- * @param {Map<string, {days: number, runs: number, since: string}>} input.streaks Current red streaks.
- * @param {Map<string, number[]>} input.durations Per-lane durations.
- * @param {Map<string, number>} input.escapes Per-lane escape counts.
- * @param {Record<string, {issue?: number, expires?: string, why?: string}>} input.quarantine The parks ledger `lanes` map.
- * @param {number} input.rung Which rung the primary workflow's lanes sit on.
- * @param {string} input.today ISO date.
- * @returns {{lane: string, kind: string, title: string, detail: string}[]} Findings.
- */
 export function applyLaneRules({
   rates,
   streaks,
@@ -252,13 +163,6 @@ export function applyLaneRules({
   return findings;
 }
 
-/**
- * The report-level verdict over the parks ledger.
- *
- * @param {Record<string, {expires?: string, why?: string}>} quarantine Parks ledger `lanes` map.
- * @param {string} today ISO date.
- * @returns {{verdict: "HOLD"|"OK", reasons: string[]}} The verdict and why.
- */
 export function overallVerdict(quarantine, today) {
   const reasons = [];
   const live = Object.entries(quarantine).filter(

@@ -1,17 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit — data, not logic: the city plan and
-// every word of copy. Length here is content volume. #704 gives it a schema type.
-// Centraid City — content.ts
-//
-// ALL text content + city geometry for the Centraid City visualization.
-// The engine (main.ts / world/world.ts / sim/sim.ts) reads geometry ONLY from this
-// file; it does not hardcode copy or coordinates. Schema is fixed by
-// SPEC.md — do not change the shape of these exports.
-//
-// Coordinate convention: ground plane is 240x240 units, origin at the
-// center. +x is east, +z is south (so -z is north). Every district
-// `plate` is a rectangle CENTERED at (x, z) with total width `w` (along x)
-// and depth `d` (along z). Building `pos` is an ABSOLUTE world position
-// that falls inside its district's plate bounds.
 
 import type {
   CityDistrict,
@@ -678,10 +665,6 @@ export const districts = [
   },
 ] satisfies CityDistrict[];
 
-// The book. Chapters carry a `section`: "walkthrough" follows one user message end to
-// end, "scenarios" pins the city into one named regime and tells you what to watch.
-// Both live in this one array so every chapter mechanism — Prev/Next, dots, Contents
-// rows, #<id> deep links, camera focus, scenario pinning — works on all of them.
 export const tour = [
   {
     id: "journey-founding",
@@ -1003,9 +986,6 @@ export const tour = [
     ],
   },
 
-  // --- Scenarios. Each one pins the city into a named regime (scenarioId) and parks the
-  // camera where that regime is legible. Copy here describes what the model actually
-  // does — if you retune sim.ts, retune these sentences with it.
   {
     id: "scenario-steady",
     section: "scenarios",

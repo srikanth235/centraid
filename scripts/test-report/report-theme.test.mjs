@@ -3,28 +3,8 @@ import { describe, expect, test } from "vitest";
 import { designSystemCss, REPORT_CSS, verifySheet } from "./report-theme.mjs";
 import { renderFixture } from "./smoke.mjs";
 
-/**
- * The report renders in the PRODUCT's design (issue #853), and these are the
- * ways it stopped doing so before.
- *
- * It had carried a palette of its own, Inter, a type scale of its own and a
- * dark-only page, on the same origin as the two public sites #841 had already
- * unified — and none of that was visible to any gate, because a CSS mistake
- * does not throw. A `var()` naming a token nothing declares is invalid at
- * computed-value time: the declaration is dropped, the element falls back to
- * inherited or initial, and the page renders wrong in silence. So the checks
- * below are byte-level rather than visual, and they are pointed at the layers
- * the report AUTHORS. The generated sheet is where colour literals belong —
- * that is what a token declaration is — and `bun run lint:site-tokens` gates
- * it against the emitter.
- */
-
-/** The layer the report writes by hand, over the generated sheet. #915 folded
- *  the briefing's sheet into it, so there is one authored layer again. */
 const AUTHORED = REPORT_CSS;
 
-/** CSS comments name what a rule replaced ("was Inter"), which is not a live
- *  declaration — the same strip `lint-design-tokens.mjs` and the emitter do. */
 function live(css) {
   return css.replaceAll(/\/\*[\s\S]*?\*\//gu, "");
 }
@@ -45,13 +25,6 @@ function referenced(css) {
   );
 }
 
-/**
- * The generated sheet's blocks, `@media` descended into so a nested rule keeps
- * the query that gates it.
- * @param {string} css A stylesheet.
- * @param {string} [query] The `@media` chain above `css`.
- * @returns {{body: string, query: string, selector: string}[]} Blocks in order.
- */
 function blocks(css, query = "") {
   const found = [];
   let cursor = 0;
@@ -77,15 +50,6 @@ function blocks(css, query = "") {
   return found;
 }
 
-/**
- * Every custom property one THEME of the sheet resolves, in cascade order: the
- * unscoped blocks, then whichever of the pinned/`prefers-color-scheme` blocks
- * that theme actually applies. A rung is spelled in three places by design — a
- * pinned light, a pinned dark and a followed dark — and reading only one of them
- * is how a check passes on a page half the readers never see.
- * @param {string} theme `"light"` or `"dark"`.
- * @returns {Map<string, string>} Property name to its declared value.
- */
 function themeTokens(theme) {
   const values = new Map();
   for (const { body, query, selector } of blocks(live(designSystemCss()))) {
@@ -109,7 +73,6 @@ function themeTokens(theme) {
 
 const THEMES = { dark: themeTokens("dark"), light: themeTokens("light") };
 
-/** A `var()` chain followed to the literal behind it, or `null`. */
 function literal(theme, name) {
   let value = THEMES[theme].get(name);
   for (let hop = 0; hop < 12 && value !== undefined; hop += 1) {
@@ -120,13 +83,11 @@ function literal(theme, name) {
   return null;
 }
 
-/** One sRGB channel, linearised — the WCAG 2.x definition, not an approximation. */
 function channel(byte) {
   const ratio = byte / 255;
   return ratio <= 0.040_45 ? ratio / 12.92 : ((ratio + 0.055) / 1.055) ** 2.4;
 }
 
-/** Relative luminance of a six-digit hex colour. */
 function luminance(hex) {
   const digits = /^#(?<hex>[0-9a-fA-F]{6})$/u.exec(hex.trim())?.groups?.hex;
   if (!digits) throw new Error(`not a hex colour: ${hex}`);
@@ -138,7 +99,6 @@ function luminance(hex) {
   );
 }
 
-/** The WCAG 2.x contrast ratio between two hex colours. */
 function contrast(one, other) {
   const [bright, dim] = [luminance(one), luminance(other)].sort(
     (left, right) => right - left
@@ -146,24 +106,10 @@ function contrast(one, other) {
   return (bright + 0.05) / (dim + 0.05);
 }
 
-/** The rung a declaration names: `var(--nw-okbg)` -> `--nw-okbg`. */
 function rung(value) {
   return /^var\(\s*(?<name>--[\w-]+)\s*\)$/u.exec(value ?? "")?.groups?.name;
 }
 
-/**
- * The cell register, as the page means it (#864). Every compound selector the
- * component layer paints a cell with, against two things: the FAMILY — the one
- * question its tint answers — and the FACT that one selector states.
- *
- * The two levels are the whole point. Before this table the register was
- * checked for distinctness alone — twelve states, ten treatments — which a page
- * can satisfy while still painting two unrelated questions in one hue and one
- * question in two hues, and this one did both: grey was "the pipeline did not
- * report" AND "no test exists", and "no test exists" was red in §8 and grey in
- * §2. Naming the family is what lets a test say "a tint answers exactly one
- * question"; naming the fact is what keeps the four greys separable inside it.
- */
 const REGISTER = {
   ".cell.degraded": {
     fact: "over budget, or outside its noise band",
@@ -191,28 +137,8 @@ const REGISTER = {
   },
 };
 
-/**
- * The pairs drawn identically while stating different facts, each told apart by
- * its WORD alone — `report-state-words.test.mjs` holds that half of the bargain.
- * They are different in kind and both are named rather than counted:
- * `failed` / `infra-mismatch` is the page's ONE cross-family collapse, and
- * `stale` / `lane-did-not-run` sit inside the absence family, which the legend
- * prints as a single entry.
- */
 const WORD_SEPARATED = [];
 
-/**
- * Every rung on this page that means a STATE, grouped by the state it means.
- *
- * Two rungs under one key are ROLES of one state, not two states: the Night
- * Watch families spell a type rung and the tint behind it, and the `--st-*`
- * ramp spells a fill and the type sibling solved for the page ground. A state
- * naming itself twice is the design; two states naming one literal is the
- * defect, because the sheet then declares a distinction the page cannot draw.
- * The neutral rungs — grounds, inks, rules, the link and the focus ring — are
- * deliberately outside this set: they carry no state, and several of them are
- * meant to sit close to one another.
- */
 const SEMANTIC_STATES = {
   "nw:absent": ["--nw-grey", "--nw-greybg"],
   "nw:attention": ["--nw-attn", "--nw-attnbg"],
@@ -240,24 +166,11 @@ const SEMANTIC_STATES = {
   "st:unmatched": ["--st-unmatched", "--st-unmatched-text"],
 };
 
-/**
- * The state groups allowed to resolve to one literal, sorted as the check sorts
- * them. Each is a name for a tone that is DEFINED as another state's, not a
- * second state that happens to land on it: the attention queue's S1 band IS the
- * consequence tone and S3 IS the middle system signal (the emitter says so where
- * it declares them), and the Night Watch danger rung is the product's `--danger`
- * spelled into the report's own palette — the two layers are emitted separately
- * and reaching one value by two names is what keeps them agreeing. Nothing else
- * may double up; `--st-gap` aliasing `--seam` onto the attention rung is the
- * collision this list exists to refuse.
- */
 const DELIBERATE_ALIASES = [
   ["nw:failed", "st:failed", "st:s1"],
   ["st:s3", "st:silent"],
 ];
 
-/** A selector's modifier classes: `.cell.passed.assessment-partial` -> the set
- *  `{passed, assessment-partial}`. */
 function modifiers(selector) {
   return new Set(selector.split(".").filter(Boolean).slice(1));
 }
@@ -274,15 +187,6 @@ const CELL_RULES = [
   )
   .map((rule, order) => ({ ...rule, order }));
 
-/**
- * What a cell in this state actually computes to: every rule whose classes are
- * a subset of the state's own applies, resolved in specificity-then-source
- * order the way a browser resolves them. Reading only a state's OWN rule would
- * miss `.cell`'s shared body and would read `.cell.passed` for the partial
- * cell, which is exactly the pair the register has to keep apart.
- * @param {string} selector A key of `REGISTER`.
- * @returns {Record<string, string>} The state's declarations.
- */
 function effective(selector) {
   const own = modifiers(selector);
   const applied = CELL_RULES.filter((rule) =>
@@ -326,10 +230,6 @@ describe("the generated design-system sheet", () => {
   });
 
   test("refuses a sheet whose ramp or face is gone", () => {
-    // Neither failure throws in a browser: a `var()` with nothing behind it
-    // drops its declaration in silence, and a face pointing at a path that
-    // does not exist just renders in the fallback stack. Both have to fail at
-    // GENERATE time, where someone is watching.
     expect(() => verifySheet("--font-sans: x;", "fixture")).toThrow(
       /--st-solid/u
     );
@@ -345,10 +245,6 @@ describe("the generated design-system sheet", () => {
   test("declares both themes, and follows the system when neither is pinned", () => {
     const css = designSystemCss();
     expect(css).toContain("@media (prefers-color-scheme: dark)");
-    // Quote-agnostic: which quote an attribute selector wears is the
-    // formatter's business, not this contract's, and pinning one spelling
-    // makes the test pass or fail on whether oxfmt happened to touch the
-    // generated sheet rather than on whether the theme is declared.
     expect(css).toMatch(/\[data-theme=['"]dark['"]\]/u);
     expect(css).toMatch(/\[data-theme=['"]light['"]\]/u);
     expect(css).toContain(":root:not([data-theme])");
@@ -372,10 +268,6 @@ describe("the layers the report authors", () => {
   });
 
   test("reference only tokens the generated sheet declares", () => {
-    // No per-instance knob is exempt any more: `--row`, the inline stagger the
-    // old matrix wrote on each cell, went with the layout it belonged to
-    // (#862). Allowing a name the sheet does not declare is how an undeclared
-    // `var()` gets in, so the sheet is now the whole vocabulary.
     const resolvable = declared(designSystemCss());
     const unresolved = [...referenced(live(AUTHORED))].filter(
       (name) => !resolvable.has(name)
@@ -384,34 +276,16 @@ describe("the layers the report authors", () => {
   });
 
   test("paints one tint per meaning, across every grid on the page", () => {
-    // The law this file used to enforce was "twelve states, twelve distinct
-    // treatments", and the page passed it while lying: four tint families were
-    // carrying twelve states, so grey meant BOTH "the pipeline did not report"
-    // and "no test exists", red meant both "tonight broke" and "there is a
-    // declared hole", and the app grids painted that hole grey while §8 painted
-    // it red. Distinctness was never the property a reader needs. The property
-    // is the inverse, and it is what #864 asserts here: a tint answers exactly
-    // ONE question, on every grid at once.
     const backgrounds = new Map();
     for (const [selector, { family }] of Object.entries(REGISTER)) {
       const value = effective(selector).background;
       expect(value, `${selector} paints no background`).toBeTruthy();
       backgrounds.set(value, (backgrounds.get(value) ?? new Set()).add(family));
     }
-    // One tint, one meaning — with exactly one collapse, named rather than
-    // counted: `infra-mismatch` rides the consequence tint with `failed`
-    // because both are "tonight's run went wrong", and the word tells them
-    // apart. Nothing else on the page may double up.
     const doubled = [...backgrounds]
       .filter(([, meanings]) => meanings.size > 1)
       .map(([value, meanings]) => [value, [...meanings].sort()]);
-    // #915 shortened the vocabulary to four words plus n/a and degraded, and
-    // the collapse #864 had to name — `infra-mismatch` riding the consequence
-    // tint with `failed` — went with the state itself. Six states, six
-    // families, no doubling at all.
     expect(doubled).toEqual([]);
-    // And the converse: a meaning may not be spoken in two tints either, which
-    // is how "no test exists" came to be red in §8 and grey in §2.
     const tints = new Map();
     for (const [selector, { family }] of Object.entries(REGISTER)) {
       tints.set(
@@ -425,11 +299,6 @@ describe("the layers the report authors", () => {
   });
 
   test("separates two states inside a family, or says why it does not", () => {
-    // A family carries several states — grey carries four — so the tint alone
-    // cannot finish the job: inside a family a state is told apart by weight,
-    // slope or rule. Two selectors may be byte-identical ONLY when they say the
-    // same thing (the same fact drawn on two different grids), or when they are
-    // the one pair the page tells apart by word alone.
     const treatments = new Map(
       Object.keys(REGISTER).map((selector) => [
         selector,
@@ -455,9 +324,6 @@ describe("the layers the report authors", () => {
   });
 
   test("registers every cell class the layer paints", () => {
-    // A state added to `generate.mjs` and given a rule here, but never entered
-    // above, would be unexamined by both tests: the law only binds what the
-    // table knows about.
     const painted = new Set(
       [...live(REPORT_CSS).matchAll(/\.cell(?<mods>(?:\.[\w-]+)+)/gu)].map(
         (hit) => `.cell${hit.groups?.mods ?? ""}`
@@ -467,24 +333,11 @@ describe("the layers the report authors", () => {
   });
 });
 
-/**
- * The palette behind the register, checked arithmetically rather than by eye.
- *
- * Both properties here were prose before #864 — the divergence register asserted
- * "each of the four tinted families clears 4.5:1 in both themes (4.63:1 at the
- * tightest)" and a receipt carried the table, so the numbers were true on the
- * day they were typed and unowned every night after. Both are now computed off
- * the emitted sheet, which `bun run lint:site-tokens` gates byte-for-byte
- * against `scripts/site-tokens.mjs` — so a hue edited in the ramp table is
- * checked here without anybody remembering to.
- */
 describe("the Night Watch palette", () => {
   test("clears 4.5:1 for every word on its own tint, in both themes", () => {
     const checked = [];
     for (const selector of Object.keys(REGISTER)) {
       const paint = effective(selector);
-      // A cell with no tint of its own sits on the page ground, which is the
-      // surface its word actually has to clear.
       const ink = rung(paint.color);
       const tint =
         paint.background === "transparent"
@@ -501,15 +354,10 @@ describe("the Night Watch palette", () => {
         checked.push(ratio);
       }
     }
-    // A register that stopped painting would pass every ratio above.
     expect(checked).toHaveLength(Object.keys(REGISTER).length * 2);
   });
 
   test("gives no two semantic states the same literal, in either theme", () => {
-    // The collision this catches is the one that shipped: `--st-gap` aliased
-    // `--seam`, and the Night Watch attention rung was spelled with the SAME
-    // two literals, so a hole in the matrix and an integrity warning were one
-    // colour while the sheet looked like it declared two.
     for (const theme of ["light", "dark"]) {
       const owners = new Map();
       for (const [state, names] of Object.entries(SEMANTIC_STATES)) {
@@ -529,7 +377,6 @@ describe("the Night Watch palette", () => {
           `${states.join(" and ")} all resolve to ${value} in ${theme}`
         ).toContain(states.join(" · "));
       }
-      // The whitelist may not outlive what it excuses either.
       expect(shared.map(([, states]) => states.join(" · ")).sort()).toEqual(
         [...allowed].sort()
       );
@@ -537,8 +384,6 @@ describe("the Night Watch palette", () => {
   });
 
   test("catches a collision when there is one to catch", () => {
-    // A detector nobody has ever seen fire is a detector nobody can trust. This
-    // is the exact shape of the #864 defect, replayed against the same code.
     const collided = new Map([
       ["attn", "#B4441F"],
       ["gap", "#B4441F"],
@@ -563,8 +408,6 @@ describe("the rendered page", () => {
     );
     expect(unresolved).toEqual([]);
     expect(style).not.toMatch(/\bInter\b\s*,/u);
-    // Self-contained, at both depths it is published to and years after the
-    // run that produced it: no sibling asset, no network.
     expect(style).not.toMatch(/url\((?!data:)/u);
   });
 });

@@ -1,16 +1,3 @@
-/**
- * The nightly report's read model (#915 Wave 3).
- *
- * `buildModel()` is pure: give it a directory of evidence (already read), the
- * claims file, the previous night's evidence and the durable history, and it
- * returns everything the renderer draws. No I/O, no clock, no network — the
- * generator CLI does the reading and passes the result in, which is what makes
- * `report:smoke` able to assert every section from a fixture root.
- *
- * The page answers three questions in order — can we ship, what changed, who
- * owes what — and every later section is evidence for one of those three.
- */
-
 import {
   buildAttention,
   buildBlockers,
@@ -22,14 +9,12 @@ import { SEVERITY_RANK } from "./model/severity.mjs";
 
 export const VERDICTS = Object.freeze(["HOLD", "DEGRADED", "SHIPPABLE"]);
 
-/** The rules of #915 §0, in one place so the page and the summary agree. */
 export const VERDICT_RULES = Object.freeze({
   maxParks: 3,
   maxParkAgeDays: 30,
   ownedSlaHours: 24,
 });
 
-/** Whole days between two YYYY-MM-DD dates. */
 export function daysBetween(from, to) {
   const a = Date.parse(`${from}T00:00:00Z`);
   const b = Date.parse(`${to}T00:00:00Z`);
@@ -38,16 +23,8 @@ export function daysBetween(from, to) {
     : null;
 }
 
-/**
- * The verdict over UNPARKED lanes, with the one sentence of why and the single
- * change that would flip it.
- * @param {{rows: object[], parks: object[], today: string}} input the claims file, the derived views, the evidence directories and the run's metadata
- */
 export function computeVerdict({ rows, parks, today }) {
   const reds = rows.filter((row) => row.verdict === "failed");
-  // A gating lane that never spoke is not red — but a page that called a night
-  // SHIPPABLE while nothing reported would be the silent all-clear this report
-  // exists to make impossible, so silence degrades and total silence holds.
   const silentGating = rows.filter(
     (row) => row.verdict === "no-evidence" && row.status === "gating"
   );
@@ -127,11 +104,6 @@ export function computeVerdict({ rows, parks, today }) {
   };
 }
 
-/**
- * Build the whole model.
- * @param {object} input the claims file, the derived views, the evidence directories and the run's metadata
- * @returns {object} the model the renderer draws
- */
 export function buildModel(input) {
   const {
     claims,
@@ -152,8 +124,6 @@ export function buildModel(input) {
   const laneRegistry = claims.lanes ?? [];
   const validationErrors = [...evidenceErrors];
 
-  // Unmapped evidence is an error, never a banner: a file naming a lane the
-  // claims file does not register means a workflow and the registry disagree.
   const registered = new Set(laneRegistry.map((lane) => lane.id));
   for (const lane of evidence.keys()) {
     if (!registered.has(lane)) {

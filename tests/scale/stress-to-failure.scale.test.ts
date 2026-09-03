@@ -18,53 +18,12 @@ import type {
 } from "../helpers/composite-workload.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
-/**
- * STRESS TO FAILURE (issue #842 W4.2).
- *
- * Every other perf and scale rig in this repo asks "does the product stay
- * inside its budget?". This one asks the question that only matters after the
- * answer is no: WHAT HAPPENS WHEN IT DOESN'T. A budget tells an owner nothing
- * about the day their phone uploads a year of photos while three devices sync;
- * what tells them something is whether the gateway sheds that load with a named
- * refusal, keeps their data intact, and comes back when the surge passes.
- *
- * So this rig deliberately pushes past the knee and asserts on the SHAPE of the
- * failure, not on its absence:
- *
- *   1. GRACEFUL — every non-2xx under overload is a TYPED product refusal
- *      (`503 GATEWAY_BUSY` from the app-handler admission gate in
- *      `packages/server/src/engine/handlers/worker-admission.ts`, or a `429`
- *      from a rate gate). A 500, a socket hangup, or an untyped body is a
- *      failure of this rig — those are the shapes a client cannot act on.
- *   2. INTACT — a write storm at the far side of the knee leaves EXACTLY as
- *      many notes in the vault as there were 2xx responses. Not more (a
- *      refusal that half-committed), not fewer (a success that did not land),
- *      and `PRAGMA integrity_check` still says ok.
- *   3. NOT WEDGED, AND RECOVERS — when the load drops, one ordinary request
- *      succeeds again inside an owner-scale latency.
- *   4. THE KNEE IS FOUND — the rig walks a concurrency ladder and reports the
- *      first rung that refuses. If the ladder tops out with no refusal at all,
- *      that is a FAILURE of the rig, not a pass: it means the ladder never
- *      reached the knee it exists to locate, and the run proved nothing.
- *
- * Determinism: the ladder, the payloads and the op counts are fixed constants
- * and seeded strings. The only thing read from the clock is elapsed time.
- */
 const OWNER = "tests/scale/stress-to-failure.scale.test.ts";
 
-/**
- * The concurrency ladder. Doubling, because the knee is set by a small integer
- * (`WORKER_MAX_CONCURRENT`, 2 on a constrained host and 8 on a standard one)
- * plus a fixed queue depth (`WORKER_MAX_QUEUE`, 16) — a doubling ladder brackets
- * that within one rung on either kind of host, and 128 is comfortably past the
- * widest configuration the resolver will produce (32 + 16).
- */
 const LADDER = [1, 2, 4, 8, 16, 32, 64, 128] as const;
 
-/** Concurrent create-note calls in the data-integrity storm, past the knee. */
 const WRITE_STORM = 64;
 
-/** Statuses the product is allowed to shed load with. Anything else is a bug. */
 const REFUSAL_STATUSES = new Set([429, 503]);
 
 interface CeilingFile {
@@ -121,7 +80,6 @@ async function burst(
   return rung;
 }
 
-/** The gateway's own vault.db, found under the data dir it was given. */
 async function vaultDbPath(vaultDir: string): Promise<string> {
   const found: string[] = [];
   for await (const entry of glob("*/vault.db", { cwd: vaultDir }))
@@ -143,10 +101,6 @@ describe("stress-to-failure.scale", () => {
     const gateway = await bootCompositeGateway("stress-to-failure-");
     onTestFinished(() => gateway.close());
 
-    // ── 1. The ladder ────────────────────────────────────────────────────
-    // Notes `library` is a declared app QUERY: a real app-engine worker
-    // spawn, which is the subsystem that owns the admission gate. A route
-    // that never spawns a worker would never reach a knee at all.
     const started = performance.now();
     const rungs: Rung[] = [];
     await forEachSequentially([...LADDER], async (concurrency) => {
@@ -163,10 +117,6 @@ describe("stress-to-failure.scale", () => {
     const ladderMs = performance.now() - started;
     const knee = rungs.find((rung) => Object.keys(rung.refusals).length > 0);
 
-    // ── 2. The write storm, past the knee ────────────────────────────────
-    // Fired at WRITE_STORM concurrency so a large fraction is refused. The
-    // invariant is arithmetic, not statistical: notes in the vault must
-    // equal 2xx responses EXACTLY.
     const storm = await burst(gateway, WRITE_STORM, async (index) =>
       callOnce(gateway, "/centraid/notes/actions/create-note", {
         method: "POST",
@@ -180,10 +130,6 @@ describe("stress-to-failure.scale", () => {
       })
     );
 
-    // ── 3. Recovery ──────────────────────────────────────────────────────
-    // Every burst above has settled (each `burst` awaits all its requests),
-    // so this is the first request after the load drops. No sleep: the rig
-    // waits on the events, not on the clock.
     const recovery = await callOnce(
       gateway,
       "/centraid/notes/queries/library",
@@ -194,7 +140,6 @@ describe("stress-to-failure.scale", () => {
       }
     );
 
-    // ── 4. Integrity ─────────────────────────────────────────────────────
     const dbPath = await vaultDbPath(gateway.vaultDir);
     const db = new DatabaseSync(dbPath, { readOnly: true });
     const noteRows = (

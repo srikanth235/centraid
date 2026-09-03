@@ -8,24 +8,6 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { parseFrameEvidence, readFrameEvidence } from "./frame-report.mjs";
 
-/**
- * The frame-drop probe (`flows/scroll-frames.mjs`) needs a booted simulator, so
- * its parse is the only part that can be verified in CI without a device — and
- * a parser nobody has executed is precisely the thing that quietly returns zero
- * on the night it matters. These run in `bun run scripts:test`.
- *
- * The literal below is the exact string `formatFrameSample` produces
- * (apps/mobile/src/lib/perf/frame-sampler.ts), pinned by an assertion in
- * apps/mobile/src/lib/perf/frame-sampler.test.ts. If that assertion changes,
- * this file must fail.
- *
- * Runner: VITEST, like its siblings in `tests/agent-e2e-shared/` — this
- * directory is inside `scripts/test-report/vitest.config.ts`'s project glob, so
- * a `node:test` file here registers under two runners and vitest reports
- * "No test suite found" while the assertions run invisibly under the other one.
- * One runner, per TESTING.md.
- */
-
 const CONTRACT_LINE =
   "frames=137 expected=241 elapsed=4016ms fps=34.11 targetHz=60 dropped=43.15%";
 
@@ -54,8 +36,6 @@ describe("parseFrameEvidence", () => {
   });
 
   test("keeps targetHz, because dropped% has a per-device denominator", () => {
-    // 60 fps on a 120 Hz ProMotion display is a 50% drop, not a clean run. A
-    // reader that only got `dropped` could not tell this from a 60 Hz device.
     const { report } = parseFrameEvidence([
       "frames=300 expected=600 elapsed=5000ms fps=60.00 targetHz=120 dropped=50.00%",
     ]);
@@ -69,15 +49,11 @@ describe("parseFrameEvidence", () => {
     expect(report.parse).toBe("degraded");
     expect(report.dropped).toBe(12.5);
     expect(report.targetHz).toBe(90);
-    // The fields the degraded path cannot recover are -1, never 0 — a zero
-    // would be indistinguishable from a real measurement of zero.
     expect(report.frames).toBe(-1);
     expect(report.fps).toBe(-1);
   });
 
   test("returns null rather than zero when nothing matched", () => {
-    // The whole point: "we could not see the frames" must not read as "no
-    // frames were dropped". The flow fails the run on a null.
     const { report } = parseFrameEvidence([
       "<hierarchy>nothing here</hierarchy>",
     ]);
@@ -93,9 +69,6 @@ describe("parseFrameEvidence", () => {
   });
 
   test("reports the highest People row index as a lower bound on seeded rows", () => {
-    // Positional row ids are how the flow states its D6 volume: the real seeded
-    // total is not observable from the device, but "we scrolled past at least
-    // this many" is.
     const { peopleRowsObserved } = parseFrameEvidence([
       `id="people-directory-row-0" id="people-directory-row-7"`,
       `id="people-directory-row-41"`,
@@ -109,8 +82,6 @@ describe("parseFrameEvidence", () => {
   });
 
   test("ignores the merge-picker's twin list, which is not the directory", () => {
-    // `people-merge-directory-row-<n>` is the merge sheet, a different surface.
-    // Counting it would inflate the claimed volume of the directory fling.
     const { peopleRowsObserved } = parseFrameEvidence([
       `id="people-merge-directory-row-900"`,
     ]);

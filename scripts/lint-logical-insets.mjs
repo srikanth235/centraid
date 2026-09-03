@@ -1,29 +1,4 @@
 #!/usr/bin/env node
-// Logical-inset gate for apps/mobile (#679).
-//
-// React Native's `StyleSheetTypes.d.ts` still DECLARES the legacy logical
-// position insets `start` and `end`, so `tsc` and oxlint both wave them
-// through — but they are the deprecated spelling and the New Architecture no
-// longer reliably lowers them onto the Yoga node. A `position: "absolute"`
-// style written with `start: 0, end: 0` therefore type-checks, lint-passes,
-// and ships with NO horizontal constraint at all: the view sizes to its
-// content and anchors at its static position. That is exactly how the Photos
-// band ran off the right edge of the screen and clipped "More", and how the
-// custody strip stopped overlaying its tile.
-//
-// The supported spellings are `insetInlineStart` / `insetInlineEnd`, which the
-// renderer applies with precedence over the physical `left` / `right`
-// (ReactCommon/react/renderer/components/view/YogaLayoutableShadowNode.cpp,
-// `applyAliasedProps`). Only the POSITION pair is affected — `marginStart`,
-// `paddingEnd`, `borderStartWidth` and friends are still parsed and applied,
-// so this gate deliberately does NOT touch them.
-//
-// The check is a source scan rather than a runtime test because the failure is
-// invisible at runtime: nothing throws, nothing warns, the layout is simply
-// wrong. It flags `start:` / `end:` used as a key anywhere inside a
-// `StyleSheet.create({ ... })` literal — not just in the same object as
-// `position: "absolute"`, because positioned styles are routinely composed
-// from a base (`styles.pager`) and a side (`styles.pagerPrev`).
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -31,13 +6,11 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const MOBILE_SRC = path.join("apps", "mobile", "src");
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".expo"]);
 
-/** The dead pair, and what to write instead. */
 const LOGICAL_INSET_FIXES = Object.freeze({
   start: "insetInlineStart",
   end: "insetInlineEnd",
 });
 
-/** Blank comments and string bodies, preserving offsets so lines still match. */
 function blankNonCode(source) {
   return source
     .replace(/\/\*[\s\S]*?\*\//gu, (m) => m.replace(/[^\n]/gu, " "))
@@ -47,10 +20,6 @@ function blankNonCode(source) {
     .replace(/`(?:[^`\\]|\\.)*`/gu, (m) => m.replace(/[^\n]/gu, " "));
 }
 
-/**
- * Byte ranges of every `StyleSheet.create({ ... })` argument in `code`
- * (comment- and string-blanked, so braces inside those cannot mislead us).
- */
 function styleSheetRanges(code) {
   const ranges = [];
   const opener = /StyleSheet\s*\.\s*create\s*\(/gu;
@@ -87,7 +56,6 @@ function walk(directory, out = []) {
   return out;
 }
 
-/** Findings for one file's source text. Exported so the test can drive it. */
 export function scanSource(source, label = "<source>") {
   const code = blankNonCode(source);
   const ranges = styleSheetRanges(code);

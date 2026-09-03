@@ -1,31 +1,4 @@
 #!/usr/bin/env node
-/**
- * Sharing-plane export reachability check (issue #750).
- *
- * Knip's dead-export detection stops at workspace entry files: anything
- * re-exported through `src/index.ts` counts as "used" because the barrel is an
- * entry, and colocated vitest files are entries too. That combination launders
- * dead sharing-plane capabilities — `declareCommonsCommands` was exported,
- * re-exported by the vault barrel, and called by nothing in production, yet
- * every existing gate stayed green.
- *
- * This check closes that class. For every value export of the configured
- * sharing-plane modules (`share-reachability.json` at the repo root) it
- * resolves the transitive importer set, following re-exports through index.ts
- * barrels and workspace package specifiers, and fails unless at least one
- * production file (non-test source under packages/ or apps/, per the
- * TESTING.md naming conventions) imports the capability in a value position.
- * Test files, type-only imports/usages, and pure re-export sites do not count
- * as reachers. A value-position use inside the capability's own declaring
- * production module does count (see the same-file rule in
- * `runShareReachability`). Documented exceptions live in the config's `allowlist`, one
- * reason string per entry (knip.json's documented-exception style); stale
- * entries fail so the list can only shrink.
- *
- * The per-file syntax scan lives in `share-reachability-parse.mjs`; it uses the
- * repo-pinned `typescript` package for syntax-level parsing only (no type
- * checking, no new dependencies).
- */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -49,13 +22,6 @@ const SKIP_DIRS = new Set([
 ]);
 const SOURCE_RE = /\.(?:ts|tsx|mts)$/u;
 
-/**
- * Test/benchmark/fixture classification by path convention, aligned with the
- * TESTING.md taxonomy (`*.test.ts[x]`, `*.integration.test.ts`,
- * `*.contract.test.ts`, `*.spec.ts`, perf/scale suites, `tests/` trees,
- * benchmarks, test kits, and fixture modules). Exported for the analyzer
- * tests.
- */
 export function isTestPath(relPath) {
   const p = relPath.replaceAll("\\", "/");
   if (/(?:^|\/)(?:tests?|e2e|benchmarks?|__fixtures__|fixtures)\//u.test(p)) {
@@ -104,7 +70,6 @@ function listSourceFiles(root) {
   return files;
 }
 
-/** Map workspace package name → absolute package dir, from package.json files. */
 function buildWorkspaceMap(root) {
   const map = new Map();
   for (const sub of SOURCE_ROOTS) {
@@ -123,14 +88,13 @@ function buildWorkspaceMap(root) {
           map.set(pkg.name, path.join(base, name));
         }
       } catch {
-        // not a package dir
+        // Intentionally empty.
       }
     }
   }
   return map;
 }
 
-/** The full repo analysis. `root` is injectable so the fail paths are testable. */
 export function runShareReachability(root, config) {
   const moduleRes = (config.modules ?? []).map((g) => globToRegExp(g));
   const workspaceByName = buildWorkspaceMap(root);
@@ -178,7 +142,6 @@ export function runShareReachability(root, config) {
     return null;
   };
 
-  // exported name set per module (needed to expand `export *`), cycle-safe
   const exportedNamesMemo = new Map();
   const exportedNamesOf = (abs, seen = new Set()) => {
     if (exportedNamesMemo.has(abs)) return exportedNamesMemo.get(abs);
@@ -192,9 +155,6 @@ export function runShareReachability(root, config) {
       for (const re of info.reexports) {
         if (re.star) {
           const target = resolveSpec(abs, re.spec);
-          // `export * from` deliberately does NOT carry `default` (ES2015
-          // §15.2.3), so a barrel over a default-exporting module must not
-          // make that component look re-exported.
           if (target)
             for (const n of exportedNamesOf(target, seen))
               if (n !== "default") names.add(n);
@@ -207,7 +167,6 @@ export function runShareReachability(root, config) {
     return names;
   };
 
-  // origin of (module, exported name): the file that declares the capability
   const originMemo = new Map();
   const exportOrigin = (abs, name, seen = new Set()) => {
     const key = `${abs}\0${name}`;
@@ -227,7 +186,6 @@ export function runShareReachability(root, config) {
     } else {
       const listed = info.exportList.find((e) => e.exported === name);
       if (listed) {
-        // `export { a as b }`: if `a` is imported, follow the chain; else local.
         let followed = null;
         for (const imp of info.imports) {
           const bound = imp.names.find((n) => n.local === listed.local);
@@ -276,11 +234,6 @@ export function runShareReachability(root, config) {
     return origin;
   };
 
-  // Scoped capability targets: value exports declared by the configured
-  // modules. Each target remembers its declaring file and the *local* name it
-  // is declared under (which differs from the exported name for
-  // `export { local as exported }`), because the same-file rule below has to
-  // look the local name up in the declaring module's own usage map.
   const targets = new Map(); // "rel#name" → { file, local, reachers }
   for (const [abs, info] of files) {
     const rel = relOf(abs);
@@ -288,13 +241,10 @@ export function runShareReachability(root, config) {
     if (isTestPath(rel)) continue;
     for (const [name, kind] of info.localExports) {
       if (kind !== "value") continue;
-      // `default` is not an identifier: the same-file rule has to look the
-      // declaration up under the name it was declared with, when it has one.
       const local = name === "default" ? info.defaultLocal : name;
       targets.set(`${rel}#${name}`, newTarget(abs, local ?? name));
     }
     for (const e of info.exportList) {
-      // Only names that originate here (not import-then-re-export laundering).
       const origin = exportOrigin(abs, e.exported);
       if (origin && origin.file === abs && !origin.typeOnly) {
         targets.set(`${rel}#${e.exported}`, newTarget(abs, e.local));
@@ -308,7 +258,6 @@ export function runShareReachability(root, config) {
     return targets.has(key) ? key : null;
   };
 
-  // Reach classification per importing file.
   for (const [abs, info] of files) {
     const rel = relOf(abs);
     const isTest = isTestPath(rel);
@@ -340,8 +289,6 @@ export function runShareReachability(root, config) {
         } else if (valueUses > 0) {
           classify(key, false, origin.file);
         }
-        // imported but never used in any position: a pure re-export site (the
-        // chain is followed via exportOrigin) or dead import — not a reach.
       }
     }
     for (const ns of info.namespaceImports) {
@@ -362,7 +309,6 @@ export function runShareReachability(root, config) {
     for (const spec of info.dynamicImportSpecs) {
       const target = resolveSpec(abs, spec);
       if (!target) continue;
-      // Conservative: a dynamic import reaches every export of its target.
       for (const name of exportedNamesOf(target)) {
         const origin = exportOrigin(target, name);
         const key = targetKeyOf(origin);
@@ -371,18 +317,6 @@ export function runShareReachability(root, config) {
     }
   }
 
-  // Same-file rule: a capability used in a value position inside its own
-  // declaring module, where that module is production code, is reached in
-  // production — the surrounding module runs, so the use runs. This mirrors
-  // knip's `ignoreExportsUsedInFile` convention (already adopted repo-wide)
-  // and composes with it: knip fails on unused *files*, so a module that
-  // reaches only itself is either alive (its own callers run this code) or
-  // knip deletes the whole file. What this gate still catches is the defect
-  // class it exists for — a capability like `declareCommonsCommands` or
-  // `pushRouteAssertion` that lives in a live module but is invoked nowhere,
-  // in-file or out. Exports whose only in-file appearance is their own
-  // declaration (see `declaredNameNodes` in `parseModule`) or a type position
-  // do not qualify.
   for (const t of targets.values()) {
     if (t.reachers.production.length > 0) continue;
     const rel = relOf(t.file);
@@ -392,7 +326,6 @@ export function runShareReachability(root, config) {
     }
   }
 
-  // Verdicts + allowlist reconciliation.
   const allowlist = config.allowlist ?? [];
   const allowlisted = new Map(allowlist.map((e) => [e.capability, e]));
   const offenses = [];

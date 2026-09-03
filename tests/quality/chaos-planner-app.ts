@@ -1,24 +1,3 @@
-/**
- * The real app-engine backend both chaos lanes dispatch through (#842 W3).
- *
- * WHY THE REAL DISPATCHER AND NOT A DIRECT `plane.invoke`. Exactly-once under
- * a retried intent is not a property of the vault alone: the app-engine
- * dispatcher derives a DETERMINISTIC, intent-bound invocation id per call
- * (`bindIntentToVaultBridge` in `packages/server/src/engine/handlers/
- * dispatcher.ts`) and that id is what `replayInvocation` recognises. A rig
- * that called the vault directly with a fresh invocation id would double-apply
- * every retry — and would be measuring its own shortcut, not the product.
- * Both chaos lanes therefore run a real registered app through the real
- * dispatcher, in a real worker.
- *
- * NOTE ON THE RUNTIME: the handler worker resolves its own module graph, so
- * these lanes need a tree whose workspace `dist` output exists (`bun run
- * build`). On an unbuilt tree every dispatch reports HANDLER_ERROR and the
- * lane's wire-outcome assertion prints that body verbatim rather than failing
- * as an unexplained empty vault — a harness state, not a product defect. The
- * canonical invocation is `bun run test:qualities`.
- */
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -33,16 +12,6 @@ import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
 
 export const PLANNER_APP_ID = "planner";
 
-/**
- * What the gateway's backend does with the next dispatch.
- *
- * - `healthy` runs the action.
- * - `dying` runs the action and THEN throws — the dangerous half of a gateway
- *   crash, where the canonical command committed and the outcome row never
- *   did. A retry that re-executed would double-write.
- * - `degraded` returns the product's own non-terminal `retryable`, which is
- *   what a backend that is up but cannot serve looks like.
- */
 export type BackendMode = "healthy" | "dying" | "degraded";
 
 export interface PlannerBackend {
@@ -83,7 +52,6 @@ async function writePlannerApp(codeDir: string): Promise<void> {
   );
 }
 
-/** Grant the planner app the one scope its action needs. */
 export function approvePlanner(plane: VaultPlane): void {
   plane.approveGrant(PLANNER_APP_ID, {
     purpose: "dpv:ServiceProvision",
@@ -91,11 +59,6 @@ export function approvePlanner(plane: VaultPlane): void {
   });
 }
 
-/**
- * `currentPlane` is a thunk so the composition lane can restart the vault
- * plane underneath a live dispatcher — a restarted gateway must not need a
- * rebuilt app registry to keep serving.
- */
 export async function openPlannerBackend(
   currentPlane: () => VaultPlane
 ): Promise<PlannerBackend> {
@@ -122,7 +85,6 @@ export async function openPlannerBackend(
       input: body.input,
       intentId: body.intentId,
     });
-    // The crash lands AFTER the canonical commit and BEFORE the outcome row.
     if (mode === "dying")
       throw new Error("gateway died after the canonical commit (chaos)");
     return replicaDispatchOutcome(written);

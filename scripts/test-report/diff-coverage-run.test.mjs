@@ -37,16 +37,12 @@ describe("parseArgs", () => {
 
 describe("resolveBase", () => {
   test("an explicit base short-circuits ref probing entirely", () => {
-    // 'definitely-not-a-ref' would fail rev-parse; returning it proves the
-    // explicit path never consults git.
     expect(resolveBase("definitely-not-a-ref")).toBe("definitely-not-a-ref");
   });
 });
 
 describe("changedFiles", () => {
   test("HEAD-vs-HEAD plus the working tree is deduped, trimmed, and never throws", () => {
-    // Committed range is empty by construction; anything present comes from the
-    // working tree unions. The contract under test is shape, not content.
     const files = changedFiles("HEAD");
     expect(Array.isArray(files)).toBe(true);
     expect(files).toStrictEqual([...new Set(files)]);
@@ -89,9 +85,6 @@ describe("workspaceDirOf", () => {
 });
 
 describe("projectNameOf", () => {
-  // Fixture workspaces under a temp root, addressed via a path RELATIVE to the
-  // repo root (the function resolves against the repo), so the test controls
-  // exactly which files exist.
   const repoRoot = path.resolve(
     path.dirname(new URL(import.meta.url).pathname),
     "../.."

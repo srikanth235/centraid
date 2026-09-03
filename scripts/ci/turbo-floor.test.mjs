@@ -23,9 +23,6 @@ test("the lockfile, root manifest, turbo config and toolchain move the global ha
 });
 
 test("a package-local package.json is NOT a global-hash input", () => {
-  // This is the case the floor exists to catch: one package's hash moves, its
-  // dependents miss, and 3 of 13 tasks still hit. Waiving it would waive most
-  // of the repo's PRs.
   assert.deepEqual(globalHashInputsIn(["packages/core/package.json"]), []);
   assert.deepEqual(globalHashInputsIn(["apps/web/turbo.json"]), []);
   assert.deepEqual(globalHashInputsIn(["packages/core/src/index.ts"]), []);

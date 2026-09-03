@@ -1,40 +1,10 @@
-// Centraid — the nightly test report's stylesheet.
-//
-// Two halves. `designSystemCss()` returns the GENERATED sheet — the product's
-// `toCss()` lowering, the site layer, the matrix status ramp, and the four
-// bundled faces inlined as `data:` URIs — read from `report-tokens.css` beside
-// this file. `REPORT_CSS` is the report's own component layer, authored here,
-// and it declares no colour, no face and no type scale of its own: every value
-// in it names a token the generated sheet above it declares.
-//
-// The split matters because the two run under different engines. The sheet is
-// emitted by `scripts/site-tokens.mjs` under **bun**, which can import
-// `packages/design`'s TypeScript; the report generator runs under **node**,
-// which cannot. So the sheet is committed and gated by bytes
-// (`bun run lint:site-tokens`), exactly as the two public sites take theirs,
-// and this module only reads it. See issue #853.
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const SHEET = path.join(import.meta.dirname, "report-tokens.css");
 
-/**
- * Two things the report cannot render without, checked at read time rather
- * than trusted. A truncated or hand-edited sheet does not throw in a browser —
- * it silently drops every declaration that names a missing token and the page
- * renders as unstyled text, which is exactly the failure this whole pass
- * exists to stop being invisible.
- */
 const REQUIRED = ["--font-sans:", "--st-solid:"];
 
-/**
- * What a usable sheet has to contain, as a pure check so the failure modes are
- * reachable from a test rather than only from a broken checkout.
- * @param {string} css The sheet's text.
- * @param {string} [label] What to name in the error.
- * @returns {string} `css`, unchanged.
- */
 export function verifySheet(css, label = path.basename(SHEET)) {
   for (const marker of REQUIRED) {
     if (!css.includes(marker)) {
@@ -43,20 +13,11 @@ export function verifySheet(css, label = path.basename(SHEET)) {
       );
     }
   }
-  // The faces are inlined precisely so an archived run keeps rendering with no
-  // network and no sibling assets. A relative `url()` here means the emitter
-  // stopped inlining and every archive published afterwards would fetch a path
-  // that does not exist at either depth it is published to.
   if (/src:\s*url\((?!data:)/u.test(css)) {
     throw new Error(
       `test report: ${label} links a face instead of inlining it — the run archives would render unstyled`
     );
   }
-  // The Night Watch palette the page's own ground, ink, rules and tints are
-  // drawn in. Both halves are checked, because the dark one closes the sheet:
-  // a truncated read carries every marker above it and would render the night
-  // page on the day ground. Quote-agnostic on the attribute selector — which
-  // quote it wears is the emitter's business, not this check's.
   if (
     !css.includes("--nw-ground:") ||
     !/\[data-theme=["']dark["']\][^{]*\{[^}]*--nw-ground:/u.test(css)
@@ -68,7 +29,6 @@ export function verifySheet(css, label = path.basename(SHEET)) {
   return css;
 }
 
-/** The generated design-system sheet, verified. */
 export function designSystemCss() {
   let css;
   try {
@@ -82,21 +42,6 @@ export function designSystemCss() {
   return verifySheet(css);
 }
 
-/**
- * The report's component layer — the Night Watch v2 frame (#915 Wave 3,
- * superseding the register of #862).
- *
- * Read it against the palette in `report-tokens.css`: a rule here says which
- * RUNG it paints (`--nw-sunken`, `--nw-parkbg`) rather than which hue, so the
- * meaning of a colour is settled once, in the emitter, and not in a selector
- * list. It declares no colour, no face and no type scale of its own.
- *
- * The cell vocabulary is four words plus `n/a`: `passed`, `failed`, `parked`,
- * `no-evidence`, `degraded`. Each has exactly one tone family and each family
- * means exactly one thing (#864's law, applied to #915's shorter vocabulary):
- * ok passed · danger tonight went wrong · park the failure has a date on it ·
- * grey nothing reported · attn over budget or outside its band.
- */
 export const REPORT_CSS = `
 *{box-sizing:border-box}
 body{margin:0;background:var(--nw-ground);color:var(--nw-ink);font-family:var(--font-sans);font-size:var(--t-body-size);line-height:1.5}

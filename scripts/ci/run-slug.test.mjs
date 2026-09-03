@@ -20,8 +20,6 @@ test("falls back when gh returned an error string rather than a timestamp", () =
 });
 
 test("rejects a well-shaped but impossible date", () => {
-  // The old shell used a glob (`[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]`),
-  // which accepts 2026-13-45 and would publish to a slot no link resolves to.
   assert.equal(toRunDate("2026-13-45T00:00:00Z", NOW), "2026-07-26");
   assert.equal(toRunDate("2026-02-30T00:00:00Z", NOW), "2026-07-26");
 });

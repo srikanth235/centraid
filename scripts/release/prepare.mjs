@@ -1,17 +1,4 @@
 #!/usr/bin/env node
-/**
- * D2 prepare half of the release chain (see docs/release.md).
- *
- * Agent runs this to *prepare* — never publish. Steps:
- *   0. assert HEAD is a promoted candidate (optional --allow-uncandidated)
- *   1. assert working tree clean (optional --allow-dirty)
- *   2. run `bun run check:pr` unless --skip-check
- *   3. classify bump from CHANGELOG Unreleased (D4)
- *   4. print next version + surface matrix + publish command
- *
- * Authorization boundary: running this script is intent, not permission to
- * tag or push. Publish is scripts/release/publish.mjs after maintainer "go".
- */
 
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -26,11 +13,6 @@ const args = new Set(process.argv.slice(2));
 const allowDirty = args.has("--allow-dirty");
 const skipCheck = args.has("--skip-check");
 
-// #915 Wave 1 — FIRST, because it is the cheapest refusal and the one whose
-// remedy takes the longest. Everything below versions, classifies and prints a
-// publish command; none of that is worth doing for a SHA rung 3 never promoted.
-// `release.yml`'s `require-candidate` job enforces the same rule after the tag
-// exists, but being told here means never cutting the tag at all.
 assertHeadIsCandidate({ argv: process.argv.slice(2) });
 
 assertNoOpenNightlyQualityIssues();
@@ -128,7 +110,7 @@ try {
     JSON.stringify(report, null, 2) + "\n"
   );
 } catch {
-  // optional
+  // Intentionally empty.
 }
 
 process.stdout.write(JSON.stringify(report, null, 2) + "\n");

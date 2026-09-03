@@ -1,4 +1,3 @@
-// W5.4 (#842) — unit pins for the install/upgrade lifecycle judge. `node --test`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 

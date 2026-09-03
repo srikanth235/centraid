@@ -2,15 +2,6 @@ import { describe, expect, test } from "vitest";
 
 import { historyPoint } from "./history-point.mjs";
 
-/**
- * #535 / #839 Wave 5 — the durable-history read boundary.
- *
- * The gh-pages series carries whole `summary.json` files from every night this
- * report has ever run, including nights that predate every field added since.
- * The two properties under test are the ones that make reading it safe: a
- * field NOT on the whitelist never reaches the report, and a field that is on
- * it but absent reads as null/empty rather than as a flattering zero.
- */
 describe("historyPoint", () => {
   test("an unknown field never crosses the boundary", () => {
     const point = historyPoint({ label: "n", cellsMissing: 3, smuggled: 99 });

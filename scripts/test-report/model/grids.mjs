@@ -1,17 +1,3 @@
-/**
- * The two grids (#915 Wave 3, §6 coverage and §7 promises × surfaces).
- *
- * Neither is typed by hand any more. §6 is the deepest rung with a passing
- * journey per app × platform, plus the designed states each app owns and the
- * verbs its scenarios cover. §7 is the join of every lane's declared
- * `tags.qualities × tags.surfaces` with tonight's verdicts — so a promise has
- * evidence on a surface exactly when some lane says it does and then reports.
- *
- * Absence stays visible: a cell with no lane is `no evidence`, never blank,
- * unless the claims file declares it n/a with a reason.
- */
-
-/** The four platform columns of §6, and the seat each one is proven through. */
 export const PLATFORM_COLUMNS = Object.freeze([
   { id: "ios", label: "iOS", seat: "origin" },
   { id: "android", label: "Android", seat: "origin" },
@@ -19,15 +5,6 @@ export const PLATFORM_COLUMNS = Object.freeze([
   { id: "desktop", label: "Desktop", seat: "custodian" },
 ]);
 
-/**
- * The verb a scenario exercises, read off its id and label.
- *
- * The scenario register carries a layer and a status but no verb, and typing
- * one per scenario would be exactly the hand-maintained axis #915 exists to
- * remove. The words below are the vocabulary the register already uses; a
- * scenario matching none of them counts under `read`, which is the verb every
- * journey performs on the way to any other.
- */
 export const VERB_WORDS = Object.freeze({
   create: [
     "create",
@@ -54,7 +31,6 @@ export const VERB_WORDS = Object.freeze({
   share: ["share", "sharing", "grant", "publish", "export", "reach", "receipt"],
 });
 
-/** Which verb a scenario counts under. */
 export function scenarioVerb(scenario) {
   const haystack = `${scenario.id ?? ""} ${scenario.label ?? ""}`.toLowerCase();
   for (const [verb, words] of Object.entries(VERB_WORDS)) {
@@ -63,10 +39,6 @@ export function scenarioVerb(scenario) {
   return "read";
 }
 
-/**
- * §6 — app × platform, three modes.
- * @param {{claims: object, derived: object, evidence: Map<string, object>}} input the claims file, the derived views and tonight's evidence
- */
 export function buildCoverageGrid({ claims, derived, evidence }) {
   const journeys = derived.journeys ?? [];
   const passingFlows = new Map(); // flowId -> deepest rung proven tonight
@@ -149,17 +121,10 @@ export function buildCoverageGrid({ claims, derived, evidence }) {
   };
 }
 
-/**
- * §7 — 11 qualities × 10 surfaces, as the join of lane tags with verdicts.
- * @param {{claims: object, evidence: Map<string, object>, laneRegistry: object[]}} input the claims file, the derived views and tonight's evidence
- */
 export function buildPromises({ claims, evidence, laneRegistry }) {
   const qualities = claims.vocabulary?.qualities ?? [];
   const surfaces = claims.vocabulary?.surfaces ?? [];
 
-  // The n/a register is still keyed by the fifteen matrix surfaces; each new
-  // surface absorbs several of them, so a cell is n/a only when EVERY absorbed
-  // surface declared it n/a and no lane claims it.
   const naFor = (surface, quality) => {
     const absorbed = surface.absorbs ?? [];
     if (absorbed.length === 0) return null;

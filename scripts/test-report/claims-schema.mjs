@@ -1,19 +1,3 @@
-/**
- * The claims file contract (#915 Wave 3, contract C3).
- *
- * `tests/claims.json` is what a machine cannot derive: the qualities ×
- * surfaces vocabulary, the lane registry, the 45 claim rows with their
- * severity and the date each was last demonstrated red, the law registry, the
- * consent ledger, the join laws, the deliberate n/a cells with reasons, the
- * revisit triggers, and the flow ownership + `minimumTests` floors. Everything
- * observable — journeys, suite budgets, seeds, fuzz targets, Vitest projects,
- * Stryker configs — is derived at read time by `derive.mjs`.
- *
- * This module validates the file on every read. The report refuses to render
- * from a claims file it cannot understand, because a silently-half-read
- * registry produces a page that looks complete and is not.
- */
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -21,15 +5,12 @@ import { PLATFORMS, RUNGS } from "./evidence-schema.mjs";
 
 export const CLAIMS_SCHEMA_VERSION = 1;
 
-/** The four severities. Declared per claim, never computed (#915). */
 export const SEVERITIES = Object.freeze(["S1", "S2", "S3", "S4"]);
 
-/** Lane statuses: whether tonight's verdict gates promotion. */
 export const LANE_STATUSES = Object.freeze(["gating", "advisory"]);
 
 const ID = /^[a-z0-9][a-z0-9._-]*$/u;
 
-/** Assert the shape of `vocabulary`, returning problems. */
 function vocabularyErrors(vocabulary, push) {
   if (!vocabulary || typeof vocabulary !== "object") {
     push("vocabulary must be an object with qualities[] and surfaces[]");
@@ -58,7 +39,6 @@ function vocabularyErrors(vocabulary, push) {
   return seen;
 }
 
-/** Assert the shape of the lane registry. */
 function laneErrors(lanes, vocab, push) {
   if (!Array.isArray(lanes)) {
     push("lanes must be an array");
@@ -102,7 +82,6 @@ function laneErrors(lanes, vocab, push) {
   }
 }
 
-/** Assert the shape of the claim rows. */
 function claimErrors(claims, push) {
   if (!Array.isArray(claims)) {
     push("claims must be an array");
@@ -132,7 +111,6 @@ function claimErrors(claims, push) {
   }
 }
 
-/** Assert the deliberate-n/a register still carries its ritual. */
 function naErrors(naCells, push) {
   if (!naCells || typeof naCells !== "object" || Array.isArray(naCells)) {
     push("naCells must be an object keyed by cell id");
@@ -150,22 +128,13 @@ function naErrors(naCells, push) {
         `naCells.${id}.restated must state the reason at length, not as a fragment`
       );
     }
-    // `citation` stays optional, exactly as `scripts/audit-na-cells.mjs` has
-    // it: the restatement is the required proof, and a citation is checked for
-    // resolution only when a row carries one.
     if (row?.citation !== undefined && typeof row.citation !== "string") {
       push(`naCells.${id}.citation must be a string when present`);
     }
   }
 }
 
-/**
- * Validate a parsed claims file.
- * @param {unknown} claims a parsed claims file
- * @returns {{ok: boolean, errors: string[]}} every problem, never just the first
- */
 export function validateClaims(claims) {
-  /** @type {string[]} */
   const errors = [];
   const push = (message) => errors.push(message);
 
@@ -202,11 +171,6 @@ export function validateClaims(claims) {
   return { ok: errors.length === 0, errors };
 }
 
-/**
- * Read and validate the claims file.
- * @param {string} [file] defaults to `tests/claims.json` at the repo root
- * @returns {{claims: object, errors: string[]}} the parsed file and its validation errors
- */
 export function loadClaims(file) {
   const root = path.resolve(import.meta.dirname, "../..");
   const target = file

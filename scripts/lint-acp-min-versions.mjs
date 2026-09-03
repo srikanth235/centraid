@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-/**
- * ACP min-version drift guard (issue #504 batch 6).
- * Ensures registry defaultBin entries remain documented in docs/harnesses.md
- * and every kind declares a minVersion object.
- */
 
 import { readFileSync } from "node:fs";
 import path from "node:path";

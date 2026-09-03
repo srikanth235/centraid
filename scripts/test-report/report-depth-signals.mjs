@@ -1,11 +1,8 @@
-/** Persist every perf/scale measurement in the durable run summary. */
 export function collectLaneSeries(results) {
   const series = {};
   for (const result of results ?? []) {
     const base = String(result?.owner ?? "");
     if (!base) continue;
-    // Platform-keyed mobile evidence (#781): keep iOS and Android as distinct
-    // trend series instead of last-write-wins over one shared owner key.
     const platform = String(result?.platform ?? "");
     const owner = platform ? `${base} [${platform}]` : base;
     for (const measurement of result.measurements ?? []) {
@@ -26,7 +23,6 @@ export function collectLaneSeries(results) {
   return series;
 }
 
-/** Per-owner Playwright flake rates from durable run classifications. */
 export function calculateFlakeRates(currentEvidence, historyPoints) {
   const owners = new Set();
   for (const point of historyPoints ?? []) {
@@ -63,7 +59,6 @@ export function calculateFlakeRates(currentEvidence, historyPoints) {
     );
 }
 
-/** Coverage/mutation values that are weak even when their configured floor passes. */
 export function findAbsoluteWeaknesses(
   coverageRows,
   mutationRows,
@@ -109,7 +104,6 @@ export function findAbsoluteWeaknesses(
   return weaknesses;
 }
 
-/** Floors that have lagged the same high-water level for N consecutive runs. */
 export function sustainedRatchetCandidates(
   currentSeries,
   historyPoints,
@@ -141,7 +135,6 @@ export function sustainedRatchetCandidates(
   return candidates.sort((left, right) => left.key.localeCompare(right.key));
 }
 
-/** Infra mismatches that occupied the same cell for too many full runs. */
 export function agedInfraMismatches(
   currentIds,
   historyPoints,
@@ -156,10 +149,6 @@ export function agedInfraMismatches(
   );
 }
 
-/**
- * Drop `_`-prefixed / non-scope meta keys from a floors-style config
- * (e.g. coverage-floors `_comment`) so they never render as coverage rows.
- */
 export function filterFloorConfigEntries(floorConfig) {
   return Object.entries(floorConfig ?? {}).filter(
     ([key, value]) =>
@@ -169,28 +158,12 @@ export function filterFloorConfigEntries(floorConfig) {
   );
 }
 
-/**
- * Match a coverage-floor scope glob against a repo-relative file path.
- *
- * Mirrors how vitest resolves threshold globs (picomatch), because the report
- * must agree with the gate: `*` matches within one path segment, `**` crosses
- * segments, and `{a,b}` alternates. A plain `startsWith` prefix — which this
- * replaced — silently renders every scope narrower than a directory (such as
- * `packages/client/src/*.{ts,tsx}`, #656 Layer 1B) as an unmeasured empty row.
- *
- * Kept dependency-free on purpose: `generate.mjs` is executed from synthetic
- * roots that have no `node_modules`.
- *
- * @param {string} scope Floor-config key.
- * @returns {(file: string) => boolean} Predicate over repo-relative paths.
- */
 export function scopeMatcher(scope) {
   let pattern = "";
   for (let i = 0; i < scope.length; i++) {
     const char = scope[i];
     if (char === "*") {
       if (scope[i + 1] === "*") {
-        // `**/` may also match zero segments, so `a/**/b.ts` covers `a/b.ts`.
         if (scope[i + 2] === "/") {
           pattern += "(?:.*/)?";
           i += 2;
@@ -209,10 +182,6 @@ export function scopeMatcher(scope) {
   return (file) => re.test(file);
 }
 
-/**
- * Merge per-lane marker maps written as `lane-starts-<lane>.json` (and the
- * legacy single `lane-starts.json`) so merge-multiple never last-write-wins.
- */
 export function mergeLaneMarkers(markerMaps) {
   const merged = {};
   for (const map of markerMaps ?? []) {

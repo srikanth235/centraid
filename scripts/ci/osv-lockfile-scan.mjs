@@ -1,17 +1,4 @@
 #!/usr/bin/env node
-/**
- * Run OSV-Scanner against the monorepo lockfile and fail closed on CRITICAL
- * findings (#671). HIGH and below are reported for operators but do not fail
- * the gate — dependency-review already blocks *new* HIGH on the PR diff.
- *
- * Usage:
- *   osv-scanner must be on PATH (CI installs a pinned release).
- *   node scripts/ci/osv-lockfile-scan.mjs
- *
- * Exit codes:
- *   0 — no CRITICAL (table printed)
- *   1 — CRITICAL present, or scanner/parse failure
- */
 
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -22,18 +9,11 @@ const root = path.resolve(import.meta.dirname, "../..");
 const lockfile = path.join(root, "bun.lock");
 const config = path.join(root, "osv-scanner.toml");
 
-/** CVSS / OSV score at or above this is treated as CRITICAL. */
 const CRITICAL_SCORE = 9;
-/** CVSS / OSV score at or above this (and below CRITICAL) is HIGH. */
 const HIGH_SCORE = 7;
 const MEDIUM_SCORE = 4;
 const LOW_SCORE = 1;
 
-/**
- * Map a severity label or numeric score to a comparable number.
- * @param {unknown} value Severity string or number from OSV JSON.
- * @returns {number} Numeric score used for thresholding.
- */
 function severityScore(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "") {
@@ -48,11 +28,6 @@ function severityScore(value) {
   return 0;
 }
 
-/**
- * Best-effort score for one vulnerability object.
- * @param {unknown} vuln OSV vulnerability entry.
- * @returns {number} Highest score found on the entry.
- */
 function vulnScore(vuln) {
   if (!vuln || typeof vuln !== "object") return 0;
   const v = /** @type {Record<string, unknown>} */ (vuln);
@@ -77,22 +52,12 @@ function vulnScore(vuln) {
   return 0;
 }
 
-/**
- * Score for an OSV package group (`max_severity`).
- * @param {unknown} group OSV group object.
- * @returns {number} Group max severity as a number.
- */
 function groupScore(group) {
   if (!group || typeof group !== "object") return 0;
   const g = /** @type {Record<string, unknown>} */ (group);
   return severityScore(g.max_severity);
 }
 
-/**
- * Parse OSV-Scanner JSON and collect CRITICAL package findings.
- * @param {unknown} report Parsed OSV-Scanner JSON report.
- * @returns {{ critical: string[], high: string[], totalPackages: number }} Package lines by severity.
- */
 export function summarizeOsvReport(report) {
   const critical = [];
   const high = [];
@@ -139,11 +104,6 @@ export function summarizeOsvReport(report) {
   return { critical, high, totalPackages };
 }
 
-/**
- * Invoke osv-scanner on bun.lock and classify findings.
- * @param {string} [osvBin] Path or name of the osv-scanner binary.
- * @returns {{ code: number, table: string, summary: ReturnType<typeof summarizeOsvReport> }} Scan result for CI.
- */
 export function runOsvLockfileScan(osvBin = "osv-scanner") {
   if (!existsSync(lockfile)) {
     return {

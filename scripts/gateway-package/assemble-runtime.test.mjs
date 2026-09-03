@@ -11,13 +11,6 @@ import {
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
-/**
- * Tests for lean runtime assemble + symlink rewrite (issue #504).
- * Run: node --test scripts/gateway-package/assemble-runtime.test.mjs
- *
- * Requires a built monorepo gateway closure (each package dist present).
- * One assemble per file — full node_modules copy is expensive.
- */
 import { test } from "node:test";
 
 import {
@@ -90,11 +83,9 @@ test("assembleRuntime rewrites @centraid links and resolves under out only", (t)
       );
     }
 
-    // Non-closure workspace names must not remain under @centraid.
     assert.equal(existsSync(path.join(scope, "tsconfig")), false);
     assert.equal(existsSync(path.join(scope, "client")), false);
 
-    // Module resolution from assembled gateway must not hit monorepo packages/.
     const fromFile = path.join(out, "packages/server/dist/cli/cli.js");
     const req = createRequire(fromFile);
     const resolved = req.resolve("@centraid/server/engine");
@@ -110,14 +101,12 @@ test("assembleRuntime rewrites @centraid links and resolves under out only", (t)
       `resolved into monorepo packages: ${resolved}`
     );
 
-    // Runtime deps (e.g. esbuild) must survive bun's .bun store remap.
     const reqFromEngine = createRequire(
       path.join(out, "packages/server/dist/index.js")
     );
     assert.doesNotThrow(() => reqFromEngine.resolve("esbuild"));
     assert.ok(underOut(reqFromEngine.resolve("esbuild"), out));
 
-    // Idempotent rewrite.
     rewriteRuntimeSymlinks(out, root);
     assert.equal(
       path.isAbsolute(readlinkSync(path.join(scope, "server"))),

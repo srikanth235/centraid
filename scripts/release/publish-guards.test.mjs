@@ -17,35 +17,9 @@ import {
   parseOpenNightlyIssues,
 } from "./nightly-quality-blockers.mjs";
 
-/**
- * Guard tests for the release publish/prepare halves (issue #656 Layer 1F).
- *
- * Both scripts are top-level `main`s that derive their repo root from
- * `import.meta.dirname`, so each test runs them inside a **synthetic root**:
- * a temp directory holding a copy of `scripts/release/`, a fixture
- * `package.json` / `CHANGELOG.md`, and the one native file `sync-versions.mjs`
- * requires. Nothing here can touch the real repo, its git history, or npm.
- *
- * Every publish case either aborts before the first mutation or runs with
- * `--dry-run`, which returns before `git commit` / `git tag`.
- */
-
 const realRoot = path.resolve(import.meta.dirname, "../..");
 const FIXTURE_VERSION = "0.4.2";
 
-/**
- * Env that keeps spawned git/node calls off the user's global config.
- *
- * The repo-pointing variables must be STRIPPED, not just overridden (#668).
- * Git exports `GIT_DIR` to its hooks, so under `pre-push` this file's
- * `process.env` carries a `GIT_DIR` aimed at the real repository. Inheriting
- * it made `git init -q` in a temp `cwd` re-initialize the REAL repo instead —
- * and because that `GIT_DIR` is a worktree admin directory with no work tree
- * of its own, the re-init wrote `core.bare = true` into the shared config.
- * That broke `git` in the main checkout and in every worktree, which in turn
- * failed the three gates that shell out to git, on every single push.
- * `cwd` alone does not isolate git: `GIT_DIR` always wins over it.
- */
 const REPO_POINTING_GIT_VARS = [
   "GIT_DIR",
   "GIT_WORK_TREE",
@@ -56,7 +30,6 @@ const REPO_POINTING_GIT_VARS = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
 ];
 
-/** Copy of `env` with every repo-pointing git variable removed. */
 function stripRepoPointingGitEnv(env) {
   const out = { ...env };
   for (const key of REPO_POINTING_GIT_VARS) delete out[key];
@@ -101,10 +74,6 @@ describe("nightly release blocker", () => {
   });
 });
 
-/**
- * Build a synthetic monorepo root that the release scripts can run against.
- * @param {{ changelog?: string, version?: string }} [options] Fixture overrides.
- */
 function makeFixtureRoot(options = {}) {
   const root = tempDirSync("centraid-release-");
   cpSync(
@@ -146,7 +115,6 @@ function makeFixtureRoot(options = {}) {
   return root;
 }
 
-/** @param {string} root @param {string[]} args */
 function runPublish(root, args) {
   return spawnSync(
     process.execPath,
@@ -155,15 +123,6 @@ function runPublish(root, args) {
   );
 }
 
-/**
- * @param {string} root @param {string[]} args
- *
- * Every fixture passes `--allow-uncandidated`: #915 made "HEAD is the promoted
- * candidate" a prepare precondition, and a throwaway fixture repo with no
- * remote is by construction not one. The refusal itself is asserted by its own
- * test below and unit-tested in candidate-guard.test.ts; the fixtures below are
- * about the OTHER guards, so they opt out explicitly rather than silently.
- */
 function runPrepare(root, args) {
   return spawnSync(
     process.execPath,
@@ -178,12 +137,7 @@ function runPrepare(root, args) {
 }
 
 describe("fixture isolation", () => {
-  // The file header promises these fixtures cannot touch the real repo. Under
-  // `pre-push` that promise used to be false, and the failure was invisible:
-  // the fixtures all passed while re-initializing the real repository around
-  // them (#668). Assert the promise instead of documenting it.
   test("a hook environment is scrubbed of every repo-pointing git variable", () => {
-    // Exactly what `pre-push` hands this process.
     const hookEnv = {
       PATH: "/usr/bin",
       GIT_DIR: "/real/repo/.git/worktrees/wt",
@@ -201,7 +155,6 @@ describe("fixture isolation", () => {
         `${key} would redirect fixture git at the real repo`
       ).not.toHaveProperty(key);
     }
-    // Unrelated variables survive — this is a scalpel, not a wipe.
     expect(scrubbed.PATH).toBe("/usr/bin");
   });
 
@@ -222,7 +175,6 @@ describe("fixture isolation", () => {
 });
 
 describe("release publish guards", () => {
-  /** @type {string} */
   let root;
   beforeAll(() => {
     root = makeFixtureRoot();
@@ -394,9 +346,6 @@ describe("release publish derivation", () => {
 });
 
 describe("release prepare guards", () => {
-  // #915 Wave 1 — releases ship builds rung 3 promoted. Without the override a
-  // fixture repo (no remote, no `refs/candidates/latest`) must be refused
-  // BEFORE anything else is checked, because the remedy takes the longest.
   test("refuses to prepare a HEAD that was never promoted", () => {
     const root = makeFixtureRoot();
     const result = spawnSync(

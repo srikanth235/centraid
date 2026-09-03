@@ -1,6 +1,3 @@
-// Development-only fixture. The shipped app imports ./content.ts (written by the content author).
-// Shape must match SPEC.md §"content.ts schema" exactly.
-
 import type {
   CityDistrict,
   CityMeta,

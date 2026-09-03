@@ -22,8 +22,6 @@ test("the gate catches the platform hairline used as a border width", () => {
 });
 
 test("the gate catches a test mock that re-declares the field", () => {
-  // The RN mocks in apps/mobile carried `hairlineWidth: 1`, which quietly made
-  // every unit test agree with the handoff while the device did not.
   const findings = scanSource(
     `vi.mock("react-native", () => ({
        StyleSheet: { create: (s) => s, hairlineWidth: 1 },

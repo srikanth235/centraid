@@ -96,8 +96,6 @@ describe("MUTATION_SEEDS", () => {
   });
 
   test("every seed watches its own config pair, and every id is unique", () => {
-    // #545 A5 makes a missing score a gate failure, so a seed whose watch list
-    // omits its own config would go stale without the PR lane noticing.
     const ids = MUTATION_SEEDS.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
     const labels = MUTATION_SEEDS.map((s) => s.label);
@@ -117,9 +115,6 @@ describe("MUTATION_SEEDS", () => {
   });
 
   test("every seed has a floor and every floor names a seed", () => {
-    // The weakness gate (`_absoluteWeaknessBelow`) and the matrix computation
-    // both read floors ∪ scores by id; an unpaired entry on either side is a
-    // silent hole.
     const floors = loadMutationFloors();
     expect(assertFloorsSubsetOfSeeds(floors)).toStrictEqual([]);
     for (const seed of MUTATION_SEEDS) {

@@ -1,9 +1,3 @@
-/**
- * Wire/handshake fuzz targets (#839 G10).
- *
- * The two targets that eat bytes a remote peer chose: the gateway info
- * handshake judge and the pairing QR payload + header frame codec.
- */
 import { utf8 } from "./mutate.mjs";
 import {
   BUILD,
@@ -14,9 +8,6 @@ import {
   stableStringify,
 } from "./targets-support.mjs";
 
-/** @typedef {import('./targets-support.mjs').FuzzTarget} FuzzTarget */
-
-/** @type {FuzzTarget[]} */
 export const PROTOCOL_TARGETS = [
   {
     id: "protocol-handshake",
@@ -47,8 +38,6 @@ export const PROTOCOL_TARGETS = [
         try {
           value = JSON.parse(text);
         } catch {
-          // A non-JSON body is a legitimate handshake input (a proxy error
-          // page, a truncated response); feed the raw text through instead.
           wasJson = false;
           value = text;
         }
@@ -110,8 +99,6 @@ export const PROTOCOL_TARGETS = [
             );
           }
         }
-        // The refusal detail is drawn from a small fixed set, so it is a
-        // usable stand-in for "which branch did we reach".
         return `json:${wasJson}|ok:${result.ok}|${result.ok ? `accepted:${Object.keys(result.info).length}` : `${result.reason}:${result.detail.slice(0, 40)}`}`;
       };
     },
@@ -166,8 +153,6 @@ export const PROTOCOL_TARGETS = [
             "re-encoding an accepted payload does not re-parse to itself"
           );
         }
-        // Header frames are encoded from values the peer supplied, so the
-        // length prefix must always describe exactly the JSON that follows.
         let header;
         try {
           header = JSON.parse(text);

@@ -76,20 +76,6 @@ async function globFiles(pattern: string): Promise<string[]> {
   return files;
 }
 
-// U4 copy-density ratchet (#805). Member-facing prose is walked as raw string
-// literals — there is no TypeScript AST pass in this suite and none is wanted:
-// the gate is a ratchet over copy, not a type-aware linter. Precision beats
-// recall here, because a false positive on a non-UI string costs an audit
-// slice a wasted allowlist entry while a missed string only survives until the
-// next tighten. The pipeline is: strip comments and commentary prose -> pull
-// quoted literals (template literals carrying `${}` substitutions are skipped
-// on purpose, since a spliced value cannot be length- or sentence-judged from
-// source) -> keep only literals that read as prose (start with an uppercase
-// letter, three or more words, ≥ 16 chars, ≥ 70% letters, no code punctuation,
-// SQL, URLs, snake_case or arrow syntax) -> drop literals whose call site or
-// assignment target is a machine key (`id:`, `className=`, `console.log(`,
-// `startsWith(` …). What survives is judged by three rules: over 120 chars,
-// two or more sentence boundaries, or a banned filler word.
 const COPY_SCOPE = [
   "packages/client/src/**/*.{ts,tsx}",
   "packages/blueprints/apps/**/*.{ts,tsx}",
@@ -98,15 +84,9 @@ const COPY_SCOPE = [
   "apps/web/src/**/*.{ts,tsx}",
   "apps/extension/src/**/*.{ts,tsx}",
   "packages/design/src/**/*.{ts,tsx}",
-  // Server scope is deliberately narrow: only the route modules that mint
-  // strings the shell renders verbatim (connection presets, OAuth outcomes).
-  // Engine/automation/acp/serve strings are logs, protocol text and internal
-  // errors this walk cannot classify, so they stay out of reach.
   "packages/server/src/routes/**/*.ts",
 ];
 
-// packages/design/src/roles.ts documents design tokens in prose for the
-// gallery and DESIGN.md; those descriptions never reach a member's screen.
 const COPY_SKIP_FILE =
   /(?:\.test\.|\.spec\.|\.stories\.|\.d\.ts$|__fixtures__|\/fixtures\/|-fixtures\.|^packages\/design\/src\/roles\.ts$)/u;
 
@@ -124,7 +104,6 @@ const COPY_MACHINE_KEY =
 const COPY_MACHINE_CALL =
   /(?:console\.\w+|require|import|describe|test|it|expect|createHash|new Error|new TypeError|matchMedia|querySelector\w*|getElementById|createElement|addEventListener|removeEventListener|setAttribute|getAttribute|startsWith|endsWith|includes|split|join|replace|replaceAll|match|has|get|set|emit|on|off|log|warn|debug|trace)\s*\(\s*$/u;
 
-/** Blank out comments so commentary prose never reaches the literal scanner. */
 function stripComments(source: string): string {
   let out = "";
   let mode: "code" | "line" | "block" | "string" = "code";
@@ -173,7 +152,6 @@ function stripComments(source: string): string {
   return out;
 }
 
-/** Two or more sentences: an internal boundary plus a terminated tail. */
 function copySentenceCount(text: string): number {
   const inner = text.match(/[.!?…](?=\s+["'(]?\p{Lu})/gu)?.length ?? 0;
   return inner + (/[.!?…]["')]?\s*$/u.test(text) ? 1 : 0);
@@ -211,23 +189,6 @@ function scanCopy(
   return flagged;
 }
 
-// P3 over the phone (#880). The mounted reader is not asked for SQL: a screen
-// hands `useReplicaQuery`/`session.read` a REQUEST — `{ entity, where, orderBy,
-// limit }` — and the reader compiles it (apps/mobile/src/lib/replica/
-// replica-read-pushdown.ts). So the mobile half of this gate walks request
-// literals and judges them exactly as the blueprint half judges
-// `ctx.vault.read({ entity })`: a growth entity with no `limit` and no
-// equality/`in` predicate is an unbounded read.
-//
-// Detection keys on the request SHAPE, not on the call site, for two reasons.
-// A request declared as data is still a read — Home's tile requests live in
-// `home-tile-reads.ts` as constants and reach the reader through a hook two
-// files away — and a call-site anchor would miss every one of them. And an
-// object that merely NAMES an entity is not a read: `BLUEPRINT_SEARCH_TARGETS`
-// carries `entity` beside `idField`/`labelFields`, so requiring every top-level
-// key to belong to the request vocabulary keeps descriptors out without an
-// allowlist. Comments are stripped first, so neither a commented-out `limit:`
-// nor prose can decide a verdict.
 const REPLICA_REQUEST_KEYS = new Set([
   "entity",
   "limit",
@@ -238,7 +199,6 @@ const REPLICA_REQUEST_KEYS = new Set([
   "where",
 ]);
 
-/** Text and top-level key names of the object literal opening at `open`. */
 function replicaObjectLiteral(
   source: string,
   open: number
@@ -276,7 +236,6 @@ function replicaObjectLiteral(
   return { body: source.slice(open, index + 1), keys };
 }
 
-/** The `{` that opens the object literal containing `index`, or -1. */
 function replicaEnclosingBrace(source: string, index: number): number {
   let depth = 0;
   for (let cursor = index; cursor >= 0; cursor -= 1) {
@@ -290,7 +249,6 @@ function replicaEnclosingBrace(source: string, index: number): number {
   return -1;
 }
 
-/** `file#entity` for every unbounded growth-entity replica read in one file. */
 function scanReplicaReads(
   file: string,
   rawSource: string,
@@ -316,13 +274,6 @@ function scanReplicaReads(
 
 describe("issue #679 user-facing quality gates", () => {
   test("A1/A3/A4: every visible quality claim is classified, governed and demonstrated red", async () => {
-    // #915 retired `tests/matrix.json#qualities` — a seven-row panel whose 45
-    // gates were nested under it and whose demonstrated-red seeds lived in a
-    // parallel top-level block, so a gate could lose its seed without either
-    // half noticing. The panel is now 45 flat claim ROWS in
-    // `tests/claims.json#claims`, each carrying its own family, severity and
-    // demonstrated-red evidence, which is what makes this test one pass over
-    // one list instead of a join.
     const claimsFile = await json("tests/claims.json");
     const claims = claimsFile["claims"] as Array<{
       id: string;
@@ -381,10 +332,6 @@ describe("issue #679 user-facing quality gates", () => {
     expect(year3FixtureCacheKey(second, 4)).toBe(
       year3FixtureCacheKey(first, 4)
     );
-    // …and the schema the fixture was built under is part of its identity, so
-    // a rung landing invalidates the cache instead of handing a newer build a
-    // vault that predates one of its tables (the nightly restore lane failed
-    // exactly that way, with `no such table: main.enrich_policy_rule`).
     expect(year3FixtureCacheKey(first, 4)).not.toBe(
       year3FixtureCacheKey(first, 5)
     );
@@ -602,20 +549,6 @@ describe("issue #679 user-facing quality gates", () => {
   });
 
   test("T2: every shipped app action declares consent and an inherited side-effect class", async () => {
-    // THE SEAM MOVED, THE SEAM DID NOT GO (#883 B2). Until the action kit
-    // landed, every one of the 131 handlers spelled `ctx.vault.invoke` itself,
-    // so "contains `ctx.vault`" and "reaches the consent-recording command
-    // seam" were the same sentence. They are not any more: a handler now hands
-    // its one typed command to `runVaultAction(ctx, …)` and the kit makes the
-    // call. Reading the old string off a handler that dispatches through the
-    // kit would fail an action that is MORE governed than before.
-    //
-    // So the rule is a disjunction with the indirection nailed shut. A handler
-    // passes by reaching the seam directly, or by importing the kit AND calling
-    // `runVaultAction(` — and the kit itself is asserted, once, to route
-    // through `ctx.vault`. A handler that does neither still fails, and an
-    // emptied kit fails everything at once rather than making every handler
-    // vacuously compliant.
     const actionKitFile = "packages/blueprints/apps/_shared/action-kit.ts";
     const actionKitImport = /_shared\/action-kit(?:\.tsx?)?["']/u;
     const actionKitSource = await readFile(
@@ -939,8 +872,6 @@ describe("issue #679 user-facing quality gates", () => {
           sql: "SELECT client_secret, access_token, refresh_token, api_key FROM sync_connection_credential",
         }
       ),
-      // Locker's sealed sidecars (#872): one read per table, scoped to the
-      // seeded canary item so every selected cell is a populated sealed one.
       ...[
         "SELECT value_sealed FROM locker_item_field WHERE item_id = 'year3-sealed-locker'",
         "SELECT private_key FROM locker_item_passkey WHERE item_id = 'year3-sealed-locker'",
@@ -955,7 +886,6 @@ describe("issue #679 user-facing quality gates", () => {
         )
       ),
     ];
-    // A masked read that returned no rows would satisfy `every` vacuously.
     expect(sqlArtifacts.map((artifact) => artifact.rows.length)).not.toContain(
       0
     );
@@ -964,12 +894,6 @@ describe("issue #679 user-facing quality gates", () => {
     ).toSatisfy((values: unknown[]) =>
       values.every((value) => value === SEALED_PLACEHOLDER)
     );
-    // HISTORY IS REVISIONS (#916, D2). `locker_item_history` carried a sealed
-    // `password` column and is gone; the previous value now lives in a
-    // `core_entity_revision` snapshot. That snapshot must record THAT a sealed
-    // column changed and never WHAT it changed to, so the canary reads the
-    // snapshot as stored: no placeholder to check, because there must be no
-    // secret there in the first place.
     const snapshots = gateway.sql(
       {
         kind: "device",
@@ -1034,9 +958,6 @@ describe("issue #679 user-facing quality gates", () => {
         purpose: "dpv:ServiceProvision",
       }),
     ];
-    // Reveal is the ONE surface a sentinel is allowed through, so every
-    // declared column has to come back out of it — a sealed cell nothing can
-    // unseal is a data-loss bug wearing a passing canary.
     const revealedText = JSON.stringify(revealed);
     for (const sentinel of Object.values(profile.sealedSentinels))
       expect(revealedText, `reveal never returned ${sentinel}`).toContain(
@@ -1317,9 +1238,6 @@ describe("issue #679 user-facing quality gates", () => {
       query: string;
       reason: string;
     }>;
-    // A waiver is a debt record, so it has to say what the debt is. An entry
-    // with no reason is a silent exemption, which is the thing the waiver file
-    // exists to prevent.
     for (const entry of entries) {
       expect(entry.query, JSON.stringify(entry)).toBeTypeOf("string");
       expect(entry.reason.length, entry.query).toBeGreaterThan(8);
@@ -1381,7 +1299,6 @@ describe("issue #679 user-facing quality gates", () => {
         offset = Math.max(cursor, offset + needle.length);
       }
     }
-    // The phone reads the same growth entities through the mounted replica.
     const mobileFiles = (
       await Promise.all(
         ["apps/mobile/src/**/*.ts", "apps/mobile/src/**/*.tsx"].map(globFiles)
@@ -1408,8 +1325,6 @@ describe("issue #679 user-facing quality gates", () => {
       ...[...found]
         .filter((query) => !waivers.has(query))
         .map((query) => `unwaived ${query}`),
-      // A waiver that no longer matches an unbounded read must leave the file,
-      // or the debt list stops being a debt list.
       ...[...waivers]
         .filter((query) => !found.has(query))
         .map((query) => `stale ${query}`),
@@ -1452,15 +1367,6 @@ describe("issue #679 user-facing quality gates", () => {
   });
 
   test("U4: user-facing copy stays short, single-thought and filler-free", async () => {
-    // Tighten-only ceiling (#805). This number started at the day-one seed
-    // count (255) and may only ever fall: audit slices delete seeds from
-    // copyRatchet.entries and lower maxEntries, and this constant tracks them
-    // down. Raising it means new verbose copy shipped, which is the regression
-    // the gate exists to stop. Slice C (shared-string promotion) took it to
-    // 216 — 40 seeds deleted, one added for the deny sheet's allowlisted
-    // destructive-confirm sentences. Audit slices D1–D5 drained the rest: the
-    // 31 that remain are all consent, destructive-confirm, or
-    // security/privacy disclosures — the deliberate residue, not debt.
     const COPY_SEED_CEILING = 31;
     const allowlistFile = await json("tests/quality/copy-allowlist.json");
     const ratchet = allowlistFile["copyRatchet"] as {
@@ -1499,8 +1405,6 @@ describe("issue #679 user-facing quality gates", () => {
           (item) =>
             `unallowed ${item.reasons.join("+")} ${item.file}: ${item.literal.slice(0, 60)}`
         ),
-      // Stale entries are violations too: an allowlisted string that no longer
-      // exists must leave the file, or the ceiling stops meaning anything.
       ...ratchet.entries
         .filter((entry) => !present.has(keyed(entry)))
         .map((entry) => `stale ${entry.file}: ${entry.literal.slice(0, 60)}`),

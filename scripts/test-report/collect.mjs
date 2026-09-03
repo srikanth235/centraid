@@ -1,15 +1,6 @@
-/**
- * Everything the report reads off disk (#915 Wave 3).
- *
- * `read-model.mjs` is pure and `render/` is pure; this module is the only
- * place that touches the filesystem, so the whole page can be driven from a
- * fixture root by handing `buildModel` the same shapes with none of the I/O.
- */
-
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-/** Read JSON at `file`, or `fallback` when it is absent or unreadable. */
 export function readJsonAt(file, fallback = null) {
   try {
     return JSON.parse(readFileSync(file, "utf8"));
@@ -18,7 +9,6 @@ export function readJsonAt(file, fallback = null) {
   }
 }
 
-/** The durable history points, oldest first, capped at `limit`. */
 export function readHistory(dir, limit = 30) {
   let names;
   try {
@@ -34,11 +24,6 @@ export function readHistory(dir, limit = 30) {
     .slice(-limit);
 }
 
-/**
- * Coverage rows against their floors, with the sustained-headroom candidates.
- * `floorsFile` is the merged floors ledger; the globs are its `coverage`
- * section (#915 Wave 4).
- */
 export function readCoverageFloors({ summaryFile, floorsFile, history }) {
   const summary = readJsonAt(summaryFile, null);
   const floors = readJsonAt(floorsFile, {}).coverage ?? {};
@@ -55,8 +40,6 @@ export function readCoverageFloors({ summaryFile, floorsFile, history }) {
       Number.isFinite(lines) && Number.isFinite(target)
         ? Number((lines - target).toFixed(1))
         : null;
-    // A ratchet candidate is headroom that has SURVIVED: the same scope has
-    // been above its floor on every night in the durable history we hold.
     const sustained =
       headroom !== null &&
       headroom >= 5 &&
@@ -81,7 +64,6 @@ export function readCoverageFloors({ summaryFile, floorsFile, history }) {
   };
 }
 
-/** Mutation scores joined with their floors. */
 export function readMutation({ scoresFile, floorsFile }) {
   const scores = readJsonAt(scoresFile, null);
   const floors = readJsonAt(floorsFile, {}).mutation ?? {};
@@ -100,7 +82,6 @@ export function readMutation({ scoresFile, floorsFile }) {
   return rows;
 }
 
-/** Fuzz results, if the lane published any. */
 export function readFuzz(file) {
   const parsed = readJsonAt(file, null);
   if (!parsed) return [];
@@ -113,7 +94,6 @@ export function readFuzz(file) {
   }));
 }
 
-/** `QUALITY.md`'s `## Open` section, one entry per bullet, with an age. */
 export function readFieldObservations(file, today) {
   let source;
   try {
@@ -140,10 +120,7 @@ export function readFieldObservations(file, today) {
     });
 }
 
-/** The down-only inventories, as counts for the evidence appendix. */
 export function readInventory(root) {
-  // The four ledgers of #915 Wave 4: skips, env-red and sleeps are sections of
-  // tests/inventory.json; the flaky-test entries are tests/quarantine.json.
   const inventory = readJsonAt(path.join(root, "tests/inventory.json"), {});
   const quarantine = readJsonAt(path.join(root, "tests/quarantine.json"), {
     entries: [],
@@ -159,11 +136,6 @@ export function readInventory(root) {
   };
 }
 
-/**
- * Trend series from the durable history's `laneSeries`, one per measurement.
- * A series is handed to the renderer whole; §9 decides whether it has enough
- * points to earn a chart.
- */
 export function readTrends(history) {
   const series = new Map();
   for (const point of history) {

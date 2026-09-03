@@ -1,23 +1,4 @@
 #!/usr/bin/env node
-/**
- * `bun run lint:evidence-mapping` — unmapped evidence is a rung-2 lint
- * failure, not a report banner (#915 Wave 3).
- *
- * Two directions, and both matter:
- *
- *   1. every `Write lane evidence` step in every workflow names a lane the
- *      claims file registers — otherwise the night's evidence directory
- *      carries a file the report has no row for, and the reader cannot tell a
- *      lane that vanished from a lane that was never registered;
- *   2. every such step names its lane consistently with the registry's rung
- *      and platform, so `--rung 4` in YAML and `rung: 2` in the registry
- *      cannot disagree about which question the lane answers.
- *
- * The converse — a registered lane with no workflow step yet — is a WARNING,
- * not a failure: the registry is allowed to run ahead of the wiring, and the
- * lane renders as `no evidence` on the board until the step lands, which is
- * the honest state and already visible.
- */
 
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -27,7 +8,6 @@ import { loadClaims } from "./claims-schema.mjs";
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const WORKFLOWS = path.join(ROOT, ".github/workflows");
 
-/** The `--flag value` pairs of one `write-evidence.mjs` invocation. */
 export function parseStep(command) {
   const flags = {};
   for (const match of command.matchAll(
@@ -38,17 +18,6 @@ export function parseStep(command) {
   return flags;
 }
 
-/**
- * A lane id as the registry spells it.
- *
- * Two shapes in the workflows are not literal job ids and both are legitimate:
- * a matrix leg (`coverage-shard-${{ matrix.shard }}`) writes one file per leg
- * under one registered lane, and a loop over reusable-workflow results writes
- * several lanes from one step with `--lane "$lane"`. The first is resolved by
- * dropping the expression suffix; the second by reading the literal lane names
- * out of the loop's own list, which is why `stepsIn` keeps the block around
- * each invocation.
- */
 export function resolveLanes(raw, block) {
   if (!raw) return [];
   if (!raw.includes("$")) return [raw];
@@ -60,10 +29,6 @@ export function resolveLanes(raw, block) {
   return [...new Set(literals)];
 }
 
-/**
- * Every evidence-writing step in a workflow's source, with the block around it
- * so a templated `--lane` can be resolved against the step's own lane list.
- */
 export function stepsIn(source) {
   const steps = [];
   const pattern =
@@ -79,7 +44,6 @@ export function stepsIn(source) {
   return steps;
 }
 
-/** The rule engine, pure over an injected world. */
 export function checkEvidenceMapping({ workflows, lanes }) {
   const errors = [];
   const warnings = [];
@@ -134,7 +98,6 @@ export function checkEvidenceMapping({ workflows, lanes }) {
   return { errors, warnings };
 }
 
-/** Read every workflow file. */
 function readWorkflows(dir) {
   const workflows = {};
   for (const name of readdirSync(dir)) {

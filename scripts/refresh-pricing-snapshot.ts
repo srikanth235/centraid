@@ -1,15 +1,3 @@
-/*
- * Dev-time refresh of the committed LiteLLM pricing snapshot (issue #445).
- *
- * Fetches BerriAI/litellm's `model_prices_and_context_window.json` (MIT),
- * filters it through the SAME `filterLiteLLM` the gateway warmer uses, and
- * writes `packages/server/src/engine/pricing/litellm-snapshot.json`. Run
- * manually when refreshing bundled prices — this is NOT wired into CI (the
- * live disk-cached warmer handles day-to-day drift at runtime).
- *
- *   bun scripts/refresh-pricing-snapshot.ts
- */
-
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 

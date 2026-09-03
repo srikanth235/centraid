@@ -1,17 +1,15 @@
-<!-- HERO -->
       <section class="ch-hero wrap">
         <p class="eyebrow r">Learn it · the foundations</p>
         <h1 class="r" style="--d: 0.1s">Nothing here is invented. <em>That's the point.</em></h1>
         <p class="lede r" style="--d: 0.22s">
           Centraid is composed from ideas that already earned their keep — W3C vocabularies, IETF
           protocols, a database that is just a file, cryptographic keys as identity. This page is
-          ten short primers, one per idea: the problem it solves, where it came from, and how it
-          shows up in Centraid. <b>No prior knowledge assumed</b>, no information overload — just
+          ten short primers, one per idea: the problem it solves, where it came from, and how i
+          shows up in Centraid. <b>No prior knowledge assumed</b>, no information overload — jus
           enough of each to read the rest of the docs with confidence.
         </p>
       </section>
 
-      <!-- §01 THE ONTOLOGY IDEA -->
       <section class="sec wrap" id="ontology">
         <p class="eyebrow r">§01 · the ontology idea</p>
         <h2 class="r" style="--d: 0.06s">Agree on the nouns, <em>once.</em></h2>
@@ -20,7 +18,7 @@
             Every app you've ever used has quietly invented its own idea of "a person" and "an
             event." Your calendar, your budgeting app and your photo library each keep a private
             definition, so a question that spans them &mdash; "who did I spend money on and see in
-            person this month?" &mdash; has no single place to ask. That's the silo disease: not
+            person this month?" &mdash; has no single place to ask. That's the silo disease: no
             missing data, but data that can't recognize itself across apps.
           </p>
           <p>
@@ -33,7 +31,7 @@
             concepts for vocabulary, all living in one canonical core.
           </p>
           <p>
-            Hard Rule #2 is <b>"Extend, don't fork."</b> A domain that needs a workout doesn't
+            Hard Rule #2 is <b>"Extend, don't fork."</b> A domain that needs a workout doesn'
             invent a second activity table &mdash; it holds a <code>UNIQUE NOT NULL</code> foreign
             key back to the core row it specializes, like
             <code>health.workout.activity_id</code>. Every row's identity is a <b>UUIDv7</b>: an
@@ -51,14 +49,13 @@
         </div>
       </section>
 
-      <!-- §02 VOCABULARIES -->
       <section class="sec wrap" id="skos">
         <p class="eyebrow r">§02 · vocabularies</p>
         <h2 class="r" style="--d: 0.06s">Naming things is <em>its own hard problem.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
             Categories, tags and folders drift apart in every app that grows past its first year
-            &mdash; one app's "Groceries" is another's "Food &amp; Dining," and neither knows about
+            &mdash; one app's "Groceries" is another's "Food &amp; Dining," and neither knows abou
             the other. Fixing identity (the previous section) doesn't fix naming, which needs its
             own answer.
           </p>
@@ -88,7 +85,6 @@
         </div>
       </section>
 
-      <!-- §03 BORROWED SHAPES -->
       <section class="dark" id="shapes">
         <div class="wrap">
           <p class="eyebrow r">§03 · borrowed shapes</p>
@@ -189,7 +185,6 @@
         </div>
       </section>
 
-      <!-- §04 SQLITE -->
       <section class="sec wrap" id="sqlite">
         <p class="eyebrow r">§04 · sqlite</p>
         <h2 class="r" style="--d: 0.06s">A database you can <em>put in your pocket.</em></h2>
@@ -227,7 +222,6 @@
         </div>
       </section>
 
-      <!-- §05 CONTENT ADDRESSING -->
       <section class="sec wrap" id="cas">
         <p class="eyebrow r">§05 · content addressing</p>
         <h2 class="r" style="--d: 0.06s">Name the bytes by what they <em>are.</em></h2>
@@ -236,7 +230,7 @@
             Most storage names a file by where it sits — a path, a bucket key, a row id. Change
             the location and every reference breaks. <b>Content addressing</b> is the idea git made
             famous: name the bytes by what they <em>are</em>, using a hash of their contents. The
-            name and the data become the same fact, so integrity checks and deduplication fall out
+            name and the data become the same fact, so integrity checks and deduplication fall ou
             for free — two copies of the same photo are just one blob.
           </p>
           <p>
@@ -250,9 +244,9 @@
             rents the bytes</b>: a row can re-home its bytes to any S3-compatible remote — AWS,
             MinIO, R2, B2 — without touching a single relationship, and the gateway never trusts a
             remote's ETag; it re-hashes from its own local spool before believing anything matches.
-            Second, the <b>claim pattern</b>: raw bytes arriving over the wire is not itself a vault
+            Second, the <b>claim pattern</b>: raw bytes arriving over the wire is not itself a vaul
             write — the typed command that claims them is. Uploads stage under a
-            <code>staged_sha</code>, and a single transaction promotes that stage into real content
+            <code>staged_sha</code>, and a single transaction promotes that stage into real conten
             rows. Bytes are only ever servable once a reference — a content link, a folder tag, a
             cover — actually claims them; egress is derived, never just granted.
           </p>
@@ -268,7 +262,6 @@
         </div>
       </section>
 
-      <!-- §06 P2P -->
       <section class="dark" id="p2p">
         <div class="wrap">
           <p class="eyebrow r">§06 · peer-to-peer</p>
@@ -279,7 +272,7 @@
             personal software normally rents a cloud middleman just to let your own devices talk.
             Centraid instead rides <b>iroh</b>, an open-source peer-to-peer library, over
             <b>QUIC</b> — the modern transport that runs on UDP with TLS 1.3 built in and can carry
-            many independent streams on one connection, so a live SSE feed is just a stream that
+            many independent streams on one connection, so a live SSE feed is just a stream tha
             stays open.
           </p>
           <div class="grid cols-3" style="margin-top: 30px">
@@ -296,7 +289,7 @@
               <h3>Relay fallback</h3>
               <p>
                 When punching fails — symmetric NAT, strict firewalls — traffic relays through
-                iroh's public n0 network, still end-to-end encrypted. Centraid rents no relay fleet
+                iroh's public n0 network, still end-to-end encrypted. Centraid rents no relay flee
                 of its own.
               </p>
             </div>
@@ -335,7 +328,6 @@
         </div>
       </section>
 
-      <!-- §07 OAUTH & PKCE -->
       <section class="sec wrap" id="oauth">
         <p class="eyebrow r">§07 · oauth &amp; pkce</p>
         <h2 class="r" style="--d: 0.06s">Sign in <em>at the source,</em> not into the app.</h2>
@@ -346,12 +338,12 @@
             narrower, revocable slice of access instead.
           </p>
           <p>
-            <b>OAuth 2.0</b> is the standard answer: you sign in <i>at the provider</i>, not
+            <b>OAuth 2.0</b> is the standard answer: you sign in <i>at the provider</i>, no
             inside the requesting app, and the app receives a scoped, revocable <b>token</b>
             instead of your password. <b>PKCE</b> (RFC 7636, "Proof Key for Code Exchange") closes
             a gap for apps that can't hold a secret: the app generates a one-time
             <code>code_verifier</code>, sends its hashed <code>S256</code>
-            <code>code_challenge</code> up front, and proves at the end that the same app that
+            <code>code_challenge</code> up front, and proves at the end that the same app tha
             started the sign-in is the one finishing it — so a stolen authorization code is
             useless to anyone else.
           </p>
@@ -377,7 +369,6 @@
         </div>
       </section>
 
-      <!-- §08 SEALED SECRETS -->
       <section class="sec wrap" id="sealed">
         <p class="eyebrow r">§08 · sealed secrets</p>
         <h2 class="r" style="--d: 0.06s">Encrypted at the <em>column,</em> not the disk.</h2>
@@ -416,7 +407,6 @@
         </div>
       </section>
 
-      <!-- §09 CONSENT LINEAGE -->
       <section class="dark" id="consent">
         <div class="wrap">
           <p class="eyebrow r">§09 · consent lineage</p>
@@ -456,7 +446,7 @@
                   <td>W3C DPV</td>
                   <td>
                     A shared vocabulary of <i>purposes</i>. Every grant is purpose-bound —
-                    <code>dpv:Billing</code>, <code>dpv:HealthMonitoring</code> — not just
+                    <code>dpv:Billing</code>, <code>dpv:HealthMonitoring</code> — not jus
                     scope-bound.
                   </td>
                 </tr>
@@ -483,8 +473,8 @@
           </div>
           <div class="prose r" style="--d: 0.3s">
             <p>
-              Where Centraid diverges is enforcement: there's exactly <b>one door</b>, and a grant
-              is evaluated on every read and every action — consent is data the data carries, not
+              Where Centraid diverges is enforcement: there's exactly <b>one door</b>, and a gran
+              is evaluated on every read and every action — consent is data the data carries, no
               a setting checked once at login. Commands judged risky <b>park</b> for the owner to
               decide instead of running. And anything bound for the outside world — an email, a
               bank transfer — is staged as an inert <b>outbox</b> artifact holding placeholders,
@@ -502,7 +492,6 @@
         </div>
       </section>
 
-      <!-- §10 AGENTS & MCP -->
       <section class="sec wrap" id="agents">
         <p class="eyebrow r">§10 · agents &amp; mcp</p>
         <h2 class="r" style="--d: 0.06s">Same three tools, <em>whichever model is driving.</em></h2>
@@ -522,7 +511,7 @@
             in-process MCP server: <code>vault_sql</code> (consent-checked reads),
             <code>vault_invoke</code> (typed commands) and <code>vault_content</code> (bytes).
             That surface is identical whether the model behind it is Claude or Codex.
-            Every vault command is MCP-shaped — a JSON-Schema input/output
+            Every vault command is MCP-shaped — a JSON-Schema input/outpu
             contract plus declared pre/postconditions — but Centraid's twist is durability: a tool
             call isn't an ephemeral protocol message, it's a row. Every invocation is checked,
             receipted and auditable after the fact, and SSE streams both chat turns and automation
@@ -538,7 +527,6 @@
         </div>
       </section>
 
-      <!-- CLOSING -->
       <section class="sec wrap" id="composition">
         <p class="eyebrow r">the composition</p>
         <h2 class="r" style="--d: 0.06s">Ten borrowed ideas, <em>one new thing.</em></h2>
@@ -547,12 +535,12 @@
             None of these primers describe a Centraid invention. The contribution is the
             <b>composition</b>: one ontology drawn from the standards, in one SQLite file you can
             copy, with bytes named by hash, devices named by key, credentials brokered by the
-            rules, secrets sealed cell-by-cell, consent checked at one door, and an agent that
+            rules, secrets sealed cell-by-cell, consent checked at one door, and an agent tha
             acts only through typed, receipted commands. Each idea is decades old or
             battle-tested; stacking them is what makes personal software ownable.
           </p>
           <p class="aside">
-            Ready for the real thing? The system map is at
+            Ready for the real thing? The system map is a
             <a href="../understand/">Understand § the whole system</a>, and the deep end is
             <a href="../ontology/">the ontology chapter</a>.
           </p>

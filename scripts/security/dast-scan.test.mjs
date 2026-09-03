@@ -1,12 +1,3 @@
-/**
- * Unit tests for the DAST judges (W2.4). Each judge gets a PAIRED pass /
- * sabotage case so the demonstrated-red is intrinsic to the suite, not a
- * one-off manual run: flip the posture and the judge must return `fail`.
- *
- * These are pure over their inputs — no server boots here. The live boot +
- * scan is exercised by `node scripts/security/dast-scan.mjs` (the nightly
- * lane); this file guards the verdict logic those probes depend on.
- */
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -75,7 +66,6 @@ test("judgeCookieFlags: Secure only required over HTTPS", () => {
     setCookie: "sid=abc; HttpOnly; SameSite=Lax",
     isHttps: false,
   });
-  // HttpOnly + SameSite present, Secure not demanded on plain HTTP.
   assert.ok(overHttp.every((f) => f.verdict === "pass"));
   assert.ok(!overHttp.some((f) => f.pinKey === "cookie.secure"));
 });

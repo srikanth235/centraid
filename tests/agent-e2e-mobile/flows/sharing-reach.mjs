@@ -1,39 +1,3 @@
-// SHARING, ON THE PHONE — the one commons producer this device has, and the
-// one place a person becomes reachable (#825 G-edit; #872 rebuilt the seat).
-//
-// Between #831 and the v17 rebuild no mobile seat could share at all, and
-// nothing on this layer noticed: the mobile journeys covered reading,
-// recording and the gate, and sharing had no mobile-owned row. This flow is
-// that row.
-//
-// THREE CLAIMS, in order:
-//
-//   1. THE VERB EXISTS, ON THE SUBJECT THAT CAN BE SHARED. `tally.group` is
-//      v1's one edit-capable placeable subject (`_shared/placement-registry`),
-//      so the group's own life-acts section is where a share is compiled — and
-//      the row says what a share DOES before it is pressed, rather than after.
-//   2. THE SHEET IS REAL. Pressing it opens the shell's share engine, which
-//      states the consequence of joining in its own words. What the sheet then
-//      OFFERS depends on who this vault is linked to; see "what CI can prove"
-//      in the .md — a single-vault fixture is linked to nobody, and the flow
-//      asserts the sheet, not a roster it does not have.
-//   3. A PERSON BECOMES REACHABLE SOMEWHERE, AND THAT SOMEWHERE LOADS. The
-//      producing seat and the linking seat are different screens on the same
-//      phone; Settings → Sharing is the second one, and its ticket field is
-//      the door a link ceremony goes through.
-//
-// Plus, on Android only, the fourth: OFFLINE DRAWS THE SENTENCE, NOT THE VERB.
-// Sharing is a commons compilation on the gateway and `MultiVaultReplicaSession
-// .share` rejects while disconnected by design, so the row withholds the verb
-// and says why — Due next's own shape — instead of offering a press that would
-// fail. Maestro's airplane control is Android-only, which is why this half is
-// gated; `apps/mobile/src/apps/tally/TallyShareGroup.test.tsx` owns the same
-// claim at the component tier on every platform.
-//
-// Every asserted string is one the asserted screen alone publishes (issue
-// #483's non-vacuous rules; this file is discovered by
-// scripts/lint-e2e-flows.mjs).
-
 import { copyFile, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -45,48 +9,29 @@ import {
   runFlow,
 } from "../lib/harness.mjs";
 
-// Maestro reads a text selector as a regex anchored to the WHOLE node text,
-// and `·` is not a character it matches reliably — so the shared sentences are
-// spelled with `.` where the product uses a middle dot, as in `tally-derived`.
-
-/** `apps/tally/view-copy.ts` BALANCES_STATUS — the Tally cover's app bar. */
 const BALANCES_STATUS =
   "Every figure is derived at read time . no balance is stored and none is transmitted";
-/** `apps/tally/view-copy.ts` ROUTE_STATUS.groups. */
 const GROUPS_STATUS =
   "A group is a shared circle . members co-contribute from their own vaults";
-/** `apps/tally/view-copy.ts` GROUP_HERO_SUB — one group's ledger, and nothing else. */
 const GROUP_HERO_SUB =
   "Every member computes this figure themselves, from the same facts.";
 
-/** `apps/mobile/src/apps/tally/tally-seat-copy.ts` — the seat's own three. */
 const SHARE_VERB = "Share group";
 const SHARE_META = "each member you are linked with gets it in their own vault";
 const SHARE_OFFLINE =
   "Sharing needs a gateway connection . it cannot be queued";
 
-/** `apps/mobile/src/kit/share/ShareSheet.tsx` — the sheet's own general-access
- *  sentence, drawn whether or not this vault is linked to anybody. */
 const SHEET_NOTE = "Everyone you add gets the full shared item.*";
 
-/** `apps/mobile/src/screens/Sharing.tsx` — the two sections, whose titles its
- *  local `Section` upper-cases, and the ceremony field's accessible name. */
 const LINK_SECTION = "LINK WITH SOMEONE";
 const PEOPLE_SECTION = "PEOPLE";
 const LINK_FIELD = "Pasted link ticket";
 
-/** `apps/mobile/src/screens/Settings.tsx` — the row's visible label. Its
- *  accessible name is the bare word "Sharing", which the section heading above
- *  it also carries; the row's own sentence is the unambiguous target. */
 const SHARING_ROW = "People you are linked with";
 
-/** `packages/blueprints/apps/tally/seed.js` — the one group the demo creates. */
 const DEMO_GROUP = "Tahoe Trip";
 
 await runFlow("sharing-reach", async (ctx) => {
-  // A group is the subject being shared, so there has to be one. Seeded before
-  // pairing so it arrives in the first replica clone; the GET guard makes a
-  // second call a no-op.
   await ctx.ensureDemo("tally");
   await ctx.configureGateway();
 
@@ -146,25 +91,6 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     `Tally group "${DEMO_GROUP}" offered Share group with its own meta, and the share sheet opened on it`
   );
 
-  // The linking seat.
-  //
-  // SETTINGS MOVED, AND THE PATH THIS FLOW USED IS GONE. Until #890 W2 this
-  // chunk opened a vault drawer: `Open vault menu` → wait for `GO TO` → tap
-  // `.*Settings`. NONE of those three strings exists anywhere in
-  // `apps/mobile/src` any more — the v17 shell ships no drawer, and
-  // `screens/home/AllAppsSheet.tsx` says so at the handle that replaced them:
-  // "Settings is reached from HERE, not from a drawer". The old first tap was
-  // non-optional, so this failed LOUDLY rather than navigating nowhere, but it
-  // was still a step red for a reason unrelated to its claim. DO NOT "RESTORE"
-  // THE DRAWER PATH — there is nothing to restore it to.
-  //
-  // The route now is the band's More tab → the all-apps sheet → the Settings
-  // place row, each hop by handle and each waiting on the NEXT surface's own
-  // handle, so a tap that did nothing cannot read as an arrival. Settings is the
-  // last row of the sheet's places half (below all eight apps), so it is
-  // scrolled to at full visibility: Maestro matches an element the sheet has
-  // clipped, and tapping one is the silent no-op README's "A passing step is not
-  // a working step" is about.
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
@@ -229,16 +155,9 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     "Settings → Sharing drew the link ceremony and the roster it writes"
   );
 
-  // UI-impact evidence for #880 (check:ui-receipt): the two member-visible
-  // surfaces on the sharing path — the Tally group's Share group sheet, and
-  // the Settings → Sharing screen — published where
-  // the desktop and native journeys publish theirs. Copied out of the run dir
-  // rather than re-captured, so what ships is the frame the assertions above
-  // already passed against.
   const uiImpactDir = "artifacts/e2e/ui-impact";
   const screenshot = async (suffix, published) => {
     const frames = await readdir(ctx.state.screenshotsDir);
-    // The frame is `<name>.png`, unprefixed — see `pairing-canary.mjs` (#905).
     const frame = frames.find((name) => name === `${suffix}.png`);
     if (frame === undefined)
       throw new Error(`${suffix} frame was not captured`);

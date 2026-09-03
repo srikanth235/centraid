@@ -15,9 +15,6 @@ const OWNER = "tests/perf/blob-egress.perf.test.ts";
 describe("blob-egress.perf", () => {
   test("large local blob egress produces a first byte without whole-file buffering", async () => {
     const registryDirectory = await tempDir("blob-egress-");
-    // Seed outside the measured child. Its allocator has therefore never owned
-    // the payload when it records the RSS baseline; a route that reads the whole
-    // file must ask the OS for those pages instead of reusing seed-time slabs.
     const registry = openVaultRegistry({
       rootDir: registryDirectory,
       logger: {
@@ -93,13 +90,7 @@ describe("blob-egress.perf", () => {
     };
     await readNext();
     const { rssGrowthBytes } = await served;
-    // Node may retain the stream's short-lived chunk slabs until its next GC.
-    // The 96 MiB ceiling remains below the fixture's 128 MiB payload, so a
-    // buffer-whole-file regression cannot fit while allocator noise gets room.
     const memoryBudget = 96 * 1024 * 1024;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("perf", OWNER);
     const passed =
       ttfbMs < 500 && rssGrowthBytes < memoryBudget && received === ready.size;

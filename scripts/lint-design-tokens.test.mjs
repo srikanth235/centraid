@@ -69,8 +69,6 @@ test("analyzeCss clears current composable size rungs but not retired roles", ()
     `),
     { ...clean, rawFontSize: 1 }
   );
-  // `--t-<key>` is a `font` shorthand; as a `font-size` value the declaration
-  // is invalid and dropped whole, so it stays debt even though it is a var().
   assert.deepEqual(
     analyzeCss(`
       .a { font-size: var(--t-body); }

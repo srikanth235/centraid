@@ -20,17 +20,12 @@ import {
 describe("countSleepSites", () => {
   test("counts every fixed-sleep shape once", () => {
     const source = [
-      // Promise-wrapped, one line.
       "await new Promise((r) => setTimeout(r, 50));",
-      // Promise-wrapped, formatter-split across lines.
       "await new Promise((resolve) => {",
       "  setTimeout(resolve, 1_000);",
       "});",
-      // Arrow first argument.
       "setTimeout(() => resolve({}), 100);",
-      // Poll-loop delay.
       "setTimeout(poll, 5);",
-      // Helper aliases (setTimeout as sleep from node:timers/promises, local delay/pause).
       "await sleep(2000);",
       "await delay(20);",
       "await pause(500);",
@@ -74,12 +69,6 @@ describe("countSleepSites", () => {
 });
 
 describe("discoverSleepSites", () => {
-  /**
-   * Write one file (creating parents) under a scratch root.
-   * @param {string} root Scratch root.
-   * @param {string} file Repo-relative path.
-   * @param {string} source File contents.
-   */
   function writeFixture(root, file, source) {
     const target = path.join(root, file);
     mkdirSync(path.dirname(target), { recursive: true });
@@ -118,8 +107,6 @@ describe("discoverSleepSites", () => {
       "scripts/test-report/detector.test.mjs",
       "setTimeout(resolve, 50);"
     );
-    // The kit's seam tests schedule literal timers under useFakeClock() to
-    // prove the fake clock runs them — never real time.
     writeFixture(
       root,
       "packages/test-kit/src/seams.test.ts",
@@ -154,8 +141,6 @@ describe("validateSleepInventory", () => {
   });
 
   test("a file that grew fails even inside a slack total", () => {
-    // b shrank while a grew: the per-file counts catch the move that a bare
-    // total would launder.
     const { errors } = validateSleepInventory(
       { _budget: 4, sites: { "a.test.ts": 1, "b.test.ts": 3 } },
       { "a.test.ts": 2, "b.test.ts": 2 }
@@ -201,7 +186,6 @@ describe("reconcileInventory", () => {
       { "a.test.ts": 2, "b.test.ts": 1 }
     );
     expect(next.sites).toStrictEqual({ "a.test.ts": 2, "b.test.ts": 1 });
-    // 9 was slack against a measured 3 — --write can only LOWER it.
     expect(next._budget).toBe(3);
     const unseeded = reconcileInventory({}, { "a.test.ts": 1 });
     expect(unseeded._budget).toBe(1);

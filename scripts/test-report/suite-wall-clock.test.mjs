@@ -10,9 +10,6 @@ const file = (runtime, start = 0) => ({
 
 describe("suite wall-clock measurement", () => {
   test("sums per-file runtime rather than the run's elapsed time", () => {
-    // Elapsed time would report ~1000ms for these two overlapping workers;
-    // the work the suite asked for is 1500ms, and that is what an added test
-    // increases regardless of how many cores happen to be free.
     expect(
       measureWallClock({
         testResults: [file(1000, 0), file(500, 200)],

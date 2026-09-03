@@ -1,24 +1,3 @@
-// THE ROSTER READER (#915 Wave 2) — one file answers "what runs on which rung".
-//
-// Before this, four documents described what the phone must do and nothing held
-// them against each other: seven `run-*-suite.mjs` files each carried a `FLOWS`
-// literal and a `BUDGET_MS` literal that three separate gates read back by
-// REGEX off disk, `roster.json` carried the claims, the budget docs carried the
-// arithmetic, and the workflows carried the wiring. A rung concept existed in
-// none of them. `roster.json` is now the single source and this module is the
-// only reader of it — every consumer (the runner, the four linters, the budget
-// ratchet, and the report's journey table) goes through these functions rather
-// than parsing the file again in its own dialect.
-//
-// PURE AND SYNCHRONOUS. It reads one JSON file and answers questions about it;
-// it spawns nothing and knows nothing about Maestro. That is what lets
-// `run-roster.mjs --dry-run`, the linters and the unit suite all drive the same
-// code on a machine with no device attached.
-//
-// THE TWO CEILINGS ARE NOT THE SAME CEILING — see `$budgets` in roster.json.
-// `suiteBudgetMs()` is the aggregate deadline `lib/run-suite.mjs` enforces;
-// a flow's own `budgetMs` is its marginal cost with no fresh pairing in it.
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -28,20 +7,11 @@ const ROSTER_PATH = `${MOBILE_DIR}/roster.json`;
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..", "..");
 
-/** The rungs of the ladder a mobile suite may sit on (#915). Rung 0 and 1 are
- *  hooks and rung 5 is weekly; no device suite belongs to either today, and the
- *  closed set is what stops a typo inventing a rung nothing runs. */
 export const RUNGS = [2, 3, 4, 5];
 export const PLATFORMS = ["android", "ios"];
 
 let cached;
 
-/**
- * The parsed roster. Cached per process: every consumer reads the same tree, and
- * a linter that re-read it per rule would be able to disagree with itself.
- *
- * @param {string} [root] repo root, for tests driving a fixture tree
- */
 export function loadRoster(root = ROOT) {
   if (root === ROOT && cached) return cached;
   const parsed = JSON.parse(
@@ -51,12 +21,10 @@ export function loadRoster(root = ROOT) {
   return parsed;
 }
 
-/** Repo-relative flow path from a bare `foo.mjs` member name. */
 export function flowPath(file) {
   return `${FLOWS_DIR}/${file}`;
 }
 
-/** Bare member name from a repo-relative flow path. */
 export function flowFile(rel) {
   return rel.slice(rel.lastIndexOf("/") + 1);
 }
@@ -67,13 +35,6 @@ function matches(spec, { rung, platform }) {
   return true;
 }
 
-/**
- * The suite ids selected by a rung/platform filter, in ROSTER ORDER.
- *
- * Roster order is the execution order of a lane that runs more than one suite,
- * which is why this returns an array rather than a set: `probes-suite` runs
- * before `photos` on the nightly because the probes must not inherit a pairing.
- */
 export function suitesFor({ rung, platform, suite, roster } = {}) {
   const table = (roster ?? loadRoster()).suites;
   const ids = Object.keys(table).filter((id) =>
@@ -83,24 +44,14 @@ export function suitesFor({ rung, platform, suite, roster } = {}) {
   return ids.filter((id) => id === suite);
 }
 
-/** One suite's spec, or `undefined`. */
 export function suiteSpec(suite, roster) {
   return (roster ?? loadRoster()).suites[suite];
 }
 
-/** A suite's AGGREGATE wall-clock ceiling in ms — the deadline, not a verdict. */
 export function suiteBudgetMs(suite, roster) {
   return suiteSpec(suite, roster)?.budgetMs;
 }
 
-/**
- * The run plan: the suites a lane invocation covers, each with its ordered
- * members resolved to repo-relative paths and their roster rows attached.
- *
- * This is the shape `run-roster.mjs --dry-run` prints and the shape
- * `scripts/lint-e2e-wiring.mjs` folds into lane reachability, so the two can
- * never disagree about what an invocation schedules.
- */
 export function plan({ rung, platform, suite, roster } = {}) {
   const tree = roster ?? loadRoster();
   return suitesFor({ rung, platform, suite, roster: tree }).map((id) => {
@@ -124,15 +75,6 @@ export function plan({ rung, platform, suite, roster } = {}) {
   });
 }
 
-/**
- * Every flow a rung/platform/suite filter reaches, DEDUPED by path and sorted,
- * each carrying its roster row plus the suites that reach it.
- *
- * Deduped because a flow legitimately sits in several suites — `cold-start` is
- * in four — and the callers that want "is this flow scheduled anywhere at rung
- * 2" would otherwise have to dedupe identically in four places. Callers that
- * need execution order want `plan()` instead.
- */
 export function flowsFor({ rung, platform, suite, roster } = {}) {
   const tree = roster ?? loadRoster();
   const byPath = new Map();
@@ -149,7 +91,6 @@ export function flowsFor({ rung, platform, suite, roster } = {}) {
   return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
 
-/** The declared lanes at a rung (all of them when `rung` is omitted). */
 export function lanesFor({ rung, roster } = {}) {
   const lanes = (roster ?? loadRoster()).lanes;
   return Object.fromEntries(
@@ -159,16 +100,6 @@ export function lanesFor({ rung, roster } = {}) {
   );
 }
 
-/**
- * Every internal-consistency defect in the roster, as printable strings.
- *
- * This is the half that replaces what the seven runner files used to enforce by
- * existing: a `FLOWS` literal could not name a journey that was not there, and
- * a suite could not be scheduled without a file to schedule it from. A single
- * JSON document can express all of those mistakes, so they are checked here and
- * called from `scripts/lint-e2e-wiring.mjs` (which owns the wiring half) and
- * from this module's own unit suite.
- */
 export function validateRoster(roster = loadRoster()) {
   const findings = [];
   const suites = roster.suites ?? {};
@@ -221,10 +152,6 @@ export function validateRoster(roster = loadRoster()) {
     }
   }
 
-  // Every flow's derived `suite` / `rungs` / `platform` must agree with the
-  // suite table. They are DERIVED and stored, because the report and the
-  // linters read a flow row directly; storing them means they can drift, so
-  // they are checked here rather than trusted.
   const membership = new Map();
   for (const [id, spec] of Object.entries(suites))
     for (const file of spec.flows ?? []) {

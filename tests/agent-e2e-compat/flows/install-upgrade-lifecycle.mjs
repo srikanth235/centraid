@@ -1,18 +1,3 @@
-// W5.4 (#842) — install / upgrade lifecycle lane runner.
-//
-// Install a PREVIOUS release, write real data through it, upgrade in place over
-// that data, then run a journey against the upgraded install — proving an
-// upgrade never eats the vault. See the .md next to this file for intent, and
-// lib/upgrade.mjs for the pure assertion + judge this driver delegates to.
-//
-// CURRENT STATE: blocked-external (#790). The launchd install/uninstall rig is
-// a NAMED #790 blocker — "No named mutable macOS user-session rig; local opt-in
-// only" (TESTING.md §Named live/hardware lanes). With no installer the lane
-// SKIPS WITH CITATION. The upgrade-over-data ASSERTION logic is already landed
-// and unit-pinned (lib/upgrade.mjs + upgrade.test.mjs), so the moment #790
-// provisions a rig, point CENTRAID_UPGRADE_PREV_INSTALLER at the previous
-// release and the live path below runs — reusing the exact same judge.
-
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -31,15 +16,6 @@ if (!installer.available) {
   process.exit(0);
 }
 
-// --- Live path (runs once #790 lands an install/uninstall rig) --------------
-// The rig must ship an install harness at CENTRAID_UPGRADE_RIG (default: the
-// fixture path) exporting:
-//   installPrevious(installer)        → { home }  installs the prev release
-//   writeSeedData(home)               → snapshot  writes rows, returns a digest map
-//   upgradeInPlace(home)              → void      installs THIS build over `home`
-//   snapshotData(home)                → snapshot  re-reads the same rows
-//   runPostUpgradeJourney(home)       → boolean   a journey against the upgrade
-//   uninstall(home)                   → void      always run in teardown
 const rigPath =
   process.env.CENTRAID_UPGRADE_RIG ||
   path.join(import.meta.dirname, "../fixtures/install-rig/rig.mjs");
@@ -70,8 +46,6 @@ try {
 const { verdict, reason } = judgeUpgradeJourney(result);
 report(verdict, reason);
 process.exit(verdict === "fail" ? 1 : 0);
-
-// ---------------------------------------------------------------------------
 
 function report(outcome, detail) {
   console.log(

@@ -1,17 +1,5 @@
-/**
- * Pure helpers for gateway npm pack / install target resolution (issue #509).
- * No network, no filesystem side effects — unit-tested entry points for install + pack.
- */
-
-/**
- * Rewrite workspace:* (and catalog: ignored) deps to concrete semver versions.
- * @param {Record<string, unknown>} packageJson Parsed package.json object.
- * @param {Record<string, string>} versionByName Map of package name → version (e.g. "@centraid/core/protocol" → "0.1.0").
- * @returns {{ packageJson: Record<string, unknown>; rewrote: string[] }} Cloned package.json ready for registry pack.
- */
 export function rewriteWorkspaceDependencies(packageJson, versionByName) {
   const out = structuredClone(packageJson);
-  /** @type {string[]} */
   const rewrote = [];
   for (const field of [
     "dependencies",
@@ -20,9 +8,7 @@ export function rewriteWorkspaceDependencies(packageJson, versionByName) {
   ]) {
     const block = out[field];
     if (!block || typeof block !== "object") continue;
-    for (const [name, range] of Object.entries(
-      /** @type {Record<string, string>} */ (block)
-    )) {
+    for (const [name, range] of Object.entries(block)) {
       if (typeof range !== "string") continue;
       if (!range.startsWith("workspace:")) continue;
       const ver = versionByName[name];
@@ -31,14 +17,11 @@ export function rewriteWorkspaceDependencies(packageJson, versionByName) {
           `No published version for workspace dep ${name} (while packing ${out.name})`
         );
       }
-      /** @type {Record<string, string>} */ (block)[name] = ver;
+      block[name] = ver;
       rewrote.push(`${field}:${name}`);
     }
   }
-  // Registry consumers never need monorepo-only workspace/catalog devDeps.
   delete out.devDependencies;
-  // Pack already copies built `files`; lifecycle scripts that re-build in the
-  // staging tree break pack (tsc not on PATH). Consumers install prebuilt dist.
   if (out.scripts && typeof out.scripts === "object") {
     const scripts = /** @type {Record<string, string>} */ (out.scripts);
     for (const key of ["prepack", "prepare", "prepublishOnly", "prepublish"]) {
@@ -49,17 +32,11 @@ export function rewriteWorkspaceDependencies(packageJson, versionByName) {
   if (!out.publishConfig || typeof out.publishConfig !== "object") {
     out.publishConfig = { access: "public" };
   } else {
-    /** @type {Record<string, unknown>} */ (out.publishConfig).access =
-      "public";
+    out.publishConfig.access = "public";
   }
   return { packageJson: out, rewrote };
 }
 
-/**
- * @param {string[]} packageDirs Ordered package directory basenames under packages/.
- * @param {(dir: string) => { name: string; version: string; dependencies?: Record<string, string> }} loadPkg Loader for each package dir name/version/deps.
- * @returns {string[]} Package dirs in dependency order (deps first).
- */
 export function topologicalPublishOrder(packageDirs, loadPkg) {
   const dirs = [...packageDirs];
   const byName = new Map();
@@ -67,7 +44,6 @@ export function topologicalPublishOrder(packageDirs, loadPkg) {
     const p = loadPkg(dir);
     byName.set(p.name, dir);
   }
-  /** @type {Map<string, Set<string>>} */
   const deps = new Map();
   for (const dir of dirs) {
     const p = loadPkg(dir);
@@ -83,7 +59,6 @@ export function topologicalPublishOrder(packageDirs, loadPkg) {
     }
     deps.set(dir, need);
   }
-  /** @type {string[]} */
   const ordered = [];
   const remaining = new Set(dirs);
   while (remaining.size) {
@@ -112,21 +87,7 @@ export function topologicalPublishOrder(packageDirs, loadPkg) {
   return ordered;
 }
 
-/**
- * Parse install-gateway CLI argv (flags only; no process mutation).
- * @param {string[]} argv Process argv slice after node/script (or bash-forwarded args).
- * @returns {{
- *   help: boolean;
- *   dryRun: boolean;
- *   prefix: string | null;
- *   version: string;
- *   fromPackDir: string | null;
- *   withService: boolean;
- *   global: boolean;
- * }} Parsed install flags.
- */
 export function parseInstallArgs(argv) {
-  /** @type {ReturnType<typeof parseInstallArgs>} */
   const out = {
     help: false,
     dryRun: false,
@@ -168,25 +129,10 @@ export function parseInstallArgs(argv) {
   return out;
 }
 
-/**
- * Resolve default install prefix (OpenClaw-like local prefix).
- * @param {string} home HOME directory.
- * @returns {string} Default install prefix path.
- */
 export function defaultInstallPrefix(home) {
   return `${home.replace(/\/$/u, "")}/.centraid`;
 }
 
-/**
- * Build the npm install argument list for gateway.
- * @param {{
- *   version: string;
- *   fromPackDir: string | null;
- *   packFiles?: string[];
- *   gatewayPackage?: string;
- * }} opts Install target options (registry version or local pack paths).
- * @returns {string[]} Args after `npm install` (excluding npm itself and --prefix/-g).
- */
 export function buildNpmInstallArgs(opts) {
   const gatewayPackage = opts.gatewayPackage ?? "@centraid/server";
   if (opts.fromPackDir) {
@@ -199,11 +145,6 @@ export function buildNpmInstallArgs(opts) {
   return [`${gatewayPackage}@${opts.version}`];
 }
 
-/**
- * Human next-steps after install (never claims silent service install).
- * @param {{ bin: string; prefix: string | null; withService: boolean }} opts Binary name, optional prefix, service hint flag.
- * @returns {string} User-facing next-steps text.
- */
 export function formatPostInstallMessage(opts) {
   const lines = [
     `Installed ${opts.bin}.`,
@@ -234,22 +175,12 @@ export function formatPostInstallMessage(opts) {
   return lines.join("\n");
 }
 
-/**
- * Minimum Node major from engines field like ">=22.5".
- * @param {string | undefined} enginesNode engines.node field value.
- * @returns {number} Minimum major version number.
- */
 export function minNodeMajorFromEngines(enginesNode) {
   if (!enginesNode) return 22;
   const major = enginesNode.match(/(?<major>\d+)/u)?.groups?.major;
   return major ? Number(major) : 22;
 }
 
-/**
- * @param {string} nodeVersion e.g. "v22.23.1".
- * @param {number} minMajor Required major version.
- * @returns {boolean} True when nodeVersion major is >= minMajor.
- */
 export function nodeVersionSatisfies(nodeVersion, minMajor) {
   const major = nodeVersion.replace(/^v/u, "").match(/^(?<major>\d+)/u)
     ?.groups?.major;

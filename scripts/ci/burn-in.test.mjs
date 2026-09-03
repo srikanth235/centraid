@@ -38,9 +38,6 @@ test("Playwright and Maestro specs are skipped with a reason, not silently", () 
 });
 
 test("nightly rigs are skipped: their input is another job's artifact", () => {
-  // Regression (#915): desktop-launch.perf.test.ts throws under CI when the
-  // nightly desktop-e2e report is absent — correct at rung 4, and a guaranteed
-  // "broken test" verdict at rung 2, where the artifact cannot exist.
   assert.match(
     skipReason("tests/perf/desktop-launch.perf.test.ts"),
     /nightly rig fed by another job's artifact/u
@@ -84,10 +81,6 @@ test("nearestVitestProjectDir walks up to the owning project, not the repo root"
   assert.equal(nearestVitestProjectDir("scripts/ci/a.test.mjs", has), ".");
 });
 
-// Regression (#916): every `packages/blueprints/apps/*` carries a private
-// package.json and no Vitest config. Stopping there ran vitest in a directory
-// whose `include` cannot see the file, which exits 1 with "No test files
-// found" — reported as a broken test for all 206 blueprint suites.
 test("a package.json without a Vitest config is not a project", () => {
   const has = (candidate) =>
     [
@@ -112,13 +105,6 @@ test("a package.json without a Vitest config is not a project", () => {
   );
 });
 
-// The example above is one directory; this is the property, over the real tree.
-// A planner that sends vitest somewhere it cannot collect does not fail loudly —
-// it reports "the test is broken" for a suite that was never run, which is the
-// silent-green a burn-in exists to refuse. Adding a config to every nested
-// package would answer this too, and much worse: `packages/blueprints`'s config
-// owns `apps/**` on purpose, with design-package source aliases and the CSS
-// harness its apps need, so eight copies would be eight things to drift.
 test("every real test file plans onto a directory Vitest can collect from", () => {
   const root = path.resolve(import.meta.dirname, "../..");
   const has = (candidate) => existsSync(path.join(root, candidate));
@@ -149,7 +135,6 @@ test("every real test file plans onto a directory Vitest can collect from", () =
   const stranded = files
     .filter((file) => skipReason(file) === null)
     .map((file) => ({ file, plan: planRun(file, has) }))
-    // A plan that names its own config is run from the root against that file.
     .filter(({ plan }) => plan.runner === "vitest" && !plan.config)
     .filter(
       ({ plan }) => !CONFIGS.some((name) => has(path.join(plan.cwd, name)))
@@ -167,9 +152,6 @@ test("each candidate is planned onto the runner that actually owns it", () => {
       "packages/core/vitest.config.ts",
       "package.json",
     ].includes(candidate);
-  // Regression (#915): `scripts/**` unit tests are node:test modules. Planning
-  // them onto a root Vitest run collected zero files and reported every one of
-  // them as a broken test.
   assert.deepEqual(planRun("scripts/ci/lane-health.test.mjs", has), {
     runner: "node",
     cwd: ".",
@@ -193,7 +175,6 @@ test("each candidate is planned onto the runner that actually owns it", () => {
     planRun("tests/integration-mobile/parked.integration.test.ts", has).config,
     "tests/integration-mobile/vitest.config.ts"
   );
-  // Everything the table does not claim runs from its owning package.
   assert.deepEqual(planRun("packages/core/src/a.test.ts", has), {
     runner: "vitest",
     cwd: "packages/core",
@@ -228,8 +209,6 @@ test("argvFor names the runner's own invocation, not a generic one", () => {
 });
 
 test("the shards partition the list: every file once, none twice, none lost", () => {
-  // The property, not an example: a sharded gate's failure mode is a file in no
-  // shard, which never runs and reports green by absence (#916).
   const files = Array.from(
     { length: 237 },
     (_, index) => `packages/p${index % 7}/src/a${index}.test.ts`
@@ -249,7 +228,6 @@ test("the shards partition the list: every file once, none twice, none lost", ()
       seen.length,
       `N=${total} must not overlap`
     );
-    // Round-robin, so no leg can be handed a run's worth more than another.
     const sizes = legs.map((leg) => leg.length);
     assert.ok(
       Math.max(...sizes) - Math.min(...sizes) <= 1,
@@ -272,8 +250,6 @@ test("the deal does not depend on the order the caller handed in", () => {
 test("a malformed or out-of-range shard is an error, never an empty slice", () => {
   assert.deepEqual(parseShard("3/8"), { shard: 3, total: 8 });
   assert.deepEqual(parseShard(" 1/1 "), { shard: 1, total: 1 });
-  // Each of these selects nothing, and "nothing" exits 0 — the silent green a
-  // burn-in cannot survive.
   assert.throws(() => parseShard("0/8"), /out of range/u);
   assert.throws(() => parseShard("9/8"), /out of range/u);
   assert.throws(() => parseShard("3/0"), /must be >= 1/u);

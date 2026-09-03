@@ -11,15 +11,6 @@ import {
 import { renderRollingIssueBody } from "./rolling-issue-body.mjs";
 import { REQUIRED_SECTIONS, renderFixture, smokeFailures } from "./smoke.mjs";
 
-/**
- * The page, end to end, from the committed fixture root.
- *
- * `report:smoke` runs the same checks on rung 1; these assert the parts a
- * reader would notice going wrong and that `smoke.mjs` only summarises — the
- * four-word vocabulary, the keys, and the agreement between §3 and the rolling
- * issue body.
- */
-
 describe("the rendered page", () => {
   test("renders every section from the fixture root with no validation errors", async () => {
     expect(await smokeFailures()).toEqual([]);
@@ -107,7 +98,6 @@ describe("the rolling issue body", () => {
       summary,
       evidence: { verdict: "parked", cases: [] },
     });
-    // §3 says "expires 2026-09-16"; the issue must say the same date.
     expect(queued.deadline).toContain(queued.issue ? "expires" : "");
     expect(body).toContain(queued.deadline.replace("expires ", ""));
     expect(body).toContain("parked until");

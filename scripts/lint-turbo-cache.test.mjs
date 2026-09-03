@@ -24,8 +24,6 @@ test("globToRegExp: literal dots are not wildcards", () => {
 });
 
 test("trackedMatches: a gitignored artifact glob matches nothing tracked", () => {
-  // `native/*.node` is the real case: the .node binaries are gitignored, but
-  // the crate's Cargo.toml sits in the same directory and must not be caught.
   assert.deepEqual(
     trackedMatches("native/*.node", DIRS, [
       "packages/tunnel/native/Cargo.toml",

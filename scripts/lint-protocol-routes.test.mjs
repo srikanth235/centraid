@@ -1,10 +1,3 @@
-// Fail-path proof for `bun run lint:protocol-routes` (issue #656 Layer 1F).
-//
-// Drives the linter against a synthetic tree via its injectable root. Uses
-// `mkdtempSync` rather than `@centraid/test-kit`'s `tempDir()`: that module
-// registers a vitest `afterAll` at import time and throws
-// ("Vitest failed to find the current suite") under `node --test`, which is the
-// runner this lane uses. Same pattern as scripts/gateway-package/*.test.mjs.
 import assert from "node:assert/strict";
 // oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered at creation via t.after below.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -16,7 +9,6 @@ import { findRouteLiterals } from "./lint-protocol-routes.mjs";
 
 const SCOPE = "apps/extension/src";
 
-/** Build a throwaway repo root containing `files` (relative path → contents). */
 function fixture(t, files) {
   const root = mkdtempSync(path.join(tmpdir(), "centraid-protocol-routes-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));

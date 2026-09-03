@@ -1,27 +1,10 @@
 #!/usr/bin/env node
-/**
- * Law registry check (issue #656 Layer 4).
- *
- * "One flow, one home" was prose. Layer 1D deleted the restatements by hand,
- * but nothing stopped the next agent from re-adding one — a duplicate law is
- * invisible in a diff, because both copies are green tests.
- *
- * The mechanism: a named product law carries a machine-readable tag in its
- * test title, `[law:backup-no-change]`. The registry in
- * `tests/claims.json#laws` records which file owns each tag. This linter fails
- * a PR when a tag appears in a file that does not own it — which is what
- * re-duplicating a law looks like at write time.
- *
- * Deliberately dependency-free and pure over an injectable root, so the fail
- * path is testable from `node --test` (see lint-law-registry.test.mjs).
- */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 
-/** `[law:some-tag]` anywhere in a source line. Tags are kebab-case. */
 const TAG_RE = /\[law:(?<tag>[^\]]*)\]/gu;
 const VALID_TAG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
@@ -34,21 +17,12 @@ const SKIP_DIRS = new Set([
   "coverage",
   "artifacts",
   ".claude",
-  // Blueprint app-boot tests mirror source tests into this scratch tree while
-  // other check:push gates run concurrently. Those copies are build products,
-  // not additional law owners.
   ".app-boot",
-  // Stryker sandboxes copy whole packages (including law-owning suites) into
-  // this gitignored scratch tree while a mutation seed runs. Those copies are
-  // build products, not additional law owners.
   ".stryker-tmp",
 ]);
 
 const TEST_FILE_RE = /\.(?:test|spec)\.(?:ts|tsx|mts|mjs|js|jsx)$/u;
 
-// This linter's own fail-path proof builds synthetic files containing law
-// tags; scanning it would report its fixtures as real duplicates. Excluded by
-// exact path, not by a pattern, so nothing else can hide behind it.
 const SELF_TEST = "scripts/lint-law-registry.test.mjs";
 
 function walk(dir, out = []) {
@@ -61,12 +35,6 @@ function walk(dir, out = []) {
   return out;
 }
 
-/**
- * Every `[law:*]` occurrence in the test tree, as
- * `{ tag, file (repo-relative, posix), line }`. Malformed tags come back with
- * `valid: false` rather than being dropped, so a typo is reported rather than
- * silently unowned.
- */
 export function collectLawTags(scanRoot = root) {
   const found = [];
   for (const file of walk(scanRoot)) {
@@ -90,14 +58,6 @@ export function collectLawTags(scanRoot = root) {
   return found;
 }
 
-/**
- * Compare the tags found in the tree against the registry.
- *
- * `laws` is `tests/claims.json#laws`: `{ [tag]: { statement, owner, flow? } }`.
- * Pass `undefined` when the key is absent — the duplicate-owner check still
- * runs (it is derivable from the tree alone) and the registration checks
- * report that they could not run, rather than passing silently.
- */
 export function checkLawRegistry({ laws, tags, flowIds = [], files = [] }) {
   const violations = [];
   const notices = [];
@@ -111,8 +71,6 @@ export function checkLawRegistry({ laws, tags, flowIds = [], files = [] }) {
     }
   }
 
-  // Owning FILES, not owning tests: one law may be proven by several tests in
-  // the file that owns it. Two files is the duplication this exists to stop.
   const filesByTag = new Map();
   for (const tag of tags.filter((t) => t.valid)) {
     if (!filesByTag.has(tag.tag)) filesByTag.set(tag.tag, new Map());
@@ -133,11 +91,6 @@ export function checkLawRegistry({ laws, tags, flowIds = [], files = [] }) {
   }
 
   if (!registryDeclared) {
-    // A notice, not a violation. The registry key lands in tests/claims.json,
-    // which #656 Layer 2 is rewriting in parallel; until it merges, the
-    // duplicate check above is the live gate — it is derivable from the tree
-    // alone and needs no registry. The owner/orphan checks then switch on
-    // without touching this file.
     if (filesByTag.size > 0) {
       notices.push(
         `tests/claims.json has no "laws" key; ${filesByTag.size} law tag(s) are in use. Duplicate-owner checking is active; owner and orphan checking is NOT until the key lands.`

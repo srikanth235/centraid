@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-/**
- * Report which release secret *names* are present in the environment.
- * Never prints secret values (issue #501 / #512 / docs/enrollment.md).
- *
- *   node scripts/release/verify-secrets.mjs [--strict]
- */
 
 const DESKTOP_APPLE = ["APPLE_API_KEY", "APPLE_API_KEY_ID", "APPLE_API_ISSUER"];
 const DESKTOP_AZURE = [
@@ -24,7 +18,6 @@ const MOBILE = [
 ];
 const WEB = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"];
 const GATEWAY_NPM = ["NPM_TOKEN"];
-/** GHCR uses GITHUB_TOKEN + packages:write in Actions; local probe is informational. */
 const GATEWAY_IMAGE = ["GITHUB_TOKEN"];
 
 const groups = {

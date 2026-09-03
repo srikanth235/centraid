@@ -10,7 +10,6 @@
         </p>
       </section>
 
-      <!-- 01 INSTALL -->
       <section class="sec wrap" id="install">
         <p class="eyebrow r">§01 · install</p>
         <h2 class="r" style="--d: 0.06s">Clone, install, open.</h2>
@@ -52,7 +51,6 @@
         </p>
       </section>
 
-      <!-- 02 FIRST OPEN -->
       <section class="sec wrap" id="first-open">
         <p class="eyebrow r">§02 · first open</p>
         <h2 class="r" style="--d: 0.06s">A name, a color, <em>a vault.</em></h2>
@@ -79,7 +77,6 @@
         </div>
       </section>
 
-      <!-- 03 FIRST APP -->
       <section class="sec wrap" id="first-app">
         <p class="eyebrow r">§03 · your first app</p>
         <h2 class="r" style="--d: 0.06s">Install a blueprint, <em>sign its grant.</em></h2>
@@ -94,7 +91,7 @@
             pinned on <b>Home</b>, opening straight away.
           </p>
           <p>
-            The part worth noticing: an app doesn't get your data by existing, and installing it
+            The part worth noticing: an app doesn't get your data by existing, and installing i
             copies nothing. Its manifest declares exactly which vault tables it wants to read and
             which typed commands it wants to call, and that declaration becomes a <b>grant</b> you
             can inspect and revoke. Install is not consent — the grant is. Uninstall whenever you
@@ -108,7 +105,6 @@
         </div>
       </section>
 
-      <!-- 04 TALK TO IT -->
       <section class="sec wrap" id="talk">
         <p class="eyebrow r">§04 · talk to it</p>
         <h2 class="r" style="--d: 0.06s">Ask across everything <em>at once.</em></h2>
@@ -144,7 +140,6 @@
         </div>
       </section>
 
-      <!-- 05 IMPORT -->
       <section class="sec wrap" id="import">
         <p class="eyebrow r">§05 · bring your data</p>
         <h2 class="r" style="--d: 0.06s">Drop a file, review, <em>publish.</em></h2>
@@ -152,7 +147,7 @@
           <p>
             <b>Settings → Import</b> takes the files other platforms let you leave with:
             <code>.ics</code> calendars, <code>.vcf</code> contacts, <code>.mbox</code> mail
-            archives, CSVs, and zips of all of the above. Nothing lands silently — every import
+            archives, CSVs, and zips of all of the above. Nothing lands silently — every impor
             becomes a <b>staged batch</b> you review as a diff (create / update / skip, duplicates
             already resolved against what the vault knows) before you publish it in one transaction,
             with per-row provenance.
@@ -172,13 +167,12 @@
         </div>
       </section>
 
-      <!-- 06 PHONE -->
       <section class="sec wrap" id="phone">
         <p class="eyebrow r">§06 · pair your phone</p>
         <h2 class="r" style="--d: 0.06s">One QR code, <em>no sync service.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
-            <b>Settings → Phone → Connect a phone</b> shows a QR code — a one-time pairing ticket
+            <b>Settings → Phone → Connect a phone</b> shows a QR code — a one-time pairing ticke
             that expires in minutes. Scan it with the Centraid mobile companion and the two devices
             hold a direct, encrypted peer-to-peer line (iroh QUIC) from then on: live updates, no
             relay account, no cloud copy. Revoke a device any time from the same screen.
@@ -203,7 +197,6 @@
         </div>
       </section>
 
-      <!-- 07 ALWAYS-ON -->
       <section class="sec wrap" id="always-on">
         <p class="eyebrow r">§07 · go always-on</p>
         <h2 class="r" style="--d: 0.06s">A gateway that <em>outlives the laptop lid.</em></h2>
@@ -224,7 +217,7 @@
             <div class="ln">
               <span class="p">$</span>
               <code
-                >centraid-gateway serve --data-dir ~/centraid-data --host 127.0.0.1 --port
+                >centraid-gateway serve --data-dir ~/centraid-data --host 127.0.0.1 --por
                 8765</code
               >
             </div>
@@ -282,7 +275,6 @@
         </p>
       </section>
 
-      <!-- 08 BACKUP -->
       <section class="sec wrap" id="backup">
         <p class="eyebrow r">§08 · back up the keys</p>
         <h2 class="r" style="--d: 0.06s">One file is the vault. <em>One key seals it.</em></h2>
@@ -290,7 +282,7 @@
           <p>
             Backing up a vault is copying its directory — <code>vault.db</code> travels as an
             ordinary file. But secrets (passwords in Locker,
-            OAuth tokens, card numbers) are <b>sealed</b>: encrypted at rest under a key that
+            OAuth tokens, card numbers) are <b>sealed</b>: encrypted at rest under a key tha
             deliberately lives <i>outside</i> the vault directory, so a copied backup can't reveal
             them. That key is yours to custody:
           </p>
@@ -305,7 +297,7 @@
             <div class="ln">
               <span class="p">$</span>
               <code
-                >centraid-gateway key export --data-dir ~/centraid-data --vault Local --out
+                >centraid-gateway key export --data-dir ~/centraid-data --vault Local --ou
                 seal-key.backup</code
               >
             </div>
@@ -316,7 +308,7 @@
           Lose the vault, keep the key → restore and reveal. Lose the key → the sealed cells are
           gone; everything unsealed remains. <a href="../data/#sealed">Data § sealed columns →</a>
           This is the manual version. Automated, offsite, provider-backed backup — and the
-          blank-machine <code>recover</code> flow that rebuilds the whole vault from a recovery kit
+          blank-machine <code>recover</code> flow that rebuilds the whole vault from a recovery ki
           on a fresh box — is <a href="../backups/">its own chapter →</a>.
         </p>
 

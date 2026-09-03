@@ -1,8 +1,3 @@
-// Readiness probe for the mobile E2E host. A list-only check can stay green
-// when the device-pairing route or live Iroh endpoint is absent, which made the
-// iOS lane fail only after the expensive native build. Mint one throwaway
-// ticket and validate its shape without ever printing the capability.
-
 const baseUrl = (process.argv[2] ?? "http://127.0.0.1:18789").replace(
   /\/+$/u,
   ""

@@ -1,42 +1,4 @@
 #!/usr/bin/env bun
-// Product-grammar screenshot gallery (issue #690 §4.2; re-pointed in #799).
-//
-// WHAT IS PHOTOGRAPHED, AND WHAT EACH LANE CLAIMS
-//
-//   SH / SH-c  — the REAL BUILT SHELL. The script builds `apps/web`, serves
-//                the dist, and drives `#ui-preview`, the in-product component
-//                gallery `packages/client/src/react/boot.tsx` mounts. The
-//                pixels are the product's own React blocks under the product's
-//                own token lowering and the product's own self-hosted faces.
-//                SH is the pointer viewport, SH-c the compact one.
-//
-//   BI / MO    — TOKEN LOWERINGS ONLY, and the baselines must not be read as
-//                anything else. `toBlueprintCss()` and `toNativeTheme()` are
-//                lowerings, not renderers: an inline blueprint app needs a
-//                gateway and a vault to paint, and a React Native surface has
-//                no DOM at all. Each lane renders a SHEET of the lowering's
-//                own resolved custom properties — every colour as a swatch,
-//                every value spelled out in full and never truncated. That
-//                fences the real and sufficient claim "this lowering reaches
-//                this surface with the values the registry declares", and it
-//                depicts nothing the platform does not emit.
-//
-// Until #799 every lane rendered a hand-written HTML fixture with a
-// hand-written stylesheet — a second, invented component vocabulary living
-// inside this gate script, photographed as if it were the product. It is gone.
-// The BS (served blueprint) lane is gone with it: #799 retired the served app
-// plane, so there is no such surface left to photograph.
-//
-// THE FACES ARE THE PRODUCT'S. The old fixture hardcoded `system-ui`, which
-// resolves to a different physical font per OS — the reason this lane was red
-// on Linux against darwin-captured baselines (#781). Every lane now loads the
-// vendored Instrument Sans `.woff2` files through the same `FONT_FILES`
-// manifest `apps/web`'s `centraid-fonts` plugin serves, and every capture
-// FAILS LOUDLY if the family does not actually resolve. A screenshot taken
-// mid-swap would bake a fallback face into a baseline.
-//
-// `--update` refreshes the committed baselines; without it the captures are
-// compared with a small, deterministic RGBA diff engine.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -64,17 +26,12 @@ const WEB_DIST = path.join(WEB_DIR, "dist");
 const MATRIX = JSON.parse(readFileSync(MATRIX_FILE, "utf8"));
 const UPDATE = process.argv.includes("--update");
 
-/** The one bundled face. Every lane must resolve it or fail. */
 const SANS = fonts.sans;
 
 const VIEWPORTS = {
   desktop: { width: 1024, height: 768 },
   compact: { width: 390, height: 844 },
 };
-
-// ---------------------------------------------------------------------------
-// The built shell, served
-// ---------------------------------------------------------------------------
 
 const CONTENT_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -88,14 +45,6 @@ const CONTENT_TYPES = {
   ".woff2": "font/woff2",
 };
 
-/**
- * `apps/web/vite.config.ts` imports `@centraid/design/font-faces`, which the
- * package export map resolves to `packages/design/dist/font-faces.js`. A
- * fresh CI checkout has no dist; the rest of the shell also imports
- * workspace packages at their `dist` entry (protocol, client, …). Build
- * `@centraid/web`'s package dependencies — not the web app itself — so
- * vite.config can load and the subsequent vite build can resolve them.
- */
 function ensureWebShellInputs() {
   execFileSync(
     "bun",
@@ -109,13 +58,6 @@ function ensureWebShellInputs() {
     );
 }
 
-/**
- * Rebuild the web dist before every run. The alternative — trusting whatever
- * `apps/web/dist` happens to hold — is how a "verified" baseline ends up
- * photographing a bundle nobody has built since the change under review.
- * `scripts/perf/run-waterfall.mjs` takes the same precaution for the same
- * reason. It costs about five seconds.
- */
 function buildWebShell() {
   ensureWebShellInputs();
   execFileSync("bunx", ["vite", "build", "--logLevel", "warn"], {
@@ -126,8 +68,6 @@ function buildWebShell() {
     throw new Error("apps/web build produced no dist/index.html");
 }
 
-/** Serve the dist on an ephemeral port. Same-origin, so `/fonts/*` resolves
- *  exactly as it does in production and no CDN enters the picture. */
 async function serveDist() {
   const server = createServer((req, res) => {
     const url = (req.url ?? "/").split("?")[0].split("#")[0];
@@ -157,10 +97,6 @@ async function serveDist() {
   return { origin: `http://127.0.0.1:${port}`, server };
 }
 
-// ---------------------------------------------------------------------------
-// Entries
-// ---------------------------------------------------------------------------
-
 function captures() {
   const entries = [];
   for (const scheme of ["light", "dark"]) {
@@ -186,8 +122,6 @@ function captures() {
       {
         id: `bi-${scheme}`,
         lane: "BI",
-        // Lowering only — see the header. Named so the manifest cannot be
-        // misread as component coverage for the inline blueprint surface.
         source: "blueprint-token-lowering",
         surface: "BI",
         scheme,
@@ -230,8 +164,6 @@ function diffPng(expected, actual) {
 
 function validateGalleryContract(entries) {
   const failures = [];
-  // BS is deliberately absent: #799 retired the served blueprint plane, so
-  // the surface it named no longer exists to photograph.
   const expectedSurfaces = new Set(["SH", "SH-c", "BI", "MO"]);
   const seen = new Set();
   for (const entry of entries) {
@@ -253,9 +185,6 @@ function validateGalleryContract(entries) {
         failures.push(`missing ${surface}/${scheme} gallery state`);
     }
   }
-  // The matrix must not keep describing a surface nothing captures — a
-  // renderer listed there with no lane is exactly the stale-doc shape #799
-  // is retiring everywhere else.
   for (const surface of Object.keys(MATRIX.surfaces)) {
     if (!expectedSurfaces.has(surface))
       failures.push(
@@ -270,12 +199,6 @@ async function assertRenderable(page, selector, id) {
     throw new Error(`${id}: missing renderable ${selector}`);
 }
 
-/**
- * The faces are loaded AND actually selected. `document.fonts.ready` alone is
- * not enough — it settles just as happily when every face failed and the
- * renderer fell back to a system font, which is the exact silent failure that
- * made the old `system-ui` baselines OS-dependent.
- */
 async function assertProductFaceResolved(page, id) {
   await page.evaluate(() => document.fonts.ready);
   const report = await page.evaluate((family) => {
@@ -288,9 +211,6 @@ async function assertProductFaceResolved(page, id) {
       probe.style.fontFamily = stack;
       return probe.getBoundingClientRect().width;
     };
-    // A family that cannot exist forces the UA's last-resort face. If the
-    // product family measures the same, it never loaded and we are looking at
-    // a fallback.
     const fallback = widthFor("'centraid-no-such-face', monospace");
     const product = widthFor(`'${family}', 'centraid-no-such-face', monospace`);
     probe.remove();
@@ -352,17 +272,6 @@ async function assertLegalTypeTriples(page, root, id) {
     );
 }
 
-/**
- * The control-vocabulary contract, re-expressed against the real shell DOM.
- *
- * The retired fixture asserted "exactly one primary action", which was a
- * property of the fixture's single reference card, not of the product: a
- * COMPONENT GALLERY shows every variant by construction, and a disabled
- * primary beside an enabled one is one of the things it exists to show. What
- * actually transfers is the M4 invariant underneath it — ONE ACCENT FILL — so
- * that is what is checked here, and it is a stronger claim than a count: no
- * variant other than `primary` may paint the accent fill.
- */
 async function assertControlVocabulary(page, root, id) {
   await Promise.all(
     ["primary", "secondary", "quiet", "destructive"].map((variant) =>
@@ -412,7 +321,6 @@ async function assertControlVocabulary(page, root, id) {
     throw new Error(`${id}: the primary action is not keyboard focusable`);
 }
 
-/** The block vocabulary is actually on screen, named as the product names it. */
 const GALLERY_BLOCK_LABELS = [
   "Records",
   "Filters",
@@ -423,15 +331,12 @@ const GALLERY_BLOCK_LABELS = [
 const FREEZE_MOTION =
   "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }";
 
-/** Where `boot.tsx` mounts the in-product component gallery. */
 const PREVIEW_HOST = "#react-preview-root";
 
 async function captureShell(page, origin, entry) {
   await page.goto(`${origin}/#ui-preview`, { waitUntil: "load" });
   const host = PREVIEW_HOST;
   await page.locator(`${host} > *`).waitFor();
-  // The scheme is the product's own attribute, set the way the renderer sets
-  // it once it has read the member's preference.
   await page.evaluate((scheme) => {
     document.documentElement.dataset.theme = scheme;
   }, entry.scheme);
@@ -445,22 +350,11 @@ async function captureShell(page, origin, entry) {
   await assertControlVocabulary(page, host, entry.id);
   await assertLegalTypeTriples(page, host, entry.id);
   await page.addStyleTag({ content: FREEZE_MOTION });
-  // The preview host is a fixed, scrolling overlay, and a browser paints only
-  // the visible part of one — an element screenshot of it comes back with
-  // everything below the fold blank. Unpin it so the DOCUMENT scrolls and a
-  // full-page capture is complete. This moves the host wrapper only: no
-  // product component's box, type or colour changes, and the `padding-top`
-  // that drops away is the macOS traffic-light inset, which is host chrome
-  // rather than design.
   await page.addStyleTag({
     content:
       `${host} { position: static !important; inset: auto !important; overflow: visible !important; padding-top: 0 !important; z-index: auto !important; } ` +
-      // The shell pins `html`/`body` to the viewport and hides their overflow
-      // — an app window does not scroll, its panes do. Let the document grow
-      // instead, or the capture is silently clipped at one viewport.
       "html, body { height: auto !important; min-height: 0 !important; overflow: visible !important; background: var(--bg); margin: 0; }",
   });
-  // One frame for the relayout before the shutter.
   await page.evaluate(
     () =>
       new Promise((resolve) => {
@@ -476,8 +370,6 @@ async function main() {
     issue: 690,
     reviewIssue: 695,
     generatedBy: "scripts/design-gallery.mjs",
-    // Read by a human looking at the PNGs, so the narrower lanes cannot be
-    // mistaken for component coverage they do not have.
     laneClaims: {
       BI: "token lowering only — toBlueprintCss() resolved values, not a rendered inline app",
       MO: "token lowering only — toNativeTheme() resolved values; React Native has no DOM to photograph",
@@ -485,11 +377,6 @@ async function main() {
       "SH-c":
         "the built shell's #ui-preview component gallery, compact viewport",
     },
-    // Read from the SAME surface the SH lane photographs, with the document
-    // direction flipped and the copy replaced by CJK. They take no baseline:
-    // what the rulebook binds under RTL and CJK is a set of invariants, not an
-    // appearance, so they are asserted as values rather than compared as
-    // pixels. See scripts/design-gallery-fidelity.mjs.
     fidelityLanes: {
       cjk: "the SH surface under Japanese copy — the one face's mandatory CJK fallbacks reach every rendered stack, and no role's rung moves with the glyphs",
       rtl: "the SH surface under dir=rtl — every asymmetric box mirrors, no physical text alignment survives the flip, and the numeric register keeps its pinned direction and its bidi isolate",
@@ -563,11 +450,6 @@ async function main() {
         }),
       Promise.resolve()
     );
-    // After the captures, never instead of them: a fidelity finding is a
-    // statement about the surface, and it must not stop a baseline being
-    // written or compared. One more page on an already-warm browser and an
-    // already-built dist, which is why this rides inside `design:gallery`
-    // rather than standing up a second gate with its own vite build.
     const fidelityPage = await browser.newPage({
       colorScheme: "light",
       deviceScaleFactor: 1,

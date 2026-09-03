@@ -1,44 +1,4 @@
 #!/usr/bin/env node
-/**
- * Path-filter inverse lint (#892 Phase 3).
- *
- * THE LOAD-BEARING FACT: in `ci.yml`, `skipped` counts as a PASS. That is
- * correct — it is what lets a path-gated lane roll up into the single required
- * `check` (#557) — and it makes the `changes` filter table the thing that
- * decides whether a lane ever runs at all. A directory no filter mentions wakes
- * no lane, reports `skipped`, and merges green. Nothing announces it.
- *
- * #890 W0 fixed one instance by hand: `tests/agent-e2e-mobile/**` was absent, so
- * editing a Maestro flow triggered NO mobile lane and the test layer of the
- * primary surface merged unexercised. This is the check that would have caught
- * it, and the one that catches the next one.
- *
- * THREE SUB-CHECKS.
- *
- *   claimed     every workspace directory (`packages/*`, `apps/*`) and every
- *               tracked top-level directory is named by at least one filter, or
- *               is listed in the ledger with the always-on job that covers it.
- *               An unclaimed path fails; a ledger entry for a path that no
- *               longer exists ALSO fails, because a stale exemption reads like a
- *               reviewed decision and is not one.
- *   tidy        no filter lists the same glob twice. The table is hand-kept and
- *               already shows the wear — `packages/server/**` appeared five
- *               times and `packages/core/**` twice inside the `gateway` filter —
- *               which is exactly the state in which a real omission is invisible.
- *   escape      every read of a filter output carries the `all` fallback. A
- *               `workflow_dispatch` run has no diff, so `changes` SKIPS the
- *               paths-filter step and every output is the empty string; `all` is
- *               what turns the lanes back on. `client-e2e` threaded it into its
- *               `if:` but not into its two `with:` inputs — the only reads in the
- *               file outside an `if:` — so the caller started, handed the lane
- *               `web: false, desktop: false`, and both inner jobs skipped. A
- *               manual full run on `main` exercised nothing and reported green.
- *               That is the `skipped`-counts-as-PASS hazard again, one level
- *               down, and reached through the very control meant to defeat it.
- *
- * Offline, no YAML dependency (the same line-scanning convention as
- * `lint-workflow-pins.mjs`), ~30 ms.
- */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -47,13 +7,6 @@ const root = path.resolve(import.meta.dirname, "..");
 const CI_PATH = path.join(root, ".github/workflows/ci.yml");
 const LEDGER_PATH = path.join(root, "tests/path-filter-ledger.json");
 
-/**
- * Parse the `changes` job's `filters:` block into `{ name: globs[] }`.
- *
- * The block is a YAML string scalar (`filters: |`) inside the workflow, so it is
- * read by indentation rather than parsed: filter names sit at 12 spaces, their
- * globs at 14 as `- '…'`.
- */
 export function parseFilters(source) {
   const lines = source.split("\n");
   const start = lines.findIndex((line) => /^\s{10}filters:\s*\|/u.test(line));
@@ -63,7 +16,6 @@ export function parseFilters(source) {
   for (let index = start + 1; index < lines.length; index += 1) {
     const line = lines[index];
     if (line.trim() === "") continue;
-    // Dedent out of the literal block ends it.
     if (!/^\s{12}/u.test(line)) break;
     const name = /^\s{12}(?<name>[\w-]+):\s*$/u.exec(line);
     if (name) {
@@ -77,7 +29,6 @@ export function parseFilters(source) {
   return filters;
 }
 
-/** Duplicate globs inside a single filter. */
 export function duplicateGlobs(filters) {
   const problems = [];
   for (const [name, globs] of Object.entries(filters)) {
@@ -96,16 +47,6 @@ export function duplicateGlobs(filters) {
 
 const OUTPUT_REF = /needs\.changes\.outputs\.(?<name>[\w-]+)/gu;
 
-/**
- * Split the workflow into the units a condition can occupy: one line, or a whole
- * block scalar (`if: >`, `filters: |`) folded back into one string under the
- * line number of its key.
- *
- * A per-line scan would read the fallback half of a folded `if:` as absent, so
- * the alternative was to ban folded conditions outright — but `publish-report`
- * has one for length alone, with no filter output in it. Joining the block costs
- * a few lines and refuses nothing that is fine.
- */
 function scannableUnits(source) {
   const lines = source.split("\n");
   const units = [];
@@ -129,13 +70,6 @@ function scannableUnits(source) {
   return units;
 }
 
-/**
- * Reads of a `changes` output that do not carry the `all` fallback.
- *
- * Deliberately blind to WHICH construct does the reading: the bug this exists
- * for was in a `with:`, and every previous reading of this table had assumed
- * `if:` was the only place an output could be consumed.
- */
 export function escapeHatchProblems(source) {
   const problems = [];
   for (const { line, text } of scannableUnits(source)) {
@@ -151,17 +85,11 @@ export function escapeHatchProblems(source) {
   return problems;
 }
 
-/** The repo-relative directory a glob claims, e.g. `packages/server/**` → `packages/server`. */
 export function claimedPath(glob) {
   const withoutGlob = glob.replace(/\/\*\*.*$/u, "").replace(/\/\*$/u, "");
   return withoutGlob.replace(/\/+$/u, "");
 }
 
-/**
- * Every path a filter table claims, including ancestors: a filter naming
- * `packages/blueprints/apps/locker/**` claims `packages/blueprints` too, because
- * a change there does wake a lane.
- */
 export function claimedPaths(filters) {
   const claimed = new Set();
   for (const globs of Object.values(filters)) {
@@ -176,10 +104,6 @@ export function claimedPaths(filters) {
   return claimed;
 }
 
-/**
- * The units a reader would expect a filter to name: each workspace package and
- * app, plus every tracked top-level directory.
- */
 export function pathsRequiringClaim(trackedFiles) {
   const required = new Set();
   for (const file of trackedFiles) {

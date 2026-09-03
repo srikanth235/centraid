@@ -1,16 +1,3 @@
-/**
- * The rig the composition-chaos lane drives (issue #842 W3.2).
- *
- * A real vault plane on a real directory, the real replica-intent route over a
- * real loopback HTTP hop, and a real durable client outbox on a real file. The
- * transport is deliberately plain HTTP here: W3.1 owns the wire, and this lane
- * owns what happens when a COMPONENT dies while work is in flight.
- *
- * `restartGateway()` is a genuine restart — the vault plane is stopped and
- * reopened from the same directory, so everything asserted afterwards is read
- * back off disk rather than out of a process that never lost its memory.
- */
-
 import { promises as fs } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo, Server } from "node:net";
@@ -37,10 +24,8 @@ export type { BackendMode } from "./chaos-planner-app.js";
 
 export interface ComponentChaosWorld {
   plane: () => VaultPlane;
-  /** Stop the vault plane and reopen it from the same directory. */
   restartGateway: () => void;
   setBackend: (mode: BackendMode) => void;
-  /** Open (or reopen) the durable outbox stored beside the vault. */
   openOutbox: () => DurableOutbox;
   submit: (intent: unknown) => Promise<{
     status: number;
@@ -72,9 +57,6 @@ export async function openComponentChaosWorld(): Promise<ComponentChaosWorld> {
 
   let plane = openPlane();
   approvePlanner(plane);
-  // The REAL app-engine dispatcher — see chaos-planner-app.ts for why a direct
-  // `plane.invoke` would make the exactly-once claim vacuous. The plane is
-  // passed as a thunk so a gateway restart swaps it underneath a live backend.
   const backend = await openPlannerBackend(() => plane);
   const outboxes: DurableOutbox[] = [];
 
@@ -145,7 +127,7 @@ export async function openComponentChaosWorld(): Promise<ComponentChaosWorld> {
         try {
           outbox.close();
         } catch {
-          // Already closed by the fault being exercised; that is the point.
+          // Intentionally empty.
         }
       }
       await new Promise<void>((resolve) => {

@@ -1,13 +1,3 @@
-/*
- * PENDING, produced rather than posed (#890 W3).
- *
- * A write goes into the REAL `SqliteIntentStore` while the phone's transport
- * refuses to connect, and the assertions are what the session then reports:
- * a durable intent it calls `queued`, and an optimistic overlay row stamped
- * with that intent's key — "saved on this phone" as a fact about the outbox,
- * not a label a fixture supplied.
- */
-
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { enumerate } from "./lib/boot-conditions.js";
@@ -43,14 +33,11 @@ describe("a pending write on a real gateway", () => {
         observed.queuedStatusWhileCut,
         `${appId} did not hold ${observed.queuedIntentId} in the outbox while the gateway was unreachable`
       ).toBe("queued");
-      // The overlay is the other half of the claim: the row the member sees is
-      // carrying this intent, not a canonical row that happens to be there.
       expect(
         observed.overlayKeys,
         `${appId} queued ${observed.queuedIntentId} but no row on ${recipe.entity} carries its pending key`
       ).toContain(observed.queuedIntentId);
 
-      // The negative: same session, same shape of write, live transport.
       expect(
         observed.liveStatus,
         `${appId} reported the LIVE write queued too — "queued" is then what this write always says`

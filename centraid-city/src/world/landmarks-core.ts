@@ -1,28 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit — one bespoke model per building id.
-// Already split three ways by district; each entry is independent of the others.
-// landmarks-core.ts — clients, gateway, runtime. See KIT_API.md.
-//
-// Lane A. Twelve bespoke silhouettes. The four rules, as applied here:
-//   1. District color is an ACCENT only — sign bands, door glow, seams, beacons, board
-//      cells, window tint. Every body mass uses the neutral kit material palette.
-//   2. Silhouette first — monolith / glass drum / portrait slab / porticoed hall /
-//      control cabin / card-index ziggurat / scoreboard / basilica vault / reactor /
-//      louvered plant block / open rack / tank farm. No two read alike at 40 px.
-//   3. No repeated roof profile in this lane: flat parapet, brass ring, notched shoulder
-//      slab, glazed barrel vault, cone, stepped ziggurat, tilted board, extruded vault,
-//      shallow copper dome, hipped, open louvered canopy, cylinder farm.
-//   4. Each shape depicts its subsystem — drawers for the vault registry, shelf bands for
-//      the ledger, gauges for the model catalog, a live scoreboard for health.
-//
-// Defensive by construction: kit.ts is authored in parallel, so every kit call goes
-// through `add()`. A kit member that is missing or throws costs one detail,
-// never the whole building (the dispatch seam in world.ts drops a landmark that throws).
 
 import type * as THREE from "three";
 
 import type { LandmarkBuilder } from "../core/types.js";
 
-/** Build a part, position it, add it to the group. Returns the object or null. */
 function add(
   g: THREE.Group,
   make: () => THREE.Object3D,
@@ -48,7 +29,6 @@ function add(
   return o;
 }
 
-/** Rotate a part that was already added. */
 function turn(
   o: THREE.Object3D | null,
   rx?: number,
@@ -60,7 +40,6 @@ function turn(
   return o;
 }
 
-/** A closed ring of [x, y, z] points, for seams and pipe runs. */
 function ringPoints(
   r: number,
   y: number,
@@ -76,17 +55,12 @@ function ringPoints(
 }
 
 export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
-  // ── Client Approach ──────────────────────────────────────────────────────────────
-  // Three towers that must be told apart instantly: heavy chamfered monolith,
-  // glass cylinder, slender notched portrait slab.
-
   "clients-desktop"({ g, w, h, d, color, kit }) {
     const m = kit.mat || {};
     const bodyH = h * 0.84;
     const topY = 0.7 + bodyH;
 
     add(g, () => kit.box(w * 1.06, 0.7, d * 1.06, m.concrete), 0, 0.35, 0);
-    // Heavy load-bearing frame with the glazing set deep behind it.
     add(
       g,
       () => kit.box(w, bodyH, d, m.bone, { bevel: true }),
@@ -111,7 +85,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       0.7 + bodyH * 0.46,
       0
     );
-    // The single chamfered corner — front-left, cut back 45°.
     turn(
       add(
         g,
@@ -132,7 +105,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // Flat parapet roof, plant deck, and a dish aimed down the approach at the gateway.
     add(g, () => kit.roofParapet(w, d, m.slate), 0, topY, 0);
     add(
       g,
@@ -156,7 +128,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     );
     add(g, () => kit.vent(0.4, 0.9, m.steel), w * 0.3, topY + 0.45, -d * 0.3);
 
-    // Accent: fascia band + lit lobby door.
     add(
       g,
       () => kit.signBand(w * 0.6, 0.6, color),
@@ -181,7 +152,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     const shaftH = h * 0.88;
     const topY = 0.6 + shaftH;
 
-    // Full-height glass drum — the only cylinder on the approach.
     add(
       g,
       () => kit.drum(r * 1.16, r * 1.22, 0.6, m.concrete, { seg: 16 }),
@@ -203,7 +173,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       0.6 + shaftH / 2,
       0
     );
-    // Mullion rings read as floor plates through the glass.
     for (let i = 1; i <= 3; i++) {
       const ringY = 0.6 + (shaftH * i) / 4;
       add(
@@ -215,7 +184,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
         0
       );
     }
-    // Thin brass ring cap — no parapet, no gable; the roof is a rim.
     add(
       g,
       () => kit.drum(r * 1.1, r * 1.02, 0.45, m.brass, { seg: 16 }),
@@ -232,7 +200,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     );
     add(g, () => kit.mast(h * 0.22, m.steel), 0, topY + 0.6, 0);
 
-    // Install canopy over the door — the "add to home screen" awning.
     turn(
       add(
         g,
@@ -268,7 +235,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     const shaftH = h * 0.86;
     const topY = plinth + shaftH;
 
-    // Low wide plinth, slender portrait slab, rounded vertical edges.
     add(
       g,
       () => kit.box(w * 0.9, plinth, d * 0.72, m.concrete, { bevel: true }),
@@ -297,7 +263,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       plinth + shaftH / 2,
       0
     );
-    // The screen.
     add(
       g,
       () =>
@@ -309,7 +274,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // The notch: two shoulder caps with a gap between them instead of a full top edge.
     add(
       g,
       () => kit.box(slabW * 0.3, 0.9, slabD, m.bone, { bevel: true }),
@@ -341,7 +305,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       )
     );
 
-    // Whip antenna — the iroh tunnel home.
     add(g, () => kit.mast(h * 0.42, m.steel), slabW * 0.35, topY + 0.9, 0);
     add(g, () => kit.aerial(h * 0.2, m.brass), -slabW * 0.35, topY + 0.9, 0);
     add(g, () =>
@@ -373,10 +336,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     );
   },
 
-  // ── Gateway Plaza ────────────────────────────────────────────────────────────────
-
-  // The civic landmark of the city: a train-station front desk. Every client walks
-  // through this one door, so it gets the portico, the broad steps, and the glazed vault.
   "gateway-frontdesk"({ g, w, h, d, color, kit }) {
     const m = kit.mat || {};
     const pod = 1;
@@ -389,7 +348,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     const wingD = d * 0.58;
     const front = hallD * 0.5;
 
-    // Podium the whole composition stands on.
     add(g, () => kit.box(w * 1.08, pod, d * 1.04, m.concrete), 0, pod / 2, 0);
     add(
       g,
@@ -399,7 +357,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // Central concourse.
     add(g, () => kit.box(hallW, hallH, hallD, m.bone), 0, pod + hallH / 2, 0);
     add(
       g,
@@ -424,7 +381,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // Brass cornice + shallow glazed barrel vault with a clerestory — the concourse roof.
     add(
       g,
       () => kit.box(hallW * 1.06, 0.4, hallD * 1.06, m.brass),
@@ -450,7 +406,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       )
     );
 
-    // Fluted colonnade of eight standing clear of the facade, carrying an entablature.
     add(
       g,
       () =>
@@ -477,7 +432,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       front + 2.45
     );
 
-    // Broad steps spanning the entire front.
     add(g, () => kit.steps(w * 0.94, 3.2, 5, m.concrete), 0, 0, front + 4.4);
     add(
       g,
@@ -487,7 +441,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       front + 0.1
     );
 
-    // Two lower flanking wings, arcaded, with flat coping and a copper plant box.
     for (let s = -1; s <= 1; s += 2) {
       const x = s * w * 0.42;
       add(g, () => kit.box(wingW, wingH, wingD, m.bone), x, pod + wingH / 2, 0);
@@ -514,7 +467,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       );
     }
 
-    // Plaza furniture — the civic scale cues.
     add(g, () => kit.flagpole(h * 0.8, m.steel), -w * 0.44, 0, front + 5.4);
     add(g, () => kit.flagpole(h * 0.8, m.steel), w * 0.44, 0, front + 5.4);
     add(g, () => kit.streetlamp(4.2, m.steel), -w * 0.3, 0, front + 6.2);
@@ -547,7 +499,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     const cabY = 0.5 + pierH + 0.35;
     const capY = cabY + cabH;
 
-    // Splayed pier — a control-tower shaft that widens at its foot.
     add(g, () => kit.box(w * 1.05, 0.5, d * 1.05, m.concrete), 0, 0.25, 0);
     add(g, () => kit.wedge(w * 0.46, pierH, d * 0.46, m.concrete), 0, 0.5, 0);
     add(
@@ -559,7 +510,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     );
     add(g, () => kit.spiralStair(w * 0.3, pierH, m.steel), 0, 0.5, 0);
 
-    // Octagonal 360°-glazed cabin, oversailing the pier so it looks over the plaza.
     add(
       g,
       () => kit.drum(rCab * 0.9, rCab * 0.7, 0.35, m.darkSlate, { seg: 8 }),
@@ -587,7 +537,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     );
     add(g, () => kit.catwalk(rCab * 1.24, 0.5 + pierH + 0.2, m.steel));
 
-    // Shallow cone cap bristling with aerials and dishes — the only cone in the lane.
     add(g, () => kit.roofCone(rCab * 1.05, h * 0.16, m.slate), 0, capY, 0);
     add(g, () => kit.mast(h * 0.3, m.steel), 0, capY + h * 0.16, 0);
     add(
@@ -623,7 +572,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     const bodyH = h * 0.66;
     const bodyTop = base + bodyH;
 
-    // A card-index cabinet blown up to building scale.
     add(g, () => kit.box(w * 1.08, base, d * 1.08, m.concrete), 0, base / 2, 0);
     add(
       g,
@@ -632,7 +580,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       base + bodyH / 2,
       0
     );
-    // Drawer fronts: a dense plaque grid on the two visible faces …
     add(
       g,
       () => kit.plaqueWall(w * 0.86, bodyH * 0.86, 4, 6, m.plaster),
@@ -652,7 +599,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       Math.PI / 2,
       0
     );
-    // … plus four real drawers with brass pulls, one pulled open and lit inside.
     for (let i = 0; i < 4; i++) {
       const y = base + bodyH * (0.22 + i * 0.19);
       const out = i === 1 ? 0.7 : 0.18;
@@ -679,7 +625,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       d * 0.46 + 0.62
     );
 
-    // Stepped ziggurat top — mounted planes stacked over the warm map.
     add(
       g,
       () => kit.roofStepped(w * 0.92, d * 0.92, h * 0.3, 4, m.concrete),
@@ -715,7 +660,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     const m = kit.mat || {};
     const baseH = h * 0.46;
 
-    // Low equipment base …
     add(
       g,
       () => kit.box(w * 0.94, baseH, d * 0.7, m.darkSlate),
@@ -738,7 +682,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // … carrying a big tilted board of live cells on a lattice truss frame.
     add(
       g,
       () => kit.latticeMast(h * 1.05, 0.5, m.steel),
@@ -791,8 +734,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     add(g, () => kit.beacon(w * 0.36, baseH + h * 1.1, -d * 0.16, color, 0.3));
   },
 
-  // ── Harness Runtime Row ──────────────────────────────────────────────────────────
-
   "runtime-ledger"({ g, w, h, d, color, kit }) {
     const m = kit.mat || {};
     const pod = 0.7;
@@ -800,8 +741,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     const naveLen = w * 0.74;
     const aisleH = h * 0.44;
 
-    // An archive basilica: aisles, clerestory, and a long barrel-vaulted nave whose
-    // barrel runs down the length of the hall (hence the quarter turn).
     add(g, () => kit.box(w * 1.02, pod, d * 1.02, m.concrete), 0, pod / 2, 0);
     turn(
       add(g, () => kit.vault(naveSpan, h * 0.92, naveLen, m.bone), 0, pod, 0),
@@ -826,7 +765,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
         pod + aisleH + 0.14,
         z
       );
-      // Repeating structural bays down both flanks.
       for (let i = -2; i <= 2; i++) {
         add(
           g,
@@ -836,7 +774,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
           z + s * d * 0.11
         );
       }
-      // Clerestory strip riding above the aisle roofs.
       add(
         g,
         () =>
@@ -849,7 +786,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       );
     }
 
-    // Facade expressed as stacked shelf bands — it should read as a library.
     add(
       g,
       () =>
@@ -892,7 +828,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       naveSpan * 0.5 + 1.7
     );
 
-    // Accent: the append point glows at the newest end of the hall.
     add(
       g,
       () => kit.signBand(naveLen * 0.44, 0.6, color),
@@ -926,7 +861,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     const shellH = h * 0.72;
     const topY = base + shellH;
 
-    // Reactor / kiln: a cylindrical shell wearing its plumbing on the outside.
     add(
       g,
       () => kit.drum(r * 1.24, r * 1.32, base, m.darkSlate, { seg: 16 }),
@@ -992,7 +926,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       -r * 0.9
     );
 
-    // Accent: the fire line at the base of the shell.
     add(g, () => kit.seam(ringPoints(r * 1.02, base + 0.35, 16), color));
     add(
       g,
@@ -1011,7 +944,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     const bodyH = h * 0.58;
     const bodyTop = base + bodyH;
 
-    // Same family as acp1 — plant, not office — but compact, louvered and hip-roofed.
     add(
       g,
       () => kit.box(w * 1.06, base, d * 1.06, m.darkSlate),
@@ -1048,7 +980,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       d * 0.16
     );
 
-    // Exhaust stack with its own smaller catwalk.
     add(
       g,
       () => kit.chimney(0.55, h * 0.62, m.steel),
@@ -1109,7 +1040,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     const pad = 0.4;
     const rackH = h * 0.82;
 
-    // A pigeonhole rack: open steel frame, labelled cubbies, some slots empty on purpose.
     add(g, () => kit.box(w * 1.04, pad, d * 1.04, m.concrete), 0, pad / 2, 0);
     for (let sx = -1; sx <= 1; sx += 2) {
       for (let sz = -1; sz <= 1; sz += 2) {
@@ -1135,7 +1065,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
         0
       );
     }
-    // Occupied slots are installed, pinned harness kinds; the gaps are the ones you have not got.
     add(
       g,
       () => kit.crateStack(w * 0.22, rackH * 0.26, d * 0.5, m.timber),
@@ -1164,7 +1093,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       pad + rackH * 0.72,
       0
     );
-    // Brass consent tag on one slot — no egress without a grant on file.
     add(
       g,
       () => kit.box(0.5, 0.5, 0.3, m.brass),
@@ -1173,7 +1101,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       d * 0.36
     );
 
-    // Open louvered canopy instead of a roof — the rack stays see-through.
     add(
       g,
       () => kit.truss(w * 1, 0.4, m.steel, { segments: 5 }),
@@ -1189,7 +1116,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // Accent: the little labels along each shelf lip.
     for (let i = 0; i < 3; i++) {
       const y = pad + (rackH * (i + 1)) / 3.2 + 0.1;
       add(g, () => kit.signBand(w * 0.9, 0.16, color), 0, y, d * 0.37);
@@ -1204,7 +1130,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     const tankLen = w * 0.86;
     const tankY = pad + r + 0.7;
 
-    // Fuel depot: the model catalog as a row of horizontal tanks behind a gauge board.
     add(g, () => kit.box(w * 1.08, pad, d * 1.08, m.concrete), 0, pad / 2, 0);
     for (let i = -1; i <= 1; i++) {
       const z = i * d * 0.28 - d * 0.1;
@@ -1244,7 +1169,6 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
       d * 0.18
     );
 
-    // The pricing board out front, tilted to be read from the road.
     turn(
       add(
         g,

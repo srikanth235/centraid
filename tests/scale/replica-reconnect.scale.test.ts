@@ -12,41 +12,10 @@ import { unrefTimer } from "../../packages/server/src/lib/unref-timer.js";
 import { serve } from "../../packages/server/src/serve/serve.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
-/**
- * RECONNECT TO FRESH (issue #883 C1).
- *
- * `tests/experience-budgets/gateway.json#reconnectToFresh` carried
- * `status: "unmeasured"` and `probe: "NONE TODAY"`: the repo had never timed
- * the interval a returning owner actually feels — reopen the app, and how long
- * does the screen keep showing yesterday? `replica-bootstrap.scale.test.ts`
- * measures a windowed bootstrap, which is the FIRST sync, not a resume.
- *
- * This is that probe, over the shipped HTTP surface at the declared year-3
- * volume (50,000 replica rows):
- *
- *   1. bootstrap — walk every row through the windowed bootstrap route, and
- *      keep PAGE ONE's watermark as the resume cursor, which is what the
- *      protocol's continuation token pins the client's later delta to;
- *   2. attach — open the change stream on that cursor and prove it live with
- *      one sentinel commit;
- *   3. leave — drop the connection, then commit `OFFLINE_COMMITS` writes the
- *      client cannot see;
- *   4. return — reopen the stream on the now-STALE cursor and time from the
- *      reconnect request to the frame that carries every missed change.
- *
- * The measured interval deliberately starts at the reconnect, not at the
- * disconnect: how long the owner was away is the owner's business and is
- * unbounded, while the gateway owns everything after the socket comes back.
- * That is the whole of what `reconnectToFreshMs` can honestly fence.
- */
 const OWNER = "tests/scale/replica-reconnect.scale.test.ts";
-/** Year-3 replica rows on a phone (tests/experience-budgets/README.md). */
 const REPLICA_ROWS = 50_000;
-/** Bootstrap page size for the walk. */
 const WINDOW = 20_000;
-/** Commits written while the client is disconnected. */
 const OFFLINE_COMMITS = 25;
-/** Upper bound on a frame arriving. A watchdog, not a wait. */
 const FRAME_DEADLINE_MS = 60_000;
 
 interface CeilingFile {
@@ -54,15 +23,12 @@ interface CeilingFile {
 }
 
 interface ChangeFrame {
-  /** ms since the stream was requested, when this frame was parsed. */
   atMs: number;
   rowIds: string[];
 }
 
 interface Stream {
-  /** Resolves once every row id in `rowIds` has been delivered. */
   waitForAll: (rowIds: readonly string[]) => Promise<ChangeFrame>;
-  /** Elapsed ms from the request to the FIRST change frame on this stream. */
   firstChangeMs: () => number | undefined;
   close: () => void;
 }
@@ -82,11 +48,6 @@ function parseFrame(raw: string): { event: string; data: unknown } | undefined {
   }
 }
 
-/**
- * Open one replica change stream and index the row ids it delivers, stamping
- * each frame against `started` — the moment the request went out, so the
- * measured interval includes connection setup, not just the projection.
- */
 async function openStream(
   base: string,
   token: string,
@@ -116,7 +77,6 @@ async function openStream(
   let buffer = "";
   const pump = async (): Promise<void> => {
     for (;;) {
-      // Sequential by construction: one chunk at a time off one socket.
       // oxlint-disable-next-line no-await-in-loop
       const chunk = await reader.read();
       if (chunk.done) return;
@@ -190,9 +150,6 @@ describe("replica-reconnect.scale", () => {
       paths: { vaultDir: path.join(dataDir, "vault") },
       token,
     });
-    // Every stream this test opens, so cleanup closes them whatever happens.
-    // `close()` is idempotent: the resumed stream is closed here as well as by
-    // the test body's own drop.
     const streams: Stream[] = [];
     onTestFinished(async () => {
       for (const stream of streams) stream.close();
@@ -240,15 +197,12 @@ describe("replica-reconnect.scale", () => {
       notifyReplicaCommit(plane.db.vault);
     };
 
-    // 1 — BOOTSTRAP. Walk every page, exactly as a fresh device does.
     const bootstrapStarted = performance.now();
     let query = `?window=${WINDOW}&app=agenda`;
     let rows = 0;
     let pages = 0;
     let resumeCursor: string | undefined;
     for (;;) {
-      // Sequential by construction: each page's query embeds the previous
-      // page's continuation token.
       // oxlint-disable-next-line no-await-in-loop
       const response = await fetch(
         `${handle.url}/centraid/_vault/replica/bootstrap${query}`,
@@ -264,8 +218,6 @@ describe("replica-reconnect.scale", () => {
       };
       pages += 1;
       rows += page.rows.filter((row) => row.entity === "schedule.task").length;
-      // PAGE ONE's watermark is the resume point the continuation token pins;
-      // a later page's watermark would silently skip the delta in between.
       resumeCursor ??= `${page.cursor.epoch}:${page.cursor.seq}`;
       if (page.complete) break;
       expect(page.next).toBeTruthy();
@@ -275,13 +227,11 @@ describe("replica-reconnect.scale", () => {
     expect(rows).toBe(REPLICA_ROWS);
     const cursor = resumeCursor!;
 
-    // 2 — ATTACH, and prove the stream live before anything is measured.
     const live = await openStream(handle.url, token, cursor, performance.now());
     streams.push(live);
     commit("reconnect-sentinel");
     await live.waitForAll(["reconnect-sentinel"]);
 
-    // 3 — LEAVE. The client is gone; these commits accumulate behind it.
     live.close();
     const missed = Array.from(
       { length: OFFLINE_COMMITS },
@@ -289,7 +239,6 @@ describe("replica-reconnect.scale", () => {
     );
     for (const rowId of missed) commit(rowId);
 
-    // 4 — RETURN on the STALE cursor. The clock starts at the request.
     const reconnectStarted = performance.now();
     const resumed = await openStream(
       handle.url,
@@ -302,9 +251,6 @@ describe("replica-reconnect.scale", () => {
     const reconnectToFreshMs = frame.atMs;
     const firstFrameMs = resumed.firstChangeMs() ?? reconnectToFreshMs;
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample nightly
-    // history. Null until the history is deep enough; a null is "no opinion
-    // yet", never a pass.
     const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed = reconnectToFreshMs < ceilingMs;
     const withinDrift = drift === null || reconnectToFreshMs <= drift;

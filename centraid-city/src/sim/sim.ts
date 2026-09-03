@@ -1,7 +1,3 @@
-// sim.ts — the city's little economy. Fixed 10 Hz logic tick, deterministic-ish PRNG.
-// Produces: stats (HUD), rates (particles/sec per flow role), pulses (transient FX 0..1),
-// activity (0..1 per district, drives the blinking lights).
-
 import type {
   CityContent,
   ScenarioConfig,
@@ -44,7 +40,6 @@ const ROLES = [
   "blobBackup",
   "automation",
   "automationWrite",
-  // --- sync path. None of these involve the harness runtime.
   "replica",
   "replicaDeliver",
   "devicePush",
@@ -65,7 +60,6 @@ const DISTRICTS = [
   "backup",
 ];
 
-// Scenario knobs. Anything omitted falls back to the steady baseline.
 const SCENARIOS: Record<string, ScenarioConfig> = {
   steady: {},
   "first-run": {
@@ -86,8 +80,6 @@ const SCENARIOS: Record<string, ScenarioConfig> = {
   },
   "photo-flood": { blobs: 6.5, casFill: 1, writes: 1.6, turns: 0.7 },
   "offline-mobile": { offline: true, turns: 1.1 },
-  // Two paired devices hammering the direct + sync path with the runtime parked.
-  // harnessOff forces every harness-path rate (and the runtime district lights) to zero.
   "multi-device": {
     harnessOff: true,
     turns: 1.5,
@@ -152,7 +144,6 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
   let itemsWindow = 0;
   let walWindow = 0;
 
-  // smoothed display values
   const smooth: Pick<SimStats, "turns" | "items" | "wal"> = {
     turns: 0,
     items: 0,
@@ -185,8 +176,6 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
     scenarioAge += dt;
 
     const kTurn = cfg.turns ?? 1;
-    // harnessOff parks the whole harness path: no harness turns, no tool calls, no parking.
-    // The direct + sync path is deliberately untouched by it — that is the point.
     const harnessOff = !!cfg.harnessOff;
     const kHarness = harnessOff ? 0 : (cfg.harness ?? 1);
     const kWrite = cfg.writes ?? 1;
@@ -196,14 +185,12 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
     const kDirect = cfg.direct ?? 1;
     const kSync = cfg.sync ?? 1;
 
-    // --- client requests → gateway
     const reqRate = (5.5 + Math.sin(elapsed * 0.31) * 1.8) * kTurn * kDirect;
     rates.request = reqRate;
     rates.response = reqRate * 0.82;
     bump("clients", reqRate * 0.006);
     bump("gateway", reqRate * 0.008);
 
-    // --- turns / harness runtime
     const turnRate = harnessOff
       ? 0
       : (0.55 + Math.max(0, Math.sin(elapsed * 0.17)) * 0.5) * kTurn;
@@ -214,7 +201,6 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
     rates.result = rates.harness * 0.6;
     bump("runtime", rates.harness * 0.01);
 
-    // --- tool calls through the consent gate
     const toolRate = 1.5 * kHarness + turnRate * 1.2;
     const parkChance = cfg.parkChance ?? 0.045;
     rates.tool = toolRate;
@@ -222,27 +208,22 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
     rates.toolPass = toolRate * (1 - parkChance);
     bump("consent", toolRate * 0.02);
 
-    // parked approvals accumulate, then drain
     if (stats.approvals < 24 && rnd() < toolRate * parkChance * dt) {
       stats.approvals += 1;
       events.push({ type: "park" });
     }
-    // the user works through the queue faster the longer it gets, so it plateaus
     const drain = (cfg.approveSlow ? 0.05 : 0.22) + stats.approvals * 0.012;
     if (stats.approvals > 0 && rnd() < drain) {
       stats.approvals -= 1;
       events.push({ type: "approve" });
     }
 
-    // --- apps quarter
     rates.appReq = 2.6 * kApp;
     rates.appWrite = 1.9 * kApp * kWrite;
     rates.directRead = 1.8 * kTurn * kDirect;
-    // Ordinary reads/writes answer straight back out of the vault — no runner in the loop.
     rates.directResult = rates.directRead * 0.9 + rates.appWrite * 0.45;
     bump("apps", rates.appReq * 0.008);
 
-    // --- vault writes → WAL
     const writes =
       (rates.toolPass * 0.7 + rates.appWrite + rates.automationWrite || 0) *
       kWrite;
@@ -259,11 +240,7 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
       events.push({ type: "checkpoint" });
     }
 
-    // --- sync harbor + replica island
-    // Note: this whole leg is gateway → WAL → harbor → device. The harness runtime has no
-    // part in it, so none of these rates read kHarness.
     if (offlinePhase === 1) {
-      // Device is away: the harbor keeps queueing, nothing lands on the replica.
       stats.lag += dt * (1.4 + scenarioAge * 0.05);
       rates.ship = 0.4;
       rates.replica = 0;
@@ -277,7 +254,6 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
         events.push({ type: "reconnect" });
       }
     } else if (offlinePhase === 2) {
-      // Reconnect: the backlog floods out to the device and its local edits flood back.
       stats.lag = Math.max(0, stats.lag - dt * 4.5);
       rates.ship = 9;
       rates.replica = 16;
@@ -303,7 +279,6 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
     );
     bump("backup", rates.backup * 0.02);
 
-    // --- blob CAS
     rates.blob = 1.5 * kBlob;
     rates.blobBackup = 0.7 * kBlob;
     const fill = rates.blob * dt * (cfg.casFill ? 0.55 : 0.06);
@@ -318,7 +293,6 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
       events.push({ type: "barge" });
     }
 
-    // --- automation yard
     const cronEvery = cfg.cronEvery ?? 30;
     cronTimer -= dt;
     if (cronTimer <= 0) {
@@ -331,25 +305,20 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
     rates.automationWrite = (0.8 + pulses.cron * 4) * kAuto * kWrite;
     bump("automation", rates.automation * 0.012);
 
-    // --- crane (automation clone + compile)
     pulses.crane = Math.max(pulses.crane * 0.94, cfg.crane ? 1 : 0.12);
 
-    // decay transient pulses
     pulses.checkpoint *= 0.86;
     pulses.barge = Math.max(0, pulses.barge - dt * 0.22);
     pulses.cron *= 0.8;
     pulses.founding *= 0.985;
     pulses.catchup *= 0.9;
 
-    // decay district activity
     for (const k of DISTRICTS) activity[k] *= 0.9;
-    // Harness Runtime Row goes dark while the rest of the city keeps working.
     if (harnessOff) {
       activity.runtime = 0;
       activity.consent = 0;
     }
 
-    // window stats → per-second display, smoothed
     smooth.turns += (turnsWindow / dt - smooth.turns) * 0.12;
     smooth.items += (itemsWindow / dt - smooth.items) * 0.12;
     smooth.wal += (walWindow / dt - smooth.wal) * 0.12;

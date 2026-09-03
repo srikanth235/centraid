@@ -1,16 +1,3 @@
-// Tests for the fixed-delay ACP stub (#890 follow-up).
-//
-// The stub exists to make `sendToFirstToken` measurable on a device, and the
-// device lane cannot run here — but the PROPERTY the measurement depends on can
-// be tested at this tier, and it is the only property that matters: that the
-// first token arrives after a known, controllable delay and not before. If that
-// is false, every number the device lane reports is off by an unknown amount,
-// and no amount of running it on a phone would reveal that.
-//
-// Both shapes are covered on purpose: `handleMessage` in-process (fast, exact)
-// and the real spawned process over stdio (proves the plumbing, the framing and
-// the `--version` probe the backend runs before it will use a binary at all).
-
 import { spawn } from "node:child_process";
 import path from "node:path";
 
@@ -26,7 +13,6 @@ import {
 
 const AGENT = path.resolve(import.meta.dirname, "fixed-delay-agent.mjs");
 
-/** Collect what `handleMessage` sends for one message. */
 async function collect(
   msg,
   { delayMs = 0, sleep = async () => undefined } = {}
@@ -46,8 +32,6 @@ describe("resolveDelayMs", () => {
   });
 
   it("accepts zero as a real value rather than treating it as unset", () => {
-    // `0` is falsy, so the obvious `raw || DEFAULT` would silently substitute
-    // 250ms here and quietly invalidate any run that asked for no delay.
     expect(resolveDelayMs({ [FIRST_TOKEN_DELAY_ENV]: "0" })).toBe(0);
   });
 
@@ -93,16 +77,10 @@ describe("the ACP subset the gateway drives", () => {
       .filter((m) => m.method === "session/update")
       .map((m) => m.params.update.content.text);
     expect(chunks).toStrictEqual([...STUB_CHUNKS]);
-    // The result must come LAST: a client that sees end_turn first stops
-    // listening, and the tokens it already emitted are never rendered.
     expect(sent.at(-1).result.stopReason).toBe("end_turn");
   });
 
   it("sleeps for the configured delay before the FIRST chunk, not after", async () => {
-    // The load-bearing assertion of this whole file. The delay must be spent
-    // before anything is sent, or the measured interval excludes it and the
-    // subtraction the budget performs is wrong in the direction that flatters
-    // the product.
     const order = [];
     await handleMessage(
       { jsonrpc: "2.0", id: 4, method: "session/prompt", params: {} },
@@ -120,8 +98,6 @@ describe("the ACP subset the gateway drives", () => {
   });
 
   it("swallows a cancel notification instead of answering it", async () => {
-    // No `id` on a notification. Replying would be a protocol violation; the
-    // fallback branch below must not catch it.
     expect(
       await collect({ jsonrpc: "2.0", method: "session/cancel", params: {} })
     ).toStrictEqual([]);
@@ -163,10 +139,6 @@ describe("the spawned process", () => {
     const firstChunkAt = new Promise((resolve) => {
       markFirstChunk = resolve;
     });
-    // Awaited separately from the first chunk: resolving both on the same event
-    // is what made an earlier draft of this test read `end_turn` off a stream
-    // that had only produced its first token. The two are different moments and
-    // the test needs both.
     const turnEnded = new Promise((resolve) => {
       markEndTurn = resolve;
     });
@@ -203,11 +175,6 @@ describe("the spawned process", () => {
     const ended = await turnEnded;
     child.kill();
 
-    // Asserted as a FLOOR only. A ceiling here would be a timing test on shared
-    // CI hardware, which is the flake this repo keeps out of blocking lanes —
-    // and the ceiling is the device lane's job anyway. What matters is that the
-    // delay was really spent: an agent that replied instantly would make the
-    // budget measure nothing.
     expect(observed).toBeGreaterThanOrEqual(delayMs);
     expect(ended.result.stopReason).toBe("end_turn");
     expect(

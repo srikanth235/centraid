@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-/** Shared run identity used by the desktop, mobile and pairing manual-QA adapters. */
 export function defaultRunId() {
   const stamp = new Date()
     .toISOString()
@@ -11,28 +10,18 @@ export function defaultRunId() {
   return `${stamp}-${crypto.randomBytes(3).toString("hex")}`;
 }
 
-/**
- * Platform segment for evidence keys (#781, QUALITY.md "keyed by flow, not
- * flow × platform"). The mobile jobs export `MAESTRO_PLATFORM=ios|android`;
- * suffixing the artifact filename with it stops the iOS and Android uploads
- * of the same flow from last-write-winning over each other after the report
- * job's `merge-multiple` download. Platform-less lanes (pairing, desktop,
- * web) see an empty segment and keep their exact current paths.
- */
 export function evidencePlatform(env = process.env) {
   return String(env.MAESTRO_PLATFORM ?? "")
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/gu, "");
 }
 
-/** `<owner-slug>` filename stem, platform-suffixed when MAESTRO_PLATFORM is set. */
 function evidenceSlug(owner) {
   const slug = owner.replaceAll(/[^a-z0-9]+/giu, "-").replace(/^-|-$/gu, "");
   const platform = evidencePlatform();
   return platform ? `${slug}-${platform}` : slug;
 }
 
-/** JavaScript-lane counterpart of @centraid/test-kit's recordQualityResult. */
 export async function recordQualityResult(repoRoot, result) {
   const directory = path.join(repoRoot, "artifacts", result.lane);
   await fs.mkdir(directory, { recursive: true });
@@ -66,17 +55,10 @@ export async function recordQualityResult(repoRoot, result) {
   );
 }
 
-/** Activate the 3× trailing-median budget only after ten durable samples. */
 export async function qualityRegressionBudget(repoRoot, lane, owner) {
   return trailingMedianBudget(repoRoot, lane, owner, 10, 3);
 }
 
-/**
- * Sustained-drift budget (#659 R4) — the JavaScript-lane counterpart of
- * `rigDriftBudgetMs` in tests/helpers/rig-budgets.ts. Knobs come from
- * tests/budgets.json#qualityRigs rather than being repeated here, so the
- * on-device flows and the vitest rigs cannot drift apart on what "drift" means.
- */
 export async function rigDriftBudget(repoRoot, lane, owner) {
   const registry = JSON.parse(
     await fs.readFile(path.join(repoRoot, "tests/budgets.json"), "utf8")
@@ -90,10 +72,6 @@ export async function rigDriftBudget(repoRoot, lane, owner) {
   );
 }
 
-/**
- * Shared trailing-median arithmetic. Returns null until `minimumSamples`
- * durable observations exist — a null is "no opinion yet", never a pass.
- */
 async function trailingMedianBudget(
   repoRoot,
   lane,
@@ -101,9 +79,6 @@ async function trailingMedianBudget(
   minimumSamples,
   multiplier
 ) {
-  // Same platform-keyed path recordQualityResult writes, so an iOS budget is
-  // computed over iOS samples only — cross-platform samples never interleave
-  // into a false ratchet (#781, QUALITY.md).
   try {
     const previous = JSON.parse(
       await fs.readFile(
@@ -128,11 +103,6 @@ async function trailingMedianBudget(
   }
 }
 
-/**
- * One verdict contract for every agent-driven exploratory surface. Platform
- * adapters own setup/teardown, but run metadata, notes, failures and result
- * summaries are deliberately identical and machine-greppable.
- */
 export async function writeFlowVerdict({
   repoRoot,
   slug,
@@ -174,10 +144,6 @@ export async function writeFlowVerdict({
   if (owner) {
     const evidenceDir = path.join(repoRoot, "artifacts", "e2e");
     await fs.mkdir(evidenceDir, { recursive: true });
-    // Platform-keyed filename (#781): iOS and Android runs of the same flow
-    // must not overwrite each other in the merged nightly evidence tree. The
-    // owner INSIDE the JSON stays the flow file, so matrix mapping is
-    // unchanged and the report's worst-status merge sees both platforms.
     const platform = evidencePlatform();
     await fs.writeFile(
       path.join(evidenceDir, `${platform ? `${slug}-${platform}` : slug}.json`),

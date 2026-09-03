@@ -1,7 +1,3 @@
-// Fail-path proof for `bun run check:mobile-native-state` (issue #656 Layer 1F).
-// The gate's whole job is deciding whether a change set touches apps/mobile.
-// If that predicate ever answers "no" for a mobile change, the native-state
-// ratchet silently stops running on every PR.
 import assert from "node:assert/strict";
 import test from "node:test";
 

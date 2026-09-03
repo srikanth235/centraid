@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * E5 — lockfile supply-chain lint (https-only, allowed hosts, integrity present).
- * Reads bun.lock as text; fails on clear violations.
- */
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -11,7 +7,6 @@ const lock = readFileSync(path.join(root, "bun.lock"), "utf8");
 const allowedHost = /registry\.npmjs\.org|npm\.pkg\.github\.com|bun\.sh/u;
 let failed = 0;
 
-// HTTP (non-TLS) package URLs
 const httpUrls = lock.match(/http:\/\/[^\s"']+/gu) ?? [];
 for (const u of httpUrls) {
   if (u.includes("localhost") || u.includes("127.0.0.1")) continue;
@@ -19,13 +14,11 @@ for (const u of httpUrls) {
   failed++;
 }
 
-// Integrity-ish tokens should appear for resolved packages (bun uses integrity fields)
 if (!/integrity|sha512-|sha256-/u.test(lock)) {
   console.error("FAIL lockfile has no integrity/hash markers");
   failed++;
 }
 
-// Suspicious hosts outside allowlist (best-effort on https:// URLs)
 const httpsUrls = lock.match(/https:\/\/(?:[^/\s"']+)/gu) ?? [];
 for (const full of httpsUrls) {
   const host = full.replace("https://", "");
@@ -34,7 +27,6 @@ for (const full of httpsUrls) {
     !host.includes("github.com") &&
     !host.includes("githubusercontent.com")
   ) {
-    // Only warn on unknown package registries; many raw github tarballs are fine.
     if (host.includes("registry") || host.includes("npm")) {
       console.error(`FAIL disallowed registry host: ${host}`);
       failed++;

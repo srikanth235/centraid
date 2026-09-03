@@ -23,7 +23,6 @@ const OWNER = "tests/scale/large-vault.scale.test.ts";
 const PHOTO_COUNT = 10_000;
 const CONTACT_COUNT = 5_000;
 const NOTE_COUNT = 1_000;
-// Calendar years 2023–2025 inclusive (2024 is the leap year).
 const EVENT_DAYS = 365 + 366 + 365;
 const SEED_BUDGET_MS = 30_000;
 const READ_BUDGET_MS = 2_000;
@@ -175,9 +174,6 @@ describe("large-vault.scale", () => {
       )
       .all();
     const readMs = performance.now() - readStarted;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       recentPhotos.length === 200 &&

@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-// Virtualized lists must declare their scroll anchoring (#903).
-//
-// FlashList v2 anchors visible content by default. Every native seat sorts
-// newest first, so a row arriving from another device is inserted at the top
-// and the anchor scrolls it out of sight above the fold — drawn, counted in the
-// footer, and invisible. A re-sorted row leaves the viewport the same way,
-// which reads as a document that vanished. `NEWEST_FIRST_ANCHORING` is the one
-// answer; a list that wants different behaviour states it in place, so the
-// choice is always visible at the call site rather than inherited by default.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -16,7 +7,6 @@ const MOBILE_SRC = path.join(ROOT, "apps", "mobile", "src");
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".expo", "test"]);
 const PROP = "maintainVisibleContentPosition";
 
-/** Every non-test source file under the mobile seat. */
 function sources(dir) {
   const out = [];
   for (const entry of readdirSync(dir)) {
@@ -33,11 +23,6 @@ function sources(dir) {
   return out;
 }
 
-/**
- * Each `<FlashList` opening tag, paired with the props text up to its `>`.
- * Crude but sufficient: the tag is always written open-ended in this codebase,
- * and a false negative here is a list that silently swallows new rows.
- */
 function flashListTags(src) {
   const tags = [];
   const opener = /<FlashList\b/gu;

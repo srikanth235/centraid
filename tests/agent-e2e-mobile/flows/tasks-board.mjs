@@ -1,37 +1,3 @@
-// The Tasks seat on the phone (home-journey roster, issue #839 G8).
-//
-// What only a device can falsify here: the board's ARITHMETIC reaching the
-// screen. Tasks imports its grouping from the blueprint (`todayGroups`,
-// `upcomingGroups`) and its nesting from `useTasks`, and both are already
-// covered as pure functions — what no unit layer proves is that the rows the
-// phone's replica hands them are the rows the vault holds, and that the group a
-// row lands in is the group the screen draws.
-//
-// Four claims, in order:
-//   1. OVERDUE IS ITS OWN GROUP WITH ITS OWN VERB: `Move all to today` is drawn
-//      only on a group `todayGroups` flagged `attention`, which is the overdue
-//      group alone.
-//   2. ITS META IS A COUNT AND A REASSURANCE: `overdueMeta` renders
-//      `N · nothing was deleted`; the digit is part of the assertion.
-//   3. A FAMILY TRAVELS WITH ITS PARENT: `useTasks` nests subtasks under their
-//      parent and drops them from the top level, so a seeded subtask can only
-//      appear on Upcoming as a CHILD of its dated parent.
-//   4. QUICK ADD WRITES INTO THE GROUP THE SCREEN DRAWS (#890 W5). Every claim
-//      above reads a seeded corpus; this one is the member's own keystrokes
-//      going through `add_task` and landing where the grouping says they must.
-//      `QUICK_ADD_EMPTY` files with no date and no project, and `quickAddLandsIn`
-//      says so on screen before the tap — so the Inbox is not a guess, it is the
-//      destination the capture bar itself names.
-//
-// SELECTOR RULE (#890 W2): CHROME is found by handle (`tasks-capture`,
-// `tasks-move-all`, `tasks-group-attention`, `tasks-band-<key>`), CONTENT by its
-// own words — a seeded title and a typed title are the vault's strings, and
-// finding a row by the text it should carry IS the assertion.
-//
-// Every assertion is on copy or an accessibilityLabel only the asserted screen
-// publishes (issue #483's non-vacuous rules; this file is discovered by
-// scripts/lint-e2e-flows.mjs).
-
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
   AWAIT_LAUNCHER,
@@ -43,9 +9,6 @@ await runFlow("tasks-board", async (ctx) => {
   await ctx.ensureDemo("tasks");
   await ctx.configureGateway();
 
-  // Unique per RUN: `ensureDemo` seeds only when the scenario is absent, so on
-  // a long-lived gateway a task left behind by an earlier run would satisfy the
-  // assertion below without this run writing anything at all.
   const capturedTask = `Captured on device ${ctx.state.runId}`;
 
   await ctx.run(
@@ -70,10 +33,6 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Tasks.*")}
     "today-board"
   );
 
-  // ─── The write (#890 W5) ──────────────────────────────────────────────────
-  // ~30 s of marginal work on a journey that has already paid the boot, the
-  // pairing and the seed: the capture bar is already drawn at the foot of the
-  // board this chunk is standing on.
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---

@@ -10,7 +10,6 @@
         </p>
       </section>
 
-      <!-- §01 TOPOLOGY -->
       <section class="sec wrap" id="topology">
         <p class="eyebrow r">§01 · topology</p>
         <h2 class="r" style="--d: 0.06s">A star, <em>never a mesh.</em></h2>
@@ -46,7 +45,6 @@
         </p>
       </section>
 
-      <!-- §02 ADDRESSING -->
       <section class="dark" id="addressing">
         <div class="wrap">
           <p class="eyebrow r">§02 · addressing</p>
@@ -81,7 +79,6 @@
         </div>
       </section>
 
-      <!-- §03 PAIRING -->
       <section class="sec wrap" id="pairing">
         <p class="eyebrow r">§03 · pairing</p>
         <h2 class="r" style="--d: 0.06s">A ticket that <em>burns on use.</em></h2>
@@ -130,7 +127,6 @@
         </div>
       </section>
 
-      <!-- §04 IROH -->
       <section class="dark" id="iroh">
         <div class="wrap">
           <p class="eyebrow r">§04 · connectivity</p>
@@ -163,7 +159,7 @@
                   Clients classify their route: <b>local</b> (embedded gateway, loopback),
                   <b>direct</b> (an https URL + bearer — your Tailscale or LAN), <b>iroh</b>
                   (dial by endpoint id; a loopback proxy makes it transparent to the rest of the
-                  app), or <b>relay-only</b> — the browser's lot, where a WebAssembly iroh endpoint
+                  app), or <b>relay-only</b> — the browser's lot, where a WebAssembly iroh endpoin
                   has no UDP socket to hole-punch with, so every stream rides iroh's public relay,
                   still key-authenticated and end-to-end encrypted. Plain http to a public hostname
                   is refused outright — loopback and RFC1918 only.
@@ -190,7 +186,6 @@
         </div>
       </section>
 
-      <!-- §05 REPLICA -->
       <section class="sec wrap" id="replica">
         <p class="eyebrow r">§05 · replica</p>
         <h2 class="r" style="--d: 0.06s">Offline, <em>without a second writer.</em></h2>
@@ -261,7 +256,6 @@
         </p>
       </section>
 
-      <!-- §06 DESKTOP -->
       <section class="sec wrap" id="desktop">
         <p class="eyebrow r">§06 · desktop shell</p>
         <h2 class="r" style="--d: 0.06s">The everyday <em>front door.</em></h2>
@@ -280,7 +274,6 @@
         </div>
       </section>
 
-      <!-- §07 WEB -->
       <section class="dark" id="web">
         <div class="wrap">
           <p class="eyebrow r">§07 · web app</p>
@@ -307,7 +300,7 @@
               <p class="c-no">the fallback</p>
               <h3>Direct HTTP, origin-bound</h3>
               <p>
-                Where the gateway answers over https (Tailscale, LAN), the browser can talk straight
+                Where the gateway answers over https (Tailscale, LAN), the browser can talk straigh
                 to it. The session is then an <b>Origin-bound, HttpOnly</b> control cookie on a
                 dedicated origin — so logout is a server-side revoke, not just a cleared
                 <code>localStorage</code>: killing the cookie kills the session on the gateway too.
@@ -317,7 +310,6 @@
         </div>
       </section>
 
-      <!-- §08 MOBILE -->
       <section class="sec wrap" id="mobile">
         <p class="eyebrow r">§08 · mobile companion</p>
         <h2 class="r" style="--d: 0.06s">Native where it counts, <em>your approvals in your pocket.</em></h2>
@@ -333,7 +325,7 @@
             the loop.
           </p>
           <p>
-            <b>Every app</b> is a native screen here, not a web view of one: the same eight
+            <b>Every app</b> is a native screen here, not a web view of one: the same eigh
             first-party apps as the desktop, rendered by Expo over the same replica and app RPC,
             with live updates and search across your tiles.
           </p>
@@ -352,7 +344,6 @@
         </div>
       </section>
 
-      <!-- §09 RUNTIMES -->
       <section class="dark" id="runtimes">
         <div class="wrap">
           <p class="eyebrow r">§09 · harness runtimes</p>
@@ -384,9 +375,9 @@
               There is no single "active agent" anymore — only a default and a set of
               <b>routing lanes</b>. Settings → <b>Agents</b> resolves each subsystem — Assistant,
               In-app Ask, Automations — to its own (agent, model) pair, any lane free to
-              inherit the default. Whatever the brain, the leash is identical: agents see the vault
+              inherit the default. Whatever the brain, the leash is identical: agents see the vaul
               only through <code>vault_sql</code> / <code>vault_invoke</code> /
-              <code>vault_content</code>, and the model tiering is capability-based, not
+              <code>vault_content</code>, and the model tiering is capability-based, no
               vendor-named — swap the runtime, keep the contract, keep every receipt.
             </p>
           </div>

@@ -1,29 +1,9 @@
 #!/usr/bin/env node
-/**
- * I8 — re-stamp staged-rollout window on published electron-updater manifests.
- *
- * electron-updater admits installs using releaseDate (see update-rollout-core).
- * Widening the effective window for installs that already see a release means
- * making releaseDate *earlier* so elapsed time is larger (bucket < elapsed/window).
- *
- *   node scripts/release/restamp-rollout.mjs \
- *     --hours 72 \
- *     --yml path/to/latest-mac.yml \
- *     [--out path] [--dry-run]
- *
- * Pure YAML touch: only rewrites `releaseDate` (ISO). Never renames latest → beta.
- */
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-/**
- * Rewrite releaseDate in an electron-updater latest*.yml body.
- * @param {string} yml electron-updater YAML text
- * @param {number} hours hours to subtract from now (widen admit); 0 = set to now
- * @param {number} [nowMs] clock override for tests
- */
 export function restampReleaseDate(yml, hours, nowMs = Date.now()) {
   if (!Number.isFinite(hours) || hours < 0) {
     throw new Error(`hours must be >= 0, got ${hours}`);

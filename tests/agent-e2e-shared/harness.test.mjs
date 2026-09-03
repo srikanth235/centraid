@@ -181,9 +181,6 @@ describe("platform-keyed evidence (#781)", () => {
           "utf8"
         )
       );
-      // The OWNER stays the flow file (matrix mapping), only the FILENAME and
-      // the platform stamp change — that is what stops iOS and Android from
-      // last-write-winning over each other in the merged evidence tree.
       expect(evidence).toMatchObject({
         owner: "tests/agent-e2e-mobile/flows/home-loads.mjs",
         name: "home-loads",
@@ -266,8 +263,6 @@ describe("platform-keyed evidence (#781)", () => {
           "utf8"
         )
       );
-      // Two files, one sample each: the platforms no longer overwrite each
-      // other, and neither history contains the other's sample.
       expect(android.history).toHaveLength(1);
       expect(android.history[0].value).toBe(3400);
       expect(ios.history[0].value).toBe(1200);
@@ -296,8 +291,6 @@ describe("platform-keyed evidence (#781)", () => {
       expect(
         await qualityRegressionBudget(repoRoot, "scale", "mobile-volume")
       ).toBe(16.5);
-      // The other platform has no samples: its budget stays "no opinion yet",
-      // not a budget computed over the sibling platform's history.
       vi.stubEnv("MAESTRO_PLATFORM", "android");
       expect(
         await qualityRegressionBudget(repoRoot, "scale", "mobile-volume")

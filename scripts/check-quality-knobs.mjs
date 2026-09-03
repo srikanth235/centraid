@@ -40,23 +40,15 @@ const changed = new Set(
 function approved(config) {
   const note = config.approvedDeviation;
   if (typeof note !== "string" || !/#\d+/u.test(note)) return false;
-  return (
-    [...changed]
-      .filter((file) => /^receipts\/issue-\d+-.*\.md$/u.test(file))
-      // `changed` includes deletions — a receipt renamed away under a
-      // doc-integrity waiver must not crash the gate; the surviving receipt
-      // is the one that can carry the deviation note.
-      .filter((file) => existsSync(path.join(root, file)))
-      .some((file) => {
-        const receipt = readFileSync(path.join(root, file), "utf8");
-        return /^## Decisions\s*$/mu.test(receipt) && receipt.includes(note);
-      })
-  );
+  return [...changed]
+    .filter((file) => /^receipts\/issue-\d+-.*\.md$/u.test(file))
+
+    .filter((file) => existsSync(path.join(root, file)))
+    .some((file) => {
+      const receipt = readFileSync(path.join(root, file), "utf8");
+      return /^## Decisions\s*$/mu.test(receipt) && receipt.includes(note);
+    });
 }
-// The experience budgets are named by the merged budgets ledger rather than
-// hard-coded here (#915 Wave 4): `tests/budgets.json#experience.files` is the
-// one list of what those ceilings are, and this gate holds the per-screen
-// query counts among them.
 const experienceFiles =
   currentJson("tests/budgets.json").experience?.files ?? [];
 const queryFile = experienceFiles.find((file) =>
@@ -134,11 +126,6 @@ if (
     `${classificationFile}: governed classifications changed without a receipt-approved deviation`
   );
 
-// #915 replaced tests/matrix.json with tests/claims.json: the 45-gate
-// user-facing qualities panel retired into claim ROWS, each carrying its own
-// severity and the date it was last demonstrated red. The governed payload is
-// those rows — remove a claim, restate what a gate proves, or move the date it
-// was last shown to go red, and this fingerprint moves with it.
 const claimsBase = baseJson("tests/claims.json");
 const claimsCurrent = currentJson("tests/claims.json");
 const claimsGovernedPayload = JSON.stringify({ claims: claimsCurrent.claims });

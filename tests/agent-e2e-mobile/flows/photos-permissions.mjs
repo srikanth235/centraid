@@ -10,9 +10,6 @@ import {
 } from "../lib/harness.mjs";
 
 await runFlow("photos-permissions", async (ctx) => {
-  // This journey owns the suite's fresh pairing slot. Purging first proves the
-  // literal empty-vault takeover; the next journey reseeds the same gateway
-  // and the paired replica receives that corpus through normal sync.
   await ctx.purgeDemo("photos");
   await ctx.configureGateway();
   await ctx.run(

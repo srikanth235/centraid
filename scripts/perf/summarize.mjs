@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-// Pretty-print the JSON report written by perf-waterfall.spec.ts as a compact
-// table, so a human (or a CI log reader) can eyeball the baseline without
-// wading through the raw resource list. Read-only; makes no assertions.
-//
-// Usage: node scripts/perf/summarize.mjs [path-to-report.json]
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -21,8 +16,6 @@ try {
   process.exit(1);
 }
 
-// `encoded` only exists in reports written after #799 retired the served-app
-// plane; print a dash rather than `NaN KB` when summarizing an older artifact.
 const kb = (n) => (typeof n === "number" ? `${(n / 1024).toFixed(1)} KB` : "—");
 
 console.log(`\nPWA fast-path waterfall — captured ${report.capturedAt}`);
@@ -30,12 +23,6 @@ console.log(
   `harness: ${report.harness.apiUrl}  app: ${report.harness.appId}\n`
 );
 
-// `transfer` is wire bytes; `encoded` is the DECODED weight of the same bodies
-// whether they came off the wire or out of the service-worker cache (Cache
-// Storage holds decoded bodies, so it is raw size, never a wire figure).
-// An app open on a warm shell transfers 0 and still loads real weight, so the
-// two columns are both shown rather than collapsed (the app-open warm/cold
-// ratio is over `encoded` — see apps/web/tests/e2e/perf-budgets.ts).
 const rows = [
   ["phase", "requests", "transfer", "encoded", "warm/cold"],
   [

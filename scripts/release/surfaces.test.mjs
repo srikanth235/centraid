@@ -40,8 +40,6 @@ test("catalog ids unique", () => {
 });
 
 test("every surface names a workflow file that exists on disk", async () => {
-  // #557 — the catalog named five workflows that had been renamed, and nothing
-  // noticed: it is documentation-as-data with no link to the tree it describes.
   const { existsSync } = await import("node:fs");
   const missing = RELEASE_SURFACES.filter(
     (surface) => !existsSync(`.github/workflows/${surface.workflow}`)

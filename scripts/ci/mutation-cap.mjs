@@ -1,50 +1,14 @@
 #!/usr/bin/env node
-/**
- * `mutation-pr` under an 8-minute wall-clock cap, deferring to rung 3 (#915).
- *
- * WHY A CAP RATHER THAN A CUT. Per-PR mutation is the only gate that audits the
- * TESTS instead of the product, and #915's open decisions keep it deliberately.
- * What it cannot keep is an unbounded tail: the affected-seed set is a function
- * of the diff, so one PR pays 90 seconds and the next pays nineteen minutes, and
- * the second one is a rung-2 lane answering a rung-3 question. The cap makes the
- * cost predictable without making the audit optional — over the cap the run is
- * killed and the same seeds are re-run in full on the candidate
- * (`candidate.yml` `mutation-full`), which is where nobody is waiting.
- *
- * DEFERRAL IS NOT A PASS, AND IT IS NOT SILENT. The lane exits 0 — a PR must not
- * be blocked by its own diff being large — but it writes a `deferred` case into
- * its evidence and leaves a PR comment saying which rung now owns the answer.
- * The comment is updated in place through a hidden marker, so a branch pushed
- * nine times carries one comment rather than nine.
- *
- * Usage:
- *   node scripts/ci/mutation-cap.mjs [--cap-ms 480000] [--script test:mutation:pr]
- *   MUTATION_PR_CAP_MS=600000 node scripts/ci/mutation-cap.mjs
- */
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-/** The hidden marker that makes the PR comment updatable rather than repeated. */
 export const DEFER_MARKER = "<!-- mutation-pr-deferred -->";
 
-/** The cap, in milliseconds, when nothing overrides it: 8 minutes (#915 Wave 1). */
 export const DEFAULT_CAP_MS = 480_000;
 
-/**
- * Resolve the cap from flags and the environment.
- *
- * A non-numeric or non-positive value is an error rather than a silent fallback:
- * `MUTATION_PR_CAP_MS=0` almost certainly means "somebody meant to disable this"
- * and a lane that quietly ran uncapped for a month is the failure this exists to
- * prevent.
- *
- * @param {{cap?: string|null}} flags Parsed CLI flags.
- * @param {Record<string, string|undefined>} env Process environment.
- * @returns {number} Cap in milliseconds.
- */
 export function resolveCapMs(flags, env) {
   const raw = flags?.cap ?? env.MUTATION_PR_CAP_MS ?? null;
   if (raw == null || raw === "") return DEFAULT_CAP_MS;
@@ -57,12 +21,6 @@ export function resolveCapMs(flags, env) {
   return value;
 }
 
-/**
- * The evidence cases for one run.
- *
- * @param {{capped: boolean, exitCode: number, durationMs: number}} outcome What happened.
- * @returns {{id: string, verdict: string, durationMs: number, attempts: number}[]} Cases for `write-evidence.mjs --cases`.
- */
 export function casesFor({ capped, exitCode, durationMs }) {
   if (capped) {
     return [
@@ -84,12 +42,6 @@ export function casesFor({ capped, exitCode, durationMs }) {
   ];
 }
 
-/**
- * The PR comment body for a deferred run.
- *
- * @param {{capMs: number, durationMs: number, runUrl: string}} context Numbers to state.
- * @returns {string} Markdown, marker first so the updater can find it.
- */
 export function deferComment({ capMs, durationMs, runUrl }) {
   return [
     DEFER_MARKER,
@@ -105,12 +57,6 @@ export function deferComment({ capMs, durationMs, runUrl }) {
   ].join("\n");
 }
 
-/**
- * The id of the existing marked comment in a `gh api` listing, or null.
- *
- * @param {string} stdout Raw stdout of the comments listing (`--jq` reduced to ids, one per line, or full JSON).
- * @returns {string|null} Comment id.
- */
 export function findMarkedCommentId(stdout) {
   const trimmed = (stdout ?? "").trim();
   if (!trimmed) return null;
@@ -127,7 +73,6 @@ function parseArgs(argv) {
   return out;
 }
 
-/** Post or rewrite the single deferral comment. Best-effort: never reds the lane. */
 function commentOnPr(body) {
   const repo = process.env.GITHUB_REPOSITORY;
   const prNumber = process.env.CENTRAID_PR_NUMBER;
@@ -181,8 +126,6 @@ async function main() {
   let capped = false;
   const timer = setTimeout(() => {
     capped = true;
-    // SIGTERM first so Stryker can flush what it has; SIGKILL is the backstop
-    // for a child that ignores it, because a cap that can be ignored is not one.
     child.kill("SIGTERM");
     setTimeout(() => child.kill("SIGKILL"), 15_000).unref();
   }, capMs);

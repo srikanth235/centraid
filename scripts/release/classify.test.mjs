@@ -8,10 +8,6 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 const CLASSIFY = path.resolve(import.meta.dirname, "classify.mjs");
 
-/**
- * Run classify.mjs over a synthetic changelog.
- * @param {string[]} lines @param {string[]} [args]
- */
 function classify(lines, args = []) {
   const file = path.join(tempDirSync("centraid-classify-"), "CHANGELOG.md");
   writeFileSync(file, `${lines.join("\n")}\n`);
@@ -110,8 +106,6 @@ describe("D4 patch-vs-minor classification", () => {
       encoding: "utf8",
     });
     expect(result.status).toBe(0);
-    // Whatever the current bump is, it must be derived from real bullets —
-    // the defect this guards against made every real changelog look empty.
     expect(JSON.parse(result.stdout).rationale).not.toContain(
       "no changelog bullets"
     );

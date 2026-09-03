@@ -1,11 +1,3 @@
-/**
- * Structural gate for the nightly product lane (#464): pairing journeys live
- * inside `.github/workflows/e2e.yml` and no longer depend on a standalone
- * pairing-relay workflow or a cross-run `gh run download`.
- *
- * This is the real shipped wiring (the YAML GHA executes), not a reimplementation
- * of the flows themselves.
- */
 import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -22,13 +14,6 @@ const requiredFlowScripts = [
   "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
   "tests/agent-e2e-pairing/flows/cross-network-relay.mjs",
   "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs",
-  // #890 W4 / #915 Wave 2 — the iOS lane's roster-runner invocation is in
-  // this YAML (`run-roster.mjs --rung 4 --platform ios`). The Android lanes
-  // invoke the same runner from the committed emulator script rather than
-  // from this YAML (the action executes `script:`), so they are checked by
-  // scripts/lint-e2e-wiring.mjs against the shipped roster instead; that
-  // linter reads the script the lane hands off to and is the general form of
-  // the rule this list encodes for the pairing lanes.
   "tests/agent-e2e-mobile/run-roster.mjs",
 ];
 
@@ -36,18 +21,9 @@ const requiredJobs = [
   "pairing-lifecycle:",
   "pairing-ticket-hygiene:",
   "pairing-cross-network-relay:",
-  // #532 — mutation scores must reach the report job via nightly-evidence-*.
   "mutation-testing:",
-  // #839 G10 — the fuzz lane is nightly-only and owns its own job; its summary
-  // reaches the report through the same nightly-evidence-* channel.
   "fuzz-parsers:",
-  // #842 W2.4 — the DAST lane boots a real gateway and scans it, so it is
-  // nightly-only and owns its own job; its summary reaches the report through
-  // the same nightly-evidence-* channel.
   "dast-scan:",
-  // #839 G11/G12 — the protocol join lane (one gateway, N mounted vaults, one
-  // iroh client per seat) runs at width here; the PR path runs the same file at
-  // its 3-seat floor.
   "protocol-join:",
 ];
 
@@ -64,8 +40,6 @@ const requiredArtifactNames = [
 const errors = [];
 
 const e2e = await readFile(e2ePath, "utf8");
-// Strip YAML comments so prose about retired cross-workflow fetch does not
-// trip the shell-command ban.
 const e2eCode = e2e
   .split("\n")
   .map((line) => {
@@ -84,9 +58,6 @@ for (const script of requiredFlowScripts) {
 }
 
 for (const name of requiredArtifactNames) {
-  // Boundary-anchored, not includes(): a superstring rename (say,
-  // nightly-evidence-joinery) must fail, or the report job's merge-multiple
-  // download silently loses the evidence while this gate stays green.
   if (!new RegExp(`${name}(?![\\w-])`, "u").test(e2eCode))
     errors.push(`e2e.yml missing artifact name ${name}`);
 }
@@ -116,10 +87,6 @@ if (reportIdx === -1) {
   }
 }
 
-// #532 — mutation upload must be `path: artifacts/` (not `artifacts/mutation/`).
-// download-artifact merge-multiple into `artifacts` flattens the uploaded root:
-// uploading the mutation subdir alone lands scores.json at artifacts/scores.json
-// while generate.mjs reads artifacts/mutation/scores.json.
 const mutationJobIdx = e2eCode.indexOf("mutation-testing:");
 if (mutationJobIdx === -1) {
   errors.push("e2e.yml missing mutation-testing job");
@@ -130,8 +97,6 @@ if (mutationJobIdx === -1) {
       "mutation-testing job must upload artifact nightly-evidence-mutation"
     );
   }
-  // Prefer path: artifacts/ over path: artifacts/mutation/ so the mutation/
-  // prefix survives download into the report job.
   if (/path:\s*artifacts\/mutation\/?/u.test(mutationChunk)) {
     errors.push(
       "mutation-testing must upload path: artifacts/ (not artifacts/mutation/) so scores stay at artifacts/mutation/scores.json after merge-multiple download"
@@ -140,7 +105,6 @@ if (mutationJobIdx === -1) {
     !/path:\s*artifacts\/?\s*$/mu.test(mutationChunk) &&
     !/path:\s*artifacts\/\s*$/mu.test(mutationChunk)
   ) {
-    // Accept `path: artifacts/` or `path: artifacts`
     if (
       !/name:\s*nightly-evidence-mutation[\s\S]{0,200}?path:\s*artifacts\/?/u.test(
         mutationChunk
@@ -153,12 +117,6 @@ if (mutationJobIdx === -1) {
   }
 }
 
-// #839 G10 — the fuzz lane is only worth having if its evidence and its
-// regression memory both survive. The summary must land at
-// artifacts/fuzz/summary.json after the report job's merge-multiple download
-// (same `path: artifacts/` rule as the mutation lane), and the job must replay
-// the committed crasher corpus even when the search itself went red — a
-// crasher that stops reproducing is news, not a reason to skip the check.
 const fuzzJobIdx = e2eCode.indexOf("fuzz-parsers:");
 if (fuzzJobIdx === -1) {
   errors.push("e2e.yml missing fuzz-parsers job");
@@ -190,9 +148,6 @@ if (fuzzJobIdx === -1) {
   }
 }
 
-// #842 W2.4 — same `path: artifacts/` rule as the fuzz and mutation lanes: the
-// scanner writes artifacts/dast/summary.json, and uploading the subdir alone
-// would flatten it to artifacts/summary.json after merge-multiple download.
 const dastJobIdx = e2eCode.indexOf("dast-scan:");
 if (dastJobIdx === -1) {
   errors.push("e2e.yml missing dast-scan job");
@@ -219,13 +174,6 @@ if (dastJobIdx === -1) {
   }
 }
 
-// #839 G11/G12 — the protocol JOIN lane. What makes this lane worth a job is
-// exactly what a well-meaning edit would drop first: it must run the join file
-// at WIDTH (a seat count the PR path does not pay for), and its per-test
-// durations must survive to the report as evidence. A job that ran the same
-// three-seat floor the PR lane already runs would be a duplicate, and a job
-// whose JSON report never reached artifacts/join/summary.json would be a lane
-// nobody can read afterwards.
 const joinJobIdx = e2eCode.indexOf("protocol-join:");
 if (joinJobIdx === -1) {
   errors.push("e2e.yml missing protocol-join job");
@@ -266,15 +214,6 @@ if (joinJobIdx === -1) {
   }
 }
 
-// #890 W0/W1 — the three mobile device lanes, read once. Every check below is
-// pure over this snapshot, so no `await` sits inside a loop: the lanes are read
-// in parallel and then judged.
-//
-// DISCOVERED, not listed. A hand-kept list of mobile lanes is how a new lane
-// (the #890 alarm test was the fourth) joins the roster unpinned: it would
-// install `releases/latest` and nothing here would say a word. Any workflow
-// that installs Maestro or drives an Expo build is a mobile lane by definition,
-// so that is the test.
 const workflowDir = path.join(root, ".github/workflows");
 const workflowNames = (await readdir(workflowDir))
   .filter((name) => name.endsWith(".yml"))
@@ -287,10 +226,6 @@ const allWorkflows = await Promise.all(
     ),
   }))
 );
-// #892 Phase 3 — the marker moved. Maestro is no longer installed by piping an
-// unpinned remote script into bash; every lane now calls the checksum-verifying
-// `scripts/ci/install-maestro.sh`. Discovery keys on that, and the ban below
-// keeps the old shape from creeping back.
 const MAESTRO_INSTALLER = "scripts/ci/install-maestro.sh";
 const mobileLanes = allWorkflows.filter(
   ({ source }) =>
@@ -303,12 +238,6 @@ if (mobileLanes.length === 0) {
   );
 }
 
-// #890 W0 — ONE Maestro version across every mobile device lane. Android's
-// installer honoured `releases/latest` while iOS pinned 2.6.1, so the two
-// platforms could be driven by different device drivers on the same night and an
-// upstream driver change would land with no commit to blame it on. The pin is
-// per-workflow by necessity (GitHub has no cross-file env), so the thing that
-// keeps them one fact is this check.
 const maestroPins = new Set();
 for (const { file, source } of mobileLanes) {
   const found = [
@@ -323,8 +252,6 @@ for (const { file, source } of mobileLanes) {
     );
     continue;
   }
-  // The installer reads MAESTRO_VERSION from the environment and nowhere else,
-  // so a second `curl` that is not inside a pinning step floats silently.
   if (installs !== found.length) {
     errors.push(
       `${file} installs Maestro ${installs} time(s) but pins MAESTRO_VERSION ${found.length} time(s); an unpinned install floats to releases/latest`
@@ -339,12 +266,6 @@ if (maestroPins.size > 1) {
   );
 }
 
-// #892 Phase 3 — NO `curl | bash` IN A REQUIRED LANE. `MAESTRO_VERSION` pinned
-// what the remote installer would fetch and pinned nothing about the installer
-// itself: an unpinned third-party script, executed as the first act of the lane
-// that gates every mobile merge. gitleaks and osv-scanner already fetch a named
-// release artifact by version; this makes Maestro match, and this check is what
-// stops the one-liner coming back the next time somebody adds a device lane.
 for (const { file, source } of allWorkflows) {
   if (!source.includes("get.maestro.mobile.dev")) continue;
   errors.push(
@@ -354,10 +275,6 @@ for (const { file, source } of allWorkflows) {
   );
 }
 
-// #890 W1 — the scheduled lanes must drive the RELEASE artifact. The dev client
-// is the local exploratory rig; a CI lane that starts Metro is testing the
-// harness. These two bans are what stop it coming back one convenient step at a
-// time, since each individual re-addition always looks reasonable.
 for (const { file, source } of mobileLanes) {
   const code = source
     .split("\n")
@@ -378,7 +295,6 @@ for (const { file, source } of mobileLanes) {
   }
 }
 
-// Executable shell cross-workflow fetch — ban the retired pairing satellite.
 const shellBans = [
   /gh\s+run\s+list[^\n]*pairing-relay-e2e/u,
   /gh\s+run\s+download/u,
@@ -392,9 +308,6 @@ for (const ban of shellBans) {
   }
 }
 
-// #725 — real model weights are deliberately weekly/manual, but their latest
-// artifact must be restored into the health report and failures must page via
-// the same deduplicating issue helper as the existing weekly lanes.
 const enrichmentLive = await readFile(enrichmentLivePath, "utf8").catch(
   () => ""
 );
@@ -413,12 +326,6 @@ for (const required of [
   if (!enrichmentLive.includes(required))
     errors.push(`enrichment-live-weekly.yml missing ${required}`);
 }
-// #842 W3.4 — the four-hour soak. The nightly scale lane already runs this
-// rig at its 0.75-minute default, so the ONLY thing that makes the weekly lane
-// worth a 300-minute runner is the duration override: a weekly job that
-// silently fell back to the nightly default would repeat the nightly and prove
-// nothing. That is why the literal is checked, exactly as the join lane's
-// CENTRAID_JOIN_SEATS floor is.
 const soakWeekly = await readFile(soakWeeklyPath, "utf8").catch(() => "");
 for (const required of [
   "schedule:",
@@ -451,15 +358,9 @@ try {
     "standalone workflow still present: .github/workflows/pairing-relay-e2e.yml"
   );
 } catch {
-  // expected — file deleted
+  // Intentionally empty.
 }
 
-// --- Rig budget registry completeness (#656 Layer 1F) ----------------------
-// `tests/budgets.json#qualityRigs` documented 9 of the 24 committed rigs and
-// nothing read it, so it drifted silently for two milestones. Making it
-// exhaustive is only durable if something fails when it stops being
-// exhaustive — that is this block. A new rig must declare its lane and volume;
-// a deleted rig must not leave a phantom entry behind.
 const LANES = [
   { lane: "perf", suffix: ".perf.test.ts" },
   { lane: "scale", suffix: ".scale.test.ts" },
@@ -470,8 +371,6 @@ const budgets = JSON.parse(
 ).qualityRigs;
 const registered = new Set(Object.keys(budgets.rigs ?? {}));
 
-// Read every lane directory and every rig source up front: the checks below are
-// pure over that snapshot, so no I/O sits inside a loop.
 const laneListings = await Promise.all(
   LANES.map(async ({ lane, suffix }) => ({
     lane,
@@ -520,18 +419,10 @@ for (const { lane, key, source } of rigs) {
       `tests/budgets.json#qualityRigs has no entry for rig ${key} (declare its lane and volume)`
     );
   }
-  // A rig that inlines its own absolute ceiling is invisible to test:ratchet.
   if (/^const BUDGET_MS\s*=\s*[\d_]+/mu.test(source))
     errors.push(
       `${key} inlines a numeric BUDGET_MS — declare budgetMs in tests/budgets.json#qualityRigs and read it with rigBudgetMs(OWNER) so the ratchet sees it`
     );
-  // #659 R4 — every rig must consume its own history. An absolute ceiling set
-  // at ~3x a baseline only fires on a collapse: before this rule, a rig could
-  // walk from 40 ms to 110 ms under a 120 ms ceiling across a year of green
-  // nightlies and no gate anywhere would say a word. `rigDriftBudgetMs` (30
-  // samples, 1.5x trailing median) is the drift gate; `qualityRegressionBudget`
-  // is the older 10-sample/3x catastrophe gate and still counts as consuming
-  // history. A rig that reads neither is fenced only against catastrophe.
   if (
     !source.includes("rigDriftBudgetMs") &&
     !source.includes("qualityRegressionBudget")
@@ -541,22 +432,10 @@ for (const { lane, key, source } of rigs) {
     );
 }
 
-// ---------------------------------------------------------------------------
-// #915 Wave 3 — every rung 2–5 lane writes evidence.
-//
-// The report is a pure function of `artifacts/evidence/`, so a lane job with no
-// `Write lane evidence` step is a lane the page cannot see: it renders as
-// `no evidence` forever and nobody can tell that from a lane that genuinely did
-// not run. The registry in `tests/claims.json#lanes` is the list of lanes the
-// page has a row for; this rule holds every one of them that names a job in a
-// workflow to actually carrying the step. The converse direction — a step
-// naming an UNREGISTERED lane — is `bun run lint:evidence-mapping`, which runs
-// on rung 2 so an unmapped file fails a PR rather than becoming a banner.
 const claimsLanes = JSON.parse(
   await readFile(path.join(root, "tests/claims.json"), "utf8")
 ).lanes;
 const EVIDENCE_STEP = /- name: Write lane evidence/u;
-/** Where each registered lane's job is defined, and whether it writes evidence. */
 const laneWiring = new Map(
   claimsLanes.map((lane) => [lane.id, { lane, jobs: [], wired: false }])
 );
@@ -576,14 +455,10 @@ for (const { file, source } of allWorkflows) {
     const next = code.slice(after).search(/\n {2}\S[^\n]*:/u);
     const block = code.slice(at.index, next === -1 ? undefined : after + next);
     entry.jobs.push(file);
-    // A caller job (`uses:` a reusable workflow) has no `steps:` of its own; its
-    // evidence is written by the calling workflow's aggregate step instead.
     if (/^\s+uses:/mu.test(block) && !/^\s+steps:/mu.test(block))
       entry.wired = true;
     if (EVIDENCE_STEP.test(block)) entry.wired = true;
   }
-  // A lane whose evidence is written from a loop over reusable-workflow results
-  // counts as wired wherever that loop names it.
   for (const match of code.matchAll(
     /"(?<lane>[a-z0-9][a-z0-9._-]*):\$\{\{ needs\./gu
   )) {
@@ -598,8 +473,6 @@ for (const { lane, jobs, wired } of laneWiring.values()) {
   );
 }
 
-// Non-vitest rigs (the mobile on-device flow) may stay registered as long as
-// the file they name still exists.
 for (const { rig, present } of orphanChecks) {
   if (!present && registered.has(rig))
     errors.push(

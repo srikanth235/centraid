@@ -1,48 +1,13 @@
 #!/usr/bin/env node
-/**
- * Advisory-output expiry ratchet (#892 Phase 3).
- *
- * Everything else in this repo that could go quietly wrong has a budget, a
- * ledger or an expiry: quarantined tests expire, environment-red tests carry an
- * issue and a revisit trigger, sleeps and assertion-hygiene counts are down-only,
- * every coverage and mutation floor is tighten-only. Two CI outputs had none —
- *
- *   ci.yml `Report generated binding drift (non-blocking)`
- *   ci.yml `Advisory — Expo compatibility map (non-blocking)`
- *
- * — and they are the ones that need it most, because a non-blocking annotation
- * is exactly where a real regression hides longest: it is printed on every run,
- * nobody is on the hook to read it, and its normal state is "there is output".
- *
- * THE RULE. A step whose NAME declares it advisory (`Advisory` or
- * `(non-blocking)`) must be registered in `tests/inventory.json#advisory` with an
- * owner, an issue and a `revisitBy` date. A past date fails this gate — the
- * advisory has been advisory for as long as somebody said it should be, and the
- * next move is a decision (make it blocking, delete it, or extend the date on
- * purpose), not another quarter of nobody reading it.
- *
- * A ledger entry naming a step that no longer exists ALSO fails: a stale
- * exemption reads like a reviewed decision.
- *
- * Deliberately NOT covered: `continue-on-error: true` in general. Most of those
- * are artifact restores whose failure is benign and whose consequence IS
- * re-checked (the nightly quality lane reads every step outcome back and fails
- * on any non-success). Sweeping them in would flood the gate and teach people to
- * widen it. This rule is about steps that ANNOUNCE they will never fail.
- *
- * Usage: node scripts/ci/advisory-expiry.mjs [--today YYYY-MM-DD]
- */
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { INVENTORY_PATH, readLedgerSection } from "../check-ledgers.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
-/** The advisory register: `tests/inventory.json#advisory.steps` (#915 Wave 4). */
 const LEDGER_LABEL = "tests/inventory.json#advisory";
 const WORKFLOW_DIR = path.join(root, ".github/workflows");
 
-/** Step names that declare themselves advisory. */
 export function advisorySteps(file, source) {
   const found = [];
   for (const line of source.split("\n")) {
@@ -55,11 +20,6 @@ export function advisorySteps(file, source) {
   return found;
 }
 
-/**
- * @param {{id: string}[]} steps advisory steps discovered in the workflows
- * @param {Record<string, {owner?: string, issue?: string, revisitBy?: string, why?: string}>} ledger the recorded owners, issues and dates
- * @param {string} today ISO date to compare `revisitBy` against
- */
 export function checkAdvisories(steps, ledger, today) {
   const errors = [];
   const ids = new Set(steps.map((step) => step.id));

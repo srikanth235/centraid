@@ -1,7 +1,3 @@
-/**
- * Append test-health markdown to $GITHUB_STEP_SUMMARY (and print to stdout).
- * Usage: node scripts/test-report/write-job-summary.mjs [--summary path] [--report-url url]
- */
 import { appendFile, readFile } from "node:fs/promises";
 import path from "node:path";
 

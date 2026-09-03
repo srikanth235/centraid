@@ -1,18 +1,3 @@
-/**
- * First-party tunnel NAPI platform matrix for gateway npm packs (#511).
- *
- * Artifact name matches native-relay.ts / build-native.mjs:
- *   centraid-tunnel-native.${process.platform}-${process.arch}.node
- */
-
-/** @typedef {{ id: string; platform: string; arch: string; required: boolean; runnerHint: string }} NativePlatform */
-
-/**
- * Platforms we build and ship in the gateway npm graph.
- * `required: true` must be present before publish when CENTRAID_REQUIRE_MULTI_NATIVE=1.
- *
- * @type {NativePlatform[]}
- */
 export const NATIVE_PLATFORMS = [
   {
     id: "linux-x64",
@@ -58,38 +43,20 @@ export const NATIVE_PLATFORMS = [
   },
 ];
 
-/**
- * @param {string} platform process.platform
- * @param {string} arch process.arch
- * @returns {string} Artifact basename (with .node)
- */
 export function nativeArtifactName(platform, arch) {
   return `centraid-tunnel-native.${platform}-${arch}.node`;
 }
 
-/**
- * @param {string} id Platform id e.g. linux-x64
- * @returns {string} Artifact basename
- */
 export function nativeArtifactNameForId(id) {
   const row = NATIVE_PLATFORMS.find((p) => p.id === id);
   if (!row) throw new Error(`Unknown native platform id: ${id}`);
   return nativeArtifactName(row.platform, row.arch);
 }
 
-/**
- * @returns {string[]} Required platform ids
- */
 export function requiredNativePlatformIds() {
   return NATIVE_PLATFORMS.filter((p) => p.required).map((p) => p.id);
 }
 
-/**
- * Validate a directory of prebuilt `.node` files.
- * @param {string[]} basenames File basenames present under packages/tunnel/native/.
- * @param {{ requireAll?: boolean; requiredIds?: string[] }} [opts] Audit options (require all known platforms or a subset).
- * @returns {{ present: string[]; missingRequired: string[]; extra: string[] }} Present files, missing required names, and unexpected extras.
- */
 export function auditNativeArtifacts(basenames, opts = {}) {
   const requireAll = opts.requireAll === true;
   const requiredIds = opts.requiredIds ?? requiredNativePlatformIds();
@@ -110,12 +77,6 @@ export function auditNativeArtifacts(basenames, opts = {}) {
   return { present, missingRequired, extra };
 }
 
-/**
- * Map a GitHub Actions matrix runner label to platform id when the host matches.
- * Used by CI scripts; pure for unit tests.
- * @param {{ os: string; arch: string }} host e.g. { os: 'Linux', arch: 'x64' } from process
- * @returns {string | null} Platform id or null if unsupported host
- */
 export function hostToPlatformId(host) {
   const platform =
     host.os === "Windows_NT" || host.os === "win32"

@@ -1,14 +1,4 @@
 #!/usr/bin/env node
-/**
- * Gateway install-set tracer (issue #504 packaging Phase A).
- *
- * Emits a reviewable list of workspace paths that form a gateway runtime
- * closure for Docker/smoke packaging. Native modules are recorded explicitly
- * (sharp, wasm-vips, node:sqlite, tunnel/iroh wasm) — that is the hard part
- * of reproducible packaging; lockfile FOD is secondary.
- *
- * External observer: does not mutate product main.
- */
 
 import { existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -17,7 +7,6 @@ import { GATEWAY_WORKSPACE_PACKAGES } from "./assemble-runtime.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-/** Native / special binary surface (Phase A decision record). */
 const NATIVE_MODULE_DECISION = {
   sharp: {
     role: "image variants in gateway routes",
@@ -91,6 +80,5 @@ try {
     `gateway package trace → ${outPath} (${entries.length} paths)\n`
   );
 } catch {
-  // artifacts/ may not exist in all worktrees — still print to stdout
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }

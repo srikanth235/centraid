@@ -1,29 +1,4 @@
 #!/usr/bin/env node
-/**
- * Freeze a populated vault as a golden corpus (#892 Phase 2).
- *
- * Run this ONCE PER RELEASE, from the release's own tree:
- *
- *   bun run golden-vault:freeze -- --label v0.4.0
- *
- * It founds a vault with the code in the tree it is run from, writes a
- * deterministic corpus through the vault's own API, and freezes the result under
- * `packages/vault/tests/golden/<label>/`. Every PR after that opens the frozen
- * pair with today's code, lets the migration ladder run, and checks the corpus
- * survived (`packages/vault/src/golden-vault.test.ts`).
- *
- * DETERMINISM IS THE WHOLE JOB. A corpus seeded with `Date.now()` and random
- * uuids re-freezes differently every run, so its diff is unreadable and nobody
- * can tell a re-freeze from a rewrite. Every id and timestamp below is derived
- * from a fixed seed, which is also why the frozen `.db` files are stable enough
- * to live in git.
- *
- * WHAT IT DOES NOT DO: it does not fabricate a PREVIOUS release. A golden vault
- * is only prior-release evidence if it was frozen BY that release, so the corpus
- * committed today is the v-current baseline and starts paying the moment the
- * next migration lands. Freezing one per release is the discipline; this script
- * is only the mechanism.
- */
 import { createHash } from "node:crypto";
 import {
   mkdirSync,
@@ -39,7 +14,6 @@ import { gzipSync } from "node:zlib";
 const root = path.resolve(import.meta.dirname, "../..");
 const GOLDEN_ROOT = path.join(root, "packages/vault/tests/golden");
 
-/** A stable id generator: the same label always produces the same corpus. */
 function seededIds(seed) {
   let counter = 0;
   return () => {
@@ -47,8 +21,6 @@ function seededIds(seed) {
     const digest = createHash("sha256")
       .update(`${seed}:${counter}`)
       .digest("hex");
-    // uuidv7-shaped so anything validating the format is satisfied, but wholly
-    // derived: no clock, no randomness.
     return [
       digest.slice(0, 8),
       digest.slice(8, 12),
@@ -61,13 +33,6 @@ function seededIds(seed) {
 
 const FROZEN_NOW = "2026-01-01T00:00:00.000Z";
 
-/**
- * Write the corpus. Deliberately narrow and deliberately CORE: the tables a
- * migration is most likely to touch and a member would most miss — identity,
- * the concept vocabulary, documents, notes and the links between them. A
- * broader corpus is not a better gate; a corpus nobody can read the diff of is
- * a worse one.
- */
 async function seedCorpus(db, nextId) {
   const { bootstrapVault } = await import(
     path.join(root, "packages/vault/dist/index.js")
@@ -77,10 +42,6 @@ async function seedCorpus(db, nextId) {
     ownerName: "Golden Owner",
   });
 
-  // A document's identity is separate from its bytes (#352), so every corpus
-  // row is a content item plus the wrapper that addresses it — the same pair the
-  // product writes, which is what makes a migration over this corpus mean
-  // anything about a member's vault.
   const contentFor = (label, index) => {
     const contentId = nextId();
     db.vault
@@ -139,8 +100,6 @@ async function seedCorpus(db, nextId) {
       );
   }
 
-  // A polymorphic link between two corpus rows: the exact shape `vault doctor`
-  // sweeps, so the golden gate also proves a migration did not orphan one.
   db.vault
     .prepare(
       `INSERT INTO core_link
@@ -176,8 +135,6 @@ async function main() {
     return;
   }
 
-  // The snapshot format is the vault package's, not this script's: the freezer
-  // and the checker must never hold two copies of the comparison rule.
   const { openVaultDb, ONTOLOGY_VERSION, snapshotVault } = await import(
     path.join(root, "packages/vault/dist/index.js")
   );
@@ -188,15 +145,7 @@ async function main() {
   try {
     await seedCorpus(db, seededIds(args.label));
     const userVersion = db.vault.prepare("PRAGMA user_version").get();
-    // Fold the WAL into the main file, or the frozen `.db` would be missing the
-    // corpus that is still sitting in `-wal` (this vault opens with
-    // `wal_autocheckpoint = 0` on purpose, for the WAL shipper).
     db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-    // A freshly migrated vault is mostly EMPTY PAGES — the full schema plus the
-    // FTS tables allocate ~5.6 MB for ~185 rows of corpus, which is both over
-    // the 5 MB `repo-hygiene` tracked-file limit and a wildly misleading diff.
-    // VACUUM rewrites the file at its actual occupancy. It is safe to run here
-    // and only here: this is a vault nothing else has open.
     db.vault.exec("VACUUM");
     manifest = {
       label: args.label,
@@ -212,15 +161,6 @@ async function main() {
   const dest = path.join(GOLDEN_ROOT, args.label);
   rmSync(dest, { force: true, recursive: true });
   mkdirSync(dest, { recursive: true });
-  // GZIPPED, and not as an optimization. A freshly migrated vault.db is ~5.6 MB
-  // of mostly empty pages (the full schema plus the FTS shadow tables) for ~185
-  // rows of corpus — over `repo-hygiene`'s 5 MB tracked-file limit, and VACUUM
-  // does not help because the size is the SCHEMA, not the data. It compresses to
-  // ~100 KB. `packages/vault/src/golden-vault.test.ts` inflates into a temp dir
-  // before opening, which it would have to do anyway: opening the frozen file in
-  // place would let a migration rewrite the corpus it is meant to be checking.
-  // ONE FILE (#916): the audit band and the conversation ledger are bands of
-  // vault.db, so there is one artifact to freeze.
   writeFileSync(
     path.join(dest, "vault.db.gz"),
     gzipSync(readFileSync(path.join(work, "vault.db")), { level: 9 })

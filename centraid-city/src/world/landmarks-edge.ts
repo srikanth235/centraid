@@ -1,18 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit — one bespoke model per building id.
-// Already split three ways by district; each entry is independent of the others.
-// landmarks-edge.ts — apps, automation, cas, sync. See KIT_API.md.
-//
-// Lane C of the bespoke-geometry set. Every building here depicts what its subsystem
-// actually does; district `color` appears ONLY on sign bands, beacons, seams, glowing
-// glass and board faces — bodies are the neutral kit material palette.
-//
-// Two deliberate contrasts this file is responsible for:
-//   * `automation-clock` is a campanile (arched belfry, four clock faces, pyramidal
-//     copper cap, weathervane) so the Automation Yard can never read as Gateway Plaza.
-//   * `apps-locker` / `apps-tally` / `apps-people` / `apps-photos` / `apps-agenda` are
-//     five different little buildings, not five clones of one hall.
-// And two machines that must not rhyme: `apps-crane` is a slewing tower crane,
-// `cas-s3crane` is a portal gantry straddling rails.
 
 import type * as THREE from "three";
 
@@ -23,11 +9,6 @@ import type {
   SurfaceMaterialFactory,
 } from "../core/types.js";
 
-/* ------------------------------------------------------------------ helpers */
-
-// Call a kit member defensively. The kit is authored in a parallel file; a missing or
-// throwing member must cost us one detail, never the whole building (world.ts clears
-// the group on an uncaught throw).
 function invoke(
   kit: CityKit | null | undefined,
   name: string,
@@ -51,7 +32,6 @@ function isObject3D(value: unknown): value is THREE.Object3D {
   );
 }
 
-// mk(target, ...) builds and parents in one step; returns the object (or null).
 function mk(
   target: THREE.Object3D | null,
   kit: CityKit | null | undefined,
@@ -63,9 +43,6 @@ function mk(
   return isObject3D(o) ? o : null;
 }
 
-// Placement is done on the returned Object3D rather than through opts, so the code
-// depends only on the documented "builders return a THREE.Object3D" contract.
-// Solid volumes are treated as centred on their own origin; roofs/props sit on theirs.
 function at(
   o: THREE.Object3D | null,
   x = 0,
@@ -105,8 +82,6 @@ function noShadow(o: THREE.Object3D | null): THREE.Object3D | null {
   return o;
 }
 
-// Material book: prefers the shared cached kit materials, falls back to world.ts's
-// plainMat so a partially-built kit still renders something in the right key.
 function palette(
   kit: CityKit | null | undefined,
   plainMat: SurfaceMaterialFactory
@@ -130,13 +105,9 @@ function palette(
   };
 }
 
-// Neutral crate/container hues — varied, but still the model-shop palette.
 const CRATE_HUES = ["#7d8894", "#8a7f6f", "#5f6b74", "#9a8b6d", "#6e7a83"];
 
 export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
-  /* ================================================================== apps */
-
-  // Strongbox shop: ribbed metal front, rolling shutter, oversized padlock, flat parapet.
   "apps-locker"({ g, w, h, d, color, kit, plainMat }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -153,7 +124,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // ribbed steel shopfront
     at(
       P("ribbedFacade", w * 0.94, bodyH * 0.94, 0.3, 11, M.steel),
       0,
@@ -161,7 +131,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       front + 0.16
     );
 
-    // rolling shutter in its housing
     at(
       P("box", w * 0.58, 0.55, 0.7, M.steel),
       0,
@@ -175,7 +144,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       front + 0.36
     );
 
-    // oversized padlock motif over the shutter
     const lockY = plinth + bodyH * 0.78;
     at(P("box", 2, 1.5, 0.4, M.brass), 0, lockY, front + 0.45);
     tilt(
@@ -201,7 +169,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     );
   },
 
-  // Counting house: abacus facade of brass rods and sliding beads, gable roof.
   "apps-tally"({ g, w, h, d, color, kit, plainMat }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -219,7 +186,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // abacus: four rods, beads bunched at different counts per rod
     const rods = 4;
     const counts = [3, 2, 4, 1];
     const rodW = w * 0.7;
@@ -248,7 +214,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     );
   },
 
-  // Townhouse row: three narrow bays, three different rooflines, three stoops.
   "apps-people"({ g, w, h, d, color, kit, plainMat }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -293,7 +258,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
           0
         );
 
-      // stoop + door
       at(P("steps", bayW * 0.42, 1, 3, M.concrete), x, 0, front + 0.6);
       at(
         P("box", bayW * 0.3, 1.5, 0.18, M.timber),
@@ -312,7 +276,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("streetlamp", 3.2, M.steel), -w * 0.42, 0, front + 1.6);
   },
 
-  // Gallery studio: sawtooth north-light roof, big glazed wall, image-tile mullions.
   "apps-photos"({ g, w, h, d, color, kit, plainMat }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -323,7 +286,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("box", w, plinth, d, M.concrete), 0, plinth / 2, 0);
     at(P("box", w * 0.92, bodyH, d * 0.9, M.bone), 0, plinth + bodyH / 2, 0);
 
-    // four small bays — deliberately finer-grained than automation-line's seven
     at(
       P("roofSawtooth", w * 0.92, d * 0.9, h * 0.42, 4, M.slate),
       0,
@@ -339,7 +301,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       plinth + bodyH * 0.44,
       front + 0.16
     );
-    // image tiles read as a contact sheet across the glazing
     at(
       P("plaqueWall", w * 0.7, bodyH * 0.6, 4, 3, M.steel),
       0,
@@ -356,8 +317,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("planter", 0.9, M.concrete), -w * 0.4, 0, front + 1.2);
   },
 
-  // Calendar house: 7x5 grid of recessed date cells, stepped cap, corner campanile
-  // with a small ribbed copper cupola.
   "apps-agenda"({ g, w, h, d, color, kit, plainMat, beacon }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -368,7 +327,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("box", w, plinth, d, M.darkSlate), 0, plinth / 2, 0);
     at(P("box", w * 0.9, bodyH, d * 0.85, M.plaster), 0, plinth + bodyH / 2, 0);
 
-    // the month grid, recessed into the front wall
     at(
       P("punchedWindows", w * 0.86, bodyH * 0.8, 0.28, 7, 5, M.bone),
       0,
@@ -382,7 +340,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // corner campanile
     const cw = 1.9;
     const cx = w * 0.36;
     const cz = -d * 0.3;
@@ -413,14 +370,10 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       beacon(cx, plinth + campH + 2.4, cz, color, 0.28);
   },
 
-  // Proper tower crane: lattice mast, counter-jib + counterweight, slewing jib, hook,
-  // blueprint scaffold and material stack on the pad below.
-  // Keeps the {type:'crane'} contract world.ts already animates.
   "apps-crane"({ g, w, h, d, color, kit, THREE, animated, plainMat, beacon }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
 
-    // ballasted pad + the scaffold of the app being built
     at(P("box", w * 0.95, 0.7, d * 0.95, M.darkSlate), 0, 0.35, 0);
     at(P("box", w * 0.5, 0.5, d * 0.5, M.concrete), 0, 0.95, 0);
     at(P("crateStack", 2.4, 1.8, 2, M.timber), -w * 0.42, 0.7, d * 0.34);
@@ -428,7 +381,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("latticeMast", 3.6, 1.2, M.steel), w * 0.4, 0.7, -d * 0.4);
     at(P("signBand", w * 0.6, 0.4, color), 0, 1.4, d * 0.48);
 
-    // slewing assembly — everything above the turntable turns as one
     const rot = new THREE.Group();
     rot.position.y = 1.2;
     g.add(rot);
@@ -447,7 +399,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(R("truss", 5.2, 0.7, M.steel, { segments: 3 }), -3.6, mastH, 0);
     at(R("box", 2.4, 1.7, 2, M.darkSlate), -4.9, mastH - 0.2, 0);
     at(R("box", 1.5, 1.3, 1.5, M.bone), 1.4, mastH - 1, 0);
-    // apex A-frame + pendant ties
     at(R("box", 0.35, 2.4, 0.35, M.steel), 0, mastH + 1.2, 0);
 
     const hookDrop = h * 0.5;
@@ -466,17 +417,12 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // The shadow map is baked once; a frozen shadow under a turning jib reads wrong.
     noShadow(rot);
     if (typeof beacon === "function") beacon(0, h + 1.2, 0, "#e5484d", 0.4);
 
     animated.push({ type: "crane", obj: rot, hook, hookBase: h });
   },
 
-  /* ============================================================ automation */
-
-  // CAMPANILE. Battered terracotta shaft, arched belfry with a bell, four clock faces,
-  // brass cornice, pyramidal copper cap, weathervane. Nothing box-shaped about it.
   "automation-clock"({ g, w, h, color, kit, plainMat, beacon }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -485,7 +431,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     const shaftW = w * 0.44;
     const plinth = 0.9;
 
-    // stepped base + entry stair
     at(P("box", baseW, plinth, baseW, M.concrete), 0, plinth / 2, 0);
     at(P("steps", shaftW * 1.1, 0.9, 3, M.concrete), 0, 0, baseW * 0.5 + 0.5);
     at(
@@ -495,7 +440,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // slender shaft with pilaster rhythm on all four faces
     const shaftH = h * 0.55;
     const shaftY = plinth + 0.7 + shaftH / 2;
     at(P("box", shaftW, shaftH, shaftW, M.terracotta), 0, shaftY, 0);
@@ -533,7 +477,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       0,
       -Math.PI / 2
     );
-    // tall lancet slot up the front, so the shaft reads as a tower not a post
     noShadow(
       at(
         P("box", shaftW * 0.16, shaftH * 0.5, 0.14, M.glass),
@@ -543,7 +486,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       )
     );
 
-    // belfry stage — arched openings on every face, bell hung inside
     const shaftTop = plinth + 0.7 + shaftH;
     const belW = shaftW * 1.2;
     const belH = h * 0.19;
@@ -579,11 +521,9 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     );
     at(P("drum", 0.34, 0.62, 0.9, M.brass, { seg: 12 }), 0, belY + 0.1, 0);
 
-    // brass cornice
     const belTop = shaftTop + belH;
     at(P("box", belW * 1.18, 0.32, belW * 1.18, M.brass), 0, belTop + 0.16, 0);
 
-    // clock stage — four faces, one per elevation
     const clkW = belW * 0.94;
     const clkH = h * 0.2;
     const clkY = belTop + 0.32 + clkH / 2;
@@ -595,7 +535,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("clockFace", faceR, M.bone, color), off, clkY, 0, Math.PI / 2);
     at(P("clockFace", faceR, M.bone, color), -off, clkY, 0, -Math.PI / 2);
 
-    // pyramidal copper cap + weathervane
     const clkTop = belTop + 0.32 + clkH;
     at(P("box", clkW * 1.12, 0.24, clkW * 1.12, M.copper), 0, clkTop + 0.12, 0);
     at(
@@ -616,17 +555,14 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     );
   },
 
-  // Signal hut: trackside lever frame, semaphore arms, small gabled hut.
   "automation-shed1"({ g, w, h, d, color, kit, plainMat, beacon }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
 
-    // ballast + rails running past the hut
     at(P("box", w * 1.25, 0.24, 2.6, M.darkSlate), 0, 0.12, d * 0.34);
     at(P("box", w * 1.3, 0.16, 0.28, M.steel), 0, 0.3, d * 0.34 - 0.7);
     at(P("box", w * 1.3, 0.16, 0.28, M.steel), 0, 0.3, d * 0.34 + 0.7);
 
-    // hut
     const hutW = w * 0.52;
     const hutD = d * 0.5;
     const hutH = h * 0.66;
@@ -652,7 +588,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       -d * 0.22
     );
 
-    // lever frame under the window
     const frameZ = -d * 0.22 + hutD * 0.5 + 0.55;
     at(P("box", hutW * 0.9, 0.28, 0.5, M.darkSlate), hx, 0.62, frameZ);
     for (let i = 0; i < 5; i += 1) {
@@ -664,7 +599,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       );
     }
 
-    // semaphore signal
     const sx = w * 0.36;
     at(P("mast", h * 1.2, M.steel), sx, 0.2, d * 0.1);
     tilt(
@@ -684,8 +618,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     );
   },
 
-  // Deterministic assembly line: long shed, seven-bay sawtooth, external gantry over a
-  // covered loading bay, a continuous glazed strip showing the line inside.
   "automation-line"({ g, w, h, d, color, kit, plainMat }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -696,7 +628,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("box", w, plinth, d, M.concrete), 0, plinth / 2, 0);
     at(P("box", w * 0.96, bodyH, d * 0.9, M.bone), 0, plinth + bodyH / 2, 0);
 
-    // seven coarse bays over a 14-wide shed — a different rhythm and scale to apps-photos
     at(
       P("roofSawtooth", w * 0.96, d * 0.9, h * 0.38, 7, M.slate),
       0,
@@ -704,7 +635,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // the line itself, seen through a long low glazed strip
     at(
       P("curtainWall", w * 0.88, bodyH * 0.34, 0.28, M.glass, {
         faces: "front",
@@ -720,12 +650,10 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // external gantry striding across the apron
     at(P("gantry", w * 0.78, h * 1.05, M.steel), 0, 0, front + 2.6);
     at(P("box", w * 0.8, 0.2, 0.4, M.darkSlate), 0, 0.1, front + 2);
     at(P("box", w * 0.8, 0.2, 0.4, M.darkSlate), 0, 0.1, front + 3.2);
 
-    // covered loading bay
     at(
       P("box", w * 0.34, 0.35, 3, M.steel),
       w * 0.26,
@@ -761,7 +689,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("activityLamp", color), w * 0.42, plinth + bodyH * 0.9, front + 0.3);
   },
 
-  // Timetable wall: a low block fronted by a big split-flap departure board on a truss.
   "automation-scheduler"({ g, w, h, d, color, kit, plainMat }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -778,7 +705,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       front + 0.12
     );
 
-    // the board stands proud of the roofline on a light truss
     const boardH = h * 1.5;
     const boardY = 0.3 + bodyH + boardH * 0.5;
     at(
@@ -819,9 +745,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("signBand", w * 0.4, 0.3, color), 0, 0.3 + bodyH * 0.2, front + 0.16);
   },
 
-  /* =================================================================== cas */
-
-  // Chunk containers: a staggered stack of shipping containers under a small gantry.
   "cas-containers"({ g, w, h, d, color, kit, plainMat }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -832,7 +755,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
 
     at(P("box", w * 1.08, pad, d * 1.08, M.darkSlate), 0, pad / 2, 0);
 
-    // three down, two, then one — content-addressed chunks stacked as they land
     const rows = [[-3, 0.2, 3.1], [-1.6, 1.8], [0.3]];
     let hue = 0;
     for (let r = 0; r < rows.length; r += 1) {
@@ -863,7 +785,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("crateStack", 1.8, 1.2, 1.6, M.timber), w * 0.44, pad, 2.6);
   },
 
-  // zstd press: squat block with a massive external ram and brass compression rings.
   "cas-press"({ g, w, h, d, color, kit, plainMat }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -886,7 +807,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // compression rings banding the base
     for (let i = 0; i < 3; i += 1) {
       at(
         P("drum", w * 0.47, w * 0.47, 0.3, M.brass, { seg: 16, open: true }),
@@ -896,7 +816,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       );
     }
 
-    // the ram itself, mounted on the front elevation
     const ramY = 0.35 + baseH + 1.2;
     at(P("box", 2.8, 0.5, 1.4, M.steel), 0, 0.35 + baseH * 0.62, front + 0.85);
     at(P("piston", 2.6, 0.62, M.steel), 0, ramY, front + 0.85);
@@ -934,14 +853,12 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     );
   },
 
-  // Portal gantry crane straddling rails — a bridge on bogies, not a slewing tower.
   "cas-s3crane"({ g, w, h, d, color, kit, THREE, plainMat, beacon }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
     const railZ = d * 0.42;
     const railLen = w * 2.3;
 
-    // rails + sleepers
     at(P("box", railLen, 0.2, 0.4, M.steel), 0, 0.12, -railZ);
     at(P("box", railLen, 0.2, 0.4, M.steel), 0, 0.12, railZ);
     for (let i = 0; i < 5; i += 1) {
@@ -953,7 +870,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       );
     }
 
-    // two portal frames straddling the track, tied by a top girder
     const portalH = h * 0.86;
     at(P("gantry", railZ * 2.1, portalH, M.steel), 0, 0, -1.7);
     at(P("gantry", railZ * 2.1, portalH, M.steel), 0, 0, 1.7);
@@ -979,7 +895,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       Math.PI / 2
     );
 
-    // travelling bogies on the rails
     const bogies = [
       [-railZ, -1.7],
       [railZ, -1.7],
@@ -1000,7 +915,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       );
     }
 
-    // trolley + a chunk on the hoist, gently bobbing as it offloads
     at(P("box", 1.6, 0.8, 1.8, M.bone), -railZ * 0.35, portalH + 0.2, 0);
     const load = new THREE.Group();
     load.position.set(-railZ * 0.35, 0, 0);
@@ -1030,7 +944,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     if (typeof beacon === "function") beacon(0, portalH + 1.6, 0, color, 0.3);
   },
 
-  // Departing cloud barge: hull, deck containers, wheelhouse, wake.
   "cas-barge"({ g, w, d, color, kit, plainMat, glowMat, beacon }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -1039,7 +952,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("box", w * 0.98, 0.28, d * 0.68, M.steel), 0, 2.05, 0);
     at(P("masonryBands", w * 1, 0.9, d * 0.7, M.bone), 0, 1.75, 0);
 
-    // deck cargo
     const spots = [-3.4, -0.4, 2.6];
     for (let i = 0; i < spots.length; i += 1) {
       at(
@@ -1051,7 +963,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     }
     at(mk(g, kit, "container", [2.7, 1.9, 2.2, CRATE_HUES[3]]), -0.4, 5.1, 0);
 
-    // wheelhouse aft
     const wx = -w * 0.4;
     at(P("box", 2.2, 1.9, 2.4, M.bone), wx, 3.15, 0);
     at(P("curtainWall", 2, 0.9, 0.2, M.glass, { faces: "all" }), wx, 3.6, 0);
@@ -1073,7 +984,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     );
     at(P("signBand", w * 0.36, 0.32, color), w * 0.24, 1.75, d * 0.36);
 
-    // wake trailing astern
     const wake =
       (typeof glowMat === "function" ? glowMat("#a9c7d8", 0.22) : M.glass) ||
       M.glass;
@@ -1082,10 +992,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     if (typeof beacon === "function") beacon(wx, 7.3, 0, color, 0.26);
   },
 
-  /* ================================================================== sync */
-
-  // True lighthouse: battered tower on a rock, banded masonry, gallery, glazed lantern
-  // room with a rotating beam, conical copper cap.
   "sync-lighthouse"({
     g,
     w,
@@ -1120,7 +1026,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       d * 0.22
     );
 
-    // gallery ring
     const galY = 1.2 + towerH;
     at(P("catwalk", w * 0.34, galY, M.steel), 0, 0, 0);
     at(
@@ -1130,7 +1035,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // lantern room + rotating beam
     const lantH = h * 0.2;
     const lantY = galY + lantH / 2;
     at(P("drum", w * 0.2, w * 0.22, lantH, M.glass, { seg: 12 }), 0, lantY, 0);
@@ -1150,7 +1054,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("signBand", w * 0.4, 0.3, color), 0, 1.6, w * 0.3);
   },
 
-  // Cable-stayed bridge: two A-frame pylons, fanned stays, a deck on piers.
   "sync-bridge"({ g, w, h, d, color, kit, plainMat, glowMat }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -1180,7 +1083,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     const pylonH = h * 2.1;
     for (const px of pylonX) {
       at(P("box", 1.8, deckY, 1.8, M.concrete), px, deckY / 2, 0);
-      // A-frame legs leaning in to a shared head
       tilt(
         at(
           P("box", 0.55, pylonH, 0.55, M.bone),
@@ -1210,7 +1112,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
         0
       );
 
-      // fanned stays, three per side
       for (let s = 0; s < 3; s += 1) {
         for (let dir = -1; dir <= 1; dir += 2) {
           const dx = dir * (len * 0.09 + s * len * 0.07);
@@ -1230,7 +1131,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("signBand", 3, 0.32, color), 0, deckY - 0.6, deckD * 0.5 + 0.1);
   },
 
-  // Replica standby A: stilted cabin on piles, deck railing, dish aimed back at the city.
   "sync-island"({ g, w, d, color, kit, plainMat, beacon }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -1262,7 +1162,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       0
     );
 
-    // dish pointed back at the gateway
     const dsh = at(P("dish", 1.5, M.bone), w * 0.26, deckY + 1.5, -d * 0.1);
     tilt(dsh, -0.5, 0);
     if (dsh && dsh.isObject3D) dsh.rotation.y = 0.9;
@@ -1296,7 +1195,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
       beacon(-w * 0.34, deckY + 3.6, -d * 0.3, color, 0.26);
   },
 
-  // Replica standby B: smaller and clearly different — an A-frame cabin, solar array, mast.
   "sync-island2"({ g, w, h, d, color, kit, plainMat, beacon }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -1306,7 +1204,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     at(P("box", w * 0.9, pad, d * 0.9, M.concrete), 0, 0.4 + pad / 2, 0);
     const deckY = 0.4 + pad;
 
-    // the A-frame: a steep gable sitting straight on the deck, no walls at all
     at(
       P("roofGable", w * 0.62, d * 0.78, h * 1.25, M.timber),
       -w * 0.1,
@@ -1321,7 +1218,6 @@ export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
     );
     at(P("box", w * 0.62, 0.2, 0.3, M.brass), -w * 0.1, deckY + 0.05, d * 0.39);
 
-    // power + link
     tilt(
       at(P("solarArray", 2.4, 1.8, M.slate), w * 0.32, deckY + 0.9, d * 0.1),
       -0.5,

@@ -1,53 +1,10 @@
-/**
- * App-weight gate (issue #659 R3d).
- *
- * `apps/mobile`'s `ci:bundle` and `apps/desktop`'s `build:react` already produce
- * the exact artifacts a user downloads, on every PR that touches those paths —
- * and nothing has ever weighed them. A bundle can double in size and every gate
- * in the repo stays green, because the only byte ceilings we own measure what a
- * BROWSER transfers from the e2e harness, not what ships.
- *
- * This script weighs a built directory and asserts it against the `appWeight`
- * entry in the surface's file under `tests/experience-budgets/`. Those ceilings
- * are tighten-only (PERF_BUDGET_SOURCES in scripts/test-report/ratchet-floors.mjs),
- * so a "just bump it" fix is a reviewed edit rather than a quiet one.
- *
- * Two numbers per surface:
- *   - shippedBytes      — everything a user actually receives (source maps and
- *                         other debug sidecars excluded; they are diagnostics,
- *                         not product weight, and their size tracks the code's
- *                         anyway so fencing both double-counts).
- *   - largestChunkBytes — the single biggest shipped file. A total that holds
- *                         while one chunk swallows everything is the shape a
- *                         code-split is supposed to prevent, and a total-only
- *                         budget cannot see it.
- *
- * Year-3 declared volume (docs/coding-standards.md D6): NONE. App weight is a
- * property of the build, not of the vault — it is the one budget in this family
- * that is volume-independent, and that is why it can gate on the PR lane
- * (already-built artifacts, ~30 ms) rather than nightly.
- *
- * Usage:
- *   node scripts/perf/app-weight.mjs --surface desktop
- *   node scripts/perf/app-weight.mjs --surface mobile
- *   node scripts/perf/app-weight.mjs --surface web
- *   node scripts/perf/app-weight.mjs --surface desktop --report   # print, never fail
- */
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-/** Debug sidecars that land in a build output but are not product weight. */
 const DEBUG_SUFFIXES = [".map", ".txt", ".LICENSE.txt"];
 
-/**
- * Where each surface's shipped bytes live, and which budget file owns them.
- * A surface may name several roots (mobile exports ios and android separately);
- * every root must exist or the run fails — a silently-absent directory would
- * weigh 0 bytes and pass, which is the failure mode this whole script exists
- * to close.
- */
 const SURFACES = {
   desktop: {
     budgetFile: "tests/experience-budgets/desktop.json",
@@ -59,24 +16,14 @@ const SURFACES = {
     roots: ["dist/mobile-bundle-smoke/ios", "dist/mobile-bundle-smoke/android"],
     builtBy: "bun run --cwd apps/mobile ci:bundle",
   },
-  // #781 (#587 D21) — web was the one shipping surface with no shipped-weight
-  // budget. The transfer-byte ceilings in apps/web/tests/e2e/perf-budgets.ts
-  // fence what the BROWSER transfers on specific e2e journeys (compressed, and
-  // only the routes those journeys load); this weighs what `bun run web:build`
-  // actually ships, the same claim the desktop/mobile entries make.
   web: {
     budgetFile: "tests/experience-budgets/web.json",
     roots: ["apps/web/dist"],
     builtBy: "bun run web:build",
-    // `precompress.mjs` emits .br/.gz sidecars beside every static asset.
-    // They are alternate transport encodings of files already weighed —
-    // counting both the raw file and its compressed twins would triple-count
-    // the same product bytes (the same reasoning that excludes source maps).
     extraDebugSuffixes: [".br", ".gz"],
   },
 };
 
-/** Recursively list every file under `dir` as absolute paths. */
 async function listFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
   const nested = await Promise.all(
@@ -95,7 +42,6 @@ function isDebugSidecar(file, extraSuffixes = []) {
   );
 }
 
-/** Weigh one root: shipped bytes, the largest shipped file, and the tail. */
 async function weighDirectory(absRoot, extraSuffixes = []) {
   const files = await listFiles(absRoot);
   const sized = await Promise.all(
@@ -119,13 +65,6 @@ async function weighDirectory(absRoot, extraSuffixes = []) {
   };
 }
 
-/**
- * Pure budget comparison.
- * @param {{ shippedBytes: number; largestChunkBytes: number }} weighed Observed.
- * @param {{ maxTotalBytes?: number; maxLargestChunkBytes?: number }} budget Ceilings.
- * @param {string} label Surface/root label for the message.
- * @returns {string[]} Human-readable breach messages (empty = pass).
- */
 function compareWeight(weighed, budget, label) {
   const errors = [];
   if (

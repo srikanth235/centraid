@@ -1,35 +1,3 @@
-/**
- * Fuzz lane runner (#839 G10).
- *
- * Deterministic, seeded, coverage-guided-lite mutation fuzzing over the
- * parsers that eat bytes somebody else chose. There is no fuzzing dependency
- * in this repo and none may be added, so the engine is the three files beside
- * this one: `mutate.mjs` (seeded PRNG + mutation table), `targets.mjs` (entry
- * points + invariants), and this runner.
- *
- * "Coverage-guided-lite": there is no coverage instrumentation. Feedback comes
- * from each target's *behaviour signature* — the outcome class it reports per
- * execution. An input that produces a signature never seen before is promoted
- * into the live corpus and mutated further, which is the same feedback shape a
- * coverage-guided fuzzer gets, at the granularity a target chooses to expose.
- *
- * Determinism is the point. Work is measured in iterations, never wall clock,
- * so two runs at the same seed execute the same inputs in the same order and
- * produce a byte-identical summary apart from timings. `--time-budget-ms` is a
- * runaway guard, not a schedule; when it trips the summary says so.
- *
- * Usage:
- *   node scripts/fuzz/run.mjs                    # full lane (nightly)
- *   node scripts/fuzz/run.mjs --smoke            # a few seconds per target
- *   node scripts/fuzz/run.mjs --target wal-keys --iterations 500000
- *   node scripts/fuzz/run.mjs --seed 839002      # a different program
- *   node scripts/fuzz/run.mjs --list
- *
- * Findings whose class is registered in `scripts/fuzz/known-findings.json` are
- * reported but do not fail the lane — they are recorded defects awaiting a
- * product decision, pinned byte-for-byte by `scripts/fuzz/replay.test.mjs`.
- * Anything else fails the run.
- */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -47,29 +15,16 @@ import { FUZZ_TARGETS, FuzzInvariantError, targetById } from "./targets.mjs";
 const root = path.resolve(import.meta.dirname, "../..");
 const fuzzDir = path.join(root, "scripts/fuzz");
 
-/** Default program seed. Never `Date.now()` — a lane you cannot replay is noise. */
 export const DEFAULT_SEED = 839_001;
 
-/** Live-corpus ceiling. Bounds memory and keeps late iterations diverse. */
 const MAX_LIVE_CORPUS = 512;
 
-/** Findings recorded per target before the runner stops collecting. */
 const MAX_FINDINGS_PER_TARGET = 16;
 
-/**
- * Content address for a fuzz input — the crasher filename and the dedup key.
- * @param {Uint8Array} bytes Input bytes.
- * @returns {string} 16 hex characters of SHA-256.
- */
 export function inputDigest(bytes) {
   return createHash("sha256").update(bytes).digest("hex").slice(0, 16);
 }
 
-/**
- * Load the register of findings that are known, recorded, and not yet fixed.
- * @param {string} [file] Register path.
- * @returns {{ classes: Record<string, { issue: number; status: string; note: string }> }} Register.
- */
 export function loadKnownFindings(
   file = path.join(fuzzDir, "known-findings.json")
 ) {
@@ -78,11 +33,6 @@ export function loadKnownFindings(
   return { classes: parsed.classes ?? {} };
 }
 
-/**
- * Read a target's committed seed corpus plus its committed crashers.
- * @param {string} targetId Target id.
- * @returns {{ bytes: Uint8Array; origin: string }[]} Corpus entries, name-sorted.
- */
 export function loadCorpus(targetId) {
   const entries = [];
   for (const [dir, origin] of [
@@ -109,11 +59,6 @@ export function loadCorpus(targetId) {
   return entries;
 }
 
-/**
- * Classify a thrown value into a finding.
- * @param {unknown} error Thrown value.
- * @returns {{ className: string; kind: string; message: string }} Finding identity.
- */
 function classify(error) {
   if (error instanceof FuzzInvariantError) {
     return {
@@ -127,22 +72,12 @@ function classify(error) {
   return { className: `uncaught.${name}`, kind: "uncaught", message };
 }
 
-/**
- * Fuzz one target for a fixed number of executions.
- * @param {import('./targets.mjs').FuzzTarget} target Target to fuzz.
- * @param {object} options Run options.
- * @param {number} options.seed Program seed.
- * @param {number} options.iterations Executions to perform.
- * @param {number} options.timeBudgetMs Runaway guard.
- * @returns {Promise<object>} Summary row for this target.
- */
 export async function fuzzTarget(target, { seed, iterations, timeBudgetMs }) {
   const run = await target.load();
   const corpus = loadCorpus(target.id);
   const live = corpus.map((entry) => entry.bytes);
   const rng = createRng(seed ^ (target.id.length * 0x9e_37_79_b1));
   const signatures = new Set();
-  /** @type {Map<string, object>} */
   const findings = new Map();
   const strategyCounts = {};
   let executions = 0;
@@ -150,8 +85,6 @@ export async function fuzzTarget(target, { seed, iterations, timeBudgetMs }) {
   const startedAt = performance.now();
 
   for (let iteration = 0; iteration < iterations; iteration += 1) {
-    // The committed corpus runs unmutated first: a seed input that already
-    // violates an invariant must be reported before any mutation happens.
     const seeded = iteration < corpus.length;
     const strategy = seeded ? "corpus" : null;
     const input = seeded
@@ -189,8 +122,6 @@ export async function fuzzTarget(target, { seed, iterations, timeBudgetMs }) {
       continue;
     }
 
-    // Coverage-guided-lite: a new behaviour signature earns the input a place
-    // in the live corpus, so the next mutations start from somewhere new.
     if (!signatures.has(signature)) {
       signatures.add(signature);
       if (live.length < MAX_LIVE_CORPUS) live.push(bytes);
@@ -224,11 +155,6 @@ export async function fuzzTarget(target, { seed, iterations, timeBudgetMs }) {
   };
 }
 
-/**
- * Persist a finding as a committed crasher (deterministic filename).
- * @param {object} finding Finding record.
- * @param {string} baseDir Crashers root.
- */
 function writeCrasher(finding, baseDir) {
   const dir = path.join(baseDir, finding.target);
   mkdirSync(dir, { recursive: true });
@@ -248,13 +174,6 @@ function writeCrasher(finding, baseDir) {
   writeFileSync(file, serialized);
 }
 
-/**
- * Build the artifact consumed by the nightly report, mirroring
- * `artifacts/mutation/scores.json`.
- * @param {object[]} rows Per-target summaries.
- * @param {object} meta Run metadata.
- * @returns {object} Artifact payload.
- */
 export function buildFuzzArtifact(rows, meta) {
   return {
     generatedAt: new Date().toISOString(),
@@ -265,12 +184,6 @@ export function buildFuzzArtifact(rows, meta) {
   };
 }
 
-/**
- * Split findings into known (registered) and new (lane-failing).
- * @param {object[]} rows Per-target summaries.
- * @param {{ classes: Record<string, unknown> }} known Register.
- * @returns {{ known: object[]; fresh: object[] }} Partition.
- */
 export function partitionFindings(rows, known) {
   const all = rows.flatMap((row) => row.findings);
   return {
@@ -279,10 +192,6 @@ export function partitionFindings(rows, known) {
   };
 }
 
-/**
- * @param {string[]} argv Raw CLI arguments.
- * @returns {object} Parsed options.
- */
 export function parseArgs(argv) {
   const out = {
     seed: DEFAULT_SEED,
@@ -312,14 +221,6 @@ export function parseArgs(argv) {
   return out;
 }
 
-/**
- * `packages/client` ships no compiled JS, so its source `.ts` is imported
- * directly. Parameter properties in that tree need Node's transform mode,
- * which is a startup flag — so re-exec once with it rather than asking every
- * caller to remember. Node's own `process.features.typescript` is the probe.
- * @param {string[]} argv Arguments to forward.
- * @returns {boolean} True when the process re-execed (caller must stop).
- */
 function reexecWithTypeTransform(argv) {
   if (process.features.typescript === "transform") return false;
   const result = spawnSync(

@@ -1,47 +1,9 @@
-/**
- * Mutation seed catalog (#532). Shared by the nightly/per-PR runner.
- */
-
-/**
- * @typedef {{
- *   id: string;
- *   label: string;
- *   cwd: string;
- *   config: string;
- *   report: string;
- *   watch: string[];
- * }} MutationSeed
- */
-
-/**
- * Paths that force every seed to re-run on the per-PR affected lane.
- *
- * WATCH THE MUTATION CONFIGURATION, NOT THE WORLD (#892 Phase 1). This list held
- * `package.json` and `bun.lock`, which meant any dependency bump — and any
- * script edit — ran all sixteen Stryker seeds inside the PR loop, at 19m27s. That
- * is what made `mutation-pr` bimodal: 4m30s of build and zero mutation, or the
- * whole catalog, with nothing in between and no relation to what the diff
- * actually endangered.
- *
- * The three entries left are the ones that change what mutation MEANS: the
- * runner, the catalog, and the floors. A lockfile change can of course move a
- * score — that is what `mutation-canary` (per merge) and the nightly full run
- * are for, neither of which has a human waiting on it.
- */
 export const MUTATION_GLOBAL_WATCH = [
   "scripts/mutation/run.mjs",
   "scripts/mutation/seeds.mjs",
-  // A SECTION, not a file (#915 Wave 4). The floors moved into the merged
-  // `tests/floors.json`, which also holds the coverage floors and the
-  // minimumTests mirror — watching that PATH would have run all 24 seeds on
-  // every coverage-floor edit, which is exactly the over-triggering the list
-  // above was trimmed to avoid. `selectAffectedSeeds` is handed
-  // `tests/floors.json#<section>` tokens for the sections that actually
-  // differ from the merge base, so only a mutation-floor edit is global.
   "tests/floors.json#mutation",
 ];
 
-/** @type {MutationSeed[]} */
 export const MUTATION_SEEDS = [
   {
     id: "packages/vault",
@@ -184,10 +146,6 @@ export const MUTATION_SEEDS = [
       "packages/server/vitest.acp.mutation.config.ts",
     ],
   },
-  // #656 Layer 3 — the remaining deeply-gated engine packages. Same rule as
-  // above: each mutate set is pure logic a property or contract test already
-  // defends (see each package's stryker.config.mjs for why those paths, and
-  // what was deliberately left out).
   {
     id: "packages/blueprints",
     label: "blueprints",
@@ -288,17 +246,6 @@ export const MUTATION_SEEDS = [
       "packages/model-runtime/vitest.mutation.config.ts",
     ],
   },
-  // #839 W2-1 — the blueprint APP layer and the phone. Everything above this
-  // line is an engine package; nothing below the shell's own boundary was
-  // measured at all, which meant the room a member actually stands in (which
-  // rows a route paints, which of three outcomes a write is narrated as, what
-  // a pending row says while the vault is quiet) had no adversary.
-  //
-  // Every mutate set here is browser-side TypeScript with NO DOM in it, run
-  // under a plain node vitest project on purpose: Stryker's vitest runner
-  // dry-runs a jsdom project as "No tests were executed", so a suite carrying
-  // the `@vitest-environment jsdom` docblock defends nothing in this lane.
-  // Each seed's stryker config says what it leaves out and why.
   {
     id: "packages/blueprints/apps/tasks",
     label: "tasks",
@@ -422,12 +369,6 @@ export const MUTATION_SEEDS = [
       "packages/blueprints/vitest.search-scaffold.mutation.config.ts",
     ],
   },
-  // #864 W2 — the render boundary the whole shell trusts. `untrusted.ts` is
-  // the display-text scrubber and the four dynamic URL sinks; its only prior
-  // suite runs under jsdom, which Stryker's vitest runner cannot measure (it
-  // dry-runs a jsdom project as "No tests were executed"), so a node-side
-  // property suite is what lets this seed exist at all. The config says what it
-  // mutates and why.
   {
     id: "packages/blueprints/apps/_shared/untrusted",
     label: "untrusted",
@@ -459,12 +400,6 @@ export const MUTATION_SEEDS = [
       "apps/mobile/src/lib/notification-model.test.ts",
       "apps/mobile/src/lib/notifications-plan.test.ts",
       "apps/mobile/src/lib/phone-link.test.ts",
-      // #892 Phase 2 — the two trees the #890 audit found undefended. The
-      // watch list is what makes a seed AFFECTED by a diff, so widening the
-      // mutate set without widening this would leave the new modules measured
-      // only by the nightly and the per-merge canary — which is precisely the
-      // gap that let the `transfer-policy` scope loop and the replica orphan
-      // check ship as tests that could not fail.
       "apps/mobile/src/lib/upload/transfer-policy.ts",
       "apps/mobile/src/lib/upload/transfer-policy.test.ts",
       "apps/mobile/src/lib/upload/reconcile-gate.ts",

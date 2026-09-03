@@ -1,23 +1,4 @@
 #!/usr/bin/env node
-// Run a set of root package scripts concurrently and report EVERY failure.
-//
-// Two problems with a serial `a && b && c` chain of gates, both of which cost
-// more than the wall clock does:
-//
-//   1. It stops at the first failure. You fix one lint error, re-run the whole
-//      chain, and discover the next one. Three unrelated problems cost three
-//      full passes.
-//   2. Independent gates wait on each other for no reason. `knip` has nothing
-//      to say about `format:check`.
-//
-// So: bounded-concurrency pool, output buffered per gate and printed only when
-// that gate fails, and a non-zero exit that lists all of them at once.
-//
-// Ordering matters for wall clock — the pool starts gates in the order given,
-// so the caller lists the long poles first and the short ones fill the gaps
-// behind them. Concurrency is deliberately modest: several of these gates are
-// themselves parallel (turbo, vitest), and oversubscribing a laptop makes the
-// whole set slower and the test lane flaky (#611).
 import { spawn } from "node:child_process";
 import { availableParallelism } from "node:os";
 
@@ -88,8 +69,6 @@ await new Promise((resolve) => {
 });
 
 const failed = results.filter((r) => r.code !== 0);
-// Slowest first: the list doubles as the evidence for what to scope or move to
-// CI the next time this gate goes over budget.
 const slowest = [...results].sort((a, b) => b.ms - a.ms).slice(0, 5);
 
 for (const f of failed) {

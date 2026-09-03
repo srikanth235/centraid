@@ -1,47 +1,15 @@
 #!/usr/bin/env node
-/**
- * Suite wall-clock ratchet (#656 Layer 5).
- *
- * Every other gate in this repo pushes one way: add more tests, raise more
- * floors. Nothing pushed back, so the cheapest way for an agent to look
- * thorough was to flood the suite, and the bill arrived as PR latency that
- * nobody owned. This is the backpressure — the PR lane's total wall clock is a
- * tighten-only ceiling, exactly like a perf budget, so an agent adding tests
- * has to pay for them by making something else faster or by widening the
- * ceiling in a reviewed edit with a recorded reason.
- *
- * It measures the same artifact the health report reads
- * (`artifacts/test-results/vitest.json`). When that artifact is absent this
- * exits 0 with an explicit "not measured" line rather than passing silently:
- * a budget that cannot be measured must not read as a budget that was met.
- *
- * Usage:
- *   node scripts/test-report/suite-wall-clock.mjs           # enforce
- *   node scripts/test-report/suite-wall-clock.mjs --write   # ratchet DOWN only
- */
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
 import { writeLedgerSection } from "../check-ledgers.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
-// The wall-clock ceilings are `tests/budgets.json#suiteWallClock` (#915 Wave 4).
 const BUDGET_REL = "tests/budgets.json";
 const BUDGET_SECTION = "suiteWallClock";
 const BUDGET_PATH = path.join(root, BUDGET_REL);
 const VITEST_PATH = path.join(root, "artifacts/test-results/vitest.json");
 
-/**
- * Total wall clock of a vitest JSON report, in milliseconds.
- *
- * Sums per-file durations rather than reading the run's own elapsed time,
- * because elapsed time includes worker startup and varies with host load and
- * `--concurrency`; the sum of file durations is the work the suite actually
- * asked for, which is the thing an added test increases.
- *
- * @param {unknown} report Parsed vitest JSON report.
- * @returns {{ totalMs: number, files: number } | null} Null when unreadable.
- */
 export function measureWallClock(report) {
   if (!report || typeof report !== "object") return null;
   const results = /** @type {{ testResults?: unknown }} */ (report).testResults;
@@ -51,9 +19,7 @@ export function measureWallClock(report) {
     const entry = /** @type {Record<string, unknown>} */ (file ?? {});
     const start = Number(entry.startTime);
     const end = Number(entry.endTime);
-    const explicit = Number(
-      /** @type {Record<string, unknown>} */ (entry.perfStats ?? {}).runtime
-    );
+    const explicit = Number((entry.perfStats ?? {}).runtime);
     if (Number.isFinite(explicit) && explicit >= 0) totalMs += explicit;
     else if (Number.isFinite(start) && Number.isFinite(end) && end >= start)
       totalMs += end - start;
@@ -61,12 +27,6 @@ export function measureWallClock(report) {
   return { totalMs: Math.round(totalMs), files: results.length };
 }
 
-/**
- * Compare a measurement against the lane's ceiling.
- * @param {number} totalMs Measured total.
- * @param {{ budgetMs?: unknown }} lane Lane budget entry.
- * @returns {{ ok: boolean, message: string, slackMs: number }} Verdict.
- */
 export function compareToBudget(totalMs, lane) {
   const budgetMs = Number(lane?.budgetMs);
   if (!Number.isFinite(budgetMs) || budgetMs <= 0)

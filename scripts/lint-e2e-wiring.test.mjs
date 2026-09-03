@@ -1,12 +1,3 @@
-// Unit spec for the mobile e2e wiring linter (#890 W0).
-//
-// The rule engine has its own `selfTest()` that runs on every invocation, which
-// is what stops the rules rotting into always-passing. This file covers the
-// half that self-test cannot: the parsers that read the SHIPPED tree, and the
-// invariants that must hold against the real repo. A rule engine that is
-// perfect over fixtures and blind to the actual YAML is exactly the shape of
-// gate this linter exists to catch.
-
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -64,10 +55,6 @@ test("a commented-out invocation is not an invocation", () => {
 });
 
 test("an invocation carries the whole line, because the flags are the wiring", () => {
-  // #915 Wave 2: `--rung/--platform/--suite` select the journeys. A parser that
-  // returned the target alone could not tell a rung-2 gate from a rung-4
-  // nightly, which is the distinction the promoting and exploratory rules rest
-  // on.
   const [hit] = directInvocations(
     "      - run: node tests/agent-e2e-mobile/run-roster.mjs --rung 4 --platform android"
   );
@@ -86,7 +73,6 @@ test("only run-*.mjs at the directory root counts as a suite runner", () => {
     isRunnerPath("tests/agent-e2e-mobile/run-photos-suite.mjs"),
     true
   );
-  // Machinery a lane legitimately node-runs, which owes no FLOWS array.
   assert.equal(
     isRunnerPath("tests/agent-e2e-mobile/lib/ci-gateway.mjs"),
     false
@@ -98,10 +84,6 @@ test("only run-*.mjs at the directory root counts as a suite runner", () => {
 });
 
 test("shimSelector is not defeated by a header comment about itself", () => {
-  // The regression this pins, carried over from the `const FLOWS` reader it
-  // replaced: an unanchored regex matched the PROSE in a runner's own header
-  // explaining what the linter reads, and reported the runner as scheduling
-  // nothing. A declaration is at column zero; a mention of one never is.
   const source = [
     "// the wiring linter reads this shim's `resolvePlan({ rung, platform, suite })` call",
     "process.exitCode = await runPlan(",
@@ -116,8 +98,6 @@ test("shimSelector is not defeated by a header comment about itself", () => {
 });
 
 test("a runner with no readable selector throws rather than scheduling nothing", () => {
-  // Silently returning an empty list would unschedule every member of that
-  // suite while the linter reported clean — the exact failure it exists for.
   assert.throws(
     () => runnerMembers("const OTHER = [];", "r.mjs", ""),
     /selector/u
@@ -137,9 +117,6 @@ test("a shim naming a suite the roster does not declare throws", () => {
 });
 
 test("state variety may not be owned by a device flow", () => {
-  // The doctrine made mechanical: the Linux boot-condition tier proves the
-  // states in about two minutes, and a device minute costs roughly 600 Vitest
-  // seconds.
   assert.equal(
     stateVarietyProblems({
       appStates: {
@@ -188,8 +165,6 @@ test("matrixMobileOwners walks structurally and reports every citing path", () =
     demonstratedRed: {
       G: { command: "node tests/agent-e2e-mobile/flows/y.mjs" },
     },
-    // A non-owner string naming the same path must NOT be collected — a note
-    // mentioning a flow is prose, not a claim of coverage.
     notes: { thing: "see tests/agent-e2e-mobile/flows/z.mjs" },
   });
   assert.deepEqual([...owners.keys()].sort(), [
@@ -206,15 +181,10 @@ test("discovery finds the real roster and excludes sibling test files", () => {
   assert.ok(flows.includes("tests/agent-e2e-mobile/flows/home-loads.mjs"));
   const runners = discoverRunners();
   assert.ok(runners.every(isRunnerPath));
-  // One runner since #915 Wave 2: the six compatibility shims went with the
-  // last workflow that spelled their paths.
   assert.ok(runners.includes("tests/agent-e2e-mobile/run-roster.mjs"));
 });
 
 test("every lane the committed roster declares names a job that exists", () => {
-  // The roster is a declaration; this is the cheapest place to catch a lane
-  // pointing at a renamed or deleted job, because the linter's own lane rule
-  // would report it as "no lane runs anything" — true, but not the cause.
   const roster = JSON.parse(read("tests/agent-e2e-mobile/roster.json"));
   const laneIds = Object.keys(roster.lanes);
   assert.ok(laneIds.length >= 2);
@@ -226,8 +196,6 @@ test("every lane the committed roster declares names a job that exists", () => {
     assert.ok(typeof lane.blocking === "boolean", `lane ${id} needs blocking`);
     assert.ok(lane.why?.length > 30, `lane ${id} needs a why`);
   }
-  // Exactly one blocking mobile device lane: the PR gate. A second one would
-  // double the merge-path cost without anybody deciding to spend it.
   const blocking = laneIds.filter((id) => roster.lanes[id].blocking);
   assert.deepEqual(blocking, ["pr-gate-android"]);
 });

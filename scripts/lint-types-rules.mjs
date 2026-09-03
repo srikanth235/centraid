@@ -1,8 +1,5 @@
 import { pathToFileURL } from "node:url";
 
-// oxlint-tsgolint's implemented type-aware-only rules. The version handshake
-// in lint-types-policy.mjs makes an engine upgrade fail closed until this
-// catalog has been regenerated and reviewed.
 export const typeAwareCatalogVersion = "7.0.2001";
 
 export const typeAwareOnlyRules = [
@@ -86,10 +83,6 @@ export const compatibilityRules = [
 
 export const fixtureRules = [...compatibilityRules];
 
-// Blueprint React/DOM callback slots intentionally launch narrated async
-// actions. The engine's CLI cannot retain condition checks while disabling
-// void-return callbacks, and wrapping 126 handlers in `void` would only erase
-// the type signal without adding rejection handling.
 export const blueprintCompatibilityRules = allFileCompatibilityRules.filter(
   (rule) => rule !== "typescript/no-misused-promises"
 );

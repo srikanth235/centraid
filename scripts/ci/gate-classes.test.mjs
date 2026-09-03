@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-// The gate-class register is a contract, not documentation (#915 Wave 4).
-//
-// Three things drift apart the moment nobody checks them: the `check:push`
-// argument list, `scripts/ci/gate-classes.json`, and the weekly
-// `.github/workflows/hygiene.yml`. A hygiene gate that quietly reappears in
-// `check:push` re-charges every push for it; one that leaves `check:push`
-// without arriving in the weekly lane is enforced NOWHERE, which is the exact
-// failure the #782 comment block in ci.yml exists to prevent. This file is
-// what makes that impossible to do by accident.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";

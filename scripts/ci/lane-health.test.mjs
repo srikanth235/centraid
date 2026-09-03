@@ -57,8 +57,6 @@ test("the rate is passed over attempted, and an empty tally cannot divide by zer
 });
 
 test("a streak stops at the lane's most recent success", () => {
-  // Newest first. `a` is green now, so however bad last week was it is not
-  // chronically red today; `b` has never recovered.
   const streaks = redStreaks(
     [
       run(1, "2026-08-31T00:00:00Z", [
@@ -136,8 +134,6 @@ test("the rendered table flags lanes under the floor and is sorted worst-first",
   assert.match(report, /80% ⚠️/u);
   assert.match(report, /teaches people to press re-run/u);
 });
-
-// --- #915: the rules table -------------------------------------------------
 
 test("percentile is nearest-rank over the runs that happened", () => {
   assert.equal(percentile([], 0.95), null);

@@ -1,46 +1,4 @@
 #!/usr/bin/env node
-// The testID contract, held from both ends (issue #890 W2).
-//
-// Why this exists: a Maestro `id:` selector and the `testID` that answers it sit
-// in two trees that nothing links. Either half can move alone and stay green —
-// a flow naming an id no screen renders never matches (and `assertNotVisible`
-// on it PASSES, forever), and a `testID` nothing selects is dead weight that
-// reads like coverage. Both failures are silent on a device and free to catch
-// statically, so they are caught here, in seconds, with no simulator:
-//
-//   RULE missing-id    Every id a committed flow references exists in
-//     `apps/mobile/src` — as an entry in `apps/mobile/src/kit/test-ids.ts`
-//     (exact, or under a declared FAMILY prefix), or as a literal `testID` value
-//     in production source. This half keeps a rename honest: renaming a handle
-//     without renaming its selectors fails the PR that does it, not the nightly
-//     two weeks later.
-//
-//   RULE unapplied-id  Every id declared in `test-ids.ts` is applied somewhere
-//     in `apps/mobile/src`, by its accessor (`TEST_IDS.photos.grid`) or its
-//     literal — the same defect arriving from the other side. A declared FAMILY
-//     prefix counts as applied when its own accessor is referenced, since its
-//     members are built at render time.
-//
-// WHAT THIS CANNOT SEE, said plainly: it matches text, not a render tree — a
-// `testID` on an element that never mounts still reads as applied. That claim
-// belongs to the device layer; this is the cheap tripwire in front of it,
-// exactly as `lint-e2e-flows.mjs` is for vacuous assertions.
-//
-// Following lint-e2e-flows.mjs and lint-css-classes.mjs: A SILENT NO-OP IS A
-// FAILURE. Zero flow files, zero Maestro YAML chunks, zero ids referenced, zero
-// source files, or an empty vocabulary each FAIL rather than pass — every one is
-// the shape this linter takes once its own discovery or grammar has gone stale,
-// and "we found nothing to check" must never read as "nothing is wrong". The
-// roster is discovered from disk, never hand-listed, so a flow cannot escape by
-// being new, and a self-test of both rules runs first on inline fixtures so the
-// linter cannot rot into always-passing.
-//
-// Escape hatch: `# testid-lint-allow: missing-id — <reason>` on a flow's own
-// line or in the comment block above its step, for a flow that legitimately
-// selects an id living outside `apps/mobile/src` (a native module's own handle).
-// THERE ARE NONE TODAY and there should not be: an id the phone does not render
-// is a selector that matches nothing. `unapplied-id` takes no marker — the
-// honest fix for an entry nothing renders is to apply it or delete it.
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -49,34 +7,22 @@ import { loadRoster } from "../tests/agent-e2e-mobile/lib/roster.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
-// DISCOVERED, never hand-listed — the lesson of #842 W0.4, where five flows
-// landed after a hardcoded roster was written and went unlinted for their whole
-// life. `lib/` is scanned too: the harness helpers emit YAML on a flow's behalf
-// (`configureGateway` selects `onboarding-connect`).
-/** The journeys the roster prices. Held against `roster.json` in `main`. */
 const JOURNEY_DIR = "tests/agent-e2e-mobile/flows";
 const FLOW_DIRS = [JOURNEY_DIR, "tests/agent-e2e-mobile/lib"];
 
-/** Production mobile source. The vocabulary lives here too. */
 const SOURCE_DIR = "apps/mobile/src";
 const VOCABULARY = "apps/mobile/src/kit/test-ids.ts";
 
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
-// Tests and the test harness are not shipped UI: counting a fixture's `testID`
-// as "applied" would let a handle no screen renders pass rule 2 on the strength
-// of its own unit test.
 const SKIP_SOURCE = /\.test\.[jt]sx?$|(?:^|\/)test\//u;
 const SOURCE_EXT = /\.tsx?$/u;
 
-/** Flow + helper files to scan, relative to `root`, discovered from disk. */
 export function discoverFlowFiles(root = ROOT) {
   const files = [];
   for (const dir of FLOW_DIRS) {
     const abs = path.resolve(root, dir);
     if (!existsSync(abs)) continue;
     for (const name of readdirSync(abs).sort()) {
-      // `*.test.mjs` siblings assert harness behaviour with deliberately
-      // violating fixtures — same carve-out as lint-e2e-flows.mjs.
       if (!name.endsWith(".mjs") || name.endsWith(".test.mjs")) continue;
       files.push(`${dir}/${name}`);
     }
@@ -84,7 +30,6 @@ export function discoverFlowFiles(root = ROOT) {
   return files;
 }
 
-/** Production `.ts`/`.tsx` under `apps/mobile/src`, relative to `root`. */
 export function discoverSourceFiles(root = ROOT, dir = SOURCE_DIR) {
   const out = [];
   const walk = (abs) => {
@@ -104,30 +49,15 @@ export function discoverSourceFiles(root = ROOT, dir = SOURCE_DIR) {
   return out;
 }
 
-// ── the vocabulary ─────────────────────────────────────────────────────────
-// Parsed line-by-line rather than with a TS parser: the file is a literal object
-// by construction (that is what makes it a vocabulary), and a regex reader keeps
-// this script dependency-free like its siblings. A shape it cannot read yields
-// zero entries, which the empty-vocabulary guard turns into a failure.
-
 const OPEN_RE =
   /^\s*(?:export const (?<root>\w+) = )?(?<key>\w+)?:?\s*Object\.freeze\(\{\s*$/u;
 const ENTRY_RE = /^\s*(?<key>\w+):\s*"(?<value>[^"]+)",?\s*$/u;
 const CLOSE_RE = /^\s*\}\),?;?\s*$/u;
 
-/**
- * Read `test-ids.ts` into the two declared sets. Exported so the sibling test
- * can drive it on fixtures.
- *
- * @returns `{ ids, prefixes }`, each `{ value, accessor, line }[]` — `accessor`
- *   is the dotted path a component references (`TEST_IDS.photos.grid`), which
- *   is how rule 2 recognises an entry as applied.
- */
 export function parseVocabulary(text) {
   const ids = [];
   const prefixes = [];
   const lines = text.split("\n");
-  /** @type {string[]} */
   let trail = [];
   let rootName = "";
   for (const [index, line] of lines.entries()) {
@@ -157,24 +87,10 @@ export function parseVocabulary(text) {
   return { ids, prefixes };
 }
 
-// ── the flows ──────────────────────────────────────────────────────────────
-
-/**
- * The template-literal REGIONS of a `.mjs` flow, by line. Every Maestro chunk
- * here is a backtick template (it interpolates `ctx.state.appId`) and every
- * non-Maestro `id:` is a plain JS object literal — `lib/failure-class.mjs` names
- * its failure classes that way — so isolating template bodies is what keeps a JS
- * field from being read as a selector. Parity per line, not a character scanner:
- * nothing here nests a backtick inside a `${…}`, and a file that starts doing so
- * flips parity and yields FEWER ids, which the zero-ids and zero-chunks guards
- * turn into a failure rather than a quiet pass.
- */
 export function templateLines(text) {
   const out = [];
   let inside = false;
   for (const [index, line] of text.split("\n").entries()) {
-    // A line's own backticks toggle the state; the part of the line that is
-    // inside the template is what gets scanned.
     const ticks = (line.match(/(?<!\\)`/gu) ?? []).length;
     if (inside) out.push({ line: index + 1, text: line });
     if (ticks % 2 === 1) {
@@ -187,14 +103,6 @@ export function templateLines(text) {
 
 const SELECTOR_RE = /\bid\s*:\s*(?:"(?<dq>[^"]*)"|'(?<sq>[^']*)')/gu;
 
-/**
- * Every Maestro `id:` selector a flow names — block form (`- tapOn:` then a
- * `id: "x"` child) and inline form (`from: { id: "x" }`) alike, since both are
- * the same token once the template body is isolated.
- *
- * `chunks` counts Maestro documents (a `---` separator inside a template): the
- * grammar-staleness guard, mirroring lint-e2e-flows.mjs's step count.
- */
 export function collectFlowIds(text) {
   const found = [];
   let chunks = 0;
@@ -204,9 +112,6 @@ export function collectFlowIds(text) {
     let match;
     while ((match = SELECTOR_RE.exec(body))) {
       const value = match.groups?.dq ?? match.groups?.sq ?? "";
-      // An interpolated selector resolves at run time (`id: "${marker}"` in
-      // scroll-frames.mjs picks its surface per phase); nothing static can say
-      // which id it names, so it is not claimed either way.
       if (value === "" || value.includes("${")) continue;
       found.push({ id: value, line });
     }
@@ -214,15 +119,6 @@ export function collectFlowIds(text) {
   return { ids: found, chunks };
 }
 
-/**
- * Is the selector on line `line` exempted from `rule`? The marker may sit on the
- * selector's own line or in the comment block above the STEP that carries it —
- * an `id:` is a child key, so "the line above" is the command, not a comment.
- * The upward walk therefore crosses the step's remaining child keys and its one
- * `- command:` header, then requires contiguous `#` comments (a reason can wrap)
- * and stops at the first line that is neither. Same marker shape as
- * lint-e2e-flows.mjs's `# e2e-lint-allow:`.
- */
 export function isAllowed(text, line, rule) {
   const lines = text.split("\n");
   const marker = new RegExp(`#\\s*testid-lint-allow:\\s*${rule}\\b`, "u");
@@ -237,28 +133,16 @@ export function isAllowed(text, line, rule) {
       continue;
     }
     if (/^\s*-\s/u.test(raw)) {
-      // The step's own header. One is the step being annotated; a second means
-      // we have walked into the step before it, which this marker does not own.
       if (crossedStep) break;
       crossedStep = true;
       continue;
     }
-    // A sibling child key of the same step (`text:`, `enabled:`, …).
     if (!crossedStep && /^\s+\S+\s*:/u.test(raw)) continue;
     break;
   }
   return false;
 }
 
-// ── the two rules ──────────────────────────────────────────────────────────
-
-/**
- * Hold the two ends of the contract against each other. Pure: the caller reads
- * the disk, this decides. Exported so the sibling test can drive both rules on
- * fixtures without a tree. `flows` and `sources` are `{ rel, text }[]`; sources
- * EXCLUDE the vocabulary file, which declares the ids and so cannot also be the
- * witness that they are applied.
- */
 export function lintTestIds({ flows, vocabulary, sources }) {
   const findings = [];
   const declared = new Set(vocabulary.ids.map((entry) => entry.value));
@@ -274,9 +158,6 @@ export function lintTestIds({ flows, vocabulary, sources }) {
       const known =
         declared.has(id) ||
         vocabulary.prefixes.some((entry) => id.startsWith(entry.value)) ||
-        // A handle predating the vocabulary is still a real handle: FrameProbe's
-        // `perf-*` pair is spelled in its own module. A literal in production
-        // source proves the id exists; it is just not part of the vocabulary.
         applied.includes(`"${id}"`);
       if (known || isAllowed(flow.text, line, "missing-id")) continue;
       findings.push({
@@ -313,12 +194,6 @@ export function lintTestIds({ flows, vocabulary, sources }) {
   return { findings, referenced, chunks };
 }
 
-// ── self-test: the linter's own rules, exercised before it judges the repo ──
-// A linter that silently stops enforcing is worse than none; these fixtures make
-// both rules executable spec. Runs on every invocation (µs) and fails loudly.
-// The guards, the family-prefix path and the grammar readers are covered more
-// thoroughly by the sibling `lint-mobile-testids.test.mjs`; what runs HERE is
-// the minimum that proves the two rules still fire at the point of use.
 function selfTest() {
   const vocabulary = parseVocabulary(
     [
@@ -334,8 +209,6 @@ function selfTest() {
   );
   const applied = [
     { rel: "a.tsx", text: "<View testID={TEST_IDS.home.band} />" },
-    // The `${…}` MUST stay uninterpolated: it is the accessor a component writes
-    // to build a family member, which is exactly what rule 2 looks for.
     // oxlint-disable-next-line no-template-curly-in-string
     { rel: "b.tsx", text: "testID={`${TEST_ID_PREFIXES.homeTile}${id}`}" },
   ];
@@ -375,9 +248,6 @@ function selfTest() {
       want: [],
     },
     {
-      // `lib/failure-class.mjs` names its failure classes `{ id: "…" }` in plain
-      // JS; reading one as a selector would fail the lane on a file that selects
-      // nothing at all.
       name: "a JS object's id: field is not a Maestro selector",
       flows: [{ rel: "flow.mjs", text: 'const c = { id: "chunk-timeout" };' }],
       sources: applied,
@@ -401,8 +271,6 @@ function selfTest() {
       process.exit(1);
     }
   }
-  // The vocabulary reader is half the linter; a shape it cannot read yields
-  // zero entries and every rule then passes vacuously.
   if (vocabulary.ids.length !== 1 || vocabulary.prefixes.length !== 1) {
     console.error(
       `FAIL — lint-mobile-testids self-test "vocabulary reader": expected 1 id ` +
@@ -423,8 +291,6 @@ function main() {
   const flowRels = discoverFlowFiles();
   const sourceRels = discoverSourceFiles();
 
-  // Silent-no-op guards (see header). Each of these is what this linter looks
-  // like once its discovery or its grammar has gone stale.
   if (flowRels.length === 0)
     fail(
       `discovered zero flow files under ${FLOW_DIRS.join(", ")}. ` +
@@ -436,12 +302,6 @@ function main() {
         `The mobile source tree moved; fix SOURCE_DIR in this linter.`
     );
 
-  // THE ROSTER IS THE SINGLE SOURCE (#915 Wave 2), and this linter's discovery
-  // is held against it rather than replaced by it. Discovery is what catches a
-  // flow that landed after a list was written (#842 W0.4); the roster is what
-  // catches a journey that was rostered and then deleted, or renamed on one
-  // side only. Reading only the roster would lose the first; reading only the
-  // directory would lose the second. Both, and they must agree.
   const rosterFlows = new Set(Object.keys(loadRoster().flows ?? {}));
   const scanned = new Set(
     flowRels.filter((rel) => rel.startsWith(`${JOURNEY_DIR}/`))
@@ -519,5 +379,4 @@ function main() {
   );
 }
 
-// Run as a CLI; stay importable (the pure functions) without side effects.
 if (import.meta.url === `file://${process.argv[1]}`) main();

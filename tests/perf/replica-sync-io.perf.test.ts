@@ -1,7 +1,3 @@
-/**
- * Replica-sync real-IO perf budget (#496 PD2).
- * Touches IndexedDB store open + enqueue/list — not an in-memory Map stringify.
- */
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -25,7 +21,6 @@ describe("replica-sync-io.perf", () => {
     const started = performance.now();
     const store = await IndexedDbIntentStore.open(name, factory);
     const queue = new IntentQueue(store);
-    // This measures serial durable enqueue latency, not concurrent throughput.
     const enqueueNext = async (i: number): Promise<void> => {
       if (i >= 200) return;
       await queue.enqueue({
@@ -52,9 +47,6 @@ describe("replica-sync-io.perf", () => {
     const overlayMs = performance.now() - overlayStarted;
     const durationMs = performance.now() - started;
     store.close();
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("perf", OWNER);
     const passed =
       listed.length === 200 &&

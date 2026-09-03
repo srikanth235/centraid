@@ -1,36 +1,3 @@
-// The Notes seat on the phone (home-journey roster, issue #839 G8).
-//
-// What only a device can falsify here: the JOIN. A note's row and a note's body
-// are two separate replica reads on this seat (`useNotes` composes the note rows
-// with their content rows), and the promoted heading comes from the blueprint's
-// own `promote()` rather than a second mobile spelling of it. A list of headings
-// above empty previews is exactly what a dropped join looks like, and it is
-// green on every fixture that hands the projection both halves already merged.
-//
-// Four claims, in order:
-//   1. THE COVER IS THE ARRIVAL: `New note` is published by the Notes header
-//      alone — never a tab label.
-//   2. A ROW IS THE VAULT'S NOTE, PROMOTED, by the row's own accessible name.
-//   3. THE PREVIEW IS THE NOTE'S BODY: the row renders it with newlines
-//      collapsed to spaces, so the body's first instruction is a reachable
-//      single-line node. This is the half a dropped join loses.
-//   4. A WRITE ROUND-TRIPS AND SURVIVES PROCESS DEATH (#890 W5). Every claim
-//      above reads a corpus the gateway seeded; this one is the member's own
-//      keystrokes going down through `create-note`, into the replica, and back
-//      out of a process that was killed in between. It is the PR gate's write
-//      claim, so it is deliberately load-bearing rather than a smoke tap.
-// Then the row opens the editor, proved by the modal's own three acts.
-//
-// SELECTOR RULE (#890 W2): CHROME is found by handle, CONTENT by its own words.
-// `notes-capture`, `notes-editor-close`, `notes-row-first` and the band keys are
-// product chrome whose copy may be re-worded; a seeded note's heading and a
-// captured note's title are the vault's own strings, and finding a row by the
-// text it should be carrying is the point of the assertion.
-//
-// Every assertion is on copy or an accessibilityLabel only the asserted screen
-// publishes (issue #483's non-vacuous rules; this file is discovered by
-// scripts/lint-e2e-flows.mjs).
-
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
   AWAIT_LAUNCHER,
@@ -43,16 +10,8 @@ await runFlow("notes-library", async (ctx) => {
   await ctx.ensureDemo("notes");
   await ctx.configureGateway();
 
-  // Unique per RUN, not per suite. `ctx.state.runId` carries a timestamp and
-  // three random bytes, so a note left behind by yesterday's nightly on a
-  // long-lived gateway cannot satisfy the survival assertion below — which is
-  // exactly how a persistence claim quietly stops being one.
   const capturedNote = `Capture round trip ${ctx.state.runId}`;
 
-  // ONE SPAWN FOR THE THREE READ/WRITE CHUNKS (#905). `pr-gate-budget.md`
-  // names combining adjacent chunks as the first remedy for an overrun, and
-  // each `ctx.run` costs ~9s of JVM start before its first command. Nothing
-  // ran between these three but the next spawn.
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
@@ -127,9 +86,6 @@ ${retryableTapCommands("Open Mom's chili, written down properly", "New note")}
     "reading-room"
   );
 
-  // A real OS process boundary — stopApp, then a relaunch that clears nothing.
-  // Only the vault's own bytes cross it: React Navigation state is not
-  // persisted, so the relaunch lands on Home and the cover is opened again.
   await ctx.restart();
 
   await ctx.run(

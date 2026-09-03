@@ -1,20 +1,3 @@
-// Near-duplicate clustering at a year-3 photo library (issue #659 G1/G2).
-//
-// Volume table (kept with the rig, per docs/coding-standards.md):
-//
-//   | Axis                | Value  | Why                                     |
-//   | ------------------- | ------ | --------------------------------------- |
-//   | media assets        | 90,000 | ~10 years of a heavy phone camera roll  |
-//   | distinct phashes    | 90,000 | one per asset, 64-bit dHash (16 hex)    |
-//   | near-duplicate sets | 3,000  | burst shots / re-saves — 3 members each |
-//
-// Before #659 the standing sweep brute-forced every pair of phashes on every
-// hourly tick: ~4·10^9 hamming comparisons at this volume, synchronously, and
-// then rewrote the whole `cluster_id` column whether or not anything had
-// changed. This rig is what makes that unrepeatable: it drives the REAL
-// gateway sweep at the volume, then drives it again with nothing changed and
-// asserts the steady-state tick writes zero rows.
-
 import { describe, expect, onTestFinished, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
@@ -51,8 +34,6 @@ describe("phash-clustering.scale", () => {
       for (let i = 0; i < 16; i += 1) out += HEX[random.int(0, 15)]!;
       return out;
     };
-    // A family is one seed hash plus members one nibble away (hamming ≤ 4),
-    // which is what a burst of near-identical shots looks like to a dHash.
     const phashes: string[] = [];
     for (let family = 0; family < DUPLICATE_FAMILIES; family += 1) {
       const seed = randomHash();
@@ -103,7 +84,6 @@ describe("phash-clustering.scale", () => {
       (db.vault.prepare("SELECT total_changes() AS n").get() as { n: number })
         .n;
 
-    // Pass 1 — the cold sweep, through the real standing duty.
     const coldStarted = performance.now();
     gw.sweep(owner);
     const coldMs = performance.now() - coldStarted;
@@ -116,8 +96,6 @@ describe("phash-clustering.scale", () => {
         .get() as { n: number }
     ).n;
 
-    // Pass 2 — nothing changed. This is the tick that runs 23 more times a
-    // day: it must neither recluster nor dirty a single WAL page.
     const changesBeforeIdle = totalChanges();
     const idleStarted = performance.now();
     gw.sweep(owner);
@@ -125,9 +103,6 @@ describe("phash-clustering.scale", () => {
     const idleWrites = totalChanges() - changesBeforeIdle;
 
     const BUDGET_MS = rigBudgetMs(OWNER);
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       coldMs < BUDGET_MS &&
@@ -158,15 +133,10 @@ describe("phash-clustering.scale", () => {
       `sustained drift: ${coldMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
     ).toBe(true);
 
-    // Every seeded family clusters (its members are within the threshold), so
-    // the projection is doing real work at this volume, not trivially empty.
     expect(clustered).toBeGreaterThanOrEqual(DUPLICATE_FAMILIES * FAMILY_SIZE);
     expect(coldMs).toBeLessThan(BUDGET_MS);
-    // THE regression guard for G2: a no-change tick writes nothing.
     expect(idleWrites).toBe(0);
 
-    // And one changed photo re-clusters without rewriting the column: the
-    // newcomer joins a family, and only its own row moves.
     db.vault
       .prepare(
         `INSERT INTO core_content_item
@@ -188,8 +158,6 @@ describe("phash-clustering.scale", () => {
 
     const incremental = recomputeDuplicateClusters(db.vault);
     expect(incremental.reused).toBe(false);
-    // Only the newcomer's row moved — its id sorts after every seeded id, so
-    // the family keeps the cluster key it was already displaying.
     expect(incremental.updated).toBe(1);
   });
 });

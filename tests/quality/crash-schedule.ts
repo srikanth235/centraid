@@ -6,7 +6,6 @@ import type { CrashBoundaryId } from "./fault-points.js";
 export type CrashScheduleMode = "cover" | "sample";
 
 export interface CrashScheduleEntry {
-  /** Position in the run — with the seed, the full replay coordinate. */
   readonly step: number;
   readonly seed: number;
   readonly boundary: CrashBoundaryId;
@@ -14,25 +13,9 @@ export interface CrashScheduleEntry {
 
 export interface CrashScheduleOptions {
   readonly mode?: CrashScheduleMode;
-  /** Draw count for "sample" mode (nightly sweep). Ignored by "cover". */
   readonly iterations?: number;
 }
 
-/**
- * Deterministic (seed → boundary sequence) enumeration so any red run is
- * replayable from its seed alone.
- *
- * - "cover" (the PR default) is a seeded Fisher–Yates shuffle of the whole
- *   catalog: every boundary exactly once, ordering fixed by the seed. This
- *   is the crash-consistency coverage floor — one real SIGKILL per durable
- *   seam every run.
- * - "sample" (the nightly sweep) draws `iterations` boundaries with
- *   repetition, so a long run exercises many orderings and re-hits hot
- *   seams while each individual draw stays pinned to its seed.
- *
- * Never `Math.random`/`Date.now` — a run seeded from the wall clock cannot
- * be replayed from its own output, which is the entire point of a seed.
- */
 export function crashSchedule(
   seed: number,
   options: CrashScheduleOptions = {}
@@ -60,10 +43,8 @@ export function crashSchedule(
   return order.map((boundary, step) => ({ step, seed, boundary }));
 }
 
-/** The pinned default seed the PR lane replays every run. */
 export const DEFAULT_CRASH_SEED = 0x5f_2e_9c_11;
 
-/** Resolve the run seed from the env override, else the pinned default. */
 export function resolveCrashSeed(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.CENTRAID_CRASH_SEED;
   if (!raw) return DEFAULT_CRASH_SEED;
@@ -73,7 +54,6 @@ export function resolveCrashSeed(env: NodeJS.ProcessEnv = process.env): number {
   return parsed >>> 0;
 }
 
-/** Resolve the nightly sweep iteration count, or 0 when unset (PR cover mode). */
 export function resolveCrashIterations(
   env: NodeJS.ProcessEnv = process.env
 ): number {

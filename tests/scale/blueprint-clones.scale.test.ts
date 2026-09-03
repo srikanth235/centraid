@@ -10,8 +10,6 @@ import {
 const OWNER = "tests/scale/blueprint-clones.scale.test.ts";
 const APPS = 1_000;
 
-// An automation template's shape: the manifest, the handler, and the wrapping
-// app.json — the file map `POST /centraid/_apps/_clone` actually rewrites.
 const TEMPLATE_FILES: ScaffoldFile[] = [
   {
     path: "app.json",

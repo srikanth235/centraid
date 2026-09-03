@@ -1,26 +1,3 @@
-// The Tally seat on the phone (home-journey roster; issue #873 U3).
-//
-// What only a device can falsify here: that the phone's Tally cover DERIVES
-// every figure at read time and draws no control it cannot fire.
-//
-// Two claims, in order:
-//   1. NO BALANCE IS STORED, AND THE SCREEN SAYS SO WITH ITS ARITHMETIC. The
-//      app bar carries Balances' own status line, and the hero's sub-line names
-//      the COUNTS the figure came from — "Derived from N expenses and M
-//      settlements". A cover that read a stored balance would have no counts to
-//      name, and a component test cannot falsify this because it renders
-//      whatever dashboard payload it is handed; only a real seeded vault makes
-//      the counts the vault's own.
-//   2. WAITING OFFERS NO VERB THIS SEAT CANNOT FIRE. The band's fourth slot is
-//      Waiting because it is the only place a write can be somebody else's and
-//      stuck — but no mobile transport reaches the gateway's per-intent decide
-//      door, so the surface states whose writes it is showing and draws neither
-//      Approve nor Decline. Their ABSENCE on a live screen is the assertion;
-//      adding either button without adding the door turns this red.
-//
-// Both assertions are on copy the asserted screen alone publishes (issue #483's
-// non-vacuous rules; this file is discovered by scripts/lint-e2e-flows.mjs).
-
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
   AWAIT_LAUNCHER,
@@ -28,13 +5,9 @@ import {
   runFlow,
 } from "../lib/harness.mjs";
 
-/** Balances' own ambient sentence — `apps/tally/view-copy.ts` BALANCES_STATUS,
- *  drawn into the app bar by `TallyScreen.tsx` and published nowhere else. */
 const BALANCES_STATUS =
   "Every figure is derived at read time . no balance is stored and none is transmitted";
 
-/** The §6 hero sub-line, with the counts the figure was derived from. The
- *  numbers are the seeded vault's, so they are matched rather than pinned. */
 const HERO_SUB = "Derived from .* expenses and .* settlements.*";
 
 await runFlow("tally-derived", async (ctx) => {

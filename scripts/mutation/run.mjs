@@ -1,19 +1,3 @@
-/**
- * Mutation lane runner (#532).
- *
- * Runs StrykerJS from each seed package directory (package-local
- * `stryker.config.mjs` + `vitest.mutation.config.ts`) and writes a normalized
- * scores JSON under artifacts/mutation/ for the test-health report.
- *
- * Usage:
- *   node scripts/mutation/run.mjs
- *   node scripts/mutation/run.mjs --package vault
- *   node scripts/mutation/run.mjs --affected [--base origin/main]
- *   node scripts/mutation/run.mjs --enforce-floors
- *   node scripts/mutation/run.mjs --dry-run
- *
- * Per-PR lane (`bun run test:mutation:pr`) is `--affected --enforce-floors`.
- */
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -23,11 +7,6 @@ import { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS } from "./seeds.mjs";
 export { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS } from "./seeds.mjs";
 const root = path.resolve(import.meta.dirname, "../..");
 
-/**
- * Normalize a Stryker JSON report into a score percentage.
- * @param {unknown} report Stryker JSON report object.
- * @returns {number | null} Mutation score 0–100, or null if missing.
- */
 export function mutationScoreFromReport(report) {
   if (!report || typeof report !== "object") return null;
   const r = /** @type {Record<string, unknown>} */ (report);
@@ -54,11 +33,7 @@ export function mutationScoreFromReport(report) {
     }
   }
   if (r.files && typeof r.files === "object") {
-    const fileEntries = Object.values(
-      /** @type {Record<string, { mutationScore?: number; mutants?: Array<{ status?: string }> }> } */ (
-        r.files
-      )
-    );
+    const fileEntries = Object.values(r.files);
     const scores = fileEntries
       .map((f) => f?.mutationScore)
       .filter((n) => typeof n === "number");
@@ -89,11 +64,6 @@ export function mutationScoreFromReport(report) {
   return null;
 }
 
-/**
- * Build the scores.json artifact consumed by the test-health report.
- * @param {Array<{ id: string; label: string; score: number | null; status: string; reportPath?: string; error?: string }>} rows Package rows.
- * @returns {object} Artifact payload.
- */
 export function buildScoresArtifact(rows) {
   return {
     generatedAt: new Date().toISOString(),
@@ -102,18 +72,6 @@ export function buildScoresArtifact(rows) {
   };
 }
 
-/**
- * Compare measured scores against floors.
- * @param {{ packages?: Array<{ id?: string; score?: number | null }> }} scores Artifact.
- * @param {Record<string, unknown>} floors the `tests/floors.json#mutation` shape.
- * @returns {string[]} Human-readable errors (empty = pass).
- */
-/**
- * Assert every floor key (except meta) is a known MUTATION_SEEDS id.
- * @param {Record<string, unknown>} floors Mutation floors object from disk.
- * @param {import('./seeds.mjs').MutationSeed[]} [seeds] Seed catalog (defaults to MUTATION_SEEDS).
- * @returns {string[]} Errors when a floor id is not in the seed catalog.
- */
 export function assertFloorsSubsetOfSeeds(floors, seeds = MUTATION_SEEDS) {
   const errors = [];
   if (!floors || typeof floors !== "object") return errors;
@@ -142,8 +100,6 @@ export function enforceMutationFloors(scores, floors) {
     if (id.startsWith("_") || id === "approvedDeviation") continue;
     if (typeof floor !== "number") continue;
     const row = byId.get(id);
-    // #545 A5 — missing score is a gate failure (Stryker crash, renamed seed,
-    // config drift). Previously `continue` left mutation-pr green.
     if (!row || typeof row.score !== "number") {
       errors.push(
         `mutation floor "${id}" has no measured score (seed missing, crashed, or skipped)`
@@ -159,13 +115,6 @@ export function enforceMutationFloors(scores, floors) {
   return errors;
 }
 
-/**
- * Select seeds whose watch paths intersect the changed file set.
- * @param {string[]} changedFiles Paths relative to repo root.
- * @param {import('./seeds.mjs').MutationSeed[]} [seeds] Seed list to filter (defaults to MUTATION_SEEDS).
- * @param {string[]} [globalWatch] Paths that force every seed when changed.
- * @returns {import('./seeds.mjs').MutationSeed[]} Seeds that need re-mutation for the change set.
- */
 export function selectAffectedSeeds(
   changedFiles,
   seeds = MUTATION_SEEDS,
@@ -180,12 +129,6 @@ export function selectAffectedSeeds(
   );
 }
 
-/**
- * List files changed vs a git base ref (triple-dot: merge-base…HEAD).
- * @param {string} base Git ref (e.g. origin/main).
- * @param {string} [cwd] Repo root.
- * @returns {string[]} Paths relative to the repo root.
- */
 export function listChangedFiles(base, cwd = root) {
   try {
     const out = execFileSync("git", ["diff", "--name-only", `${base}...HEAD`], {
@@ -212,11 +155,6 @@ export function listChangedFiles(base, cwd = root) {
   }
 }
 
-/**
- * Load mutation score floors from disk.
- * @param {string} [floorsPath] Absolute path to the merged floors ledger.
- * @returns {Record<string, unknown>} The `mutation` section, or empty when missing.
- */
 export function loadMutationFloors(
   floorsPath = path.join(root, "tests/floors.json")
 ) {
@@ -224,14 +162,6 @@ export function loadMutationFloors(
   return JSON.parse(readFileSync(floorsPath, "utf8")).mutation ?? {};
 }
 
-/**
- * `tests/floors.json#<section>` tokens for the sections that differ from the
- * merge base, so a section of a merged ledger can be watched without watching
- * the whole file (#915 Wave 4).
- * @param {unknown} base the floors ledger on the merge base
- * @param {unknown} head the floors ledger in the working tree
- * @returns {string[]} one token per section whose content changed
- */
 export function changedFloorSections(base, head) {
   const keys = new Set([
     ...Object.keys(base ?? {}),
@@ -247,13 +177,6 @@ export function changedFloorSections(base, head) {
     .sort();
 }
 
-/**
- * Read a JSON file at a git ref, or null when it is not there.
- * @param {string} ref git ref
- * @param {string} relative repo-relative path
- * @param {string} [cwd] repo root
- * @returns {unknown} the parsed document, or null
- */
 export function readJsonAtRef(ref, relative, cwd = root) {
   try {
     return JSON.parse(
@@ -305,10 +228,6 @@ function findStrykerBin() {
   return null;
 }
 
-/**
- * Run Stryker for each seed and return score rows.
- * @param {import('./seeds.mjs').MutationSeed[]} seeds Seeds to mutate.
- */
 function runSeeds(seeds) {
   const stryker = findStrykerBin();
   if (!stryker) {
@@ -324,7 +243,6 @@ function runSeeds(seeds) {
     }));
   }
 
-  /** @type {Array<{ id: string; label: string; score: number | null; status: string; reportPath?: string; error?: string }>} */
   const rows = [];
   for (const seed of seeds) {
     const pkgDir = path.join(root, seed.cwd);
@@ -340,9 +258,6 @@ function runSeeds(seeds) {
       continue;
     }
     console.log(`mutation: running Stryker for ${seed.id} (cwd ${seed.cwd})…`);
-    // One retry: CI hosts occasionally return "No tests were executed" on the
-    // first dry-run under load even though the same vitest.mutation.config is
-    // healthy (repro intermittent on ubuntu-latest for vault/automation).
     let result = spawnSync(process.execPath, [stryker, "run", seed.config], {
       cwd: pkgDir,
       encoding: "utf8",
@@ -409,7 +324,6 @@ function main() {
     process.exit(0);
   }
 
-  /** @type {import('./seeds.mjs').MutationSeed[]} */
   let seeds;
   if (args.package) {
     seeds = MUTATION_SEEDS.filter(
@@ -422,8 +336,6 @@ function main() {
     }
   } else if (args.affected) {
     let changed = listChangedFiles(args.base);
-    // A merged ledger is watched by SECTION: expand tests/floors.json into the
-    // sections that actually moved before the watch list is consulted.
     if (changed.includes("tests/floors.json")) {
       changed = [
         ...changed,
@@ -504,8 +416,6 @@ function main() {
 
   if (args.enforceFloors) {
     const floors = loadMutationFloors();
-    // Only enforce floors for seeds that ran (affected / --package). Full
-    // nightly runs every seed so every floor is checked.
     const ranIds = new Set(rows.map((r) => r.id));
     const floorsForRun = Object.fromEntries(
       Object.entries(floors).filter(([id, v]) => {

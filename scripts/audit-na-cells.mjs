@@ -1,35 +1,4 @@
 #!/usr/bin/env node
-// THE n/a-CELL AUDIT (#890 W6, re-pointed at tests/claims.json by #915).
-//
-// `tests/claims.json` carries 56 cells that are deliberately not owned — a seat
-// an app disables, an engine an app has no entity for, a dimension a surface is
-// not the right place to assert. Every one cites a doctrine anchor or an issue,
-// and `validate-app-axes.mjs` already checks that those citations RESOLVE.
-//
-// What nothing checked is the distinction that decides whether the cell is
-// finished. An n/a is one of two different things:
-//
-//   IMPOSSIBILITY  the claim cannot arise. Agenda has no placeable entity, so
-//     there is no placement behaviour to assert — an owner would have to invent
-//     the situation it tested. Nothing more is owed; the citation IS the proof.
-//
-//   PROHIBITION    the claim must never arise. Locker declares
-//     `seats.disabledOn: ["viewer"]`, so the PWA seat must REFUSE at the mount
-//     path. That is not an absence of behaviour, it is a behaviour: something
-//     has to fail if the app ever renders there. A prohibition with no gate is a
-//     rule the codebase merely intends.
-//
-// Both read identically in the matrix — `status: "skip"` with a citation — which
-// is exactly why the difference rotted invisibly. This audit makes each cell
-// declare which it is, and makes a prohibition name the gate that owns it.
-//
-// IT DOES NOT BACKFILL. #890's non-goals say so explicitly: the 56 are
-// deliberate and the ritual is re-verification, not conversion. What it forbids
-// is an n/a nobody has re-read since the ruling that created it.
-//
-// Runs in the same PR loop as its siblings — it is pure file reading and costs
-// milliseconds, and a "periodic ritual" that depends on somebody remembering to
-// run it is the thing this repo keeps learning not to build.
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -38,12 +7,9 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const REGISTER_PATH = "tests/claims.json#naCells";
 const CLAIMS_PATH = "tests/claims.json";
 
-// Two quarters. Long enough that the ritual is not busywork against 56 cells,
-// short enough that no deliberate absence outlives the reasoning behind it.
 const REVIEW_WINDOW_DAYS = 183;
 
 const dayMs = 24 * 60 * 60 * 1000;
-/** Whole days between an ISO date and `now`, or null when unparseable. */
 export function ageInDays(reviewed, now = Date.now()) {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(String(reviewed ?? ""))) return null;
   const parsed = Date.parse(`${reviewed}T00:00:00Z`);
@@ -51,17 +17,6 @@ export function ageInDays(reviewed, now = Date.now()) {
   return Math.floor((now - parsed) / dayMs);
 }
 
-/**
- * Every non-owned cell the claims file DERIVES a grid from, keyed
- * `<grid>.<app>.<axis>`.
- *
- * #915 retired `surfaces[].assessment`: the promises grid (§7) is now the join
- * of lane tags with tonight's verdicts, so there is no declared surface cell to
- * walk. The `surface.*` rows in the register are therefore AUTHORITATIVE rather
- * than derived — they are the only statement that a promise cannot arise on a
- * surface — and `auditNaCells` exempts them from the phantom rule while still
- * holding them to the kind / restatement / re-verification ritual.
- */
 export function collectNaCells(matrix) {
   const cells = new Map();
   for (const app of matrix.appSeats?.apps ?? []) {
@@ -82,7 +37,6 @@ export function collectNaCells(matrix) {
   return cells;
 }
 
-/** The rule engine, pure over an injected world. */
 export function auditNaCells({
   cells,
   register,
@@ -109,7 +63,6 @@ export function auditNaCells({
 
   for (const [key, row] of Object.entries(rows)) {
     if (!cells.has(key)) {
-      // The promises-grid rows are declared, not derived (see above).
       if (key.startsWith("surface.")) continue;
       fail(
         "no-phantom",
@@ -136,10 +89,6 @@ export function auditNaCells({
           `thought so.`
       );
     }
-    // The DATE is what makes this a ritual rather than a register. A row nobody
-    // has re-read since a ruling two years ago is exactly the state the audit
-    // exists to surface, and the only way to clear it is to read the cell again
-    // and re-date it — which is a deliberate act somebody signs.
     const age = ageInDays(row.reviewed, now);
     if (age == null) {
       fail(
@@ -184,7 +133,6 @@ export function auditNaCells({
   return findings;
 }
 
-// ---- self-test: the rules on fixtures, before judging the repo.
 function selfTest() {
   const cells = new Map([["appSeats.locker.viewer", { status: "skip" }]]);
   const restated = "a".repeat(60);
@@ -336,8 +284,6 @@ function main() {
   const register = { cells: claims.naCells ?? {} };
   const cells = collectNaCells(claims);
 
-  // Silent-no-op guard: an empty cell set reads as "everything is owned", which
-  // would be wonderful and is not what a matrix-shape change looks like.
   if (cells.size === 0) {
     console.error(
       `\nFAIL — found zero non-owned cells in ${CLAIMS_PATH}. Either every cell ` +
@@ -353,8 +299,6 @@ function main() {
     const abs = path.resolve(ROOT, doc);
     if (!existsSync(abs)) return false;
     if (!anchor) return true;
-    // Anchors are GitHub-style slugs of a heading; compare on the slug so a
-    // heading's punctuation can change without breaking every citation to it.
     const slugs = new Set(
       read(doc)
         .split("\n")

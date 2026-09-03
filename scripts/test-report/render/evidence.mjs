@@ -1,15 +1,3 @@
-/**
- * §10 evidence (collapsed) and §11 how to read this (#915 Wave 3).
- *
- * §10 is the old detail shelf plus the Consent and Joins tabs: everything here
- * is a ratchet or a registry, and it changes the verdict only when a floor is
- * breached — at which point the breach appears in §1 as a blocker.
- *
- * §11 is the page's own contract: every state, every severity, every column,
- * the mapping from the old report's tabs, and the `evidence.json` shape a lane
- * has to write.
- */
-
 import {
   details,
   escapeHtml,
@@ -19,7 +7,6 @@ import {
   table,
 } from "./util.mjs";
 
-/** The old report's tabs, and where each one now lives. */
 export const TAB_MAP = Object.freeze([
   ["Attention", "§1 Blockers + §3 Attention queue"],
   ["Product", "§6 Coverage, rung-proven mode"],
@@ -33,7 +20,6 @@ export const TAB_MAP = Object.freeze([
   ["Detail shelf", "§10 Evidence"],
 ]);
 
-/** §10. */
 export function renderEvidence(model) {
   const panels = model.evidencePanels;
 
@@ -138,7 +124,6 @@ export function renderEvidence(model) {
   );
 }
 
-/** §11. */
 export function renderHowToRead(model) {
   const severity = model.severity ?? {};
   const gloss = [

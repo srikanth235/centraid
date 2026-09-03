@@ -85,12 +85,6 @@ describe("scanSkipSites", () => {
 });
 
 describe("discoverSkipSites", () => {
-  /**
-   * Write one file (creating parents) under a scratch root.
-   * @param {string} root Scratch root.
-   * @param {string} file Repo-relative path.
-   * @param {string} source File contents.
-   */
   function writeFixture(root, file, source) {
     const target = path.join(root, file);
     mkdirSync(path.dirname(target), { recursive: true });
@@ -98,9 +92,6 @@ describe("discoverSkipSites", () => {
   }
 
   test("scans script tests in NESTED directories, not just the top level", async () => {
-    // Regression (#782): the globs were single-segment (`scripts/*.test.mjs`),
-    // so a skip one directory down was invisible to the budget — the exact
-    // silence this gate exists to prevent.
     const root = tempDirSync("skip-inventory-");
     writeFixture(root, "scripts/top.test.mjs", "test.skip('top', () => {});");
     writeFixture(
@@ -226,8 +217,6 @@ describe("reconcileInventory", () => {
     expect(Object.keys(next.sites)).toEqual(["a.test.ts#1", "b.test.ts#1"]);
     expect(next.sites["a.test.ts#1"].issue).toBe(656);
     expect(next.sites["a.test.ts#1"].line).toBe(10);
-    // A brand-new site is stubbed with no issue, so validation still fails
-    // until a human cites one — --write cannot launder a new skip.
     expect(next.sites["b.test.ts#1"].issue).toBeNull();
     expect(next._budget).toBe(2);
   });

@@ -32,74 +32,19 @@ import {
 
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
-/**
- * YEAR-3 RESTORE (issue #659 S3).
- *
- * Backup honesty is a product promise: the vault owner is told their data can
- * come back. Until this rig, the largest restore the repo had ever executed was
- * `backup-restore.scale.test.ts` at ~160 MiB, and the year-3 restore time — the
- * number that decides whether "restore my vault" is a coffee break or an
- * afternoon — was a guess. Nobody had ever run it.
- *
- * It also isolates the one step whose cost is superlinear in the wrong way:
- * `PRAGMA foreign_key_check`. `packages/backup/src/wal-restore.ts` (checkDb)
- * runs `integrity_check` AND `foreign_key_check` on every restored database and
- * treats either failure as fatal — correctly, because a committed state can
- * never hold an FK violation, so one means the replay produced a wrong vault.
- * But `foreign_key_check` with no arguments walks EVERY row of EVERY table with
- * a foreign key and probes the parent index for each. That is O(rows), it runs
- * inside the restore the owner is waiting on, and its cost at year-3 volumes had
- * never been separated from the rest of the restore. This rig times it alone
- * and publishes the number.
- *
- * ── Year-3 declared volume (docs/coding-standards.md D6) ────────────────────
- *
- * | Dimension          | Year-3   | Seeded here                              |
- * | ------------------ | -------- | ---------------------------------------- |
- * | Vault on disk      | 10 GiB   | `CENTRAID_SCALE_RESTORE_GIB` (default 10) |
- * | Photo assets       | 90,000   | 90,000 `core_content_item` rows over a shared CAS pool    |
- * | Contacts / people  | 5,000    | `core_party` rows                        |
- * | CAS objects        | 100,000  | one 16 MiB filler per 16 MiB of target (byte axis)       |
- *
- * The full table lives in tests/experience-budgets/README.md. When the target
- * size changes, the measured numbers and the volume move together — a restore
- * duration with no stated size is not a measurement.
- *
- * ── Why this is opt-in ──────────────────────────────────────────────────────
- *
- * Ten GiB through the chunker, AEAD, and back is tens of minutes and ~25 GiB of
- * scratch disk. It cannot share the 30-minute nightly scale job, and it must
- * never touch the PR lane (TESTING.md). It runs only when
- * `CENTRAID_SCALE_RESTORE_GIB` is set — its own nightly job sets it — and
- * SKIPS loudly otherwise rather than silently shrinking to a size that proves
- * nothing.
- */
 const OWNER = "tests/scale/restore-10gib.scale.test.ts";
 
 const TARGET_GIB = Number(process.env.CENTRAID_SCALE_RESTORE_GIB ?? "0");
 const ENABLED = Number.isFinite(TARGET_GIB) && TARGET_GIB > 0;
 
-// Two axes, deliberately decoupled — the first cut of this rig scaled rows WITH
-// bytes and produced 2,560 content rows at 10 GiB, which made the
-// foreign_key_check number meaningless (measured 8.8 ms over 5,256 rows at
-// 1 GiB). Restore duration is driven by BYTES; foreign_key_check is driven by
-// ROWS. Both must be at year-3 or the rig answers the wrong question.
 const YEAR3 = year3VaultProfile();
 const YEAR3_SEAL_KEY = Buffer.alloc(32, 0x67);
 const PARTY_COUNT = YEAR3.parties; // year-3 contacts
 const CONTENT_ROWS = YEAR3.photos; // year-3 photo assets
-// `core_content_item.sha256` is UNIQUE, so the row axis cannot share one CAS
-// object across rows. It also does not need to MATERIALIZE one: no foreign key
-// ties a content row to a CAS file, and foreign_key_check — the thing being
-// measured — walks rows, not bytes. So the row axis inserts 90,000 rows with
-// distinct synthetic digests and writes no files for them; the byte axis below
-// carries the real CAS bytes. Stated plainly because it is the one place this
-// fixture is not a faithful vault.
 const BLOB_BYTES = 16 * 1024 * 1024;
 const targetBytes = Math.round(TARGET_GIB * 1024 * 1024 * 1024);
 const BLOB_COUNT = Math.max(1, Math.round(targetBytes / BLOB_BYTES));
 
-/** Deterministic pseudo-random payload; incompressible enough to be honest. */
 function blobBytes(index: number, size = BLOB_BYTES): Buffer {
   let state = (911 + index * 2_654_435_761) >>> 0;
   const result = Buffer.allocUnsafe(size);
@@ -159,11 +104,7 @@ describe("restore-10gib.scale", () => {
       );
       const now = new Date().toISOString();
 
-      // Byte axis: the fixture's 90k logical photos deliberately do not
-      // materialize 90k CAS files; large filler objects carry the real bytes.
       const blobShas: string[] = [];
-      // Large filler objects are written in committed batches so a
-      // 10 GiB seed never holds one transaction open for the whole run.
       const BATCH = 8;
       for (let start = 0; start < BLOB_COUNT; start += BATCH) {
         db.vault.exec("BEGIN IMMEDIATE");
@@ -255,11 +196,6 @@ describe("restore-10gib.scale", () => {
       });
       const restoreMs = performance.now() - restoreStarted;
 
-      // ── The isolated integrity pragmas ────────────────────────────────────
-      // Measured on the RESTORED file, one at a time, on a freshly opened
-      // connection so neither warms the other's page cache. This is the number
-      // #659 S3 exists to publish: how much of a year-3 restore is spent
-      // proving the restore is honest, as opposed to moving bytes.
       const restoredVaultPath = path.join(restoreDir, "vault.db");
       const restoredBytes = (await stat(restoredVaultPath)).size;
 
@@ -296,11 +232,6 @@ describe("restore-10gib.scale", () => {
 
       const seededBytes = BLOB_COUNT * BLOB_BYTES;
 
-      // The owner-facing ceilings live in tests/experience-budgets/gateway.json
-      // and are asserted HERE, so they are not another budget nobody reads.
-      // They are stated AT 10 GiB, so a smaller opt-in run (used to develop the
-      // rig) reports but does not gate — a 1 GiB run passing a 10 GiB ceiling
-      // would be a meaningless green.
       const experience = JSON.parse(
         await readFile("tests/experience-budgets/gateway.json", "utf8")
       ) as {
@@ -377,9 +308,6 @@ describe("restore-10gib.scale", () => {
       expect(integrity?.integrity_check).toBe("ok");
       expect(partyRows).toBeGreaterThanOrEqual(PARTY_COUNT);
       expect(contentRows).toBe(CONTENT_ROWS + BLOB_COUNT);
-      // Unconditional assertion on a boolean rather than a conditional expect:
-      // the ceilings are stated AT 10 GiB, so a smaller development run reports
-      // and does not gate, and `withinCeilings` already encodes that.
       expect(
         withinCeilings,
         `year-3 ceilings (asserted only at >= 10 GiB; this run seeded ${TARGET_GIB} GiB): ` +
@@ -391,8 +319,6 @@ describe("restore-10gib.scale", () => {
         `sustained drift: ${restoreMs} ms vs drift budget ${drift} ms (1.5x the trailing median of the last 30 nightly samples)`
       ).toBe(true);
     },
-    // Ten GiB of chunk + AEAD + restore is tens of minutes on a CI disk. This
-    // is a runaway guard, not a budget — the budget is the drift gate above.
     3_600_000
   );
 });

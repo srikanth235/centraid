@@ -1,11 +1,3 @@
-// #892 P0 — the budget arithmetic, exercised without a device.
-//
-// `mobile-device-gate` reported 17m38s against a twelve-minute budget because
-// the budget was scored only after every member finished. These two pure
-// helpers are the bound that replaced that verdict, so they are the half that
-// has to be provable off-device: everything else in the suite runner needs an
-// emulator, which is exactly why the overrun was never caught by a test.
-
 import { describe, expect, it } from "vitest";
 
 import { maestroChunkTimeoutMs } from "./harness.mjs";
@@ -18,8 +10,6 @@ describe("fitsInBudget", () => {
   });
 
   it("refuses a retry that costs more than the time left", () => {
-    // The observed shape: a four-minute journey fails with ninety seconds of
-    // budget remaining. Retrying it is how twelve minutes became seventeen.
     expect(fitsInBudget(90_000, 4 * 60_000)).toBe(false);
   });
 

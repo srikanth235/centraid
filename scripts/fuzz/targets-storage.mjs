@@ -1,9 +1,3 @@
-/**
- * Storage-key / blob-directory fuzz targets (#839 G10).
- *
- * The two targets that eat bytes a storage provider chose: the CBSF v2 blob
- * directory decoder and the WAL segment / closer / pair-marker key parsers.
- */
 import { utf8 } from "./mutate.mjs";
 import {
   assertKeyRoundtrip,
@@ -16,17 +10,12 @@ import {
   UINT32_MAX,
 } from "./targets-support.mjs";
 
-/** @typedef {import('./targets-support.mjs').FuzzTarget} FuzzTarget */
-
-/** @type {FuzzTarget[]} */
 export const STORAGE_TARGETS = [
   {
     id: "cbsf-directory",
     title: "CBSF v2 blob directory decoder",
     entry: "packages/core/src/blob/cbsf.ts",
     structure: "bytes",
-    // Byte target: the interesting-word strategy already supplies the
-    // integer boundaries; the only useful literal is the format magic.
     dictionary: ["CBSF"],
     iterations: 2_000_000,
     smokeIterations: 1_500,
@@ -35,9 +24,6 @@ export const STORAGE_TARGETS = [
         "packages/core/dist/blob/index.js",
         BUILD
       );
-      // `frameCount` reaches the decoder from a CBSF trailer `getUint32`, so
-      // the reachable domain is exactly uint32 (see
-      // packages/client/src/device-blob-source.ts).
       const frameCountsFor = (bytes) => {
         const exact =
           bytes.length >= 16 && (bytes.length - 16) % 4 === 0
@@ -107,11 +93,6 @@ export const STORAGE_TARGETS = [
             "cbsf.roundtrip",
             "re-encoding a decoded directory is not byte-identical to its input"
           );
-          // Valid-prefix corruption: a directory that decoded cleanly must not
-          // absorb a flipped bit silently — every byte of it is load-bearing.
-          // The 16-byte fixed prefix is always probed; the sealed-length table
-          // is sampled on a fixed stride so a 4 KiB directory still costs a
-          // bounded number of decodes per execution.
           for (const offset of corruptionOffsets(bytes.length)) {
             const corrupted = Uint8Array.from(bytes);
             corrupted[offset] ^= 0x80;
@@ -257,9 +238,6 @@ export const STORAGE_TARGETS = [
             : marker
               ? "marker"
               : "none";
-        // Coarse on purpose: the signature drives corpus promotion, so it
-        // classifies key SHAPES (kind, depth, first segment) rather than key
-        // contents — otherwise every random byte string looks "new".
         return `${kind}|seg:${key.split("/").length}|head:${key.slice(0, 4)}`;
       };
     },

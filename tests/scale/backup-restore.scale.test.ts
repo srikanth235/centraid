@@ -28,21 +28,12 @@ const APP_META = {
   sourceInstanceId: "scale-lane",
 };
 
-// Realistic-but-nightly volume: 500 party rows + 160 content items each backed
-// by a 1 MiB CAS blob ≈ 160 MiB of real blob bytes plus a populated ontology
-// db. Big enough that byte/row fidelity and duration mean something; small
-// enough to finish in a few seconds nightly.
 const PARTY_COUNT = 500;
 const BLOB_COUNT = 160;
 const BLOB_BYTES = 1024 * 1024;
 
-// Duration baseline (2026-07-19, darwin arm64): ~1.8 s for this fixture through
-// the real backup engine (chunk + AEAD + restore of ~160 MiB CAS + a populated
-// db). Slower CI disks run this 2–3× slower (~5 s), so budget ≈ 3× that ≈
-// 12 s. Falsifiable against a real backup-throughput collapse.
 const DURATION_BUDGET_MS = 12_000;
 
-/** Deterministic 1 MiB payload; its sha256 is the CAS key we store it under. */
 function blobBytes(index: number): Buffer {
   let state = (458 + index * 2_654_435_761) >>> 0;
   const result = Buffer.allocUnsafe(BLOB_BYTES);
@@ -61,9 +52,6 @@ describe("backup-restore.scale", () => {
     const restoreDir = await tempDir("backup-scale-restore-");
     await rm(restoreDir, { recursive: true, force: true });
 
-    // A REAL vault (createTestVault === openVaultDb + bootstrapVault, on-disk WAL)
-    // populated with ontology rows from the shared volume fixture and real CAS
-    // blob content — not a hand-made single-BLOB sqlite file.
     const db = await createTestVault({ dir: sourceDir });
     const fixture = generateVolumeFixture({
       seed: 458,
@@ -103,9 +91,6 @@ describe("backup-restore.scale", () => {
     }
     db.vault.exec("COMMIT");
 
-    // Flush the WAL into vault.db so the backed-up base file is self-consistent
-    // (WAL mode + autocheckpoint=0 means uncheckpointed frames otherwise live
-    // only in -wal). No writer touches the db after this, so its bytes are stable.
     db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 
     const vaultPath = path.join(sourceDir, "vault.db");
@@ -166,7 +151,6 @@ describe("backup-restore.scale", () => {
     });
     const durationMs = performance.now() - started;
 
-    // Byte fidelity: the restored base db is identical to the source.
     const restoredVaultBytes = await readFile(
       path.join(restoreDir, "vault.db")
     );
@@ -174,7 +158,6 @@ describe("backup-restore.scale", () => {
       .update(restoredVaultBytes)
       .digest("hex");
 
-    // Row fidelity: open the restored db and count the ontology rows back.
     const restored = new DatabaseSync(path.join(restoreDir, "vault.db"));
     const partyRows = (
       restored.prepare("SELECT count(*) AS n FROM core_party").get() as {
@@ -188,8 +171,6 @@ describe("backup-restore.scale", () => {
     ).n;
     restored.close();
 
-    // Blob fidelity: spot-check the first, middle and last restored CAS blobs by
-    // recomputing sha256 over the materialized bytes.
     const spotIndices = [0, Math.floor(BLOB_COUNT / 2), BLOB_COUNT - 1];
     const blobHashesMatch = await Promise.all(
       spotIndices.map(async (index) => {
@@ -201,9 +182,6 @@ describe("backup-restore.scale", () => {
       })
     );
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       restoredVaultHash === sourceVaultHash &&

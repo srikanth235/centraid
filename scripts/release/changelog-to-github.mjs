@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * D3 — extract CHANGELOG section for a version as GitHub Release body.
- *   node scripts/release/changelog-to-github.mjs --version 0.2.1 [--out path]
- */
 
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";

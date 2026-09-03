@@ -1,48 +1,12 @@
 #!/usr/bin/env node
-/**
- * The rung-2 budget, measured and enforced on the run that spent it (#915).
- *
- * WHAT WAS MISSING. `tests/budgets.json#suiteWallClock` fenced the vitest suite's
- * summed file spans, which is the right backpressure on ADDING TESTS and says
- * nothing about the thing a person actually waits for: the elapsed minutes
- * between pushing and `check` going green. #915 measured that at ~26 minutes
- * against a docs claim of 12.3, and nothing in the repo could have noticed —
- * a budget nobody measures is a wish.
- *
- * WHAT IT MEASURES. The PR gate's wall clock is `max(completed_at) −
- * min(started_at)` across the jobs in `check`'s `needs:` list. Not the sum:
- * those jobs run in parallel and the sum would punish parallelism, which is the
- * one thing that makes the gate fast. Not `check`'s own duration either: it
- * starts last and would report five seconds. The span is what a human sits
- * through, so the span is what is budgeted.
- *
- * The lane list is read from `ci.yml` itself rather than restated here, because
- * a second hand-maintained copy of `check.needs` is exactly the failure mode
- * #557's nightly-failure-issue demonstrated.
- *
- * Usage (inside the `check` job, which needs `actions: read`):
- *   node scripts/ci/pr-gate-wall-clock.mjs --repo owner/name --run-id 123
- */
 import { spawnSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const CI_PATH = path.join(root, ".github/workflows/ci.yml");
-// The wall-clock ceilings are `tests/budgets.json#suiteWallClock` (#915 Wave 4).
 const BUDGET_PATH = path.join(root, "tests/budgets.json");
 
-/**
- * The job ids in `check`'s `needs:` list.
- *
- * Parsed from the workflow text: `check:` is a top-level job (two spaces), its
- * `needs: [` block runs until the closing bracket, and every bare identifier in
- * between is a lane. Comments inside the list are stripped first — the real
- * list carries several, and they name lanes.
- *
- * @param {string} yaml The contents of `.github/workflows/ci.yml`.
- * @returns {string[]} Lane job ids, in declaration order.
- */
 export function parseCheckNeeds(yaml) {
   const start = yaml.indexOf("\n  check:");
   if (start === -1) return [];
@@ -61,12 +25,6 @@ export function parseCheckNeeds(yaml) {
     .filter((token) => /^[A-Za-z0-9_-]+$/u.test(token));
 }
 
-/**
- * Parse the newline-delimited JSON `gh api --jq '.jobs[]' --paginate` emits.
- *
- * @param {string} stdout Raw stdout.
- * @returns {{name: string, started_at: string, completed_at: string, conclusion: string}[]} Jobs.
- */
 export function parseJobsStream(stdout) {
   const jobs = [];
   for (const line of (stdout ?? "").split("\n")) {
@@ -77,24 +35,12 @@ export function parseJobsStream(stdout) {
       if (Array.isArray(parsed)) jobs.push(...parsed);
       else jobs.push(parsed);
     } catch {
-      // A single unparseable line must not lose the rest of the page.
+      // Intentionally empty.
     }
   }
   return jobs;
 }
 
-/**
- * The jobs belonging to the gate.
- *
- * A matrix leg's GitHub job name is `<id> (<leg>)`, so the match is "equals the
- * id, or starts with `<id> (`". Skipped jobs are excluded: a path-gated lane the
- * diff never woke contributes no minutes and would otherwise drag `started_at`
- * to the front of the run for nothing.
- *
- * @param {{name: string, conclusion: string, started_at?: string, completed_at?: string}[]} jobs Every job of the run.
- * @param {string[]} needs Lane ids from `check.needs`.
- * @returns {{name: string, started_at?: string, completed_at?: string}[]} The gate's jobs.
- */
 export function selectGateJobs(jobs, needs) {
   const wanted = new Set(needs.filter((id) => id !== "check"));
   return jobs.filter((job) => {
@@ -105,12 +51,6 @@ export function selectGateJobs(jobs, needs) {
   });
 }
 
-/**
- * Elapsed wall clock across the gate.
- *
- * @param {{name: string, started_at?: string, completed_at?: string}[]} jobs Gate jobs.
- * @returns {{ms: number, firstStart: string, lastEnd: string, slowest: {name: string, ms: number}|null}|null} Null when nothing measurable ran.
- */
 export function wallClockMs(jobs) {
   if (!jobs.length) return null;
   let min = Infinity;
@@ -136,14 +76,6 @@ export function wallClockMs(jobs) {
 
 const fmt = (ms) => `${(ms / 60000).toFixed(1)} min`;
 
-/**
- * Markdown for the Job Summary.
- *
- * @param {{ms: number, slowest: {name: string, ms: number}|null}} measured What the run took.
- * @param {number} budgetMs The ceiling.
- * @param {number} lanes How many gate jobs were measured.
- * @returns {string} Markdown.
- */
 export function renderWallClock(measured, budgetMs, lanes) {
   const over = measured.ms > budgetMs;
   return [
@@ -217,8 +149,6 @@ function main() {
   const gateJobs = selectGateJobs(parseJobsStream(listed.stdout), needs);
   const measured = wallClockMs(gateJobs);
   if (!measured) {
-    // Every lane skipped is a real state (a docs-only PR), and it is not a
-    // budget breach. Say so rather than reporting a zero that reads as a win.
     console.log(
       "pr-gate-wall-clock: no gate lane reported a start and end — nothing to measure"
     );

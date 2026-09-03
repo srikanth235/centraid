@@ -2,22 +2,6 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-/**
- * Single reader for `tests/budgets.json#qualityRigs` (issue #656 Layer 1F;
- * merged into the budgets ledger by #915 Wave 4).
- *
- * Before this, three perf rigs and two scale rigs each carried their absolute
- * catastrophic-failure ceiling as a `const BUDGET_MS` in their own source. Those
- * numbers were invisible to `bun run test:ratchet`, so a widened ceiling — the
- * cheapest way to make a slow rig green — was an ordinary one-line edit that
- * nothing flagged. Moving them into the registry puts them under the
- * tighten-only ratchet (`PERF_BUDGET_SOURCES` in
- * `scripts/test-report/ratchet-floors.mjs`) and puts the volume descriptor next
- * to the ceiling it justifies.
- *
- * Resolution is from this file, not `process.cwd()`: perf and scale rigs run
- * under the repo-root vitest configs but a forked child fixture may not.
- */
 const REGISTRY_PATH = path.resolve(import.meta.dirname, "../budgets.json");
 
 interface RigEntry {
@@ -40,7 +24,6 @@ const registry = (
   }
 ).qualityRigs;
 
-/** Full registry entry for a rig, keyed by its `OWNER` path. */
 export function rigEntry(owner: string): RigEntry {
   const entry = registry.rigs[owner];
   if (!entry)
@@ -50,12 +33,6 @@ export function rigEntry(owner: string): RigEntry {
   return entry;
 }
 
-/**
- * The rig's absolute wall-clock ceiling in milliseconds. Throws rather than
- * defaulting: a rig that silently fell back to `Infinity` would keep passing
- * after someone deleted its budget, which is the exact failure this registry
- * exists to prevent.
- */
 export function rigBudgetMs(owner: string): number {
   const { budgetMs } = rigEntry(owner);
   if (typeof budgetMs !== "number")
@@ -65,31 +42,6 @@ export function rigBudgetMs(owner: string): number {
   return budgetMs;
 }
 
-/**
- * Sustained-drift budget for a rig, from its own 30-sample nightly history
- * (issue #659 R4).
- *
- * The problem this closes: the rigs with a fixed absolute ceiling — the
- * `budgetMs` entries above, and the inline constants in `gateway-request`,
- * `vault-write`, `backup-restore` and friends — never read their history at
- * all. A ceiling set at ~3x a measured baseline only fires on a collapse, so a
- * rig could walk from 40 ms to 110 ms under a 120 ms ceiling over a year of
- * green nightlies with nothing anywhere saying a word. `qualityRegressionBudget`
- * in `@centraid/test-kit` already computed a trailing-median budget, but only
- * nine rigs called it, and at 10 samples x 3 it is a second catastrophe gate
- * rather than a drift gate.
- *
- * This is the drift gate: 30 durable observations (about a month of nightlies —
- * long enough that one slow runner cannot move the median, short enough to
- * catch a regression inside a release cycle), then fail above
- * `driftMultiplier` x the trailing median. Both knobs live in
- * `tests/budgets.json#qualityRigs` so `bun run test:ratchet` holds them
- * tighten-only; nothing here invents a number.
- *
- * Returns `null` until the history is deep enough. A null must be treated as
- * "no opinion yet", never as a pass — call sites read it as
- * `drift === null || value <= drift`.
- */
 export async function rigDriftBudgetMs(
   lane: "perf" | "scale",
   owner: string
@@ -105,10 +57,6 @@ export async function rigDriftBudgetMs(
   );
 }
 
-/**
- * Pure trailing-median drift budget. Exported for unit tests: the whole gate
- * is this arithmetic, and a rig-driven test of it would need 30 nightlies.
- */
 export function driftBudget(
   values: readonly number[],
   {

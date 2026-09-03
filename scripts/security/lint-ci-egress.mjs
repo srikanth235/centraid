@@ -1,45 +1,11 @@
 #!/usr/bin/env node
-/**
- * W6.3 — CI egress control ratchet (umbrella #842).
- *
- * The companion to `lifecycle-audit.mjs`. That gate asks what a dependency
- * *declares* it will run; this one constrains what the runner can *reach* while
- * it runs anything at all — because the two failure modes are not the same. A
- * build step, a test, a codegen plugin, or a dependency Bun did decide to trust
- * can all open a socket, and CI is where the interesting secrets live
- * (NPM_TOKEN, GHCR push, Apple/Azure signing, Cloudflare deploy). Identity
- * gates cannot see any of that; a blocked egress policy turns an exfiltration
- * attempt into a failed DNS lookup with a named destination in the run log.
- *
- * The mechanism is `step-security/harden-runner` with `egress-policy: block`
- * (or `audit` while an allowlist is being learned) as the FIRST step of a job.
- *
- * This linter is a tighten-only ratchet, not a big-bang: every workflow that
- * has no harden-runner today is pinned in `egress-ledger.json` with a reason.
- * A NEW workflow, or a new job in an unledgered one, must carry the step. A
- * ledger entry for a workflow that has since been hardened, or that no longer
- * exists, FAILS as stale — that is what stops the allowlist growing back.
- *
- * Usage:  node scripts/security/lint-ci-egress.mjs
- * Exit:   0 clean, 1 on drift.
- */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 export const HARDEN_RUNNER_ACTION = "step-security/harden-runner";
-/** Policies we accept. `audit` is a learning mode and must carry a ledger note. */
 export const ACCEPTED_EGRESS_POLICIES = ["block", "audit"];
 
-/**
- * Does this workflow ever execute third-party code? Composite `setup` runs
- * `bun install`; a bare `run:` may install directly. Workflows that only call
- * other workflows (`release.yml`) or run a vendored shell script
- * (`governance.yml`) execute nothing they did not already have.
- *
- * @param {string} source workflow YAML
- * @returns {boolean} true when the workflow installs or runs third-party code
- */
 export function executesDependencyCode(source) {
   if (/uses:\s*\.\/\.github\/actions\/setup/u.test(source)) return true;
   return /^\s*(?:-\s*)?run:.*\b(?:bun install|npm ci|npm install|pnpm install|yarn install)\b/mu.test(
@@ -47,15 +13,6 @@ export function executesDependencyCode(source) {
   );
 }
 
-/**
- * Read the harden-runner steps out of a workflow, with the policy each declares.
- * Text-scanned rather than YAML-parsed on purpose: this repo already lints
- * workflows by line (`scripts/lint-workflow-pins.mjs`), the grammar is stable,
- * and staying dependency-free keeps the gate on the fast per-PR loop.
- *
- * @param {string} source workflow YAML
- * @returns {Array<{ ref: string, policy: string | null }>} one entry per harden-runner step, with the policy it declares
- */
 export function hardenRunnerSteps(source) {
   const lines = source.split("\n");
   const steps = [];
@@ -79,10 +36,6 @@ export function hardenRunnerSteps(source) {
   return steps;
 }
 
-/**
- * @param {{ workflows: Array<{ file: string, source: string }>, ledger: Record<string, {reason?: string}> }} input the workflows on disk and the debt ledger
- * @returns {{ ok: boolean, problems: string[], hardened: string[], ledgered: string[] }} the verdict, which workflows enforce a policy, and which are pinned as debt
- */
 export function auditEgress(input) {
   const problems = [];
   const hardened = [];

@@ -1,53 +1,4 @@
 #!/usr/bin/env node
-/**
- * New-test burn-in: every test file this diff adds or modifies, run 3× alone (#915).
- *
- * THE GAP THIS CLOSES. `author ≠ auditor` is enforced for the PRODUCT — mutation
- * seeds, diff coverage, the e2e alarm — and not at all for the TESTS themselves.
- * A newly written test runs exactly once before it is merged, inside a full
- * suite, sharing a worker pool with a thousand siblings. A test that passes
- * because a sibling seeded a fixture, because a timer happened to fire, or
- * because it is 1-in-3 flaky, passes that one run and then costs everybody a
- * re-run habit for months. The cheapest falsifier is repetition in isolation:
- * three runs, alone, and any disagreement between them is the test telling you
- * it is not deterministic.
- *
- * ANY DISAGREEMENT IS RED, not just a failure. A file that fails 3/3 is a broken
- * test and the author sees it anyway; a file that passes twice and fails once is
- * the expensive one, and it is exactly what a single run cannot see.
- *
- * WHAT IT REFUSES TO RUN. Playwright and Maestro specs match `*.spec.*` and
- * `*.test.*` too, and running them here would boot browsers and emulators on the
- * PR gate — the opposite of the merge diet this lane ships inside. The nightly
- * rigs are refused for the opposite reason: they are FED by an artifact another
- * job publishes, and several fail on purpose under CI when it is absent. Both
- * are skipped with a printed reason rather than silently dropped, because a skip
- * nobody can see is indistinguishable from a check that never looked.
- *
- * WHY IT SHARDS. The guarantee is per-FILE — three isolated runs of each — so
- * it costs the SUM of the files, on one runner, sequentially, while the rung-2
- * budget is a SPAN (`scripts/ci/pr-gate-wall-clock.mjs`: `max(completed_at) −
- * min(started_at)`). A wave that rewrites 237 suites at once is ~53 minutes of
- * that sum and blew a 15-minute span it was the only lane over. `--shard i/N`
- * deals the same sorted list across N runners: every file still runs, still
- * three times, still alone, still with its disagreement red — only the span
- * shrinks, because a span over jobs in parallel is the longest one, not the
- * total. This is arithmetic on the budget's own definition, not relief from it.
- *
- * THE PARTITION MUST NOT LEAK. A sharded gate's failure mode is #556's: a file
- * that lands in no shard is never run and reports green by absence. Two things
- * refuse it. The deal is `index % N` over a SORTED copy, so the shards are a
- * true partition of one list by construction rather than N independent guesses;
- * and `N` is `strategy.job-total` in the workflow, which is the matrix's own
- * length, so the divisor cannot drift from the number of runners that exist.
- * An out-of-range `i` is a hard error rather than an empty slice, because an
- * empty slice exits 0 and that is the silence the guarantee cannot survive.
- *
- * Usage:
- *   node scripts/ci/burn-in.mjs [--base origin/main] [--runs 3] [--list]
- *   node scripts/ci/burn-in.mjs --files packages/core/src/a.test.ts
- *   node scripts/ci/burn-in.mjs --shard 3/8
- */
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -55,7 +6,6 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "../..");
 const VITEST = path.join(root, "node_modules/vitest/vitest.mjs");
 
-/** Extensions a Vitest project can actually load. */
 export const BURN_IN_EXTENSIONS = Object.freeze([
   ".ts",
   ".tsx",
@@ -65,13 +15,6 @@ export const BURN_IN_EXTENSIONS = Object.freeze([
   ".cjs",
 ]);
 
-/**
- * Directory prefixes whose `*.spec.*` / `*.test.*` files are driven by a
- * browser or a device, not by Vitest. Kept as a literal list rather than a
- * clever heuristic: a wrong guess here either boots an emulator on the PR gate
- * or silently skips a real unit test, and both are worse than a list somebody
- * has to extend on purpose.
- */
 export const DEVICE_DRIVEN_PREFIXES = Object.freeze([
   "tests/e2e/",
   "tests/agent-e2e-mobile/",
@@ -82,26 +25,11 @@ export const DEVICE_DRIVEN_PREFIXES = Object.freeze([
   "apps/extension/tests/e2e/",
 ]);
 
-/**
- * Directory prefixes whose tests are NIGHTLY RIGS, fed by an artifact another
- * job publishes (`artifacts/perf-input/…`, the scale fixtures). Several of them
- * fail on purpose when `CI` is set and that artifact is absent, because at
- * rung 4 a missing artifact means the gate guarded nothing — so at rung 2,
- * where the artifact does not exist and cannot, a burn-in run measures the
- * absence rather than the test, three times. Their own lanes (`test:perf`,
- * `test:scale`) run them whole where the inputs are.
- */
 export const NIGHTLY_RIG_PREFIXES = Object.freeze([
   "tests/perf/",
   "tests/scale/",
 ]);
 
-/**
- * Why a changed file is not a burn-in candidate, or null when it is one.
- *
- * @param {string} file Repository-relative path.
- * @returns {string|null} Human-readable skip reason, or null to burn it in.
- */
 export function skipReason(file) {
   const name = path.basename(file);
   if (!/\.(?:test|spec)\./u.test(name)) return "not a test file";
@@ -120,12 +48,6 @@ export function skipReason(file) {
   return null;
 }
 
-/**
- * Split `git diff --name-only` output into burn-in candidates and skips.
- *
- * @param {string} stdout Raw diff output, one path per line.
- * @returns {{files: string[], skipped: {file: string, why: string}[]}} Partitioned paths.
- */
 export function partitionChangedFiles(stdout) {
   const files = [];
   const skipped = [];
@@ -141,19 +63,6 @@ export function partitionChangedFiles(stdout) {
   return { files, skipped };
 }
 
-/**
- * Parse a `--shard i/N` value into its two integers.
- *
- * Every malformed shape is an error rather than a default, because each of them
- * has a silent-green reading: `0/8` and `9/8` both select nothing, `3/0` divides
- * the list by zero, and a non-integer `N` would put files in no shard at all.
- * The lane's whole value is that it looked, so it must refuse to run rather than
- * run over an empty slice.
- *
- * @param {string} value The raw `--shard` argument.
- * @returns {{shard: number, total: number}} The 1-based leg and the matrix size.
- * @throws {Error} When the value is not `i/N` with `1 <= i <= N`.
- */
 export function parseShard(value) {
   const match = /^(?<shard>\d+)\/(?<total>\d+)$/u.exec(String(value).trim());
   if (!match)
@@ -166,32 +75,11 @@ export function parseShard(value) {
   return { shard, total };
 }
 
-/**
- * The slice of the candidate list one shard owns.
- *
- * Sorted first so the deal does not depend on the order the caller handed in —
- * `git diff --name-only` is already path-sorted, but `--files` is whatever a
- * person typed, and a partition that changes with input order is one whose
- * shards can overlap and leave gaps. Dealt round-robin rather than in
- * contiguous blocks: neighbouring paths are the same package and therefore
- * similar cost, so `index % N` mixes the expensive suites across the runners
- * instead of stacking them all onto one.
- *
- * @param {string[]} files Every burn-in candidate.
- * @param {number} shard 1-based leg number.
- * @param {number} total Number of legs.
- * @returns {string[]} This leg's files, a subset of `files`.
- */
 export function selectShard(files, shard, total) {
   if (total <= 1) return [...files];
   return [...files].sort().filter((_, index) => index % total === shard - 1);
 }
 
-/**
- * The config filenames that make a directory a Vitest project rather than
- * merely a package. Vite's own name is included because `apps/desktop` and
- * `apps/web` carry their Vitest settings in `vite.config.ts`.
- */
 const VITEST_PROJECT_CONFIGS = Object.freeze([
   "vitest.config.ts",
   "vitest.config.mts",
@@ -203,28 +91,6 @@ const VITEST_PROJECT_CONFIGS = Object.freeze([
   "vite.config.mjs",
 ]);
 
-/**
- * The nearest ancestor directory Vitest can actually be invoked in.
- *
- * Vitest resolves aliases, setup files and environment from the project it is
- * invoked in, so a test run from the repo root can pass or fail for reasons
- * that have nothing to do with the test. Running from the owning package is
- * what makes the three runs comparable to the run the suite does.
- *
- * A `package.json` ALONE does not make a project (#916). Every blueprint under
- * `packages/blueprints/apps/*` carries one — a private manifest declaring a dev
- * dependency, with no Vitest config and no `include` — so the walk stopped
- * there, vitest collected zero files from a directory that owns 206 tests, and
- * every blueprint suite in the diff was reported as "failed all 3 runs — the
- * test is broken". It is #915's own regression one level down: the fix there
- * taught the planner that `scripts/**` is not a Vitest project, and the same
- * question was never asked of a nested package. The probe is `package.json` AND
- * a config, which is exactly what vitest needs to find the test it was handed.
- *
- * @param {string} file Repository-relative path.
- * @param {(candidate: string) => boolean} hasFile Existence probe, injected for tests.
- * @returns {string} Repository-relative project directory (`.` for the root).
- */
 export function nearestVitestProjectDir(file, hasFile) {
   let dir = path.dirname(file);
   while (dir && dir !== "." && dir !== path.sep) {
@@ -238,12 +104,6 @@ export function nearestVitestProjectDir(file, hasFile) {
   return ".";
 }
 
-/**
- * The verdict for one file's repeated runs.
- *
- * @param {boolean[]} outcomes One boolean per run, true when the run passed.
- * @returns {{ok: boolean, why: string}} Verdict plus the sentence to print.
- */
 export function verdictForRuns(outcomes) {
   const passed = outcomes.filter(Boolean).length;
   if (passed === outcomes.length)
@@ -259,19 +119,6 @@ export function verdictForRuns(outcomes) {
   };
 }
 
-/**
- * How each candidate is actually RUN, in first-match order.
- *
- * A monorepo does not have one test runner. The `scripts/**` unit tests are
- * driven by `node --test` (see the `scripts:test` script); the report and
- * mutation helpers, the release guards and the three suites under `tests/` each
- * have a Vitest config that the ROOT config does not load. Burning a file in
- * from the wrong place does not fail on the test: Vitest collects zero files
- * and exits non-zero, which this lane then reports as "the test is broken" for
- * a test that is fine. Kept as a literal first-match list for the same reason
- * DEVICE_DRIVEN_PREFIXES is — a wrong guess here is a false red on somebody
- * else's PR — and the bare `scripts/` catch-all must stay last.
- */
 export const RUNNERS = Object.freeze([
   {
     prefix: "scripts/test-report/",
@@ -299,8 +146,6 @@ export const RUNNERS = Object.freeze([
     runner: "vitest",
     config: "tests/integration-mobile/vitest.config.ts",
   },
-  // tests/perf and tests/scale are not here on purpose: skipReason refuses
-  // them upstream as nightly rigs, so no plan can reach them.
   {
     prefix: "tests/quality/",
     runner: "vitest",
@@ -308,16 +153,6 @@ export const RUNNERS = Object.freeze([
   },
 ]);
 
-/**
- * The run plan for one candidate: which runner, from where, with what filter.
- *
- * Anything the table does not claim is a project-owned Vitest test, and runs
- * from its owning project for the reason nearestVitestProjectDir documents.
- *
- * @param {string} file Repository-relative path.
- * @param {(candidate: string) => boolean} hasFile Existence probe, injected for tests.
- * @returns {{runner: "node"|"vitest", cwd: string, filter: string, config?: string}} Run plan.
- */
 export function planRun(file, hasFile) {
   for (const entry of RUNNERS) {
     if (!file.startsWith(entry.prefix)) continue;
@@ -333,12 +168,6 @@ export function planRun(file, hasFile) {
   };
 }
 
-/**
- * The argv for one run of a plan, passed to `process.execPath`.
- *
- * @param {{runner: "node"|"vitest", filter: string, config?: string}} plan Run plan.
- * @returns {string[]} Node argv.
- */
 export function argvFor(plan) {
   if (plan.runner === "node") return ["--test", plan.filter];
   return [
@@ -375,9 +204,6 @@ function parseArgs(argv) {
 }
 
 function changedTestFiles(base) {
-  // `A...B` is the merge-base diff: the files THIS branch changed, not the ones
-  // main moved underneath it. `--diff-filter=AM` drops deletions and renames'
-  // old halves, which have nothing to run.
   const result = spawnSync(
     "git",
     ["diff", "--name-only", "--diff-filter=AM", `${base}...HEAD`],
@@ -407,9 +233,6 @@ function main() {
     console.log(`burn-in: skipping ${entry.file} — ${entry.why}`);
   }
   const files = selectShard(candidates, args.shard, args.total);
-  // Say the denominator out loud on every leg. A sharded gate is only as honest
-  // as its arithmetic, and "30 of 237" printed N times is what lets a reader
-  // add the legs up and see that nothing fell between them.
   const of =
     args.total > 1
       ? ` (shard ${args.shard}/${args.total}: ${files.length} of ${candidates.length} candidate(s))`
@@ -435,10 +258,8 @@ function main() {
     return;
   }
 
-  /** @type {{file: string, why: string}[]} */
   const failures = [];
   for (const { file, plan } of plans) {
-    /** @type {boolean[]} */
     const outcomes = [];
     for (let attempt = 1; attempt <= args.runs; attempt += 1) {
       const run = spawnSync(process.execPath, argvFor(plan), {
@@ -470,9 +291,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
   try {
     main();
   } catch (error) {
-    // A bad `--shard` is a wiring bug in the workflow, and the only wrong
-    // answer is a quiet zero: that is a leg reporting green over files it never
-    // selected. Named, and red.
     console.error(`::error title=New-test burn-in::${error.message}`);
     process.exitCode = 2;
   }

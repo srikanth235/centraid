@@ -13,18 +13,6 @@ async function fileExists(cwd, target) {
   }
 }
 
-/**
- * #864 Wave 7 — the per-app scenario ledger. Closed against the bundled apps
- * the same way grids B and D are: an absence is a validation error, a gap
- * cites an open issue, an owned row names a repository-relative owner that
- * exists on disk, and a product-bug is a declared defect with a note so it
- * cannot hide as a missing test.
- *
- * @param {object} matrix Parsed test matrix.
- * @param {{ root: string, checkFiles?: boolean }} options Validator options; `root` is the repo root.
- * @param {{ expectedApps: string[]|null, openIssue: (n: string|number) => boolean, issues: object }} ctx Bundled-app axis, open-issue predicate, and trackingIssues map.
- * @returns {Promise<string[]>} Validation error strings; empty when the ledger is well-formed.
- */
 export async function validateAppScenarios(matrix, options, ctx) {
   const errors = [];
   const cwd = options.root;

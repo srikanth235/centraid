@@ -1,7 +1,3 @@
-// Smoke-check: a fresh-state launch of the Expo app renders the mandatory
-// ticket-only onboarding entry point. Proves the harness loop end-to-end (sim
-// discovery, app-install check, ctx.run, screenshot capture, verdict.md).
-
 import {
   DEV_LAUNCHER_HANDOFF,
   FIRST_LAUNCH_TIMEOUT_MS,
@@ -9,9 +5,6 @@ import {
 } from "../lib/harness.mjs";
 
 await runFlow("home-loads", async (ctx) => {
-  // Since #603 a cleared client cannot bypass enrollment: the gateway founds
-  // itself and every phone enters through a one-time pairing ticket. Assert the
-  // durable field/action labels instead of obsolete Home/no-gateway copy.
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---

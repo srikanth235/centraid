@@ -1,48 +1,3 @@
-/**
- * Gateway send → first token dead-time probe (issue #842 W0.5).
- *
- * `sendToFirstToken` is the single most-felt latency in the product, and until
- * now `tests/experience-budgets/gateway.json` carried it as `unmeasured` with
- * the honest note that no rig existed: every path in
- * `tests/perf/harness-turn.perf.test.ts` measures DISPATCH throughput (2,000
- * registry dispatches against a stubbed `runTurn`), which never spawns a
- * harness, never speaks ACP, and therefore cannot see the interval this
- * budget is about.
- *
- * WHAT THIS MEASURES, EXACTLY — read this before trusting the number:
- *
- *   t0  `runAcpTurn(...)` is called (the gateway's equivalent of "send")
- *   t1  the first `assistant.delta` event reaches `onEvent` (first token)
- *
- * Between them sit harness process spawn, the ACP `initialize` handshake,
- * `session/new`, `session/prompt` dispatch, and the stream translation in
- * `packages/server/src/acp/backends/acp/backend.ts`. The provider is held
- * CONSTANT by driving the scripted `fake-acp-harness.mjs` in `--mode=normal`,
- * which streams its first chunk with no artificial think time — so the
- * measurement is dead time the repo owns and nothing else.
- *
- * WHAT IT DOES NOT MEASURE, and why the budget entry says so:
- *   - the HTTP/SSE conversation route in front of `runAcpTurn`
- *   - any client: no renderer, no frame, no composer
- *   - a real provider's own time to first token (deliberately excluded — that
- *     is the provider's number, not a regression this repo can fix)
- *
- * So this is a LOWER BOUND on what the vault owner feels, and it fences a
- * gateway-side regression (a slower spawn, an extra handshake round trip, a
- * blocking step added before the prompt goes out) rather than the whole
- * perceived interval. The remaining span is named in the budget entry's
- * `probe` field so nobody reads this as the complete answer.
- *
- * The ceiling lives in `tests/experience-budgets/gateway.json` and is
- * tighten-only via `PERF_BUDGET_SOURCES`
- * (`scripts/test-report/ratchet-floors.mjs`), so widening it is a reviewed
- * edit with a recorded `approvedDeviation`, never a quiet one.
- *
- * Usage:
- *   node scripts/perf/send-to-first-token.mjs             # enforce the ceiling
- *   node scripts/perf/send-to-first-token.mjs --report    # print, never fail
- *   node scripts/perf/send-to-first-token.mjs --samples 40 --warmup 5
- */
 import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -54,10 +9,6 @@ const HARNESS_PATH = path.join(
   "packages/server/src/acp/backends/acp/fake-acp-harness.mjs"
 );
 
-/**
- * @param {string[]} argv Raw argv slice.
- * @returns {{ samples: number, warmup: number, report: boolean }} Options.
- */
 export function parseArgs(argv) {
   const out = { samples: 25, warmup: 3, report: false };
   for (let i = 0; i < argv.length; i++) {
@@ -69,29 +20,12 @@ export function parseArgs(argv) {
   return out;
 }
 
-/**
- * Percentile of a sample set, nearest-rank on the sorted values.
- *
- * Nearest-rank rather than interpolation because these are wall-clock samples
- * from a small n: an interpolated p95 invents a value no run produced, and a
- * budget seeded from an invented value is exactly what this family of files
- * exists to prevent.
- *
- * @param {number[]} values Unsorted samples.
- * @param {number} p Percentile in [0, 1].
- * @returns {number} The sample at that rank.
- */
 export function percentile(values, p) {
   const sorted = [...values].sort((a, b) => a - b);
   const rank = Math.max(1, Math.ceil(p * sorted.length));
   return sorted[Math.min(rank, sorted.length) - 1];
 }
 
-/**
- * Summarize a sample set the way the budget entry records it.
- * @param {number[]} values Samples in ms.
- * @returns {{ n: number, minMs: number, medianMs: number, p95Ms: number, maxMs: number }} Summary.
- */
 export function summarize(values) {
   return {
     n: values.length,
@@ -102,12 +36,6 @@ export function summarize(values) {
   };
 }
 
-/**
- * Compare a measured p95 against the surface's ceiling.
- * @param {number} p95Ms Measured p95.
- * @param {unknown} metric The `sendToFirstToken` budget entry.
- * @returns {{ ok: boolean, message: string }} Verdict.
- */
 export function compareToCeiling(p95Ms, metric) {
   const entry = /** @type {Record<string, unknown>} */ (metric ?? {});
   const ceiling = Number(entry.ceilingP95Ms);
@@ -126,16 +54,9 @@ export function compareToCeiling(p95Ms, metric) {
   };
 }
 
-/**
- * One end-to-end sample: call `runAcpTurn` and stop the clock on the first
- * assistant token.
- * @param {(input: unknown, config: unknown) => Promise<unknown>} runAcpTurn Turn driver.
- * @returns {Promise<number>} Milliseconds from send to first token.
- */
 async function sample(runAcpTurn) {
   const cwd = await mkdtemp(path.join(os.tmpdir(), "send-to-first-token-"));
   const controller = new AbortController();
-  /** @type {number | null} */
   let firstTokenMs = null;
   const started = performance.now();
   await runAcpTurn(
@@ -144,7 +65,6 @@ async function sample(runAcpTurn) {
       message: "hello",
       extraSystemPrompt: "",
       abortSignal: controller.signal,
-      /** @param {{ type?: string }} event Normalized stream event. */
       onEvent: (event) => {
         if (firstTokenMs === null && event?.type === "assistant.delta")
           firstTokenMs = performance.now() - started;
@@ -165,32 +85,18 @@ async function sample(runAcpTurn) {
   return firstTokenMs;
 }
 
-/**
- * @returns {Promise<number>} Process exit code.
- */
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const { runAcpTurn } = await import("@centraid/server/acp");
   const driver = /** @type {(i: unknown, c: unknown) => Promise<unknown>} */ (
-    /** @type {unknown} */ (runAcpTurn)
+    runAcpTurn
   );
 
-  // Both passes are STRICTLY SERIAL, and the reduce-over-a-promise-chain
-  // idiom (the same one tests/perf/harness-turn.perf.test.ts uses) is how
-  // that is expressed without an await inside a loop. Serial is the
-  // measurement, not an oversight: N harness processes spawned at once on a
-  // 4-cpu host would measure contention between the samples rather than the
-  // gateway's dead time, which is the one thing this probe exists to see.
-  //
-  // Warmups are discarded, not averaged in: the first turns pay module
-  // resolution and a cold page cache, which is real cost but not the steady
-  // state a regression would move.
   await Array.from({ length: args.warmup }).reduce(async (previous) => {
     await previous;
     await sample(driver);
   }, Promise.resolve());
 
-  /** @type {number[]} */
   const values = [];
   await Array.from({ length: args.samples }).reduce(async (previous) => {
     await previous;

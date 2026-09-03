@@ -30,16 +30,10 @@ describe("replica-bootstrap.scale", () => {
       conversations: 0,
       replicaRows: 50_000,
     });
-    // The volume fixture types row values as Record<string, unknown>; the
-    // deterministic string/number values it emits are all valid ReplicaValues, so
-    // bridge the two fixture shapes explicitly for the bootstrap harness.
     const source = fixture.replicaRows as unknown as Parameters<
       typeof exerciseWindowedBootstrap
     >[0];
     const result = await exerciseWindowedBootstrap(source, 2_000, 24_999);
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       result.rows === 49_999 &&
@@ -70,14 +64,6 @@ describe("replica-bootstrap.scale", () => {
     expect(result.durationMs).toBeLessThan(20_000);
   });
 
-  // ── issue #750: the SERVER side of the same 50k walk ──────────────────
-  //
-  // The test above drives the client walk against a stub server; this one
-  // proves the gateway's windowed bootstrap route (#419) at the same volume:
-  // every response is bounded by `window` (no request serializes the full
-  // 50k-row shape into one JSON envelope), and the continuation token is a
-  // stateless resume cursor — the walk continues across a full vault-plane
-  // stop/reopen without losing or duplicating a row.
   test("the gateway pages 50k rows bounded and resumes its cursor across a restart", async () => {
     const logger = {
       info: () => undefined,
@@ -190,8 +176,6 @@ describe("replica-bootstrap.scale", () => {
     let restarted = false;
     let query = `?window=${WINDOW}`;
     for (;;) {
-      // Sequential by construction: each page's query embeds the previous
-      // page's continuation token.
       // oxlint-disable-next-line no-await-in-loop
       const result = await page(query);
       expect(result.status).toBe(200);
@@ -205,9 +189,6 @@ describe("replica-bootstrap.scale", () => {
       if (result.page.complete) break;
       expect(result.page.next).toBeTruthy();
       if (!restarted) {
-        // Stop the gateway's vault plane mid-walk and reopen it from disk: the
-        // continuation token must remain a valid resume point (same epoch, same
-        // shape catalog) across the restart.
         restarted = true;
         plane.stop();
         plane = openVaultPlane({ dir, logger, enableWalShipper: false });
@@ -216,13 +197,9 @@ describe("replica-bootstrap.scale", () => {
     }
     const durationMs = performance.now() - started;
 
-    // Bounded: no response carried more than one window — the full 50k-row
-    // shape was never loaded into a single JSON envelope.
     expect(maxRowsPerPage).toBeLessThanOrEqual(WINDOW);
     expect(pages).toBeGreaterThanOrEqual(Math.ceil(ROWS / WINDOW));
     expect(restarted).toBe(true);
-    // Resumable: every row arrived EXACTLY once across the restart boundary —
-    // no gap (seen.size) and no duplicate (delivered count).
     expect(seen.size).toBe(ROWS);
     expect(taskRowsDelivered).toBe(ROWS);
     expect(durationMs).toBeLessThan(30_000);

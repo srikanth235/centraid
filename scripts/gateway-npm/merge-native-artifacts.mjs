@@ -1,14 +1,4 @@
 #!/usr/bin/env node
-/**
- * Merge multi-platform tunnel NAPI artifacts into packages/tunnel/native/ (#511).
- *
- * Usage:
- *   node scripts/gateway-npm/merge-native-artifacts.mjs --from <dir> [--require]
- *
- * Expects `--from` to contain either:
- *   - flat: centraid-tunnel-native.*.node
- *   - or per-platform subdirs: linux-x64/*.node, darwin-arm64/*.node, …
- */
 import fs from "node:fs";
 import path from "node:path";
 
@@ -43,12 +33,7 @@ function parseArgs(argv) {
   return { from, require };
 }
 
-/**
- * @param {string} from Root directory to walk for .node files.
- * @returns {string[]} Absolute paths of .node files to copy.
- */
 export function collectNodeArtifacts(from) {
-  /** @type {string[]} */
   const out = [];
   if (!fs.existsSync(from)) return out;
 
@@ -64,14 +49,8 @@ export function collectNodeArtifacts(from) {
   return out;
 }
 
-/**
- * @param {string[]} sources Absolute paths of .node files.
- * @param {string} destDir Destination native/ directory.
- * @returns {string[]} Copied basenames.
- */
 export function copyArtifacts(sources, destDir) {
   fs.mkdirSync(destDir, { recursive: true });
-  /** @type {string[]} */
   const copied = [];
   for (const src of sources) {
     const base = path.basename(src);
@@ -100,7 +79,6 @@ function main() {
   }
   const copied = copyArtifacts(sources, DEST);
 
-  // Also list what is already in DEST (host build may have left one file)
   const present = fs
     .readdirSync(DEST)
     .filter(
@@ -126,7 +104,6 @@ function main() {
       `warn: ${msg} (pass --require or CENTRAID_REQUIRE_MULTI_NATIVE=1 to fail)`
     );
   }
-  // Touch a small manifest for pack debugging
   const manifestPath = path.join(DEST, "native-platforms.manifest.json");
   fs.writeFileSync(
     manifestPath,

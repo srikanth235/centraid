@@ -1,30 +1,10 @@
 #!/usr/bin/env node
-/**
- * Flake quarantine gate (#656 Layer 5).
- *
- * The protocol this enforces: a test that fails nondeterministically is moved
- * to `tests/quarantine.json#entries` with an issue and an expiry date, and excluded
- * from the required checks until then. It is never deleted inline (that loses
- * the coverage silently) and never retried-in-place until green (that converts
- * a real defect into latency). On expiry it returns fixed or is deleted with a
- * receipt — and the way this file makes that stick is that an expired entry is
- * a hard failure, so the debt cannot be parked forever.
- *
- * A quarantine list that only ever grows is a slow way of deleting a suite, so
- * the count is a down-only budget, ratcheted with the coverage floors.
- *
- * Usage:
- *   node scripts/test-report/quarantine.mjs            # validate (check:pr)
- *   node scripts/test-report/quarantine.mjs --exclude  # print runner excludes
- *   node scripts/test-report/quarantine.mjs --json     # machine-readable state
- */
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const QUARANTINE_PATH = path.join(root, "tests/quarantine.json");
 
-/** `YYYY-MM-DD` → epoch ms at UTC midnight, or null when unparseable. */
 export function parseDay(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value))
     return null;
@@ -32,16 +12,6 @@ export function parseDay(value) {
   return Number.isFinite(at) ? at : null;
 }
 
-/**
- * Validate a quarantine document against the protocol.
- *
- * `nowMs` is a parameter rather than a `Date.now()` call so the gate's own
- * tests can prove the expiry boundary instead of asserting around it.
- *
- * @param {unknown} document Parsed `tests/quarantine.json` (tests in `entries`, lane parks in `lanes` since #915 Wave 4).
- * @param {number} nowMs Wall-clock reference.
- * @returns {{ errors: string[], entries: object[] }} Violations and entries.
- */
 export function validateQuarantine(document, nowMs) {
   const errors = [];
   if (!document || typeof document !== "object")
@@ -108,7 +78,6 @@ export function validateQuarantine(document, nowMs) {
   return { errors, entries };
 }
 
-/** @returns {object} Parsed quarantine document. */
 export function readQuarantine(file = QUARANTINE_PATH) {
   return JSON.parse(readFileSync(file, "utf8"));
 }

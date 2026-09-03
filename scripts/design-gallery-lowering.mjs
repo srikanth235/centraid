@@ -1,17 +1,3 @@
-// The BI and MO capture lanes of `design-gallery.mjs`.
-//
-// These two surfaces have NO DOM the product renders: `toBlueprintCss()` and
-// `toNativeTheme()` are LOWERINGS, and an inline blueprint app needs a gateway
-// and a vault to paint while a React Native surface has no document at all.
-// So each lane photographs the lowering itself — a sheet of its own RESOLVED
-// custom properties, every colour as a swatch, every value spelled out in
-// full. That fences "this lowering reaches this surface with the values the
-// registry declares", which is the whole of the claim, and it depicts nothing
-// the platform does not emit.
-//
-// This is not the fixture #799 deleted. The fixture invented a component
-// vocabulary — `.kit-panel`, `.kit-btn`, `.row`, `.notice` — and photographed
-// it as if it were the product. Nothing here renders a component.
 import { toFontFaceCss } from "../packages/design/src/font-faces.ts";
 import {
   fonts,
@@ -19,8 +5,6 @@ import {
   toNativeTheme,
 } from "../packages/design/src/index.ts";
 
-/** Where the served dist answers for the vendored faces — the same literal
- *  path `apps/web/vite.config.ts` bakes into the shell's token CSS. */
 const FONT_BASE = "/fonts";
 const SANS = fonts.sans;
 
@@ -40,18 +24,6 @@ function nativeTokenCss(scheme) {
     vars.push(`--sp-${key}: ${value}px;`);
   for (const [key, value] of Object.entries(theme.type))
     vars.push(
-      // The family is the product's, not `system-ui`: this sheet loads the
-      // same Instrument Sans faces the product does, as `.woff2` (#799 — the
-      // `system-ui` literal here was the fidelity bug that made these
-      // baselines OS-dependent).
-      //
-      // One KNOWN divergence, ruled 2026-08-19 (docs/decisions.md): native
-      // draws the 400 register in a 470 face to compensate for CoreText's
-      // lighter rasterization at the touch size delta. This sheet keeps
-      // `value.weight`, so the gallery depicts the ramp's SPECIFICATION and
-      // the phone deliberately differs from it on that one axis. Do not
-      // "fix" this by teaching the gallery about the 470 — the baselines
-      // photograph the contract, not the device.
       `--t-${kebab(key)}: ${value.weight} ${value.fontSize}px/${value.lineHeight}px '${SANS}';`
     );
   vars.push(
@@ -65,7 +37,6 @@ function nativeTokenCss(scheme) {
   return `:root { ${vars.join(" ")} }`;
 }
 
-/** Every custom property the lowering declares, in declaration order. */
 function tokenNames(css) {
   const names = [];
   const seen = new Set();
@@ -78,12 +49,6 @@ function tokenNames(css) {
   return names;
 }
 
-/**
- * A page that carries the lowering and nothing else. The rows are filled in
- * from the RESOLVED computed values once the page is live (a `var()` chain
- * cannot be resolved in Node), so what the baseline shows is what the surface
- * actually gets, not what the emitter's source text says.
- */
 function loweringSheetHtml({ surface, scheme, css }) {
   return `<!doctype html>
 <html data-theme="${scheme}">
@@ -106,7 +71,6 @@ body { margin: 0; background: var(--bg); color: var(--text); font: var(--t-body)
 </main></body></html>`;
 }
 
-/** Fill the sheet from the resolved custom properties. */
 async function paintLoweringSheet(page, names) {
   return page.evaluate((tokens) => {
     const sheet = document.querySelector(".sheet");
@@ -134,16 +98,9 @@ async function paintLoweringSheet(page, names) {
   }, names);
 }
 
-/**
- * Capture one lowering lane. `assert*` are passed in rather than imported:
- * they belong to the gate's contract half, and this module owns only the
- * rendering half.
- */
 export async function captureLowering(page, origin, entry, assertions) {
   const css =
     entry.surface === "BI" ? toBlueprintCss() : nativeTokenCss(entry.scheme);
-  // Navigated first, not `setContent` alone: the sheet must be same-origin
-  // with the served dist so `/fonts/*.woff2` resolves to the vendored bytes.
   await page.goto(`${origin}/`, { waitUntil: "commit" });
   await page.setContent(
     loweringSheetHtml({ css, scheme: entry.scheme, surface: entry.surface }),

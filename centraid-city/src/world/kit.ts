@@ -1,25 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit — a flat catalog of 69 independent
-// geometry primitives with no internal coupling; splitting it would scatter one lookup
-// table across files without reducing what a reader has to hold. Revisit in #704.
-// kit.ts — shared landmark geometry kit. See KIT_API.md for the full contract.
-//
-// Aesthetic: precision architectural model — basswood-and-brass massing on a blueprint
-// table. Restrained neutral bodies, lavish silhouettes, district colour only on signage,
-// seams, ports and beacons.
-//
-// CONVENTIONS (every builder honours these):
-//   * Every builder returns a THREE.Object3D and positions itself from `opts`
-//     ({ x, y, z, rotY } where sensible). Nothing assumes it is alone in its group.
-//   * VOLUMES are CENTRED on `y` — box, drum, vault, wedge, curtainWall, punchedWindows,
-//     ribbedFacade, louvers, masonryBands. So `kit.box(w, h, d, m, { y: h / 2 })` sits on
-//     the plate, matching the KIT_API example.
-//   * EVERYTHING ELSE sits with its BASE at `y` and builds upward — roofs, domes, prisms,
-//     hulls, structure and props. `kit.roofGable(w, d, rise, m, { y: h })` caps a box of
-//     height h.
-//   * Meshes get castShadow/receiveShadow, except glass and glow (unlit) materials.
-//   * Materials come only from the injected factories, so they stay cached + night-aware.
-//   * Repeated sub-parts (columns, fins, ribs, treads, mullions) are merged into a single
-//     BufferGeometry before they become a mesh — one draw call per rhythm, not per part.
 
 import type {
   BufferGeometry,
@@ -88,8 +67,6 @@ export function makeKit(
   THREE: ThreeNamespace,
   { facadeMat, plainMat, glowMat, animated }: KitDependencies
 ): CityKit {
-  /* ------------------------------------------------------------------ helpers */
-
   const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
   const _mtx = new THREE.Matrix4();
   const _quat = new THREE.Quaternion();
@@ -99,8 +76,6 @@ export function makeKit(
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const TAU = Math.PI * 2;
 
-  // Defensive coercion — landmarks are written by other hands, so a missing/zero/NaN
-  // dimension must degrade to something sane instead of producing NaN geometry.
   const D = (v, dflt) =>
     typeof v === "number" && Number.isFinite(v) && Math.abs(v) > 1e-4
       ? v
@@ -111,9 +86,6 @@ export function makeKit(
   const O = (o: KitOptions | undefined): KitOptions =>
     o && typeof o === "object" ? o : {};
 
-  // Point normaliser: accepts [x, z], [x, y, z] and THREE.Vector3 alike. KIT_API.md never
-  // pinned the arity and the lanes used all three, so every point-taking helper goes
-  // through this.
   function toVec3(p, defaultY = 0) {
     if (!p) return V3(0, defaultY, 0);
     if (p.isVector3) return V3(N(p.x, 0), N(p.y, defaultY), N(p.z, 0));
@@ -129,13 +101,11 @@ export function makeKit(
   const toVec3List = (pts, defaultY = 0) =>
     Array.isArray(pts) ? pts.map((p) => toVec3(p, defaultY)) : [];
 
-  // Deterministic jitter — stable across reloads, unlike Math.random().
   const rnd = (i, salt = 0) => {
     const x = Math.sin((i + 1) * 127.1 + salt * 311.7) * 43758.5453;
     return x - Math.floor(x);
   };
 
-  // Materials that must never cast/receive shadows (unlit glow, smoked glass).
   const noShadow = new Set();
   const isNoShadow = (m) =>
     !m || m.isMeshBasicMaterial === true || noShadow.has(m);
@@ -172,8 +142,6 @@ export function makeKit(
     return geo;
   }
 
-  // Manual merge — no BufferGeometryUtils dependency. All inputs are geometries created
-  // inside this module, so disposing them afterwards is safe.
   function mergeGeos(geos) {
     const list = [];
     for (const g of geos) {
@@ -217,7 +185,6 @@ export function makeKit(
     return out;
   }
 
-  // A box beam running from a to b (arrays or Vector3) — struts, braces, cables, rails.
   function strutGeo(a, b, t, t2 = t) {
     const A = toVec3(a);
     const B = toVec3(b);
@@ -231,7 +198,6 @@ export function makeKit(
     return g;
   }
 
-  // Round tube from a to b.
   function tubeGeo(a, b, r, seg = 6) {
     const A = toVec3(a);
     const B = toVec3(b);
@@ -245,7 +211,6 @@ export function makeKit(
     return g;
   }
 
-  // Tapered rectangular solid, base at y=0.
   function frustumGeo(wb, db, wt, dt, h) {
     const b = [
       [-wb / 2, 0, db / 2],
@@ -286,13 +251,9 @@ export function makeKit(
     return g;
   }
 
-  // Square chamfer cap: a 4-sided frustum whose top is inset by `c` on every edge.
   const chamferGeo = (w, d, h, c) =>
     frustumGeo(w, d, Math.max(0.05, w - 2 * c), Math.max(0.05, d - 2 * c), h);
 
-  /* ------------------------------------------------------------------ materials */
-
-  // Neutral palette. Bodies live here; district colour is an accent only.
   const MAT_SPEC: Record<
     string,
     { hex: string; rough: number; metal: number }
@@ -316,7 +277,6 @@ export function makeKit(
     const s = MAT_SPEC[key];
     mat[key] = plainMat(s.hex, { rough: s.rough, metal: s.metal });
   }
-  // Smoked glass reads best without shadow contribution.
   noShadow.add(mat.glass);
 
   const matWindows = (hex) => facadeMat(hex || "#d9d3c6");
@@ -344,11 +304,6 @@ export function makeKit(
     });
   };
 
-  /* ------------------------------------------------------------------ volumes */
-
-  // box — centred on y. opts { x, y, z, rotY, windows, bevel }
-  //   windows: true applies the window UV mapping (pass kit.matWindows(hex) as `m`);
-  //            a hex string does both.
   function box(rw, rh, rd, m, rawOpts) {
     const opts = O(rawOpts);
     const w = Math.abs(D(rw, 4));
@@ -375,7 +330,6 @@ export function makeKit(
     return mesh(mergeGeos([body, cap]), material, opts);
   }
 
-  // drum — centred on y. opts { seg = 16, y, open, x, z, rotY }
   function drum(rTop, rBot, rh, m, rawOpts) {
     const opts = O(rawOpts);
     const seg = clamp(Math.round(D(opts.seg, 16)), 3, 24);
@@ -391,7 +345,6 @@ export function makeKit(
     return mesh(geo, M(m, mat.bone), opts);
   }
 
-  // dome — hemisphere, base at y. opts { y, ratio = 0.6, seg = 18 }
   function dome(rr, m, rawOpts) {
     const opts = O(rawOpts);
     const r = Math.abs(D(rr, 3));
@@ -410,9 +363,6 @@ export function makeKit(
     return mesh(geo, M(m, mat.copper), opts);
   }
 
-  // vault — barrel-vaulted volume, CENTRED on y. Default: the arc crosses `w` and the
-  // vault is extruded along `d` (ridge runs along Z). `opts.axis = 'x'` flips it so the
-  // ridge runs along X instead.
   function vault(rw, rh, rd, m, rawOpts) {
     const opts = O(rawOpts);
     if (opts.axis === "x") {
@@ -447,7 +397,6 @@ export function makeKit(
         0
       ),
     ];
-    // solid tympana so the ends read closed
     const tym = [];
     for (const sz of [d / 2 - 0.16, -d / 2 + 0.16]) {
       const s = new THREE.Shape();
@@ -465,7 +414,6 @@ export function makeKit(
     return g;
   }
 
-  // Half-tube shell, base at y=0, axis along Z.
   function barrelGeo(w, rise, d, t = 0.4) {
     const s = new THREE.Shape();
     s.moveTo(w / 2, 0);
@@ -481,8 +429,6 @@ export function makeKit(
     return xf(g, 0, 0, -d / 2);
   }
 
-  // prismShape — extrude an arbitrary footprint [[x,z], …] (pairs, triples or Vector3).
-  // CENTRED on y like the other volumes: spans -depth/2 … +depth/2.
   function prismShape(points, rdepth, m, rawOpts) {
     const opts = O(rawOpts);
     const pts = toVec3List(points);
@@ -510,7 +456,6 @@ export function makeKit(
     return mesh(geo, M(m, mat.bone), opts);
   }
 
-  // wedge — battered mass, wider at the base. CENTRED on y. opts { taper = 0.62 }
   function wedge(rw, rh, rd, m, rawOpts) {
     const opts = O(rawOpts);
     const w = Math.abs(D(rw, 4));
@@ -521,7 +466,6 @@ export function makeKit(
     return mesh(geo, M(m, mat.concrete), opts);
   }
 
-  // hull — barge hull. CENTRED on y: keel at -depth/2, deck at +depth/2.
   function hull(rlen, rbeam, rdepth, m, rawOpts) {
     const opts = O(rawOpts);
     const len = Math.abs(D(rlen, 12));
@@ -549,9 +493,6 @@ export function makeKit(
     return mesh(geo, M(m, mat.steel), opts);
   }
 
-  /* ------------------------------------------------------------------ roofs */
-
-  // roofGable — ridge along Z, gable ends face ±Z. Base at y. opts { overhang, rotY }
   function roofGable(w, d, rise, m, opts: KitOptions = {}) {
     const oh = opts.overhang ?? 0.35;
     const W = w + oh * 2;
@@ -573,7 +514,6 @@ export function makeKit(
     push(A, C, F, A, F, Dp);
     push(C, B, E, C, E, F);
     push(Dp, E, B, Dp, B, A);
-    // ridge cap + eaves fascia
     const parts = [
       rawGeo(v),
       xf(new THREE.BoxGeometry(0.42, 0.3, Dtot + 0.2), 0, rise - 0.06, 0),
@@ -583,7 +523,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.slate, opts);
   }
 
-  // roofHipped — four slopes, ridge along the longer axis. Base at y.
   function roofHipped(w, d, rise, m, opts: KitOptions = {}) {
     const swap = w > d;
     const W = swap ? d : w;
@@ -618,14 +557,11 @@ export function makeKit(
     return mesh(geo, m || mat.slate, opts);
   }
 
-  // roofSawtooth — north-light studio roof. Sloped opaque sheets + vertical glazed faces.
-  // Bays run along X; the glazed faces look toward -X ("north"). Base at y.
   function roofSawtooth(w, d, rise, bays, m, opts: KitOptions = {}) {
     const g = group(opts);
     const n = Math.max(1, Math.min(bays || 4, 10));
     const bw = w / n;
     const t = opts.thick ?? 0.34;
-    // zig-zag ribbon profile in XY, extruded across the depth
     const s = new THREE.Shape();
     s.moveTo(-w / 2, 0);
     for (let i = 0; i < n; i++) {
@@ -645,7 +581,6 @@ export function makeKit(
     });
     xf(sheet, 0, 0, -d / 2);
     g.add(mesh(sheet, m || mat.slate));
-    // glazed vertical faces + their mullions
     const glassParts = [];
     const barParts = [];
     for (let i = 0; i < n; i++) {
@@ -678,7 +613,6 @@ export function makeKit(
     return g;
   }
 
-  // roofBarrel — half-cylinder along Z, optional clerestory drum band beneath.
   function roofBarrel(w, d, rise, m, opts: KitOptions = {}) {
     const g = group(opts);
     const cler = opts.clerestory ? Math.min(rise * 0.5, 1.6) : 0;
@@ -707,7 +641,6 @@ export function makeKit(
     const shell = barrelGeo(w, rise, d, Math.min(0.45, rise * 0.3));
     xf(shell, 0, cler, 0);
     const parts = [shell];
-    // ribs across the vault
     const ribs = Math.max(3, Math.round(d / 3.2));
     for (let i = 0; i <= ribs; i++) {
       const z = -d / 2 + (d * i) / ribs;
@@ -718,7 +651,6 @@ export function makeKit(
     return g;
   }
 
-  // roofPyramid — campanile / tower cap. Base at y.
   function roofPyramid(w, d, rise, m, opts: KitOptions = {}) {
     const hw = w / 2;
     const hd = d / 2;
@@ -739,11 +671,9 @@ export function makeKit(
       rawGeo(v),
       xf(new THREE.BoxGeometry(w + 0.3, 0.3, d + 0.3), 0, 0.06, 0),
     ];
-    // hip arrises in a contrasting metal read as seams; keep them in the same merge
     return mesh(mergeGeos(parts), m || mat.copper, opts);
   }
 
-  // roofStepped — ziggurat. Base at y.
   function roofStepped(w, d, h, stepCount, m, opts: KitOptions = {}) {
     const n = Math.max(1, Math.min(stepCount || 3, 8));
     const sh = h / n;
@@ -763,7 +693,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.concrete, opts);
   }
 
-  // roofMansard — steep lower slope, shallow deck above, dormers on +Z. Base at y.
   function roofMansard(w, d, h, m, opts: KitOptions = {}) {
     const g = group(opts);
     const lower = h * 0.64;
@@ -807,7 +736,6 @@ export function makeKit(
     return g;
   }
 
-  // roofParapet — flat roof with a raised rim and a coping band. Base at y.
   function roofParapet(w, d, m, opts: KitOptions = {}) {
     const g = group(opts);
     const h = opts.h ?? 0.95;
@@ -850,13 +778,11 @@ export function makeKit(
     return g;
   }
 
-  // roofCone — silo cap. Base at y.
   function roofCone(r, h, m, opts: KitOptions = {}) {
     const geo = xf(new THREE.ConeGeometry(r, h, 14), 0, h / 2, 0);
     return mesh(geo, m || mat.copper, opts);
   }
 
-  // roofDomeRibbed — ribbed copper dome with a base ring. Base at y.
   function roofDomeRibbed(r, m, opts: KitOptions = {}) {
     const g = group(opts);
     const ratio = opts.ratio ?? 0.62;
@@ -874,7 +800,6 @@ export function makeKit(
         8,
         Math.PI / 2
       );
-      // torus arc lies in XY from (r,0) to (0,r) — a meridian; rotate into place
       xf(rg, 0, 0, 0, 0, (i / nribs) * TAU, 0, 1, ratio, 1);
       ribs.push(rg);
     }
@@ -918,10 +843,6 @@ export function makeKit(
     return g;
   }
 
-  /* ------------------------------------------------------------ facades & structure */
-
-  // curtainWall — glazed skin with a real mullion grid. CENTRED on y.
-  // opts { faces: 'front' | 'all', cols, rows, y, x, z, rotY }
   function curtainWall(w, h, d, m, opts: KitOptions = {}) {
     const g = group(opts);
     const all = opts.faces === "all";
@@ -968,7 +889,6 @@ export function makeKit(
           : put(0.12, h - 0.1, span - 0.1, 0, 0)
       );
     }
-    // recessed core so the glazing reads as a skin, not a solid
     g.add(
       mesh(
         new THREE.BoxGeometry(w - 0.5, h - 0.3, d - 0.5),
@@ -980,7 +900,6 @@ export function makeKit(
     return g;
   }
 
-  // punchedWindows — solid mass with recessed openings. CENTRED on y.
   function punchedWindows(w, h, d, cols, rows, m, opts: KitOptions = {}) {
     const g = group(opts);
     g.add(mesh(new THREE.BoxGeometry(w, h, d), m || mat.bone));
@@ -1027,7 +946,6 @@ export function makeKit(
     return g;
   }
 
-  // ribbedFacade — vertical fin / pilaster rhythm over a solid body. CENTRED on y.
   function ribbedFacade(w, h, d, fins, m, opts: KitOptions = {}) {
     const g = group(opts);
     const body = m || mat.bone;
@@ -1058,7 +976,6 @@ export function makeKit(
     return g;
   }
 
-  // louvers — angled slats in a frame. CENTRED on y.
   function louvers(w, h, d, count, m, opts: KitOptions = {}) {
     const g = group(opts);
     const n = Math.max(2, Math.min(count || 8, 22));
@@ -1106,7 +1023,6 @@ export function makeKit(
         }
       }
     }
-    // frame posts
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
         parts.push(
@@ -1122,7 +1038,6 @@ export function makeKit(
     return g;
   }
 
-  // masonryBands — horizontal course lines over a solid body. CENTRED on y.
   function masonryBands(w, h, d, m, opts: KitOptions = {}) {
     const g = group(opts);
     const body = m || mat.terracotta;
@@ -1141,7 +1056,6 @@ export function makeKit(
     return g;
   }
 
-  // Fluted shaft with entasis — a real scalloped surface, not decal ridges.
   function shaftGeo(R, h, flutes) {
     const ringCount = 5;
     const segCount = flutes > 0 ? flutes * 4 : 12;
@@ -1176,8 +1090,6 @@ export function makeKit(
     return rawGeo(v);
   }
 
-  // colonnade — a row of columns spread along X over `span`, base at y.
-  // opts { fluted, entablature, x, y, z, rotY, flutes }
   function colonnade(count, r, h, span, m, opts: KitOptions = {}) {
     const g = group(opts);
     const n = Math.max(2, Math.min(count || 6, 16));
@@ -1186,7 +1098,6 @@ export function makeKit(
     const parts = [];
     for (let i = 0; i < n; i++) {
       const x = n === 1 ? 0 : -span / 2 + (span * i) / (n - 1);
-      // plinth + torus base, shaft with entasis, capital: echinus + abacus
       parts.push(
         xf(
           new THREE.BoxGeometry(r * 2.7, h * 0.045, r * 2.7),
@@ -1221,9 +1132,7 @@ export function makeKit(
       const ey = h * 0.085 + shaftH + h * 0.085;
       const ew = span + r * 3.4;
       ent.push(
-        // architrave
         xf(new THREE.BoxGeometry(ew, h * 0.055, r * 2.9), 0, ey + h * 0.028, 0),
-        // frieze
         xf(new THREE.BoxGeometry(ew, h * 0.06, r * 2.7), 0, ey + h * 0.086, 0)
       );
       g.add(mesh(mergeGeos(ent), m || mat.bone));
@@ -1234,7 +1143,6 @@ export function makeKit(
         0
       );
       g.add(mesh(cor, opts.cornMat || mat.brass));
-      // triglyph rhythm on the frieze
       const tg = [];
       for (let i = 0; i < n * 2 - 1; i++) {
         const x = -span / 2 + (span * i) / (n * 2 - 2);
@@ -1252,7 +1160,6 @@ export function makeKit(
     return g;
   }
 
-  // arcade — a wall of repeated arched openings. Base at y, wall spans w along X, d thick.
   function arcade(count, w, h, d, m, opts: KitOptions = {}) {
     const n = Math.max(1, Math.min(count || 4, 12));
     const s = new THREE.Shape();
@@ -1280,7 +1187,6 @@ export function makeKit(
       curveSegments: 8,
     });
     xf(wall, 0, 0, -d / 2);
-    // impost band + cornice
     const parts = [
       wall,
       xf(new THREE.BoxGeometry(w, 0.2, d + 0.22), 0, sp, 0),
@@ -1299,7 +1205,6 @@ export function makeKit(
     return g;
   }
 
-  // pilotis — a building raised on legs. Base at y; legs of height h under a w×d plate.
   function pilotis(w, d, h, m, opts: KitOptions = {}) {
     const g = group(opts);
     const cols = Math.max(2, opts.cols || Math.round(w / 4.5));
@@ -1320,7 +1225,6 @@ export function makeKit(
     return g;
   }
 
-  // truss — lattice beam along X, base at y, spanning [-len/2, len/2].
   function truss(len, h, m, opts: KitOptions = {}) {
     const segs = Math.max(
       2,
@@ -1360,7 +1264,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.steel, opts);
   }
 
-  // latticeMast — openwork tower with legs, ring braces and X cross-bracing. Base at y.
   function latticeMast(h, w, m, opts: KitOptions = {}) {
     const segs = Math.max(
       3,
@@ -1381,7 +1284,6 @@ export function makeKit(
         const b = corner(i + 1, c);
         parts.push(strutGeo(a, b, t));
       }
-      // 4 side faces get an X brace each
       const order = [0, 1, 3, 2];
       for (let f = 0; f < 4; f++) {
         const c1 = order[f];
@@ -1403,7 +1305,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.steel, opts);
   }
 
-  // gantry — portal frame straddling a track along X. Base at y.
   function gantry(span, h, m, opts: KitOptions = {}) {
     const g = group(opts);
     const legW = opts.legW ?? Math.max(0.5, span * 0.05);
@@ -1449,7 +1350,6 @@ export function makeKit(
     return g;
   }
 
-  // catwalk — a ring deck with railing at radius r, base at y.
   function catwalk(r, y, m, opts: KitOptions = {}) {
     const g = group({ ...opts, y: y || 0 });
     const seg = 20;
@@ -1493,7 +1393,6 @@ export function makeKit(
     return g;
   }
 
-  // railing — posts + two rails along [[x,z] | [x,y,z] | Vector3, …], base-anchored at y.
   function railing(points, y, m, rawOpts) {
     const opts = O(rawOpts);
     const pts = toVec3List(points);
@@ -1527,7 +1426,6 @@ export function makeKit(
     });
   }
 
-  // stairFlight — an open flight of width w climbing `rise` over `run` toward +Z. Base at y.
   function stairFlight(w, rise, run, m, opts: KitOptions = {}) {
     const n = Math.max(2, Math.min(Math.round(rise / 0.3), 26));
     const parts = [];
@@ -1553,7 +1451,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.steel, opts);
   }
 
-  // spiralStair — treads winding around a central pole. Base at y.
   function spiralStair(r, h, m, opts: KitOptions = {}) {
     const n = Math.max(6, Math.min(Math.round(h / 0.34), 40));
     const turns = opts.turns ?? 1.25;
@@ -1580,7 +1477,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.steel, opts);
   }
 
-  // steps — entry stairs: top tread against the building (z=0), descending toward +z.
   function steps(w, d, count, m, opts: KitOptions = {}) {
     const n = Math.max(1, Math.min(count || 4, 14));
     const rise = opts.rise ?? 0.3;
@@ -1597,7 +1493,6 @@ export function makeKit(
         )
       );
     }
-    // cheek walls
     for (const sx of [-1, 1]) {
       parts.push(
         xf(
@@ -1611,7 +1506,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.bone, opts);
   }
 
-  // buttress — a battered pier projecting +X from a wall. Base at y.
   function buttress(h, d, m, opts: KitOptions = {}) {
     const w = opts.w ?? 0.8;
     const s = new THREE.Shape();
@@ -1629,9 +1523,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.bone, opts);
   }
 
-  /* ------------------------------------------------------------------ props */
-
-  // pipeRun — tubes + elbow spheres along [[x,y,z] | [x,z] | Vector3, …].
   function pipeRun(points, rr, m, rawOpts) {
     const opts = O(rawOpts);
     const pts = toVec3List(points, opts.y0 || 0);
@@ -1658,7 +1549,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), M(m, mat.steel), opts);
   }
 
-  // ductRun — rectangular duct along X with flange ribs. Base-centred on y.
   function ductRun(w, len, m, opts: KitOptions = {}) {
     const parts = [xf(new THREE.BoxGeometry(len, w, w), 0, 0, 0)];
     const n = Math.max(2, Math.min(Math.round(len / 2), 12));
@@ -1669,7 +1559,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.steel, opts);
   }
 
-  // dish — aimable parabolic dish. opts { az, el, aim: [x,y,z], y, x, z }
   function dish(r, m, opts: KitOptions = {}) {
     const yaw = group({ x: opts.x || 0, y: opts.y || 0, z: opts.z || 0 });
     let az = opts.az || 0;
@@ -1683,7 +1572,6 @@ export function makeKit(
     const tilt = group({});
     tilt.rotation.x = Math.PI / 2 - el;
     yaw.add(tilt);
-    // parabolic shell via lathe: inner face then offset back
     const t = Math.max(0.06, r * 0.06);
     const pts = [];
     const segCount = 6;
@@ -1699,7 +1587,6 @@ export function makeKit(
     }
     const shell = new THREE.LatheGeometry(pts, 14);
     tilt.add(mesh(shell, M(m, mat.bone)));
-    // feed mast + tripod legs share the steel material — one merged draw call
     const legs = [
       xf(
         new THREE.CylinderGeometry(r * 0.06, r * 0.06, r * 0.9, 6),
@@ -1726,7 +1613,6 @@ export function makeKit(
         { y: r * 0.92 }
       )
     );
-    // yoke + pedestal live in the un-tilted frame
     yaw.add(
       mesh(
         new THREE.CylinderGeometry(r * 0.14, r * 0.2, r * 0.5, 8),
@@ -1737,7 +1623,6 @@ export function makeKit(
     return yaw;
   }
 
-  // mast — a tapered pole with collars. Base at y.
   function mast(h, m, opts: KitOptions = {}) {
     const r = opts.r ?? Math.max(0.12, h * 0.02);
     const parts = [
@@ -1759,7 +1644,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.steel, opts);
   }
 
-  // aerial — a whip antenna with cross elements. Base at y.
   function aerial(h, m, opts: KitOptions = {}) {
     const parts = [
       xf(new THREE.CylinderGeometry(0.045, 0.09, h, 6), 0, h / 2, 0),
@@ -1774,7 +1658,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.steel, opts);
   }
 
-  // vent — a stack with a cowl. Base at y.
   function vent(r, h, m, opts: KitOptions = {}) {
     const parts = [
       xf(new THREE.CylinderGeometry(r, r, h, 10), 0, h / 2, 0),
@@ -1809,7 +1692,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), m || mat.steel, opts);
   }
 
-  // fan — housing ring with a spinning 4-blade rotor. Base at y (axis vertical).
   function fan(r, m, opts: KitOptions = {}) {
     const g = group(opts);
     const body = m || mat.steel;
@@ -1849,7 +1731,6 @@ export function makeKit(
     return g;
   }
 
-  // chimney — tapered stack with a corbelled cap and pots. Base at y.
   function chimney(r, h, m, opts: KitOptions = {}) {
     const parts = [
       frustumGeo(r * 2, r * 2, r * 1.55, r * 1.55, h),
@@ -1883,8 +1764,6 @@ export function makeKit(
     return g;
   }
 
-  // tank — vertical drum with dished ends, or horizontal on saddles if { lying: true }.
-  // CENTRED on y (the inner frame is built base-up then re-centred).
   function tank(rr, rh, m, rawOpts) {
     const opts = O(rawOpts);
     const r = Math.abs(D(rr, 1.6));
@@ -1991,7 +1870,6 @@ export function makeKit(
           )
         );
       }
-      // ladder
       for (const sz of [-0.16, 0.16]) {
         parts.push(
           xf(
@@ -2018,7 +1896,6 @@ export function makeKit(
     return g;
   }
 
-  // silo — corrugated cylinder with a conical cap and a ladder. CENTRED on y.
   function silo(rr, rh, m, rawOpts) {
     const opts = O(rawOpts);
     const r = Math.abs(D(rr, 2));
@@ -2074,7 +1951,6 @@ export function makeKit(
     return g;
   }
 
-  // crateStack — battened crates stacked in a w×d×h envelope. Base at y.
   function crateStack(w, h, d, m, opts: KitOptions = {}) {
     const cw = opts.crate ?? Math.min(1.9, w * 0.5);
     const cols = Math.max(1, Math.round(w / cw));
@@ -2115,8 +1991,6 @@ export function makeKit(
     return g;
   }
 
-  // container — a real shipping container: corrugated sides, rails, corner castings,
-  // door leaves with locking rods and handles. Length along X, doors at +X. CENTRED on y.
   function container(rw, rh, rd, hex, rawOpts) {
     const opts = O(rawOpts);
     const w = Math.abs(D(rw, 6));
@@ -2133,7 +2007,6 @@ export function makeKit(
     const parts = [
       xf(new THREE.BoxGeometry(w - 0.3, h - 0.3, d - 0.24), 0, h / 2, 0),
     ];
-    // corrugation ribs on both long sides + the blind end
     const n = Math.min(Math.max(4, Math.round(w / 0.55)), 26);
     for (let i = 0; i < n; i++) {
       const x = -w / 2 + (w * (i + 0.5)) / n;
@@ -2160,7 +2033,6 @@ export function makeKit(
         )
       );
     }
-    // doors share the body material, so they join the same merge (one draw call)
     for (const sz of [-1, 1]) {
       parts.push(
         xf(
@@ -2172,7 +2044,6 @@ export function makeKit(
       );
     }
     inner.add(mesh(mergeGeos(parts), body));
-    // steel frame: rails, posts, corner castings
     const fr = [];
     for (const sy of [0.14, h - 0.14]) {
       for (const sz of [-1, 1])
@@ -2205,7 +2076,6 @@ export function makeKit(
       }
     }
     inner.add(mesh(mergeGeos(fr), mat.darkSlate));
-    // door hardware: locking rods + handles
     const hw = [];
     for (const dz of [-0.34, -0.12, 0.12, 0.34]) {
       hw.push(
@@ -2227,7 +2097,6 @@ export function makeKit(
     return g;
   }
 
-  // bollards — merged posts at [[x,z] | [x,y,z] | Vector3, …]. Base-anchored.
   function bollards(points, m, rawOpts) {
     const opts = O(rawOpts);
     const pts = toVec3List(points);
@@ -2255,7 +2124,6 @@ export function makeKit(
     return mesh(mergeGeos(parts), M(m, mat.darkSlate), opts);
   }
 
-  // planter — a tub with soil and a shrub. Base at y.
   function planter(r, m, opts: KitOptions = {}) {
     const g = group(opts);
     const h = opts.h ?? r * 0.85;
@@ -2281,7 +2149,6 @@ export function makeKit(
     return g;
   }
 
-  // tree — trunk + canopy. opts { r, kind: 'round' | 'conifer', x, y, z }
   function tree(h, opts: KitOptions = {}) {
     const g = group(opts);
     const r = opts.r ?? h * 0.24;
@@ -2326,7 +2193,6 @@ export function makeKit(
     return g;
   }
 
-  // streetlamp — pole with a curved arm and a glowing head. Base at y.
   function streetlamp(h, m, opts: KitOptions = {}) {
     const g = group(opts);
     const arm = opts.arm ?? h * 0.28;
@@ -2346,7 +2212,6 @@ export function makeKit(
     return g;
   }
 
-  // flagpole — pole, finial and a flag. Base at y.
   function flagpole(h, m, opts: KitOptions = {}) {
     const g = group(opts);
     const parts = [
@@ -2368,7 +2233,6 @@ export function makeKit(
     return g;
   }
 
-  // signBand — the primary home of district colour: a glowing fascia in a dark surround.
   function signBand(w, h, hex, opts: KitOptions = {}) {
     const g = group(opts);
     const dep = opts.depth ?? 0.22;
@@ -2401,7 +2265,6 @@ export function makeKit(
     return g;
   }
 
-  // plaqueWall — a wall faced with a grid of small brass plaques. CENTRED on y.
   function plaqueWall(w, h, cols, rows, m, opts: KitOptions = {}) {
     const g = group(opts);
     const d = opts.d ?? 0.6;
@@ -2427,7 +2290,6 @@ export function makeKit(
     return g;
   }
 
-  // gaugeBoard — instrument panel: brass bezels, glowing needles and lamps. Faces +Z.
   function gaugeBoard(w, h, m, hex, opts: KitOptions = {}) {
     const g = group(opts);
     g.add(mesh(new THREE.BoxGeometry(w, h, 0.3), m || mat.darkSlate));
@@ -2473,7 +2335,6 @@ export function makeKit(
     return g;
   }
 
-  // splitFlapBoard — a departure board: flap cells, glowing rows, header band. Faces +Z.
   function splitFlapBoard(w, h, m, hex, opts: KitOptions = {}) {
     const g = group(opts);
     g.add(mesh(new THREE.BoxGeometry(w, h, 0.36), m || mat.darkSlate));
@@ -2517,7 +2378,6 @@ export function makeKit(
     return g;
   }
 
-  // clockFace — dial facing +Z with brass rim, ticks and live hands.
   function clockFace(rr, m, hex, rawOpts) {
     const opts = O(rawOpts);
     const r = Math.abs(D(rr, 1.4));
@@ -2536,7 +2396,6 @@ export function makeKit(
         M(m, mat.bone)
       )
     );
-    // hub shares the rim material — merged in rather than costing its own draw call
     const rim = [
       xf(new THREE.TorusGeometry(r * 1.02, r * 0.07, 5, 22), 0, 0, 0.02),
       xf(
@@ -2574,13 +2433,10 @@ export function makeKit(
     );
     g.add(hour);
     g.add(minute);
-    // world.ts already drives `{ type: 'clock', minute, hour }` — reuse that handler
-    // rather than introducing a second, conflicting one.
     animated.push({ type: "clock", hour, minute });
     return g;
   }
 
-  // weathervane — cross arms and a spinning arrow. Base at y.
   function weathervane(h, m, opts: KitOptions = {}) {
     const g = group(opts);
     const parts = [
@@ -2610,7 +2466,6 @@ export function makeKit(
     return g;
   }
 
-  // solarArray — rows of tilted panels on a merged steel frame. Base at y.
   function solarArray(w, d, m, opts: KitOptions = {}) {
     const g = group(opts);
     const rows = Math.max(1, Math.min(opts.rows || Math.round(d / 2.4), 8));
@@ -2640,7 +2495,6 @@ export function makeKit(
     return g;
   }
 
-  // wheel — a spoked flywheel in the XY plane (spins about Z). Centred on y.
   function wheel(r, m, opts: KitOptions = {}) {
     const g = group(opts);
     const rot = new THREE.Group();
@@ -2676,7 +2530,6 @@ export function makeKit(
     return g;
   }
 
-  // piston — cylinder body along X with a reciprocating rod + crosshead. Centred on y.
   function piston(len, r, m, opts: KitOptions = {}) {
     const g = group(opts);
     const body = m || mat.steel;
@@ -2747,10 +2600,7 @@ export function makeKit(
     return g;
   }
 
-  /* ------------------------------------------------------------------ animation */
-
   function beacon(x, y, z, hex, r = 0.55) {
-    // Deliberately uncached: each beacon owns its material so the pulses stay out of phase.
     const m = glowMat(hex || "#ffd479", 0.85);
     const o = mesh(new THREE.SphereGeometry(Math.abs(D(r, 0.55)), 8, 6), m, {
       x: N(x, 0),
@@ -2765,8 +2615,6 @@ export function makeKit(
     return o;
   }
 
-  // seam — a glowing line along [[x,y,z] | [x,z] | Vector3, …]. 2-element points sit at
-  // local y=0; `opts.y` always translates the finished seam.
   function seam(points, hex, rawOpts) {
     const opts = O(rawOpts);
     const wdt = Math.abs(D(opts.w, 0.16));
@@ -2821,11 +2669,8 @@ export function makeKit(
     return obj;
   }
 
-  // activityLamp — brightens with district activity when a districtId is supplied;
-  // otherwise it falls back to the shared beacon pulse so it is never a dead lamp.
   function activityLamp(hex, rawOpts) {
     const opts = O(rawOpts);
-    // Uncached for the same reason as beacon(): it is driven per-instance.
     const m = glowMat(hex || "#8fe3ff", D(opts.base, 0.5));
     const geo = opts.r
       ? new THREE.SphereGeometry(opts.r, 8, 6)
@@ -2847,10 +2692,6 @@ export function makeKit(
     return o;
   }
 
-  /* ------------------------------------------------------------------ export */
-
-  // Landmarks are authored independently; a bad argument must cost one detail, never the
-  // whole building. Every Object3D builder degrades to an empty Group instead of throwing.
   const safe = (fn, name) =>
     function kitBuilder(...args) {
       try {
@@ -2863,7 +2704,6 @@ export function makeKit(
     };
 
   const builders = {
-    // volumes
     box,
     drum,
     dome,
@@ -2871,7 +2711,6 @@ export function makeKit(
     prismShape,
     wedge,
     hull,
-    // roofs
     roofGable,
     roofHipped,
     roofSawtooth,
@@ -2882,7 +2721,6 @@ export function makeKit(
     roofParapet,
     roofCone,
     roofDomeRibbed,
-    // facades & structure
     curtainWall,
     punchedWindows,
     ribbedFacade,
@@ -2900,7 +2738,6 @@ export function makeKit(
     spiralStair,
     steps,
     buttress,
-    // props & fittings
     pipeRun,
     ductRun,
     dish,
@@ -2927,14 +2764,12 @@ export function makeKit(
     solarArray,
     wheel,
     piston,
-    // animation-bearing builders
     beacon,
     seam,
     activityLamp,
   };
 
   const kit = {
-    // materials
     mat,
     matWindows: (hex) => {
       try {
@@ -2957,7 +2792,6 @@ export function makeKit(
         return mat[baseKey] || mat.concrete;
       }
     },
-    // animation registrars (return their subject, never a Group)
     spin: (obj, speed, axis) => {
       try {
         return obj ? spin(obj, speed, axis) : obj;
@@ -2972,7 +2806,6 @@ export function makeKit(
         return obj;
       }
     },
-    // low-level utilities (handy for one-off bespoke bits inside a landmark)
     group,
     mesh,
     merge: mergeGeos,

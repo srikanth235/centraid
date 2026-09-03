@@ -1,8 +1,4 @@
-// main.ts — bootstrap: renderer, camera, controls, picking, camera tweens, frame loop.
-// Content (copy + city plan) comes from ./core/content.ts. Rendering lives in world/world.ts,
-// the economy in sim/sim.ts, the DOM in ui/ui.ts.
 // governance: allow-repo-hygiene file-size-limit — 709 lines against a 625 cap; the
-// bootstrap is one linear wiring sequence and an early split would just add indirection.
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -26,8 +22,6 @@ import {
 } from "./ui/ui.js";
 import { createWorld } from "./world/world.js";
 
-/* ------------------------------------------------------------------ content */
-
 let content: CityContent;
 let contentFallback = false;
 try {
@@ -39,8 +33,6 @@ try {
 }
 const meta = content.meta;
 const districtsData = content.districts;
-
-/* ------------------------------------------------------------------ renderer */
 
 const stage = document.querySelector<HTMLElement>("#stage")!;
 const renderer = new THREE.WebGLRenderer({
@@ -59,8 +51,6 @@ stage.append(renderer.domElement);
 const world = createWorld(content);
 const sim = createSim(content);
 const scene = world.scene;
-
-/* ------------------------------------------------------------------ camera */
 
 const bounds = new THREE.Box3();
 for (const d of districtsData) {
@@ -85,7 +75,6 @@ const camera = new THREE.PerspectiveCamera(
   1400
 );
 
-// Frame the whole plan for the current aspect ratio, looking in from the south-east.
 const HOME = {
   target: new THREE.Vector3(cityCenter.x, 4, cityCenter.z),
   pos: new THREE.Vector3(),
@@ -121,10 +110,6 @@ controls.maxPolarAngle = Math.PI * 0.487; // never dip under the ground plane
 controls.minPolarAngle = 0.12;
 controls.target.copy(HOME.target);
 
-// This is a map, so it obeys map conventions: left-drag grabs the ground and moves it, and a
-// modifier turns the same drag into an orbit. OrbitControls ships the inverse (left orbits,
-// right pans), which reads as a dead control to anyone who expects to drag the city around.
-// Two fingers on a trackpad pan too, since that gesture arrives as a wheel with ctrlKey unset.
 controls.mouseButtons = {
   LEFT: THREE.MOUSE.PAN,
   MIDDLE: THREE.MOUSE.PAN,
@@ -138,15 +123,10 @@ function setRotateModifier(on: boolean): void {
   rotateModifier = on;
   controls.mouseButtons.LEFT = on ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
 }
-// Shift/Ctrl/Cmd, matching every other 3D map. Space would also fire whichever chapter
-// button holds focus, so it stays out of this.
 const isRotateKey = (e) => e.shiftKey || e.ctrlKey || e.metaKey;
 window.addEventListener("keydown", (e) => setRotateModifier(isRotateKey(e)));
 window.addEventListener("keyup", (e) => setRotateModifier(isRotateKey(e)));
-// Releasing the key outside the window would otherwise latch the modifier on forever.
 window.addEventListener("blur", () => setRotateModifier(false));
-// A drag that starts with the modifier already held must orbit even if no key event
-// reached this window first (click into the page while holding Shift).
 renderer.domElement.addEventListener(
   "pointerdown",
   (e) => setRotateModifier(isRotateKey(e)),
@@ -154,8 +134,6 @@ renderer.domElement.addEventListener(
 );
 
 controls.update();
-
-/* ------------------------------------------------------------------ camera tween */
 
 const tween = {
   active: false,
@@ -179,7 +157,6 @@ function flyTo(targetVec: THREE.Vector3, distance: number, dur = 1.5): void {
     targetVec.y + distance * 0.66,
     targetVec.z + dir.z * distance * 0.92
   );
-  // keep the shot inside the orbit limits
   const d = pos.distanceTo(targetVec);
   if (d > controls.maxDistance)
     pos.lerp(targetVec, 1 - controls.maxDistance / d);
@@ -208,7 +185,6 @@ function focusDistrict(id: string, buildingId?: string | null): void {
     const b = rec.buildings.find((x) => x.data.id === buildingId);
     if (b) {
       const size = b.box.getSize(new THREE.Vector3());
-      // frame the building itself, not the neighbourhood around it
       flyTo(
         b.center.clone(),
         Math.max(19, Math.max(size.x, size.y, size.z) * 2.05)
@@ -234,8 +210,6 @@ function goHome(): void {
   controls.enabled = false;
 }
 
-/* ------------------------------------------------------------------ UI */
-
 const toast = createToast();
 const hoverTip = createHoverTip();
 const hud = createHud(content.hudStats, meta);
@@ -252,17 +226,6 @@ const districtNames = new Map<string, string>(
   districtsData.map((d) => [d.id, d.name || d.id])
 );
 
-// A chapter may pin the scenario it narrates, so the city actually shows what the text
-// claims — every Scenarios chapter does, and several walkthrough chapters do too.
-// Closing the card leaves that scenario running on purpose: the reader can keep watching
-// what the chapter set up, and the next chapter that pins one takes over from there.
-//
-// `at` is the position within the chapter: which page, whether the chapter itself just
-// changed, and the resolved building/flows for this page. The three things it drives run
-// on different clocks — the camera moves every page, the flow spotlight is set every page
-// (an absent `flows` releases it), but the scenario is pinned once on entering the
-// chapter. Re-pinning it per page would restart the scenario's own timers, e.g. the
-// offline drift that has to accumulate across the pages describing it.
 const tour = createTour(content.tour, {
   districtNames,
   onEnter: (c, at) => {
@@ -271,7 +234,6 @@ const tour = createTour(content.tour, {
     btnTour.classList.add("on");
     if (at.chapterChanged && c.scenarioId && c.scenarioId !== sim.scenario)
       sim.setScenario(c.scenarioId);
-    // world.ts may not expose the spotlight yet — never let a page turn throw
     if (typeof world.setFlowFocus === "function")
       world.setFlowFocus(at.flows || null);
   },
@@ -283,15 +245,11 @@ const tour = createTour(content.tour, {
   },
 });
 
-// Open on the first scenario content declares (the steady baseline) so the city is
-// already alive before anyone opens a chapter.
 const firstScenario = (content.scenarios || [])[0];
 if (firstScenario) sim.setScenario(firstScenario.id);
 
 const btnTour = document.querySelector<HTMLButtonElement>("#btnTour")!;
 const btnDayNight = document.querySelector<HTMLButtonElement>("#btnDayNight")!;
-// The top-bar button is the way into the book: it opens the table of contents rather
-// than starting a fixed sequence.
 btnTour.addEventListener("click", () => tour.togglePanel());
 document
   .querySelector<HTMLButtonElement>("#btnReset")!
@@ -311,8 +269,6 @@ btnDayNight.addEventListener("click", () => {
     nightTarget > 0.5 ? "Day" : "Night";
 });
 
-// OrbitControls only binds arrow keys when listenToKeyEvents() is called, which this
-// build never does — so the arrows are ours for page-turning.
 function isTypingTarget(t: EventTarget | null): boolean {
   if (!(t instanceof Element)) return false;
   return (
@@ -332,14 +288,12 @@ window.addEventListener("keydown", (e) => {
       clearSelection();
     }
   } else if (e.key === "ArrowRight" && tour.active) {
-    // left/right read straight through, page by page, across chapter boundaries
     e.preventDefault();
     tour.next();
   } else if (e.key === "ArrowLeft" && tour.active) {
     e.preventDefault();
     tour.prev();
   } else if (e.key === "ArrowDown" && tour.active) {
-    // up/down stay inside the chapter you are reading
     e.preventDefault();
     tour.nextInChapter();
   } else if (e.key === "ArrowUp" && tour.active) {
@@ -347,8 +301,6 @@ window.addEventListener("keydown", (e) => {
     tour.prevInChapter();
   }
 });
-
-/* ------------------------------------------------------------------ picking */
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2(-2, -2);
@@ -440,7 +392,6 @@ renderer.domElement.addEventListener("pointerdown", (e) => {
 renderer.domElement.addEventListener("pointerup", (e) => {
   pointerDown = null;
   if (pointerMoved) return;
-  // taps and synthetic clicks never send a pointermove first, so read the ray from the event
   pointerPx = { x: e.clientX, y: e.clientY };
   pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -584,8 +535,6 @@ function stateFor(districtId: string): InspectorState {
   return rows;
 }
 
-/* ------------------------------------------------------------------ resize */
-
 function resize(): void {
   const w = window.innerWidth;
   const h = window.innerHeight;
@@ -597,8 +546,6 @@ function resize(): void {
   renderer.shadowMap.needsUpdate = true;
 }
 window.addEventListener("resize", resize);
-
-/* ------------------------------------------------------------------ loop */
 
 const clock = new THREE.Clock();
 let elapsed = 0;
@@ -613,7 +560,6 @@ function frame(): void {
   const dt = Math.min(0.05, clock.getDelta());
   elapsed += dt;
 
-  // fps
   frames++;
   fpsAcc += dt;
   if (fpsAcc >= 0.5) {
@@ -622,7 +568,6 @@ function frame(): void {
     fpsAcc = 0;
   }
 
-  // camera tween
   if (tween.active) {
     tween.t += dt / tween.dur;
     const k = easeInOutCubic(Math.min(1, tween.t));
@@ -634,7 +579,6 @@ function frame(): void {
     }
   }
 
-  // keep the camera above ground and roughly over the city
   controls.target.x = THREE.MathUtils.clamp(
     controls.target.x,
     cityCenter.x - 180,
@@ -649,7 +593,6 @@ function frame(): void {
   controls.update();
   if (camera.position.y < 3) camera.position.y = 3;
 
-  // day / night
   if (Math.abs(nightNow - nightTarget) > 0.001) {
     nightNow += (nightTarget - nightNow) * Math.min(1, dt * 2.2);
     world.applyNight(nightNow);
@@ -659,8 +602,6 @@ function frame(): void {
   sim.drainEvents();
   world.update(dt, elapsed, sim);
 
-  // hover — raycasting the whole city is the most expensive thing per frame, so it runs
-  // at ~12 Hz and only when the pointer is actually over the canvas.
   hoverAcc += dt;
   if (!tween.active && pointer.x > -1.5 && hoverAcc >= 0.08) {
     hoverAcc = 0;
@@ -695,7 +636,6 @@ function frame(): void {
     hoverTip.move(pointerPx.x, pointerPx.y);
   }
 
-  // HUD + minimap at a calmer cadence
   hudAcc += dt;
   if (hudAcc >= 0.1) {
     hudAcc = 0;
@@ -716,12 +656,8 @@ function frame(): void {
   renderer.render(scene, camera);
 }
 
-/* ------------------------------------------------------------------ go */
-
-// small debug handle (renderer.info, sim state) — handy when tuning, harmless otherwise
 window.__city = { renderer, scene, camera, controls, world, sim };
 
-// one warm-up frame so the shadow map bakes with everything in place
 renderer.render(scene, camera);
 renderer.shadowMap.needsUpdate = true;
 renderer.render(scene, camera);
@@ -730,8 +666,6 @@ frame();
 createLoading(meta, () => {
   if (contentFallback)
     toast("core/content.ts not found — running the development fixture.", 5000);
-  // A shared link like …/#chapter-10 opens straight into that chapter once the scene is
-  // ready; otherwise settle on the establishing shot.
   tour.applyHash();
   if (!tour.active) goHome();
 });
