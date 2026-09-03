@@ -890,3 +890,50 @@ bun run --cwd packages/vault test -- src/gateway/work-counters.test.ts   # 9 pas
 bun run --cwd packages/server test -- src/serve/gateway-trace.test.ts    # 16 passed
 node node_modules/vitest/vitest.mjs run --config vitest.perf.config.ts   # ad-hoc A/B rig (not committed) — the four numbers above
 ```
+
+## w1-seats — the seats emit spans, and count the reads an action costs
+
+**Files**
+
+| Path | What |
+| --- | --- |
+| `packages/client/src/replica/work-counters.ts` (new) | The seat's `WorkCounters` registry — a third one, because this code runs in a browser, a worker and on Hermes where `@centraid/vault` and `node:*` do not exist. |
+| `packages/client/src/replica/trace.ts` (new) | `ClientTracer`: the seat span emitter, sampling off by default, `TraceIdFactory` injectable for Hermes. |
+| `packages/client/src/replica/trace-ring.ts` (new) | `ClientTraceRing` — the bounded in-memory buffer a flush drains; platform-free and separately testable. |
+| `packages/client/src/replica/trace.test.ts` (new) | 11 tests across the tracer, the ring, the two live-query counters and the transport counter. |
+| `packages/client/src/replica/live-query-registry.ts` | `invalidations` bumped once per invalidation FIRED, before fan-out. |
+| `packages/client/src/replica/live-query.ts` | `reReads` bumped where a read actually happens — after the dirty check and `matches()`. **This is #922's D4 reads-per-action counter; no second counter was added.** |
+| `packages/client/src/replica/shell-transport.ts` | `countedRoundTrip` wraps the one transport seam, so all six request paths — and any injected fetcher — count identically. |
+| `packages/client/src/replica/{index,native}.ts` | Export `trace.js` and `work-counters.js` on both barrels; the native barrel's DOM-free rule holds (neither module imports a DOM global or `node:`). |
+| `apps/mobile/src/lib/replica/native-trace.ts` (new) | The phone's tracer over `nativeReplicaIdFactory`, the `EXPO_PUBLIC_CENTRAID_TRACE` policy, and `flushNativeTraces` writing `<replicaStorage>/diagnostics/traces.jsonl`. `expo-file-system` is imported **lazily inside the flush**: a static import would pull Expo's native module graph into every unit test that reaches `background-sync.ts` (it did — `background-sync.test.ts` went red on `__DEV__ is not defined` until the import moved). |
+| `apps/mobile/src/lib/replica/native-trace.test.ts` (new) | 7 tests: default-off, drain-once, native minting, swallowed write failure. |
+| `apps/mobile/src/lib/replica/background-sync.ts` | One `flushNativeTraces()` in `runBackgroundReplicaSync`'s `finally`. |
+| `docs/logs.md`, `docs/mobile-offline.md` | The seats' counter→seam row, and the ring-buffer/flush rule in § "Background work and push privacy". |
+
+**Numbers** — host: this container, Linux 6.18 x64, 4 cores / 15 GB, Node 22. Volume: the golden year-3 vault via the w1-gateway A/B rig; the seat counters add no SQLite work, so the hot-path cost they carry is the same three integer bumps measured there. Spans on the seat cost what they cost on the gateway (a record built and pushed into an array, no I/O until a flush): the w1-gateway spans row, minus the file write.
+
+| Measurement | Before | After | Δ |
+| --- | --- | --- | --- |
+| `invalidations` + `reReads` per fired invalidation (2 fired, coalesced) | — | 2 invalidations / 1–2 re-reads | asserted in `trace.test.ts`, not timed — three integer increments |
+| `httpRoundTrips` per transport call | — | exactly 1, injected fetcher or default | asserted in `trace.test.ts` |
+| A non-matching invalidation | — | 1 invalidation, **0** re-reads | the fan-out regression the pair is for |
+
+**Deleted / replaced** — nothing. #922's D4 reads-per-action counter is REALIZED by `reReads` rather than built separately; a second counter would have been the duplication the ruling forbids.
+
+**Decisions**
+
+- The mobile flush lives in `runBackgroundReplicaSync`'s `finally`, not on a success path: a pass that timed out or threw still recorded spans worth reading, and those are the passes a developer is looking at. `flushNativeTraces` swallows its own failures for the same reason the gateway store does.
+- `httpRoundTrips` is counted by wrapping the fetcher rather than by six call-site bumps. A new request path in `shell-transport.ts` is then counted the day it is written, and the web shell's Iroh/webControl wrapper and the native fetcher are counted like the default instead of being invisible.
+- Three counter registries, not one: gateway (node), engine (node, no vault import), seat (browser/worker/Hermes). `addCounters` is the contract's own answer, and a shared mutable singleton across those runtimes does not exist to be shared.
+- `reReads` counts EXECUTIONS, not invalidations that matched: `LiveQuery` coalesces a burst into one run, and the honest number for "reads per action" is the number of times the runner ran.
+
+**Verification**
+
+```
+bun run --cwd packages/client typecheck                                   # tsc clean
+bun run --cwd apps/mobile typecheck                                       # tsc clean
+bun run --cwd packages/client test -- src/replica/trace.test.ts           # 11 passed
+bun run --cwd apps/mobile test -- src/lib/replica/native-trace.test.ts    # 7 passed
+bun run --cwd packages/client test                                        # 267 files, 2447 passed (engine lane)
+bun run --cwd apps/mobile test -- src/lib/replica/                        # 30 files, 214 passed (engine lane)
+```

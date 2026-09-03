@@ -23,6 +23,7 @@ import { MultiVaultReplicaSession } from "./multi-vault-session";
 import { NativeVaultChangeFeed } from "./native-change-feed";
 import { nativeReplicaDigest, nativeReplicaIdFactory } from "./native-hash";
 import { createNativeReplicaSession } from "./native-session";
+import { flushNativeTraces } from "./native-trace";
 import { MOBILE_REPLICA_BOOTSTRAP_WINDOW } from "./offline-budgets";
 import {
   nativeReplicaDatabasePath,
@@ -323,6 +324,12 @@ export async function runBackgroundReplicaSync(
       );
     looseReader?.close();
     for (const feed of feeds) feed.setActive(false);
+    // #927 OQ1: the phone buffers spans in memory and writes them HERE — the
+    // background pass is the one moment disk I/O costs the owner nothing. In
+    // the `finally` so a pass that timed out or threw still lands what it
+    // recorded; `flushNativeTraces` swallows its own failures, and with
+    // tracing off (the default) the ring is empty and this is a no-op.
+    await flushNativeTraces();
   }
 }
 

@@ -15,6 +15,7 @@ import type {
   ReplicaSnapshot,
   ReplicaSnapshotRow,
 } from "./types.js";
+import { bumpClientWorkCounter } from "./work-counters.js";
 
 /** Matches the gateway's own default; kept explicit so the request is self-describing. */
 export const DEFAULT_REPLICA_BOOTSTRAP_WINDOW = 5_000;
@@ -36,6 +37,20 @@ export type ReplicaFetcher = (
  */
 const defaultReplicaFetcher: ReplicaFetcher = (baseUrl, pathname, init) =>
   fetch(href(baseUrl, pathname), init as RequestInit);
+
+/**
+ * #927 P2: one `httpRoundTrips` bump per call into the transport, wrapped at
+ * the ONE seam every replica request already goes through. Counting here rather
+ * than at six call sites means a new request path is counted the day it is
+ * written, and an injected fetcher (the web shell's Iroh/webControl wrapper,
+ * the native one) is counted exactly like the default.
+ */
+function countedRoundTrip(fetcher: ReplicaFetcher): ReplicaFetcher {
+  return (baseUrl, pathname, init) => {
+    bumpClientWorkCounter("httpRoundTrips");
+    return fetcher(baseUrl, pathname, init);
+  };
+}
 
 export class ReplicaTransportError extends GatewayClientError {
   constructor(
@@ -77,7 +92,7 @@ export async function fetchReplicaBootstrap(
   fetcher: ReplicaFetcher = defaultReplicaFetcher,
   signal?: AbortSignal
 ): Promise<ReplicaSnapshot> {
-  const response = await fetcher(
+  const response = await countedRoundTrip(fetcher)(
     gatewayAuth.baseUrl,
     "/centraid/_vault/replica/bootstrap",
     {
@@ -150,7 +165,7 @@ export async function fetchReplicaBootstrapPage(
   // Neither param present would silently fall back to the single-shot envelope.
   if ([...params].length === 0)
     params.set("window", String(DEFAULT_REPLICA_BOOTSTRAP_WINDOW));
-  const response = await fetcher(
+  const response = await countedRoundTrip(fetcher)(
     gatewayAuth.baseUrl,
     `/centraid/_vault/replica/bootstrap?${params}`,
     {
@@ -208,7 +223,7 @@ export async function fetchReplicaChanges(
   });
   // Presence is significant: `shapeIds=` attests a persisted empty catalog.
   if (shapeIds) params.set("shapeIds", shapeIds.join(","));
-  const response = await fetcher(
+  const response = await countedRoundTrip(fetcher)(
     gatewayAuth.baseUrl,
     `/centraid/_vault/changes?${params}`,
     {
@@ -253,7 +268,7 @@ export async function fetchReplicaIntentOutcomes(
   );
   const receivedBatches = await Promise.all(
     batches.map(async (batch) => {
-      const response = await fetcher(
+      const response = await countedRoundTrip(fetcher)(
         gatewayAuth.baseUrl,
         "/centraid/_vault/replica/outcomes",
         {
@@ -297,7 +312,7 @@ export async function postReplicaIntent(
   intent: ReplicaIntent,
   fetcher: ReplicaFetcher = defaultReplicaFetcher
 ): Promise<ReplicaIntentResponse> {
-  const response = await fetcher(
+  const response = await countedRoundTrip(fetcher)(
     gatewayAuth.baseUrl,
     "/centraid/_vault/replica/intents",
     {
@@ -337,7 +352,7 @@ export async function postReplicaCheckpoint(
   schemaEpoch: string,
   fetcher: ReplicaFetcher = defaultReplicaFetcher
 ): Promise<void> {
-  const response = await fetcher(
+  const response = await countedRoundTrip(fetcher)(
     gatewayAuth.baseUrl,
     "/centraid/_vault/replica/checkpoint",
     {

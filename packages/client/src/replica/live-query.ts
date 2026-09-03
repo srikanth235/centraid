@@ -1,4 +1,5 @@
 import type { ReplicaDependency, ReplicaInvalidation } from "./types.js";
+import { bumpClientWorkCounter } from "./work-counters.js";
 
 export interface LiveQueryExecution<T> {
   value: T;
@@ -114,6 +115,10 @@ export class LiveQuery<T> implements PromiseLike<T> {
     const runDirtyExecution = async (): Promise<void> => {
       if (!this.#dirty || this.#disposed) return;
       this.#dirty = false;
+      // #927 P2 / #922 D4: the reads-per-action counter, bumped where a read
+      // ACTUALLY happens — after the dirty check and the `matches()` screen, so
+      // an invalidation that a query correctly ignores costs nothing here.
+      bumpClientWorkCounter("reReads");
       const abort = new AbortController();
       this.#abort = abort;
       try {
