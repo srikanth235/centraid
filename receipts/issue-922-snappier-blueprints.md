@@ -1114,3 +1114,105 @@ Files this commit changed on top of 0a:
 `packages/client/src/react/blueprints/inline-read-truncation.test.ts`,
 `apps/mobile/src/lib/replica/inline-query-ctx.native.ts`,
 `receipts/issue-922-snappier-blueprints.md`.
+
+### Audit — re-verification of `f0957fb8d` (2026-09-03)
+
+Verdict: PASS
+
+Second fresh-context pass, scoped to the one new commit
+`refactor(client): one inline-query ctx core for web and native`. Two findings for the
+root are recorded below; neither is a defect in the change, and both must be settled
+before the wave PR merges.
+
+**Reproduced, not read**
+
+- **Duplication.** Re-ran the block scan independently (`difflib.SequenceMatcher`,
+  `autojunk=False`, matching blocks ≥ 8 lines). Before (`61973cef5`): native ↔ web =
+  **6 blocks / 93 of 238 lines (39.1 %)**, at native 26-33, 70-79, 97-135, 176-192,
+  195-204, 228-236 ↔ web 3-10, 52-61, 80-118, 249-265, 267-276, 284-292 — every offset in
+  the receipt's table matches. After (`f0957fb8d`): native ↔ web **0/0**, native ↔ core
+  **0/0**, web ↔ core **0/0**. Line counts 238 → 81 and 294 → 173 confirmed.
+- **The core is DOM-free, by module graph.** Transitive scan from
+  `inline-query-ctx-core.ts`: the value graph is the file itself plus
+  `@centraid/core/time`; adding type-only edges reaches only `online-only-error.ts`,
+  `online-only-guard.ts` and `types.ts`. No `gateway-client-core`, no `window`/`document`/
+  `navigator`/`HTMLElement`/`localStorage` token anywhere in that closure.
+  End-to-end: a Metro export with the adapter forced into the app graph (throwaway probe
+  from `index.ts`, reverted) is **exit 0 at 2,687 modules / 8,057,740 B** — one module and
+  +939 B against the same probe before the refactor (2,686 / 8,056,801 B). Pulling in the
+  browser engine would not cost 939 bytes.
+- **Web pending-row provenance is unchanged.** The shell still threads
+  `PENDING_ROW_PROVENANCE` through the core's row callback as an enumerable own symbol,
+  and `carriedPendingMarker`'s exact-symbol branch still fires: a throwaway test whose
+  handler projects rows with **no** identity field surviving — so the field-matching
+  fallback cannot fire — still receives the pending overlay fields. Deleted after running.
+  Behaviour-equivalence of the two other web changes checked by reading both revisions:
+  `guardedRow` now returns a plain object when nothing is missing (the old one always
+  returned a Proxy), which is observationally identical because every trap is a no-op in
+  that case; and `createOnlineGuard` / `InlineOnlineGuard` / the local `OnlineOnlyError`
+  interface had no importer outside the file and its test.
+- **The deleted guard.** `OnlineOnlyGuard` predates this slice (used by `coordinator.ts`,
+  `worker-client.ts`, `query.ts`, `store.ts` and already by
+  `apps/mobile/src/lib/replica/native-replica-store.ts`), and `OnlineOnlyError` produces
+  the identical message (`Query requires the online vault: <reason>`), `code`
+  `ONLINE_ONLY` and `name` `OnlineOnlyError`. `required` and `assertLocal()` match the
+  deleted copy exactly. One wording correction: `mark()` is **not** "sticky first-reason"
+  — it *retains* the first error but *returns* the newly created one, where the deleted
+  copy returned the first on every call (verified with a throwaway probe). Unobservable
+  outside the ctx, because `runInlineQueryCore` surfaces the run's refusal through
+  `assertLocal()`, which throws the first reason on both designs.
+- **Receipt ↔ diff.** The `### Sonar duplication` section names all seven files in the
+  commit and nothing else; the diff contains exactly those seven. The preconditions
+  paragraph now reads "(a) is done … only (b) remains for E7". Still no `- [x]` anywhere
+  in `## Checklist`. No NUL bytes in any changed file; no binary hunk in
+  `git diff --numstat`.
+- **`lint:product`, checked both ways.** 35/39 here. On a detached clean worktree at this
+  branch's base `e2f277da3`, `bun run lint:product` is **36/39** and fails on exactly
+  `test:ratchet`, `lint:ledgers`, `lint:quality-knobs` — so those three are base lag, not
+  this diff, confirmed rather than assumed. `check:ui-receipt` passes at the base and
+  fails here: this diff is its only cause. (`origin/main` has since moved to `dccf9e609`,
+  where all 39 are green.)
+
+**Findings for the root**
+
+1. `receipts/issue-922-snappier-blueprints.md` (the `check:ui-receipt` paragraph) →
+   the stated shape of the fix — "a non-UI exclusion for the engine paths under
+   `packages/client/src/replica/**`" — **does not clear this diff**, and neither does
+   rebasing onto #931. Ran #931's refined `validateUiReceipt` against this commit's file
+   list: `packages/client/src/replica/**` is excluded there, but
+   `packages/client/src/react/blueprints/inlineQueryCtx.ts` is not, and it alone
+   re-triggers the gate (verified by removing it from the list, which returns `[]`).
+   → The root must settle `check:ui-receipt` for `react/blueprints/` engine modules
+   explicitly; a rebase alone leaves the wave PR red.
+2. Cross-slice collision. `claude/922-w1-0a-no-silent-truncation` also edits
+   `packages/client/src/react/blueprints/inlineQueryCtx.ts` (+18) and
+   `inlineQueryCtx.test.ts` (+28), which this commit rewrote 294 → 173 lines. Two
+   in-flight slices now own the same two files, against the wave rule that a slice owns
+   files no other in-flight slice touches. → Order the merges and re-land 0a's truncation
+   hook against the post-refactor file, or the second merge conflicts.
+
+**Noted, not blocking**
+
+- No test pins the provenance **symbol** path: deleting the symbol from the row (in this
+  revision *and* in `61973cef5`) leaves `inlineQueryCtx.test.ts` green, because every
+  fixture also satisfies the field-matching fallback. Pre-existing, not introduced here;
+  worth a case when E7 touches this code.
+
+**Gates run** (this worktree, 4 cores, Node 22 vs pinned 24; each under
+`scratchpad/gate.lock`)
+
+```
+bun run format:check                          # clean, 5358 files
+bun run lint                                  # green
+bun run --cwd packages/client build           # clean
+bun run --cwd packages/client typecheck       # clean
+bun run --cwd packages/client test            # 264 files, 2420 passed  (engine lane)
+bun run --cwd packages/client test -- src/react/blueprints/   # 8 files, 76 passed
+bun run --cwd apps/mobile typecheck           # clean
+bun run --cwd apps/mobile test                # 272 files, 2357 passed  (engine lane)
+bun run --cwd packages/blueprints typecheck   # clean
+bun run --cwd packages/blueprints test        # 207 files, 6588 passed | 2 expected fail
+bun run lint:hermes-surface                   # ok — 809 modules reachable, none unsafe
+bash .governance/run.sh                       # 22/22 directives
+bun run lint:product                          # 35/39 — see the two-way check above
+```
