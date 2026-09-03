@@ -46,7 +46,10 @@ Per slice, in the appended sections.
 
 ## Audit
 
-Per slice, as a `### Audit` sub-heading. The umbrella verdict is the root's, once the waves close.
+Verdict: PASS — for the slices audited so far. One verdict per slice, written by a
+fresh-context verifier under the slice's own `### Audit` sub-heading; the evidence for each lives
+there. Slices audited: **w1-core — PASS**, under `## w1-core`. The umbrella verdict
+over the acceptance criteria is the root's, once the waves close.
 
 ## w1-core — the trace and work-counter contract
 
@@ -162,7 +165,96 @@ Not an audit — the author's own list, left here so the root's fresh-context ve
 
 ### Audit
 
-Written by the root's fresh-context verifier. Not self-authored by this slice.
+Verdict: PASS
+
+Written by the root's fresh-context verifier, which saw only the diff, this receipt and
+issue #927. Not self-authored by this slice.
+
+Verified:
+
+- **Scope** — `git diff origin/main...HEAD --name-only` is exactly the five files the
+  slice contract names (`docs/logs.md`, `packages/core/src/protocol/{trace.ts,trace.test.ts,index.ts}`,
+  this receipt). `packages/core/src/protocol/version.ts` is untouched: no protocol version bump.
+  Every changed file is named in the section above.
+- **Checklist ↔ issue** — the nine `## Checklist` lines are byte-identical to #927's
+  acceptance criteria (`diff` against the issue body: no output). All nine remain unticked,
+  correct for a wave-1 contract slice.
+- **Vocabulary ↔ issue** — nine hops (`seat…render`) match P1's hop list; four seats match
+  the surfaces P1/P5 name; nine journeys match P5's table row for row; nine counter keys match
+  P2's list (`bytesRead`/`bytesWritten` being P2's "bytes read and written").
+- **Constraints** — no `Math.random`, no `Date.now`, no `node:` import and no runtime dependency
+  in `trace.ts` or its test (grep, exit 1). `TraceId` is the intent id's exact shape: intent ids
+  are plain `crypto.randomUUID()` strings with no prefix (`packages/client/src/replica/{digest.ts,intents.ts}`,
+  `apps/mobile/src/lib/replica/mobile-intent-id.ts`), so `traceIdOfIntent` correctly does not
+  transform and `mintTraceId`'s default factory mints the same shape. The injectable
+  `TraceIdFactory` mirrors the repo's existing `ReplicaIdFactory` seam for Hermes.
+- **Numbers reproduced on this host** (Linux 6.18 x64): 43 tests in `trace.test.ts`;
+  100% statements 133/133, branches 87/87, functions 20/20, lines 126/126 from the receipt's own
+  coverage command; `@centraid/core` 289 tests / 17 files. `tests/floors.json#coverage` still
+  carries `packages/core/src/protocol/**` at 98 lines / 96 branches, unchanged by this diff —
+  no floor, budget, allowlist or ratchet is touched, no `approvedDeviation` claimed.
+- **Property tests** — re-ran the `addCounters` / `diffCounters` / `shouldSample` properties out
+  of `packages/core/dist` under five fresh seeds (1, 7, 123456, 987654321, and a clock-derived one)
+  at 500 runs each: all green, so the committed seeds are not load-bearing.
+  `expect.requireAssertions` is on for this package via `nodeProject`
+  (`packages/test-kit/src/vitest.ts`) and the suite passes, so every test asserts.
+
+Gates run (all from the worktree):
+
+```sh
+bun run format                       # clean; git status --short empty afterwards
+bun run lint                         # green
+bun run --cwd packages/core test     # 17 files, 289 tests passed
+bun run --cwd packages/core typecheck# green
+bun run --cwd packages/core build    # green
+bun run --cwd apps/mobile typecheck  # green (consumes core from src)
+bun run --cwd packages/client typecheck # green
+bash .governance/run.sh              # 21/22 — only the pre-existing repo-hygiene
+                                     # file-size red on packages/blueprints/apps/locker/
+                                     # queries.test.ts (638 > 625), present on origin/main
+                                     # and untouched by this diff
+```
+
+Findings — none blocking; three the root should carry forward:
+
+1. `receipts/issue-927-perf-infra.md` (this section's parent, "43 tests … rejects each of 23
+   malformed classes") → the `it.each` table has **24** rejection cases, not 23
+   (`vitest list src/protocol/trace.test.ts | grep -c 'rejects '` → 24). The count understates
+   the work; fix is the digit.
+2. `packages/core/src/protocol/trace.ts:283` `validateTraceRecord` accepts a record whose `root`
+   object disagrees with the same-`spanId` entry inside `spans` (verified: a root with
+   `hop: "seat"` and a spans copy with `hop: "render"` parses, and the spans copy silently wins).
+   The returned record is self-consistent, so nothing downstream breaks, but a strict parser that
+   rejects "a root absent from `spans`" should also reject a root that contradicts it — an
+   emitter writing two different roots is exactly the bug class this parser exists to catch.
+   Fix: compare the parsed `root` to `byId.get(root.spanId)` field by field and throw on mismatch.
+3. `packages/core/src/protocol/trace.ts:150` `diffCounters` throwing on a backwards counter is the
+   right contract **for a consumer** (a rig or the merge rung must not average a straddled reset
+   into a passing number) but is a hazard for the emitter slices: on a hot path a throw turns a
+   diagnostic anomaly into a user-visible failure, and a fresh worker or a per-request counter reset
+   makes a backwards delta reachable. Not a defect in this slice; the w1-gateway/client/mobile
+   contracts should state that emitters call `diffCounters` off the product path or behind a guard.
+
+Judged and not findings:
+
+- `traceIdOfIntent` as an identity function: it costs nothing, is covered, and does buy a
+  greppable call site, but it buys no runtime or type property today because `TraceId` is a bare
+  `string` alias. If it stays, brand `TraceId` so the two id-producing functions become the only
+  way to make one; that is a strictly better version of the same argument. Keeping it as-is is
+  acceptable.
+- `globalThis.crypto.randomUUID` on Hermes: `mintTraceId(factory?)` defaults to WebCrypto and takes
+  an injected factory, identical to `IntentQueue`'s `webCryptoIdFactory` default, and the header
+  says why. No polyfill is required by this package; the mobile emitter slice must pass
+  `nativeReplicaIdFactory` (expo-crypto), as `native-hash.ts` already does.
+- `docs/logs.md` `centraid-gateway trace last`: worded as a forward pointer
+  ("_Lands in #927 w1-gateway_ — … the command and the store that backs it arrive with the gateway
+  emitter slice"), so it is not a claim that the command exists. It would read less ambiguously with
+  the marker leading the paragraph rather than closing it.
+- The strict-parser departure from `docs/protocol.md` C1 names a concrete property (a closed
+  vocabulary, so a budget query cannot read a missing hop as a fast hop) at the seam itself, not a
+  bare citation.
+- The three red gates (`lint:ledgers`/`test:ratchet`, `design:gallery`, `repo-hygiene` file-size)
+  reproduce on `origin/main` and are outside this slice's contract; nothing was weakened to go green.
 
 ## Session
 
