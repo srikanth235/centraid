@@ -393,6 +393,8 @@ $ bun run lint:product
 
 ## Audit
 
+**2026-09-03 — first pass, head `01f772cbd`.**
+
 Verdict: REFUTED
 
 Findings:
@@ -507,6 +509,96 @@ Falsification attempts:
    `6047 tracked text files, none carrying a raw NUL`.
 3. Probed `validateUiReceipt` directly over every non-`src/react/` module in
    `packages/client/src` — this is what produced finding 1.
+
+**2026-09-03 — re-verification, head `f953c021d`** (rebased onto `dccf9e609`;
+series `b19a72a07 → cce4e2cc2 → a6adee7ba → f953c021d`).
+
+Verdict: REFUTED
+
+Fixed and confirmed:
+
+- Finding 1's shape is right now. `CLIENT_SURFACE_RE` is gone; the default —
+  every `packages/client` path is a surface — is restored and
+  `CLIENT_NOT_A_SURFACE` subtracts from it. Probed all 800 tracked
+  `packages/client` files against the real predicate: 672 demand evidence, 128 do
+  not. `home-copy.ts`, `icons.ts`, `theme-vars.ts`, `index.html`,
+  `status-channel.ts`, `device-enrichment-compute.ts`, `styles.css` and the eight
+  further `*-copy.ts` modules are all back in the watched set, and the widened
+  test pins them.
+- Findings 2 and 3 are fixed. `tests/quality/classification-ratchet.json` reads
+  `76aac1a07f17…` on `origin/main` → `56f64c948746…` on this head, exactly as the
+  receipt now quotes, and `claimsGovernanceFingerprint` is `71625bd5f205…` on both
+  sides. The re-run transcript reproduces line for line: `1710 test files`,
+  `45 claims, 49 lanes, 193 derived flows`, `6049 tracked text files`,
+  `41/41 product gates`, and the real `::error title=design:gallery unrunnable::`
+  under `CI`.
+- Re-escape after the rebase (check b): for all twelve files,
+  `git show origin/main:<f> | perl -pe 's/\x00/\\0/g'` is byte-identical to the
+  branch version — including `authority-registry.ts` re-escaped on #949's
+  content, 8,788 → 8,790 bytes. No `\0` is followed by a digit anywhere in the
+  twelve, so no literal decodes differently.
+- Non-blocking items done: the `run()` JSDoc no longer declares a parameter it
+  does not take; `IS_CI` now treats any `CI` other than empty / `0` / `false` as
+  CI — probed `CI` unset, `0`, `false`, `FALSE` → exit 0 with the skip, and
+  `yes`, `true`, `1` → exit 1 with the annotation; the blank line in
+  `design-gallery.mjs` is restored; the issue's item 7 is now an unticked
+  checklist row pointing at `## Out of scope`, where it is described with its
+  evidence; the two granted additions are relabelled A and B rather than
+  "items 7 and 8".
+
+Remaining finding:
+
+- `scripts/validate-ui-receipt.mjs:44-52` — two excluded paths carry
+  member-visible copy, so `## What changed` §"Granted addition A"'s claim that
+  each excluded subtree "was checked for DOM calls, markup and user-visible
+  strings before being named" does not hold, and the same class of hole the first
+  pass found survives in two files:
+  - `packages/client/src/replica/rebootstrap-copy.ts`, swept up by
+    `/^packages\/client\/src\/replica\//u`. Its own header is "WHAT A MEMBER IS
+    TOLD WHEN THEIR REPLICA STARTS OVER (#883 C6)", and it holds the notice
+    `headline`/`detail` strings a member reads, e.g. `"This device is downloading
+    its whole library again — your unsent changes stay queued."` (line 58).
+  - `packages/client/src/gateway-client-edges.ts`, named by
+    `/^packages\/client\/src\/gateway-client[\w.-]*\.ts$/u`. Lines 178-188 are
+    `RECOVERY_REFUSALS`, commented "the member reads a reason, not a code":
+    `"You already run this shared space."`, `"That shared space is no longer
+    live."` and two more, consumed by
+    `packages/client/src/react/shell/routes/InlineAppRoute.tsx`.
+
+  Fix: carve both out of the exclusions — e.g.
+  `/^packages\/client\/src\/replica\/(?!rebootstrap-copy\.ts$)/u` and an
+  explicit `gateway-client-edges.ts` exception (or move `RECOVERY_REFUSALS` into
+  a `*-copy.ts` module) — and add both to the drawing case in
+  `scripts/validate-ui-receipt.test.mjs`.
+
+  Borderline, reported not filed: several excluded `src/replica/**` modules throw
+  operator-shaped messages (`shell-session.ts:316` "The pending row is no longer
+  available to edit", `search-refused-error.ts`, `online-only-error.ts`). These
+  read as developer diagnostics rather than composed member copy; if any is
+  surfaced verbatim, the same carve-out applies.
+
+Gates run on `f953c021d` (same container, Node 22):
+
+- `bun run format:check` → clean, 5,364 files.
+- `bun run lint` → clean.
+- `bun run lint:product` → 41/41.
+- `bun run scripts:test` → 613 pass, 0 fail.
+- `bun run lint:no-nul-bytes` → 6,049 tracked text files, none carrying a NUL.
+- `bun run lint:test-reachability` → 1,710 test files, all reached.
+- `bun run test:claims` → 45 claims, 49 lanes, 193 derived flows.
+- `bun run lint:workflow-pins` → 23 clean · `lint:evidence-mapping` → 49 lanes ·
+  `lint:path-filters` → 10 clean · `check-quality-knobs.mjs` → no widening.
+- `bun run --cwd packages/vault build` then typecheck of `packages/vault` and
+  `packages/client` → clean; `bun run --cwd packages/vault test -- grant` →
+  55 pass.
+- `node --test scripts/validate-ui-receipt.test.mjs` → 7 pass ·
+  `bun run check:ui-receipt` → evidence verified.
+- `bash .governance/run.sh` → **22/22**.
+
+Falsification attempt: probed every tracked `packages/client` path against the
+shipped predicate and read the 128 excluded files for DOM calls, markup and
+prose-shaped string literals rather than trusting the list — which is what
+surfaced the remaining finding.
 
 ## Session
 
