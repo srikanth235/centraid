@@ -7,6 +7,7 @@ import type * as TypeImport_18fk7n9 from "node:sqlite";
 import { SseStream } from "@centraid/server/engine";
 import {
   currentReplicaLogState,
+  DEFAULT_REPLICA_TEXT_CEILING_BYTES,
   InvalidReplicaCursorError,
   parseReplicaCursor,
   readReplicaIntentOutcome,
@@ -47,7 +48,6 @@ import {
   buildReplicaShapes,
   replicaRowColumns,
   replicaShapesWire,
-  REPLICA_MAX_VALUE_BYTES,
   REPLICA_PROTOCOL_VERSION,
   REPLICA_SYNTHETIC_PRIMARY_KEY,
   replicaWireRowId,
@@ -213,7 +213,7 @@ function collectBootstrapWindow(
     const page = reader.readRows(entity, {
       ...(after ? { after } : {}),
       limit: Math.min(BOOTSTRAP_READ_PAGE, windowLimit - rows.length),
-      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
     });
     for (const row of page.rows) {
       const shaped = shapeReplicaRow(shape, entity, row, nowMs);
@@ -276,7 +276,7 @@ function collectNewestVisibleRows(
   const seen = new Set<string>();
   const append = (entity: string, rowId: string): ReplicaRow | undefined => {
     const raw = reader.readRow(entity, rowId, {
-      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
     });
     if (!raw) return undefined;
     for (const shape of shapes) {
@@ -531,7 +531,7 @@ function rowForWireId(
 ): ReplicaRow | undefined {
   if (schema.primaryKey !== REPLICA_SYNTHETIC_PRIMARY_KEY) {
     return reader.readRow(entity, wireRowId, {
-      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
     });
   }
   let after: string | undefined;
@@ -540,7 +540,7 @@ function rowForWireId(
     const page = reader.readRows(entity, {
       ...(after ? { after } : {}),
       limit: Math.min(10_000, Math.max(1, maxRows - scanned)),
-      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
     });
     const found = page.rows.find(
       (row) => replicaWireRowId(shape, entity, row.rowId) === wireRowId
@@ -1052,7 +1052,7 @@ export function makeReplicaRouteHandler(
               const page = reader.readRows(entity, {
                 ...(after ? { after } : {}),
                 limit: 10_000,
-                maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+                maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
               });
               rows.push(...page.rows);
               if (

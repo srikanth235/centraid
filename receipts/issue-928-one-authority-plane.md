@@ -472,6 +472,63 @@ already lives.
   that the root doc commit makes, and it adds no claim the w1b evidence does not already
   carry.
 
+## w2 — static replica shape composition
+
+Wave 2 of #928, ruling AP-apps-declare: `buildReplicaShapes` stops asking the grant evaluator what an app may
+mirror and reads the app's own build-time manifest instead. Acceptance clause served — **"Replica shapes are
+composed statically from the app manifest and the sealed registry; shape ids for all eight apps are unchanged
+on the golden vault; a sealed column name appears in no shape."** Nothing ticked above.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/server/src/routes/replica-declared-scopes.ts` | new: the declared-manifest registry (`recordDeclaredManifest`, `declaredManifestFor`, `coveringReadScope`), keyed by the vault handle |
+| `packages/server/src/routes/replica-grantees.ts` | **deleted** — `readGrantees` and its four-table grantee join have no reader |
+| `packages/server/src/routes/replica-shape.ts` | `buildReplicaShapes` walks the install register + the declared manifest; the `evaluateAccess` call is gone; `REPLICA_MAX_VALUE_BYTES` deleted for `DEFAULT_REPLICA_TEXT_CEILING_BYTES` |
+| `packages/server/src/serve/vault-plane.ts` | `ensureAppInstallGrant` records the manifest it was handed; the literal default purpose becomes `DEFAULT_INSTALL_PURPOSE` |
+| `packages/server/src/routes/replica-projection.ts` | `SHAPE_CONTROL_ENTITIES` shrinks to `access.app` + `access.app_ext`; the `core.concept`, `access.policy`, `access.grant` and `access.grant_scope` verdicts, `activeAt` and `grantMatches` deleted |
+| `packages/server/src/routes/replica-routes.ts`, `scripts/lint-vault-sql.mjs` | byte-ceiling import swapped to the vault constant; the `replica-grantees.ts` allow-list entry removed (the file is gone) and two neighbouring reasons restated |
+| `packages/server/src/routes/replica-shape-parity.test.ts` | new: the eight pinned shape ids, the year-3 repeat, the sealed-column tripwire |
+| `packages/server/src/routes/replica-shape.test.ts`, `packages/server/src/routes/replica-grant-shape.test.ts`, `packages/server/src/routes/replica-projection.test.ts`, `packages/server/src/routes/replica-routes.test.ts`, `packages/server/src/routes/replica-intent-route.test.ts` | set-up moves from `approveGrant` to `ensureAppInstallGrant`; the purpose-keyed and two-grant shape cases become one manifest, the doorbell case two apps, and three grant revocations become `revokeApp` or a re-declared manifest — what now moves a shape |
+
+### Numbers
+
+Host 4 cores / 15 GB, Node 22, worktree `claude/928-ac-work` on `claude/928-authority-composition`; one
+`buildReplicaShapes` call over the eight bundled apps installed from their shipped `app.json`, counted by
+wrapping `DatabaseSync.prepare` (`FROM|JOIN access_grant|access_grant_scope|access_policy|core_concept`).
+
+| measure | before | after |
+| --- | --- | --- |
+| grant / policy / purpose statements per eight-app shape build | 3521 | **0** |
+| prepared statements of any kind, same build | 3913 | 393 |
+| shapes built / shape ids changed | 8 / — | 8 / **0** |
+
+### Deleted, with its replacement
+
+`readGrantees` (and `replica-grantees.ts`) → `installedApps` over `access_app` plus `declaredManifestFor`; the
+per-entity `evaluateAccess` call → `coveringReadScope` over the declared scopes; `REPLICA_MAX_VALUE_BYTES` →
+`DEFAULT_REPLICA_TEXT_CEILING_BYTES` (same 64 KiB, so no digest moved); three shape-control verdicts → nothing,
+`access_policy` having had no writer since #916 and grants no longer deciding a shape.
+
+### Decisions
+
+- **`purpose` and the declared row filters / field masks stay in the shape this wave.** AP-apps-declare ends
+  with a manifest "minus purpose, minus row filters and field masks", but the same wave's acceptance clause
+  requires all eight shape ids unchanged, and both cannot hold: dropping the field masks alone moves `locker`
+  to `locker:d777d60745f0179649f17329` and `people` to `people:a6efd1932c28e9a8a33e8bb1` (reproduced below),
+  rebootstraps every device holding them, **and widens** three replicas from one entity type's revisions to
+  every app's. They stay until w1b's work order re-expresses them as `WHERE` clauses in the owning queries;
+  `purpose` rides opaquely from `vault.purpose` for the same reason. Reported to the root as a finding.
+- **The declared manifest is held per vault handle in the gateway process, not in a table** — it is a
+  build-time constant of the app's own code, so a row would be derived state, and a `WeakMap` on the vault
+  handle keeps two vaults running different versions of one code-store app from sharing a shape. Its one
+  writer is `ensureAppInstallGrant`, already the only path that reads an `app.json`.
+- **`SHAPE_CONTROL_ENTITIES` and its verdict were edited in `replica-projection.ts`**, which the lane brief
+  assigns elsewhere: leaving `access.grant` in the set after grants stop deciding a shape would rebootstrap
+  every device for a row nothing reads. `REPLICA_COMPACTION_HELD_ENTITIES` in `packages/vault` stays a
+  superset (its test asserts containment) and is wave 4's to shrink.
+
 ### Verification
 
 ```
@@ -485,3 +542,28 @@ bun run test:claims               # 45 claims, 48 lanes, 193 derived flows
 ### Audit
 
 Verdict: PASS — root doc commit; ticks are traceable to the evidence sections named above
+git rev-parse HEAD^{tree}   # the tree these ran against; quoted in the lane report
+bun run format ; bun run lint                                    # clean
+bun run --cwd packages/server typecheck                          # clean
+bun run --cwd packages/server test                               # 3456 tests; 0 red from this diff
+bun run --cwd packages/server test -- --run src/routes/replica-shape-parity.test.ts
+bash .governance/run.sh
+```
+
+**Demonstrated red.** Forcing `fieldMask: null` fails 2 of 3 parity cases with the `locker` and `people` ids
+moving, so the parity test is not vacuous; the sealed case asserts the registry names more than five real
+secrets before looking for them. **Pre-existing reds on this host, reproduced with the diff stashed:**
+`src/serve/gateway-db-lock.integration.test.ts`, two root/`IS_SANDBOX` cases in `src/acp/backends/acp/launch.test.ts`.
+
+### Findings and doc debt
+
+1. **A7 (Locker) needs no code.** `packages/blueprints/apps/locker/queries/access.ts` already passes
+   `object_type in ["locker.item","locker.auth"]` as its own `where`, `queries-reveal-access.test.ts` pins it,
+   and `access.receipt` reaches no replica shape at all — the history query filters in SQL today. Left over is
+   the header's "THE ROW FILTER IS THE BOUNDARY", which AP-locker-boundary supersedes; editing it trips
+   `check:ui-receipt` with no screen to photograph, so it waits for a wave that moves a Locker surface.
+2. **Wave 4 inherits the three readers this wave could not retire without widening** — the declared row
+   filters, the field masks and `purpose`.
+3. Doc debt: `docs/vault-ontology.md` ONT-18 (`access_policy` read twice per non-owner read) — the shape path
+   no longer consults it, still true of `gateway/access.ts`, wave 4 closes; `year3-shape.ts` and
+   `replica/snapshot.ts` both name `DEFAULT_REPLICA_MAX_VALUE_BYTES`, a constant with no such name today.

@@ -1,7 +1,7 @@
 /*
- * Grants ride the ORDINARY replica plane (#825): `share.authority` and
- * `share.fulfillment` are consent-shaped entities like any other. An
- * unapproved app gets nothing, which is what lets a surface say "we cannot
+ * The authority plane rides the ORDINARY replica plane (#825): `share.authority`
+ * and `share.fulfillment` are entities like any other. An app that does not
+ * DECLARE them gets nothing (#928), which is what lets a surface say "we cannot
  * see" rather than "shared with nobody".
  */
 
@@ -46,9 +46,9 @@ describe("grant plane on the replica", () => {
     return opened;
   }
 
-  test("an approved app's shape carries the grant and its delivery state", async () => {
+  test("a declaring app's shape carries the authority row and its delivery state", async () => {
     const vault = await plane();
-    vault.approveGrant("people", {
+    vault.ensureAppInstallGrant("people", {
       purpose: "dpv:ServiceProvision",
       scopes: [
         { schema: "share", table: "authority", verbs: "read" },
@@ -80,7 +80,7 @@ describe("grant plane on the replica", () => {
   });
 
   /*
-   * THE SHIPPED MANIFEST UNBLOCKS IT (#883): the test above approves a
+   * THE SHIPPED MANIFEST UNBLOCKS IT (#883): the test above declares a
    * hand-written scope, proving the machinery, not the product. Read off disk
    * because a scope typed here would pass while the shipped one drifted.
    */
@@ -91,14 +91,19 @@ describe("grant plane on the replica", () => {
         "utf8"
       )
     ) as {
-      vault: { purpose: string; scopes: { verbs: string }[] };
+      vault: {
+        purpose: string;
+        scopes: Parameters<
+          VaultPlane["ensureAppInstallGrant"]
+        >[1]["scopes"][number][];
+      };
     };
     const vault = await plane();
-    vault.approveGrant("people", {
+    vault.ensureAppInstallGrant("people", {
       purpose: manifest.vault.purpose,
       scopes: manifest.vault.scopes.filter((scope) =>
         scope.verbs.includes("read")
-      ) as Parameters<typeof vault.approveGrant>[1]["scopes"],
+      ),
     });
     const [shape] = buildReplicaShapes(vault.db.vault, {
       canWrite: false,
@@ -122,9 +127,9 @@ describe("grant plane on the replica", () => {
     expect(authority?.primaryKey).toBe("authority_id");
   });
 
-  test("an app the owner never approved for shares sees no grant entity at all", async () => {
+  test("an app that declares no share scope sees no authority entity at all", async () => {
     const vault = await plane();
-    vault.approveGrant("people", {
+    vault.ensureAppInstallGrant("people", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "core", table: "party", verbs: "read" }],
     });

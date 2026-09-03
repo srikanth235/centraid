@@ -81,7 +81,7 @@ describe("replica-routes", () => {
       () => fs.rm(dir, { recursive: true, force: true }),
       () => plane.stop()
     );
-    plane.approveGrant("agenda", {
+    plane.ensureAppInstallGrant("agenda", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
@@ -424,14 +424,13 @@ describe("replica-routes", () => {
     });
   });
 
-  test("revoking the grant between windows forces a shape-changed 409", async () => {
+  test("revoking the install between windows forces a shape-changed 409", async () => {
     const { plane, handler } = await fixture();
     for (const id of ["task-01", "task-02", "task-03"]) task(plane, id, id);
     const first = await bootstrapDirect(handler, "?window=1&appId=agenda");
     expect(first.page.next).toBeTruthy();
-    const grant = plane.listApps().find((app) => app.name === "agenda")
-      ?.grants[0];
-    plane.revokeGrant(grant!.grantId);
+    // Since #928 the install register, not a grant, is what ends a shape.
+    plane.revokeApp("agenda");
     const conflicted = await bootstrapDirect(
       handler,
       `?window=1&appId=agenda&after=${encodeURIComponent(first.page.next!)}`
@@ -565,11 +564,9 @@ describe("replica-routes", () => {
 
   test("lazy fields resolve by opaque masked-PK row id without disclosing the canonical key", async () => {
     const { plane, handler } = await fixture();
-    const initial = plane.listApps().find((app) => app.name === "agenda")
-      ?.grants[0];
-    expect(initial).toBeDefined();
-    plane.revokeGrant(initial!.grantId);
-    plane.approveGrant("agenda", {
+    // Re-declaring the manifest IS the reshape (#928): the columns a shape
+    // carries are the ones the app's own scope names.
+    plane.ensureAppInstallGrant("agenda", {
       purpose: "dpv:ServiceProvision",
       scopes: [
         {
@@ -637,10 +634,7 @@ describe("replica-routes", () => {
 
   test("synthetic lazy-row lookup is bounded instead of scanning an unbounded entity", async () => {
     const { plane, handler } = await fixture({ maxSyntheticLookupRows: 1 });
-    const initial = plane.listApps().find((app) => app.name === "agenda")
-      ?.grants[0];
-    plane.revokeGrant(initial!.grantId);
-    plane.approveGrant("agenda", {
+    plane.ensureAppInstallGrant("agenda", {
       purpose: "dpv:ServiceProvision",
       scopes: [
         {
@@ -753,10 +747,7 @@ describe("replica-routes", () => {
     }>();
     expect(bootstrap.shapeIds).toHaveLength(1);
 
-    const grant = plane.listApps().find((app) => app.name === "agenda")
-      ?.grants[0];
-    expect(grant).toBeDefined();
-    plane.revokeGrant(grant!.grantId);
+    plane.revokeApp("agenda");
     const current = currentReplicaLogState(plane.db.vault).watermark;
     const query = new URLSearchParams({
       since: `${current.epoch}:${current.seq}`,

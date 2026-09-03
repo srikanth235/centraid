@@ -133,6 +133,7 @@ import type {
 
 import { loadSqliteVec } from "../enrich/sqlite-vec.js";
 import { unrefTimer } from "../lib/unref-timer.js";
+import { recordDeclaredManifest } from "../routes/replica-declared-scopes.js";
 import { GroupCommitQueue } from "./group-commit-queue.js";
 import { decideJournalArchive } from "./journal-limit.js";
 import { NoticeStore } from "./notices.js";
@@ -241,6 +242,9 @@ export interface GrantRequest {
   scopes: ScopeSpec[];
   expiresAt?: string;
 }
+
+/** What a manifest with no stated purpose is installed under (#306). */
+const DEFAULT_INSTALL_PURPOSE = "dpv:ServiceProvision";
 
 export interface InstallScopeBlock {
   purpose?: string;
@@ -854,6 +858,21 @@ export class VaultPlane {
    *  manifests, so a re-publish would steer its own containment (#306). */
   ensureAppInstallGrant(appId: string, block: InstallScopeBlock): void {
     const app = ensureAppEnrolled(this.db, appId);
+    // The app's own build-time declaration, which is what a replica shape is
+    // composed from (#928, AP-apps-declare). Recorded here because this is the
+    // one path that reads an `app.json`, and recorded whether or not the block
+    // widens: a widening still parks as a GRANT below, while the declaration
+    // itself is the reviewable artefact the static tripwire holds.
+    recordDeclaredManifest(this.db.vault, appId, {
+      purpose: block.purpose ?? DEFAULT_INSTALL_PURPOSE,
+      scopes: block.scopes.map((scope) => ({
+        schema: scope.schema,
+        ...(scope.table === undefined ? {} : { table: scope.table }),
+        verbs: scope.verbs,
+        ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
+        ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
+      })),
+    });
     this.ensureInstallGrant({
       plane: "app",
       appId,
@@ -886,7 +905,7 @@ export class VaultPlane {
     grants: GrantSummary[];
     approve: (request: GrantRequest) => void;
   }): void {
-    const purpose = input.block.purpose ?? "dpv:ServiceProvision";
+    const purpose = input.block.purpose ?? DEFAULT_INSTALL_PURPOSE;
     const existingRequest = this.listScopeRequests().find(
       (request) =>
         request.plane === input.plane && request.appId === input.appId

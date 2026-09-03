@@ -1,7 +1,8 @@
-// governance: allow-repo-hygiene file-size-limit (#406) consent selection, temporal membership, and opaque row identity form one security boundary
-// Server-derived replica shapes (#406): app consent scopes intersected with the
-// acting owner's write authority. Manifests carry no replica field; this module
-// projects gateway-enforced grants into a row/column-minimized offline shape.
+// governance: allow-repo-hygiene file-size-limit (#406) declared shape composition, temporal membership, and opaque row identity form one security boundary
+// Server-derived replica shapes (#406, #928): an installed app's own build-time
+// manifest, minimized by the sealed-column registry. No evaluator runs here —
+// a first-party app is not a principal (#928, AP-apps-declare), so the shape is
+// a static function of what the app declares and what the vault seals.
 
 import crypto from "node:crypto";
 import type { DatabaseSync, SQLInputValue, StatementSync } from "node:sqlite";
@@ -10,20 +11,22 @@ import {
   compileFilters,
   compileReplicaHistoricalFilters,
   currentReplicaLogState,
-  evaluateAccess,
+  DEFAULT_REPLICA_TEXT_CEILING_BYTES,
   listVaultEntities,
   readReplicaRow,
   readReplicaRows,
   replicaUnavailableColumnsOf,
   resolveEntity,
 } from "@centraid/vault";
-import type { FilterClause, AccessAllow, ReplicaRow } from "@centraid/vault";
+import type { FilterClause, ReplicaRow } from "@centraid/vault";
 
-import { readGrantees } from "./replica-grantees.js";
+import {
+  coveringReadScope,
+  declaredManifestFor,
+} from "./replica-declared-scopes.js";
 import { preparedStatement } from "./sql-statement-cache.js";
 
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
-export const REPLICA_MAX_VALUE_BYTES = 64 * 1024;
 export const REPLICA_SYNTHETIC_PRIMARY_KEY = "__centraid_row_id";
 
 export interface ReplicaShapeAccess {
@@ -153,7 +156,7 @@ function quoteIdentifier(value: string): string {
 function alternativeFor(
   db: DatabaseSync,
   physical: string,
-  scope: Pick<AccessAllow, "rowFilter" | "fieldMask">,
+  scope: { rowFilter: FilterClause[]; fieldMask: string[] | null },
   columns: TableColumn[],
   keyColumns: string[],
   unavailable: Set<string>,
@@ -365,7 +368,7 @@ function temporalFingerprint(
     const transitions = new Map(priorTransitions);
     for (const rowId of stale) {
       const row = readReplicaRow(db, entity.entity, rowId, {
-        maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+        maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
       });
       // Gone from the table is gone from the membership; the log's own delete
       // entry is what put the id in `stale`.
@@ -401,7 +404,7 @@ function temporalFingerprint(
     const page = readReplicaRows(db, entity.entity, {
       ...(after ? { after } : {}),
       limit: 10_000,
-      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
     });
     for (const row of page.rows) {
       const columns = memberColumns(row);
@@ -456,13 +459,34 @@ export interface BuildReplicaShapesOptions {
   onlyShapeId?: string;
 }
 
+/**
+ * Which apps a replica may be shaped for: the install register, and nothing
+ * else (#928, AP-owner-direct). `access_app` says an app is installed and
+ * carries the signing key the row-key HMAC is derived from; what it may hold
+ * comes from the app's own declared manifest.
+ */
+function installedApps(
+  db: DatabaseSync,
+  appId?: string
+): { app_name: string; signing_key: string | null }[] {
+  const restriction = appId ? ` AND (name = ? OR app_id = ?)` : "";
+  return preparedStatement(
+    db,
+    `SELECT name AS app_name, signing_key FROM access_app
+      WHERE status = 'active'${restriction}
+      ORDER BY name`
+  ).all(...(appId ? [appId, appId] : [])) as unknown as {
+    app_name: string;
+    signing_key: string | null;
+  }[];
+}
+
 export function buildReplicaShapes(
   db: DatabaseSync,
   access: ReplicaShapeAccess,
   now = new Date().toISOString(),
   options: BuildReplicaShapesOptions = {}
 ): ReplicaServerShape[] {
-  const grantees = readGrantees(db, now, access.appId);
   const shapes: ReplicaServerShape[] = [];
   const nowMs = Date.parse(now);
   const replicaEpoch = currentReplicaLogState(db).epoch;
@@ -470,39 +494,29 @@ export function buildReplicaShapes(
     options.onlyShapeId === undefined
       ? undefined
       : options.onlyShapeId.slice(0, options.onlyShapeId.lastIndexOf(":"));
-  for (const grantee of grantees) {
-    if (!grantee.signing_key) continue;
-    const appId = grantee.app_name;
+  for (const installed of installedApps(db, access.appId)) {
+    if (!installed.signing_key) continue;
+    const appId = installed.app_name;
     if (onlyAppId !== undefined && appId !== onlyAppId) continue;
-    const purpose = grantee.purpose;
+    const manifest = declaredManifestFor(db, appId);
+    // An app whose manifest this process has not read declares nothing.
+    if (!manifest) continue;
+    const purpose = manifest.purpose;
     const entities: ReplicaEntityShape[] = [];
     for (const entity of listVaultEntities(db)) {
       // ONE file (#916): every entity `resolveEntity` names lives in it.
       const ref = resolveEntity(entity, db);
       if (!ref) continue;
-      let effective: AccessAllow;
-      try {
-        const decision = evaluateAccess(
-          db,
-          {
-            kind: "app",
-            callerId: grantee.app_id,
-            provAgentKind: "app",
-            partyId: null,
-            mayAct: access.canWrite,
-          },
-          ref.schema,
-          ref.table,
-          "read",
-          purpose,
-          now
-        );
-        if (decision.decision !== "allow") continue;
-        effective = decision;
-      } catch {
-        // Fails closed; never falls through to a later, broader grant.
-        continue;
-      }
+      const declaredScope = coveringReadScope(
+        manifest.scopes,
+        ref.schema,
+        ref.table
+      );
+      if (!declaredScope) continue;
+      const effective = {
+        rowFilter: declaredScope.rowFilter ?? [],
+        fieldMask: declaredScope.fieldMask ?? null,
+      };
       const info = tableColumns(db, ref.physical);
       const unavailable = new Set(replicaUnavailableColumnsOf(entity, db));
       const pk = info
@@ -521,7 +535,7 @@ export function buildReplicaShapes(
       if (!alternative) continue;
       const alternatives = [alternative];
       const allowed = new Set(alternatives.flatMap((scope) => scope.columns));
-      // Sticky over consent masks too: a handler touching a masked field must
+      // Sticky over declared masks too: a handler touching a masked field must
       // rerun online rather than see `undefined` and change its semantics.
       const hasUnavailableFields =
         unavailable.size > 0 ||
@@ -553,7 +567,7 @@ export function buildReplicaShapes(
       appId,
       purpose,
       canWrite: access.canWrite,
-      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+      maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
       entities: entities.map((entity) => ({
         entity: entity.entity,
         primaryKey: entity.primaryKey,
@@ -581,7 +595,7 @@ export function buildReplicaShapes(
       entities.map((entity) => [entity.entity, entity])
     );
     const rowKeySecret = crypto
-      .createHmac("sha256", grantee.signing_key)
+      .createHmac("sha256", installed.signing_key)
       .update(`replica-row-key\u0000${replicaEpoch}`)
       .digest("hex");
     const shape = {
