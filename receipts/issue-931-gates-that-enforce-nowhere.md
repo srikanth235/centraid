@@ -720,6 +720,23 @@ Verdict: REFUTED — one narrow finding; both earlier findings are fixed.
   this base, so it sees other work's `apps/mobile/**/*.tsx`. Stale base, not this
   slice — the branch's own 34 files contain zero surfaces.
 
+**2026-09-03 — close, head `96506fdc7`.** Verdict: PASS.
+
+Further verification ceremony waived by the maintainer, so this reads the delta
+only and runs nothing. `96506fdc7` fixes the single open finding exactly as
+recommended: `CLIENT_NOT_A_SURFACE` now carries
+`/^packages\/client\/src\/react\/blueprints\/inlineQueryCtx\.ts$/u` — one exact
+name, no prefix — and the nonexistent `inline-query-ctx-core.ts` is gone from the
+transport case in `scripts/validate-ui-receipt.test.mjs`; `git ls-files | grep -c
+inline-query-ctx-core` is still 0, so nothing unwritten is exempted. Both earlier
+findings were already fixed and re-swept at `729926091` (674 surfaces / 126
+excluded across 800 tracked `packages/client` paths, every remaining excluded
+literal a thrown diagnostic). Gates last run green at `729926091`: `format:check`,
+root `lint`, `scripts:test` 613/0, `validate-ui-receipt.test.mjs` 7 pass,
+`.governance/run.sh` 22/22, `self-audit.sh 931` PASS; `lint:product` 40/41 there
+only because `check:ui-receipt` two-dot-diffs a stale `origin/main`. Not re-run on
+this head.
+
 ## Session
 
 ### Identifiers
