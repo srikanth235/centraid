@@ -176,6 +176,18 @@ else
   # "Task not found" rather than quietly resuming a 4-minute lint, which is the
   # failure mode to want.
   #
+  # ALL THREE, NOT TWO (#916). `lintVitalRelease` is the CONSUMER — an
+  # `AndroidLintTextOutputTask` whose `returnValueInputFile` and
+  # `textReportInputFile` are written by the two analyze/report tasks excluded
+  # beside it. Excluding only the producers left it in the graph with its inputs
+  # deleted, and gradle refuses that at validation rather than skipping it:
+  # "An input file was expected to be present but it doesn't exist" →
+  # `WorkValidationException` → BUILD FAILED after an 18m19s compile, on run
+  # 33711841127. The omission has been latent since #905 added the exclusions:
+  # this lane hard-failed on an apk-cache miss until #916 reversed that, so no
+  # PR had reached a cold gradle build to trip it, and a warm build skipped
+  # every one of these tasks. It is unmasked by this branch, not caused by it.
+  #
   # THE JS BUNDLE IS THE ONE TASK A WARM BUILD DIRECTORY MAY NOT SHORTCUT
   # (#916). Since the caching restructure, the three Android lanes restore
   # `apps/mobile/android/.gradle` alongside the build directories, so gradle
@@ -207,7 +219,7 @@ else
   ( cd apps/mobile/android \
     && EXPO_PUBLIC_CENTRAID_FRAME_PROBE=1 ./gradlew "${bundle_rerun[@]}" "$gradle_task" \
       -PreactNativeArchitectures=x86_64 \
-      -x lintVitalAnalyzeRelease -x lintVitalReportRelease \
+      -x lintVitalAnalyzeRelease -x lintVitalReportRelease -x lintVitalRelease \
       --console=plain --stacktrace )
   # Bank the apk under the content-addressed cache path. Fail hard if it is
   # missing rather than caching nothing (a later hit would install nothing and
