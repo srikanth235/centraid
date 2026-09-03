@@ -18,6 +18,7 @@ import {
   seedYear3Vault,
   materializeYear3Fixture,
   year3VaultProfile,
+  year3FixtureCacheRoot,
 } from "@centraid/test-kit/year3-vault";
 import {
   blobUriFor,
@@ -120,9 +121,9 @@ describe("restore-10gib.scale", () => {
       const restoreDir = await tempDir("restore-10gib-restore-");
       await rm(restoreDir, { recursive: true, force: true });
 
-      const cacheRoot =
-        process.env.CENTRAID_YEAR3_CACHE_DIR ??
-        (await tempDir("restore-year3-cache-"));
+      // ONE way to name the fixture cache (#927 P4): the env-var-or-temp-dir
+      // dance lives in the kit, so a rig cannot drift from where CI caches.
+      const cacheRoot = year3FixtureCacheRoot();
       const materialized = await materializeYear3Fixture(
         cacheRoot,
         async (target) => {

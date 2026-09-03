@@ -274,3 +274,443 @@ Judged and not findings:
 | date | harness | session |
 | --- | --- | --- |
 | 2026-09-03 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+
+## w1c — golden year-3 vault and golden phone replica
+
+### What changed, file by file
+
+- **`packages/test-kit/src/year3-vault.ts`** — `YEAR3_FIXTURE_VERSION` 1 → 2.
+  Adds `Year3Distributions` (the declared shape of the owner's third year) and
+  `YEAR3_DISTRIBUTIONS`: notes with a `longNoteShare` over the replica's 64 KiB
+  value ceiling, `eventDays`, `automations`, `mountedVaults`, `grantees` /
+  `granteeCircles`, `receiptDays`, `replicaRows`, `dailyPathPhotos`. Adds
+  `goldenYear3Profile()` (the named golden artifact: the year-3 profile with
+  the daily-path photo count and the distributions attached) and
+  `year3FixtureCacheRoot()` (the ONE place the cache is named). `seedYear3Vault`
+  gains an opt-in `counts.distributions` branch that seeds notes (bodies as
+  base64 `data:` URIs on `core_content_item`, exactly as `schema/fts.ts`
+  requires), three calendar years of `core_event`, 50,000 `schedule_task` rows,
+  200 automations' `automation_state` + `automation_trigger_cursor`, a circle
+  and its `tally_group`, grantee `share_party_vault_binding` +
+  `share_authority` rows (view over `media.asset`, one circle-principal edit
+  over `tally.group`), and a year of chained `access_receipt` rows. Plants the
+  two search needles (`YEAR3_CONTACT_NEEDLE`, `YEAR3_NOTE_NEEDLE`) in the
+  fixture itself so no rig writes to the artifact it measures.
+- **`packages/test-kit/src/year3-shape.ts`** (new) — types and constants only:
+  `Year3Distributions`, `Year3VaultProfile`, `Year3Sqlite`,
+  `Year3VaultTarget`, `Year3SeedCounts`, `YEAR3_DISTRIBUTIONS` and the two
+  search needles. Re-exported in full by `year3-vault.ts`, so `./year3-vault`
+  remains the one public subpath.
+- **`packages/test-kit/src/year3-distributions.ts`** (new) — the distribution
+  half of the seeder, split out of `year3-vault.ts` so no file is a god file:
+  `seedYear3Distributions`, `longNoteBody`, `NOTE_WORDS`, `Year3SeedContext`.
+  Same statements, same behaviour, one import seam.
+- **`packages/test-kit/src/year3-replica.ts`** (new) — the golden phone
+  replica: `buildYear3ReplicaSnapshot` walks the vault's own
+  `readReplicaRows` and assembles the bootstrap snapshot a phone receives,
+  deriving the shape catalog from the reader's answer rather than a hand-written
+  column list; `year3PendingIntents` builds the converge journey's outbox at
+  N ∈ {1, 10, 40} through the phone's own canonical payload hash;
+  `year3ReplicaCacheKey` content-addresses a replica off the vault's key.
+- **`packages/test-kit/src/year3-vault.test.ts`** (new) — distributions present
+  in a real bootstrapped file, seed determinism, the plain profile carrying no
+  distributions, cache-key coverage, cache hit/miss and schema-bump
+  invalidation.
+- **`packages/test-kit/src/year3-replica.test.ts`** (new) — per-entity row
+  counts equal to `snapshot.ts`'s own read, the long bodies landing in the
+  DEFERRED half and absent from `values`, the ceiling, outbox determinism at
+  all three volumes, cache-key separation.
+- **`packages/test-kit/package.json`** — `./year3-replica` export.
+- **`tests/helpers/factories.ts`** — `goldenYear3Vault()` (materialize or
+  reuse, plus the four companion vaults of the five-vault footprint) and
+  `goldenYear3Replica({ pendingIntents })` (real `ReplicaSqliteStore.bootstrap`
+  over `NodeSqliteDriver`, the phone's `SqliteIntentStore` for the outbox,
+  `VACUUM INTO` for the on-disk artifact). `createTestVault`'s dynamic import
+  is aliased so the new static imports do not shadow it.
+- **`tests/scale/large-vault.scale.test.ts`** — mounts the golden vault. Its
+  inline seeding (1,000 notes, 1,096 events, two needles patched in by UPDATE
+  after the copy) is deleted; all four assertions are unchanged.
+- **`tests/scale/replica-bootstrap.scale.test.ts`** — gains three additive
+  `test.each` cases that materialize the golden phone replica at N = 1, 10, 40
+  and reopen it. The two existing tests are untouched.
+- **`tests/scale/photos-timeline.scale.test.ts`**, **`tests/scale/restore-10gib.scale.test.ts`**
+  — one expression each: `cacheRoot` now comes from `year3FixtureCacheRoot()`
+  rather than an inlined `process.env.CENTRAID_YEAR3_CACHE_DIR ?? …`. Profiles,
+  seeds and assertions untouched.
+- **`tests/experience-budgets/README.md`** — the year-3 table gains a **golden
+  artifact** column naming the fixture field per row, plus rows for calendar
+  events, grantees, audit receipts and pending intents. No ceiling changed.
+
+### Numbers
+
+Host: this session's container, Linux 4 cores / 15 GB, node 22, `/tmp` scratch.
+Volume: `goldenYear3Profile()`.
+
+| Measurement | Value | Command |
+| --- | --- | --- |
+| Golden vault build, cold | 20.3 s (test body), 25.0 s wall | `bun run test:scale -- tests/scale/large-vault.scale.test.ts` (empty cache) |
+| Golden vault mount, warm | 0.43 s (test body), 4.9 s wall | same command, second run |
+| `vault.db` on disk | 106,217,472 B (101.3 MiB) | `ls -la <cache>/vault.db` |
+| Golden fixture directory | 126 MB (vault + 4 companions) | `du -sh` |
+| `replica.db` on disk | 33,304,576 / 33,312,768 / 33,325,056 B (N = 1 / 10 / 40) | `ls -la <cache>/*/replica.db` |
+| Golden replica build, cold, all three N | 34.0 s (test body) | `bun run test:scale -- tests/scale/replica-bootstrap.scale.test.ts` |
+
+Row counts in the built artifact (`SELECT COUNT(*)` on the cached `vault.db`):
+
+| Dimension | Rows |
+| --- | --- |
+| `core_party` | 5,001 (5,000 + the bootstrapped owner) |
+| `media_asset` | 10,000 |
+| `core_content_item` | 11,000 |
+| `knowledge_note` | 1,000 |
+| note bodies > 64 KiB | 30 (3.0% — the declared `longNoteShare`) |
+| `core_event` | 1,096 |
+| `schedule_task` | 50,000 |
+| `access_receipt` | 365, spanning 2025-01-01 → 2025-12-31 |
+| `share_party_vault_binding` (live) | 12 |
+| `share_authority` | 14 (12 view + 1 circle edit + 1 bootstrap device) |
+| `social_circle` | 1 |
+| `automation_state` | 200 |
+| `core_tag` | 200 |
+| `replica_change` | 78,376 |
+| Golden replica rows | 50,000 |
+
+**`vault.db` size is a sample, not a constant.** This run measured
+106,217,472 B; the verifier measured 106,258,432 B and 106,299,392 B across
+two further builds of the same profile at the same seed. The artifact is
+row-identical but NOT byte-reproducible, because `bootstrapVault` mints
+`uuidv7` owner/vault/device ids and several schema DEFAULTs are wall-clock —
+vault behaviour tracked as #935, not kit nondeterminism.
+`year3-vault.test.ts` claims exactly the row-identical scope and no more.
+Quote the size as "about 101 MiB", never as an exact figure.
+
+There is no before/after here to compare: this slice adds a fixture, it does
+not change a hot path. The numbers above are the artifact's own cost, recorded
+so wave 3 can state what mounting it costs a journey rig.
+
+### What was deleted
+
+- `tests/scale/large-vault.scale.test.ts`'s inline corpus — 1,000 notes with
+  their content items, 1,096 `core_event` rows, and the two `UPDATE`s that
+  patched search needles into a fixture after it was copied. Replaced by the
+  golden vault's own declared dimensions and its planted needles.
+- The `artifacts/year3-cache` SHAPE inside rig bodies: the env-var-or-temp-dir
+  dance is now `year3FixtureCacheRoot()`, one function, defaulting to the
+  host's scratch dir so a second local run is warm. All four rigs that
+  materialize a year-3 fixture call it — `large-vault` and `replica-bootstrap`
+  through `goldenYear3Vault`, and `photos-timeline` and `restore-10gib`
+  directly (mounting-only change; their assertions and profiles are
+  untouched). No rig body inlines `process.env.CENTRAID_YEAR3_CACHE_DIR ?? …`
+  any more; the only remaining literal `artifacts/year3-cache` in the tree is
+  in `.github/workflows/e2e.yml`, which #927 w2 owns.
+
+### Decisions
+
+1. **The distributions are opt-in on the seeder, not on the plain profile.**
+   `year3VaultProfile()` deliberately returns `distributions: undefined`;
+   `goldenYear3Profile()` attaches them. `photos-timeline` and `restore-10gib`
+   spread the plain profile for one axis, and silently giving them a year of
+   receipts and 50,000 tasks would change what those rigs measure without
+   anyone deciding to. A rig opts into year-3 distribution by mounting the
+   golden vault.
+2. **The golden vault's photo count is the DAILY-PATH 10,000, not the library
+   90,000.** The golden vault is what a journey opens, and a journey reads the
+   daily path. The 90,000-asset library stays the plain profile's number, owned
+   by the two rigs that measure the library itself.
+3. **`replicaRows` is seeded as `schedule.task`.** That is the shape the two
+   rigs owning the "50,000 replica rows on a phone" dimension already walk. The
+   daily-path corpus alone yields ~27,000 mirrorable rows; padding it with
+   photos nobody declared would have been inventing a number, and declaring the
+   phone volume unmet would have left the golden replica short of its own
+   declaration.
+4. **The share rows are MIRRORED, not imported.** `@centraid/test-kit`
+   deliberately does not depend on `@centraid/vault` (the vault devDepends on
+   the kit), so `createShareGrant` and `bindPartyToVault` cannot be called from
+   the seeder. Each block names the writer it mirrors, and the kit's own suite
+   runs those statements against a real bootstrapped schema — which is what
+   catches a mirror going stale. Ids are deterministic where the commands mint
+   a `uuidv7`: an id is opaque, and a fixture that is not reproducible is not
+   an artifact.
+5. **The kit's suites import the vault and the client by PATH.** A package
+   import would close a dependency cycle. This adds no dependency edge and no
+   type dependency.
+
+### Re-judged rulings
+
+- **`year3FixtureCacheKey` carries the schema ladder length (#883/#915
+  lineage).** Kept, and the property is concrete for the product as it is now:
+  the fixture IS a vault on disk, and a cached directory built before a
+  migration rung, opened by post-rung code, is the failure that ruling was
+  written from. The version bump to 2 rides the same key, so the distributions
+  change invalidates every cached directory without a manual purge.
+- **`multi-vault-footprint.scale.test.ts`'s "row volume is deliberately
+  bootstrap-only".** Re-judged and KEPT, with the property named: the pragmas
+  under test are reservations made at open time and are exact regardless of row
+  count, so seeding the golden vault into all five mounts would add minutes of
+  build time and change no measured value. The golden artifact still carries
+  the dimension (`mountedVaults`, and `goldenYear3Vault().companionDirs`
+  materializes the four companions) so a wave-3 journey rig that DOES read from
+  five mounts has them.
+
+### Findings and handoffs
+
+1. **`.github/workflows/e2e.yml` still names `artifacts/year3-cache`** (lines
+   ~1439, ~1450, ~1515, ~1527) as the `CENTRAID_YEAR3_CACHE_DIR` value and the
+   cached path. Workflows are #927 w2's, so this slice left them alone; the env
+   var is still honoured by `year3FixtureCacheRoot()`, so CI is unaffected. w2
+   should retire the literal path along with the rest of the actions-cache
+   shape the issue deletes.
+2. **`replica-reconnect.scale.test.ts` and `replica-bootstrap.scale.test.ts`'s
+   gateway test cannot be converted by mounting alone.** Both seed their
+   50,000 rows into a LIVE gateway plane (`serve()` / `openVaultPlane`) and
+   pin their assertions to that plane's grant scope and cursor arithmetic;
+   mounting a pre-built vault into a gateway data dir is a journey-rig change,
+   which is #927 w3's. The golden vault now carries the rows they would need
+   (50,000 `schedule.task`, ids `year3-NNNNNN` — the scheme `replica-reconnect`
+   already walks), so w3's conversion is a mount rather than a reseed.
+3. **`mobile-reconnect-to-fresh.scale.test.ts` drives
+   `createNativeReplicaSession` against an in-memory corpus fixture**, not a
+   replica file. Pointing it at the golden replica is a rewrite of how the
+   session is opened, again w3's.
+4. **`photos-timeline.scale.test.ts` is red at the base**: it inserts
+   `media_asset.favorite`, a column #916 deleted. Reproduced on a clean tree.
+   Nothing in this slice touches it beyond the one-expression cache-root
+   conversion; whoever finishes #916's fallout, or #927 w3 when it rewrites
+   the rig, owns the fix.
+5. **`large-vault`'s 30 s seed budget has ~6 s of headroom on a cold golden
+   build** on this host, and none under CPU contention. Not widened. See the
+   verification note above for the two ways out; both are the root's or w2's
+   to choose.
+6. **`openVaultDb` writes its identity key to `<parent-of-vault-dir>/keys/`**,
+   so materializing a fixture leaves an orphaned `<tmpname>.identity` pair in
+   the cache root after the atomic rename. Pre-existing for every year-3 rig
+   today and harmless (the seal key is explicit and the copy regenerates its
+   identity on open), but it means the cache root accumulates dead key files.
+   Not owned by this slice; recorded for whoever owns `schema/vault-identity.ts`.
+
+### Verification
+
+First pass, before the audit. It is recorded as run and is superseded by the
+re-run under `#### Fix after audit` below; `bash .governance/run.sh` is missing
+from it, which is finding 6 of that section.
+
+```sh
+# in /home/user/centraid-wt/claude/927-w1c-golden-vault
+bun run format                                   # 5354 files, clean
+bun run lint                                     # oxlint --deny-warnings, clean
+bun run lint:vault-sql                           # ok — 489 refs / 4241 files / 42 allow-listed
+bun run --cwd packages/test-kit test             # 5 files, 76 tests passed
+bun run --cwd packages/test-kit typecheck        # clean
+bun run --cwd packages/vault test                # unchanged package, green
+bun run --cwd packages/vault typecheck           # clean
+bun run typecheck                                # root, clean
+bun run lint:product                             # clean
+bun run test:scale -- tests/scale/large-vault.scale.test.ts
+#   cold: 1 passed, 24.35 s (fixture build 20.3 s)
+#   warm: 1 passed,  4.26 s (fixture mount 0.43 s)
+bun run test:scale -- tests/scale/replica-bootstrap.scale.test.ts
+#   5 passed, 39.66 s (three golden-replica builds, cold)
+```
+
+`bun run check:push` was not run: host contention makes it unreliable in this
+container, and the slice contract substitutes `bun run lint:product`.
+
+### Audit
+
+Verdict: REFUTED
+
+Fresh-context verifier, worktree `claude/927-w1c-golden-vault` at `2c6e7270`
+(base `cf616a09`). The slice's substance holds — the golden vault, the replica
+builder and the two rigs all check out under adversarial reading — but two
+governance gates that were green at the base are red on this branch, and both
+were introduced here. `bash .governance/run.sh` was never run.
+
+Findings:
+
+1. `packages/test-kit/src/year3-vault.ts` (917 lines) →
+   `.governance/run.sh` § `repo-hygiene` fails: `917 lines (limit: 625)`. The
+   file is 423 lines at the base `cf616a09`, so this is a god-file violation
+   this slice introduces, not a base-state red. (The other hygiene violation,
+   `packages/blueprints/apps/locker/queries.test.ts` at 638 lines, is
+   pre-existing at the base and untouched here.) Fix: split the distribution
+   half — `seedYear3Distributions`, `longNoteBody`, `NOTE_WORDS`,
+   `Year3SeedContext` — into a sibling module (e.g.
+   `packages/test-kit/src/year3-distributions.ts`) that `year3-vault.ts`
+   imports; no API or behaviour change is needed.
+2. `receipts/issue-927-perf-infra.md:31` → `.governance/run.sh` §
+   `receipt-per-issue` fails: "newly added receipt's `## Verification` has no
+   fenced code block". The top-level `## Verification` delegates in prose to
+   the appended section; the fence the directive wants must be under the
+   top-level heading. Fix: put a fenced command block under `## Verification`
+   (the w1c list is already fenced and can be repeated or pointed at).
+3. `receipts/issue-927-perf-infra.md` § "What was deleted", second bullet →
+   overstates. "the env-var-or-temp-dir dance is now `year3FixtureCacheRoot()`,
+   one function" is true only of the rigs this slice touched:
+   `tests/scale/photos-timeline.scale.test.ts:73` and
+   `tests/scale/restore-10gib.scale.test.ts:124` still inline
+   `process.env.CENTRAID_YEAR3_CACHE_DIR ?? …` verbatim. Fix: qualify the
+   bullet ("in the rigs this slice mounts; two rigs w3 owns still repeat it")
+   or add the two call sites to the slice.
+4. `tests/experience-budgets/README.md`, "Replica rows on a phone" row → the
+   golden-artifact column names `replicaRows` with no disclosure that the
+   50,000 vault rows behind it are one shape (`schedule.task`), a declared
+   filler rather than a realistic year-3 mix. The kit source
+   (`year3-vault.ts`, `Year3Distributions.replicaRows`) and this receipt's
+   Decision 3 both say so; the README, which is where a rig author reads the
+   dimension, does not. Fix: add the qualifier to that row.
+
+Non-findings, recorded because they were attacked and held:
+
+- **Determinism.** Built the fixture twice at the default seed into two fresh
+  cache roots (`/tmp/centraid-year3-fixture-cache` and, via
+  `CENTRAID_YEAR3_CACHE_DIR=/tmp/y3-b`, a second). Row counts are identical
+  across all 34 non-empty tables. Seeded content is byte-identical for
+  `access_receipt`, `core_event`, `items`, `turns`,
+  `share_party_vault_binding`, `social_circle_member`, `automation_state`,
+  `automation_trigger_cursor`, `core_entity_kind`, `sync_connection`,
+  `tally_group`. The tables that differ do so only through the bootstrap's
+  `uuidv7` owner/vault/device ids and schema-DEFAULT wall-clock
+  `created_at`/`updated_at` — vault behaviour (#935), not kit
+  nondeterminism. `year3-vault.test.ts`'s "two builds at one seed are
+  row-identical" claims exactly that scope and no more. Note the artifact is
+  therefore NOT byte-reproducible: `vault.db` measured 106,258,432 and
+  106,299,392 bytes across my two builds against the 106,217,472 in § Numbers,
+  so that row is a sample, not a constant.
+- **Declared distributions hold** in the built artifact: 30 of 1,000 note
+  bodies over 64 KiB (3.0% = `longNoteShare`), `access_receipt` 365 rows
+  spanning 2025-01-01 → 2025-12-31, 12 live `share_party_vault_binding` + 14
+  `share_authority` + 1 `social_circle`, 1,096 `core_event`, 50,000
+  `schedule_task`, 200 `automation_state`, five vault directories (main +
+  four companions), N ∈ {1, 10, 40}. Every row in § Numbers reproduced.
+- **Seeded through the product's own shapes.** Read every INSERT in
+  `seedYear3Distributions`; each names the writer it mirrors, the
+  `access_receipt` block is INSERT-only against the append-only trigger, and
+  `share_authority`'s circle-principal `edit` over `tally.group` is the one
+  the subject registry offers. `bun run lint:vault-sql` is green — but note
+  `packages/test-kit/` is allowed by ROLE (`scripts/lint-vault-sql.mjs:81`),
+  so that gate polices nothing here; the honesty of the mirrors rests on
+  `year3-vault.test.ts` running them against a real bootstrapped schema,
+  which it does.
+- **The replica equals a real bootstrap.** `year3-replica.test.ts` asserts
+  per-entity row counts against `readReplicaRows`'s own paged read, the
+  column list against the reader's answer, and the >64 KiB bodies as
+  `oversizedFields` absent from `values`. The scale rig reopens the on-disk
+  artifact and counts `replica_row` = 50,000 and `replica_intent_outbox`
+  queued = N independently of the builder's own tally.
+- **`large-vault.scale.test.ts`'s assertions are byte-for-byte unchanged**
+  against the base (all six `expect` lines), as are the four read queries
+  they stand on; only the needle literals moved to the fixture's exported
+  constants.
+- **Workflows untouched** (`git diff --name-only … -- .github/` is empty);
+  `.github/workflows/e2e.yml`'s four `artifacts/year3-cache` literals are
+  intact and `CENTRAID_YEAR3_CACHE_DIR` is honoured — I built a whole fixture
+  through it.
+- **Binary tripwire clean**: no `-\t-` rows in `git diff --numstat`, no NUL
+  byte in any changed file. (`tests/quality/user-facing-qualities.test.ts`
+  holds one deliberate `^@` key delimiter; it is pre-existing at the base and
+  not in this diff.)
+- Checklist mirrors #927's nine acceptance criteria verbatim; no box is
+  checked, which is correct for a wave-1 slice. No budget, ceiling,
+  allowlist or ratchet number moved; no test skipped or deleted.
+
+Gates run:
+
+```sh
+bun run format                                     # clean, tree unchanged
+bun run lint                                       # pass
+bun run lint:vault-sql                             # pass (test-kit allowed by role)
+bun run --cwd packages/test-kit test               # 5 files, 76 tests passed
+bun run --cwd packages/test-kit typecheck          # pass
+bun run --cwd packages/vault typecheck             # pass
+bun run typecheck                                  # 25/25 tasks + tsc -p tests, pass
+bun run test:scale -- tests/scale/large-vault.scale.test.ts       # cold 24.1 s / warm 5.0 s wall, 1 passed
+bun run test:scale -- tests/scale/replica-bootstrap.scale.test.ts # cold 38.9 s / warm 18.4 s wall, 5 passed
+bash .governance/run.sh                            # FAIL — findings 1 and 2
+```
+
+Host: this session's container, Linux, node 22, `/tmp` scratch. Volume:
+`goldenYear3Profile()`.
+
+#### Fix after audit
+
+Rebased onto `origin/main` (`6c242d62`, carrying #930, #922's rulings and
+#927 w1-core) and re-landed as one appended section on main's receipt; the
+scaffolding this slice originally created is gone, and nothing above this
+section is rewritten.
+
+1. **Finding 1 — `repo-hygiene`, `year3-vault.ts` at 917 lines (limit 625).**
+   Split three ways, because a two-way split left an import cycle
+   (`import/no-cycle`): `year3-shape.ts` (167 lines) holds the vocabulary —
+   the distribution and profile types, `YEAR3_DISTRIBUTIONS`, the SQLite
+   seams, the needles; `year3-distributions.ts` (344 lines) holds
+   `seedYear3Distributions`, `longNoteBody`, `NOTE_WORDS` and
+   `Year3SeedContext`; `year3-vault.ts` (461 lines) keeps the artifact's
+   identity — version, profile, content-addressed cache — and calls the
+   seeder at the one seam it always had. `year3-vault.ts` re-exports
+   `year3-shape.ts` in full, so `./year3-vault` stays the one public subpath
+   and not a single import elsewhere in the tree changed. No exported API and
+   no behaviour changed; all three files are under the limit.
+2. **Finding 2 — `receipt-per-issue`, no fenced block under `## Verification`.**
+   Moot as filed and fixed as meant: this slice no longer creates the receipt,
+   so main's `## Verification` stands untouched, and the fenced command block
+   below carries this section's own replayable evidence.
+3. **Finding 3 — the cache-root claim was false.**
+   `tests/scale/photos-timeline.scale.test.ts` and
+   `tests/scale/restore-10gib.scale.test.ts` now call
+   `year3FixtureCacheRoot()` instead of inlining
+   `process.env.CENTRAID_YEAR3_CACHE_DIR ?? (await tempDir(…))`. Mounting-only:
+   their profiles, seeds and assertions are byte-for-byte unchanged. The
+   "What was deleted" bullet above is rewritten to say what is now true.
+4. **Finding 4 — the README hid that `replicaRows` is one shape.** The
+   "Replica rows on a phone" row now says in the golden-artifact column that
+   the 50,000 rows are a single `schedule.task` shape — a declared filler
+   rather than a realistic year-3 mix, revisited by #927 w3.
+5. **The `vault.db` byte figure** is restated as a sample with the verifier's
+   two measurements and the #935 cause beside it, in § Numbers above.
+6. **`bash .governance/run.sh` was never run before the first report.** It is
+   now part of the gate list below and was run to green before this commit.
+
+Verification of the fix, on the same host:
+
+```sh
+bun run format                                       # clean
+bun run lint                                         # pass
+bun run lint:vault-sql                               # pass
+bun run --cwd packages/test-kit test                 # 5 files, 76 tests passed
+bun run --cwd packages/test-kit typecheck            # pass
+bun run typecheck                                    # turbo 25/25 + tsc -p tests, pass
+bun run test:scale -- tests/scale/large-vault.scale.test.ts        # 1 passed, cold cache, 23.5 s
+bun run test:scale -- tests/scale/replica-bootstrap.scale.test.ts  # 5 passed, 39.2 s
+bun run test:scale -- tests/scale/photos-timeline.scale.test.ts    # FAILS — base-state red, see below
+bun run lint:product                                 # 39/39 gates passed
+bash .governance/run.sh                              # 22/22 directives passed
+```
+
+Two of those need their outcome stated rather than a tick:
+
+- **`photos-timeline.scale.test.ts` fails, and fails identically on the clean
+  base.** `Error: table media_asset has no column named favorite` at its own
+  `INSERT INTO media_asset` — #916 removed that column and this rig was not
+  updated with it. Confirmed by `git stash -u`, re-run, same error one line
+  up (the only difference being the comment this slice adds). Out of this
+  slice's contract to fix: it is an assertion/corpus change to a rig #927 w3
+  owns, not a cache-root change. Filed as a finding below.
+- **`large-vault` has thin headroom on a COLD cache.** 23.5 s of test body
+  against its unchanged `SEED_BUDGET_MS = 30_000`, and 34.2 s when the host
+  was also running `bun run typecheck` — i.e. it fails under contention on a
+  cold fixture. The budget was NOT widened and the fixture build was NOT moved
+  out of the timed window; both would be weakening a gate to go green. In CI
+  the cold path is paid only on a cache miss, because `e2e.yml` caches
+  `artifacts/year3-cache` and passes it as `CENTRAID_YEAR3_CACHE_DIR`. Filed
+  as a finding for the root: either the nightly lane warms the fixture before
+  the timed rigs, or the ledger (#927 w2) separates "build the artifact" from
+  "mount the artifact" as two entries.
+
+`tests/scale/restore-10gib.scale.test.ts` was **not** run: it is a ~90-minute
+nightly rig that materializes a 10 GiB blob store, and this container cannot
+host it. Its change is one expression — `cacheRoot` now comes from
+`year3FixtureCacheRoot()` rather than from
+`process.env.CENTRAID_YEAR3_CACHE_DIR ?? (await tempDir(…))`, which is the same
+value by construction — and it is covered by the root `typecheck`
+(`tsc -p tests`) plus a line-by-line read of the mount block. Saying so
+explicitly rather than claiming a run that did not happen.

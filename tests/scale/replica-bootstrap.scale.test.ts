@@ -9,13 +9,17 @@ import { describe, expect, onTestFinished, test } from "vitest";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { generateVolumeFixture } from "@centraid/test-kit/volume-fixture";
+import { YEAR3_PENDING_INTENT_VOLUMES } from "@centraid/test-kit/year3-replica";
+import { YEAR3_DISTRIBUTIONS } from "@centraid/test-kit/year3-vault";
 
+import { NodeSqliteDriver } from "../../packages/client/src/replica/node-sqlite-test-driver.js";
 import { makeReplicaRouteHandler } from "../../packages/server/src/routes/replica-routes.js";
 import { EnrollmentStore } from "../../packages/server/src/serve/enrollment-store.js";
 import { runWithVaultContext } from "../../packages/server/src/serve/vault-context.js";
 import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import type { VaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import type { VaultRegistry } from "../../packages/server/src/serve/vault-registry.js";
+import { goldenYear3Replica } from "../helpers/factories.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 import { exerciseWindowedBootstrap } from "../quality/replica-bootstrap-fixture.js";
 
@@ -227,4 +231,66 @@ describe("replica-bootstrap.scale", () => {
     expect(taskRowsDelivered).toBe(ROWS);
     expect(durationMs).toBeLessThan(30_000);
   });
+
+  // ── issue #927 P4: the GOLDEN phone replica ──────────────────────────────
+  //
+  // The two tests above prove the WALK — the client side against a stub, the
+  // server side against the real route. Neither leaves an artifact behind, so
+  // every later journey rig would have to walk 50,000 rows again before it
+  // could measure anything. This one materializes the walk's OUTPUT once: the
+  // SQLite file a phone holds after a full bootstrap of the golden year-3
+  // vault, plus the outbox at each of the converge journey's three volumes
+  // (N = 1, 10, 40).
+  //
+  // Deliberately additive — the assertions above are untouched. The rows
+  // arrive through the vault's own `readReplicaRows` and the client's own
+  // `ReplicaSqliteStore.bootstrap`, and the outbox through the phone's own
+  // `SqliteIntentStore`, so what this asserts about the artifact is an
+  // assertion about the real apply path.
+  test.each(YEAR3_PENDING_INTENT_VOLUMES)(
+    "the golden phone replica materializes with %i pending intents",
+    async (pending) => {
+      const replica = await goldenYear3Replica({ pendingIntents: pending });
+      // The declared year-3 phone volume, in full.
+      expect(replica.rows).toBe(YEAR3_DISTRIBUTIONS.replicaRows);
+      expect(replica.pendingIntents).toBe(pending);
+      expect(replica.bytes).toBeGreaterThan(0);
+
+      // Reopen the artifact exactly as a phone would: a fixture nothing can
+      // open is not a fixture.
+      const driver = new NodeSqliteDriver();
+      driver.exec(
+        `ATTACH DATABASE '${replica.file.replaceAll("'", "''")}' AS golden`
+      );
+      const rows = driver.all<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM golden.replica_row"
+      )[0]!.n;
+      const queued = driver.all<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM golden.replica_intent_outbox
+            WHERE state = 'queued'`
+      )[0]!.n;
+      driver.close();
+      expect(rows).toBe(YEAR3_DISTRIBUTIONS.replicaRows);
+      expect(queued).toBe(pending);
+
+      await recordQualityResult({
+        lane: "scale",
+        owner: OWNER,
+        name: `Golden phone replica at ${YEAR3_DISTRIBUTIONS.replicaRows} rows, ${pending} pending intents`,
+        status: "passed",
+        measurements: [
+          { name: "replica rows", value: replica.rows, unit: "rows" },
+          { name: "pending intents", value: pending, unit: "count" },
+          { name: "replica on disk", value: replica.bytes, unit: "bytes" },
+          { name: "build", value: replica.buildMs, unit: "ms" },
+          {
+            name: "golden fixture cache hit",
+            value: replica.cacheHit ? 1 : 0,
+            unit: "count",
+          },
+        ],
+      });
+    },
+    600_000
+  );
 });
