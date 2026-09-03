@@ -1,8 +1,10 @@
+import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 import type {
   ReplicaCoverage,
   ReplicaInvalidation,
   ReplicaSearchWireResult,
 } from "@centraid/client/replica/native";
+import { postStatus } from "@centraid/client/status-channel";
 
 import type { MountedReadResult } from "./mounted-read-scoping";
 import type {
@@ -127,11 +129,21 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     return this.#reader.read(appId, request);
   }
 
-  search(
+  /**
+   * Every phone search passes through here, so the truncation line is said
+   * ONCE rather than by each of the three screens that search (#922 0a). A
+   * ranked page that filled its window hides hits exactly as a list read hides
+   * rows, and lands on the same status line.
+   */
+  async search(
     appId: string,
     request: NativeSearchRequest
   ): Promise<ReplicaSearchWireResult> {
-    return this.#reader.search(appId, request);
+    const result = await this.#reader.search(appId, request);
+    if (result.truncated && result.appliedLimit !== undefined) {
+      postStatus(truncatedListNotice(result.appliedLimit));
+    }
+    return result;
   }
 
   write(appId: string, input: NativeWriteInput): Promise<NativeWriteResult> {

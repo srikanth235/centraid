@@ -247,6 +247,11 @@ export function buildInlineCtx(
       request: ShellReplicaSearchRequest
     ): Promise<{ rows: unknown[]; receiptId: string }> {
       const result = await session.search(appId, request);
+      // A ranked page that filled its window hides hits exactly as a list read
+      // hides rows, and says so on the same line (#922 0a).
+      if (result.truncated && result.appliedLimit !== undefined) {
+        postStatus(truncatedListNotice(result.appliedLimit));
+      }
       const rows = result.rows.map((row) => {
         const marker = pendingMarker(row);
         if (marker) pendingRows.push(marker);

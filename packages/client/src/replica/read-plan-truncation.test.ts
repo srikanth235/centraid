@@ -18,6 +18,7 @@ import {
   UnboundedReplicaReadError,
   assertBoundedReplicaRead,
 } from "./read-plan.js";
+import { REPLICA_DEFAULT_SEARCH_ROWS } from "./search.js";
 import { ReplicaSqliteStore } from "./store-core.js";
 import { REPLICA_PROTOCOL_VERSION } from "./types.js";
 import type {
@@ -32,8 +33,39 @@ const SHAPE: ReplicaShape = {
   purpose: "dpv:ServiceProvision",
   entities: [
     { entity: "core.item", primaryKey: "item_id", columns: ["item_id", "n"] },
+    // A locally searchable entity, so the FTS window has something to fill.
+    {
+      entity: "knowledge.annotation",
+      primaryKey: "annotation_id",
+      columns: ["annotation_id", "body_text"],
+    },
   ],
 };
+
+function searchSnapshot(rowCount: number): ReplicaSnapshot {
+  const base = snapshot(0);
+  const rows: ReplicaSnapshotRow[] = [];
+  for (let index = 0; index < rowCount; index += 1) {
+    const rowId = `note-${String(index).padStart(6, "0")}`;
+    rows.push({
+      shapeId: SHAPE.shapeId,
+      entity: "knowledge.annotation",
+      rowId,
+      // One shared term so every row is a hit, ranked and bounded together.
+      values: { annotation_id: rowId, body_text: `lease clause ${index}` },
+    });
+  }
+  return { ...base, rows };
+}
+
+function openSearch(rowCount: number): ReplicaSqliteStore {
+  const store = new ReplicaSqliteStore(
+    new NodeSqliteDriver(),
+    "vault-truncation"
+  );
+  store.bootstrap(searchSnapshot(rowCount));
+  return store;
+}
 
 function snapshot(rowCount: number): ReplicaSnapshot {
   const rows: ReplicaSnapshotRow[] = [];
@@ -172,5 +204,65 @@ describe("the bounded-read boundary rule", () => {
     expect(() =>
       assertBoundedReplicaRead({ entity: "core.party", acceptTruncation: true })
     ).not.toThrow();
+  });
+});
+
+/**
+ * THE FTS PATH KEPT THE SILENCE THE READ PATH LOST (#922 0a, verifier follow-up
+ * 1). Same three cases, same "exactly at the cap is not truncated" rule, over
+ * the real SQLite FTS index rather than a stub — a ranked page is where an
+ * over-report would be easiest to write and hardest to notice.
+ */
+describe("replica search truncation", () => {
+  test("the default search cap filling is reported, with the limit applied", () => {
+    const store = openSearch(REPLICA_DEFAULT_SEARCH_ROWS + 1);
+    const result = store.search({
+      shapeId: SHAPE.shapeId,
+      entity: "knowledge.annotation",
+      query: "lease",
+    });
+    expect(result.rows).toHaveLength(REPLICA_DEFAULT_SEARCH_ROWS);
+    expect(result.truncated).toBe(true);
+    expect(result.appliedLimit).toBe(REPLICA_DEFAULT_SEARCH_ROWS);
+    store.close();
+  });
+
+  test("a page under the cap is not truncated", () => {
+    const store = openSearch(7);
+    const result = store.search({
+      shapeId: SHAPE.shapeId,
+      entity: "knowledge.annotation",
+      query: "lease",
+    });
+    expect(result.rows).toHaveLength(7);
+    expect(result.truncated).toBeUndefined();
+    expect(result.appliedLimit).toBeUndefined();
+    store.close();
+  });
+
+  test("a set of exactly the cap fills the window without hiding a hit", () => {
+    const store = openSearch(REPLICA_DEFAULT_SEARCH_ROWS);
+    const result = store.search({
+      shapeId: SHAPE.shapeId,
+      entity: "knowledge.annotation",
+      query: "lease",
+    });
+    expect(result.rows).toHaveLength(REPLICA_DEFAULT_SEARCH_ROWS);
+    expect(result.truncated).toBeUndefined();
+    store.close();
+  });
+
+  test("an explicit window that fills reports that window, not the default", () => {
+    const store = openSearch(30);
+    const result = store.search({
+      shapeId: SHAPE.shapeId,
+      entity: "knowledge.annotation",
+      query: "lease",
+      limit: 10,
+    });
+    expect(result.rows).toHaveLength(10);
+    expect(result.truncated).toBe(true);
+    expect(result.appliedLimit).toBe(10);
+    store.close();
   });
 });

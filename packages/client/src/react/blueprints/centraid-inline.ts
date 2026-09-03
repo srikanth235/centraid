@@ -1,6 +1,7 @@
 import { isAddressablePartyKind } from "@centraid/blueprints/apps/_shared/party-kind";
 import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { PendingProjectionDeclaration } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 // governance: allow-repo-hygiene file-size-limit (#731) the inline host bridge keeps query, write, sharing, Commons claim, resident-save, and replica invalidation doors in one security boundary.
 import type {
   InlineAppModule,
@@ -37,6 +38,7 @@ import type {
 } from "../../gateway-client-vault-imports.js";
 import type { ReplicaShellSession } from "../../replica/shell-session.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
+import { postStatus } from "../../status-channel.js";
 import { authorizeBlobText, authorizeBlobUrl } from "./blob-auth.js";
 import { stageBlob, stageDerivative } from "./blob-staging.js";
 import type { GrantBridge } from "./grant-seat.js";
@@ -329,7 +331,23 @@ async function gatewayRead(
     },
     body: JSON.stringify({ input }),
   });
-  return readJson<unknown>(res, `read ${query}`);
+  const answer = await readJson<unknown>(res, `read ${query}`);
+  // The ONLINE FALLBACK is a seat too (#922 0a). The gateway bounds its reads
+  // on the same default, so an answer that came back short must say so here
+  // rather than only inside the handler that saw `ReadResult.truncated`. The
+  // signal rides the query's own answer: a handler that forwards it gets the
+  // line for free, and one that does not is silent exactly as before — which
+  // is why the aggregation on the app-query response is filed, not faked.
+  if (answer && typeof answer === "object") {
+    const carried = answer as { truncated?: unknown; appliedLimit?: unknown };
+    if (
+      carried.truncated === true &&
+      typeof carried.appliedLimit === "number"
+    ) {
+      postStatus(truncatedListNotice(carried.appliedLimit));
+    }
+  }
+  return answer;
 }
 
 /** Never hands its payload to a replica session: sealed input must not queue. */

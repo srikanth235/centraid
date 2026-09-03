@@ -14,7 +14,9 @@ import {
   replicaLocalSearchSpec,
   ReplicaProtocolError,
   REPLICA_DEFAULT_LOCAL_ROWS,
+  REPLICA_DEFAULT_SEARCH_ROWS,
   REPLICA_MAX_LOCAL_ROWS,
+  REPLICA_MAX_SEARCH_ROWS,
   trimReplicaPage,
 } from "@centraid/client/replica/native";
 import type {
@@ -426,7 +428,10 @@ export class MultiVaultReplicaReader {
     const schemas = await this.schemasForAll(appId, purpose, request.entity);
     const overlays = await this.overlaysForAll(appId, request.entity, schemas);
     const indexed = new Set(required);
-    const limit = Math.min(Math.max(request.limit ?? 100, 1), 1_000);
+    const limit = Math.min(
+      Math.max(request.limit ?? REPLICA_DEFAULT_SEARCH_ROWS, 1),
+      REPLICA_MAX_SEARCH_ROWS
+    );
     // Only a delete or an upsert that touches an INDEXED column can take a
     // canonical hit out of the composed page; every other pending mutation
     // leaves the FTS ranking alone. Over-fetch by that count rather than by the
@@ -439,7 +444,10 @@ export class MultiVaultReplicaReader {
         mutations.filter((mutation) => displaces(mutation, indexed)).length,
       0
     );
-    const fetchLimit = Math.min(limit + displacing, MAX_SEARCH_FETCH_ROWS);
+    // `+ 1` is the truncation probe (#922 0a): a ranked page of exactly `limit`
+    // proves nothing, one hit past the window proves the window cut the answer
+    // short. It is dropped before the caller sees it.
+    const fetchLimit = Math.min(limit + 1 + displacing, MAX_SEARCH_FETCH_ROWS);
     const match = replicaFtsMatchExpression(request.query);
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
@@ -565,12 +573,11 @@ export class MultiVaultReplicaReader {
           .map((row) => replicaScopeEnvelope(scope, row))
       );
     }
-    const rows = dedupeReplicaRowsByContent(hits)
-      .sort(
-        (left, right) =>
-          Number(left.values._rank ?? 0) - Number(right.values._rank ?? 0)
-      )
-      .slice(0, limit);
+    const ranked = dedupeReplicaRowsByContent(hits).sort(
+      (left, right) =>
+        Number(left.values._rank ?? 0) - Number(right.values._rank ?? 0)
+    );
+    const rows = ranked.slice(0, limit);
     const aggregate = this.aggregateState();
     return {
       rows,
@@ -580,6 +587,9 @@ export class MultiVaultReplicaReader {
         entity: request.entity,
       },
       coverage: aggregate.coverage,
+      ...(ranked.length > limit
+        ? { truncated: true, appliedLimit: limit }
+        : {}),
     };
   }
 

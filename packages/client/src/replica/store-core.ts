@@ -25,6 +25,8 @@ import {
   replicaPendingSearchMatch,
   replicaPendingSearchRank,
   replicaSearchRequiredColumns,
+  REPLICA_DEFAULT_SEARCH_ROWS,
+  REPLICA_MAX_SEARCH_ROWS,
 } from "./search.js";
 import {
   REPLICA_PROTOCOL_VERSION,
@@ -737,11 +739,14 @@ export class ReplicaSqliteStore {
       );
 
     const match = replicaFtsMatchExpression(request.query);
-    const requestedLimit = request.limit ?? 100;
+    const requestedLimit = request.limit ?? REPLICA_DEFAULT_SEARCH_ROWS;
     if (!Number.isSafeInteger(requestedLimit)) {
       throw new ReplicaProtocolError("Search limit must be a safe integer");
     }
-    const limit = Math.min(Math.max(requestedLimit, 1), 1000);
+    const limit = Math.min(
+      Math.max(requestedLimit, 1),
+      REPLICA_MAX_SEARCH_ROWS
+    );
     const relevant = mutations.filter(
       (mutation) =>
         mutation.shapeId === request.shapeId &&
@@ -759,7 +764,12 @@ export class ReplicaSqliteStore {
     // requested limit after local composition.
     const hasOpaqueIdentity =
       schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY;
-    const fetchLimit = limit + relevant.length + (hasOpaqueIdentity ? 1 : 0);
+    // `+ 1` is the truncation probe, on the same rule as the read plan (#922
+    // 0a): a page of exactly `limit` hits proves nothing, one hit past the
+    // window proves the window cut the answer short. The `relevant.length`
+    // term already covers overlay-removed hits, so the probe survives them.
+    const fetchLimit =
+      limit + 1 + relevant.length + (hasOpaqueIdentity ? 1 : 0);
     if (fetchLimit > 10_000) {
       throw new OnlineOnlyError(
         "the pending search overlay exceeds the local bounded work limit"
@@ -863,6 +873,9 @@ export class ReplicaSqliteStore {
       cursor: { epoch: meta.cursor_epoch, seq: meta.cursor_seq },
       dependency: { shapeId: request.shapeId, entity: request.entity },
       coverage: completeMeta ? "complete" : "partial",
+      ...(overlaid.length > limit
+        ? { truncated: true, appliedLimit: limit }
+        : {}),
     };
   }
 

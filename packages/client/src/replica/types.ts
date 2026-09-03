@@ -168,6 +168,8 @@ export interface ReplicaSearchRequest {
   where?: ReplicaFilterClause[];
   limit?: number;
   purpose?: string;
+  /** As on a read (#922 0a): the caller takes the default window knowingly. */
+  acceptTruncation?: boolean;
 }
 
 export interface ReplicaDependency {
@@ -208,7 +210,7 @@ export interface ReplicaReadWireResult extends ReplicaTruncation {
   coverage?: ReplicaCoverage;
 }
 
-export interface ReplicaSearchWireResult {
+export interface ReplicaSearchWireResult extends ReplicaTruncation {
   rows: ReplicaRowEnvelope[];
   cursor: ReplicaCursor;
   dependency: ReplicaDependency;
@@ -223,7 +225,7 @@ export interface ReplicaReadResult extends ReplicaTruncation {
   coverage?: ReplicaCoverage;
 }
 
-export interface ReplicaSearchResult {
+export interface ReplicaSearchResult extends ReplicaTruncation {
   rows: ReplicaRow[];
   /** No consent receipt locally; the cursor makes the origin inspectable. */
   receiptId: string;
