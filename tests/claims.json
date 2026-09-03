@@ -1464,6 +1464,11 @@
       "owner": "packages/blueprints/src/one-computation.test.ts",
       "flow": "blueprint-one-computation-law"
     },
+    "app-entity-tripwire": {
+      "statement": "Every entity a bundled app's queries, actions and phone screens read, and every command they invoke, is declared in that app's app.json#vault.scopes — minimisation is a build-time check over the manifest, not a runtime grant evaluation (#928 A1).",
+      "owner": "packages/blueprints/src/app-entity-tripwire.test.ts",
+      "flow": "blueprint-app-entity-tripwire-law"
+    },
     "select-all-filtered": {
       "statement": "Select-all takes the rows the current filter shows, never the whole table, and a selection survives a filter change through pruneSelection rather than being carried onto rows the member never saw.",
       "owner": "packages/blueprints/src/select-all-scope.test.ts",
@@ -3666,6 +3671,15 @@
       "tier": "contract",
       "owner": "packages/blueprints/src/one-computation.test.ts",
       "minimumTests": 3
+    },
+    {
+      "id": "blueprint-app-entity-tripwire-law",
+      "name": "An app reads and invokes only what its manifest declares",
+      "surface": "blueprints",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/blueprints/src/app-entity-tripwire.test.ts",
+      "minimumTests": 17
     },
     {
       "id": "blueprint-select-all-law",
