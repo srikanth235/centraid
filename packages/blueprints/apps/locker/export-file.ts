@@ -25,6 +25,11 @@ export interface ExportItem {
     value?: string | null;
   }[];
   passkey?: Record<string, unknown> | null;
+  /** THE ONE PLACE A PREVIOUS PASSWORD IS READABLE (#916, D2). `locker.export`
+   *  unseals each item's `core_entity_revision` snapshots under the export's
+   *  own confirmation and receipt; the item pane cannot, because no reveal
+   *  permit reaches a revision. So this stays — it is not a read of the dead
+   *  `locker_item_history` table, it is the command's own unseal. */
   history?: Record<string, unknown>[];
   [column: string]: unknown;
 }

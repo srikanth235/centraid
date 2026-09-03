@@ -30,15 +30,20 @@ export interface Permit {
 
 /**
  * A SEALED ROW THAT HANGS OFF AN ITEM (#873) — a custom field's value, a
- * retained previous password, a passkey's key material. The vault reveals each
- * through its OWNING ITEM's permit (`gateway.lockerOwningItemId`), which is why
- * this rides a `PermitRequest` rather than being a request of its own: one
- * gate, for one item, and the row it names is what the permit is then spent on.
+ * passkey's key material. The vault reveals each through its OWNING ITEM's
+ * permit (`gateway.lockerOwningItemId`), which is why this rides a
+ * `PermitRequest` rather than being a request of its own: one gate, for one
+ * item, and the row it names is what the permit is then spent on.
+ *
+ * A REVISION IS NOT ONE OF THESE (#916, D2). `locker.item_history` carried a
+ * third sealed cell — the password an item was rotated away from — and the
+ * table is gone; that value now rides a `core_entity_revision` snapshot, which
+ * no permit reveals and only a confirmed `locker.export` unseals.
  */
 export interface SidecarTarget {
-  /** `locker.item_field` · `locker.item_history` · `locker.item_passkey`. */
+  /** `locker.item_field` · `locker.item_passkey`. */
   entity: string;
-  /** The SIDECAR row's own id — a field id, a revision id, the item id. */
+  /** The SIDECAR row's own id — a field id, or the item id. */
   entityId: string;
   /** The one sealed column being asked for. */
   column: string;

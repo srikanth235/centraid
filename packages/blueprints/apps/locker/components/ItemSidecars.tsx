@@ -1,9 +1,10 @@
 // THE SIDECAR SECTIONS OF ONE ITEM (#872; GAPS §3.3 #2–#5, #8–#10).
 //
-// THE SEALED HALF IS A ROW WITH VERBS (#873): a sealed custom value, a
-// retained previous password and a passkey's key material read back as
-// PRESENT, never as a value, and each offers `Reveal` and `Copy` through the
-// SAME per-item permit gate the item's own sealed columns run on.
+// THE SEALED HALF IS A ROW WITH VERBS (#873): a sealed custom value and a
+// passkey's key material read back as PRESENT, never as a value, and each
+// offers `Reveal` and `Copy` through the SAME per-item permit gate the item's
+// own sealed columns run on. A REVISION IS NOT ONE OF THEM (#916, D2) — see
+// `HistorySection`.
 //
 // So these rows say nothing special: `SealedField`, and §6's own sentence.
 import type { ReactNode } from "react";
@@ -14,7 +15,6 @@ import {
   PASSKEY_KEY_FIELD,
   byteSize,
   changedWords,
-  historyPasswordKey,
   sealedFieldKey,
   sectionsOf,
 } from "../field-model.ts";
@@ -38,7 +38,6 @@ import {
   HISTORY_EMPTY,
   HISTORY_HEAD,
   HISTORY_META,
-  HISTORY_PASSWORD_LABEL,
   HISTORY_PASSWORD_PRESENT,
   MATCH_WORD,
   PASSKEY_HEAD,
@@ -272,16 +271,18 @@ export function AttachmentSection({
 }
 
 /**
- * Two rows rather than one: the revision is metadata that never needed a
- * permit, the password it retained is a secret that does. Folding the verbs
- * onto the revision row would put a `Reveal` next to a timestamp.
+ * ONE ROW PER REVISION, AND NO VERBS ON IT (#916, D2). This pane used to draw a
+ * second row beneath each rotation — `Previous password`, with `Reveal` and
+ * `Copy` behind the item's permit — because `locker_item_history` kept that
+ * value in a sealed cell of its own. That table is gone. A revision is a
+ * `core_entity_revision` snapshot whose sealed cells nothing here unseals, so
+ * the row names the rotation and its time and says where the old value lives:
+ * in a confirmed export, and nowhere a reveal reaches.
  */
 export function HistorySection({
   detail,
-  reveal,
 }: {
   detail: LockerDetail;
-  reveal: SidecarRevealProps;
 }): ReactNode {
   const history = detail.history ?? [];
   return (
@@ -292,28 +293,20 @@ export function HistorySection({
       empty={<p className={styles.fieldNote}>{HISTORY_EMPTY}</p>}
     >
       {history.map((revision) => (
-        <div key={revision.revision_id}>
-          <FieldRow
-            label={revision.operation}
-            value={[
-              changedWords(revision.changed),
-              revision.recorded_at.slice(0, 16).replace("T", " "),
-            ]
-              .filter(Boolean)
-              .join("  ·  ")}
-            numeric
-            {...(revision.has_previous_password
-              ? { note: HISTORY_PASSWORD_PRESENT }
-              : {})}
-          />
-          {revision.has_previous_password ? (
-            <SidecarSecret
-              label={HISTORY_PASSWORD_LABEL}
-              field={historyPasswordKey(revision.revision_id)}
-              reveal={reveal}
-            />
-          ) : null}
-        </div>
+        <FieldRow
+          key={revision.revision_id}
+          label={revision.operation}
+          value={[
+            changedWords(revision.changed),
+            revision.recorded_at.slice(0, 16).replace("T", " "),
+          ]
+            .filter(Boolean)
+            .join("  ·  ")}
+          numeric
+          {...(revision.changed?.password === true
+            ? { note: HISTORY_PASSWORD_PRESENT }
+            : {})}
+        />
       ))}
     </Section>
   );

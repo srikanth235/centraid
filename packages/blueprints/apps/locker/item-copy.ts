@@ -38,8 +38,13 @@ export const ATTACHMENTS_NOTE =
 export const HISTORY_HEAD = "History";
 export const HISTORY_META = "what changed, and when";
 export const HISTORY_EMPTY = "Nothing has been rewritten yet.";
-export const HISTORY_PASSWORD_PRESENT = "Previous password kept";
-export const HISTORY_PASSWORD_LABEL = "Previous password";
+/** WHERE A ROTATED PASSWORD WENT (#916, D2). The pane used to offer it behind
+ *  a permit; a revision is a snapshot now, its sealed cells stay sealed, and
+ *  the only thing that opens them is the export — which is confirmed,
+ *  receipted, and says out loud that it is a mass reveal. Saying so on the row
+ *  is the honest answer to "so where is my old password". */
+export const HISTORY_PASSWORD_PRESENT =
+  "Previous password kept · sealed in this revision, and readable only through a confirmed export.";
 export const PASSWORD_AGE_ROW = "Password age";
 export const PASSWORD_AGE_NOTE =
   "Counted from the day it was set · Review scores the same clock, so the two can never disagree.";

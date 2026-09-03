@@ -70,9 +70,13 @@ const SEALED_FIELDS: SealedField[] = [
  *  is not a reveal it will attempt on the caller's word. */
 const SIDECAR_COLUMNS: Record<string, string> = {
   "locker.item_field": "value_sealed",
-  "locker.item_history": "password",
   "locker.item_passkey": "private_key",
 };
+// A REVISION IS NOT ONE OF THEM (#916, D2). `locker.item_history` was a second
+// revision mechanism with a sealed `password` cell of its own; the table is
+// gone, a previous value now rides a `core_entity_revision` snapshot, and the
+// gateway refuses the entity outright. There is nothing in a revision to spend
+// a permit on — the export is what unseals a rotated password now.
 
 interface SidecarAsk {
   entity: string;
@@ -166,7 +170,15 @@ export default async function itemHandler({
       readFields(ctx, itemId, purpose),
       readAddresses(ctx, itemId, purpose),
       readPasskey(ctx, itemId, purpose),
-      readHistory(ctx, itemId, purpose),
+      // The item as it stands is what the newest revision is diffed against.
+      // `row`'s sealed cells may be plaintext by now; the revision read reaches
+      // for PLAIN columns only, and never for one of them.
+      readHistory(
+        ctx,
+        itemId,
+        row as unknown as Record<string, unknown>,
+        purpose
+      ),
       readAttachments(ctx, itemId, purpose),
     ]);
     const item = {
