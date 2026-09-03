@@ -1,0 +1,10 @@
+# Umbrella receipts are append-only: each slice adds exactly one section at the
+# end of the file, and `doc-integrity` requires the trunk's copy to stay a byte
+# prefix of ours. Git's built-in `union` driver resolves a conflicting hunk by
+# concatenating both sides, ours-then-theirs; during a rebase onto main "ours"
+# is main, so main's section lands first and the byte-prefix property survives.
+# That is exactly the resolution sibling slices were typing out by hand on every
+# rebase. The driver cannot tell an append from an edit above the append point —
+# `doc-integrity` still enforces that, and a slice still never rewrites text it
+# does not own.
+receipts/*.md merge=union
