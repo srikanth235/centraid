@@ -76,6 +76,7 @@ export interface VaultRegistryOptions {
   onCommonsIntentQueued?: (vaultId: string, grantId: string) => void;
   onNotificationsChanged?: (vaultId: string, wake: boolean) => void;
   synchronous?: "FULL" | "NORMAL";
+  storageFsyncMs?: number;
   shouldDeferBackgroundWork?: () => boolean;
   replicationConcurrency?: number;
   /** Divided evenly: without it, N vaults cost N times one (#659). */
@@ -137,6 +138,7 @@ export class VaultRegistry {
     | ((vaultId: string, wake: boolean) => void)
     | undefined;
   private readonly synchronous: "FULL" | "NORMAL" | undefined;
+  private readonly storageFsyncMs: number | undefined;
   private readonly shouldDeferBackgroundWork: (() => boolean) | undefined;
   private readonly replicationConcurrency: number | undefined;
   private readonly footprintBudget: VaultFootprintBudget | undefined;
@@ -175,6 +177,7 @@ export class VaultRegistry {
     this.onCommonsIntentQueued = options.onCommonsIntentQueued;
     this.onNotificationsChanged = options.onNotificationsChanged;
     this.synchronous = options.synchronous;
+    this.storageFsyncMs = options.storageFsyncMs;
     this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork;
     this.replicationConcurrency = options.replicationConcurrency;
     this.footprintBudget = options.footprintBudget;
@@ -373,6 +376,9 @@ export class VaultRegistry {
         ? { onNotificationsChanged: this.onNotificationsChanged }
         : {}),
       ...(this.synchronous ? { synchronous: this.synchronous } : {}),
+      ...(this.storageFsyncMs === undefined
+        ? {}
+        : { storageFsyncMs: this.storageFsyncMs }),
       ...(this.shouldDeferBackgroundWork
         ? { shouldDeferBackgroundWork: this.shouldDeferBackgroundWork }
         : {}),

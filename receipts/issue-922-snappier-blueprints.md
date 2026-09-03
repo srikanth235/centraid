@@ -1624,3 +1624,15 @@ Demonstrated red, both new isolation properties, seeded by reverting one line ea
 - **Admission (`sending`), before dispatch.** The only durable carrier of the device-visible intent identity — device, app, action, payload hash — which no canonical transaction can reconstruct; the latch that makes a concurrent or redelivered duplicate conceal instead of dispatch; and the row a parked command transitions days later, which `transitionReplicaIntentOutcome` can only do to a row that exists.
 - **The terminal outcome, after dispatch.** It is the **action's** outcome, not the invocation's: an action may span several canonical commits and may end contradicting one. `replica-intent-route.test.ts` › "a post-invoke denial is durable and does not re-dispatch on retry" pins exactly that — a durable `schedule_task` row and a `denied` intent. Publishing `executed` from inside the canonical transaction was implemented, and it failed that test plus "a later invocation finalization error replays the complete action exactly once"; both were kept, the fold was reverted.
 - **The audit finalisation as a releasable savepoint, not a folded step, is a property too.** That second test pins a canonical write that is durable while its journal finalisation aborted, repaired on the next retry without re-entering the handler. Folding it into the mutation would turn that into a rollback of a write the member already made.
+
+### B7 — the group-commit window opens only under concurrency
+
+`GroupCommitQueue` no longer holds an arriving write when there is nothing in flight to share a commit with. An idle queue commits on the next **microtask**, which still gathers every write issued together without awaiting the last one into a single transaction at no added latency for any of them; the `windowMs` window is kept for the turn AFTER a batch larger than one has committed — concurrency observed, not assumed — and shuts again as soon as batches are back to one. `packages/server/src/serve/group-commit-queue.test.ts` pins both arms plus the closing.
+
+The window's size is now the measured cost of the fsync it exists to share: `groupCommitWindowMs(storageFsyncMs)`, clamped to `[1, GROUP_COMMIT_MAX_WINDOW_MS]`, fed from the boot probe already published on `GatewayHardwareProfile.storageFsyncMs` (build-gateway → vault-registry → vault-plane). The `synchronous === "NORMAL" ? 8 : 5` pair it replaces was two numbers with no measurement behind either.
+
+| number | before | after | provenance |
+| --- | --- | --- | --- |
+| lone write through the plane's queue, p50 | 12.29 ms | 7.33 ms | 200 sequential `plane.invoke("schedule.add_task")`, median of 3 runs (before 11.89/12.29/13.64, after 5.38/7.33/7.98); Linux 6.18.44, 4 cores / 15 GB, tmpfs-backed vault dir |
+| one offline intent end to end, p50 | 14.59 ms | 9.33 ms | 50 intents through `handleReplicaIntent` on a real `VaultPlane`, median of 3 runs (before 14.52/14.59/15.44, after 9.14/9.33/10.25), same host |
+| durable commits per offline intent | 3.00 | 3.00 | unchanged by B7 — the window never changed how many transactions a serial writer opens, only how long each waited |

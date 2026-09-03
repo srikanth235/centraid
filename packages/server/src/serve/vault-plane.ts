@@ -141,7 +141,7 @@ import type {
 import { loadSqliteVec } from "../enrich/sqlite-vec.js";
 import { unrefTimer } from "../lib/unref-timer.js";
 import { recordDeclaredManifest } from "../routes/replica-declared-scopes.js";
-import { GroupCommitQueue } from "./group-commit-queue.js";
+import { GroupCommitQueue, groupCommitWindowMs } from "./group-commit-queue.js";
 import { decideJournalArchive } from "./journal-limit.js";
 import { NoticeStore } from "./notices.js";
 import { replicaIntentContext } from "./replica-intent-context.js";
@@ -228,6 +228,9 @@ export interface VaultPlaneOptions {
   onCommonsIntentQueued?: (vaultId: string, grantId: string) => void;
   onNotificationsChanged?: (vaultId: string, wake: boolean) => void;
   synchronous?: "FULL" | "NORMAL";
+  /** The host's measured 4 KiB fsync, from the boot probe: it sizes the
+   *  group-commit window, which exists to share exactly one of them. */
+  storageFsyncMs?: number;
   shouldDeferBackgroundWork?: () => boolean;
   replicationConcurrency?: number;
   onSweepPass?: (info: { durationMs: number }) => void;
@@ -543,7 +546,7 @@ export class VaultPlane {
         : {}),
     });
     this.groupCommitQueue = new GroupCommitQueue(
-      options.synchronous === "NORMAL" ? 8 : 5,
+      groupCommitWindowMs(options.storageFsyncMs),
       (runs) => this.gateway.invokeBatchSettled(runs)
     );
     registerScheduleCommands(this.gateway);
