@@ -104,6 +104,7 @@ const {
   freshnessKey,
   replicaDatabaseFamily,
   resolveIdentity,
+  startCompatibilityWall,
 } = await import("./replica-mount");
 
 type MountedScope = Awaited<
@@ -359,5 +360,52 @@ describe("reclaiming a revoked scope's bytes", () => {
     deleteReplicaDatabaseFamily("replica.sqlite3");
 
     expect(files.deleted).toStrictEqual([]);
+  });
+});
+
+// The compatibility wall is STARTED beside the mount and READ once the replica
+// drivers are open (#922 E8) — a phone must not wait on `/info` to look at its
+// own disk. Two properties make that safe rather than merely fast.
+describe("the compatibility wall, started but not awaited", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("an offline mount asks the gateway nothing at all", async () => {
+    stubInfo(undefined);
+    const fetched = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+
+    const features = await startCompatibilityWall({
+      auth: { baseUrl: "http://127.0.0.1:51890" },
+      gatewayId: GATEWAY,
+      online: false,
+    })(async () => undefined);
+
+    expect(features).toBeUndefined();
+    expect(fetched).not.toHaveBeenCalled();
+  });
+
+  // A gateway too old to serve `/info` still refuses the mount — and the
+  // refusal runs the caller's teardown FIRST, so the replica this device
+  // already opened is closed rather than left dangling behind a raised wall.
+  test("a refused wall tears the mount down before it rethrows", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("gone", { status: 404 }))
+    );
+    const torn: string[] = [];
+
+    const read = startCompatibilityWall({
+      auth: { baseUrl: "http://127.0.0.1:51890" },
+      gatewayId: GATEWAY,
+      online: true,
+    });
+
+    await expect(
+      read(async () => {
+        torn.push("closed");
+      })
+    ).rejects.toMatchObject({ disposition: "update-gateway" });
+    expect(torn).toStrictEqual(["closed"]);
   });
 });

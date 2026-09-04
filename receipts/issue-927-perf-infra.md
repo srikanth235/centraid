@@ -1358,3 +1358,118 @@ Every path this lane's two commits touch that the tables above name only by grou
 ### Falsification
 
 1. *Claim: the paired runner cannot compare a FULL-fsync sample against a NORMAL-fsync ceiling.* The per-profile rows carry the same `pairedSample` path, so `pairedEntries()` would have picked up twelve rows where four exist; it is pinned to the unprofiled hardware key and returns exactly the four. Printed and checked.
+
+## H3 — the device rung, and the test-kit build it needed
+
+| Path | Change |
+| --- | --- |
+| `.github/workflows/e2e.yml` | Four rung-5 jobs: `device-rung-gate` (always runs, resolves the farm secrets and the Pi variable, writes the absent cells' evidence as `parked`), `device-rung-android` (leased low-end phone), `device-rung-ios` (leased iPhone, behind its own switch), `device-rung-gateway-pi` (`runs-on: [self-hosted, linux, arm64, centraid-pi]`) |
+| `scripts/ci/device-farm-lease.sh` (new) | Leases one device and puts it where the repo's OWN harness looks — `adb connect` for Android; the iOS arm REFUSES with the exact reason rather than leasing a device `xcrun simctl` can never enumerate |
+| `tests/agent-e2e-mobile/roster.json`, `tests/agent-e2e-mobile/flows/device-rung-budget.md` (new) | Suites `device-rung-android` (10 members, 45 min) and `device-rung-ios` (5, 25 min), their two lanes, rung 5's row rewritten, and every flow's derived `suite`/`rungs`/`platform` recomputed |
+| `tests/claims.json`, `tests/quality/classification-ratchet.json` | The four lanes registered, and the whole-file fingerprint re-pinned with the note below |
+| `tests/quarantine.json` | The three device cells parked with what unblocks each; **#870's `mobile-e2e-android` and `mobile-e2e-ios` parks deleted** |
+| `tests/journeys.json` | Three hardware keys — `device-android-low-end`, `device-iphone`, `pi-arm64-4c` — so a device row and an emulator row can never be averaged |
+| `tests/budgets.json` | `mobileSuites` mirror refreshed by `node scripts/check-ledgers.mjs --write` — a MIRROR of the two new roster ceilings, not a widen: no existing budget moves, and `bun run lint:ledgers` reports the ledgers hold against `origin/main` |
+| `docs/decisions.md` | `PS-device-rung`, with the cost. This is the in-slice doc exception: a later lane reads it |
+| `.github/workflows/soak-weekly.yml` | The evictable `quality-history-soak-*` cache replaced by the gh-pages restore `candidate.yml` uses |
+| `packages/test-kit/package.json`, `packages/test-kit/tsconfig.build.json` (new), `packages/test-kit/src/vitest.ts` | A `dist` build wired like every other built package, so a plain-Node harness can reach the year-3 generator at all |
+| `scripts/accessibility-contract.test.mjs` | The virtualization contract follows #922 E6's five surfaces onto `SeatList` |
+
+**Mobile ceilings stay `_intended` until the first device run, and that is a statement about hardware.** `ci-android-emu` and `ci-ios-sim` have neither a phone's thermal envelope nor its flash, so every millisecond either produces is a lower bound. Nothing in `tests/journeys.json` is promoted here.
+
+| Number | Value | Provenance |
+| --- | --- | --- |
+| Suite ceilings | android 2,700,000 ms / ios 1,500,000 ms | NOT measurements — provisional, and `device-rung-budget.md` says so. The members' own budgets are emulator-derived (`ledger/durations.json` holds zero records); the first device run replaces both with `p95 x 1.5` |
+| `@centraid/test-kit` reachable from Node | `node -e "import('@centraid/test-kit/year3-vault')"` fails → resolves | linux x64 dev container; before the build the specifier resolved to a `.ts` file no Node can load |
+
+**Deleted, with their replacement:** the `quality-history-soak-*` actions cache (gh-pages, never evicted, which is where `candidate.yml` already reads its history from); #870's two lane parks (see `PS-device-rung` — their 14-day date expires 2026-09-16 and the fix they named has landed; a park moved onto a cell that is skipped until somebody buys a farm would be a mute, not a date).
+
+**Decisions:** the phone cells seed the DEMO corpus, not the golden year-3 replica: nothing seeds a gateway from `goldenYear3Replica()`, and a phone cannot be handed a replica by file push (app-private storage). The test-kit `dist` build landed here is what makes that seeder writable from a plain-Node harness; until it exists every number this rung produces is at demo volume and its ledger row says so. `tests/quality/classification-ratchet.json` approvedDeviation, in full: #930 re-pins the tests/claims.json whole-file fingerprint after removing the spent rename marker on the `golden-vault-archaeology` flow, superseding the #916 re-pin note rather than contradicting it — every sentence of #916's account of what that flow took over is kept, in receipts/issue-916-vault-ontology-review.md and in the flow's own `_comment`. `replacesMinimumTestsFlow` is a ONE-SHOT claim about the change set that makes a rename, checked against the merge base; once #916 landed, `schema-migration-corpus` existed at no base any more, so the marker could only ever report an unknown predecessor and `lint:ledgers` / `test:ratchet` were red on main itself. The marker and the `approvedMinimumTestsDeviation` that authorized it are removed together, because that note waives a future minimumTests drop on this flow by presence alone; the floor stays at 5, no claim row, severity, evidence selector or demonstrated-red date moves, and claimsGovernanceFingerprint is unchanged. Prior: #916. #928 w1b re-pins tests/claims.json once more, for the static app entity tripwire: it registers the new law `app-entity-tripwire` and its flow `blueprint-app-entity-tripwire-law` (owner packages/blueprints/src/app-entity-tripwire.test.ts, minimumTests 17), mirroring how `one-computation` is registered so the lane is owned. Additions to the law and flow registries only, and a NEW minimumTests floor, which is a tightening — no claim row, severity, evidence selector, demonstrated-red date or existing floor moves, and the 45 claim rows stay byte-identical, so claimsGovernanceFingerprint is unchanged. Prior: #930. #931 re-pins it once more after registering ONE new rung-3 lane, `rung1-on-main`, in `lanes` — the row `candidate.yml`'s new job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept it. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or `minimumTests` floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #928 w1b. #927 w2 re-pins tests/claims.json for the JOURNEY LEDGER: every `knob` and `seed` string that named tests/experience-budgets/*.json now names tests/journeys.json and the entry key inside it, because those five files were absorbed into one ledger keyed `surface / journey / volume / hardware`. A knob path rename only: no claim row is added or removed, no severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and every seeded-red recipe still points at the same number under its new address. Prior: #931. #927 w3 re-pins tests/claims.json once more to register ONE new rung-3 lane, `paired-journeys` — the row candidate.yml's paired candidate/PR journey job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept its evidence step. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and the claim rows stay byte-identical, so claimsGovernanceFingerprint moves only because `lanes` shares the file with `claims`. Prior: #927 w2. #927 w4 re-pins tests/claims.json once more to register the FOUR device-rung lanes — `device-rung-gate`, `device-rung-android`, `device-rung-ios` and `device-rung-gateway-pi` — the rows e2e.yml's new rung-5 jobs need before `lint:evidence-mapping` and `validate-nightly-wiring` will accept their evidence steps. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #927 w3.
+
+**Findings:** (1) `rigDriftBudgetMs` (`tests/helpers/rig-budgets.ts`) has **no writer anywhere** — nothing appends to `artifacts/<lane>/<slug>.json`, so it returns `null` on every lane and the sustained-drift budget states no opinion by construction. The soak cache this slice deleted was carrying an empty directory. (2) The iOS cell cannot lease a device until the harness enumerates physical devices (`xcrun devicectl`), which is why it is behind a second switch. (3) The two farm cells are the only recurring third-party spend any lane here incurs. (4) `lint:e2e-wiring` never reads `roster.json`'s `suites[*].lane`, so a suite can name a lane that does not exist and nothing says so — see the Falsification table.
+
+**Doc debt:** none — `PS-device-rung` is written.
+
+```sh
+bun run lint:e2e-wiring                # 22 flows, 7 lanes, all reachable
+bun run test:claims                    # 45 claims, 54 lanes, 4 mobile device lanes discovered
+bun run lint:ledgers                   # 19 sections across 5 ledgers
+bun run lint:quality-knobs             # ok
+bun run test:accessibility             # 6/6
+node -e "import('@centraid/test-kit/year3-vault')"   # resolves
+```
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| The lanes are registered AND wired, not merely written | Deleted the `Write lane evidence` step from `device-rung-android` and re-ran `bun run test:claims` | RED — "job `device-rung-android` is a registered rung-5 lane with no `Write lane evidence` step". (The first check I tried — renaming the suite's `lane` field — stayed GREEN, because reachability is derived from the lanes table and every device-rung member also sits on an emulator suite. A finding about the linter, not about this diff: `roster.json`'s `suites[*].lane` is not held against anything.) |
+| The test-kit build is what makes the generator reachable | `node -e "import('@centraid/test-kit/year3-vault')"` with the pre-change exports restored | RED — `ERR_MODULE_NOT_FOUND`; GREEN after the build, printing the module's keys |
+
+## H3a — the web journeys, re-measured at year-3
+
+| Path | Change |
+| --- | --- |
+| `apps/web/tests/e2e/server.ts` | Seeds the shared year-3 generator's golden daily-path profile straight into the mounted vault, BEFORE the demo routes; the 2,000-row Atlas fill it replaces is deleted |
+| `packages/test-kit/src/year3-distributions.ts` | The receipt chain continues from `MAX(seq)` instead of restarting at 1 — what let the generator fill a vault a live `serve()` had already written receipts into |
+| `tests/journeys.json` | The ten `web/*` entries re-keyed `seeded-demo` → `year3`, three vitals re-observed there, `volumes.seeded-demo` rewritten to what still uses it, and the re-key's `approvedDeviation` |
+| `apps/web/tests/e2e/perf-waterfall.spec.ts` | The two ledger keys it reads, and the volume string it stamps on its own report |
+| `scripts/perf/app-waterfall.run.ts` | Module header: the rig runs under vitest for the assertions, not because the kit ships no build |
+| `scripts/lint-journey-ledger.mjs`, `scripts/lint-journey-ledger.test.mjs` | The `entries` section's OWN `approvedDeviation` is no longer read as a journey key — the ledger demanded one on a re-key and no place existed that both gates accepted (finding 4) |
+
+| Journey row | seeded-demo | year3 | Ceiling (unchanged) |
+| --- | --- | --- | --- |
+| `web/cold-open` largestContentfulPaint | 296 / 420 / 476 ms | **484 / 516 / 524 ms** | 1200 |
+| `web/warm-switch` interactionToNextPaint | 24 / 24 / 24 ms | **24 / 24 / 24 ms** | 120 |
+| `web/cold-open` cumulativeLayoutShift | 0 | **0** | 0.1 |
+
+`bun run --cwd apps/web e2e -- perf-waterfall.spec.ts`, `CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell`, linux x64 / 4 cores / 15 GB, 2026-09-04.
+
+**Nothing PROMOTES, and that is the answer rather than a shortfall.** Both measured rows already gated; year-3 costs the shell ~80 ms of LCP inside a 1200 ms ceiling and moves INP and CLS by nothing. The other eight `web/*` rows are `unmeasured` for want of a PROBE — `"No probe drives it yet"` — not for want of volume, so no volume changes their status; they are re-keyed with the harness and say so. No ceiling widens: every number is carried across byte-identical and the `approvedDeviation` covers only the address.
+
+**Deleted, with its replacement:** the harness's 2,000-row Atlas `core.place` fill — the year-3 generator supplies the row count now, from the same statements and the same declared distribution every other rig measures against.
+
+**Decisions:** the ceilings are CARRIED ACROSS rather than re-derived from the year-3 samples. `tests/journeys.json` is tighten-only, and a ceiling re-seeded at 2.3x on a contended container is one host's noise away from needing to come back up.
+
+**Findings:**
+
+1. **`perf-waterfall.spec.ts`'s app-open waterfall is RED on `origin/main` (541f0720c), independent of this lane.** `Loading Tasks…` is still on screen after the spec's 10 s wait. Reproduced on a detached `origin/main` checkout with a full `bun run build` and nothing of this branch in the tree: 3 passed, 1 failed — the same 3/1 this branch produces before and after the year-3 seed. The gateway is not the cost: on the seeded harness `/centraid/_vault/scopes?app=tasks` answers in 4.7 ms, `/centraid/tasks/_describe` in 5.2 ms and `POST /centraid/tasks/queries/board` in 102 ms, and `InlineAppRoute.tsx` holds the fallback until `scopes && descriptorPromise` — both of which those answers supply. Client-side, past the gateway, and owned by the shell's app-open path, not by this lane.
+2. `seedYear3Distributions` wrote `access_receipt.seq` as `index + 1` from 1, so it could seed only a file no gateway had served — founding and mounting a vault writes receipts, and the seed died on `UNIQUE constraint failed: access_receipt.seq`. Fixed here; the golden artifact's bytes are unchanged because `MAX(seq)` is NULL on a fresh file.
+4. **The ledger's re-key rule had nowhere to write its waiver.** `tests/journeys.json`'s `_comment` requires an `approvedDeviation` on a re-key; `scripts/check-ledgers.mjs` reads it from the `entries` object itself (a neighbouring section's never waives, #781), and `scripts/lint-journey-ledger.mjs` then read that string as a journey key and failed it for not being `surface/journey/volume/hardware`. The reserved key is now skipped, with a test.
+3. The generator plants the flags concept scheme by URI and the product's own `flags.ts` creates it on first use, so a year-3 seed must precede any demo seed or the two collide on `core_concept_scheme.uri`. The ordering is a comment in the harness beside the call.
+
+**Doc debt:** none.
+
+```sh
+CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell \
+  bun run --cwd apps/web e2e -- perf-waterfall.spec.ts   # vitals 3/3; app-open red on main too (finding 1)
+bun run lint:journey-ledger                              # ok
+bun run lint:ledgers                                     # 19 sections across 5 ledgers
+```
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| The app-open red is pre-existing, not the year-3 seed | Stashed the lane, detached onto `origin/main`, full `bun run build`, ran the same spec | RED there too, same test, same assertion — 3 passed / 1 failed with none of this branch in the tree |
+| The re-key widens no ceiling | Diffed every `ceiling*`/`max*` under the ten moved keys against their `seeded-demo` originals | Byte-identical: 1200, 120, 0.1 and eight `_intendedCeilingMs: null`. Only the key moved |
+
+## CI-green — test-kit off the turbo build graph
+
+| Path | Change |
+| --- | --- |
+| `packages/test-kit/package.json`, `packages/test-kit/src/vitest.ts` | Source exports restored. A `build` script on `@centraid/test-kit` joined `^build` for every workspace that lists it as a devDependency, so `coverage-shard`'s `build:ci:floored` rebuilt `@centraid/tunnel` (217s) and missed the 0.15 hit-rate floor (2/14 = 14.3%). The year-3 generator is reachable from the web e2e harness without that graph node: `apps/web/tests/e2e/playwright.config.ts` already runs `node --experimental-strip-types tests/e2e/server.ts`. |
+| `packages/test-kit/tsconfig.build.json` | Deleted. It existed only to feed the turbo `build` task. |
+| `.github/actionlint.yaml` (new) | Names the `centraid-pi` self-hosted label `device-rung-gateway-pi` uses, so actionlint stops treating a real runner as unknown. |
+| `tests/agent-e2e-mobile/flows/device-rung-budget.md`, `scripts/perf/app-waterfall.run.ts` | Drop the claim that the kit ships a `dist` build. |
+
+The 0.15 floor is unchanged. This is a graph mistake, not a cache-policy miss.
+
+`tests/quality/classification-ratchet.json` `approvedDeviation`, verbatim, so `lint:quality-knobs` can see the receipt that authorized the fingerprint re-pin (H3's copy ended `Prior: #927 w3`; the ratchet string ends `Prior: #922`):
+
+#930 re-pins the tests/claims.json whole-file fingerprint after removing the spent rename marker on the `golden-vault-archaeology` flow, superseding the #916 re-pin note rather than contradicting it — every sentence of #916's account of what that flow took over is kept, in receipts/issue-916-vault-ontology-review.md and in the flow's own `_comment`. `replacesMinimumTestsFlow` is a ONE-SHOT claim about the change set that makes a rename, checked against the merge base; once #916 landed, `schema-migration-corpus` existed at no base any more, so the marker could only ever report an unknown predecessor and `lint:ledgers` / `test:ratchet` were red on main itself. The marker and the `approvedMinimumTestsDeviation` that authorized it are removed together, because that note waives a future minimumTests drop on this flow by presence alone; the floor stays at 5, no claim row, severity, evidence selector or demonstrated-red date moves, and claimsGovernanceFingerprint is unchanged. Prior: #916. #928 w1b re-pins tests/claims.json once more, for the static app entity tripwire: it registers the new law `app-entity-tripwire` and its flow `blueprint-app-entity-tripwire-law` (owner packages/blueprints/src/app-entity-tripwire.test.ts, minimumTests 17), mirroring how `one-computation` is registered so the lane is owned. Additions to the law and flow registries only, and a NEW minimumTests floor, which is a tightening — no claim row, severity, evidence selector, demonstrated-red date or existing floor moves, and the 45 claim rows stay byte-identical, so claimsGovernanceFingerprint is unchanged. Prior: #930. #931 re-pins it once more after registering ONE new rung-3 lane, `rung1-on-main`, in `lanes` — the row `candidate.yml`'s new job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept it. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or `minimumTests` floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #928 w1b. #927 w2 re-pins tests/claims.json for the JOURNEY LEDGER: every `knob` and `seed` string that named tests/experience-budgets/*.json now names tests/journeys.json and the entry key inside it, because those five files were absorbed into one ledger keyed `surface / journey / volume / hardware`. A knob path rename only: no claim row is added or removed, no severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and every seeded-red recipe still points at the same number under its new address. Prior: #931. #927 w3 re-pins tests/claims.json once more to register ONE new rung-3 lane, `paired-journeys` — the row candidate.yml's paired candidate/PR journey job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept its evidence step. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and the claim rows stay byte-identical, so claimsGovernanceFingerprint moves only because `lanes` shares the file with `claims`. Prior: #927 w2. #922 re-pins tests/claims.json after registering ONE new flow, `pending-destructive-projection` (owner packages/blueprints/src/pending-projection-tripwire.test.ts, flow blueprint-pending-overlay-law). Flow registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law or minimumTests floor moves, and claimsGovernanceFingerprint (digest of claims.claims alone) stays byte-identical. #927 w4 re-pins tests/claims.json once more to register the FOUR device-rung lanes — `device-rung-gate`, `device-rung-android`, `device-rung-ios` and `device-rung-gateway-pi` — the rows e2e.yml's new rung-5 jobs need before `lint:evidence-mapping` and `validate-nightly-wiring` will accept their evidence steps. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or `minimumTests` floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #922.
+
+## CI-green — journey re-key waiver at file root
+
+`scripts/test-report/ratchet-floors.mjs` loads `tests/journeys.json` as a whole file (no `section`), so it only sees a root `approvedDeviation`. The W4 re-key note lived under `entries`, which `lint:journey-ledger` requires, and the ratchet read the ten `seeded-demo` keys as deletions. The same rationale now sits at the file root as well; the entries copy is unchanged.
+

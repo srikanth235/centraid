@@ -91,6 +91,20 @@ test("a hole in the nine-journey grid fails", () => {
   assert.match(lintJourneyLedger(root).join("\n"), /no entry for web\/share/u);
 });
 
+test("the entries section's own approvedDeviation is not read as a journey", () => {
+  const root = fixture(
+    {
+      ...BASE,
+      entries: {
+        approvedDeviation: "#927 W4 re-keyed the web rows onto year3.",
+        ...grid({ "web/cold-open/year3/any": entry() }),
+      },
+    },
+    { "tests/probe.ts": "// the consumer" }
+  );
+  assert.deepEqual(lintJourneyLedger(root), []);
+});
+
 test("a well-formed ledger passes", () => {
   const root = fixture(
     { ...BASE, entries: grid({ "web/cold-open/year3/any": entry() }) },

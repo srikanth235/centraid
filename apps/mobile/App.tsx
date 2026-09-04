@@ -24,6 +24,15 @@ import {
 // The 400 rung, bundled rather than upstream — see the `useFonts` call.
 import InstrumentSans_470Book from "./assets/fonts/InstrumentSans_470Book.ttf";
 import {
+  AgendaNavigator,
+  DocsNavigator,
+  LockerNavigator,
+  PeopleNavigator,
+  PhotosNavigator,
+  SettingsNavigator,
+  TallyNavigator,
+} from "./lazy-navigators";
+import {
   AssistantScreen,
   AssistantFullScreen,
   AutomationsScreen,
@@ -38,15 +47,6 @@ import {
   SignalNotificationScreen,
   SystemOnPhoneScreen,
 } from "./lazy-screens";
-import {
-  AgendaNavigator,
-  DocsNavigator,
-  LockerNavigator,
-  PeopleNavigator,
-  PhotosNavigator,
-  SettingsNavigator,
-  TallyNavigator,
-} from "./navigators";
 // Side-effect import: registers Photos as the frame's camera-roll target.
 import "./src/apps/photos/camera-roll-target";
 import { configurePhotoImageCache } from "./src/apps/photos/image-cache";

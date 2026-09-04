@@ -891,6 +891,282 @@ jobs:
           path: artifacts/
           retention-days: 14
           if-no-files-found: warn
+  # ─── THE DEVICE RUNG (#927 W4) ──────────────────────────────────────────────
+  #
+  # Rung 5's row in `tests/agent-e2e-mobile/roster.json` said, for a year, "no
+  # mobile device suite sits here today; the row exists so a suite that earns
+  # one has somewhere to go". Every mobile number this repo has is therefore an
+  # EMULATOR number: swiftshader software rendering on a 4-vCPU Linux runner, or
+  # a simulator sharing a macOS host's CPU. Neither has a phone's thermal
+  # envelope, a phone's flash, or a phone's GPU, so no dropped-frame percentage
+  # and no cold-start millisecond measured on them may be promoted to an
+  # absolute ceiling — which is why every mobile row in `tests/journeys.json`
+  # carries `_intended*` and gates on nothing.
+  #
+  # This is the rung that can change that: one LOW-END Android, one iPhone, and
+  # one Pi-class cell running the gateway itself.
+  #
+  # HOW IT IS ALLOWED TO BE ABSENT. The two phone cells need a device farm, and
+  # the Pi cell needs a self-hosted runner. Neither exists on a fork, and neither
+  # existed when this landed. A lane that goes RED because a secret is missing
+  # teaches everyone to ignore it, so the gate below resolves what is available
+  # and the cells are SKIPPED — never failed — when it is not. `device-rung-gate`
+  # itself always runs and writes each absent cell's evidence as `parked`, so the
+  # report shows the debt with its date rather than a silent gap
+  # (docs/traps/lane-evidence.md: a park is a date on the debt, never a mute).
+  device-rung-gate:
+    needs: [resolve-candidate]
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      farm: ${{ steps.resolve.outputs.farm }}
+      pi: ${{ steps.resolve.outputs.pi }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
+      # `secrets` is not readable from a job-level `if:`, which is the whole
+      # reason this job exists rather than an expression on each cell.
+      - id: resolve
+        env:
+          FARM_TOKEN: ${{ secrets.CENTRAID_DEVICE_FARM_TOKEN }}
+          FARM_PROJECT: ${{ secrets.CENTRAID_DEVICE_FARM_PROJECT }}
+          PI_CELL: ${{ vars.CENTRAID_PI_CELL }}
+        run: |
+          set -euo pipefail
+          if [ -n "${FARM_TOKEN:-}" ] && [ -n "${FARM_PROJECT:-}" ]; then
+            echo "farm=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "farm=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::device farm secrets absent — the phone cells are parked, not failed"
+          fi
+          if [ "${PI_CELL:-}" = "true" ]; then
+            echo "pi=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pi=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::no self-hosted Pi cell registered — the gateway cell is parked, not failed"
+          fi
+      # An absent cell still owes the report a row. `--verdict parked` names the
+      # entry in tests/quarantine.json#lanes that says what unblocks it.
+      - name: Write lane evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          write() {
+            node scripts/test-report/write-evidence.mjs --lane "$1" --rung 5 --platform "$2" \
+              --verdict parked --started-at "$(date -u +%FT%TZ)" --budget-ms "$3" \
+              --candidate ${{ needs.resolve-candidate.outputs.sha }} \
+              --qualities journey,performance --surfaces mobile-native
+          }
+          if [ "${{ steps.resolve.outputs.farm }}" != "true" ]; then
+            write device-rung-android android 3600000
+            write device-rung-ios ios 3600000
+          fi
+          if [ "${{ steps.resolve.outputs.pi }}" != "true" ]; then
+            node scripts/test-report/write-evidence.mjs --lane device-rung-gateway-pi --rung 5 \
+              --platform any --verdict parked --started-at "$(date -u +%FT%TZ)" --budget-ms 3600000 \
+              --candidate ${{ needs.resolve-candidate.outputs.sha }} \
+              --qualities performance --surfaces gateway
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-device-rung-gate
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ONE LOW-END ANDROID. Low-end on purpose: the phone that struggles is the one
+  # whose numbers are worth a ceiling, and a flagship would only re-measure what
+  # the emulator already over-reports. The device is leased from the farm and
+  # reached over `adb connect`, so the repo's own harness drives it exactly as it
+  # drives an emulator — `run-roster.mjs` discovers it through `adb devices` like
+  # any other target, and no second driver exists to disagree with the first.
+  device-rung-android:
+    needs: [resolve-candidate, device-rung-gate]
+    if: needs.device-rung-gate.outputs.farm == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
+      - uses: ./.github/actions/setup
+      - name: Install Maestro CLI
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: bash scripts/ci/install-maestro.sh
+      - run: bun run turbo run build --filter=@centraid/mobile...
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bun run turbo run build --filter=@centraid/server
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      # THE VOLUME IS THE DEMO CORPUS, AND THAT IS THIS RUNG'S FIRST DEBT. A
+      # cold-start or frame number taken over a hundred rows says nothing about
+      # a year-3 library, and the golden phone replica — `goldenYear3Replica()`
+      # in `tests/helpers/factories.ts` — is the fixture every other rig mounts.
+      # Nothing seeds a gateway from it yet, so no lane can hand a phone one.
+      # `@centraid/test-kit` now ships a `dist` build (#927), which is what
+      # unblocks writing that seeder from a plain-Node harness; until it exists
+      # every number this rung produces is at demo volume and its ledger row
+      # says so.
+      - name: Seed the lane's demo corpus
+        run: node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+      - name: Lease a low-end Android from the farm
+        id: lease
+        env:
+          CENTRAID_DEVICE_FARM_TOKEN: ${{ secrets.CENTRAID_DEVICE_FARM_TOKEN }}
+          CENTRAID_DEVICE_FARM_PROJECT: ${{ secrets.CENTRAID_DEVICE_FARM_PROJECT }}
+          CENTRAID_DEVICE_FARM_ANDROID_MODEL: ${{ vars.CENTRAID_DEVICE_FARM_ANDROID_MODEL }}
+        run: bash scripts/ci/device-farm-lease.sh android
+      - name: Run the device rung
+        env:
+          CENTRAID_MOBILE_BUILD: release
+          MAESTRO_PLATFORM: android
+        run: node tests/agent-e2e-mobile/run-roster.mjs --rung 5 --platform android
+      - name: Release the leased device
+        if: always()
+        env:
+          CENTRAID_DEVICE_FARM_TOKEN: ${{ secrets.CENTRAID_DEVICE_FARM_TOKEN }}
+        run: bash scripts/ci/device-farm-lease.sh release
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane device-rung-android --rung 5 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,performance --surfaces mobile-native
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-device-rung-android
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ONE iPhone. The farm's macOS session is what makes it reachable at all: a
+  # Linux runner cannot talk to a physical iPhone, and `xcrun simctl` — which is
+  # what the harness enumerates today — lists simulators only. Closing that is
+  # the first thing the first real run has to do; until the secrets exist this
+  # cell is parked and says so.
+  device-rung-ios:
+    needs: [resolve-candidate, device-rung-gate]
+    # Its own switch: enabling the farm for Android must not turn the iPhone
+    # cell red on the day the harness still cannot enumerate a physical device.
+    if: needs.device-rung-gate.outputs.farm == 'true' && vars.CENTRAID_DEVICE_FARM_IOS == 'true'
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
+      - uses: ./.github/actions/setup
+      - name: Install Maestro CLI
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: bash scripts/ci/install-maestro.sh
+      - run: bun run turbo run build --filter=@centraid/mobile...
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bun run turbo run build --filter=@centraid/server
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      # Demo volume, for the reason the Android cell states above.
+      - name: Seed the lane's demo corpus
+        run: node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+      - name: Lease an iPhone from the farm
+        id: lease
+        env:
+          CENTRAID_DEVICE_FARM_TOKEN: ${{ secrets.CENTRAID_DEVICE_FARM_TOKEN }}
+          CENTRAID_DEVICE_FARM_PROJECT: ${{ secrets.CENTRAID_DEVICE_FARM_PROJECT }}
+          CENTRAID_DEVICE_FARM_IOS_MODEL: ${{ vars.CENTRAID_DEVICE_FARM_IOS_MODEL }}
+        run: bash scripts/ci/device-farm-lease.sh ios
+      - name: Run the device rung
+        env:
+          CENTRAID_MOBILE_BUILD: release
+          MAESTRO_PLATFORM: ios
+        run: node tests/agent-e2e-mobile/run-roster.mjs --rung 5 --platform ios
+      - name: Release the leased device
+        if: always()
+        env:
+          CENTRAID_DEVICE_FARM_TOKEN: ${{ secrets.CENTRAID_DEVICE_FARM_TOKEN }}
+        run: bash scripts/ci/device-farm-lease.sh release
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane device-rung-ios --rung 5 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,performance --surfaces mobile-native
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-device-rung-ios
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # THE PI-CLASS GATEWAY CELL. The vault owner's gateway is a machine in their
+  # home, and the constrained hardware profile exists because of it — but every
+  # number under that profile so far was measured on a 4-vCPU cloud runner
+  # pretending. This cell runs the same constrained-profile rig on the hardware
+  # the profile is named for, so `ci-linux-x64-4c-constrained` and `pi-arm64-4c`
+  # can finally be told apart. Self-hosted, so it exists only where somebody
+  # registered a runner with the `centraid-pi` label.
+  device-rung-gateway-pi:
+    needs: [resolve-candidate, device-rung-gate]
+    if: needs.device-rung-gate.outputs.pi == 'true'
+    runs-on: [self-hosted, linux, arm64, centraid-pi]
+    timeout-minutes: 120
+    steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
+      - uses: ./.github/actions/setup
+      - run: bun run build
+      # The same rig `candidate.yml` runs on a cloud runner, here on the machine
+      # the constrained profile describes. Its ledger rows are keyed by hardware
+      # (`tests/journeys.json#hardware`), so the two never average together.
+      - name: Constrained-profile wall clock on Pi-class hardware
+        env:
+          CENTRAID_HARDWARE_PROFILE: constrained
+          CENTRAID_JOURNEY_HARDWARE: pi-arm64-4c
+        run: bun run test:perf:pr
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane device-rung-gateway-pi --rung 5 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities performance --surfaces gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-device-rung-pi
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
   pairing-lifecycle:
     needs: [resolve-candidate]
     if: >

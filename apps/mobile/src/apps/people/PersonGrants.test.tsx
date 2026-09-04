@@ -19,6 +19,9 @@ import type { GrantRecord } from "@centraid/blueprints/apps/_shared/grant-plane"
 
 import PersonGrants from "./PersonGrants";
 
+vi.mock(import("expo-clipboard"), () => ({
+  setStringAsync: () => Promise.resolve(true),
+}));
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.reactNativeStub() as unknown as typeof import("react-native");
@@ -48,7 +51,12 @@ vi.mock(
 // every test injects its own door.
 vi.mock(
   import("../../kit/share/grant-seat"),
-  () => ({ nativeGrantDoor: () => undefined }) as never
+  () =>
+    ({
+      nativeGrantDoor: () => undefined,
+      nativeLinkTicketDoor: () => () =>
+        Promise.resolve({ ok: false, message: "no gateway in this test" }),
+    }) as never
 );
 
 // The sheet has its own suite; here it is a recorder, so what this screen

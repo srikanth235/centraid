@@ -29,7 +29,9 @@ import {
 } from "@centraid/blueprints/apps/notes/view-copy";
 
 import Icon from "../../kit/components/Icon";
+import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import SeatList from "../../kit/components/SeatList";
 import { useTheme } from "../../kit/theme";
 import type { NotesMoreRow } from "./notes-band";
 import type { NativeNote } from "./notes-model";
@@ -97,8 +99,8 @@ export function NotebooksPlace(props: NotebooksPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<string>();
-  return (
-    <ScrollView contentContainerStyle={styles.list}>
+  const head = (
+    <View>
       <Text style={[styles.rowMeta, { color: colors.textSoft }]}>
         {RAIL_NOTEBOOKS}
       </Text>
@@ -138,10 +140,19 @@ export function NotebooksPlace(props: NotebooksPlaceProps): React.JSX.Element {
           {props.unfiled}
         </Text>
       </View>
-      {props.notebooks.map((shelf) =>
+    </View>
+  );
+  return (
+    <SeatList
+      accessibilityLabel={RAIL_NOTEBOOKS}
+      anchoring={NEWEST_FIRST_ANCHORING}
+      rows={props.notebooks}
+      keyOf={(shelf) => shelf.notebook_id}
+      contentContainerStyle={styles.list}
+      header={head}
+      renderRow={(shelf) =>
         renaming === shelf.notebook_id ? (
           <NameField
-            key={shelf.notebook_id}
             initial={shelf.name ?? ""}
             label="Notebook name"
             onCommit={(name) => {
@@ -151,10 +162,7 @@ export function NotebooksPlace(props: NotebooksPlaceProps): React.JSX.Element {
             onCancel={() => setRenaming(undefined)}
           />
         ) : (
-          <View
-            key={shelf.notebook_id}
-            style={[styles.row, { borderBottomColor: colors.line }]}
-          >
+          <View style={[styles.row, { borderBottomColor: colors.line }]}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Open ${shelf.name ?? "this notebook"}`}
@@ -186,8 +194,8 @@ export function NotebooksPlace(props: NotebooksPlaceProps): React.JSX.Element {
             </Pressable>
           </View>
         )
-      )}
-    </ScrollView>
+      }
+    />
   );
 }
 
@@ -202,15 +210,19 @@ export interface TagsPlaceProps {
 export function TagsPlace(props: TagsPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <ScrollView contentContainerStyle={styles.list}>
-      <Text style={[styles.rowMeta, { color: colors.textSoft }]}>
-        {RAIL_TAGS}
-      </Text>
-      {props.tags.map((tag) => (
-        <View
-          key={tag.concept_id}
-          style={[styles.row, { borderBottomColor: colors.line }]}
-        >
+    <SeatList
+      accessibilityLabel={RAIL_TAGS}
+      anchoring={NEWEST_FIRST_ANCHORING}
+      rows={props.tags}
+      keyOf={(tag) => tag.concept_id}
+      contentContainerStyle={styles.list}
+      header={
+        <Text style={[styles.rowMeta, { color: colors.textSoft }]}>
+          {RAIL_TAGS}
+        </Text>
+      }
+      renderRow={(tag) => (
+        <View style={[styles.row, { borderBottomColor: colors.line }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ selected: props.active === tag.concept_id }}
@@ -230,8 +242,8 @@ export function TagsPlace(props: TagsPlaceProps): React.JSX.Element {
             {tag.edges.length}
           </Text>
         </View>
-      ))}
-    </ScrollView>
+      )}
+    />
   );
 }
 
@@ -245,17 +257,21 @@ export interface TrashPlaceProps {
 export function TrashPlace(props: TrashPlaceProps): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <ScrollView contentContainerStyle={styles.list}>
-      <Text style={[styles.rowMeta, { color: colors.textSoft }]}>
-        {TRASH_STATUS}
-      </Text>
-      {props.notes.map((note) => {
+    <SeatList
+      accessibilityLabel={TRASH_STATUS}
+      anchoring={NEWEST_FIRST_ANCHORING}
+      rows={props.notes}
+      keyOf={(note) => note.id}
+      contentContainerStyle={styles.list}
+      header={
+        <Text style={[styles.rowMeta, { color: colors.textSoft }]}>
+          {TRASH_STATUS}
+        </Text>
+      }
+      renderRow={(note) => {
         const left = daysLeft(note.purgeAt);
         return (
-          <View
-            key={note.id}
-            style={[styles.row, { borderBottomColor: colors.line }]}
-          >
+          <View style={[styles.row, { borderBottomColor: colors.line }]}>
             <View style={styles.rowOpen}>
               <Text
                 numberOfLines={1}
@@ -281,8 +297,8 @@ export function TrashPlace(props: TrashPlaceProps): React.JSX.Element {
             </Pressable>
           </View>
         );
-      })}
-    </ScrollView>
+      }}
+    />
   );
 }
 
