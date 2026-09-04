@@ -13,6 +13,8 @@ import type {
 import { pathToFileUri } from "../../../modules/centraid-storage";
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
 import { fetchWithinReplyDeadline } from "../../lib/replica/gateway-deadline";
+import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
+import type { MobileGatewayFeatures } from "../../lib/replica/mobile-gateway-compatibility-core";
 import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
 import { MAX_MOUNTED_NATIVE_SCOPES } from "../../lib/replica/offline-budgets";
@@ -61,6 +63,37 @@ export function fetcher(vaultId?: string): ReplicaFetcher {
       );
       throw error;
     }
+  };
+}
+
+/**
+ * Start the `/info` compatibility read WITHOUT waiting on it (#922 E8).
+ *
+ * The wall settles the gateway's feature flags and refuses a build that cannot
+ * speak this contract — but it must not stand between a tapped icon and replica
+ * files this device already holds, or a phone whose gateway is asleep sits
+ * through the whole reply deadline before a single local row can be read. The
+ * returned reader is awaited once the drivers are open; it runs `onRefusal` —
+ * the mount's own teardown — before rethrowing, so a refused wall leaves
+ * nothing half-open. The rejection is captured here, never left floating.
+ */
+export function startCompatibilityWall(
+  identity: Awaited<ReturnType<typeof resolveIdentity>>
+): (
+  onRefusal: () => Promise<void>
+) => Promise<MobileGatewayFeatures | undefined> {
+  const answer = requireMobileOfflineGateway({
+    baseUrl: identity.auth.baseUrl,
+    online: identity.online,
+  }).then(
+    (features) => ({ features, error: undefined }),
+    (error: unknown) => ({ features: undefined, error })
+  );
+  return async (onRefusal) => {
+    const settled = await answer;
+    if (settled.error === undefined) return settled.features;
+    await onRefusal();
+    throw settled.error;
   };
 }
 

@@ -74,9 +74,11 @@ describe("photos-memories.scale", () => {
        VALUES (?, 'image/jpeg', ?, ?, 4096, ?)`
     );
     const insertAsset = db.vault.prepare(
+      // No `favorite` column since #916 (ruling ONT-03): the star is a flags
+      // row on the asset, and naming it here fails the seed outright.
       `INSERT INTO media_asset
-         (asset_id, content_id, kind, captured_at, place_id, capture_group_id, favorite)
-       VALUES (?, ?, 'photo', ?, ?, ?, 0)`
+         (asset_id, content_id, kind, captured_at, place_id, capture_group_id)
+       VALUES (?, ?, 'photo', ?, ?, ?)`
     );
     const insertPhash = db.vault.prepare(
       `INSERT INTO media_asset_phash (asset_id, phash, cluster_id, computed_at)

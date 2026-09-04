@@ -13,7 +13,6 @@
 // sentence).
 
 import { useNavigation } from "@react-navigation/native";
-import { FlashList } from "@shopify/flash-list";
 import React, { useMemo, useState } from "react";
 import { Modal, Pressable, View } from "react-native";
 
@@ -27,6 +26,7 @@ import type { MenuAnchor, MenuGroup } from "../../kit/components/AnchoredMenu";
 import EmptyBlock from "../../kit/components/EmptyBlock";
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import SeatList from "../../kit/components/SeatList";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { postStatus, showUndoStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -427,37 +427,38 @@ export default function DriveList({
         </View>
       ) : (
         <View style={styles.container}>
-          <FlashList
-            maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
-            data={docs as MobileDriveDoc[]}
-            keyExtractor={(doc) => doc.document_id}
-            numColumns={arrangement === "grid" ? 2 : 1}
-            renderItem={({ item, index }) => {
-              const open = (doc: MobileDriveDoc): void =>
+          <SeatList
+            accessibilityLabel="The drive"
+            anchoring={NEWEST_FIRST_ANCHORING}
+            rows={docs}
+            keyOf={(doc) => doc.document_id}
+            columns={arrangement === "grid" ? 2 : 1}
+            renderRow={(doc, index) => {
+              const open = (opened: MobileDriveDoc): void =>
                 navigation.navigate("DocumentRead", {
-                  documentId: doc.document_id,
+                  documentId: opened.document_id,
                 });
               if (arrangement === "grid") {
                 return (
                   <DocGridTile
-                    doc={item}
+                    doc={doc}
                     offline={offline}
                     onOpen={open}
                     onMenu={openMenu}
                   />
                 );
               }
-              const reason = reasons?.[item.document_id];
+              const reason = reasons?.[doc.document_id];
               return (
                 <DocRow
-                  doc={item}
+                  doc={doc}
                   offline={offline}
                   first={index === 0}
                   {...(reason ? { reason } : {})}
                   onOpen={open}
                   onMenu={openMenu}
                   selecting={selecting}
-                  selected={pickedSet.has(item.document_id)}
+                  selected={pickedSet.has(doc.document_id)}
                   onToggleSelect={togglePick}
                 />
               );
