@@ -16,7 +16,7 @@ import { nowIso, uuidv7 } from "../ids.js";
 /** One scope extent, as the manifest declares it. */
 export interface ScopeTriple {
   schema: string;
-  table?: string | undefined;
+  table?: string;
   verbs: "read" | "read+act" | "act" | "reveal";
 }
 

@@ -887,7 +887,7 @@ export class VaultPlane {
     // The ask carries EXACTLY the unanswered subjects, never the whole
     // manifest: deciding it must not re-answer what the owner already settled,
     // and a "no" to a widening must not withdraw the yes it already gave.
-    const nextScopes = missing.map(scopeForSubject);
+    const nextScopes = missing.map((subject) => scopeForSubject(subject));
     openScopeRequest(this.db, { principalId: appId, scopes: nextScopes });
     if (
       !existingRequest ||
