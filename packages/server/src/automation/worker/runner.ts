@@ -6,6 +6,17 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parentPort, workerData } from "node:worker_threads";
 
+async function loadThreadReuse(): Promise<
+  typeof import("../../engine/worker/thread-reuse.js")
+> {
+  const dir = path.join(import.meta.dirname, "..", "..", "engine", "worker");
+  const js = path.join(dir, "thread-reuse.js");
+  const file = existsSync(js) ? js : path.join(dir, "thread-reuse.ts");
+  return (await import(
+    pathToFileURL(file).href
+  )) as typeof import("../../engine/worker/thread-reuse.js");
+}
+
 /** Absolute path: a relative `.js` specifier does not resolve under native
  *  type stripping. */
 async function loadSandboxBoot(): Promise<
@@ -132,32 +143,8 @@ if (!parentPort) {
   throw new Error("centraid automation worker must be run as a worker_thread");
 }
 const port = parentPort;
-
-/**
- * Own global keys as of the first run, captured AFTER the sandbox installs so
- * the sandbox's own marks are part of the baseline. A reused thread shares one
- * global object, so anything a handler parks there would otherwise be readable
- * by the NEXT handler — possibly another app's. Scrubbing before each graph
- * loads closes that channel; it is not a realm, and a non-configurable global
- * still cannot be removed.
- */
-let baselineGlobals: Set<string | symbol> | undefined;
-
-function scrubHandlerGlobals(): void {
-  const scope = globalThis as unknown as Record<PropertyKey, unknown>;
-  if (!baselineGlobals) {
-    baselineGlobals = new Set(Reflect.ownKeys(scope));
-    return;
-  }
-  for (const key of Reflect.ownKeys(scope)) {
-    if (baselineGlobals.has(key)) continue;
-    try {
-      delete scope[key];
-    } catch {
-      /* non-configurable: never ours to remove */
-    }
-  }
-}
+const { createThreadSession } = await loadThreadReuse();
+const session = createThreadSession();
 
 const boot = workerData as { pooled?: boolean } & Partial<WorkerRequest>;
 let req = boot as WorkerRequest;
@@ -185,18 +172,6 @@ function rpcCall(msg: RpcRequest): Promise<unknown> {
     port.postMessage({ ...msg, id } as WorkerMessage);
   });
 }
-
-/** One per run (#922 B3): the previous run's controller is aborted in its
- *  `finally`, so a shared one would hand run N+1 a dead signal. */
-let abortController = new AbortController();
-
-/**
- * Retire the thread after this many runs. Each run imports the handler under a
- * fresh URL and Node's module registry never drops one, so this is the
- * resource-limit guard on that growth. Mirrors `../../engine/worker/runner.ts`.
- */
-const MAX_RUNS_PER_WORKER = 64;
-let runsServed = 0;
 
 function rejectAllPending(reason: string): void {
   const err = new Error(reason);
@@ -233,8 +208,9 @@ port.on("message", (msg: ParentMessage) => {
     return;
   }
   if (msg.type === "abort") {
-    abortController.abort(msg.reason ?? "aborted");
-    rejectAllPending(msg.reason ?? "aborted");
+    const reason = msg.reason ?? "aborted";
+    session.abort(reason);
+    rejectAllPending(reason);
   }
 });
 
@@ -382,7 +358,9 @@ const ctx = {
   runs,
   vault,
   input: req.input,
-  abortSignal: abortController.signal,
+  get abortSignal(): AbortSignal {
+    return session.signal;
+  },
 };
 
 interface PullRow {
@@ -495,12 +473,10 @@ async function executePullSpec(spec: PullSpec): Promise<unknown> {
 }
 
 function execute(request: WorkerRequest): void {
-  runsServed += 1;
-  abortController = new AbortController();
+  session.beginRun();
   req = request;
   ctx.now = request.now;
   ctx.input = request.input;
-  ctx.abortSignal = abortController.signal;
   let sandboxKey: string | undefined;
   void (async () => {
     try {
@@ -531,13 +507,9 @@ function execute(request: WorkerRequest): void {
           roots,
           request.sandboxRuntimeDir ?? null,
         ]);
-        scrubHandlerGlobals();
+        session.scrub();
       }
-      // A per-run URL: the registry key differs, so the handler graph is
-      // evaluated again and carries nothing from the last run.
-      const mod = (await import(
-        `${pathToFileURL(req.handlerFile).href}?centraid-run=${runsServed}`
-      )) as {
+      const mod = (await import(session.importHref(req.handlerFile))) as {
         default?: ((args: unknown) => Promise<unknown>) | PullSpec;
       };
       if (
@@ -560,8 +532,7 @@ function execute(request: WorkerRequest): void {
         type: "result",
         ok: true,
         value,
-        ...(sandboxKey ? { sandboxKey } : {}),
-        ...(runsServed >= MAX_RUNS_PER_WORKER ? { retire: true } : {}),
+        ...session.resultFlags(sandboxKey),
       } satisfies WorkerMessage);
     } catch (error) {
       port.postMessage({
@@ -571,15 +542,10 @@ function execute(request: WorkerRequest): void {
           error instanceof Error
             ? (error.stack ?? error.message)
             : String(error),
-        ...(sandboxKey ? { sandboxKey } : {}),
-        ...(runsServed >= MAX_RUNS_PER_WORKER ? { retire: true } : {}),
+        ...session.resultFlags(sandboxKey),
       } satisfies WorkerMessage);
     } finally {
-      abortController.abort();
-      // Dropped, not rejected: a call the handler abandoned has no `catch`,
-      // and an unhandled rejection would kill a thread about to serve someone
-      // else.
-      pendingCalls.clear();
+      session.finish(pendingCalls);
     }
   })();
 }
