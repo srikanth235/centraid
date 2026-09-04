@@ -736,9 +736,16 @@ async function streamChanges(
       }
       baseline ??= replicaShapeIds(page.shapes);
       if (page.doorbell.length > 0) {
+        // SB-payload (#922 A1): the frame carries the batch the hub ALREADY
+        // projected, so a subscribed device applies it in one hop instead of
+        // discarding the doorbell and pulling `/changes` — which re-projected
+        // the same window outside the hub memo. Catch-up still pulls:
+        // `hasMore`, a reconnect, or a cursor gap. `changes` stays the
+        // doorbell so shape routing does not have to open the batch.
         writeSse(stream, "change", {
           changes: page.doorbell,
           cursor: page.batch.to,
+          batch: page.batch,
         });
       }
       if (!sameCursor(cursor, page.batch.to))

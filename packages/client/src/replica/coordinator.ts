@@ -40,6 +40,42 @@ import type {
   ReplicaValue,
 } from "./types.js";
 
+/**
+ * A client that stops applying must not accumulate pushed batches forever;
+ * past this depth the oldest are dropped and the pull path catches up.
+ */
+const PUSHED_BATCH_QUEUE_MAX = 32;
+
+function sameCursor(a: ReplicaCursor, b: ReplicaCursor): boolean {
+  return a.epoch === b.epoch && a.seq === b.seq;
+}
+
+function cursorLike(value: unknown): ReplicaCursor | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as { epoch?: unknown; seq?: unknown };
+  if (typeof candidate.epoch !== "string") return undefined;
+  if (!Number.isSafeInteger(candidate.seq)) return undefined;
+  return { epoch: candidate.epoch, seq: candidate.seq as number };
+}
+
+/**
+ * Narrow a change frame's `batch` to something `applyChanges` may be handed.
+ * Only the fields the apply path fences on are checked here — the batch takes
+ * the same route, and the same store-side validation, as a pulled one.
+ */
+function pushedBatch(value: unknown): ReplicaChangeBatch | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as {
+    from?: unknown;
+    to?: unknown;
+    changes?: unknown;
+  };
+  const from = cursorLike(candidate.from);
+  const to = cursorLike(candidate.to);
+  if (!from || !to || !Array.isArray(candidate.changes)) return undefined;
+  return value as ReplicaChangeBatch;
+}
+
 export interface ReplicaChangeFeedAdapter {
   /** Pass `subscribeVaultChanges` from the shell-owned singleton feed. */
   subscribe: (listener: (message: VaultChangeMessage) => void) => () => void;
@@ -103,6 +139,13 @@ export class ReplicaCoordinator {
   #storageFullError: unknown | undefined;
   #unsubscribeFeed: (() => void) | undefined;
   #feedTarget: ReplicaCursor | undefined;
+  /**
+   * Batches the gateway pushed on the change frame and this replica has not
+   * applied yet (SB-payload, #922 A1). Bounded: a client that falls behind
+   * the pushes drops the oldest and lets the pull path catch it up, so a
+   * stalled applier cannot grow this without limit.
+   */
+  readonly #pushedBatches: ReplicaChangeBatch[] = [];
   #feedSync: Promise<void> | undefined;
   #feedAbort: AbortController | undefined;
   #feedRetryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -519,6 +562,21 @@ export class ReplicaCoordinator {
       void this.requireRebootstrap(message.detail);
       return;
     }
+    if (message.type === "centraid:vault-batch") {
+      const batch = pushedBatch(message.batch);
+      // An unusable frame is not an error, only a missed shortcut: the cursor
+      // still moves the target and the pull path catches up.
+      if (batch) {
+        this.#pushedBatches.push(batch);
+        while (this.#pushedBatches.length > PUSHED_BATCH_QUEUE_MAX)
+          this.#pushedBatches.shift();
+      }
+      const cursor = message.cursor;
+      if (!this.#feedTarget || cursorAfter(cursor, this.#feedTarget))
+        this.#feedTarget = cursor;
+      this.startFeedSync();
+      return;
+    }
     const cursor =
       message.type === "centraid:vault-cursor"
         ? message.cursor
@@ -527,6 +585,25 @@ export class ReplicaCoordinator {
       this.#feedTarget = cursor;
     this.startFeedSync();
   };
+
+  /**
+   * The batch the gateway already pushed for THIS cursor, if it pushed one.
+   * Anything at or behind the cursor is spent and dropped; a batch that does
+   * not start exactly here is a gap, and a gap is the pull path's job.
+   */
+  private takePushedBatch(
+    cursor: ReplicaCursor
+  ): ReplicaChangeBatch | undefined {
+    while (
+      this.#pushedBatches[0] &&
+      !cursorAfter(this.#pushedBatches[0].to, cursor)
+    )
+      this.#pushedBatches.shift();
+    const head = this.#pushedBatches[0];
+    if (!head || sameCursor(head.from, cursor) === false) return undefined;
+    this.#pushedBatches.shift();
+    return head;
+  }
 
   private startFeedSync(): void {
     if (
@@ -564,15 +641,19 @@ export class ReplicaCoordinator {
         this.clearReachedFeedTarget(status.cursor);
         return syncNextFeedTarget();
       }
-      let batch: ReplicaChangeBatch | undefined;
-      try {
-        batch = await pullChanges(status.cursor, abort.signal);
-      } catch (error) {
-        if (error instanceof ReplicaRebootstrapRequiredError) {
-          await this.requireRebootstrap(error);
-          return true;
+      // ONE HOP (#922 A1): the frame that woke us usually carries the batch,
+      // so the happy path applies it and never touches `/changes`.
+      let batch = this.takePushedBatch(status.cursor);
+      if (!batch) {
+        try {
+          batch = await pullChanges(status.cursor, abort.signal);
+        } catch (error) {
+          if (error instanceof ReplicaRebootstrapRequiredError) {
+            await this.requireRebootstrap(error);
+            return true;
+          }
+          throw error;
         }
-        throw error;
       }
       if (!batch) return false;
       if (abort.signal.aborted || generation !== this.#feedGeneration)
@@ -745,6 +826,7 @@ export class ReplicaCoordinator {
     this.#feedAbort?.abort();
     this.#feedAbort = undefined;
     this.#feedTarget = undefined;
+    this.#pushedBatches.length = 0;
     if (this.#feedRetryTimer) clearTimeout(this.#feedRetryTimer);
     this.#feedRetryTimer = undefined;
     this.clearFeedFailures();

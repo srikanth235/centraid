@@ -1719,3 +1719,40 @@ bun run --cwd packages/server test src/routes/replica-fanout.test.ts src/routes/
 | --- | --- | --- |
 | A shared projection leaks one device's intent outcome to another | asserted on the memoized page itself that `batch.outcomes` is undefined and `intentEntries` is `[]`, then re-ran both device-scoped outcome suites | held — 43 route tests green, no outcome crosses devices |
 | The memoized entity shape serves a stale column set after a schema change | ext entities excluded from the memo by `parseExtLogical`; re-ran `snapshot.test.ts` + `change-log.test.ts` (24 tests) and the ext-touching route suites | held — canonical shapes are fixed at open, ext still re-reads `PRAGMA table_info` every call |
+
+## Mega-lane A slice 2 — wire (A1 payload frame)
+
+| File | Change |
+| --- | --- |
+| `packages/server/src/routes/replica-routes.ts` | the SSE `change` frame carries `batch`, the page the hub already projected |
+| `packages/client/src/vault-change-sse.ts` | `centraid:vault-batch` added to the platform-neutral message grammar; the batch stays opaque here |
+| `packages/client/src/vault-change-feed.ts` | the batch is emitted BEFORE the per-entry nudges it covers |
+| `apps/mobile/src/lib/replica/native-change-feed.ts` | the same emit on the React Native feed |
+| `packages/client/src/replica/coordinator.ts` | a bounded pushed-batch queue; the feed sync applies the pushed batch for the current cursor and pulls only when there is none |
+| `packages/client/src/replica/coordinator.test.ts` | one-hop apply with zero pulls, and the gap case that must still pull |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| `/changes` pulls per change frame, happy path | 1 | 0 | `coordinator.test.ts` — the pre-existing "uses the shared feed as a pull trigger" case records one pulled cursor per nudge; the new "applies the batch the change frame carries" case asserts `pulls === 0` for the same commit |
+| Projections per commit for a subscribed device | 2 | 1 | the pull re-projected the same window through `/changes`, outside the hub memo (slice 1's `applyReplicaIntentOutcomes` path); the frame reuses the hub's page |
+| Round trips from commit to applied on a subscribed device | 2 (frame + pull) | 1 (frame) | same cases |
+
+**Deleted/replaced.** The pull-on-every-nudge path is gone as the happy path — the losing side of the doorbell/payload contradiction (`SB-payload`). `pullChanges` itself is kept and still exercised: catch-up on `hasMore`, on reconnect, and on a cursor gap, with the gap case now asserted (a pushed batch whose `from` is not the local cursor is dropped and the pull runs). `changes` stays the doorbell on the frame so shape routing does not have to open the batch.
+
+**Decisions.** No protocol-version bump: `batch` is an additive frame field a client that does not know it ignores, and `REPLICA_PROTOCOL_VERSION` fences the batch's own shape, which is unchanged. Bumping it would force every device to re-bootstrap for a strictly backward-compatible frame. The pushed-batch queue is capped at 32; past that the oldest are dropped and the pull path catches up, so a stalled applier cannot grow it without bound.
+
+**Not reached in this slice.** A6 (the batched intent drain) and G1/G8 (pending-badge clearing on held row versions, `executed` carrying resulting row versions) are NOT in this diff — the lane's tool budget ran to the payload frame only. The 40-offline-edits and no-frame-in-which-a-row-is-neither-pending-nor-canonical boxes are therefore still open.
+
+```
+bun run --cwd packages/client typecheck && bun run --cwd packages/server typecheck && bun run --cwd apps/mobile typecheck
+bun run --cwd packages/client test src/replica/coordinator.test.ts src/replica/convergence-properties.test.ts src/replica/app-convergence.contract.test.ts src/replica/multi-writer.contract.test.ts src/vault-change-feed.test.ts src/vault-change-sse.test.ts
+bun run --cwd packages/server test src/routes/replica-routes.test.ts src/routes/replica-intent-route.test.ts
+```
+
+**Finding — the identity stamp fights `doc-integrity` on a date rollover.** The `agent-session-identity` pre-commit hook UPDATES the existing `date | harness | session` row in place when the same session commits on a later day. That row sits above the frozen prefix, so the trunk's copy of this receipt stops being a byte-prefix and every append-only audit fails on a line no author wrote. Restoring the date by hand does not survive: the hook re-stamps it on the next commit. Adding a second row for the new date would keep the prefix intact and is the fix, but it belongs to the hook, not to this lane.
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| A pushed batch applied out of order or across a gap corrupts the replica | emitted a batch whose `from` is `epoch:7` at a replica sitting on `epoch:0` | held — the batch is dropped and `/changes` is pulled from `epoch:0`; `takePushedBatch` requires an exact `from` match and discards anything at or behind the cursor |
+| The per-entry nudges that follow the batch re-trigger the pull it replaced | emitted the batch and then the `centraid:vault-change` for the same commit in the frame's own order | held — 0 pulls; the batch is consumed by the first feed-sync pass and the nudge's target is already reached |

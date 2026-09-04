@@ -218,11 +218,22 @@ class VaultFeed {
           cursor?: unknown;
           next?: unknown;
           watermark?: unknown;
+          batch?: unknown;
         }
       | undefined;
     const pageCursor = parseCursor(
       page?.cursor ?? page?.next ?? page?.watermark
     );
+    // BEFORE the per-entry nudges: a listener that can apply the batch must
+    // see it before the doorbell entries it covers, or it schedules the pull
+    // this frame exists to avoid (#922 A1).
+    if (page?.batch && typeof page.batch === "object" && pageCursor) {
+      this.emit({
+        type: "centraid:vault-batch",
+        batch: page.batch,
+        cursor: pageCursor,
+      });
+    }
     const values = Array.isArray(payload)
       ? payload
       : Array.isArray(page?.changes)
