@@ -68,21 +68,32 @@ export default async function exportHandler({ input, ctx }: HandlerArgs) {
     const nameOf = (partyId: string): string =>
       data.people.get(partyId)?.name ?? "Someone";
 
-    const revisionsRes = await ctx.vault.read({
-      entity: "core.entity_revision",
-      orderBy: { column: "recorded_at", dir: "desc" },
-      limit: MAX_LIMIT,
-    });
-    const exported = new Set(expenses.map((e) => e.expense_id));
-    const revisions = ((revisionsRes.rows ?? []) as unknown as RevisionRow[])
-      .filter((row) => exported.has(row.entity_id))
-      .map((row) => ({
-        revision_id: row.revision_id,
-        expense_id: row.entity_id,
-        operation: row.operation,
-        recorded_at: row.recorded_at,
-        undone_at: row.undone_at ?? null,
-      }));
+    // THE WINDOW ASKS FOR THE ROWS IT WANTS (#928). This used to read the
+    // newest `MAX_LIMIT` revisions of everything and keep the ones it had
+    // exported — correct only while the declared row filter narrowed the read
+    // to this app's own entity type BEFORE the window was applied. The clamp
+    // still refuses everything else, but a window is not a filter: name the
+    // exported expenses in SQL, so the page cannot fill with rows this export
+    // is about to discard.
+    const exported = expenses.map((e) => e.expense_id);
+    const revisionsRes =
+      exported.length === 0
+        ? { rows: [] }
+        : await ctx.vault.read({
+            entity: "core.entity_revision",
+            where: [{ column: "entity_id", op: "in", value: exported }],
+            orderBy: { column: "recorded_at", dir: "desc" },
+            limit: MAX_LIMIT,
+          });
+    const revisions = (
+      (revisionsRes.rows ?? []) as unknown as RevisionRow[]
+    ).map((row) => ({
+      revision_id: row.revision_id,
+      expense_id: row.entity_id,
+      operation: row.operation,
+      recorded_at: row.recorded_at,
+      undone_at: row.undone_at ?? null,
+    }));
 
     return {
       group: {

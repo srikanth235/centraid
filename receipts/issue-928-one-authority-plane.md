@@ -1429,3 +1429,61 @@ tests/quality/backup-corpus-fixture.ts
 | --- | --- | --- |
 | "Last used" is really the receipt chain's date, not a write-time guess | forced `writeAuthorityReceipt` to skip the upsert and re-ran `access-lens.test.ts` plus the vault suite | the lens test stays green (it feeds rows directly), which was the finding: the LENS cannot prove the stamp. The proof is the seam — one function, one transaction, one `authorityId` — and the vault suite is what would break if the two disagreed. Recorded as the weaker of the two claims |
 | The dashboard really shows an undecided ask, rather than the harness drawing one | deleted the `requests` block from `SettingsAccessScreen` and re-ran the e2e spec | **red** on `getByText("Waiting on you")`; and `access-lens.test.ts` asserts a DECIDED request is dropped, so the block cannot fill with settled history |
+
+## w5c — Locker's boundary, said accurately; and one runtime filter becomes SQL
+
+Wave 5's Locker slice, plus the root's ruling that a declared row filter is not a WHERE clause. Serves in
+part: **"Locker: sealed set, permits, reveal and `ONLINE_ONLY_ACTIONS` unchanged; its history query filters
+in SQL; `locker-online-only.test.ts` green"**.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/blueprints/apps/locker/queries/access.ts` | header only: "THE ROW FILTER IS THE BOUNDARY" said the boundary was a grant's filter. It is now the app's own declared manifest carried as the execution clamp, and the `where` in the query is the inner wall — the header says both, and why the SQL filter is not redundant with the clamp |
+| `packages/blueprints/apps/tally/queries/export.ts` | the revision read NAMES the exported expenses (`entity_id IN (…)`) instead of reading the newest 2 000 revisions of everything and discarding most — a window is not a filter |
+| `packages/blueprints/apps/tally/queries/export.test.ts` | the ctx double honours `where`, so the clause is what the case proves rather than the handler's leftovers |
+
+### Numbers
+
+| measure | before | after |
+| --- | --- | --- |
+| revision rows the Tally export reads to ship N expenses' revisions | up to 2 000, of every entity type the clamp allows | **exactly the rows for those N expenses** |
+| Locker sealed set / permits / reveal / `ONLINE_ONLY_ACTIONS` | — | **unchanged; no file under `gateway/{sealed,locker-auth,reseal}.ts` is in this diff** |
+
+### Deleted, with its replacement
+
+The export's post-read `.filter((row) => exported.has(row.entity_id))` → the `IN` clause that made it
+unnecessary. Nothing else.
+
+### Decisions
+
+- **No user-visible change in this slice.** `check:ui-receipt` fires because both files sit under
+  `packages/blueprints/apps/**`; the branch's `## User impact` and its screenshot belong to w4c, and this
+  slice adds nothing to see: Locker's history renders the same rows in the same order, and the export ships
+  the same revisions it always did. No screenshot is fabricated for it.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/blueprints typecheck                                    # passes
+bun run --cwd packages/blueprints test -- --run apps/tally apps/locker         # 34 files, 661 passed
+bun run --cwd packages/blueprints test -- --run src/locker-online-only.test.ts # 1 passed
+bun run --cwd apps/mobile test -- --run src/lib/replica/locker-online-only.test.ts  # 3 passed
+```
+
+### Paths
+
+```
+packages/blueprints/apps/locker/queries/access.ts
+packages/blueprints/apps/tally/queries/export.ts
+packages/blueprints/apps/tally/queries/export.test.ts
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| The export's `IN` clause is what narrows the revisions, not a surviving JS filter | the test double previously ignored `where`; with the clause in and the double ignoring it, `ships only the revisions of the expenses that travel` was **red** (both revisions came back). The double now applies the clause and the case passes — so the assertion bites on the SQL | **red then green**, and the case cannot pass again on discarded leftovers |
+| Locker's own walls really are untouched | `git diff origin/main -- packages/vault/src/gateway/{sealed,locker-auth,reseal}.ts packages/blueprints/apps/locker/actions` | `sealed.ts` and the actions are empty. `locker-auth.ts` and `reseal.ts` each carry ONE hunk from w4a and nothing else: `writeReceipt(db.audit, {grantId: null, purpose: "dpv:Security"})` → `writeAuthorityReceipt(db, {authorityId: null})`. Same receipt, same chain, no authority to stamp — the sealed set, the permits and the reveal path are not in the branch at all |

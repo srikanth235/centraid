@@ -4,9 +4,14 @@
  * ONLINE_ONLY and the gateway serves it. Never catch that — a flattened
  * ONLINE_ONLY draws an empty history as none.
  *
- * THE ROW FILTER IS THE BOUNDARY: `provenanceScopeFailure` guards
- * `access.provenance` only, so app.json's rowFilter on `object_type` is all
- * that holds this grant to Locker's own receipts.
+ * TWO WALLS, AND THE QUERY IS THE INNER ONE (#928). Locker holds no grant to
+ * be held to: it runs on the owner's own device credential, and the reach of
+ * that call is its own `app.json` manifest, carried per call as the gateway's
+ * execution clamp — so the declared rowFilter on `object_type` still refuses
+ * a receipt that is not Locker's. The `where` below names the same two types
+ * in SQL, so the page is filtered before the window is applied rather than
+ * after: without it a busy vault's newest 200 receipts could be entirely
+ * someone else's and the clamp would hand this screen an empty history.
  */
 
 const LOCKER_ITEM_TYPE = "locker.item";
