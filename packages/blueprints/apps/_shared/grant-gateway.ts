@@ -14,6 +14,8 @@
 
 import { grantDoor } from "./grant-door.ts";
 import type { GrantDoor, GrantWireCalls } from "./grant-door.ts";
+import { parseMintedLinkTicket } from "./grant-plane.ts";
+import type { LinkTicketDoor } from "./grant-plane.ts";
 
 /** What a host with no grant bridge says. One clause, and it names the fix. */
 export const GRANTS_UNAVAILABLE_HERE =
@@ -43,4 +45,34 @@ export function webGrantCalls(): GrantWireCalls {
 
 export function webGrantDoor(): GrantDoor {
   return grantDoor(webGrantCalls());
+}
+
+/** What a host too old to mint a ticket says — one clause naming the fix, the
+ *  same shape `GRANTS_UNAVAILABLE_HERE` uses. */
+export const LINK_TICKET_UNAVAILABLE_HERE =
+  "Making a link ticket needs a newer gateway connection.";
+
+/**
+ * The web seat's link-ticket door (#929 S6). Feature-detected like every other
+ * optional bridge method, and it reads no payload itself: the wire guard lives
+ * once in `grant-plane.ts`, shared with the native seat.
+ */
+export function webLinkTicketDoor(): LinkTicketDoor {
+  return async () => {
+    const mint = window.centraid?.linkTicket;
+    if (typeof mint !== "function")
+      return { ok: false, message: LINK_TICKET_UNAVAILABLE_HERE };
+    try {
+      const ticket = parseMintedLinkTicket(await mint());
+      return ticket
+        ? { ok: true, ticket }
+        : { ok: false, message: LINK_TICKET_UNAVAILABLE_HERE };
+    } catch (error) {
+      // The route's own words, which the sheet prints verbatim.
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  };
 }

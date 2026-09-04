@@ -146,6 +146,42 @@
       "status": "gating"
     },
     {
+      "id": "device-rung-android",
+      "rung": 5,
+      "platform": "android",
+      "budgetMs": 3600000,
+      "qualities": ["journey", "performance"],
+      "surfaces": ["mobile-native"],
+      "status": "advisory"
+    },
+    {
+      "id": "device-rung-gate",
+      "rung": 5,
+      "platform": "any",
+      "budgetMs": 3600000,
+      "qualities": ["journey"],
+      "surfaces": ["mobile-native"],
+      "status": "advisory"
+    },
+    {
+      "id": "device-rung-gateway-pi",
+      "rung": 5,
+      "platform": "any",
+      "budgetMs": 3600000,
+      "qualities": ["performance"],
+      "surfaces": ["gateway"],
+      "status": "advisory"
+    },
+    {
+      "id": "device-rung-ios",
+      "rung": 5,
+      "platform": "ios",
+      "budgetMs": 3600000,
+      "qualities": ["journey", "performance"],
+      "surfaces": ["mobile-native"],
+      "status": "advisory"
+    },
+    {
       "id": "design-gallery",
       "rung": 2,
       "platform": "web",

@@ -174,13 +174,25 @@ test("long native surfaces remain virtualized and photo cells keep bounded image
   // already a FlatList; the receipts, the search answers, the trash and the
   // items behind a verdict were a ScrollView over a `.map`, and the receipts
   // are the worst of them — every reveal in the vault's life writes one, and
-  // the phone route asks for all of them. `LockerHome` is deliberately
-  // unnamed: like Tasks' cover it is a router that draws no list itself.
+  // the phone route asks for all of them. `LockerHome` is unnamed because,
+  // like Tasks' cover, it is a router that draws no list itself.
+  //
+  // The five capped roster/drive/ledger surfaces draw through `SeatList`, the
+  // kit's one virtualised list (#922 E6) — a stricter pin than the two above
+  // it, because the primitive also REQUIRES its scroll anchoring at the call
+  // site (docs/traps/list-anchoring.md) where a bare tag can inherit it. Named
+  // by the component, not by "either list": a screen that swapped `SeatList`
+  // back for a hand-wired tag would be virtualised and would still have lost
+  // the thing E6 bought.
   const files = [
     ["apps/mobile/src/apps/photos/FaceReview.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/assistant/Assistant.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/agenda/AgendaHome.tsx", /<FlatList/u],
-    ["apps/mobile/src/apps/locker/LockerItemsView.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/locker/LockerItemsView.tsx", /<SeatList/u],
+    ["apps/mobile/src/apps/people/PeopleHome.tsx", /<SeatList/u],
+    ["apps/mobile/src/apps/docs/DriveList.tsx", /<SeatList/u],
+    ["apps/mobile/src/apps/tally/ActivityView.tsx", /<SeatList/u],
+    ["apps/mobile/src/apps/notes/NotesPlaces.tsx", /<SeatList/u],
     ["apps/mobile/src/apps/locker/LockerAccessView.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/locker/LockerSearchView.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/locker/LockerTrashScreen.tsx", /<FlatList/u],

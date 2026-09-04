@@ -10,7 +10,7 @@
     "2": "PR, the required `check`. Blocking. Android only, eight minutes warm, ZERO iOS minutes (#915 non-goal). Can this land without a regression a user would see on the phone?",
     "3": "Every push to main \u2014 the candidate. Non-blocking, 45-minute envelope shared with the rest of rung 3. Is this SHA a build we would hand to a device? Every candidate carries an iOS verdict.",
     "4": "Nightly, against the latest candidate. Depth: the Photos seat, the probes, the promotion pipeline, and the six iOS-only claims.",
-    "5": "Weekly. No mobile device suite sits here today; the row exists so a suite that earns it has somewhere to go."
+    "5": "Weekly, on REAL HARDWARE \u2014 the device rung (#927 W4). One low-end Android, one iPhone, one Pi-class gateway cell. It is the only rung whose numbers may be promoted to an absolute ceiling: every rung below it runs on an emulator or a simulator, which has neither a phone's thermal envelope nor its flash, so a millisecond measured there is a lower bound and nothing more. Each cell is SKIPPED, never failed, where the farm secrets or the self-hosted runner are absent."
   },
   "$budgets": "TWO ceilings, and they measure different things. `suites[*].budgetMs` is the AGGREGATE wall clock lib/run-suite.mjs enforces as a DEADLINE (#892 P0) \u2014 it prices the members' work AND the pairings the suite pays. `flows[*].budgetMs` is one journey's MARGINAL cost, excluding any fresh pairing, which is why a flow's number is smaller than its measured wall time on a suite where it pairs for itself, and why the flow budgets of a suite may sum past the suite's own. Both are derived arithmetic today: tests/agent-e2e-mobile/ledger/durations.json holds ZERO records, so the p95x1.5 rule scripts/check-mobile-suite-budgets.mjs applies at three samples has nothing to apply to yet. Each flow number is the per-member figure its suite's budget doc derives, raised to the measured CI figure where flows/pr-gate-budget.md records one (pairing-canary 187-209s, notes-library 106-154s, native-v0-resilience 267s, cold-start 116-150s, photos-permissions ~90s). BOTH are TIGHTEN-ONLY: check:mobile-suite-budgets reads the suite ceilings out of this file and refuses a rise against the merge base, following `supersedes` across a rename so a renamed suite cannot launder its ratchet.",
   "suites": {
@@ -154,6 +154,47 @@
       ],
       "why": "iOS DEPTH \u2014 the six claims that are facts about iOS, never a second copy of Android's roster. Each member's `claim` names the iOS fact that earns its place; ios-depth-budget.md prices the set.",
       "onBudgetBreach": "macOS minutes are the scarcest thing this repo spends \u2014 move a claim down a tier rather than raising the ceiling."
+    },
+    "device-rung-android": {
+      "budgetMs": 2700000,
+      "doc": "tests/agent-e2e-mobile/flows/device-rung-budget.md",
+      "rungs": [5],
+      "platform": ["android"],
+      "lane": "device-rung-android",
+      "canaryCount": 1,
+      "reuseAfter": 1,
+      "flows": [
+        "pairing-canary.mjs",
+        "cold-start.mjs",
+        "scroll-frames.mjs",
+        "docs-drive.mjs",
+        "people-roster.mjs",
+        "notes-library.mjs",
+        "tally-derived.mjs",
+        "agenda-week.mjs",
+        "tasks-board.mjs",
+        "locker-gate.mjs"
+      ],
+      "why": "THE SAME JOURNEYS, ON A PHONE. Nothing here is a new claim \u2014 every member already runs on an emulator rung \u2014 and that is the point: the two probes (cold-start, scroll-frames) produce the numbers tests/journeys.json parks under `_intended*` because no emulator number may be promoted, and the eight journeys around them are what makes a probe's number trustworthy rather than a microbenchmark. A LOW-END device on purpose: the phone that struggles is the one whose ceiling is worth having.",
+      "onBudgetBreach": "A leased device-hour is the most expensive minute this repository spends. Drop a journey whose claim an emulator rung already carries before raising this."
+    },
+    "device-rung-ios": {
+      "budgetMs": 1500000,
+      "doc": "tests/agent-e2e-mobile/flows/device-rung-budget.md",
+      "rungs": [5],
+      "platform": ["ios"],
+      "lane": "device-rung-ios",
+      "canaryCount": 1,
+      "reuseAfter": 1,
+      "flows": [
+        "pairing-canary.mjs",
+        "cold-start.mjs",
+        "scroll-frames.mjs",
+        "native-v0-resilience.mjs",
+        "locker-gate.mjs"
+      ],
+      "why": "iOS ON HARDWARE, and a shorter list than Android's for the reason `ios-depth` is shorter: a farm device-hour is scarcer still, and a claim Android's cell already carries on the same product does not need a second copy here. The two probes plus the three claims that are facts about the iOS runtime.",
+      "onBudgetBreach": "Move a claim to `ios-depth` on the simulator rather than raising this \u2014 a simulator lower bound is worth more than a ceiling nobody can afford."
     }
   },
   "lanes": {
@@ -203,13 +244,38 @@
       "platform": "ios",
       "budgetDoc": "tests/agent-e2e-mobile/flows/ios-smoke-budget.md",
       "why": "EVERY CANDIDATE CARRIES AN iOS VERDICT (#915 Wave 2). The iOS .app is a SEPARATE ARTIFACT \u2014 a different binary, a different toolchain, a different Maestro driver \u2014 so Android's green says nothing about it, and before this lane the first iOS answer of the day came from the nightly against a tree that had already absorbed a day of merges. Ten minutes WARM on the fingerprint-cached shell with this SHA's bundle injected, so no compilation is inside the clock. It gates `promote`, not a merge: rung 3 is not a merge gate, which is why `blocking` is false."
+    },
+    "device-rung-android": {
+      "workflow": ".github/workflows/e2e.yml",
+      "job": "device-rung-android",
+      "rung": 5,
+      "blocking": false,
+      "platform": "android",
+      "budgetDoc": "tests/agent-e2e-mobile/flows/device-rung-budget.md",
+      "why": "Rung 5 on a leased low-end Android. Gated on the device-farm secrets and SKIPPED \u2014 never failed \u2014 without them, so a fork and a repository that has not bought a farm both stay honest instead of learning to ignore a red; `device-rung-gate` writes the parked evidence in its place."
+    },
+    "device-rung-ios": {
+      "workflow": ".github/workflows/e2e.yml",
+      "job": "device-rung-ios",
+      "rung": 5,
+      "blocking": false,
+      "platform": "ios",
+      "budgetDoc": "tests/agent-e2e-mobile/flows/device-rung-budget.md",
+      "why": "Rung 5 on a leased iPhone. Behind its own switch as well as the farm secrets: the harness enumerates simulators through `xcrun simctl` and a physical device answers only to `xcrun devicectl`, so enabling the farm for Android must not turn this cell red before that is taught."
     }
   },
   "flows": {
     "tests/agent-e2e-mobile/flows/pairing-canary.mjs": {
       "status": "scheduled",
-      "suite": ["pr-gate", "resilience", "ios-smoke", "ios-depth"],
-      "rungs": [2, 3, 4],
+      "suite": [
+        "pr-gate",
+        "resilience",
+        "ios-smoke",
+        "ios-depth",
+        "device-rung-android",
+        "device-rung-ios"
+      ],
+      "rungs": [2, 3, 4, 5],
       "platform": ["android", "ios"],
       "budgetMs": 240000,
       "claim": "the three prerequisites every committed mobile journey shares are working \u2014 the gateway is reachable and mints a one-time pairing ticket, the device is booted with the dev build installed, and that ticket redeems through onboarding to a ready Home."
@@ -224,8 +290,8 @@
     },
     "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs": {
       "status": "scheduled",
-      "suite": ["resilience", "probes-suite", "ios-depth"],
-      "rungs": [3, 4],
+      "suite": ["resilience", "probes-suite", "ios-depth", "device-rung-ios"],
+      "rungs": [3, 4, 5],
       "platform": ["android", "ios"],
       "budgetMs": 280000,
       "claim": "Settings still loads from the all-apps sheet, the app survives an OS process restart, and on Android a write made offline survives that restart and settles once the radio returns. If this passes when it should not, a release ships in which Settings is unreachable from Home, or a write made on a train is silently lost on arrival."
@@ -237,17 +303,24 @@
         "resilience",
         "ios-smoke",
         "probes-suite",
-        "ios-depth"
+        "ios-depth",
+        "device-rung-android",
+        "device-rung-ios"
       ],
-      "rungs": [2, 3, 4],
+      "rungs": [2, 3, 4, 5],
       "platform": ["android", "ios"],
       "budgetMs": 160000,
       "claim": "the app still reaches a usable Home over EXISTING data, launch after launch, and does so within a stable time. If this passes when it should not, a release ships in which the app takes visibly longer to become usable \u2014 or, worse, comes up to a Home that is not usable at all."
     },
     "tests/agent-e2e-mobile/flows/scroll-frames.mjs": {
       "status": "scheduled",
-      "suite": ["probes-suite", "ios-depth"],
-      "rungs": [4],
+      "suite": [
+        "probes-suite",
+        "ios-depth",
+        "device-rung-android",
+        "device-rung-ios"
+      ],
+      "rungs": [4, 5],
       "platform": ["android", "ios"],
       "budgetMs": 60000,
       "claim": "Dropped-frame percentage during a driven scroll on the Photos grid and the People directory, sampled by the release build's own rAF sampler."
@@ -310,56 +383,61 @@
     },
     "tests/agent-e2e-mobile/flows/docs-drive.mjs": {
       "status": "scheduled",
-      "suite": ["home-apps"],
-      "rungs": [3, 4],
+      "suite": ["home-apps", "device-rung-android"],
+      "rungs": [3, 4, 5],
       "platform": ["android"],
       "budgetMs": 70000,
       "claim": "The Docs cover opens, a row's quick actions appear, and a band tap POPS rather than pushes \u2014 a React Navigation stack fact both outcomes would otherwise render identically."
     },
     "tests/agent-e2e-mobile/flows/agenda-week.mjs": {
       "status": "scheduled",
-      "suite": ["home-apps"],
-      "rungs": [3, 4],
+      "suite": ["home-apps", "device-rung-android"],
+      "rungs": [3, 4, 5],
       "platform": ["android"],
       "budgetMs": 70000,
       "claim": "Day and Schedule differ by the size of the read, not by fixture: the widened read carries an event two days out, and a created event appears in it."
     },
     "tests/agent-e2e-mobile/flows/notes-library.mjs": {
       "status": "scheduled",
-      "suite": ["pr-gate", "ios-smoke", "home-apps"],
-      "rungs": [2, 3, 4],
+      "suite": ["pr-gate", "ios-smoke", "home-apps", "device-rung-android"],
+      "rungs": [2, 3, 4, 5],
       "platform": ["android", "ios"],
       "budgetMs": 160000,
       "claim": "a write made on the phone reaches the vault and survives process death \u2014 the one property that makes this a local-first product rather than a cache. If this passes when it should not, a release ships in which a member's note is gone after the OS reclaims the app."
     },
     "tests/agent-e2e-mobile/flows/tasks-board.mjs": {
       "status": "scheduled",
-      "suite": ["home-apps"],
-      "rungs": [3, 4],
+      "suite": ["home-apps", "device-rung-android"],
+      "rungs": [3, 4, 5],
       "platform": ["android"],
       "budgetMs": 70000,
       "claim": "The rows the phone's replica hands the screen are the vault's rows and land in the group the screen draws, and a created task appears in its group."
     },
     "tests/agent-e2e-mobile/flows/people-roster.mjs": {
       "status": "scheduled",
-      "suite": ["home-apps"],
-      "rungs": [3, 4],
+      "suite": ["home-apps", "device-rung-android"],
+      "rungs": [3, 4, 5],
       "platform": ["android"],
       "budgetMs": 70000,
       "claim": "The People roster renders real party rows on the origin seat."
     },
     "tests/agent-e2e-mobile/flows/tally-derived.mjs": {
       "status": "scheduled",
-      "suite": ["home-apps"],
-      "rungs": [3, 4],
+      "suite": ["home-apps", "device-rung-android"],
+      "rungs": [3, 4, 5],
       "platform": ["android"],
       "budgetMs": 70000,
       "claim": "Read-time figures are derived on device, and the seat offers no verb it cannot fire."
     },
     "tests/agent-e2e-mobile/flows/locker-gate.mjs": {
       "status": "scheduled",
-      "suite": ["home-apps", "ios-depth"],
-      "rungs": [3, 4],
+      "suite": [
+        "home-apps",
+        "ios-depth",
+        "device-rung-android",
+        "device-rung-ios"
+      ],
+      "rungs": [3, 4, 5],
       "platform": ["android", "ios"],
       "budgetMs": 90000,
       "claim": "Home's launcher never read the one app it must not (a WITHHELD count, never 0), and no Locker session crossed a real process boundary. Only killing the process proves the second half."

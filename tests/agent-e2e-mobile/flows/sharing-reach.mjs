@@ -34,9 +34,6 @@
 // #483's non-vacuous rules; this file is discovered by
 // scripts/lint-e2e-flows.mjs).
 
-import { copyFile, mkdir, readdir } from "node:fs/promises";
-import path from "node:path";
-
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
   AWAIT_LAUNCHER,
@@ -44,6 +41,7 @@ import {
   HOME_READY_MARKER,
   runFlow,
 } from "../lib/harness.mjs";
+import { screenshot } from "../lib/ui-impact.mjs";
 
 // Maestro reads a text selector as a regex anchored to the WHOLE node text,
 // and `·` is not a character it matches reliably — so the shared sentences are
@@ -231,28 +229,17 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
 
   // UI-impact evidence for #880 (check:ui-receipt): the two member-visible
   // surfaces on the sharing path — the Tally group's Share group sheet, and
-  // the Settings → Sharing screen — published where
-  // the desktop and native journeys publish theirs. Copied out of the run dir
-  // rather than re-captured, so what ships is the frame the assertions above
-  // already passed against.
-  const uiImpactDir = "artifacts/e2e/ui-impact";
-  const screenshot = async (suffix, published) => {
-    const frames = await readdir(ctx.state.screenshotsDir);
-    // The frame is `<name>.png`, unprefixed — see `pairing-canary.mjs` (#905).
-    const frame = frames.find((name) => name === `${suffix}.png`);
-    if (frame === undefined)
-      throw new Error(`${suffix} frame was not captured`);
-    await mkdir(uiImpactDir, { recursive: true });
-    await copyFile(
-      path.join(ctx.state.screenshotsDir, frame),
-      path.join(uiImpactDir, published)
-    );
-  };
+  // the Settings → Sharing screen — published to `artifacts/e2e/ui-impact/`
+  // where the desktop and native journeys publish theirs. Copied out of the
+  // run dir rather than re-captured, so what ships is the frame the assertions
+  // above already passed against.
   await screenshot(
+    ctx,
     "sharing-tally-group-sheet",
     "issue-880-mobile-share-group-sheet.png"
   );
   await screenshot(
+    ctx,
     "sharing-link-surface",
     "issue-880-mobile-sharing-screen.png"
   );
