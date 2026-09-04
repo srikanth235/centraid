@@ -8,14 +8,14 @@
     "passed": 0,
     "failed": 0,
     "degraded": 0,
-    "noEvidence": 49,
+    "noEvidence": 50,
     "newRed": 0,
     "newGreen": 0,
     "previousVerdict": null
   },
   "parks": [],
   "candidate": null,
-  "generatedAt": "2026-09-04T05:59:04.744Z",
+  "generatedAt": "2026-09-04T08:48:18.036Z",
   "label": "2026-09-04",
   "validationErrorCount": 0,
   "lanes": {
@@ -112,6 +112,10 @@
       "durationMs": null
     },
     "mutation-full": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "paired-journeys": {
       "verdict": "no-evidence",
       "durationMs": null
     },

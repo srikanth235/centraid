@@ -8,7 +8,7 @@ No lane wrote evidence for this candidate — the run proved nothing, which is n
 | Lanes failed | 0 |
 | Lanes degraded | 0 |
 | Lanes parked | 0 |
-| Lanes with no evidence | 49 |
+| Lanes with no evidence | 50 |
 | New red since the last candidate | 0 |
 | New green since the last candidate | 0 |
 | Validation errors | 0 |
@@ -17,8 +17,8 @@ No lane wrote evidence for this candidate — the run proved nothing, which is n
 
 _Public HTML report publishes on main (and nightly); this run keeps the artifact + Job Summary only._
 
-Actions run: https://github.com/srikanth235/centraid/actions/runs/33841764671
+Actions run: https://github.com/srikanth235/centraid/actions/runs/33853998860
 
-Generated: `2026-09-04T05:59:04.744Z`
+Generated: `2026-09-04T08:48:18.036Z`
 
 <!-- centraid-test-health-report -->
