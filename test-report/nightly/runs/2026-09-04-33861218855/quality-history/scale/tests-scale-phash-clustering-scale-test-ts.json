@@ -1,0 +1,45 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/phash-clustering.scale.test.ts",
+  "name": "Near-duplicate cluster sweep at 90k assets",
+  "status": "failed",
+  "measurements": [
+    {
+      "name": "cold sweep",
+      "value": 7565.632455999999,
+      "unit": "ms",
+      "budget": 30000
+    },
+    {
+      "name": "idle sweep",
+      "value": 365.5167360000014,
+      "unit": "ms"
+    },
+    {
+      "name": "idle rows written",
+      "value": 1,
+      "unit": "rows"
+    },
+    {
+      "name": "assets",
+      "value": 90000,
+      "unit": "assets"
+    },
+    {
+      "name": "clustered assets",
+      "value": 9000,
+      "unit": "assets"
+    },
+    {
+      "name": "fixture seeding",
+      "value": 8120.831593000001,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:19.364Z",
+      "value": 7565.632455999999
+    }
+  ]
+}

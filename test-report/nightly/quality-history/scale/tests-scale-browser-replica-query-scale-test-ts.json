@@ -1,0 +1,42 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/browser-replica-query.scale.test.ts",
+  "name": "Replica query engine at 50k rows",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "full-entity read",
+      "value": 151.03667799999948,
+      "unit": "ms",
+      "budget": 4000
+    },
+    {
+      "name": "filtered + sorted read",
+      "value": 108.60177599999952,
+      "unit": "ms",
+      "budget": 1500
+    },
+    {
+      "name": "in over 1000 ids",
+      "value": 64.15649899999971,
+      "unit": "ms",
+      "budget": 1500
+    },
+    {
+      "name": "bootstrap",
+      "value": 4013.550275,
+      "unit": "ms"
+    },
+    {
+      "name": "rows scanned per read",
+      "value": 50000,
+      "unit": "rows"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:18:14.780Z",
+      "value": 151.03667799999948
+    }
+  ]
+}

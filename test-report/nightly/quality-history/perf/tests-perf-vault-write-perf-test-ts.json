@@ -1,0 +1,26 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/vault-write.perf.test.ts",
+  "name": "Vault write p95 and fsync budget",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "p95 transaction latency",
+      "value": 0.7168569999998908,
+      "unit": "ms",
+      "budget": 6
+    },
+    {
+      "name": "fsyncs per write",
+      "value": 1.3,
+      "unit": "calls/write",
+      "budget": 3
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:16:52.121Z",
+      "value": 0.7168569999998908
+    }
+  ]
+}

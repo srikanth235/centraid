@@ -1,0 +1,24 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/desktop-windows.scale.test.ts",
+  "name": "128 desktop windows × 500 broadcasts",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 164.74147700000003,
+      "unit": "ms"
+    },
+    {
+      "name": "window deliveries",
+      "value": 64000,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:38.577Z",
+      "value": 164.74147700000003
+    }
+  ]
+}

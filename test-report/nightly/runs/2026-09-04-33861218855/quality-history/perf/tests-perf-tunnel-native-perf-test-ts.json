@@ -1,0 +1,20 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/tunnel-native.perf.test.ts",
+  "name": "Native tunnel module load",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "load wall clock",
+      "value": 1.7059830000000034,
+      "unit": "ms",
+      "budget": 5000
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:17:00.015Z",
+      "value": 1.7059830000000034
+    }
+  ]
+}

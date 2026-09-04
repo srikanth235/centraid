@@ -1,0 +1,59 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/gateway-request-volume.perf.test.ts",
+  "name": "core route p95 and cold start on a year-3-shaped vault",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "slowest core route p95",
+      "value": 14.924273999999059,
+      "unit": "ms",
+      "budget": 120
+    },
+    {
+      "name": "gatewayInfo p95",
+      "value": 2.9540669999987585,
+      "unit": "ms",
+      "budget": 120
+    },
+    {
+      "name": "apps p95",
+      "value": 14.924273999999059,
+      "unit": "ms",
+      "budget": 120
+    },
+    {
+      "name": "health p95",
+      "value": 13.391492999999173,
+      "unit": "ms",
+      "budget": 120
+    },
+    {
+      "name": "replica bootstrap page p95 (published, not gated)",
+      "value": 22.79446200000166,
+      "unit": "ms"
+    },
+    {
+      "name": "cold start on seeded vault",
+      "value": 327.0120880000013,
+      "unit": "ms",
+      "budget": 5000
+    },
+    {
+      "name": "seeded domain rows",
+      "value": 25007,
+      "unit": "rows"
+    },
+    {
+      "name": "seed",
+      "value": 1559.8823510000002,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:16:38.466Z",
+      "value": 14.924273999999059
+    }
+  ]
+}

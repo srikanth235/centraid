@@ -1,0 +1,50 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+  "name": "#404 PWA fast-path waterfall",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "cold shell requests",
+      "value": 16,
+      "unit": "requests",
+      "budget": 17
+    },
+    {
+      "name": "cold shell transfer",
+      "value": 456674,
+      "unit": "bytes",
+      "budget": 528000
+    },
+    {
+      "name": "warm/cold shell bytes",
+      "value": 0,
+      "unit": "ratio",
+      "budget": 0.15
+    },
+    {
+      "name": "cold app requests",
+      "value": 10,
+      "unit": "requests",
+      "budget": 10
+    },
+    {
+      "name": "cold app transfer",
+      "value": 0,
+      "unit": "bytes",
+      "budget": 8000
+    },
+    {
+      "name": "cold app encoded",
+      "value": 77785,
+      "unit": "bytes",
+      "budget": 120000
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:16:47.002Z",
+      "value": 16
+    }
+  ]
+}

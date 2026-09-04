@@ -1,0 +1,61 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/large-vault.scale.test.ts",
+  "name": "Daily-use queries on the golden year-3 vault",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "golden fixture mount",
+      "value": 145.004341,
+      "unit": "ms",
+      "budget": 30000
+    },
+    {
+      "name": "combined reads",
+      "value": 2.752670999999964,
+      "unit": "ms",
+      "budget": 2000
+    },
+    {
+      "name": "photos",
+      "value": 10000,
+      "unit": "rows"
+    },
+    {
+      "name": "contacts",
+      "value": 5000,
+      "unit": "rows"
+    },
+    {
+      "name": "event days",
+      "value": 1096,
+      "unit": "rows"
+    },
+    {
+      "name": "notes",
+      "value": 1000,
+      "unit": "rows"
+    },
+    {
+      "name": "receipt days",
+      "value": 365,
+      "unit": "rows"
+    },
+    {
+      "name": "golden vault on disk",
+      "value": 106209280,
+      "unit": "bytes"
+    },
+    {
+      "name": "golden fixture cache hit",
+      "value": 1,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:26.248Z",
+      "value": 145.004341
+    }
+  ]
+}

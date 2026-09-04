@@ -1,0 +1,26 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/replica-sync-io.perf.test.ts",
+  "name": "Replica intent IO (200 enqueues)",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 74.486674,
+      "unit": "ms",
+      "budget": 2500
+    },
+    {
+      "name": "overlay enumeration and composition",
+      "value": 5.609326999999979,
+      "unit": "ms",
+      "budget": 250
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:16:59.881Z",
+      "value": 74.486674
+    }
+  ]
+}

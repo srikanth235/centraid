@@ -1,0 +1,36 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/replica-retention.scale.test.ts",
+  "name": "Resumable replica history under year-3 churn",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "worst-day resumable window (compaction)",
+      "value": 28,
+      "unit": "days",
+      "budget": 30
+    },
+    {
+      "name": "worst-day resumable window (entry cap alone)",
+      "value": 5,
+      "unit": "days"
+    },
+    {
+      "name": "retained entries",
+      "value": 100000,
+      "unit": "entries",
+      "budget": 100000
+    },
+    {
+      "name": "wall clock",
+      "value": 15761,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:19:07.310Z",
+      "value": 28
+    }
+  ]
+}

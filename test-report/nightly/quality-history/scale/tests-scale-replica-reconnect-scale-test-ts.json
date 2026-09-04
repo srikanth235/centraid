@@ -1,0 +1,45 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/replica-reconnect.scale.test.ts",
+  "name": "Replica reconnect to fresh at 50000 rows",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "reconnect to fresh",
+      "value": 16.309579000000667,
+      "unit": "ms",
+      "budget": 250
+    },
+    {
+      "name": "first change frame",
+      "value": 16.309579000000667,
+      "unit": "ms"
+    },
+    {
+      "name": "missed commits replayed",
+      "value": 25,
+      "unit": "count"
+    },
+    {
+      "name": "bootstrap walk",
+      "value": 1179.5268560000004,
+      "unit": "ms"
+    },
+    {
+      "name": "bootstrap pages",
+      "value": 3,
+      "unit": "count"
+    },
+    {
+      "name": "seed",
+      "value": 3067.8956519999997,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:18:48.689Z",
+      "value": 16.309579000000667
+    }
+  ]
+}

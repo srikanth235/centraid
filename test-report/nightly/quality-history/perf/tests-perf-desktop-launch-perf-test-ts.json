@@ -1,0 +1,36 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/desktop-launch.perf.test.ts",
+  "name": "Desktop cold launch to a usable Home (volume: empty (mock gateway, 1 app, fresh userData))",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "cold open to usable",
+      "value": 879,
+      "unit": "ms",
+      "budget": 12000
+    },
+    {
+      "name": "process to first window",
+      "value": 738,
+      "unit": "ms"
+    },
+    {
+      "name": "first window to Home",
+      "value": 141,
+      "unit": "ms"
+    },
+    {
+      "name": "tap to visual response",
+      "value": 126,
+      "unit": "ms",
+      "budget": 6000
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:16:59.632Z",
+      "value": 879
+    }
+  ]
+}

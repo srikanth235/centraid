@@ -1,0 +1,24 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/backup-throughput.perf.test.ts",
+  "name": "Backup encrypt + verify throughput",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 175.15446699999998,
+      "unit": "ms"
+    },
+    {
+      "name": "throughput",
+      "value": 182.69588294313957,
+      "unit": "MiB/s"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:17:03.122Z",
+      "value": 175.15446699999998
+    }
+  ]
+}

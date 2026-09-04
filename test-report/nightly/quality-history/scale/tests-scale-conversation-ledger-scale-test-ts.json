@@ -1,0 +1,25 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/conversation-ledger.scale.test.ts",
+  "name": "Conversation archival over 7.3k turns",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 2778.73386,
+      "unit": "ms",
+      "budget": 60000
+    },
+    {
+      "name": "turns pruned",
+      "value": 7300,
+      "unit": "turns"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:32.031Z",
+      "value": 2778.73386
+    }
+  ]
+}

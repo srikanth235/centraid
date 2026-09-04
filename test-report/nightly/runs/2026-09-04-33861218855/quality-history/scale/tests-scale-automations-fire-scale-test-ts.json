@@ -1,0 +1,25 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/automations-fire.scale.test.ts",
+  "name": "Automations missed-window scan (200 autos, 6h gap, hourly cron)",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 7.704878000000008,
+      "unit": "ms",
+      "budget": 10000
+    },
+    {
+      "name": "missed entries",
+      "value": 200,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:26.885Z",
+      "value": 7.704878000000008
+    }
+  ]
+}

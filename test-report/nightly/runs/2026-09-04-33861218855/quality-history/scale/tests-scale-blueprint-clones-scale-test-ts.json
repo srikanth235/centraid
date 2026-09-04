@@ -1,0 +1,24 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/blueprint-clones.scale.test.ts",
+  "name": "1000 in-memory blueprint clones",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 11.794612,
+      "unit": "ms"
+    },
+    {
+      "name": "apps",
+      "value": 1000,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:37.382Z",
+      "value": 11.794612
+    }
+  ]
+}

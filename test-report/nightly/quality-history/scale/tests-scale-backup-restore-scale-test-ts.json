@@ -1,0 +1,35 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/backup-restore.scale.test.ts",
+  "name": "Backup restore of a 160 MiB populated vault",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 2706.451827,
+      "unit": "ms",
+      "budget": 12000
+    },
+    {
+      "name": "restored vault bytes",
+      "value": 6856704,
+      "unit": "bytes"
+    },
+    {
+      "name": "party rows restored",
+      "value": 501,
+      "unit": "rows"
+    },
+    {
+      "name": "content rows restored",
+      "value": 160,
+      "unit": "rows"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:02.193Z",
+      "value": 2706.451827
+    }
+  ]
+}

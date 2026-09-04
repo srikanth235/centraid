@@ -1,0 +1,24 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/automation-fire.perf.test.ts",
+  "name": "10 automation fires",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 389.48768300000006,
+      "unit": "ms"
+    },
+    {
+      "name": "mean fire",
+      "value": 38.948768300000005,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:17:01.287Z",
+      "value": 389.48768300000006
+    }
+  ]
+}

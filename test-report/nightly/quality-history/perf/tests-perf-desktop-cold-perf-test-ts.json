@@ -1,0 +1,31 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/desktop-cold.perf.test.ts",
+  "name": "Desktop main-process import graph",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "import wall clock",
+      "value": 320.46584,
+      "unit": "ms",
+      "budget": 1300
+    },
+    {
+      "name": "modules loaded",
+      "value": 451,
+      "unit": "modules",
+      "budget": 650
+    },
+    {
+      "name": "heap after import",
+      "value": 30253400,
+      "unit": "bytes"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:16:46.840Z",
+      "value": 320.46584
+    }
+  ]
+}

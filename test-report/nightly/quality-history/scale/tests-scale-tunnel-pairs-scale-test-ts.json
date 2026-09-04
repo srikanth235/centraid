@@ -1,0 +1,24 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/tunnel-pairs.scale.test.ts",
+  "name": "200 paired-device fan-out",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 55.588975000000005,
+      "unit": "ms"
+    },
+    {
+      "name": "pairs",
+      "value": 200,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:38.812Z",
+      "value": 55.588975000000005
+    }
+  ]
+}

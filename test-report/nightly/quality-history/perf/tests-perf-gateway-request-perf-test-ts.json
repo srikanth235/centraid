@@ -1,0 +1,50 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/gateway-request.perf.test.ts",
+  "name": "core route p95 and cold start",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "slowest core route p95",
+      "value": 23.700753000000077,
+      "unit": "ms",
+      "budget": null
+    },
+    {
+      "name": "gatewayInfo p95",
+      "value": 3.6390299999998206,
+      "unit": "ms",
+      "budget": 120
+    },
+    {
+      "name": "apps p95",
+      "value": 23.700753000000077,
+      "unit": "ms",
+      "budget": 120
+    },
+    {
+      "name": "health p95",
+      "value": 9.094978000000083,
+      "unit": "ms",
+      "budget": 120
+    },
+    {
+      "name": "cold start",
+      "value": 2089.0754770000003,
+      "unit": "ms",
+      "budget": 5000
+    },
+    {
+      "name": "idle CPU per second",
+      "value": 1.7766068687174756,
+      "unit": "ms/s",
+      "budget": 25
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:16:46.315Z",
+      "value": 23.700753000000077
+    }
+  ]
+}

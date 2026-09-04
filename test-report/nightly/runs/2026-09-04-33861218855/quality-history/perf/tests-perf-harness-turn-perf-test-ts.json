@@ -1,0 +1,24 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/harness-turn.perf.test.ts",
+  "name": "2000 harness turn dispatches",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 1.2602239999999938,
+      "unit": "ms"
+    },
+    {
+      "name": "mean dispatch",
+      "value": 0.0006301119999999969,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:17:02.035Z",
+      "value": 1.2602239999999938
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/mobile-reconnect-to-fresh.scale.test.ts",
+  "name": "Mobile reconnect to fresh at 50000 rows",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "reconnect to fresh",
+      "value": 314.00158099999953,
+      "unit": "ms",
+      "budget": 1800
+    },
+    {
+      "name": "polls to fresh",
+      "value": 2,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:24.031Z",
+      "value": 314.00158099999953
+    }
+  ]
+}

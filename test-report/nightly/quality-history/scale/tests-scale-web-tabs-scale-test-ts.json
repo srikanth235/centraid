@@ -1,0 +1,24 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/web-tabs.scale.test.ts",
+  "name": "64 web-tab invalidation fan-out",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 16.684071000000003,
+      "unit": "ms"
+    },
+    {
+      "name": "tabs",
+      "value": 64,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:38.271Z",
+      "value": 16.684071000000003
+    }
+  ]
+}

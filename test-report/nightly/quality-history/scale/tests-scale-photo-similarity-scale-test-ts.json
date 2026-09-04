@@ -1,0 +1,65 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/photo-similarity.scale.test.ts",
+  "name": "Semantic photo search over 90,000 embeddings",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "sqlite-vec ranked search",
+      "value": 153.62229099999968,
+      "unit": "ms",
+      "budget": 750
+    },
+    {
+      "name": "SQL cosine ranked search",
+      "value": 560.8506269999998,
+      "unit": "ms",
+      "budget": 3600
+    },
+    {
+      "name": "sqlite-vec RSS delta",
+      "value": 0,
+      "unit": "bytes",
+      "budget": 134217728
+    },
+    {
+      "name": "SQL cosine RSS delta",
+      "value": 57409536,
+      "unit": "bytes",
+      "budget": 134217728
+    },
+    {
+      "name": "sqlite-vec event-loop block",
+      "value": 154.1006980000002,
+      "unit": "ms",
+      "budget": 750
+    },
+    {
+      "name": "SQL cosine event-loop block",
+      "value": 561.4354519999997,
+      "unit": "ms",
+      "budget": 3600
+    },
+    {
+      "name": "embeddings",
+      "value": 90000,
+      "unit": "rows"
+    },
+    {
+      "name": "vector width",
+      "value": 512,
+      "unit": "floats"
+    },
+    {
+      "name": "fixture seeding",
+      "value": 10093.661112999998,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:18:41.665Z",
+      "value": 153.62229099999968
+    }
+  ]
+}

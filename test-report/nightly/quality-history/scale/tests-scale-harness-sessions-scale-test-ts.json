@@ -1,0 +1,24 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/harness-sessions.scale.test.ts",
+  "name": "256 concurrent harness sessions",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 0.5630630000000565,
+      "unit": "ms"
+    },
+    {
+      "name": "sessions",
+      "value": 256,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:38.114Z",
+      "value": 0.5630630000000565
+    }
+  ]
+}

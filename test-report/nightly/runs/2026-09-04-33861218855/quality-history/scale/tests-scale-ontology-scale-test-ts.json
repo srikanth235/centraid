@@ -1,0 +1,30 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/ontology.scale.test.ts",
+  "name": "Atlas/Browse kinds and relations at 10k entities",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 53.534597000000076,
+      "unit": "ms",
+      "budget": 10000
+    },
+    {
+      "name": "party rows paged",
+      "value": 10001,
+      "unit": "rows"
+    },
+    {
+      "name": "relation rows paged",
+      "value": 9999,
+      "unit": "rows"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:33.962Z",
+      "value": 53.534597000000076
+    }
+  ]
+}

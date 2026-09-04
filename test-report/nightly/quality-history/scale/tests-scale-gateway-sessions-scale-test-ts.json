@@ -1,0 +1,25 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/gateway-sessions.scale.test.ts",
+  "name": "Gateway 40 concurrent session probes",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 487.10341500000004,
+      "unit": "ms",
+      "budget": 15000
+    },
+    {
+      "name": "sessions",
+      "value": 40,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:37.182Z",
+      "value": 487.10341500000004
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/stress-to-failure.scale.test.ts",
+  "name": "Stress to failure: concurrency ladder 1/2/4/8/16/32/64/128 on the app-handler plane + a 64-wide write storm",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "ladder wall clock",
+      "value": 9600.594222,
+      "unit": "ms"
+    },
+    {
+      "name": "knee (first refusing concurrency)",
+      "value": 32,
+      "unit": "count"
+    },
+    {
+      "name": "recovery after load drop",
+      "value": 169.0178619999988,
+      "unit": "ms",
+      "budget": 1000
+    },
+    {
+      "name": "untyped refusals",
+      "value": 0,
+      "unit": "count"
+    },
+    {
+      "name": "refusals outside 429/503",
+      "value": 0,
+      "unit": "count"
+    },
+    {
+      "name": "write storm accepted",
+      "value": 18,
+      "unit": "count"
+    },
+    {
+      "name": "notes committed",
+      "value": 18,
+      "unit": "rows"
+    },
+    {
+      "name": "p95 at concurrency 1",
+      "value": 246.48376300000018,
+      "unit": "ms"
+    },
+    {
+      "name": "p95 at concurrency 2",
+      "value": 227.84598199999982,
+      "unit": "ms"
+    },
+    {
+      "name": "p95 at concurrency 4",
+      "value": 433.60879799999975,
+      "unit": "ms"
+    },
+    {
+      "name": "p95 at concurrency 8",
+      "value": 834.5686819999996,
+      "unit": "ms"
+    },
+    {
+      "name": "p95 at concurrency 16",
+      "value": 1677.6872710000007,
+      "unit": "ms"
+    },
+    {
+      "name": "p95 at concurrency 32",
+      "value": 1983.3989569999994,
+      "unit": "ms"
+    },
+    {
+      "name": "p95 at concurrency 64",
+      "value": 1817.87637,
+      "unit": "ms"
+    },
+    {
+      "name": "p95 at concurrency 128",
+      "value": 1460.3997280000003,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:18:29.131Z",
+      "value": 9600.594222
+    }
+  ]
+}

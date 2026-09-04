@@ -1,0 +1,46 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/replica-sse-fanout.scale.test.ts",
+  "name": "Replica SSE fan-out: 50 commits x 16 subscribers",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "fan-out wall clock",
+      "value": 227.99737600000026,
+      "unit": "ms",
+      "budget": 3600
+    },
+    {
+      "name": "per-commit fan-out p95",
+      "value": 5.658893000000262,
+      "unit": "ms"
+    },
+    {
+      "name": "per-commit fan-out median",
+      "value": 4.377345999999761,
+      "unit": "ms"
+    },
+    {
+      "name": "subscribers",
+      "value": 16,
+      "unit": "count"
+    },
+    {
+      "name": "commits",
+      "value": 50,
+      "unit": "count"
+    },
+    {
+      "name": "vault statements per commit",
+      "value": 47,
+      "unit": "statements",
+      "budget": 1200
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:17:21.837Z",
+      "value": 227.99737600000026
+    }
+  ]
+}

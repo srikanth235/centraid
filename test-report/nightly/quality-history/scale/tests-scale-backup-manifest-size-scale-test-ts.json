@@ -1,0 +1,35 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/backup-manifest-size.scale.test.ts",
+  "name": "Backup manifest size at 100k chunk-index entries",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "bytes per chunk",
+      "value": 205.16918,
+      "unit": "bytes",
+      "budget": 230
+    },
+    {
+      "name": "manifest bytes at 100k chunks",
+      "value": 20516918,
+      "unit": "bytes"
+    },
+    {
+      "name": "50k→100k growth",
+      "value": 1.9999760200776286,
+      "unit": "x"
+    },
+    {
+      "name": "seal wall clock",
+      "value": 1299.335071,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:20:25.591Z",
+      "value": 205.16918
+    }
+  ]
+}

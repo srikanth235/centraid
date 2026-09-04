@@ -1,0 +1,52 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/multi-vault-footprint.scale.test.ts",
+  "name": "5 mounted vaults (5 SQLite handles) under one host footprint budget",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "summed page cache",
+      "value": 16384000,
+      "unit": "bytes",
+      "budget": 16384000
+    },
+    {
+      "name": "summed mmap window",
+      "value": 67108860,
+      "unit": "bytes",
+      "budget": 67108864
+    },
+    {
+      "name": "smallest per-file cache",
+      "value": 3276800,
+      "unit": "bytes",
+      "budget": 524288
+    },
+    {
+      "name": "page cache had this been per-file",
+      "value": 81920000,
+      "unit": "bytes"
+    },
+    {
+      "name": "RSS delta mounting all 5 (idle; includes one-time module load)",
+      "value": 209354752,
+      "unit": "bytes"
+    },
+    {
+      "name": "RSS per additional vault after the first (idle)",
+      "value": 29475840,
+      "unit": "bytes"
+    },
+    {
+      "name": "SQLite handles",
+      "value": 5,
+      "unit": "handles"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:19:50.914Z",
+      "value": 16384000
+    }
+  ]
+}

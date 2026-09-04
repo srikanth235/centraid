@@ -1,0 +1,32 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/blob-egress.perf.test.ts",
+  "name": "Large-blob egress TTFB and memory",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "TTFB",
+      "value": 27.420020000000022,
+      "unit": "ms",
+      "budget": 500
+    },
+    {
+      "name": "RSS growth",
+      "value": 59809792,
+      "unit": "bytes",
+      "budget": 100663296
+    },
+    {
+      "name": "bytes streamed",
+      "value": 134217728,
+      "unit": "bytes",
+      "budget": 134217728
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:16:55.490Z",
+      "value": 27.420020000000022
+    }
+  ]
+}

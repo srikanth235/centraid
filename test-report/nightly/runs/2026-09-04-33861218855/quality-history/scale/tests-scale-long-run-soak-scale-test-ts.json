@@ -1,0 +1,68 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/long-run-soak.scale.test.ts",
+  "name": "Long-run soak: 70 household cycles over 0.76 min",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "latency creep (last third / first third)",
+      "value": 1.0059517627987011,
+      "unit": "x",
+      "budget": 3
+    },
+    {
+      "name": "soak wall clock",
+      "value": 45429.760411,
+      "unit": "ms"
+    },
+    {
+      "name": "cycles",
+      "value": 70,
+      "unit": "count"
+    },
+    {
+      "name": "ops",
+      "value": 1050,
+      "unit": "count"
+    },
+    {
+      "name": "RSS growth",
+      "value": 1285047.6686088273,
+      "unit": "bytes/cycle",
+      "budget": 65536
+    },
+    {
+      "name": "heapUsed growth",
+      "value": 993233.8086040387,
+      "unit": "bytes/cycle"
+    },
+    {
+      "name": "arrayBuffers growth",
+      "value": 271412.5943012213,
+      "unit": "bytes/cycle"
+    },
+    {
+      "name": "gateway SQLite growth",
+      "value": 372007.72447920823,
+      "unit": "bytes/cycle"
+    },
+    {
+      "name": "open descriptors (max)",
+      "value": 69,
+      "unit": "count",
+      "budget": 256
+    },
+    {
+      "name": "open descriptor spread",
+      "value": 13,
+      "unit": "count",
+      "budget": 96
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:18:10.100Z",
+      "value": 1.0059517627987011
+    }
+  ]
+}

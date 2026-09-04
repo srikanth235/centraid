@@ -1,0 +1,51 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/replica-bootstrap.scale.test.ts",
+  "name": "Golden phone replica at 50000 rows, 40 pending intents",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "replica rows",
+      "value": 50000,
+      "unit": "rows"
+    },
+    {
+      "name": "pending intents",
+      "value": 40,
+      "unit": "count"
+    },
+    {
+      "name": "replica on disk",
+      "value": 39153664,
+      "unit": "bytes"
+    },
+    {
+      "name": "build",
+      "value": 4065.5062580000013,
+      "unit": "ms"
+    },
+    {
+      "name": "golden fixture cache hit",
+      "value": 0,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:19:08.523Z",
+      "value": 143.59233399999994
+    },
+    {
+      "at": "2026-09-04T10:19:27.979Z",
+      "value": 50000
+    },
+    {
+      "at": "2026-09-04T10:19:32.280Z",
+      "value": 50000
+    },
+    {
+      "at": "2026-09-04T10:19:36.501Z",
+      "value": 50000
+    }
+  ]
+}

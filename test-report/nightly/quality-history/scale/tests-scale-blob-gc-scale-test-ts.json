@@ -1,0 +1,30 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/blob-gc.scale.test.ts",
+  "name": "Mixed-custody CAS eviction at 5k objects",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 241.57811599999968,
+      "unit": "ms",
+      "budget": 30000
+    },
+    {
+      "name": "objects scanned",
+      "value": 5000,
+      "unit": "objects"
+    },
+    {
+      "name": "objects evicted",
+      "value": 1000,
+      "unit": "objects"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:19:39.260Z",
+      "value": 241.57811599999968
+    }
+  ]
+}

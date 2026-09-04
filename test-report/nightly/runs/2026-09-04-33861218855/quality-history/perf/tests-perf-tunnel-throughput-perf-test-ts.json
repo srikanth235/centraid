@@ -1,0 +1,31 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/tunnel-throughput.perf.test.ts",
+  "name": "Tunnel payload throughput",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "throughput",
+      "value": 4.258647736322357,
+      "unit": "MiB/s",
+      "budget": 1.5
+    },
+    {
+      "name": "payload",
+      "value": 16777216,
+      "unit": "bytes",
+      "budget": 16777216
+    },
+    {
+      "name": "wall clock",
+      "value": 3757.061159,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:16:59.490Z",
+      "value": 4.258647736322357
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/composite-load.scale.test.ts",
+  "name": "Composite load: 20 ops x 5 HTTP lanes + 128 turns + 200 automations, solo vs together",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "composite phase wall clock",
+      "value": 4054.847787999999,
+      "unit": "ms"
+    },
+    {
+      "name": "solo phase wall clock",
+      "value": 4359.043412999999,
+      "unit": "ms"
+    },
+    {
+      "name": "composition throughput factor (composite/solo)",
+      "value": 0.9302150503725666,
+      "unit": "x",
+      "budget": 2
+    },
+    {
+      "name": "worst lane p95 under composition (write)",
+      "value": 580.0031149999995,
+      "unit": "ms",
+      "budget": 3500
+    },
+    {
+      "name": "ref-search p95 under composition",
+      "value": 73.52913400000034,
+      "unit": "ms",
+      "budget": 1000
+    },
+    {
+      "name": "worst per-lane latency factor (browse, reported not gated)",
+      "value": 18.22929866824657,
+      "unit": "x"
+    },
+    {
+      "name": "sync p95 composite",
+      "value": 165.70264099999986,
+      "unit": "ms"
+    },
+    {
+      "name": "search p95 composite",
+      "value": 461.77191700000003,
+      "unit": "ms"
+    },
+    {
+      "name": "write p95 composite",
+      "value": 580.0031149999995,
+      "unit": "ms"
+    },
+    {
+      "name": "blob p95 composite",
+      "value": 79.71491199999946,
+      "unit": "ms"
+    },
+    {
+      "name": "browse p95 composite",
+      "value": 73.52913400000034,
+      "unit": "ms"
+    },
+    {
+      "name": "sync p95 solo",
+      "value": 102.25139500000023,
+      "unit": "ms"
+    },
+    {
+      "name": "search p95 solo",
+      "value": 238.45634400000017,
+      "unit": "ms"
+    },
+    {
+      "name": "write p95 solo",
+      "value": 186.37934399999995,
+      "unit": "ms"
+    },
+    {
+      "name": "blob p95 solo",
+      "value": 16.466457000000446,
+      "unit": "ms"
+    },
+    {
+      "name": "browse p95 solo",
+      "value": 4.03356900000108,
+      "unit": "ms"
+    },
+    {
+      "name": "turn dispatch",
+      "value": 0.6945279999999912,
+      "unit": "ms"
+    },
+    {
+      "name": "missed-window scan",
+      "value": 4.299272000000201,
+      "unit": "ms"
+    },
+    {
+      "name": "composite ops",
+      "value": 100,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:17:18.473Z",
+      "value": 4054.847787999999
+    }
+  ]
+}
