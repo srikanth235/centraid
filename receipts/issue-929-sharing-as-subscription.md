@@ -92,3 +92,5 @@ CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux
 
 `.github/actionlint.yaml` is named here only because `receipt-per-issue` reads paths from the receipts added in this change set, and this file is the only added receipt. The file is described and owned by `receipts/issue-927-perf-infra.md`.
 
+`knip.json` is named here only because this is the added receipt; it is described and owned by `receipts/issue-922-snappier-blueprints.md`.
+

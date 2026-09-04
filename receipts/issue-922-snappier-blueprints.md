@@ -2027,3 +2027,7 @@ bash .governance/run.sh                                 # 22/22
 
 `apps/mobile/src/kit/replica/replica-mount.ts` `startCompatibilityWall` rethrew the `.then` rejection as `unknown`, which `typescript/only-throw-error` flags. The wall already throws `MobileGatewayCompatibilityError`; the catch now rethrows that Error, or wraps a non-Error with `{ cause }`. The refused-wall test still matches `{ disposition: "update-gateway" }`.
 
+## CI-green — navigators.tsx is a knip entry
+
+`apps/mobile/navigators.tsx` is loaded only through `import()` in `lazy-navigators.tsx`, so knip's static graph never saw the seven stack exports. It is a composition-root module (same reason it sits beside `App.tsx`); `knip.json` now lists it as an entry, which is what a dynamically imported public API is. `lazy-navigators.tsx` is added to `project` so the file is still scanned.
+
