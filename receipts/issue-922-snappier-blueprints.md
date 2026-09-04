@@ -1936,10 +1936,10 @@ The audit at `44b5384f4` was right on all four counts. What changed, and what th
 **The claim, corrected.** Slice 5's Decisions said "the origin REFUSES a duplicate rather than merging". True of `schedule.add_task`, which is only ever a create. NOT true of `schedule.save_project` and `schedule.save_section`, which are upserts and deliberately merge. `minted-id.ts` now says which kind of command each half is for.
 
 ```
-# Slice 5 landed at 7bbbb5687. The suites and governance below ran against
-# tree 710619d4777b2090617473253f5cd8ad48d03919 — this section's own text is
-# the only thing added after it, so the landed commit tree differs from it by
-# these three lines and nothing else.
+# The four suites and governance below ran against tree
+# 2b004f3b6946ab8d906f2a4e03899ab1ca505db0, which is the tree of commit
+# a41fb44cc exactly. Only this corrected hash was written after that run, so
+# the landed tree differs from it by these four lines and nothing else.
 bun run --cwd packages/vault test src/commands/tasks.test.ts            # 22 passed
 bun run --cwd packages/vault test src/commands/schedule-organize.test.ts # 7 passed
 bun run --cwd packages/vault test && bun run --cwd packages/blueprints test
