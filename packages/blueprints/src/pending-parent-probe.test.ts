@@ -116,7 +116,8 @@ describe("pending-parent child writes", () => {
     // `add` began accepting the id its own projection mints (#922 G2) — a new
     // action taking a minted id must move it, which is exactly the point.
     expect(edges.length).toMatchInlineSnapshot(`67`);
-    expect([...byApp.entries()].sort()).toMatchInlineSnapshot(`
+    expect([...byApp.entries()].sort(([a], [b]) => a.localeCompare(b)))
+      .toMatchInlineSnapshot(`
       [
         [
           "docs",
