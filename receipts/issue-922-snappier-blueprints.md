@@ -2035,3 +2035,4 @@ bash .governance/run.sh                                 # 22/22
 
 `apps/mobile/src/apps/tally/ActivityView.test.tsx` draws one expense and one settlement through `SeatList`, so the day-heading flatten and both row kinds are covered. `nativeLinkTicketDoor` in `grant-seat.test.ts` covers the mint / refuse / missing-vault branches the diff-coverage floor named.
 
+The `mintLinkTicket` mock uses `as never`, matching the gateway mock in the same file, so `tsc --noEmit` accepts the factory.

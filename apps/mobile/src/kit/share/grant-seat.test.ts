@@ -36,9 +36,10 @@ vi.mock(
   import("../../lib/gateway"),
   () => ({ apiHeaders: () => ({ Authorization: "Bearer test" }) }) as never
 );
-vi.mock(import("../../lib/replica/links-transport"), () => ({
-  mintLinkTicket,
-}));
+vi.mock(
+  import("../../lib/replica/links-transport"),
+  () => ({ mintLinkTicket }) as never
+);
 
 const BASE = "http://127.0.0.1:4599";
 
