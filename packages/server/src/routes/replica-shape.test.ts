@@ -12,9 +12,11 @@ import {
   currentReplicaLogState,
   readReplicaRow,
 } from "@centraid/vault";
+import type { Credential } from "@centraid/vault";
 
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
+import { declaredManifestFor } from "./replica-declared-scopes.js";
 import { projectReplicaPage } from "./replica-projection.js";
 import {
   buildReplicaShapes,
@@ -50,24 +52,29 @@ describe("replica-shape suite", () => {
     return opened;
   }
 
-  function appCredential(
-    vault: VaultPlane,
-    name: string
-  ): {
-    kind: "app";
-    appId: string;
-    signingKey: string;
-  } {
+  /**
+   * The owner's own device, naming the surface that carried the call and
+   * carrying that surface's DECLARED manifest as its attenuation (#928) —
+   * exactly what `bridgeFor` builds, which is what makes an online read and
+   * the app's replica rows comparable at all.
+   */
+  function appCredential(vault: VaultPlane, name: string): Credential {
     const app = vault.db.vault
-      .prepare(`SELECT app_id, signing_key FROM access_app WHERE name = ?`)
-      .get(name) as { app_id: string; signing_key: string };
-    return { kind: "app", appId: app.app_id, signingKey: app.signing_key };
+      .prepare(`SELECT app_id FROM access_app WHERE name = ?`)
+      .get(name) as { app_id: string };
+    const declared = declaredManifestFor(vault.db.vault, name);
+    return {
+      kind: "device",
+      deviceId: vault.boot.deviceId,
+      deviceKey: vault.boot.deviceKey,
+      surface: app.app_id,
+      ...(declared ? { scopeClamp: declared.scopes } : {}),
+    };
   }
 
   test("sealed names remain sticky metadata while values never enter a replica row", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("passwords", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("passwords", {
       scopes: [{ schema: "locker", table: "item", verbs: "read" }],
     });
     vault.db.vault
@@ -100,8 +107,7 @@ describe("replica-shape suite", () => {
 
   test("consent-masked columns remain sticky unavailable for local handler fallback", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("tasks", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("tasks", {
       scopes: [
         {
           schema: "schedule",
@@ -130,8 +136,7 @@ describe("replica-shape suite", () => {
 
   test("unmasked shapes hide protocol credential names and values", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("credential-auditor", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("credential-auditor", {
       scopes: [
         { schema: "access", table: "app", verbs: "read" },
         { schema: "access", table: "agent", verbs: "read" },
@@ -204,8 +209,7 @@ describe("replica-shape suite", () => {
 
   test("credential predicates and credential-only masks fail closed", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("credential-filter", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("credential-filter", {
       scopes: [
         {
           schema: "access",
@@ -217,8 +221,7 @@ describe("replica-shape suite", () => {
         },
       ],
     });
-    vault.ensureAppInstallGrant("credential-mask", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("credential-mask", {
       scopes: [
         {
           schema: "access",
@@ -250,8 +253,7 @@ describe("replica-shape suite", () => {
    */
   test("keeps a declared scope's row filter and field mask in the shape", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -316,10 +318,9 @@ describe("replica-shape suite", () => {
     ).toBeUndefined();
   });
 
-  test("uses the exact first declared scope the canonical online read selects", async () => {
+  test("folds EVERY covering declared scope, exactly as the online read does", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -347,12 +348,12 @@ describe("replica-shape suite", () => {
 
     const online = vault.gateway.read(appCredential(vault, "planner"), {
       entity: "schedule.task",
-      purpose: "dpv:ServiceProvision",
     });
     const onlineRows = plainSqliteRows(online.rows);
-    expect(onlineRows).toStrictEqual([
-      { task_id: "both-scopes", title: "Canonical first" },
-    ]);
+    // Both declarations bite: the filters AND, the masks intersect down to the
+    // one column both name. Taking the first would leave the second
+    // declaration unenforced (#541, #928).
+    expect(onlineRows).toStrictEqual([{ task_id: "both-scopes" }]);
 
     const shape = buildReplicaShapes(vault.db.vault, {
       canWrite: true,
@@ -361,7 +362,6 @@ describe("replica-shape suite", () => {
     })[0]!;
     expect(shape.entityMap.get("schedule.task")?.columns).toStrictEqual([
       "task_id",
-      "title",
     ]);
     const row = readReplicaRow(vault.db.vault, "schedule.task", "both-scopes")!;
     expect(shapeReplicaRow(shape, "schedule.task", row)?.values).toStrictEqual(
@@ -380,8 +380,7 @@ describe("replica-shape suite", () => {
     },
   ])("matches canonical SQLite affinity for $name", async ({ filter }) => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -419,8 +418,7 @@ describe("replica-shape suite", () => {
 
   test("changes temporal shape identity exactly when a row enters and leaves its window", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -496,8 +494,7 @@ describe("replica-shape suite", () => {
 
   test("expires within-days membership without requiring a database write", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -559,8 +556,7 @@ describe("replica-shape suite", () => {
     // have moved: one the log says was written, and one whose recorded
     // transition has passed. The rest keep the membership they had.
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -636,8 +632,7 @@ describe("replica-shape suite", () => {
 
   test("omits an unrelated filtered delete without rebootstrap or row-id disclosure", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -672,8 +667,7 @@ describe("replica-shape suite", () => {
 
   test("uses one stable opaque id through snapshot, update-out and delete", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -752,8 +746,7 @@ describe("replica-shape suite", () => {
 
   test("never serializes either component of a masked composite primary key", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("tally", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("tally", {
       scopes: [
         {
           schema: "tally",
@@ -819,8 +812,7 @@ describe("replica-shape suite", () => {
 
   test("ordinary concepts tail incrementally instead of invalidating every shape", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", table: "task", verbs: "read" }],
     });
     const since = currentReplicaLogState(vault.db.vault).watermark;
@@ -846,12 +838,10 @@ describe("replica-shape suite", () => {
 
   test("doorbells name only the shapes that received the projected row", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", table: "task", verbs: "read" }],
     });
-    vault.ensureAppInstallGrant("biller", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("biller", {
       scopes: [
         {
           schema: "schedule",
@@ -914,8 +904,7 @@ describe("replica-shape suite", () => {
     const vault = await plane();
     // The photos read surface (#419): a native client renders the whole
     // library from the replica, with no online round trip.
-    vault.ensureAppInstallGrant("photos", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("photos", {
       scopes: [
         { schema: "media", verbs: "read" },
         { schema: "core", table: "content_item", verbs: "read" },
@@ -967,8 +956,7 @@ describe("replica-shape suite", () => {
 
   test("docs and agenda grants multiplex as additive self-contained native shapes", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("docs", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("docs", {
       scopes: [
         { schema: "core", table: "document", verbs: "read" },
         { schema: "core", table: "content_item", verbs: "read" },
@@ -978,8 +966,7 @@ describe("replica-shape suite", () => {
         { schema: "blob", table: "custody_state", verbs: "read" },
       ],
     });
-    vault.ensureAppInstallGrant("agenda", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("agenda", {
       scopes: [
         { schema: "schedule", verbs: "read+act" },
         { schema: "core", table: "event", verbs: "read" },

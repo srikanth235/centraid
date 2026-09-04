@@ -670,7 +670,6 @@ async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
       entity: "locker.item",
       ...target,
       columns: [column],
-      purpose: "dpv:ServiceProvision",
     },
   });
   if (!reply.ok) throw new Error(reply.error ?? "reveal failed");
@@ -694,7 +693,6 @@ async function flipNeedsAuth(
     payload: {
       command: "sync.set_connection_status",
       input: { connection_id: connectionId, status: "needs-auth" },
-      purpose: "dpv:ServiceProvision",
     },
   });
 }
@@ -713,7 +711,6 @@ async function connectionIdOf(
         { column: "label", op: "eq", value: connector.label },
       ],
       limit: 1,
-      purpose: "dpv:ServiceProvision",
     },
   });
   if (!reply.ok) return undefined;
@@ -737,7 +734,6 @@ async function connectionStatus(
           { column: "connection_id", op: "eq", value: connector.connectionId },
         ],
         limit: 1,
-        purpose: "dpv:ServiceProvision",
       },
     });
     if (!byId.ok) return undefined;
@@ -753,7 +749,6 @@ async function connectionStatus(
         { column: "label", op: "eq", value: connector.label },
       ],
       limit: 1,
-      purpose: "dpv:ServiceProvision",
     },
   });
   if (!reply.ok) return undefined;

@@ -48,8 +48,7 @@ describe("grant plane on the replica", () => {
 
   test("a declaring app's shape carries the authority row and its delivery state", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("people", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("people", {
       scopes: [
         { schema: "share", table: "authority", verbs: "read" },
         { schema: "share", table: "fulfillment", verbs: "read" },
@@ -94,13 +93,12 @@ describe("grant plane on the replica", () => {
       vault: {
         purpose: string;
         scopes: Parameters<
-          VaultPlane["ensureAppInstallGrant"]
+          VaultPlane["recordAppInstall"]
         >[1]["scopes"][number][];
       };
     };
     const vault = await plane();
-    vault.ensureAppInstallGrant("people", {
-      purpose: manifest.vault.purpose,
+    vault.recordAppInstall("people", {
       scopes: manifest.vault.scopes.filter((scope) =>
         scope.verbs.includes("read")
       ),
@@ -129,8 +127,7 @@ describe("grant plane on the replica", () => {
 
   test("an app that declares no share scope sees no authority entity at all", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("people", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("people", {
       scopes: [{ schema: "core", table: "party", verbs: "read" }],
     });
     const [shape] = buildReplicaShapes(vault.db.vault, {

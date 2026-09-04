@@ -58,7 +58,6 @@ describe("R2 product offline/reconnect transport", () => {
     });
     cleanups.push(() => plane.stop());
     plane.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", verbs: "act" }],
     });
     await fs.mkdir(path.join(codeDir, "actions"), { recursive: true });
@@ -88,7 +87,7 @@ describe("R2 product offline/reconnect transport", () => {
     );
     await fs.writeFile(
       path.join(codeDir, "actions", "add_task.js"),
-      `export default async ({ body, ctx }) => ({ status: 200, body: await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: body.title }, purpose: 'dpv:ServiceProvision' }) });\n`
+      `export default async ({ body, ctx }) => ({ status: 200, body: await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: body.title } }) });\n`
     );
     const registry = new Registry(registryDir);
     await registry.load();

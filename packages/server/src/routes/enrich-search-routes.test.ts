@@ -83,7 +83,6 @@ describe("enrich-search-routes", () => {
       const outcome = await plane.invoke(plane.ownerCredential, {
         command: "media.add_asset",
         input: { data_uri: PIXELS[index] },
-        purpose: "dpv:ServiceProvision",
       });
       assetIds.push(
         (outcome as { status: "executed"; output: { asset_id: string } }).output

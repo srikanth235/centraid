@@ -10,8 +10,9 @@
  * Vault create/delete are ADMIN acts on the gateway host, not routes here
  * (#289). The vault list is filtered to the calling device's enrollments: an
  * owner sees no evidence of others' vaults. Deny-by-default is structural —
- * until a POST …/grants lands, an enrolled app's every vault call is a
- * receipted deny.
+ * until the owner answers, an enrolled automation's every vault call is a
+ * receipted deny (#928); a first-party app is not a principal and has no
+ * answer to wait for, only its declared manifest.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -598,43 +599,14 @@ export function makeVaultRouteHandler(
         const companionProfile = vaultContext()?.grantProfile;
         if (companionProfile !== undefined) {
           const allowed = new Set(companionProfile);
-          const apps = new Map(plane.listApps().map((app) => [app.name, app]));
-          const modules = COMPANION_MODULES.map((id) => {
-            const app = apps.get(id);
-            return {
-              id,
-              state: companionModuleState(allowed, id, app),
-            };
-          });
+          const installed = new Set(plane.listApps().map((app) => app.name));
+          const modules = COMPANION_MODULES.map((id) => ({
+            id,
+            state: companionModuleState(allowed, id, installed.has(id)),
+          }));
           return sendJson(res, 200, { modules });
         }
         return sendJson(res, 200, { apps: plane.listApps() });
-      }
-
-      if (
-        method === "POST" &&
-        segments[0] === "apps" &&
-        segments[2] === "grants"
-      ) {
-        const appId = segments[1] ?? "";
-        const body = await readJson(req);
-        const request = parseGrantRequest(body);
-        if (!request) {
-          return sendJson(res, 400, {
-            error: "bad_request",
-            message:
-              "grant body needs {purpose: string, scopes: [{schema, verbs, table?}]}",
-          });
-        }
-        try {
-          const grantId = plane.approveGrant(appId, request);
-          return sendJson(res, 200, { grantId });
-        } catch (error) {
-          return sendJson(res, 400, {
-            error: "grant_refused",
-            message: error instanceof Error ? error.message : String(error),
-          });
-        }
       }
 
       // The explicit second half of uninstall (#286): uninstall RETAINS the
@@ -675,17 +647,16 @@ export function makeVaultRouteHandler(
         if (!request) {
           return sendJson(res, 400, {
             error: "bad_request",
-            message:
-              "grant body needs {purpose: string, scopes: [{schema, verbs, table?}]}",
+            message: "answer body needs {scopes: [{schema, verbs, table?}]}",
           });
         }
         try {
           const displayName = await options.resolveAutomationName?.(appId);
-          const grantId = plane.approveAgentGrant(appId, request, displayName);
-          return sendJson(res, 200, { grantId });
+          const written = plane.approveAgentGrant(appId, request, displayName);
+          return sendJson(res, 200, { written });
         } catch (error) {
           return sendJson(res, 400, {
-            error: "grant_refused",
+            error: "answer_refused",
             message: error instanceof Error ? error.message : String(error),
           });
         }
@@ -706,7 +677,7 @@ export function makeVaultRouteHandler(
         segments.length === 2
       ) {
         try {
-          const result = plane.revokeGrant(segments[1] ?? "");
+          const result = plane.revokeAuthority(segments[1] ?? "");
           return sendJson(res, 200, result);
         } catch (error) {
           return sendJson(res, 404, {
@@ -1486,7 +1457,6 @@ async function runBrowseWrite(
   const outcome = await plane.invoke(plane.ownerCredential, {
     command,
     input,
-    purpose: "dpv:ServiceProvision",
   });
   if (outcome.status === "executed") {
     return sendJson(res, 200, {
@@ -1531,25 +1501,16 @@ function parseSelector(raw: unknown): AnchorSelector | undefined {
 }
 
 const VERBS = new Set(["read", "read+act", "act", "reveal"]);
-const FILTER_OPS = new Set([
-  "eq",
-  "ne",
-  "lt",
-  "lte",
-  "gt",
-  "gte",
-  "in",
-  "is-null",
-  "not-null",
-  "within-days",
-  "within-next-days",
-]);
 
+/**
+ * An owner's ANSWER about an automation (#928): an extent and a verb, and
+ * nothing else. Row filters and field masks are the RUN's clamp, declared by
+ * the manifest the automation was launched with, so an answer body carrying
+ * them would be naming a boundary this plane does not enforce.
+ */
 function parseGrantRequest(
   body: Record<string, unknown>
 ): GrantRequest | undefined {
-  if (typeof body.purpose !== "string" || body.purpose.length === 0)
-    return undefined;
   if (!Array.isArray(body.scopes) || body.scopes.length === 0) return undefined;
   const scopes: GrantRequest["scopes"] = [];
   for (const raw of body.scopes) {
@@ -1558,67 +1519,11 @@ function parseGrantRequest(
     if (typeof s.schema !== "string" || s.schema.length === 0) return undefined;
     if (typeof s.verbs !== "string" || !VERBS.has(s.verbs)) return undefined;
     if (s.table !== undefined && typeof s.table !== "string") return undefined;
-    if (
-      (s.rowFilter !== undefined || s.fieldMask !== undefined) &&
-      (typeof s.table !== "string" || s.table === "")
-    ) {
-      return undefined;
-    }
-    let rowFilter: GrantRequest["scopes"][number]["rowFilter"];
-    if (s.rowFilter !== undefined) {
-      if (!Array.isArray(s.rowFilter) || s.rowFilter.length === 0)
-        return undefined;
-      rowFilter = [];
-      for (const rawClause of s.rowFilter) {
-        if (
-          rawClause === null ||
-          typeof rawClause !== "object" ||
-          Array.isArray(rawClause)
-        ) {
-          return undefined;
-        }
-        const clause = rawClause as Record<string, unknown>;
-        if (
-          typeof clause.column !== "string" ||
-          clause.column === "" ||
-          typeof clause.op !== "string" ||
-          !FILTER_OPS.has(clause.op)
-        ) {
-          return undefined;
-        }
-        rowFilter.push({
-          column: clause.column,
-          op: clause.op as NonNullable<
-            GrantRequest["scopes"][number]["rowFilter"]
-          >[number]["op"],
-          ...(Object.hasOwn(clause, "value") ? { value: clause.value } : {}),
-        });
-      }
-    }
-    let fieldMask: string[] | undefined;
-    if (s.fieldMask !== undefined) {
-      if (
-        !Array.isArray(s.fieldMask) ||
-        s.fieldMask.length === 0 ||
-        !s.fieldMask.every((field) => typeof field === "string" && field !== "")
-      ) {
-        return undefined;
-      }
-      fieldMask = [...s.fieldMask] as string[];
-    }
     scopes.push({
       schema: s.schema,
       verbs: s.verbs as "read" | "read+act" | "act" | "reveal",
       ...(typeof s.table === "string" ? { table: s.table } : {}),
-      ...(rowFilter ? { rowFilter } : {}),
-      ...(fieldMask ? { fieldMask } : {}),
     });
   }
-  return {
-    purpose: body.purpose,
-    scopes,
-    ...(typeof body.expiresAt === "string"
-      ? { expiresAt: body.expiresAt }
-      : {}),
-  };
+  return { scopes };
 }

@@ -156,7 +156,6 @@ function world(options: { linked?: boolean } = {}): World {
           gateway.invoke(ownerCredential, {
             command,
             input,
-            purpose: "dpv:ServiceProvision",
           }),
       }),
     }),

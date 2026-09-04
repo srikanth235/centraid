@@ -6,7 +6,6 @@ import {
 } from "../src/capabilities/transcript.js";
 
 const BATCH = 2;
-const PURPOSE = "dpv:ServiceProvision";
 // Matches the existing ctx.vault.content original-audio/video ceiling. FFmpeg
 // separately caps decompressed duration, so both compressed and expanded work
 // remain bounded.

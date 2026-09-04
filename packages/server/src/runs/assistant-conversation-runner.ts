@@ -71,7 +71,6 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
       vaults.current().invokeAsAssistant({
         command: call.command,
         input: call.input,
-        purpose: "dpv:ServiceProvision",
       }),
     vaultContent: () => async (call) => {
       const result = (await vaults.current().contentAsOwner(call)) as Record<

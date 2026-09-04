@@ -944,3 +944,177 @@ bun run golden-vault:freeze -- --label issue-916
 | --- | --- | --- |
 | An automation is refused reveal because reveal rides no answer, not because fixtures stopped asking | removed the `verb === "reveal"` early return in `standingAnswerId`, re-ran `sealed.test.ts` | **green at first** — the finding: `automationSubjectsOf` mints no `reveal` row, so the guard was untested. The case now FORGES a `granted` reveal row into `share_authority`; with the guard removed it is **red** |
 | Owner-direct reads really stopped receipting, rather than the tests stopping counting | forced `skipsAllowReceipt` to `false`, re-ran `read-batch` | **red** on `an owner-direct batch writes NO receipts at all` (3 rows appear) and on the refusal case (2 instead of 1) |
+
+## w4b — the host: the app bridge stops asking for a grant
+
+`packages/server`, the automation handler pack and the root suites. The app bridge issues no app credential:
+it opens the owner's own device credential, NAMES the surface, and carries the app's build-time manifest as
+the execution clamp the gateway already had. The grant routes and the grant half of the vault plane go with
+the tables w4a dropped. Serves in part: **"the app bridge issues no app credential; an owner-device read of
+the owner's vault runs 0 grant statements"** and **"every reader of them is gone"**.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/server/src/serve/vault-plane.ts` | `bridgeFor` mints `{kind:"device", surface, scopeClamp}` from `declaredManifestFor`; `approveGrant`/`listGrants`/`revokeGrant`/park-by-grant deleted; `recordAppInstall` replaces the install grant; `readBatch` bridge op |
+| `packages/server/src/routes/vault-routes.ts` | `POST /apps/:id/grants` deleted with `parseGrantRequest`'s purpose; the automation answer route keeps the same URL and loses `purpose`; companion module state reads the install register |
+| `packages/server/src/routes/replica-shape.ts` | shape composition reads the declared manifest only |
+| `packages/server/src/serve/build-gateway.ts` | `grantScopesFromDir` records a declaration; no grant is minted at mount |
+| `packages/server/src/automation/handler/runner.ts` | the handler rail stops sending a purpose with every `invoke` |
+| `packages/server/src/serve/manifest-scope-denial.*` | the clamp sweeps keep their refusal classes against the one plane |
+| root suites (`tests/quality`, `tests/scale`, `tests/perf`, `tests/integration-mobile`) | the retired `purpose` field off every fixture and call |
+
+### Numbers
+
+| measure | before | after |
+| --- | --- | --- |
+| `packages/server` suite | — | 400 files, 3512 passed, 3 expected-fail, 7 skipped, **3 failed (container-known)** |
+| HTTP routes that mint or read an app grant | 3 | **0** |
+
+### Deleted, with its replacement
+
+`POST /vaults/:id/apps/:app/grants` and `plane.approveGrant`/`listGrants`/`revokeGrant` → `recordAppInstall`,
+which records the app's own `app.json` manifest; the grant-shaped `purpose` on the automation answer route →
+nothing.
+
+### Decisions
+
+- **A declaration is not durable state.** An app's reach is its build-time manifest, re-read from `app.json`
+  by the mount pass (`hostFor`) on every boot for every store and bundled app, so it is held per vault handle
+  rather than persisted. An app the mount pass has not run for reaches nothing — the fail-closed direction.
+  Three suites that reached an APP bridge after `approveAgentGrant` (an AUTOMATION answer) now declare through
+  `recordAppInstall`, which is the real install path; `vault-plane-wal` re-declares after the restart exactly
+  as mounting would.
+- **The declared manifest is enforced as the execution clamp**, not as a grant (root ruling, deviating from
+  A1's "minus filters and masks"). The property that depends on it: a first-party surface must not reach past
+  what it declared — without the clamp, `notes` running on the owner's credential could reveal a Locker
+  sidecar. It only ever narrows, so no deny in `authz-deny-matrix` becomes an allow.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/server build       # tsc -p tsconfig.json, clean
+bun run --cwd packages/server typecheck   # passed
+bun run --cwd packages/server test        # 3512 passed; reds: acp/launch x2 (IS_SANDBOX set), gateway-db-lock (no sqlite3 CLI)
+bun run --cwd packages/server test -- --run src/serve/vault-plane-wal.test.ts src/serve/protocol-join-lane.test.ts src/serve/vault-plane-consent.test.ts   # 18 passed
+```
+
+### Paths
+
+```
+packages/model-runtime/automation-handlers/embed-image.js
+packages/model-runtime/automation-handlers/embed-image.test.ts
+packages/model-runtime/automation-handlers/embed-text.js
+packages/model-runtime/automation-handlers/faces.js
+packages/model-runtime/automation-handlers/faces.test.ts
+packages/model-runtime/automation-handlers/photo-ocr.js
+packages/model-runtime/automation-handlers/photo-ocr.test.ts
+packages/model-runtime/automation-handlers/place-names.js
+packages/model-runtime/automation-handlers/place-names.test.ts
+packages/model-runtime/automation-handlers/transcript.js
+packages/model-runtime/automation-handlers/transcript.test.ts
+packages/server/src/acp/prompt-injection/harness.ts
+packages/server/src/automation/fire/condition.test.ts
+packages/server/src/automation/fire/condition.ts
+packages/server/src/automation/fire/connector.test.ts
+packages/server/src/automation/fire/fire-vault.test.ts
+packages/server/src/automation/fire/fire.ts
+packages/server/src/automation/handler/runner.ts
+packages/server/src/automation/manifest/enricher-templates.test.ts
+packages/server/src/automation/manifest/manifest-vault.test.ts
+packages/server/src/automation/manifest/manifest.test.ts
+packages/server/src/automation/manifest/manifest.ts
+packages/server/src/automation/scaffold/scaffold-files.test.ts
+packages/server/src/brief/daily-brief.ts
+packages/server/src/engine/handlers/build-extra-prompt.ts
+packages/server/src/engine/handlers/vault-bridge.test.ts
+packages/server/src/engine/registry/manifest.test.ts
+packages/server/src/engine/registry/manifest.ts
+packages/server/src/enrich/semantic-search.test.ts
+packages/server/src/lifecycle/automation-anchor-scopes.test.ts
+packages/server/src/lifecycle/automation-anchor-scopes.ts
+packages/server/src/lifecycle/automation-lifecycle-over-http.test.ts
+packages/server/src/lifecycle/automation-turn-context.test.ts
+packages/server/src/lifecycle/automation-turn-context.ts
+packages/server/src/lifecycle/ext-band-over-http.test.ts
+packages/server/src/lifecycle/headless-automation-compile.test.ts
+packages/server/src/lifecycle/headless-automation-compile.ts
+packages/server/src/lifecycle/install-over-http.test.ts
+packages/server/src/lifecycle/interactive-automation-turn.test.ts
+packages/server/src/reminders/due-reminders.test.ts
+packages/server/src/reminders/due-reminders.ts
+packages/server/src/routes/blob-routes-hardening.test.ts
+packages/server/src/routes/blob-routes.test.ts
+packages/server/src/routes/companion-grants.test.ts
+packages/server/src/routes/companion-grants.ts
+packages/server/src/routes/connections-routes.ts
+packages/server/src/routes/enrich-search-routes.test.ts
+packages/server/src/routes/grant-routes.test.ts
+packages/server/src/routes/import-routes.ts
+packages/server/src/routes/peer-commons-route.ts
+packages/server/src/routes/push-wake-routes.test.ts
+packages/server/src/routes/replica-declared-scopes.ts
+packages/server/src/routes/replica-grant-shape.test.ts
+packages/server/src/routes/replica-intent-attribution.test.ts
+packages/server/src/routes/replica-intent-crash-replay.test.ts
+packages/server/src/routes/replica-intent-route.test.ts
+packages/server/src/routes/replica-projection.test.ts
+packages/server/src/routes/replica-routes.test.ts
+packages/server/src/routes/replica-shape-parity.test.ts
+packages/server/src/routes/replica-shape.test.ts
+packages/server/src/routes/replica-shape.ts
+packages/server/src/routes/vault-enrich-rules-routes.ts
+packages/server/src/routes/vault-routes.test.ts
+packages/server/src/routes/vault-routes.ts
+packages/server/src/runs/assistant-conversation-runner.ts
+packages/server/src/serve/agent-owner-cap.test.ts
+packages/server/src/serve/build-gateway.test.ts
+packages/server/src/serve/build-gateway.ts
+packages/server/src/serve/connection-broker.test.ts
+packages/server/src/serve/connection-broker.ts
+packages/server/src/serve/gateway-db.test.ts
+packages/server/src/serve/grant-fulfillment.ts
+packages/server/src/serve/manifest-scope-denial.closed-grammar.test.ts
+packages/server/src/serve/manifest-scope-denial.fuzz.test.ts
+packages/server/src/serve/manifest-scope-denial.hostile.test.ts
+packages/server/src/serve/manifest-scope-denial.sweep.test-fixtures.ts
+packages/server/src/serve/manifest-scope-denial.sweep.test.ts
+packages/server/src/serve/outbox-executor.test.ts
+packages/server/src/serve/peer-commons-client.ts
+packages/server/src/serve/peer-commons-pull.test.ts
+packages/server/src/serve/peer-commons-sweep.ts
+packages/server/src/serve/protocol-join-lane.test.ts
+packages/server/src/serve/serve-scheduler-reconcile.test.ts
+packages/server/src/serve/vault-picker.ts
+packages/server/src/serve/vault-plane-app-bridge.test.ts
+packages/server/src/serve/vault-plane-assistant.test.ts
+packages/server/src/serve/vault-plane-automation-authority.test.ts
+packages/server/src/serve/vault-plane-commons.test.ts
+packages/server/src/serve/vault-plane-consent.test.ts
+packages/server/src/serve/vault-plane-links.test.ts
+packages/server/src/serve/vault-plane-scopes.test.ts
+packages/server/src/serve/vault-plane-wal.test.ts
+packages/server/src/serve/vault-plane.ts
+packages/server/src/serve/vault-registry.test.ts
+packages/server/src/validate-manifest.test.ts
+tests/integration-mobile/lib/gateway.ts
+tests/perf/blob-egress.perf.test.ts
+tests/quality/chaos-planner-app.ts
+tests/quality/fixtures/kill-mid-write-child.ts
+tests/quality/offline-reconnect.integration.test.ts
+tests/quality/replica-bootstrap-fixture.ts
+tests/quality/user-facing-qualities.test.ts
+tests/scale/browser-replica-query.fixture.ts
+tests/scale/replica-bootstrap.scale.test.ts
+tests/scale/replica-reconnect.scale.test.ts
+tests/scale/replica-sse-fanout.scale.test.ts
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| The bridge clamp really bites — an app is held to its declared manifest, not merely enrolled | ran the three repaired suites with `recordAppInstall` reverted to `approveAgentGrant` | **red**: `denied`, not `parked`/`executed`, in all three — an app with no recorded declaration reaches nothing, so the clamp is the thing deciding, not the enrolment row |
+| The three remaining suite reds are the container's, not this diff's | read the two failing assertions and probed the environment they name: `env | grep IS_SANDBOX`, `which sqlite3` | `IS_SANDBOX=yes` is exported into this container (the suite asserts it is unset / `1`) and there is no `sqlite3` binary (the lock test shells out to it and reads `null`). Neither assertion touches the authority plane |

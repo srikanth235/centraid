@@ -470,7 +470,6 @@ describe("issue #679 user-facing quality gates", () => {
       const added = await plane.invoke(plane.ownerCredential, {
         command: "locker.add_item",
         input: { type: "login", title: "Consent canary", password: "secret" },
-        purpose: "dpv:ServiceProvision",
       });
       expect(added.status).toBe("executed");
       const itemId = (added as { output: { item_id: string } }).output.item_id;
@@ -486,7 +485,6 @@ describe("issue #679 user-facing quality gates", () => {
           plane.invokeAsAssistant({
             command: "locker.purge_item",
             input: { item_id: itemId },
-            purpose: "dpv:ServiceProvision",
           })
       );
       expect(parked.status).toBe("parked");
@@ -524,14 +522,12 @@ describe("issue #679 user-facing quality gates", () => {
           title: "Automation consent canary",
           password: "automation-secret",
         },
-        purpose: "dpv:ServiceProvision",
       });
       const automationItemId = (
         automationItem as { output: { item_id: string } }
       ).output.item_id;
       plane.enrollAutomationAgent("quality");
       plane.approveAgentGrant("quality", {
-        purpose: "dpv:ServiceProvision",
         scopes: [{ schema: "locker", verbs: "read+act" }],
       });
       const codeAppsDir = await tempDir("quality-consent-automation-");
@@ -552,7 +548,6 @@ describe("issue #679 user-facing quality gates", () => {
           triggers: [],
           requires: {},
           vault: {
-            purpose: "dpv:ServiceProvision",
             scopes: [{ schema: "locker", verbs: "read+act" }],
           },
           history: { keep: { count: 100 } },
@@ -561,7 +556,7 @@ describe("issue #679 user-facing quality gates", () => {
       );
       await writeFile(
         path.join(automationDir, "handler.js"),
-        `export default async ({ ctx }) => ({ output: await ctx.vault.invoke({ command: 'locker.purge_item', input: { item_id: '${automationItemId}' }, purpose: 'dpv:ServiceProvision' }) });\n`
+        `export default async ({ ctx }) => ({ output: await ctx.vault.invoke({ command: 'locker.purge_item', input: { item_id: '${automationItemId}' } }) });\n`
       );
       const automated = await runFire(
         {
@@ -1025,29 +1020,24 @@ describe("issue #679 user-facing quality gates", () => {
         title: "T3 journal canary",
         password: invokedSentinel,
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(invoked.status).toBe("executed");
     const revealed = [
       gateway.reveal(credential, {
         entity: "locker.item",
         entityId: "year3-sealed-locker",
-        purpose: "dpv:ServiceProvision",
       }),
       gateway.reveal(credential, {
         entity: "sync.connection_credential",
         entityId: "year3-sealed-connection",
-        purpose: "dpv:ServiceProvision",
       }),
       gateway.reveal(credential, {
         entity: "locker.item_field",
         entityId: "year3-sealed-field",
-        purpose: "dpv:ServiceProvision",
       }),
       gateway.reveal(credential, {
         entity: "locker.item_passkey",
         entityId: "year3-sealed-locker",
-        purpose: "dpv:ServiceProvision",
       }),
     ];
     // Reveal is the ONE surface a sentinel is allowed through, so every

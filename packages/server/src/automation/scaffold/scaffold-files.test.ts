@@ -48,7 +48,6 @@ describe(scaffoldAppFiles, () => {
 
   it("accepts a condition/data trigger paired with a vault block", () => {
     const vault = {
-      purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "core", table: "invoice", verbs: "read" as const }],
     };
     const out = byPath(
@@ -61,12 +60,12 @@ describe(scaffoldAppFiles, () => {
     );
     const mf = JSON.parse(out.get("automations/watcher/automation.json")!) as {
       triggers: { kind: string; entities?: string[]; every?: string }[];
-      vault?: { purpose: string };
+      vault?: { why?: string; scopes: unknown[] };
     };
     expect(mf.triggers).toStrictEqual([
       { kind: "data", entities: ["core.invoice"], every: "*/10 * * * *" },
     ]);
-    expect(mf.vault?.purpose).toBe("dpv:ServiceProvision");
+    expect(mf.vault?.scopes).toHaveLength(1);
   });
 
   it("rejects a condition/data trigger with no vault block", () => {

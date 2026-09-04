@@ -230,15 +230,16 @@ describe("vault-registry scenarios", () => {
     const work = registry.create("Work");
 
     registry.enrollApp("planner");
-    registry.current().approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    // Installed HERE only: a declared manifest is per vault handle, so the
+    // other vault has no record of this app and its bridge fails closed.
+    registry.current().recordAppInstall("planner", {
       scopes: [{ schema: "schedule", verbs: "read" }],
     });
 
     const bridge = registry.bridgeFor("planner");
     const readReq = {
       op: "read" as const,
-      payload: { entity: "schedule.task", purpose: "dpv:ServiceProvision" },
+      payload: { entity: "schedule.task" },
     };
 
     // Unscoped call rides the default vault, where the grant lives.
@@ -246,7 +247,7 @@ describe("vault-registry scenarios", () => {
     expect(allowed.ok).toBe(true);
 
     // Same bridge, addressed to the other vault: identity ensured on first
-    // call, no grant exists — a receipted deny.
+    // call, no declared manifest there — a receipted deny.
     const denied = await runWithVaultContext({ vaultId: work.vaultId }, () =>
       bridge(readReq)
     );

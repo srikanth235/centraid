@@ -888,7 +888,7 @@ export async function buildGateway(
       throw new Error(`commons replica vault ${vaultId} is not mounted`);
     return mounted.gateway.invokeCommonsCanonical(
       mounted.ownerCredential,
-      { command, input, purpose: "dpv:ServiceProvision", invocationId },
+      { command, input, invocationId },
       { idSeed: invocationId }
     );
   };
@@ -1604,7 +1604,10 @@ export async function buildGateway(
       });
   };
 
-  // Installing IS the consent (#306); a malformed block grants nothing.
+  // AN APP DECLARES; IT IS NOT GRANTED (#928 A1). Installing records the
+  // app's own build-time manifest — what a replica shape is composed from and
+  // what the static entity tripwire holds it to. A malformed block declares
+  // nothing, so the app reaches nothing.
   const grantScopesFromDir = async (
     plane: VaultPlane,
     appId: string,
@@ -1614,11 +1617,9 @@ export async function buildGateway(
     try {
       const raw = JSON.parse(
         await fs.readFile(path.join(dir, "app.json"), "utf8")
-      ) as {
-        vault?: { purpose?: unknown; scopes?: unknown };
-      };
+      ) as { vault?: { scopes?: unknown } };
       const block = manifestScopeBlock(raw.vault);
-      if (block) plane.ensureAppInstallGrant(appId, block);
+      if (block) plane.recordAppInstall(appId, block);
     } catch (error) {
       logger.warn(
         `install-time grant for app "${appId}" failed: ` +
@@ -3005,7 +3006,6 @@ export async function buildGateway(
     }
     const common = {
       automationRef: input.automationRef,
-      purpose: row.manifest.vault.purpose,
       vault: vaultRegistry.agentBridgeFor(
         parsed.appId,
         executionScopeBlock(row.manifest.vault)
@@ -3913,7 +3913,6 @@ export async function buildGateway(
               plane.invoke(plane.ownerCredential, {
                 command,
                 input,
-                purpose: "dpv:ServiceProvision",
               }),
           };
         },
@@ -4741,7 +4740,7 @@ async function readBundledAppMeta(dir: string): Promise<{
 
 function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
   if (raw === null || typeof raw !== "object") return undefined;
-  const block = raw as { purpose?: unknown; scopes?: unknown };
+  const block = raw as { scopes?: unknown };
   if (!Array.isArray(block.scopes)) return undefined;
   const verbs = new Set(["read", "read+act", "act", "reveal"]);
   const filterOps = new Set([
@@ -4835,12 +4834,7 @@ function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
     ];
   });
   if (scopes.length === 0) return undefined;
-  return {
-    ...(typeof block.purpose === "string" && block.purpose !== ""
-      ? { purpose: block.purpose }
-      : {}),
-    scopes,
-  };
+  return { scopes };
 }
 
 /** Every automation execution is attenuated, including manifests declaring no vault access. */

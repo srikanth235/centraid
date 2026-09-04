@@ -3,7 +3,7 @@
  *
  * `serve()` is the shipped host: an auto-founded Personal vault, the eight
  * bundled system apps installed, and their manifest scopes granted at install
- * ("installing WAS the consent" — `vault-plane.ts#ensureAppInstallGrant`). That
+ * ("installing WAS the consent" — `vault-plane.ts#recordAppInstall`). That
  * last part is why nothing here approves a grant by hand: a hand-written scope
  * would prove the machinery while the shipped manifest drifted, and the replica
  * shape catalog these suites read is derived from the grants, not the manifest.

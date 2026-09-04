@@ -78,7 +78,6 @@ function plantedVault(options: { withVec: boolean }): Planted {
     const outcome = gw.invoke(owner, {
       command: "media.add_asset",
       input: { data_uri: PIXELS[index] },
-      purpose: "dpv:ServiceProvision",
     });
     const assetId = (
       outcome as { status: "executed"; output: { asset_id: string } }

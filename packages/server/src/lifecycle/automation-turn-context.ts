@@ -84,7 +84,6 @@ export function automationContextPreamble(
   }));
   const scope = row.manifest.vault
     ? {
-        purpose: row.manifest.vault.purpose,
         scopes: row.manifest.vault.scopes,
       }
     : undefined;

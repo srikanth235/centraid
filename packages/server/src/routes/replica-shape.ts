@@ -48,7 +48,6 @@ export interface ReplicaEntitySchemaWire {
 export interface ReplicaShapeWire {
   shapeId: string;
   appId: string;
-  purpose: string;
   entities: ReplicaEntitySchemaWire[];
 }
 
@@ -246,7 +245,6 @@ function publicShape(shape: ReplicaServerShape): ReplicaShapeWire {
   return {
     shapeId: shape.shapeId,
     appId: shape.appId,
-    purpose: shape.purpose,
     entities: shape.entities.map((entity) => ({
       entity: entity.entity,
       primaryKey: entity.primaryKey,
@@ -286,7 +284,6 @@ function nextTemporalTransition(
 function temporalFingerprint(
   db: DatabaseSync,
   appId: string,
-  purpose: string,
   entity: ReplicaEntityShape,
   nowMs: number
 ): string | undefined {
@@ -304,7 +301,7 @@ function temporalFingerprint(
       columns: alternative.columns,
     }))
   );
-  const key = `${appId}\u0000${purpose}\u0000${entity.entity}\u0000${policy}`;
+  const key = `${appId}\u0000${entity.entity}\u0000${policy}`;
   const cache =
     temporalFingerprintCache.get(db) ??
     new Map<string, TemporalFingerprintCacheEntry>();
@@ -501,7 +498,6 @@ export function buildReplicaShapes(
     const manifest = declaredManifestFor(db, appId);
     // An app whose manifest this process has not read declares nothing.
     if (!manifest) continue;
-    const purpose = manifest.purpose;
     const entities: ReplicaEntityShape[] = [];
     for (const entity of listVaultEntities(db)) {
       // ONE file (#916): every entity `resolveEntity` names lives in it.
@@ -565,7 +561,6 @@ export function buildReplicaShapes(
     const digestInput = {
       protocolVersion: REPLICA_PROTOCOL_VERSION,
       appId,
-      purpose,
       canWrite: access.canWrite,
       maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
       entities: entities.map((entity) => ({
@@ -577,13 +572,7 @@ export function buildReplicaShapes(
           filters: alternative.filters,
           columns: alternative.columns,
         })),
-        temporalFingerprint: temporalFingerprint(
-          db,
-          appId,
-          purpose,
-          entity,
-          nowMs
-        ),
+        temporalFingerprint: temporalFingerprint(db, appId, entity, nowMs),
       })),
     };
     const digest = crypto
@@ -601,7 +590,6 @@ export function buildReplicaShapes(
     const shape = {
       shapeId,
       appId,
-      purpose,
       entities,
       entityMap,
     } as ReplicaServerShape;

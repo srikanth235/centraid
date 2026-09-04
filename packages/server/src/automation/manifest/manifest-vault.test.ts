@@ -9,11 +9,10 @@ describe("manifest vault block", () => {
     generated: { by: "test", at: "2026-07-03" },
   };
 
-  it("accepts a purpose + scopes request and round-trips it", () => {
+  it("accepts a scopes request and round-trips it", () => {
     const m = validateManifest({
       ...base,
       vault: {
-        purpose: "dpv:ServiceProvision",
         why: "reads your agenda",
         scopes: [
           { schema: "schedule", verbs: "read" },
@@ -22,7 +21,6 @@ describe("manifest vault block", () => {
       },
     });
     expect(m.vault).toStrictEqual({
-      purpose: "dpv:ServiceProvision",
       why: "reads your agenda",
       scopes: [
         { schema: "schedule", verbs: "read" },
@@ -40,7 +38,6 @@ describe("manifest vault block", () => {
       validateManifest({
         ...base,
         vault: {
-          purpose: "dpv:ServiceProvision",
           scopes: [
             {
               schema: "schedule",
@@ -62,20 +59,16 @@ describe("manifest vault block", () => {
   });
 
   it("rejects malformed and unsupported scopes", () => {
-    expect(() => validateManifest({ ...base, vault: { scopes: [] } })).toThrow(
-      /vault\.purpose/u
-    );
     expect(() =>
       validateManifest({
         ...base,
-        vault: { purpose: "dpv:Billing", scopes: [] },
+        vault: { scopes: [] },
       })
     ).toThrow(/vault\.scopes/u);
     expect(() =>
       validateManifest({
         ...base,
         vault: {
-          purpose: "dpv:Billing",
           scopes: [{ schema: "tally", verbs: "write" }],
         },
       })
@@ -84,7 +77,6 @@ describe("manifest vault block", () => {
       validateManifest({
         ...base,
         vault: {
-          purpose: "dpv:Billing",
           scopes: [
             {
               schema: "schedule",
@@ -101,7 +93,6 @@ describe("manifest vault block", () => {
       validateManifest({
         ...base,
         vault: {
-          purpose: "dpv:Billing",
           scopes: [
             {
               schema: "schedule",

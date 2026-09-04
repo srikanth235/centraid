@@ -10,7 +10,6 @@ import {
 import { resolveRuntimeModule } from "../src/onnx.js";
 
 const BATCH = 16;
-const PURPOSE = "dpv:ServiceProvision";
 const PROMPT_REV = "ocr-v1";
 /**
  * The engine profile a run that names none belongs to — the same literal

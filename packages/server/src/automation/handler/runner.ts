@@ -710,7 +710,6 @@ export async function runHandler(
     const reply = await handleVaultMessage(audit, opts.vault, "invoke", {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
     if (!reply.ok) throw new Error(reply.error ?? `${command} failed`);
     const result = reply.result;

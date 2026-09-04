@@ -6,7 +6,6 @@ import {
 } from "../src/capabilities/faces.js";
 
 const BATCH = 16;
-const PURPOSE = "dpv:ServiceProvision";
 let infer = faces;
 let weightsPresent = facesWeightsPresent;
 

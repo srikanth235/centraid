@@ -41,7 +41,6 @@ import {
  * library's places down to a handful of fires while leaving each one short.
  */
 const BATCH = 64;
-const PURPOSE = "dpv:ServiceProvision";
 
 /** Does this row already carry a gazetteer verdict (a hit OR a miss)? */
 function alreadyChecked(addressJson) {

@@ -78,7 +78,6 @@ describe("validate-manifest", () => {
       baseManifest({
         triggers: [{ kind: "data", entities: "not-an-array" }],
         vault: {
-          purpose: "dpv:ServiceProvision",
           scopes: [{ schema: "core", verbs: "read" }],
         },
       })

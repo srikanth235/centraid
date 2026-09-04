@@ -218,7 +218,6 @@ describe("gateway-db scenarios", () => {
           username: "priya",
           password: "real-sealed-row",
         },
-        purpose: "dpv:ServiceProvision",
       }).status
     ).toBe("executed");
     const vaultSecret = keyStore.export(`${vault.vaultId}.sealkey`);

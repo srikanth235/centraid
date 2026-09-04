@@ -244,8 +244,7 @@ describe("VaultPlane ordinary Commons commands", () => {
       now,
     });
     member.enrollApp("tally");
-    member.approveGrant("tally", {
-      purpose: "dpv:ServiceProvision",
+    member.approveAgentGrant("tally", {
       scopes: [{ schema: "tally", verbs: "read+act" }],
     });
     const memberTally = member.bridgeFor("tally");

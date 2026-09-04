@@ -299,7 +299,6 @@ async function attemptPullPeerCommons(
             {
               command,
               input: commandInput,
-              purpose: "dpv:ServiceProvision",
               invocationId,
             },
             { idSeed: invocationId }

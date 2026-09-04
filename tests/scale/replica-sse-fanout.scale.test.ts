@@ -227,7 +227,6 @@ describe("replica-sse-fanout.scale", () => {
     if (!plane)
       throw new Error("the auto-founded Personal vault is not mounted");
     plane.approveGrant("agenda", {
-      purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
 

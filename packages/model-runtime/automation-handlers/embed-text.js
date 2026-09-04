@@ -6,7 +6,6 @@ import {
 } from "../src/capabilities/embed.js";
 
 const BATCH = 16;
-const PURPOSE = "dpv:ServiceProvision";
 let infer = embedText;
 let weightsPresent = embedWeightsPresent;
 
