@@ -2022,3 +2022,8 @@ bash .governance/run.sh                                 # 22/22
 | A first mount opens local replica files before the gateway answers | Awaited the wall immediately after starting it and re-ran `ReplicaProvider.test.tsx` with the `/info` answer held open | RED — `expected [] to strictly equal [ 'vault-1', 'vault-2', 'reader' ]` |
 | The primitive actually hands its anchoring to the list | Replaced `maintainVisibleContentPosition={anchoring}` with `undefined` and re-ran `SeatList.test.tsx` | RED — 1 failed, 2 passed |
 | The memories rig was broken, not merely untidy | Restored the `favorite` column in the seed and re-ran the rig | RED — `table media_asset has no column named favorite`; GREEN after, 1 passed in 12.4 s |
+
+## CI-green — throw the wall as an Error
+
+`apps/mobile/src/kit/replica/replica-mount.ts` `startCompatibilityWall` rethrew the `.then` rejection as `unknown`, which `typescript/only-throw-error` flags. The wall already throws `MobileGatewayCompatibilityError`; the catch now rethrows that Error, or wraps a non-Error with `{ cause }`. The refused-wall test still matches `{ disposition: "update-gateway" }`.
+

@@ -86,8 +86,14 @@ export function startCompatibilityWall(
     baseUrl: identity.auth.baseUrl,
     online: identity.online,
   }).then(
-    (features) => ({ features, error: undefined }),
-    (error: unknown) => ({ features: undefined, error })
+    (features) => ({ features, error: undefined as Error | undefined }),
+    (error: unknown) => ({
+      features: undefined,
+      error:
+        error instanceof Error
+          ? error
+          : new Error("compatibility wall refused", { cause: error }),
+    })
   );
   return async (onRefusal) => {
     const settled = await answer;
