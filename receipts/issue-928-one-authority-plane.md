@@ -472,6 +472,19 @@ already lives.
   that the root doc commit makes, and it adds no claim the w1b evidence does not already
   carry.
 
+### Verification
+
+```
+bun run format                    # clean
+bun run lint                      # clean
+bun run lint:product              # 39/39
+bash .governance/run.sh           # 22/22
+bun run test:claims               # 45 claims, 48 lanes, 193 derived flows
+```
+
+### Audit
+
+Verdict: PASS — root doc commit; ticks are traceable to the evidence sections named above
 ## w2 — static replica shape composition
 
 Wave 2 of #928, ruling AP-apps-declare: `buildReplicaShapes` stops asking the grant evaluator what an app may
@@ -621,3 +634,56 @@ bun run --cwd packages/server test -- --run src/serve/vault-plane-automation-aut
 | --- | --- | --- |
 | The migration actually migrates — the assertions are not satisfied by the live write path that already ran | early-returned `backfillAutomationAnswers` before its guard, rebuilt `packages/vault`, re-ran | **red**: `re-opening a vault backfills automation grants and refusals losslessly` fails, 6 others pass — so only that case depends on the backfill |
 | A widened manifest could be answered by the install path rather than parked | asserted the widened scope is absent from the answers AND that a scope request is open, in the same case, before deciding it | held: `granted agent.pack media read` appears only after `decideScopeRequest(_, true)` |
+
+## w3b — the assistant holds no standing grant
+
+#928 A3 / AP-automation-principal, second half. Acceptance clause served: **"The assistant holds no standing
+grant; its reads and writes are receipted exercises on behalf of the acting owner; scheduler-fired automations
+are capped by their row."** Nothing ticked above.
+
+| file | change |
+| --- | --- |
+| `packages/vault/src/gateway/types.ts` | `Identity.assistant?: true` — set from the enrolment row, never claimable from a credential |
+| `packages/vault/src/gateway/identity.ts` | `authenticate` reads `enrollment_key` in the statement it already ran and flags `_assistant` |
+| `packages/vault/src/gateway/access.ts` | one clause after the execution clamp: an assistant identity with an acting owner who owns this vault is allowed, clamped, with no grant lookup |
+| `packages/server/src/serve/vault-plane.ts` | `invokeAsAssistant` loses its self-healing `createGrant`, its schema sweep and its tombstone loop, and carries `onBehalfOfOwner`; `sqlAsOwner` → `sqlAsAssistant`, refusing when no acting owner owns the vault, and the decorative `purpose: "owner-assistant"` is gone |
+| `packages/server/src/runs/assistant-conversation-runner.ts`, `packages/server/src/backup/backup.integration.test.ts`, `packages/server/src/lifecycle/ext-band-over-http.test.ts` | the three `sqlAsOwner` callers |
+| `packages/server/src/routes/vault-routes.test.ts`, `packages/server/src/serve/vault-plane-commons.test.ts`, and the two test files above | eight assistant calls now run inside the owner frame the shell supplies — the harness had been exercising a surface that no longer exists without one |
+| `packages/server/src/serve/vault-plane-assistant.test.ts` | rewritten: the standing grant is gone, so the suite holds the containment that replaces it |
+
+| measure | before | after |
+| --- | --- | --- |
+| `share_authority` / `access_grant` rows the assistant holds | 1 grant, one scope per `agent_command.owner_schema`, self-healing | **0** |
+| grant statements per assistant invoke | 1 grant + 1 scope + 1 schema sweep + 1 tombstone read, then a `createGrant` on any new schema | 0 (the clause returns before `activeGrants`) |
+| `sqlAsOwner` production callers | 1 (`assistant-conversation-runner`) + 2 tests | 0 — deleted |
+| server test files that had to gain an owner frame | — | 4 (8 call sites) |
+
+### Decisions
+
+- **`sqlAsOwner` is deleted, not renamed away from its callers.** Enumerated first, as the brief required: one
+  production caller and two tests, all the assistant's. `gateway.sql` is owner-only by construction and
+  receipts both the allow and the refusal, so the replacement keeps the owner-device credential and adds the
+  check that was missing — no acting owner who owns this vault, no whole-model SQL. Strictly narrower than
+  what it replaced.
+- **The allowance is narrowed by the enrolment row, not by the credential.** `Identity.assistant` is derived
+  inside `authenticate` from `access_agent.enrollment_key`, so a caller cannot claim it, and it is read from
+  the statement identity already ran — no extra work per invocation.
+- **Scheduler-fired automations are capped by their row**, unchanged by this slice and now true by absence: a
+  run with no owner behind it has no `onBehalfOfOwner`, so it falls through to the grant path and its w3a
+  `automation` answer, exactly as an interactive automation does.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}   # the tree these ran against; quoted in the lane report
+bun run --cwd packages/vault build ; bun run --cwd packages/server typecheck   # clean
+bun run --cwd packages/server test -- --run src/serve/vault-plane-assistant.test.ts   # 6 passed
+bun run --cwd packages/server test -- --run src/serve/authz-deny-matrix.test.ts src/serve/agent-owner-cap.test.ts src/serve/authz-matrix.smoke.test.ts
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| The assistant allowance cannot be widened to every agent without a suite noticing | flipped the flag in `authenticate` to match every enrolment key, rebuilt `packages/vault`, re-ran | **red** on `an ordinary automation on the same owner frame is still capped`. It took two attempts to make this bite: the deny-matrix and smoke suites stayed green under the same mutation, and so did the first version of the case, which built its bridge outside the owner's frame and was therefore denied for the ordinary reason. Both facts are in the diff — the case now builds the bridge inside the frame, and the comment says why |
+| Deleting the standing grant left the assistant working through some other path | disabled the new clause in `evaluateAccess` (`if (false && …)`), rebuilt, re-ran | **red**: the low-risk execute becomes `denied`, so the clause is the only thing carrying it |

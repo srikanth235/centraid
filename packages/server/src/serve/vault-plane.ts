@@ -1589,83 +1589,54 @@ export class VaultPlane {
   }
 
   /**
-   * THE ASSISTANT'S AUTHORITY, WRITTEN DOWN (#308). Writes ride an enrolled
+   * THE ASSISTANT HOLDS NO STANDING ANSWER (#928 A3). Writes ride the enrolled
    * `_assistant` agent, not the owner-device credential, so confirm-gated
-   * commands park for the owner. `_assistant` holds a standing `act` grant
-   * over EVERY command schema — more privileged than any installed app — and
-   * that is intentional; the containment is that confirm-gated commands park,
-   * it cannot decide the outbox or reveal sealed plaintext, and every act is
-   * receipted under its own identity. The owner can narrow it durably: a
-   * revoked grant tombstones its schemas and the self-heal skips them.
+   * commands still park for the owner and every act is receipted under its own
+   * identity — but its REACH is the acting owner's, carried on the on-behalf-of
+   * identity and capped by that owner's trust tier. With no acting owner behind
+   * the call there is nothing to ride and the gateway refuses.
    */
   async invokeAsAssistant(request: InvokeRequest): Promise<InvokeOutcome> {
     const agent = ensureAgentEnrolled(this.db, "_assistant", {
       modelRef: "centraid-assistant",
       displayName: "Assistant",
     });
-    // Self-healing: a later app's ext band joins with no re-enrollment.
-    const schemas = this.db.vault
-      .prepare(
-        `SELECT DISTINCT owner_schema FROM agent_command ORDER BY owner_schema`
-      )
-      .all() as { owner_schema: string }[];
-    const covered = new Set(
-      (
-        this.db.vault
-          .prepare(
-            // R10 (#916): one dotted `entity` column, so the schema half is
-            // the text before the dot — a whole-schema scope has no dot and
-            // is its own schema name.
-            `SELECT DISTINCT s.entity FROM access_grant_scope s
-               JOIN access_grant g ON g.grant_id = s.grant_id
-              WHERE g.grantee_party_id = ? AND g.status = 'active' AND g.revoked_at IS NULL`
-          )
-          .all(agent.partyId) as { entity: string }[]
-      ).map((r) =>
-        r.entity.includes(".")
-          ? r.entity.slice(0, r.entity.indexOf("."))
-          : r.entity
-      )
-    );
-    // The owner's "no" binds the assistant too (#308 A4/B3).
-    for (const t of listScopeTombstones(this.db, {
-      granteePartyId: agent.partyId,
-    })) {
-      if (t.verbs === "act") covered.add(t.schema);
-    }
-    const missing = schemas.filter((s) => !covered.has(s.owner_schema));
-    if (missing.length > 0) {
-      const purpose = purposeConceptId(this.db, "dpv:ServiceProvision");
-      if (!purpose)
-        throw new Error("vault vocabulary missing dpv:ServiceProvision");
-      createGrant(this.db, {
-        granteePartyId: agent.partyId,
-        purposeConceptId: purpose,
-        grantedByPartyId: this.boot.ownerPartyId,
-        scopes: missing.map((s) => ({
-          schema: s.owner_schema,
-          verbs: "act" as const,
-        })),
-      });
-      this.logger.info(
-        `vault plane: extended the _assistant standing act grant (+${missing.length} schema(s))`
-      );
-    }
+    const scope = vaultContext();
     const cred: Credential = {
       kind: "agent",
       agentId: agent.agentId,
       deviceId: this.boot.deviceId,
       deviceKey: this.boot.deviceKey,
+      ...(scope?.ownerId === undefined
+        ? {}
+        : {
+            onBehalfOfOwner: {
+              ownerId: scope.ownerId,
+              mayAct: scope.ownsVault === true,
+            },
+          }),
     };
     return this.invoke(cred, request);
   }
 
-  /** OWNER-DEVICE credential: no grant keyhole applies. */
-  sqlAsOwner(sql: string, maxRows?: number): VaultSqlResult {
+  /**
+   * Whole-model SQL is the OWNER'S surface, and the assistant only ever holds
+   * it on the owner's behalf (#928 A3). The acting owner is checked here rather
+   * than assumed: with nobody behind the call — a scheduler-fired run — there is
+   * no authority to exercise. `gateway.sql` receipts both the allow and the
+   * refusal, so the exercise is evidence either way.
+   */
+  sqlAsAssistant(sql: string, maxRows?: number): VaultSqlResult {
+    const scope = vaultContext();
+    if (scope?.ownsVault !== true) {
+      throw new GatewayError(
+        "access",
+        "whole-model sql is the owner's surface — the assistant holds it only on an acting owner's behalf"
+      );
+    }
     return this.gateway.sql(this.ownerCredential, {
       sql,
       ...(maxRows === undefined ? {} : { maxRows }),
-      purpose: "owner-assistant",
     });
   }
 

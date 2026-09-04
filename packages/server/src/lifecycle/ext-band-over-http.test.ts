@@ -19,6 +19,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import type { GatewayPaths } from "../paths.ts";
 import { serve } from "../serve/serve.ts";
 import type { GatewayServeHandle } from "../serve/serve.ts";
+import { runWithVaultContext } from "../serve/vault-context.js";
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -97,9 +98,25 @@ describe("ext-band-over-http scenarios", () => {
     });
   }
 
+  /**
+   * The frame the shell supplies around an assistant turn (#928 A3): the
+   * assistant reaches the vault on the acting owner's behalf and nothing else.
+   */
+  function asOwner<T>(run: () => T): T {
+    const plane = handle.vaults.current();
+    return runWithVaultContext(
+      {
+        vaultId: plane.boot.vaultId,
+        ownerId: plane.boot.ownerPartyId,
+        ownsVault: true,
+      },
+      run
+    );
+  }
+
   /** Owner-side vault SQL — the assertion window into the band. */
   function ownerSql(sql: string): Record<string, unknown>[] {
-    return handle.vaults.current().sqlAsOwner(sql).rows;
+    return asOwner(() => handle.vaults.current().sqlAsAssistant(sql).rows);
   }
 
   test("publish applies the declared ext band to the vault; re-publish diffs", async () => {
@@ -157,11 +174,13 @@ describe("ext-band-over-http scenarios", () => {
     expect((await publish("s1", "v1")).status).toBe(201);
     // A live row the draft copy must carry.
     const plane = handle.vaults.current();
-    const live = await plane.invokeAsAssistant({
-      command: "ext.gym.insert",
-      input: { table: "workout", values: { notes: "live row" } },
-      purpose: "dpv:ServiceProvision",
-    });
+    const live = await asOwner(() =>
+      plane.invokeAsAssistant({
+        command: "ext.gym.insert",
+        input: { table: "workout", values: { notes: "live row" } },
+        purpose: "dpv:ServiceProvision",
+      })
+    );
     expect(live.status).toBe("executed");
 
     // First draft access (the draft code-dir resolver) seeds the band.
@@ -179,15 +198,17 @@ describe("ext-band-over-http scenarios", () => {
     ).toStrictEqual([{ notes: "live row" }]);
 
     // Draft writes stay scratch.
-    const draftWrite = await plane.invokeAsAssistant({
-      command: "ext.gym.insert",
-      input: {
-        table: "workout",
-        values: { notes: "draft only" },
-        band: "draft",
-      },
-      purpose: "dpv:ServiceProvision",
-    });
+    const draftWrite = await asOwner(() =>
+      plane.invokeAsAssistant({
+        command: "ext.gym.insert",
+        input: {
+          table: "workout",
+          values: { notes: "draft only" },
+          band: "draft",
+        },
+        purpose: "dpv:ServiceProvision",
+      })
+    );
     expect(draftWrite.status).toBe("executed");
     expect(
       ownerSql("SELECT count(*) AS n FROM extdraft_gym_workout")[0]?.n
@@ -257,11 +278,13 @@ describe("ext-band-over-http scenarios", () => {
     const plane = handle.vaults.current();
     expect(
       (
-        await plane.invokeAsAssistant({
-          command: "ext.gym.insert",
-          input: { table: "workout", values: { notes: "reclaim me" } },
-          purpose: "dpv:ServiceProvision",
-        })
+        await asOwner(() =>
+          plane.invokeAsAssistant({
+            command: "ext.gym.insert",
+            input: { table: "workout", values: { notes: "reclaim me" } },
+            purpose: "dpv:ServiceProvision",
+          })
+        )
       ).status
     ).toBe("executed");
     expect(ownerSql("SELECT count(*) AS n FROM ext_gym_workout")[0]?.n).toBe(1);

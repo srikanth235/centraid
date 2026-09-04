@@ -28,6 +28,7 @@ import { daemonKeyStore } from "../cli/key-store.js";
 import { daemonLayoutFor } from "../cli/paths.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { HealthRegistry } from "../serve/health-registry.js";
+import { runWithVaultContext } from "../serve/vault-context.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
@@ -502,11 +503,16 @@ describe("backup", () => {
       expect(outboxRow.status).toBe("pending");
       expect(outboxRow.grant_id).toBeNull();
 
-      const rows = plane.sqlAsOwner(
-        "SELECT title FROM schedule_task ORDER BY title"
-      ).rows as Array<{
-        title: string;
-      }>;
+      const rows = runWithVaultContext(
+        {
+          vaultId: plane.boot.vaultId,
+          ownerId: plane.boot.ownerPartyId,
+          ownsVault: true,
+        },
+        () =>
+          plane.sqlAsAssistant("SELECT title FROM schedule_task ORDER BY title")
+            .rows
+      ) as Array<{ title: string }>;
       const titles = rows.map((r) => r.title);
       for (const t of h.seeded.taskTitles) expect(titles).toContain(t);
 

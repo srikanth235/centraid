@@ -62,7 +62,7 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
 } {
   return {
     vaultSql: () => (sql: string) => {
-      const result = vaults.current().sqlAsOwner(sql);
+      const result = vaults.current().sqlAsAssistant(sql);
       // Receipt id stays gateway-side; the model gets rows + caps only.
       const { receiptId: _receiptId, ...rows } = result;
       return rows;

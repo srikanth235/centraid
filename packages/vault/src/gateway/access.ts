@@ -263,6 +263,18 @@ export function evaluateAccess(
       grantId: null,
     };
   }
+  // THE ASSISTANT HOLDS NO STANDING ANSWER (#928 A3). It reaches what the
+  // acting owner reaches and nothing more: the clamp above still applies, and
+  // with no acting owner who owns this vault there is nothing to ride, so a
+  // scheduler-fired run falls through to the grant path like any automation.
+  if (identity.assistant && identity.onBehalfOfOwner?.mayAct === true) {
+    return {
+      decision: "allow",
+      grantId: null,
+      rowFilter: clamp.rowFilter,
+      fieldMask: clamp.fieldMask,
+    };
+  }
   const grants = activeGrants(vault, identity, purpose, evaluatedAt);
   if (grants.length === 0) {
     return {

@@ -202,8 +202,9 @@ function scopesByPrincipal(
  * so an owner's prior refusal survives the plane it was recorded in. Lossless
  * and idempotent: it reads the legacy rows and never deletes them (wave 4
  * does), and a vault that already carries automation answers is left alone.
- * Open scope requests are deliberately untouched — a parked ask is not an
- * answer, and it must still be answerable after the backfill.
+ * Open scope requests are untouched, because the owner's pending decision is
+ * what depends on them: a parked ask is not an answer, and answering it here
+ * would settle a question the owner has not been shown.
  *
  * `_assistant` is excluded by name: the assistant holds no standing answer at
  * all (#928 A3), so minting one here would recreate the grant #928 deletes.

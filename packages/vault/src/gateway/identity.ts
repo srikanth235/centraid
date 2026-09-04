@@ -18,7 +18,11 @@ interface AgentRow {
   agent_id: string;
   party_id: string;
   status: string;
+  enrollment_key: string;
 }
+
+/** The assistant's enrolment key; the one agent with no standing answer (#928 A3). */
+const ASSISTANT_ENROLLMENT_KEY = "_assistant";
 interface DeviceIdentityRow {
   device_id: string;
   owner_party_id: string;
@@ -81,7 +85,7 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
     const device = deviceRow(vault, cred.deviceId, cred.deviceKey);
     const row = vault
       .prepare(
-        "SELECT agent_id, party_id, status FROM access_agent WHERE agent_id = ?"
+        "SELECT agent_id, party_id, status, enrollment_key FROM access_agent WHERE agent_id = ?"
       )
       .get(cred.agentId) as AgentRow | undefined;
     if (!row || row.status !== "active")
@@ -95,6 +99,9 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
       ...(cred.scopeClamp ? { scopeClamp: cred.scopeClamp } : {}),
       ...(cred.onBehalfOfOwner
         ? { onBehalfOfOwner: cred.onBehalfOfOwner }
+        : {}),
+      ...(row.enrollment_key === ASSISTANT_ENROLLMENT_KEY
+        ? { assistant: true as const }
         : {}),
     };
   }
