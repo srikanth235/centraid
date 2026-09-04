@@ -165,7 +165,7 @@ Falsification attempts:
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-05 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 | 2026-09-03 | codex | 01a06827-b506-78d1-b396-f4b14307e138 |
 
 ## w1 Metro-loader spike — ADOPT
@@ -2373,3 +2373,33 @@ find packages/blueprints/apps -name '*.js' ! -name 'seed.js' -delete && bun run 
 | The speedup is the cache, so the first read after every write is as slow as before | measured the after-a-write column separately, which is the cache-cold one: 21.6 ms → 8.3 ms with the cache doing nothing, and `EXPLAIN QUERY PLAN` shows the temp b-tree gone | held — the statement itself is 3.4x cheaper; the cache is what makes the warm read free |
 | Exempting the overlay detail drops a re-read some screen needed | asserted a canonical doorbell arriving mid-window still fires on the trailing edge and is not carried out early by the echo, then ran the whole `@centraid/design` suite and the `@centraid/blueprints` suite (212 files, 7024 tests) whose seven app roots are the real consumers | held — one exemption, one key, and the buffered detail is untouched |
 
+## Mega-lane E3 — the trees the gates ran against
+
+| What | Head | Tree |
+| --- | --- | --- |
+| Slice 1 — the web bootstrap loop | `2e1648218` | `fc8952f8f85b1bb7d744cf2ab012f3c52e8ba2e6` |
+| Slice 2 — the tie census and the owner's echo | `d3c91a83d` | `84592cada200edc7768f1e6e020b285953268e14` |
+
+```
+bash $S/self-audit.sh 922            # SELF-AUDIT PASS on both trees
+bash .governance/run.sh              # 22/22 on both
+bun run --cwd packages/client test   # 274 files, 2477 tests
+bun run --cwd packages/design test   # 32 files, 384 tests
+bun run --cwd apps/mobile test src/lib/replica   # 33 files, 223 tests
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- perf-waterfall.spec.ts tasks.spec.ts   # 7 of 8
+```
+
+The one red is `tasks.spec.ts` "hides a queued delete and shows a minted pending add", filed in slice 1's findings: its writes carry no `due_at`, so the rows land under Anytime while the board opens on Today, and the read through the app's own door returns them.
+
+
+| Closing evidence commit — receipt text only, code trees unchanged | `HEAD` | `0b7fb815e…` before this block was appended |
+
+```
+bash .governance/run.sh              # 22/22 on the final tree
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- tasks.spec.ts perf-waterfall.spec.ts   # 6 of 8, see below
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- perf-waterfall.spec.ts -g "app-open waterfall"   # 1/1
+```
+
+`self-audit.sh` reports `FAIL receipt edits text above the appended section` on the final tree: `origin/main` moved to `0bf7cbee2` after this branch's merge-base `541f0720c`, so the trunk's copy of this receipt now carries a section (`## H1 — E6 …`) that the integration branch does not. Base lag, reproduced on `origin/claude/922-reads` itself with nothing of this lane applied; every other self-audit rung is `ok` on the same run (format:check, lint, file coverage, NUL, commit hygiene). `.governance/run.sh`, whose `doc-integrity` compares against the merge-base, is 22/22.
+
+Second red of the paired e2e run: `perf-waterfall.spec.ts` "app-open waterfall" — `cold app request count` 11 against `perfBudgets.appOpen.cold.maxRequests` 10. Green on the same tree in isolation (1/1) and in the earlier paired run; the budget has zero headroom and tips over under the load of a second spec in the same worker. Not widened — filed as a finding.
