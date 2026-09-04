@@ -48,22 +48,24 @@ describe("grant/subject-registry", () => {
     expect(fulfillmentAnswerFor(locker, "edit")).toBeUndefined();
   });
 
-  test("edit is offered for the one v1 co-contribution type, and no other", () => {
-    // v1 ships edit co-contribution for `tally.group` only (#825). The
-    // registry is what the route publishes and what the share sheets draw
+  test("edit is offered for the three containers the intent route executes", () => {
+    // The registry is what the route publishes and what the share sheets draw
     // pills from, so a wider answer offers a verb the write door refuses. The
     // co-contribution list derives from it (#883), so the value is what is
-    // worth asserting.
+    // worth asserting. ALBUMS ARE STILL ABSENT (#929): a co-contributed
+    // photograph is bytes, and that blob path is unmeasured.
     expect(
       SHARE_SUBJECT_REGISTRY.filter(
         (entry) => entry.fulfillment.edit !== undefined
       ).map((entry) => entry.subjectType)
     ).toStrictEqual([...SHARE_GRANT_CO_CONTRIBUTION_TYPES]);
     expect([...SHARE_GRANT_CO_CONTRIBUTION_TYPES]).toStrictEqual([
+      "core.document",
+      "docs.folder",
       "tally.group",
     ]);
-    expect(fulfillmentAnswerFor("core.document", "edit")).toBeUndefined();
-    expect(fulfillmentAnswerFor("docs.folder", "edit")).toBeUndefined();
+    expect(fulfillmentAnswerFor("core.collection", "edit")).toBeUndefined();
+    expect(fulfillmentAnswerFor("media.asset", "edit")).toBeUndefined();
     expect(fulfillmentAnswerFor("core.document", "view")).toBe(
       "closure-reprojection"
     );
@@ -74,7 +76,8 @@ describe("grant/subject-registry", () => {
 
   test("every edit answer names a container the routing table can act on", () => {
     // Narrower than actable is the ruling; WIDER than actable would be a
-    // write with no commons rail — a local mutation the next compile reverts.
+    // write the declared table cannot apply — a local mutation the origin's
+    // next pass reverts.
     for (const entry of SHARE_SUBJECT_REGISTRY) {
       if (entry.fulfillment.edit === undefined) continue;
       expect(
@@ -82,7 +85,7 @@ describe("grant/subject-registry", () => {
         `${entry.subjectType} offers edit without an actable route`
       ).toBe(true);
       expect(fulfillmentAnswerFor(entry.subjectType, "edit")).toBe(
-        "commons-routing"
+        "replica-intent"
       );
     }
   });

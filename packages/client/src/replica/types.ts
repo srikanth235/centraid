@@ -106,9 +106,26 @@ export function conflictBaseIsMissing(conflict: ReplicaConflict): boolean {
   return conflict.actualVersion === 0;
 }
 
+/**
+ * Who a parked write waits on, and what to call them (#929). A member reads a
+ * person: `label` comes off the LINK, never a vault id nobody has a name for.
+ */
+export interface ReplicaWaitingOn {
+  seat: "owner" | "origin" | "gateway";
+  label?: string;
+}
+
 export interface IntentOutcome {
   intentId: string;
   status: IntentOutcomeStatus;
+  /** Set on a `parked` outcome; the seat renders the seat and the label. */
+  waitingOn?: ReplicaWaitingOn;
+  /**
+   * The ORIGIN row versions an `executed` answer stands for (#929, G1). The
+   * pending row drops only once the replica HOLDS them — otherwise the badge
+   * clears before the row it wrote arrives, which is the defect this closes.
+   */
+  answeredVersions?: ReplicaBaseVersion[];
   /** Structured refusal detail; #928 fills it, the shape is fixed now. */
   denial?: ReplicaDenial;
   reason?: string;
@@ -326,6 +343,10 @@ export interface ReplicaDenial {
 
 export interface ReplicaIntent {
   intentId: string;
+  /** Carried from a `parked` outcome so the seat can name who is deciding. */
+  waitingOn?: ReplicaWaitingOn;
+  /** Carried from an `executed` answer until the replica holds them (G1). */
+  answeredVersions?: ReplicaBaseVersion[];
   /** SHA-256 of canonical {appId, action, input, baseVersions}; daemon verifies id reuse. */
   payloadHash: string;
   appId: string;

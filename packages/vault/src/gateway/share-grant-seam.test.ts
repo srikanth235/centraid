@@ -311,21 +311,36 @@ describe("where an audience's edit is actually enforced", () => {
     ).toMatchObject({ n: 1 });
   });
 
-  test("an origin-side audience with an edit grant but no rail is refused", () => {
+  /**
+   * THE GRANT IS THE RAIL (#929). A member's write is a signed replica intent
+   * the ORIGIN executes, so an audience with an `edit` answer over a container
+   * this vault owns needs no second rail row: the write lands here, which is
+   * the container's home. What still refuses is a `view` answer — and it
+   * refuses BY NAME, so nothing is applied privately.
+   */
+  test("an origin-side audience's edit lands, and a view answer refuses by name", () => {
     const seat = tallySeat();
     const audience = audienceAgent(seat, "ravi-seat", "tally");
     const groupId = seat.createGroup([audience.partyId]);
     grantTo(seat, audience, { type: "tally.group", id: groupId }, "edit");
-
-    // Nowhere to land is refused, not applied privately (#750).
     expect(
       seat.gateway.invoke(audience.credential, {
         command: "tally.rename_group",
         input: { group_id: groupId, name: "Museum trip" },
       })
+    ).toMatchObject({ status: "executed" });
+
+    const viewer = audienceAgent(seat, "asha-seat", "tally");
+    const viewedGroup = seat.createGroup([viewer.partyId]);
+    grantTo(seat, viewer, { type: "tally.group", id: viewedGroup }, "view");
+    expect(
+      seat.gateway.invoke(viewer.credential, {
+        command: "tally.rename_group",
+        input: { group_id: viewedGroup, name: "Museum trip" },
+      })
     ).toMatchObject({
       status: "denied",
-      reason: `tally.group ${groupId} has no commons rail to route tally.rename_group to`,
+      reason: `tally.rename_group writes into tally.group ${viewedGroup}, which is shared for view only`,
     });
   });
 });

@@ -382,6 +382,14 @@ function ensureReplicaCommitColumns(vault: DatabaseSync): void {
     vault.exec(
       "ALTER TABLE replica_intent_outcome ADD COLUMN conflict_json TEXT"
     );
+  // #929: who a parked write waits on, and the origin row versions its answer
+  // stands for. Additive on a file the base DDL already created.
+  if (!intentColumns.has("waiting_on"))
+    vault.exec("ALTER TABLE replica_intent_outcome ADD COLUMN waiting_on TEXT");
+  if (!intentColumns.has("answered_versions"))
+    vault.exec(
+      "ALTER TABLE replica_intent_outcome ADD COLUMN answered_versions TEXT"
+    );
 }
 
 export interface ReplicaCommitHandle {

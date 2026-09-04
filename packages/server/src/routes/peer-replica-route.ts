@@ -31,7 +31,12 @@ import {
   readShareGrant,
   resolveGrantAudienceParties,
 } from "@centraid/vault";
-import type { ShareShapeFrame, VaultDb } from "@centraid/vault";
+import type {
+  Credential,
+  Gateway as VaultGateway,
+  ShareShapeFrame,
+  VaultDb,
+} from "@centraid/vault";
 
 import type { PeerIdentity } from "./peer-plane.js";
 import { readJson, sendJson } from "./route-helpers.js";
@@ -54,6 +59,9 @@ export interface PeerReplicaDeps {
     shapeId: string;
     seat: VaultDb;
   }) => Promise<PeerReplicaPullOutcome>;
+  /** The origin executes a member's write as the single writer (#929 wave 3). */
+  gatewayFor?: (vaultId: string) => VaultGateway | undefined;
+  credentialFor?: (vaultId: string) => Credential | undefined;
   now?: () => string;
 }
 
@@ -74,7 +82,7 @@ function nowOf(deps: PeerReplicaDeps): string {
   return (deps.now ?? ((): string => new Date().toISOString()))();
 }
 
-interface Admission {
+export interface Admission {
   origin: VaultDb;
   originVaultId: string;
   audienceVaultId: string;
@@ -87,7 +95,7 @@ interface Admission {
  * vault, the shape names a LIVE grant, and the audience vault is one this grant
  * actually reaches. Every failure is `not_found`.
  */
-function admitAtOrigin(
+export function admitAtOrigin(
   peer: PeerIdentity,
   params: URLSearchParams,
   deps: PeerReplicaDeps

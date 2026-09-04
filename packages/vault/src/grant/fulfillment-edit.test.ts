@@ -54,9 +54,9 @@ describe("grant/fulfillment-edit", () => {
     expect(route).toMatchObject({
       containerType: "tally.group",
       containerId: groupId,
-      commonsGrantId: commons.grantId,
       actable: true,
     });
+    expect(commons.grantId).toBeTruthy();
     expect(route?.refusal).toBeUndefined();
     expect(route?.grants).toHaveLength(1);
   });
@@ -159,7 +159,7 @@ describe("grant/fulfillment-edit", () => {
     );
   });
 
-  test("a folder is shareable for view only, so every write into it refuses", () => {
+  test("a folder shared for view refuses every write into it", () => {
     const { origin, originBoot } = household();
     const now = nowIso();
     const ravi = addParty(origin.vault, "Ravi", now);
@@ -184,12 +184,12 @@ describe("grant/fulfillment-edit", () => {
       ownerPartyId: originBoot.ownerPartyId,
       containerType: "docs.folder",
       containerId: folderId,
-      members: [{ partyId: ravi, capability: "read+write" }],
+      // `read`, so the roster mints a `view` answer and this case stays about
+      // the audience whose answer stops short. Folders became edit-capable in
+      // #929, so a `read+write` member here would (rightly) be routed.
+      members: [{ partyId: ravi, capability: "read" }],
       now,
     });
-    // `view`, because the registry offers a folder nothing else (#825, ruling
-    // G-edit): albums and folders are view-capable and their edit strategy is
-    // deferred, so an `edit` grant over one cannot be minted at all.
     createShareGrant(origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "docs.folder",
@@ -264,10 +264,33 @@ describe("grant/fulfillment-edit", () => {
           capability: "edit" as ShareGrantCapability,
         }))
       )
-    ).toBe("co-contribution to docs.folder is not offered in v1");
+      // Folders are offered for edit since #929, so the co-contribution
+      // refusal moved to the container that is still not: an album.
+    ).toBeUndefined();
+    expect(
+      shareGrantEditRefusal(
+        routeShareGrantEdit(origin.vault, {
+          command: "core.add_document",
+          commandInput: { folder_id: folderId },
+        })!,
+        (edit?.grants ?? []).map((grant) => ({
+          ...grant,
+          capability: "view" as ShareGrantCapability,
+        }))
+      )
+    ).toBe(
+      `core.add_document writes into docs.folder ${folderId}, which is shared for view only`
+    );
   });
 
-  test("an edit grant with no commons rail is refused, never applied privately", () => {
+  /**
+   * THE GRANT IS THE RAIL NOW (#929). A member's write is a signed replica
+   * intent the ORIGIN executes, so a container needs no second grant row to be
+   * writable: the `edit` answer in `share_authority` is the whole of the
+   * authorization, and the refusal that used to name a missing commons rail
+   * would refuse a write the origin can and should execute.
+   */
+  test("an edit grant needs no second rail row to be routable", () => {
     const { origin, originBoot } = household();
     const now = nowIso();
     const ravi = addParty(origin.vault, "Ravi", now);
@@ -286,9 +309,11 @@ describe("grant/fulfillment-edit", () => {
       command: "tally.add_expense",
       commandInput: { group_id: groupId },
     });
-    expect(route?.commonsGrantId).toBeUndefined();
-    expect(route?.refusal).toBe(
-      `tally.group ${groupId} has no commons rail to route tally.add_expense to`
-    );
+    expect(route).toMatchObject({
+      containerType: "tally.group",
+      containerId: groupId,
+      actable: true,
+    });
+    expect(route?.refusal).toBeUndefined();
   });
 });

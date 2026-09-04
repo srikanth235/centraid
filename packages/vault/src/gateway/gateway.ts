@@ -1472,7 +1472,9 @@ export class Gateway {
     if (replayed) return this.trackBatchInvocation(replayed);
 
     // Confirmation routing (#306 decision 2, amending #294 decision 4): risk
-    // never parks; only `confirm: true` does, for EVERY non-owner caller.
+    // never parks; only `confirm: true` does, for EVERY non-owner caller — and
+    // for a member's write the origin is carrying (#929), which is not the
+    // owner's own act however owner-shaped the credential carrying it is.
     const sealedInput = this.commands.get(request.command)?.sealedInput ?? [];
     const capability = this.db.vault
       .prepare(
@@ -1480,7 +1482,8 @@ export class Gateway {
       )
       .get(command.command_id) as { requires_confirmation: number } | undefined;
     if (
-      identity.kind !== "owner-device" &&
+      (identity.kind !== "owner-device" ||
+        request.onBehalfOfMember !== undefined) &&
       capability?.requires_confirmation === 1
     ) {
       const invocationId = request.invocationId ?? uuidv7();

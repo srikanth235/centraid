@@ -189,3 +189,30 @@ export function readSubscriptionLineage(
     originRowVersion: row.origin_row_version,
   }));
 }
+
+/**
+ * G1 (#929): does this seat already hold the ORIGIN version an answer stands
+ * for? The lineage is the only place that fact lives — the audience's own
+ * replica sequence is a different clock — so a member's pending row asks here
+ * rather than guessing from its own log.
+ */
+export function subscriptionHoldsOriginVersion(
+  db: DatabaseSync,
+  input: {
+    shapeId: string;
+    entity: string;
+    /** The ORIGIN row id the answer named. */
+    rowId: string;
+    version: number;
+  }
+): boolean {
+  const row = db
+    .prepare(
+      `SELECT origin_row_version FROM share_subscription_lineage
+        WHERE shape_id = ? AND target_type = ? AND origin_item_id = ?`
+    )
+    .get(input.shapeId, input.entity, input.rowId) as
+    | { origin_row_version: number }
+    | undefined;
+  return row !== undefined && row.origin_row_version >= input.version;
+}

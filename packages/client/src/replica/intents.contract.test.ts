@@ -1097,4 +1097,80 @@ describe(IntentQueue, () => {
       []
     );
   });
+
+  /**
+   * G1 (#929): a member's pending row drops only when their replica HOLDS the
+   * origin's answered row versions. Clearing on the answer alone makes the
+   * badge go quiet one round trip before the row the member wrote arrives.
+   */
+  test("holds an executed answer until the replica carries its origin versions", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-g1",
+    });
+    await queue.enqueue({
+      appId: "tally",
+      action: "add-expense",
+      input: { amount: 1 },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "@share:grant-1",
+          entity: "tally.expense",
+          rowId: "pending:intent-g1:1",
+          values: { amount: 1 },
+        },
+      ],
+    });
+    await queue.claimNext();
+    const answered = {
+      intentId: "intent-g1",
+      status: "executed" as const,
+      answeredVersions: [
+        {
+          shapeId: "@share:grant-1",
+          entity: "tally.group",
+          rowId: "group-1",
+          version: 42,
+        },
+      ],
+    };
+
+    // The replica holds nothing yet: the answer is real, the row is not here.
+    const [waiting] = await queue.applyOutcomes([answered], () => false);
+    expect(waiting).toMatchObject({ state: "awaiting-change" });
+    expect(waiting?.answeredVersions).toStrictEqual(answered.answeredVersions);
+    await expect(queue.settleAnswered(() => false)).resolves.toStrictEqual([]);
+
+    // The shape's lineage now carries origin version 42, so it settles.
+    const settled = await queue.settleAnswered(
+      (version) => version.rowId === "group-1" && version.version >= 42
+    );
+    expect(settled.map((intent) => intent.state)).toStrictEqual(["executed"]);
+    const remaining = await queue.pending();
+    expect(remaining.some((intent) => intent.intentId === "intent-g1")).toBe(
+      false
+    );
+  });
+
+  test("a seat that cannot answer holds rather than clearing early", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-g1-noprobe",
+    });
+    await queue.enqueue({
+      appId: "tally",
+      action: "add-expense",
+      input: { amount: 2 },
+    });
+    await queue.claimNext();
+    const [held] = await queue.applyOutcomes([
+      {
+        intentId: "intent-g1-noprobe",
+        status: "executed",
+        answeredVersions: [
+          { entity: "tally.group", rowId: "group-2", version: 7 },
+        ],
+      },
+    ]);
+    expect(held).toMatchObject({ state: "awaiting-change" });
+  });
 });

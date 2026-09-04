@@ -60,6 +60,16 @@ export interface ReplicaIntentOutcomeWire {
     expectedVersion: number;
     actualVersion: number;
   };
+  /** Who a parked write waits on, with the label from the link (#929). */
+  waitingOn?: { seat: "owner" | "origin" | "gateway"; label?: string };
+  /** ORIGIN versions an executed answer stands for (#929, G1). Additive: an
+   *  older reader ignores it and settles as it did. */
+  answeredVersions?: {
+    shapeId?: string;
+    entity: string;
+    rowId: string;
+    version: number;
+  }[];
 }
 
 export interface ReplicaChangeBatchWire {
@@ -140,6 +150,12 @@ function outcomeWire(
     status: outcome.status as ReplicaIntentOutcomeWire["status"],
     ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
     ...(outcome.conflict === undefined ? {} : { conflict: outcome.conflict }),
+    ...(outcome.waitingOn === undefined
+      ? {}
+      : { waitingOn: outcome.waitingOn }),
+    ...(outcome.answeredVersions === undefined
+      ? {}
+      : { answeredVersions: [...outcome.answeredVersions] }),
   };
 }
 

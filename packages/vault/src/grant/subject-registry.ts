@@ -1,28 +1,29 @@
-/* What the vault can HONOUR (#750): view = closure reprojection; edit =
- * commons routing where actable. `locker.item` absent — secrets are never
- * offered as a standing grant.
+/* What the vault can HONOUR: view = closure reprojection; edit = a SIGNED
+ * REPLICA INTENT the origin executes (#929). `locker.item` absent — secrets are
+ * never offered as a standing grant, and its sealed columns cannot be re-sealed
+ * across a gateway boundary anyway.
  *
- * EDIT IS NARROWER THAN ACTABLE (#825, ruling G-edit): v1 ships edit
- * co-contribution for `tally.group` alone, and albums and folders are
- * view-capable with their edit strategy deferred. `core.document` and
- * `docs.folder` DO carry actable commons routes, but declaring `edit` here
- * would publish a capability the write door refuses
- * (`SHARE_GRANT_CO_CONTRIBUTION_TYPES` in `fulfillment-edit.ts`) — and both
- * share sheets draw their capability pills straight off this registry, so a
- * wider answer here is a control that cannot fire. */
+ * EDIT IS STILL NARROWER THAN ACTABLE. `tally.group`, `core.document` and
+ * `docs.folder` are offered because the intent route executes their declared
+ * commands at the origin and the receipt names the member. ALBUMS ARE NOT: a
+ * co-contributed photograph is bytes, and the blob path a member's upload would
+ * take across the peer plane has not been measured, so offering `edit` here
+ * would publish a capability whose cost nobody has read. Both share sheets draw
+ * their capability pills straight off this registry, so a wider answer here is
+ * a control that cannot fire. */
 
 import type { ShareableItemType } from "../share/closure.js";
 import type { ShareGrantCapability } from "./grant-store.js";
 
 export type ShareFulfillmentStrategy =
   | "closure-reprojection"
-  | "commons-routing";
+  | "replica-intent";
 
 export interface ShareSubjectDeclaration {
   subjectType: ShareableItemType;
   fulfillment: {
     view: "closure-reprojection";
-    edit?: "commons-routing";
+    edit?: "replica-intent";
   };
 }
 
@@ -37,11 +38,11 @@ export const SHARE_SUBJECT_REGISTRY: readonly ShareSubjectDeclaration[] = [
   },
   {
     subjectType: "core.document",
-    fulfillment: { view: "closure-reprojection" },
+    fulfillment: { view: "closure-reprojection", edit: "replica-intent" },
   },
   {
     subjectType: "docs.folder",
-    fulfillment: { view: "closure-reprojection" },
+    fulfillment: { view: "closure-reprojection", edit: "replica-intent" },
   },
   {
     subjectType: "media.asset",
@@ -49,7 +50,7 @@ export const SHARE_SUBJECT_REGISTRY: readonly ShareSubjectDeclaration[] = [
   },
   {
     subjectType: "tally.group",
-    fulfillment: { view: "closure-reprojection", edit: "commons-routing" },
+    fulfillment: { view: "closure-reprojection", edit: "replica-intent" },
   },
 ];
 

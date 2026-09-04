@@ -10,6 +10,7 @@ import {
   createGateway,
   createShareGrant,
   nowIso,
+  registerDocumentCommands,
   registerTallyCommands,
   uuidv7,
 } from "@centraid/vault";
@@ -238,8 +239,21 @@ export function wireGoldenPair(
   origin: Side,
   audience: Side
 ): { toOrigin: PeerDial; toAudience: PeerDial } {
+  const originGateway = createGateway(origin.vault);
+  registerTallyCommands(originGateway);
+  registerDocumentCommands(originGateway);
+  const originCredential: Credential = {
+    kind: "device",
+    deviceId: origin.ownerCredential.deviceId,
+    deviceKey: origin.ownerCredential.deviceKey,
+  };
   const toOrigin: PeerDial = {
-    request: transportTo(origin, audience.endpointId, {}),
+    request: transportTo(origin, audience.endpointId, {
+      gatewayFor: (vaultId) =>
+        vaultId === origin.vaultId ? originGateway : undefined,
+      credentialFor: (vaultId) =>
+        vaultId === origin.vaultId ? originCredential : undefined,
+    }),
     endpointTicketFor: (endpointId) => `ticket-for-${endpointId}`,
   };
   const pullShape = async (input: {

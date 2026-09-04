@@ -42,6 +42,7 @@ import {
   PEER_COMMONS_INVITE_PATH,
   PEER_COMMONS_REFUSE_PATH,
 } from "./peer-commons-route.js";
+import { handlePeerReplicaIntent } from "./peer-replica-intent-route.js";
 import {
   handlePeerReplicaBlob,
   handlePeerReplicaBootstrap,
@@ -49,6 +50,7 @@ import {
   PEER_REPLICA_BLOB_PATH,
   PEER_REPLICA_BOOTSTRAP_PATH,
   PEER_REPLICA_CHANGES_PATH,
+  PEER_REPLICA_INTENTS_PATH,
 } from "./peer-replica-route.js";
 import type { PeerReplicaDeps } from "./peer-replica-route.js";
 import { readJson, sendJson } from "./route-helpers.js";
@@ -294,6 +296,8 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
         return handlePeerReplicaBlob(res, peer, search(), deps.replica);
       if (pathname === PEER_REPLICA_CHANGES_PATH && method === "POST")
         return handlePeerReplicaChanges(req, res, peer, deps.replica);
+      if (pathname === PEER_REPLICA_INTENTS_PATH && method === "POST")
+        return handlePeerReplicaIntent(req, res, peer, deps.replica);
     }
     // COPY-AS-SHARE IS OFF THIS WIRE (#825, ruling G-copy): remote-give frames
     // and the ranged byte pull answer `not_found` like any unknown path.

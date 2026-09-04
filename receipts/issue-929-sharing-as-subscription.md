@@ -121,3 +121,52 @@ Findings: none new. Doc debt: `docs/protocol.md` § "Commons stream and cursor
 contract" still describes the commons rail as the cross-gateway path; the peer
 protocol is now 2 and the subscription doors are the path (wave 4 retires the
 commons vocabulary).
+
+## Wave 3 — edit as signed intents
+
+A member's write is no longer a local mutation hoping to converge: it is a
+SIGNED replica intent the origin executes as the single writer of the
+container. Routing is `commons-routing.ts`'s declared table, unchanged;
+authorization is the `edit` answer in `share_authority` and nothing else.
+
+| file | what changed |
+| --- | --- |
+| `packages/vault/src/share/subscription-intent.ts` | canonical signed bytes, sign/verify against the MEMBER vault's key, and `judgeMemberIntent` (declared route + roster-resolved grant + actability, each refusing by name) |
+| `packages/vault/src/grant/subject-registry.ts` | strategy renamed `replica-intent`; `edit` offered for `core.document` and `docs.folder` beside `tally.group`. Albums stay absent — a co-contributed photograph is bytes, and that blob path is unmeasured |
+| `packages/vault/src/grant/fulfillment-edit.ts` | the second rail row is gone: a container needs no commons grant to be writable |
+| `packages/vault/src/gateway/types.ts`, `gateway.ts` | `InvokeRequest.onBehalfOfMember`: the origin's credential carries the write, so the owner's confirmation EXEMPTION must not apply to it |
+| `packages/server/src/routes/peer-replica-intent-route.ts` | the origin's write door: verify, route, execute, receipt naming the member, park with `waitingOn` |
+| `packages/server/src/routes/peer-plane.ts`, `peer-replica-route.ts` | mounts it; `admitAtOrigin` shared |
+| `packages/vault/src/schema/replica.ts`, `replica/intents.ts`, `replica/change-log.ts` | `waiting_on` and `answered_versions` on `replica_intent_outcome` |
+| `packages/server/src/routes/replica-projection.ts` | both fields on the outcome wire, additive |
+| `packages/client/src/replica/types.ts`, `intents.ts` | `ReplicaWaitingOn`; G1 — an executed answer naming origin versions holds `awaiting-change` until `settleAnswered` sees the replica carry them |
+| `packages/vault/src/share/subscription-store.ts` | `subscriptionHoldsOriginVersion` — the lineage answers G1's probe |
+| `packages/vault/src/share/commons.ts` | the roster's `edit` mint follows the renamed strategy |
+
+| number | value | provenance |
+| --- | --- | --- |
+| member writes landing in the member's own vault | 0 | `packages/server/src/serve/share-member-intent.test.ts`, golden pair, host 4c/15GB |
+| edit-capable subject types | 3 (`core.document`, `docs.folder`, `tally.group`) | `SHARE_GRANT_CO_CONTRIBUTION_TYPES`, derived from the registry |
+
+Decisions. (1) `onBehalfOfMember` on `InvokeRequest` rather than a new
+credential kind: the credential IS the origin's, and what changes is whose act
+it is — a new principal kind is #928's plane, not this issue's. (2) The parked
+payload is the gateway's own durable one, so the owner decides a member's write
+through the Approvals surface that already exists. (3) `share-grant-seam.test.ts`
+and `fulfillment-edit.test.ts` each lost a case whose premise was "an edit grant
+with no commons rail is refused" — that refusal would now refuse a write the
+origin can and should execute, so both were rewritten to assert the `view`
+refusal, which still holds.
+
+```sh
+bun run --cwd packages/vault build && bun run --cwd packages/vault typecheck
+bunx vitest run src/share src/grant src/gateway src/replica --root packages/vault
+bun run --cwd packages/server test src/routes/replica-intent-route.test.ts src/routes/replica-projection.test.ts src/serve/share-member-intent.test.ts src/serve/share-subscription-peer.test.ts
+bun run --cwd packages/client test src/replica/intents.contract.test.ts
+```
+
+Findings: the `commons-tally-*.test.ts` B6 scenarios still exercise the commons
+rail; they move to the subscription sims in wave 4 with the rail's deletion, so
+this section does not claim them. Doc debt: `docs/protocol.md` § "One intent
+grammar" describes `share_commons_intent.status` as the member's overlay; the
+overlay is `replica_intent_outcome` now.

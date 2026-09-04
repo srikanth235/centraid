@@ -127,11 +127,21 @@ export {
   readSubscription,
   readSubscriptionLineage,
   recordSubscription,
+  subscriptionHoldsOriginVersion,
   type RecordSubscriptionInput,
   type SubscriptionCursor,
   type SubscriptionLineageRow,
   type SubscriptionRecord,
 } from "./share/subscription-store.js";
+export {
+  judgeMemberIntent,
+  memberIntentBytes,
+  memberIntentPayloadHash,
+  signMemberIntent,
+  verifyMemberIntent,
+  type MemberIntentEnvelope,
+  type MemberIntentVerdict,
+} from "./share/subscription-intent.js";
 export {
   planShareShapeIngest,
   shareShapeStructureDigest,

@@ -342,13 +342,12 @@ export function createCommonsGrant(
        VALUES (?, 'person', ?, ?, ?, ?, 'standing', NULL, 'granted', ?, ?)
        ON CONFLICT DO NOTHING`
     );
-    // `edit` ONLY where the subject registry declares an edit strategy (#825,
-    // ruling G-edit): a `read+write` member of a commons over `docs.folder`
-    // gets a `view` authority, because minting `edit` would publish a
-    // capability the write door refuses. The member's write capability still
-    // lives in `social_circle_member.capability` and travels the intent rail.
+    // `edit` ONLY where the subject registry declares an edit strategy: a
+    // member of a commons over a container with no edit strategy gets a `view`
+    // authority, because minting `edit` would publish a capability the write
+    // door refuses.
     const editable =
-      fulfillmentAnswerFor(input.containerType, "edit") === "commons-routing";
+      fulfillmentAnswerFor(input.containerType, "edit") === "replica-intent";
     for (const member of members.values()) {
       if (member.partyId === input.ownerPartyId) continue;
       authority.run(
