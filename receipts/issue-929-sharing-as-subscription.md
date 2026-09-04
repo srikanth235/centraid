@@ -170,3 +170,46 @@ rail; they move to the subscription sims in wave 4 with the rail's deletion, so
 this section does not claim them. Doc debt: `docs/protocol.md` § "One intent
 grammar" describes `share_commons_intent.status` as the member's overlay; the
 overlay is `replica_intent_outcome` now.
+
+## Wave 4a — the migration, red first
+
+Live commons grants become subscriptions in ONE pass. The steward vault becomes
+the origin — it already held the container and serialized every write — and the
+roster stops being a second membership plane: one standing answer per current
+member, one delivery row per audience vault.
+
+| file | what it is |
+| --- | --- |
+| `packages/vault/src/share/subscription-migration.ts` | the one-shot: roster → answers + delivery rows, revoking answers whose roster row is gone, idempotent on a second pass |
+| `packages/vault/src/share/subscription-migration.test.ts` | the red-first case: a live three-member Tally commons across two gateways |
+
+RED, against a stub that returned zeros (`grantsMigrated: 0, audiences: 0`):
+
+```
+× a three-member Tally commons across two gateways keeps every member and every ledger row
+× a departed member's answer is revoked, and the ledger keeps their rows
+AssertionError: expected +0 to be 1
+Test Files  1 failed (1)   Tests  2 failed (2)
+```
+
+GREEN, same command, after the implementation:
+
+```
+Test Files  1 passed (1)   Tests  2 passed (2)
+```
+
+```sh
+bunx vitest run src/share/subscription-migration.test.ts --root packages/vault
+```
+
+| number | value | provenance |
+| --- | --- | --- |
+| members kept across two gateways | 3 of 3 (`edit`, `edit`, `view`) | the red-first test, host 4c/15GB |
+| ledger rows lost | 0 (`tally_expense_split` count identical before and after) | same |
+| answers created on a second pass | 0 | same |
+
+Decisions. A refused or invited roster row is NOT an audience, and an answer
+standing for one is revoked by the migration rather than left to drift — a live
+answer whose roster row is gone is the exact state the authority plane exists to
+prevent. Their ledger rows stay: the origin owns them, and a departure has never
+been a reason to rewrite history.
