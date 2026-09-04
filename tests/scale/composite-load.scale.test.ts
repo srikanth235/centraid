@@ -163,7 +163,7 @@ describe("composite-load.scale", () => {
     // happens to be slowest, so the READ lane the blob-reference CTE work
     // touches gets its own number rather than hiding behind the write lane's.
     const ceilingRefSearchP95Ms = journeyCeiling(
-      "gateway/search/empty/ci-linux-x64-4c",
+      "gateway/composite-load/empty/ci-linux-x64-4c",
       "refSearchUnderComposition",
       "ceilingP95Ms"
     );

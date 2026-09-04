@@ -41,8 +41,8 @@ const input = "artifacts/perf-input/desktop-launch-report.json";
  * to close, so this rig consumes both gates: the absolute ceiling (measured
  * 2026-07-31 + headroom).
  */
-const COLD_KEY = "desktop/cold-open/empty/dev-darwin-arm64";
-const TAP_KEY = "desktop/warm-switch/empty/dev-darwin-arm64";
+const COLD_KEY = "desktop/cold-open/mock-gateway/dev-darwin-arm64";
+const TAP_KEY = "desktop/warm-switch/mock-gateway/dev-darwin-arm64";
 
 interface LaunchReport {
   volume: string;

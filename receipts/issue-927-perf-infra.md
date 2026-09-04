@@ -1298,3 +1298,42 @@ Every path this lane's two commits touch that the tables above name only by grou
 
 1. *Claim: the paired verdict is a property of the DIFFERENCE, not of the runner.* Fed it a series where every round is 40% slower than the last on **both** sides: verdict `held`. Fed it the same drift with a real 30% slow-down on one side: `regressed`. Both in `scripts/ci/paired-journeys.test.mjs`.
 2. *Claim: deleting the drift rule left no rig asserting against a budget that no longer exists.* `git grep` for `rigDriftBudgetMs|qualityRegressionBudget|regressionBudget|withinDrift` over `packages/ tests/ scripts/ apps/` returns nothing, `bun run lint` is clean of unused imports, and the `packages/test-kit` suite is 62/62.
+
+## w3 journeys — the nine-journey grid, and no ceiling on an empty vault
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `tests/journeys.json` | 51 entries. Every one of the nine journeys has a row on all four surfaces — a hole is now a lint error, not a silence. **No journey entry says `"volume": "empty"`.** New volumes: `seeded-demo`, `mock-gateway`, `device-fixture`, `shared-album`. |
+| `apps/web/tests/e2e/server.ts` | The web e2e vault is SEEDED — every bundled app's demo data plus 2,000 Atlas rows, through the gateway's own write path. Its budgets said `"volume": "empty (web-e2e fixture vault)"` in as many words. |
+| `apps/web/tests/e2e/perf-waterfall.spec.ts` | Reads the re-keyed entries; the report's `volume` field names the declared volume. |
+| `tests/scale/share-journey.scale.test.ts` (new) | The share journey's BEFORE number for [#929](https://github.com/srikanth235/centraid/issues/929) wave 1(c): grant → fulfil → the grantee's own read, co-hosted. |
+| `scripts/lint-journey-ledger.mjs` + `.test.mjs` | Enforces the 9 × 4 grid. |
+| `scripts/lint-test-reachability.mjs` | Registers the waterfall runner. |
+| `tests/perf/desktop-launch.perf.test.ts`, `tests/scale/{composite-load,mobile-reconnect-to-fresh}.scale.test.ts`, `tests/agent-e2e-mobile/flows/scroll-frames.mjs`, `scripts/perf/send-to-first-token.mjs` | Follow the re-keyed entries. |
+
+### Numbers
+
+| Journey | Value | Provenance |
+| --- | --- | --- |
+| web `largestContentfulPaint` | **420 ms** observed (296 / 420 / 476 over three runs) → ceiling **1200 ms** | `npx playwright test -g "web vitals"`, linux x64 / 4 cores / 15 GB, headless_shell 1194, 2026-09-04, on the SEEDED harness. Promoted from `unmeasured`; the entry had said the browser emits no first-contentful-paint. |
+| web `interactionToNextPaint` | **24 ms** observed (24 / 24 / 24) → ceiling **120 ms** | same runs, `interactionDriven: true`. Promoted from `unmeasured`. Ceiling is the Core Web Vitals threshold HALVED: 200 ms over a 24 ms interaction would not notice an eightfold regression. |
+| web `cumulativeLayoutShift` | 0 → `maxScore` 0.1, unchanged | same runs |
+| gateway `share` grant → visible, 200-photo album, co-hosted | **212.1 ms** (133.1 / 212.1 / 244.4 over three runs) → ceiling **750 ms** | `node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/share-journey.scale.test.ts`, same host, 2026-09-04. Breakdown: grant written 1.9–4.0 ms, **fulfillment 130.8–240.0 ms**, grantee's read 0.3–0.4 ms. |
+
+### Decisions
+
+- **Volume re-keys, not ceiling changes.** Moving an entry from `empty` to a declared volume renames its flattened ratchet key. Nothing to ratchet against on this land (the ledger is new on main), but the ledger's `_comment` now says a re-key carries the same numbers plus an `approvedDeviation` once the file is on the trunk.
+- `refSearchUnderComposition` left the `search` journey for the `composite-load` entry: it is the browse lane's p95 under composition, a property of the composite rig, not of the owner's search.
+
+### Findings
+
+1. **Web, desktop and mobile cannot be measured at year-3 volume from their e2e harnesses**, and the reason is one fact: `@centraid/test-kit` ships TypeScript sources with **no build**, so the year-3 generator is unreachable from `node --experimental-strip-types` (the web harness), from a plain `.mjs` script, and from Playwright's server process. The web harness is seeded through the gateway's own write path instead, which is real but is `seeded-demo`, not year-3. Giving the kit a `dist` — or a compiled `year3` entry point — is the one change that unblocks year-3 on every surface at once. **Root's call.**
+2. **Desktop rows stay `_intended` with the reason recorded**: Electron does not launch on a display-less runner, so no desktop journey number was taken here. **Mobile rows stay `_intended`**: no device.
+3. The share journey's cost is **98% fulfillment** — the grant write and the grantee's read are both under 4 ms at 200 photos. #929's AFTER belongs on the same row.
+
+### Falsification
+
+1. *Claim: no journey entry is stated at an empty volume.* Walked all 51 entries and printed the volume of every one whose journey is not marked "Not a journey" in the ledger's own vocabulary: none is `empty`. The three that remain — `composite-load`, `soak`, `stress-recovery` — are declared non-journeys in the same file.
+2. *Claim: the promoted web ceilings actually gate.* Ran the probe against them after promotion: LCP 436 ms against the new 1200 ms ceiling and INP 24 ms against 120 ms, both asserted (they were annotations before). Setting the LCP ceiling to 300 ms reds the spec on the next run.

@@ -208,7 +208,7 @@ async function main() {
 
   const verdict = compareToCeiling(
     stats.p95Ms,
-    journeyMetric("gateway/own-echo/empty/ci-linux-x64-4c", "sendToFirstToken")
+    journeyMetric("gateway/own-echo/none/ci-linux-x64-4c", "sendToFirstToken")
   );
   console.log(line);
   console[verdict.ok ? "log" : "error"](verdict.message);

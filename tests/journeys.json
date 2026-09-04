@@ -1,5 +1,5 @@
 {
-  "_comment": "THE JOURNEY LEDGER (#927). ONE ledger, keyed `surface / journey / volume / hardware`. It replaces tests/experience-budgets/{web,desktop,mobile,gateway,client-query-counts}.json, tests/budgets.json#qualityRigs and tests/budgets.json#experience: a ceiling stated without the volume and the hardware it was measured on is not a budget, and four files keyed by surface alone could not say so. Every entry names the SPANS it is measured from (packages/core/src/protocol/trace.ts) and the CONSUMERS that assert it, so a ceiling with no reader and a reader with no ceiling are both visible here. Read through tests/helpers/journeys.ts (TypeScript) or scripts/lib/journey-ledger.mjs (scripts); nothing parses this file by hand. Ratcheted tighten-only as a PERF_BUDGET_SOURCE (scripts/test-report/ratchet-floors.mjs): `max*`/`ceiling*` fall freely and widening one needs an `approvedDeviation`; `min*` may only rise. A leading underscore is invisible to the ratchet, which is how an intended-but-unobserved ceiling is parked without gating vacuously.",
+  "_comment": "THE JOURNEY LEDGER (#927). ONE ledger, keyed `surface / journey / volume / hardware`. It replaces tests/experience-budgets/{web,desktop,mobile,gateway,client-query-counts}.json, tests/budgets.json#qualityRigs and tests/budgets.json#experience: a ceiling stated without the volume and the hardware it was measured on is not a budget, and four files keyed by surface alone could not say so. Every entry names the SPANS it is measured from (packages/core/src/protocol/trace.ts) and the CONSUMERS that assert it, so a ceiling with no reader and a reader with no ceiling are both visible here. Read through tests/helpers/journeys.ts (TypeScript) or scripts/lib/journey-ledger.mjs (scripts); nothing parses this file by hand. Ratcheted tighten-only as a PERF_BUDGET_SOURCE (scripts/test-report/ratchet-floors.mjs): `max*`/`ceiling*` fall freely and widening one needs an `approvedDeviation`; `min*` may only rise. A leading underscore is invisible to the ratchet, which is how an intended-but-unobserved ceiling is parked without gating vacuously. RE-KEYING an entry (a journey measured at a new volume, say) renames its flattened numbers, which the ratchet reads as a removal plus an addition — i.e. a widen: carry the same numbers across and add an `approvedDeviation` saying what moved and why.",
   "_statusVocabulary": {
     "measured": "A real run on the stated date and hardware produced `_provenance.observed*`; the ceiling is that value plus the stated headroom.",
     "projected": "Arithmetic on a measured number from a different volume or surface. `_basis` names what it extrapolates from. Never presented as observed.",
@@ -22,7 +22,11 @@
     "year3-10gib": "10 GiB of CAS bytes across 4 MiB objects + 95,640 FK-checked rows.",
     "empty": "A FRESH VAULT. A bundle or transport ratchet only: it cannot catch an O(vault-size) regression, and an entry that stays here is an admission, not a budget.",
     "build-artifact": "Bytes on disk after a build; independent of vault size.",
-    "none": "Nothing vault-sized is involved."
+    "none": "Nothing vault-sized is involved.",
+    "seeded-demo": "Every bundled app's own demo seed written through the gateway's write path, plus a stated number of Atlas `core.place` rows (the count is in each entry's provenance). NOT year-3: reaching the declared 10,000-photo daily path from an e2e harness needs the kit's year-3 generator, and `@centraid/test-kit` ships TypeScript sources with no build, which `node --experimental-strip-types` cannot load. It is a real volume through the real write path, and it is the volume the number below is stated at.",
+    "mock-gateway": "The desktop e2e fixture: a mock gateway, one app, a fresh userData directory. NOT year-3, and the harness cannot be pointed at the golden artifact from this container — Electron does not launch on a display-less runner, so the rig is landed and the number stays parked.",
+    "device-fixture": "Whatever the CI gateway fixture seeded onto the simulator's device replica. NOT the declared year-3 50,000 replica rows / 90,000 photo assets: reaching those needs a device run, which this container has none of.",
+    "shared-album": "One album of 200 photos, shared whole. Big enough that projection dominates the grant plane's fixed cost."
   },
   "journeys": {
     "cold-open": "Process start to the first screen the owner can act on.",
@@ -47,69 +51,6 @@
     "read-cost": "Not a journey — what one gateway READ costs in bytes it writes: audit band and write-ahead log."
   },
   "entries": {
-    "web/cold-open/empty/ci-linux-x64-4c": {
-      "surface": "web",
-      "journey": "cold-open",
-      "volume": "empty",
-      "hardware": "ci-linux-x64-4c",
-      "spans": ["web.boot", "web.first-paint"],
-      "consumers": ["apps/web/tests/e2e/perf-waterfall.spec.ts"],
-      "tolerancePercent": 20,
-      "metrics": {
-        "coldOpenToUsable": {
-          "status": "unmeasured",
-          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — 'web vitals — LCP / INP / CLS on a cold shell load'",
-          "_note": "Blocked on the same missing first-contentful-paint as largestContentfulPaint. What IS observable in this harness today (2026-07-31 run): domContentLoadedEventEnd 32-52 ms, loadEventEnd 48-96 ms, first-paint 44 ms. Those are document-lifecycle events, not 'first usable screen', so they are recorded here as context and NOT promoted to a ceiling. perfBudgets.timing.coldOpenMsSoftCeiling (15,000 ms, enforceTiming === true) is the machine-cost twin that gates today."
-        },
-        "largestContentfulPaint": {
-          "status": "unmeasured",
-          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — 'web vitals (LCP/INP/CLS) on a cold shell load'",
-          "_intendedCeilingMs": 2500,
-          "_provenance": {
-            "attempted": "2026-07-31, darwin arm64, Playwright bundled headless Chromium, apps/web e2e harness",
-            "result": "NO LCP ENTRY. The probe ran, all three observers installed (`installed: [largest-contentful-paint, layout-shift, event]`), the connect screen rendered fully (accessibility snapshot shows heading + ticket field), and the paint timeline contained ONLY `first-paint=44` — no `first-contentful-paint`, hence no LCP candidate, after 16 s.",
-            "note": "The ceiling is deliberately parked in `_intendedCeilingMs` (underscore = invisible to the ratchet) rather than shipped as `ceilingMs`. Shipping the Core Web Vitals 2500 ms threshold as a live ceiling would gate on a value the browser never emits, which passes vacuously forever. First suspect for the missing FCP: shell content that is not yet a contentful paint to the compositor (webfont with font-display: block, or an opacity/transition that never resolves in this harness). Promote to `ceilingMs` the moment a run produces a number."
-          }
-        },
-        "cumulativeLayoutShift": {
-          "status": "measured",
-          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — 'web vitals (LCP/INP/CLS) on a cold shell load'",
-          "maxScore": 0.1,
-          "_provenance": {
-            "at": "2026-07-31",
-            "host": "darwin arm64, Playwright bundled headless Chromium, apps/web e2e harness",
-            "observedScore": 0,
-            "note": "MEASURED and HARD-GATED — the one vital this harness produces honestly, and the only one of the three currently asserted. Observed 0 (no unexpected layout shift on the cold connect screen). The ceiling is the Core Web Vitals 'good' threshold rather than observed+headroom, because a 0 + headroom ceiling would be 0 and any first honest shift would red the lane; 0.1 is the point at which a user notices.",
-            "headroom": "standard-derived (0.1 threshold vs observed 0)"
-          }
-        }
-      }
-    },
-    "web/warm-switch/empty/ci-linux-x64-4c": {
-      "surface": "web",
-      "journey": "warm-switch",
-      "volume": "empty",
-      "hardware": "ci-linux-x64-4c",
-      "spans": ["web.interaction"],
-      "consumers": ["apps/web/tests/e2e/perf-waterfall.spec.ts"],
-      "tolerancePercent": 20,
-      "metrics": {
-        "interactionToNextPaint": {
-          "status": "unmeasured",
-          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — 'web vitals (LCP/INP/CLS) on a cold shell load'",
-          "_intendedCeilingMs": 200,
-          "_provenance": {
-            "attempted": "2026-07-31, same run as largestContentfulPaint",
-            "result": "NO EVENT-TIMING ENTRY. The cold connect screen exposes no visible button, so the probe's deliberate click timed out (`interactionDriven: false`) and Chromium recorded no interaction. INP is undefined without one.",
-            "note": "Parked in `_intendedCeilingMs` for the same reason as LCP. Closing this needs the probe to interact with a control that exists on the cold screen — the pairing-ticket textbox is present; a keypress-driven INP capture is the obvious next step and does not need any apps/web/src change."
-          }
-        },
-        "tapToVisualResponse": {
-          "status": "unmeasured",
-          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — the INP capture above is the closest proxy; a dedicated per-control probe does not exist"
-        }
-      }
-    },
     "web/own-echo/none/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "own-echo",
@@ -148,59 +89,6 @@
             "observedLargestChunk": "centraid-worker-iroh.wasm",
             "note": "MEASURED by `node scripts/perf/app-weight.mjs --surface web --report` (#781, closing the #587 D21 web gap; re-measured and TIGHTENED by #883 C5). The earlier 'a weigh-in here would be a duplicate owner' claim was wrong: perf-budgets.ts shell.maxTransferBytes fences what the BROWSER transfers on the e2e shell journey (compressed, journey-scoped), not what the build ships on disk — the two can diverge by megabytes without either gate noticing the other's regression. Source maps plus the .br/.gz precompress sidecars (17.6 MB together) are excluded as diagnostics/alternate encodings of already-weighed bytes. THE DOUBLE-SHIPPED IROH WASM IS FIXED: the 1,995,618 B binding had two inclusion paths — the page's wasm-bindgen ESM resolving new URL('centraid_web_iroh_bg.wasm', import.meta.url) into a hashed assets/ copy, and scripts/build-iroh-worker.mjs copying the same bytes to public/centraid-worker-iroh.wasm for the CLASSIC service worker, which cannot import ESM. The worker's copy has to keep its unhashed, _headers-pinned path, so the centraid-iroh-wasm-single-copy plugin in apps/web/vite.config.ts rewrites the bindings' default to that same ?v=-stamped URL and the assets/ copy stops being emitted; public/sw.js now treats that path as an immutable shell entry, so a visit that uses both the page transport and the worker pays the 2 MB once. Measured on this host the same day: 10,074,585 B across 87 files before, 8,083,152 B across 86 files after. maxTotalBytes ratcheted 11,010,048 -> 8,730,000 (observed + ~8%). maxLargestChunkBytes is UNCHANGED at 2,200,000 deliberately: the largest single file is still that same 1,995,618 B binary — de-duplication removed a COPY, not weight from the copy that remains — so the existing observed+10% ceiling is still the honest one, and tightening it here would claim a win that did not happen. Next largest: pdf.worker.min.mjs 1.30 MB, boot.js 1.10 MB, sqlite3.wasm 865 kB; pdf.worker is the next real cut.",
             "headroom": "observed + ~8% total; largest chunk + ~10% (mirrors the desktop/mobile seeds)"
-          }
-        }
-      }
-    },
-    "desktop/cold-open/empty/dev-darwin-arm64": {
-      "surface": "desktop",
-      "journey": "cold-open",
-      "volume": "empty",
-      "hardware": "dev-darwin-arm64",
-      "spans": ["desktop.main.boot", "desktop.renderer.usable"],
-      "consumers": [
-        "apps/desktop/tests/e2e/launch-time.spec.ts",
-        "tests/perf/desktop-launch.perf.test.ts"
-      ],
-      "tolerancePercent": 20,
-      "metrics": {
-        "coldOpenToUsable": {
-          "status": "measured",
-          "probe": "apps/desktop/tests/e2e/launch-time.spec.ts — REAL Electron launch (_electron.launch → firstWindow → Home library visible), nightly desktop-e2e job. Publishes artifacts/perf-input/desktop-launch-report.json, gated by tests/perf/desktop-launch.perf.test.ts.",
-          "ceilingMs": 12000,
-          "_provenance": {
-            "at": "2026-07-31",
-            "host": "darwin arm64, worktree build, Playwright _electron.launch",
-            "observedMs": 4540,
-            "breakdown": "process → first window 4494 ms; first window → usable Home 46 ms",
-            "note": "MEASURED, ONE SAMPLE, and NOT re-run since #883 C5 cut the term below — this 4540 ms stands as the last real Electron launch on the record, so the ceiling stays where it is until a fresh launch-time.spec.ts artifact justifies moving it. The headline finding: 99% of the 4.5 s a vault owner waits is MAIN-PROCESS boot before any window exists — the renderer reaches a usable Home 46 ms after it appears. That main-process term is instrumented continuously by the `desktop-cold` rig (tests/perf/desktop-cold.perf.test.ts, budget in tests/quality-rig-budgets.json), which imports the REAL main-process graph in a child process with `electron` stubbed. C1 measured it at 752-855 ms across 1,001 modules on a linux x64 container; before #883 the rig imported gateway-supervisor-core.ts, a file with ZERO imports, so it timed one module parse (~64 ms) and could not have moved if that graph doubled. #883 C5 then attacked the graph itself: three main-process modules were pulling the entire @centraid/server barrel (900 modules, ~770 ms of cold import on its own) — gateway-paths.ts for one path resolver, detached-gateway.ts for one HMAC helper, and embedded-gateway.ts for serve(). The first two now import narrow @centraid/server subpath exports; embedded-gateway.js became a DYNAMIC import inside local-gateway.ts's startEmbedded, which a production launch never reaches (the embedded gateway is selected by CENTRAID_EMBEDDED_GATEWAY=1, for tests — production spawns a DETACHED gateway child). On the same contended container the rig fell from 952-1105 ms / 1,003 modules to 396-431 ms / 430-431 modules, and the main entry's full direct dependency set from 1,034 modules / 815 ms to 461 / 365 ms; the rig budget was ratcheted 3000 -> 1300 ms to match. What is left is dominated by the @centraid/vault barrel (296 modules) that gateway-secrets.ts needs for KeyStore. None of this covers Electron's own runtime start, V8 snapshot restore or window creation, which is why this Playwright ceiling remains the cold-start budget and why the ~450 ms of import cost removed is a floor on, not a measure of, what a vault owner will feel. TIGHTEN this ceiling once ~10 nightly launch samples exist. The sustained-drift gate (30 samples, 1.5x) is what actually catches a slow walk.",
-            "headroom": "~2.6x observed (single-sample, cross-host)"
-          }
-        }
-      }
-    },
-    "desktop/warm-switch/empty/dev-darwin-arm64": {
-      "surface": "desktop",
-      "journey": "warm-switch",
-      "volume": "empty",
-      "hardware": "dev-darwin-arm64",
-      "spans": ["desktop.appview.attach"],
-      "consumers": [
-        "apps/desktop/tests/e2e/launch-time.spec.ts",
-        "tests/perf/desktop-launch.perf.test.ts"
-      ],
-      "tolerancePercent": 20,
-      "metrics": {
-        "tapToVisualResponse": {
-          "status": "measured",
-          "probe": "apps/desktop/tests/e2e/launch-time.spec.ts — click an app tile → the app view attaches.",
-          "ceilingMs": 6000,
-          "_provenance": {
-            "at": "2026-07-31",
-            "host": "darwin arm64, same run as coldOpenToUsable",
-            "observedMs": 2066,
-            "note": "MEASURED, ONE SAMPLE. Two seconds from clicking a tile to the app view attaching is a long time to look at an unchanged screen, and nothing measured it before. The number includes the app-view mount and its first gateway round trips against the mock gateway. Ceiling ~3x observed, single-sample; tighten on real distribution.",
-            "headroom": "~3x observed (single-sample, cross-host)"
           }
         }
       }
@@ -274,45 +162,6 @@
             "observedLargestChunk": "react-boot.js",
             "note": "MEASURED by `node scripts/perf/app-weight.mjs --surface desktop --report`. Source maps (10.7 MB of them) are excluded as diagnostics, not product weight. Ceilings are observed + ~8% headroom. The three next-largest shipped files are react-pdf.worker.min.mjs (1.30 MB), sqlite3.wasm (865 kB) and react-boot.css (530 kB) — react-boot.js and react-pdf are both code-split candidates, and when either lands these numbers must be re-measured and TIGHTENED.",
             "headroom": "observed + 8%"
-          }
-        }
-      }
-    },
-    "mobile/cold-open/empty/ci-ios-sim": {
-      "surface": "mobile",
-      "journey": "cold-open",
-      "volume": "empty",
-      "hardware": "ci-ios-sim",
-      "spans": ["native.boot", "native.home-ready"],
-      "consumers": ["tests/agent-e2e-mobile/flows/cold-start.mjs"],
-      "tolerancePercent": 20,
-      "metrics": {
-        "coldOpenToUsable": {
-          "status": "unmeasured",
-          "probe": "tests/agent-e2e-mobile/flows/cold-start.mjs — PER-LAUNCH cold start (stopApp → launchApp → Home ready marker), 8 launches, reports median and p95. Runs on the nightly mobile-e2e-ios / mobile-e2e-android jobs and on the run-probes-suite path of the per-merge canary.",
-          "_note": "The pre-existing tests/agent-e2e-mobile/flows/volume-proof.mjs measures 20 relaunches as ONE wall-clock total, so a single 10 s launch hides inside a 20-launch sum and the number is unreadable as an experience. The new flow reports per-launch statistics. No ceilingMs on first land: an on-device number from a CI simulator has no distribution yet, so the flow gates on the trailing-median drift budget (>1.5x sustained) from its own 30-sample history. The replica volume is also not year-3 yet — docs/mobile-offline.md's 90k figure is an explicitly labelled PROJECTION, not a run. #890 W1 changed WHAT this measures: the lane now installs a release-configuration build with the Hermes bundle embedded, so a launch is a real app start rather than a dev-client bundle fetch from Metro. Every sample recorded before that change was taken against a __DEV__ build and is not comparable — the drift history starts again here."
-        }
-      }
-    },
-    "mobile/scroll/empty/ci-ios-sim": {
-      "surface": "mobile",
-      "journey": "scroll",
-      "volume": "empty",
-      "hardware": "ci-ios-sim",
-      "spans": ["client.frame"],
-      "consumers": ["tests/agent-e2e-mobile/flows/scroll-frames.mjs"],
-      "tolerancePercent": 20,
-      "metrics": {
-        "maxDroppedFramePercent": {
-          "status": "bound",
-          "probe": "tests/agent-e2e-mobile/flows/scroll-frames.mjs — arms apps/mobile's sampler with openLink centraid://perf-frames?ms=6000, confirms testID perf-frame-sampling, flings 8x, then reads testID perf-frame-report and parses `dropped=<number>%`. Contract pinned by apps/mobile/src/lib/perf/frame-sampler.test.ts.",
-          "maxPercent": 50,
-          "_intendedMaxPercent": 5,
-          "_provenance": {
-            "attempted": "not yet — needs a booted simulator; pending the rebuilt nightly mobile-e2e-ios / mobile-e2e-android jobs and the per-merge mobile-canary lane. #890 W1 is what makes a run possible at all: the sampler was __DEV__-only, so before it the probe could only ever have measured a development build. It is now compiled into a PERF-FLAVORED RELEASE behind EXPO_PUBLIC_CENTRAID_FRAME_PROBE (apps/mobile/src/kit/perf/FrameProbe.tsx), which the device lanes set on the bundling step and a store build never sets.",
-            "note": "maxPercent 50 is a CATASTROPHE bound, NOT observed + headroom, and is labelled so deliberately. Above 50% the list is running at half the display's refresh rate or worse, which is broken on any device and needs no measurement to assert. The real target is 5% (`_intendedMaxPercent`, underscore-prefixed so it is invisible to the ratchet); it is promoted to `maxPercent` only when a real device run against the release artifact produces a distribution, and the 30-sample/1.5x drift gate is what catches a slow walk in the meantime.",
-            "denominatorCaveat": "`dropped` has a PER-DEVICE denominator. The sampler derives the display's true refresh rate from the 10th-percentile inter-frame interval and snaps to 120/90/60/30 Hz, so the flow records `targetHz` beside every percentage. A comparison that drops it reads 60 fps on a 120 Hz ProMotion device as flawless when half the frames are missing.",
-            "scopeCaveat": "JS THREAD ONLY. The sampler counts requestAnimationFrame callbacks, so jank originating on the UI/native thread (a Reanimated worklet, a native image decode) is invisible to it. This is a real frame-drop number for the JS thread, not a compositor-level guarantee."
           }
         }
       }
@@ -420,49 +269,6 @@
             "observedLargestChunk": "_expo/static/js/<platform>/index-*.hbc (Hermes bytecode)",
             "note": "MEASURED. One ceiling covers both platforms because they differ by 7,750 B (0.07%). The Hermes bundle is 55% of the weight and the @expo/vector-icons font set is most of the rest — MaterialCommunityIcons.ttf alone is 1.31 MB and is the largest single asset. Ceilings are the larger observed value + ~8% headroom.",
             "headroom": "observed + 8%"
-          }
-        }
-      }
-    },
-    "gateway/own-echo/empty/ci-linux-x64-4c": {
-      "surface": "gateway",
-      "journey": "own-echo",
-      "volume": "empty",
-      "hardware": "ci-linux-x64-4c",
-      "spans": ["gateway.turn.dispatch"],
-      "consumers": [
-        "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs",
-        "scripts/perf/send-to-first-token.mjs"
-      ],
-      "tolerancePercent": 10,
-      "metrics": {
-        "sendToFirstToken": {
-          "status": "measured",
-          "probe": "scripts/perf/send-to-first-token.mjs — drives a real runAcpTurn against the scripted packages/server/src/acp/backends/acp/fake-acp-harness.mjs (--mode=normal) and times t0 (send) → first `assistant.delta`. PARTIAL BY CONSTRUCTION, and this entry says so rather than implying the whole interval is fenced. IN the span: harness process spawn, the ACP initialize handshake, session/new, session/prompt dispatch, and the stream translation in packages/server/src/acp/backends/acp/backend.ts. OUT of it: the HTTP/SSE conversation route in front of runAcpTurn, every client (no renderer, no frame, no composer), and a real provider's own time to first token — that last one is deliberately excluded, because it is the provider's number and not a regression this repo can fix. STILL UNMEASURED: the route + client half, which needs the desktop/web e2e mock gateway to serve a fixed-delay SSE turn plus a client-side first-token marker to observe; the `sendToFirstToken` entries in desktop.json and web.json remain unmeasured for exactly that reason.",
-          "ceilingP95Ms": 400,
-          "_provenance": {
-            "at": "2026-08-21",
-            "host": "linux x64, 4 cpus, shared container under concurrent sibling load (load average 3.3-4.5 of 4 during the noisiest runs); @centraid/server consumed from its built dist",
-            "observedP95Ms": 123,
-            "observedMedianMs": 69.5,
-            "observedMinMs": 38.4,
-            "observedMaxMs": 197.9,
-            "note": "MEASURED — and what it replaces is NO NUMBER AT ALL. Before this the product's most-felt latency had no rig: tests/perf/harness-turn.perf.test.ts measures 2,000 registry dispatches against a stubbed runTurn, so it never spawns a harness, never speaks ACP, and could not see this interval. The stub the old probe text asked for turned out to already exist (fake-acp-harness.mjs, the ACP backend suite's fixture); the missing piece was a rig pointing at it. Thirteen independent runs of 25-30 samples put per-run p95 between 53.4 ms on an idle container and 123.0 ms under concurrent load, while the per-run MEDIAN barely moved (47.9-69.5 ms) — so the spread is host contention on the process spawn, not variance in the path itself. Every observed* value above records the WORST run seen, never the friendliest. The number is dominated by node process spawn plus the JSON-RPC handshake, which is the honest shape of a first turn. READ IT AS A LOWER BOUND on what the vault owner feels: it fences a gateway-side regression — a slower spawn, an added handshake round trip, a blocking step inserted before the prompt goes out — not the whole perceived interval.",
-            "headroom": "~3.3x worst observed p95 (~2x the worst single sample), in the same grammar as requestToFirstByte above. Sized against the CONTENDED measurement on purpose, because a shared CI runner IS the contended case: a ceiling seeded from the idle 53 ms p95 would fence runner jitter rather than a regression, and a gate that flakes is a gate that gets widened. The ratchet is tighten-only, so this can only come DOWN — re-seed it from a real distribution on the lane that runs it."
-          }
-        },
-        "replicaIntentWarmP50": {
-          "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — 8 intents, warm p50",
-          "pairedSample": "journeys.replicaIntent.warm.p50Ms",
-          "ceilingMs": 700,
-          "_provenance": {
-            "at": "2026-09-04",
-            "host": "linux x64 development container, 4 cores / 15 GB",
-            "observedMs": 147.9,
-            "note": "One replica intent per HTTP round trip — the offline drain's unit of work. Paired against the candidate rather than against a nightly median.",
-            "headroom": "~4.7x observed, single host"
           }
         }
       }
@@ -667,7 +473,7 @@
       "journey": "composite-load",
       "volume": "empty",
       "hardware": "ci-linux-x64-4c",
-      "spans": ["gateway.request"],
+      "spans": ["atlas.ref-search", "gateway.request"],
       "consumers": ["tests/scale/composite-load.scale.test.ts"],
       "tolerancePercent": 20,
       "metrics": {
@@ -687,18 +493,7 @@
             "note": "MEASURED, and what it replaces is NO NUMBER AT ALL — before this rig every perf/scale rig in the repo measured one dimension against an otherwise idle gateway. The headline is reassuring: running the whole household together costs about the same WALL CLOCK as running the lanes one after another (0.75-1.05x), so the gateway is genuinely overlapping work rather than serializing behind one lock. THE FINDING THAT IS NOT reassuring is the per-lane spread: the cheapest lane (Atlas ref-search, ~5 ms solo) degrades 27-66x under composition, to 217-361 ms. That is the app-engine worker spawns (create-note and search each spawn a capped worker thread, and this host admits only 2 at once) taking the CPU away from an in-gateway read. It is a fairness observation, not a refusal or a correctness failure — every op completed and nothing was shed. Per-lane latency ratios are therefore PUBLISHED BY THE RIG BUT NOT GATED: a ratio over a ~5 ms denominator fences scheduler noise, and a gate that flakes is a gate that gets widened.",
             "headroom": "ceilingThroughputFactor ~1.9x the worst observed (1.05); ceilingWorstLaneP95Ms ~3x the worst observed (1147.5 ms). Both sized against the CONTENDED measurements on purpose — a shared CI runner IS the contended case. Tighten-only: re-seed from a real distribution once the nightly lane has one."
           }
-        }
-      }
-    },
-    "gateway/search/empty/ci-linux-x64-4c": {
-      "surface": "gateway",
-      "journey": "search",
-      "volume": "empty",
-      "hardware": "ci-linux-x64-4c",
-      "spans": ["gateway.request", "atlas.ref-search"],
-      "consumers": ["tests/scale/composite-load.scale.test.ts"],
-      "tolerancePercent": 20,
-      "metrics": {
+        },
         "refSearchUnderComposition": {
           "status": "measured",
           "probe": "tests/scale/composite-load.scale.test.ts — the `browse` lane's composite p95, asserted in the rig body. Named separately from `compositeLoadFactor.ceilingWorstLaneP95Ms` because that ceiling only ever fences whichever lane happens to be slowest (the write lane, today), so a ref-search regression could double before the worst-lane gate noticed.",
@@ -921,60 +716,6 @@
         }
       }
     },
-    "gateway/peer-echo/empty/ci-linux-x64-4c": {
-      "surface": "gateway",
-      "journey": "peer-echo",
-      "volume": "empty",
-      "hardware": "ci-linux-x64-4c",
-      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
-      "consumers": [
-        "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
-      ],
-      "tolerancePercent": 10,
-      "metrics": {
-        "lastSubscriberDeliveryMs": {
-          "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — one subscriber, 5 commits",
-          "pairedSample": "journeys.sseProjection.0.lastSubscriberDelivery.p50Ms",
-          "ceilingMs": 300,
-          "_provenance": {
-            "at": "2026-09-04",
-            "host": "linux x64 development container, 4 cores / 15 GB",
-            "observedMs": 61.2,
-            "note": "Commit written on one device to the frame landing on another: the p50 over 5 commits at one subscriber. The N=10 level is published by the same run and fenced by the converge entry.",
-            "headroom": "~4.9x observed, single host"
-          }
-        }
-      }
-    },
-    "gateway/converge/empty/ci-linux-x64-4c": {
-      "surface": "gateway",
-      "journey": "converge",
-      "volume": "empty",
-      "hardware": "ci-linux-x64-4c",
-      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
-      "consumers": [
-        "packages/server/scripts/bench-journeys.mjs",
-        "scripts/ci/paired-journeys.mjs"
-      ],
-      "tolerancePercent": 10,
-      "metrics": {
-        "tenSubscriberCommitMs": {
-          "status": "measured",
-          "probe": "scripts/ci/paired-journeys.mjs — ten subscribers, 5 commits",
-          "pairedSample": "journeys.sseProjection.1.lastSubscriberDelivery.p50Ms",
-          "ceilingMs": 400,
-          "_provenance": {
-            "at": "2026-09-04",
-            "host": "linux x64 development container, 4 cores / 15 GB",
-            "observedMs": 70.8,
-            "note": "Ten concurrent replica subscribers, well under SSE_MAX_SUBSCRIBERS (32). Per-commit p50 to the LAST subscriber, so it is the slowest device's convergence, not the luckiest.",
-            "headroom": "~5.6x observed, single host"
-          }
-        }
-      }
-    },
     "gateway/read-cost/year3/ci-linux-x64-4c": {
       "surface": "gateway",
       "journey": "read-cost",
@@ -1006,6 +747,555 @@
             "observedBytes": 46490,
             "note": "45.4 KiB of write-ahead log per READ — one commit's worth of dirty pages for a 360-byte receipt, and the WAL never shrinks on its own. Projected at the rate this container sustained, 43-128 GB/h under a client that only looks. Gated at 64 KiB (observed + ~41%, one page-cluster of headroom) so a change that starts dirtying a second page per read fails rather than being rediscovered.",
             "headroom": "observed + ~41%, sized to one page cluster"
+          }
+        }
+      }
+    },
+    "web/cold-open/seeded-demo/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "cold-open",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.boot", "web.first-paint"],
+      "consumers": ["apps/web/tests/e2e/perf-waterfall.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "largestContentfulPaint": {
+          "status": "measured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — 'web vitals — LCP / INP / CLS on a cold shell load'",
+          "ceilingMs": 1200,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, Playwright headless_shell 1194",
+            "observedMs": 420,
+            "observedSpreadMs": "296 / 420 / 476 over three consecutive runs on the seeded harness (388 on the empty one before seeding)",
+            "note": "PROMOTED FROM `unmeasured`. The entry carried `_intendedCeilingMs: 2500` and a #659 note saying the browser emitted no first-contentful-paint, so no LCP candidate existed; the vitals probe was fixed to force a paint, and it now emits one on every run. The ceiling is ~2.5x the slowest of three samples on a contended container, not the Core Web Vitals 2500 ms threshold: shipping the standard threshold would gate at six times what this shell actually costs, which passes vacuously.",
+            "headroom": "~2.5x slowest observed (three samples, single host)"
+          }
+        },
+        "cumulativeLayoutShift": {
+          "status": "measured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — 'web vitals (LCP/INP/CLS) on a cold shell load'",
+          "maxScore": 0.1,
+          "_provenance": {
+            "at": "2026-07-31",
+            "host": "darwin arm64, Playwright bundled headless Chromium, apps/web e2e harness",
+            "observedScore": 0,
+            "note": "MEASURED and HARD-GATED — the one vital this harness produces honestly, and the only one of the three currently asserted. Observed 0 (no unexpected layout shift on the cold connect screen). The ceiling is the Core Web Vitals 'good' threshold rather than observed+headroom, because a 0 + headroom ceiling would be 0 and any first honest shift would red the lane; 0.1 is the point at which a user notices.",
+            "headroom": "standard-derived (0.1 threshold vs observed 0)"
+          }
+        },
+        "coldOpenToUsable": {
+          "status": "unmeasured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts",
+          "_note": "Still no number. LCP is now measured and is the closest honest proxy; 'first usable screen' needs a marker the shell does not emit, and inventing one from `loadEventEnd` would measure the document lifecycle rather than the owner's wait."
+        }
+      }
+    },
+    "web/warm-switch/seeded-demo/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "warm-switch",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.interaction"],
+      "consumers": ["apps/web/tests/e2e/perf-waterfall.spec.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "interactionToNextPaint": {
+          "status": "measured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — the keypress-driven INP capture on the cold screen",
+          "ceilingMs": 120,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, Playwright headless_shell 1194",
+            "observedMs": 24,
+            "observedSpreadMs": "24 / 24 / 24 over three consecutive runs (32 on the empty harness)",
+            "note": "PROMOTED FROM `unmeasured`. The old entry said the cold connect screen exposed no clickable control, so Chromium recorded no interaction and INP was undefined; the probe now drives the pairing-ticket textbox, and `interactionDriven: true` on every run. Ceiling is the Core Web Vitals 'good' threshold halved — 120 ms rather than 200 — because observed is 24 ms and a 200 ms ceiling on a 24 ms interaction would not notice an eightfold regression.",
+            "headroom": "5x observed; deliberately tighter than the 200 ms standard"
+          }
+        },
+        "tapToVisualResponse": {
+          "status": "unmeasured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — the INP capture above is the closest proxy; a dedicated per-control probe does not exist"
+        }
+      }
+    },
+    "gateway/own-echo/none/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "own-echo",
+      "volume": "none",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.turn.dispatch"],
+      "consumers": ["scripts/perf/send-to-first-token.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "sendToFirstToken": {
+          "status": "measured",
+          "probe": "scripts/perf/send-to-first-token.mjs — drives a real runAcpTurn against the scripted packages/server/src/acp/backends/acp/fake-acp-harness.mjs (--mode=normal) and times t0 (send) → first `assistant.delta`. PARTIAL BY CONSTRUCTION, and this entry says so rather than implying the whole interval is fenced. IN the span: harness process spawn, the ACP initialize handshake, session/new, session/prompt dispatch, and the stream translation in packages/server/src/acp/backends/acp/backend.ts. OUT of it: the HTTP/SSE conversation route in front of runAcpTurn, every client (no renderer, no frame, no composer), and a real provider's own time to first token — that last one is deliberately excluded, because it is the provider's number and not a regression this repo can fix. STILL UNMEASURED: the route + client half, which needs the desktop/web e2e mock gateway to serve a fixed-delay SSE turn plus a client-side first-token marker to observe; the `sendToFirstToken` entries in desktop.json and web.json remain unmeasured for exactly that reason.",
+          "ceilingP95Ms": 400,
+          "_provenance": {
+            "at": "2026-08-21",
+            "host": "linux x64, 4 cpus, shared container under concurrent sibling load (load average 3.3-4.5 of 4 during the noisiest runs); @centraid/server consumed from its built dist",
+            "observedP95Ms": 123,
+            "observedMedianMs": 69.5,
+            "observedMinMs": 38.4,
+            "observedMaxMs": 197.9,
+            "note": "MEASURED — and what it replaces is NO NUMBER AT ALL. Before this the product's most-felt latency had no rig: tests/perf/harness-turn.perf.test.ts measures 2,000 registry dispatches against a stubbed runTurn, so it never spawns a harness, never speaks ACP, and could not see this interval. The stub the old probe text asked for turned out to already exist (fake-acp-harness.mjs, the ACP backend suite's fixture); the missing piece was a rig pointing at it. Thirteen independent runs of 25-30 samples put per-run p95 between 53.4 ms on an idle container and 123.0 ms under concurrent load, while the per-run MEDIAN barely moved (47.9-69.5 ms) — so the spread is host contention on the process spawn, not variance in the path itself. Every observed* value above records the WORST run seen, never the friendliest. The number is dominated by node process spawn plus the JSON-RPC handshake, which is the honest shape of a first turn. READ IT AS A LOWER BOUND on what the vault owner feels: it fences a gateway-side regression — a slower spawn, an added handshake round trip, a blocking step inserted before the prompt goes out — not the whole perceived interval.",
+            "headroom": "~3.3x worst observed p95 (~2x the worst single sample), in the same grammar as requestToFirstByte above. Sized against the CONTENDED measurement on purpose, because a shared CI runner IS the contended case: a ceiling seeded from the idle 53 ms p95 would fence runner jitter rather than a regression, and a gate that flakes is a gate that gets widened. The ratchet is tighten-only, so this can only come DOWN — re-seed it from a real distribution on the lane that runs it."
+          }
+        }
+      }
+    },
+    "gateway/own-echo/seeded-demo/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "own-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.turn.dispatch"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "replicaIntentWarmP50": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — 8 intents, warm p50",
+          "pairedSample": "journeys.replicaIntent.warm.p50Ms",
+          "ceilingMs": 700,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 147.9,
+            "note": "One replica intent per HTTP round trip — the offline drain's unit of work. Paired against the candidate rather than against a nightly median.",
+            "headroom": "~4.7x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/peer-echo/seeded-demo/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "peer-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "lastSubscriberDeliveryMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — one subscriber, 5 commits",
+          "pairedSample": "journeys.sseProjection.0.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 300,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 61.2,
+            "note": "Commit written on one device to the frame landing on another: the p50 over 5 commits at one subscriber. The N=10 level is published by the same run and fenced by the converge entry.",
+            "headroom": "~4.9x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/converge/seeded-demo/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "converge",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "tenSubscriberCommitMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — ten subscribers, 5 commits",
+          "pairedSample": "journeys.sseProjection.1.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 400,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 70.8,
+            "note": "Ten concurrent replica subscribers, well under SSE_MAX_SUBSCRIBERS (32). Per-commit p50 to the LAST subscriber, so it is the slowest device's convergence, not the luckiest.",
+            "headroom": "~5.6x observed, single host"
+          }
+        }
+      }
+    },
+    "desktop/cold-open/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "cold-open",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.main.boot", "desktop.renderer.usable"],
+      "consumers": [
+        "apps/desktop/tests/e2e/launch-time.spec.ts",
+        "tests/perf/desktop-launch.perf.test.ts"
+      ],
+      "tolerancePercent": 20,
+      "metrics": {
+        "coldOpenToUsable": {
+          "status": "measured",
+          "probe": "apps/desktop/tests/e2e/launch-time.spec.ts — REAL Electron launch (_electron.launch → firstWindow → Home library visible), nightly desktop-e2e job. Publishes artifacts/perf-input/desktop-launch-report.json, gated by tests/perf/desktop-launch.perf.test.ts.",
+          "ceilingMs": 12000,
+          "_provenance": {
+            "at": "2026-07-31",
+            "host": "darwin arm64, worktree build, Playwright _electron.launch",
+            "observedMs": 4540,
+            "breakdown": "process → first window 4494 ms; first window → usable Home 46 ms",
+            "note": "MEASURED, ONE SAMPLE, and NOT re-run since #883 C5 cut the term below — this 4540 ms stands as the last real Electron launch on the record, so the ceiling stays where it is until a fresh launch-time.spec.ts artifact justifies moving it. The headline finding: 99% of the 4.5 s a vault owner waits is MAIN-PROCESS boot before any window exists — the renderer reaches a usable Home 46 ms after it appears. That main-process term is instrumented continuously by the `desktop-cold` rig (tests/perf/desktop-cold.perf.test.ts, budget in tests/quality-rig-budgets.json), which imports the REAL main-process graph in a child process with `electron` stubbed. C1 measured it at 752-855 ms across 1,001 modules on a linux x64 container; before #883 the rig imported gateway-supervisor-core.ts, a file with ZERO imports, so it timed one module parse (~64 ms) and could not have moved if that graph doubled. #883 C5 then attacked the graph itself: three main-process modules were pulling the entire @centraid/server barrel (900 modules, ~770 ms of cold import on its own) — gateway-paths.ts for one path resolver, detached-gateway.ts for one HMAC helper, and embedded-gateway.ts for serve(). The first two now import narrow @centraid/server subpath exports; embedded-gateway.js became a DYNAMIC import inside local-gateway.ts's startEmbedded, which a production launch never reaches (the embedded gateway is selected by CENTRAID_EMBEDDED_GATEWAY=1, for tests — production spawns a DETACHED gateway child). On the same contended container the rig fell from 952-1105 ms / 1,003 modules to 396-431 ms / 430-431 modules, and the main entry's full direct dependency set from 1,034 modules / 815 ms to 461 / 365 ms; the rig budget was ratcheted 3000 -> 1300 ms to match. What is left is dominated by the @centraid/vault barrel (296 modules) that gateway-secrets.ts needs for KeyStore. None of this covers Electron's own runtime start, V8 snapshot restore or window creation, which is why this Playwright ceiling remains the cold-start budget and why the ~450 ms of import cost removed is a floor on, not a measure of, what a vault owner will feel. TIGHTEN this ceiling once ~10 nightly launch samples exist. The sustained-drift gate (30 samples, 1.5x) is what actually catches a slow walk.",
+            "headroom": "~2.6x observed (single-sample, cross-host)"
+          }
+        }
+      }
+    },
+    "desktop/warm-switch/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "warm-switch",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.appview.attach"],
+      "consumers": [
+        "apps/desktop/tests/e2e/launch-time.spec.ts",
+        "tests/perf/desktop-launch.perf.test.ts"
+      ],
+      "tolerancePercent": 20,
+      "metrics": {
+        "tapToVisualResponse": {
+          "status": "measured",
+          "probe": "apps/desktop/tests/e2e/launch-time.spec.ts — click an app tile → the app view attaches.",
+          "ceilingMs": 6000,
+          "_provenance": {
+            "at": "2026-07-31",
+            "host": "darwin arm64, same run as coldOpenToUsable",
+            "observedMs": 2066,
+            "note": "MEASURED, ONE SAMPLE. Two seconds from clicking a tile to the app view attaching is a long time to look at an unchanged screen, and nothing measured it before. The number includes the app-view mount and its first gateway round trips against the mock gateway. Ceiling ~3x observed, single-sample; tighten on real distribution.",
+            "headroom": "~3x observed (single-sample, cross-host)"
+          }
+        }
+      }
+    },
+    "mobile/cold-open/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "cold-open",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.boot", "native.home-ready"],
+      "consumers": ["tests/agent-e2e-mobile/flows/cold-start.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "coldOpenToUsable": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/cold-start.mjs — PER-LAUNCH cold start (stopApp → launchApp → Home ready marker), 8 launches, reports median and p95. Runs on the nightly mobile-e2e-ios / mobile-e2e-android jobs and on the run-probes-suite path of the per-merge canary.",
+          "_note": "The pre-existing tests/agent-e2e-mobile/flows/volume-proof.mjs measures 20 relaunches as ONE wall-clock total, so a single 10 s launch hides inside a 20-launch sum and the number is unreadable as an experience. The new flow reports per-launch statistics. No ceilingMs on first land: an on-device number from a CI simulator has no distribution yet, so the flow gates on the trailing-median drift budget (>1.5x sustained) from its own 30-sample history. The replica volume is also not year-3 yet — docs/mobile-offline.md's 90k figure is an explicitly labelled PROJECTION, not a run. #890 W1 changed WHAT this measures: the lane now installs a release-configuration build with the Hermes bundle embedded, so a launch is a real app start rather than a dev-client bundle fetch from Metro. Every sample recorded before that change was taken against a __DEV__ build and is not comparable — the drift history starts again here."
+        }
+      }
+    },
+    "mobile/scroll/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "scroll",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["client.frame"],
+      "consumers": ["tests/agent-e2e-mobile/flows/scroll-frames.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "maxDroppedFramePercent": {
+          "status": "bound",
+          "probe": "tests/agent-e2e-mobile/flows/scroll-frames.mjs — arms apps/mobile's sampler with openLink centraid://perf-frames?ms=6000, confirms testID perf-frame-sampling, flings 8x, then reads testID perf-frame-report and parses `dropped=<number>%`. Contract pinned by apps/mobile/src/lib/perf/frame-sampler.test.ts.",
+          "maxPercent": 50,
+          "_intendedMaxPercent": 5,
+          "_provenance": {
+            "attempted": "not yet — needs a booted simulator; pending the rebuilt nightly mobile-e2e-ios / mobile-e2e-android jobs and the per-merge mobile-canary lane. #890 W1 is what makes a run possible at all: the sampler was __DEV__-only, so before it the probe could only ever have measured a development build. It is now compiled into a PERF-FLAVORED RELEASE behind EXPO_PUBLIC_CENTRAID_FRAME_PROBE (apps/mobile/src/kit/perf/FrameProbe.tsx), which the device lanes set on the bundling step and a store build never sets.",
+            "note": "maxPercent 50 is a CATASTROPHE bound, NOT observed + headroom, and is labelled so deliberately. Above 50% the list is running at half the display's refresh rate or worse, which is broken on any device and needs no measurement to assert. The real target is 5% (`_intendedMaxPercent`, underscore-prefixed so it is invisible to the ratchet); it is promoted to `maxPercent` only when a real device run against the release artifact produces a distribution, and the 30-sample/1.5x drift gate is what catches a slow walk in the meantime.",
+            "denominatorCaveat": "`dropped` has a PER-DEVICE denominator. The sampler derives the display's true refresh rate from the 10th-percentile inter-frame interval and snaps to 120/90/60/30 Hz, so the flow records `targetHz` beside every percentage. A comparison that drops it reads 60 fps on a 120 Hz ProMotion device as flawless when half the frames are missing.",
+            "scopeCaveat": "JS THREAD ONLY. The sampler counts requestAnimationFrame callbacks, so jank originating on the UI/native thread (a Reanimated worklet, a native image decode) is invisible to it. This is a real frame-drop number for the JS thread, not a compositor-level guarantee."
+          }
+        }
+      }
+    },
+    "web/peer-echo/seeded-demo/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "peer-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.replica.apply"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "web/share/seeded-demo/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "share",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.grant"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "web/search/seeded-demo/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "search",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.search"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "web/scroll/seeded-demo/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "scroll",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.frame"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "web/first-bootstrap/seeded-demo/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "first-bootstrap",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.replica.bootstrap"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "web/converge/seeded-demo/ci-linux-x64-4c": {
+      "surface": "web",
+      "journey": "converge",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["web.replica.resume"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+        }
+      }
+    },
+    "desktop/peer-echo/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "peer-echo",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.replica.apply"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "apps/desktop/tests/e2e — rig landed, host cannot run it",
+          "_intendedCeilingMs": null,
+          "_reason": "apps/desktop/tests/e2e cannot run in this container — Electron does not launch on a display-less runner — so no number is taken here. The harness exists; what is missing is a host that can start it."
+        }
+      }
+    },
+    "desktop/share/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "share",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.grant"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "apps/desktop/tests/e2e — rig landed, host cannot run it",
+          "_intendedCeilingMs": null,
+          "_reason": "apps/desktop/tests/e2e cannot run in this container — Electron does not launch on a display-less runner — so no number is taken here. The harness exists; what is missing is a host that can start it."
+        }
+      }
+    },
+    "desktop/search/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "search",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.search"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "apps/desktop/tests/e2e — rig landed, host cannot run it",
+          "_intendedCeilingMs": null,
+          "_reason": "apps/desktop/tests/e2e cannot run in this container — Electron does not launch on a display-less runner — so no number is taken here. The harness exists; what is missing is a host that can start it."
+        }
+      }
+    },
+    "desktop/first-bootstrap/mock-gateway/dev-darwin-arm64": {
+      "surface": "desktop",
+      "journey": "first-bootstrap",
+      "volume": "mock-gateway",
+      "hardware": "dev-darwin-arm64",
+      "spans": ["desktop.replica.bootstrap"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "apps/desktop/tests/e2e — rig landed, host cannot run it",
+          "_intendedCeilingMs": null,
+          "_reason": "apps/desktop/tests/e2e cannot run in this container — Electron does not launch on a display-less runner — so no number is taken here. The harness exists; what is missing is a host that can start it."
+        }
+      }
+    },
+    "mobile/peer-echo/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "peer-echo",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.replica.apply"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows — needs a device",
+          "_intendedCeilingMs": null,
+          "_reason": "No device. tests/agent-e2e-mobile drives a simulator on a macOS/linux runner, which this container is not, so every mobile row stays intended by construction rather than by omission."
+        }
+      }
+    },
+    "mobile/share/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "share",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.grant"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows — needs a device",
+          "_intendedCeilingMs": null,
+          "_reason": "No device. tests/agent-e2e-mobile drives a simulator on a macOS/linux runner, which this container is not, so every mobile row stays intended by construction rather than by omission."
+        }
+      }
+    },
+    "mobile/search/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "search",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.search"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows — needs a device",
+          "_intendedCeilingMs": null,
+          "_reason": "No device. tests/agent-e2e-mobile drives a simulator on a macOS/linux runner, which this container is not, so every mobile row stays intended by construction rather than by omission."
+        }
+      }
+    },
+    "mobile/first-bootstrap/device-fixture/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "first-bootstrap",
+      "volume": "device-fixture",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.replica.bootstrap"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows — needs a device",
+          "_intendedCeilingMs": null,
+          "_reason": "No device. tests/agent-e2e-mobile drives a simulator on a macOS/linux runner, which this container is not, so every mobile row stays intended by construction rather than by omission."
+        }
+      }
+    },
+    "gateway/scroll/none/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "scroll",
+      "volume": "none",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.request"],
+      "consumers": [],
+      "tolerancePercent": 20,
+      "metrics": {
+        "elapsed": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY",
+          "_intendedCeilingMs": null,
+          "_reason": "Scrolling is a client-side journey; the gateway's half is the paged read, which `gateway/warm-switch` already fences. Kept so the nine-journey grid has no silent hole."
+        }
+      }
+    },
+    "gateway/share/shared-album/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "share",
+      "volume": "shared-album",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["vault.grant.create", "vault.grant.fulfill", "vault.read"],
+      "consumers": ["tests/scale/share-journey.scale.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "grantToVisible": {
+          "status": "measured",
+          "probe": "tests/scale/share-journey.scale.test.ts — createShareGrant, fulfillShareGrant, then the AUDIENCE vault's own read",
+          "ceilingMs": 750,
+          "_beforeFor": "#929 wave 1(c). This is the BEFORE number against the sharing engine as it stands: two vaults CO-HOSTED under one gateway root, so no transport is inside the interval. #929 lands its AFTER beside this row rather than overwriting it, and a cross-gateway number belongs in a second entry, not folded into this one.",
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 212.1,
+            "observedSpreadMs": "133.1 / 212.1 / 244.4 over three consecutive runs",
+            "breakdown": "grant written 1.9-4.0 ms, grant FULFILLED 130.8-240.0 ms, grantee's own read 0.3-0.4 ms",
+            "note": "BEFORE number. Fulfillment is 98% of the interval and the only term that scales with the size of the share: writing the standing grant and the grantee's read are both under 4 ms at 200 photos. Ceiling is ~3x the slowest of three samples on a contended container, the same convention every single-host measurement here uses.",
+            "headroom": "~3x slowest observed (three samples, single host)"
           }
         }
       }
@@ -1049,8 +1339,8 @@
       "volume": "1 REAL Electron cold launch (mock gateway, 1 app, fresh userData — an EMPTY vault, not year-3); measured by apps/desktop/tests/e2e/launch-time.spec.ts and consumed here as an artifact",
       "_noBudgetMs": "Deliberate. A cold Electron launch on a shared CI runner has no distribution yet; the gate is the 30-sample/1.5x drift budget. An absolute ceiling lands in tests/experience-budgets/desktop.json once ~10 green nightlies justify one.",
       "entries": [
-        "desktop/cold-open/empty/dev-darwin-arm64",
-        "desktop/warm-switch/empty/dev-darwin-arm64"
+        "desktop/cold-open/mock-gateway/dev-darwin-arm64",
+        "desktop/warm-switch/mock-gateway/dev-darwin-arm64"
       ]
     },
     "tests/perf/gateway-request-volume.perf.test.ts": {
@@ -1201,7 +1491,7 @@
       "_noBudgetMs": "Deliberate. The ceilings are a RATIO and an absolute worst-lane p95, not a rig duration: `compositeLoadFactor` in tests/experience-budgets/gateway.json (ceilingThroughputFactor 2, ceilingWorstLaneP95Ms 3500), both asserted in the rig body and both tighten-only there. Total wall clock was 4.3-10.2 s across five 2026-08-21 runs on a contended 4-vCPU container — a 2.4x spread that is host contention, so an absolute duration ceiling here would fence the runner, not the product. The 30-sample/1.5x drift gate is the duration gate.",
       "entries": [
         "gateway/composite-load/empty/ci-linux-x64-4c",
-        "gateway/search/empty/ci-linux-x64-4c"
+        "gateway/composite-load/empty/ci-linux-x64-4c"
       ]
     },
     "tests/scale/stress-to-failure.scale.test.ts": {
@@ -1286,13 +1576,18 @@
       "lane": "scale",
       "volume": "8 per-launch on-device cold starts against an EMPTY device replica (year-3 is 50,000 replica rows — see tests/experience-budgets/README.md)",
       "_noBudgetMs": "Deliberate. Simulator launch times have no distribution yet; the 30-sample/1.5x drift gate is the only gate until one exists.",
-      "entries": ["mobile/cold-open/empty/ci-ios-sim"]
+      "entries": ["mobile/cold-open/device-fixture/ci-ios-sim"]
     },
     "tests/agent-e2e-mobile/flows/scroll-frames.mjs": {
       "lane": "scale",
       "volume": "8 flings each on the Photos grid and the People directory, holding whatever the CI gateway fixture seeded (year-3 is 90,000 photo assets / 5,000 contacts). The flow publishes `people rows observed` — a real lower bound it can see — rather than guessing the seeded total.",
       "_noBudgetMs": "Not a duration rig. It measures dropped-frame PERCENT via apps/mobile's rAF sampler (arm with centraid://perf-frames, read testID perf-frame-report); the ceiling lives in tests/experience-budgets/mobile.json and the drift series is the worst dropped-frame percentage across the two surfaces. NOTE the denominator is per-device — targetHz is recorded beside every percentage — and the sampler sees the JS thread only.",
-      "entries": ["mobile/scroll/empty/ci-ios-sim"]
+      "entries": ["mobile/scroll/device-fixture/ci-ios-sim"]
+    },
+    "tests/scale/share-journey.scale.test.ts": {
+      "lane": "scale",
+      "volume": "One 200-photo album granted from one vault to another, both mounted under one gateway root",
+      "entries": ["gateway/share/shared-album/ci-linux-x64-4c"]
     }
   }
 }

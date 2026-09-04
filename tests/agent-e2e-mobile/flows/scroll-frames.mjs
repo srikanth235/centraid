@@ -151,7 +151,7 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.configureGateway();
 
   const ceiling = journeyCeiling(
-    "mobile/scroll/empty/ci-ios-sim",
+    "mobile/scroll/device-fixture/ci-ios-sim",
     "maxDroppedFramePercent",
     "maxPercent"
   );

@@ -26,10 +26,50 @@ function fixture(ledger, files = {}) {
 const BASE = {
   hardware: { any: "hardware-independent" },
   volumes: { year3: "the golden artifact" },
-  journeys: { "cold-open": "process start to first usable screen" },
+  journeys: Object.fromEntries(
+    [
+      "cold-open",
+      "warm-switch",
+      "own-echo",
+      "peer-echo",
+      "converge",
+      "share",
+      "search",
+      "scroll",
+      "first-bootstrap",
+    ].map((name) => [name, `the ${name} journey`])
+  ),
   entries: {},
   rigs: {},
 };
+
+/** Fills the 9x4 grid so a case fails only for the reason it is testing. */
+function grid(extra = {}) {
+  const filled = {};
+  for (const surface of ["web", "desktop", "mobile", "gateway"])
+    for (const journey of [
+      "cold-open",
+      "warm-switch",
+      "own-echo",
+      "peer-echo",
+      "converge",
+      "share",
+      "search",
+      "scroll",
+      "first-bootstrap",
+    ])
+      filled[`${surface}/${journey}/year3/any`] = {
+        surface,
+        journey,
+        volume: "year3",
+        hardware: "any",
+        spans: ["x"],
+        consumers: [],
+        tolerancePercent: 20,
+        metrics: {},
+      };
+  return { ...filled, ...extra };
+}
 
 const entry = (over = {}) => ({
   surface: "web",
@@ -43,9 +83,17 @@ const entry = (over = {}) => ({
   ...over,
 });
 
-test("a well-formed ledger passes", () => {
+test("a hole in the nine-journey grid fails", () => {
   const root = fixture(
     { ...BASE, entries: { "web/cold-open/year3/any": entry() } },
+    { "tests/probe.ts": "" }
+  );
+  assert.match(lintJourneyLedger(root).join("\n"), /no entry for web\/share/u);
+});
+
+test("a well-formed ledger passes", () => {
+  const root = fixture(
+    { ...BASE, entries: grid({ "web/cold-open/year3/any": entry() }) },
     { "tests/probe.ts": "// the consumer" }
   );
   assert.deepEqual(lintJourneyLedger(root), []);
@@ -69,9 +117,9 @@ test("an undeclared volume fails, so nobody writes a ceiling at an unnamed volum
   const root = fixture(
     {
       ...BASE,
-      entries: {
+      entries: grid({
         "web/cold-open/huge/any": entry({ volume: "huge" }),
-      },
+      }),
     },
     { "tests/probe.ts": "" }
   );
@@ -81,9 +129,9 @@ test("an undeclared volume fails, so nobody writes a ceiling at an unnamed volum
 test("an entry with no span and no consumer fails", () => {
   const root = fixture({
     ...BASE,
-    entries: {
+    entries: grid({
       "web/cold-open/year3/any": entry({ spans: [], consumers: [] }),
-    },
+    }),
   });
   assert.match(
     lintJourneyLedger(root).join("\n"),
@@ -94,7 +142,7 @@ test("an entry with no span and no consumer fails", () => {
 test("a consumer that does not exist fails", () => {
   const root = fixture({
     ...BASE,
-    entries: { "web/cold-open/year3/any": entry() },
+    entries: grid({ "web/cold-open/year3/any": entry() }),
   });
   assert.match(lintJourneyLedger(root).join("\n"), /which does not exist/u);
 });
@@ -103,11 +151,11 @@ test("an unmeasured metric that ships a number fails", () => {
   const root = fixture(
     {
       ...BASE,
-      entries: {
+      entries: grid({
         "web/cold-open/year3/any": entry({
           metrics: { coldOpen: { status: "unmeasured", ceilingMs: 900 } },
         }),
-      },
+      }),
     },
     { "tests/probe.ts": "" }
   );
@@ -118,11 +166,11 @@ test("a catastrophe bound must argue itself", () => {
   const root = fixture(
     {
       ...BASE,
-      entries: {
+      entries: grid({
         "web/cold-open/year3/any": entry({
           metrics: { coldOpen: { status: "bound", maxPercent: 50 } },
         }),
-      },
+      }),
     },
     { "tests/probe.ts": "" }
   );
@@ -148,7 +196,7 @@ test("a rig cross-link to a missing entry fails", () => {
 
 test("a surviving reference to a replaced file fails", () => {
   const root = fixture(
-    { ...BASE, entries: { "web/cold-open/year3/any": entry() } },
+    { ...BASE, entries: grid({ "web/cold-open/year3/any": entry() }) },
     {
       "tests/probe.ts": "",
       "tests/old.ts": 'import x from "tests/experience-budgets/web.json";',

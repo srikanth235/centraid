@@ -17,6 +17,7 @@
  *   - a rig cross-link naming an entry that is gone;
  *   - a `measured` metric with no numeric ceiling, an `unmeasured` one that
  *     ships a number anyway, or a `bound` one that does not argue its bound;
+ *   - a hole in the nine-journey x four-surface grid;
  *   - ANY surviving reference to the files this ledger replaced.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -124,6 +125,31 @@ export function lintJourneyLedger(root = ROOT) {
         );
     }
   }
+
+  // THE GRID. Nine journeys x four surfaces, and every cell has an entry —
+  // `unmeasured` with a reason is an answer, a missing row is not. Before this
+  // the absence of a share number on any surface was invisible: nothing named
+  // the journeys, so nothing could notice one had no home.
+  const NINE = [
+    "cold-open",
+    "warm-switch",
+    "own-echo",
+    "peer-echo",
+    "converge",
+    "share",
+    "search",
+    "scroll",
+    "first-bootstrap",
+  ];
+  const covered = new Set(
+    Object.values(entries).map((entry) => `${entry.surface}/${entry.journey}`)
+  );
+  for (const surface of ["web", "desktop", "mobile", "gateway"])
+    for (const journey of NINE)
+      if (!covered.has(`${surface}/${journey}`))
+        errors.push(
+          `journey-ledger: no entry for ${surface}/${journey} — an unmeasured entry with a reason is an answer, a missing row is not`
+        );
 
   for (const [owner, rig] of Object.entries(ledger.rigs ?? {}))
     for (const key of rig.entries ?? [])

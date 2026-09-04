@@ -80,6 +80,51 @@ controlStore.establish({
 // into every vault at mount — which is exactly what the specs drive.
 await handle.syncApps();
 
+// A VOLUME, so the perf specs are not measuring an empty vault (#927). Every
+// journey ceiling this harness produces is stated at the volume declared in
+// `tests/journeys.json` as `seeded-demo`; before this the harness's own budget
+// file said `"volume": "empty (web-e2e fixture vault)"` in as many words, which
+// makes a cold-open number a bundle ratchet and nothing more.
+//
+// Seeded through the gateway's OWN write path — the demo route each bundled app
+// owns, then Atlas rows — rather than by writing SQLite directly: a direct
+// insert skips the journal sequence the replica cursor is derived from, so the
+// vault would be big in a way no client ever produces. The kit's year-3
+// generator is not reachable from here: `@centraid/test-kit` ships TypeScript
+// sources and no build, and this file runs under `node --experimental-strip-types`,
+// which cannot resolve its `./x.js` specifiers onto `.ts` files.
+const seedHeaders = {
+  Authorization: "Bearer centraid-web-e2e-token",
+  "content-type": "application/json",
+};
+const listed = (await (
+  await fetch(`${handle.url}/centraid/_vault/demo`, { headers: seedHeaders })
+).json()) as { apps: { appId: string; seedable: boolean }[] };
+for (const app of listed.apps.filter((entry) => entry.seedable)) {
+  // oxlint-disable-next-line no-await-in-loop -- (#927) the gateway's write path is serial; firing eight seeds at once would measure its admission queue, not seed a vault
+  await fetch(`${handle.url}/centraid/_vault/demo/${app.appId}`, {
+    method: "POST",
+    headers: seedHeaders,
+    body: "{}",
+  });
+}
+const FILL_ROWS = 2000;
+for (let index = 0; index < FILL_ROWS; index += 1) {
+  // oxlint-disable-next-line no-await-in-loop -- (#927) same serial write path
+  await fetch(`${handle.url}/centraid/_vault/atlas/browse/insert`, {
+    method: "POST",
+    headers: seedHeaders,
+    body: JSON.stringify({
+      table: "core.place",
+      values: {
+        name: `Web e2e fill place ${index}`,
+        kind: "venue",
+        created_at: new Date().toISOString(),
+      },
+    }),
+  });
+}
+
 async function close(): Promise<void> {
   await handle.close().catch(() => undefined);
   await fs.rm(dataDir, { recursive: true, force: true });

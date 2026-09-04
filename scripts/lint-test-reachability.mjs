@@ -53,6 +53,10 @@ export const RUNNERS = Object.freeze([
   { config: "vitest.config.ts", cwd: "." },
   { config: "vitest.perf.config.ts", cwd: "." },
   { config: "vitest.scale.config.ts", cwd: "." },
+  // `bun run perf:waterfall` — the rung-0 developer command (#927). One file,
+  // eight apps; it is a vitest project only because the year-3 fixture ships as
+  // TypeScript sources.
+  { config: "vitest.waterfall.config.ts", cwd: "." },
   { config: "scripts/test-report/vitest.config.ts", cwd: "." },
   { config: "scripts/fuzz/vitest.config.ts", cwd: "." },
   { config: "scripts/release/vitest.config.ts", cwd: "." },
