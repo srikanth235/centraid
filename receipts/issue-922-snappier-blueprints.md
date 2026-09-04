@@ -2134,3 +2134,8 @@ Switching to an app and back is unchanged to look at; what changed is what a scr
 First-run: nothing new on a first run — a fresh vault has no batch to collapse and no second app to switch to.
 
 Screenshot from the changed harness: `artifacts/e2e/ui-impact/issue-922-web-warm-switch-app-view.png` (`apps/web/tests/e2e/perf-waterfall.spec.ts`, the warm tap→app-view attach probe).
+
+## Mega-lane E — paths the rebase onto `main` carried
+
+The lane's integration branch was replayed onto `main` after the #922 engine chain landed there, so the change set now spans mega-lane E2's landed commit as well. Two of its paths are named in its own section by brace expansion; spelled out here for the coverage crosswalk, which matches whole paths: `packages/client/src/react/blueprints/inline-change-batch.test.ts`, `packages/client/src/replica/shell-session-lifecycle.test.ts`.
+
