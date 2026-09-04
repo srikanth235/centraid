@@ -1487,3 +1487,67 @@ packages/blueprints/apps/tally/queries/export.test.ts
 | --- | --- | --- |
 | The export's `IN` clause is what narrows the revisions, not a surviving JS filter | the test double previously ignored `where`; with the clause in and the double ignoring it, `ships only the revisions of the expenses that travel` was **red** (both revisions came back). The double now applies the clause and the case passes — so the assertion bites on the SQL | **red then green**, and the case cannot pass again on discarded leftovers |
 | Locker's own walls really are untouched | `git diff origin/main -- packages/vault/src/gateway/{sealed,locker-auth,reseal}.ts packages/blueprints/apps/locker/actions` | `sealed.ts` and the actions are empty. `locker-auth.ts` and `reseal.ts` each carry ONE hunk from w4a and nothing else: `writeReceipt(db.audit, {grantId: null, purpose: "dpv:Security"})` → `writeAuthorityReceipt(db, {authorityId: null})`. Same receipt, same chain, no authority to stamp — the sealed set, the permits and the reveal path are not in the branch at all |
+
+## w4/w5 lane close — what landed, and what wave 5 still owes
+
+Two comments named columns of tables w4a deleted; both are corrected here. The rest of this section is the
+lane's own account of what it did NOT land, so the next worker starts from state rather than from memory.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/vault/src/schema/core.ts` | the "no party column confers permission" list cited `access_grant.granted_by_party_id`; it now cites `share_authority.granted_by`, which is the column that exists |
+| `packages/vault/src/schema/party-pointers.ts` | the RESTRICT roll-call cited `access_grant.*` and `access_scope_tombstone.grantee_party_id`; both tables are gone, and `share_authority.granted_by` already stood beside them |
+
+### Acceptance clauses served by this branch
+
+| clause | state |
+| --- | --- |
+| `evaluateAccess` has no `app` identity path; the app bridge issues no app credential; an owner-device read runs 0 grant statements | **served** (w4a, w4b) |
+| the five grant tables and every reader are gone; `grep -r "dpv:" packages apps` empty | **served** — the only remaining mentions are `schema/access.ts`'s supersession marker and one test's pre-#928 replica fixture |
+| `access_receipt` references `authority_id` from one id space; purpose column gone; chain verifier green; Settings → Access shows last-used for every row | **served** (w4a, w4c) |
+| Locker: sealed set, permits, reveal, `ONLINE_ONLY_ACTIONS` unchanged; history filters in SQL; `locker-online-only.test.ts` green | **served** (w5c) |
+| Companion attenuation and outbox grants are rows in the one plane; `grant_profile_json` has no reader | **NOT served** — see below |
+| the give-plane coordinator, edge store, effects, edge routes and retire pass are deleted; a same-owner album move is one command | **NOT served** |
+| a handler invocation's remaining reads commit once off the read path, with fsync-per-read measured (#922 B1) | **NOT served** — `Gateway.readBatch` exists (#916) and `push-wake-routes.ts` is its one caller; the app/agent bridge in `serve/vault-plane.ts` does not wrap a handler invocation's reads yet, and no before/after strace was taken |
+
+### Findings — two design questions wave 5(a) cannot answer for itself
+
+1. **`outbox_grant` has three actor kinds, and only one of them is an automation.** `outbox_item.actor_kind`
+   is `identity.provAgentKind`, so a standing "always allow" rule can belong to the OWNER (a device caller)
+   or, since w4b, to a first-party SURFACE — neither of which is an `automation` principal, and a surface is
+   not a principal at all. The rule is also not a reach question: it is egress consent ("send this shape of
+   thing to this address without asking again"), which `share_authority.verb`'s per-(kind × subject) registry
+   has no vocabulary for. Options: (a) `principal_kind='automation'` for agent actors only, leaving owner and
+   surface rules where they are — half a migration, and `outbox_grant` keeps a reader; (b) admit an `egress`
+   subject_type across `device`/`automation` principals, with the surface as `subject_id`; (c) leave the
+   outbox rule out of the one plane and say so in the issue. Recommendation: (b). Not landed — this is the
+   root's ruling, not a worker's.
+2. **Companion attenuation is read before a vault is open.** `devices.grant_profile_json` lives in the
+   gateway's own store and `build-gateway.ts` reads it per request to authorize a companion. Making it a
+   `share_authority` row puts a vault open on the companion authorization path, which changes what happens
+   when the vault cannot be opened — today the companion is refused by the host, afterwards it would depend
+   on the vault. That is a security-relevant failure-mode change and wants a ruling before the code.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/server test -- --run src/serve/authz-deny-matrix.test.ts src/serve/authz-matrix.smoke.test.ts src/serve/manifest-scope-denial.{sweep,fuzz,hostile,closed-grammar}.test.ts   # 6 files, 186 passed, 3 expected fail
+bun run --cwd packages/vault test -- --run src/gateway/{access-properties,evidence,read-batch}.test.ts       # 3 files, 13 passed
+```
+
+### Paths
+
+```
+packages/vault/src/schema/core.ts
+packages/vault/src/schema/party-pointers.ts
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| "No widening" is asserted, not assumed | ran the named invariant suites on the landed head: the deny matrix, the authz smoke matrix and all four automation clamp sweeps | **186 passed, 3 expected fail** — including `[law:consent-standing-answer-required]`, which asserts a `surface` identity's decision is byte-identical to the bare owner device's over the generated table × verb space |
+| The five retired tables really have no reader left, rather than a reader the grep missed | `grep -rn 'access_grant\\b\|access_grant_scope\|access_policy\|access_scope_tombstone\|access_scope_request\|purpose_concept_id' packages apps` over non-test source | 5 hits before this commit, 3 after: `schema/access.ts`'s deliberate supersession marker and two comments — now one. No code path |
