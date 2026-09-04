@@ -2330,3 +2330,46 @@ bun run --cwd packages/client test src/replica/rebootstrap-loop.test.ts        #
 | Narrowing `changeMismatch` lets a replica silently skip changes | ran the whole `@centraid/client` suite (274 files) and the mobile replica suite (33 files) against the narrowed rule, then asserted in the committed suite that a batch starting ahead of the cursor still wipes and raises — and re-ran with the three files reverted, which puts 3 of the 4 new cases red | held — a gap ahead still wipes; only a batch at or behind the cursor is absorbed, and the spent case is proved not to move the cursor back |
 | The e2e is green because the probe got weaker, not because the loop is gone | carried the warm-switch probe PAST attach to a takeable screen (`window.centraid` installed, fallback gone) — a strictly stronger assertion than the one that passed before — and watched the network: the 409s, the `NoModificationAllowedError`s and the re-bootstraps are all at zero on a 30 s open that previously never settled | held — the number rose from 191 (attach) to 433 (usable) because it now fences more, under the same unchanged ceiling |
 
+## Mega-lane E3 slice 2 — the owner's echo skips the window, and the tie census is an index walk
+
+| File | Change |
+| --- | --- |
+| `packages/design/src/elements/refresh.ts` | `onDataChange` hands the seat's OWN overlay detail straight through; every other doorbell keeps the 200 ms window |
+| `packages/design/src/elements/refresh.test.ts` | both halves, red first: the echo fires with no timer, a doorbell mid-window still waits it out |
+| `packages/client/src/replica/read-plan.ts` | the tie census is `EXISTS (… GROUP BY <ordered> HAVING count(*) > 1)`; `ReplicaTieCensusRow` is the one column that answer needs |
+| `packages/client/src/replica/store-core.ts` | the tie census joins the order census in the write-invalidated cache (`orderCensuses` → `censuses`, `orderCensus` → `cachedCensus`) |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Warm ordered read, 50k-row synthetic-pk entity | 21.6 ms | 0.45 ms | throwaway vitest over `ReplicaSqliteStore` on `node:sqlite`, 50 000 `knowledge.note` rows, `orderBy updated_at desc limit 20`, 5 cycles; before `[20.04, 21.61, 21.05, 21.77, 21.59]`, after `[0.64, 0.48, 0.36, 0.40, 0.45]`; container 4 cores / 15 GB |
+| Ordered read after a write, same fixture | 21.6 ms | 8.3 ms | same run; before `[20.41, 22.20, 21.41, 22.09, 21.64]`, after `[7.44, 7.10, 8.79, 9.99, 8.22]` |
+| Tie-census statement alone, same fixture | 22.5 ms | 6.7 ms | same rig, statement timed directly; `EXPLAIN QUERY PLAN` before: `USE TEMP B-TREE FOR count(DISTINCT) \| SEARCH replica_row USING COVERING INDEX replica_row_ord_…`, after: the covering index with no b-tree |
+| Share of an ordered read the tie census was | 21.9 of 22.2 ms | — | same rig with the census suppressed: `[0.57, 0.31, 0.18, 0.20, 0.25]` |
+| Delay the owner's own write pays before its re-read | 200 ms | 0 | `refresh.test.ts`, counted on a fake clock; red first at 200 ms |
+| Untracked `.js` under `packages/blueprints/apps/**` after a clean root build | — | 0 of 184 | verified on this base, see decisions |
+
+**Deleted/replaced.** The `count(*) / count(DISTINCT …) / count(…)` tie aggregate and the three-column row it filled, replaced by the one boolean the rule actually reads. The per-read (uncached) execution of that census, replaced by the census cache the order guards already use.
+
+**Decisions.** The tie rule is UNCHANGED: `kept > distinct + (nulls ? 1 : 0)` is "some ordered value is carried by two kept rows", which is what `GROUP BY … HAVING count(*) > 1` asks, and SQLite groups NULLs together for free. The win is structural — the aggregate built a temp b-tree over every kept value, the grouped probe walks the ordering index that already exists. It does NOT stop at the first repeated value in practice (measured: a tie at row 2 of 50 000 still costs 7.1 ms), so no early-exit claim is made. **Slice 2(c) needed no change**: the ignore added by the precompiled-handlers lane already covers all 184 generated handlers, and `packages/blueprints/turbo.json` already declares `apps/*/{actions,queries}/*.js` as build outputs — proved by deleting all 184, running the root `bun run build` to a `@centraid/blueprints:build` CACHE HIT, and finding all 184 restored with `git status` clean.
+
+```
+# tree hash: quoted in this lane's closing section
+bun run --cwd packages/{client,design} typecheck
+bun run --cwd packages/client test                  # 274 files, 2477 tests
+bun run --cwd packages/design test                  # 32 files, 384 tests
+bun run --cwd apps/mobile test src/lib/replica      # 33 files, 223 tests
+bun run --cwd packages/design test src/elements/refresh.test.ts   # red first: 2 of 12 fail
+find packages/blueprints/apps -name '*.js' ! -name 'seed.js' -delete && bun run build   # cache hit, 184 back
+```
+
+**Findings.** (1) `apps/mobile/src/lib/replica/reader-statement-budget.test.ts`'s `bucket()` classifies a statement as the tie census by `sql.includes("count(DISTINCT")`, which this slice's statement no longer contains. No mobile assertion moves (33 files, 223 tests green — nothing in that suite exercises a synthetic-pk ordered read today), so the line is dead rather than wrong-answering, but it will silently mis-bucket the first test that does. Mobile is not this lane's tree. (2) `apps/mobile/src/lib/replica/multi-vault-reader.ts` runs both censuses UNCACHED on every mounted read, so the phone still pays the full statement per read where the shell pays it once per write. (3) `packages/blueprints` `handler-reachability.test.ts` "every mobile handler is dispatched or explicitly marked" is RED ON THE BASE (`claude/922-reads`) for `tally`'s `dashboard`/`activity`/`search` — reproduced with this slice's changes stashed.
+
+**Doc debt.** `docs/mobile-offline.md` states the replica's per-read census cost from the aggregate era (this slice).
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| The grouped probe disagrees with the aggregate it replaces — a tie it misses is an unstable page served as if it were canonical | forced a tie into the 50 000-row fixture (two rows given one `updated_at`) and re-read: the read raised `OnlineOnlyError` with the same message, from the same assertion; then ran the whole `@centraid/client` suite (274 files) and the mobile replica suite, which carry the existing tie cases | held — the tie still escalates, and NULL grouping is `GROUP BY`'s own semantics rather than a re-derivation |
+| The speedup is the cache, so the first read after every write is as slow as before | measured the after-a-write column separately, which is the cache-cold one: 21.6 ms → 8.3 ms with the cache doing nothing, and `EXPLAIN QUERY PLAN` shows the temp b-tree gone | held — the statement itself is 3.4x cheaper; the cache is what makes the warm read free |
+| Exempting the overlay detail drops a re-read some screen needed | asserted a canonical doorbell arriving mid-window still fires on the trailing edge and is not carried out early by the echo, then ran the whole `@centraid/design` suite and the `@centraid/blueprints` suite (212 files, 7024 tests) whose seven app roots are the real consumers | held — one exemption, one key, and the buffered detail is untouched |
+

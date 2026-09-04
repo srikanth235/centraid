@@ -827,17 +827,14 @@ export class ReplicaSqliteStore {
     const probed = this.all<ReplicaPlannedRow>(plan.sql, plan.binds);
     assertReplicaPage(probed, plan);
     if (plan.orderCensus && probed.length > 0) {
-      assertReplicaOrder(this.orderCensus(plan.orderCensus), plan);
+      assertReplicaOrder(this.cachedCensus(plan.orderCensus), plan);
     }
     // The plan over-fetches by one row; that probe is dropped HERE and reported
     // as `truncated`, never swallowed (#922 0a).
     const page = trimReplicaPage(probed, plan);
     const planned = page.rows;
     if (plan.tieCensus) {
-      const census = this.one<ReplicaTieCensusRow>(
-        plan.tieCensus.sql,
-        plan.tieCensus.binds
-      );
+      const census = this.cachedCensus<ReplicaTieCensusRow>(plan.tieCensus);
       if (census) assertReplicaTieCensus(census);
     }
     // Confined only when a pk-eq read found its row; anything wider, or a miss,
@@ -1193,7 +1190,7 @@ export class ReplicaSqliteStore {
 
   private clear(): void {
     this.schemas.clear();
-    this.invalidateOrderCensus();
+    this.invalidateCensuses();
     this.driver.exec(`
       DELETE FROM replica_bootstrap_progress;
       DELETE FROM replica_search;
@@ -1383,30 +1380,31 @@ export class ReplicaSqliteStore {
   private readonly orderIndexes = new Set<string>();
 
   /**
-   * The order guards' verdict, cached until the next write (#922 C3).
+   * Both censuses' verdicts, cached until the next write (#922 C3, #922 E3).
    *
-   * The census asks a question about the STORED VALUES' TYPES — is any of them
-   * oversized, non-scalar, or straddling text and number? — so its answer
-   * changes only when rows change, never between two reads. Computing it per
-   * read made every ordered read O(entity) even with the ordering index doing
-   * the paging in O(limit). `invalidateOrderCensus` runs on every write path.
+   * A census asks a question about the STORED VALUES — is any of them
+   * oversized, non-scalar, straddling text and number, or carried by two rows
+   * at once? — so its answer changes only when rows change, never between two
+   * reads. Computing one per read made every ordered read O(entity) even with
+   * the ordering index doing the paging in O(limit). `invalidateCensuses` runs
+   * on every write path.
    */
-  private readonly orderCensuses = new Map<string, Record<string, number>>();
+  private readonly censuses = new Map<string, Record<string, number>>();
 
-  private orderCensus(census: {
+  private cachedCensus<Row extends Record<string, number>>(census: {
     sql: string;
     binds: ReplicaBindValue[];
-  }): Record<string, number> | undefined {
+  }): Row | undefined {
     const key = `${census.sql}\u0000${JSON.stringify(census.binds)}`;
-    const hit = this.orderCensuses.get(key);
-    if (hit) return hit;
-    const computed = this.one<Record<string, number>>(census.sql, census.binds);
-    if (computed) this.orderCensuses.set(key, computed);
+    const hit = this.censuses.get(key);
+    if (hit) return hit as Row;
+    const computed = this.one<Row>(census.sql, census.binds);
+    if (computed) this.censuses.set(key, computed);
     return computed;
   }
 
-  private invalidateOrderCensus(): void {
-    this.orderCensuses.clear();
+  private invalidateCensuses(): void {
+    this.censuses.clear();
   }
 
   /**
@@ -1764,7 +1762,7 @@ export class ReplicaSqliteStore {
   private run(sql: string, bind: readonly ReplicaBindValue[] = []): void {
     // EVERY write goes through here, which is why the census cache is dropped
     // here and not at each call site: a new write path cannot forget to.
-    this.invalidateOrderCensus();
+    this.invalidateCensuses();
     if (this.recording) {
       this.recording.push({ sql, bind: [...bind] });
       return;

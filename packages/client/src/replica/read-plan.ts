@@ -161,11 +161,8 @@ export function assertReplicaOrder(
   }
 }
 
-export interface ReplicaTieCensusRow {
-  kept: number;
-  distinct_values: number;
-  non_null: number;
-}
+/** 1 when some ordered value is carried by more than one kept row. */
+export type ReplicaTieCensusRow = { tied: number };
 
 function raise(escalation: ReplicaEscalation): never {
   throw escalation.kind === "online"
@@ -192,10 +189,9 @@ export function assertReplicaPage(
 }
 
 /** A tie under an opaque primary key makes `ORDER BY ... LIMIT` unstable.
- *  NULLs form ONE group. */
+ *  NULLs form ONE group, which `GROUP BY` gives for free. */
 export function assertReplicaTieCensus(row: ReplicaTieCensusRow): void {
-  const groups = row.distinct_values + (row.non_null < row.kept ? 1 : 0);
-  if (row.kept > groups) {
+  if (row.tied) {
     throw new OnlineOnlyError(
       "ORDER BY ties require an exposed scalar primary key or canonical SQLite ordering"
     );
@@ -460,12 +456,21 @@ export function planComposedReplicaRead(
   };
   if (request.orderBy && schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY) {
     const ordered = jsonValue(request.orderBy.column);
+    // THE TIE CENSUS ASKS ONE QUESTION (#922 E3): does any ordered value
+    // repeat? `count(*) / count(DISTINCT …)` answered it by building a temp
+    // b-tree over every kept value — 22 ms of a 22 ms ordered read at 50 000
+    // rows, the largest O(entity) term left on this path once the ORDER census
+    // became a seek. `GROUP BY` over the SAME expression the ordering index is
+    // built on walks that index in order instead, needs no b-tree, and stops
+    // at the FIRST repeated value, so the case that escalates costs almost
+    // nothing. `EXISTS` keeps the answer one row, and NULLs still form one
+    // group, so the rule is unchanged.
     plan.tieCensus = {
-      sql: `SELECT count(*) AS kept,
-                   count(DISTINCT ${ordered}) AS distinct_values,
-                   count(${ordered}) AS non_null
-              FROM (${scan})
-             WHERE verdict = 0`,
+      sql: `SELECT EXISTS (SELECT 1
+                             FROM (${scan})
+                            WHERE verdict = 0
+                            GROUP BY ${ordered}
+                           HAVING count(*) > 1) AS tied`,
       binds: scanBinds,
     };
   }
