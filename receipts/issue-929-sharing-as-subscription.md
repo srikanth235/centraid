@@ -632,3 +632,37 @@ Verdict: PASS
 - The blueprint readers are disclosed rather than buried: `docs/queries/_shared.ts` and
   `people/queries/_shared.ts` do still join deleted entities. Naming it for the root to
   place is the right disposition for a lane that does not own those files.
+## CI — unused fixture exports and declared-writes floor
+
+PR 972 CI: knip unused exports and a vacuous declared-writes tripwire after
+the commons rail left. No production client behaviour change. The unused
+`edges` re-export is gone even though it busts the mobile apk cache — knip
+correctness over cache.
+
+Unused exports deleted (no dummy imports, no knip ignores):
+
+| file | removed |
+| --- | --- |
+| `packages/client/src/gateway-client-seam-fixtures.ts` | `edges` re-export of `gateway-client-edges.js` |
+| `packages/server/src/serve/peer-give.test-fixtures.ts` | `dialFrom`, `routeFrom`, and the `PeerDial` / `LinkRoute` / `judgeEdgeCrossing` imports they uniquely needed |
+| `packages/vault/src/share/subscription-sim-world.test-fixtures.ts` | `fail` (the sim's own `fail` stays local in `subscription-sim.test-fixtures.ts`) |
+
+`packages/server/src/serve/peer-transport-remote.test.ts` keeps its own local
+`dialFrom`.
+
+Declared-writes floor retuned, not padded: the catalog is 98 names after
+~14 `share.commons_*` tables left and `share.subscription` /
+`share.subscription_lineage` landed. The vacuous-parser tripwire was `size <
+100`; that is now `size < 90` and still requires `core.content_item`. Dummy
+entities were not added. Files not previously named in this receipt:
+
+- `scripts/lint-engine-conformance.mjs`
+- `scripts/lint-engine-conformance.test.mjs` — floor `>= 90`; asserts
+  `share.subscription` and `share.subscription_lineage` exist;
+  `share.commons_op` is gone, with the existing gone-table checks kept
+
+```sh
+bun run knip
+bun run lint:engine-conformance
+node --test scripts/lint-engine-conformance.test.mjs
+```

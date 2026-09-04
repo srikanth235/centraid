@@ -166,7 +166,3 @@ export function closeWorld(world: World): void {
   }
   rmSync(world.root, { recursive: true, force: true });
 }
-
-export function fail(world: World, message: string): void {
-  world.failures.push(message);
-}

@@ -424,7 +424,6 @@ export const backup = await import("./gateway-client-backup.js");
 export const atlas = await import("./gateway-client-atlas.js");
 export const owners = await import("./gateway-client-owners.js");
 export const devices = await import("./gateway-client-devices.js");
-export const edges = await import("./gateway-client-edges.js");
 export const history = await import("./gateway-client-conversation-history.js");
 export const editing = await import("./gateway-client-editing.js");
 export const vaultOwner = await import("./gateway-client-vault.js");

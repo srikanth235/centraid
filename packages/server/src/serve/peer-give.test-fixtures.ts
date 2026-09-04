@@ -24,14 +24,12 @@ import { makePeerPlaneHandler } from "../routes/peer-plane.js";
 import type { PeerReplicaDeps } from "../routes/peer-replica-route.js";
 import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
-import { judgeEdgeCrossing } from "./link-crossing.js";
 import {
   encodeLinkTicket,
   parseLinkTicket,
   redeemLinkTicket,
 } from "./peer-link-client.js";
-import type { PeerDial, PeerRequest } from "./peer-link-client.js";
-import type { LinkRoute } from "./vault-link-row.js";
+import type { PeerRequest } from "./peer-link-client.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
 export interface Side {
@@ -228,13 +226,6 @@ export function transportToHost(
   return wireHandler(handler, callerEndpointId, host.proof);
 }
 
-export function dialFrom(caller: Side, callee: Side): PeerDial {
-  return {
-    request: transportTo(callee, caller.endpointId),
-    endpointTicketFor: (endpointId) => `ticket-for-${endpointId}`,
-  };
-}
-
 function showTicket(side: Side): string {
   const ticket = side.links.tickets.mint(side.vaultId, side.publicKey);
   return encodeLinkTicket({
@@ -262,21 +253,6 @@ export async function link(shower: Side, scanner: Side): Promise<void> {
   if (result.state !== "linked") {
     throw new Error(`expected a link, got ${result.state}`);
   }
-}
-
-export function routeFrom(from: Side, to: Side): LinkRoute {
-  const crossing = judgeEdgeCrossing(
-    {
-      links: from.links,
-      ownerOf: (vaultId) =>
-        vaultId === from.vaultId ? from.ownerId : undefined,
-    },
-    from.vaultId,
-    to.vaultId
-  );
-  if (crossing.state !== "linked" || !crossing.route)
-    throw new Error(`expected a routed link from ${from.label} to ${to.label}`);
-  return crossing.route;
 }
 
 export interface SeededPhoto {

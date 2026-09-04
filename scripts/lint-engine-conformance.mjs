@@ -1369,7 +1369,9 @@ function checkDeclaredWrites(root) {
   const findings = [];
   const entities = vaultEntityNames(root);
   // Anti-vacuity: an empty or tiny vocabulary would pass every declaration.
-  if (entities.size < 100 || !entities.has("core.content_item"))
+  // Floor is 90, not 100: post-#929 catalog after the commons rail left
+  // (~14 share.commons_* tables gone; share.subscription + lineage added).
+  if (entities.size < 90 || !entities.has("core.content_item"))
     return [
       `${VAULT_TABLES_PATH}: read ${entities.size} entity names — the declared-writes ` +
         `gate is anchored on this registry and has gone vacuous`,
