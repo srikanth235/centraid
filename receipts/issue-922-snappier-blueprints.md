@@ -2249,3 +2249,44 @@ First-run: a device that has not finished mounting the vault says so — "This d
 
 `check:ui-receipt` fires on `apps/mobile/src/apps/tally/**`. This slice changes no e2e harness — the rendered states are unchanged except that `stale` can no longer occur — so no screenshot is fabricated here; CI must run the mobile evidence lane against this branch.
 
+## Mega-lane E slice 4b — Locker on the phone: the sealed-column law, and why the reads did not follow Tally
+
+| File | Change |
+| --- | --- |
+| `packages/vault/src/replica/locker-sealed-columns.test.ts` | new: every sealed column of every sealed entity is structurally unavailable to the replica lane, asserted over the REGISTRY (so a sixth column tomorrow is covered) and over a real row carrying real secret material |
+
+**What holds.** `locker.item`'s replica row carries `title`, `username`, `url` — the browsable half Locker's whole premise rests on — and none of `password`, `otp_seed`, `card_number`, `cvv`, `content`, by NAME rather than blanked: a column present-but-empty would still say the row has a password. The single-row read a change frame takes agrees with the page. `ONLINE_ONLY_ACTIONS` is untouched by this lane, and its two existing exact-list assertions (`packages/blueprints/apps/locker/writes.test.ts`, `packages/blueprints/src/locker-online-only.test.ts`) still pin it.
+
+**What does NOT hold, and why the seat's reads stayed on the gateway.** Two of Locker's three secret-free queries cannot run on a local ctx at all, and this is structural, not an omission. `OnlineOnlyGuard` is sticky by design — "sticky even when query handler code catches the capability failure" — so a handler's own soft catch does not save the run:
+
+| Query | Verb it reaches for | On a local ctx |
+| --- | --- | --- |
+| `queries/items.ts` | `ctx.vault.authenticate` (the unlock gate) | **refused** — `authenticate is online-only` |
+| `queries/search.ts` | `ctx.vault.invoke` (`locker.watchtower`) | **refused** — `invoke is online-only` |
+| `queries/trash.ts` | `ctx.vault.read` only | runs |
+
+Measured by running each handler through `runNativeInlineQuery` over a stub read plane (throwaway probe, this container). One query of three is not a seam worth building.
+
+**The shape that would work, and the ruling it needs.** The seat could hand the native ctx the same ONLINE calls it already makes — `authenticate` → `lockerAuth`, and an allowlisted `invoke` for `locker.watchtower` / `locker.counts`, both derived inside the sealed boundary and unreachable locally by construction — while `read` stays local. Nothing about the gate would change: it would be the same gateway call, made from the same seat, and a device that cannot reach the gateway still could not unlock. The gain is bounded to "the row window stops crossing the wire while online"; Locker would remain unreadable offline, because unlocking is an online question. The alternative that WOULD give offline Locker is serving `authenticate` from the phone's own boundary (`locker-store.ts`'s session machine over the device's biometric credential), and that is a security ruling about what unlocks a locker, not a lane's call. **Blocked on the root; no code was written for either shape.**
+
+**Deleted/replaced.** Nothing.
+
+**Decisions.** The `onlineVerbs` seam described above was implemented and then reverted rather than landed: with only `trash` reachable it would have been a hole in the shared ctx with no consumer behind it, and "no dead seams" outranks a partial delivery.
+
+```
+bun run --cwd packages/vault test src/replica/locker-sealed-columns.test.ts
+bun run --cwd packages/vault test
+```
+
+**Findings.** (1) Locker's phone reads are blocked as above — the root's call. (2) `queries/search.ts` reaching for Watchtower means a search that cannot decorate cannot answer at all, on either seat; the shell hides it behind an online fallback, so the coupling has never been visible. Whether a search should fail because a decoration is unavailable is a product question this lane opened but did not own.
+
+**Doc debt.** `docs/mobile-offline.md`'s Locker paragraph still describes the seat correctly (its reads remain the gateway's); nothing is stale. If the root rules on the shape above, that paragraph and the SB-loader row's "app by app" list both need the Locker row.
+
+**Full paths for coverage:** `packages/vault/src/replica/locker-sealed-columns.test.ts`
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| "No sealed column reaches a locker replica row" is really "the row was empty" | inserted a row with a real password, OTP seed, card number and CVV, then asserted the browsable columns ARE present and searched the serialized values for the plaintexts | held — `title`/`username` present, no sealed column name, and neither plaintext appears under any key |
+| Locker's queries are only blocked because the probe's stub read plane returned nothing | the refusals name the VERB, not the rows: `authenticate is online-only` and `invoke is online-only`, raised before any row shape matters, and `trash` — same stub, same empty rows — ran to completion | held; the blocker is the verb surface, not the data |
+
