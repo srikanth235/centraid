@@ -1431,14 +1431,30 @@ jobs:
         with:
           name: nightly-evidence-desktop
           path: artifacts
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # PERF HISTORY IS NOT CACHE (#927). The 30-sample drift budget every rig
+      # consumes (tests/helpers/rig-budgets.ts) reads artifacts/<lane>/<slug>.json,
+      # and a series a runner may evict at any time is a gate that silently
+      # stops gating. The series is published to gh-pages beside the candidate
+      # record by the report job below and restored from there here, so it is
+      # append-only and auditable rather than best-effort.
+      - name: Restore durable rig history (gh-pages)
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          path: |
-            artifacts/perf
-            artifacts/scale
-            artifacts/year3-cache
-          key: quality-history-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: quality-history-${{ runner.os }}-
+          ref: gh-pages
+          path: .gh-pages-quality
+      - name: Stage durable rig history
+        run: |
+          mkdir -p artifacts/perf artifacts/scale
+          for lane in perf scale; do
+            src=".gh-pages-quality/test-report/nightly/quality-history/$lane"
+            if [ -d "$src" ]; then
+              cp "$src"/*.json "artifacts/$lane/" 2>/dev/null || true
+            else
+              echo "::warning::no durable $lane rig history on gh-pages yet; drift budgets start with no opinion"
+            fi
+          done
+          rm -rf .gh-pages-quality
       - run: sudo apt-get update && sudo apt-get install -y strace
       - run: bun run build
       - id: perf
@@ -1446,8 +1462,6 @@ jobs:
         run: bun run test:perf
       - id: scale
         continue-on-error: true
-        env:
-          CENTRAID_YEAR3_CACHE_DIR: artifacts/year3-cache
         run: bun run test:scale
       # #842 W3.1/W3.2 — the seeded chaos lanes run on every PR in `cover` mode
       # (every fault exactly once, ~18 s). Here they run in `sample` mode, so
@@ -1508,13 +1522,6 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            artifacts/scale
-            artifacts/year3-cache
-          key: quality-history-restore-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: quality-history-restore-${{ runner.os }}-
       - run: bun run build
       # ~25 GiB of scratch is needed for the source vault, the provider store
       # and the restore destination. A runner that cannot spare it fails here
@@ -1524,7 +1531,6 @@ jobs:
       - name: Restore a 10 GiB year-3 vault
         env:
           CENTRAID_SCALE_RESTORE_GIB: "10"
-          CENTRAID_YEAR3_CACHE_DIR: artifacts/year3-cache
         run: node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/restore-10gib.scale.test.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -1673,7 +1679,8 @@ jobs:
         continue-on-error: true
         run: bun run coverage
       # Durable trend source: the append-only summary series committed to
-      # gh-pages. Unlike the quality-history cache above it is never evicted.
+      # gh-pages, the same store the rig drift series rides in (#927). Nothing
+      # perf-related is kept in an actions cache, which a runner may evict.
       - name: Restore durable report history (gh-pages)
         if: always()
         continue-on-error: true
@@ -1741,6 +1748,19 @@ jobs:
             echo "::error::Nightly coverage lane failed — see step above"
             exit 1
           fi
+      # The rig drift series rides INSIDE the report tree, so publish-nightly-report
+      # persists it to gh-pages beside the candidate record with no second
+      # publisher and no cache (#927). Consumed by the quality job's
+      # "Stage durable rig history" step on the next night.
+      - name: Stage rig history into the report tree
+        if: always()
+        run: |
+          mkdir -p dist/test-report/quality-history/perf dist/test-report/quality-history/scale
+          for lane in perf scale; do
+            if [ -d "artifacts/$lane" ]; then
+              cp "artifacts/$lane"/*.json "dist/test-report/quality-history/$lane/" 2>/dev/null || true
+            fi
+          done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

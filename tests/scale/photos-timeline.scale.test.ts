@@ -18,7 +18,7 @@ import {
   VAULT_MIGRATIONS,
 } from "@centraid/vault";
 
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { rigBudgetMsNamed, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 // Photos-specific companion to large-vault.scale.test.ts (issue #721 C1):
 // that rig proves the whole-vault "daily use" mix stays bounded at 10k
@@ -39,10 +39,12 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 const OWNER = "tests/scale/photos-timeline.scale.test.ts";
 const PHOTO_COUNT = 50_000;
 const ONE_DAY_PHOTO_COUNT = 10_000;
-const SEED_BUDGET_MS = 30_000;
-const PAGE_READ_BUDGET_MS = 2_000;
-const ONE_DAY_READ_BUDGET_MS = 1_000;
-const DAY_BUCKET_BUDGET_MS = 2_000;
+// Ceilings live beside the volume they were measured at, in
+// tests/budgets.json#qualityRigs, so the ratchet holds them tighten-only.
+const SEED_BUDGET_MS = rigBudgetMsNamed(OWNER, "seedMs");
+const PAGE_READ_BUDGET_MS = rigBudgetMsNamed(OWNER, "pageReadMs");
+const ONE_DAY_READ_BUDGET_MS = rigBudgetMsNamed(OWNER, "oneDayReadMs");
+const DAY_BUCKET_BUDGET_MS = rigBudgetMsNamed(OWNER, "dayBucketMs");
 const YEAR3 = year3VaultProfile();
 const YEAR3_SEAL_KEY = Buffer.alloc(32, 0x50);
 // Outside year3's own 2023-01-01..~2025-12-31 multiYearStart window, so the

@@ -21,7 +21,7 @@ import type { Year3VaultProfile } from "./year3-shape.js";
 /**
  * 3 — the golden artifact (#927 P4). Version 1 declared row COUNTS only;
  * version 2 declared DISTRIBUTIONS as well (long note bodies over the
- * replica's 64 KiB value ceiling, grantees with live bindings and standing
+ * previous 64 KiB default text ceiling, grantees with live bindings and standing
  * authority, a year of receipts in the audit band, the five-vault footprint).
  * Version 3 adds the golden replica's `meta.json` — the row count and
  * bootstrap cursor of the artifact, written beside `replica.db` so a warm run

@@ -16,9 +16,7 @@ import type { ReplicaValuePolicy } from "./value-policy.js";
  * decides whether a text value rides in full is declared per entity in
  * `schema/entity-catalog.ts`, and a caller's `maxValueBytes` is only the
  * baseline for entities that declare nothing. The number lives beside the
- * declaration it defaults; this is the replica lane's re-export of it, and it
- * replaces `DEFAULT_REPLICA_MAX_VALUE_BYTES`, which named a flat cap that no
- * longer exists.
+ * declaration it defaults; this is the replica lane's re-export of it.
  */
 export { DEFAULT_REPLICA_TEXT_CEILING_BYTES } from "../schema/entity-declaration.js";
 

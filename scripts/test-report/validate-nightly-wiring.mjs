@@ -525,14 +525,18 @@ for (const { lane, key, source } of rigs) {
     errors.push(
       `${key} inlines a numeric BUDGET_MS — declare budgetMs in tests/budgets.json#qualityRigs and read it with rigBudgetMs(OWNER) so the ratchet sees it`
     );
-  // #659 R4 — every rig must consume its own history. An absolute ceiling set
-  // at ~3x a baseline only fires on a collapse: before this rule, a rig could
-  // walk from 40 ms to 110 ms under a 120 ms ceiling across a year of green
-  // nightlies and no gate anywhere would say a word. `rigDriftBudgetMs` (30
-  // samples, 1.5x trailing median) is the drift gate; `qualityRegressionBudget`
-  // is the older 10-sample/3x catastrophe gate and still counts as consuming
-  // history. A rig that reads neither is fenced only against catastrophe.
+  // #659 R4 — every SAMPLED rig consumes its own history: an absolute ceiling
+  // at ~3x a baseline only fires on a collapse, so `rigDriftBudgetMs` (30
+  // samples, 1.5x median) or the older `qualityRegressionBudget` must appear.
+  // A deterministic gate consumes none by design; that exemption is declared
+  // in the ledger entry beside the volume, with the `_gateNote` arguing it.
+  const sampled = entry?.gate !== "deterministic-counters";
+  if (!sampled && typeof entry._gateNote !== "string")
+    errors.push(
+      `${key} claims gate "deterministic-counters" with no _gateNote`
+    );
   if (
+    sampled &&
     !source.includes("rigDriftBudgetMs") &&
     !source.includes("qualityRegressionBudget")
   )

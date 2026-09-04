@@ -24,6 +24,7 @@ interface RigEntry {
   lane: "perf" | "scale";
   volume: string;
   budgetMs?: number;
+  budgetsMs?: Record<string, number>;
 }
 
 interface RigRegistry {
@@ -63,6 +64,26 @@ export function rigBudgetMs(owner: string): number {
       `${owner} has no budgetMs in tests/budgets.json#qualityRigs — declare one there rather than inlining a constant`
     );
   return budgetMs;
+}
+
+/**
+ * One NAMED ceiling for a rig that measures several intervals, from
+ * `budgetsMs` beside the volume it was measured at (#927).
+ *
+ * A rig whose four reads share one `budgetMs` cannot say which read regressed,
+ * so those rigs carried their ceilings as module constants — outside the
+ * tighten-only ratchet, where widening one was a one-line edit nothing flagged.
+ * Throws on a missing key rather than defaulting, for the same reason
+ * `rigBudgetMs` does: a silent `Infinity` keeps passing after someone deletes
+ * the ceiling.
+ */
+export function rigBudgetMsNamed(owner: string, key: string): number {
+  const budget = rigEntry(owner).budgetsMs?.[key];
+  if (typeof budget !== "number")
+    throw new Error(
+      `${owner} has no budgetsMs.${key} in tests/budgets.json#qualityRigs — declare it there beside the volume rather than inlining a constant`
+    );
+  return budget;
 }
 
 /**

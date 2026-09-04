@@ -1087,3 +1087,49 @@ symmetrically in both runs. Every other check is green in both, and
 
 - `tests/experience-budgets/README.md` — the year-3 table names the golden artifact per row but not `meta.json` (#927 wave 2's ledger pass).
 - `docs/harnesses.md` — describes the year-3 fixture as materialize-and-copy; build vs mount is a distinction a rig author now has to know.
+
+## w2 ledger — perf history off the cache, rig ceilings beside their volume
+
+Wave-2 integration branch `claude/927-w2`: `claude/927-w1b` (3 commits) and
+`claude/927-ledger` (5) rebased onto main's maintainer parity fix `2bac48118`,
+then this slice.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `.github/workflows/e2e.yml` | `quality-history-*` and `quality-history-restore-*` actions caches deleted; rig drift series restored from and published to gh-pages inside the report tree; four `artifacts/year3-cache` literals gone |
+| `tests/budgets.json` | `photos-timeline` gains `budgetsMs` (4 named ceilings) beside its volume; `work-counters` registered with a declared `gate: "deterministic-counters"` |
+| `tests/helpers/rig-budgets.ts` | `rigBudgetMsNamed(owner, key)` — one named ceiling for a rig that measures several intervals |
+| `tests/scale/photos-timeline.scale.test.ts` | four module constants replaced by registry reads |
+| `scripts/test-report/validate-nightly-wiring.mjs` | honours the ledger-declared deterministic-gate exemption, and requires the `_gateNote` that argues it |
+| `packages/test-kit/src/year3-fixture-cache.ts`, `packages/vault/src/replica/snapshot.ts` | comments naming the removed `DEFAULT_REPLICA_MAX_VALUE_BYTES` corrected |
+
+### Numbers
+
+| Ceiling | Was | Now | Provenance |
+| --- | --- | --- | --- |
+| `photos-timeline` seed / page / one-day / bucket | 30000 / 2000 / 1000 / 2000 ms, module constants | same four values, ratcheted | value-preserving move; ratchet now sees them (`bun run test:ratchet:unit`, linux x64) |
+
+### Deleted, with replacement
+
+- `quality-history-${{ runner.os }}` and `quality-history-restore-${{ runner.os }}` actions caches → the gh-pages report tree (`test-report/nightly/quality-history/{perf,scale}`), written by the report job, read by the quality job.
+- `CENTRAID_YEAR3_CACHE_DIR: artifacts/year3-cache` (×2, the last two literals) → `year3FixtureCacheRoot()`'s host scratch dir. The fixture is a rebuildable artifact, not history.
+- `SEED_BUDGET_MS`/`PAGE_READ_BUDGET_MS`/`ONE_DAY_READ_BUDGET_MS`/`DAY_BUCKET_BUDGET_MS` → `tests/budgets.json#qualityRigs`.
+
+### Decisions
+
+- The counter gate's history exemption is declared in the **ledger entry**, not in the validator, so it is reviewed beside the volume. A rig claiming it and then timing something is the thing to look for.
+
+### Verification
+
+```
+bun run lint:ledgers && node scripts/test-report/validate-nightly-wiring.mjs
+bun run test:ratchet:unit && node --test scripts/lint-workflow-pins.test.mjs
+bun run --cwd packages/test-kit test
+```
+
+### Falsification
+
+1. *Claim: no rig ceiling was widened by the photos-timeline move.* Diffed the four registry values against the deleted constants — 30000/2000/1000/2000 both sides; `lint:ledgers` green against `origin/main`.
+2. *Claim: the deterministic-gate exemption cannot be claimed silently.* Removed `_gateNote` from the entry and re-ran `validate-nightly-wiring.mjs`: it errors. Restored.
