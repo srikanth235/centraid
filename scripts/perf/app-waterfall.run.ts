@@ -4,8 +4,9 @@
  * are unit-tested there; this opens the apps.
  *
  * It runs under the repo's TypeScript runner for vitest's assertions and the
- * fixture seams; the year-3 generator itself is reachable from plain Node since
- * `@centraid/test-kit` gained a `dist` build (#927 W4).
+ * fixture seams. The year-3 generator is TypeScript source
+ * (`@centraid/test-kit/year3-vault`); a plain-Node importer needs
+ * `--experimental-strip-types`, which the web e2e harness already passes.
  */
 import { performance } from "node:perf_hooks";
 

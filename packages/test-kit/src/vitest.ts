@@ -6,13 +6,7 @@ import type { UserWorkspaceConfig } from "vitest/config";
 type ProjectConfig = UserWorkspaceConfig;
 
 // setupFiles paths resolve against the consuming project root, not test-kit.
-// `../src/`, not `./`: this module resolves from `dist/vitest.js` in a built
-// package and from `src/vitest.ts` in the source tree, and the setup file is a
-// TypeScript module vitest loads itself, so it is only ever under `src/`. Both
-// paths land on the same file.
-const JSDOM_SETUP = fileURLToPath(
-  new URL("../src/jsdom-setup.ts", import.meta.url)
-);
+const JSDOM_SETUP = fileURLToPath(new URL("jsdom-setup.ts", import.meta.url));
 
 // Zero-assertion tests fail (#496). A legitimately assertion-free test must
 // call `expect.assertions(0)`.

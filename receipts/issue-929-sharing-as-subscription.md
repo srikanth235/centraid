@@ -72,6 +72,12 @@ CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux
 | The offer does not soften #903 | Asserted `Share` is disabled in the same browser frame that shows the minted ticket, and again after minting on both seats | GREEN — `toBeDisabled()` holds after the mint; `window.__grantStatus` stays `[]` |
 | The ceremony is only offered where it applies | `offersLinkTicket` over the four reaches and both audience kinds | RED for `live`, `unknown`, `circle`, and an absent audience — only `party` + `never-reached`/`severed` are offered |
 
+## Audit
+
+- **PASS** — (1) `## What changed` faithfully describes the #929 share-sheet surface vs `origin/main`. The table names every file in the focused S6 diff: `offersLinkTicket` / `LinkTicketDoor` / `MintedLinkTicket` / `parseMintedLinkTicket` in `packages/blueprints/apps/_shared/grant-plane.ts` (and tests); the five `LINK_TICKET_*` sentences plus `linkTicketExpiry` in `grant-copy.ts`; `useLinkTicket` in `link-ticket-panel.ts`; new `GrantSheetTicket.tsx` on both seats; sheet wiring and CSS/styles; `webLinkTicketDoor` in `grant-gateway.ts`; `linkTicket()` on the host bridge (`centraid.d.ts`, `centraid-inline.ts` → `mintGatewayLinkTicket`); phone `nativeLinkTicketDoor` over `mintLinkTicket` in `grant-seat.ts`; claims in `GrantSheet.claims.test.tsx`, `GrantSheet.test.tsx`, `GrantSheet.flows.test.tsx`, `PersonGrants.test.tsx` (clipboard/`grant-seat` mocks); the second Playwright case in `apps/web/tests/e2e/grant-sheet.spec.ts`; and `sharing-reach.mjs` dropping its private screenshot helper for `tests/agent-e2e-mobile/lib/ui-impact.mjs`. Prose matches the tree: submit still goes through `reachBlocksSharing` (`cannotShare` on web, `blocked` on phone); no gateway/share-engine files in this slice. Other paths on `claude/surfaces-device-rung` are named as #922/#927-owned, not as this work.
+- **PASS** — (2) The single `[x]` item is realized in that diff: both grant sheets (`packages/blueprints/apps/_shared/GrantSheet.tsx`, `apps/mobile/src/kit/share/GrantSheet.tsx`) render `GrantSheetTicket` under the reach line when `offersLinkTicket(party, reach)` is true (`reachBlocksSharing` → `never-reached`/`severed`); mint is on request; Share stays disabled after mint (web claims, native claims, Playwright `toBeDisabled()` + empty `__grantStatus`). `#903`'s refusal is not rewritten. The second box (`DocsSharedView` / Photos / Tally shape lineage) is **intentionally unchecked** — no lineage-surface files in the S6 diff; `## Out of scope` says the engine lane has not landed.
+- **REFUTED** — (3) `## Checklist` does not mirror issue #929's checklist. `gh issue view 929` `### Acceptance criteria` has thirteen boxes (cross-gateway view of six subjects, one-delta album edit, signed edit intents, re-origin/migration, `share_commons_*` deletion, revocation/D1/BUG-9, **S6 link ticket**, one size ceiling, #927 share journey measured, docs/glossary, `rowVersion`/pending settle, `parked.waitingOn`, shape-purge `expired` intents). The receipt lists two lines: the S6 ticket box (wording matches AC item 7) and an extra unchecked `DocsSharedView`/Photos/Tally lineage line that is wave-5 execution-plan text, not an AC checkbox. The other twelve AC items are absent. Sibling umbrellas on this branch (`receipts/issue-922-snappier-blueprints.md`, `receipts/issue-927-perf-infra.md`) mirror their issue AC lists in full and leave unlanded boxes open.
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
@@ -81,3 +87,8 @@ CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux
 | date | harness | session |
 | --- | --- | --- |
 | 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+
+## CI-green follow-up files owned by #927
+
+`.github/actionlint.yaml` is named here only because `receipt-per-issue` reads paths from the receipts added in this change set, and this file is the only added receipt. The file is described and owned by `receipts/issue-927-perf-infra.md`.
+

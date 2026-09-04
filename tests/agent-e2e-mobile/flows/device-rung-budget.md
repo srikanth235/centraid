@@ -13,7 +13,7 @@ The two rung-5 suites — `device-rung-android` and `device-rung-ios` — run on
 
 ## The volume caveat, stated once
 
-Both cells seed the **demo corpus**, not the golden year-3 replica. A cold-start or dropped-frame number over a hundred rows is not a year-3 number, and every ledger row this rung feeds must carry the volume it was taken at. Seeding a gateway from `goldenYear3Replica()` is the rung's first debt; `@centraid/test-kit` now ships a `dist` build (#927), which is what makes that seeder writable from a plain-Node harness at all.
+Both cells seed the **demo corpus**, not the golden year-3 replica. A cold-start or dropped-frame number over a hundred rows is not a year-3 number, and every ledger row this rung feeds must carry the volume it was taken at. Seeding a gateway from `goldenYear3Replica()` is the rung's first debt; the seeder is `@centraid/test-kit/year3-vault`, imported from source (plain Node needs `--experimental-strip-types`, which the web e2e harness already passes).
 
 ## On breach
 
