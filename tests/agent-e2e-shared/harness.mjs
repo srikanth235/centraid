@@ -66,68 +66,6 @@ export async function recordQualityResult(repoRoot, result) {
   );
 }
 
-/** Activate the 3× trailing-median budget only after ten durable samples. */
-export async function qualityRegressionBudget(repoRoot, lane, owner) {
-  return trailingMedianBudget(repoRoot, lane, owner, 10, 3);
-}
-
-/**
- * Sustained-drift budget (#659 R4) — the JavaScript-lane counterpart of
- * `rigDriftBudgetMs` in tests/helpers/rig-budgets.ts. Knobs come from
- * tests/journeys.json#rigs rather than being repeated here, so the
- * on-device flows and the vitest rigs cannot drift apart on what "drift" means.
- */
-export async function rigDriftBudget(repoRoot, lane, owner) {
-  const registry = JSON.parse(
-    await fs.readFile(path.join(repoRoot, "tests/budgets.json"), "utf8")
-  ).qualityRigs;
-  return trailingMedianBudget(
-    repoRoot,
-    lane,
-    owner,
-    registry.minimumDriftSamples,
-    registry.driftMultiplier
-  );
-}
-
-/**
- * Shared trailing-median arithmetic. Returns null until `minimumSamples`
- * durable observations exist — a null is "no opinion yet", never a pass.
- */
-async function trailingMedianBudget(
-  repoRoot,
-  lane,
-  owner,
-  minimumSamples,
-  multiplier
-) {
-  // Same platform-keyed path recordQualityResult writes, so an iOS budget is
-  // computed over iOS samples only — cross-platform samples never interleave
-  // into a false ratchet (#781, QUALITY.md).
-  try {
-    const previous = JSON.parse(
-      await fs.readFile(
-        path.join(repoRoot, "artifacts", lane, `${evidenceSlug(owner)}.json`),
-        "utf8"
-      )
-    );
-    const samples = (previous.history ?? [])
-      .map((point) => Number(point.value))
-      .filter((value) => Number.isFinite(value) && value >= 0)
-      .slice(-minimumSamples)
-      .toSorted((left, right) => left - right);
-    if (samples.length < minimumSamples) return null;
-    const middle = Math.floor(samples.length / 2);
-    const median =
-      samples.length % 2
-        ? samples[middle]
-        : (samples[middle - 1] + samples[middle]) / 2;
-    return median * multiplier;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * One verdict contract for every agent-driven exploratory surface. Platform
  * adapters own setup/teardown, but run metadata, notes, failures and result

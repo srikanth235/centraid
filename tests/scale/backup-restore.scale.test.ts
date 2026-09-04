@@ -18,7 +18,6 @@ import { generateVolumeFixture } from "@centraid/test-kit/volume-fixture";
 import { FsBlobStore, sha256OfBytes, blobUriFor } from "@centraid/vault";
 
 import { createTestVault } from "../helpers/factories.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/backup-restore.scale.test.ts";
 const APP_META = {
@@ -201,22 +200,17 @@ describe("backup-restore.scale", () => {
       })
     );
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       restoredVaultHash === sourceVaultHash &&
       partyRows >= PARTY_COUNT &&
       contentRows === BLOB_COUNT &&
       blobHashesMatch.every(Boolean) &&
       durationMs < DURATION_BUDGET_MS;
-    const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: `Backup restore of a ${BLOB_COUNT} MiB populated vault`,
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "wall clock",
@@ -233,10 +227,6 @@ describe("backup-restore.scale", () => {
         { name: "content rows restored", value: contentRows, unit: "rows" },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${durationMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
 
     expect(restoredVaultHash).toBe(sourceVaultHash);
     expect(partyRows).toBeGreaterThanOrEqual(PARTY_COUNT);

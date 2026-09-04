@@ -27,8 +27,6 @@ import type { ManifestEntry } from "@centraid/backup";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
-
 const OWNER = "tests/scale/backup-manifest-size.scale.test.ts";
 const VOLUMES = [25_000, 50_000, 100_000] as const;
 /**
@@ -98,18 +96,13 @@ describe("backup-manifest-size.scale", () => {
     const doublingRatio =
       (sizes.get(100_000) as number) / (sizes.get(50_000) as number);
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       bytesPerChunk < BYTES_PER_CHUNK_BUDGET && doublingRatio < 2.2;
-    const withinDrift = drift === null || bytesPerChunk <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: "Backup manifest size at 100k chunk-index entries",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "bytes per chunk",
@@ -126,10 +119,6 @@ describe("backup-manifest-size.scale", () => {
         { name: "seal wall clock", value: sealMs, unit: "ms" },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${bytesPerChunk} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
 
     expect(bytesPerChunk).toBeLessThan(BYTES_PER_CHUNK_BUDGET);
     expect(doublingRatio).toBeLessThan(2.2);

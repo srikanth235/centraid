@@ -16,7 +16,7 @@ import { describe, expect, test } from "vitest";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 import { computeMissedWindows } from "../../packages/server/src/automation/fire/scheduler-ledger.js";
-import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/automations-fire.scale.test.ts";
 const AUTOMATION_COUNT = 200;
@@ -59,17 +59,12 @@ describe("automations-fire.scale", () => {
     expect(missed).toHaveLength(AUTOMATION_COUNT);
     expect(missed.length).toBeLessThan(360 * AUTOMATION_COUNT);
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed = durationMs < BUDGET_MS && missed.length === AUTOMATION_COUNT;
-    const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: `Automations missed-window scan (${AUTOMATION_COUNT} autos, 6h gap, hourly cron)`,
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "wall clock",
@@ -80,10 +75,6 @@ describe("automations-fire.scale", () => {
         { name: "missed entries", value: missed.length, unit: "count" },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${durationMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(durationMs).toBeLessThan(BUDGET_MS);
   });
 });

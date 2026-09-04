@@ -8,7 +8,6 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { openVaultRegistry } from "../../packages/server/src/serve/vault-registry.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/blob-egress.perf.test.ts";
 
@@ -97,18 +96,13 @@ describe("blob-egress.perf", () => {
     // The 96 MiB ceiling remains below the fixture's 128 MiB payload, so a
     // buffer-whole-file regression cannot fit while allocator noise gets room.
     const memoryBudget = 96 * 1024 * 1024;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("perf", OWNER);
     const passed =
       ttfbMs < 500 && rssGrowthBytes < memoryBudget && received === ready.size;
-    const withinDrift = drift === null || ttfbMs <= drift;
     await recordQualityResult({
       lane: "perf",
       owner: OWNER,
       name: "Large-blob egress TTFB and memory",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         { name: "TTFB", value: ttfbMs, unit: "ms", budget: 500 },
         {
@@ -125,10 +119,6 @@ describe("blob-egress.perf", () => {
         },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${ttfbMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(first.value?.byteLength).toBeGreaterThan(0);
     expect(received).toBe(ready.size);
     expect(ttfbMs).toBeLessThan(500);

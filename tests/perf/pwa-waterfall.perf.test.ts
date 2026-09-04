@@ -5,7 +5,6 @@ import { describe, expect, test } from "vitest";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 import { perfBudgets } from "../../apps/web/tests/e2e/perf-budgets.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/pwa-waterfall.perf.test.ts";
 // Produced by the web-e2e Playwright job (perf-waterfall.spec.ts) and handed to
@@ -72,10 +71,6 @@ describe("pwa-waterfall.perf", () => {
     "the real #404 PWA fast-path browser budgets gate the nightly lane",
     async () => {
       const report = waterfall!;
-      // #659 R4 — sustained-drift gate over this rig's own 30-sample
-      // nightly history. Null until the history is deep enough; a null is
-      // "no opinion yet", never a pass.
-      const drift = await rigDriftBudgetMs("perf", OWNER);
       const passed =
         report.shell.cold.requestCount <= perfBudgets.shell.maxRequests &&
         report.shell.cold.transferBytes <= perfBudgets.shell.maxTransferBytes &&
@@ -105,13 +100,11 @@ describe("pwa-waterfall.perf", () => {
           perfBudgets.appOpen.warm.maxEncodedBytes &&
         report.appOpen.warmToColdByteRatio <=
           perfBudgets.appOpen.maxWarmToColdByteRatio;
-      const withinDrift =
-        drift === null || report.shell.cold.requestCount <= drift;
       await recordQualityResult({
         lane: "perf",
         owner: OWNER,
         name: "#404 PWA fast-path waterfall",
-        status: passed && withinDrift ? "passed" : "failed",
+        status: passed ? "passed" : "failed",
         measurements: [
           {
             name: "cold shell requests",
@@ -151,10 +144,6 @@ describe("pwa-waterfall.perf", () => {
           },
         ],
       });
-      expect(
-        withinDrift,
-        `sustained drift: ${report.shell.cold.requestCount} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-      ).toBe(true);
       expect(passed).toBe(true);
     }
   );

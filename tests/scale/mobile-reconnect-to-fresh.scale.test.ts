@@ -42,7 +42,6 @@ import {
   SCREEN_PAGE,
 } from "../../apps/mobile/src/lib/replica/reconnect-to-fresh.fixture";
 import { journeyCeiling } from "../helpers/journeys.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/mobile-reconnect-to-fresh.scale.test.ts";
 
@@ -143,13 +142,11 @@ describe("reconnect-to-fresh probe", () => {
             `${SCREEN_PAGE}-row screen page, ${framesPolled} polls) ` +
             "— client-side term only; no network RTT, no device flash, no render\n"
         );
-        const drift = await rigDriftBudgetMs("scale", OWNER);
-        const withinDrift = drift === null || freshMs <= drift;
         await recordQualityResult({
           lane: "scale",
           owner: OWNER,
           name: `Mobile reconnect to fresh at ${REPLICA_ROWS} rows`,
-          status: withinDrift && freshMs < ceilingMs ? "passed" : "failed",
+          status: freshMs < ceilingMs ? "passed" : "failed",
           measurements: [
             {
               name: "reconnect to fresh",
@@ -160,10 +157,6 @@ describe("reconnect-to-fresh probe", () => {
             { name: "polls to fresh", value: framesPolled, unit: "count" },
           ],
         });
-        expect(
-          withinDrift,
-          `sustained drift: ${freshMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-        ).toBe(true);
         expect(freshMs).toBeLessThan(ceilingMs);
       } finally {
         await session.close();

@@ -8,7 +8,6 @@ import {
 import type { VaultDb } from "@centraid/vault";
 
 import { createTestVault } from "../helpers/factories.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
  * FIVE-VAULT MEMORY FOOTPRINT (issue #659 S5).
@@ -149,9 +148,7 @@ describe("multi-vault-footprint.scale", () => {
       summedCacheBytes <= HOST_TOTAL_CACHE_BYTES;
     const everyFileUsable = smallestCacheBytes >= MIN_VAULT_FILE_CACHE_BYTES;
 
-    const drift = await rigDriftBudgetMs("scale", OWNER);
-    const withinDrift = drift === null || summedCacheBytes <= drift;
-    const passed = withinTotals && everyFileUsable && withinDrift;
+    const passed = withinTotals && everyFileUsable;
 
     console.log("\n======== FIVE-VAULT FOOTPRINT ========");
     console.log(`handles open:        ${files.length}`);
@@ -234,10 +231,5 @@ describe("multi-vault-footprint.scale", () => {
       smallestCacheBytes,
       "smallest per-file page cache"
     ).toBeGreaterThanOrEqual(MIN_VAULT_FILE_CACHE_BYTES);
-
-    expect(
-      withinDrift,
-      `sustained drift: ${summedCacheBytes} B vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
   });
 });

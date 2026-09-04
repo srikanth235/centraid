@@ -10,7 +10,7 @@ import { describe, expect, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
-import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/tunnel-native.perf.test.ts";
 const nativeCandidates = [
@@ -44,17 +44,12 @@ describe("tunnel-native.perf", () => {
         Object.keys(addon as object).length +
           (typeof addon === "function" ? 1 : 0)
       ).toBeGreaterThan(0);
-      // #659 R4 — sustained-drift gate over this rig's own 30-sample
-      // nightly history. Null until the history is deep enough; a null is
-      // "no opinion yet", never a pass.
-      const drift = await rigDriftBudgetMs("perf", OWNER);
       const passed = durationMs < BUDGET_MS;
-      const withinDrift = drift === null || durationMs <= drift;
       await recordQualityResult({
         lane: "perf",
         owner: OWNER,
         name: "Native tunnel module load",
-        status: passed && withinDrift ? "passed" : "failed",
+        status: passed ? "passed" : "failed",
         measurements: [
           {
             name: "load wall clock",
@@ -64,10 +59,6 @@ describe("tunnel-native.perf", () => {
           },
         ],
       });
-      expect(
-        withinDrift,
-        `sustained drift: ${durationMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-      ).toBe(true);
       expect(durationMs).toBeLessThan(BUDGET_MS);
     }
   );

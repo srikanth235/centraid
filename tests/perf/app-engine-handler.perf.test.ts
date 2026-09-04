@@ -4,10 +4,7 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { runHandler } from "@centraid/server/engine";
-import {
-  qualityRegressionBudget,
-  recordQualityResult,
-} from "@centraid/test-kit/quality-result";
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 const OWNER = "tests/perf/app-engine-handler.perf.test.ts";
@@ -36,8 +33,9 @@ describe("app-engine-handler.perf", () => {
       Promise.resolve()
     );
     const durationMs = performance.now() - started;
-    const budget = await qualityRegressionBudget("perf", OWNER);
-    const passed = budget == null || durationMs < budget;
+    // Published, not gated (#927): the paired candidate/PR run compares two
+    // trees; a threshold on one sample here would fence the runner.
+    const passed = true;
     await recordQualityResult({
       lane: "perf",
       owner: OWNER,
@@ -48,7 +46,6 @@ describe("app-engine-handler.perf", () => {
           name: "wall clock",
           value: durationMs,
           unit: "ms",
-          ...(budget == null ? {} : { budget }),
         },
         { name: "mean handler", value: durationMs / RUNS, unit: "ms" },
       ],

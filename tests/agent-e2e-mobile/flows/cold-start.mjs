@@ -1,9 +1,6 @@
 import path from "node:path";
 
-import {
-  recordQualityResult,
-  rigDriftBudget,
-} from "../../agent-e2e-shared/harness.mjs";
+import { recordQualityResult } from "../../agent-e2e-shared/harness.mjs";
 import { AWAIT_LAUNCHER, runFlow } from "../lib/harness.mjs";
 
 /**
@@ -86,11 +83,10 @@ ${AWAIT_LAUNCHER}`,
   const slowestMs = sorted.at(-1);
 
   // The recorded history keys off measurements[0], so the MEDIAN is the series
-  // the drift budget tracks: a p95 from eight samples on a shared CI simulator
-  // is one unlucky launch away from noise, and a drift gate on noise is a gate
-  // people learn to ignore.
-  const drift = await rigDriftBudget(REPO_ROOT, "scale", OWNER);
-  const passed = drift == null || medianMs <= drift;
+  // Published, not gated (#927). Eight launches on a shared CI simulator is a
+  // distribution, and the paired candidate/PR run is what compares two trees;
+  // a threshold here would fence the runner.
+  const passed = true;
 
   await recordQualityResult(REPO_ROOT, {
     lane: "scale",
@@ -102,7 +98,6 @@ ${AWAIT_LAUNCHER}`,
         name: "median cold start",
         value: medianMs,
         unit: "ms",
-        ...(drift == null ? {} : { budget: drift }),
       },
       { name: "p95 cold start", value: p95Ms, unit: "ms" },
       { name: "slowest cold start", value: slowestMs, unit: "ms" },
@@ -112,16 +107,13 @@ ${AWAIT_LAUNCHER}`,
 
   ctx.note(
     `cold start over ${LAUNCHES} launches: median ${Math.round(medianMs)} ms, ` +
-      `p95 ${Math.round(p95Ms)} ms, slowest ${Math.round(slowestMs)} ms` +
-      (drift == null
-        ? " (drift budget inactive — fewer than 30 durable samples)"
-        : ` (drift budget ${Math.round(drift)} ms)`)
+      `p95 ${Math.round(p95Ms)} ms, slowest ${Math.round(slowestMs)} ms`
   );
 
   return {
     pass: passed,
     notes: passed
-      ? "per-launch cold start within its sustained-drift budget"
-      : `median cold start ${Math.round(medianMs)} ms exceeded the drift budget ${Math.round(drift)} ms`,
+      ? "per-launch cold start distribution recorded"
+      : "per-launch cold start could not be recorded",
   };
 });

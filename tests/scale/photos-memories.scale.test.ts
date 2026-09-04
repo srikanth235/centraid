@@ -27,7 +27,7 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { bootstrapVault } from "../../packages/vault/src/bootstrap.js";
 import { openVaultDb } from "../../packages/vault/src/db.js";
 import { rebuildMemories } from "../../packages/vault/src/enrich/memories.js";
-import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/photos-memories.scale.test.ts";
 const ASSET_COUNT = 50_000;
@@ -160,8 +160,6 @@ describe("photos-memories.scale", () => {
     const totalMemories = result.onThisDay + result.trips + result.similar;
 
     const BUDGET_MS = rigBudgetMs(OWNER);
-    const drift = await rigDriftBudgetMs("scale", OWNER);
-    const withinDrift = drift === null || coldMs <= drift;
     const passed =
       coldMs < BUDGET_MS &&
       result.trips > 0 &&
@@ -173,7 +171,7 @@ describe("photos-memories.scale", () => {
       lane: "scale",
       owner: OWNER,
       name: "Memories v0 rebuild at 50k assets over a 3-year span",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         { name: "rebuild", value: coldMs, unit: "ms", budget: BUDGET_MS },
         { name: "fixture seeding", value: seedMs, unit: "ms" },
@@ -190,10 +188,6 @@ describe("photos-memories.scale", () => {
       ],
     });
 
-    expect(
-      withinDrift,
-      `sustained drift: ${coldMs}ms vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(coldMs).toBeLessThan(BUDGET_MS);
     // Every kind produced real work at this volume, not a trivially empty
     // projection — the same "prove it is not vacuous" assertion

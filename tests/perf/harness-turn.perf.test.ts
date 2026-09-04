@@ -2,10 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { HARNESSES, runTurn } from "@centraid/server/acp";
 import type { TurnConfig, TurnInput } from "@centraid/server/acp";
-import {
-  qualityRegressionBudget,
-  recordQualityResult,
-} from "@centraid/test-kit/quality-result";
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 const OWNER = "tests/perf/harness-turn.perf.test.ts";
 const TURNS = 2_000;
@@ -34,8 +31,9 @@ describe("harness-turn.perf", () => {
         await runTurn(input, config);
       }, Promise.resolve());
       const durationMs = performance.now() - started;
-      const budget = await qualityRegressionBudget("perf", OWNER);
-      const passed = budget == null || durationMs < budget;
+      // Published, not gated (#927): the paired candidate/PR run compares two
+      // trees; a threshold on one sample here would fence the runner.
+      const passed = true;
       await recordQualityResult({
         lane: "perf",
         owner: OWNER,
@@ -46,7 +44,6 @@ describe("harness-turn.perf", () => {
             name: "wall clock",
             value: durationMs,
             unit: "ms",
-            ...(budget == null ? {} : { budget }),
           },
           { name: "mean dispatch", value: durationMs / TURNS, unit: "ms" },
         ],

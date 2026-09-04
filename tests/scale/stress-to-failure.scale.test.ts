@@ -17,7 +17,6 @@ import type {
   OpOutcome,
 } from "../helpers/composite-workload.js";
 import { journeyCeiling } from "../helpers/journeys.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
  * STRESS TO FAILURE (issue #842 W4.2).
@@ -218,8 +217,6 @@ describe("stress-to-failure.scale", () => {
       for (const [key, count] of Object.entries(rung.refusals))
         refusalTally[key] = (refusalTally[key] ?? 0) + count;
 
-    const drift = await rigDriftBudgetMs("scale", OWNER);
-    const withinDrift = drift === null || ladderMs <= drift;
     const recovered =
       recovery.status >= 200 &&
       recovery.status < 300 &&
@@ -232,8 +229,7 @@ describe("stress-to-failure.scale", () => {
       noteRows === storm.ok &&
       integrity?.integrity_check === "ok" &&
       foreignKeys.length === 0 &&
-      recovered &&
-      withinDrift;
+      recovered;
 
     console.log("\n========== STRESS TO FAILURE ==========");
     for (const rung of rungs)
@@ -269,7 +265,6 @@ describe("stress-to-failure.scale", () => {
           name: "ladder wall clock",
           value: ladderMs,
           unit: "ms",
-          ...(drift === null ? {} : { budget: drift }),
         },
         {
           name: "knee (first refusing concurrency)",
@@ -326,10 +321,6 @@ describe("stress-to-failure.scale", () => {
       recovered,
       `recovery: the first request after the load dropped returned ${recovery.status} in ` +
         `${recovery.durationMs.toFixed(0)} ms (ceiling ${ceilingRecoveryMs} ms)`
-    ).toBe(true);
-    expect(
-      withinDrift,
-      `sustained drift: ${ladderMs} ms vs drift budget ${drift} ms (1.5x the trailing median of the last 30 nightly samples)`
     ).toBe(true);
   }, 300_000);
 });

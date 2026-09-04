@@ -12,7 +12,7 @@ import { unrefTimer } from "../../packages/server/src/lib/unref-timer.js";
 import { replicaProjectionHub } from "../../packages/server/src/routes/replica-fanout.js";
 import type { ReplicaProjectedPage } from "../../packages/server/src/routes/replica-projection.js";
 import { serve } from "../../packages/server/src/serve/serve.js";
-import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
  * REPLICA SSE FAN-OUT (issue #883 — the before-instrument for C1, the gate
@@ -357,22 +357,17 @@ describe("replica-sse-fanout.scale", () => {
     const generations = hub.currentGeneration() - generationBefore;
     const projectionsPerCommit = distinctPages.size / generations;
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample nightly
-    // history. Null until the history is deep enough; a null is "no opinion
-    // yet", never a pass.
-    const drift = await rigDriftBudgetMs("scale", OWNER);
     const everyoneHeard = subscribers.every(
       (subscriber) => subscriber.frames() > 0
     );
     const sharedProjection =
       statementsPerCommit < SHARED_PROJECTION_STATEMENTS_CEILING;
     const passed = everyoneHeard && sharedProjection && durationMs < budgetMs;
-    const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: `Replica SSE fan-out: ${COMMITS} commits x ${SUBSCRIBERS} subscribers`,
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "fan-out wall clock",
@@ -411,10 +406,6 @@ describe("replica-sse-fanout.scale", () => {
         },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${durationMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(everyoneHeard).toBe(true);
     // The mechanism, asserted: one projection per commit for the whole
     // household, not one per subscriber.

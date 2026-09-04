@@ -17,7 +17,6 @@ import {
 } from "../helpers/composite-workload.js";
 import type { SoakSample } from "../helpers/composite-workload.js";
 import { journeyNumbers } from "../helpers/journeys.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
  * LONG-RUN SOAK (issue #842 W3.4).
@@ -220,8 +219,6 @@ describe("long-run-soak.scale", () => {
           rssSlope <= ceilings.ceilingRssGrowthBytesPerCycle &&
           descriptorGrowth <= ceilings.ceilingDescriptorGrowth);
 
-      const drift = await rigDriftBudgetMs("scale", OWNER);
-      const withinDrift = drift === null || latencyCreepFactor <= drift;
       const passed = invariantsHeld && growthHeld;
 
       console.log("\n========== LONG-RUN SOAK ==========");
@@ -330,10 +327,6 @@ describe("long-run-soak.scale", () => {
           `latency creep x${latencyCreepFactor.toFixed(2)} vs x${ceilings.ceilingLatencyCreepFactor}, ` +
           `RSS ${Math.round(rssSlope)} B/cycle vs ${ceilings.ceilingRssGrowthBytesPerCycle}, ` +
           `descriptor spread ${descriptorGrowth} vs ${ceilings.ceilingDescriptorGrowth}`
-      ).toBe(true);
-      expect(
-        withinDrift,
-        `sustained drift: latency creep x${latencyCreepFactor} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
       ).toBe(true);
     },
     RUNAWAY_GUARD_MS

@@ -19,7 +19,7 @@ import {
 import type { VaultDb } from "@centraid/vault";
 
 import { goldenYear3Vault } from "../helpers/factories.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 
 /**
  * DAILY-USE QUERIES AT YEAR-3 VOLUME, on the GOLDEN artifact (#927 P4).
@@ -48,6 +48,7 @@ const READ_BUDGET_MS = 2_000;
  * page a handful of receipts happen to share, small enough that the loop is a
  * second of the rig's budget.
  */
+const READ_COST_KEY = "gateway/read-cost/year3/ci-linux-x64-4c";
 const AUDIT_GAUGE_READS = 500;
 /** Rows each gauge read returns — the shape of a surface page, not a sweep. */
 const AUDIT_GAUGE_LIMIT = 20;
@@ -158,10 +159,6 @@ describe("large-vault.scale", () => {
     const readsPerSecond = AUDIT_GAUGE_READS / (gaugeMs / 1_000);
     const walBytesPerHour = walBytesPerRead * readsPerSecond * 3_600;
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       recentPhotos.length === 200 &&
       contactHit.length === 1 &&
@@ -169,12 +166,11 @@ describe("large-vault.scale", () => {
       noteHit.length === 1 &&
       seedMs < SEED_BUDGET_MS &&
       readMs < READ_BUDGET_MS;
-    const withinDrift = drift === null || seedMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: "Daily-use queries on the golden year-3 vault",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "golden fixture mount",
@@ -237,20 +233,24 @@ describe("large-vault.scale", () => {
         },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${seedMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(recentPhotos).toHaveLength(200);
     expect(contactHit).toHaveLength(1);
     expect(events).toHaveLength(365);
     expect(noteHit).toHaveLength(1);
     expect(seedMs).toBeLessThan(SEED_BUDGET_MS);
     expect(readMs).toBeLessThan(READ_BUDGET_MS);
-    // The gauges carry no ceiling, but a gauge that measured NOTHING is a
-    // broken instrument reporting a good number: every read must have left its
-    // receipt, and the band must have grown.
+    // These two were GAUGES — measured, published, ungated — until #927 gave
+    // them ceilings in tests/journeys.json. A byte-per-read that nothing budgets
+    // is exactly the cost that grows unnoticed: a client that only ever looks
+    // pays it forever. A gauge that measured NOTHING is still a broken
+    // instrument reporting a good number, so the floors stay too.
     expect(auditBytesPerRead).toBeGreaterThan(0);
     expect(walBytesPerRead).toBeGreaterThan(0);
+    expect(auditBytesPerRead).toBeLessThanOrEqual(
+      journeyCeiling(READ_COST_KEY, "auditBandPerRead", "maxBytes")
+    );
+    expect(walBytesPerRead).toBeLessThanOrEqual(
+      journeyCeiling(READ_COST_KEY, "walBytesPerRead", "maxBytes")
+    );
   });
 });

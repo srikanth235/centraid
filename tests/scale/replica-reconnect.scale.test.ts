@@ -11,7 +11,6 @@ import { notifyReplicaCommit } from "@centraid/vault";
 import { unrefTimer } from "../../packages/server/src/lib/unref-timer.js";
 import { serve } from "../../packages/server/src/serve/serve.js";
 import { journeyCeiling } from "../helpers/journeys.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
  * RECONNECT TO FRESH (issue #883 C1).
@@ -297,17 +296,12 @@ describe("replica-reconnect.scale", () => {
     const reconnectToFreshMs = frame.atMs;
     const firstFrameMs = resumed.firstChangeMs() ?? reconnectToFreshMs;
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample nightly
-    // history. Null until the history is deep enough; a null is "no opinion
-    // yet", never a pass.
-    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed = reconnectToFreshMs < ceilingMs;
-    const withinDrift = drift === null || reconnectToFreshMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: `Replica reconnect to fresh at ${REPLICA_ROWS} rows`,
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "reconnect to fresh",
@@ -326,10 +320,6 @@ describe("replica-reconnect.scale", () => {
         { name: "seed", value: seedMs, unit: "ms" },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${reconnectToFreshMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(reconnectToFreshMs).toBeLessThan(ceilingMs);
   });
 });

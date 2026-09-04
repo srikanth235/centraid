@@ -1,10 +1,7 @@
 import path from "node:path";
 
 import { journeyCeiling } from "../../../scripts/lib/journey-ledger.mjs";
-import {
-  recordQualityResult,
-  rigDriftBudget,
-} from "../../agent-e2e-shared/harness.mjs";
+import { recordQualityResult } from "../../agent-e2e-shared/harness.mjs";
 import { readFrameEvidence } from "../lib/frame-report.mjs";
 import {
   AWAIT_LAUNCHER,
@@ -196,10 +193,7 @@ ${AWAIT_LAUNCHER}
     .map(([surface]) => surface);
 
   const worstDropped = photos.report?.dropped ?? 0;
-  const drift = await rigDriftBudget(REPO_ROOT, "scale", OWNER);
-  const withinDrift = drift == null || worstDropped <= drift;
-  const passed =
-    unparsed.length === 0 && worstDropped <= ceiling && withinDrift;
+  const passed = unparsed.length === 0 && worstDropped <= ceiling;
 
   await recordQualityResult(REPO_ROOT, {
     lane: "scale",
@@ -211,7 +205,7 @@ ${AWAIT_LAUNCHER}
         name: "worst dropped frames",
         value: worstDropped,
         unit: "percent",
-        budget: drift == null ? ceiling : Math.min(drift, ceiling),
+        budget: ceiling,
       },
       {
         name: "Photos dropped frames",

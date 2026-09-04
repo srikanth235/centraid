@@ -525,23 +525,16 @@ for (const { lane, key, source } of rigs) {
     errors.push(
       `${key} inlines a numeric BUDGET_MS — declare budgetMs in tests/journeys.json#rigs and read it with rigBudgetMs(OWNER) so the ratchet sees it`
     );
-  // #659 R4 — every SAMPLED rig consumes its own history: an absolute ceiling
-  // at ~3x a baseline only fires on a collapse, so `rigDriftBudgetMs` (30
-  // samples, 1.5x median) or the older `qualityRegressionBudget` must appear.
-  // A deterministic gate consumes none by design; that exemption is declared
-  // in the ledger entry beside the volume, with the `_gateNote` arguing it.
-  const sampled = entry?.gate !== "deterministic-counters";
-  if (!sampled && typeof entry._gateNote !== "string")
+  // #927 — every rig NAMES THE LEDGER ENTRIES IT FEEDS. The rule this replaces
+  // required each rig to consume its own 30-sample nightly history; that gate
+  // is gone, because the paired candidate/PR run compares two trees inside one
+  // run and needs no history at all. What matters now is the other direction: a
+  // rig whose numbers no ledger entry cites is measuring a machine cost nobody
+  // budgeted. `entries: []` is allowed and is the DIET LIST — those rigs are
+  // reviewed, not silently deleted.
+  if (entry && !Array.isArray(entry.entries))
     errors.push(
-      `${key} claims gate "deterministic-counters" with no _gateNote`
-    );
-  if (
-    sampled &&
-    !source.includes("rigDriftBudgetMs") &&
-    !source.includes("qualityRegressionBudget")
-  )
-    errors.push(
-      `${key} never reads its own sample history — call rigDriftBudgetMs("${lane}", OWNER) from tests/helpers/rig-budgets.js and fold the result into the recorded status and an assertion`
+      `tests/journeys.json#rigs entry ${key} needs an \`entries\` array naming the ledger entries it feeds (\`[]\` if none yet)`
     );
 }
 

@@ -32,7 +32,6 @@ import {
 } from "@centraid/vault";
 
 import { journeyCeiling } from "../helpers/journeys.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
  * YEAR-3 RESTORE (issue #659 S3).
@@ -318,16 +317,13 @@ describe("restore-10gib.scale", () => {
       const withinCeilings =
         !atDeclaredVolume ||
         (restoreMs <= restoreCeilingMs && foreignKeyCheckMs <= fkCeilingMs);
-      const drift = await rigDriftBudgetMs("scale", OWNER);
-      const withinDrift = drift === null || restoreMs <= drift;
       const passed =
         restoredVaultHash === sourceVaultHash &&
         fkViolations.length === 0 &&
         integrity?.integrity_check === "ok" &&
         partyRows >= PARTY_COUNT &&
         contentRows === CONTENT_ROWS + BLOB_COUNT &&
-        withinCeilings &&
-        withinDrift;
+        withinCeilings;
 
       console.log("\n========== YEAR-3 RESTORE ==========");
       console.log(`seeded CAS bytes:        ${seededBytes}`);
@@ -351,7 +347,6 @@ describe("restore-10gib.scale", () => {
             name: "restore wall clock",
             value: restoreMs,
             unit: "ms",
-            ...(drift === null ? {} : { budget: drift }),
           },
           { name: "snapshot wall clock", value: snapshotMs, unit: "ms" },
           {
@@ -388,13 +383,9 @@ describe("restore-10gib.scale", () => {
           `restore ${Math.round(restoreMs)} ms vs ${restoreCeilingMs} ms, ` +
           `foreign_key_check ${foreignKeyCheckMs.toFixed(1)} ms vs ${fkCeilingMs} ms`
       ).toBe(true);
-      expect(
-        withinDrift,
-        `sustained drift: ${restoreMs} ms vs drift budget ${drift} ms (1.5x the trailing median of the last 30 nightly samples)`
-      ).toBe(true);
     },
     // Ten GiB of chunk + AEAD + restore is tens of minutes on a CI disk. This
-    // is a runaway guard, not a budget — the budget is the drift gate above.
+    // is a runaway guard, not a budget.
     3_600_000
   );
 });

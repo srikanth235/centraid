@@ -55,7 +55,6 @@ import { searchPhotosByText } from "../../packages/server/src/enrich/semantic-se
 import { loadSqliteVec } from "../../packages/server/src/enrich/sqlite-vec.js";
 import { unrefTimer } from "../../packages/server/src/lib/unref-timer.js";
 import { journeyCeiling } from "../helpers/journeys.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/photo-similarity.scale.test.ts";
 const EMBEDDINGS = 90_000;
@@ -253,13 +252,9 @@ describe("photo-similarity.scale", () => {
         ? result.value.outcome.hits[0]?.assetId
         : undefined;
 
-    const drift = await rigDriftBudgetMs("scale", OWNER);
-    const worstMs = Math.max(vec.elapsedMs, scan.elapsedMs);
-    const withinDrift = drift === null || worstMs <= drift;
     const agree = topOf(vec) === expectedTop && topOf(scan) === expectedTop;
     const passed =
       agree &&
-      withinDrift &&
       vec.elapsedMs < CEILING_MS &&
       scan.elapsedMs < CEILING_FALLBACK_MS &&
       vec.value.rssDelta < CEILING_RSS_BYTES &&
@@ -315,10 +310,6 @@ describe("photo-similarity.scale", () => {
       ],
     });
 
-    expect(
-      withinDrift,
-      `sustained drift: ${worstMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     // Anti-vacuity AND the two-engines-one-answer contract in one assertion:
     // an engine that returned nothing, or ranked the library differently from
     // its twin, fails here before any budget is consulted.

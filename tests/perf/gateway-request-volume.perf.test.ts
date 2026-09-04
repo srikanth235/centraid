@@ -12,7 +12,6 @@ import { sealAad, sealValue } from "@centraid/vault";
 import { serve } from "../../packages/server/src/serve/serve.js";
 import type { GatewayServeHandle } from "../../packages/server/src/serve/serve.js";
 import { journeyCeiling } from "../helpers/journeys.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
  * GATEWAY REQUEST LATENCY AT VOLUME (issue #883 C1).
@@ -186,16 +185,11 @@ describe("gateway-request-volume.perf", () => {
       ([identity, value]) => value < routeCeilingMs(identity)
     );
     const coldPassed = coldStartMs < coldStartCeilingMs;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample nightly
-    // history. Null until the history is deep enough; a null is "no opinion
-    // yet", never a pass.
-    const drift = await rigDriftBudgetMs("perf", OWNER);
-    const withinDrift = drift === null || slowestP95Ms <= drift;
     await recordQualityResult({
       lane: "perf",
       owner: OWNER,
       name: "core route p95 and cold start on a year-3-shaped vault",
-      status: routesPassed && coldPassed && withinDrift ? "passed" : "failed",
+      status: routesPassed && coldPassed ? "passed" : "failed",
       measurements: [
         {
           name: "slowest core route p95",
@@ -224,10 +218,6 @@ describe("gateway-request-volume.perf", () => {
         { name: "seed", value: seedMs, unit: "ms" },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${slowestP95Ms} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(routesPassed).toBe(true);
     expect(coldStartMs).toBeLessThan(coldStartCeilingMs);
   });

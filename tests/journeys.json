@@ -43,14 +43,8 @@
     "soak": "Not a journey — growth over a long-lived process.",
     "stress-recovery": "Not a journey — the first ordinary request after the knee.",
     "photo-sweep": "Not a journey — the perceptual-hash sweep over the library.",
-    "first-paint-work": "Not a journey — the WORK a screen's first paint costs, in the product's own counters."
-  },
-  "drift": {
-    "_comment": "The sampled-rig gate. `minimum*` are floors and may only rise; the multipliers are ceilings. A rig with `gate: \"deterministic-counters\"` consumes no history by design and is exempt — see its `_gateNote`.",
-    "minimumSamples": 10,
-    "regressionMultiplier": 3,
-    "minimumDriftSamples": 30,
-    "driftMultiplier": 1.5
+    "first-paint-work": "Not a journey — the WORK a screen's first paint costs, in the product's own counters.",
+    "read-cost": "Not a journey — what one gateway READ costs in bytes it writes: audit band and write-ahead log."
   },
   "entries": {
     "web/cold-open/empty/ci-linux-x64-4c": {
@@ -436,8 +430,12 @@
       "volume": "empty",
       "hardware": "ci-linux-x64-4c",
       "spans": ["gateway.turn.dispatch"],
-      "consumers": ["scripts/perf/send-to-first-token.mjs"],
-      "tolerancePercent": 20,
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs",
+        "scripts/perf/send-to-first-token.mjs"
+      ],
+      "tolerancePercent": 10,
       "metrics": {
         "sendToFirstToken": {
           "status": "measured",
@@ -452,6 +450,19 @@
             "observedMaxMs": 197.9,
             "note": "MEASURED — and what it replaces is NO NUMBER AT ALL. Before this the product's most-felt latency had no rig: tests/perf/harness-turn.perf.test.ts measures 2,000 registry dispatches against a stubbed runTurn, so it never spawns a harness, never speaks ACP, and could not see this interval. The stub the old probe text asked for turned out to already exist (fake-acp-harness.mjs, the ACP backend suite's fixture); the missing piece was a rig pointing at it. Thirteen independent runs of 25-30 samples put per-run p95 between 53.4 ms on an idle container and 123.0 ms under concurrent load, while the per-run MEDIAN barely moved (47.9-69.5 ms) — so the spread is host contention on the process spawn, not variance in the path itself. Every observed* value above records the WORST run seen, never the friendliest. The number is dominated by node process spawn plus the JSON-RPC handshake, which is the honest shape of a first turn. READ IT AS A LOWER BOUND on what the vault owner feels: it fences a gateway-side regression — a slower spawn, an added handshake round trip, a blocking step inserted before the prompt goes out — not the whole perceived interval.",
             "headroom": "~3.3x worst observed p95 (~2x the worst single sample), in the same grammar as requestToFirstByte above. Sized against the CONTENDED measurement on purpose, because a shared CI runner IS the contended case: a ceiling seeded from the idle 53 ms p95 would fence runner jitter rather than a regression, and a gate that flakes is a gate that gets widened. The ratchet is tighten-only, so this can only come DOWN — re-seed it from a real distribution on the lane that runs it."
+          }
+        },
+        "replicaIntentWarmP50": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — 8 intents, warm p50",
+          "pairedSample": "journeys.replicaIntent.warm.p50Ms",
+          "ceilingMs": 700,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 147.9,
+            "note": "One replica intent per HTTP round trip — the offline drain's unit of work. Paired against the candidate rather than against a nightly median.",
+            "headroom": "~4.7x observed, single host"
           }
         }
       }
@@ -838,7 +849,9 @@
             "observedStatements": 76,
             "observedHttpRequests": 1,
             "headroom": "NONE, deliberately. The count is deterministic on a fixed fixture, so observed IS the ceiling and one extra statement on this screen's first paint fails on the first run — the same discipline as the merge-rung counter gate."
-          }
+          },
+          "maxWallClockMs": 2000,
+          "_wallClockNote": "#922 D4 — the count and the clock, together. A statement COUNT cannot see the screen whose single statement is the expensive one: since the Atlas census batched its per-table COUNT(*) calls, registering a table costs a SCAN and never a statement, so a first paint whose scanned bytes double reads as unchanged here. The wall clock is the second instrument that can see it. It is a catastrophe fence, not a p95: the paired candidate/PR run is what compares two trees."
         },
         "notifications": {
           "status": "measured",
@@ -877,6 +890,122 @@
             "observedStatements": 5,
             "observedHttpRequests": 1,
             "headroom": "NONE, deliberately. The count is deterministic on a fixed fixture, so observed IS the ceiling and one extra statement on this screen's first paint fails on the first run — the same discipline as the merge-rung counter gate."
+          }
+        }
+      }
+    },
+    "gateway/first-bootstrap/year3-replica/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "first-bootstrap",
+      "volume": "year3-replica",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.replica.bootstrap"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "bootstrapPageMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
+          "pairedSample": "journeys.bootstrapPage.durationMs",
+          "ceilingMs": 600,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 129.3,
+            "note": "One windowed bootstrap page over a 500-row fill, 1,436 rows / 726 kB. The CEILING is a catastrophe fence; the gate that matters is the PAIRED verdict, which compares this number against the candidate's own on the same runner in the same run.",
+            "headroom": "~4.6x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/peer-echo/empty/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "peer-echo",
+      "volume": "empty",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "lastSubscriberDeliveryMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — one subscriber, 5 commits",
+          "pairedSample": "journeys.sseProjection.0.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 300,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 61.2,
+            "note": "Commit written on one device to the frame landing on another: the p50 over 5 commits at one subscriber. The N=10 level is published by the same run and fenced by the converge entry.",
+            "headroom": "~4.9x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/converge/empty/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "converge",
+      "volume": "empty",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "tenSubscriberCommitMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — ten subscribers, 5 commits",
+          "pairedSample": "journeys.sseProjection.1.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 400,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedMs": 70.8,
+            "note": "Ten concurrent replica subscribers, well under SSE_MAX_SUBSCRIBERS (32). Per-commit p50 to the LAST subscriber, so it is the slowest device's convergence, not the luckiest.",
+            "headroom": "~5.6x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/read-cost/year3/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "read-cost",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.read", "vault.audit.append"],
+      "consumers": ["tests/scale/large-vault.scale.test.ts"],
+      "tolerancePercent": 10,
+      "metrics": {
+        "auditBandPerRead": {
+          "status": "measured",
+          "probe": "tests/scale/large-vault.scale.test.ts — 500 gateway reads on the mounted golden year-3 vault, band growth divided by reads",
+          "maxBytes": 450,
+          "_provenance": {
+            "at": "2026-09-03",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedBytes": 360.4,
+            "note": "A GATEWAY READ IS A WRITER: every read appends its receipt to the audit band. Was a GAUGE with no ceiling; #927 makes it a gated number, because an unbudgeted byte-per-read is exactly the cost that grows without anyone noticing — a client that only ever looks pays it forever. Ceiling is observed + ~25%: the receipt's size is a function of the entity name and purpose string, so it moves in steps when a purpose is renamed, not continuously.",
+            "headroom": "observed + ~25%"
+          }
+        },
+        "walBytesPerRead": {
+          "status": "measured",
+          "probe": "tests/scale/large-vault.scale.test.ts — WAL file growth over the same 500 reads",
+          "maxBytes": 65536,
+          "_provenance": {
+            "at": "2026-09-03",
+            "host": "linux x64 development container, 4 cores / 15 GB",
+            "observedBytes": 46490,
+            "note": "45.4 KiB of write-ahead log per READ — one commit's worth of dirty pages for a 360-byte receipt, and the WAL never shrinks on its own. Projected at the rate this container sustained, 43-128 GB/h under a client that only looks. Gated at 64 KiB (observed + ~41%, one page-cluster of headroom) so a change that starts dirtying a second page per read fails rather than being rediscovered.",
+            "headroom": "observed + ~41%, sized to one page cluster"
           }
         }
       }
@@ -968,8 +1097,7 @@
     "tests/perf/work-counters.perf.test.ts": {
       "lane": "perf",
       "volume": "The golden year-3 artifact (packages/test-kit, ~27,600 domain rows) — one fixed workload per hot path, counted rather than timed",
-      "gate": "deterministic-counters",
-      "_gateNote": "#927 P2. This rig has NO sample history and must not grow one: it compares the integers the product counts about itself (scripts/ci/work-counters.expected.json) and two runs on the same code give the same integers on any host. A trailing-median drift budget over a constant series would say nothing, and an absolute wall-clock ceiling would reintroduce the host-dependent flake this gate replaced. `gate: deterministic-counters` is the declared, reviewable exemption validate-nightly-wiring.mjs honours; a rig claiming it and then timing something is the failure to look for.",
+      "_gateNote": "#927 P2. This rig has NO sample history and must not grow one: it compares the integers the product counts about itself (scripts/ci/work-counters.expected.json), and two runs on the same code give the same integers on any host. It times nothing, so no ledger entry cites it — `entries: []` here is the honest answer, not an omission.",
       "_noBudgetMs": "Deliberate — nothing here is timed.",
       "entries": []
     },
@@ -1024,7 +1152,7 @@
     "tests/scale/large-vault.scale.test.ts": {
       "lane": "scale",
       "volume": "10,000 photos + 5,000 contacts + 1,000 notes, then daily-use queries",
-      "entries": []
+      "entries": ["gateway/read-cost/year3/ci-linux-x64-4c"]
     },
     "tests/scale/photos-timeline.scale.test.ts": {
       "lane": "scale",

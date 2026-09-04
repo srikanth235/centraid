@@ -5,7 +5,6 @@ import { describe, expect, test } from "vitest";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 import { journeyCeiling } from "../helpers/journeys.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/desktop-launch.perf.test.ts";
 
@@ -25,8 +24,8 @@ const OWNER = "tests/perf/desktop-launch.perf.test.ts";
  * them is the point of this file.
  *
  * NO ABSOLUTE CEILING BY DESIGN. A cold Electron launch on a shared CI runner
- * has no distribution yet; the gate is the trailing-median drift budget every
- * other rig now uses (30 samples, 1.5x — tests/journeys.json#drift). An
+ * has no distribution yet; the gate is the paired candidate/PR run (#927),
+ * which compares two trees inside one run rather than one tree across nights. An
  * absolute ceiling lands in tests/journeys.json once ~10
  * green nightlies justify one, and not before.
  *
@@ -40,7 +39,7 @@ const input = "artifacts/perf-input/desktop-launch-report.json";
  * The owner-facing ceilings live in tests/journeys.json and
  * are asserted HERE. A budget file nobody reads is the failure #659 R4 exists
  * to close, so this rig consumes both gates: the absolute ceiling (measured
- * 2026-07-31 + headroom) and the sustained-drift budget.
+ * 2026-07-31 + headroom).
  */
 const COLD_KEY = "desktop/cold-open/empty/dev-darwin-arm64";
 const TAP_KEY = "desktop/warm-switch/empty/dev-darwin-arm64";
@@ -73,12 +72,9 @@ if (process.env.CI && !report) {
 
 describe("desktop-launch.perf", () => {
   test.skipIf(!report)(
-    "a real Electron cold launch stays within its sustained-drift budget",
+    "a real Electron cold launch stays under its ceiling",
     async () => {
       const { measurements, volume } = report!;
-      const drift = await rigDriftBudgetMs("perf", OWNER);
-      const withinDrift =
-        drift === null || measurements.coldOpenToUsableMs <= drift;
       const coldCeiling = journeyCeiling(
         COLD_KEY,
         "coldOpenToUsable",
@@ -96,13 +92,13 @@ describe("desktop-launch.perf", () => {
         lane: "perf",
         owner: OWNER,
         name: `Desktop cold launch to a usable Home (volume: ${volume})`,
-        status: withinDrift && withinCeilings ? "passed" : "failed",
+        status: withinCeilings ? "passed" : "failed",
         measurements: [
           {
             name: "cold open to usable",
             value: measurements.coldOpenToUsableMs,
             unit: "ms",
-            budget: drift === null ? coldCeiling : Math.min(drift, coldCeiling),
+            budget: coldCeiling,
           },
           {
             name: "process to first window",
@@ -130,10 +126,6 @@ describe("desktop-launch.perf", () => {
         measurements.tapToVisualResponseMs,
         "tap to visual response"
       ).toBeLessThanOrEqual(tapCeiling);
-      expect(
-        withinDrift,
-        `sustained drift: ${measurements.coldOpenToUsableMs} ms vs drift budget ${drift} ms (1.5x the trailing median of the last 30 nightly samples)`
-      ).toBe(true);
     }
   );
 });

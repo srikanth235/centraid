@@ -1176,3 +1176,125 @@ bun run typecheck   # 25/25
 
 1. *Claim: absorbing five files into one ledger widened no ceiling.* Flattened every number from `origin/main`'s five files plus `budgets.json#qualityRigs` (61 values) and matched them as a multiset against the ledger's 97: **nothing lost**, and the 36 additions are 31 `tolerancePercent`, one `0`, and the four `photos-timeline` ceilings this lane's earlier commit moved.
 2. *Claim: the linter actually refuses a ledger that rots the way the old files did.* Nine fixture cases in `scripts/lint-journey-ledger.test.mjs` — key/field disagreement, undeclared volume, no span and no consumer, missing consumer file, `unmeasured` shipping a number, a `bound` that does not argue itself, a dangling rig cross-link, a surviving retired reference. All nine fail the linter; the well-formed ledger passes.
+
+## w2 paired runner — the verdict that replaced the drift rule
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `scripts/ci/paired-journeys.mjs` + `.test.mjs` (new) | Interleaved candidate/PR journey rounds, paired differences, bootstrap CI on the median, per-journey tolerance from the ledger. Seeded PRNG, so a re-run cannot launder a red. |
+| `scripts/ci/bisect-journeys.mjs` + `.test.mjs` (new) | Walks the promoted-candidate list on gh-pages for the first sustained step; a spike that reverts is a blip, not a culprit. |
+| `.github/workflows/candidate.yml` | `paired-journeys` job (rung 3, `promote` needs it) and a `workflow_dispatch` `bisect-journeys` job; `promote` publishes each promotion's baseline to `test-report/candidate-journeys/<sha>.json`. `test:perf:pr` (the constrained wall-clock rig) re-homed here — no rung ran it. |
+| `scripts/perf/app-waterfall.mjs` + `.run.ts` + `.test.mjs`, `vitest.waterfall.config.ts` (new) | `bun run perf:waterfall` — the rung-0 developer command: eight apps, one gateway, statements + clock, compared to this machine's own saved baseline. |
+| `tests/helpers/rig-budgets.ts`, `packages/test-kit/src/quality-result.ts`, `tests/agent-e2e-shared/harness.mjs` | `rigDriftBudgetMs`, `driftBudget`, `qualityRegressionBudget`, `rigDriftBudget`, `regressionBudget` and `trailingMedianBudget` **deleted**. |
+| 46 rigs + 2 mobile flows | Every drift/catastrophe call site removed with them. |
+| `vitest.perf.config.ts`, `vitest.scale.config.ts` | `fileParallelism: false` deleted; the header says why it existed and why it no longer does. |
+| `tests/scale/large-vault.scale.test.ts`, `tests/journeys.json` | The audit-band and WAL gauges become GATED numbers (`gateway/read-cost`); `client/first-paint-work` gains `maxWallClockMs` beside the statement count (#922 D4). |
+
+### Numbers
+
+| Measurement | Value | Provenance |
+| --- | --- | --- |
+| Seeded 200 ms on the bootstrap read path | **regressed**, +201.2 ms, 95% CI [172.2, 221.3] ms vs a 26.8 ms tolerance, **4 paired rounds**, first run | `node scripts/ci/paired-journeys.mjs --candidate . --pr /tmp/prtree --rounds 4`, linux x64 / 4 cores / 15 GB, 2026-09-04. Three other journeys `held` — no false positive. |
+| Seeded **26 ms (a 20% slow-down)** on the same path | **regressed**, +28.4 ms = 23.3%, 95% CI [18.9, 38.6] ms vs a 12.2 ms tolerance, **14 paired rounds**, first run, no warm-up | same command, `--rounds 14`. At 6 rounds the same seed reads `inconclusive`, which fails the lane too — an interval straddling the tolerance is not a pass. |
+| audit band per gateway read | 360.4 B observed → gated at **450 B** | `tests/scale/large-vault.scale.test.ts`, 500 reads on the mounted golden vault, 2026-09-03 (lane 3a), re-asserted here |
+| WAL per gateway read | 46,490 B observed → gated at **65,536 B** | same run; a read that starts dirtying a second page cluster now fails |
+| `perf:waterfall`, eight apps on a year-3-shaped vault | 4.3 s of measurement, 9.2 s wall (cap: one minute) | `bun run perf:waterfall`, linux x64 / 4 cores / 15 GB, 2026-09-04. agenda 504.7 ms / **3,244 statements**; docs 150.2/25; locker 156.8/286; notes 188.4/58; people 151.2/35; photos 210.3/141; tally 200.9/215; tasks 188.3/47 |
+
+### Deleted, with replacement
+
+- The **30-sample drift budget** and the **3× catastrophe budget** → the paired candidate/PR verdict. Both compared one tree's number today against other trees' numbers on other nights and other runners, so most of what they measured was the runner, and neither could answer whether THIS change is slower.
+- **`fileParallelism: false`** in both nightly configs → the paired run measures both trees under whatever contention the runner has, so serialising the lane bought nothing and cost the lane's duration. Measured cost of the removal on this container: the gateway cold-start rig read **5,291 ms serially and 6,250 ms in parallel** — and its 5,000 ms ceiling was already breached SERIALLY, so that ceiling is seeded from a faster host than CI runs on.
+
+### Decisions
+
+- An `inconclusive` verdict FAILS the lane. "Slower, but the run cannot say by how much" is not a pass.
+- The four paired gateway journeys carry `tolerancePercent: 10`, not 20: they are in-process measurements with low round-to-round spread, and a 20% tolerance would make a seeded 20% regression unprovable by construction.
+
+### Findings
+
+1. **`agenda` first paint issues 3,244 statements** against 25 for `docs` — an N+1 on the busiest app's opening read, found by the new developer command on its first run. Not this lane's to fix (#922 owns hot paths); the ledger entry and the command that found it are here.
+2. **The rig DIET LIST — 32 rigs cite no ledger entry.** `tests/perf/{harness-turn,app-engine-handler,automation-fire,backup-throughput,blob-egress,desktop-cold,pwa-waterfall,replica-sync-io,tunnel-native,tunnel-throughput,vault-write}`, `tests/perf/work-counters` (deliberate — it times nothing), `tests/scale/{harness-sessions,automations-fire,backup-restore,blob-gc,blueprint-clones,conversation-ledger,desktop-windows,gateway-sessions,large-vault→now cited,photos-timeline,photos-memories,ontology,backup-manifest-size,browser-replica-query,replica-sse-fanout,replica-bootstrap,replica-retention,tunnel-pairs,web-tabs}`, `tests/agent-e2e-mobile/flows/volume-proof`. The entry each would want: `photos-timeline`/`photos-memories` → `web|mobile/scroll` at `year3-photos`; `browser-replica-query`/`replica-bootstrap` → `mobile/first-bootstrap`; `replica-sse-fanout` → `gateway/peer-echo`; `replica-retention` → `gateway/converge`; `blob-gc`/`backup-restore`/`backup-manifest-size`/`backup-throughput` → a `restore`/`backup` entry that does not exist; `harness-*`/`app-engine-handler`/`automation-fire`/`desktop-*`/`tunnel-*`/`web-tabs`/`blueprint-clones`/`ontology`/`conversation-ledger`/`pwa-waterfall`/`replica-sync-io`/`vault-write`/`blob-egress` → machine costs with no journey above them. **Not deleted** — the maintainer reviews the list.
+3. `soak-weekly.yml` still keeps its `quality-history-soak-*` actions cache. Out of this lane's named files; the nightly's is gone.
+4. **Three rigs are red on this container BEFORE this lane touches them**, confirmed by stashing the whole diff and re-running: `photos-memories.scale` throws `table media_asset has no column named favorite` (the #916 column drop; lane 3a fixed the same break in `photos-timeline` and not here), `phash-clustering.scale` fails a count assertion (`expected 1 to be +0`), and `gateway-request.perf` reads a 5,291 ms cold start against a 5,000 ms ceiling seeded on a faster host. None is a regression from this lane and none is this lane's to fix.
+
+### Files, in full
+
+Every path this lane's two commits touch that the tables above name only by group:
+
+- `.github/workflows/lane-client-e2e.yml`
+- `apps/mobile/src/lib/replica/reader-statement-budget.test.ts`
+- `apps/mobile/src/lib/replica/reconnect-to-fresh.fixture.ts`
+- `packages/test-kit/src/quality-signal.test.ts`
+- `packages/test-kit/src/test-kit.test.ts`
+- `scripts/check-ledgers.test.mjs`
+- `scripts/check-mobile-suite-budgets.mjs`
+- `scripts/ci/bisect-journeys.test.mjs`
+- `scripts/ci/gate-classes.json`
+- `scripts/lint-product.mjs`
+- `scripts/perf/README.md`
+- `scripts/perf/app-waterfall.run.ts`
+- `scripts/perf/app-waterfall.test.mjs`
+- `scripts/perf/app-weight.mjs`
+- `scripts/perf/send-to-first-token.mjs`
+- `scripts/test-report/derive.mjs`
+- `scripts/test-report/fixtures/claims.json`
+- `scripts/test-report/ratchet-floors.mjs`
+- `tests/agent-e2e-mobile/flows/cold-start.mjs`
+- `tests/agent-e2e-mobile/flows/ios-smoke-budget.md`
+- `tests/agent-e2e-mobile/flows/volume-proof.mjs`
+- `tests/agent-e2e-mobile/lib/ci-gateway.mjs`
+- `tests/agent-e2e-mobile/lib/fixed-delay-agent.mjs`
+- `tests/agent-e2e-shared/harness.test.mjs`
+- `tests/experience-budgets/client-query-counts.json`
+- `tests/experience-budgets/desktop.json`
+- `tests/experience-budgets/gateway.json`
+- `tests/experience-budgets/mobile.json`
+- `tests/experience-budgets/web.json`
+- `tests/inventory.json`
+- `tests/perf/app-engine-handler.perf.test.ts`
+- `tests/perf/automation-fire.perf.test.ts`
+- `tests/perf/backup-throughput.perf.test.ts`
+- `tests/perf/blob-egress.perf.test.ts`
+- `tests/perf/desktop-cold.perf.test.ts`
+- `tests/perf/desktop-launch.perf.test.ts`
+- `tests/perf/fixtures/desktop-main-graph.mjs`
+- `tests/perf/gateway-request-volume.perf.test.ts`
+- `tests/perf/gateway-request.perf.test.ts`
+- `tests/perf/harness-turn.perf.test.ts`
+- `tests/perf/pwa-waterfall.perf.test.ts`
+- `tests/perf/replica-sync-io.perf.test.ts`
+- `tests/perf/tunnel-native.perf.test.ts`
+- `tests/perf/tunnel-throughput.perf.test.ts`
+- `tests/perf/vault-write.perf.test.ts`
+- `tests/quarantine.json`
+- `tests/scale/automations-fire.scale.test.ts`
+- `tests/scale/backup-manifest-size.scale.test.ts`
+- `tests/scale/backup-restore.scale.test.ts`
+- `tests/scale/blob-gc.scale.test.ts`
+- `tests/scale/blueprint-clones.scale.test.ts`
+- `tests/scale/browser-replica-query.fixture.ts`
+- `tests/scale/browser-replica-query.scale.test.ts`
+- `tests/scale/composite-load.scale.test.ts`
+- `tests/scale/conversation-ledger.scale.test.ts`
+- `tests/scale/desktop-windows.scale.test.ts`
+- `tests/scale/gateway-sessions.scale.test.ts`
+- `tests/scale/harness-sessions.scale.test.ts`
+- `tests/scale/long-run-soak.scale.test.ts`
+- `tests/scale/mobile-reconnect-to-fresh.scale.test.ts`
+- `tests/scale/multi-vault-footprint.scale.test.ts`
+- `tests/scale/ontology.scale.test.ts`
+- `tests/scale/phash-clustering.scale.test.ts`
+- `tests/scale/photo-similarity.scale.test.ts`
+- `tests/scale/photos-memories.scale.test.ts`
+- `tests/scale/replica-reconnect.scale.test.ts`
+- `tests/scale/replica-retention.scale.test.ts`
+- `tests/scale/stress-to-failure.scale.test.ts`
+- `tests/scale/tunnel-pairs.scale.test.ts`
+- `tests/scale/web-tabs.scale.test.ts`
+
+### Falsification
+
+1. *Claim: the paired verdict is a property of the DIFFERENCE, not of the runner.* Fed it a series where every round is 40% slower than the last on **both** sides: verdict `held`. Fed it the same drift with a real 30% slow-down on one side: `regressed`. Both in `scripts/ci/paired-journeys.test.mjs`.
+2. *Claim: deleting the drift rule left no rig asserting against a budget that no longer exists.* `git grep` for `rigDriftBudgetMs|qualityRegressionBudget|regressionBudget|withinDrift` over `packages/ tests/ scripts/ apps/` returns nothing, `bun run lint` is clean of unused imports, and the `packages/test-kit` suite is 62/62.

@@ -21,7 +21,6 @@ import type {
   LaneResult,
 } from "../helpers/composite-workload.js";
 import { journeyCeiling } from "../helpers/journeys.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
  * COMPOSITE LOAD (issue #842 W4.1).
@@ -250,8 +249,6 @@ describe("composite-load.scale", () => {
       ...compositeTally.refusals,
     }).filter((key) => key.endsWith("/untyped"));
 
-    const drift = await rigDriftBudgetMs("scale", OWNER);
-    const withinDrift = drift === null || compositeMs <= drift;
     const everyLaneFinished =
       composite.every((lane) => lane.ops === OPS) &&
       solo.every((lane) => lane.ops === OPS);
@@ -264,8 +261,7 @@ describe("composite-load.scale", () => {
       inProcess.missed === AUTOMATIONS &&
       throughputFactor <= ceilingThroughputFactor &&
       worstByP95.compositeP95 <= ceilingWorstLaneP95Ms &&
-      refSearch() <= ceilingRefSearchP95Ms &&
-      withinDrift;
+      refSearch() <= ceilingRefSearchP95Ms;
 
     console.log("\n========== COMPOSITE LOAD ==========");
     console.log(`solo phase:        ${Math.round(soloMs)} ms`);
@@ -301,7 +297,6 @@ describe("composite-load.scale", () => {
           name: "composite phase wall clock",
           value: compositeMs,
           unit: "ms",
-          ...(drift === null ? {} : { budget: drift }),
         },
         { name: "solo phase wall clock", value: soloMs, unit: "ms" },
         {
@@ -376,9 +371,5 @@ describe("composite-load.scale", () => {
       `lane starvation: ${worstByP95.lane} p95 reached ${worstByP95.compositeP95.toFixed(1)} ms ` +
         `under composition (solo ${worstByP95.soloP95.toFixed(1)} ms), ceiling ${ceilingWorstLaneP95Ms} ms`
     ).toBeLessThanOrEqual(ceilingWorstLaneP95Ms);
-    expect(
-      withinDrift,
-      `sustained drift: ${compositeMs} ms vs drift budget ${drift} ms (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
   }, 180_000);
 });

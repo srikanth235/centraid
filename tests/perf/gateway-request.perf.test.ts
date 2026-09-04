@@ -9,7 +9,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { journeyCeiling } from "../helpers/journeys.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/gateway-request.perf.test.ts";
 
@@ -105,10 +104,6 @@ describe("gateway-request.perf", () => {
     const idleCpuMs = (idle.cpuUserUs + idle.cpuSystemUs) / 1_000;
     const idleCpuMsPerSecond = idleCpuMs / (idle.wallMs / 1_000);
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("perf", OWNER);
     const routePassed = Object.entries(routeP95).every(
       ([identity, value]) => value < routeCeilingMs(identity)
     );
@@ -118,12 +113,11 @@ describe("gateway-request.perf", () => {
         journeyCeiling(COLD_START_KEY, "gatewayColdStartMs", "ceilingMs") &&
       idleCpuMsPerSecond < IDLE_CPU_BUDGET_MS_PER_S;
     const slowestP95Ms = Math.max(...Object.values(routeP95));
-    const withinDrift = drift === null || slowestP95Ms <= drift;
     await recordQualityResult({
       lane: "perf",
       owner: OWNER,
       name: "core route p95 and cold start",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "slowest core route p95",
@@ -155,10 +149,6 @@ describe("gateway-request.perf", () => {
         },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${slowestP95Ms} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(routePassed).toBe(true);
     expect(coldStartMs).toBeLessThan(
       journeyCeiling(COLD_START_KEY, "gatewayColdStartMs", "ceilingMs")

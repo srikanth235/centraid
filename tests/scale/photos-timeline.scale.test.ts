@@ -18,7 +18,7 @@ import {
   VAULT_MIGRATIONS,
 } from "@centraid/vault";
 
-import { rigBudgetMsNamed, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { rigBudgetMsNamed } from "../helpers/rig-budgets.js";
 
 // Photos-specific companion to large-vault.scale.test.ts (issue #721 C1):
 // that rig proves the whole-vault "daily use" mix stays bounded at 10k
@@ -186,8 +186,6 @@ describe("photos-timeline.scale", () => {
       (bucket) => bucket.day === "2020-06-15"
     );
 
-    const drift = await rigDriftBudgetMs("scale", OWNER);
-    const withinDrift = drift === null || seedMs <= drift;
     const passed =
       page.length === 200 &&
       oneDayPage.length === 200 &&
@@ -243,13 +241,9 @@ describe("photos-timeline.scale", () => {
       ],
       name: "50k-photo library plus a 10k-one-day degenerate corpus, at their own reads",
       owner: OWNER,
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
     });
 
-    expect(
-      withinDrift,
-      `sustained drift: ${seedMs}ms vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(page).toHaveLength(200);
     expect(oneDayPage).toHaveLength(200);
     expect(oneDayBucket?.n).toBe(ONE_DAY_PHOTO_COUNT);

@@ -19,7 +19,7 @@ import {
   sha256OfBytes,
 } from "../../packages/vault/src/blob/store.js";
 import { openVaultDb } from "../../packages/vault/src/db.js";
-import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/blob-gc.scale.test.ts";
 const STATES: readonly CustodyState[] = [
@@ -146,10 +146,6 @@ describe("blob-gc.scale", () => {
       }
     ).n;
     const DURATION_BUDGET_MS = 30_000;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       evicted.evictedBlobs === perState &&
       eligible.every((sha) => !local.hasSync(sha) && remote.hasSync(sha)) &&
@@ -157,12 +153,11 @@ describe("blob-gc.scale", () => {
       pending.every((sha) => local.hasSync(sha)) &&
       outboxRemaining === perState &&
       durationMs < DURATION_BUDGET_MS;
-    const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: "Mixed-custody CAS eviction at 5k objects",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "wall clock",
@@ -178,10 +173,6 @@ describe("blob-gc.scale", () => {
         },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${durationMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
 
     expect(evicted.evictedBlobs).toBe(perState);
     expect(evicted.evictedBytes).toBeGreaterThan(0);

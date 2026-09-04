@@ -5,10 +5,7 @@ import { describe, expect, test } from "vitest";
 
 import { runFire } from "@centraid/server/automation";
 import type { OpenDispatch } from "@centraid/server/automation";
-import {
-  qualityRegressionBudget,
-  recordQualityResult,
-} from "@centraid/test-kit/quality-result";
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { ledgerDbFileIn } from "../../packages/server/src/engine/stores/ledger-db.test-fixtures.js";
@@ -61,8 +58,9 @@ describe("automation-fire.perf", () => {
       Promise.resolve()
     );
     const durationMs = performance.now() - started;
-    const budget = await qualityRegressionBudget("perf", OWNER);
-    const passed = budget == null || durationMs < budget;
+    // Published, not gated (#927): the paired candidate/PR run compares two
+    // trees; a threshold on one sample here would fence the runner.
+    const passed = true;
     await recordQualityResult({
       lane: "perf",
       owner: OWNER,
@@ -73,7 +71,6 @@ describe("automation-fire.perf", () => {
           name: "wall clock",
           value: durationMs,
           unit: "ms",
-          ...(budget == null ? {} : { budget }),
         },
         { name: "mean fire", value: durationMs / FIRES, unit: "ms" },
       ],
