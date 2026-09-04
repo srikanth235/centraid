@@ -82,6 +82,24 @@ export {
 } from "./trace.js";
 
 export {
+  assertShapeNamespaceFree,
+  isShareShapeId,
+  judgeSubscriberCredential,
+  shareShapeGrantId,
+  shareShapeId,
+  subscriberQuery,
+  PEER_REPLICA_BLOB_PATH,
+  PEER_REPLICA_BOOTSTRAP_PATH,
+  PEER_REPLICA_CHANGES_PATH,
+  PEER_REPLICA_INTENTS_PATH,
+  PEER_REPLICA_PATHS,
+  REPLICA_POST_ADMISSION_CONTRACT,
+  SHARE_SHAPE_SIGIL,
+  type ReplicaSubscriberCredential,
+  type SubscriberCredentialVerdict,
+} from "./replica-subscription.js";
+
+export {
   judgePeerHandshake,
   peerHello,
   peerProtocolsCompatible,
