@@ -335,6 +335,15 @@
       "status": "gating"
     },
     {
+      "id": "paired-journeys",
+      "rung": 3,
+      "platform": "any",
+      "budgetMs": 2700000,
+      "qualities": ["performance"],
+      "surfaces": ["gateway", "protocol"],
+      "status": "gating"
+    },
+    {
       "id": "rust-supply-chain",
       "rung": 3,
       "platform": "any",
