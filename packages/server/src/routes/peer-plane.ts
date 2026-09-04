@@ -42,6 +42,15 @@ import {
   PEER_COMMONS_INVITE_PATH,
   PEER_COMMONS_REFUSE_PATH,
 } from "./peer-commons-route.js";
+import {
+  handlePeerReplicaBlob,
+  handlePeerReplicaBootstrap,
+  handlePeerReplicaChanges,
+  PEER_REPLICA_BLOB_PATH,
+  PEER_REPLICA_BOOTSTRAP_PATH,
+  PEER_REPLICA_CHANGES_PATH,
+} from "./peer-replica-route.js";
+import type { PeerReplicaDeps } from "./peer-replica-route.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 export const PEER_LINK_REDEEM_PATH = `${PEER_PLANE_PREFIX}link/redeem`;
@@ -65,6 +74,8 @@ export interface PeerPlaneDeps {
   commonsCredentialFor?: (
     vaultId: string
   ) => ExecuteCommonsCommandInput["credential"] | undefined;
+  /** The subscription doors (#929). Absent on a host that mounts no vault. */
+  replica?: PeerReplicaDeps;
 }
 
 export interface PeerIdentity {
@@ -273,6 +284,16 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     }
     if (pathname === PEER_ROUTE_ASSERT_PATH && method === "POST") {
       return assertRoute(req, res, peer);
+    }
+    if (deps.replica) {
+      const search = (): URLSearchParams =>
+        new URL(target, "http://gateway.local").searchParams;
+      if (pathname === PEER_REPLICA_BOOTSTRAP_PATH && method === "GET")
+        return handlePeerReplicaBootstrap(res, peer, search(), deps.replica);
+      if (pathname === PEER_REPLICA_BLOB_PATH && method === "GET")
+        return handlePeerReplicaBlob(res, peer, search(), deps.replica);
+      if (pathname === PEER_REPLICA_CHANGES_PATH && method === "POST")
+        return handlePeerReplicaChanges(req, res, peer, deps.replica);
     }
     // COPY-AS-SHARE IS OFF THIS WIRE (#825, ruling G-copy): remote-give frames
     // and the ranged byte pull answer `not_found` like any unknown path.

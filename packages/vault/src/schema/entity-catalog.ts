@@ -571,6 +571,14 @@ export const VAULT_ENTITIES: EntityRegistry = {
     authority: { label: "Access answers", lifecycle: "machinery" },
     delivery_config: { label: "Delivery limits", lifecycle: "machinery" },
     fulfillment: { label: "Delivery state", lifecycle: "machinery" },
+    // The subscription seat (#929): which grant-keyed shapes this vault holds
+    // rows for, how far it has ingested, and which rows each shape placed. A
+    // restore without them hands back a copy no revoke can reach.
+    subscription: { label: "Subscriptions", lifecycle: "machinery" },
+    subscription_lineage: {
+      label: "Subscription lineage",
+      lifecycle: "machinery",
+    },
     // #916, R8 / review 6.4: these four were in `LOCAL_TABLES` as "device
     // observation", which contradicted the comment above — they are Commons
     // CONTROL truth, and a restore without them hands back a seat that has

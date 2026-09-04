@@ -1,25 +1,19 @@
 /*
- * Grant fulfillment (#825): keep a share true. View is origin-authoritative
- * re-projection, never a merge; container grants are membership, not snapshot.
- * Scrub + re-project are ONE audience transaction — a crash between them must
- * not leave the audience empty while the grant stands. Revocation propagates:
- * reachable → hard-delete + `removed`, unreachable stops at `remove_sent`.
+ * START, STOP, REPORT (#929). A grant is kept true by a SUBSCRIPTION, not by
+ * the origin reaching into an audience vault: this module decides who should
+ * hold the shape and hands frames to a transport. The transport is the only
+ * thing that knows whether the audience is co-hosted (loopback) or on another
+ * gateway (the peer replica route), which is what makes one delivery path
+ * serve both — the reach that confined cross-gateway sharing to a second rail.
+ *
+ * Origin-authoritative throughout: the audience never authors over a projected
+ * row, and revocation settles `removed` only on the seat's acknowledgement.
  */
 
-import type { DatabaseSync } from "node:sqlite";
-
 import { sha256Hex } from "../ids.js";
-import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
-import { placeBlob } from "../share/blobs.js";
-import type { ProjectedItem, WireClosure } from "../share/closure.js";
-import {
-  COMMONS_DEFAULT_MAX_SIZE_BYTES,
-  commonsClosureSizeBytes,
-} from "../share/commons.js";
 import type { ShareVaultRef } from "../share/placement.js";
-import { unshareFromVault } from "../share/placement.js";
-import { projectShareClosure } from "../share/project-closure.js";
-import { readShareClosure } from "../share/read-closure.js";
+import type { ShareShapeFrame } from "../share/subscription-frame.js";
+import { composeShareShape } from "../share/subscription-frame.js";
 import { channelForParty } from "./channel.js";
 import type { ShareFulfillmentState, ShareGrantRecord } from "./grant-store.js";
 import {
@@ -30,39 +24,58 @@ import {
   setFulfillmentState,
 } from "./grant-store.js";
 
-/** Over the ceiling. No second budget: fail before placing. */
-export class ShareGrantMaxSizeError extends Error {
-  constructor(
-    readonly grantId: string,
-    readonly currentSizeBytes: number,
-    readonly maxSizeBytes: number
-  ) {
-    super(
-      `share grant ${grantId} is ${currentSizeBytes} bytes, above its ${maxSizeBytes} byte maximum`
-    );
-    this.name = "ShareGrantMaxSizeError";
-  }
+export type ShareTransportRoute = "loopback" | "peer";
+
+export type ShareDeliveryOutcome =
+  | {
+      outcome: "delivered";
+      /** What the ingest had to write — the work-counter reading (#927). */
+      apply: "bootstrap" | "reproject" | "fields";
+      fieldUpdates: number;
+    }
+  | { outcome: "unreachable"; detail: string };
+
+export type ShareRemovalOutcome =
+  | { outcome: "acknowledged"; removed: number; retained: number }
+  | { outcome: "unreachable"; detail: string };
+
+/**
+ * One audience seat, however it is reached. `deliver` places the manifest's
+ * bytes and ingests the frame; `remove` drops the shape and ANSWERS — that
+ * acknowledgement is what settles `removed`, so an unanswered removal stops at
+ * `remove_sent` whether the seat is a hardlink away or a gateway away.
+ */
+export interface ShareShapeTransport {
+  route: ShareTransportRoute;
+  deliver: (frame: ShareShapeFrame) => ShareDeliveryOutcome;
+  remove: (input: {
+    shapeId: string;
+    audienceVaultId: string;
+  }) => ShareRemovalOutcome;
 }
 
-export interface GrantFulfillmentStep {
+export interface ShareSubscriptionStep {
   partyId: string;
   state: ShareFulfillmentState;
   peerVaultId?: string;
+  route?: ShareTransportRoute;
   detail?: string;
-  projected?: readonly ProjectedItem[];
-  /** Already matched: nothing written, no device woken. */
+  apply?: "bootstrap" | "reproject" | "fields";
+  fieldUpdates?: number;
+  /** Already matched: nothing composed, nothing written, no device woken. */
   unchanged?: true;
   /** The FIRST time the subject reached this peer (#846). */
   firstDelivery?: true;
 }
 
-export interface GrantFulfillmentResult {
+export interface ShareSubscriptionResult {
   grantId: string;
-  steps: readonly GrantFulfillmentStep[];
+  shapeId: string;
+  steps: readonly ShareSubscriptionStep[];
   /**
    * `masked` is a refusal standing inside a granted circle; `departed` is a
-   * peer still holding a copy whose party left the roster — the receipt
-   * carries it, because that copy ends by revocation, not a roster edit.
+   * peer still holding a delivered copy whose party left the roster — that copy
+   * ends by revocation, not a roster edit, so the receipt carries it.
    */
   drift: {
     masked: readonly string[];
@@ -71,10 +84,9 @@ export interface GrantFulfillmentResult {
 }
 
 /**
- * Per-grant × peer memory of WHAT was last projected. Rebuildable, so it lives
- * in host memory: a restart re-projects once and converges. Its only job is to
- * stop an UNCHANGED projection writing, since delete-then-insert would wake
- * every audience device.
+ * Per-grant × peer memory of WHAT was last composed. Rebuildable, so it lives
+ * in host memory: a restart re-composes once and converges. Its only job is to
+ * stop an unchanged shape reaching a transport at all.
  */
 export interface GrantProjectionMemory {
   read: (grantId: string, peerVaultId: string) => string | undefined;
@@ -86,136 +98,60 @@ export interface GrantProjectionMemory {
 export function createGrantProjectionMemory(): GrantProjectionMemory {
   const digests = new Map<string, string>();
   const key = (grantId: string, peerVaultId: string): string =>
-    `${grantId}\0${peerVaultId}`;
+    `${grantId} ${peerVaultId}`;
   return {
     read: (grantId, peerVaultId) => digests.get(key(grantId, peerVaultId)),
     write: (grantId, peerVaultId, digest) => {
       digests.set(key(grantId, peerVaultId), digest);
     },
     forget: (grantId) => {
-      for (const existing of digests.keys())
-        if (existing.startsWith(`${grantId}\0`)) digests.delete(existing);
+      const stale = [...digests.keys()].filter((existing) =>
+        existing.startsWith(`${grantId} `)
+      );
+      for (const entry of stale) digests.delete(entry);
     },
   };
 }
 
-export interface FulfillShareGrantInput {
+/** Grant-keyed shape id. Mirrors `@centraid/core/protocol`'s `shareShapeId`;
+ *  the peer replica route's test holds the two equal. */
+export function shareGrantShapeId(grantId: string): string {
+  return `@share:${grantId}`;
+}
+
+export interface StartShareSubscriptionInput {
   origin: ShareVaultRef;
   originVaultId: string;
   grantId: string;
-  /** A fact about reach, never about the grant. */
-  seatFor: (vaultId: string) => ShareVaultRef | undefined;
+  /** A fact about REACH, never about the grant. */
+  transportFor: (peerVaultId: string) => ShareShapeTransport | undefined;
   now: string;
-  /** Omitted: every pass re-projects. */
+  /** Omitted: every pass composes. */
   memory?: GrantProjectionMemory;
 }
 
-function priorProjection(
-  audience: DatabaseSync,
-  originVaultId: string,
-  grant: ShareGrantRecord
-): string | undefined {
-  const row = audience
-    .prepare(
-      `SELECT target_id FROM core_share_origin
-        WHERE target_type = ? AND origin_vault_id = ? AND origin_item_id = ?`
-    )
-    .get(grant.subjectType, originVaultId, grant.subjectId) as
-    | { target_id: string }
-    | undefined;
-  return row?.target_id;
-}
-
-/** Bytes first (the hardlink is independent), then scrub + project in one txn. */
-function reproject(input: {
-  origin: ShareVaultRef;
-  originVaultId: string;
-  seat: ShareVaultRef;
-  closure: WireClosure;
-  grant: ShareGrantRecord;
-  now: string;
-}): readonly ProjectedItem[] {
-  for (const blob of input.closure.blobs)
-    placeBlob(input.origin.blobs.local, input.seat.blobs.local, blob.sha256);
-  const audience = input.seat.vault;
-  const nested = audience.isTransaction;
-  audience.exec(nested ? "SAVEPOINT grant_reproject" : "BEGIN IMMEDIATE");
-  try {
-    const replicaCommit = beginReplicaCommit(audience);
-    const prior = priorProjection(audience, input.originVaultId, input.grant);
-    if (prior !== undefined)
-      unshareFromVault({
-        audience: input.seat,
-        itemType: input.grant.subjectType,
-        itemId: prior,
-      });
-    const projection = projectShareClosure(audience, input.closure, {
-      sharedBy: `grant:${input.grant.grantId}`,
-      now: () => Date.parse(input.now),
-      ...(input.origin.sealKey && input.seat.sealKey
-        ? {
-            keys: {
-              origin: input.origin.sealKey,
-              audience: input.seat.sealKey,
-            },
-          }
-        : {}),
-    });
-    endReplicaCommit(audience, replicaCommit);
-    audience.exec(nested ? "RELEASE grant_reproject" : "COMMIT");
-    return projection.items;
-  } catch (error) {
-    audience.exec(nested ? "ROLLBACK TO grant_reproject" : "ROLLBACK");
-    if (nested) audience.exec("RELEASE grant_reproject");
-    throw error;
-  }
-}
-
-/** Lazy: an audience with no open channel at all never walks it. */
-function subjectClosure(input: {
-  origin: ShareVaultRef;
-  originVaultId: string;
-  grant: ShareGrantRecord;
-}): WireClosure {
-  const closure = readShareClosure(input.origin.vault, {
-    originVaultId: input.originVaultId,
-    itemType: input.grant.subjectType,
-    itemIds: [input.grant.subjectId],
-    // Never a grant to oneself: origin's own media.location policy applies.
-    crossOwner: true,
-  });
-  const sizeBytes = commonsClosureSizeBytes(closure);
-  const ceiling = input.grant.maxSizeBytes ?? COMMONS_DEFAULT_MAX_SIZE_BYTES;
-  if (sizeBytes > ceiling)
-    throw new ShareGrantMaxSizeError(input.grant.grantId, sizeBytes, ceiling);
-  return closure;
-}
-
-/** No open channel, so nothing is carried and nothing is minted to open one
- *  (#903). Two ways to get here and the row can only record one of them:
- *  `share_fulfillment` is keyed by peer vault, so a SEVERED link — the vault
- *  is known, the way in is gone — writes a row, and a party who was never
- *  linked has no vault to name and writes none. The step reports both, which
- *  is what a circle's unlinked members are answered with. */
+/**
+ * No open channel, so nothing is carried and nothing is minted to open one
+ * (#903). A SEVERED link names a vault and writes a row; a party who was never
+ * linked has no vault to name and writes none.
+ */
 function park(input: {
   origin: ShareVaultRef;
-  grant: ShareGrantRecord;
+  grantId: string;
   partyId: string;
   peerVaultId?: string;
   now: string;
-}): GrantFulfillmentStep {
+}): ShareSubscriptionStep {
   const detail =
     input.peerVaultId === undefined
       ? "they have no linked account, so there is no vault to deliver into"
       : `the link to peer vault ${input.peerVaultId} has ended`;
   // An UPDATE, never an insert-if-absent: a severed link must DEMOTE a row that
-  // already read `delivered`, the way losing the host demotes one to `syncing`
-  // below — `state` is a live freshness reading. The durable memory is
-  // untouched (#846), so a peer that was delivered to still owes its copy back
-  // on revocation.
+  // already read `delivered`. The durable memory is untouched (#846), so a peer
+  // that was delivered to still owes its copy back on revocation.
   if (input.peerVaultId !== undefined)
     setFulfillmentState(input.origin.vault, {
-      grantId: input.grant.grantId,
+      grantId: input.grantId,
       peerVaultId: input.peerVaultId,
       state: "awaiting_channel",
       updatedAt: input.now,
@@ -231,34 +167,40 @@ function park(input: {
   };
 }
 
-/** Idempotent. A departed member's copy ends by revocation. */
-export function fulfillShareGrant(
-  input: FulfillShareGrantInput
-): GrantFulfillmentResult {
+function frameFor(
+  input: StartShareSubscriptionInput,
+  grant: ShareGrantRecord,
+  audienceVaultId: string
+): ShareShapeFrame {
+  return composeShareShape({
+    origin: input.origin,
+    originVaultId: input.originVaultId,
+    audienceVaultId,
+    shapeId: shareGrantShapeId(grant.grantId),
+    grantId: grant.grantId,
+    subjectType: grant.subjectType,
+    subjectId: grant.subjectId,
+    maxSizeBytes: grant.maxSizeBytes,
+  });
+}
+
+/** Idempotent. A departed member's copy ends by revocation, never by drift. */
+export function startShareSubscription(
+  input: StartShareSubscriptionInput
+): ShareSubscriptionResult {
   const db = input.origin.vault;
   const grant = readShareGrant(db, input.grantId);
   if (!grant) throw new Error(`share grant ${input.grantId} is not available`);
   if (grant.revokedAt !== null)
     throw new Error(
-      `share grant ${input.grantId} is revoked; propagate its removal instead`
+      `share grant ${input.grantId} is revoked; stop its subscriptions instead`
     );
-  let loaded: WireClosure | undefined;
-  const closure = (): WireClosure => {
-    loaded ??= subjectClosure({
-      origin: input.origin,
-      originVaultId: input.originVaultId,
-      grant,
-    });
-    return loaded;
-  };
-  // Over-ceiling must leave no fulfillment row.
-  closure();
-  let digest: string | undefined;
-  const closureDigest = (): string => {
-    digest ??= sha256Hex(JSON.stringify(closure()));
-    return digest;
-  };
-  const steps: GrantFulfillmentStep[] = [];
+  // Composed once for the ceiling, so an over-ceiling grant leaves no
+  // fulfillment row and dials no transport. The audience is unnamed here: the
+  // frame is discarded, and the size and digest do not depend on who receives.
+  const probe = frameFor(input, grant, "");
+  const digest = sha256Hex(JSON.stringify(probe.closure));
+  const steps: ShareSubscriptionStep[] = [];
   const audience = resolveGrantAudienceParties(db, grant);
   const reached = new Map<string, string>();
   for (const partyId of audience.parties) {
@@ -270,7 +212,7 @@ export function fulfillShareGrant(
       steps.push(
         park({
           origin: input.origin,
-          grant,
+          grantId: grant.grantId,
           partyId,
           ...(channel === null ? {} : { peerVaultId: channel.vaultId }),
           now: input.now,
@@ -279,9 +221,8 @@ export function fulfillShareGrant(
       continue;
     }
     const peerVaultId = channel.vaultId;
-    reached.set(peerVaultId, partyId);
-    const seat = input.seatFor(peerVaultId);
-    if (!seat) {
+    const transport = input.transportFor(peerVaultId);
+    if (!transport) {
       // Channel open, this host cannot carry it now: `syncing` is honest.
       const detail = `peer vault ${peerVaultId} is not reachable from this host`;
       setFulfillmentState(db, {
@@ -291,58 +232,65 @@ export function fulfillShareGrant(
         updatedAt: input.now,
         detail,
       });
-      steps.push({
-        partyId,
-        state: "syncing",
-        peerVaultId,
-        detail,
-      });
+      steps.push({ partyId, state: "syncing", peerVaultId, detail });
       continue;
     }
-    // DIFF FIRST. An unchanged projection over a peer already holding it
-    // writes nothing, so no change-log entry wakes its devices. Consult
-    // `delivered_at`, never the rebuildable digest alone.
+    // DIFF FIRST. An unchanged shape over a peer already holding it composes no
+    // frame and dials no transport. Consult `delivered_at`, never the
+    // rebuildable digest alone.
     const standing = readFulfillment(db, grant.grantId, peerVaultId);
     if (
       standing?.state === "delivered" &&
       standing.deliveredAt !== null &&
-      input.memory?.read(grant.grantId, peerVaultId) === closureDigest()
+      input.memory?.read(grant.grantId, peerVaultId) === digest
     ) {
       steps.push({
         partyId,
         state: "delivered",
         peerVaultId,
+        route: transport.route,
         unchanged: true,
       });
       continue;
     }
-    const wire = closure();
     setFulfillmentState(db, {
       grantId: grant.grantId,
       peerVaultId,
       state: "syncing",
       updatedAt: input.now,
     });
-    const projected = reproject({
-      origin: input.origin,
-      originVaultId: input.originVaultId,
-      seat,
-      closure: wire,
-      grant,
-      now: input.now,
-    });
+    const delivery = transport.deliver(frameFor(input, grant, peerVaultId));
+    if (delivery.outcome === "unreachable") {
+      setFulfillmentState(db, {
+        grantId: grant.grantId,
+        peerVaultId,
+        state: "syncing",
+        updatedAt: input.now,
+        detail: delivery.detail,
+      });
+      steps.push({
+        partyId,
+        state: "syncing",
+        peerVaultId,
+        route: transport.route,
+        detail: delivery.detail,
+      });
+      continue;
+    }
     setFulfillmentState(db, {
       grantId: grant.grantId,
       peerVaultId,
       state: "delivered",
       updatedAt: input.now,
     });
-    input.memory?.write(grant.grantId, peerVaultId, closureDigest());
+    input.memory?.write(grant.grantId, peerVaultId, digest);
     steps.push({
       partyId,
       state: "delivered",
       peerVaultId,
-      projected,
+      route: transport.route,
+      apply: delivery.apply,
+      fieldUpdates: delivery.fieldUpdates,
       // Read off the DURABLE memory as it stood BEFORE this pass (#846), so
       // the "shared with you" notice fires once per grant.
       ...(standing?.deliveredAt ? {} : { firstDelivery: true as const }),
@@ -350,6 +298,7 @@ export function fulfillShareGrant(
   }
   return {
     grantId: grant.grantId,
+    shapeId: shareGrantShapeId(grant.grantId),
     steps,
     drift: {
       masked: audience.masked,
@@ -358,7 +307,7 @@ export function fulfillShareGrant(
           (row) => row.deliveredAt !== null && !reached.has(row.peerVaultId)
         )
         .map((row) => ({
-          partyId: departedPartyFor(db, row.peerVaultId),
+          partyId: departedPartyFor(input.origin, row.peerVaultId),
           peerVaultId: row.peerVaultId,
         })),
     },
@@ -366,8 +315,8 @@ export function fulfillShareGrant(
 }
 
 /** `''` when the binding is gone too. */
-function departedPartyFor(db: DatabaseSync, peerVaultId: string): string {
-  const row = db
+function departedPartyFor(origin: ShareVaultRef, peerVaultId: string): string {
+  const row = origin.vault
     .prepare(
       `SELECT party_id FROM share_party_vault_binding
         WHERE vault_id = ? AND revoked_at IS NULL LIMIT 1`
@@ -384,82 +333,69 @@ function departedPartyFor(db: DatabaseSync, peerVaultId: string): string {
 export const NOTHING_DELIVERED_DETAIL =
   "nothing had been delivered; there was nothing to remove";
 
-export interface GrantRemovalStep {
+export interface ShareSubscriptionStopStep {
   peerVaultId: string;
   state: ShareFulfillmentState;
   detail?: string;
-  removed?: boolean;
+  removed?: number;
+  retained?: number;
 }
 
-export interface GrantRemovalResult {
+export interface ShareSubscriptionStopResult {
   grantId: string;
-  steps: readonly GrantRemovalStep[];
+  shapeId: string;
+  steps: readonly ShareSubscriptionStopStep[];
 }
 
-export interface PropagateShareGrantRevocationInput {
+export interface StopShareSubscriptionInput {
   origin: ShareVaultRef;
   originVaultId: string;
   grantId: string;
-  seatFor: (vaultId: string) => ShareVaultRef | undefined;
+  transportFor: (peerVaultId: string) => ShareShapeTransport | undefined;
   now: string;
-  /** Forgotten here, so a re-grant re-projects rather than trust a digest. */
+  /** Forgotten here, so a re-grant re-composes rather than trust a digest. */
   memory?: GrantProjectionMemory;
 }
 
 /**
- * Nothing promotes `remove_sent` to `removed` on a timer: that needs a look
- * inside the audience vault. Never-delivered ends `removed` with a "nothing
- * delivered" detail, never a fabricated "removal sent".
+ * REVOCATION IS SHAPE REMOVAL. Nothing promotes `remove_sent` to `removed` on a
+ * timer: only the seat's acknowledgement does, so a removal that left the
+ * origin and was never answered reads honestly. Never-delivered ends `removed`
+ * with a "nothing delivered" detail, never a fabricated "removal sent".
  */
-export function propagateShareGrantRevocation(
-  input: PropagateShareGrantRevocationInput
-): GrantRemovalResult {
+export function stopShareSubscription(
+  input: StopShareSubscriptionInput
+): ShareSubscriptionStopResult {
   const db = input.origin.vault;
   const grant = readShareGrant(db, input.grantId);
   if (!grant) throw new Error(`share grant ${input.grantId} is not available`);
   if (grant.revokedAt === null)
     throw new Error(
-      `share grant ${input.grantId} still stands; revoke it before propagating`
+      `share grant ${input.grantId} still stands; revoke it before stopping it`
     );
   input.memory?.forget(input.grantId);
-  const steps: GrantRemovalStep[] = [];
+  const shapeId = shareGrantShapeId(grant.grantId);
+  const steps: ShareSubscriptionStopStep[] = [];
   for (const row of listFulfillment(db, grant.grantId)) {
     if (row.state === "removed") {
       steps.push({ peerVaultId: row.peerVaultId, state: "removed" });
       continue;
     }
-    // Ask `delivered_at`, not live state (#846): a lost-reach row sits in `syncing` and must not settle `removed` while the audience holds a copy.
+    // Ask `delivered_at`, not live state (#846): a lost-reach row sits in
+    // `syncing` and must not settle `removed` while the audience holds a copy.
     if (row.deliveredAt === null) {
-      const detail = NOTHING_DELIVERED_DETAIL;
       setFulfillmentState(db, {
         grantId: grant.grantId,
         peerVaultId: row.peerVaultId,
         state: "removed",
         updatedAt: input.now,
-        detail,
+        detail: NOTHING_DELIVERED_DETAIL,
       });
       steps.push({
         peerVaultId: row.peerVaultId,
         state: "removed",
-        detail,
-        removed: false,
-      });
-      continue;
-    }
-    const seat = input.seatFor(row.peerVaultId);
-    if (!seat) {
-      const detail = `removal sent to ${row.peerVaultId}; the peer has not acknowledged it`;
-      setFulfillmentState(db, {
-        grantId: grant.grantId,
-        peerVaultId: row.peerVaultId,
-        state: "remove_sent",
-        updatedAt: input.now,
-        detail,
-      });
-      steps.push({
-        peerVaultId: row.peerVaultId,
-        state: "remove_sent",
-        detail,
+        detail: NOTHING_DELIVERED_DETAIL,
+        removed: 0,
       });
       continue;
     }
@@ -469,25 +405,63 @@ export function propagateShareGrantRevocation(
       state: "remove_sent",
       updatedAt: input.now,
     });
-    const prior = priorProjection(seat.vault, input.originVaultId, grant);
-    // Hard delete, no tombstone; bytes go to the orphan sweep.
-    const removed =
-      prior !== undefined &&
-      unshareFromVault({
-        audience: seat,
-        itemType: grant.subjectType,
-        itemId: prior,
-      }).removed;
+    const transport = input.transportFor(row.peerVaultId);
+    const answer: ShareRemovalOutcome = transport
+      ? transport.remove({ shapeId, audienceVaultId: row.peerVaultId })
+      : {
+          outcome: "unreachable",
+          detail: `removal sent to ${row.peerVaultId}; the peer has not acknowledged it`,
+        };
+    if (answer.outcome === "unreachable") {
+      setFulfillmentState(db, {
+        grantId: grant.grantId,
+        peerVaultId: row.peerVaultId,
+        state: "remove_sent",
+        updatedAt: input.now,
+        detail: answer.detail,
+      });
+      steps.push({
+        peerVaultId: row.peerVaultId,
+        state: "remove_sent",
+        detail: answer.detail,
+      });
+      continue;
+    }
     setFulfillmentState(db, {
       grantId: grant.grantId,
       peerVaultId: row.peerVaultId,
       state: "removed",
       updatedAt: input.now,
-      ...(removed
-        ? {}
-        : { detail: "the audience vault no longer held a projection" }),
+      ...(answer.removed === 0 && answer.retained === 0
+        ? { detail: "the audience vault no longer held a projection" }
+        : {}),
     });
-    steps.push({ peerVaultId: row.peerVaultId, state: "removed", removed });
+    steps.push({
+      peerVaultId: row.peerVaultId,
+      state: "removed",
+      removed: answer.removed,
+      retained: answer.retained,
+    });
   }
-  return { grantId: grant.grantId, steps };
+  return { grantId: grant.grantId, shapeId, steps };
+}
+
+export interface ShareSubscriptionReportRow {
+  peerVaultId: string;
+  state: ShareFulfillmentState;
+  detail: string | null;
+  deliveredAt: string | null;
+}
+
+/** What the member is told: one row per audience vault, no derivation. */
+export function reportShareSubscription(
+  origin: ShareVaultRef,
+  grantId: string
+): readonly ShareSubscriptionReportRow[] {
+  return listFulfillment(origin.vault, grantId).map((row) => ({
+    peerVaultId: row.peerVaultId,
+    state: row.state,
+    detail: row.detail,
+    deliveredAt: row.deliveredAt,
+  }));
 }

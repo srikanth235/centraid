@@ -48,6 +48,22 @@ export interface IntentQueueOptions {
   onSupersededRetired?: (intentId: string) => void;
 }
 
+/** What the member reads when a revoked share expires their queued write. */
+export const SHAPE_REVOKED_REASON = "no longer shared with you";
+
+/** An intent belongs to a shape if its optimistic rows or its declared read
+ *  dependencies name it — the two places a shape id is written down. */
+function touchesShape(intent: ReplicaIntent, shapeId: string): boolean {
+  return (
+    intent.optimistic.some((mutation) => mutation.shapeId === shapeId) ||
+    (intent.dependencies ?? []).some(
+      (dependency) => dependency.shapeId === shapeId
+    ) ||
+    (intent.baseVersions ?? []).some((version) => version.shapeId === shapeId)
+  );
+}
+
+const SYNTHETIC_PENDING_ROW = /^pending:(?<intentId>[^:]+):/u;
 const PENDING_SUPERSEDES_FIELD = "__centraid_pending_supersedes";
 const replacementLocks = new Map<string, Promise<void>>();
 
@@ -343,6 +359,34 @@ export class IntentQueue {
    */
   async pending(): Promise<ReplicaIntent[]> {
     return this.#mirror.pending([...OVERLAY_STATES]);
+  }
+
+  /**
+   * A SHARE WAS REVOKED (#929). The shape's rows leave this device, so every
+   * write still queued over one of them can never land: it settles `expired`,
+   * which is the outbox's own word for "this waited too long, decide again",
+   * with the reason the member actually needs to read.
+   *
+   * `expired` is not `failed`: nothing went wrong on the wire, and there is no
+   * retry that would work — the row is not this member's to write any more.
+   */
+  async expireShape(
+    shapeId: string,
+    reason = SHAPE_REVOKED_REASON
+  ): Promise<ReplicaIntent[]> {
+    const open = await this.store.list([...OVERLAY_STATES]);
+    const expired: ReplicaIntent[] = [];
+    await applyInIntentOrder(open, async (intent) => {
+      if (!touchesShape(intent, shapeId)) return;
+      if (intent.state === "expired") return;
+      expired.push(
+        await this.store.transition(intent.intentId, [intent.state], {
+          state: "expired",
+          reason,
+        })
+      );
+    });
+    return expired;
   }
 
   /** A renderer crash can strand claimed work; replay it with the same id and hash. */

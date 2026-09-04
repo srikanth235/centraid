@@ -5,7 +5,11 @@ import { stablePendingRowId } from "@centraid/blueprints/apps/_shared/pending-ov
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { MemoryIntentStore } from "./intent-store.js";
-import { IntentQueue } from "./intents.js";
+import {
+  IntentQueue,
+  pendingIntentIdFromInput,
+  SHAPE_REVOKED_REASON,
+} from "./intents.js";
 import type { ReplicaValue } from "./types.js";
 
 describe(IntentQueue, () => {
@@ -1023,5 +1027,74 @@ describe(IntentQueue, () => {
     await expect(queue.discard("missing")).resolves.toBe(false);
     await queue.purge();
     expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  /**
+   * A REVOKED SHARE (#929). The shape's rows leave the device, so a write
+   * still queued over one of them can never land — and `expired` is the
+   * outbox's own word for that, not `failed`, because there is no retry that
+   * would work. A write over ANOTHER shape is untouched.
+   */
+  test("expires the queued writes of a revoked shape and no others", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: (() => {
+        let n = 0;
+        return () => `intent-shape-${(n += 1)}`;
+      })(),
+    });
+    await queue.enqueue({
+      appId: "tally",
+      action: "add-expense",
+      input: { amount: 1 },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "@share:grant-1",
+          entity: "tally.expense",
+          rowId: "expense-1",
+          values: { amount: 1 },
+        },
+      ],
+    });
+    await queue.enqueue({
+      appId: "tally",
+      action: "add-expense",
+      input: { amount: 2 },
+      dependencies: [{ shapeId: "@share:grant-1", entity: "tally.expense" }],
+    });
+    await queue.enqueue({
+      appId: "agenda",
+      action: "create",
+      input: { title: "mine" },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "agenda:own",
+          entity: "core.task",
+          rowId: "task-1",
+          values: { title: "mine" },
+        },
+      ],
+    });
+
+    const expired = await queue.expireShape("@share:grant-1");
+    expect(expired.map((intent) => intent.intentId)).toStrictEqual([
+      "intent-shape-1",
+      "intent-shape-2",
+    ]);
+    expect(expired.every((intent) => intent.state === "expired")).toBe(true);
+    expect(expired[0]?.reason).toBe(SHAPE_REVOKED_REASON);
+    expect(SHAPE_REVOKED_REASON).toBe("no longer shared with you");
+    // No pending row survives over a purged shape; the member's own write does.
+    const open = await queue.pending();
+    expect(
+      open
+        .filter((intent) => intent.state === "queued")
+        .map((intent) => intent.intentId)
+    ).toStrictEqual(["intent-shape-3"]);
+    // Idempotent: a second purge of the same shape settles nothing again.
+    await expect(queue.expireShape("@share:grant-1")).resolves.toStrictEqual(
+      []
+    );
   });
 });

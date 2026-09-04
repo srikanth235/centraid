@@ -84,3 +84,49 @@ export function listFulfillment(
     ).all(grantId) as ShareFulfillmentRow[]
   ).map(toFulfillment);
 }
+
+export interface PendingShareDelivery {
+  grantId: string;
+  peerVaultId: string;
+  state: ShareFulfillmentState;
+  /** True when the grant has been revoked, so the pending work is a removal. */
+  revoked: boolean;
+}
+
+/**
+ * Delivery work the peer route still owes, across every grant (#929). The
+ * loopback route settles in the pass that starts a subscription; a peer-routed
+ * audience cannot, because a network call has no business on a commit path —
+ * so the pass leaves `syncing`/`remove_sent` and a sweep drains it.
+ *
+ * BOUNDED: the sweep asks for a page, so a vault with a thousand stalled peers
+ * costs one page per pass rather than one walk of the whole table.
+ */
+export function listPendingShareDeliveries(
+  db: DatabaseSync,
+  limit = 100
+): PendingShareDelivery[] {
+  return (
+    prepared(
+      db,
+      `SELECT f.grant_id, f.peer_vault_id, f.state,
+              (a.revoked_at IS NOT NULL) AS revoked
+         FROM share_fulfillment f
+         JOIN share_authority a ON a.authority_id = f.grant_id
+        WHERE f.state IN ('syncing', 'remove_sent')
+          AND a.principal_kind IN ('person', 'circle')
+        ORDER BY f.updated_at, f.grant_id, f.peer_vault_id
+        LIMIT ?`
+    ).all(limit) as {
+      grant_id: string;
+      peer_vault_id: string;
+      state: ShareFulfillmentState;
+      revoked: number;
+    }[]
+  ).map((row) => ({
+    grantId: row.grant_id,
+    peerVaultId: row.peer_vault_id,
+    state: row.state,
+    revoked: row.revoked === 1,
+  }));
+}

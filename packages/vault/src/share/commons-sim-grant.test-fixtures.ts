@@ -11,8 +11,8 @@
 // Nothing here is pinned: every invariant simply fails on violation.
 
 import {
-  fulfillShareGrant,
-  propagateShareGrantRevocation,
+  startShareSubscription,
+  stopShareSubscription,
 } from "../grant/fulfillment.js";
 import type { ShareFulfillmentState } from "../grant/grant-store.js";
 import {
@@ -35,7 +35,7 @@ import {
   originTitles,
   projectedAlbumId,
   projectionRowCount,
-  seatRefFor,
+  transportRefFor,
   tamperAudience,
 } from "./commons-sim-grant-world.test-fixtures.js";
 import type { Rng, Seat, World } from "./commons-sim-world.test-fixtures.js";
@@ -207,21 +207,21 @@ function fulfillAction(
   if (slot.revoked) {
     // G1: a revoked grant is never delivered again, at any reach.
     refuses(world, `${slot.key} grant_fulfill`, "is revoked", () =>
-      fulfillShareGrant({
+      startShareSubscription({
         origin: slot.origin.db,
         originVaultId: slot.origin.vaultId,
         grantId: slot.grantId as string,
-        seatFor: seatRefFor(plane(world), reachable),
+        transportFor: transportRefFor(plane(world), reachable, slot.origin.db),
         now: NOW,
       })
     );
     return;
   }
-  const result = fulfillShareGrant({
+  const result = startShareSubscription({
     origin: slot.origin.db,
     originVaultId: slot.origin.vaultId,
     grantId: slot.grantId,
-    seatFor: seatRefFor(plane(world), reachable),
+    transportFor: transportRefFor(plane(world), reachable, slot.origin.db),
     now: NOW,
   });
   const step = result.steps[0];
@@ -276,21 +276,21 @@ function propagateAction(
   if (!slot.revoked) {
     // The engine refuses an undated revocation, so the halves cannot drift.
     refuses(world, `${slot.key} grant_propagate`, "still stands", () =>
-      propagateShareGrantRevocation({
+      stopShareSubscription({
         origin: slot.origin.db,
         originVaultId: slot.origin.vaultId,
         grantId: slot.grantId as string,
-        seatFor: seatRefFor(plane(world), reachable),
+        transportFor: transportRefFor(plane(world), reachable, slot.origin.db),
         now: NOW,
       })
     );
     return;
   }
-  const removal = propagateShareGrantRevocation({
+  const removal = stopShareSubscription({
     origin: slot.origin.db,
     originVaultId: slot.origin.vaultId,
     grantId: slot.grantId,
-    seatFor: seatRefFor(plane(world), reachable),
+    transportFor: transportRefFor(plane(world), reachable, slot.origin.db),
     now: NOW,
   });
   observe(world, slot, "grant_propagate");
@@ -484,11 +484,11 @@ export function checkGrantInvariants(world: World): void {
       checkSeverance(world, slot, "quiesced");
       // G1's second half: no future pass revives it.
       refuses(world, `${slot.key} quiesced`, "is revoked", () =>
-        fulfillShareGrant({
+        startShareSubscription({
           origin: slot.origin.db,
           originVaultId: slot.origin.vaultId,
           grantId: slot.grantId as string,
-          seatFor: seatRefFor(grantPlane, true),
+          transportFor: transportRefFor(grantPlane, true, slot.origin.db),
           now: NOW,
         })
       );

@@ -103,6 +103,41 @@ export {
   type ProjectionIngestHook,
   type ProjectionIngestContext,
 } from "./share/projection-ingest.js";
+// A share is a subscription (#929): the origin composes a grant-keyed shape,
+// a transport carries it, and the audience seat ingests it through the same
+// door an authored row takes.
+export {
+  composeShareShape,
+  shareShapeSizeBytes,
+  ShareShapeMaxSizeError,
+  SHARE_SHAPE_DEFAULT_MAX_SIZE_BYTES,
+  SHARE_SHAPE_FORMAT_VERSION,
+  type ComposeShareShapeInput,
+  type ShareShapeFrame,
+  type ShareShapeRowVersion,
+} from "./share/subscription-frame.js";
+export {
+  ingestShareShape,
+  purgeShareShape,
+  type IngestShareShapeResult,
+  type PurgeShareShapeResult,
+} from "./share/subscription-seat.js";
+export {
+  listSubscriptions,
+  readSubscription,
+  readSubscriptionLineage,
+  recordSubscription,
+  type RecordSubscriptionInput,
+  type SubscriptionCursor,
+  type SubscriptionLineageRow,
+  type SubscriptionRecord,
+} from "./share/subscription-store.js";
+export {
+  planShareShapeIngest,
+  shareShapeStructureDigest,
+  type ShapeFieldUpdate,
+  type ShareShapePlan,
+} from "./share/subscription-delta.js";
 export {
   isCommonsCommandActable,
   commonsRoutesForCommand,
@@ -325,22 +360,38 @@ export {
   type ShareChannel,
   type ShareChannelState,
 } from "./grant/channel.js";
-// Fulfillment: the act of keeping a grant true. View re-projects the subject
-// over the closure transport, edit routes back through the commons rail, and
-// revoke propagates a removal instead of pretending it reached the peer.
+// Keeping a grant true is START, STOP, REPORT over a subscription (#929): the
+// origin composes a grant-keyed shape and a transport carries it, so a
+// co-hosted audience and one on another gateway take the same delivery path.
 export {
   createGrantProjectionMemory,
-  fulfillShareGrant,
-  propagateShareGrantRevocation,
-  ShareGrantMaxSizeError,
+  reportShareSubscription,
+  shareGrantShapeId,
+  startShareSubscription,
+  stopShareSubscription,
+  NOTHING_DELIVERED_DETAIL,
   type GrantProjectionMemory,
-  type FulfillShareGrantInput,
-  type GrantFulfillmentResult,
-  type GrantFulfillmentStep,
-  type GrantRemovalResult,
-  type GrantRemovalStep,
-  type PropagateShareGrantRevocationInput,
+  type ShareDeliveryOutcome,
+  type ShareRemovalOutcome,
+  type ShareShapeTransport,
+  type ShareSubscriptionReportRow,
+  type ShareSubscriptionResult,
+  type ShareSubscriptionStep,
+  type ShareSubscriptionStopResult,
+  type ShareSubscriptionStopStep,
+  type ShareTransportRoute,
+  type StartShareSubscriptionInput,
+  type StopShareSubscriptionInput,
 } from "./grant/fulfillment.js";
+export {
+  listPendingShareDeliveries,
+  type PendingShareDelivery,
+} from "./grant/grant-fulfillment-rows.js";
+export {
+  loopbackShareTransport,
+  loopbackShareTransports,
+  type LoopbackShareTransportInput,
+} from "./share/subscription-transport.js";
 export {
   routeShareGrantEdit,
   SHARE_GRANT_CO_CONTRIBUTION_COMMANDS,

@@ -53,6 +53,7 @@ import { OUTBOX_DDL } from "./outbox.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
 import { SHARE_COMMONS_DDL } from "./share-commons.js";
+import { SHARE_SUBSCRIPTION_DDL } from "./subscription.js";
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
 import { assertVaultRegistryLabels } from "./tables.js";
 import { TIME_ORGANIZE_DDL } from "./time-organize.js";
@@ -152,6 +153,9 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     // The authority plane's table before the trigger that revokes into it
     // (#916, E2).
     SHARE_AUTHORITY_DDL,
+    // The subscription seat (#929), after `core_entity` (its lineage FKs the
+    // entity supertype) and after the authority plane it delivers under.
+    SHARE_SUBSCRIPTION_DDL,
     // A trigger ON `core_entity` that writes to `share_authority` and
     // `share_circle_grant`, so both must exist (#916, E2).
     ENTITY_PURGE_REVOKE_DDL,

@@ -516,7 +516,7 @@ export function projectShareClosure(
     });
     endReplicaCommit(audience, replicaCommit);
     audience.exec(nested ? "RELEASE project_share_closure" : "COMMIT");
-    return { items };
+    return { items, rows: [...projected.values()] };
   } catch (error) {
     audience.exec(nested ? "ROLLBACK TO project_share_closure" : "ROLLBACK");
     if (nested) audience.exec("RELEASE project_share_closure");

@@ -58,3 +58,66 @@ Open questions ruled by the maintainer before wave 1(b), recorded here so the do
 | date | harness | session |
 | --- | --- | --- |
 | 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+
+## Wave 2 — the view over the replica
+
+A share is a SUBSCRIPTION: the origin composes a grant-keyed shape and hands it
+to a transport; a co-hosted audience takes the loopback, one on another gateway
+takes the peer replica route and PULLS. `read-closure.ts` is the shape's row
+source and `projection-ingest.ts` the audience door — both unchanged.
+
+| file | what it is |
+| --- | --- |
+| `packages/vault/src/schema/subscription.ts` | `share_subscription` (one row per shape × audience vault, both seats) and `share_subscription_lineage` (shape-keyed, carries the origin row version) |
+| `packages/vault/src/schema/migrate.ts`, `entity-catalog.ts`, `scripts/docs-site/src/content/ontology-body.html` | the two tables composed into the base schema and named in the canonical walk |
+| `packages/vault/src/share/subscription-frame.ts` | origin half: compose the shape, check it against the sealed registry, carry the origin cursor and one row version per row, refuse over the ONE ceiling |
+| `packages/vault/src/share/subscription-seat.ts` | audience half: bootstrap / re-project / field-update, shape-keyed lineage, purge |
+| `packages/vault/src/share/subscription-store.ts` | the seat's store: subscription rows, cursors, lineage |
+| `packages/vault/src/share/subscription-delta.ts` | what an ingest has to write: structure digest vs. per-row comparison |
+| `packages/vault/src/share/subscription-transport.ts` | the loopback route (hardlink + the same seat door) |
+| `packages/vault/src/grant/fulfillment.ts` | start / stop / report over a transport (was `fulfillShareGrant` / `propagateShareGrantRevocation`) |
+| `packages/vault/src/grant/grant-fulfillment-rows.ts` | `listPendingShareDeliveries` — bounded work the peer route still owes |
+| `packages/vault/src/share/closure.ts`, `project-closure.ts` | `ProjectResult.rows`: every projected row, so a SECOND grant over one photograph claims what it deduped onto |
+| `packages/server/src/routes/peer-replica-route.ts` | the subscription doors: origin bootstrap + blob, audience change notice |
+| `packages/server/src/routes/peer-plane.ts` | mounts them |
+| `packages/server/src/serve/share-subscriber.ts` | the seat's pull: frame, bytes, ingest |
+| `packages/server/src/serve/share-subscription-sweep.ts` | drains the peer-routed half off the commit path |
+| `packages/server/src/serve/grant-fulfillment.ts` | host seam: co-hosted ⇒ loopback, linked ⇒ deferred to the sweep |
+| `packages/client/src/replica/purge-selector.ts` | the `shape` selector — a scoped purge, not a whole replica |
+| `packages/client/src/replica/intents.ts` | `expireShape` settles a revoked shape's queued writes `expired` with "no longer shared with you" |
+
+| number | value | provenance |
+| --- | --- | --- |
+| audience change rows for a one-field origin edit | 1 (`media.asset`, distinct row) | `packages/vault/src/share/subscription.test.ts`, two on-disk vaults, host 4c/15GB, `bunx vitest run src/share/subscription.test.ts --root packages/vault` |
+| audience change rows for an unchanged shape | 0 | same test |
+| subject types delivered cross-gateway | 6 of 6 | `packages/server/src/serve/share-subscription-peer.test.ts`, two gateways in one process |
+| per-grant size ceilings | 1 (`share_delivery_config`, default 4 GiB) | `SHARE_SHAPE_DEFAULT_MAX_SIZE_BYTES` |
+
+Deleted with replacement: `fulfillShareGrant` → `startShareSubscription`,
+`propagateShareGrantRevocation` → `stopShareSubscription`,
+`ShareGrantMaxSizeError` → `ShareShapeMaxSizeError`. The scrub + re-project path
+survives as ONE branch of the ingest plan (structure changed), so an album's
+membership still follows; `commons-sim-grant*.test-fixtures.ts` dial the
+loopback transport instead of a raw seat.
+
+Decisions. (1) The field path covers the five single-row tables and re-projects
+`tally.group` and `locker.item`, whose closures are sub-graphs an `UPDATE`
+cannot name — cost unchanged from before for those two, named rather than
+hidden. (2) The plan COMPARES the audience's live row rather than trusting the
+origin's row version alone: origin-authoritative means an audience that edited a
+projected row is repaired on the next pass, which is what the D1 adversary lane
+caught. (3) A `locker.item` cannot be subscribed cross-gateway at all — re-seal
+needs both DEKs — and it is already absent from `SHARE_SUBJECT_REGISTRY`.
+
+```sh
+bun run --cwd packages/vault build && bun run --cwd packages/vault typecheck
+bun run --cwd packages/server typecheck && bun run --cwd packages/client typecheck
+bunx vitest run src/share src/grant --root packages/vault
+bunx vitest run src/serve/share-subscription-peer.test.ts src/serve/authz-deny-matrix.test.ts src/routes/peer-plane.test.ts --root packages/server
+bun run --cwd packages/client test src/replica/purge-selector.test.ts src/replica/intents.contract.test.ts
+```
+
+Findings: none new. Doc debt: `docs/protocol.md` § "Commons stream and cursor
+contract" still describes the commons rail as the cross-gateway path; the peer
+protocol is now 2 and the subscription doors are the path (wave 4 retires the
+commons vocabulary).

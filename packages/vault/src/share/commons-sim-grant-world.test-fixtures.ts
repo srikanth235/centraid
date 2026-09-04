@@ -11,6 +11,7 @@
 
 import { createGrant, enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { Credential } from "../gateway/types.js";
+import type { ShareShapeTransport } from "../grant/fulfillment.js";
 import type { ShareFulfillmentState } from "../grant/grant-store.js";
 import { uuidv7 } from "../ids.js";
 import type { Seat, World } from "./commons-sim-world.test-fixtures.js";
@@ -20,6 +21,7 @@ import {
   revokePartyVaultBinding,
 } from "./party-vault-binding.js";
 import type { ShareVaultRef } from "./placement.js";
+import { loopbackShareTransports } from "./subscription-transport.js";
 
 /** Marked loud so a non-owner caller parks on it. Deliberately OUTSIDE the
  *  commons routing table, so parking never disturbs the tally oracle. */
@@ -81,7 +83,7 @@ export interface GrantPlane {
 }
 
 /** `undefined` means "this host cannot reach that vault right now" — the fact
- *  `fulfillShareGrant` and `propagateShareGrantRevocation` branch on. */
+ *  `startShareSubscription` and `stopShareSubscription` branch on. */
 export function seatRefFor(
   plane: GrantPlane,
   reachable: boolean
@@ -91,6 +93,19 @@ export function seatRefFor(
     const slot = plane.slots.find((entry) => entry.peerVaultId === vaultId);
     return slot?.audience.db;
   };
+}
+
+/** The same reach, as the loopback transport the subscription rail takes. */
+export function transportRefFor(
+  plane: GrantPlane,
+  reachable: boolean,
+  origin: ShareVaultRef
+): (vaultId: string) => ShareShapeTransport | undefined {
+  return loopbackShareTransports({
+    origin,
+    seatFor: seatRefFor(plane, reachable),
+    now: () => NOW,
+  });
 }
 
 function insertPhoto(seat: Seat, label: string): string {

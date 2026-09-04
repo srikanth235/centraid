@@ -188,4 +188,12 @@ export interface ProjectedItem {
 export interface ProjectResult {
   /** One entry per `WireClosure.items`, in the same order. */
   items: ProjectedItem[];
+  /**
+   * EVERY row the projection resolved, named items included. A share's lineage
+   * is keyed by the shape, and `core_share_origin` is keyed by the row and so
+   * names one sender only: a second grant over the same photograph stamps
+   * nothing and would claim nothing if the caller read provenance back instead
+   * of this (#929).
+   */
+  rows: ProjectedItem[];
 }

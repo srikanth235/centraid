@@ -21,6 +21,7 @@ import {
 import type { Gateway as VaultGateway, VaultDb } from "@centraid/vault";
 
 import { makePeerPlaneHandler } from "../routes/peer-plane.js";
+import type { PeerReplicaDeps } from "../routes/peer-replica-route.js";
 import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
 import { judgeEdgeCrossing } from "./link-crossing.js";
@@ -171,8 +172,17 @@ function wireHandler(
   };
 }
 
-/** A peer request that lands on `side`'s real handler, as the relay would deliver it. */
-export function transportTo(side: Side, callerEndpointId: string): PeerRequest {
+/**
+ * A peer request that lands on `side`'s real handler, as the relay would
+ * deliver it. `replica` mounts the subscription doors (#929); a caller that
+ * omits it gets a host whose peer plane serves no shape, which is the fixture
+ * for "this gateway does not carry subscriptions".
+ */
+export function transportTo(
+  side: Side,
+  callerEndpointId: string,
+  replica?: Omit<PeerReplicaDeps, "vaultFor">
+): PeerRequest {
   const handler = makePeerPlaneHandler({
     links: side.links,
     peerProof: side.proof,
@@ -188,6 +198,15 @@ export function transportTo(side: Side, callerEndpointId: string): PeerRequest {
       vaultId === side.vaultId ? side.gateway : undefined,
     commonsCredentialFor: (vaultId) =>
       vaultId === side.vaultId ? side.ownerCredential : undefined,
+    ...(replica
+      ? {
+          replica: {
+            ...replica,
+            vaultFor: (vaultId: string) =>
+              vaultId === side.vaultId ? side.vault : undefined,
+          },
+        }
+      : {}),
   });
   return wireHandler(handler, callerEndpointId, side.proof);
 }

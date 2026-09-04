@@ -1,25 +1,29 @@
 /*
- * Host seam for the fulfillment engine (#825): the engine must NOT learn which
- * vaults this host mounted. One audience never costs another — a failing grant
- * is that grant's failure. Nothing here retries or promotes `remove_sent`.
+ * Host seam for the subscription engine (#825, #929): the engine must NOT learn
+ * which vaults this host mounted. It is handed a `transportFor`, and this file
+ * is the only place that knows a co-hosted audience takes the loopback. One
+ * audience never costs another — a failing grant is that grant's failure.
+ * Nothing here retries or promotes `remove_sent`.
  */
 
 import {
   createGrantProjectionMemory,
-  fulfillShareGrant,
   listShareGrantsForSubject,
-  propagateShareGrantRevocation,
+  loopbackShareTransports,
   readShareGrant,
+  startShareSubscription,
+  stopShareSubscription,
   subjectWokenBy,
   wakeTypesForSubjectTypes,
   writeReceipt,
 } from "@centraid/vault";
 import type {
-  GrantFulfillmentResult,
-  GrantFulfillmentStep,
   GrantProjectionMemory,
-  GrantRemovalResult,
   ShareableItemType,
+  ShareShapeTransport,
+  ShareSubscriptionResult,
+  ShareSubscriptionStep,
+  ShareSubscriptionStopResult,
   VaultDb,
 } from "@centraid/vault";
 
@@ -29,7 +33,50 @@ import { raiseShareReceivedNotice } from "./share-notices.js";
 export interface GrantFulfillmentHost {
   /** `undefined` is a fact about this HOST, never about the grant. */
   vaultFor: (vaultId: string) => VaultDb | undefined;
+  /** True when the audience vault is a LINKED peer this host can dial. The
+   *  network is not on the commit path: the pass leaves the row pending and
+   *  `share-subscription-sweep.ts` drains it (#929). */
+  linkedPeer?: (originVaultId: string, audienceVaultId: string) => boolean;
   logger?: { warn: (message: string) => void };
+}
+
+/**
+ * A co-hosted audience takes the loopback; a linked one is deferred to the
+ * sweep, which is what keeps a dial off the commit doorbell. A vault that is
+ * neither is `undefined` — unreachable, honestly.
+ */
+function transportsFor(
+  host: GrantFulfillmentHost,
+  origin: VaultDb,
+  originVaultId: string,
+  now: string
+): (audienceVaultId: string) => ShareShapeTransport | undefined {
+  const loopback = loopbackShareTransports({
+    origin,
+    seatFor: (vaultId) => host.vaultFor(vaultId),
+    now: () => now,
+  });
+  return (audienceVaultId) =>
+    loopback(audienceVaultId) ??
+    (host.linkedPeer?.(originVaultId, audienceVaultId) === true
+      ? deferredPeerTransport(audienceVaultId)
+      : undefined);
+}
+
+const PEER_QUEUED_DETAIL = "queued for the peer route; the audience will pull";
+
+function deferredPeerTransport(audienceVaultId: string): ShareShapeTransport {
+  return {
+    route: "peer",
+    deliver: () => ({
+      outcome: "unreachable",
+      detail: `${PEER_QUEUED_DETAIL} (${audienceVaultId})`,
+    }),
+    remove: () => ({
+      outcome: "unreachable",
+      detail: `removal ${PEER_QUEUED_DETAIL} (${audienceVaultId})`,
+    }),
+  };
 }
 
 /*
@@ -95,7 +142,7 @@ function indexFor(
 }
 
 export type GrantFulfillmentReport =
-  | { grantId: string; outcome: "fulfilled"; result: GrantFulfillmentResult }
+  | { grantId: string; outcome: "fulfilled"; result: ShareSubscriptionResult }
   | { grantId: string; outcome: "failed"; reason: string };
 
 /** `unmounted` is NOT an empty `reports` list: collapsing them tells an owner
@@ -105,7 +152,11 @@ export type GrantFulfillmentPass =
   | { origin: "unmounted"; reason: string };
 
 export type GrantRemovalReport =
-  | { grantId: string; outcome: "propagated"; result: GrantRemovalResult }
+  | {
+      grantId: string;
+      outcome: "propagated";
+      result: ShareSubscriptionStopResult;
+    }
   | { grantId: string; outcome: "failed"; reason: string };
 
 function reasonOf(error: unknown): string {
@@ -129,10 +180,10 @@ function announceFirstDeliveries(
     subjectLabel?: string;
     now: string;
   },
-  result: GrantFulfillmentResult
+  result: ShareSubscriptionResult
 ): void {
   const first = result.steps.filter(
-    (step): step is GrantFulfillmentStep & { peerVaultId: string } =>
+    (step): step is ShareSubscriptionStep & { peerVaultId: string } =>
       step.firstDelivery === true && step.peerVaultId !== undefined
   );
   if (first.length === 0) return;
@@ -163,7 +214,7 @@ function announceFirstDeliveries(
  */
 function receiptRosterDrift(
   input: { origin: VaultDb; grantId: string; now: string },
-  result: GrantFulfillmentResult
+  result: ShareSubscriptionResult
 ): void {
   const { masked, departed } = result.drift;
   if (masked.length === 0 && departed.length === 0) return;
@@ -193,11 +244,16 @@ function passOne(input: {
   now: string;
 }): GrantFulfillmentReport {
   try {
-    const result = fulfillShareGrant({
+    const result = startShareSubscription({
       origin: input.origin,
       originVaultId: input.originVaultId,
       grantId: input.grantId,
-      seatFor: (vaultId) => input.host.vaultFor(vaultId),
+      transportFor: transportsFor(
+        input.host,
+        input.origin,
+        input.originVaultId,
+        input.now
+      ),
       now: input.now,
       memory: memoryFor(input.host),
     });
@@ -262,11 +318,16 @@ export function propagateGrantRemoval(input: {
     return {
       grantId: input.grantId,
       outcome: "propagated",
-      result: propagateShareGrantRevocation({
+      result: stopShareSubscription({
         origin,
         originVaultId: input.originVaultId,
         grantId: input.grantId,
-        seatFor: (vaultId) => input.host.vaultFor(vaultId),
+        transportFor: transportsFor(
+          input.host,
+          origin,
+          input.originVaultId,
+          input.now
+        ),
         now: input.now,
         memory: memoryFor(input.host),
       }),
