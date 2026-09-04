@@ -580,12 +580,11 @@ export class LockerAuthentication {
     detail?: Record<string, unknown>
   ): void {
     writeReceipt(this.db.audit, {
-      grantId: null,
+      authorityId: null,
       invocationId: null,
       action: `authenticate locker.${operation}`,
       objectType: "locker.auth",
       objectId,
-      purpose: "dpv:Security",
       decision,
       detail,
     });

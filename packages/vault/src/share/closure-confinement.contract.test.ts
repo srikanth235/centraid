@@ -129,7 +129,6 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
       const outcome = gateway.invoke(owner, {
         command,
         input,
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
       return (outcome as { output: Record<string, string> }).output;

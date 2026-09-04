@@ -59,12 +59,7 @@ export function recordRevision(
   oldContentId: string
 ): string {
   const relationConceptId = revisesConceptId(ctx);
-  const assertedBy =
-    ctx.identity.kind === "app"
-      ? "app"
-      : ctx.identity.kind === "agent"
-        ? "agent"
-        : "owner";
+  const assertedBy = ctx.identity.kind === "agent" ? "agent" : "owner";
   const linkId = ctx.newId();
   ctx.db
     .prepare(

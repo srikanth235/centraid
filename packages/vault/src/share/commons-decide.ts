@@ -30,8 +30,6 @@ import {
 } from "./commons.js";
 import type { CommonsIntentStatus } from "./commons.js";
 
-const DECIDE_PURPOSE = "dpv:ServiceProvision";
-
 /**
  * `cancelled` is deliberately inside the window: `cancelCommonsIntent`'s status
  * guard is the MEMBER's, and the steward's settle is unconditional — the owner
@@ -264,14 +262,13 @@ export function decideCommonsIntent(
     const status =
       readIntentRow(found.seat.vault, input.intentId)?.status ?? found.status;
     const receiptId = writeReceipt(input.steward.audit, {
-      grantId: grant.grantId,
+      authorityId: grant.grantId,
       // NOT the intent id: `invocation_id` is a foreign key into
       // `agent_command_invocation`, and a decision is not an invocation.
       invocationId: null,
       action: `decide ${found.command}`,
       objectType: "share.commons",
       objectId: grant.grantId,
-      purpose: DECIDE_PURPOSE,
       decision:
         input.decision === "approve" && outcome.decided && !outcome.reason
           ? "allow"

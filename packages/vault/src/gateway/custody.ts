@@ -63,12 +63,11 @@ export function backupVault(db: VaultDb, destDir: string): BackupResult {
   const vaultSha256 = sha256File(vaultPath);
   const { copied } = db.blobs.exportTo(destDir);
   const receiptId = writeReceipt(db.audit, {
-    grantId: null,
+    authorityId: null,
     invocationId: null,
     action: "act access.backup_vault",
     objectType: "core.vault",
     objectId: null,
-    purpose: null,
     decision: "allow",
     detail: { vaultSha256, destDir, blobsCopied: copied },
   });

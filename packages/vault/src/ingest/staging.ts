@@ -283,12 +283,11 @@ export function stageCandidates(
   }
   const { batchId, counts } = staged;
   const receiptId = writeReceipt(db.audit, {
-    grantId: null,
+    authorityId: null,
     invocationId: null,
     action: "act sync.stage_import",
     objectType: "sync.import_batch",
     objectId: batchId,
-    purpose: null,
     decision: "allow",
     detail: {
       connectionId,
@@ -615,12 +614,11 @@ export function publishBatch(
     );
   }
   const receiptId = writeReceipt(db.audit, {
-    grantId: null,
+    authorityId: null,
     invocationId: null,
     action: "act sync.publish_import",
     objectType: "sync.import_batch",
     objectId: batchId,
-    purpose: null,
     decision: "allow",
     detail: { created, updated, skipped, failed, by: owner.partyId },
   });
@@ -667,12 +665,11 @@ export function discardBatch(
     throw error;
   }
   const receiptId = writeReceipt(db.audit, {
-    grantId: null,
+    authorityId: null,
     invocationId: null,
     action: "act sync.discard_import",
     objectType: "sync.import_batch",
     objectId: batchId,
-    purpose: null,
     decision: "allow",
     detail: { by: owner.partyId },
   });

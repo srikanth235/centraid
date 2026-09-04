@@ -103,7 +103,6 @@ describe("incremental Tally commons sharing", () => {
     const created = gateway.invoke(credential, {
       command: "tally.create_group",
       input: { name: "Trip", icon: "🧳", member_ids: [bob, carol] },
-      purpose: "dpv:ServiceProvision",
     });
     expect(created.status).toBe("executed");
     const groupId = (created as { output: { group_id: string } }).output

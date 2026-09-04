@@ -124,7 +124,6 @@ function tallyCommonsFixture(): TallyCommonsFixture {
       icon: "🧪",
       member_ids: [audienceBoot.ownerPartyId],
     },
-    purpose: "dpv:ServiceProvision",
   });
   if (created.status !== "executed")
     throw new Error(

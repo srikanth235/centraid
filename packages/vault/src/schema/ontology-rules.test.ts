@@ -266,17 +266,21 @@ describe("R9 — a binding is about someone else", () => {
 });
 
 describe("R10 — one encoding of which entity", () => {
-  it("gives the scope and the policy a single dotted column", () => {
+  it("names an entity in ONE dotted column wherever authority does", () => {
     const db = baselineVault();
-    for (const t of [
-      "access_grant_scope",
-      "access_policy",
-      "access_scope_tombstone",
-    ]) {
-      expect(columnsOf(db, t)).toContain("entity");
-      expect(columnsOf(db, t)).not.toContain("schema_name");
-      expect(columnsOf(db, t)).not.toContain("applies_schema");
-    }
+    // The three tables R10 was written about (`access_grant_scope`,
+    // `access_policy`, `access_scope_tombstone`) are gone with the app grant
+    // plane (#928). The rule outlived them: `share_authority` is where an
+    // answer names what it is about, and it says it once.
+    expect(columnsOf(db, "share_authority")).toContain("subject_type");
+    expect(columnsOf(db, "share_authority")).toContain("subject_id");
+    expect(columnsOf(db, "share_authority")).not.toContain("schema_name");
+    expect(columnsOf(db, "share_authority")).not.toContain("applies_schema");
+    expect(() => tableSql(db, "access_grant_scope")).toThrow(/no such table/u);
+    expect(() => tableSql(db, "access_policy")).toThrow(/no such table/u);
+    expect(() => tableSql(db, "access_scope_tombstone")).toThrow(
+      /no such table/u
+    );
     // enrich_policy_rule keeps scope_type: a CASCADE LEVEL, not an entity.
     expect(columnsOf(db, "enrich_policy_rule")).toContain("scope_type");
   });

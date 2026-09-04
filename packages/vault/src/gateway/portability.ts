@@ -120,14 +120,13 @@ export function exportVault(
       | undefined
   )?.vault_id;
   const receiptId = writeReceipt(db.audit, {
-    grantId: null,
+    authorityId: null,
     invocationId: null,
     action: "act access.export_vault",
     // The object of an export is the VAULT itself (#916, ruling ONT-06); the
     // export's own id is minted here and lives in the receipt detail.
     objectType: "core.vault",
     objectId: vaultId ?? exportId,
-    purpose: null,
     decision: "allow",
     detail: {
       exportId,

@@ -14,7 +14,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { ACCESS_DDL, ACCESS_INSTALL_MEMORY_DDL } from "./access.js";
+import { ACCESS_DDL } from "./access.js";
 import { AGENT_DDL } from "./agent.js";
 import { AUDIT_DDL } from "./audit.js";
 import { SHARE_AUTHORITY_DDL } from "./authority.js";
@@ -83,7 +83,7 @@ export const ONTOLOGY_VERSION = "1.0";
 // Composition order is dependency order:
 //   - CORE first (everything references the spine), and the entity supertype
 //     with it: every ontology table carries a foreign key into `core_entity`;
-//   - the access plane (apps, grants, install memory, the seed registry, the
+//   - the access plane (the app install register, the seed registry, the
 //     ext-band registry) before anything that enrolls or scopes;
 //   - the agent plane's model tables, then the AUDIT band it writes into —
 //     `core_entity_revision` names an invocation, so the band precedes it;
@@ -112,7 +112,6 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     LINK_ANCHOR_DDL,
     SHARE_ORIGIN_DDL,
     ACCESS_DDL,
-    ACCESS_INSTALL_MEMORY_DDL,
     SEED_DDL,
     APP_EXT_DDL,
     AGENT_DDL,

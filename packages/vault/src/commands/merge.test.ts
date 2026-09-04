@@ -40,7 +40,6 @@ describe("merge", () => {
         display_name: name,
         ...(email ? { identifiers: [{ scheme: "email", value: email }] } : {}),
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     return (outcome as { output: { party_id: string } }).output.party_id;
@@ -50,7 +49,6 @@ describe("merge", () => {
     return gw.invoke(owner, {
       command: "core.merge_party",
       input: { survivor_party_id: survivor, merged_party_id: merged },
-      purpose: "dpv:ServiceProvision",
     });
   }
 
@@ -237,7 +235,6 @@ describe("merge", () => {
     const outcome = gw.invoke(owner, {
       command: "people.add_person",
       input: { display_name: name, cadence_days: 0, ...extras },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     return (outcome as { output: { party_id: string } }).output.party_id;
@@ -253,7 +250,6 @@ describe("merge", () => {
       gw.invoke(owner, {
         command: "people.log_interaction",
         input: { party_id: dupe, kind: "Call" },
-        purpose: "dpv:ServiceProvision",
       }).status
     ).toBe("executed");
     const touched = (
@@ -311,7 +307,6 @@ describe("merge", () => {
     const outcome = gw.invoke(owner, {
       command: "core.find_duplicate_parties",
       input: {},
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     if (outcome.status !== "executed") return;

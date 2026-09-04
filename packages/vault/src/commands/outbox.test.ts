@@ -1,17 +1,13 @@
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollAgent,
-  enrollDevice,
-} from "../bootstrap.js";
+import { bootstrapVault, enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import type { Gateway } from "../gateway/gateway.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { registerOutboxCommands } from "./outbox.js";
 
 let db: VaultDb;
@@ -35,12 +31,7 @@ describe("outbox", () => {
       modelRef: "model-x",
     });
     const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
-    createGrant(db, {
-      granteePartyId: enrolled.partyId,
-      purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: "outbox", verbs: "act" }],
-    });
+    answerScopes(db, boot, "gmail-send", [{ schema: "outbox", verbs: "act" }]);
     agent = {
       kind: "agent",
       agentId: enrolled.agentId,

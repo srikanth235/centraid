@@ -226,12 +226,11 @@ export function recordDurableParkedDenial(
       );
     }
     const receiptId = writeReceipt(db.audit, {
-      grantId: payload.grantId,
+      authorityId: payload.grantId,
       invocationId: payload.invocationId,
       action: `act ${payload.commandName}`,
       objectType: "agent.command",
       objectId: payload.commandId,
-      purpose: payload.request.purpose,
       decision: "deny",
       detail: {
         failing: input.reason,

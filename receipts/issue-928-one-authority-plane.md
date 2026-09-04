@@ -727,3 +727,220 @@ bun run --cwd packages/vault test -- --coverage --run src/grant/automation-autho
 bun run --cwd packages/server test -- --coverage --run src/routes/replica-routes.test.ts      # changed read line covered
 bun run --cwd packages/server test -- --run src/routes/replica-routes.test.ts                # 17 passed
 ```
+
+## w4a — the evaluator retires; the vault engine
+
+`packages/vault` only. `evaluateAccess` stops asking the app grant plane, the app grant tables leave the
+schema, and `access_receipt` is re-keyed to one id space. Serves in part: **"`evaluateAccess` has no `app`
+identity path"**, **"`access_grant`, `access_grant_scope`, `access_policy`, `access_scope_tombstone`,
+`access_scope_request` and every reader of them are gone"**, **"`access_receipt` references `authority_id`
+from one id space; the purpose column is gone"**. The bridge, dashboard and `dpv:` sweep land in w4b/w4c.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `gateway/access.ts` | rewritten (>50%): owner-direct, assistant-on-acting-owner, `share_authority` `automation` row. No purpose, policy, grant or `app` |
+| `gateway/types.ts` | `Credential.app` deleted; `device` gains `surface` (attribution) + host-resolved `scopeClamp` (narrows only); `Identity` gains `principalId`/`surface`; `purpose` off every request |
+| `gateway/identity.ts` | app branch gone; an agent carries `enrollment_key` as `principalId`; a surface names itself on the owner's own credential |
+| `gateway/evidence.ts` | `ReceiptInput.authorityId`; purpose off the row and out of the hash; new `skipsAllowReceipt` |
+| `gateway/duties.ts` | `revokeGrantCascade` → `revokeAuthorityCascade`; `enforceRetention` + `RETENTION_REFUSALS` **deleted** with `access_policy` |
+| `gateway/gateway.ts` | a named surface still confirms; `callerKind`/`callerName` read the surface for the owner's prompt |
+| `schema/{access,audit,authority,migrate,entity-catalog}.ts` | five tables dropped; `access_app.revoked_at`; `access_receipt.authority_id` replaces `grant_id`; `share_authority_request` added |
+| `{bootstrap,host}.ts` | `createGrant`, `listActiveGrants`, `listActiveAgentGrants`, `purposeConceptId`, `GrantSummary`, DPV seeds deleted; a revoked enrolment name is reusable |
+| `install-memory.ts` → `grant/authority-request.ts` | tombstones and `hasGrantHistory` deleted; the parking half re-homed, keyed by principal |
+| `grant/automation-authority.ts` | `hasAnsweredEver`, `scopeForSubject`; `backfillAutomationAnswers` deleted with the legacy tables |
+| `grant/automation-principal.test-fixtures.ts` | new: what 31 suites used `createGrant` + an app credential for |
+| `tests/claims.json` | four `consent-*` law statements rewritten one for one to the new plane |
+| `scripts/docs-site/src/content/ontology-body.html` | §03 drops the four retired tables; `share.authority_request` joins the machinery band |
+
+### Numbers
+
+| measure | before | after |
+| --- | --- | --- |
+| statements an owner-device read runs against grant/policy tables | 4 | **0** |
+| durable audit appends per owner-direct read/search/resolve/changes | 1 | **0** |
+| refusal classes the manifest sweep can produce | 6 | **4** |
+
+### Deleted, with its replacement
+
+`access_grant`/`access_grant_scope` → `share_authority` rows with `principal_kind='automation'`;
+`access_scope_tombstone` → `declined` answers; `access_scope_request` → `share_authority_request`;
+`access_policy` + `enforceRetention` → nothing (no writer since #916; the purge canary moves to the
+thread-projection heal); the `app` credential → the owner's device naming a `surface`; DPV purposes → nothing.
+
+### Decisions
+
+- **Declared row filters and field masks stay** (root ruling, deviating from A1): build-time properties of an
+  app's own code, not grants. `evaluateAccess` stops reading the grant plane for them; the host bridge passes
+  them as the same `scopeClamp` an automation already carries, which only ever narrows.
+- **`Identity.surface` is attribution, never authority** — never read by `evaluateAccess`;
+  `consent-standing-answer-required` asserts a surface identity reaches exactly what the bare owner device does.
+- **A parked ask is not an answer**: `share_authority_request` is registered, so a restore keeps an open question.
+- **The golden corpus is re-frozen, not migrated** — `golden-vault.test.ts` names re-freezing as the remedy.
+
+### Laws rewritten in `tests/claims.json`
+
+Five `consent-*` statements re-stated on the new plane, one for one, each keeping its property;
+`consent-explicit-scope-unbypassable` (the minimization-policy law, whose table is deleted) is replaced by
+`consent-standing-answer-required`, which carries the surface-confers-nothing property instead. No law deleted
+without a replacement: `consent-denial-monotone`, `consent-clamp-only-narrows`, `consent-reveal-never-rides`,
+`consent-standing-answer-required`, `consent-onbehalf-cap-precedes-grants`. A tightening, not a widening — no root
+sign-off owed.
+
+### Paths
+
+```
+packages/test-kit/src/year3-replica.ts
+packages/vault/README.md
+packages/vault/src/blob/derivatives.test.ts
+packages/vault/src/blob/flow.test.ts
+packages/vault/src/blob/preview.test.ts
+packages/vault/src/bootstrap.ts
+packages/vault/src/commands/atlas.test.ts
+packages/vault/src/commands/attachments.test.ts
+packages/vault/src/commands/documents-purge.test.ts
+packages/vault/src/commands/documents.test.ts
+packages/vault/src/commands/inline-body-guard.test.ts
+packages/vault/src/commands/knowledge.test.ts
+packages/vault/src/commands/links.test.ts
+packages/vault/src/commands/links.ts
+packages/vault/src/commands/locker-test-kit.ts
+packages/vault/src/commands/locker.test.ts
+packages/vault/src/commands/media-forget-person.test.ts
+packages/vault/src/commands/media-gazetteer.test.ts
+packages/vault/src/commands/media-places.test.ts
+packages/vault/src/commands/media-purge.test.ts
+packages/vault/src/commands/media.test.ts
+packages/vault/src/commands/merge.test.ts
+packages/vault/src/commands/organize-domains.test.ts
+packages/vault/src/commands/outbox.test.ts
+packages/vault/src/commands/parties.test.ts
+packages/vault/src/commands/people-dates.test.ts
+packages/vault/src/commands/people-debts.test.ts
+packages/vault/src/commands/people.test.ts
+packages/vault/src/commands/people.ts
+packages/vault/src/commands/provider-writeback.test.ts
+packages/vault/src/commands/revisions.ts
+packages/vault/src/commands/schedule-organize.test.ts
+packages/vault/src/commands/schedule.test.ts
+packages/vault/src/commands/share.test.ts
+packages/vault/src/commands/share.ts
+packages/vault/src/commands/social.test.ts
+packages/vault/src/commands/sync.test.ts
+packages/vault/src/commands/tags.test.ts
+packages/vault/src/commands/tally-groups.test.ts
+packages/vault/src/commands/tally-identity.test.ts
+packages/vault/src/commands/tally-ledger-test-kit.ts
+packages/vault/src/commands/tally-receipts.test.ts
+packages/vault/src/commands/tally.test.ts
+packages/vault/src/commands/tasks.test.ts
+packages/vault/src/enrich/clusters.test.ts
+packages/vault/src/enrich/enrich.test.ts
+packages/vault/src/enrich/face-clusters.test.ts
+packages/vault/src/enrich/memories.test.ts
+packages/vault/src/gateway/access-properties.test.ts
+packages/vault/src/gateway/access.ts
+packages/vault/src/gateway/acting-owner.test.ts
+packages/vault/src/gateway/activity-read.test.ts
+packages/vault/src/gateway/cards.test.ts
+packages/vault/src/gateway/cards.ts
+packages/vault/src/gateway/custody.ts
+packages/vault/src/gateway/demo.test.ts
+packages/vault/src/gateway/demo.ts
+packages/vault/src/gateway/duties-helpers.test.ts
+packages/vault/src/gateway/duties.test.ts
+packages/vault/src/gateway/duties.ts
+packages/vault/src/gateway/evidence.test.ts
+packages/vault/src/gateway/evidence.ts
+packages/vault/src/gateway/execution-clamp.test.ts
+packages/vault/src/gateway/execution.test.ts
+packages/vault/src/gateway/execution.ts
+packages/vault/src/gateway/ext-sealed.test.ts
+packages/vault/src/gateway/ext.test.ts
+packages/vault/src/gateway/filters.ts
+packages/vault/src/gateway/gateway.contract.test.ts
+packages/vault/src/gateway/gateway.ts
+packages/vault/src/gateway/identity.ts
+packages/vault/src/gateway/locker-auth.ts
+packages/vault/src/gateway/locker-sidecar-reveal.test.ts
+packages/vault/src/gateway/portability.test.ts
+packages/vault/src/gateway/portability.ts
+packages/vault/src/gateway/portable-sealed-custody.test.ts
+packages/vault/src/gateway/read-batch.test.ts
+packages/vault/src/gateway/read-order.test.ts
+packages/vault/src/gateway/read-truncation.test.ts
+packages/vault/src/gateway/reseal.ts
+packages/vault/src/gateway/seal-custody.test.ts
+packages/vault/src/gateway/sealed.test.ts
+packages/vault/src/gateway/search.test.ts
+packages/vault/src/gateway/search.ts
+packages/vault/src/gateway/share-grant-seam.test.ts
+packages/vault/src/gateway/sql.test.ts
+packages/vault/src/gateway/types.ts
+packages/vault/src/grant/authority-request.test.ts
+packages/vault/src/grant/authority-request.ts
+packages/vault/src/grant/automation-authority.test.ts
+packages/vault/src/grant/automation-authority.ts
+packages/vault/src/grant/automation-principal.test-fixtures.ts
+packages/vault/src/grant/fulfillment.test.ts
+packages/vault/src/host.test.ts
+packages/vault/src/host.ts
+packages/vault/src/index.ts
+packages/vault/src/ingest/staging.test.ts
+packages/vault/src/ingest/staging.ts
+packages/vault/src/install-memory.test.ts
+packages/vault/src/install-memory.ts
+packages/vault/src/journal-archive.test.ts
+packages/vault/src/replica/change-log.test.ts
+packages/vault/src/replica/change-log.ts
+packages/vault/src/replica/intents.test.ts
+packages/vault/src/replica/invocation-commits.test.ts
+packages/vault/src/replica/invocation-commits.ts
+packages/vault/src/replica/parked.test.ts
+packages/vault/src/replica/parked.ts
+packages/vault/src/schema/access.ts
+packages/vault/src/schema/audit-band.test.ts
+packages/vault/src/schema/audit.ts
+packages/vault/src/schema/authority.ts
+packages/vault/src/schema/entity-catalog.ts
+packages/vault/src/schema/fts-index-budget.test.ts
+packages/vault/src/schema/migrate.ts
+packages/vault/src/schema/ontology-rules.test.ts
+packages/vault/src/schema/ontology-shape.test.ts
+packages/vault/src/share/closure-confinement.contract.test.ts
+packages/vault/src/share/commons-automation-b6.test.ts
+packages/vault/src/share/commons-convergence-properties.test.ts
+packages/vault/src/share/commons-decide.ts
+packages/vault/src/share/commons-invoke.test.ts
+packages/vault/src/share/commons-replay.test-fixtures.ts
+packages/vault/src/share/commons-sim-grant-world.test-fixtures.ts
+packages/vault/src/share/commons-sim-grant.test-fixtures.ts
+packages/vault/src/share/commons-sim-world.test-fixtures.ts
+packages/vault/src/share/commons-tally-grant.test.ts
+packages/vault/src/share/commons.test.ts
+packages/vault/src/share/commons.ts
+packages/vault/src/share/docs-folder.test.ts
+packages/vault/src/wal-shipper.ts
+packages/vault/tests/golden/issue-916/manifest.json
+packages/vault/tests/golden/issue-916/vault.db.gz
+scripts/docs-site/src/content/ontology-body.html
+tests/claims.json
+```
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/vault typecheck    # passed
+bun run --cwd packages/vault build        # clean
+bun run --cwd packages/vault test         # 204 files, 1600 passed, 2 skipped, 0 failed
+bun run golden-vault:freeze -- --label issue-916
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| An automation is refused reveal because reveal rides no answer, not because fixtures stopped asking | removed the `verb === "reveal"` early return in `standingAnswerId`, re-ran `sealed.test.ts` | **green at first** — the finding: `automationSubjectsOf` mints no `reveal` row, so the guard was untested. The case now FORGES a `granted` reveal row into `share_authority`; with the guard removed it is **red** |
+| Owner-direct reads really stopped receipting, rather than the tests stopping counting | forced `skipsAllowReceipt` to `false`, re-ran `read-batch` | **red** on `an owner-direct batch writes NO receipts at all` (3 rows appear) and on the refusal case (2 instead of 1) |

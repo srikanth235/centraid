@@ -122,6 +122,28 @@ CREATE INDEX IF NOT EXISTS share_authority_principal
 CREATE INDEX IF NOT EXISTS share_authority_granted_by
   ON share_authority(granted_by);
 
+-- WHAT HAS NOT BEEN PUT TO THE MEMBER YET (#308 A4, re-homed by #928). An
+-- automation whose published manifest asks for more than the member ever
+-- answered parks here instead of auto-granting: automations author their own
+-- manifests, so "install was the answer" must not be bypassable by the actor
+-- the answer contains. Deliberately NOT a \`share_authority\` row — that table
+-- records what the member SAID, and a parked ask is not an answer.
+--
+-- One open ask per automation; a re-publish replaces its scope set; deciding
+-- it stamps \`decided_at\` and writes the real answer next door.
+CREATE TABLE IF NOT EXISTS share_authority_request (
+  request_id   TEXT PRIMARY KEY,
+  -- The automation's own id (its enrolment key), the same principal id
+  -- \`share_authority.principal_id\` carries for an 'automation' row.
+  principal_id TEXT NOT NULL,
+  scopes_json  TEXT NOT NULL CHECK (json_valid(scopes_json)),
+  requested_at TEXT NOT NULL,
+  decided_at   TEXT,
+  decision     TEXT CHECK (decision IN ('approved','denied'))
+) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS share_authority_request_open
+  ON share_authority_request(principal_id) WHERE decided_at IS NULL;
+
 -- Per-grant DELIVERY-strategy configuration, keyed by the authority row it
 -- serves (ruling V-delivery: \`max_size_bytes\` belongs to delivery-strategy
 -- config, not to the authority row — a ceiling is a property of how a subject

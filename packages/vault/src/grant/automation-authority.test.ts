@@ -2,12 +2,9 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
-import { ensureAgentEnrolled } from "../host.js";
-import { uuidv7 } from "../ids.js";
 import {
   automationAnswers,
   automationSubjectsOf,
-  backfillAutomationAnswers,
   recordAutomationAnswers,
   revokeAutomationAnswers,
 } from "./automation-authority.js";
@@ -107,75 +104,5 @@ describe("grant/automation-authority", () => {
     expect(
       revokeAutomationAnswers(db.vault, "digest", "2026-09-04T00:04:00.000Z")
     ).toBe(0);
-  });
-
-  test("backfills legacy grants and tombstones, excluding the assistant", () => {
-    const { db, boot } = freshVault();
-    const digest = ensureAgentEnrolled(db, "digest");
-    const assistant = ensureAgentEnrolled(db, "_assistant");
-    const purposeConceptId = boot.concepts["dpv:ServiceProvision"];
-    if (!purposeConceptId) throw new Error("missing test purpose concept");
-    const grantId = uuidv7();
-    db.vault
-      .prepare(
-        `INSERT INTO access_grant
-           (grant_id, grantee_party_id, purpose_concept_id, granted_by_party_id,
-            granted_at, expires_at, revoked_at, status)
-         VALUES (?, ?, ?, ?, ?, NULL, NULL, 'active')`
-      )
-      .run(
-        grantId,
-        digest.partyId,
-        purposeConceptId,
-        boot.ownerPartyId,
-        "2026-09-04T00:00:00.000Z"
-      );
-    const scope = db.vault.prepare(
-      `INSERT INTO access_grant_scope
-         (scope_id, grant_id, entity, verbs, row_filter_json, field_mask_json)
-       VALUES (?, ?, ?, ?, NULL, NULL)`
-    );
-    scope.run(uuidv7(), grantId, "schedule", "read+act");
-    scope.run(uuidv7(), grantId, "core.party", "read");
-    scope.run(uuidv7(), grantId, "locker.item", "reveal");
-    db.vault
-      .prepare(
-        `INSERT INTO access_scope_tombstone
-           (tombstone_id, grantee_party_id, entity, verbs, row_filter_json,
-            field_mask_json, revoked_at)
-         VALUES (?, ?, 'media', 'read', NULL, NULL, ?)`
-      )
-      .run(uuidv7(), digest.partyId, "2026-09-04T00:00:00.000Z");
-    db.vault
-      .prepare(
-        `INSERT INTO access_grant
-           (grant_id, grantee_party_id, purpose_concept_id, granted_by_party_id,
-            granted_at, expires_at, revoked_at, status)
-         VALUES (?, ?, ?, ?, ?, NULL, NULL, 'active')`
-      )
-      .run(
-        uuidv7(),
-        assistant.partyId,
-        purposeConceptId,
-        boot.ownerPartyId,
-        "2026-09-04T00:00:00.000Z"
-      );
-
-    expect(
-      backfillAutomationAnswers(
-        db.vault,
-        boot.ownerPartyId,
-        "2026-09-04T00:05:00.000Z"
-      )
-    ).toStrictEqual({ granted: 3, declined: 1 });
-    expect(automationAnswers(db.vault, "digest")).toHaveLength(4);
-    expect(automationAnswers(db.vault, "_assistant")).toStrictEqual([]);
-    expect(
-      backfillAutomationAnswers(
-        db.vault,
-        boot.ownerPartyId,
-        "2026-09-04T00:06:00.000Z"
-      )
-    ).toStrictEqual({ granted: 0, declined: 0 });
   });
 });

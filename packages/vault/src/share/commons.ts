@@ -2069,7 +2069,6 @@ export function executeCommonsCommand(
       {
         command: input.command,
         input: input.commandInput,
-        purpose: "dpv:ServiceProvision",
         ...(input.invocationId ? { invocationId: input.invocationId } : {}),
       },
       { idSeed: replicaInvocationKey(input.grantId, grant.lastSequence + 1) }

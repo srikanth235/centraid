@@ -37,12 +37,11 @@ function verify(rows: Row[]): boolean {
       prevHash: prev,
       receiptId: row.receipt_id,
       seq: row.seq,
-      grantId: row.grant_id,
+      authorityId: row.grant_id,
       invocationId: row.invocation_id,
       action: row.action,
       objectType: row.object_type,
       objectId: row.object_id,
-      purpose: row.purpose_concept_id,
       decision: row.decision,
       occurredAt: row.occurred_at,
       detailJson: row.detail_json,
@@ -59,12 +58,11 @@ describe(writeReceipt, () => {
     try {
       for (const n of [1, 2, 3])
         writeReceipt(db.audit, {
-          grantId: null,
+          authorityId: null,
           invocationId: null,
           action: `act test.${n}`,
           objectType: "core.vault",
           objectId: `object-${n}`,
-          purpose: null,
           decision: "allow",
           detail: { n },
         });
@@ -80,12 +78,11 @@ describe(writeReceipt, () => {
     const db = openVaultDb();
     try {
       writeReceipt(db.audit, {
-        grantId: null,
+        authorityId: null,
         invocationId: null,
         action: "act access.revoke_grant",
         objectType: "access.grant",
         objectId: "grant-1",
-        purpose: null,
         decision: "allow",
         detail: { revokedBy: "party-owner", reason: "asked" },
       });
@@ -108,18 +105,19 @@ describe(writeReceipt, () => {
     const db = openVaultDb();
     try {
       writeReceipt(db.audit, {
-        grantId: "grant-1",
+        authorityId: "grant-1",
         invocationId: null,
         action: "read core.event",
         objectType: "core.event",
         objectId: "event-1",
-        purpose: null,
         decision: "allow",
       });
       db.audit.exec("PRAGMA writable_schema = ON");
       db.audit.exec("DROP TRIGGER access_receipt_append_only_u");
       db.audit.exec("PRAGMA writable_schema = OFF");
-      db.audit.prepare("UPDATE access_receipt SET grant_id = 'grant-2'").run();
+      db.audit
+        .prepare("UPDATE access_receipt SET authority_id = 'authority-2'")
+        .run();
       expect(verify(chain(db))).toBe(false);
     } finally {
       db.close();

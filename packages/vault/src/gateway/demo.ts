@@ -127,12 +127,11 @@ export function purgeDemoRows(
     );
   }
   const receiptId = writeReceipt(db.audit, {
-    grantId: null,
+    authorityId: null,
     invocationId: null,
     action: "act access.demo_purge",
     objectType: "access.seed_row",
     objectId: appId ?? null,
-    purpose: null,
     decision: "allow",
     detail: {
       purged,

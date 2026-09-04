@@ -43,8 +43,7 @@ export function tallyLedgerFixture(): TallyLedgerFixture {
   const invoke = (
     command: string,
     input: Record<string, unknown>
-  ): InvokeOutcome =>
-    gw.invoke(owner, { command, input, purpose: "dpv:ServiceProvision" });
+  ): InvokeOutcome => gw.invoke(owner, { command, input });
   const out = <T = Record<string, unknown>>(outcome: InvokeOutcome): T => {
     expect(outcome.status).toBe("executed");
     return (outcome as unknown as { output: T }).output;

@@ -278,7 +278,8 @@ export {
 export {
   automationAnswers,
   automationSubjectsOf,
-  backfillAutomationAnswers,
+  hasAnsweredEver,
+  scopeForSubject,
   recordAutomationAnswers,
   revokeAutomationAnswers,
   AUTOMATION_ENTITY_SUBJECT,
@@ -663,7 +664,7 @@ export {
 } from "./replica/parked.js";
 
 export { createGateway, Gateway } from "./gateway/gateway.js";
-export { GatewayError, DEFAULT_PURPOSE } from "./gateway/types.js";
+export { GatewayError } from "./gateway/types.js";
 export {
   bumpWorkCounter,
   gatewayWorkCounters,
@@ -777,9 +778,7 @@ export {
 export {
   bootstrapVault,
   enrollDevice,
-  enrollApp,
   enrollAgent,
-  createGrant,
   type BootstrapResult,
   type BootstrapVaultOptions,
   type ScopeSpec,
@@ -800,7 +799,6 @@ export {
   type VaultPresentation,
   lookupAppByName,
   ensureAppEnrolled,
-  listActiveGrants,
   listEnrolledApps,
   markAppRevoked,
   listInstalledApps,
@@ -808,23 +806,15 @@ export {
   type InstalledAppRow,
   lookupAgentByName,
   ensureAgentEnrolled,
-  listActiveAgentGrants,
   listEnrolledAgents,
   markAgentRevoked,
-  purposeConceptId,
   type HostBootstrap,
   type EnrolledApp,
   type EnrolledAgent,
-  type GrantSummary,
   type AppSummary,
   type AgentSummary,
 } from "./host.js";
 export {
-  writeScopeTombstones,
-  listScopeTombstones,
-  clearScopeTombstones,
-  clearAllScopeTombstones,
-  hasGrantHistory,
   openScopeRequest,
   closeObsoleteScopeRequest,
   listOpenScopeRequests,
@@ -832,7 +822,7 @@ export {
   markScopeRequestDecided,
   type ScopeTriple,
   type ScopeRequestSummary,
-} from "./install-memory.js";
+} from "./grant/authority-request.js";
 export { scopeCovers, type ScopeExtent } from "./scope-extent.js";
 
 export { registerScheduleCommands } from "./commands/schedule.js";

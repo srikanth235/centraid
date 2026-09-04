@@ -26,7 +26,6 @@ import type { Year3Distributions } from "./year3-vault.js";
 
 export const YEAR3_REPLICA_PROTOCOL_VERSION = 1 as const;
 export const YEAR3_REPLICA_APP_ID = "_golden";
-export const YEAR3_REPLICA_PURPOSE = "dpv:ServiceProvision";
 export const YEAR3_REPLICA_SHAPE_ID = "golden-year3";
 
 /** The converge journey's three volumes (#927, journey table). */

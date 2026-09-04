@@ -62,7 +62,7 @@ import type {
   InvokeOutcome,
   InvokeRequest,
 } from "./types.js";
-import { DEFAULT_PURPOSE, GatewayError } from "./types.js";
+import { GatewayError } from "./types.js";
 
 /** `sealedInput` drives journal redaction, `unseals` gates `ctx.unseal` (#293). */
 export interface RegisteredCommand {
@@ -211,7 +211,7 @@ export function insertInvocation(
   const invocationId = fixedId ?? request.invocationId ?? uuidv7();
   db.audit
     .prepare(
-      `INSERT INTO agent_command_invocation (invocation_id, command_id, caller_id, grant_id, input_json, status, requested_at)
+      `INSERT INTO agent_command_invocation (invocation_id, command_id, caller_id, authority_id, input_json, status, requested_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
@@ -249,18 +249,18 @@ export function assertInvocationIdentity(
 ): boolean {
   const existing = db.audit
     .prepare(
-      `SELECT command_id, caller_id, grant_id
+      `SELECT command_id, caller_id, authority_id
          FROM agent_command_invocation
         WHERE invocation_id = ?`
     )
     .get(invocationId) as
-    | { command_id: string; caller_id: string; grant_id: string | null }
+    | { command_id: string; caller_id: string; authority_id: string | null }
     | undefined;
   if (!existing) return false;
   if (
     existing.command_id !== commandId ||
     existing.caller_id !== callerId ||
-    existing.grant_id !== grantId
+    existing.authority_id !== grantId
   ) {
     throw new GatewayError(
       "contract",
@@ -415,19 +415,17 @@ export function runContractAndExecute(
     deterministicIdSeed?: string;
   } = {}
 ): InvokeOutcome {
-  const purpose = request.purpose ?? DEFAULT_PURPOSE;
   const denyContract = (
     predicate: string,
     detail: Record<string, unknown>
   ): InvokeOutcome => {
     setInvocationStatus(db, invocationId, "failed");
     const receiptId = writeReceipt(db.audit, {
-      grantId: access.grantId,
+      authorityId: access.authorityId,
       invocationId,
       action: `act ${command.name}`,
       objectType: "agent.command",
       objectId: command.command_id,
-      purpose,
       decision: "deny",
       detail: { ...detail, risk: command.risk },
     });
@@ -528,7 +526,6 @@ export function runContractAndExecute(
     identity,
     invocationId,
     input: request.input,
-    purpose,
     now: nowIso(),
     newId,
     wrote: (entityType, entityId) => writes.push({ entityType, entityId }),
@@ -648,12 +645,11 @@ export function runContractAndExecute(
       // receipt detail.
       const friendly = failedPost.message ?? failedPost.predicate;
       const receiptId = writeReceipt(db.audit, {
-        grantId: access.grantId,
+        authorityId: access.authorityId,
         invocationId,
         action: `act ${command.name}`,
         objectType: "agent.command",
         objectId: command.command_id,
-        purpose,
         decision: "deny",
         detail: {
           stage: "execution",
@@ -712,8 +708,7 @@ export function runContractAndExecute(
       commandName: command.name,
       agentId: identity.callerId,
       agentKind: identity.provAgentKind,
-      grantId: access.grantId,
-      purpose,
+      authorityId: access.authorityId,
       preconditionCount: preResults.length,
       postChecks: postResults.map((result) => ({
         predicate: result.predicate,
@@ -759,12 +754,11 @@ export function runContractAndExecute(
       error instanceof Error ? error.message : String(error)
     );
     const receiptId = writeReceipt(db.audit, {
-      grantId: access.grantId,
+      authorityId: access.authorityId,
       invocationId,
       action: `act ${command.name}`,
       objectType: "agent.command",
       objectId: command.command_id,
-      purpose,
       decision: "deny",
       detail: { stage: "execution", error: reason, risk: command.risk },
     });
@@ -789,12 +783,11 @@ export function runContractAndExecute(
   // the stream reads in the order facts became true.
   for (const receipt of handlerReceipts)
     writeReceipt(db.audit, {
-      grantId: receipt.grantId,
+      authorityId: receipt.authorityId,
       invocationId,
       action: receipt.action,
       objectType: receipt.objectType,
       objectId: receipt.objectId,
-      purpose,
       decision: receipt.decision,
       ...(receipt.detail ? { detail: receipt.detail } : {}),
     });

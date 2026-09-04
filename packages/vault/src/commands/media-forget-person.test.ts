@@ -66,7 +66,6 @@ describe("media.forget_person", () => {
     const outcome = gw.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome, command).toMatchObject({ status: "executed" });
     return (outcome as { output: unknown }).output;
@@ -267,7 +266,6 @@ describe("media.forget_person", () => {
     const outcome = gw.invoke(owner, {
       command: "media.forget_person",
       input: { party_id: "nobody" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
   });

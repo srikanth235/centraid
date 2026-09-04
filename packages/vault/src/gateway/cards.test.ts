@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerKnowledgeCommands } from "../commands/knowledge.js";
 import { registerLinkCommands } from "../commands/links.js";
 import { registerMediaCommands } from "../commands/media.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import type { Gateway } from "./gateway.js";
 import { createGateway } from "./gateway.js";
 import type { Credential } from "./types.js";
@@ -20,7 +21,6 @@ let owner: Credential;
 
 const PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-const PURPOSE = "dpv:ServiceProvision";
 
 describe("cards", () => {
   beforeEach(() => {
@@ -44,7 +44,7 @@ describe("cards", () => {
     command: string,
     input: Record<string, unknown>
   ) {
-    return gw.invoke(cred, { command, input, purpose: PURPOSE });
+    return gw.invoke(cred, { command, input });
   }
 
   function addNote(title: string): string {
@@ -72,9 +72,9 @@ describe("cards", () => {
         { type: "not.an-entity", id: "x" },
         { type: "knowledge.note", id: "no-such-note" },
       ],
-      purpose: PURPOSE,
     });
-    expect(receiptId).toBeTruthy();
+    // Owner-direct: nothing was exercised, so no receipt (#928, #922 B1).
+    expect(receiptId).toBeUndefined();
     expect(cards).toHaveLength(4);
     expect(cards[0]).toMatchObject({ status: "live", title: "Trip" });
     expect(cards[1]).toMatchObject({ status: "live", title: "Beach" });
@@ -90,7 +90,6 @@ describe("cards", () => {
     ).toBe("executed");
     const { cards } = gw.resolveRefs(owner, {
       refs: [{ type: "media.asset", id: assetId }],
-      purpose: PURPOSE,
     });
     expect(cards[0]?.status).toBe("trashed");
   });
@@ -98,27 +97,25 @@ describe("cards", () => {
   test("resolvable-if-linked: an app renders a foreign entity ONLY through a live link to something it reads", () => {
     const noteId = addNote("Has a photo");
     const assetId = addPhoto("Linked photo");
-    const app = enrollApp(db, { name: "notes-app" });
+    const app = enrollAgent(db, {
+      name: "notes-app",
+      modelRef: "test-automation",
+    });
     const appCred: Credential = {
-      kind: "app",
-      appId: app.appId,
-      signingKey: app.signingKey,
+      kind: "agent",
+      agentId: app.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
     };
     // The app reads knowledge (its own domain) — media is deliberately absent.
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts["dpv:ServiceProvision"] ?? "",
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [
-        { schema: "knowledge", verbs: "read" },
-        { schema: "core", table: "link", verbs: "read" },
-      ],
-    });
+    answerScopes(db, boot, "notes-app", [
+      { schema: "knowledge", verbs: "read" },
+      { schema: "core", table: "link", verbs: "read" },
+    ]);
 
     // Before any link exists, the foreign asset is a denied card.
     const before = gw.resolveRefs(appCred, {
       refs: [{ type: "media.asset", id: assetId }],
-      purpose: PURPOSE,
     });
     expect(before.cards[0]?.status).toBe("denied");
 
@@ -134,7 +131,6 @@ describe("cards", () => {
     expect(linked.status).toBe("executed");
     const after = gw.resolveRefs(appCred, {
       refs: [{ type: "media.asset", id: assetId }],
-      purpose: PURPOSE,
     });
     expect(after.cards[0]).toMatchObject({
       status: "live",
@@ -148,7 +144,6 @@ describe("cards", () => {
     ).toBe("executed");
     const ended = gw.resolveRefs(appCred, {
       refs: [{ type: "media.asset", id: assetId }],
-      purpose: PURPOSE,
     });
     expect(ended.cards[0]?.status).toBe("denied");
   });
@@ -170,7 +165,6 @@ describe("cards", () => {
     ).toBe("executed");
     const trashed = gw.resolveRefs(owner, {
       refs: [{ type: "knowledge.note", id: noteId }],
-      purpose: PURPOSE,
     });
     expect(trashed.cards[0]?.status).toBe("live");
     // …until the lifecycle sweep performs the real deletion past the window.
@@ -182,7 +176,6 @@ describe("cards", () => {
     gw.sweep(owner);
     const { cards } = gw.resolveRefs(owner, {
       refs: [{ type: "knowledge.note", id: noteId }],
-      purpose: PURPOSE,
     });
     expect(cards[0]?.status).toBe("missing"); // the tombstone
   });

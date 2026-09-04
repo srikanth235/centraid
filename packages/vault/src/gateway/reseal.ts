@@ -179,12 +179,11 @@ export function resealVaultKey(
   db.sealKey.set(newKey);
 
   const receiptId = writeReceipt(db.audit, {
-    grantId: null,
+    authorityId: null,
     invocationId: null,
     action: "key.rotate",
     objectType: "core.vault",
     objectId: "seal-key",
-    purpose: null,
     decision: "allow",
     detail: {
       oldFingerprint,

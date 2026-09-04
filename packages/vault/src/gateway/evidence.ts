@@ -9,13 +9,15 @@ import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
 import type { Citation, Identity } from "./types.js";
 
 export interface ReceiptInput {
-  grantId: string | null;
+  /**
+   * ONE ID SPACE (#928, AP-one-id-space): the `share_authority` row that
+   * answered, or NULL for an owner-direct act that needed no answer.
+   */
+  authorityId: string | null;
   invocationId: string | null;
   action: string;
   objectType: string;
   objectId: string | null;
-  /** The purpose that APPLIED — callers record the defaulted notation (#306). */
-  purpose: string | null | undefined;
   decision: "allow" | "deny";
   detail?: Record<string, unknown>;
 }
@@ -40,14 +42,23 @@ export function actingOwnerDetail(
 }
 
 /**
+ * THE OWNER READING THEIR OWN VAULT IS NOT AN ACCESS EVENT (#928, #922 B1).
+ * An `allow` receipt proves that somebody exercised an authority they were
+ * given; owner-direct there is no authority and nobody to prove it against,
+ * and writing one cost a durable append, an fsync and a WAL page on EVERY
+ * read the gateway served. Denials, reveals, invocations and every act by any
+ * other principal are unaffected — same chain, same content, same count.
+ */
+export function skipsAllowReceipt(identity: Pick<Identity, "kind">): boolean {
+  return identity.kind === "owner-device";
+}
+
+/**
  * Append an access.receipt, chaining its hash to the previous receipt.
  *
- * THE HASH COVERS THE WHOLE BODY (#916, review 5.3). It used to cover seven
- * columns — the chain proved the action and its object, and left
- * `detail_json`, `grant_id`, `invocation_id` and the purpose outside, so the
- * WHY of a decision could be rewritten without breaking the chain that exists
- * to prove it was not. Every column the row carries is hashed, in a fixed
- * order, so tampering with any of them is detectable.
+ * THE HASH COVERS THE WHOLE BODY (#916, review 5.3): every column the row
+ * carries is hashed, in a fixed order, so tampering with any of them —
+ * `detail_json` and `authority_id` included — is detectable.
  *
  * `seq` is the chain POSITION (#916, R13 / review 5.4). The head used to be
  * found with `ORDER BY receipt_id DESC`, correct only because ids happen to be
@@ -70,12 +81,11 @@ export function writeReceipt(audit: DatabaseSync, input: ReceiptInput): string {
       head?.hash ?? "",
       receiptId,
       seq,
-      input.grantId,
+      input.authorityId,
       input.invocationId,
       input.action,
       input.objectType,
       input.objectId,
-      input.purpose ?? null,
       input.decision,
       occurredAt,
       detailJson,
@@ -84,17 +94,16 @@ export function writeReceipt(audit: DatabaseSync, input: ReceiptInput): string {
   audit
     .prepare(
       `INSERT INTO access_receipt
-         (receipt_id, grant_id, invocation_id, action, object_type, object_id, purpose_concept_id, decision, occurred_at, hash, detail_json, seq)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (receipt_id, authority_id, invocation_id, action, object_type, object_id, decision, occurred_at, hash, detail_json, seq)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       receiptId,
-      input.grantId,
+      input.authorityId,
       input.invocationId,
       input.action,
       input.objectType,
       input.objectId,
-      input.purpose ?? null,
       input.decision,
       occurredAt,
       hash,
@@ -113,12 +122,11 @@ export function receiptHash(row: {
   prevHash: string | null;
   receiptId: string;
   seq: number | null;
-  grantId: string | null;
+  authorityId: string | null;
   invocationId: string | null;
   action: string;
   objectType: string;
   objectId: string | null;
-  purpose: string | null;
   decision: string;
   occurredAt: string;
   detailJson: string | null;
@@ -128,12 +136,11 @@ export function receiptHash(row: {
       row.prevHash ?? "",
       row.receiptId,
       row.seq,
-      row.grantId,
+      row.authorityId,
       row.invocationId,
       row.action,
       row.objectType,
       row.objectId,
-      row.purpose,
       row.decision,
       row.occurredAt,
       row.detailJson,

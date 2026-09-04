@@ -6,11 +6,12 @@
 // which the registry still answers for view.
 import { afterEach, describe, expect, test } from "vitest";
 
-import { createGrant, enrollAgent, enrollDevice } from "../bootstrap.js";
+import { enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerDocumentCommands } from "../commands/documents.js";
 import { registerTallyCommands } from "../commands/tally.js";
 import type { VaultDb } from "../db.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { createShareGrant } from "../grant/grant-store.js";
 import { nowIso } from "../ids.js";
 import {
@@ -27,8 +28,6 @@ import { closeOpenVaults, household } from "../share/placement-fixture.js";
 import { createGateway } from "./gateway.js";
 import type { Gateway } from "./gateway.js";
 import type { Credential } from "./types.js";
-
-const PURPOSE = "dpv:ServiceProvision";
 
 function ownerSeat(register: (gateway: Gateway) => void) {
   const { origin, originBoot } = household();
@@ -127,12 +126,9 @@ function audienceAgent(
     seat.originBoot.ownerPartyId,
     "host"
   );
-  createGrant(seat.origin, {
-    granteePartyId: agent.partyId,
-    purposeConceptId: seat.originBoot.concepts[PURPOSE] as string,
-    grantedByPartyId: seat.originBoot.ownerPartyId,
-    scopes: [{ schema, verbs: "read+act" }],
-  });
+  answerScopes(seat.origin, seat.originBoot, name, [
+    { schema, verbs: "read+act" },
+  ]);
   const credential: Credential = {
     kind: "agent",
     agentId: agent.agentId,

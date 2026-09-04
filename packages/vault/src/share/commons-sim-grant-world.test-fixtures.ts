@@ -9,10 +9,15 @@
 //      SQLite file, resurrecting projections a revocation hard-deleted, and
 //      stewards are never rewound (`replicaOnlySeats`).
 
-import { createGrant, enrollAgent, enrollDevice } from "../bootstrap.js";
+import { enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { Credential } from "../gateway/types.js";
+import {
+  automationAnswers,
+  automationSubjectsOf,
+  recordAutomationAnswers,
+} from "../grant/automation-authority.js";
 import type { ShareFulfillmentState } from "../grant/grant-store.js";
-import { uuidv7 } from "../ids.js";
+import { nowIso, uuidv7 } from "../ids.js";
 import type { Seat, World } from "./commons-sim-world.test-fixtures.js";
 import { NOW, armConfirmGate } from "./commons-sim-world.test-fixtures.js";
 import {
@@ -68,6 +73,7 @@ export interface ParkedFact {
 
 export interface PlaneAgent {
   credential: Credential;
+  /** The automation's own principal id — what a `share_authority` row keys on. */
   agentPartyId: string;
   consentGrantId: string;
 }
@@ -233,14 +239,12 @@ export function tamperAudience(slot: ShareSlot, title: string): boolean {
 }
 
 export function enrollPlaneAgent(seat: Seat): PlaneAgent {
-  const agent = enrollAgent(seat.db, {
-    name: `sim-agent-${seat.index}`,
-    modelRef: "sim",
-  });
+  const principalId = `sim-agent-${seat.index}`;
+  const agent = enrollAgent(seat.db, { name: principalId, modelRef: "sim" });
   return {
     credential: agentCredential(seat, agent.agentId),
-    agentPartyId: agent.partyId,
-    consentGrantId: freshConsentGrant(seat, agent.partyId),
+    agentPartyId: principalId,
+    consentGrantId: freshConsentGrant(seat, principalId),
   };
 }
 
@@ -258,14 +262,20 @@ function agentCredential(seat: Seat, agentId: string): Credential {
   };
 }
 
-/** Called again after a revoke, so the program can keep parking. */
-export function freshConsentGrant(seat: Seat, agentPartyId: string): string {
-  return createGrant(seat.db, {
-    granteePartyId: agentPartyId,
-    purposeConceptId: seat.purposeConceptId,
-    grantedByPartyId: seat.partyId,
-    scopes: [{ schema: "tally", verbs: "read+act" }],
+/**
+ * Called again after a withdrawal, so the program can keep parking. Answers
+ * are immutable but for `revoked_at`, so re-answering the same subject after a
+ * revoke mints a NEW row — which is the id the next parked fact rides.
+ */
+export function freshConsentGrant(seat: Seat, principalId: string): string {
+  recordAutomationAnswers(seat.db.vault, {
+    principalId,
+    ownerPartyId: seat.partyId,
+    subjects: automationSubjectsOf([{ schema: "tally", verbs: "read+act" }]),
+    decision: "granted",
+    now: nowIso(),
   });
+  return automationAnswers(seat.db.vault, principalId)[0]!.authorityId;
 }
 
 /** One slot per ordered steward pair per album. Every slot starts with a live

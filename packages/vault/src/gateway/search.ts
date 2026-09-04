@@ -15,7 +15,7 @@ import { nowIso } from "../ids.js";
 import { SEARCHABLE } from "../schema/fts.js";
 import { resolveEntity } from "../schema/tables.js";
 import { evaluateAccess } from "./access.js";
-import { writeReceipt } from "./evidence.js";
+import { skipsAllowReceipt, writeReceipt } from "./evidence.js";
 import { extSearchable } from "./ext.js";
 import { applyFieldMask, compileFilters } from "./filters.js";
 import type { Identity, SearchRequest, SearchResult } from "./types.js";
@@ -44,17 +44,18 @@ export function searchEntity(
   identity: Identity,
   request: SearchRequest
 ): SearchResult {
-  const deny = (failing: string, grantId: string | null = null): never => {
-    const receiptId = writeReceipt(db.audit, {
-      grantId,
-      invocationId: null,
-      action: "search",
-      objectType: request.entity,
-      objectId: null,
-      purpose: request.purpose,
-      decision: "deny",
-      detail: { failing },
-    });
+  const deny = (failing: string, authorityId: string | null = null): never => {
+    const receiptId = skipsAllowReceipt(identity)
+      ? undefined
+      : writeReceipt(db.audit, {
+          authorityId,
+          invocationId: null,
+          action: "search",
+          objectType: request.entity,
+          objectId: null,
+          decision: "deny",
+          detail: { failing },
+        });
     throw new GatewayError("access", `deny (receipt ${receiptId}): ${failing}`);
   };
   const ref = resolveEntity(request.entity, db.vault);
@@ -77,10 +78,10 @@ export function searchEntity(
     identity,
     ref.schema,
     ref.table,
-    "read",
-    request.purpose
+    "read"
   );
-  if (access.decision === "deny") return deny(access.failing, access.grantId);
+  if (access.decision === "deny")
+    return deny(access.failing, access.authorityId);
   // Folded-in canonical text needs its own read consent — matching a note
   // body IS reading core.content_item.
   for (const extra of spec.alsoConsent) {
@@ -88,18 +89,20 @@ export function searchEntity(
     if (!extraRef)
       return deny(
         `search index folds in unknown entity ${extra}`,
-        access.grantId
+        access.authorityId
       );
     const extraConsent = evaluateAccess(
       db.vault,
       identity,
       extraRef.schema,
       extraRef.table,
-      "read",
-      request.purpose
+      "read"
     );
     if (extraConsent.decision === "deny") {
-      return deny(`${extra}: ${extraConsent.failing}`, extraConsent.grantId);
+      return deny(
+        `${extra}: ${extraConsent.failing}`,
+        extraConsent.authorityId
+      );
     }
   }
   if (access.fieldMask !== null) {
@@ -109,7 +112,7 @@ export function searchEntity(
     if (hidden.length > 0) {
       return deny(
         `field mask hides indexed column(s) ${hidden.join(", ")} — search unavailable`,
-        access.grantId
+        access.authorityId
       );
     }
   }
@@ -143,19 +146,20 @@ export function searchEntity(
     string,
     unknown
   >[];
-  const receiptId = writeReceipt(db.audit, {
-    grantId: access.grantId,
-    invocationId: null,
-    action: "search",
-    objectType: request.entity,
-    objectId: null,
-    purpose: request.purpose,
-    decision: "allow",
-    detail: {
-      query: request.query,
-      filter: request.where ?? [],
-      rowCount: rows.length,
-    },
-  });
-  return { rows, receiptId };
+  const receiptId = skipsAllowReceipt(identity)
+    ? undefined
+    : writeReceipt(db.audit, {
+        authorityId: access.authorityId,
+        invocationId: null,
+        action: "search",
+        objectType: request.entity,
+        objectId: null,
+        decision: "allow",
+        detail: {
+          query: request.query,
+          filter: request.where ?? [],
+          rowCount: rows.length,
+        },
+      });
+  return { rows, ...(receiptId === undefined ? {} : { receiptId }) };
 }
