@@ -51,6 +51,14 @@ Open questions ruled by the maintainer before wave 1(b), recorded here so the do
 - **Fork detection without the chain is accepted.** The chain defended against a party the model already trusts (SECURITY.md:71); member signatures are kept.
 - **The peer protocol floor moves with the number.** v1 cannot serve or ingest a grant-keyed shape, and a snapshot fallback beside it is the historical-shape branch `docs/protocol.md` § (b) forbids, so `PEER_MIN_PROTOCOL_VERSION` becomes 2 and an older gateway sees the single update wall.
 
+## Audit
+
+**PASS**
+
+- **`## What changed` against the diff.** PASS. Judged against the whole receipt (Wave 1(b) `## What changed` plus Waves 2–4c, Slice 5, and the CI section) versus `git diff --name-only origin/main...HEAD` (166 paths). Wave 1(b) names the subscriber contract (`replica-subscription.ts` / `.test.ts`, protocol 2 in `version.ts`, `index.ts`, `peer.test.ts`, `peer-plane.test.ts`) and those files exist with `PEER_PROTOCOL_VERSION` / `PEER_MIN_PROTOCOL_VERSION` both 2. Later waves name the subscription schema and seats, signed intents, red-first migration, commons-rail deletion, share-journey after numbers (`_afterProvenance` 232.2 ms, ceiling 750), the docs/people shape re-pin (`docs:8020cd25b4e9c6a62546b895`, `people:cde59ac8f6e982ac17c88289`), and the CI knip / declared-writes floor (`size < 90` in `scripts/lint-engine-conformance.mjs`). Every non-receipt path in the diff is named somewhere in that narrative. Wave 4b's table says “files deleted | 57”; `git show --diff-filter=D fc3464ef0` lists 64 deletions — the paths are enumerated (and `share/commons*.ts` / `docs/recovery/commons-steward-loss.md` are named in the replacement table), so the work is not omitted; the count is off, not a substitute for the deletion.
+- **Each `- [x]` against the diff.** PASS. The receipt has zero `- [x]` items; every checklist row is `- [ ]` remaining work and is not required to be realized in this diff.
+- **The `## Checklist` against the issue's acceptance criteria.** PASS. `gh issue view 929` Acceptance criteria is 13 unchecked items; the receipt checklist is those same 13, same order, all still `- [ ]`. The last three drop the issue's `**(amended 2026-09-03)**` prefix and keep the criterion text.
+
 ## Session
 
 ### Identifiers
