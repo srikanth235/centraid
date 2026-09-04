@@ -1006,7 +1006,18 @@ export async function openReplicaShellSession(
     rememberStorage,
     onAuthorizationRevoked: options.onAuthorizationRevoked ?? forgetSession,
   });
-  await session.start(status);
+  try {
+    await session.start(status);
+  } catch (error) {
+    // NEVER LEAVE THE HANDLES BEHIND (#922 E3). `start` awaits the first
+    // bootstrap, so a bootstrap that fails rejects this open — and the scope
+    // registry drops the entry, so the next lease opens a SECOND worker on the
+    // same OPFS pool. The first worker still holds its access handles, the
+    // second cannot create them, and every later open fights the same files.
+    // Closing here hands them back before the failure is re-raised.
+    await session.close().catch(() => undefined);
+    throw error;
+  }
   if (pendingBootstrap) session.requireBootstrap();
   return session;
 }

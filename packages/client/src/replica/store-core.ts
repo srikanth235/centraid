@@ -723,6 +723,18 @@ export class ReplicaSqliteStore {
       this.wipe();
       throw new ReplicaRebootstrapRequiredError(mismatch);
     }
+    // Spent: the whole batch is at or behind the stored cursor, so it carries
+    // nothing this replica has not applied. Re-applying would be harmless but
+    // moving the cursor BACK to `batch.to` would not — the checkpoint it posts
+    // must stay monotonic, and the next pull must not re-ask for changes this
+    // store already holds.
+    if (batch.to.seq <= meta.cursor_seq) {
+      return {
+        cursor: { epoch: meta.cursor_epoch, seq: meta.cursor_seq },
+        invalidations: [],
+        outcomes: batch.outcomes ?? [],
+      };
+    }
 
     const invalidations: ReplicaInvalidation[] = [];
     runTransaction(() => {
@@ -1722,7 +1734,15 @@ export class ReplicaSqliteStore {
     ) {
       return "epoch-mismatch";
     }
-    if (batch.from.seq !== meta.cursor_seq || batch.to.seq < batch.from.seq)
+    // A GAP IS A BATCH THAT STARTS AHEAD OF US, AND ONLY THAT (#922 E3).
+    // Two catch-up paths legitimately hold the same cursor at once — the
+    // bootstrap's convergence replay and the change feed's own sync — so the
+    // slower one arrives with a `from` the faster one has already passed.
+    // That batch skipped nothing; it OVERLAPS, and every change in it is an
+    // idempotent upsert or delete under the same server-version guard. Calling
+    // it a gap wiped the store and demanded a re-bootstrap that raced exactly
+    // the same way, which is the loop this rule ends.
+    if (batch.from.seq > meta.cursor_seq || batch.to.seq < batch.from.seq)
       return "cursor-gap";
     return undefined;
   }

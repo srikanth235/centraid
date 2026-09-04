@@ -2284,9 +2284,49 @@ bun run --cwd packages/vault test
 
 **Full paths for coverage:** `packages/vault/src/replica/locker-sealed-columns.test.ts`
 
+## Mega-lane E3 slice 1 — the web bootstrap loop, and the warm switch measured to a usable screen
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/replica/store-core.ts` | a gap is a batch that starts AHEAD of the cursor; an overlapping batch applies, a spent one is a no-op that never moves the cursor back |
+| `packages/client/src/replica/shell-session.ts` | `openReplicaShellSession` closes the session it built when `start` throws, so a failed first bootstrap cannot leak the OPFS worker |
+| `packages/client/src/replica/windowed-bootstrap.ts` | `converge` drains to the head the gateway reports (`hasMore`) instead of waiting for the log to stop advancing |
+| `packages/client/src/replica/rebootstrap-loop.test.ts` | new, red-first: overlap, spent batch, a real gap that still wipes, and the worker closed on a failed open |
+| `packages/client/src/replica/windowed-bootstrap.test.ts` | the budget test says `hasMore: true` (what "one more commit" is on the wire); a sibling pins the one-pass drain |
+| `apps/web/tests/e2e/perf-waterfall.spec.ts` | the warm-switch probe is carried past attach to a TAKEABLE screen; `goHomeFromAttached` now proves the bridge went down |
+| `tests/journeys.json` | `web/warm-switch/…#tapToVisualResponse` re-stated at the usable interval, with the seven-run spread and both halves |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Web warm switch, tap → usable app screen | not measurable (loop) | 433 ms worst of 7 | `perf-waterfall.spec.ts -g "warm switch"`, seeded-demo, linux x64 4c/15 GB, headless_shell 1194; 433/394/396/408/408/397/413, ceiling 600 unchanged |
+| Same run, tap → app-view attach | 191 ms worst of 7 | 128 ms worst of 7 | same runs: 128/90/97/100/107/91/108 |
+| Re-bootstraps in a 30 s Tasks open (web e2e harness) | unbounded (≥ 4 observed, never settles) | 0 | `apps/web/tests/e2e` console/network probe; `409`s and `opfs-sahpool: NoModificationAllowedError` also 0 |
+| Convergence-replay round trips per bootstrap on a live vault | 1000 (the pass budget) | 1 | `windowed-bootstrap.test.ts` "stops as soon as the gateway reports itself drained"; on the harness, 682 checkpoint POSTs → 2 |
+| `tasks.spec.ts` cases green | 0 of 3 on `main` | 2 of 3 | third case is a separate finding below |
+
+**Deleted/replaced.** The "replay until the log stops advancing" rule and the two register lines that named the loop as the reason `tapToVisualResponse` stopped at attach.
+
+**Decisions.** `changeMismatch` is narrowed, not weakened: the fence exists to catch a replica that MISSED changes, and a batch whose `from` is at or behind the stored cursor cannot have missed anything — it overlaps, and every change in it is an idempotent upsert or delete under the same `server_version` guard. `from` ahead of the cursor still wipes and demands a snapshot, and the committed suite proves it. The 600 ms ceiling is left alone although the interval it fences grew: widening a ceiling is a ruling, not a lane's call.
+
+```
+# tree hash: quoted in this lane's closing section (self-audit reads HEAD's tree)
+bun run --cwd packages/client typecheck && bun run --cwd apps/web typecheck
+bun run --cwd packages/client test                  # 274 files, 2477 tests
+bun run --cwd apps/mobile test src/lib/replica      # 33 files, 223 tests
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- perf-waterfall.spec.ts   # 5/5
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- tasks.spec.ts            # 2/3, see findings
+bun run --cwd packages/client test src/replica/rebootstrap-loop.test.ts        # red first: 3 of 4 fail
+```
+
+**Findings.** (1) `tasks.spec.ts` "Tasks hides a queued delete and shows a minted pending add" fails for a reason that is NOT the bootstrap: the tasks it writes carry no `due_at`, so they file under **Anytime** while the board opens on **Today**, and the spec never leaves that view. Proved by reading the board through the app's own door right after the write — `window.centraid.read({query:"board",input:{limit:200}})` returns `"Queued delete target"` — so the write, the replica and the read are all correct and the assertion is looking at the wrong view. `packages/blueprints/apps/tasks` and this spec belong to the minted-id lane. (2) `requireBootstrap` fires `void this.bootstrapWhenReachable()`, whose rejection has no handler: every non-transient bootstrap failure reached the page as an unhandled rejection (`pageerror`). No longer raised by the fixed path, but the shape is still there. (3) The convergence replay and the feed's own catch-up both pull from the same cursor after commit; they now converge instead of destroying the store, but the duplicate round trip remains.
+
+**Doc debt.** `docs/mobile-offline.md` and `docs/client-keying.md` describe the replica's catch-up without the overlap rule (this slice).
+
 ### Falsification
 | Claim at risk | Throwaway check | Result |
 | --- | --- | --- |
 | "No sealed column reaches a locker replica row" is really "the row was empty" | inserted a row with a real password, OTP seed, card number and CVV, then asserted the browsable columns ARE present and searched the serialized values for the plaintexts | held — `title`/`username` present, no sealed column name, and neither plaintext appears under any key |
 | Locker's queries are only blocked because the probe's stub read plane returned nothing | the refusals name the VERB, not the rows: `authenticate is online-only` and `invoke is online-only`, raised before any row shape matters, and `trash` — same stub, same empty rows — ran to completion | held; the blocker is the verb surface, not the data |
+| Narrowing `changeMismatch` lets a replica silently skip changes | ran the whole `@centraid/client` suite (274 files) and the mobile replica suite (33 files) against the narrowed rule, then asserted in the committed suite that a batch starting ahead of the cursor still wipes and raises — and re-ran with the three files reverted, which puts 3 of the 4 new cases red | held — a gap ahead still wipes; only a batch at or behind the cursor is absorbed, and the spent case is proved not to move the cursor back |
+| The e2e is green because the probe got weaker, not because the loop is gone | carried the warm-switch probe PAST attach to a takeable screen (`window.centraid` installed, fallback gone) — a strictly stronger assertion than the one that passed before — and watched the network: the 409s, the `NoModificationAllowedError`s and the re-bootstraps are all at zero on a 30 s open that previously never settled | held — the number rose from 191 (attach) to 433 (usable) because it now fences more, under the same unchanged ceiling |
 
