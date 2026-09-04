@@ -756,7 +756,16 @@ bunx vitest run apps/docs apps/people src/app-manifest-reads.test.ts src/docs-dr
 bunx vitest run src/apps/docs src/apps/people --root apps/mobile
 bunx vitest run src/serve/share-surface-queries.test.ts src/routes/replica-shape-parity.test.ts --root packages/server
 bun run --cwd packages/blueprints typecheck && bun run --cwd apps/mobile typecheck && bun run --cwd packages/server typecheck
+bun run --cwd packages/blueprints test     # 212 files, 7017 passed, 2 expected fail
+bun run --cwd apps/mobile test             # 277 files, 2388 passed
+bash .governance/run.sh                    # green
 ```
+
+Gate tree `27b7e1ac972ad814758e403170e1f4a0f4e6b621` at `848dabe6f` (self-audit
+PASS); this line is appended above it. Self-audit's commit-hygiene arm reports
+three commits on the integration branch missing the `Co-Authored-By` /
+`Claude-Session` trailers — `07f82368b`, `1ce068c82`, `6981a949f`; none is this
+lane's.
 
 **Full paths for coverage:**
 
