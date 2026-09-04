@@ -728,9 +728,16 @@ export async function buildGateway(
   process.env.CENTRAID_WORKER_MAX_OLD_GENERATION_MB = String(
     hardwareProfile.workerMaxOldGenerationMb
   );
-  process.env.CENTRAID_WORKER_POOL_SIZE = String(
-    hardwareProfile.workerPoolSize
-  );
+  // NOT the resolved default (#922 B3): the warm-pool default has one source,
+  // `CONSTRAINED_WORKER_POOL_SIZE`/`DEFAULT_WORKER_POOL_SIZE` beside the pool,
+  // and boot used to overwrite it with a second number. Only a durable UI
+  // override still has to reach the engine this way — an operator env var is
+  // already in the environment the pool reads.
+  if (hardwareProfile.sources.workerPoolSize.source === "prefs") {
+    process.env.CENTRAID_WORKER_POOL_SIZE = String(
+      hardwareProfile.workerPoolSize
+    );
+  }
   process.env.CENTRAID_REPLICATION_CONCURRENCY = String(
     hardwareProfile.replicationConcurrency
   );

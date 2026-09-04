@@ -1,5 +1,9 @@
 import { availableParallelism, totalmem } from "node:os";
 
+import {
+  CONSTRAINED_WORKER_POOL_SIZE,
+  DEFAULT_WORKER_POOL_SIZE,
+} from "../engine/handlers/worker-pool.js";
 import { parseResourceMode, resourceModeLabel } from "./resource-mode.js";
 import type { ResourceKnobOverrides, ResourceMode } from "./resource-mode.js";
 
@@ -70,7 +74,6 @@ interface BudgetPreset {
   cpuShare: number;
   workerMaxConcurrent: number;
   workerMaxOldGenerationMb: number;
-  workerPoolSize: number;
   replicationConcurrency: number;
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
@@ -81,7 +84,6 @@ const BUDGET_PRESETS: Record<BudgetPresetName, BudgetPreset> = {
     cpuShare: 0.5,
     workerMaxConcurrent: 2,
     workerMaxOldGenerationMb: 128,
-    workerPoolSize: 0,
     replicationConcurrency: 1,
     vaultSweepIntervalMs: 2 * 60 * 60 * 1000,
     outboxIdleIntervalMs: 2 * 60 * 1000,
@@ -90,7 +92,6 @@ const BUDGET_PRESETS: Record<BudgetPresetName, BudgetPreset> = {
     cpuShare: 0.75,
     workerMaxConcurrent: 8,
     workerMaxOldGenerationMb: 256,
-    workerPoolSize: 2,
     replicationConcurrency: 3,
     vaultSweepIntervalMs: 60 * 60 * 1000,
     outboxIdleIntervalMs: 60 * 1000,
@@ -99,7 +100,6 @@ const BUDGET_PRESETS: Record<BudgetPresetName, BudgetPreset> = {
     cpuShare: 1,
     workerMaxConcurrent: 12,
     workerMaxOldGenerationMb: 384,
-    workerPoolSize: 4,
     replicationConcurrency: 4,
     vaultSweepIntervalMs: 60 * 60 * 1000,
     outboxIdleIntervalMs: 60 * 1000,
@@ -336,9 +336,13 @@ export function resolveGatewayHardwareProfile(
     preset.workerMaxOldGenerationMb,
     prefsOverrides.workerMaxOldGenerationMb
   );
+  // NO PRESET ENTRY (#922 B3): the warm-pool default has ONE source, the
+  // constants beside the pool itself, and a constrained host keeps a warm
+  // worker because that is where a cold boot hurts most (#659). Only an
+  // explicit operator env var or a durable UI override moves it.
   const workerPoolSize = knob(
     "workerPoolSize",
-    preset.workerPoolSize,
+    constrained ? CONSTRAINED_WORKER_POOL_SIZE : DEFAULT_WORKER_POOL_SIZE,
     prefsOverrides.workerPoolSize
   );
   const replicationConcurrency = knob(

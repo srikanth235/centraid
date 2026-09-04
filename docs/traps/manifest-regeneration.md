@@ -34,7 +34,8 @@ See `packages/blueprints/README.md`.
 
 - [ ] `index.json` entry present for new templates
 - [ ] `build:manifest` run; `manifest.json` diff reviewed
-- [ ] Handlers committed as **source**, with no compile step on clone/install — `.js` for a compiler-authored automation, `.ts` for a TS-authored one. Both are first-class: `resolveHandlerFile` (packages/server/src/engine/handlers/dispatcher.ts) probes `.ts` first and falls through to `.js`, and the worker registers an esbuild loader hook for the `.ts` graph. What is still banned is a **built artifact** — nothing under `dist/` may appear in a template's `files[]`.
+- [ ] Handlers committed as **source**, with no compile step on clone/install — `.js` for a compiler-authored automation, `.ts` for a TS-authored one. Both are first-class. What is still banned is a **built artifact** — nothing under `dist/` may appear in a template's `files[]`.
+- [ ] `manifest.json` still lists handler SOURCES only. `bun run build` also emits a precompiled `apps/<id>/{actions,queries}/<name>.js` beside every `.ts` handler (`scripts/build-handlers.mjs`, #922 B2) — gitignored, shipped by `files: ["apps"]`, and skipped by the manifest walk, which drops a `.js` that has a `.ts` sibling. A bundled app is enrolled in place and runs that compiled file: `resolveHandlerFile` (packages/server/src/engine/handlers/dispatcher.ts) probes `.js` FIRST and falls back to `.ts`, which is the only path that still registers the worker's esbuild loader hook. **Edit a handler's `.ts` and rebuild, or dispatch keeps running the stale `.js`.**
 - [ ] CI build path exercised if you touched vendor scripts
 
 ## Related

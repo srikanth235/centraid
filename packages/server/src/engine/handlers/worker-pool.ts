@@ -1,8 +1,13 @@
 /*
- * Warm-spare pool for app-handler dispatch (#404). ISOLATION FIRST: handler
- * code arrives by dynamic `import()`, so a worker's module registry keeps
- * every handler it ran. NEVER reuse a worker across handlers — these are
- * pre-booted SINGLE-USE spares.
+ * Warm pool for handler dispatch (#404, #922 B3). A worker is a REUSED thread
+ * that gets a fresh module graph per run: the thread boundary plus the hard
+ * timeout in the caller is what the isolation ruling buys, and disposal after
+ * every run was the implementation of that, never the property.
+ *
+ * WHAT REUSE STILL MAY NOT CROSS is the sandbox. `installWorkerSandbox` is
+ * thread-wide, one-way, and per lane, so a parked worker carries the SANDBOX
+ * KEY it was installed for and is handed back only for a run with the same
+ * key. A worker that has never run carries no key and matches anything.
  */
 
 import { Worker } from "node:worker_threads";
@@ -83,8 +88,18 @@ export function workerPoolSizeFromEnv(
   return Math.min(n, 8);
 }
 
+/** A parked worker and the sandbox lane it is already committed to. */
+interface Spare {
+  readonly worker: Worker;
+  /** Undefined until the worker has run once and installed its sandbox. */
+  readonly key: string | undefined;
+}
+
 export class WorkerPool {
-  private readonly idle: Worker[] = [];
+  private readonly idle: Spare[] = [];
+  /** Threads handed out and not yet released or retired. Counted so a refill
+   *  never spawns a COLD spare for a slot a WARM thread is about to fill. */
+  private outstanding = 0;
   private disposed = false;
   private refilling: ReturnType<typeof setImmediate> | undefined;
 
@@ -102,10 +117,17 @@ export class WorkerPool {
     this.scheduleRefill();
   }
 
-  /** No pool listeners survive: the caller owns the lifecycle. */
-  acquire(): Worker {
-    const spare = this.idle.shift();
-    const worker = spare ?? this.spawn();
+  /**
+   * A worker whose sandbox already matches `key`, else an unused spare, else a
+   * fresh thread. No pool listeners survive: the caller owns the lifecycle
+   * until it calls `release` or `retire`.
+   */
+  acquire(key: string): Worker {
+    const reusable = this.idle.findIndex((spare) => spare.key === key);
+    const index = reusable >= 0 ? reusable : this.idle.findIndex((s) => !s.key);
+    const spare = index >= 0 ? this.idle.splice(index, 1)[0] : undefined;
+    const worker = spare?.worker ?? this.spawn();
+    this.outstanding += 1;
     worker.removeAllListeners();
     // Spares park unref'd; a working worker holds the loop open.
     worker.ref();
@@ -114,13 +136,37 @@ export class WorkerPool {
     return worker;
   }
 
+  /**
+   * Parks a worker that finished a run cleanly. Over-capacity threads are
+   * terminated rather than kept: the pool size is the number of warm threads
+   * the host agreed to pay for.
+   */
+  release(worker: Worker, key: string): void {
+    if (this.disposed || this.idle.length >= this.size) {
+      this.retire(worker);
+      return;
+    }
+    this.outstanding = Math.max(0, this.outstanding - 1);
+    worker.removeAllListeners();
+    worker.unref();
+    this.park({ worker, key });
+  }
+
+  /** Timeout, worker error, or a resource-limit breach: the thread dies. */
+  retire(worker: Worker): void {
+    this.outstanding = Math.max(0, this.outstanding - 1);
+    worker.removeAllListeners();
+    void worker.terminate();
+    this.scheduleRefill();
+  }
+
   dispose(): void {
     this.disposed = true;
     if (this.refilling) clearImmediate(this.refilling);
     this.refilling = undefined;
-    for (const worker of this.idle.splice(0)) {
-      worker.removeAllListeners();
-      void worker.terminate();
+    for (const spare of this.idle.splice(0)) {
+      spare.worker.removeAllListeners();
+      void spare.worker.terminate();
     }
   }
 
@@ -131,14 +177,23 @@ export class WorkerPool {
    */
   private scheduleRefill(): void {
     if (this.disposed || this.refilling) return;
-    if (this.idle.length >= this.size) return;
+    if (this.idle.length >= this.warmTarget) return;
     this.refilling = setImmediate(() => {
       this.refilling = undefined;
       if (this.disposed) return;
-      if (this.idle.length < this.size) this.idle.push(this.spawn());
+      if (this.idle.length < this.warmTarget) {
+        this.park({ worker: this.spawn(), key: undefined });
+      }
       this.scheduleRefill();
     });
     unrefTimer(this.refilling);
+  }
+
+  /** Threads out on a run come BACK warm (#922 B3), so they already hold the
+   *  slots they occupy: topping up to `size` regardless would spawn a cold
+   *  spare per dispatch and then throw the warm thread away on release. */
+  private get warmTarget(): number {
+    return Math.max(0, this.size - this.outstanding);
   }
 
   private spawn(): Worker {
@@ -150,14 +205,18 @@ export class WorkerPool {
       resourceLimits: this.resourceLimits,
     });
     worker.unref();
-    // Evict on death, never auto-refill here: a boot crash would spin a
-    // respawn loop. The next acquire re-tops the set.
+    return worker;
+  }
+
+  /** Evict on death, never auto-refill from the listener: a boot crash would
+   *  spin a respawn loop. The next acquire re-tops the set. */
+  private park(spare: Spare): void {
     const drop = (): void => {
-      const i = this.idle.indexOf(worker);
+      const i = this.idle.findIndex((s) => s.worker === spare.worker);
       if (i >= 0) this.idle.splice(i, 1);
     };
-    worker.once("error", drop);
-    worker.once("exit", drop);
-    return worker;
+    spare.worker.once("error", drop);
+    spare.worker.once("exit", drop);
+    this.idle.push(spare);
   }
 }

@@ -1526,3 +1526,86 @@ symmetrically in both runs. Every other check is green in both, and
 ### Doc debt
 
 - `tests/experience-budgets/README.md` — its status vocabulary has no word for "measured, deliberately ungated"; the report page now calls that a gauge.
+
+## lane 5 — handlers
+
+**Acceptance clauses served (Part B).** *"Blueprint handlers run precompiled; no esbuild hook on the app-handler path; per-call `fs.stat`s gone"* — B2 below. *"Workers are reused across clean runs and terminated only on timeout/error/limit; the pool size has one source and constrained hosts keep ≥1 warm worker; #842 W4.1 ref-search p95 under composition re-measured and budgeted"* — B3 below.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `packages/blueprints/scripts/build-handlers.mjs` | NEW. esbuild-bundles every `apps/*/{actions,queries}/*.ts` to a self-contained `.js` beside it. |
+| `packages/blueprints/package.json` | `build:handlers` runs first in `build`. |
+| `packages/blueprints/turbo.json` | The compiled handlers are declared build outputs (both gitignored; `lint:turbo-cache` clean). |
+| `packages/blueprints/scripts/build-manifest.mjs` | The walk drops a `.js` that has a `.ts` sibling, so `manifest.json` still lists sources only. |
+| `.gitignore` | The compiled handlers are generated, never committed. |
+| `packages/server/src/engine/handlers/dispatcher.ts` | `probeHandlerFile` prefers the precompiled `.js`; handler resolution and the manifest `stat` cache behind `CODE_REVALIDATE_MS`; `invalidate()` clears both. |
+| `packages/server/src/engine/handlers/worker-pool.ts` | Keyed reuse: `acquire(key)` / `release(worker, key)` / `retire(worker)`, refill accounts for threads that are coming back. |
+| `packages/server/src/engine/handlers/handler-runner.ts` | Releases a thread that completed the protocol, retires it on timeout/error/exit; parks under the lane the WORKER reports. |
+| `packages/server/src/engine/worker/runner.ts` | Per-run `AbortController`, per-run handler URL, global scrub between runs, `MAX_RUNS_PER_WORKER`, reports its installed `sandboxKey`. |
+| `packages/server/src/engine/worker/thread-reuse.ts` | The four reuse properties as an in-process kernel both runners import. Worker isolates are outside the v8 coverage map; the kernel is what the 80% diff-coverage gate can actually see. Also owns the sandbox-key and host-ctx helpers the runners used to inline, so those lines are not invisible to v8. |
+| `packages/server/src/engine/worker/thread-reuse.test.ts` | Scrub, per-run URL, run budget, abort-and-drop, host `fetch` signal. |
+| `packages/server/src/automation/worker/runner.ts` | The same four, for the automation lane. |
+| `packages/server/src/automation/handler/runner.ts` | Keyed acquire/release; a timed-out thread never returns to the pool. |
+| `packages/server/src/serve/hardware-profile.ts` | The `workerPoolSize` preset entries are deleted; the knob's fallback is the pool's own constants. |
+| `packages/server/src/serve/build-gateway.ts` | The boot-time `CENTRAID_WORKER_POOL_SIZE` override is deleted; only a durable UI override is still exported. |
+| `tests/journeys.json` | `refSearchUnderComposition._remeasured` (ceiling unchanged at 1000 ms). The per-surface file this used to live in was folded into the journey ledger by #965. |
+| `docs/traps/manifest-regeneration.md` | The checklist item said `.ts` wins and no compile step exists; both are now false. |
+| `packages/server/src/engine/handlers/dispatcher.test.ts` · `packages/server/src/engine/handlers/handler-pool.test.ts` · `packages/server/src/engine/sandbox/sandbox-escape.test.ts` | Resolution order, stat coalescing, thread reuse, fresh graph, global scrub, lane keying, timeout destruction. |
+| `packages/server/src/serve/hardware-profile.test.ts` · `packages/server/src/serve/hardware-profile.budget.test.ts` · `packages/server/src/serve/hardware-profile.cgroup.test.ts` · `packages/blueprints/src/runtime-boundary.test.ts` | The pinned pool sizes follow the pool's constants; the scripts set gains the handler compiler. |
+
+### Numbers
+
+Host: linux x64, 4 vCPU, 15.7 GiB, shared dev container; node v22.22.2. Handler: `notes/queries/library` (13 `ctx.vault.read`s against an empty-vault stub bridge), 30 invocations per cell, through `runHandler` on the built `packages/server/dist`. Command: `WT=$PWD CENTRAID_HARDWARE_PROFILE=<profile> node <bench> --runs=30`, where `<bench>` copies bench-journeys.mjs's blueprint-handler invocation without the HTTP and vault lanes.
+
+| Profile | Cell | Before p50/p99 (ms) | After p50/p99 (ms) |
+| --- | --- | --- | --- |
+| standard | warm | 217.6 / 303.9 | **4.3 / 67.4** |
+| standard | cold (pool 0) | 272.7 / 347.7 | **122.7 / 177.0** |
+| constrained | warm | 273.9 / 333.7 | **3.8 / 56.8** |
+| constrained | cold (pool 0) | 301.2 / 369.6 | **120.6 / 184.3** |
+
+Constrained "before" is measured at `CENTRAID_WORKER_POOL_SIZE=0`, which is what the `conserve` preset exported at boot — the second source SB-pool deletes. Warm p99 is the first sample of each series (a keyless spare, so effectively cold); p50 is the steady state.
+
+`fs.stat` calls per dispatch, counted by replacing `fs.promises.stat` and driving `Dispatcher.read` 12 times: **before 2, 2, 2, … (24 total); after 2, 0, 0, … (2 total)**. Command: `WT=$PWD node <count-stats> 12`.
+
+#842 W4.1 ref-search p95 under composition, 3 runs of `tests/scale/composite-load.scale.test.ts`: **291.6 / 293.0 / 300.1 ms** against the unchanged 1000 ms ceiling (2026-08-28 band: 228.4 / 282.0 / 333.4). Unmoved — this lane is starved by the CPU the write lane takes, not by its own cost. The lane doing the taking did move: worst-lane (Notes create-note) p95 **828.1–1147.5 → 646.7–754.3 ms**.
+
+Compiled output: 184 handlers, 500 KiB total, generated at build and never committed.
+
+### Deleted / replaced
+
+- `BUDGET_PRESETS.*.workerPoolSize` (all three) and the boot-time `process.env.CENTRAID_WORKER_POOL_SIZE` assignment in `build-gateway.ts` — replaced by `CONSTRAINED_WORKER_POOL_SIZE` / `DEFAULT_WORKER_POOL_SIZE` as the knob's own fallback. The pool is graded by class only now, so `performance` mode's 4 goes with the preset: 1 constrained, 2 standard, and a thread that comes back warm is worth more than a fourth cold spare.
+- `WorkerPool.acquire()`'s single-use contract and the `worker.terminate()` in both parent runners' `finish` — replaced by `release`/`retire`.
+- The `resolveHandlerFile` free function — replaced by `Dispatcher.resolveHandlerFile` over a cache plus `probeHandlerFile`.
+
+### Decisions
+
+- **The boot-time override is deleted for the DEFAULT, not for a member's own knob.** SB-pool names the whole `build-gateway.ts` assignment for deletion. `workerPoolSize` is also a shipped advanced resource knob (`packages/client/src/react/screens/ResourceAdvancedKnobs.tsx`) whose prefs value reaches the engine ONLY through that env export, and `formatHardwareProfileDetail` prints the resolved number. Deleting the line outright would have left a setting the UI shows and nothing reads. The export is therefore kept for `sources.workerPoolSize.source === "prefs"` alone; with the preset entries gone, the default has exactly one source and the two numbers can no longer disagree.
+- **A run cap, because a fresh graph is not free.** Each run imports the handler under a per-run URL and Node's module registry never drops one, so a reused thread grows with its age. `MAX_RUNS_PER_WORKER = 64` retires a thread before `resourceLimits` would kill it mid-run and fail a member's request.
+- **The worker reports the lane it installed.** The parent's seed/handler classification is only an acquire hint; the pool parks under the key the worker sends back, so a hint that ever diverged could cost a thread but could never leak a seed's filesystem grant into an ordinary handler's run.
+- **Compiled handlers are generated, not committed.** Committing 184 esbuild bundles would have needed formatter and linter exclusions — repo-wide toolchain config this lane does not own — and would have put a build artifact in `files[]`, which `docs/traps/manifest-regeneration.md` bans. Generated + gitignored + declared as a turbo output matches `apps/web/public/centraid-worker-iroh.js`.
+
+### Verification
+
+```sh
+bash $S/self-audit.sh 922 origin/claude/922-handlers   # gate tree 9731f8d9a950e6ef428afaf770e0a236b909ddb2; the landed tree differs from it by this line alone
+bun run --cwd packages/server typecheck
+bun run --cwd packages/server test
+bun run --cwd packages/blueprints test
+node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/composite-load.scale.test.ts
+bash .governance/run.sh
+```
+
+Demonstrated red, both new isolation properties, seeded by reverting one line each:
+
+- `scrubHandlerGlobals()` commented out → `sandbox-escape.test.ts` "no module state and no planted global survive into the next run" fails with `expected { seen: 1, stash: 2 } to strictly equal { seen: 1, stash: 1 }`.
+- the per-run `?centraid-run=` URL reverted to the bare one → `handler-pool.test.ts` "a reused thread still gives every run a fresh handler graph and a clean global" fails with `expected { seen: 2, leak: 1, thread: 1 } to strictly equal { seen: 1, leak: 1, thread: 1 }`.
+
+### Findings
+
+- **`Dispatcher.invalidate()` has no caller anywhere in `packages/server/src`.** Its docstring says "Call when a version is activated", and nothing does; the mtime check was the only invalidation and is now the mtime check plus a 500 ms window. Publishing an app version writes into a STABLE `codeDir` (`worktree-store.ts#resolveActiveAppDir` returns `<activeMainDir>/apps/<id>`), so the cache cannot be dropped by key change either. Not fixed here — wiring the publish path to the dispatcher is a `serve/` seam this lane was not given.
+- **Base drift in `packages/blueprints/manifest.json`.** `bun run build` regenerates it with two entries the checked-in copy lacks (`notes/queries/history.test.ts`, `docs/queries/history.test.ts`, both added by the branch's base commit `f782cfb6d`). Reverted rather than carried, per the wave's base-drift rule.
+- **`compositeLoadFactor.ceilingWorstLaneP95Ms` (3500) is now loose** against an observed 646.7–754.3 ms. A tightening, not taken here: it is not this lane's budget and a flaky ceiling is worse than a loose one.
+- **A pool full of one key never serves another.** `acquire` falls back to a fresh thread when no idle spare matches, and does not evict a mismatched spare to make room. Harmless while app seeds are rare and every automation lane is `automation-handler`, and visible the moment a household runs two lanes hot.
