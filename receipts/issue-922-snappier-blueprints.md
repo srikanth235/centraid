@@ -2031,3 +2031,7 @@ bash .governance/run.sh                                 # 22/22
 
 `apps/mobile/navigators.tsx` is loaded only through `import()` in `lazy-navigators.tsx`, so knip's static graph never saw the seven stack exports. It is a composition-root module (same reason it sits beside `App.tsx`); `knip.json` now lists it as an entry, which is what a dynamically imported public API is. `lazy-navigators.tsx` is added to `project` so the file is still scanned.
 
+## CI-green — the activity ledger's flatten is tested
+
+`apps/mobile/src/apps/tally/ActivityView.test.tsx` draws one expense and one settlement through `SeatList`, so the day-heading flatten and both row kinds are covered. `nativeLinkTicketDoor` in `grant-seat.test.ts` covers the mint / refuse / missing-vault branches the diff-coverage floor named.
+

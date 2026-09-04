@@ -94,3 +94,4 @@ CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux
 
 `knip.json` is named here only because this is the added receipt; it is described and owned by `receipts/issue-922-snappier-blueprints.md`.
 
+`apps/mobile/src/apps/tally/ActivityView.test.tsx` is named here only because this is the added receipt; it is described and owned by `receipts/issue-922-snappier-blueprints.md`.

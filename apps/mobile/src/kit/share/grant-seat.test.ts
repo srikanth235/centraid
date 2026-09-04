@@ -17,16 +17,28 @@ import {
 import { isGrantUnreachable } from "@centraid/blueprints/apps/_shared/grant-door";
 import { grantWireCalls } from "@centraid/blueprints/apps/_shared/grant-transport";
 
-import { nativeGrantDoor, nativeGrantHttp } from "./grant-seat";
+import {
+  LINK_TICKET_UNAVAILABLE_HERE,
+  nativeGrantDoor,
+  nativeGrantHttp,
+  nativeLinkTicketDoor,
+} from "./grant-seat";
 
 /** The shared wire law over THIS seat's addressed, credentialed requests. */
 const nativeWire = (baseUrl: string) =>
   grantWireCalls(nativeGrantHttp(baseUrl));
 
+const mintLinkTicket = vi.hoisted(() =>
+  vi.fn<(baseUrl: string, vaultId: string) => Promise<unknown>>()
+);
+
 vi.mock(
   import("../../lib/gateway"),
   () => ({ apiHeaders: () => ({ Authorization: "Bearer test" }) }) as never
 );
+vi.mock(import("../../lib/replica/links-transport"), () => ({
+  mintLinkTicket,
+}));
 
 const BASE = "http://127.0.0.1:4599";
 
@@ -379,6 +391,56 @@ describe("the native grant transport", () => {
       stubFetch(() => ({ status: 403, body: { error: "denied", message } }));
       const outcome = await nativeGrantDoor(BASE).create(REQUEST);
       expect(outcome).toStrictEqual({ ok: false, message, reach: "refused" });
+    });
+  });
+});
+
+describe("the native link-ticket door", () => {
+  afterEach(() => {
+    mintLinkTicket.mockReset();
+  });
+
+  test("without a vault it names the missing ceremony, and does not mint", async () => {
+    await expect(
+      nativeLinkTicketDoor(BASE, undefined)()
+    ).resolves.toStrictEqual({
+      ok: false,
+      message: LINK_TICKET_UNAVAILABLE_HERE,
+    });
+    expect(mintLinkTicket).not.toHaveBeenCalled();
+  });
+
+  test("a minted ticket is the gateway's own string and expiry", async () => {
+    mintLinkTicket.mockResolvedValue({
+      ticket: "tkt-1",
+      expiresAt: "2026-09-04T00:15:00.000Z",
+    });
+    await expect(
+      nativeLinkTicketDoor(BASE, "vault-1")()
+    ).resolves.toStrictEqual({
+      ok: true,
+      ticket: { ticket: "tkt-1", expiresAt: "2026-09-04T00:15:00.000Z" },
+    });
+    expect(mintLinkTicket).toHaveBeenCalledWith(BASE, "vault-1");
+  });
+
+  test("a payload the wire guard refuses is unavailability, not a throw", async () => {
+    mintLinkTicket.mockResolvedValue({ ticket: "tkt-1" });
+    await expect(
+      nativeLinkTicketDoor(BASE, "vault-1")()
+    ).resolves.toStrictEqual({
+      ok: false,
+      message: LINK_TICKET_UNAVAILABLE_HERE,
+    });
+  });
+
+  test("the gateway's own refusal words ride through, verbatim", async () => {
+    mintLinkTicket.mockRejectedValue(new Error("this vault will not mint"));
+    await expect(
+      nativeLinkTicketDoor(BASE, "vault-1")()
+    ).resolves.toStrictEqual({
+      ok: false,
+      message: "this vault will not mint",
     });
   });
 });
