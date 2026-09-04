@@ -2021,3 +2021,56 @@ Nothing on screen changes shape: a queued, parked, conflicted or denied row stil
 First-run: nothing new appears on a first run — a fresh vault has no queued writes and no offline-created parents.
 
 `check:ui-receipt` fires on this diff (surfaces under `packages/blueprints/apps/**`, `apps/mobile/src/apps/**` and `packages/client`) and asks for a screenshot from a changed e2e harness. This slice changes no e2e harness — the visible states are unchanged by construction, which is what the six `states.test.tsx` suites assert — so no screenshot is fabricated here; CI must run `bun run test:e2e` (web, `CENTRAID_E2E_CHROMIUM`) and the mobile evidence lane against this branch.
+
+## Mega-lane E slice 2 — mobile reads (E2/E3/E5/E4 + C4's counter)
+
+| File | Change |
+| --- | --- |
+| `apps/mobile/src/kit/hooks/useReplicaQuery.ts` | `mapReplicaRows` carries the envelope's `oversizedFields` and `replicaFieldUnavailable` turns one into a sentence; `readDependsOn` filters the mounted session's app-wide invalidations down to the reads that depend on them |
+| `apps/mobile/src/lib/replica/offline-budgets.ts` | `MOBILE_ENTITY_READ_WINDOW` (5,000) — the year-3 window a whole-entity screen read declares |
+| `apps/mobile/src/apps/{people/usePeople,agenda/useAgenda}.ts` | 22 reads move off `acceptTruncation` (the default 1,000) onto the declared window |
+| `apps/mobile/src/kit/hooks/useReplicaQuery.reads.test.tsx` | the counter: eight apps' real read sets, one write each, and the bootstrap burst |
+| `apps/mobile/src/kit/hooks/replica-read-windows.test.ts` | the census: every `useReplicaQuery` call site on the phone declares a window, inline or through a shared request module |
+| `tests/scale/mobile-screen-reads.scale.test.ts` | People and Agenda at 5,000 rows a vault over two mounted vaults |
+| `tests/perf/replica-sync-io.perf.test.ts` | follows `IntentQueue.overlayMutations` to `overlay()` — the rename slice 1 made, whose one remaining caller lived outside that slice's tree |
+
+| Number (screen re-reads per event) | Before | After | Provenance |
+| --- | --- | --- | --- |
+| One write on the app → screen re-reads, by app | agenda 11 · docs 4 · locker 2 · notes 6 · people 6 · photos 6 · tally 4 · tasks 3 | **1** each | `useReplicaQuery.reads.test.tsx`, demonstrated red below; container 4 cores / 15 GB |
+| Agenda's first paint + its bootstrap invalidation burst (11 batches) | 121 reads | 11 reads | same file, "a bootstrap burst costs one re-read per CHANGED entity"; Docs' equivalent is 16 → 4, so Agenda is now the same order as Docs rather than 7.5× it |
+| Photos: a `core.place` rename → reads | 6 (the whole library reparsed) | 1 (`core.place`) | same file, "a change to one entity does not reparse the rest of the library" |
+| A purge → reads | all | all | unchanged and asserted: a purge removes the plane every read stands on |
+| People/Agenda rows returned at 5,000 a vault | 1,000 (silently the default window) | 5,000, `truncated: true` | `tests/scale/mobile-screen-reads.scale.test.ts`, 10,000 rows over two mounted vaults |
+| Statements per screen read at 5,000 rows a vault | — | ≤ 12 (`2 scopes + k`, constant in library size) | same rig, counting driver over the production reader |
+| `useReplicaQuery` call sites declaring a window | 121 total, 33 through a shared module | 121, all declared | `replica-read-windows.test.ts` |
+
+**Demonstrated red.** With the dependency filter replaced by `if (invalidations.length > 0)` — the behaviour before this slice — nine of the counter's cases fail with exactly the before-numbers above (`expected [ 'core.event', …(10) ] to strictly equal [ 'core.event' ]`, and the burst at `…(120)`). Restored, all 14 pass.
+
+**Deleted/replaced.** `acceptTruncation: true` on People's and Agenda's 22 whole-entity reads, replaced by the declared year-3 window; the app-wide invalidation subscription in the hook, replaced by the read's own dependency.
+
+**Decisions.** The filter is on ENTITY, not shape or row: an invalidation carries a `rowId` only sometimes (`ReplicaDependency` says absent means the whole entity), and a read whose entity moved must re-run whatever row it was. A purge re-reads everything on purpose. The window is one constant for both screens rather than one per entity: 5,000 is the year-3 volume in `tests/scale`'s own table, and a per-entity window would be a second place to keep it.
+
+```
+bun run --cwd apps/mobile typecheck
+bun run --cwd apps/mobile test src/apps src/kit src/screens   # 203 files
+bun run test:scale tests/scale/mobile-screen-reads.scale.test.ts
+```
+
+**Findings.** (1) The eleven whole-entity reads Agenda holds are still eleven reads: the filter stops them re-running together, but a day view that reads every attendee, tag and concept in the vault to draw one day is a shape question this lane did not open. (2) `replicaFieldUnavailable` has no screen consumer yet — the notes/docs body paths still render an oversized column as empty text; the row now CARRIES the fact, so wiring it is a one-line change per surface, and it belongs with whoever owns those screens.
+
+**Doc debt.** `docs/mobile-offline.md` describes the phone's reads as accepting the default window; that sentence is now wrong for People and Agenda (fixed in slice 4, which owns that file's Tally rows).
+
+**Full paths for coverage:** `apps/mobile/src/apps/agenda/useAgenda.ts`, `apps/mobile/src/apps/people/usePeople.ts`, `apps/mobile/src/kit/hooks/useReplicaQuery.ts`, `apps/mobile/src/lib/replica/offline-budgets.ts`, `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`, `apps/mobile/src/kit/hooks/useReplicaQuery.reads.test.tsx`, `tests/scale/mobile-screen-reads.scale.test.ts`, `tests/perf/replica-sync-io.perf.test.ts`
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| The filter drops an invalidation a screen needed, so a row lands and the screen never shows it | ran the counter with a purge, with an overlay invalidation on the written entity, and with a canonical invalidation on each of Agenda's eleven entities in turn; then the whole mobile suite (203 files) including every screen test that asserts a change reaching a list | held — a purge still re-reads all eleven, every entity re-reads its own read, and nothing else moved |
+| The declared 5,000 window makes a phone read 5,000 rows where it used to read 1,000 and pay for it | measured the rig: the page is one statement over the union at any size, ≤ 12 statements per read at 10,000 rows across two vaults, and the whole eight-read pass runs in under a second on this container | held — the cost is proportional to the answer, and the answer is what the member asked to see |
+
+## User impact
+A roster of 5,000 people is a roster of 5,000 people: People and Agenda were reading the first 1,000 rows and saying so in one line most members never read, and they now ask for the whole year-3 window. And the phone stops re-reading a screen for changes that have nothing to do with it — renaming a place no longer re-reads the photo library, and an edited event no longer re-runs all eleven of Agenda's reads. On a busy sync that is the difference between a screen that stutters and one that does not.
+
+First-run: a fresh device shows the same empty states; the window only matters once a vault has more than a thousand rows of anything.
+
+`check:ui-receipt` fires on `apps/mobile/src/apps/**`; this slice changes no e2e harness (the visible states are unchanged — the same rows, drawn fewer times), so no screenshot is fabricated. CI must run the mobile evidence lane against this branch.

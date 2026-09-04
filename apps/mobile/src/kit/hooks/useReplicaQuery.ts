@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { attachPendingSidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
-import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
+import {
+  fieldNotOnThisDevice,
+  truncatedListNotice,
+} from "@centraid/blueprints/apps/_shared/shared-copy";
 import { UnboundedReplicaReadError } from "@centraid/client/replica/native";
 import type {
+  ReplicaInvalidation,
   ReplicaRow,
   ReplicaReadWireResult,
 } from "@centraid/client/replica/native";
@@ -37,6 +41,9 @@ function latestSync(scopes: ReplicaContextValue["scopes"]): string | undefined {
     .sort((a, b) => b.localeCompare(a))[0];
 }
 
+/** Columns this device does not hold, carried on the mapped row (#922 E2). */
+export const REPLICA_OVERSIZED_FIELDS = "__oversizedFields";
+
 /**
  * Project a wire result into `{ ...values, __rowId }` rows. Pure and exported
  * so the identity-stability contract (one mapped array per underlying result,
@@ -45,13 +52,60 @@ function latestSync(scopes: ReplicaContextValue["scopes"]): string | undefined {
  * Every row carries the read's ONE pending sidecar (#922 G3) — one object for
  * the whole result, so a row a queued write projected can be read with
  * `readPendingOverlay(row, pendingSidecarOf(row))` wherever it lands.
+ *
+ * It also carries the envelope's `oversizedFields`. Dropping them (as this did)
+ * is how a lazily-loaded column reads as `undefined` on a hook-based screen —
+ * indistinguishable from an empty value, which is the silent absence 0a exists
+ * to refuse. `replicaFieldUnavailable` turns it back into a sentence.
  */
 export function mapReplicaRows(
   result: ReplicaReadWireResult | undefined
 ): Array<ReplicaRow & { __rowId: string }> {
   const sidecar = result?.pending ?? {};
   return (result?.rows ?? []).map((row) =>
-    attachPendingSidecar({ ...row.values, __rowId: row.rowId }, sidecar)
+    attachPendingSidecar(
+      {
+        ...row.values,
+        __rowId: row.rowId,
+        ...(row.oversizedFields.length > 0
+          ? { [REPLICA_OVERSIZED_FIELDS]: [...row.oversizedFields] }
+          : {}),
+      },
+      sidecar
+    )
+  );
+}
+
+/**
+ * Why a column on a mapped row is absent, or undefined when it is simply not
+ * set. A screen reading a lazy field asks this before drawing a blank.
+ */
+export function replicaFieldUnavailable(
+  row: Readonly<Record<string, unknown>> | undefined,
+  column: string
+): string | undefined {
+  const oversized = row?.[REPLICA_OVERSIZED_FIELDS];
+  return Array.isArray(oversized) && oversized.includes(column)
+    ? fieldNotOnThisDevice(column)
+    : undefined;
+}
+
+/**
+ * Does this read depend on what just changed (#922 E3)?
+ *
+ * A mounted session reports every invalidation the whole APP produced, so a
+ * screen holding eleven reads used to re-run all eleven when one entity moved
+ * — the phone's own read amplification, paid once per invalidation batch. A
+ * read depends on its own entity and on nothing else; a purge is the exception
+ * because it removes the plane every read stands on.
+ */
+export function readDependsOn(
+  request: NativeReadRequest,
+  invalidations: readonly ReplicaInvalidation[]
+): boolean {
+  return invalidations.some(
+    (invalidation) =>
+      invalidation.source === "purge" || invalidation.entity === request.entity
   );
 }
 
@@ -131,12 +185,15 @@ export function useReplicaQuery(
     // as many re-renders; the burst says nothing an individual signal doesn't,
     // so it collapses into one read after the batch settles.
     const coalesced = coalesceWork(refresh, REPLICA_INVALIDATION_WINDOW_MS);
-    const unsubscribe = session.subscribe(appId, coalesced.signal);
+    // One entity change re-runs only the reads that depend on it (#922 E3).
+    const unsubscribe = session.subscribe(appId, (invalidations) => {
+      if (readDependsOn(request, invalidations)) coalesced.signal();
+    });
     return () => {
       coalesced.cancel();
       unsubscribe();
     };
-  }, [appId, refresh, session]);
+  }, [appId, refresh, request, session]);
 
   // Map once per underlying result — a fresh array identity every render would
   // defeat every downstream memo (a 50k merge/re-sort on each selection tap).
