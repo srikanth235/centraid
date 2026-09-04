@@ -33,11 +33,11 @@ const answers = {
   search: vi.fn<(term: string) => Promise<unknown>>(),
 };
 
-// The gateway door, replaced wholesale. The cast is the mock's: every handler
+// The read door, replaced wholesale. The cast is the mock's: every handler
 // answers `unknown` here because each test supplies the shape it needs, and a
 // factory typed to the real payloads would make every fixture a full payload.
 vi.mock(
-  import("./tally-gateway"),
+  import("./tally-reads"),
   () =>
     ({
       EXPORT_WINDOW: 2000,
@@ -48,7 +48,7 @@ vi.mock(
       tallyGroup: (groupId: string) => answers.group(groupId),
       tallyHistory: (expenseId: string) => answers.history(expenseId),
       tallySearch: (term: string) => answers.search(term),
-    }) as unknown as typeof import("./tally-gateway")
+    }) as unknown as typeof import("./tally-reads")
 );
 
 const {
@@ -106,21 +106,19 @@ describe("the Tally read plane", () => {
     });
 
     it("stays not-loaded when the read failed — an outage is not an empty vault", async () => {
-      answers.dashboard.mockRejectedValue(new Error("gateway unreachable"));
+      answers.dashboard.mockRejectedValue(new Error("replica not mounted"));
       await openTally();
       const state = readTallyVault();
       expect(state.loaded).toBe(false);
-      expect(state.readError).toContain("gateway unreachable");
+      expect(state.readError).toContain("replica not mounted");
       expect(state.dashboard.friends).toStrictEqual([]);
     });
 
-    it("lands the payload and stamps when it matched", async () => {
+    it("lands the payload", async () => {
       answers.dashboard.mockResolvedValue(DASHBOARD);
       await openTally();
       const state = readTallyVault();
       expect(state.loaded).toBe(true);
-      expect(state.stale).toBe(false);
-      expect(state.lastReadAt).not.toBeNull();
       expect(state.dashboard.owed_total_minor).toBe(8100);
     });
 

@@ -2176,6 +2176,44 @@ bun run --cwd packages/client test src/replica/order-census.test.ts   # red firs
 **Full paths for coverage** (this lane's two slices, spelled out): `packages/client/src/react/blueprints/inline-change-batch.ts`, `packages/client/src/react/blueprints/inline-change-batch.test.ts`, `packages/client/src/react/blueprints/inline-change-feed.test.ts`, `packages/client/src/react/blueprints/centraid-inline.ts`, `packages/client/src/replica/shell-session.ts`, `packages/client/src/replica/shell-session-lifecycle.test.ts`, `packages/client/src/replica/read-plan.ts`, `packages/client/src/replica/read-plan-clauses.ts`, `packages/client/src/replica/store-core.ts`, `packages/client/src/replica/order-census.test.ts`, `packages/vault/src/replica/change-log.ts`, `packages/vault/src/replica/change-log-statement-cache.test.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `tests/journeys.json`.
 
 **Doc debt.** `docs/traps/` has no entry for the census index's spelling rule (the index expression and the probe expression must be byte-identical); `docs/mobile-offline.md` states the replica's per-write index cost without the census index (this slice).
+## Mega-lane E slice 4a — Tally on the phone (E7, the Metro ruling's tail)
+
+| File | Change |
+| --- | --- |
+| `apps/mobile/src/apps/tally/tally-reads.ts` | new: the seven `queries/*.ts` modules the web seat runs, run here against the mounted replica; the module-level read plane the frame attaches |
+| `apps/mobile/src/apps/tally/tally-gateway.ts` | **deleted** — seven gateway read RPCs |
+| `apps/mobile/src/apps/tally/tally-store.ts` | reads through `tally-reads.ts`; `STALE_AFTER_MS`, the staleness verdict and `lastReadAt` deleted; the tick now only turns the day over |
+| `apps/mobile/src/apps/tally/useTallyVault.ts` | the frame attaches the session, takes the spine read, and re-reads on the app's own invalidations (coalesced at 120 ms) |
+| `apps/mobile/src/apps/tally/{tally-view-model,TallyNotice,TallyHome}.tsx?` | the `stale` designed state leaves this seat with its clock |
+| `apps/mobile/src/lib/replica/inline-query-ctx.native.ts` | `withoutScopeProvenance` — precondition (b): `__centraid*` is stripped from the ENVELOPE before `guardedRow` wraps it, so no handler can emit this seat's bookkeeping |
+| `apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts` | new: the one seeded ledger both parity oracles read |
+| `apps/mobile/src/apps/tally/tally-airplane.test.ts` | new: `lib/gateway` replaced by a module that throws from every door; the dashboard still lands complete |
+| `tests/integration-mobile/tally-balance-parity.integration.test.ts` | new: phone vs web, same rows, strict equality of the whole payload |
+| `docs/mobile-offline.md` · `docs/decisions.md` | the Tally read carve-out and the SB-loader row said the opposite of the code; both rows corrected |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Tally reads that need a reachable gateway | 7 of 7 | **0 of 7** | `tally-reads.ts` holds no network door; `tally-airplane.test.ts` proves it with `lib/gateway` throwing |
+| Tally's dashboard, phone vs web, on the same 40-expense ledger | not comparable (RPC) | **identical payload** | `tally-balance-parity.integration.test.ts`, strict equality over the JSON projection plus per-friend nets |
+| `__centraid*` keys in a handler's payload on the phone | 6 on every spread row | **0** | same file, and `inline-query-ctx.native.test.ts` now asserts strict equality with no filtering |
+| Tally's stale clock | 10 min, re-examined every 30 s | **deleted** | `tally-store.ts`; the 30 s tick remains only to turn the day heading over |
+| Screen re-reads per Tally write | 1 refresh call per writer | 1 coalesced re-read per invalidation batch | `useTallyVault.ts` |
+
+**Deleted/replaced.** `tally-gateway.ts` whole (the seat's read fork), replaced by `tally-reads.ts` running the canonical query modules. `STALE_AFTER_MS` and the `stale` screen state on this seat, replaced by nothing: a read of this device's own replica is as current as the device is, and a replica behind the vault is `offline`/coverage on the frame, which already outranks. The spike test's row-array reference and its `withoutProvenance` filter, replaced by an unfiltered comparison plus a "no provenance anywhere" assertion.
+
+**Decisions.** (1) The read plane is attached module-level rather than threaded through fifteen screens, matching `tally-store.ts`'s own reason: the plane is process memory, and a provider would let a remount hand a subtree a session the member has navigated away from. (2) The phone does NOT copy the shell's payload-level pending sidecar: the shell attaches it to carry pending-row identity across a projection, the phone's rows carry it themselves. It is a symbol, so it crosses no JSON — the parity oracle compares what reaches a surface and says so. (3) The parity test loads `queries/dashboard.ts` and the shell's `inlineQueryCtx.ts` through a specifier tsc cannot follow. Both are resolvable at run time and neither is describable in `tests/tsconfig.json`; widening a type-checker config for one test was the alternative and is worse.
+
+```
+bun run --cwd apps/mobile typecheck && bunx tsc -p tests --noEmit
+bun run --cwd apps/mobile test                      # 280 files
+bun run test:integration:mobile tally-balance-parity
+```
+
+**Findings.** (1) **Locker's list cannot follow Tally without a ruling.** `packages/blueprints/apps/locker/queries/items.ts` gates on `ctx.vault.authenticate`, which the inline ctx rejects as online-only by construction, so the list query cannot run on a phone as it stands. `search.ts` and `trash.ts` use `ctx.vault.read` alone and can. The non-weakening shape is for the NATIVE ctx to answer `authenticate` with the same online `lockerAuth` call the seat makes today while `read` stays local — the gate unchanged and online, the rows local — but that is a security seam and it is the root's call, not this lane's. Slice 4b is blocked on it. (2) The two seats' post-processing differs (decision 2); nothing derived differs, but a future payload-level field on one seat would not be caught by a JSON comparison.
+
+**Doc debt.** None for this slice — both rows this change made actively wrong are corrected in it.
+
+**Full paths for coverage:** `apps/mobile/src/apps/tally/tally-reads.ts`, `apps/mobile/src/apps/tally/tally-gateway.ts`, `apps/mobile/src/apps/tally/tally-store.ts`, `apps/mobile/src/apps/tally/tally-store.test.ts`, `apps/mobile/src/apps/tally/useTallyVault.ts`, `apps/mobile/src/apps/tally/tally-view-model.ts`, `apps/mobile/src/apps/tally/tally-view-model.test.ts`, `apps/mobile/src/apps/tally/TallyNotice.tsx`, `apps/mobile/src/apps/tally/TallyHome.tsx`, `apps/mobile/src/apps/tally/BalancesView.test.tsx`, `apps/mobile/src/apps/tally/WaitingView.test.tsx`, `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx`, `apps/mobile/src/apps/tally/tally-airplane.test.ts`, `apps/mobile/src/lib/replica/inline-query-ctx.native.ts`, `apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts`, `apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts`, `tests/integration-mobile/tally-balance-parity.integration.test.ts`, `docs/mobile-offline.md`, `docs/decisions.md`
 
 ### Falsification
 | Claim at risk | Throwaway check | Result |
@@ -2201,3 +2239,13 @@ bun run --cwd packages/vault test src/replica      # 8 files, 49 tests
 bun run --cwd apps/mobile test src/lib/replica     # 33 files, 223 tests
 CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- perf-waterfall.spec.ts -g "warm switch"   # 107 ms, ceiling 600
 ```
+| "The phone derives the same balances as the web" is really "both sides ran the same empty ledger" | asserted the web side's own numbers before comparing — 40 expenses, 3 friends, non-zero totals — and asserted every friend's net individually, not just the totals | held; a seat that agreed on totals while disagreeing on who owes them would fail the second test |
+| The airplane-mode proof passes because the gateway was never reached rather than because it is unreachable | replaced `lib/gateway` with a proxy that throws from EVERY export, and added a case with no read plane attached at all | held — the four reads land with the gateway throwing, and the unattached case says "mounting" instead of drawing an empty ledger |
+
+## User impact
+Tally on a phone is a ledger you can read on a plane. Every net, share and total was a question for the gateway; the same balance engine now runs on the device, over its own copy of the vault, so opening Tally in a tunnel shows the whole thing instead of a spinner — and the ten-minute "your ledger may be behind" line is gone, because a read of this device's own data cannot be behind itself. Nothing on screen changes shape: the same figures, from the same one engine, arriving without a round trip.
+
+First-run: a device that has not finished mounting the vault says so — "This device has not finished mounting the vault yet." — rather than drawing an empty ledger that reads as settled.
+
+`check:ui-receipt` fires on `apps/mobile/src/apps/tally/**`. This slice changes no e2e harness — the rendered states are unchanged except that `stale` can no longer occur — so no screenshot is fabricated here; CI must run the mobile evidence lane against this branch.
+

@@ -59,7 +59,7 @@ function view(
   return mountBlock(
     <WaitingView
       names={new Map([["ana", "Ana"]])}
-      notice={{ lastReadAt: null, pending: rows.length, state: "ready" }}
+      notice={{ pending: rows.length, state: "ready" }}
       nudges={nudges}
       onVerb={noop}
       sections={tallyWaiting(rows, "owner")}
