@@ -387,9 +387,29 @@ export function Root({
           ...dataRef.current.open,
           ...dataRef.current.logbook,
         ];
-        const pause = (): Promise<void> =>
+        // WAIT ON THE PUSH, NOT A CLOCK (#922 C4). This used to wake every
+        // 50 ms and re-read the board to see whether the completion had
+        // landed — twenty screen reads a second for a change the replica
+        // announces the moment it applies. The deadline is still here; it is
+        // now the only timer.
+        const nextChange = (timeoutMs: number): Promise<void> =>
           new Promise((resolve) => {
-            window.setTimeout(resolve, 50);
+            let settled = false;
+            const stops: (() => void)[] = [];
+            const done = (): void => {
+              if (settled) return;
+              settled = true;
+              window.clearTimeout(timer);
+              for (const stop of stops) stop();
+              resolve();
+            };
+            const timer = window.setTimeout(done, Math.max(timeoutMs, 0));
+            const stop = onDataChange(CHANGE_TABLES, done);
+            // A synchronous fire has already settled; unsubscribe either way.
+            if (stop) {
+              if (settled) stop();
+              else stops.push(stop);
+            }
           });
         const waitForLanded = async (deadline: number): Promise<Task> => {
           const current = landedTask(task, rows()) ?? task;
@@ -399,7 +419,7 @@ export function Root({
           await refresh();
           const landed = landedTask(task, rows());
           if (landed && !isPendingTaskId(landed.task_id)) return landed;
-          await pause();
+          await nextChange(deadline - Date.now());
           return waitForLanded(deadline);
         };
         const target = await waitForLanded(Date.now() + 15_000);

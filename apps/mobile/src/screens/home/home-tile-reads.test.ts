@@ -248,7 +248,17 @@ function pageReads(driver: RecordingDriver): Array<{
   sql: string;
   rows: number;
 }> {
-  return driver.reads.filter((read) => read.sql.includes("AS verdict"));
+  // The ORDER GUARD CENSUS is its own statement since #922 C3, and it also
+  // selects over the union; the PAGE is the one that orders and limits.
+  return driver.reads.filter(
+    (read) => read.sql.includes("AS verdict") && read.sql.includes("LIMIT ?")
+  );
+}
+
+function censusReads(driver: RecordingDriver): string[] {
+  return driver.reads
+    .map((read) => read.sql)
+    .filter((sql) => sql.includes("order_straddle"));
 }
 
 function onePage(driver: RecordingDriver): { sql: string; rows: number } {
@@ -292,11 +302,16 @@ describe("Home tile reads", () => {
     expect(paged.sql).toContain(
       `ORDER BY (verdict = 0) ASC, json_extract(payload_json, '$.${tile.column}') DESC`
     );
-    // The refusal guards ride the same pass: the order column has to be
-    // type-uniform and disclosed across EVERY attached vault, not merely on
-    // the page, and that is a window column rather than a second statement.
-    expect(paged.sql).toContain("order_oversized");
-    expect(paged.sql).toContain("order_straddle");
+    // The refusal guards still span EVERY attached vault, but they ride their
+    // OWN statement (#922 C3): as `OVER ()` window columns on this one they
+    // forced SQLite to materialize the whole union before returning a row, so
+    // neither the limit nor an index could bound the work.
+    expect(paged.sql).not.toContain("OVER ()");
+    const census = censusReads(driver);
+    expect(census).toHaveLength(1);
+    expect(census[0]).toContain("order_oversized");
+    expect(census[0]).toContain("order_straddle");
+    expect(census[0]).toContain("UNION ALL");
     // One arm per attached vault, one page across their union.
     expect(paged.sql.match(/UNION ALL/gu)).toHaveLength(SCOPES.length - 1);
     expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(1);

@@ -8,7 +8,51 @@
  */
 
 import { conflictBaseIsMissing } from "./types.js";
-import type { IntentOutcome, IntentState, ReplicaDenial } from "./types.js";
+import type {
+  IntentOutcome,
+  IntentState,
+  ReplicaDenial,
+  ReplicaIntent,
+} from "./types.js";
+
+/** The states whose optimistic projection is still on screen. */
+export const OVERLAY_STATES = new Set<IntentState>([
+  "queued",
+  "sending",
+  "awaiting-change",
+  "parked",
+  "denied",
+  "conflict",
+  "conflict-base-missing",
+  "expired",
+  "failed",
+]);
+
+/** Still shown and still the member's to act on, retry or not. */
+export function retainedAttention(
+  intent: ReplicaIntent | undefined
+): intent is ReplicaIntent {
+  return (
+    intent?.state === "denied" ||
+    intent?.state === "failed" ||
+    intent?.state === "conflict" ||
+    intent?.state === "conflict-base-missing" ||
+    intent?.state === "expired" ||
+    intent?.state === "parked"
+  );
+}
+
+/** The member can retry it as it stands. */
+export function actionableAttention(
+  intent: ReplicaIntent | undefined
+): intent is ReplicaIntent {
+  return (
+    intent?.state === "denied" ||
+    intent?.state === "failed" ||
+    intent?.state === "conflict" ||
+    intent?.state === "conflict-base-missing"
+  );
+}
 
 /**
  * The structured half of a refusal. #928 fills `code` and `subject` from the

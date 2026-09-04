@@ -72,6 +72,16 @@ export interface ReplicaReadPlan {
   /** Verdict code `n` names `escalations[n - 1]`. */
   escalations: ReplicaEscalation[];
   orderGuards: ReplicaOrderGuard[];
+  /** The guards' own statement; absent when the read is unordered. */
+  orderCensus?: { sql: string; binds: ReplicaBindValue[] };
+  /**
+   * What the store needs to build the ordering index (#922 C3): the column,
+   * the direction the plan asks for, and the tie-break key after it. An index
+   * that disagrees on any of the three leaves a temp b-tree behind.
+   */
+  orderColumn?: string;
+  orderDirection?: "asc" | "desc";
+  orderTieBreak?: string;
   tieCensus?: { sql: string; binds: ReplicaBindValue[] };
   /**
    * The window this answer is bounded by. TRUNCATION IS NEVER SILENT (#922
@@ -145,6 +155,17 @@ export interface ReplicaPlannedRow {
   [guard: string]: unknown;
 }
 
+/** The order guards' verdict row; one per ordered read, from its own statement. */
+export function assertReplicaOrder(
+  census: Record<string, number> | undefined,
+  plan: ReplicaReadPlan
+): void {
+  if (!census) return;
+  for (const guard of plan.orderGuards) {
+    if (census[guard.column] === 1) raise(guard.escalation);
+  }
+}
+
 export interface ReplicaTieCensusRow {
   kept: number;
   distinct_values: number;
@@ -173,9 +194,6 @@ export function assertReplicaPage(
     }
     raise(escalation);
   }
-  for (const guard of plan.orderGuards) {
-    if (first[guard.column] === 1) raise(guard.escalation);
-  }
 }
 
 /** A tie under an opaque primary key makes `ORDER BY ... LIMIT` unstable.
@@ -189,6 +207,18 @@ export function assertReplicaTieCensus(row: ReplicaTieCensusRow): void {
   }
 }
 
+/**
+ * The guards ride their OWN statement, not the paging one (#922 C3).
+ *
+ * As `max(...) OVER ()` window aggregates in the page's select list they made
+ * every ordered read materialize and scan the WHOLE entity before it could
+ * return the first row — `LIMIT 50` and an index on the ordered expression
+ * were both powerless, because a window frame spans the result. Split out,
+ * the paging statement is an indexed range scan of `limit` rows, and the
+ * census is a separate aggregate that reads the index rather than the rows.
+ * The guards themselves are unchanged: same tests, same escalations, still
+ * spanning EVERY source of a composed read.
+ */
 function orderGuards(
   column: string,
   role: "order" | "key",
@@ -202,7 +232,7 @@ function orderGuards(
     escalation: ReplicaEscalation
   ): void => {
     const alias = `${role}_${name}`;
-    select.push(`max(CASE WHEN ${test} THEN 1 ELSE 0 END) OVER () AS ${alias}`);
+    select.push(`max(CASE WHEN ${test} THEN 1 ELSE 0 END) AS ${alias}`);
     guards.push({ column: alias, escalation });
   };
   if (role === "order") {
@@ -228,9 +258,9 @@ function orderGuards(
   const alias = `${role}_straddle`;
   select.push(
     `(max(CASE WHEN ${jsonType(column)} IN (${quoted(TEXT_TYPES)})` +
-      " THEN 1 ELSE 0 END) OVER ()" +
+      " THEN 1 ELSE 0 END)" +
       ` * max(CASE WHEN ${jsonType(column)} IN (${quoted(NUMERIC_TYPES)})` +
-      ` THEN 1 ELSE 0 END) OVER ()) AS ${alias}`
+      ` THEN 1 ELSE 0 END)) AS ${alias}`
   );
   guards.push({
     column: alias,
@@ -339,12 +369,13 @@ export function planComposedReplicaRead(
   const select = [SOURCE_COLUMNS, "verdict"];
   if (composed) select.push(REPLICA_PLAN_SOURCE_COLUMN);
   const guards: ReplicaOrderGuard[] = [];
+  const census: string[] = [];
   const order: string[] = [];
   // Only when a clause can escalate: an unfiltered read keeps index order.
   if (builder.escalations.length > 0) order.push("(verdict = 0) ASC");
   if (request.orderBy) {
     const column = request.orderBy.column;
-    guards.push(...orderGuards(column, "order", schema, select));
+    guards.push(...orderGuards(column, "order", schema, census));
     order.push(`${jsonValue(column)} ${dir === "desc" ? "DESC" : "ASC"}`);
     const visiblePrimaryKey =
       schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY
@@ -352,7 +383,7 @@ export function planComposedReplicaRead(
         : schema.primaryKey;
     if (visiblePrimaryKey !== undefined && visiblePrimaryKey !== column) {
       assertColumn(schema, visiblePrimaryKey);
-      guards.push(...orderGuards(visiblePrimaryKey, "key", schema, select));
+      guards.push(...orderGuards(visiblePrimaryKey, "key", schema, census));
       // Mirrors the canonical read's fixed ASC tie-break; keeps paging stable.
       order.push(`${jsonValue(visiblePrimaryKey)} ASC`);
     }
@@ -390,6 +421,24 @@ export function planComposedReplicaRead(
     binds: [...scanBinds, limit + 1],
     escalations: builder.escalations,
     orderGuards: guards,
+    ...(census.length > 0
+      ? {
+          orderCensus: {
+            sql: `SELECT ${census.join(", ")} FROM (${scan}) WHERE verdict >= 0`,
+            binds: [...scanBinds],
+          },
+        }
+      : {}),
+    ...(request.orderBy
+      ? {
+          orderColumn: request.orderBy.column,
+          orderDirection: dir === "desc" ? ("desc" as const) : ("asc" as const),
+          ...(schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY ||
+          schema.primaryKey === request.orderBy.column
+            ? {}
+            : { orderTieBreak: schema.primaryKey }),
+        }
+      : {}),
     limit,
     limitDefaulted: defaulted,
   };

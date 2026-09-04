@@ -69,12 +69,18 @@ export class NativeReplicaStore implements ReplicaStore {
     return Promise.resolve(this.core.bootstrapBegin(header, options));
   }
 
-  bootstrapPage(
+  /**
+   * The heavy paths take the store core's OFF-THREAD form (#922 E1): on this
+   * seat the core runs in the app's own JS context, so a page applied
+   * synchronously freezes the screen for the whole page. The driver hands the
+   * batch to op-sqlite's thread instead.
+   */
+  async bootstrapPage(
     rows: ReplicaSnapshotRow[],
     advance?: ReplicaBootstrapAdvance
   ): Promise<undefined> {
-    this.core.bootstrapPage(rows, advance);
-    return Promise.resolve(undefined);
+    await this.core.bootstrapPageAsync(rows, advance);
+    return undefined;
   }
 
   bootstrapPreview(cursor: ReplicaCursor): Promise<undefined> {
@@ -87,7 +93,7 @@ export class NativeReplicaStore implements ReplicaStore {
   }
 
   applyChanges(batch: ReplicaChangeBatch): Promise<ApplyChangesResult> {
-    return Promise.resolve(this.core.applyChanges(batch));
+    return this.core.applyChangesAsync(batch);
   }
 
   async read(

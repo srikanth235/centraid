@@ -8,29 +8,24 @@ import { webCryptoDigest, webCryptoIdFactory } from "./digest.js";
 import type { ReplicaDigest, ReplicaIdFactory } from "./digest.js";
 import { ReplicaProtocolError } from "./errors.js";
 import type { IntentRecordStore } from "./intent-record-store.js";
-import { intentVerdict } from "./intent-verdict.js";
+import {
+  OVERLAY_STATES,
+  actionableAttention,
+  intentVerdict,
+  retainedAttention,
+} from "./intent-verdict.js";
+import { mirrorOutbox } from "./outbox-mirror.js";
+import type { OutboxMirror } from "./outbox-mirror.js";
 import { intentPayloadHash } from "./payload-hash.js";
 import type {
   EnqueueIntentInput,
   IntentOutcome,
-  IntentState,
   OptimisticMutation,
   ReplicaBaseVersion,
   ReplicaIntent,
   ReplicaValue,
 } from "./types.js";
 
-const OVERLAY_STATES = new Set<IntentState>([
-  "queued",
-  "sending",
-  "awaiting-change",
-  "parked",
-  "denied",
-  "conflict",
-  "conflict-base-missing",
-  "expired",
-  "failed",
-]);
 /**
  * Intent transitions share one durable queue; preserve outcome order instead
  * of racing state reads and writes for the same optimistic overlay.
@@ -196,30 +191,6 @@ function revisedInput(
   return merged;
 }
 
-function retainedAttention(
-  intent: ReplicaIntent | undefined
-): intent is ReplicaIntent {
-  return (
-    intent?.state === "denied" ||
-    intent?.state === "failed" ||
-    intent?.state === "conflict" ||
-    intent?.state === "conflict-base-missing" ||
-    intent?.state === "expired" ||
-    intent?.state === "parked"
-  );
-}
-
-function actionableAttention(
-  intent: ReplicaIntent | undefined
-): intent is ReplicaIntent {
-  return (
-    intent?.state === "denied" ||
-    intent?.state === "failed" ||
-    intent?.state === "conflict" ||
-    intent?.state === "conflict-base-missing"
-  );
-}
-
 function markSupersededIntent(
   mutations: readonly OptimisticMutation[],
   intentId: string
@@ -287,11 +258,13 @@ export class IntentQueue {
   readonly #idFactory: ReplicaIdFactory;
   readonly #digest: ReplicaDigest;
   readonly #onSupersededRetired: ((intentId: string) => void) | undefined;
+  readonly #mirror: OutboxMirror;
+  /** The mirrored store: every write through it invalidates the overlay. */
+  private readonly store: IntentRecordStore;
 
-  constructor(
-    private readonly store: IntentRecordStore,
-    options: IntentQueueOptions = {}
-  ) {
+  constructor(store: IntentRecordStore, options: IntentQueueOptions = {}) {
+    this.#mirror = mirrorOutbox(store);
+    this.store = this.#mirror.store;
     this.#idFactory = options.idFactory ?? webCryptoIdFactory;
     this.#digest = options.digest ?? webCryptoDigest;
     this.#onSupersededRetired = options.onSupersededRetired;
@@ -379,8 +352,12 @@ export class IntentQueue {
     return updated;
   }
 
+  /**
+   * The overlay every replica read composes over. It comes from the mirror,
+   * so an empty outbox costs no IndexedDB work per read (#922 C1).
+   */
   async pending(): Promise<ReplicaIntent[]> {
-    return this.store.list([...OVERLAY_STATES]);
+    return this.#mirror.pending([...OVERLAY_STATES]);
   }
 
   /** A renderer crash can strand claimed work; replay it with the same id and hash. */

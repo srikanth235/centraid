@@ -1802,3 +1802,49 @@ bun run --cwd apps/mobile test src/lib/replica
 | --- | --- | --- |
 | The tripwire passes because it silently reads nothing, not because the apps are clean | asserted the scanned app list, a non-zero destructive total, and that every destructive action of every app is accounted for as delete + tombstone + excluded; then re-seeded a plain-patch destructive action, an exclusion with no reason, and an action the map never mentions | held — all three seed a finding, and the two parsing bugs that DID make it read nothing were both caught by the real tree, not by the synthetic cases |
 | Widening the intent vocabulary breaks a phone that already holds queued writes | stored all three new verdicts through the real SQLite store and compared `sqlite_master`'s DDL for `replica_intent_outbox` before and after | held — byte-identical DDL; the column is unconstrained TEXT and nothing was rebuilt |
+
+## Mega-lane A slice 3 — client engine (C1–C5 + E1)
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/replica/outbox-mirror.ts` + `.test.ts` | the overlay in memory: an empty outbox costs no IndexedDB work per read, and every non-read invalidates by default |
+| `packages/client/src/replica/{intents,intent-verdict}.ts` | `pending()` reads the mirror; the state policy moved beside the verdict it belongs to |
+| `packages/client/src/replica/store-core.ts` | per-seat `synchronous`; snapshot writes skip the guard and the two search deletes; `INSERT OR REPLACE` for the index entry; schema and order-census memos; the ordering index; off-thread `bootstrapPageAsync`/`applyChangesAsync` |
+| `packages/client/src/replica/read-plan.ts` | the order guards leave the paging statement for their own census |
+| `packages/client/src/replica/wasm-sqlite-driver.ts` | `synchronous=NORMAL` on web and desktop; a prepared-statement cache |
+| `packages/client/src/replica/windowed-bootstrap.ts` | page N+1 is fetched while page N applies |
+| `apps/mobile/src/lib/replica/{op-sqlite,node-sqlite}-driver.ts` | `runBatchAsync`: a write batch on the driver's own thread |
+| `apps/mobile/src/lib/replica/{native-replica-store,multi-vault-reader}.ts` | the phone's heavy paths take the off-thread form; the mounted reader runs the order census too |
+| `packages/blueprints/apps/tasks/app-root.tsx` | the completion waiter waits on the change push, not a 50 ms clock |
+
+Also in this diff, by full path: `packages/client/src/replica/intents.ts`, `packages/client/src/replica/outbox-mirror.test.ts`, `packages/client/src/replica/store-core-storage-lifecycle.test.ts`, `packages/client/src/replica/windowed-bootstrap.test.ts`, `apps/mobile/src/lib/replica/node-sqlite-driver.ts`, `apps/mobile/src/lib/replica/bootstrap-statement-budget.test.ts`, `apps/mobile/src/lib/replica/ordered-read-plan.test.ts`, `apps/mobile/src/lib/replica/off-thread-apply.test.ts`, `apps/mobile/src/lib/replica/reader-statement-budget.test.ts`.
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Outbox reads per replica read, empty outbox (after one warm-up) | 1 IndexedDB `list` (9 indexed `getAll`s) | 0 | `outbox-mirror.test.ts`, counting store calls |
+| Bootstrap statements per row | 5.01 | 1.01 | `bootstrap-statement-budget.test.ts`, 500 rows through the store core on `node:sqlite` with a statement cache |
+| Search-index deletes issued by a bootstrap | one per row | 0 | `store-core-storage-lifecycle.test.ts` |
+| Warm ordered read, 50k-row library, `LIMIT 50` | 131 ms, `USE TEMP B-TREE FOR ORDER BY` | 1 ms, `SEARCH … USING INDEX replica_row_ord_…` with no temp b-tree | throwaway vitest over `ReplicaSqliteStore` on `node:sqlite`, 50 000 `knowledge.note` rows; container 4 cores / 15 GB. Cold read after a write is ~104 ms (the census, once per write batch) |
+| Order-guard censuses per ordered read | 4 window aggregates inside the page | 1 statement, cached until the next write | `ordered-read-plan.test.ts`; `reader-statement-budget.test.ts` classifies it and holds the unchanged 148-statement cold-start ceiling |
+| Longest JS-thread block, 5 000-row bootstrap page | 33 ms | 13 ms (statement recording only; SQLite runs off-thread) | throwaway sampler over `NativeReplicaStore`, sync driver vs `runBatchAsync` driver |
+| Bootstrap pages fetched while a page applies | 0 | 1 | `windowed-bootstrap.test.ts` — page 2 applies with page 3's request already made |
+| Screen re-reads per second while a repeating task settles | 20 | 0 (one per change push) | the 50 ms poll in `tasks/app-root.tsx` is deleted |
+
+**Deleted/replaced.** The 50 ms pending poll and its `pause()`; the per-row version SELECT and the two search-index deletes on both bootstrap paths; the `DELETE`+`INSERT` pair for a search entry (one `INSERT OR REPLACE`); the `max(...) OVER ()` order guards in the paging statement; the per-row schema lookup. Three tests asserting the superseded shapes were rewritten to the stronger claim they supersede: the bootstrap's search deletes, the home tile's window columns, and the reader's statement shape.
+
+**Decisions.** `synchronous=NORMAL` lands on the WASM seat only (ruling SB-replica-sync); mobile stays `FULL` because B4's phone fsync number does not exist yet, and the driver's absent declaration means `FULL` so a new driver gets the safe answer. The `journal_mode=DELETE` seam was re-judged as C2 asks: nothing depends on DELETE — `op-sqlite-driver.ts`'s own comment describes a reader's SHARED lock BLOCKING the writer under it, which is a cost of DELETE, not a property WAL would break — so the citation is not a justification, and the move to WAL stays gated on B4's number rather than on this seam. The ordering index is created lazily, on the writer's handle, capped at 64 (entity, column, direction, tie-break) combinations.
+
+```
+bun run --cwd packages/client typecheck && bun run --cwd packages/blueprints typecheck && bun run --cwd apps/mobile typecheck
+bun run --cwd packages/client test
+bun run --cwd packages/blueprints test
+bun run --cwd apps/mobile test
+```
+
+**Findings.** (1) The order census is still one scan of the entity per write batch; the design that would remove it is two index probes (`ORDER BY <expr>` ASC and DESC, `LIMIT 1`) reading the type at each end of the ordering index, which is exact for the straddle guard because the index orders by type class. Not landed here: it changes what the guard PROVES, and that wants its own red-first slice. (2) `packages/blueprints/apps/tasks/app-root.tsx` and `apps/mobile/src/lib/replica/multi-vault-reader.ts` are outside this brief's file set; the first is where the named 50 ms poll lives, the second had to run the census or the mounted reader would have lost the escalation the paging statement used to carry. Both are declared here rather than left silent. (3) C4's "≤ 1 screen re-read per write, counter-verified" is NOT proven in this diff — the poll is gone and the push is the only trigger, but no counter test spans the eight apps' seats; it wants a harness this lane does not have.
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| Skipping the version guard on a bootstrap write lets an older row overwrite a newer one | traced both bootstrap paths: single-shot clears every table first, and a windowed page replays the same rows at the same versions from the cursor its walk is pinned to; ran the bootstrap-walk, resume and convergence suites | held — 268 client and 276 mobile files green, including the resumed-walk cases |
+| Moving the order guards out of the paging statement loses the escalation | ran the mounted-reader pushdown cases, which are the ones that escalate; they went RED first, which is how the missing census in `multi-vault-reader.ts` was found, and green after | held — the escalation is now proven on both readers, and a straddling value still refuses after the cache is warm |

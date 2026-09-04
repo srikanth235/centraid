@@ -342,8 +342,12 @@ function household(): {
 function bucket(sql: string): string {
   if (sql.includes("sqlite_master")) return "overlayProbe";
   if (sql.includes("replica_intent_outbox")) return "overlayRows";
-  // The census shares the page's scan, so it has to be recognised first.
+  // Both censuses share the page's scan, so they are recognised first.
   if (sql.includes("count(DISTINCT")) return "tieCensus";
+  // The ORDER GUARDS are their own statement since #922 C3: as window columns
+  // on the page they forced the whole union to materialize before a row came
+  // back, so neither the limit nor an index could bound an ordered read.
+  if (sql.includes("order_straddle")) return "orderCensus";
   if (sql.includes("AS verdict")) return "page";
   if (sql.includes("r.row_id, r.payload_json")) return "overlayTargets";
   if (sql.includes("replica_bootstrap_progress")) return "state";
@@ -409,11 +413,14 @@ describe("mounted reader statement budget (#880)", () => {
         schema: 2,
         overlayProbe: SCOPES.length,
         page: 1,
+        orderCensus: 1,
         state: SCOPES.length,
       });
       // `schema: 2` is the entity-schema union plus the content-hash lookup,
-      // which reads the same table; the second is cached from here on.
-      expect(driver.statements).toHaveLength(2 * SCOPES.length + 3);
+      // which reads the same table; the second is cached from here on. The
+      // order census is ONE more statement for the whole read, not one per
+      // scope: it spans the same union in a single pass.
+      expect(driver.statements).toHaveLength(2 * SCOPES.length + 4);
     } finally {
       reader.close();
     }
@@ -464,6 +471,10 @@ describe("mounted reader statement budget (#880)", () => {
       // per page.
       expect(shapeOf(driver.statements)["other"]).toBeUndefined();
       expect(shapeOf(driver.statements)["page"]).toBe(HOME_COLD_START.length);
+      // One order census per ORDERED read, and Home fires three of them. The
+      // ceiling above is unchanged and still met: the census replaced work
+      // that used to ride the page, it did not add a per-scope round trip.
+      expect(shapeOf(driver.statements)["orderCensus"]).toBe(3);
     } finally {
       reader.close();
     }

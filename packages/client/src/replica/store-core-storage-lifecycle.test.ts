@@ -160,9 +160,12 @@ describe("store-core", () => {
         const searchDeletes = driver.statements.filter((sql) =>
           sql.trim().startsWith("DELETE FROM replica_search WHERE")
         );
-        // One per bootstrapped row plus the delete, and every one of them keyed
-        // on the index's own rowid.
-        expect(searchDeletes.length).toBeGreaterThan(20);
+        // A BOOTSTRAP ISSUES NONE (#922 C2): the tables were just cleared, so
+        // there is no previous entry to clear and the row's index entry is
+        // written with one `INSERT OR REPLACE`. What remains is the one delete
+        // the incremental change asked for — and it, like every other, is
+        // keyed on the index's own rowid.
+        expect(searchDeletes).toHaveLength(1);
         expect(
           searchDeletes.filter((sql) => !sql.includes("WHERE rowid = "))
         ).toStrictEqual([]);

@@ -59,6 +59,26 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
     }
   }
 
+  /**
+   * A whole write batch on op-sqlite's OWN thread, in one transaction (#922
+   * E1). This is what keeps a first-launch bootstrap page from freezing the
+   * app: the JS thread hands the statements over and is free until they land.
+   */
+  async runBatchAsync(
+    statements: readonly { sql: string; bind: readonly ReplicaBindValue[] }[]
+  ): Promise<void> {
+    try {
+      await this.db.executeBatch(
+        statements.map((statement) => [
+          statement.sql,
+          statement.bind as ReplicaBindValue[],
+        ])
+      );
+    } catch (error) {
+      throw asReplicaStorageError(error);
+    }
+  }
+
   /** Off-thread read. Reads only — the write path stays synchronous. */
   async allAsync<T extends object>(
     sql: string,

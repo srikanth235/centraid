@@ -7,7 +7,9 @@ import {
 } from "./errors.js";
 import type { RebootstrapReason } from "./errors.js";
 import { applyOptimisticMutations } from "./query.js";
+import { jsonValue } from "./read-plan-clauses.js";
 import {
+  assertReplicaOrder,
   assertReplicaPage,
   assertReplicaTieCensus,
   planReplicaRead,
@@ -16,6 +18,7 @@ import {
 import type {
   ReplicaOverlayBinding,
   ReplicaPlannedRow,
+  ReplicaReadPlan,
   ReplicaTieCensusRow,
 } from "./read-plan.js";
 import {
@@ -81,6 +84,42 @@ export interface ReplicaSqliteDriver {
    * mid-bootstrap.
    */
   assertCapabilities?: () => void;
+  /**
+   * The `synchronous` level THIS SEAT's storage justifies (ruling
+   * SB-replica-sync). The replica is derived, rebootstrappable state whose
+   * lost commits are re-pulled from the cursor, so a seat whose outbox lives
+   * in a different store — the browser's, in IndexedDB — may run `NORMAL`.
+   * A seat whose outbox shares this file must not: it would be trading the
+   * member's own queued writes for a page-apply saving.
+   *
+   * ABSENT MEANS `FULL`. A new driver gets the safe answer without asking.
+   */
+  synchronous?: "FULL" | "NORMAL";
+  /**
+   * Run a whole write batch OFF THE JS THREAD, in one transaction (#922 E1).
+   *
+   * A first-launch bootstrap page and a reconnect's edits are thousands of
+   * statements; run synchronously they hold the JS thread for the whole
+   * transaction and the app is frozen while they land. A driver that can hand
+   * the batch to its own thread (op-sqlite does) implements this, and the
+   * store ships the page instead of executing it statement by statement.
+   *
+   * ABSENT MEANS SYNCHRONOUS. The store falls back to running the same
+   * statements itself, so a driver without a background thread still works.
+   */
+  runBatchAsync?: (statements: readonly ReplicaStatement[]) => Promise<void>;
+  /**
+   * A driver SHOULD cache prepared statements by SQL text: the store issues a
+   * small fixed set of statements and a bootstrap runs them once per row, so
+   * re-compiling each time is the difference between three statements per row
+   * and thirty.
+   */
+}
+
+/** One statement of a recorded write batch. */
+export interface ReplicaStatement {
+  sql: string;
+  bind: readonly ReplicaBindValue[];
 }
 
 interface MetaRow {
@@ -186,6 +225,23 @@ const FTS_OPTIMIZE_ROW_INTERVAL = 20_000;
  * the range a scoped purge or a trimmed era arrives in.
  */
 const LARGE_DELETION_BATCH = 1_000;
+
+/**
+ * How many ordered columns a replica will index. Eight apps ordering by a
+ * handful of columns each sits far below it; past it the store keeps sorting
+ * rather than letting an unusual read pattern grow the file.
+ */
+const ORDER_INDEX_MAX = 64;
+
+/** A stable, SQL-safe identifier for an (entity, column) pair. */
+function orderIndexSuffix(key: string): string {
+  let hash = 0x811c_9dc5;
+  for (let index = 0; index < key.length; index += 1) {
+    hash ^= key.charCodeAt(index);
+    hash = Math.imul(hash, 0x0100_0193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
 
 /**
  * `replica_row.row_key` is a surrogate INTEGER PRIMARY KEY whose value is also
@@ -298,7 +354,9 @@ export class ReplicaSqliteStore {
   ) {
     this.driver.exec("PRAGMA foreign_keys=ON;");
     this.driver.exec("PRAGMA journal_mode=DELETE;");
-    this.driver.exec("PRAGMA synchronous=FULL;");
+    this.driver.exec(
+      `PRAGMA synchronous=${this.driver.synchronous ?? "FULL"};`
+    );
     this.driver.assertCapabilities?.();
     this.initializeSchema();
   }
@@ -354,7 +412,7 @@ export class ReplicaSqliteStore {
     this.transaction(() => {
       this.clear();
       this.writeShapes(snapshot.shapes);
-      for (const row of snapshot.rows) this.upsert(row);
+      for (const row of snapshot.rows) this.upsert(row, undefined, true);
       this.writeMeta(snapshot, snapshot.cursor);
     });
     this.reclaimFreePages();
@@ -427,9 +485,48 @@ export class ReplicaSqliteStore {
     rows: readonly ReplicaSnapshotRow[],
     advance?: ReplicaBootstrapAdvance
   ): void {
+    this.transaction(() => this.pageWork(rows, advance));
+    this.maybeOptimizeSearchIndex();
+  }
+
+  /**
+   * The same page, applied OFF THE JS THREAD when the driver can (#922 E1).
+   *
+   * The page's writes are recorded rather than executed — since #922 C2 a
+   * snapshot write issues no reads, so recording captures the whole batch —
+   * and handed to the driver's background thread as one transaction. The JS
+   * thread is free for the duration instead of frozen for the page.
+   *
+   * A driver with no background thread runs the synchronous path, so the
+   * behaviour is identical either way; only who is blocked differs.
+   */
+  async bootstrapPageAsync(
+    rows: readonly ReplicaSnapshotRow[],
+    advance?: ReplicaBootstrapAdvance
+  ): Promise<void> {
+    const runBatch = this.driver.runBatchAsync;
+    if (!runBatch) {
+      this.bootstrapPage(rows, advance);
+      return;
+    }
+    const recorded: ReplicaStatement[] = [];
+    this.recording = recorded;
+    try {
+      this.pageWork(rows, advance);
+    } finally {
+      this.recording = undefined;
+    }
+    await runBatch.call(this.driver, recorded);
+    this.maybeOptimizeSearchIndex();
+  }
+
+  private pageWork(
+    rows: readonly ReplicaSnapshotRow[],
+    advance?: ReplicaBootstrapAdvance
+  ): void {
     this.requireBootstrapProgress();
     if (advance) validateCursor(advance.commitCursor);
-    this.transaction(() => {
+    {
       for (const row of rows) {
         const schema = this.schema(row.shapeId, row.entity);
         if (!schema) {
@@ -438,7 +535,10 @@ export class ReplicaSqliteStore {
           );
         }
         this.validateRow(row, schema);
-        this.upsert(row, schema);
+        // A windowed page is a snapshot write too: its rows come from the walk
+        // pinned to page one's cursor, and a resumed page replays the same
+        // rows at the same versions (#922 C2).
+        this.upsert(row, schema, true);
       }
       if (!advance) return;
       // COALESCE, not assignment: the commit cursor belongs to the walk's FIRST
@@ -458,8 +558,7 @@ export class ReplicaSqliteStore {
           advance.commitCursor.seq,
         ]
       );
-    });
-    this.maybeOptimizeSearchIndex();
+    }
   }
 
   /**
@@ -512,6 +611,108 @@ export class ReplicaSqliteStore {
   }
 
   applyChanges(batch: ReplicaChangeBatch): ApplyChangesResult {
+    return this.changeWork(batch, (work) => {
+      this.transaction(work);
+    });
+  }
+
+  /**
+   * The same batch, applied OFF THE JS THREAD when the driver can (#922 E1).
+   *
+   * A reconnect's edits are read-then-write per change, so the version guards
+   * are hoisted into ONE query for the whole batch first; after that the batch
+   * is pure writes and can be recorded and shipped like a bootstrap page.
+   */
+  async applyChangesAsync(
+    batch: ReplicaChangeBatch
+  ): Promise<ApplyChangesResult> {
+    const runBatch = this.driver.runBatchAsync;
+    if (!runBatch) return this.applyChanges(batch);
+    this.loadVersions(batch);
+    const recorded: ReplicaStatement[] = [];
+    let result: ApplyChangesResult;
+    try {
+      result = this.changeWork(batch, (work) => {
+        this.recording = recorded;
+        try {
+          work();
+        } finally {
+          this.recording = undefined;
+        }
+      });
+    } finally {
+      this.versions = undefined;
+    }
+    await runBatch.call(this.driver, recorded);
+    return result;
+  }
+
+  /**
+   * Every row version the batch will need, in one query per (shape, entity)
+   * instead of one per change. Set for the duration of a batched apply; absent
+   * means the guards query as they go.
+   */
+  private versions: Map<string, number> | undefined;
+
+  private loadVersions(batch: ReplicaChangeBatch): void {
+    const byEntity = new Map<
+      string,
+      { shapeId: string; entity: string; rowIds: string[] }
+    >();
+    for (const change of batch.changes) {
+      const key = `${change.shapeId}\u0000${change.entity}`;
+      const bucket = byEntity.get(key) ?? {
+        shapeId: change.shapeId,
+        entity: change.entity,
+        rowIds: [],
+      };
+      bucket.rowIds.push(change.rowId);
+      byEntity.set(key, bucket);
+    }
+    const versions = new Map<string, number>();
+    for (const bucket of byEntity.values()) {
+      const rows = this.all<{ row_id: string; server_version: number }>(
+        `SELECT row_id, server_version FROM replica_row
+          WHERE shape_id = ? AND entity = ?
+            AND row_id IN (SELECT value FROM json_each(?))`,
+        [
+          bucket.shapeId,
+          bucket.entity,
+          JSON.stringify([...new Set(bucket.rowIds)]),
+        ]
+      );
+      for (const row of rows) {
+        versions.set(
+          `${bucket.shapeId}\u0000${bucket.entity}\u0000${row.row_id}`,
+          row.server_version
+        );
+      }
+    }
+    this.versions = versions;
+  }
+
+  private storedVersion(
+    shapeId: string,
+    entity: string,
+    rowId: string
+  ): { server_version: number } | undefined {
+    if (this.versions) {
+      const known = this.versions.get(
+        `${shapeId}\u0000${entity}\u0000${rowId}`
+      );
+      return known === undefined ? undefined : { server_version: known };
+    }
+    return this.one<{ server_version: number }>(
+      `SELECT server_version FROM replica_row
+        WHERE shape_id = ? AND entity = ? AND row_id = ?`,
+      [shapeId, entity, rowId]
+    );
+  }
+
+  private changeWork(
+    batch: ReplicaChangeBatch,
+    runTransaction: (work: () => void) => void
+  ): ApplyChangesResult {
     const completeMeta = this.meta();
     const meta = completeMeta ?? this.previewMeta();
     if (!meta) throw new ReplicaRebootstrapRequiredError("not-bootstrapped");
@@ -524,7 +725,7 @@ export class ReplicaSqliteStore {
     }
 
     const invalidations: ReplicaInvalidation[] = [];
-    this.transaction(() => {
+    runTransaction(() => {
       for (const change of batch.changes) {
         const schema = this.schema(change.shapeId, change.entity);
         if (!schema) {
@@ -608,8 +809,14 @@ export class ReplicaSqliteStore {
       now,
       this.overlay(request, schema, relevant)
     );
+    // The ordering index makes the paging statement a range scan of `limit`
+    // rows instead of a sort of the whole entity (#922 C3).
+    this.ensureOrderIndex(request.entity, plan);
     const probed = this.all<ReplicaPlannedRow>(plan.sql, plan.binds);
     assertReplicaPage(probed, plan);
+    if (plan.orderCensus && probed.length > 0) {
+      assertReplicaOrder(this.orderCensus(plan.orderCensus), plan);
+    }
     // The plan over-fetches by one row; that probe is dropped HERE and reported
     // as `truncated`, never swallowed (#922 0a).
     const page = trimReplicaPage(probed, plan);
@@ -904,6 +1111,7 @@ export class ReplicaSqliteStore {
   }
 
   private writeShapes(shapes: readonly ReplicaShape[]): void {
+    this.schemas.clear();
     for (const shape of shapes) {
       this.run(
         "INSERT INTO replica_shape(shape_id, app_id, purpose) VALUES (?, ?, ?)",
@@ -972,6 +1180,8 @@ export class ReplicaSqliteStore {
   }
 
   private clear(): void {
+    this.schemas.clear();
+    this.invalidateOrderCensus();
     this.driver.exec(`
       DELETE FROM replica_bootstrap_progress;
       DELETE FROM replica_search;
@@ -1097,7 +1307,25 @@ export class ReplicaSqliteStore {
     };
   }
 
+  /**
+   * The catalog is written once per bootstrap and never per row, so looking a
+   * schema up per row was a query the answer of which could not have changed
+   * (#922 E1). Cleared wherever the catalog is.
+   */
+  private readonly schemas = new Map<string, ReplicaEntitySchema | undefined>();
+
   private schema(
+    shapeId: string,
+    entity: string
+  ): ReplicaEntitySchema | undefined {
+    const key = `${shapeId}\u0000${entity}`;
+    if (this.schemas.has(key)) return this.schemas.get(key);
+    const resolved = this.readSchema(shapeId, entity);
+    this.schemas.set(key, resolved);
+    return resolved;
+  }
+
+  private readSchema(
     shapeId: string,
     entity: string
   ): ReplicaEntitySchema | undefined {
@@ -1117,17 +1345,90 @@ export class ReplicaSqliteStore {
     };
   }
 
+  /**
+   * `fromSnapshot` marks a BOOTSTRAP write, where the snapshot is the whole
+   * truth: the tables were cleared (or the page is being replayed from the
+   * same pinned cursor), so the version guard cannot fire and the two
+   * clean-up deletes have nothing to clean. Skipping them takes a bootstrap
+   * from five statements a row to two (#922 C2). On the incremental path they
+   * all still run — there a row's previous state is real.
+   */
+  /**
+   * An expression index over the ordered column, created the first time a read
+   * asks for that order (#922 C3).
+   *
+   * Ordering is `json_extract(payload_json, '$.col')`, which no ordinary index
+   * can serve, so an ordered read sorted the whole entity — 50k rows to return
+   * fifty. The index must spell the expression EXACTLY as the plan does, hence
+   * `jsonValue`, and it carries `shape_id, entity` first so one index serves
+   * every shape.
+   *
+   * Bounded by the columns reads actually order by, and capped: past the cap
+   * the read falls back to the sort rather than growing the file without
+   * limit. Names are derived from the entity and column, never from the wire —
+   * both are checked against the shape catalog before a plan is built.
+   */
+  private readonly orderIndexes = new Set<string>();
+
+  /**
+   * The order guards' verdict, cached until the next write (#922 C3).
+   *
+   * The census asks a question about the STORED VALUES' TYPES — is any of them
+   * oversized, non-scalar, or straddling text and number? — so its answer
+   * changes only when rows change, never between two reads. Computing it per
+   * read made every ordered read O(entity) even with the ordering index doing
+   * the paging in O(limit). `invalidateOrderCensus` runs on every write path.
+   */
+  private readonly orderCensuses = new Map<string, Record<string, number>>();
+
+  private orderCensus(census: {
+    sql: string;
+    binds: ReplicaBindValue[];
+  }): Record<string, number> | undefined {
+    const key = `${census.sql}\u0000${JSON.stringify(census.binds)}`;
+    const hit = this.orderCensuses.get(key);
+    if (hit) return hit;
+    const computed = this.one<Record<string, number>>(census.sql, census.binds);
+    if (computed) this.orderCensuses.set(key, computed);
+    return computed;
+  }
+
+  private invalidateOrderCensus(): void {
+    this.orderCensuses.clear();
+  }
+
+  private ensureOrderIndex(entity: string, plan: ReplicaReadPlan): void {
+    const column = plan.orderColumn;
+    if (column === undefined) return;
+    const direction = plan.orderDirection === "desc" ? "DESC" : "ASC";
+    const tieBreak = plan.orderTieBreak;
+    const key = `${entity}\u0000${column}\u0000${direction}\u0000${tieBreak ?? ""}`;
+    if (this.orderIndexes.has(key)) return;
+    this.orderIndexes.add(key);
+    if (this.orderIndexes.size > ORDER_INDEX_MAX) return;
+    const terms = [
+      "shape_id",
+      "entity",
+      `${jsonValue(column)} ${direction}`,
+      ...(tieBreak === undefined ? [] : [`${jsonValue(tieBreak)} ASC`]),
+      "row_id ASC",
+    ];
+    this.driver.exec(
+      `CREATE INDEX IF NOT EXISTS replica_row_ord_${orderIndexSuffix(key)}
+         ON replica_row(${terms.join(", ")});`
+    );
+  }
+
   private upsert(
     row: ReplicaSnapshotRow,
-    knownSchema?: ReplicaEntitySchema
+    knownSchema?: ReplicaEntitySchema,
+    fromSnapshot = false
   ): void {
     const serverVersion = row.rowVersion ?? 0;
-    const current = this.one<{ server_version: number }>(
-      `SELECT server_version FROM replica_row
-        WHERE shape_id = ? AND entity = ? AND row_id = ?`,
-      [row.shapeId, row.entity, row.rowId]
-    );
-    if (current && current.server_version > serverVersion) return;
+    if (!fromSnapshot) {
+      const current = this.storedVersion(row.shapeId, row.entity, row.rowId);
+      if (current && current.server_version > serverVersion) return;
+    }
     this.run(
       `INSERT INTO replica_row(shape_id, entity, row_id, payload_json, oversized_json, server_version)
        VALUES (?, ?, ?, ?, ?, ?)
@@ -1150,7 +1451,7 @@ export class ReplicaSqliteStore {
         `Row references unknown shape entity ${row.shapeId}/${row.entity}`
       );
     }
-    this.indexRow(row, schema);
+    this.indexRow(row, schema, fromSnapshot);
   }
 
   private deleteRow(
@@ -1160,11 +1461,7 @@ export class ReplicaSqliteStore {
     serverVersion?: number
   ): void {
     if (serverVersion !== undefined) {
-      const current = this.one<{ server_version: number }>(
-        `SELECT server_version FROM replica_row
-          WHERE shape_id = ? AND entity = ? AND row_id = ?`,
-        [shapeId, entity, rowId]
-      );
+      const current = this.storedVersion(shapeId, entity, rowId);
       if (current && current.server_version > serverVersion) return;
     }
     this.indexedSinceOptimize += 1;
@@ -1183,26 +1480,25 @@ export class ReplicaSqliteStore {
     );
   }
 
-  private indexRow(row: ReplicaSnapshotRow, schema: ReplicaEntitySchema): void {
+  private indexRow(
+    row: ReplicaSnapshotRow,
+    schema: ReplicaEntitySchema,
+    fromSnapshot = false
+  ): void {
     this.indexedSinceOptimize += 1;
-    this.run(`DELETE FROM replica_search WHERE rowid = ${SEARCH_ROWID}`, [
-      row.shapeId,
-      row.entity,
-      row.rowId,
-    ]);
-    this.run(
-      "DELETE FROM replica_search_gap WHERE shape_id = ? AND entity = ? AND row_id = ?",
-      [row.shapeId, row.entity, row.rowId]
-    );
     const spec = REPLICA_LOCAL_SEARCH[row.entity];
-    if (!spec) return;
+    if (!spec) return this.unindexRow(row, fromSnapshot);
     const required = replicaSearchRequiredColumns(spec);
-    if (required.some((column) => !schema.columns.includes(column))) return;
+    if (required.some((column) => !schema.columns.includes(column)))
+      return this.unindexRow(row, fromSnapshot);
     const oversized = new Set(row.oversizedFields);
     const unavailable = required.find((column) => oversized.has(column));
     if (unavailable) {
-      this.recordSearchGap(row, `oversized indexed field ${unavailable}`);
-      return;
+      return this.recordSearchGap(
+        row,
+        `oversized indexed field ${unavailable}`,
+        fromSnapshot
+      );
     }
     if (spec.deletedColumn) {
       const deleted = row.values[spec.deletedColumn];
@@ -1211,26 +1507,32 @@ export class ReplicaSqliteStore {
         deleted !== null &&
         typeof deleted === "object"
       ) {
-        this.recordSearchGap(
+        return this.recordSearchGap(
           row,
-          `non-scalar deletion field ${spec.deletedColumn}`
+          `non-scalar deletion field ${spec.deletedColumn}`,
+          fromSnapshot
         );
-        return;
       }
-      if (deleted !== undefined && deleted !== null) return;
+      if (deleted !== undefined && deleted !== null)
+        return this.unindexRow(row, fromSnapshot);
     }
     const parts: string[] = [];
     for (const column of spec.columns) {
       const value = row.values[column];
       if (value === undefined || value === null) continue;
       if (typeof value === "object") {
-        this.recordSearchGap(row, `non-scalar indexed field ${column}`);
-        return;
+        return this.recordSearchGap(
+          row,
+          `non-scalar indexed field ${column}`,
+          fromSnapshot
+        );
       }
       parts.push(String(value));
     }
+    // OR REPLACE, not delete-then-insert: the entry is addressed by the same
+    // rowid either way, so one statement does what two did.
     this.run(
-      `INSERT INTO replica_search(rowid, shape_id, entity, row_id, body)
+      `INSERT OR REPLACE INTO replica_search(rowid, shape_id, entity, row_id, body)
        VALUES (${SEARCH_ROWID}, ?, ?, ?, ?)`,
       [
         row.shapeId,
@@ -1242,11 +1544,43 @@ export class ReplicaSqliteStore {
         parts.join("\n"),
       ]
     );
+    if (!fromSnapshot) this.clearSearchGap(row);
   }
 
-  private recordSearchGap(row: ReplicaSnapshotRow, reason: string): void {
+  /** Drop whatever the search index held for a row that must not be in it. */
+  private unindexRow(row: ReplicaSnapshotRow, fromSnapshot: boolean): void {
+    if (fromSnapshot) return;
+    this.run(`DELETE FROM replica_search WHERE rowid = ${SEARCH_ROWID}`, [
+      row.shapeId,
+      row.entity,
+      row.rowId,
+    ]);
+    this.clearSearchGap(row);
+  }
+
+  private clearSearchGap(row: ReplicaSnapshotRow): void {
     this.run(
-      `INSERT INTO replica_search_gap(shape_id, entity, row_id, reason)
+      "DELETE FROM replica_search_gap WHERE shape_id = ? AND entity = ? AND row_id = ?",
+      [row.shapeId, row.entity, row.rowId]
+    );
+  }
+
+  private recordSearchGap(
+    row: ReplicaSnapshotRow,
+    reason: string,
+    fromSnapshot = false
+  ): void {
+    if (!fromSnapshot) {
+      this.run(`DELETE FROM replica_search WHERE rowid = ${SEARCH_ROWID}`, [
+        row.shapeId,
+        row.entity,
+        row.rowId,
+      ]);
+    }
+    // OR REPLACE so a resumed bootstrap page re-records the same gap instead
+    // of failing on its own primary key.
+    this.run(
+      `INSERT OR REPLACE INTO replica_search_gap(shape_id, entity, row_id, reason)
        VALUES (?, ?, ?, ?)`,
       [row.shapeId, row.entity, row.rowId, reason]
     );
@@ -1382,7 +1716,17 @@ export class ReplicaSqliteStore {
     }
   }
 
+  /** When set, `run` RECORDS instead of executing (see `bootstrapPageAsync`). */
+  private recording: ReplicaStatement[] | undefined;
+
   private run(sql: string, bind: readonly ReplicaBindValue[] = []): void {
+    // EVERY write goes through here, which is why the census cache is dropped
+    // here and not at each call site: a new write path cannot forget to.
+    this.invalidateOrderCensus();
+    if (this.recording) {
+      this.recording.push({ sql, bind: [...bind] });
+      return;
+    }
     this.driver.run(sql, bind);
   }
 
