@@ -308,6 +308,16 @@ export function seedYear3Distributions(
         decision, occurred_at, hash, detail_json, seq)
      VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, ?)`
   );
+  // The chain CONTINUES rather than restarting at 1, so the generator can fill
+  // a vault a live gateway has already written receipts into — founding and
+  // mounting one writes some. On a fresh file MAX(seq) is NULL, the offset is 0
+  // and every seq is `index + 1`, so the golden artifact's bytes are unchanged.
+  const seqOffset =
+    (
+      target.vault
+        .prepare("SELECT MAX(seq) AS seq FROM access_receipt")
+        .get() as { seq: number | null } | undefined
+    )?.seq ?? 0;
   target.vault.exec("BEGIN IMMEDIATE");
   let previousHash = digest("year3-receipt-chain-genesis");
   for (let index = 0; index < distributions.receiptDays; index += 1) {
@@ -322,7 +332,7 @@ export function seedYear3Distributions(
       index % 29 === 0 ? "deny" : "allow",
       at(day),
       previousHash,
-      index + 1
+      seqOffset + index + 1
     );
   }
   target.vault.exec("COMMIT");

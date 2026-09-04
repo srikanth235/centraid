@@ -581,6 +581,15 @@ interface CentraidClient {
     }) => Promise<unknown>;
     revoke: (grantId: string) => Promise<unknown>;
   };
+  /**
+   * Mint a ONE-TIME peer link ticket for this shell's own vault (#929 S6) —
+   * the same `peer_link_tickets` ceremony the People and Settings link rows
+   * use, reached from the share sheet so an unlinked person is not a dead end.
+   * The vault is the shell's, never the caller's: a blueprint app may not
+   * choose which vault mints. Answers the route's parsed body as `unknown`;
+   * `_shared/grant-plane.ts` owns the guard.
+   */
+  linkTicket?: () => Promise<unknown>;
   describe?: () => Promise<unknown>;
   /** Subscribe to the change feed; returns the unsubscribe. */
   onChange: (cb: (detail: CentraidChangeDetail) => void) => () => void;

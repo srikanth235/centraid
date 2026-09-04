@@ -34,7 +34,9 @@
       "home-apps": 720000,
       "sharing": 300000,
       "promoting-suite": 960000,
-      "ios-depth": 1500000
+      "ios-depth": 1500000,
+      "device-rung-android": 2700000,
+      "device-rung-ios": 1500000
     }
   }
 }

@@ -76,6 +76,7 @@ import {
   refreshCachedScopes,
   removeCachedScope,
   resolveIdentity,
+  startCompatibilityWall,
 } from "./replica-mount";
 import {
   attemptedReachability,
@@ -225,11 +226,8 @@ export function ReplicaProvider({
               }
             : await resolveIdentity(activeRef.current);
         if (cancelled) return;
-        // One `/info` read raises the wall and settles the flags, not one per surface.
-        let features = await requireMobileOfflineGateway({
-          baseUrl: identity.auth.baseUrl,
-          online: identity.online,
-        });
+        // Started beside the mount, never ahead of it — the function says why.
+        const wall = startCompatibilityWall(identity);
         const storageLocation = replicaStorageDirectory();
         const scopes = await mountedScopes(identity, storageLocation);
         // BEFORE any stamp or cursor is read. A restored container carries the
@@ -420,6 +418,9 @@ export function ReplicaProvider({
           await facade.close();
           return;
         }
+        // Read now the local replica is open: it refuses a mount, never disk.
+        const mounted = facade;
+        let features = await wall(() => mounted.close());
         // Durable coverage, read at mount and after every pull. Without it a
         // relaunch after a kill mid-backfill renders a truncated library with
         // nothing saying so: the in-process bootstrap that would have reported

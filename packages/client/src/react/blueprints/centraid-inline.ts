@@ -33,6 +33,7 @@ import {
   VAULT_HEADER,
 } from "../../gateway-client-core.js";
 import type { GatewayAuth } from "../../gateway-client-core.js";
+import { mintGatewayLinkTicket } from "../../gateway-client-links.js";
 // Types only — erased at build, so declaring the import doors below never pulls
 // the staged-import transport onto the eager shell graph (see `lazyVaultImports`).
 import type {
@@ -298,6 +299,8 @@ export interface InlineCentraidClient {
   }) => Promise<{ retained: boolean; grantIds: string[] }>;
   links: () => Promise<InlineLinkDestination[]>;
   grants: GrantBridge;
+  /** One-time peer link ticket for THIS shell's own vault (#929 S6). */
+  linkTicket: () => Promise<{ ticket: string; expiresAt: string }>;
   describe: () => Promise<unknown>;
   onChange: (cb: (detail: InlineChangeDetail) => void) => () => void;
   blobUrl: (pathname: string, scope?: string) => Promise<string | null>;
@@ -1094,6 +1097,12 @@ export function createInlineCentraidClient(
     },
 
     grants: lazyGrantBridge(auth),
+
+    // The shell's OWN vault mints, never the caller's: a blueprint app asking
+    // for a ticket must not be able to choose which vault it links (#929 S6).
+    linkTicket() {
+      return mintGatewayLinkTicket(primary.scope.id);
+    },
 
     describe() {
       return Promise.resolve({ commands: [] });

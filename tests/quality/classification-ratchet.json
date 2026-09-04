@@ -1,5 +1,5 @@
 {
-  "approvedDeviation": "#928 re-pins classification fingerprints after the authority-plane migration changed the governed manifest and claim statements; thresholds and classifications are unchanged.",
+  "approvedDeviation": "#928 re-pins classification fingerprints after the authority-plane migration changed the governed manifest and claim statements, and after merging current main's ledger updates; thresholds and classifications are unchanged.",
   "claimsGovernanceFingerprint": "8193ade4715e77add6e3c94c5395d2bee185ba3d9aca69b2cc3fac6cf4030cc9",
   "fingerprints": {
     "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "e7c3fcc3cbbafa3c0e5e36dd10a0e82aa088629fd9d790f00c276d8d630ce3ed",
@@ -8,6 +8,6 @@
     "packages/server/src/serve/health-registry.ts": "14ad4979e4b0adda60f16478522b8edda3606e87caa26a71d389aeaa94b7d4e0",
     "packages/vault/src/schema/sealed.ts": "e1a8cc4118760d1de21cc5e8c1917d71bddf7cb4dbcc8d791d3d39e8f162fb75",
     "tests/quality/fault-points.ts": "2b667efd1354071ab91043ab33f5ebd29cd79a11fcc4716edbe00aeada60f4bd",
-    "tests/claims.json": "fbc9d143305c8138745e9cee99b7d116256af8f3ed0762394f0f6d073152229e"
+    "tests/claims.json": "45448cf851950a9e318360d87deabe4d727c474aaf286251e4d5ee3ea53ebc69"
   }
 }
