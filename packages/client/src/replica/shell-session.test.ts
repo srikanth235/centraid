@@ -1,9 +1,10 @@
-// governance: allow-repo-hygiene file-size-limit pre-existing cohesive session regression suite; decomposition is outside issue #417
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
+// governance: allow-repo-hygiene file-size-limit pre-existing cohesive session regression suite; decomposition is outside issue #417
+import { stablePendingRowId } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import type {
@@ -722,7 +723,7 @@ describe("shell-session", () => {
           action: "complete",
           input: {
             task_id: "task-1",
-            title: "pending:ordinary:content",
+            title: stablePendingRowId("ordinary", "content"),
           },
         })
       ).resolves.toMatchObject({ status: "queued" });
@@ -730,7 +731,7 @@ describe("shell-session", () => {
         expect.objectContaining({
           input: {
             task_id: "task-1",
-            title: "pending:ordinary:content",
+            title: stablePendingRowId("ordinary", "content"),
           },
         })
       );
@@ -757,7 +758,7 @@ describe("shell-session", () => {
         session.write("tasks", {
           action: "add",
           input: {
-            project_id: "pending:intent-project:project",
+            project_id: stablePendingRowId("intent-project", "project"),
             title: "Child of a pending project",
           },
         })
@@ -768,7 +769,7 @@ describe("shell-session", () => {
           appId: "tasks",
           action: "add",
           input: {
-            project_id: "pending:intent-project:project",
+            project_id: stablePendingRowId("intent-project", "project"),
             title: "Child of a pending project",
           },
         })
@@ -788,7 +789,17 @@ describe("shell-session", () => {
       const reviseIntent = vi
         .fn<NonNullable<ShellReplicaCoordinator["reviseIntent"]>>()
         .mockResolvedValue(replacement);
-      const coordinator = fakeCoordinator({ reviseIntent });
+      // #922 G2: the session asks the OUTBOX which queued intent minted the
+      // row this edit names — the id no longer spells it.
+      const coordinator = fakeCoordinator({
+        reviseIntent,
+        pendingIntentForInput: vi
+          .fn<NonNullable<ShellReplicaCoordinator["pendingIntentForInput"]>>()
+          .mockResolvedValue({
+            intentId: "intent-tally-original",
+            expectedActions: ["add-expense", "add-receipt-expense"],
+          }),
+      });
       const session = new ReplicaShellSession(
         { baseUrl: "https://gateway.example", vaultId: "vault" },
         coordinator,
@@ -800,7 +811,7 @@ describe("shell-session", () => {
         schemaEpoch: "s",
       });
       const revision = {
-        expense_id: "pending:intent-tally-original:expense",
+        expense_id: stablePendingRowId("intent-tally-original", "expense"),
         description: "Edited lunch",
         amount_minor: 1_250,
         paid_by: "owner",

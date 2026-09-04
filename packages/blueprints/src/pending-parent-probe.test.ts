@@ -1,22 +1,19 @@
 /*
- * The pending-parent child-write probe (#922 G2).
+ * The pending-parent child-write surface (#922 G2).
  *
- * A member creates a project offline and immediately adds a task to it. The
- * project's row exists only as an overlay under a `pending:` id, so the task's
- * `project_id` carries an id no canonical row will ever have. This probe does
- * not fix that; it MEASURES it — how many actions on the eight apps can take
- * a pending parent id — and holds the count so the surface cannot widen
- * unnoticed while the fix is designed.
+ * A member creates a project offline and immediately adds a task to it. This
+ * probe counts the actions on the eight apps that can take a parent id a
+ * projection minted, and holds the number: with the id minted AT THE SEAT and
+ * honoured by the origin, each of these is a write that now lands pointing at
+ * the row the member is looking at — and a new one appearing is a new place
+ * that has to be true.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import {
-  isPendingRowId,
-  stablePendingRowId,
-} from "../apps/_shared/pending-overlay.js";
+import { stablePendingRowId } from "../apps/_shared/pending-overlay.js";
 
 const APPS = [
   "agenda",
@@ -94,12 +91,20 @@ function probe(): Edge[] {
 }
 
 describe("pending-parent child writes", () => {
-  test("a pending row id is recognizable wherever a child write carries one", () => {
-    expect(isPendingRowId(stablePendingRowId("intent-1", "project"))).toBe(
-      true
+  // #922 G2 answered this probe: a minted id is the row's REAL id, so there is
+  // nothing about its spelling to recognize. It is deterministic in (intent,
+  // suffix) so a replayed intent projects the same row, and it is canonical in
+  // shape so the origin can honour it. Pendingness moved to the overlay's own
+  // column on the row, where a reader can see it.
+  test("a minted row id is canonical in shape and stable across replays", () => {
+    const minted = stablePendingRowId("intent-1", "project");
+    expect(minted).toBe(stablePendingRowId("intent-1", "project"));
+    expect(minted).not.toBe(stablePendingRowId("intent-1", "task"));
+    expect(minted).not.toBe(stablePendingRowId("intent-2", "project"));
+    expect(minted).toMatch(
+      /^[\da-f]{8}-[\da-f]{4}-8[\da-f]{3}-8[\da-f]{3}-[\da-f]{12}$/u
     );
-    expect(isPendingRowId("project-7")).toBe(false);
-    expect(isPendingRowId(undefined)).toBe(false);
+    expect(minted).not.toContain("pending:");
   });
 
   test("the child-write surface is counted and held", () => {
@@ -107,9 +112,10 @@ describe("pending-parent child writes", () => {
     const byApp = new Map<string, number>();
     for (const edge of edges)
       byApp.set(edge.appId, (byApp.get(edge.appId) ?? 0) + 1);
-    // The number this probe exists to report. A new action taking a parent id
-    // a projection mints must move it, which is the point.
-    expect(edges.length).toMatchInlineSnapshot(`66`);
+    // The number this probe exists to report. It moved 66 to 67 when Tasks'
+    // `add` began accepting the id its own projection mints (#922 G2) — a new
+    // action taking a minted id must move it, which is exactly the point.
+    expect(edges.length).toMatchInlineSnapshot(`67`);
     expect([...byApp.entries()].sort()).toMatchInlineSnapshot(`
       [
         [
@@ -130,7 +136,7 @@ describe("pending-parent child writes", () => {
         ],
         [
           "tasks",
-          10,
+          11,
         ],
       ]
     `);

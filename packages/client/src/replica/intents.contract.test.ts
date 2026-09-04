@@ -1,10 +1,12 @@
 // governance: allow-repo-hygiene file-size-limit #738 cohesive intent lifecycle contract
 import { describe, expect, test, vi } from "vitest";
 
+import { stablePendingRowId } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { MemoryIntentStore } from "./intent-store.js";
-import { IntentQueue, pendingIntentIdFromInput } from "./intents.js";
+import { IntentQueue } from "./intents.js";
+import type { ReplicaValue } from "./types.js";
 
 describe(IntentQueue, () => {
   test("uses injected digest and initializes optional collections", async () => {
@@ -169,7 +171,7 @@ describe(IntentQueue, () => {
           op: "upsert",
           shapeId: "shape-tally",
           entity: "tally.expense",
-          rowId: "pending:intent-expired-commons:expense",
+          rowId: stablePendingRowId("intent-expired-commons", "expense"),
           values: { description: "Lunch" },
         },
       ],
@@ -385,9 +387,9 @@ describe(IntentQueue, () => {
           op: "upsert",
           shapeId: "shape-tasks",
           entity: "schedule.task",
-          rowId: "pending:intent-original:task",
+          rowId: stablePendingRowId("intent-original", "task"),
           values: {
-            task_id: "pending:intent-original:task",
+            task_id: stablePendingRowId("intent-original", "task"),
             title: "Original",
           },
         },
@@ -405,7 +407,10 @@ describe(IntentQueue, () => {
     await expect(
       queue.revise(
         "intent-original",
-        { task_id: "pending:intent-original:task", title: "Wrong action" },
+        {
+          task_id: stablePendingRowId("intent-original", "task"),
+          title: "Wrong action",
+        },
         undefined,
         ["save-project"]
       )
@@ -415,7 +420,7 @@ describe(IntentQueue, () => {
       queue.revise(
         "intent-original",
         {
-          task_id: "pending:intent-original:task",
+          task_id: stablePendingRowId("intent-original", "task"),
           title: "Edited locally",
         },
         undefined,
@@ -437,7 +442,7 @@ describe(IntentQueue, () => {
     await expect(queue.overlayMutations()).resolves.toMatchObject([
       {
         entity: "schedule.task",
-        rowId: "pending:intent-replacement:task",
+        rowId: stablePendingRowId("intent-replacement", "task"),
         values: {
           __centraid_pending_key: "intent-replacement",
           title: "Edited locally",
@@ -468,9 +473,9 @@ describe(IntentQueue, () => {
           op: "upsert",
           shapeId: "shape-tasks",
           entity: "schedule.task",
-          rowId: "pending:intent-original:task",
+          rowId: stablePendingRowId("intent-original", "task"),
           values: {
-            task_id: "pending:intent-original:task",
+            task_id: stablePendingRowId("intent-original", "task"),
             title: "Original",
           },
         },
@@ -496,7 +501,7 @@ describe(IntentQueue, () => {
     ]);
     await expect(reopened.overlayMutations()).resolves.toMatchObject([
       {
-        rowId: "pending:intent-replacement:task",
+        rowId: stablePendingRowId("intent-replacement", "task"),
         values: { __centraid_pending_key: "intent-replacement" },
       },
     ]);
@@ -600,36 +605,56 @@ describe(IntentQueue, () => {
     ]);
   });
 
-  test("recognizes only declared synthetic revision identities", () => {
-    expect(
-      pendingIntentIdFromInput("tasks", "edit", {
-        task_id: "pending:intent-original:task",
-        project_id: "pending:intent-project:project",
+  // #922 G2: the row id no longer spells which intent minted it, so the match
+  // is an OUTBOX lookup — exact, and unbothered by what the id looks like.
+  // Only a DECLARED revision matches; nothing is guessed from an `*_id`.
+  test("recognizes only declared revisions, by asking the outbox", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-original",
+    });
+    const added = await queue.enqueue({
+      appId: "tasks",
+      action: "add",
+      input: { title: "Offline" },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "shape-tasks",
+          entity: "schedule.task",
+          rowId: "1f2e3d4c-0000-8000-8000-0000000000aa",
+          values: { task_id: "1f2e3d4c-0000-8000-8000-0000000000aa" },
+        },
+      ],
+    });
+    await expect(
+      queue.pendingIntentForInput("tasks", "edit", {
+        task_id: added.optimistic[0]?.rowId ?? "",
         title: "Edited locally",
       })
-    ).toStrictEqual({
+    ).resolves.toStrictEqual({
       intentId: "intent-original",
       expectedActions: ["add"],
     });
-    expect(
-      pendingIntentIdFromInput("tasks", "add", {
-        project_id: "pending:intent-project:project",
-        title: "Child of a pending project",
+    // `add` does not revise anything, and neither does an undeclared pair.
+    await expect(
+      queue.pendingIntentForInput("tasks", "add", {
+        project_id: added.optimistic[0]?.rowId ?? "",
+        title: "Child",
       })
-    ).toBeUndefined();
-    expect(
-      pendingIntentIdFromInput("tally", "add-expense", {
-        group_id: "pending:intent-group:group",
+    ).resolves.toBeUndefined();
+    await expect(
+      queue.pendingIntentForInput("tally", "add-expense", {
+        group_id: added.optimistic[0]?.rowId ?? "",
         description: "Lunch",
       })
-    ).toBeUndefined();
-    expect(
-      pendingIntentIdFromInput("tasks", "edit", {
+    ).resolves.toBeUndefined();
+    // An id no queued intent minted is nobody's revision.
+    await expect(
+      queue.pendingIntentForInput("tasks", "edit", {
         task_id: "task-1",
-        description: "pending:ordinary:content",
-        title: "pending:also-ordinary:content",
+        title: "Edited",
       })
-    ).toBeUndefined();
+    ).resolves.toBeUndefined();
   });
 
   test("returns a settled transition with an explicit awaiting-change reason reset", async () => {
@@ -719,7 +744,7 @@ describe(IntentQueue, () => {
       input: {
         id: "original-id",
         __rowId: "original-row",
-        task_id: "pending:intent-original:task",
+        task_id: stablePendingRowId("intent-original", "task"),
         title: "Original",
         due_at: "2026-08-12",
         project_id: "project-1",
@@ -733,9 +758,9 @@ describe(IntentQueue, () => {
           op: "upsert",
           shapeId: "shape-tasks",
           entity: "schedule.task",
-          rowId: "pending:intent-original:task",
+          rowId: stablePendingRowId("intent-original", "task"),
           values: {
-            task_id: "pending:intent-original:task",
+            task_id: stablePendingRowId("intent-original", "task"),
             title: "Original",
           },
         },
@@ -746,9 +771,12 @@ describe(IntentQueue, () => {
     ]);
 
     const revised = await queue.revise("intent-original", {
-      id: "pending:intent-original:id",
-      __rowId: "pending:intent-original:row",
-      task_id: "pending:intent-original:task",
+      // The identity fields that name THIS intent's own projected row are not
+      // what the revision is revising, so they never overwrite themselves
+      // (#922 G2 — the id no longer spells its intent, the outbox does).
+      id: stablePendingRowId("intent-original", "task"),
+      __rowId: stablePendingRowId("intent-original", "task"),
+      task_id: stablePendingRowId("intent-original", "task"),
       title: "Revised",
       description: "pending:intent-original:ordinary-user-text",
       clear_due: true,
@@ -763,31 +791,30 @@ describe(IntentQueue, () => {
     expect(revised?.input).toStrictEqual({
       id: "original-id",
       __rowId: "original-row",
-      task_id: "pending:intent-original:task",
+      task_id: stablePendingRowId("intent-original", "task"),
       title: "Revised",
       description: "pending:intent-original:ordinary-user-text",
       clear_false: false,
     });
   });
 
-  test("fails closed for non-object or undeclared synthetic revision probes", () => {
-    expect(pendingIntentIdFromInput("tasks", "edit", null)).toBeUndefined();
-    expect(
-      pendingIntentIdFromInput("tasks", "edit", "pending:intent-x:task")
-    ).toBeUndefined();
-    expect(
-      pendingIntentIdFromInput("tasks", "edit", ["pending:intent-x:task"])
-    ).toBeUndefined();
-    expect(
-      pendingIntentIdFromInput("unknown-app", "edit", {
-        task_id: "pending:intent-x:task",
-      })
-    ).toBeUndefined();
-    expect(
-      pendingIntentIdFromInput("tasks", "unknown-action", {
-        task_id: "pending:intent-x:task",
-      })
-    ).toBeUndefined();
+  test("fails closed for a non-object input or an undeclared pair", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-x",
+    });
+    const shapes: ReplicaValue[] = [null, "task-1", ["task-1"]];
+    for (const input of shapes) {
+      // eslint-disable-next-line no-await-in-loop -- (#922) three cheap probes
+      await expect(
+        queue.pendingIntentForInput("tasks", "edit", input)
+      ).resolves.toBeUndefined();
+    }
+    await expect(
+      queue.pendingIntentForInput("unknown-app", "edit", { task_id: "t" })
+    ).resolves.toBeUndefined();
+    await expect(
+      queue.pendingIntentForInput("tasks", "unknown-action", { task_id: "t" })
+    ).resolves.toBeUndefined();
   });
 
   test("preserves the original projection and refreshed versions when an app has no declaration", async () => {

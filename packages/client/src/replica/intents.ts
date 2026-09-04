@@ -48,9 +48,7 @@ export interface IntentQueueOptions {
   onSupersededRetired?: (intentId: string) => void;
 }
 
-const SYNTHETIC_PENDING_ROW = /^pending:(?<intentId>[^:]+):/u;
 const PENDING_SUPERSEDES_FIELD = "__centraid_pending_supersedes";
-const REVISION_IDENTITY_PROBE = "__centraid_revision_identity_probe__";
 const replacementLocks = new Map<string, Promise<void>>();
 
 interface WebLockManager {
@@ -123,37 +121,20 @@ export interface PendingIntentReplacement {
   supersededIntentId: string;
 }
 
-/** Resolve only an explicitly declared edit of a projected synthetic row. */
-export function pendingIntentIdFromInput(
-  appId: string,
-  action: string,
-  input: ReplicaValue
-): PendingIntentRevisionTarget | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input))
-    return undefined;
-  const declaration = pendingProjectionFor(appId);
-  const expectedActions = declaration?.revisions?.[action];
-  if (!declaration || !expectedActions || expectedActions.length === 0)
-    return undefined;
-  const projected = projectPendingWrite(declaration, {
-    appId,
-    action,
-    input: input as Readonly<Record<string, unknown>>,
-    intentId: REVISION_IDENTITY_PROBE,
-  });
-  for (const mutation of projected.optimistic) {
-    const match = SYNTHETIC_PENDING_ROW.exec(mutation.rowId);
-    const intentId = match?.groups?.intentId;
-    if (intentId && intentId !== REVISION_IDENTITY_PROBE)
-      return { intentId, expectedActions };
-  }
-  return undefined;
+/** Every row id a write's identity fields name. */
+function namedRowIds(input: ReplicaValue): string[] {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return [];
+  return Object.entries(input as Record<string, ReplicaValue>)
+    .filter(
+      ([key, value]) => isRowIdentityField(key) && typeof value === "string"
+    )
+    .map(([, value]) => value as string);
 }
 
 function revisedInput(
   existing: ReplicaValue,
   revision: ReplicaValue,
-  intentId: string
+  mintedRowIds: ReadonlySet<string>
 ): ReplicaValue {
   if (
     !existing ||
@@ -166,10 +147,14 @@ function revisedInput(
     return revision;
   const merged = cloneReplicaValue(existing) as Record<string, ReplicaValue>;
   for (const [key, value] of Object.entries(revision)) {
+    // The revision names the row this intent already minted; the identity is
+    // not the thing being revised, so it never overwrites itself (#922 G2 —
+    // the id no longer spells which intent made it, so the intent's own
+    // projected rows are the answer).
     if (
       isRowIdentityField(key) &&
       typeof value === "string" &&
-      value.startsWith(`pending:${intentId}:`)
+      mintedRowIds.has(value)
     )
       continue;
     if (key.startsWith("clear_") && value === true) {
@@ -454,9 +439,42 @@ export class IntentQueue {
       if (!actionableAttention(existing)) return undefined;
       if (expectedActions && !expectedActions.includes(existing.action))
         return undefined;
-      const input = revisedInput(existing.input, revision, intentId);
+      const input = revisedInput(
+        existing.input,
+        revision,
+        new Set(existing.optimistic.map((mutation) => mutation.rowId))
+      );
       return this.replace(existing, input, refreshedBaseVersions);
     });
+  }
+
+  /**
+   * The queued intent whose projection minted a row id this write NAMES
+   * (#922 G2).
+   *
+   * It replaces the `pending:` grammar, which encoded the intent id in the
+   * row id so a caller could read it back out. Ids are canonical now, so the
+   * OUTBOX is asked instead — exact, and it does not care what the id looks
+   * like. Only declared revisions match: an app says which action revises
+   * which in `revisions`, and nothing is guessed from an arbitrary `*_id`.
+   */
+  async pendingIntentForInput(
+    appId: string,
+    action: string,
+    input: ReplicaValue
+  ): Promise<PendingIntentRevisionTarget | undefined> {
+    const expectedActions = pendingProjectionFor(appId)?.revisions?.[action];
+    if (!expectedActions || expectedActions.length === 0) return undefined;
+    const named = new Set(namedRowIds(input));
+    if (named.size === 0) return undefined;
+    const match = (await this.store.list()).findLast(
+      (intent) =>
+        intent.appId === appId &&
+        OVERLAY_STATES.has(intent.state) &&
+        expectedActions.includes(intent.action) &&
+        intent.optimistic.some((mutation) => named.has(mutation.rowId))
+    );
+    return match ? { intentId: match.intentId, expectedActions } : undefined;
   }
 
   /**

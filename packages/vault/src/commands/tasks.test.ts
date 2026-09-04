@@ -513,4 +513,17 @@ describe("tasks", () => {
     assert(outcome.status === "failed");
     expect(outcome.predicate).toContain("task_exists");
   });
+
+  // #922 G2: the id the member's seat showed IS the row's id, so an offline
+  // child write filed against it lands pointing at the same task.
+  test("honours a seat-minted task id, and refuses it the second time", () => {
+    const minted = "1f2e3d4c-0000-8000-8000-0000000000aa";
+    expect(addTask({ task_id: minted, title: "Grout" })).toBe(minted);
+    const again = gw.invoke(owner, {
+      command: "schedule.add_task",
+      input: { task_id: minted, title: "Grout again" },
+      purpose: "dpv:ServiceProvision",
+    });
+    expect(again.status).not.toBe("executed");
+  });
 });

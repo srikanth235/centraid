@@ -10,6 +10,7 @@ import type {
   IntentQueue,
   IntentQueueOptions,
   PendingIntentReplacement,
+  PendingIntentRevisionTarget,
 } from "./intents.js";
 import { LiveQueryRegistry } from "./live-query-registry.js";
 import { LiveQuery } from "./live-query.js";
@@ -417,6 +418,15 @@ export class ReplicaCoordinator {
     return captured.filter(
       (version): version is ReplicaBaseVersion => version !== undefined
     );
+  }
+
+  /** The queued intent a write revises, by the row id it names (#922 G2). */
+  pendingIntentForInput(
+    appId: string,
+    action: string,
+    input: ReplicaValue
+  ): Promise<PendingIntentRevisionTarget | undefined> {
+    return this.intents.pendingIntentForInput(appId, action, input);
   }
 
   claimNextIntent(): Promise<ReplicaIntent | undefined> {

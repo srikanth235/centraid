@@ -107,8 +107,7 @@ import {
   inboxMeta,
 } from "./view-copy.ts";
 import {
-  isPendingTaskId,
-  landedTask,
+  boardTask,
   mountedWriteScope,
   removeTaskWrite,
   taskWrite,
@@ -387,46 +386,11 @@ export function Root({
           ...dataRef.current.open,
           ...dataRef.current.logbook,
         ];
-        // WAIT ON THE PUSH, NOT A CLOCK (#922 C4). This used to wake every
-        // 50 ms and re-read the board to see whether the completion had
-        // landed — twenty screen reads a second for a change the replica
-        // announces the moment it applies. The deadline is still here; it is
-        // now the only timer.
-        const nextChange = (timeoutMs: number): Promise<void> =>
-          new Promise((resolve) => {
-            let settled = false;
-            const stops: (() => void)[] = [];
-            const done = (): void => {
-              if (settled) return;
-              settled = true;
-              window.clearTimeout(timer);
-              for (const stop of stops) stop();
-              resolve();
-            };
-            const timer = window.setTimeout(done, Math.max(timeoutMs, 0));
-            const stop = onDataChange(CHANGE_TABLES, done);
-            // A synchronous fire has already settled; unsubscribe either way.
-            if (stop) {
-              if (settled) stop();
-              else stops.push(stop);
-            }
-          });
-        const waitForLanded = async (deadline: number): Promise<Task> => {
-          const current = landedTask(task, rows()) ?? task;
-          if (!isPendingTaskId(current.task_id) || Date.now() >= deadline) {
-            return current;
-          }
-          await refresh();
-          const landed = landedTask(task, rows());
-          if (landed && !isPendingTaskId(landed.task_id)) return landed;
-          await nextChange(deadline - Date.now());
-          return waitForLanded(deadline);
-        };
-        const target = await waitForLanded(Date.now() + 15_000);
-        if (isPendingTaskId(target.task_id)) {
-          publishOutcome(frame, { text: "This task has not landed yet." });
-          return;
-        }
+        // #922 G2: the id is the row's real id from the moment it is minted,
+        // so completing it needs no wait at all — the write names the same row
+        // whether or not the origin has seen the add yet, and the queue keeps
+        // the two acts in order.
+        const target = boardTask(task, rows()) ?? task;
         try {
           await window.centraid.write(
             taskWrite({

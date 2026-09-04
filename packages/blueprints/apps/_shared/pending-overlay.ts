@@ -88,6 +88,12 @@ export interface PendingProjectionContext {
 
 export interface PendingProjectionResult {
   optimistic: PendingProjectionMutation[];
+  /**
+   * Values the projection MINTED that the write must carry (#922 G2) — the
+   * row ids above all. The write door merges them into the action input, so
+   * the origin creates the very row the seat is already showing.
+   */
+  input?: Record<string, PendingProjectionValue>;
   baseVersions?: Array<{
     shapeId?: string;
     entity: string;
@@ -150,23 +156,41 @@ export function definePendingProjection<T extends PendingProjectionDeclaration>(
   return declaration;
 }
 
-export const PENDING_ROW_ID_PREFIX = "pending:";
-
-export function stablePendingRowId(intentId: string, suffix = "row"): string {
-  return `${PENDING_ROW_ID_PREFIX}${intentId}:${suffix}`;
-}
-
 /**
- * Is this id one the overlay minted for a row that does not exist yet?
+ * THE ROW'S REAL ID, MINTED AT THE SEAT (#922 G2).
  *
- * A CHILD WRITE MAY CARRY ONE (#922 G2): a member adds a task to a project
- * whose creation is still queued, and the child's `project_id` is the parent's
- * PENDING id, which no canonical row will ever have. Detecting it is the
- * precondition for doing anything about it, so the predicate lives with the id
- * it recognizes and `pending-parent-probe.test.ts` counts where it can happen.
+ * It used to be `pending:<intent>:<suffix>` — a spelling that announced "this
+ * row does not exist yet", which meant the origin minted a DIFFERENT id and
+ * every child write filed against the pending one pointed at a row that never
+ * existed. Now the projection mints the id the row will actually have, the
+ * write carries it, and the origin honours it or refuses it.
+ *
+ * Deterministic in (intent, suffix), because a replayed intent must project
+ * the SAME row rather than a second one; UUID-shaped, because that is what the
+ * column holds. Pendingness is not spelled in the id any more — the overlay's
+ * own `__centraid_pending_key` says it, on the row, where a reader can see it.
  */
-export function isPendingRowId(value: unknown): boolean {
-  return typeof value === "string" && value.startsWith(PENDING_ROW_ID_PREFIX);
+export function stablePendingRowId(intentId: string, suffix = "row"): string {
+  const seed = `${intentId}:${suffix}`;
+  const words = [0x811c_9dc5, 0x0100_0193, 0x9e37_79b9, 0x85eb_ca6b].map(
+    (offset, index) => {
+      let hash = offset;
+      for (let at = 0; at < seed.length; at += 1) {
+        hash ^= seed.charCodeAt(at) + index * 0x27d4_eb2d;
+        hash = Math.imul(hash, 0x0100_0193) >>> 0;
+      }
+      return hash >>> 0;
+    }
+  );
+  const hex = words.map((word) => word.toString(16).padStart(8, "0")).join("");
+  // Version 8 (RFC 9562: "custom"), because it IS custom — derived, not random.
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    `8${hex.slice(13, 16)}`,
+    `8${hex.slice(17, 20)}`,
+    hex.slice(20, 32),
+  ].join("-");
 }
 
 export function pendingUpsert(
@@ -248,6 +272,7 @@ export function projectPendingWrite(
     ? { optimistic: projected }
     : {
         optimistic: projected.optimistic,
+        ...(projected.input ? { input: projected.input } : {}),
         ...(projected.baseVersions
           ? { baseVersions: projected.baseVersions }
           : {}),

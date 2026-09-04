@@ -15,6 +15,7 @@ import {
   pendingOverlayCopy,
   projectPendingWrite,
   readPendingOverlay,
+  stablePendingRowId,
   enrichPendingRows,
   settlePendingOverlay,
 } from "./pending-overlay.ts";
@@ -46,17 +47,17 @@ describe("pending-write overlay law", () => {
 
     expect(task.optimistic[0]).toMatchObject({
       entity: "schedule.task",
-      rowId: "pending:intent-1:task",
+      rowId: stablePendingRowId("intent-1", "task"),
     });
     expect(expense.optimistic.map((row) => row.rowId)).toStrictEqual([
-      "pending:intent-1:expense",
-      "pending:intent-1:payer-0",
-      "pending:intent-1:split-0",
+      stablePendingRowId("intent-1", "expense"),
+      stablePendingRowId("intent-1", "payer-0"),
+      stablePendingRowId("intent-1", "split-0"),
     ]);
     expect(expense.optimistic[1]).toMatchObject({
       entity: "tally.expense_payer",
       values: {
-        expense_id: "pending:intent-1:expense",
+        expense_id: stablePendingRowId("intent-1", "expense"),
         party_id: "me",
         paid_minor: 1200,
       },
@@ -179,7 +180,7 @@ describe("pending-write overlay law", () => {
   test("an empty Commons enrichment cannot wipe an outbox row", () => {
     const rows = [
       {
-        expense_id: "pending:intent-solo:expense",
+        expense_id: stablePendingRowId("intent-solo", "expense"),
         [PENDING_OVERLAY_FIELDS.key]: "intent-solo",
         [PENDING_OVERLAY_FIELDS.status]: "queued",
         [PENDING_OVERLAY_FIELDS.action]: "add-expense",
@@ -224,7 +225,7 @@ describe("pending-write overlay law", () => {
 
   test("Commons enrichment can settle copy without owning row membership", () => {
     const row = {
-      expense_id: "pending:intent-expired:expense",
+      expense_id: stablePendingRowId("intent-expired", "expense"),
       [PENDING_OVERLAY_FIELDS.key]: "intent-expired",
       [PENDING_OVERLAY_FIELDS.status]: "parked",
       [PENDING_OVERLAY_FIELDS.action]: "add-expense",

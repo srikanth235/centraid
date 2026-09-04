@@ -1850,3 +1850,60 @@ bun run --cwd apps/mobile test
 | Moving the order guards out of the paging statement loses the escalation | ran the mounted-reader pushdown cases, which are the ones that escalate; they went RED first, which is how the missing census in `multi-vault-reader.ts` was found, and green after | held — the escalation is now proven on both readers, and a straddling value still refuses after the cache is warm |
 
 **Full paths named for coverage** (this lane's brace-expanded rows above, spelled out): `packages/blueprints/apps/docs/pending-projection.ts`, `packages/blueprints/apps/notes/pending-projection.ts`, `packages/blueprints/apps/locker/pending-projection.ts`, `packages/blueprints/apps/people/pending-projection.ts`, `packages/blueprints/apps/photos/pending-projection.ts`, `packages/blueprints/apps/tally/pending-projection.ts`, `packages/blueprints/apps/_shared/pending-overlay.test.ts`, `packages/blueprints/apps/_shared/pending-overlay-presentation.test.ts`, `packages/blueprints/src/pending-projection-tripwire.test.ts`, `packages/client/src/replica/intents.contract.test.ts`, `apps/mobile/src/lib/replica/sqlite-intent-store.test.ts`, `apps/mobile/src/kit/replica/pending-copy.ts`.
+
+## Mega-lane A slice 5 — G2 client-minted row ids (red-first)
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/replica/offline-parent-child.test.ts` | the red-first case: an offline child write on an offline-created parent |
+| `packages/blueprints/apps/_shared/pending-overlay.ts` | `stablePendingRowId` mints a canonical UUIDv8 derived from (intent, suffix); a projection may declare `input` — the ids the write must carry; `isPendingRowId` and the `pending:` prefix are gone |
+| `packages/blueprints/apps/tasks/pending-projection.ts` | `add`, `save-project`, `save-section` declare their minted id on the input, and `add` REUSES an id the write already carries |
+| `packages/blueprints/apps/tasks/app.json`, `packages/blueprints/apps/tasks/actions/add.ts` | the action accepts and forwards `task_id` |
+| `packages/vault/src/commands/tasks.ts` | `schedule.add_task` honours a seat-minted `task_id` and REFUSES one it already holds |
+| `packages/client/src/react/blueprints/centraid-inline.ts`, `apps/mobile/src/lib/replica/native-session.ts` | both write doors merge the minted ids into the input they send |
+| `packages/client/src/replica/{intents,coordinator,shell-session}.ts` | `pendingIntentForInput` asks the OUTBOX which queued intent minted the row a write names; `SYNTHETIC_PENDING_ROW` and the revision-identity probe are deleted |
+| `packages/blueprints/apps/tasks/writes.ts`, `packages/blueprints/apps/_shared/{share-kit,grant-audiences}.ts` | `isPendingTaskId`, `landedTask` and `isPendingPartyId` are gone; the pending fact is the row's overlay on both seats |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Offline child writes landing on the parent the member saw | 0 (the child named `pending:<intent>:project`, which no row ever had) | 1 of 1 | `offline-parent-child.test.ts`, red then green (below) |
+| Row-id spellings that mean "not yet real" | 1 (`pending:` + 3 predicates over it) | 0 | `grep -rn '"pending:' packages apps` finds only ordinary user text in tests |
+| Pending-parent child-write edges | 66 | 67 | `pending-parent-probe.test.ts` — Tasks' `add` now accepts the id its own projection mints, which is the point of the count |
+| Screen re-reads waiting for a completion to "land" | a 15 s wait loop | 0 | the waiter is deleted outright: the id is the row's id from the moment it is minted |
+
+**Demonstrated red, then green.**
+
+```
+# RED — before the projection minted into the write:
+bun run --cwd packages/client test src/replica/offline-parent-child.test.ts
+#   × lands on reconnect naming the row the seat already showed
+#     AssertionError: expected undefined to be 'pending:intent-project:project'
+#   × the origin refuses a row id it already holds rather than merging into it
+#     AssertionError: expected 'executed' to be 'denied'
+# GREEN — after:
+bun run --cwd packages/client test src/replica/offline-parent-child.test.ts   # 2 passed
+bun run --cwd packages/vault test src/commands/tasks.test.ts                  # 21 passed
+bun run --cwd packages/blueprints test && bun run --cwd packages/client test
+bun run --cwd packages/vault test && bun run --cwd apps/mobile test
+```
+
+**Deleted/replaced.** `PENDING_ROW_ID_PREFIX` and the `pending:<intent>:<suffix>` grammar; `SYNTHETIC_PENDING_ROW`; `REVISION_IDENTITY_PROBE` and `pendingIntentIdFromInput`, replaced by `IntentQueue.pendingIntentForInput`, an outbox lookup by the row id the write names; `isPendingRowId`; `isPendingTaskId` and `landedTask` (title-matching a row whose id would never become canonical), replaced by `boardTask`, an id lookup; `isPendingPartyId`, replaced by the destination's own `pending` flag, which web now reads off the row's overlay exactly as native already did; the 15-second completion waiter in the Tasks seat, which existed only to wait for an id that no longer changes.
+
+**Decisions.** Ids are UUIDv8 ("custom" per RFC 9562) derived deterministically from (intent id, suffix) — deterministic because a replayed intent must project the SAME row rather than a second one, canonical in shape because the column holds row ids. A revision reuses the id its predecessor minted rather than minting a new one, so a child write filed against the first is still correct after an edit. The origin REFUSES a duplicate rather than merging: a seat-minted id the vault already holds is a replay or a collision, never an instruction to overwrite.
+
+## User impact
+Work done on a plane holds together. Create a project and file a task in it with no signal, and on reconnect the task is in that project — before this, the task landed pointing at a project id that never existed. Completing a task you just added no longer waits up to fifteen seconds for the vault to "land" it, and no longer refuses with "This task has not landed yet": the row you are looking at is the row the vault will hold.
+
+First-run: nothing new appears on a first run; every change here is to what an id means and when a queued row can be acted on.
+
+**Findings.** (1) Only TASKS carries its minted ids through to the origin in this diff. The other seven apps mint canonical ids and show them, but their manifests and commands do not yet accept them, so their offline children still name a row the origin will not create: `notes` (note, body, notebook), `docs` (document, content, folder), `photos` (album), `tally` (expense, payer, split, settlement, party, friend), `people` (party, profile, list), `agenda` (event), `locker` (item). Each needs the same three edits — the projection's `input`, the manifest property, the command's honour-or-refuse — and the probe's 67 edges are the map. (2) `packages/vault/src/commands/tasks.ts`, `packages/blueprints/apps/tasks/{app.json,actions/add.ts}` and both write doors are outside this brief's file sets; the box names the behaviour they carry, so they are declared here rather than left silent.
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| A seat that mints its own ids lets one device overwrite another's row | added the duplicate case to the vault suite: the second `add_task` with an id the vault already holds must not execute | held — the `task_id_is_free` precondition refuses it, and the first row is untouched |
+| Deleting the `pending:` grammar loses the "this row is not real yet" signal the seats depend on | traced every reader of the grammar — Tasks' completion, Share's audience filter, the inline party guard — and moved each to the row's own overlay or to an id lookup; ran all four package suites | held — 212 blueprints, 269 client, 202 vault and 276 mobile files green, and Share still refuses to offer a person whose row is queued |
+
+**Full paths named for coverage** (slice 5's brace-expanded rows, spelled out): `packages/blueprints/apps/_shared/share-kit.ts`, `packages/blueprints/apps/_shared/grant-audiences.ts`, `packages/blueprints/apps/_shared/grant-audiences.test.ts`, `packages/blueprints/apps/_shared/pending-overlay-law.test.ts`, `packages/blueprints/apps/tasks/writes.test.ts`, `packages/blueprints/src/share-kit.test.ts`, `packages/client/src/replica/shell-session.ts`, `packages/client/src/replica/shell-session.test.ts`, `packages/client/src/react/blueprints/centraid-inline.test.ts`, `packages/client/src/react/blueprints/inlineQueryCtx.test.ts`, `packages/vault/src/commands/tasks.test.ts`.
+
+Also in slice 5: `packages/vault/src/commands/minted-id.ts` — the honour-or-refuse pair (input property + duplicate precondition) extracted so a creating command cannot declare one half without the other, and so the seven remaining apps have a seam to reach for.

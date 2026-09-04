@@ -9,6 +9,7 @@ import { nextOccurrence } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { MINTED_ID_PROPERTY, mintedIdIsFree } from "./minted-id.js";
 
 const ADD_TASK: CommandDefinition = {
   name: "schedule.add_task",
@@ -18,6 +19,7 @@ const ADD_TASK: CommandDefinition = {
     required: ["title"],
     additionalProperties: false,
     properties: {
+      task_id: MINTED_ID_PROPERTY,
       title: { type: "string", minLength: 1 },
       description: { type: "string", minLength: 1 },
       due_at: { type: "string", minLength: 1 },
@@ -68,6 +70,7 @@ const ADD_TASK: CommandDefinition = {
       value: 1,
       message: "A reminder needs a due date to count back from.",
     },
+    mintedIdIsFree("schedule_task", "task_id", "task"),
   ],
   postconditions: [
     {
@@ -86,6 +89,7 @@ const ADD_TASK: CommandDefinition = {
 
 function addTask(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
+    task_id?: string;
     title: string;
     description?: string;
     due_at?: string;
@@ -99,7 +103,7 @@ function addTask(ctx: HandlerCtx): Record<string, unknown> {
     .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
     .get() as { self_party_id: string | null } | undefined;
   if (!owner?.self_party_id) throw new Error("vault has no owner");
-  const taskId = ctx.newId();
+  const taskId = input.task_id ?? ctx.newId(); // The seat's, or ours (#922 G2).
   ctx.db
     .prepare(
       `INSERT INTO schedule_task
