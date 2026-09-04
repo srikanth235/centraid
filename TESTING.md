@@ -6,7 +6,7 @@ Centraid tests protect important product flows and invariants, not a test-file c
 
 This repo is written almost entirely by agents, and agents fail in predictable ways. They optimize for the green checkmark. They grade their own homework. They cannot see the whole suite, so they duplicate. They have no memory, so prose conventions decay. And the agent that writes the code writes the tests that _confirm_ it rather than tests that try to _falsify_ it.
 
-This is not a hypothesis — the repo's own history demonstrates each mode. A probe sentinel was once left behind in a live assertion. Matrix cells were graded solid on the strength of prose. Owners of "solid" cells could skip themselves. Eight files hand-rolled a vault bootstrap that already existed in the test kit. `tests/budgets.json#qualityRigs` drifted to describing 9 of 24 rigs while nothing in the repo actually read it.
+This is not a hypothesis — the repo's own history demonstrates each mode. A probe sentinel was once left behind in a live assertion. Matrix cells were graded solid on the strength of prose. Owners of "solid" cells could skip themselves. Eight files hand-rolled a vault bootstrap that already existed in the test kit. `tests/journeys.json#rigs` drifted to describing 9 of 24 rigs while nothing in the repo actually read it.
 
 Therefore:
 
@@ -96,14 +96,15 @@ Soft SLA (auto-issue, not a hard age gate):
 6. Missing nightly HTML is **visible** (error annotation + tracking issue + a failed job), not a silent `::warning` only.
 7. The scheduled `companion` lane in `extension-e2e.yml` and the weekly `backup-interop` lane both file their own tracking issues on the same terms.
 
-### The four ledgers (#915 Wave 4)
+### The ledgers (#915 Wave 4, #927)
 
-Twenty tighten-only JSON ledgers under `tests/` are four, behind one validator — `bun run lint:ledgers` ([`scripts/check-ledgers.mjs`](scripts/check-ledgers.mjs)), a rung-1 contract gate inside the `lint:product` bundle.
+Twenty tighten-only JSON ledgers under `tests/` are five, behind one validator — `bun run lint:ledgers` ([`scripts/check-ledgers.mjs`](scripts/check-ledgers.mjs)), a rung-1 contract gate inside the `lint:product` bundle.
 
 | Ledger | Direction | Sections |
 | --- | --- | --- |
 | [`tests/floors.json`](tests/floors.json) | **up-only** | `coverage` (the globs the root Vitest config takes as its v8 thresholds and the constitution's `coverage-scope-reachability` directive reads), `mutation` (Stryker score per seed), `minimumTests` |
-| [`tests/budgets.json`](tests/budgets.json) | **down-only** | `suiteWallClock`, `rungs` (the ladder's p95 budget per rung), `qualityRigs`, `experience`, `designTokenCss`, `mobileSuites` |
+| [`tests/budgets.json`](tests/budgets.json) | **down-only** | `suiteWallClock`, `rungs` (the ladder's p95 budget per rung), `designTokenCss`, `mobileSuites` |
+| [`tests/journeys.json`](tests/journeys.json) | **down-only** | `entries` (every user-facing ceiling, keyed `surface / journey / volume / hardware`), `rigs` (the nightly rig register), `drift` (the sampled-rig knobs) |
 | [`tests/inventory.json`](tests/inventory.json) | **down-only, with an issue and an expiry** | `skips`, `envRed`, `sleeps`, `hygiene`, `commentDensity`, `naCells`, `advisory` |
 | [`tests/quarantine.json`](tests/quarantine.json) | **down-only, with an expiry** | `entries` (flaky tests), `lanes` (parked CI lanes) |
 
@@ -112,7 +113,7 @@ Four rules make the merge safe rather than merely tidier:
 1. **The waiver did not merge with the files.** Each section carries its own `approvedDeviation`, and a widen is waived only by a CHANGED note in the section being widened (#781: presence never waives). Before the merge, seven files each scoped their own waiver; one file-level note would have let a reviewed widen of the desktop cold-start ceiling silently waive a coverage-floor drop riding the same PR.
 2. **The rename cannot widen anything.** Every comparison reads the merged file at the merge base first and falls back to the section's pre-merge path (`tests/coverage-floors.json`, `tests/suite-wall-clock.json`, …). Without that fallback every ratchet in the repo would go silent for exactly one commit — the one that did the renaming.
 3. **Two sections are derived mirrors, not second copies.** `floors.minimumTests` mirrors `tests/claims.json#flows[].minimumTests` and `budgets.mobileSuites` mirrors `tests/agent-e2e-mobile/roster.json#suites[].budgetMs`; `lint:ledgers` asserts equality and `node scripts/check-ledgers.mjs --write` refreshes them. The source of each number is still the one document that also holds its context — the flow's surface/dimension/tier, the suite's flows and rung — so nothing is typed twice.
-4. **`budgets.experience` is a reference, not a copy.** The per-surface files under [`tests/experience-budgets/`](tests/experience-budgets/README.md) stay on disk because fifteen tests and probes import them directly; the ledger names them and applies the ratchet, which is what the ledger is for.
+4. **A ceiling states its volume and its hardware, or it is not a budget (#927).** [`tests/journeys.json`](tests/journeys.json) replaced four per-surface experience files, the rig register and the query-count file, whose keys named the SURFACE and nothing else — several of them silently meant "empty vault". Every entry is keyed `surface / journey / volume / hardware` against a declared vocabulary, and names the trace SPANS it is measured from and the CONSUMERS that assert it, so a ceiling with no reader and a reader with no ceiling are both visible. `bun run lint:journey-ledger` holds that shape and fails on any surviving reference to the five files it replaced.
 
 Two more things earn their own note. `commentDensity` is 3,600 per-file pins and 44% of all ledger bytes; the bespoke serializer that kept `--write` output passing `format:check` moved into `serializeLedger` and now serves every section, so any scanner's `--write` produces exactly what oxfmt would. And `designTokenCss` is deliberately **empty** — see [docs/traps/design-tokens.md](docs/traps/design-tokens.md); folding it in kept the emptiness, it did not repopulate it.
 
@@ -224,7 +225,7 @@ Scheduling is `chaosSchedule(catalog, seed, {mode})`. `cover` is a seeded Fisher
 
 ### Long-run soak and load rigs (#842 W3.4, W4)
 
-`tests/scale/{composite-load,stress-to-failure,long-run-soak}.scale.test.ts` are nightly-only (`tests/scale` is never in the PR lane). They live there rather than anywhere else on purpose: `validate-nightly-wiring.mjs` walks only `tests/perf` and `tests/scale`, and for every file it finds there it _forces_ a `tests/budgets.json#qualityRigs` entry, bans inline `const BUDGET_MS`, and requires the rig to read its own drift history. A rig placed elsewhere gets none of that and could land unbudgeted.
+`tests/scale/{composite-load,stress-to-failure,long-run-soak}.scale.test.ts` are nightly-only (`tests/scale` is never in the PR lane). They live there rather than anywhere else on purpose: `validate-nightly-wiring.mjs` walks only `tests/perf` and `tests/scale`, and for every file it finds there it _forces_ a `tests/journeys.json#rigs` entry, bans inline `const BUDGET_MS`, and requires the rig to read its own drift history. A rig placed elsewhere gets none of that and could land unbudgeted.
 
 The soak is **not** an env-gated skip. `CENTRAID_SOAK_MINUTES` defaults to `0.75`, so the rig always runs and always gates its always-true invariants; only the _growth_ ceilings assert at `>= declaredSoakMinutes`. That split is not a convenience — at 45 seconds the per-cycle RSS slope reads ~58× higher than it does over ten minutes, because warm-up has not amortized, so a growth ceiling asserted at the nightly duration would be measuring start-up. `declaredSoakMinutes` is 10 because ten minutes is the longest run the ceilings were derived from; `soak-weekly.yml` runs the same file at 240 minutes to turn them into a distribution.
 
@@ -652,7 +653,7 @@ Publishing is unchanged in shape — a mutable `nightly/` alias plus an immutabl
 
 - First-run remains **path-gated on PR and unconditional nightly**. Making desktop, web, and two native device journeys unconditional would exceed the tighten-only PR wall-clock budget; the quality row therefore renders partial when those lanes did not run, never green. Mobile offline writes and reconnect replay are defined product behaviour under the single-gateway topology in [`docs/mobile-offline.md`](docs/mobile-offline.md), so R2 is a testable reliability contract rather than a new product design.
 - `@centraid/test-kit/year3-vault` owns the deterministic seed, multi-year/ledger/sealed/parked profile, and cache key used by quality and scale rigs. Byte-heavy owners materialize their own CAS payloads from that identity; never copy a live SQLite file into a cache. Regenerate by changing the explicit fixture version/seed and rerunning the owning rig, after reading [`docs/traps/wal-checkpoint.md`](docs/traps/wal-checkpoint.md).
-- `bun run test:qualities` is the deterministic PR gate. Timing evidence remains in nightly perf/scale and uses the existing rig-drift and `tests/experience-budgets/` owners rather than a parallel budget file.
+- `bun run test:qualities` is the deterministic PR gate. Timing evidence remains in nightly perf/scale and uses the existing rig-drift and `tests/journeys.json` owners rather than a parallel budget file.
 
 ## The test convention
 

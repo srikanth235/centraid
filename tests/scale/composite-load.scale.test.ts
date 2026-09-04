@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-
 import { describe, expect, onTestFinished, test } from "vitest";
 
 import { HARNESSES, runTurn } from "@centraid/server/acp";
@@ -22,7 +20,7 @@ import type {
   CompositeGateway,
   LaneResult,
 } from "../helpers/composite-workload.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 
 /**
  * COMPOSITE LOAD (issue #842 W4.1).
@@ -72,16 +70,6 @@ const LANE_CONCURRENCY = 2;
 const TURNS = 128;
 /** Automations whose missed windows are scanned during the composite phase. */
 const AUTOMATIONS = 200;
-
-interface CeilingFile {
-  metrics: {
-    compositeLoadFactor: {
-      ceilingThroughputFactor: number;
-      ceilingWorstLaneP95Ms: number;
-    };
-    refSearchUnderComposition: { ceilingP95Ms: number };
-  };
-}
 
 async function httpLanes(
   gateway: CompositeGateway,
@@ -160,18 +148,25 @@ async function inProcessLanes(): Promise<{
 
 describe("composite-load.scale", () => {
   test("sync + search + writes + blob ingest + turns + automations hold their budgets when run together", async () => {
-    const ceilings = JSON.parse(
-      await readFile("tests/experience-budgets/gateway.json", "utf8")
-    ) as CeilingFile;
-    const ceilingThroughputFactor =
-      ceilings.metrics.compositeLoadFactor.ceilingThroughputFactor;
-    const ceilingWorstLaneP95Ms =
-      ceilings.metrics.compositeLoadFactor.ceilingWorstLaneP95Ms;
+    const COMPOSITE_KEY = "gateway/composite-load/empty/ci-linux-x64-4c";
+    const ceilingThroughputFactor = journeyCeiling(
+      COMPOSITE_KEY,
+      "compositeLoadFactor",
+      "ceilingThroughputFactor"
+    );
+    const ceilingWorstLaneP95Ms = journeyCeiling(
+      COMPOSITE_KEY,
+      "compositeLoadFactor",
+      "ceilingWorstLaneP95Ms"
+    );
     // #883 C2 item 4. The worst-lane ceiling only ever fences whichever lane
     // happens to be slowest, so the READ lane the blob-reference CTE work
     // touches gets its own number rather than hiding behind the write lane's.
-    const ceilingRefSearchP95Ms =
-      ceilings.metrics.refSearchUnderComposition.ceilingP95Ms;
+    const ceilingRefSearchP95Ms = journeyCeiling(
+      "gateway/composite-load/empty/ci-linux-x64-4c",
+      "refSearchUnderComposition",
+      "ceilingP95Ms"
+    );
     const refSearch = () =>
       factors.find((entry) => entry.lane === "browse")?.compositeP95 ??
       Number.NaN;
@@ -254,8 +249,6 @@ describe("composite-load.scale", () => {
       ...compositeTally.refusals,
     }).filter((key) => key.endsWith("/untyped"));
 
-    const drift = await rigDriftBudgetMs("scale", OWNER);
-    const withinDrift = drift === null || compositeMs <= drift;
     const everyLaneFinished =
       composite.every((lane) => lane.ops === OPS) &&
       solo.every((lane) => lane.ops === OPS);
@@ -268,8 +261,7 @@ describe("composite-load.scale", () => {
       inProcess.missed === AUTOMATIONS &&
       throughputFactor <= ceilingThroughputFactor &&
       worstByP95.compositeP95 <= ceilingWorstLaneP95Ms &&
-      refSearch() <= ceilingRefSearchP95Ms &&
-      withinDrift;
+      refSearch() <= ceilingRefSearchP95Ms;
 
     console.log("\n========== COMPOSITE LOAD ==========");
     console.log(`solo phase:        ${Math.round(soloMs)} ms`);
@@ -305,7 +297,6 @@ describe("composite-load.scale", () => {
           name: "composite phase wall clock",
           value: compositeMs,
           unit: "ms",
-          ...(drift === null ? {} : { budget: drift }),
         },
         { name: "solo phase wall clock", value: soloMs, unit: "ms" },
         {
@@ -380,9 +371,5 @@ describe("composite-load.scale", () => {
       `lane starvation: ${worstByP95.lane} p95 reached ${worstByP95.compositeP95.toFixed(1)} ms ` +
         `under composition (solo ${worstByP95.soloP95.toFixed(1)} ms), ceiling ${ceilingWorstLaneP95Ms} ms`
     ).toBeLessThanOrEqual(ceilingWorstLaneP95Ms);
-    expect(
-      withinDrift,
-      `sustained drift: ${compositeMs} ms vs drift budget ${drift} ms (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
   }, 180_000);
 });

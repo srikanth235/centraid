@@ -427,7 +427,7 @@ describe("issue #679 user-facing quality gates", () => {
       )
       .get() as Record<string, string>;
     expect(Object.values(sealed).every(isSealedValue)).toBe(true);
-    const cacheRoot = await tempDir("quality-year3-cache-");
+    const cacheRoot = await tempDir("quality-year3-fixture-cache-");
     let generated = 0;
     const generate = async (target: string): Promise<void> => {
       generated += 1;
@@ -1303,13 +1303,12 @@ describe("issue #679 user-facing quality gates", () => {
   });
 
   test("P2: first-paint query budgets are per-screen identities, never an aggregate", async () => {
-    const budgets = await json(
-      "tests/experience-budgets/client-query-counts.json"
-    );
-    const screens = budgets["screens"] as Record<
+    const ledger = await json("tests/journeys.json");
+    const entries = ledger["entries"] as Record<
       string,
-      { sqlStatements: number; httpRequests: number }
+      { metrics: Record<string, Record<string, number>> }
     >;
+    const screens = entries["client/first-paint-work/year3/any"]?.metrics ?? {};
     expect(Object.keys(screens).sort()).toStrictEqual([
       "assistant",
       "atlas",
@@ -1317,8 +1316,8 @@ describe("issue #679 user-facing quality gates", () => {
       "photos-grid",
     ]);
     for (const budget of Object.values(screens)) {
-      expect(budget.sqlStatements).toBeGreaterThan(0);
-      expect(budget.httpRequests).toBeGreaterThan(0);
+      expect(budget["maxStatements"]).toBeGreaterThan(0);
+      expect(budget["maxHttpRequests"]).toBeGreaterThan(0);
     }
   });
 
@@ -1486,7 +1485,7 @@ describe("issue #679 user-facing quality gates", () => {
     expect(ratchet.maxEntries).toBeLessThanOrEqual(COPY_SEED_CEILING);
     expect(ratchet.entries.length).toBeLessThanOrEqual(ratchet.maxEntries);
     const keyed = (entry: { file: string; literal: string }): string =>
-      `${entry.file}\0${entry.literal}`;
+      `${entry.file}\u0000${entry.literal}`;
     expect(new Set(ratchet.entries.map(keyed)).size).toBe(
       ratchet.entries.length
     );

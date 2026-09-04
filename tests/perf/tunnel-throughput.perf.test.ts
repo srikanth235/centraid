@@ -14,8 +14,6 @@ import {
   startLocalProxy,
 } from "@centraid/tunnel";
 
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
-
 const OWNER = "tests/perf/tunnel-throughput.perf.test.ts";
 
 describe("tunnel-throughput.perf", () => {
@@ -94,20 +92,15 @@ describe("tunnel-throughput.perf", () => {
     // Floor = measured_min ÷ 3 ≈ 5.1 / 3 ≈ 1.7; set to 1.5 for loopback variance
     // headroom. The native fast path is NOT measured by this lane.
     const throughputFloor = 1.5;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("perf", OWNER);
     const passed =
       response.status === 200 &&
       received === payload.length &&
       mibPerSecond >= throughputFloor;
-    const withinDrift = drift === null || mibPerSecond >= drift;
     await recordQualityResult({
       lane: "perf",
       owner: OWNER,
       name: "Tunnel payload throughput",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "throughput",
@@ -124,10 +117,6 @@ describe("tunnel-throughput.perf", () => {
         { name: "wall clock", value: durationMs, unit: "ms" },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${mibPerSecond} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(response.status).toBe(200);
     expect(received).toBe(payload.length);
     expect(mibPerSecond).toBeGreaterThanOrEqual(throughputFloor);

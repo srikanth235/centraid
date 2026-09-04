@@ -32,6 +32,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      bisect_journey:
+        description: "Ledger key#metric to bisect over the candidate list, e.g. gateway/first-bootstrap/year3-replica/ci-linux-x64-4c#bootstrapPageMs. Empty means no bisect."
+        required: false
+        default: ""
 
 # One promotion at a time, and NEVER cancel a running one: a superseded
 # candidate run still banks the Android shell caches the PR gate restores from,
@@ -669,6 +674,135 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+  # THE PAIRED CANDIDATE/PR JOURNEY RUN (#927). The rung that answers "is this
+  # merge slower than the tree it merged into", and the only place a wall-clock
+  # number gates anything.
+  #
+  # It runs the journey benchmark in BOTH checkouts — the promoted candidate and
+  # this push — alternating which goes first each round, and compares the paired
+  # differences with a bootstrap confidence interval taken inside the run. No
+  # 30-sample warm-up, no nightly median, no history: a runner that is slow today
+  # is slow for both sides of every pair, so the difference survives what an
+  # absolute number cannot. The tolerance is per journey, in tests/journeys.json.
+  #
+  # An INCONCLUSIVE verdict fails this lane. An interval that straddles the
+  # tolerance has not shown the change is safe, and treating "cannot tell" as a
+  # pass is how a threshold-on-one-sample gate goes quiet.
+  #
+  # `test:perf:pr` — the constrained-profile wall-clock rig — is re-homed here
+  # too (#927). It came off the merge rung when the counter gate replaced it and
+  # no rung ran it after that; a rig nothing runs is not a gate.
+  paired-journeys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - run: bun run build
+      # The BASELINE side: the last promoted candidate. `refs/candidates/latest`
+      # is what every deeper rung already consumes, so the comparison is against
+      # the tree the fleet is actually running, not against an arbitrary parent.
+      - name: Check out the last promoted candidate
+        id: baseline
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin '+refs/candidates/latest:refs/candidates/latest'
+          sha="$(git rev-parse refs/candidates/latest)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          git worktree add ../candidate-baseline "$sha"
+      - name: Set up the baseline
+        if: steps.baseline.outcome == 'success'
+        uses: ./.github/actions/setup
+        with:
+          working-directory: ../candidate-baseline
+      - name: Build the baseline
+        if: steps.baseline.outcome == 'success'
+        working-directory: ../candidate-baseline
+        run: bun run build
+      - name: Paired candidate/PR journeys
+        id: paired
+        if: steps.baseline.outcome == 'success'
+        run: |
+          mkdir -p artifacts/perf
+          node scripts/ci/paired-journeys.mjs \
+            --candidate ../candidate-baseline \
+            --pr . \
+            --rounds 14 \
+            --output artifacts/perf/paired-journeys.json
+      - name: Report a first promotion with no baseline
+        if: steps.baseline.outcome != 'success'
+        run: echo "::warning::no refs/candidates/latest yet; the paired journey run has nothing to compare against and is skipped for this promotion only"
+      # Re-homed from the merge rung (#927). It answers a different question from
+      # the counter gate — latency under the constrained hardware profile — and
+      # it belongs on a rung where a slow sample costs a promotion, not a merge.
+      - name: Constrained-profile wall clock
+        run: bun run test:perf:pr
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-paired-journeys
+          path: artifacts/perf/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane paired-journeys --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities performance --surfaces gateway,replica-sync
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-evidence-paired-journeys
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # WHICH CANDIDATE MADE IT SLOW (#927). `workflow_dispatch` only: a bisect is a
+  # question a human asks after a paired run went red, and the answer is a walk
+  # over the CANDIDATE LIST — the promoted shas on gh-pages, in order — rather
+  # than over every commit, because those are the trees a paired run can compare
+  # without rebuilding history.
+  bisect-journeys:
+    if: github.event_name == 'workflow_dispatch' && inputs.bisect_journey != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - name: Restore the candidate list (gh-pages)
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: gh-pages
+          path: .gh-pages-candidates
+      - name: Bisect the candidate list
+        run: |
+          node scripts/ci/bisect-journeys.mjs \
+            --journey '${{ inputs.bisect_journey }}' \
+            --history .gh-pages-candidates/test-report/candidate-journeys \
+            --output artifacts/perf/bisect.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-bisect-journeys
+          path: artifacts/perf/
+          retention-days: 14
+          if-no-files-found: warn
+
   # #557 — SAST over the TS/Rust product code AND the workflow YAML itself (the
   # `actions` language finds injection and unpinned-ref classes actionlint does
   # not model). It ran on a weekly cron in `security.yml`; #915 moved it here so
@@ -849,6 +983,7 @@ jobs:
         codeql,
         rust-supply-chain,
         rung1-on-main,
+        paired-journeys,
       ]
     if: always()
     runs-on: ubuntu-latest
@@ -869,6 +1004,13 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           install: "false"
+      - name: Collect the paired journey baseline
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: candidate-paired-journeys
+          path: artifacts/perf
       - name: Record what every lane said
         if: always()
         env:
@@ -953,6 +1095,20 @@ jobs:
             --out artifacts/candidate.json \
             --history site/test-report/candidates.json
           cp artifacts/candidate.json site/test-report/candidate.json
+      # THE JOURNEY BASELINE, beside the candidate record and never in a cache
+      # (#927). One file per promoted sha, so `bisect-journeys` can walk the
+      # list, and `candidate-journeys/latest.json` for the newest.
+      - name: Publish this promotion's journey baseline
+        if: steps.aggregate.outputs.green == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p site/test-report/candidate-journeys
+          if [ -f artifacts/perf/paired-journeys.json ]; then
+            cp artifacts/perf/paired-journeys.json "site/test-report/candidate-journeys/$GITHUB_SHA.json"
+            cp artifacts/perf/paired-journeys.json site/test-report/candidate-journeys/latest.json
+          else
+            echo "::warning::no paired-journeys.json in this run's evidence; the candidate list gains no baseline for $GITHUB_SHA"
+          fi
       - name: Move the candidate pointer
         if: steps.aggregate.outputs.green == 'true'
         run: |

@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 
 const OWNER = "tests/perf/desktop-launch.perf.test.ts";
 
@@ -24,9 +24,9 @@ const OWNER = "tests/perf/desktop-launch.perf.test.ts";
  * them is the point of this file.
  *
  * NO ABSOLUTE CEILING BY DESIGN. A cold Electron launch on a shared CI runner
- * has no distribution yet; the gate is the trailing-median drift budget every
- * other rig now uses (30 samples, 1.5x — tests/budgets.json#qualityRigs). An
- * absolute ceiling lands in tests/experience-budgets/desktop.json once ~10
+ * has no distribution yet; the gate is the paired candidate/PR run (#927),
+ * which compares two trees inside one run rather than one tree across nights. An
+ * absolute ceiling lands in tests/journeys.json once ~10
  * green nightlies justify one, and not before.
  *
  * Year-3 declared volume: NONE — the launch is measured against the mock
@@ -36,19 +36,13 @@ const OWNER = "tests/perf/desktop-launch.perf.test.ts";
 const input = "artifacts/perf-input/desktop-launch-report.json";
 
 /**
- * The owner-facing ceilings live in tests/experience-budgets/desktop.json and
+ * The owner-facing ceilings live in tests/journeys.json and
  * are asserted HERE. A budget file nobody reads is the failure #659 R4 exists
  * to close, so this rig consumes both gates: the absolute ceiling (measured
- * 2026-07-31 + headroom) and the sustained-drift budget.
+ * 2026-07-31 + headroom).
  */
-const budgets = JSON.parse(
-  await readFile("tests/experience-budgets/desktop.json", "utf8")
-) as {
-  metrics: {
-    coldOpenToUsable: { ceilingMs: number };
-    tapToVisualResponse: { ceilingMs: number };
-  };
-};
+const COLD_KEY = "desktop/cold-open/mock-gateway/dev-darwin-arm64";
+const TAP_KEY = "desktop/warm-switch/mock-gateway/dev-darwin-arm64";
 
 interface LaunchReport {
   volume: string;
@@ -78,14 +72,19 @@ if (process.env.CI && !report) {
 
 describe("desktop-launch.perf", () => {
   test.skipIf(!report)(
-    "a real Electron cold launch stays within its sustained-drift budget",
+    "a real Electron cold launch stays under its ceiling",
     async () => {
       const { measurements, volume } = report!;
-      const drift = await rigDriftBudgetMs("perf", OWNER);
-      const withinDrift =
-        drift === null || measurements.coldOpenToUsableMs <= drift;
-      const coldCeiling = budgets.metrics.coldOpenToUsable.ceilingMs;
-      const tapCeiling = budgets.metrics.tapToVisualResponse.ceilingMs;
+      const coldCeiling = journeyCeiling(
+        COLD_KEY,
+        "coldOpenToUsable",
+        "ceilingMs"
+      );
+      const tapCeiling = journeyCeiling(
+        TAP_KEY,
+        "tapToVisualResponse",
+        "ceilingMs"
+      );
       const withinCeilings =
         measurements.coldOpenToUsableMs <= coldCeiling &&
         measurements.tapToVisualResponseMs <= tapCeiling;
@@ -93,13 +92,13 @@ describe("desktop-launch.perf", () => {
         lane: "perf",
         owner: OWNER,
         name: `Desktop cold launch to a usable Home (volume: ${volume})`,
-        status: withinDrift && withinCeilings ? "passed" : "failed",
+        status: withinCeilings ? "passed" : "failed",
         measurements: [
           {
             name: "cold open to usable",
             value: measurements.coldOpenToUsableMs,
             unit: "ms",
-            budget: drift === null ? coldCeiling : Math.min(drift, coldCeiling),
+            budget: coldCeiling,
           },
           {
             name: "process to first window",
@@ -127,10 +126,6 @@ describe("desktop-launch.perf", () => {
         measurements.tapToVisualResponseMs,
         "tap to visual response"
       ).toBeLessThanOrEqual(tapCeiling);
-      expect(
-        withinDrift,
-        `sustained drift: ${measurements.coldOpenToUsableMs} ms vs drift budget ${drift} ms (1.5x the trailing median of the last 30 nightly samples)`
-      ).toBe(true);
     }
   );
 });

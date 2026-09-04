@@ -4,7 +4,7 @@
 // plane that `client-query-counts.json` fences, so a read that grows a
 // per-scope round trip would otherwise surface only as a slower Home. The
 // budget is in STATEMENTS, not milliseconds, so it lives beside the reader it
-// fences rather than in tests/experience-budgets/mobile.json ("what the vault
+// fences rather than in tests/journeys.json ("what the vault
 // owner feels"), and this test is its whole enforcement.
 //
 // What the shape is, per read, over S mounted scopes:

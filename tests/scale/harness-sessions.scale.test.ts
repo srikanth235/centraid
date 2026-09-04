@@ -2,10 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { HARNESSES, runTurn } from "@centraid/server/acp";
 import type { TurnConfig, TurnInput } from "@centraid/server/acp";
-import {
-  qualityRegressionBudget,
-  recordQualityResult,
-} from "@centraid/test-kit/quality-result";
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 const OWNER = "tests/scale/harness-sessions.scale.test.ts";
 const SESSIONS = 256;
@@ -40,8 +37,9 @@ describe("harness-sessions.scale", () => {
         )
       );
       const durationMs = performance.now() - started;
-      const budget = await qualityRegressionBudget("scale", OWNER);
-      const passed = budget == null || durationMs < budget;
+      // Published, not gated (#927): the paired candidate/PR run compares two
+      // trees; a threshold on one sample here would fence the runner.
+      const passed = true;
       expect(new Set(results.map((result) => result.sessionId)).size).toBe(
         SESSIONS
       );
@@ -55,7 +53,6 @@ describe("harness-sessions.scale", () => {
             name: "wall clock",
             value: durationMs,
             unit: "ms",
-            ...(budget == null ? {} : { budget }),
           },
           { name: "sessions", value: SESSIONS, unit: "count" },
         ],

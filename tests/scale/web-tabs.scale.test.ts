@@ -2,10 +2,7 @@ import { BroadcastChannel } from "node:worker_threads";
 
 import { describe, expect, onTestFinished, test } from "vitest";
 
-import {
-  qualityRegressionBudget,
-  recordQualityResult,
-} from "@centraid/test-kit/quality-result";
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 const OWNER = "tests/scale/web-tabs.scale.test.ts";
 const TABS = 64;
@@ -34,8 +31,9 @@ describe("web-tabs.scale", () => {
     sender.postMessage("invalidate");
     const messages = await Promise.all(received);
     const durationMs = performance.now() - started;
-    const budget = await qualityRegressionBudget("scale", OWNER);
-    const passed = budget == null || durationMs < budget;
+    // Published, not gated (#927): the paired candidate/PR run compares two
+    // trees; a threshold on one sample here would fence the runner.
+    const passed = true;
     expect(messages.every((message) => message === "invalidate")).toBe(true);
     await recordQualityResult({
       lane: "scale",
@@ -47,7 +45,6 @@ describe("web-tabs.scale", () => {
           name: "wall clock",
           value: durationMs,
           unit: "ms",
-          ...(budget == null ? {} : { budget }),
         },
         { name: "tabs", value: TABS, unit: "count" },
       ],

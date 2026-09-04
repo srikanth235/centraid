@@ -11,8 +11,6 @@ import {
 } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
-
 /**
  * HOW MUCH HISTORY DOES 100,000 ENTRIES BUY? (issue #883 C6.)
  *
@@ -269,18 +267,11 @@ describe("replica-retention.scale", () => {
     expect(shippedWorst).toBeGreaterThanOrEqual(REPLICA_RETENTION_DAYS - 2);
     expect(shippedWorst).toBeGreaterThan(baselineWorst * 3);
 
-    // #659 R4 — the sustained-drift gate over this rig's own 30-sample nightly
-    // history. This rig has no absolute ceiling (its budget entry says why: the
-    // number it gates is a window in DAYS, and the wall clock is dominated by
-    // seeding 360,000 writes twice), so the trailing median is the only thing
-    // with an opinion about duration. `null` is "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("scale", OWNER);
-    const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: "Resumable replica history under year-3 churn",
-      status: withinDrift ? "passed" : "failed",
+      status: "passed",
       measurements: [
         {
           name: "worst-day resumable window (compaction)",
@@ -306,9 +297,5 @@ describe("replica-retention.scale", () => {
         { name: "wall clock", value: Math.round(durationMs), unit: "ms" },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${Math.round(durationMs)} ms vs drift budget ${drift} ms (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
   });
 });

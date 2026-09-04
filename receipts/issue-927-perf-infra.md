@@ -273,7 +273,7 @@ Judged and not findings:
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-03 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 
 ## w1c — golden year-3 vault and golden phone replica
 
@@ -840,3 +840,521 @@ the profile passed to `materializeYear3Fixture` is the unchanged `YEAR3`, and
 the materialized directory is copied to a private `sourceDir` before any blob
 is written, so the shared persistent cache root holds only the vault, never the
 10 GiB store.
+
+## w1-gateway — the gateway emits spans, and the statement layer counts work
+
+**Files**
+
+| Path | What |
+| --- | --- |
+| `packages/vault/src/gateway/work-counters.ts` (new) | Process-total `WorkCounters` and the SQLite statement-layer instrumentation: statements, rows scanned, payload bytes read/written, durability barriers as `fsyncs`. |
+| `packages/vault/src/gateway/work-counters.test.ts` (new) | 9 tests, incl. the seeded-extra-statement case. |
+| `packages/vault/src/gateway/gateway.ts` | `createGateway` attaches the instrumentation to the one vault handle. Nothing inside the read-cap or read-plan functions (#922's tree) is touched. |
+| `packages/vault/src/index.ts` | Exports `bumpWorkCounter`, `gatewayWorkCounters`, `instrumentVaultStatements`. |
+| `packages/server/src/engine/handlers/work-counters.ts` (new) | The engine's `workerSpawns` registry — a second registry because the engine must not import `@centraid/vault` (#404 keeps its module load thread-free); the consumer sums with `addCounters`. |
+| `packages/server/src/engine/handlers/worker-pool.ts` | One bump in `spawn()`, the only place `new Worker` happens. |
+| `packages/server/src/serve/gateway-trace.ts` (new) | `GatewayTracer` + `beginGatewayTrace` (span emitter, sampling, counter snapshot+diff), `traceRequests` (the per-request seam), `TRACE_ID_HEADER`, `processWorkCounters`. |
+| `packages/server/src/serve/trace-store.ts` (new) | `TraceStore` (JSONL under `<vaultDir>/diagnostics/`, one rotation, torn-line-tolerant reader) and `lazyVaultTraceSink`. |
+| `packages/server/src/serve/gateway-trace.test.ts` (new) | 16 tests: default-off, sampling determinism, purge-with-vault, torn-line recovery, header refusal, once-only close. |
+| `packages/server/src/serve/serve.ts` | Wraps `composedHandler` in `traceRequests`; store bound lazily to the current vault dir. |
+| `packages/server/src/index.ts` | Public exports for the tracer, store and engine counters. |
+| `docs/logs.md` | § "Traces and work counters (#927)" extended: store location + purge property, `CENTRAID_TRACE` switch, the counter→seam table, and the "this is the only per-request gateway timing seam" ruling. |
+
+**Numbers** — host: this container, Linux 6.18 x64, 4 cores / 15 GB, Node 22. Volume: the golden year-3 vault (`goldenYear3Vault()`), one file, two SQLite handles on it, 8 alternating rounds (order flipped each round so WAL growth is not charged to one side), medians reported. Read = `SELECT party_id, display_name, kind FROM core_party ORDER BY party_id LIMIT 20`, fresh `prepare` each time (2000/round). Write = one `core_place` insert in its own `BEGIN IMMEDIATE`/`COMMIT` (200/round).
+
+| Measurement | Before | After | Δ |
+| --- | --- | --- | --- |
+| Counters OFF → ON, per read | 0.04417 ms | 0.04961 ms | +0.0054 ms (+12.3%) |
+| Counters OFF → ON, per write | 1.9131 ms | 1.9839 ms | +0.071 ms (+3.7%) |
+| Spans OFF → ON (`sampleEvery: 1`, record written), per read | 0.06186 ms | 0.13002 ms | +0.068 ms (+110%) |
+| Spans OFF → ON (`sampleEvery: 1`, record written), per write | 4.2310 ms | 4.2487 ms | +0.018 ms (+0.4%) |
+
+The span row is exactly why the invariant makes spans off by default: a read is cheap enough that writing a record doubles it. The counter row is the always-on cost and is single-digit percent on the write path; the read figure is the instrumentation's worst case (a 60-cell payload walk on a statement that does almost no work). A first pass built the counted statement out of one closure per method and cost **+47%** per read; moving the forwarder to a prototype-based class and screening the barrier regex on one character brought it to +12.3%.
+
+**Deleted / replaced** — nothing yet. `route-latency.ts` stays: it answers a different question (aggregate per-route histograms for health) and the receipt names that property rather than citing a ruling. #922's F1 per-request gateway phase timing is ABSORBED by `traceRequests` per the root ruling — no second timing seam was built.
+
+**Decisions**
+
+- `fsyncs` counts **durability barriers** (`COMMIT`/`END`, WAL checkpoints), not `fsync(2)` calls. Counting the syscall needs `strace` and a Linux runner, which is the platform-shaped instrument P1 exists to replace; the barrier is the product's own behaviour and is the same integer on every host. The existing wall-clock rig's strace count stays available on its own rung.
+- `bytesRead`/`bytesWritten` are **payload bytes** — what a statement materialized out of SQLite and what it bound into it — not disk I/O. Disk bytes are not observable from `node:sqlite` and are not deterministic per action; payload bytes are, and they catch the regression the gate is for ("this read now selects the whole row"), which the test asserts directly.
+- Two counter registries (vault + engine) rather than one: the engine importing `@centraid/vault` would undo #404's "import must not spawn threads". `addCounters` is the contract's own answer and `processWorkCounters()` is the single consumer-side sum.
+- `TRACE_ID_HEADER` is read **only while tracing is enabled**, and only as an opaque `[A-Za-z0-9._:-]{1,128}` token. Off by default means shipped builds have no ingestion surface at all; the id joins two span trees on one machine and is never echoed or forwarded.
+- `diffCounters` throws on a backwards counter, so it is not called on the product path in the emitter sense: the one call sits behind the sampling guard, over a totals object that is allocated once per process and never replaced, inside a `try` that drops the record rather than failing a request.
+
+**Verification**
+
+```
+bun run --cwd packages/vault typecheck                                   # tsc clean
+bun run --cwd packages/server typecheck                                  # tsc clean
+bun run --cwd packages/vault test -- src/gateway/work-counters.test.ts   # 9 passed
+bun run --cwd packages/server test -- src/serve/gateway-trace.test.ts    # 16 passed
+node node_modules/vitest/vitest.mjs run --config vitest.perf.config.ts   # ad-hoc A/B rig (not committed) — the four numbers above
+```
+
+## w1-seats — the seats emit spans, and count the reads an action costs
+
+**Files**
+
+| Path | What |
+| --- | --- |
+| `packages/client/src/replica/work-counters.ts` (new) | The seat's `WorkCounters` registry — a third one, because this code runs in a browser, a worker and on Hermes where `@centraid/vault` and `node:*` do not exist. |
+| `packages/client/src/replica/trace.ts` (new) | `ClientTracer`: the seat span emitter, sampling off by default, `TraceIdFactory` injectable for Hermes. |
+| `packages/client/src/replica/trace-ring.ts` (new) | `ClientTraceRing` — the bounded in-memory buffer a flush drains; platform-free and separately testable. |
+| `packages/client/src/replica/trace.test.ts` (new) | 11 tests across the tracer, the ring, the two live-query counters and the transport counter. |
+| `packages/client/src/replica/live-query-registry.ts` | `invalidations` bumped once per invalidation FIRED, before fan-out. |
+| `packages/client/src/replica/live-query.ts` | `reReads` bumped where a read actually happens — after the dirty check and `matches()`. **This is #922's D4 reads-per-action counter; no second counter was added.** |
+| `packages/client/src/replica/shell-transport.ts` | `countedRoundTrip` wraps the one transport seam, so all six request paths — and any injected fetcher — count identically. |
+| `packages/client/src/replica/index.ts` and `packages/client/src/replica/native.ts` | Export `trace.js` and `work-counters.js` on both barrels; the native barrel's DOM-free rule holds (neither module imports a DOM global or `node:`). |
+| `apps/mobile/src/lib/replica/native-trace.ts` (new) | The phone's tracer over `nativeReplicaIdFactory`, the `EXPO_PUBLIC_CENTRAID_TRACE` policy, and `flushNativeTraces` writing `<replicaStorage>/diagnostics/traces.jsonl`. `expo-file-system` is imported **lazily inside the flush**: a static import would pull Expo's native module graph into every unit test that reaches `background-sync.ts` (it did — `background-sync.test.ts` went red on `__DEV__ is not defined` until the import moved). |
+| `apps/mobile/src/lib/replica/native-trace.test.ts` (new) | 7 tests: default-off, drain-once, native minting, swallowed write failure. |
+| `apps/mobile/src/lib/replica/background-sync.ts` | One `flushNativeTraces()` in `runBackgroundReplicaSync`'s `finally`. |
+| `docs/logs.md`, `docs/mobile-offline.md` | The seats' counter→seam row, and the ring-buffer/flush rule in § "Background work and push privacy". |
+
+**Numbers** — host: this container, Linux 6.18 x64, 4 cores / 15 GB, Node 22. Volume: the golden year-3 vault via the w1-gateway A/B rig; the seat counters add no SQLite work, so the hot-path cost they carry is the same three integer bumps measured there. Spans on the seat cost what they cost on the gateway (a record built and pushed into an array, no I/O until a flush): the w1-gateway spans row, minus the file write.
+
+| Measurement | Before | After | Δ |
+| --- | --- | --- | --- |
+| `invalidations` + `reReads` per fired invalidation (2 fired, coalesced) | — | 2 invalidations / 1–2 re-reads | asserted in `trace.test.ts`, not timed — three integer increments |
+| `httpRoundTrips` per transport call | — | exactly 1, injected fetcher or default | asserted in `trace.test.ts` |
+| A non-matching invalidation | — | 1 invalidation, **0** re-reads | the fan-out regression the pair is for |
+
+**Deleted / replaced** — nothing. #922's D4 reads-per-action counter is REALIZED by `reReads` rather than built separately; a second counter would have been the duplication the ruling forbids.
+
+**Decisions**
+
+- The mobile flush lives in `runBackgroundReplicaSync`'s `finally`, not on a success path: a pass that timed out or threw still recorded spans worth reading, and those are the passes a developer is looking at. `flushNativeTraces` swallows its own failures for the same reason the gateway store does.
+- `httpRoundTrips` is counted by wrapping the fetcher rather than by six call-site bumps. A new request path in `shell-transport.ts` is then counted the day it is written, and the web shell's Iroh/webControl wrapper and the native fetcher are counted like the default instead of being invisible.
+- Three counter registries, not one: gateway (node), engine (node, no vault import), seat (browser/worker/Hermes). `addCounters` is the contract's own answer, and a shared mutable singleton across those runtimes does not exist to be shared.
+- `reReads` counts EXECUTIONS, not invalidations that matched: `LiveQuery` coalesces a burst into one run, and the honest number for "reads per action" is the number of times the runner ran.
+
+**Verification**
+
+```
+bun run --cwd packages/client typecheck                                   # tsc clean
+bun run --cwd apps/mobile typecheck                                       # tsc clean
+bun run --cwd packages/client test -- src/replica/trace.test.ts           # 11 passed
+bun run --cwd apps/mobile test -- src/lib/replica/native-trace.test.ts    # 7 passed
+bun run --cwd packages/client test                                        # 267 files, 2447 passed (engine lane)
+bun run --cwd apps/mobile test -- src/lib/replica/                        # 30 files, 214 passed (engine lane)
+```
+
+## w1-gate — the merge rung stops timing and starts counting
+
+**Files**
+
+| Path | What |
+| --- | --- |
+| `.github/workflows/ci.yml` | The per-PR perf gate is now `bun run test:perf:counters`. The `apt-get install strace` step and the **retry-once wrapper are DELETED**. |
+| `scripts/ci/work-counter-gate.mjs` (new) | The comparison: `compareScenario` / `compareAll` / `renderRows` / `explainFailures` / `verdict`, plus a CLI over a captured measurements file. Two modes — `max` (a budget) and `exact` (a value where both directions are a regression). |
+| `scripts/ci/work-counters.expected.json` (new) | The committed, tighten-only expectations. |
+| `scripts/ci/work-counter-gate.test.mjs` (new) | 10 `node --test` cases, incl. drift in both directions between the rig and the file. |
+| `tests/perf/work-counters.perf.test.ts` (new) | The rig: golden year-3 vault, real `Gateway.read` and `Gateway.invoke`, counters diffed and compared. Second test asserts two identical runs cost identically — the property that makes the retry unnecessary. |
+| `packages/server/src/cli/trace-admin.ts` (new) | `centraid-gateway trace last [--data-dir] [--vault-dir] [--json] [--clear]` — the waterfall, rendered through the contract's own `waterfall()`. |
+| `packages/server/src/cli/trace-admin.test.ts` (new) | 9 tests: rendering, vault ordering by recency, `--json`, `--clear`, and the "spans are off, here is how to turn them on" refusal. |
+| `packages/server/src/cli/cli.ts` | `trace` subcommand + usage line. |
+| `packages/vault/src/gateway/work-counters.ts` | `fsyncs` also counts an AUTOCOMMIT write (a mutating statement outside a transaction opens and commits its own, so SQLite syncs with no `COMMIT` to see). Found by this rig: without it the gate read 0 barriers for a write. |
+| `packages/vault/src/gateway/work-counters.test.ts` | +2 tests: autocommit is a barrier, a no-op statement is not, and two writes in one transaction are ONE barrier. |
+| `package.json` | `test:perf:counters`; `work-counter-gate.test.mjs` added to `scripts:test`. |
+| `docs/logs.md` | `trace last`'s flags, and the merge-rung paragraph. |
+
+**Numbers** — host: this container, Linux 6.18 x64, 4 cores / 15 GB, Node 22. Volume: the golden year-3 vault. Command: `bun run test:perf:counters`. These are the committed expectations, measured, not estimated:
+
+| Scenario | statements | rowsScanned | fsyncs | bytesRead | bytesWritten |
+| --- | --- | --- | --- | --- | --- |
+| `gateway.read core.party limit=20` | 6 | 24 | **1** | 2100 | 198 |
+| `gateway.invoke atlas.insert_row core.place` | 25 | 31 | **5** | 1448 | 948 |
+
+**Seeded-regression proof.** Both seeds were applied to `Gateway.read`, the gate run once, and the seed reverted.
+
+| Seed | First-run verdict |
+| --- | --- |
+| One extra statement (`SELECT 1`) | `statements max 6 → 7 FAIL` — *"statements must be at most 6, measured 7 (+1). Something on this path now does more work. Find it — do not raise the number."* |
+| One extra durability barrier (an autocommit `INSERT`) | `fsyncs exact 1 → 2 FAIL` — *"fsyncs is 1, measured 2 (+1)."* |
+
+Both failed on the **first** run, with no retry and no history, and both named the counter and the direction.
+
+**Deleted / replaced**
+
+- The **retry-once step** (#532, annotated by #557) is gone. Re-judged on its merits: it existed only because the wall-clock rig it wrapped read shared-runner event-loop noise as a regression. Deterministic integers have no noise to absorb, and a retry over them would hide a real regression half the time. There is no product or security property that depends on it — it is deleted, not moved.
+- The `apt-get install strace` step is gone with it. `strace` gave an exact `fsync(2)` count at the cost of a Linux runner and an external tracer; a durability barrier is the product's own behaviour and is the same integer on every host.
+- The wall-clock rig itself (`test:perf:pr` → `packages/server/scripts/bench-low-end.mjs`) is **NOT** deleted: it answers a different question — latency, RSS and idle cost under a constrained hardware profile — and no counter replaces that. Per the lane's escape hatch, **the counters gate replaces it on the merge rung and the wall-clock rig moves to rung 3 (`candidate.yml`) in wave 2**; `candidate.yml` is outside this lane's contract so it was not edited. `check:full` still runs it locally, so it is not orphaned in the meantime.
+
+**Decisions**
+
+- `fsyncs` uses `mode: "exact"`, the other counters `mode: "max"`. A durability barrier that disappears is a durability bug, not a speed-up, so both directions must fail; the rest are budgets and must not fail an improvement.
+- The rig warms each path before measuring. The first call through any path compiles statements and fills SQLite's page cache; fencing that would fence the fixture's coldness, which no product change moves.
+- The comparison lives in `scripts/ci/` and the measurement in `tests/perf/`, so the comparison is unit-tested without booting a vault and a developer's `--explain` and CI's failure use one renderer.
+- A scenario in the file but not in the run, or measured but not expected, is an **error**. A gate that silently stops fencing a path is worse than no gate.
+
+**Findings** (not this lane's to fix; filed for the root)
+
+1. **One `atlas.insert_row` costs five durability barriers.** Five separate autocommit writes for one user write, where a transaction would make it one. Recorded in the expectations as measured, with the comment saying so — not approved.
+2. **Every gateway READ performs a durable write** (the audit receipt), so a read costs an fsync. The property that depends on it is real — an access receipt that is not durable before the caller sees the rows is not evidence — but it means "read" is not a read-only cost, and any read-heavy budget written as if it were is wrong.
+3. **`tests/quality/first-paint-query-counts.test.ts` has its own statement counter** (`countReadStatements`) and its own query-count budget file. That is the "query-count file" #927's ledger criterion says the ledger replaces; it should read these counters instead of counting statements a second way.
+
+**Verification**
+
+```
+bun run test:perf:counters                                              # 2 passed; the table above, all rows ok
+node --test scripts/ci/work-counter-gate.test.mjs                       # 10 pass, 0 fail
+bun run --cwd packages/server test -- src/cli/trace-admin.test.ts       # 9 passed
+bun run --cwd packages/vault test -- src/gateway/work-counters.test.ts  # 11 passed
+bun run lint:workflow-pins                                              # 23 workflows clean
+bun run lint:path-filters                                               # 10 filters cover every path
+bun run scripts:test                                                    # 599 pass, 0 fail
+bash .governance/run.sh                                                 # 22/22 directives passed
+bun run --cwd packages/vault test                                       # 202 files, 1588 passed (engine lane)
+bun run --cwd packages/server test                                      # 391/395 files; 3 reds are BASE STATE, see below
+bun run format:check && bun run lint && bun run typecheck               # clean
+```
+
+Lane tree hash after the final gates: quoted in the lane report to the root. A tree hash cannot be written inside the tree it names — recording it here would change it — so the report is the authority and `git rev-parse HEAD^{tree}` on the landed head is the check. Base: `origin/claude/927-w1b@f782cfb6d`.
+
+The three `packages/server` reds are BASE STATE, not this lane: `gateway-db-lock.integration.test.ts` shells out to the `sqlite3` CLI, which is not installed in this container, and `acp/backends/acp/launch.test.ts` asserts `IS_SANDBOX` is unset while the container exports `IS_SANDBOX=yes`. `git diff --name-only origin/main...HEAD` touches neither tree.
+## lane 3a — golden-vault follow-ups
+
+Slices (iii) photos-timeline rig fix, (iv) fixture warm + build/mount split, (v) `artifacts/year3-cache` retired — `## w1c`'s finding 4 and its fixture-cost notes.
+
+### Files
+
+| Path | Change |
+| --- | --- |
+| `tests/scale/photos-timeline.scale.test.ts` | The degenerate corpus's `INSERT` stops naming `media_asset.favorite`, deleted by #916 (ONT-03). One statement; profile, volumes, budgets and all four assertions untouched. |
+| `packages/test-kit/src/year3-fixture-cache.ts` (new) | The content-addressed cache, split out of `year3-vault.ts`: version, root, key, the WARM set, and `materializeYear3Fixture` — now a BUILD that never copies and never opens. Re-exported in full by `./year3-vault`, so no import moved. |
+| `packages/test-kit/src/year3-vault.ts` | Loses the cache half (461 → 358 lines), gains the re-export. `YEAR3_FIXTURE_VERSION` 2 → 3: the golden replica carries `meta.json` now, so a version-2 directory is a different artifact. The unused `profile` default is dropped. |
+| `packages/test-kit/src/year3-vault.test.ts` | Version assertion follows the bump; new test — three CONCURRENT materializations of one key run `generate` once and share one directory. |
+| `tests/helpers/factories.ts` | `buildGoldenYear3Vault()` (the artifact exists in the cache; no copy) and `mountGoldenYear3Vault()` (a private writable copy) are separate; `goldenYear3Vault()` is their composition. `goldenYear3Replica()` computes its content address from the profile alone and reads `rows`/`cursor` from the artifact's `meta.json`, so a warm run neither mounts the vault nor walks a row. |
+| `tests/quality/user-facing-qualities.test.ts` | The `year3-cache` temp-dir prefix follows the module that owns the cache, and the file's one raw NUL byte becomes `\u0000`. |
+| `tests/scale/large-vault.scale.test.ts` | Publishes `golden vault mount` — the copy alone. The file lands in this lane's #922 gauge commit, which adds the audit-band gauges to the same `recordQualityResult` call. |
+
+Also in this lane, under #922 and detailed in `receipts/issue-922-snappier-blueprints.md`: `tests/scale/replica-sse-fanout.scale.test.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `scripts/test-report/render/adversaries.mjs`, `scripts/test-report/render.test.mjs`.
+
+### Numbers
+
+Host: this session's container, Linux 4 cores / 15 GB, node 22, cache root `/tmp/centraid-year3-fixture-cache`. Volume: `goldenYear3Profile()`, 106,274,816 B on disk. Command: `bun run test:scale -- tests/scale/<rig> --reporter=verbose`.
+
+| Measurement | Before | After |
+| --- | --- | --- |
+| Golden replica cases, WARM (N = 1 / 10 / 40) | 1,159 / 2,700 / 2,646 ms | 9 / 6 / 6 ms |
+| Golden replica cases, warm, total | 6,505 ms | 21 ms |
+| `goldenYear3Replica().buildMs`, warm, N = 40 | 585.1 ms | 1.0 ms |
+| Golden replica cases, COLD under version 3 | — | 8,680 / 8,675 / 8,418 ms |
+| Golden vault MOUNT alone, warm | not separable | 198.4 ms |
+| `large-vault` materialize + mount + open, warm | 574.9 ms | 441.3 ms |
+
+Before, a replica cache HIT still mounted 126 MB of golden vault and walked 50,000 rows through `readReplicaRows` to rebuild a snapshot it discarded: `rows` and `cursor` were knowable only from the walk. `photos-timeline`, warm, is 2,580.9 ms, of which 2,271.2 ms is its own degenerate corpus.
+
+### Deleted, with its replacement
+
+- `goldenYear3Vault({ copy: false })` — the branch handing a caller the cache directory itself. No caller passed it, and opening the artifact writes a WAL and an identity key into the bytes every other rig measures against. Replaced by `buildGoldenYear3Vault()` for callers that need only its existence.
+- `copyMs` → `mountMs`; `materializeYear3Fixture`'s `profile` default.
+- The last three `year3-cache` literals: the cache-root comment's account of how the path used to be spelled, the kit test's `tempDir("year3-cache-")` prefix, and `tests/quality/user-facing-qualities.test.ts`'s `quality-year3-cache-`. `grep -rn "year3-cache" packages apps tests scripts` is empty. That file also carried a RAW NUL byte in a template literal (a join separator); it is `\u0000` now, the same string with no unreadable source.
+
+### Decisions
+
+1. **The version bump IS the invalidation.** `meta.json` changes the artifact's shape, so a version-2 directory cannot answer a version-3 question; tolerating its absence would leave a rebuild-on-missing-file shim forever. Cost: one ~25 s golden-vault rebuild per cache root.
+2. **The warm set lives in the kit.** "Materialize once" is the cache's job; a memo in `tests/helpers` would leave `photos-timeline` and `restore-10gib`, which call the cache directly, out of it.
+3. **`photos-timeline` keeps its own 50,000-photo profile** — finding 1.
+
+### Verification
+
+```sh
+# in /home/user/centraid-wt/claude/927-w1c-golden-vault
+bash $S/self-audit.sh 927 origin/claude/927-ledger   # tree d4697a3e1fb4f84bde8323ff42fbfd652246ad0d
+bun run --cwd packages/test-kit typecheck && bun run --cwd packages/test-kit test
+bun run typecheck
+bun run test:scale -- tests/scale/photos-timeline.scale.test.ts    # 1 passed (red at the base)
+bun run test:scale -- tests/scale/large-vault.scale.test.ts        # 1 passed
+bun run test:scale -- tests/scale/replica-bootstrap.scale.test.ts  # 5 passed
+bash .governance/run.sh                                # 22/22 directives passed
+```
+
+Gates ran on tree `d4697a3e1fb4f84bde8323ff42fbfd652246ad0d` (head `564ff42d5`),
+and `self-audit.sh` was re-run on the landed head after this paragraph was
+written, with the same result — the two trees differ only by this paragraph and
+its twin in the other receipt. `self-audit.sh` is single-umbrella: it reports
+each of this lane's other-umbrella commits as "subject lacks (#N)",
+symmetrically in both runs. Every other check is green in both, and
+`.governance/run.sh` passes 22 of 22.
+
+### Findings
+
+1. **Whether `photos-timeline` should mount the golden vault is open.** A: mount and re-declare it at 10,000 + 10,000 — needs `tests/budgets.json#qualityRigs` and `tests/claims.json#photos.scale-50k` to move with the volume (3b's files). B: mount and top up to 50,000 — the top-up is not cacheable, so warm seed cost goes from ~0.3 s to seconds and the rig's own 1.5x drift gate walks. Recommendation: A, in 3b's ledger pass. Not taken here.
+2. **`.github/workflows/e2e.yml` still names `artifacts/year3-cache`** four times (w1c finding 1). The env var is still read, so CI is correct; the literal is the trace lane's.
+3. **A build still leaves an orphan identity key** in the cache root (w1c finding 6) — now once per version bump too. Unowned.
+
+### Doc debt
+
+- `tests/experience-budgets/README.md` — the year-3 table names the golden artifact per row but not `meta.json` (#927 wave 2's ledger pass).
+- `docs/harnesses.md` — describes the year-3 fixture as materialize-and-copy; build vs mount is a distinction a rig author now has to know.
+
+## w2 ledger — perf history off the cache, rig ceilings beside their volume
+
+Wave-2 integration branch `claude/927-w2`: `claude/927-w1b` (3 commits) and
+`claude/927-ledger` (5) rebased onto main's maintainer parity fix `2bac48118`,
+then this slice.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `.github/workflows/e2e.yml` | `quality-history-*` and `quality-history-restore-*` actions caches deleted; rig drift series restored from and published to gh-pages inside the report tree; four `artifacts/year3-cache` literals gone |
+| `tests/budgets.json` | `photos-timeline` gains `budgetsMs` (4 named ceilings) beside its volume; `work-counters` registered with a declared `gate: "deterministic-counters"` |
+| `tests/helpers/rig-budgets.ts` | `rigBudgetMsNamed(owner, key)` — one named ceiling for a rig that measures several intervals |
+| `tests/scale/photos-timeline.scale.test.ts` | four module constants replaced by registry reads |
+| `scripts/test-report/validate-nightly-wiring.mjs` | honours the ledger-declared deterministic-gate exemption, and requires the `_gateNote` that argues it |
+| `packages/test-kit/src/year3-fixture-cache.ts`, `packages/vault/src/replica/snapshot.ts` | comments naming the removed `DEFAULT_REPLICA_MAX_VALUE_BYTES` corrected |
+
+### Numbers
+
+| Ceiling | Was | Now | Provenance |
+| --- | --- | --- | --- |
+| `photos-timeline` seed / page / one-day / bucket | 30000 / 2000 / 1000 / 2000 ms, module constants | same four values, ratcheted | value-preserving move; ratchet now sees them (`bun run test:ratchet:unit`, linux x64) |
+
+### Deleted, with replacement
+
+- `quality-history-${{ runner.os }}` and `quality-history-restore-${{ runner.os }}` actions caches → the gh-pages report tree (`test-report/nightly/quality-history/{perf,scale}`), written by the report job, read by the quality job.
+- `CENTRAID_YEAR3_CACHE_DIR: artifacts/year3-cache` (×2, the last two literals) → `year3FixtureCacheRoot()`'s host scratch dir. The fixture is a rebuildable artifact, not history.
+- `SEED_BUDGET_MS`/`PAGE_READ_BUDGET_MS`/`ONE_DAY_READ_BUDGET_MS`/`DAY_BUCKET_BUDGET_MS` → `tests/budgets.json#qualityRigs`.
+
+### Decisions
+
+- The counter gate's history exemption is declared in the **ledger entry**, not in the validator, so it is reviewed beside the volume. A rig claiming it and then timing something is the thing to look for.
+
+### Verification
+
+```
+bun run lint:ledgers && node scripts/test-report/validate-nightly-wiring.mjs
+bun run test:ratchet:unit && node --test scripts/lint-workflow-pins.test.mjs
+bun run --cwd packages/test-kit test
+```
+
+### Falsification
+
+1. *Claim: no rig ceiling was widened by the photos-timeline move.* Diffed the four registry values against the deleted constants — 30000/2000/1000/2000 both sides; `lint:ledgers` green against `origin/main`.
+2. *Claim: the deterministic-gate exemption cannot be claimed silently.* Removed `_gateNote` from the entry and re-ran `validate-nightly-wiring.mjs`: it errors. Restored.
+
+## w2 ledger — one journey ledger, keyed surface × journey × volume × hardware
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `tests/journeys.json` (new) | THE ledger. 32 entries keyed `surface/journey/volume/hardware`, each naming its spans, its consumers and its `tolerancePercent`; plus `rigs` (46) and `drift`. Declares the journey, volume, hardware and status vocabularies inline, so no ceiling is stated at an unnamed volume. |
+| `tests/experience-budgets/**` (deleted, 6 files) | Absorbed. `web/desktop/mobile/gateway.json` → per-surface entries; `client-query-counts.json` → `client/first-paint-work`; `README.md` → the ledger's own `volumes`/`journeys`/`hardware`/`_statusVocabulary`. |
+| `tests/budgets.json` | `qualityRigs` and `experience` removed; the file keeps only the SUITE and LADDER ceilings no journey owns. |
+| `tests/helpers/journeys.ts`, `scripts/lib/journey-ledger.mjs` (new) | The two readers. A missing entry, metric or numeric field throws; nothing parses the ledger by hand. |
+| `scripts/lint-journey-ledger.mjs` + `.test.mjs` (new) | The ledger's own shape gate, wired into `lint:product` and `gate-classes.json` as a rung-1 contract gate. |
+| 18 consumers (`tests/perf/**`, `tests/scale/**`, `tests/quality/**`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `scripts/perf/*.mjs`, `tests/agent-e2e-mobile/flows/scroll-frames.mjs`) | Read the ledger through a reader instead of a JSON file. |
+| `tests/quality/first-paint-query-counts.test.ts` | Counts through `gatewayWorkCounters` (the trace contract) instead of monkey-patching `DatabaseSync.prepare`. |
+| `scripts/test-report/{ratchet-floors,derive,validate-nightly-wiring}.mjs`, `scripts/check-ledgers.mjs`, `scripts/check-quality-knobs.mjs` | Point at the ledger. |
+| `TESTING.md`, `docs/decisions.md` | Four ledgers → five; ruling **G-experience-reference** marked superseded (it said the opposite of the code). |
+
+### Numbers
+
+| Measurement | Was | Now | Provenance |
+| --- | --- | --- | --- |
+| first paint, statements per screen (photos-grid / notifications / atlas / assistant) | 68 / 8 / 13 / 22 (SELECT PREPARES seen by a test-local monkey-patch) | **76 / 7 / 7 / 5** (statement EXECUTIONS from the product's own counter) | `node node_modules/vitest/vitest.mjs run tests/quality/first-paint-query-counts.test.ts`, linux x64 / 4 cores / 15 GB, 2026-09-04. NOT comparable to the old numbers — different instrument, recorded on the entry. Atlas and Assistant read handles the gateway never wrapped, so the probe instruments each screen's own handle instead of reporting 0. |
+| every other ceiling | — | unchanged | Carried across mechanically; falsified below. |
+
+### Decisions
+
+- The counts above are seeded at **observed with no headroom**: the count is deterministic on a fixed fixture, so one extra statement fails on the first run — the counter-gate discipline, not the p95 one.
+- `tests/quality/classification-ratchet.json` approvedDeviation, in full: #930 re-pins the tests/claims.json whole-file fingerprint after removing the spent rename marker on the `golden-vault-archaeology` flow, superseding the #916 re-pin note rather than contradicting it — every sentence of #916's account of what that flow took over is kept, in receipts/issue-916-vault-ontology-review.md and in the flow's own `_comment`. `replacesMinimumTestsFlow` is a ONE-SHOT claim about the change set that makes a rename, checked against the merge base; once #916 landed, `schema-migration-corpus` existed at no base any more, so the marker could only ever report an unknown predecessor and `lint:ledgers` / `test:ratchet` were red on main itself. The marker and the `approvedMinimumTestsDeviation` that authorized it are removed together, because that note waives a future minimumTests drop on this flow by presence alone; the floor stays at 5, no claim row, severity, evidence selector or demonstrated-red date moves, and claimsGovernanceFingerprint is unchanged. Prior: #916. #928 w1b re-pins tests/claims.json once more, for the static app entity tripwire: it registers the new law `app-entity-tripwire` and its flow `blueprint-app-entity-tripwire-law` (owner packages/blueprints/src/app-entity-tripwire.test.ts, minimumTests 17), mirroring how `one-computation` is registered so the lane is owned. Additions to the law and flow registries only, and a NEW minimumTests floor, which is a tightening — no claim row, severity, evidence selector, demonstrated-red date or existing floor moves, and the 45 claim rows stay byte-identical, so claimsGovernanceFingerprint is unchanged. Prior: #930. #931 re-pins it once more after registering ONE new rung-3 lane, `rung1-on-main`, in `lanes` — the row `candidate.yml`'s new job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept it. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or `minimumTests` floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #928 w1b. #927 w2 re-pins tests/claims.json for the JOURNEY LEDGER: every `knob` and `seed` string that named tests/experience-budgets/*.json now names tests/journeys.json and the entry key inside it, because those five files were absorbed into one ledger keyed `surface / journey / volume / hardware`. A knob path rename only: no claim row is added or removed, no severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and every seeded-red recipe still points at the same number under its new address. Prior: #931. #927 w3 re-pins tests/claims.json once more to register ONE new rung-3 lane, `paired-journeys` — the row candidate.yml's paired candidate/PR journey job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept its evidence step. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and the claim rows stay byte-identical, so claimsGovernanceFingerprint moves only because `lanes` shares the file with `claims`. Prior: #927 w2.
+- A third status word, `bound`, names what `mobile/scroll`'s 50% frame-drop ceiling always was: a catastrophe bound, not observed + headroom. The linter makes it argue itself.
+
+### Verification
+
+```
+bun run lint:journey-ledger && bun run lint:ledgers && bun run lint:quality-knobs
+bun run test:ratchet && node scripts/test-report/validate-nightly-wiring.mjs
+node --test scripts/lint-journey-ledger.test.mjs scripts/ci/gate-classes.test.mjs
+bun run typecheck   # 25/25
+```
+
+### Falsification
+
+1. *Claim: absorbing five files into one ledger widened no ceiling.* Flattened every number from `origin/main`'s five files plus `budgets.json#qualityRigs` (61 values) and matched them as a multiset against the ledger's 97: **nothing lost**, and the 36 additions are 31 `tolerancePercent`, one `0`, and the four `photos-timeline` ceilings this lane's earlier commit moved.
+2. *Claim: the linter actually refuses a ledger that rots the way the old files did.* Nine fixture cases in `scripts/lint-journey-ledger.test.mjs` — key/field disagreement, undeclared volume, no span and no consumer, missing consumer file, `unmeasured` shipping a number, a `bound` that does not argue itself, a dangling rig cross-link, a surviving retired reference. All nine fail the linter; the well-formed ledger passes.
+
+## w2 paired runner — the verdict that replaced the drift rule
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `scripts/ci/paired-journeys.mjs` + `.test.mjs` (new) | Interleaved candidate/PR journey rounds, paired differences, bootstrap CI on the median, per-journey tolerance from the ledger. Seeded PRNG, so a re-run cannot launder a red. |
+| `scripts/ci/bisect-journeys.mjs` + `.test.mjs` (new) | Walks the promoted-candidate list on gh-pages for the first sustained step; a spike that reverts is a blip, not a culprit. |
+| `.github/workflows/candidate.yml` | `paired-journeys` job (rung 3, `promote` needs it) and a `workflow_dispatch` `bisect-journeys` job; `promote` publishes each promotion's baseline to `test-report/candidate-journeys/<sha>.json`. `test:perf:pr` (the constrained wall-clock rig) re-homed here — no rung ran it. |
+| `scripts/perf/app-waterfall.mjs` + `.run.ts` + `.test.mjs`, `vitest.waterfall.config.ts` (new) | `bun run perf:waterfall` — the rung-0 developer command: eight apps, one gateway, statements + clock, compared to this machine's own saved baseline. |
+| `tests/helpers/rig-budgets.ts`, `packages/test-kit/src/quality-result.ts`, `tests/agent-e2e-shared/harness.mjs` | `rigDriftBudgetMs`, `driftBudget`, `qualityRegressionBudget`, `rigDriftBudget`, `regressionBudget` and `trailingMedianBudget` **deleted**. |
+| 46 rigs + 2 mobile flows | Every drift/catastrophe call site removed with them. |
+| `vitest.perf.config.ts`, `vitest.scale.config.ts` | `fileParallelism: false` deleted; the header says why it existed and why it no longer does. |
+| `tests/scale/large-vault.scale.test.ts`, `tests/journeys.json` | The audit-band and WAL gauges become GATED numbers (`gateway/read-cost`); `client/first-paint-work` gains `maxWallClockMs` beside the statement count (#922 D4). |
+
+### Numbers
+
+| Measurement | Value | Provenance |
+| --- | --- | --- |
+| Seeded 200 ms on the bootstrap read path | **regressed**, +201.2 ms, 95% CI [172.2, 221.3] ms vs a 26.8 ms tolerance, **4 paired rounds**, first run | `node scripts/ci/paired-journeys.mjs --candidate . --pr /tmp/prtree --rounds 4`, linux x64 / 4 cores / 15 GB, 2026-09-04. Three other journeys `held` — no false positive. |
+| Seeded **26 ms (a 20% slow-down)** on the same path | **regressed**, +28.4 ms = 23.3%, 95% CI [18.9, 38.6] ms vs a 12.2 ms tolerance, **14 paired rounds**, first run, no warm-up | same command, `--rounds 14`. At 6 rounds the same seed reads `inconclusive`, which fails the lane too — an interval straddling the tolerance is not a pass. |
+| audit band per gateway read | 360.4 B observed → gated at **450 B** | `tests/scale/large-vault.scale.test.ts`, 500 reads on the mounted golden vault, 2026-09-03 (lane 3a), re-asserted here |
+| WAL per gateway read | 46,490 B observed → gated at **65,536 B** | same run; a read that starts dirtying a second page cluster now fails |
+| `perf:waterfall`, eight apps on a year-3-shaped vault | 4.3 s of measurement, 9.2 s wall (cap: one minute) | `bun run perf:waterfall`, linux x64 / 4 cores / 15 GB, 2026-09-04. agenda 504.7 ms / **3,244 statements**; docs 150.2/25; locker 156.8/286; notes 188.4/58; people 151.2/35; photos 210.3/141; tally 200.9/215; tasks 188.3/47 |
+
+### Deleted, with replacement
+
+- The **30-sample drift budget** and the **3× catastrophe budget** → the paired candidate/PR verdict. Both compared one tree's number today against other trees' numbers on other nights and other runners, so most of what they measured was the runner, and neither could answer whether THIS change is slower.
+- **`fileParallelism: false`** in both nightly configs → the paired run measures both trees under whatever contention the runner has, so serialising the lane bought nothing and cost the lane's duration. Measured cost of the removal on this container: the gateway cold-start rig read **5,291 ms serially and 6,250 ms in parallel** — and its 5,000 ms ceiling was already breached SERIALLY, so that ceiling is seeded from a faster host than CI runs on.
+
+### Decisions
+
+- An `inconclusive` verdict FAILS the lane. "Slower, but the run cannot say by how much" is not a pass.
+- The four paired gateway journeys carry `tolerancePercent: 10`, not 20: they are in-process measurements with low round-to-round spread, and a 20% tolerance would make a seeded 20% regression unprovable by construction.
+
+### Findings
+
+1. **`agenda` first paint issues 3,244 statements** against 25 for `docs` — an N+1 on the busiest app's opening read, found by the new developer command on its first run. Not this lane's to fix (#922 owns hot paths); the ledger entry and the command that found it are here.
+2. **The rig DIET LIST — 32 rigs cite no ledger entry.** `tests/perf/{harness-turn,app-engine-handler,automation-fire,backup-throughput,blob-egress,desktop-cold,pwa-waterfall,replica-sync-io,tunnel-native,tunnel-throughput,vault-write}`, `tests/perf/work-counters` (deliberate — it times nothing), `tests/scale/{harness-sessions,automations-fire,backup-restore,blob-gc,blueprint-clones,conversation-ledger,desktop-windows,gateway-sessions,large-vault→now cited,photos-timeline,photos-memories,ontology,backup-manifest-size,browser-replica-query,replica-sse-fanout,replica-bootstrap,replica-retention,tunnel-pairs,web-tabs}`, `tests/agent-e2e-mobile/flows/volume-proof`. The entry each would want: `photos-timeline`/`photos-memories` → `web|mobile/scroll` at `year3-photos`; `browser-replica-query`/`replica-bootstrap` → `mobile/first-bootstrap`; `replica-sse-fanout` → `gateway/peer-echo`; `replica-retention` → `gateway/converge`; `blob-gc`/`backup-restore`/`backup-manifest-size`/`backup-throughput` → a `restore`/`backup` entry that does not exist; `harness-*`/`app-engine-handler`/`automation-fire`/`desktop-*`/`tunnel-*`/`web-tabs`/`blueprint-clones`/`ontology`/`conversation-ledger`/`pwa-waterfall`/`replica-sync-io`/`vault-write`/`blob-egress` → machine costs with no journey above them. **Not deleted** — the maintainer reviews the list.
+3. `soak-weekly.yml` still keeps its `quality-history-soak-*` actions cache. Out of this lane's named files; the nightly's is gone.
+4. **Three rigs are red on this container BEFORE this lane touches them**, confirmed by stashing the whole diff and re-running: `photos-memories.scale` throws `table media_asset has no column named favorite` (the #916 column drop; lane 3a fixed the same break in `photos-timeline` and not here), `phash-clustering.scale` fails a count assertion (`expected 1 to be +0`), and `gateway-request.perf` reads a 5,291 ms cold start against a 5,000 ms ceiling seeded on a faster host. None is a regression from this lane and none is this lane's to fix.
+
+### Files, in full
+
+Every path this lane's two commits touch that the tables above name only by group:
+
+- `.github/workflows/lane-client-e2e.yml`
+- `apps/mobile/src/lib/replica/reader-statement-budget.test.ts`
+- `apps/mobile/src/lib/replica/reconnect-to-fresh.fixture.ts`
+- `packages/test-kit/src/quality-signal.test.ts`
+- `packages/test-kit/src/test-kit.test.ts`
+- `scripts/check-ledgers.test.mjs`
+- `scripts/check-mobile-suite-budgets.mjs`
+- `scripts/ci/bisect-journeys.test.mjs`
+- `scripts/ci/gate-classes.json`
+- `scripts/lint-product.mjs`
+- `scripts/perf/README.md`
+- `scripts/perf/app-waterfall.run.ts`
+- `scripts/perf/app-waterfall.test.mjs`
+- `scripts/perf/app-weight.mjs`
+- `scripts/perf/send-to-first-token.mjs`
+- `scripts/test-report/derive.mjs`
+- `scripts/test-report/fixtures/claims.json`
+- `scripts/test-report/ratchet-floors.mjs`
+- `tests/agent-e2e-mobile/flows/cold-start.mjs`
+- `tests/agent-e2e-mobile/flows/ios-smoke-budget.md`
+- `tests/agent-e2e-mobile/flows/volume-proof.mjs`
+- `tests/agent-e2e-mobile/lib/ci-gateway.mjs`
+- `tests/agent-e2e-mobile/lib/fixed-delay-agent.mjs`
+- `tests/agent-e2e-shared/harness.test.mjs`
+- `tests/experience-budgets/client-query-counts.json`
+- `tests/experience-budgets/desktop.json`
+- `tests/experience-budgets/gateway.json`
+- `tests/experience-budgets/mobile.json`
+- `tests/experience-budgets/web.json`
+- `tests/inventory.json`
+- `tests/perf/app-engine-handler.perf.test.ts`
+- `tests/perf/automation-fire.perf.test.ts`
+- `tests/perf/backup-throughput.perf.test.ts`
+- `tests/perf/blob-egress.perf.test.ts`
+- `tests/perf/desktop-cold.perf.test.ts`
+- `tests/perf/desktop-launch.perf.test.ts`
+- `tests/perf/fixtures/desktop-main-graph.mjs`
+- `tests/perf/gateway-request-volume.perf.test.ts`
+- `tests/perf/gateway-request.perf.test.ts`
+- `tests/perf/harness-turn.perf.test.ts`
+- `tests/perf/pwa-waterfall.perf.test.ts`
+- `tests/perf/replica-sync-io.perf.test.ts`
+- `tests/perf/tunnel-native.perf.test.ts`
+- `tests/perf/tunnel-throughput.perf.test.ts`
+- `tests/perf/vault-write.perf.test.ts`
+- `tests/quarantine.json`
+- `tests/scale/automations-fire.scale.test.ts`
+- `tests/scale/backup-manifest-size.scale.test.ts`
+- `tests/scale/backup-restore.scale.test.ts`
+- `tests/scale/blob-gc.scale.test.ts`
+- `tests/scale/blueprint-clones.scale.test.ts`
+- `tests/scale/browser-replica-query.fixture.ts`
+- `tests/scale/browser-replica-query.scale.test.ts`
+- `tests/scale/composite-load.scale.test.ts`
+- `tests/scale/conversation-ledger.scale.test.ts`
+- `tests/scale/desktop-windows.scale.test.ts`
+- `tests/scale/gateway-sessions.scale.test.ts`
+- `tests/scale/harness-sessions.scale.test.ts`
+- `tests/scale/long-run-soak.scale.test.ts`
+- `tests/scale/mobile-reconnect-to-fresh.scale.test.ts`
+- `tests/scale/multi-vault-footprint.scale.test.ts`
+- `tests/scale/ontology.scale.test.ts`
+- `tests/scale/phash-clustering.scale.test.ts`
+- `tests/scale/photo-similarity.scale.test.ts`
+- `tests/scale/photos-memories.scale.test.ts`
+- `tests/scale/replica-reconnect.scale.test.ts`
+- `tests/scale/replica-retention.scale.test.ts`
+- `tests/scale/stress-to-failure.scale.test.ts`
+- `tests/scale/tunnel-pairs.scale.test.ts`
+- `tests/scale/web-tabs.scale.test.ts`
+
+### Falsification
+
+1. *Claim: the paired verdict is a property of the DIFFERENCE, not of the runner.* Fed it a series where every round is 40% slower than the last on **both** sides: verdict `held`. Fed it the same drift with a real 30% slow-down on one side: `regressed`. Both in `scripts/ci/paired-journeys.test.mjs`.
+2. *Claim: deleting the drift rule left no rig asserting against a budget that no longer exists.* `git grep` for `rigDriftBudgetMs|qualityRegressionBudget|regressionBudget|withinDrift` over `packages/ tests/ scripts/ apps/` returns nothing, `bun run lint` is clean of unused imports, and the `packages/test-kit` suite is 62/62.
+
+## w3 journeys — the nine-journey grid, and no ceiling on an empty vault
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `tests/journeys.json` | 51 entries. Every one of the nine journeys has a row on all four surfaces — a hole is now a lint error, not a silence. **No journey entry says `"volume": "empty"`.** New volumes: `seeded-demo`, `mock-gateway`, `device-fixture`, `shared-album`. |
+| `apps/web/tests/e2e/server.ts` | The web e2e vault is SEEDED — every bundled app's demo data plus 2,000 Atlas rows, through the gateway's own write path. Its budgets said `"volume": "empty (web-e2e fixture vault)"` in as many words. |
+| `apps/web/tests/e2e/perf-waterfall.spec.ts` | Reads the re-keyed entries; the report's `volume` field names the declared volume. |
+| `tests/scale/share-journey.scale.test.ts` (new) | The share journey's BEFORE number for [#929](https://github.com/srikanth235/centraid/issues/929) wave 1(c): grant → fulfil → the grantee's own read, co-hosted. |
+| `scripts/lint-journey-ledger.mjs` + `.test.mjs` | Enforces the 9 × 4 grid. |
+| `scripts/lint-test-reachability.mjs` | Registers the waterfall runner. |
+| `tests/perf/desktop-launch.perf.test.ts`, `tests/scale/{composite-load,mobile-reconnect-to-fresh}.scale.test.ts`, `tests/agent-e2e-mobile/flows/scroll-frames.mjs`, `scripts/perf/send-to-first-token.mjs` | Follow the re-keyed entries. |
+
+### Numbers
+
+| Journey | Value | Provenance |
+| --- | --- | --- |
+| web `largestContentfulPaint` | **420 ms** observed (296 / 420 / 476 over three runs) → ceiling **1200 ms** | `npx playwright test -g "web vitals"`, linux x64 / 4 cores / 15 GB, headless_shell 1194, 2026-09-04, on the SEEDED harness. Promoted from `unmeasured`; the entry had said the browser emits no first-contentful-paint. |
+| web `interactionToNextPaint` | **24 ms** observed (24 / 24 / 24) → ceiling **120 ms** | same runs, `interactionDriven: true`. Promoted from `unmeasured`. Ceiling is the Core Web Vitals threshold HALVED: 200 ms over a 24 ms interaction would not notice an eightfold regression. |
+| web `cumulativeLayoutShift` | 0 → `maxScore` 0.1, unchanged | same runs |
+| gateway `share` grant → visible, 200-photo album, co-hosted | **212.1 ms** (133.1 / 212.1 / 244.4 over three runs) → ceiling **750 ms** | `node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/share-journey.scale.test.ts`, same host, 2026-09-04. Breakdown: grant written 1.9–4.0 ms, **fulfillment 130.8–240.0 ms**, grantee's read 0.3–0.4 ms. |
+
+### Decisions
+
+- **Volume re-keys, not ceiling changes.** Moving an entry from `empty` to a declared volume renames its flattened ratchet key. Nothing to ratchet against on this land (the ledger is new on main), but the ledger's `_comment` now says a re-key carries the same numbers plus an `approvedDeviation` once the file is on the trunk.
+- `refSearchUnderComposition` left the `search` journey for the `composite-load` entry: it is the browse lane's p95 under composition, a property of the composite rig, not of the owner's search.
+
+### Findings
+
+1. **Web, desktop and mobile cannot be measured at year-3 volume from their e2e harnesses**, and the reason is one fact: `@centraid/test-kit` ships TypeScript sources with **no build**, so the year-3 generator is unreachable from `node --experimental-strip-types` (the web harness), from a plain `.mjs` script, and from Playwright's server process. The web harness is seeded through the gateway's own write path instead, which is real but is `seeded-demo`, not year-3. Giving the kit a `dist` — or a compiled `year3` entry point — is the one change that unblocks year-3 on every surface at once. **Root's call.**
+2. **Desktop rows stay `_intended` with the reason recorded**: Electron does not launch on a display-less runner, so no desktop journey number was taken here. **Mobile rows stay `_intended`**: no device.
+3. The share journey's cost is **98% fulfillment** — the grant write and the grantee's read are both under 4 ms at 200 photos. #929's AFTER belongs on the same row.
+
+### Falsification
+
+1. *Claim: no journey entry is stated at an empty volume.* Walked all 51 entries and printed the volume of every one whose journey is not marked "Not a journey" in the ledger's own vocabulary: none is `empty`. The three that remain — `composite-load`, `soak`, `stress-recovery` — are declared non-journeys in the same file.
+2. *Claim: the promoted web ceilings actually gate.* Ran the probe against them after promotion: LCP 436 ms against the new 1200 ms ceiling and INP 24 ms against 120 ms, both asserted (they were annotations before). Setting the LCP ceiling to 300 ms reds the spec on the next run.
+
+## w3 profiles — every gateway journey under both durability modes
+
+### Numbers
+
+| Journey | standard (`synchronous=FULL`) | constrained (`synchronous=NORMAL`) |
+| --- | --- | --- |
+| `first-bootstrap` bootstrap page | 112.9 ms | **149.2 ms** |
+| `own-echo` replica intent, warm p50 | 112.6 ms | **173.6 ms** |
+| `peer-echo` last-subscriber delivery, N=1 | 66.1 ms | **79.6 ms** |
+| `converge` last-subscriber delivery, N=10 | 65.9 ms | **83.2 ms** |
+
+`node packages/server/scripts/bench-journeys.mjs --profile <p> --intents 8 --fill 500 --subscribers 1,10`, linux x64 / 4 cores / 15 GB, 2026-09-04. Ceilings are ~3x observed, per profile.
+
+### Findings
+
+1. **Constrained is slower on all four**, which is the opposite of the intuition that a weaker fsync is cheaper. The profile also shrinks the worker pool, and that term dominates: the intent path pays +54% while the fan-out pays +21%. Anyone quoting a `standard` number for a phone is quoting a number 20–54% too good.
+
+### Falsification
+
+1. *Claim: the paired runner cannot compare a FULL-fsync sample against a NORMAL-fsync ceiling.* The per-profile rows carry the same `pairedSample` path, so `pairedEntries()` would have picked up twelve rows where four exist; it is pinned to the unprofiled hardware key and returns exactly the four. Printed and checked.

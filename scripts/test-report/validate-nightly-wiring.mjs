@@ -455,19 +455,19 @@ try {
 }
 
 // --- Rig budget registry completeness (#656 Layer 1F) ----------------------
-// `tests/budgets.json#qualityRigs` documented 9 of the 24 committed rigs and
-// nothing read it, so it drifted silently for two milestones. Making it
-// exhaustive is only durable if something fails when it stops being
-// exhaustive — that is this block. A new rig must declare its lane and volume;
-// a deleted rig must not leave a phantom entry behind.
+// The rig register is only useful while it is EXHAUSTIVE, and it is only
+// exhaustive while something fails when it stops being — that is this block. A
+// new rig must declare its lane and volume; a deleted rig must not leave a
+// phantom entry behind. The register's own shape (spans, consumers, ledger
+// cross-links) is checked by scripts/lint-journey-ledger.mjs.
 const LANES = [
   { lane: "perf", suffix: ".perf.test.ts" },
   { lane: "scale", suffix: ".scale.test.ts" },
 ];
 
 const budgets = JSON.parse(
-  await readFile(path.join(root, "tests/budgets.json"), "utf8")
-).qualityRigs;
+  await readFile(path.join(root, "tests/journeys.json"), "utf8")
+);
 const registered = new Set(Object.keys(budgets.rigs ?? {}));
 
 // Read every lane directory and every rig source up front: the checks below are
@@ -505,39 +505,36 @@ for (const { lane, key, source } of rigs) {
     registered.delete(key);
     if (entry.lane !== lane)
       errors.push(
-        `tests/budgets.json#qualityRigs entry ${key} declares lane "${entry.lane}" but lives in tests/${lane}`
+        `tests/journeys.json#rigs entry ${key} declares lane "${entry.lane}" but lives in tests/${lane}`
       );
     if (typeof entry.volume !== "string" || entry.volume.trim() === "")
       errors.push(
-        `tests/budgets.json#qualityRigs entry ${key} needs a non-empty volume descriptor`
+        `tests/journeys.json#rigs entry ${key} needs a non-empty volume descriptor`
       );
     if ("budgetMs" in entry && !(entry.budgetMs > 0))
       errors.push(
-        `tests/budgets.json#qualityRigs entry ${key} has a non-positive budgetMs`
+        `tests/journeys.json#rigs entry ${key} has a non-positive budgetMs`
       );
   } else {
     errors.push(
-      `tests/budgets.json#qualityRigs has no entry for rig ${key} (declare its lane and volume)`
+      `tests/journeys.json#rigs has no entry for rig ${key} (declare its lane and volume)`
     );
   }
   // A rig that inlines its own absolute ceiling is invisible to test:ratchet.
   if (/^const BUDGET_MS\s*=\s*[\d_]+/mu.test(source))
     errors.push(
-      `${key} inlines a numeric BUDGET_MS — declare budgetMs in tests/budgets.json#qualityRigs and read it with rigBudgetMs(OWNER) so the ratchet sees it`
+      `${key} inlines a numeric BUDGET_MS — declare budgetMs in tests/journeys.json#rigs and read it with rigBudgetMs(OWNER) so the ratchet sees it`
     );
-  // #659 R4 — every rig must consume its own history. An absolute ceiling set
-  // at ~3x a baseline only fires on a collapse: before this rule, a rig could
-  // walk from 40 ms to 110 ms under a 120 ms ceiling across a year of green
-  // nightlies and no gate anywhere would say a word. `rigDriftBudgetMs` (30
-  // samples, 1.5x trailing median) is the drift gate; `qualityRegressionBudget`
-  // is the older 10-sample/3x catastrophe gate and still counts as consuming
-  // history. A rig that reads neither is fenced only against catastrophe.
-  if (
-    !source.includes("rigDriftBudgetMs") &&
-    !source.includes("qualityRegressionBudget")
-  )
+  // #927 — every rig NAMES THE LEDGER ENTRIES IT FEEDS. The rule this replaces
+  // required each rig to consume its own 30-sample nightly history; that gate
+  // is gone, because the paired candidate/PR run compares two trees inside one
+  // run and needs no history at all. What matters now is the other direction: a
+  // rig whose numbers no ledger entry cites is measuring a machine cost nobody
+  // budgeted. `entries: []` is allowed and is the DIET LIST — those rigs are
+  // reviewed, not silently deleted.
+  if (entry && !Array.isArray(entry.entries))
     errors.push(
-      `${key} never reads its own sample history — call rigDriftBudgetMs("${lane}", OWNER) from tests/helpers/rig-budgets.js and fold the result into the recorded status and an assertion`
+      `tests/journeys.json#rigs entry ${key} needs an \`entries\` array naming the ledger entries it feeds (\`[]\` if none yet)`
     );
 }
 
@@ -603,7 +600,7 @@ for (const { lane, jobs, wired } of laneWiring.values()) {
 for (const { rig, present } of orphanChecks) {
   if (!present && registered.has(rig))
     errors.push(
-      `tests/budgets.json#qualityRigs registers ${rig}, which no longer exists`
+      `tests/journeys.json#rigs registers ${rig}, which no longer exists`
     );
 }
 

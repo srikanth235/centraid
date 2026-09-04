@@ -2,10 +2,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import {
-  qualityRegressionBudget,
-  recordQualityResult,
-} from "@centraid/test-kit/quality-result";
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { DeviceStore } from "@centraid/tunnel";
 
@@ -25,8 +22,9 @@ describe("tunnel-pairs.scale", () => {
       });
     }
     const durationMs = performance.now() - started;
-    const budget = await qualityRegressionBudget("scale", OWNER);
-    const passed = budget == null || durationMs < budget;
+    // Published, not gated (#927): the paired candidate/PR run compares two
+    // trees; a threshold on one sample here would fence the runner.
+    const passed = true;
     expect(store.list()).toHaveLength(PAIRS);
     expect(
       store.findByEndpointId((PAIRS - 1).toString(16).padStart(64, "0"))
@@ -41,7 +39,6 @@ describe("tunnel-pairs.scale", () => {
           name: "wall clock",
           value: durationMs,
           unit: "ms",
-          ...(budget == null ? {} : { budget }),
         },
         { name: "pairs", value: PAIRS, unit: "count" },
       ],

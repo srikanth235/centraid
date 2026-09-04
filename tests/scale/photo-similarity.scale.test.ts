@@ -24,7 +24,7 @@
 // finds something quickly.
 //
 // WHAT IT PUBLISHES, all against `photoSemanticSearchAtYear3` in
-// tests/experience-budgets/gateway.json, and all PER ENGINE because one rig
+// tests/journeys.json, and all PER ENGINE because one rig
 // duration would hide which engine regressed:
 //   - `… ranked search` — the wall clock the owner waits. `ceilingMs` fences
 //     the engine the gateway SHIPS; `ceilingFallbackMs` fences the degraded
@@ -54,8 +54,7 @@ import { bootstrapVault, encodeVector, openVaultDb } from "@centraid/vault";
 import { searchPhotosByText } from "../../packages/server/src/enrich/semantic-search.js";
 import { loadSqliteVec } from "../../packages/server/src/enrich/sqlite-vec.js";
 import { unrefTimer } from "../../packages/server/src/lib/unref-timer.js";
-import budgets from "../experience-budgets/gateway.json" with { type: "json" };
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 
 const OWNER = "tests/scale/photo-similarity.scale.test.ts";
 const EMBEDDINGS = 90_000;
@@ -70,15 +69,32 @@ const MODEL = "clip-vit-b32@1";
  * ceiling rather than being held to a number it cannot meet or being let off
  * a number entirely.
  */
-const CEILING_MS = budgets.metrics.photoSemanticSearchAtYear3.ceilingMs;
-const CEILING_FALLBACK_MS =
-  budgets.metrics.photoSemanticSearchAtYear3.ceilingFallbackMs;
-const CEILING_RSS_BYTES =
-  budgets.metrics.photoSemanticSearchAtYear3.ceilingRssDeltaBytes;
-const CEILING_BLOCK_MS =
-  budgets.metrics.photoSemanticSearchAtYear3.ceilingEventLoopBlockMs;
-const CEILING_FALLBACK_BLOCK_MS =
-  budgets.metrics.photoSemanticSearchAtYear3.ceilingFallbackEventLoopBlockMs;
+const SEARCH_KEY = "gateway/search/year3-photos/ci-linux-x64-4c";
+const CEILING_MS = journeyCeiling(
+  SEARCH_KEY,
+  "photoSemanticSearchAtYear3",
+  "ceilingMs"
+);
+const CEILING_FALLBACK_MS = journeyCeiling(
+  SEARCH_KEY,
+  "photoSemanticSearchAtYear3",
+  "ceilingFallbackMs"
+);
+const CEILING_RSS_BYTES = journeyCeiling(
+  SEARCH_KEY,
+  "photoSemanticSearchAtYear3",
+  "ceilingRssDeltaBytes"
+);
+const CEILING_BLOCK_MS = journeyCeiling(
+  SEARCH_KEY,
+  "photoSemanticSearchAtYear3",
+  "ceilingEventLoopBlockMs"
+);
+const CEILING_FALLBACK_BLOCK_MS = journeyCeiling(
+  SEARCH_KEY,
+  "photoSemanticSearchAtYear3",
+  "ceilingFallbackEventLoopBlockMs"
+);
 
 /** A unit-length pseudo-random vector, so cosine is a real angle. */
 function unitVector(random: ReturnType<typeof seededRandom>): number[] {
@@ -236,13 +252,9 @@ describe("photo-similarity.scale", () => {
         ? result.value.outcome.hits[0]?.assetId
         : undefined;
 
-    const drift = await rigDriftBudgetMs("scale", OWNER);
-    const worstMs = Math.max(vec.elapsedMs, scan.elapsedMs);
-    const withinDrift = drift === null || worstMs <= drift;
     const agree = topOf(vec) === expectedTop && topOf(scan) === expectedTop;
     const passed =
       agree &&
-      withinDrift &&
       vec.elapsedMs < CEILING_MS &&
       scan.elapsedMs < CEILING_FALLBACK_MS &&
       vec.value.rssDelta < CEILING_RSS_BYTES &&
@@ -298,10 +310,6 @@ describe("photo-similarity.scale", () => {
       ],
     });
 
-    expect(
-      withinDrift,
-      `sustained drift: ${worstMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     // Anti-vacuity AND the two-engines-one-answer contract in one assertion:
     // an engine that returned nothing, or ranked the library differently from
     // its twin, fails here before any budget is consulted.

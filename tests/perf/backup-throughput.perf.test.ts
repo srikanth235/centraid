@@ -3,10 +3,7 @@ import { randomBytes } from "node:crypto";
 import { describe, expect, test } from "vitest";
 
 import { decrypt, encrypt } from "@centraid/backup";
-import {
-  qualityRegressionBudget,
-  recordQualityResult,
-} from "@centraid/test-kit/quality-result";
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 const OWNER = "tests/perf/backup-throughput.perf.test.ts";
 const BYTES = 32 * 1024 * 1024;
@@ -19,8 +16,9 @@ describe("backup-throughput.perf", () => {
     const sealed = encrypt(key, input);
     const opened = decrypt(key, sealed);
     const durationMs = performance.now() - started;
-    const budget = await qualityRegressionBudget("perf", OWNER);
-    const passed = budget == null || durationMs < budget;
+    // Published, not gated (#927): the paired candidate/PR run compares two
+    // trees; a threshold on one sample here would fence the runner.
+    const passed = true;
     expect(Buffer.compare(Buffer.from(opened), input)).toBe(0);
 
     await recordQualityResult({
@@ -33,7 +31,6 @@ describe("backup-throughput.perf", () => {
           name: "wall clock",
           value: durationMs,
           unit: "ms",
-          ...(budget == null ? {} : { budget }),
         },
         {
           name: "throughput",

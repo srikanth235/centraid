@@ -928,6 +928,57 @@ The intent path is measured **single only**. One intent per HTTP round trip is w
 - **An SSE fan-out of 40 is refused.** `SSE_MAX_SUBSCRIBERS = 32` (`packages/server/src/routes/sse-cap.ts`) is global to the change stream, so 8 of the golden household's 40 replicas get `503 sse_capacity` with `Retry-After: 5`. The benchmark records `admitted`/`refused`/`refusalError` rather than failing. #922's Part A acceptance criterion "projections per commit per household ≤ 1" is stated at N = 40, which this gateway cannot currently seat; the cap is owned by neither this slice nor wave 2's file list, so it is filed here for the root.
 - The fan-out numbers do **not** yet show a per-subscriber projection cost (N = 10 is no slower than N = 1 at this volume). That is a measurement limit, not evidence against A2: the counter that would show it is #927's work counter on `hub.project()`, and this instrument only sees wall clock at the last subscriber.
 
+## lane 3a — F5 gauges and web probe
+
+Slices (i) F5/B6 gauges and (ii) the web LCP/INP probe. Gauges only: no budget is added, moved or widened. Serves "Audit-band bytes/read and WAL size are gated numbers" (the numbers half — gating is 3b's, the checkpoint 4a's) and the F5 half of "F1/F3/F5 landed in wave 1 with provenance".
+
+### Files
+
+| Path | Change |
+| --- | --- |
+| `tests/scale/large-vault.scale.test.ts` | Enrolls a real owner device on the mounted golden vault, issues 500 real `Gateway.read`s of `media.asset`, and publishes what they cost the audit band: bytes per read, WAL bytes per read, the achieved read rate, and WAL growth per hour AT that rate. Two non-zero assertions guard the instrument; no ceiling is added. Also publishes `golden vault mount` (#927's slice iv). |
+| `tests/scale/replica-sse-fanout.scale.test.ts` | Publishes household projections per commit, read from the hub's OWN counters — `currentGeneration()` for commits, `subscriberCount()` for the household — plus the property the hub exists for: the page it returns is SHARED, so distinct page objects across a household reading at one cursor IS the projection count. `routes/replica-fanout.ts` is untouched. |
+| `scripts/test-report/render/adversaries.mjs` | A trend card with no budget now reads `gauge · no budget` instead of a blank corner, and §9's note says what that means. An ungated series and a gate someone forgot to wire looked identical on the page. |
+| `scripts/test-report/render.test.mjs` | Pins both halves of that: `budget 500 ms` on a gated series, `gauge · no budget` on a gauge. |
+| `apps/web/tests/e2e/perf-waterfall.spec.ts` | The vitals probe emits LCP and INP now — see below. |
+
+Also in this lane, under #927 and detailed in `receipts/issue-927-perf-infra.md`: `packages/test-kit/src/year3-fixture-cache.ts`, `packages/test-kit/src/year3-vault.ts`, `packages/test-kit/src/year3-vault.test.ts`, `tests/helpers/factories.ts`, `tests/scale/photos-timeline.scale.test.ts`, `tests/quality/user-facing-qualities.test.ts`.
+
+### Numbers
+
+Host: this session's container, Linux 4 cores / 15 GB, node 22. Volumes: the mounted golden year-3 vault (106,274,816 B) at 500 gateway reads of `limit` 20; 16 subscribers x 10 commits on a real `serve()` gateway; headless_shell 1194 on the `apps/web` e2e harness, empty fixture vault.
+
+| Gauge | Value | Ledger entry it feeds (wave 2: surface x journey x volume x hardware) |
+| --- | --- | --- |
+| Audit-band bytes per gateway read | 360.4 B (three runs, identical) | vault-core x open-a-surface x year-3 golden x this container |
+| WAL bytes per gateway read | 45,352 / 45,599 / 45,649 B | same row's storage axis — and the input to #922's WAL ceiling and 4a's size-based checkpoint |
+| Gateway reads sustained | 263.4 / 660.8 / 779.8 reads/s | the rate the row below is stated at; it is the HOST's, and it moves |
+| WAL growth per hour under a reading client | 43.3 / 107.9 / 128.0 GB/h | vault-core x a client that only reads x year-3 golden x this container |
+| Household projections per commit | 1, across 16 subscribers | server x a write reaches the household x 16 devices x this container |
+| Hub subscribers / generations per commit | 16 / 1 | the same row's denominators |
+| Web LCP | 612 / 560 ms | web x cold shell load x empty fixture vault x headless_shell |
+| Web INP | 32 / 40 ms | same row |
+
+The per-READ pair is the stable measurement; the per-HOUR figure is that pair times the run's own achieved rate, so it moves with the host and is never to be quoted without the rate beside it. 45 KiB of WAL for a 360-byte receipt is one commit's worth of dirty pages per read — the cost `gateway/read-batch.test.ts` was written about, now with a number.
+
+Commands:
+
+```sh
+bun run test:scale -- tests/scale/large-vault.scale.test.ts
+bun run test:scale -- tests/scale/replica-sse-fanout.scale.test.ts
+cd apps/web && CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell \
+  bunx playwright test -c tests/e2e/playwright.config.ts perf-waterfall.spec.ts -g "web vitals"
+```
+
+### The web probe: what was wrong
+
+Two faults, both in the harness, neither in the app:
+
+1. **No presented frame.** PaintTiming stamps `first-contentful-paint` when a frame carrying the content is PRESENTED, and LCP has no candidate before it. A headless shell driving no display presents nothing on its own, so the probe read `first-paint` alone off a fully rendered screen and reported `LCP: n/a`; `web.json` had guessed a webfont or an unresolved transition. Animation frames and forced layout reads never reach presentation. One thrown-away `page.screenshot()` does. It runs BEFORE the interaction, because Chromium stops reporting LCP at the first input — and the probe then waits for the candidate to be DELIVERED: a first run that interacted too early got a `first-contentful-paint` on the timeline and `LCP: n/a` beside it, the entry dropped while queued.
+2. **The interaction never happened.** The probe clicked `button:visible` — on the cold connect screen that is "Continue", disabled until a ticket is pasted, so it spent its whole 15 s actionability timeout and left `interactionDriven: false`. It presses the pairing-ticket field instead, the one enabled control that screen offers, exactly as `web.json`'s own note proposed.
+
+`readVitals` also fills in `visibility` and `bodyText`, declared on `VitalsCapture` and never populated, so a future null is attributable.
+
 ### Verification
 
 ```sh
@@ -1449,3 +1500,29 @@ bun run test:claims               # 45 claims, 48 lanes, 193 derived flows
 ### Audit
 
 Verdict: PASS — root doc commit; ticks are traceable to the evidence sections named above
+# in /home/user/centraid-wt/claude/927-w1c-golden-vault
+bash $S/self-audit.sh 922 origin/claude/927-ledger   # tree d4697a3e1fb4f84bde8323ff42fbfd652246ad0d
+bun run test:ratchet:unit                            # scripts/test-report, incl. the new gauge-label test
+bun run typecheck
+bun run test:scale -- tests/scale/large-vault.scale.test.ts        # 1 passed
+bun run test:scale -- tests/scale/replica-sse-fanout.scale.test.ts # 1 passed
+bash .governance/run.sh                                # 22/22 directives passed
+```
+
+Gates ran on tree `d4697a3e1fb4f84bde8323ff42fbfd652246ad0d` (head `564ff42d5`),
+and `self-audit.sh` was re-run on the landed head after this paragraph was
+written, with the same result — the two trees differ only by this paragraph and
+its twin in the other receipt. `self-audit.sh` is single-umbrella: it reports
+each of this lane's other-umbrella commits as "subject lacks (#N)",
+symmetrically in both runs. Every other check is green in both, and
+`.governance/run.sh` passes 22 of 22.
+
+### Findings
+
+1. **`tests/experience-budgets/web.json` still says LCP and INP are `unmeasured`, with both ceilings parked in `_intendedCeilingMs`.** They are measured now. Promoting them is 3b's file and 3b's call — but the probe ALREADY asserts against the parked numbers (`ceilingMs ?? _intendedCeilingMs`), so 612 ms and 40 ms are gated against 2,500 ms and 200 ms today, under a `status` saying nobody measured anything.
+2. **`web.json`'s `volume` for those metrics is `empty (web-e2e fixture vault)`** — the exact string #927 says must appear in no journey entry. This lane measured on that harness because it is the harness the probe has; the volume is 3b's to move.
+3. **`replica-fanout.ts` is another lane's file this rig now reads.** The gauge uses `currentGeneration()`, `subscriberCount()` and `project()` only; a rename there fails this rig loudly rather than reporting a wrong number.
+
+### Doc debt
+
+- `tests/experience-budgets/README.md` — its status vocabulary has no word for "measured, deliberately ungated"; the report page now calls that a gauge.

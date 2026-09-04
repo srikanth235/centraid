@@ -18,7 +18,7 @@ import {
   VAULT_MIGRATIONS,
 } from "@centraid/vault";
 
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { rigBudgetMsNamed } from "../helpers/rig-budgets.js";
 
 // Photos-specific companion to large-vault.scale.test.ts (issue #721 C1):
 // that rig proves the whole-vault "daily use" mix stays bounded at 10k
@@ -39,10 +39,12 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 const OWNER = "tests/scale/photos-timeline.scale.test.ts";
 const PHOTO_COUNT = 50_000;
 const ONE_DAY_PHOTO_COUNT = 10_000;
-const SEED_BUDGET_MS = 30_000;
-const PAGE_READ_BUDGET_MS = 2_000;
-const ONE_DAY_READ_BUDGET_MS = 1_000;
-const DAY_BUCKET_BUDGET_MS = 2_000;
+// Ceilings live beside the volume they were measured at, in
+// tests/journeys.json#rigs, so the ratchet holds them tighten-only.
+const SEED_BUDGET_MS = rigBudgetMsNamed(OWNER, "seedMs");
+const PAGE_READ_BUDGET_MS = rigBudgetMsNamed(OWNER, "pageReadMs");
+const ONE_DAY_READ_BUDGET_MS = rigBudgetMsNamed(OWNER, "oneDayReadMs");
+const DAY_BUCKET_BUDGET_MS = rigBudgetMsNamed(OWNER, "dayBucketMs");
 const YEAR3 = year3VaultProfile();
 const YEAR3_SEAL_KEY = Buffer.alloc(32, 0x50);
 // Outside year3's own 2023-01-01..~2025-12-31 multiYearStart window, so the
@@ -108,9 +110,14 @@ describe("photos-timeline.scale", () => {
          (content_id, media_type, content_uri, sha256, byte_size, title, created_at)
        VALUES (?, 'image/jpeg', ?, ?, 4096, ?, ?)`
     );
+    // No `favorite` column: the star is a flags-scheme `core_tag` on the asset
+    // since #916 (ruling ONT-03), and naming the dropped column made this rig
+    // red at every volume rather than at a large one. The degenerate corpus
+    // stars nothing — these reads are ordered and bucketed by `captured_at`,
+    // and a tag join is `large-vault`'s axis, not this one.
     const insertAsset = db.vault.prepare(
-      `INSERT INTO media_asset (asset_id, content_id, kind, captured_at, favorite)
-       VALUES (?, ?, 'photo', ?, 0)`
+      `INSERT INTO media_asset (asset_id, content_id, kind, captured_at)
+       VALUES (?, ?, 'photo', ?)`
     );
 
     // The degenerate one-day corpus. Seeded and timed separately from the
@@ -179,8 +186,6 @@ describe("photos-timeline.scale", () => {
       (bucket) => bucket.day === "2020-06-15"
     );
 
-    const drift = await rigDriftBudgetMs("scale", OWNER);
-    const withinDrift = drift === null || seedMs <= drift;
     const passed =
       page.length === 200 &&
       oneDayPage.length === 200 &&
@@ -236,13 +241,9 @@ describe("photos-timeline.scale", () => {
       ],
       name: "50k-photo library plus a 10k-one-day degenerate corpus, at their own reads",
       owner: OWNER,
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
     });
 
-    expect(
-      withinDrift,
-      `sustained drift: ${seedMs}ms vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(page).toHaveLength(200);
     expect(oneDayPage).toHaveLength(200);
     expect(oneDayBucket?.n).toBe(ONE_DAY_PHOTO_COUNT);

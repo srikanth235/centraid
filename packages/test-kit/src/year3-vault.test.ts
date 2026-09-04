@@ -253,13 +253,13 @@ describe("golden year-3 vault", () => {
         42
       )
     ).not.toBe(key);
-    // The version is IN the key, which is what makes the bump to 2 an
-    // invalidation rather than a note in a changelog.
-    expect(YEAR3_FIXTURE_VERSION).toBe(2);
+    // The version is IN the key, which is what makes a bump an invalidation
+    // rather than a note in a changelog.
+    expect(YEAR3_FIXTURE_VERSION).toBe(3);
   });
 
   test("materializing hits the cache the second time and misses after a bump", async () => {
-    const root = await tempDir("year3-cache-");
+    const root = await tempDir("year3-fixture-cache-");
     const profile = goldenYear3Profile();
     let builds = 0;
     const generate = async (): Promise<void> => {
@@ -276,5 +276,26 @@ describe("golden year-3 vault", () => {
     expect(bumped.cacheHit).toBe(false);
     expect(bumped.dir).not.toBe(first.dir);
     expect(builds).toBe(2);
+  });
+
+  test("one build per key per run, however many callers ask at once", async () => {
+    const root = await tempDir("year3-fixture-warm-");
+    const profile = goldenYear3Profile();
+    let builds = 0;
+    const generate = async (): Promise<void> => {
+      builds += 1;
+    };
+    // Concurrent, not sequential: the on-disk cache cannot answer callers that
+    // arrive before the first one has renamed its temporary directory, so
+    // without the warm set every one of these pays a full build.
+    const [first, second, third] = await Promise.all([
+      materializeYear3Fixture(root, generate, profile, 1),
+      materializeYear3Fixture(root, generate, profile, 1),
+      materializeYear3Fixture(root, generate, profile, 1),
+    ]);
+    expect(builds).toBe(1);
+    expect(second!.dir).toBe(first!.dir);
+    expect(third!.dir).toBe(first!.dir);
+    expect([second!.cacheHit, third!.cacheHit]).toStrictEqual([true, true]);
   });
 });

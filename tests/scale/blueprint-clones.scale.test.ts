@@ -2,10 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { cloneTemplateFiles } from "@centraid/blueprints";
 import type { ScaffoldFile } from "@centraid/blueprints";
-import {
-  qualityRegressionBudget,
-  recordQualityResult,
-} from "@centraid/test-kit/quality-result";
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 const OWNER = "tests/scale/blueprint-clones.scale.test.ts";
 const APPS = 1_000;
@@ -67,8 +64,9 @@ describe("blueprint-clones.scale", () => {
       })
     );
     const durationMs = performance.now() - started;
-    const budget = await qualityRegressionBudget("scale", OWNER);
-    const passed = budget == null || durationMs < budget;
+    // Published, not gated (#927): the paired candidate/PR run compares two
+    // trees; a threshold on one sample here would fence the runner.
+    const passed = true;
     expect(clones).toHaveLength(APPS);
     expect(
       clones.every((files) => files.some((file) => file.path === "app.json"))
@@ -83,7 +81,6 @@ describe("blueprint-clones.scale", () => {
           name: "wall clock",
           value: durationMs,
           unit: "ms",
-          ...(budget == null ? {} : { budget }),
         },
         { name: "apps", value: APPS, unit: "count" },
       ],

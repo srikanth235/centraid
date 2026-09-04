@@ -10,12 +10,12 @@ import { notifyReplicaCommit } from "@centraid/vault";
 
 import { unrefTimer } from "../../packages/server/src/lib/unref-timer.js";
 import { serve } from "../../packages/server/src/serve/serve.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 
 /**
  * RECONNECT TO FRESH (issue #883 C1).
  *
- * `tests/experience-budgets/gateway.json#reconnectToFresh` carried
+ * `tests/journeys.json#reconnectToFresh` carried
  * `status: "unmeasured"` and `probe: "NONE TODAY"`: the repo had never timed
  * the interval a returning owner actually feels — reopen the app, and how long
  * does the screen keep showing yesterday? `replica-bootstrap.scale.test.ts`
@@ -40,7 +40,7 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
  * That is the whole of what `reconnectToFreshMs` can honestly fence.
  */
 const OWNER = "tests/scale/replica-reconnect.scale.test.ts";
-/** Year-3 replica rows on a phone (tests/experience-budgets/README.md). */
+/** Year-3 replica rows on a phone (tests/journeys.json). */
 const REPLICA_ROWS = 50_000;
 /** Bootstrap page size for the walk. */
 const WINDOW = 20_000;
@@ -48,10 +48,6 @@ const WINDOW = 20_000;
 const OFFLINE_COMMITS = 25;
 /** Upper bound on a frame arriving. A watchdog, not a wait. */
 const FRAME_DEADLINE_MS = 60_000;
-
-interface CeilingFile {
-  metrics: { reconnectToFresh: { ceilingMs: number } };
-}
 
 interface ChangeFrame {
   /** ms since the stream was requested, when this frame was parsed. */
@@ -177,13 +173,11 @@ async function openStream(
 
 describe("replica-reconnect.scale", () => {
   test("a stale cursor catches up inside the reconnect-to-fresh ceiling at 50k rows", async () => {
-    const ceilings = JSON.parse(
-      await fs.readFile(
-        path.resolve("tests/experience-budgets/gateway.json"),
-        "utf8"
-      )
-    ) as CeilingFile;
-    const ceilingMs = ceilings.metrics.reconnectToFresh.ceilingMs;
+    const ceilingMs = journeyCeiling(
+      "gateway/converge/year3-replica/ci-linux-x64-4c",
+      "reconnectToFresh",
+      "ceilingMs"
+    );
     const dataDir = await tempDir("replica-reconnect-");
     const token = "replica-reconnect-token";
     const handle = await serve({
@@ -302,17 +296,12 @@ describe("replica-reconnect.scale", () => {
     const reconnectToFreshMs = frame.atMs;
     const firstFrameMs = resumed.firstChangeMs() ?? reconnectToFreshMs;
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample nightly
-    // history. Null until the history is deep enough; a null is "no opinion
-    // yet", never a pass.
-    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed = reconnectToFreshMs < ceilingMs;
-    const withinDrift = drift === null || reconnectToFreshMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: `Replica reconnect to fresh at ${REPLICA_ROWS} rows`,
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "reconnect to fresh",
@@ -331,10 +320,6 @@ describe("replica-reconnect.scale", () => {
         { name: "seed", value: seedMs, unit: "ms" },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${reconnectToFreshMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(reconnectToFreshMs).toBeLessThan(ceilingMs);
   });
 });

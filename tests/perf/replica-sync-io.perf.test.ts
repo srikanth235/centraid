@@ -9,7 +9,7 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 import { IndexedDbIntentStore } from "../../packages/client/src/replica/intent-store.js";
 import { IntentQueue } from "../../packages/client/src/replica/intents.js";
-import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/replica-sync-io.perf.test.ts";
 const BUDGET_MS = rigBudgetMs(OWNER);
@@ -52,21 +52,16 @@ describe("replica-sync-io.perf", () => {
     const overlayMs = performance.now() - overlayStarted;
     const durationMs = performance.now() - started;
     store.close();
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("perf", OWNER);
     const passed =
       listed.length === 200 &&
       overlays.length === 200 &&
       durationMs < BUDGET_MS &&
       overlayMs < OVERLAY_BUDGET_MS;
-    const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({
       lane: "perf",
       owner: OWNER,
       name: "Replica intent IO (200 enqueues)",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "wall clock",
@@ -82,10 +77,6 @@ describe("replica-sync-io.perf", () => {
         },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${durationMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(listed).toHaveLength(200);
     expect(overlays).toHaveLength(200);
     expect(overlayMs).toBeLessThan(OVERLAY_BUDGET_MS);

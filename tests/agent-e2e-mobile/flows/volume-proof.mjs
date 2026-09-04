@@ -1,9 +1,6 @@
 import path from "node:path";
 
-import {
-  qualityRegressionBudget,
-  recordQualityResult,
-} from "../../agent-e2e-shared/harness.mjs";
+import { recordQualityResult } from "../../agent-e2e-shared/harness.mjs";
 import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
 const OWNER = "tests/agent-e2e-mobile/flows/volume-proof.mjs";
@@ -38,8 +35,10 @@ await runFlow("mobile-volume-proof", async (ctx) => {
     "mobile-volume"
   );
   const durationMs = performance.now() - started;
-  const budget = await qualityRegressionBudget(REPO_ROOT, "scale", OWNER);
-  const passed = budget == null || durationMs < budget;
+  // Published, not gated: 20 relaunches on a shared CI simulator is a
+  // distribution, and the paired candidate/PR run (#927) is what compares two
+  // trees. This flow fails on its assertions, never on a wall clock.
+  const passed = true;
   await recordQualityResult(REPO_ROOT, {
     lane: "scale",
     owner: OWNER,
@@ -50,7 +49,6 @@ await runFlow("mobile-volume-proof", async (ctx) => {
         name: "wall clock",
         value: durationMs,
         unit: "ms",
-        ...(budget == null ? {} : { budget }),
       },
       { name: "launches", value: ITERATIONS, unit: "count" },
     ],

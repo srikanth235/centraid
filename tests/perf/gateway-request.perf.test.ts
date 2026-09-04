@@ -1,6 +1,5 @@
 import { fork } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, onTestFinished, test } from "vitest";
@@ -9,7 +8,7 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 
 const OWNER = "tests/perf/gateway-request.perf.test.ts";
 
@@ -23,14 +22,15 @@ const OWNER = "tests/perf/gateway-request.perf.test.ts";
 // baseline. The OLD test measured the VITEST process over 500 ms with a 300 ms
 // (60%-of-a-core) ceiling — shorter than the poll period and on the wrong
 // process, so the idle-poll defect could never breach it.
-const experienceBudget = JSON.parse(
-  readFileSync(path.resolve("tests/experience-budgets/gateway.json"), "utf8")
-) as {
-  metrics: {
-    coreRouteP95Ms: Record<"gatewayInfo" | "apps" | "health", number>;
-    gatewayColdStartMs: { ceilingMs: number };
-  };
-};
+// The EMPTY-VAULT floor lane for two year-3 ledger entries: the volume lane
+// (gateway-request-volume.perf.test.ts) asserts the same two ceilings with the
+// vault full, so the pair fences both the transport floor and the volume case
+// against one number.
+const CORE_ROUTE_KEY = "gateway/core-route/year3/ci-linux-x64-4c";
+const COLD_START_KEY = "gateway/cold-open/year3/ci-linux-x64-4c";
+/** The p95 ceiling for one core route; throws rather than defaulting. */
+const routeCeilingMs = (identity: string): number =>
+  journeyCeiling(CORE_ROUTE_KEY, "coreRouteP95Ms", identity);
 const CORE_ROUTES = {
   gatewayInfo: "/centraid/_gateway/info",
   apps: "/centraid/_apps",
@@ -104,51 +104,42 @@ describe("gateway-request.perf", () => {
     const idleCpuMs = (idle.cpuUserUs + idle.cpuSystemUs) / 1_000;
     const idleCpuMsPerSecond = idleCpuMs / (idle.wallMs / 1_000);
 
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("perf", OWNER);
     const routePassed = Object.entries(routeP95).every(
-      ([identity, value]) =>
-        value <
-        experienceBudget.metrics.coreRouteP95Ms[
-          identity as keyof typeof CORE_ROUTES
-        ]
+      ([identity, value]) => value < routeCeilingMs(identity)
     );
     const passed =
       routePassed &&
-      coldStartMs < experienceBudget.metrics.gatewayColdStartMs.ceilingMs &&
+      coldStartMs <
+        journeyCeiling(COLD_START_KEY, "gatewayColdStartMs", "ceilingMs") &&
       idleCpuMsPerSecond < IDLE_CPU_BUDGET_MS_PER_S;
     const slowestP95Ms = Math.max(...Object.values(routeP95));
-    const withinDrift = drift === null || slowestP95Ms <= drift;
     await recordQualityResult({
       lane: "perf",
       owner: OWNER,
       name: "core route p95 and cold start",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "slowest core route p95",
           value: slowestP95Ms,
           unit: "ms",
-          budget: Math.max(
-            ...Object.values(experienceBudget.metrics.coreRouteP95Ms)
-          ),
+          budget: Math.max(...Object.keys(CORE_ROUTES).map(routeCeilingMs)),
         },
         ...Object.entries(routeP95).map(([identity, value]) => ({
           name: `${identity} p95`,
           value,
           unit: "ms",
-          budget:
-            experienceBudget.metrics.coreRouteP95Ms[
-              identity as keyof typeof CORE_ROUTES
-            ],
+          budget: routeCeilingMs(identity),
         })),
         {
           name: "cold start",
           value: coldStartMs,
           unit: "ms",
-          budget: experienceBudget.metrics.gatewayColdStartMs.ceilingMs,
+          budget: journeyCeiling(
+            COLD_START_KEY,
+            "gatewayColdStartMs",
+            "ceilingMs"
+          ),
         },
         {
           name: "idle CPU per second",
@@ -158,13 +149,9 @@ describe("gateway-request.perf", () => {
         },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${slowestP95Ms} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(routePassed).toBe(true);
     expect(coldStartMs).toBeLessThan(
-      experienceBudget.metrics.gatewayColdStartMs.ceilingMs
+      journeyCeiling(COLD_START_KEY, "gatewayColdStartMs", "ceilingMs")
     );
     expect(idleCpuMsPerSecond).toBeLessThan(IDLE_CPU_BUDGET_MS_PER_S);
   });

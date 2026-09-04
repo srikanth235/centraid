@@ -29,7 +29,9 @@ export * from "./search.js";
 export * from "./shell-transport.js";
 export * from "./store.js";
 export * from "./store-core.js";
+export * from "./trace.js";
 export * from "./types.js";
+export * from "./work-counters.js";
 export * from "./windowed-bootstrap.js";
 export * from "./write-helpers.js";
 export {

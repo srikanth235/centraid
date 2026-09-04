@@ -8,6 +8,7 @@ import {
   resolveLanes,
   stepsIn,
 } from "./lint-evidence-mapping.mjs";
+import { renderTrends, TREND_MINIMUM_POINTS } from "./render/adversaries.mjs";
 import { renderRollingIssueBody } from "./rolling-issue-body.mjs";
 import { REQUIRED_SECTIONS, renderFixture, smokeFailures } from "./smoke.mjs";
 
@@ -50,6 +51,20 @@ describe("the rendered page", () => {
     }
     expect(html).not.toMatch(/>flaky</u);
     expect(html).not.toMatch(/No trend yet/u);
+  });
+
+  test("says which trend cards are gauges and which have a ceiling", () => {
+    const points = Array.from({ length: TREND_MINIMUM_POINTS }, () => 100);
+    const html = renderTrends({
+      trends: [
+        { name: "gated series", unit: "ms", points, budget: 500 },
+        { name: "gauge series", unit: "bytes", points, budget: null },
+      ],
+    });
+    expect(html).toContain("budget 500 ms");
+    // A gauge is a number the ledger has not priced yet — the card has to say
+    // so, or an ungated series reads as a gate someone forgot to wire.
+    expect(html).toContain("gauge · no budget");
   });
 
   test("carries the lane filters, the name search and the three keys", async () => {

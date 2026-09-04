@@ -51,7 +51,6 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { NodeSqliteDriver } from "../../packages/client/src/replica/node-sqlite-test-driver.js";
 import { ReplicaSqliteStore } from "../../packages/client/src/replica/store-core.js";
 import type { ReplicaCursor } from "../../packages/client/src/replica/types.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 import {
   buildCorpus,
   buildSnapshot,
@@ -169,27 +168,16 @@ describe("browser-replica-query.scale", () => {
         new Set(inFilterIds())
       );
 
-      const slowestMs = Math.max(
-        full.durationMs,
-        filtered.durationMs,
-        inFilter.durationMs
-      );
-      // The drift series is the SLOWEST of the three reads, not their sum and
-      // not the bootstrap: bootstrap cost is already owned by
-      // replica-bootstrap.scale.test.ts, and a sum would let a collapse in one
-      // read hide behind two fast ones.
-      const drift = await rigDriftBudgetMs("scale", OWNER);
       const withinCeilings =
         full.durationMs < FULL_READ_CEILING_MS &&
         filtered.durationMs < FILTERED_READ_CEILING_MS &&
         inFilter.durationMs < IN_READ_CEILING_MS;
-      const withinDrift = drift === null || slowestMs <= drift;
 
       await recordQualityResult({
         lane: "scale",
         owner: OWNER,
         name: "Replica query engine at 50k rows",
-        status: withinCeilings && withinDrift ? "passed" : "failed",
+        status: withinCeilings ? "passed" : "failed",
         measurements: [
           {
             name: "full-entity read",
@@ -224,10 +212,6 @@ describe("browser-replica-query.scale", () => {
           "====================================================\n"
       );
 
-      expect(
-        withinDrift,
-        `sustained drift: ${slowestMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-      ).toBe(true);
       expect(full.durationMs).toBeLessThan(FULL_READ_CEILING_MS);
       expect(filtered.durationMs).toBeLessThan(FILTERED_READ_CEILING_MS);
       expect(inFilter.durationMs).toBeLessThan(IN_READ_CEILING_MS);

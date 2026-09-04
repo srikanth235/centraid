@@ -8,7 +8,6 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { createTestVault } from "../helpers/factories.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/vault-write.perf.test.ts";
 
@@ -54,19 +53,14 @@ describe("vault-write.perf", () => {
       samples[Math.floor(samples.length * 0.95)] ?? Number.POSITIVE_INFINITY;
 
     const fsyncsPerWrite = await traceFsyncsPerWrite();
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("perf", OWNER);
     const passed =
       p95Ms < LATENCY_BUDGET_MS &&
       (fsyncsPerWrite === undefined || fsyncsPerWrite <= FSYNC_BUDGET);
-    const withinDrift = drift === null || p95Ms <= drift;
     await recordQualityResult({
       lane: "perf",
       owner: OWNER,
       name: "Vault write p95 and fsync budget",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "p95 transaction latency",
@@ -86,10 +80,6 @@ describe("vault-write.perf", () => {
             ]),
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${p95Ms} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(p95Ms).toBeLessThan(LATENCY_BUDGET_MS);
     expect(fsyncsPerWrite === undefined || fsyncsPerWrite <= FSYNC_BUDGET).toBe(
       true

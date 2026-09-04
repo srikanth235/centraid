@@ -1,3 +1,6 @@
+import { statSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, onTestFinished, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
@@ -6,10 +9,17 @@ import {
   YEAR3_DISTRIBUTIONS,
   YEAR3_NOTE_NEEDLE,
 } from "@centraid/test-kit/year3-vault";
-import { openVaultDb } from "@centraid/vault";
+import {
+  AUDIT_BAND_TABLES,
+  createGateway,
+  DEFAULT_PURPOSE,
+  enrollDevice,
+  openVaultDb,
+} from "@centraid/vault";
+import type { VaultDb } from "@centraid/vault";
 
 import { goldenYear3Vault } from "../helpers/factories.js";
-import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 
 /**
  * DAILY-USE QUERIES AT YEAR-3 VOLUME, on the GOLDEN artifact (#927 P4).
@@ -32,6 +42,41 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 const OWNER = "tests/scale/large-vault.scale.test.ts";
 const SEED_BUDGET_MS = 30_000;
 const READ_BUDGET_MS = 2_000;
+/**
+ * Gateway reads behind the audit-band gauges below. Large enough that the
+ * per-read cost is measured over whole SQLite pages rather than over the one
+ * page a handful of receipts happen to share, small enough that the loop is a
+ * second of the rig's budget.
+ */
+const READ_COST_KEY = "gateway/read-cost/year3/ci-linux-x64-4c";
+const AUDIT_GAUGE_READS = 500;
+/** Rows each gauge read returns — the shape of a surface page, not a sweep. */
+const AUDIT_GAUGE_LIMIT = 20;
+
+/**
+ * On-disk bytes the audit band occupies, its indexes included.
+ *
+ * `dbstat` is queried one btree at a time because its `name` constraint is the
+ * only one it can push down: a join against `sqlite_schema` would walk every
+ * page of a 101 MiB file per call. The names come from the band's own
+ * `AUDIT_BAND_TABLES`, so a table added to the band is weighed without this
+ * rig being edited.
+ */
+function auditBandBytes(db: VaultDb): number {
+  const btrees = db.vault.prepare(
+    "SELECT name FROM sqlite_schema WHERE tbl_name = ?"
+  );
+  const pages = db.vault.prepare(
+    "SELECT COALESCE(SUM(pgsize), 0) AS bytes FROM dbstat WHERE name = ?"
+  );
+  let total = 0;
+  for (const table of AUDIT_BAND_TABLES) {
+    for (const btree of btrees.all(table) as { name: string }[]) {
+      total += Number((pages.get(btree.name) as { bytes: number }).bytes);
+    }
+  }
+  return total;
+}
 
 describe("large-vault.scale", () => {
   test("10k photos, 5k contacts, three years of events, and 1k notes stay bounded", async () => {
@@ -67,10 +112,53 @@ describe("large-vault.scale", () => {
       )
       .all(YEAR3_NOTE_NEEDLE);
     const readMs = performance.now() - readStarted;
-    // #659 R4 — sustained-drift gate over this rig's own 30-sample
-    // nightly history. Null until the history is deep enough; a null is
-    // "no opinion yet", never a pass.
-    const drift = await rigDriftBudgetMs("scale", OWNER);
+
+    // ── #922 F5 / B6 gauges: what a READ costs the audit band ───────────────
+    // A gateway read is a WRITER (`gateway/read-batch.test.ts`): it appends an
+    // access.receipt, so an owner who only ever looks still grows the file and
+    // the WAL — and the WAL never shrinks on its own, because
+    // `wal_autocheckpoint = 0` makes the shipper the sole checkpointer
+    // (docs/traps/wal-checkpoint.md). These are GAUGES and carry no budget:
+    // #927 wave 2's `surface x journey x volume x hardware` ledger decides
+    // what to gate and where. The reads run through the real gateway on a real
+    // enrolled owner device, so the bytes are the product's, not a model's.
+    const ownerPartyId = (
+      db.vault
+        .prepare("SELECT owner_party_id FROM access_device LIMIT 1")
+        .get() as { owner_party_id: string }
+    ).owner_party_id;
+    const device = enrollDevice(db, ownerPartyId, "Audit gauge device");
+    const gateway = createGateway(db);
+    const walFile = path.join(golden.dir, "vault.db-wal");
+    const auditBefore = auditBandBytes(db);
+    const walBefore = statSync(walFile).size;
+    const gaugeStarted = performance.now();
+    for (let index = 0; index < AUDIT_GAUGE_READS; index += 1) {
+      gateway.read(
+        {
+          kind: "device",
+          deviceId: device.deviceId,
+          deviceKey: device.deviceKey,
+        },
+        {
+          entity: "media.asset",
+          purpose: DEFAULT_PURPOSE,
+          limit: AUDIT_GAUGE_LIMIT,
+          acceptTruncation: true,
+        }
+      );
+    }
+    const gaugeMs = performance.now() - gaugeStarted;
+    const auditBytesPerRead =
+      (auditBandBytes(db) - auditBefore) / AUDIT_GAUGE_READS;
+    const walBytesPerRead =
+      (statSync(walFile).size - walBefore) / AUDIT_GAUGE_READS;
+    // The projection states BOTH its inputs: a per-hour number is only as
+    // honest as the rate it assumes, so the achieved rate is published beside
+    // it rather than folded into it.
+    const readsPerSecond = AUDIT_GAUGE_READS / (gaugeMs / 1_000);
+    const walBytesPerHour = walBytesPerRead * readsPerSecond * 3_600;
+
     const passed =
       recentPhotos.length === 200 &&
       contactHit.length === 1 &&
@@ -78,12 +166,11 @@ describe("large-vault.scale", () => {
       noteHit.length === 1 &&
       seedMs < SEED_BUDGET_MS &&
       readMs < READ_BUDGET_MS;
-    const withinDrift = drift === null || seedMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: "Daily-use queries on the golden year-3 vault",
-      status: passed && withinDrift ? "passed" : "failed",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
           name: "golden fixture mount",
@@ -120,17 +207,50 @@ describe("large-vault.scale", () => {
           value: golden.cacheHit ? 1 : 0,
           unit: "count",
         },
+        // MOUNT alone, separated from the build the first run pays: this is
+        // what every journey rig that opens the golden vault will pay, once
+        // per rig, forever.
+        { name: "golden vault mount", value: golden.mountMs, unit: "ms" },
+        {
+          name: "audit-band bytes per gateway read",
+          value: auditBytesPerRead,
+          unit: "bytes",
+        },
+        {
+          name: "WAL bytes per gateway read",
+          value: walBytesPerRead,
+          unit: "bytes",
+        },
+        {
+          name: "gateway reads sustained",
+          value: readsPerSecond,
+          unit: "reads/s",
+        },
+        {
+          name: "WAL growth per hour under a reading client",
+          value: walBytesPerHour,
+          unit: "bytes/h",
+        },
       ],
     });
-    expect(
-      withinDrift,
-      `sustained drift: ${seedMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
-    ).toBe(true);
     expect(recentPhotos).toHaveLength(200);
     expect(contactHit).toHaveLength(1);
     expect(events).toHaveLength(365);
     expect(noteHit).toHaveLength(1);
     expect(seedMs).toBeLessThan(SEED_BUDGET_MS);
     expect(readMs).toBeLessThan(READ_BUDGET_MS);
+    // These two were GAUGES — measured, published, ungated — until #927 gave
+    // them ceilings in tests/journeys.json. A byte-per-read that nothing budgets
+    // is exactly the cost that grows unnoticed: a client that only ever looks
+    // pays it forever. A gauge that measured NOTHING is still a broken
+    // instrument reporting a good number, so the floors stay too.
+    expect(auditBytesPerRead).toBeGreaterThan(0);
+    expect(walBytesPerRead).toBeGreaterThan(0);
+    expect(auditBytesPerRead).toBeLessThanOrEqual(
+      journeyCeiling(READ_COST_KEY, "auditBandPerRead", "maxBytes")
+    );
+    expect(walBytesPerRead).toBeLessThanOrEqual(
+      journeyCeiling(READ_COST_KEY, "walBytesPerRead", "maxBytes")
+    );
   });
 });
