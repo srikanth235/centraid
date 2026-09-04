@@ -4,7 +4,6 @@ import {
   assertReplicaOrder,
   assertReplicaPage,
   assertReplicaTieCensus,
-  DEFAULT_REPLICA_PURPOSE,
   OnlineOnlyError,
   planComposedReplicaRead,
   presentPendingIntentMutation,
@@ -235,8 +234,7 @@ export class MultiVaultReplicaReader {
     appId: string,
     request: NativeReadRequest
   ): Promise<MountedReadResult> {
-    const purpose = request.purpose ?? DEFAULT_REPLICA_PURPOSE;
-    const mounted = await this.schemasForAll(appId, purpose, request.entity);
+    const mounted = await this.schemasForAll(appId, request.entity);
     // Provenance is constant per database, so its equalities choose DATABASES
     // rather than rows — and never reach SQL, which has no value for them.
     const selection = selectMountedScopes(request, this.#scopes);
@@ -245,7 +243,7 @@ export class MultiVaultReplicaReader {
     );
     const shapeId = request.shapeId ?? mounted[0]?.shape_id;
     const dependency = {
-      shapeId: shapeId ?? `${appId}:${purpose}`,
+      shapeId: shapeId ?? appId,
       entity: request.entity,
     };
     if (schemas.length === 0) {
@@ -259,7 +257,7 @@ export class MultiVaultReplicaReader {
     }
     const [overlays, contentHashed] = await Promise.all([
       this.overlaysForAll(appId, request.entity, schemas),
-      this.contentHashed(appId, purpose, request.entity),
+      this.contentHashed(appId, request.entity),
     ]);
     const bindings = await this.overlayBindings(
       request.entity,
@@ -417,13 +415,12 @@ export class MultiVaultReplicaReader {
     appId: string,
     request: NativeSearchRequest
   ): Promise<ReplicaSearchWireResult> {
-    const purpose = request.purpose ?? DEFAULT_REPLICA_PURPOSE;
     if (this.#scopes.length === 0) {
       return {
         rows: [],
         cursor: { epoch: "mounted", seq: 0 },
         dependency: {
-          shapeId: request.shapeId ?? `${appId}:${purpose}`,
+          shapeId: request.shapeId ?? appId,
           entity: request.entity,
         },
         coverage: "partial",
@@ -436,7 +433,7 @@ export class MultiVaultReplicaReader {
     }
     const searchSpec = replicaLocalSearchSpec(request.entity);
     const required = replicaSearchRequiredColumns(searchSpec);
-    const schemas = await this.schemasForAll(appId, purpose, request.entity);
+    const schemas = await this.schemasForAll(appId, request.entity);
     const overlays = await this.overlaysForAll(appId, request.entity, schemas);
     const indexed = new Set(required);
     const limit = Math.min(
@@ -463,7 +460,7 @@ export class MultiVaultReplicaReader {
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
       .map((scope, scopeIndex) => {
-        parameters.push(match, fetchLimit, appId, purpose, request.entity);
+        parameters.push(match, fetchLimit, appId, request.entity);
         return `SELECT ${scopeIndex} AS scope_index,
                        s.shape_id, s.row_id, r.payload_json, r.oversized_json,
                        r.server_version,
@@ -488,7 +485,7 @@ export class MultiVaultReplicaReader {
                   JOIN ${scope.alias}.replica_shape AS sh
                     ON sh.shape_id = s.shape_id
                   JOIN (${cursorSql(scope)}) AS m
-                 WHERE sh.app_id = ? AND sh.purpose = ? AND s.entity = ?`;
+                 WHERE sh.app_id = ? AND s.entity = ?`;
       })
       .join(" UNION ALL ");
     parameters.push(fetchLimit);
@@ -594,7 +591,7 @@ export class MultiVaultReplicaReader {
       rows,
       cursor: aggregate.cursor,
       dependency: {
-        shapeId: request.shapeId ?? `${appId}:${purpose}`,
+        shapeId: request.shapeId ?? appId,
         entity: request.entity,
       },
       coverage: aggregate.coverage,
@@ -762,21 +759,20 @@ export class MultiVaultReplicaReader {
 
   private schemasForAll(
     appId: string,
-    purpose: string,
     entity: string
   ): Promise<ScopedEntitySchemaRow[]> {
     if (this.#scopes.length === 0) return Promise.resolve([]);
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
       .map((scope, scopeIndex) => {
-        parameters.push(appId, purpose, entity);
+        parameters.push(appId, entity);
         return `SELECT ${scopeIndex} AS scope_index, es.shape_id,
                        es.primary_key, es.columns_json,
                        es.has_unavailable_fields
                   FROM ${scope.alias}.replica_entity_schema AS es
                   JOIN ${scope.alias}.replica_shape AS sh
                     ON sh.shape_id = es.shape_id
-                 WHERE sh.app_id = ? AND sh.purpose = ? AND es.entity = ?`;
+                 WHERE sh.app_id = ? AND es.entity = ?`;
       })
       .join(" UNION ALL ");
     return this.query<ScopedEntitySchemaRow>(
@@ -829,12 +825,8 @@ export class MultiVaultReplicaReader {
   }
 
   /** Cacheable: shape metadata, stable until a scope is revoked. */
-  private async contentHashed(
-    appId: string,
-    purpose: string,
-    entity: string
-  ): Promise<boolean> {
-    const key = `${appId}\u0000${purpose}\u0000${entity}`;
+  private async contentHashed(appId: string, entity: string): Promise<boolean> {
+    const key = `${appId}\u0000${entity}`;
     const cached = this.#contentHashed.get(key);
     if (cached !== undefined) return cached;
     // Every scope revoked: there is no union to build, and the read itself
@@ -843,13 +835,13 @@ export class MultiVaultReplicaReader {
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
       .map((scope) => {
-        parameters.push(appId, purpose, entity);
+        parameters.push(appId, entity);
         return `SELECT es.shape_id, es.primary_key, es.columns_json,
                        es.has_unavailable_fields
                   FROM ${scope.alias}.replica_entity_schema AS es
                   JOIN ${scope.alias}.replica_shape AS sh
                     ON sh.shape_id = es.shape_id
-                 WHERE sh.app_id = ? AND sh.purpose = ? AND es.entity = ?`;
+                 WHERE sh.app_id = ? AND es.entity = ?`;
       })
       .join(" UNION ALL ");
     const schemas = await this.query<StoredEntitySchemaRow>(

@@ -35,7 +35,6 @@ interface RevisionRow {
 }
 
 export default async function exportHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const groupId = String(input?.group_id ?? "");
   const limit = Math.min(
     Math.max(Number(input?.limit ?? DEFAULT_LIMIT) || DEFAULT_LIMIT, 1),
@@ -44,7 +43,7 @@ export default async function exportHandler({ input, ctx }: HandlerArgs) {
   const since = floorDate(input?.since);
   const emptyWindow = { limit, since, expenses: 0, settlements: 0 };
   try {
-    const data = await loadTally(ctx, purpose);
+    const data = await loadTally(ctx);
     const group = data.groups.find((g) => g.group_id === groupId);
     if (!group)
       return {
@@ -73,7 +72,6 @@ export default async function exportHandler({ input, ctx }: HandlerArgs) {
       entity: "core.entity_revision",
       orderBy: { column: "recorded_at", dir: "desc" },
       limit: MAX_LIMIT,
-      purpose,
     });
     const exported = new Set(expenses.map((e) => e.expense_id));
     const revisions = ((revisionsRes.rows ?? []) as unknown as RevisionRow[])

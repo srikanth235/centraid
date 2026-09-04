@@ -25,7 +25,7 @@ import {
   writeSealKeyFile,
 } from "../schema/sealed.js";
 import { resolveEntity } from "../schema/tables.js";
-import { writeReceipt } from "./evidence.js";
+import { writeAuthorityReceipt } from "./evidence.js";
 import { pkColumn } from "./execution.js";
 
 /** Sealed-cell entities: static registry plus live ext tables declaring a
@@ -178,7 +178,7 @@ export function resealVaultKey(
   if (keyFile) renameSync(`${keyFile}.next`, keyFile);
   db.sealKey.set(newKey);
 
-  const receiptId = writeReceipt(db.audit, {
+  const receiptId = writeAuthorityReceipt(db, {
     authorityId: null,
     invocationId: null,
     action: "key.rotate",

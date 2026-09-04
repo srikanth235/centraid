@@ -567,6 +567,12 @@ export const VAULT_ENTITIES: EntityRegistry = {
     // silently drop a question the member was about to be shown, and the
     // automation's next mount would park it again as if it were new.
     authority_request: { label: "Pending asks", lifecycle: "machinery" },
+    // WHEN each answer was last exercised (#928) — what Settings → Access
+    // draws beside every row. Registered because "you granted this a year ago
+    // and nothing has used it since" is the fact that makes a stale answer
+    // visible, and a restore that forgot it would silently reset every row to
+    // "never used".
+    authority_use: { label: "Answer last used", lifecycle: "machinery" },
     delivery_config: { label: "Delivery limits", lifecycle: "machinery" },
     fulfillment: { label: "Delivery state", lifecycle: "machinery" },
     // #916, R8 / review 6.4: these four were in `LOCAL_TABLES` as "device

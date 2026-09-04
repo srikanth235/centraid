@@ -104,7 +104,6 @@ export interface Year3ReplicaSnapshot {
   shapes: {
     shapeId: string;
     appId: string;
-    purpose: string;
     entities: Year3ReplicaEntitySchema[];
   }[];
   cursor: { epoch: string; seq: number };
@@ -188,7 +187,6 @@ export function buildYear3ReplicaSnapshot(
       {
         shapeId: YEAR3_REPLICA_SHAPE_ID,
         appId: YEAR3_REPLICA_APP_ID,
-        purpose: YEAR3_REPLICA_PURPOSE,
         entities: schemas,
       },
     ],

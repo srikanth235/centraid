@@ -427,7 +427,6 @@ async function l(q) {
   }
 }
 var f = 16,
-  Y = "dpv:ServiceProvision",
   kq = l,
   Bq = h;
 function _0(q) {
@@ -445,7 +444,6 @@ async function Vq(q, v) {
         { column: "deleted_at", op: "is-null" },
       ],
       limit: 1,
-      purpose: Y,
     })
   ).rows?.[0];
 }
@@ -459,7 +457,6 @@ async function x(q, v, $) {
           { column: "variant", op: "eq", value: "faces" },
         ],
         limit: 1,
-        purpose: Y,
       })
     ).rows?.[0]?.model === $
   )
@@ -468,7 +465,6 @@ async function x(q, v, $) {
     contentId: v.content_id,
     variant: "preview",
     maxBytes: 4194304,
-    purpose: Y,
   });
   if (J?.status !== "ok" || J.kind !== "bytes")
     throw Error(`asset ${v.asset_id}: preview is unavailable`);
@@ -487,7 +483,6 @@ async function x(q, v, $) {
     await q.vault.invoke({
       command: "enrich.upsert_faces",
       input: { asset_id: v.asset_id, model: $, faces: u.faces },
-      purpose: Y,
     }),
     { settled: !0, derived: 1, skipped: 0 }
   );
@@ -498,7 +493,6 @@ async function Sq(q, v) {
     where: [{ column: "variant", op: "eq", value: "faces" }],
     orderBy: { column: "target_id", dir: "desc" },
     limit: 1,
-    purpose: Y,
   });
   return $.rows?.[0]?.model === v ? $.rows[0].target_id : "";
 }
@@ -518,7 +512,6 @@ async function bq({ ctx: q }) {
       ],
       orderBy: { column: "request_id", dir: "asc" },
       limit: f,
-      purpose: Y,
     }),
     J = 0,
     u = 0,
@@ -560,7 +553,6 @@ async function bq({ ctx: q }) {
         ],
         orderBy: { column: "asset_id", dir: "asc" },
         limit: C,
-        purpose: Y,
       });
     for (let L of X.rows ?? []) {
       let H = await x(q, L, v);
@@ -582,7 +574,6 @@ async function bq({ ctx: q }) {
         ],
         orderBy: { column: "target_id", dir: "asc" },
         limit: _,
-        purpose: Y,
       });
     for (let X of w.rows ?? []) {
       if (G.has(X.target_id)) continue;
@@ -602,13 +593,11 @@ async function bq({ ctx: q }) {
     await q.vault.invoke({
       command: "enrich.mark_requests_drained",
       input: { request_ids: B },
-      purpose: Y,
     });
   if (J > 0)
     await q.vault.invoke({
       command: "enrich.rebuild_face_clusters",
       input: {},
-      purpose: Y,
     });
   return {
     summary: `faces derived ${J}; skipped ${u}; consent queue batch ${K.rows?.length ?? 0}/${f}`,

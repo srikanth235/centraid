@@ -6,7 +6,7 @@ import path from "node:path";
 
 import type { VaultDb } from "../db.js";
 import { asVaultDiskFullError } from "../errors.js";
-import { writeReceipt } from "./evidence.js";
+import { writeAuthorityReceipt } from "./evidence.js";
 import { GatewayError } from "./types.js";
 
 function requireDir(db: VaultDb, action: string): string {
@@ -62,7 +62,7 @@ export function backupVault(db: VaultDb, destDir: string): BackupResult {
   db.vault.exec(`VACUUM INTO '${vaultPath.replaceAll("'", "''")}'`);
   const vaultSha256 = sha256File(vaultPath);
   const { copied } = db.blobs.exportTo(destDir);
-  const receiptId = writeReceipt(db.audit, {
+  const receiptId = writeAuthorityReceipt(db, {
     authorityId: null,
     invocationId: null,
     action: "act access.backup_vault",

@@ -144,6 +144,24 @@ CREATE TABLE IF NOT EXISTS share_authority_request (
 CREATE UNIQUE INDEX IF NOT EXISTS share_authority_request_open
   ON share_authority_request(principal_id) WHERE decided_at IS NULL;
 
+-- WHEN AN ANSWER WAS LAST USED (#928). A row of its OWN, deliberately not a
+-- column on \`share_authority\`: that row is the member's answer and is
+-- immutable except for \`revoked_at\`, so stamping a timestamp on it on every
+-- use would rewrite the answer — and push a replica change — every time an
+-- automation read anything. One row per authority, upserted beside the receipt
+-- that cites it, so the cost is O(1) per receipt and there is no history to
+-- grow. Absent row = never used, which is what the Access dashboard draws.
+-- \`authority_id\` carries NO foreign key, for the same reason
+-- \`share_authority.receipt_id\` carries none: this row is derived from the
+-- AUDIT BAND, whose \`authority_id\` is a value rather than a key (#916), and
+-- the commons rail receipts acts under authority ids that are not rows of this
+-- table at all. A key here would turn "an act was receipted" into "the act is
+-- refused", which is the wrong direction for evidence.
+CREATE TABLE IF NOT EXISTS share_authority_use (
+  authority_id TEXT PRIMARY KEY,
+  last_used_at TEXT NOT NULL
+) STRICT;
+
 -- Per-grant DELIVERY-strategy configuration, keyed by the authority row it
 -- serves (ruling V-delivery: \`max_size_bytes\` belongs to delivery-strategy
 -- config, not to the authority row — a ceiling is a property of how a subject

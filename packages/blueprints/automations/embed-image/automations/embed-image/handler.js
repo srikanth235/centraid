@@ -193,7 +193,6 @@ async function D($) {
   }
 }
 var k = 16,
-  Z = "dpv:ServiceProvision",
   S = D,
   m = z;
 function z0($) {
@@ -212,7 +211,6 @@ async function B0($, q) {
       ],
       orderBy: { column: "asset_id", dir: "desc" },
       limit: 1,
-      purpose: Z,
     })
   ).rows?.[0];
   if (!B) return "";
@@ -224,7 +222,6 @@ async function B0($, q) {
         { column: "variant", op: "eq", value: "embedding" },
       ],
       limit: 1,
-      purpose: Z,
     })
   ).rows?.[0]?.model === q
     ? B.asset_id
@@ -247,7 +244,6 @@ async function v0({ ctx: $, log: q }) {
       ],
       orderBy: { column: "asset_id", dir: "asc" },
       limit: k,
-      purpose: Z,
     }),
     K = 0,
     J = 0;
@@ -265,7 +261,6 @@ async function v0({ ctx: $, log: q }) {
             { column: "variant", op: "eq", value: "embedding" },
           ],
           limit: 1,
-          purpose: Z,
         })
       ).rows?.[0]?.model === v
     ) {
@@ -276,7 +271,6 @@ async function v0({ ctx: $, log: q }) {
       contentId: W.content_id,
       variant: "preview",
       maxBytes: 4194304,
-      purpose: Z,
     });
     if (G?.status !== "ok" || G.kind !== "bytes")
       throw Error(`asset ${W.asset_id}: preview is unavailable`);
@@ -298,7 +292,6 @@ async function v0({ ctx: $, log: q }) {
         vector: H.vector,
         capability: "embed-image",
       },
-      purpose: Z,
     }),
       (K += 1));
   }

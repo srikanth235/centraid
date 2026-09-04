@@ -15,13 +15,11 @@ interface RawPolicy {
 }
 
 export default async function enrichmentStatus({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   try {
     const result = await ctx.vault.read({
       acceptTruncation: true,
       entity: "enrich.policy",
       where: [{ column: "domain", op: "eq", value: "photos" }],
-      purpose,
     });
     const row = ((result.rows ?? []) as unknown as RawPolicy[])[0];
     return { tier: row?.tier ?? "off" };

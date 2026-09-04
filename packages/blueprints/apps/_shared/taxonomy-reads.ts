@@ -20,15 +20,13 @@
  * the pair takes the default window knowingly and says so if it ever fills.
  */
 export function conceptTaxonomyReads(
-  vault: VaultApi,
-  purpose: string
+  vault: VaultApi
 ): [Promise<VaultReadResult>, Promise<VaultReadResult>] {
   return [
-    vault.read({ acceptTruncation: true, entity: "core.concept", purpose }),
+    vault.read({ acceptTruncation: true, entity: "core.concept" }),
     vault.read({
       acceptTruncation: true,
       entity: "core.concept_scheme",
-      purpose,
     }),
   ];
 }

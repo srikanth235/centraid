@@ -9,7 +9,7 @@ import { RELATIONS_SCHEME_URI } from "../commands/links.js";
 import type { VaultDb } from "../db.js";
 import { nowIso } from "../ids.js";
 import { contentReferenceExists } from "../schema/content-references.js";
-import { writeProvenance, writeReceipt } from "./evidence.js";
+import { writeProvenance, writeAuthorityReceipt } from "./evidence.js";
 import type { Identity } from "./types.js";
 
 export interface RevocationResult {
@@ -55,7 +55,7 @@ export function revokeAuthorityCascade(
     )
     .run(now, authorityId);
   const parkedDropped = dropParked(authorityId);
-  const receiptId = writeReceipt(db.audit, {
+  const receiptId = writeAuthorityReceipt(db, {
     authorityId,
     invocationId: null,
     action: "act share.revoke_authority",
@@ -441,7 +441,7 @@ function receiptPurgeRevocations(
     "UPDATE share_authority SET receipt_id = ? WHERE authority_id = ?"
   );
   for (const row of ended) {
-    const receiptId = writeReceipt(db.audit, {
+    const receiptId = writeAuthorityReceipt(db, {
       authorityId: row.authority_id,
       invocationId: null,
       action: "act share.revoke",
@@ -498,7 +498,7 @@ function revokeExpiredAuthority(
       WHERE authority_id = ? AND revoked_at IS NULL`
   );
   for (const row of expired) {
-    const receiptId = writeReceipt(db.audit, {
+    const receiptId = writeAuthorityReceipt(db, {
       authorityId: row.authority_id,
       invocationId: null,
       action: "act share.revoke",
@@ -874,7 +874,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     .run();
   // Staging TTL (#296): a batch hold pins past it.
   const staging = sweepBlobStaging(db, { now });
-  const receiptId = writeReceipt(db.audit, {
+  const receiptId = writeAuthorityReceipt(db, {
     authorityId: null,
     invocationId: null,
     action: "act access.lifecycle_sweep",

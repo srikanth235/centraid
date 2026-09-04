@@ -63,7 +63,6 @@ async function rowsOf<T>(
   ctx: HandlerCtx,
   entity: string,
   itemId: string,
-  purpose: string,
   column = "item_id"
 ): Promise<T[]> {
   try {
@@ -71,7 +70,6 @@ async function rowsOf<T>(
       acceptTruncation: true,
       entity,
       where: [{ column, op: "eq", value: itemId }],
-      purpose,
     });
     return (result.rows ?? []) as unknown as T[];
   } catch {
@@ -83,22 +81,19 @@ async function rowsOf<T>(
 
 export async function readAlias(
   ctx: HandlerCtx,
-  itemId: string,
-  purpose: string
+  itemId: string
 ): Promise<string | null> {
   const rows = await rowsOf<{ alias: string }>(
     ctx,
     "locker.item_alias",
-    itemId,
-    purpose
+    itemId
   );
   return rows[0]?.alias ?? null;
 }
 
 export async function readFields(
   ctx: HandlerCtx,
-  itemId: string,
-  purpose: string
+  itemId: string
 ): Promise<
   {
     field_id: string;
@@ -109,12 +104,7 @@ export async function readFields(
     sealed: boolean;
   }[]
 > {
-  const rows = await rowsOf<FieldRow>(
-    ctx,
-    "locker.item_field",
-    itemId,
-    purpose
-  );
+  const rows = await rowsOf<FieldRow>(ctx, "locker.item_field", itemId);
   return rows
     .toSorted(
       (a, b) =>
@@ -139,15 +129,9 @@ export async function readFields(
 
 export async function readAddresses(
   ctx: HandlerCtx,
-  itemId: string,
-  purpose: string
+  itemId: string
 ): Promise<{ address_id: string; url: string; match_policy: string }[]> {
-  const rows = await rowsOf<AddressRow>(
-    ctx,
-    "locker.item_address",
-    itemId,
-    purpose
-  );
+  const rows = await rowsOf<AddressRow>(ctx, "locker.item_address", itemId);
   return rows
     .toSorted((a, b) => (a.position ?? 0) - (b.position ?? 0))
     .map((row) => ({
@@ -159,15 +143,9 @@ export async function readAddresses(
 
 export async function readPasskey(
   ctx: HandlerCtx,
-  itemId: string,
-  purpose: string
+  itemId: string
 ): Promise<Record<string, unknown> | null> {
-  const rows = await rowsOf<PasskeyRow>(
-    ctx,
-    "locker.item_passkey",
-    itemId,
-    purpose
-  );
+  const rows = await rowsOf<PasskeyRow>(ctx, "locker.item_passkey", itemId);
   const row = rows[0];
   if (!row) return null;
   return {
@@ -253,7 +231,6 @@ export async function readHistory(
   ctx: HandlerCtx,
   itemId: string,
   current: Record<string, unknown>,
-  purpose: string,
   limit = 50
 ): Promise<Record<string, unknown>[]> {
   let rows: RevisionRow[] = [];
@@ -267,7 +244,6 @@ export async function readHistory(
       ],
       orderBy: { column: "recorded_at", dir: "desc" },
       limit,
-      purpose,
     });
     rows = (result.rows ?? []) as unknown as RevisionRow[];
   } catch {
@@ -301,8 +277,7 @@ export async function readHistory(
  *  column class — so this returns what the file IS (GAPS §3.3 #8). */
 export async function readAttachments(
   ctx: HandlerCtx,
-  itemId: string,
-  purpose: string
+  itemId: string
 ): Promise<Record<string, unknown>[]> {
   let edges: AttachmentRow[] = [];
   try {
@@ -313,7 +288,6 @@ export async function readAttachments(
         { column: "target_type", op: "eq", value: "locker.item" },
         { column: "target_id", op: "eq", value: itemId },
       ],
-      purpose,
     });
     edges = (result.rows ?? []) as unknown as AttachmentRow[];
   } catch {
@@ -332,7 +306,6 @@ export async function readAttachments(
           value: edges.map((edge) => edge.content_id),
         },
       ],
-      purpose,
     });
     contents = (result.rows ?? []) as unknown as ContentRow[];
   } catch {

@@ -13,12 +13,11 @@ interface Row {
   receipt_id: string;
   seq: number;
   hash: string;
-  grant_id: string | null;
+  authority_id: string | null;
   invocation_id: string | null;
   action: string;
   object_type: string;
   object_id: string | null;
-  purpose_concept_id: string | null;
   decision: string;
   occurred_at: string;
   detail_json: string | null;

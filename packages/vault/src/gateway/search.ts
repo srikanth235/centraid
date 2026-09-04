@@ -15,7 +15,7 @@ import { nowIso } from "../ids.js";
 import { SEARCHABLE } from "../schema/fts.js";
 import { resolveEntity } from "../schema/tables.js";
 import { evaluateAccess } from "./access.js";
-import { skipsAllowReceipt, writeReceipt } from "./evidence.js";
+import { skipsAllowReceipt, writeAuthorityReceipt } from "./evidence.js";
 import { extSearchable } from "./ext.js";
 import { applyFieldMask, compileFilters } from "./filters.js";
 import type { Identity, SearchRequest, SearchResult } from "./types.js";
@@ -47,7 +47,7 @@ export function searchEntity(
   const deny = (failing: string, authorityId: string | null = null): never => {
     const receiptId = skipsAllowReceipt(identity)
       ? undefined
-      : writeReceipt(db.audit, {
+      : writeAuthorityReceipt(db, {
           authorityId,
           invocationId: null,
           action: "search",
@@ -148,7 +148,7 @@ export function searchEntity(
   >[];
   const receiptId = skipsAllowReceipt(identity)
     ? undefined
-    : writeReceipt(db.audit, {
+    : writeAuthorityReceipt(db, {
         authorityId: access.authorityId,
         invocationId: null,
         action: "search",

@@ -5,6 +5,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import type { VaultDb } from "../db.js";
 import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
 import type { Citation, Identity } from "./types.js";
 
@@ -110,6 +111,33 @@ export function writeReceipt(audit: DatabaseSync, input: ReceiptInput): string {
       detailJson,
       seq
     );
+  return receiptId;
+}
+
+/**
+ * Append a receipt AND stamp the answer that permitted it (#928). Every act
+ * whose authority is a `share_authority` row goes through here, so "last used"
+ * on the Access dashboard can never disagree with the receipt chain: the two
+ * are written in the same transaction from the same id. An owner-direct act
+ * carries no authority and stamps nothing — there is no answer to age.
+ *
+ * The stamp is an UPSERT of one row keyed by the authority, never a column on
+ * the answer itself: the answer is what the member SAID and stays immutable.
+ */
+export function writeAuthorityReceipt(
+  db: VaultDb,
+  input: ReceiptInput
+): string {
+  const receiptId = writeReceipt(db.audit, input);
+  if (input.authorityId !== null) {
+    db.vault
+      .prepare(
+        `INSERT INTO share_authority_use (authority_id, last_used_at)
+           VALUES (?, ?)
+         ON CONFLICT(authority_id) DO UPDATE SET last_used_at = excluded.last_used_at`
+      )
+      .run(input.authorityId, nowIso());
+  }
   return receiptId;
 }
 

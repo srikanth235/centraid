@@ -207,7 +207,6 @@ async function U(z) {
   }
 }
 var M = 2,
-  Q = "dpv:ServiceProvision",
   S = 67108864,
   b = U,
   f = v;
@@ -227,7 +226,6 @@ async function Kz(z, G) {
       ],
       orderBy: { column: "asset_id", dir: "desc" },
       limit: 1,
-      purpose: Q,
     })
   ).rows?.[0];
   if (!K) return "";
@@ -239,7 +237,6 @@ async function Kz(z, G) {
         { column: "variant", op: "eq", value: "transcript" },
       ],
       limit: 1,
-      purpose: Q,
     })
   ).rows?.[0]?.model === G
     ? K.asset_id
@@ -265,7 +262,6 @@ async function Vz({ ctx: z, log: G }) {
       ],
       orderBy: { column: "asset_id", dir: "asc" },
       limit: M,
-      purpose: Q,
     }),
     q = 0,
     W = 0;
@@ -279,7 +275,6 @@ async function Vz({ ctx: z, log: G }) {
             { column: "variant", op: "eq", value: "transcript" },
           ],
           limit: 1,
-          purpose: Q,
         })
       ).rows?.[0]?.model === J
     ) {
@@ -290,7 +285,6 @@ async function Vz({ ctx: z, log: G }) {
       contentId: Z.content_id,
       variant: "original",
       maxBytes: S,
-      purpose: Q,
     });
     if (Y?.status === "too-large") {
       ((W += 1),
@@ -322,7 +316,6 @@ async function Vz({ ctx: z, log: G }) {
         capability: "transcript",
         model: J,
       },
-      purpose: Q,
     }),
       (q += 1));
   }

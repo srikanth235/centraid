@@ -86,7 +86,6 @@ const parkedRow: ApprovalsParkedRowDTO = {
 const scopeRow: ApprovalsScopeRequestRowDTO = {
   requestId: "r1",
   appId: "invoicer",
-  purpose: "dpv:ServiceProvision",
   scopeSummary: "schedule.task (act)",
   requestedAgo: "1h ago",
 };
@@ -821,6 +820,7 @@ describe("screens/ApprovalsScreen", () => {
                   holderId: "photos",
                   holderLabel: "Photos",
                   mode: "read",
+                  revocable: true,
                 },
               ],
             },
@@ -916,6 +916,7 @@ describe("screens/ApprovalsScreen", () => {
                   holderId: "photos",
                   holderLabel: "Photos",
                   mode: "write",
+                  revocable: true,
                 },
               ],
             },
@@ -1255,6 +1256,7 @@ describe("notification presentation helpers", () => {
       holderId: "photos",
       holderLabel: "Photos",
       mode: "read" as const,
+      revocable: true,
     };
     const revoked = new Map([[revokedHolderKey("photos", "g-photos"), holder]]);
     expect(

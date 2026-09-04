@@ -5,7 +5,7 @@
 import type { VaultDb } from "../db.js";
 import { SEED_PURGE_ACTIVITY } from "../schema/seed.js";
 import { resolveEntity } from "../schema/tables.js";
-import { writeProvenance, writeReceipt } from "./evidence.js";
+import { writeProvenance, writeAuthorityReceipt } from "./evidence.js";
 import { pkColumn } from "./execution.js";
 import type { Identity } from "./types.js";
 
@@ -126,7 +126,7 @@ export function purgeDemoRows(
       SEED_PURGE_ACTIVITY
     );
   }
-  const receiptId = writeReceipt(db.audit, {
+  const receiptId = writeAuthorityReceipt(db, {
     authorityId: null,
     invocationId: null,
     action: "act access.demo_purge",

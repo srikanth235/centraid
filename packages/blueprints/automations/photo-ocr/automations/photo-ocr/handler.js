@@ -430,7 +430,6 @@ async function a(q) {
   }
 }
 var i = 16,
-  O = "dpv:ServiceProvision",
   E = "ocr-v1",
   t = "built-in",
   Uq = a,
@@ -594,7 +593,6 @@ async function qK(q, K, Q) {
       ],
       orderBy: { column: "asset_id", dir: "desc" },
       limit: 1,
-      purpose: O,
     })
   ).rows?.[0];
   if (!$) return "";
@@ -607,7 +605,6 @@ async function qK(q, K, Q) {
         { column: "profile", op: "eq", value: Q },
       ],
       limit: 1,
-      purpose: O,
     })
   ).rows?.[0]?.model === K
     ? $.asset_id
@@ -618,7 +615,6 @@ async function KK(q, K) {
     contentId: K.content_id,
     variant: "preview",
     maxBytes: 4194304,
-    purpose: O,
   });
   if (Q?.status !== "ok" || Q.kind !== "bytes")
     throw Error(`asset ${K.asset_id}: preview is unavailable`);
@@ -664,7 +660,6 @@ async function QK({ ctx: q, log: K }) {
       ],
       orderBy: { column: "asset_id", dir: "asc" },
       limit: i,
-      purpose: O,
     }),
     A = (j.rows ?? []).filter((B) => B.kind === "photo" || B.kind === "scan"),
     U = 0,
@@ -679,7 +674,6 @@ async function QK({ ctx: q, log: K }) {
             { column: "profile", op: "eq", value: J },
           ],
           limit: 1,
-          purpose: O,
         })
       ).rows?.[0],
       F = Z ? await q.state.get("confirmedModel") : $,
@@ -733,7 +727,6 @@ async function QK({ ctx: q, log: K }) {
         ...(Z ? { prompt_rev: E } : {}),
         ...(Qq === void 0 ? {} : { confidence: Qq }),
       },
-      purpose: O,
     }),
       (U += 1));
   }

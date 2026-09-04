@@ -285,7 +285,6 @@ function seedScope(file: string, vaultId: string): void {
     shapes: SHAPES.map((shape) => ({
       shapeId: shape.shapeId,
       appId: shape.appId,
-      purpose: "dpv:ServiceProvision",
       entities: shape.entities.map((entity) => ({
         entity: entity.entity,
         primaryKey: entity.primaryKey,

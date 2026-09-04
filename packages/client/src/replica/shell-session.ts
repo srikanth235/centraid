@@ -43,7 +43,6 @@ import type {
   ReplicaBootstrapResume,
 } from "./store-core.js";
 import { TerminalReplicaPurgeRetryLoop } from "./terminal-purge-retry.js";
-import { DEFAULT_REPLICA_PURPOSE } from "./types.js";
 import type {
   EnqueueIntentInput,
   IntentOutcome,
@@ -281,8 +280,7 @@ export class ReplicaShellSession {
     const shapeIdLocal = this.resolveShapeId(
       appId,
       request.entity,
-      request.shapeId,
-      request.purpose
+      request.shapeId
     );
     return this.coordinator.readWire({ ...request, shapeId: shapeIdLocal });
   }
@@ -295,8 +293,7 @@ export class ReplicaShellSession {
     const shapeIdLocal = this.resolveShapeId(
       appId,
       request.entity,
-      request.shapeId,
-      request.purpose
+      request.shapeId
     );
     return this.coordinator.searchWire({ ...request, shapeId: shapeIdLocal });
   }
@@ -758,33 +755,29 @@ export class ReplicaShellSession {
   private resolveShapeId(
     appId: string,
     entity: string,
-    requested?: string,
-    purpose?: string
+    requested?: string
   ): string {
-    const resolvedPurpose =
-      purpose ?? (requested ? undefined : DEFAULT_REPLICA_PURPOSE);
+    // ONE APP, ONE SHAPE (#928 A1). A shape is composed from the app's own
+    // declared manifest, so there is nothing left for a caller-supplied
+    // purpose to select between: the app and the entity name it.
     const candidates = this.#catalog.filter(
       (shape) =>
         shape.appId === appId &&
-        (resolvedPurpose === undefined || shape.purpose === resolvedPurpose) &&
         shape.entities.some((item) => item.entity === entity)
     );
     if (requested) {
       if (!candidates.some((shape) => shape.shapeId === requested)) {
         throw new ReplicaProtocolError(
-          `Shape ${requested} is not available to app ${appId}${resolvedPurpose ? ` for purpose ${resolvedPurpose}` : ""}`
+          `Shape ${requested} is not available to app ${appId}`
         );
       }
       return requested;
     }
     if (candidates.length !== 1) {
-      const purposeLabel = resolvedPurpose
-        ? ` at purpose ${resolvedPurpose}`
-        : "";
       throw new ReplicaProtocolError(
         candidates.length === 0
-          ? `No offline shape for ${appId}/${entity}${purposeLabel}`
-          : `Multiple offline shapes match ${appId}/${entity}${purposeLabel}; shapeId is required`
+          ? `No offline shape for ${appId}/${entity}`
+          : `Multiple offline shapes match ${appId}/${entity}; shapeId is required`
       );
     }
     return candidates[0]!.shapeId;

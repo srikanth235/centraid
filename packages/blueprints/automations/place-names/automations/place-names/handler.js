@@ -90,8 +90,7 @@ function O(q, Q, W = C) {
   };
   return { ...U, distanceKm: Math.round(D * 10) / 10, displayName: u(U) };
 }
-var N = 64,
-  H = "dpv:ServiceProvision";
+var N = 64;
 function x(q) {
   if (typeof q !== "string" || q === "") return !1;
   let Q;
@@ -116,7 +115,6 @@ async function K({ ctx: q, log: Q }) {
           where: [{ column: "place_id", op: "gt", value: F }],
           orderBy: { column: "place_id", dir: "asc" },
           limit: N,
-          purpose: H,
         })
       ).rows ?? [],
     j = 0,
@@ -138,7 +136,6 @@ async function K({ ctx: q, log: Q }) {
       (await q.vault.invoke({
         command: "media.set_place_gazetteer",
         input: { place_id: $.place_id, source: z, snapshot: J },
-        purpose: H,
       }),
         (X += 1));
       continue;
@@ -154,7 +151,6 @@ async function K({ ctx: q, log: Q }) {
         source: z,
         snapshot: J,
       },
-      purpose: H,
     }),
       Q.info(`place ${$.place_id}: near ${V.displayName}`),
       (j += 1));

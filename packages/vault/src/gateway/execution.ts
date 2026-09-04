@@ -44,7 +44,7 @@ import {
   actingOwnerDetail,
   writeCheck,
   writeExplanation,
-  writeReceipt,
+  writeAuthorityReceipt,
 } from "./evidence.js";
 import { validateJson } from "./json-schema.js";
 import {
@@ -420,7 +420,7 @@ export function runContractAndExecute(
     detail: Record<string, unknown>
   ): InvokeOutcome => {
     setInvocationStatus(db, invocationId, "failed");
-    const receiptId = writeReceipt(db.audit, {
+    const receiptId = writeAuthorityReceipt(db, {
       authorityId: access.authorityId,
       invocationId,
       action: `act ${command.name}`,
@@ -644,7 +644,7 @@ export function runContractAndExecute(
       // Same split as the precondition path: friendly for the app, raw in the
       // receipt detail.
       const friendly = failedPost.message ?? failedPost.predicate;
-      const receiptId = writeReceipt(db.audit, {
+      const receiptId = writeAuthorityReceipt(db, {
         authorityId: access.authorityId,
         invocationId,
         action: `act ${command.name}`,
@@ -753,7 +753,7 @@ export function runContractAndExecute(
     const reason = scrub(
       error instanceof Error ? error.message : String(error)
     );
-    const receiptId = writeReceipt(db.audit, {
+    const receiptId = writeAuthorityReceipt(db, {
       authorityId: access.authorityId,
       invocationId,
       action: `act ${command.name}`,
@@ -782,7 +782,7 @@ export function runContractAndExecute(
   // After the write they describe is durable and after the invocation's, so
   // the stream reads in the order facts became true.
   for (const receipt of handlerReceipts)
-    writeReceipt(db.audit, {
+    writeAuthorityReceipt(db, {
       authorityId: receipt.authorityId,
       invocationId,
       action: receipt.action,

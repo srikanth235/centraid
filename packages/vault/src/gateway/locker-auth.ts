@@ -21,7 +21,7 @@ import { promisify } from "node:util";
 
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
-import { writeReceipt } from "./evidence.js";
+import { writeAuthorityReceipt } from "./evidence.js";
 
 export const LOCKER_PRIMARY_CREDENTIAL_ID = "primary";
 export const LOCKER_SESSION_TIMEOUT_MS = 5 * 60 * 1000;
@@ -579,7 +579,7 @@ export class LockerAuthentication {
     objectId: string | null = null,
     detail?: Record<string, unknown>
   ): void {
-    writeReceipt(this.db.audit, {
+    writeAuthorityReceipt(this.db, {
       authorityId: null,
       invocationId: null,
       action: `authenticate locker.${operation}`,

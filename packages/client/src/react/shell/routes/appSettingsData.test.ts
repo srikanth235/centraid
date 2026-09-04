@@ -13,29 +13,23 @@ vi.mock(import("../../../gateway-client.js"), () => ({}));
 describe(manifestVaultBlock, () => {
   it("parses a sound vault block", () => {
     const block = manifestVaultBlock({
-      vault: {
-        purpose: "Read tasks",
-        why: "to summarise",
-        scopes: [{ table: "tasks" }],
-      },
+      vault: { why: "to summarise", scopes: [{ table: "tasks" }] },
     });
     expect(block).toStrictEqual({
-      purpose: "Read tasks",
       why: "to summarise",
       scopes: [{ table: "tasks" }],
     });
   });
 
   it("defaults why to empty string", () => {
-    const block = manifestVaultBlock({ vault: { purpose: "x", scopes: [] } });
+    const block = manifestVaultBlock({ vault: { scopes: [] } });
     expect(block?.why).toBe("");
   });
 
   it("returns null when absent or malformed", () => {
     expect(manifestVaultBlock(null)).toBeNull();
     expect(manifestVaultBlock({})).toBeNull();
-    expect(manifestVaultBlock({ vault: { purpose: "x" } })).toBeNull(); // no scopes
-    expect(manifestVaultBlock({ vault: { scopes: [] } })).toBeNull(); // no purpose
+    expect(manifestVaultBlock({ vault: { why: "x" } })).toBeNull(); // no scopes
   });
 });
 

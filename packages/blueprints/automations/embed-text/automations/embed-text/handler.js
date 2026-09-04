@@ -269,7 +269,6 @@ async function R(v) {
   }
 }
 var k = 16,
-  u = "dpv:ServiceProvision",
   T = R,
   p = D;
 function nv(v) {
@@ -292,7 +291,6 @@ async function Mv(v, B) {
       where: [{ column: "variant", op: "in", value: ["text", "transcript"] }],
       orderBy: { column: "derivative_id", dir: "desc" },
       limit: 1,
-      purpose: u,
     })
   ).rows?.[0];
   if (!J) return "";
@@ -303,7 +301,6 @@ async function Mv(v, B) {
       { column: "variant", op: "eq", value: "embedding" },
     ],
     limit: 1,
-    purpose: u,
   });
   return l($.rows?.[0], B, J.derivative_id) ? J.derivative_id : "";
 }
@@ -335,7 +332,6 @@ async function Cv({ ctx: v, log: B }) {
       ],
       orderBy: { column: "derivative_id", dir: "asc" },
       limit: k,
-      purpose: u,
     }),
     W = 0,
     j = 0;
@@ -347,7 +343,6 @@ async function Cv({ ctx: v, log: B }) {
         { column: "variant", op: "eq", value: "embedding" },
       ],
       limit: 1,
-      purpose: u,
     });
     if (l(X.rows?.[0], q, Q.derivative_id)) {
       j += 1;
@@ -357,7 +352,6 @@ async function Cv({ ctx: v, log: B }) {
       contentId: Q.content_id,
       variant: Q.variant,
       maxBytes: 1048576,
-      purpose: u,
     });
     if (K?.status !== "ok" || K.kind !== "text")
       throw Error(`content ${Q.content_id}: ${Q.variant} text is unavailable`);
@@ -376,7 +370,6 @@ async function Cv({ ctx: v, log: B }) {
         capability: "embed-text",
         source_version: Q.derivative_id,
       },
-      purpose: u,
     }),
       (W += 1));
   }

@@ -52,7 +52,6 @@ export default async function accessHandler({
   input?: Record<string, unknown>;
   ctx: HandlerCtx;
 }) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(
     Math.max(Number(input?.limit) || DEFAULT_WINDOW, 20),
     MAX_WINDOW
@@ -84,7 +83,6 @@ export default async function accessHandler({
       ],
       orderBy: { column: "occurred_at", dir: "desc" },
       limit: window,
-      purpose,
     });
     const rows = (result.rows ?? []) as unknown as ReceiptRow[];
     const entries = rows

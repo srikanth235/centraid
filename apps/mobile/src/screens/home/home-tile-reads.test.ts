@@ -31,7 +31,6 @@ const SHAPES = [
   {
     shapeId: "photos-default",
     appId: "photos",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "media.asset",
@@ -50,7 +49,6 @@ const SHAPES = [
   {
     shapeId: "docs-default",
     appId: "docs",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.document",
@@ -76,7 +74,6 @@ const SHAPES = [
   {
     shapeId: "notes-default",
     appId: "notes",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "knowledge.note",
@@ -95,7 +92,6 @@ const SHAPES = [
   {
     shapeId: "tasks-default",
     appId: "tasks",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "schedule.task",

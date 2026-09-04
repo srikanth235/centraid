@@ -31,19 +31,17 @@ interface ContentRow {
 export default async function noteHistory({ input, ctx }: HandlerArgs) {
   const noteId = String(input?.note_id ?? "");
   if (!noteId) return { versions: [] };
-  const purpose = "dpv:ServiceProvision";
   try {
     const notes = await ctx.vault.read({
       entity: "knowledge.note",
       where: [{ column: "note_id", op: "eq", value: noteId }],
       limit: 1,
-      purpose,
     });
     const note = ((notes.rows ?? []) as unknown as NoteRow[])[0];
     if (!note) return { versions: [] };
 
     const [concepts, schemes] = await Promise.all(
-      conceptTaxonomyReads(ctx.vault, purpose)
+      conceptTaxonomyReads(ctx.vault)
     );
     const relationId = findSchemeConcept(
       schemes.rows as Array<{ scheme_id: string; uri: string }>,
@@ -76,7 +74,6 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
           ],
           orderBy: { column: "valid_from", dir: "desc" },
           limit: 1,
-          purpose,
         });
         const next = ((links.rows ?? []) as unknown as LinkRow[])[0];
         if (!next || seen.has(next.to_id)) return;
@@ -92,7 +89,6 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
       acceptTruncation: true,
       entity: "core.content_item",
       where: [{ column: "content_id", op: "in", value: chain }],
-      purpose,
     });
     const byId = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((row) => [

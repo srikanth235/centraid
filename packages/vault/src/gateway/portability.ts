@@ -10,7 +10,7 @@ import {
   stampSealKeyFingerprint,
 } from "../schema/sealed.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
-import { writeReceipt } from "./evidence.js";
+import { writeAuthorityReceipt } from "./evidence.js";
 import { recreateExtTables } from "./ext.js";
 import { clearColumnCache, tableColumns } from "./filters.js";
 import { resealSealedCells } from "./reseal.js";
@@ -119,7 +119,7 @@ export function exportVault(
       | { vault_id: string }
       | undefined
   )?.vault_id;
-  const receiptId = writeReceipt(db.audit, {
+  const receiptId = writeAuthorityReceipt(db, {
     authorityId: null,
     invocationId: null,
     action: "act access.export_vault",

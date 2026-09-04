@@ -7,7 +7,6 @@
   "iconKey": "Receipt",
   "colorKey": "indigo",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Keeps your shared expenses split, balanced and settled.",
     "scopes": [
       {

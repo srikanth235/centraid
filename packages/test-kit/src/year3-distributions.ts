@@ -304,9 +304,9 @@ export function seedYear3Distributions(
   //    position and `hash` the chain link.
   const insertReceipt = target.vault.prepare(
     `INSERT INTO access_receipt
-       (receipt_id, grant_id, invocation_id, action, object_type, object_id,
-        purpose_concept_id, decision, occurred_at, hash, detail_json, seq)
-     VALUES (?, NULL, NULL, ?, ?, ?, NULL, ?, ?, ?, NULL, ?)`
+       (receipt_id, authority_id, invocation_id, action, object_type, object_id,
+        decision, occurred_at, hash, detail_json, seq)
+     VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, ?)`
   );
   target.vault.exec("BEGIN IMMEDIATE");
   let previousHash = digest("year3-receipt-chain-genesis");

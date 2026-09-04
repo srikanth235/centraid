@@ -52,7 +52,10 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       // scopes that named the dead table (`read` and `reveal`) became one
       // `core.entity_revision` read. Nothing may reveal a revision, so the
       // reveal scope did not move — it is gone.
-      declaredScopes: 277,
+      // 277 → 279 (#928): People declares `share.authority_use` and
+      // `share.authority_request` so Settings → Access can date every answer
+      // and draw an automation's undecided ask on the same screen.
+      declaredScopes: 279,
     });
   });
 

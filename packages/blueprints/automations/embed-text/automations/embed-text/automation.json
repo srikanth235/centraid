@@ -13,7 +13,6 @@
   ],
   "requires": {},
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Reads text derivatives and writes vectors through the dedicated validated vector command.",
     "scopes": [
       {

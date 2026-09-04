@@ -64,7 +64,6 @@ interface VaultReadRequest {
   where?: VaultWhere[];
   orderBy?: { column: string; dir?: "asc" | "desc" };
   limit?: number;
-  purpose: string;
   /**
    * "Give me the default window and tell me when it fills" (#922 0a). A read
    * declaring neither `limit` nor this is REFUSED at the inline seat's
@@ -90,7 +89,6 @@ interface VaultSearchRequest {
   query: string;
   where?: VaultWhere[];
   limit?: number;
-  purpose: string;
 }
 
 interface VaultSearchResult {
@@ -98,17 +96,15 @@ interface VaultSearchResult {
   receiptId?: string;
 }
 
-/** Typed-command invocation: `{command, input, purpose}` → `VaultOutcome`. */
+/** Typed-command invocation: `{command, input}` → `VaultOutcome`. */
 interface VaultInvokeRequest {
   command: string;
   input?: Record<string, unknown>;
-  purpose: string;
 }
 
 /** The card resolver (#272): (type, id) refs → renderable cards. */
 interface VaultResolveRequest {
   refs: Array<{ type: string; id: string }>;
-  purpose: string;
 }
 
 interface VaultResolveResult {
@@ -125,8 +121,8 @@ interface VaultApi {
   read: (request: VaultReadRequest) => Promise<VaultReadResult>;
   search: (request: VaultSearchRequest) => Promise<VaultSearchResult>;
   invoke: (request: VaultInvokeRequest) => Promise<VaultOutcome>;
-  /** Query a registered app view, clamped to this app's grants. */
-  query: (view: string, purpose: string) => Promise<unknown>;
+  /** Query a registered app view, clamped to this app's declared manifest. */
+  query: (view: string) => Promise<unknown>;
   /** Commands discoverable by this app (name, schema, risk, confirmation). */
   describe: () => Promise<unknown>;
   /** This app's own invocations awaiting owner confirmation. */

@@ -153,10 +153,7 @@ export interface TallyData {
 }
 
 /** Pull every ground fact Tally needs and shape it for the compute helpers. */
-export async function loadTally(
-  ctx: HandlerCtx,
-  purpose: string
-): Promise<TallyData> {
+export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
   // A group decorates a social.circle (#310): the circle carries
   // the name and the membership, tally.group the icon + colour.
   const [
@@ -175,18 +172,16 @@ export async function loadTally(
     receiptAllocationsRes,
     nudgesRes,
   ] = await Promise.all([
-    ctx.vault.read({ acceptTruncation: true, entity: "core.vault", purpose }),
-    ctx.vault.read({ acceptTruncation: true, entity: "tally.friend", purpose }),
-    ctx.vault.read({ acceptTruncation: true, entity: "tally.group", purpose }),
+    ctx.vault.read({ acceptTruncation: true, entity: "core.vault" }),
+    ctx.vault.read({ acceptTruncation: true, entity: "tally.friend" }),
+    ctx.vault.read({ acceptTruncation: true, entity: "tally.group" }),
     ctx.vault.read({
       acceptTruncation: true,
       entity: "social.circle",
-      purpose,
     }),
     ctx.vault.read({
       acceptTruncation: true,
       entity: "social.circle_member",
-      purpose,
     }),
     ctx.vault.read({
       entity: "tally.expense",
@@ -195,15 +190,13 @@ export async function loadTally(
       where: [{ column: "deleted_at", op: "is-null" }],
       orderBy: { column: "spent_on", dir: "desc" },
       limit: 2000,
-      purpose,
     }),
-    ctx.vault.read({ entity: "tally.expense_split", limit: 8000, purpose }),
-    ctx.vault.read({ entity: "tally.expense_payer", limit: 8000, purpose }),
+    ctx.vault.read({ entity: "tally.expense_split", limit: 8000 }),
+    ctx.vault.read({ entity: "tally.expense_payer", limit: 8000 }),
     ctx.vault.read({
       entity: "tally.settlement",
       where: [{ column: "deleted_at", op: "is-null" }],
       limit: 2000,
-      purpose,
     }),
     ctx.vault.read({
       entity: "tally.obligation",
@@ -212,7 +205,6 @@ export async function loadTally(
         { column: "deleted_at", op: "is-null" },
       ],
       limit: 2000,
-      purpose,
     }),
     // A receipt IS the `role='receipt'` attachment on the expense (#883,
     // ruling O-attach).
@@ -223,23 +215,19 @@ export async function loadTally(
         { column: "role", op: "eq", value: "receipt" },
       ],
       limit: 2_000,
-      purpose,
     }),
     ctx.vault.read({
       entity: "tally.expense_line_item",
       limit: 8_000,
-      purpose,
     }),
     ctx.vault.read({
       entity: "tally.expense_line_allocation",
       limit: 32_000,
-      purpose,
     }),
     ctx.vault.read({
       entity: "tally.nudge",
       orderBy: { column: "prepared_at", dir: "desc" },
       limit: 500,
-      purpose,
     }),
   ]);
 
@@ -294,7 +282,6 @@ export async function loadTally(
           acceptTruncation: true,
           entity: "core.party",
           where: [{ column: "party_id", op: "in", value: partyIds }],
-          purpose,
         })
       : { rows: [] as Record<string, unknown>[] };
   const partyRows = (partiesRes.rows ?? []) as unknown as Array<{
@@ -395,7 +382,6 @@ export async function loadTally(
           acceptTruncation: true,
           entity: "core.content_item",
           where: [{ column: "content_id", op: "in", value: receiptContentIds }],
-          purpose,
         })
       : { rows: [] as Record<string, unknown>[] };
   const contentsById = new Map(
@@ -750,22 +736,19 @@ function groupCard(data: TallyData, g: TallyData["groups"][number]) {
 }
 
 export default async function dashboardHandler({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   try {
-    const data = await loadTally(ctx, purpose);
+    const data = await loadTally(ctx);
     const [trashRes, recurringRes, exceptionRes] = await Promise.all([
       ctx.vault.read({
         entity: "tally.expense",
         where: [{ column: "deleted_at", op: "not-null" }],
         orderBy: { column: "deleted_at", dir: "desc" },
         limit: 100,
-        purpose,
       }),
       ctx.vault.read({
         entity: "tally.recurring_expense",
         orderBy: { column: "updated_at", dir: "desc" },
         limit: 500,
-        purpose,
       }),
       ctx.vault.read({
         entity: "schedule.recurrence_exception",
@@ -777,7 +760,6 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
           },
         ],
         limit: 2000,
-        purpose,
       }),
     ]);
     const bal = pairwise(data);

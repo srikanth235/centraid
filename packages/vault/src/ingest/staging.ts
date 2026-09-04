@@ -27,7 +27,10 @@ import {
   unsealValue,
 } from "../schema/sealed.js";
 import { resolveEntity } from "../schema/tables.js";
-import { writeProvenance, writeReceipt } from "./../gateway/evidence.js";
+import {
+  writeProvenance,
+  writeAuthorityReceipt,
+} from "./../gateway/evidence.js";
 
 export function payloadAad(rowId: string, field: string): string {
   return sealAad("sync_import_row", `payload.${field}`, rowId);
@@ -282,7 +285,7 @@ export function stageCandidates(
     throw error;
   }
   const { batchId, counts } = staged;
-  const receiptId = writeReceipt(db.audit, {
+  const receiptId = writeAuthorityReceipt(db, {
     authorityId: null,
     invocationId: null,
     action: "act sync.stage_import",
@@ -613,7 +616,7 @@ export function publishBatch(
       "import"
     );
   }
-  const receiptId = writeReceipt(db.audit, {
+  const receiptId = writeAuthorityReceipt(db, {
     authorityId: null,
     invocationId: null,
     action: "act sync.publish_import",
@@ -664,7 +667,7 @@ export function discardBatch(
     db.vault.exec("ROLLBACK");
     throw error;
   }
-  const receiptId = writeReceipt(db.audit, {
+  const receiptId = writeAuthorityReceipt(db, {
     authorityId: null,
     invocationId: null,
     action: "act sync.discard_import",

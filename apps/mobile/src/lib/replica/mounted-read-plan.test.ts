@@ -18,7 +18,6 @@ const SHAPES = [
   {
     shapeId: "docs-default",
     appId: "docs",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.document",

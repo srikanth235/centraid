@@ -99,7 +99,7 @@ import type { RevocationResult, SweepResult } from "./duties.js";
 import {
   actingOwnerDetail,
   skipsAllowReceipt,
-  writeReceipt,
+  writeAuthorityReceipt,
 } from "./evidence.js";
 import {
   assertInvocationIdentity,
@@ -610,7 +610,7 @@ export class Gateway {
     };
     const ref = resolveEntity(request.entity, this.db.vault);
     if (!ref) {
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId: null,
         invocationId: null,
         action: "read",
@@ -632,7 +632,7 @@ export class Gateway {
       "read"
     );
     if (access.decision === "deny") {
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId: access.authorityId,
         invocationId: null,
         action: "read",
@@ -654,7 +654,7 @@ export class Gateway {
     ) {
       const failing = provenanceScopeFailure(this.db.vault, identity, request);
       if (failing) {
-        const receiptId = writeReceipt(this.db.audit, {
+        const receiptId = writeAuthorityReceipt(this.db, {
           authorityId: access.authorityId,
           invocationId: null,
           action: "read",
@@ -744,7 +744,7 @@ export class Gateway {
     }
     const receiptId = skipsAllowReceipt(identity)
       ? undefined
-      : writeReceipt(this.db.audit, {
+      : writeAuthorityReceipt(this.db, {
           authorityId: access.authorityId,
           invocationId: null,
           action: "read",
@@ -776,7 +776,7 @@ export class Gateway {
       failing: string,
       authorityId: string | null = null
     ): never => {
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId,
         invocationId: null,
         action: "reveal",
@@ -910,7 +910,7 @@ export class Gateway {
     // A successful unseal proves this key sealed this vault's secrets, so
     // stamp the fingerprint a pre-#298 vault never recorded.
     if (unsealedAny) stampSealKeyFingerprint(this.db.vault, this.db.sealKey);
-    const receiptId = writeReceipt(this.db.audit, {
+    const receiptId = writeAuthorityReceipt(this.db, {
       authorityId: access.authorityId,
       invocationId: null,
       action: "reveal",
@@ -940,7 +940,7 @@ export class Gateway {
   sql(cred: Credential, request: VaultSqlRequest): VaultSqlResult {
     const identity = this.identify(cred);
     if (identity.kind !== "owner-device") {
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId: null,
         invocationId: null,
         action: "read",
@@ -959,7 +959,7 @@ export class Gateway {
       request.sql,
       request.maxRows ?? VAULT_SQL_DEFAULT_ROWS
     );
-    const receiptId = writeReceipt(this.db.audit, {
+    const receiptId = writeAuthorityReceipt(this.db, {
       authorityId: null,
       invocationId: null,
       action: "read",
@@ -1049,7 +1049,7 @@ export class Gateway {
             authorityId: null,
           } as const);
       if (access.decision === "deny") {
-        const receiptId = writeReceipt(this.db.audit, {
+        const receiptId = writeAuthorityReceipt(this.db, {
           authorityId: access.authorityId,
           invocationId: null,
           action: "read",
@@ -1109,7 +1109,7 @@ export class Gateway {
     }
     const receiptId = skipsAllowReceipt(identity)
       ? undefined
-      : writeReceipt(this.db.audit, {
+      : writeAuthorityReceipt(this.db, {
           authorityId: null,
           invocationId: null,
           action: "read",
@@ -1163,7 +1163,7 @@ export class Gateway {
     // not something the rail should carry to the steward.
     const refused = this.shareGrantRefusal(identity, rawRequest);
     if (refused) {
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId: null,
         invocationId: rawRequest.invocationId ?? null,
         action: `act ${rawRequest.command}`,
@@ -1185,7 +1185,7 @@ export class Gateway {
     if (!grant) return this.invokeCore(identity, rawRequest);
     if (!isCommonsCommandActable(grant.containerType, rawRequest.command)) {
       const reason = `command ${rawRequest.command} is not declared for ${grant.containerType}`;
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId: grant.grantId,
         invocationId: rawRequest.invocationId ?? null,
         action: `act ${rawRequest.command}`,
@@ -1240,7 +1240,7 @@ export class Gateway {
           this.activeBatchCommonsIntentGrantIds.push(grant.grantId);
         else this.emitCommonsIntentQueued(grant.grantId);
       }
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId: grant.grantId,
         invocationId: rawRequest.invocationId ?? null,
         action: `act ${rawRequest.command}`,
@@ -1259,7 +1259,7 @@ export class Gateway {
         throw new Error("commons invocation batch returned no result");
       if (!settled.ok) {
         if (settled.error instanceof CommonsMaxSizeError) {
-          const receiptId = writeReceipt(this.db.audit, {
+          const receiptId = writeAuthorityReceipt(this.db, {
             authorityId: grant.grantId,
             invocationId: rawRequest.invocationId ?? null,
             action: `act ${rawRequest.command}`,
@@ -1354,7 +1354,7 @@ export class Gateway {
     // The demo register is the OWNER loading a scenario: a granted caller
     // marking real-looking rows purgeable would be an integrity hole.
     if (request.demo && identity.kind !== "owner-device") {
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId: null,
         invocationId: null,
         action: `act ${request.command}`,
@@ -1371,7 +1371,7 @@ export class Gateway {
     }
     const command = lookupCommand(this.db.vault, request.command);
     if (!command || !this.commands.has(request.command)) {
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId: null,
         invocationId: null,
         action: `act ${request.command}`,
@@ -1395,7 +1395,7 @@ export class Gateway {
       "act"
     );
     if (access.decision === "deny") {
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId: access.authorityId,
         invocationId: null,
         action: `act ${request.command}`,
@@ -1916,7 +1916,7 @@ export class Gateway {
     action: string,
     detail: Record<string, unknown>
   ): string {
-    return writeReceipt(this.db.audit, {
+    return writeAuthorityReceipt(this.db, {
       authorityId: null,
       invocationId: null,
       action: `act ${action}`,
@@ -2016,7 +2016,7 @@ export class Gateway {
       "read"
     );
     if (access.decision === "deny") {
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId: access.authorityId,
         invocationId: null,
         action: "read",
@@ -2035,7 +2035,7 @@ export class Gateway {
       contentId,
       options.variant
     );
-    const receiptId = writeReceipt(this.db.audit, {
+    const receiptId = writeAuthorityReceipt(this.db, {
       authorityId: access.authorityId,
       invocationId: null,
       action: "read",
@@ -2082,7 +2082,7 @@ export class Gateway {
       "read"
     );
     if (access.decision === "deny") {
-      const receiptId = writeReceipt(this.db.audit, {
+      const receiptId = writeAuthorityReceipt(this.db, {
         authorityId: access.authorityId,
         invocationId: null,
         action: "read",
@@ -2106,7 +2106,7 @@ export class Gateway {
       request.variant as AgentContentVariant,
       request.maxBytes
     );
-    const receiptId = writeReceipt(this.db.audit, {
+    const receiptId = writeAuthorityReceipt(this.db, {
       authorityId: access.authorityId,
       invocationId: null,
       action: "read",
@@ -2181,7 +2181,7 @@ export class Gateway {
     // sheds a tiny just made. Pinned tinies, staged bytes and un-replicated
     // last copies are untouchable.
     const evicted = this.db.blobs.evictAfterReconcile();
-    const receiptId = writeReceipt(this.db.audit, {
+    const receiptId = writeAuthorityReceipt(this.db, {
       authorityId: null,
       invocationId: null,
       action: "act access.blob_sweep",

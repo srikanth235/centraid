@@ -1,8 +1,14 @@
-// Turns `(app|agent) -> grants[] -> scopes[]` sideways into `store -> holders[]`
-// (#708 A2). Anything unmatched falls into the "Shared identifiers" catch-all.
+// Turns holders sideways into `store -> holders[]` (#708 A2). Anything
+// unmatched falls into the "Shared identifiers" catch-all.
+//
+// TWO KINDS OF HOLDER, AND ONLY ONE IS REVOCABLE (#928 A1). An app DECLARES
+// its reach at build time — there is no grant to take away, so its row is
+// shown and not offered a Revoke. An automation holds a standing ANSWER, one
+// `share_authority` row per subject, and that row is what a revoke ends.
 
 import type {
   VaultAgentEntry,
+  VaultAnswer,
   VaultAppEntry,
   VaultScope,
 } from "../../gateway-client-vault.js";
@@ -72,13 +78,14 @@ function modeForVerbs(verbs: string): GrantMode {
 }
 
 export interface StoreHolderDTO {
-  /** An app's revocable `grantId`; an agent's `agentId` — agents have no
-   *  per-scope grant. */
+  /** The `share_authority` row a revoke ends; `""` for a declared app. */
   grantId: string;
   holderKind: "app" | "agent";
   holderId: string;
   holderLabel: string;
   mode: GrantMode;
+  /** False for an app: a declaration is not a grant and cannot be withdrawn. */
+  revocable: boolean;
 }
 
 export interface StoreGroup {
@@ -87,31 +94,44 @@ export interface StoreGroup {
   holders: StoreHolderDTO[];
 }
 
-function holdersFromEntry(
+function holdersFromScopes(
   holderKind: "app" | "agent",
   holderId: string,
   holderLabel: string,
-  grants: readonly { grantId: string; scopes: readonly VaultScope[] }[]
+  reach: readonly { grantId: string; scope: VaultScope }[],
+  revocable: boolean
 ): Map<string, StoreHolderDTO> {
   // One row per holder per store, at the strongest mode.
   const byStore = new Map<string, StoreHolderDTO>();
-  for (const grant of grants) {
-    for (const scope of grant.scopes) {
-      const storeId = storeIdForScope(scope);
-      const mode = modeForVerbs(scope.verbs);
-      const existing = byStore.get(storeId);
-      if (!existing || (existing.mode === "read" && mode === "write")) {
-        byStore.set(storeId, {
-          grantId: grant.grantId,
-          holderKind,
-          holderId,
-          holderLabel,
-          mode,
-        });
-      }
+  for (const { grantId, scope } of reach) {
+    const storeId = storeIdForScope(scope);
+    const mode = modeForVerbs(scope.verbs);
+    const existing = byStore.get(storeId);
+    if (!existing || (existing.mode === "read" && mode === "write")) {
+      byStore.set(storeId, {
+        grantId,
+        holderKind,
+        holderId,
+        holderLabel,
+        mode,
+        revocable,
+      });
     }
   }
   return byStore;
+}
+
+/** An answer's subject back to the scope it covers — `schema` or `schema.table`. */
+function scopeOfAnswer(answer: VaultAnswer): VaultScope {
+  const dot = answer.subjectId.indexOf(".");
+  const verbs = answer.verb === "act" ? "act" : "read";
+  return answer.subjectType === "automation.entity" && dot > 0
+    ? {
+        schema: answer.subjectId.slice(0, dot),
+        table: answer.subjectId.slice(dot + 1),
+        verbs,
+      }
+    : { schema: answer.subjectId, verbs };
 }
 
 /** A store with no holders stays in the list; the caller renders that. */
@@ -123,17 +143,29 @@ export function groupGrantsByStore(
   for (const store of STORES) perStore.set(store.storeId, []);
 
   for (const app of apps) {
-    const holders = holdersFromEntry("app", app.appId, app.name, app.grants);
+    const holders = holdersFromScopes(
+      "app",
+      app.appId,
+      app.name,
+      app.scopes.map((scope) => ({ grantId: "", scope })),
+      false
+    );
     for (const [storeId, holder] of holders) {
       perStore.get(storeId)?.push(holder);
     }
   }
   for (const agent of agents) {
-    const holders = holdersFromEntry(
+    const holders = holdersFromScopes(
       "agent",
       agent.agentId,
       agent.name,
-      agent.grants
+      agent.answers
+        .filter((answer) => answer.decision === "granted")
+        .map((answer) => ({
+          grantId: answer.authorityId,
+          scope: scopeOfAnswer(answer),
+        })),
+      true
     );
     for (const [storeId, holder] of holders) {
       perStore.get(storeId)?.push(holder);

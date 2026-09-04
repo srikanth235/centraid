@@ -7,7 +7,6 @@
   "iconKey": "Folder",
   "colorKey": "teal",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Keeps your important documents filed, editable, downloadable and restorable — with a version history.",
     "scopes": [
       { "schema": "core", "table": "document", "verbs": "read" },

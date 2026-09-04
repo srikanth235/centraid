@@ -1118,3 +1118,314 @@ tests/scale/replica-sse-fanout.scale.test.ts
 | --- | --- | --- |
 | The bridge clamp really bites — an app is held to its declared manifest, not merely enrolled | ran the three repaired suites with `recordAppInstall` reverted to `approveAgentGrant` | **red**: `denied`, not `parked`/`executed`, in all three — an app with no recorded declaration reaches nothing, so the clamp is the thing deciding, not the enrolment row |
 | The three remaining suite reds are the container's, not this diff's | read the two failing assertions and probed the environment they name: `env | grep IS_SANDBOX`, `which sqlite3` | `IS_SANDBOX=yes` is exported into this container (the suite asserts it is unset / `1`) and there is no `sqlite3` binary (the lock test shells out to it and reads `null`). Neither assertion touches the authority plane |
+
+## w4c — the seats: one plane on screen, and when it was last used
+
+`packages/client`, `packages/blueprints`, `apps/mobile`, plus the vault half that makes "last used" a fact
+rather than a guess. The retired `purpose` selector leaves every replica shape, request and manifest; an app's
+pane states what it DECLARED instead of offering a grant; and Settings → Access grows an Automations group, a
+last-used line on every row, and the asks still waiting on the owner. Serves in part: **"Settings → Access
+shows last-used for every row"** and **"`grep -r \"dpv:\" packages apps` is empty outside receipts and
+CHANGELOG"**.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/vault/src/schema/authority.ts` | new `share_authority_use` (authority_id → last_used_at), one row per answer, no history, no FK — the audit band's `authority_id` is a value, and the commons rail receipts under ids this table does not hold |
+| `packages/vault/src/gateway/evidence.ts` | new `writeAuthorityReceipt(db, input)`: the receipt and the stamp in one transaction from one id, so last-used can never disagree with the chain; `writeReceipt` stays band-agnostic for the journal and steward writers |
+| `packages/vault/src/schema/entity-catalog.ts` | `share.authority_use` registered — a restore that forgot it would reset every row to "never used" |
+| `packages/client/src/access-lens.ts` | `automation` joins the principal kinds and gets its own group; `AccessAnswer.lastUsedAt`; `AccessRequest` + `parseAccessRequests`/`parseAccessUse`; the two side reads are best-effort beside the answers |
+| `packages/client/src/react/screens/SettingsAccessScreen.tsx` · `apps/mobile/src/screens/settings/AccessSection.tsx` | both seats draw "last used <date>" / "never used" per row and a "Waiting on you" block for undecided asks |
+| `packages/client/src/react/screens/VaultScreen.tsx` | `GrantSection` **deleted**; "Requested access" becomes "Declared access" and the Purpose line goes — an app declares, it is not granted |
+| `packages/client/src/react/screens/privacyStores.ts` | two kinds of holder: a DECLARED app (no revoke) and an ANSWERED automation (revocable), from `app.scopes` and `agent.answers` |
+| `packages/client/src/gateway-client-vault.ts` | `approveVaultGrant` and `VaultGrant` **deleted**; `VaultAppEntry.scopes`, `VaultAgentEntry.answers` |
+| `packages/client/src/replica/{types,shell-session,store-core,write-helpers}.ts` · `apps/mobile/src/lib/replica/{native-session,multi-vault-reader}.ts` | one app, one shape: `purpose` off the shape, the read, the search and the `replica_shape` table; the shape id is the only selector |
+| `packages/blueprints/types/centraid.d.ts` + 34 app query modules | `purpose` off `ctx.vault.read/search/invoke/resolve/query` and every call site |
+| `packages/blueprints/apps/people/app.json` | declares `share.authority_use` and `share.authority_request` |
+| `packages/server/src/serve/vault-plane.ts` | `listApps()` carries each app's declared manifest, which is what the privacy store view draws |
+| `apps/web/tests/e2e/settings-access.spec.ts` | new harness: the shipped screen in a real browser, emitting the evidence screenshot |
+
+### Numbers
+
+| measure | before | after |
+| --- | --- | --- |
+| `dpv:` occurrences under `packages/` + `apps/` (excluding `dist/`) | 12 | **0** |
+| replica shapes an app may hold for one entity | many, selected by a caller-supplied purpose string | **one**, or an explicitly named shape id |
+| Access rows carrying a last-used date | 0 | **every row** ("never used" where nothing has) |
+| principal kinds the dashboard groups | 4 | **5** (automations) |
+| suites | vault 204 files/1600 · client 270/2460 · blueprints 212/6651 · mobile 277/2387 · server 400/3512, all passing bar the three container reds |
+
+### Deleted, with its replacement
+
+`DEFAULT_REPLICA_PURPOSE` and `replica_shape.purpose` → the shape id alone; `VaultScreen`'s grant/revoke
+section and `approveVaultGrant` → a statement of what the app declared; `VaultGrant`/`VaultAppEntry.grants` →
+`VaultAppEntry.scopes` (declarations) and `VaultAgentEntry.answers` (answers); the ctx `purpose` argument →
+nothing.
+
+### Decisions
+
+- **Last-used is a row of its own, not a column on the answer.** `share_authority` is what the member SAID and
+  is immutable but for `revoked_at`; stamping it on every use would rewrite the answer and push a replica
+  change each time an automation read anything. `share_authority_use` is one row per authority, upserted
+  beside the receipt that cites it — O(1), no history, and a replica change only when the date actually moves.
+- **The privacy store view keeps app rows.** Dropping them would have been simpler, but "which apps reach my
+  photos" is the question that screen exists to answer; what changed is that an app's row is not offered a
+  Revoke, because a declaration is not a grant and the button could not keep its promise.
+- **A pinned digest moved, a policy did not.** `replica-shape-parity`'s `people` shape id and the sweep's
+  `declaredScopes` count are pins over derived values; People declares two more entities on purpose, so both
+  are re-pinned with the reason in the test.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/{vault,client,blueprints,server,test-kit,core,design} typecheck   # all pass
+bun run --cwd apps/mobile typecheck                                                      # passes
+bun run --cwd packages/vault test        # 204 files, 1600 passed, 2 skipped
+bun run --cwd packages/client test       # 270 files, 2460 passed
+bun run --cwd packages/blueprints test   # 212 files, 6651 passed
+bun run --cwd apps/mobile test           # 277 files, 2387 passed
+bun run --cwd packages/server test       # 400 files, 3512 passed; 3 container reds (IS_SANDBOX, no sqlite3)
+CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell \
+  bun run --cwd apps/web e2e -- settings-access.spec.ts   # 1 passed
+node scripts/golden-vault/build.mjs --label issue-916     # re-frozen for share_authority_use
+```
+
+## User impact
+
+Settings → Access finally answers the question it was built for. Every answer now carries the date it was last
+used — "last used Sep 3, 2026", or "never used" for one nothing has touched — so an automation you approved
+months ago and forgot is visible as exactly that instead of sitting indistinguishable beside the ones you rely
+on. Automations join people, harnesses and your devices as a group of their own, because an automation's reach
+is now the same kind of standing answer theirs is. And an automation asking for MORE than you have agreed to
+no longer waits silently: it appears at the top under "Waiting on you", with the scopes it is asking for, above
+everything you have already answered. On an app's own settings pane, "Requested access" becomes "Declared
+access": a first-party app runs on your device against your vault and its reach is fixed by its own code, so
+the pane now states it plainly rather than offering a Grant button — and a Revoke that could not have kept its
+promise is gone from the privacy ledger for apps, while automations keep theirs.
+
+First-run: a fresh vault has no answers and nothing has used anything, so Access shows each group's "No
+standing answers here." and no "Waiting on you" block at all — the empty state is unchanged, and no row is
+drawn as "never used" until there is a row.
+
+Evidence: `artifacts/e2e/ui-impact/issue-928-settings-access.png`, emitted by
+`apps/web/tests/e2e/settings-access.spec.ts` (the shipped `SettingsAccessScreen`, its loader stubbed, in
+headless Chromium). The phone seat renders the same `access-lens.ts` groups and the same two strings; there is
+no mobile screenshot harness in this container, so CI must run the mobile evidence lane against this branch —
+nothing is fabricated here.
+
+### Paths
+
+```
+apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx
+apps/mobile/src/lib/replica/bootstrap-statement-budget.test.ts
+apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts
+apps/mobile/src/lib/replica/mounted-read-plan.pushdown.test.ts
+apps/mobile/src/lib/replica/mounted-read-plan.test.ts
+apps/mobile/src/lib/replica/multi-vault-read-parity.test.ts
+apps/mobile/src/lib/replica/multi-vault-reader.test.ts
+apps/mobile/src/lib/replica/multi-vault-reader.ts
+apps/mobile/src/lib/replica/native-replica-store.test.ts
+apps/mobile/src/lib/replica/native-session.test-fixtures.ts
+apps/mobile/src/lib/replica/native-session.ts
+apps/mobile/src/lib/replica/off-thread-apply.test.ts
+apps/mobile/src/lib/replica/ordered-read-plan.test.ts
+apps/mobile/src/lib/replica/pending-write-visibility.test.ts
+apps/mobile/src/lib/replica/reader-statement-budget.test.ts
+apps/mobile/src/lib/replica/reconnect-to-fresh.fixture.ts
+apps/mobile/src/screens/home/home-tile-reads.test.ts
+apps/mobile/src/screens/settings/AccessSection.tsx
+apps/web/tests/e2e/settings-access.spec.ts
+packages/blueprints/apps/_shared/action-kit.test.ts
+packages/blueprints/apps/_shared/action-kit.ts
+packages/blueprints/apps/_shared/journal-scheme.ts
+packages/blueprints/apps/_shared/pending-overlay.ts
+packages/blueprints/apps/_shared/taxonomy-reads.ts
+packages/blueprints/apps/agenda/app.json
+packages/blueprints/apps/agenda/queries/day-context.ts
+packages/blueprints/apps/agenda/queries/parties.ts
+packages/blueprints/apps/agenda/queries/search.ts
+packages/blueprints/apps/agenda/queries/upcoming.ts
+packages/blueprints/apps/agenda/seed.js
+packages/blueprints/apps/docs/app.json
+packages/blueprints/apps/docs/queries/_shared.ts
+packages/blueprints/apps/docs/queries/activity.ts
+packages/blueprints/apps/docs/queries/drive.ts
+packages/blueprints/apps/docs/queries/history.ts
+packages/blueprints/apps/docs/queries/search.ts
+packages/blueprints/apps/docs/seed.js
+packages/blueprints/apps/locker/app.json
+packages/blueprints/apps/locker/queries/access.ts
+packages/blueprints/apps/locker/queries/autofill-candidates.ts
+packages/blueprints/apps/locker/queries/autofill-item.ts
+packages/blueprints/apps/locker/queries/item-sidecars.ts
+packages/blueprints/apps/locker/queries/item.ts
+packages/blueprints/apps/locker/queries/items.ts
+packages/blueprints/apps/locker/queries/search.ts
+packages/blueprints/apps/locker/queries/trash.ts
+packages/blueprints/apps/locker/queries/watchtower.ts
+packages/blueprints/apps/notes/actions/send-to-tasks.ts
+packages/blueprints/apps/notes/app.json
+packages/blueprints/apps/notes/queries/history.ts
+packages/blueprints/apps/notes/queries/journal.ts
+packages/blueprints/apps/notes/queries/library.ts
+packages/blueprints/apps/notes/queries/link-targets.ts
+packages/blueprints/apps/notes/queries/note.ts
+packages/blueprints/apps/notes/queries/search.ts
+packages/blueprints/apps/notes/seed.js
+packages/blueprints/apps/people/app.json
+packages/blueprints/apps/people/queries/_shared.ts
+packages/blueprints/apps/people/queries/dashboard.ts
+packages/blueprints/apps/people/queries/history.ts
+packages/blueprints/apps/people/queries/journal.ts
+packages/blueprints/apps/people/queries/people.ts
+packages/blueprints/apps/people/queries/person.ts
+packages/blueprints/apps/people/queries/search.ts
+packages/blueprints/apps/people/queries/trash.ts
+packages/blueprints/apps/people/seed.js
+packages/blueprints/apps/photos/app.json
+packages/blueprints/apps/photos/queries/_shared.ts
+packages/blueprints/apps/photos/queries/duplicates.ts
+packages/blueprints/apps/photos/queries/enrichment-status.ts
+packages/blueprints/apps/photos/queries/face-queue.ts
+packages/blueprints/apps/photos/queries/faces.ts
+packages/blueprints/apps/photos/queries/library.ts
+packages/blueprints/apps/photos/queries/people.ts
+packages/blueprints/apps/photos/queries/search.ts
+packages/blueprints/apps/photos/queries/storage.ts
+packages/blueprints/apps/photos/seed.js
+packages/blueprints/apps/tally/app.json
+packages/blueprints/apps/tally/queries/activity.ts
+packages/blueprints/apps/tally/queries/dashboard.ts
+packages/blueprints/apps/tally/queries/export.ts
+packages/blueprints/apps/tally/queries/friend.ts
+packages/blueprints/apps/tally/queries/group.ts
+packages/blueprints/apps/tally/queries/history.ts
+packages/blueprints/apps/tally/queries/search.ts
+packages/blueprints/apps/tally/seed.js
+packages/blueprints/apps/tasks/app.json
+packages/blueprints/apps/tasks/queries/board.ts
+packages/blueprints/apps/tasks/queries/search.ts
+packages/blueprints/apps/tasks/seed.js
+packages/blueprints/automations/doc-entity-linker/automations/doc-entity-linker/automation.json
+packages/blueprints/automations/doc-entity-linker/automations/doc-entity-linker/handler.js
+packages/blueprints/automations/doc-filer/automations/doc-filer/automation.json
+packages/blueprints/automations/doc-filer/automations/doc-filer/handler.js
+packages/blueprints/automations/doc-text-extractor/automations/doc-text-extractor/automation.json
+packages/blueprints/automations/doc-text-extractor/automations/doc-text-extractor/handler.js
+packages/blueprints/automations/dropbox-pull/automations/dropbox-pull/automation.json
+packages/blueprints/automations/embed-image/automations/embed-image/automation.json
+packages/blueprints/automations/embed-image/automations/embed-image/handler.js
+packages/blueprints/automations/embed-text/automations/embed-text/automation.json
+packages/blueprints/automations/embed-text/automations/embed-text/handler.js
+packages/blueprints/automations/faces/automations/faces/automation.json
+packages/blueprints/automations/faces/automations/faces/handler.js
+packages/blueprints/automations/github-pull/automations/github-pull/automation.json
+packages/blueprints/automations/gitlab-pull/automations/gitlab-pull/automation.json
+packages/blueprints/automations/google-calendar-invite-send/automations/google-calendar-invite-send/automation.json
+packages/blueprints/automations/google-calendar-pull/automations/google-calendar-pull/automation.json
+packages/blueprints/automations/google-contacts-pull/automations/google-contacts-pull/automation.json
+packages/blueprints/automations/google-drive-pull/automations/google-drive-pull/automation.json
+packages/blueprints/automations/google-gmail-pull/automations/google-gmail-pull/automation.json
+packages/blueprints/automations/google-gmail-send/automations/google-gmail-send/automation.json
+packages/blueprints/automations/linear-pull/automations/linear-pull/automation.json
+packages/blueprints/automations/microsoft-calendar-pull/automations/microsoft-calendar-pull/automation.json
+packages/blueprints/automations/microsoft-contacts-pull/automations/microsoft-contacts-pull/automation.json
+packages/blueprints/automations/microsoft-onedrive-pull/automations/microsoft-onedrive-pull/automation.json
+packages/blueprints/automations/microsoft-outlook-pull/automations/microsoft-outlook-pull/automation.json
+packages/blueprints/automations/notion-pull/automations/notion-pull/automation.json
+packages/blueprints/automations/obligation-extractor/automations/obligation-extractor/automation.json
+packages/blueprints/automations/obligation-extractor/automations/obligation-extractor/handler.js
+packages/blueprints/automations/photo-ocr/automations/photo-ocr/automation.json
+packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js
+packages/blueprints/automations/place-names/automations/place-names/automation.json
+packages/blueprints/automations/place-names/automations/place-names/handler.js
+packages/blueprints/automations/renewal-reminders/automations/renewal-reminders/automation.json
+packages/blueprints/automations/slack-pull/automations/slack-pull/automation.json
+packages/blueprints/automations/todoist-pull/automations/todoist-pull/automation.json
+packages/blueprints/automations/transcript/automations/transcript/automation.json
+packages/blueprints/automations/transcript/automations/transcript/handler.js
+packages/blueprints/src/app-manifest-reads.test.ts
+packages/blueprints/types/centraid.d.ts
+packages/client/src/access-lens.test.ts
+packages/client/src/access-lens.ts
+packages/client/src/gateway-client-automation-editing.ts
+packages/client/src/gateway-client-outbox.ts
+packages/client/src/gateway-client-vault.contract.test.ts
+packages/client/src/gateway-client-vault.ts
+packages/client/src/react/screen-contracts.ts
+packages/client/src/react/screens/ApprovalsScreen.test.tsx
+packages/client/src/react/screens/ApprovalsScreen.tsx
+packages/client/src/react/screens/AutomationEditorScreen.test.tsx
+packages/client/src/react/screens/AutomationEditorTriggers.test.tsx
+packages/client/src/react/screens/SettingsAccessScreen.tsx
+packages/client/src/react/screens/VaultScreen.test.tsx
+packages/client/src/react/screens/VaultScreen.tsx
+packages/client/src/react/screens/privacyStores.test.ts
+packages/client/src/react/screens/privacyStores.ts
+packages/client/src/react/shell/routes/ApprovalsRoute.tsx
+packages/client/src/react/shell/routes/AutomationEditorRoute.test.tsx
+packages/client/src/react/shell/routes/appSettingsData.test.ts
+packages/client/src/react/shell/routes/appSettingsData.ts
+packages/client/src/react/shell/routes/approvalsData.test.ts
+packages/client/src/react/shell/routes/approvalsData.ts
+packages/client/src/react/shell/routes/automationEditorData.ts
+packages/client/src/react/shell/routes/automationEditorTriggers.ts
+packages/client/src/react/shell/routes/automationEditorVault.test.ts
+packages/client/src/react/shell/routes/automationThreadData.test.ts
+packages/client/src/react/shell/routes/homeTileContent.test.ts
+packages/client/src/react/shell/routes/homeTileContent.ts
+packages/client/src/replica/app-convergence.contract.test.ts
+packages/client/src/replica/convergence-properties.test.ts
+packages/client/src/replica/coordinator.test.ts
+packages/client/src/replica/deferred-values.test.ts
+packages/client/src/replica/read-plan-parity.test-fixtures.ts
+packages/client/src/replica/read-plan-refusals.test.ts
+packages/client/src/replica/read-plan-truncation.test.ts
+packages/client/src/replica/shell-session-admission.contract.test.ts
+packages/client/src/replica/shell-session-scopes.test.ts
+packages/client/src/replica/shell-session.test.ts
+packages/client/src/replica/shell-session.ts
+packages/client/src/replica/sqlite-store.test.ts
+packages/client/src/replica/store-core-bootstrap-walk.test.ts
+packages/client/src/replica/store-core.test-fixtures.ts
+packages/client/src/replica/store-core.ts
+packages/client/src/replica/store-docs-search.test.ts
+packages/client/src/replica/types.ts
+packages/client/src/replica/windowed-bootstrap.test-fixtures.ts
+packages/client/src/replica/write-helpers.ts
+packages/server/skills/automation-authoring/SKILL.md
+packages/server/src/routes/replica-shape-parity.test.ts
+packages/server/src/serve/manifest-scope-denial.sweep.test.ts
+packages/server/src/serve/vault-plane.ts
+packages/test-kit/src/year3-distributions.ts
+packages/test-kit/src/year3-replica.ts
+packages/vault/src/gateway/custody.ts
+packages/vault/src/gateway/demo.ts
+packages/vault/src/gateway/duties.ts
+packages/vault/src/gateway/evidence.test.ts
+packages/vault/src/gateway/evidence.ts
+packages/vault/src/gateway/execution.ts
+packages/vault/src/gateway/gateway.ts
+packages/vault/src/gateway/locker-auth.ts
+packages/vault/src/gateway/portability.ts
+packages/vault/src/gateway/reseal.ts
+packages/vault/src/gateway/search.ts
+packages/vault/src/ingest/staging.ts
+packages/vault/src/replica/parked.ts
+packages/vault/src/schema/authority.ts
+packages/vault/src/schema/entity-catalog.ts
+packages/vault/src/schema/migrate.test.ts
+packages/vault/tests/golden/issue-916/manifest.json
+packages/vault/tests/golden/issue-916/vault.db.gz
+scripts/docs-site/src/content/ontology-body.html
+tests/quality/backup-corpus-fixture.ts
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| "Last used" is really the receipt chain's date, not a write-time guess | forced `writeAuthorityReceipt` to skip the upsert and re-ran `access-lens.test.ts` plus the vault suite | the lens test stays green (it feeds rows directly), which was the finding: the LENS cannot prove the stamp. The proof is the seam — one function, one transaction, one `authorityId` — and the vault suite is what would break if the two disagreed. Recorded as the weaker of the two claims |
+| The dashboard really shows an undecided ask, rather than the harness drawing one | deleted the `requests` block from `SettingsAccessScreen` and re-ran the e2e spec | **red** on `getByText("Waiting on you")`; and `access-lens.test.ts` asserts a DECIDED request is dropped, so the block cannot fill with settled history |

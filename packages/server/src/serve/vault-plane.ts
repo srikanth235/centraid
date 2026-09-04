@@ -958,8 +958,17 @@ export class VaultPlane {
     }
   }
 
-  listApps(): AppSummary[] {
-    return listEnrolledApps(this.db);
+  /**
+   * The install register, each row carrying the app's own DECLARED manifest
+   * (#928 A1) — what it reaches, which is not a grant and cannot be revoked.
+   * An app the mount pass has not declared for reaches nothing, and says so
+   * with an empty scope list rather than an absent field.
+   */
+  listApps(): Array<AppSummary & { scopes: ScopeSpec[] }> {
+    return listEnrolledApps(this.db).map((app) => ({
+      ...app,
+      scopes: [...(declaredManifestFor(this.db.vault, app.name)?.scopes ?? [])],
+    }));
   }
 
   listAgents(): Array<AgentSummary & { answers: AutomationAnswer[] }> {
