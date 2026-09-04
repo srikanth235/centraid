@@ -3,10 +3,9 @@
  * verdicts and the rendering are in `app-waterfall.mjs` beside this file and
  * are unit-tested there; this opens the apps.
  *
- * It runs under the repo's TypeScript runner rather than as a plain Node script
- * because the golden year-3 artifact's generator is `@centraid/test-kit`, which
- * ships sources and no build. That is a deliberate property of the kit, so the
- * command comes to it rather than the other way round.
+ * It runs under the repo's TypeScript runner for vitest's assertions and the
+ * fixture seams; the year-3 generator itself is reachable from plain Node since
+ * `@centraid/test-kit` gained a `dist` build (#927 W4).
  */
 import { performance } from "node:perf_hooks";
 

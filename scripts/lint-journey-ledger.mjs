@@ -59,6 +59,11 @@ export function lintJourneyLedger(root = ROOT) {
   const entries = ledger.entries ?? {};
 
   for (const [key, entry] of Object.entries(entries)) {
+    // `entries` is a ratcheted SECTION as well as a map of journeys, and
+    // scripts/check-ledgers.mjs reads a re-key's waiver from this object's own
+    // `approvedDeviation` (a neighbouring section's never waives, #781). It is
+    // the section's note, not a journey, so it is not held to the key grammar.
+    if (key === "approvedDeviation" || key.startsWith("_")) continue;
     const parts = key.split("/");
     if (parts.length !== 4) {
       errors.push(

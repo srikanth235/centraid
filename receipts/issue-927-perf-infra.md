@@ -1405,3 +1405,51 @@ node -e "import('@centraid/test-kit/year3-vault')"   # resolves
 | --- | --- | --- |
 | The lanes are registered AND wired, not merely written | Deleted the `Write lane evidence` step from `device-rung-android` and re-ran `bun run test:claims` | RED — "job `device-rung-android` is a registered rung-5 lane with no `Write lane evidence` step". (The first check I tried — renaming the suite's `lane` field — stayed GREEN, because reachability is derived from the lanes table and every device-rung member also sits on an emulator suite. A finding about the linter, not about this diff: `roster.json`'s `suites[*].lane` is not held against anything.) |
 | The test-kit build is what makes the generator reachable | `node -e "import('@centraid/test-kit/year3-vault')"` with the pre-change exports restored | RED — `ERR_MODULE_NOT_FOUND`; GREEN after the build, printing the module's keys |
+
+## H3a — the web journeys, re-measured at year-3
+
+| Path | Change |
+| --- | --- |
+| `apps/web/tests/e2e/server.ts` | Seeds the shared year-3 generator's golden daily-path profile straight into the mounted vault, BEFORE the demo routes; the 2,000-row Atlas fill it replaces is deleted |
+| `packages/test-kit/src/year3-distributions.ts` | The receipt chain continues from `MAX(seq)` instead of restarting at 1 — what let the generator fill a vault a live `serve()` had already written receipts into |
+| `tests/journeys.json` | The ten `web/*` entries re-keyed `seeded-demo` → `year3`, three vitals re-observed there, `volumes.seeded-demo` rewritten to what still uses it, and the re-key's `approvedDeviation` |
+| `apps/web/tests/e2e/perf-waterfall.spec.ts` | The two ledger keys it reads, and the volume string it stamps on its own report |
+| `scripts/perf/app-waterfall.run.ts` | Module header: the rig runs under vitest for the assertions, not because the kit ships no build |
+| `scripts/lint-journey-ledger.mjs`, `scripts/lint-journey-ledger.test.mjs` | The `entries` section's OWN `approvedDeviation` is no longer read as a journey key — the ledger demanded one on a re-key and no place existed that both gates accepted (finding 4) |
+
+| Journey row | seeded-demo | year3 | Ceiling (unchanged) |
+| --- | --- | --- | --- |
+| `web/cold-open` largestContentfulPaint | 296 / 420 / 476 ms | **484 / 516 / 524 ms** | 1200 |
+| `web/warm-switch` interactionToNextPaint | 24 / 24 / 24 ms | **24 / 24 / 24 ms** | 120 |
+| `web/cold-open` cumulativeLayoutShift | 0 | **0** | 0.1 |
+
+`bun run --cwd apps/web e2e -- perf-waterfall.spec.ts`, `CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell`, linux x64 / 4 cores / 15 GB, 2026-09-04.
+
+**Nothing PROMOTES, and that is the answer rather than a shortfall.** Both measured rows already gated; year-3 costs the shell ~80 ms of LCP inside a 1200 ms ceiling and moves INP and CLS by nothing. The other eight `web/*` rows are `unmeasured` for want of a PROBE — `"No probe drives it yet"` — not for want of volume, so no volume changes their status; they are re-keyed with the harness and say so. No ceiling widens: every number is carried across byte-identical and the `approvedDeviation` covers only the address.
+
+**Deleted, with its replacement:** the harness's 2,000-row Atlas `core.place` fill — the year-3 generator supplies the row count now, from the same statements and the same declared distribution every other rig measures against.
+
+**Decisions:** the ceilings are CARRIED ACROSS rather than re-derived from the year-3 samples. `tests/journeys.json` is tighten-only, and a ceiling re-seeded at 2.3x on a contended container is one host's noise away from needing to come back up.
+
+**Findings:**
+
+1. **`perf-waterfall.spec.ts`'s app-open waterfall is RED on `origin/main` (541f0720c), independent of this lane.** `Loading Tasks…` is still on screen after the spec's 10 s wait. Reproduced on a detached `origin/main` checkout with a full `bun run build` and nothing of this branch in the tree: 3 passed, 1 failed — the same 3/1 this branch produces before and after the year-3 seed. The gateway is not the cost: on the seeded harness `/centraid/_vault/scopes?app=tasks` answers in 4.7 ms, `/centraid/tasks/_describe` in 5.2 ms and `POST /centraid/tasks/queries/board` in 102 ms, and `InlineAppRoute.tsx` holds the fallback until `scopes && descriptorPromise` — both of which those answers supply. Client-side, past the gateway, and owned by the shell's app-open path, not by this lane.
+2. `seedYear3Distributions` wrote `access_receipt.seq` as `index + 1` from 1, so it could seed only a file no gateway had served — founding and mounting a vault writes receipts, and the seed died on `UNIQUE constraint failed: access_receipt.seq`. Fixed here; the golden artifact's bytes are unchanged because `MAX(seq)` is NULL on a fresh file.
+4. **The ledger's re-key rule had nowhere to write its waiver.** `tests/journeys.json`'s `_comment` requires an `approvedDeviation` on a re-key; `scripts/check-ledgers.mjs` reads it from the `entries` object itself (a neighbouring section's never waives, #781), and `scripts/lint-journey-ledger.mjs` then read that string as a journey key and failed it for not being `surface/journey/volume/hardware`. The reserved key is now skipped, with a test.
+3. The generator plants the flags concept scheme by URI and the product's own `flags.ts` creates it on first use, so a year-3 seed must precede any demo seed or the two collide on `core_concept_scheme.uri`. The ordering is a comment in the harness beside the call.
+
+**Doc debt:** none.
+
+```sh
+CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell \
+  bun run --cwd apps/web e2e -- perf-waterfall.spec.ts   # vitals 3/3; app-open red on main too (finding 1)
+bun run lint:journey-ledger                              # ok
+bun run lint:ledgers                                     # 19 sections across 5 ledgers
+```
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| The app-open red is pre-existing, not the year-3 seed | Stashed the lane, detached onto `origin/main`, full `bun run build`, ran the same spec | RED there too, same test, same assertion — 3 passed / 1 failed with none of this branch in the tree |
+| The re-key widens no ceiling | Diffed every `ceiling*`/`max*` under the ten moved keys against their `seeded-demo` originals | Byte-identical: 1200, 120, 0.1 and eight `_intendedCeilingMs: null`. Only the key moved |

@@ -28,7 +28,7 @@
     "empty": "A FRESH VAULT. A bundle or transport ratchet only: it cannot catch an O(vault-size) regression, and an entry that stays here is an admission, not a budget.",
     "build-artifact": "Bytes on disk after a build; independent of vault size.",
     "none": "Nothing vault-sized is involved.",
-    "seeded-demo": "Every bundled app's own demo seed written through the gateway's write path, plus a stated number of Atlas `core.place` rows (the count is in each entry's provenance). NOT year-3: reaching the declared 10,000-photo daily path from an e2e harness needs the kit's year-3 generator, and `@centraid/test-kit` ships TypeScript sources with no build, which `node --experimental-strip-types` cannot load. It is a real volume through the real write path, and it is the volume the number below is stated at.",
+    "seeded-demo": "Every bundled app's own demo seed written through the gateway's write path, plus a stated number of Atlas `core.place` rows (the count is in each entry's provenance). NOT year-3, and the only rows still stated at it are the `gateway/*` bench journeys. The web e2e harness left it for `year3` in #927 W4, once `@centraid/test-kit` gained a `dist` build and `node --experimental-strip-types` could load the year-3 generator. It is a real volume through the real write path, and it is the volume the gateway numbers below are stated at.",
     "mock-gateway": "The desktop e2e fixture: a mock gateway, one app, a fresh userData directory. NOT year-3, and the harness cannot be pointed at the golden artifact from this container — Electron does not launch on a display-less runner, so the rig is landed and the number stays parked.",
     "device-fixture": "Whatever the CI gateway fixture seeded onto the simulator's device replica. NOT the declared year-3 50,000 replica rows / 90,000 photo assets: reaching those needs a device run, which this container has none of.",
     "shared-album": "One album of 200 photos, shared whole. Big enough that projection dominates the grant plane's fixed cost."
@@ -56,6 +56,7 @@
     "read-cost": "Not a journey — what one gateway READ costs in bytes it writes: audit band and write-ahead log."
   },
   "entries": {
+    "approvedDeviation": "#927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`, which the ratchet reads as ten removals plus ten additions. Every number is carried across BYTE-IDENTICAL — largestContentfulPaint 1200 ms, interactionToNextPaint 120 ms, cumulativeLayoutShift 0.1, and the eight unmeasured rows' `_intendedCeilingMs: null` — so not one ceiling widens; only the address moves. The move is a measurement, not a relabel: `@centraid/test-kit` gained a `dist` build in this same change set, so `apps/web/tests/e2e/server.ts` seeds the shared year-3 generator's golden daily-path profile instead of eight demo routes plus 2,000 Atlas rows, and all three vitals were re-observed there (LCP 484/516/524 ms against the unchanged 1200 ceiling, INP 24 ms, CLS 0). The `gateway/*` rows keep `seeded-demo`; they are seeded by `bench-journeys.mjs`, not by this harness.",
     "web/own-echo/none/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "own-echo",
@@ -767,10 +768,10 @@
         }
       }
     },
-    "web/cold-open/seeded-demo/ci-linux-x64-4c": {
+    "web/cold-open/year3/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "cold-open",
-      "volume": "seeded-demo",
+      "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.boot", "web.first-paint"],
       "consumers": ["apps/web/tests/e2e/perf-waterfall.spec.ts"],
@@ -783,10 +784,10 @@
           "_provenance": {
             "at": "2026-09-04",
             "host": "linux x64 development container, 4 cores / 15 GB, Playwright headless_shell 1194",
-            "observedMs": 420,
-            "observedSpreadMs": "296 / 420 / 476 over three consecutive runs on the seeded harness (388 on the empty one before seeding)",
-            "note": "PROMOTED FROM `unmeasured`. The entry carried `_intendedCeilingMs: 2500` and a #659 note saying the browser emitted no first-contentful-paint, so no LCP candidate existed; the vitals probe was fixed to force a paint, and it now emits one on every run. The ceiling is ~2.5x the slowest of three samples on a contended container, not the Core Web Vitals 2500 ms threshold: shipping the standard threshold would gate at six times what this shell actually costs, which passes vacuously.",
-            "headroom": "~2.5x slowest observed (three samples, single host)"
+            "observedMs": 524,
+            "observedSpreadMs": "484 / 516 / 524 over three consecutive runs at year-3 volume (296 / 420 / 476 at seeded-demo, before the harness moved)",
+            "note": "RE-KEYED from `seeded-demo` to `year3` (#927 W4) and re-measured there; the ceiling is CARRIED ACROSS unchanged. The volume moved because `@centraid/test-kit` gained a `dist` build, so `apps/web/tests/e2e/server.ts` can seed the golden daily-path profile through the shared generator instead of eight demo routes and 2,000 Atlas rows. Year-3 costs this shell ~80 ms of LCP, which is the whole point of stating a ceiling at a volume. 1200 stays ~2.3x the slowest year-3 sample, not the Core Web Vitals 2500 ms threshold: shipping the standard threshold would gate at five times what this shell actually costs, which passes vacuously.",
+            "headroom": "~2.3x slowest observed (three samples at year-3, single host)"
           }
         },
         "cumulativeLayoutShift": {
@@ -794,8 +795,8 @@
           "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — 'web vitals (LCP/INP/CLS) on a cold shell load'",
           "maxScore": 0.1,
           "_provenance": {
-            "at": "2026-07-31",
-            "host": "darwin arm64, Playwright bundled headless Chromium, apps/web e2e harness",
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, Playwright headless_shell 1194; re-observed at year-3 volume",
             "observedScore": 0,
             "note": "MEASURED and HARD-GATED — the one vital this harness produces honestly, and the only one of the three currently asserted. Observed 0 (no unexpected layout shift on the cold connect screen). The ceiling is the Core Web Vitals 'good' threshold rather than observed+headroom, because a 0 + headroom ceiling would be 0 and any first honest shift would red the lane; 0.1 is the point at which a user notices.",
             "headroom": "standard-derived (0.1 threshold vs observed 0)"
@@ -808,10 +809,10 @@
         }
       }
     },
-    "web/warm-switch/seeded-demo/ci-linux-x64-4c": {
+    "web/warm-switch/year3/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "warm-switch",
-      "volume": "seeded-demo",
+      "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.interaction"],
       "consumers": ["apps/web/tests/e2e/perf-waterfall.spec.ts"],
@@ -825,8 +826,8 @@
             "at": "2026-09-04",
             "host": "linux x64 development container, 4 cores / 15 GB, Playwright headless_shell 1194",
             "observedMs": 24,
-            "observedSpreadMs": "24 / 24 / 24 over three consecutive runs (32 on the empty harness)",
-            "note": "PROMOTED FROM `unmeasured`. The old entry said the cold connect screen exposed no clickable control, so Chromium recorded no interaction and INP was undefined; the probe now drives the pairing-ticket textbox, and `interactionDriven: true` on every run. Ceiling is the Core Web Vitals 'good' threshold halved — 120 ms rather than 200 — because observed is 24 ms and a 200 ms ceiling on a 24 ms interaction would not notice an eightfold regression.",
+            "observedSpreadMs": "24 / 24 / 24 over three consecutive runs at year-3 volume, unchanged from the same three at seeded-demo (32 on the empty harness)",
+            "note": "RE-KEYED from `seeded-demo` to `year3` (#927 W4) and re-measured there; the ceiling is CARRIED ACROSS unchanged. The keypress the probe drives is on the cold connect screen and touches no vault row, which is why year-3 moves it by nothing — an INP that had moved with volume would have been the finding. Ceiling is the Core Web Vitals 'good' threshold halved — 120 ms rather than 200 — because observed is 24 ms and a 200 ms ceiling on a 24 ms interaction would not notice an eightfold regression.",
             "headroom": "5x observed; deliberately tighter than the 200 ms standard"
           }
         },
@@ -1035,10 +1036,10 @@
         }
       }
     },
-    "web/peer-echo/seeded-demo/ci-linux-x64-4c": {
+    "web/peer-echo/year3/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "peer-echo",
-      "volume": "seeded-demo",
+      "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.replica.apply"],
       "consumers": [],
@@ -1048,14 +1049,14 @@
           "status": "unmeasured",
           "probe": "NONE TODAY",
           "_intendedCeilingMs": null,
-          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
         }
       }
     },
-    "web/share/seeded-demo/ci-linux-x64-4c": {
+    "web/share/year3/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "share",
-      "volume": "seeded-demo",
+      "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.grant"],
       "consumers": [],
@@ -1065,14 +1066,14 @@
           "status": "unmeasured",
           "probe": "NONE TODAY",
           "_intendedCeilingMs": null,
-          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
         }
       }
     },
-    "web/search/seeded-demo/ci-linux-x64-4c": {
+    "web/search/year3/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "search",
-      "volume": "seeded-demo",
+      "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.search"],
       "consumers": [],
@@ -1082,14 +1083,14 @@
           "status": "unmeasured",
           "probe": "NONE TODAY",
           "_intendedCeilingMs": null,
-          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
         }
       }
     },
-    "web/scroll/seeded-demo/ci-linux-x64-4c": {
+    "web/scroll/year3/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "scroll",
-      "volume": "seeded-demo",
+      "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.frame"],
       "consumers": [],
@@ -1099,14 +1100,14 @@
           "status": "unmeasured",
           "probe": "NONE TODAY",
           "_intendedCeilingMs": null,
-          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
         }
       }
     },
-    "web/first-bootstrap/seeded-demo/ci-linux-x64-4c": {
+    "web/first-bootstrap/year3/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "first-bootstrap",
-      "volume": "seeded-demo",
+      "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.replica.bootstrap"],
       "consumers": [],
@@ -1116,14 +1117,14 @@
           "status": "unmeasured",
           "probe": "NONE TODAY",
           "_intendedCeilingMs": null,
-          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
         }
       }
     },
-    "web/converge/seeded-demo/ci-linux-x64-4c": {
+    "web/converge/year3/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "converge",
-      "volume": "seeded-demo",
+      "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.replica.resume"],
       "consumers": [],
@@ -1133,7 +1134,7 @@
           "status": "unmeasured",
           "probe": "NONE TODAY",
           "_intendedCeilingMs": null,
-          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness; the rig is the next thing this journey needs, not a number."
+          "_reason": "No probe drives it yet. apps/web/tests/e2e owns the harness and seeds year-3 (#927 W4), so the volume is real and waiting; the rig is the next thing this journey needs, not a number."
         }
       }
     },
