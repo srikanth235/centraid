@@ -1290,7 +1290,7 @@ const MACHINERY = [
 {id:'ledger',label:'Conversation ledger — transcripts, automation state and the archive that bounds them (physical names, band-declared)',tables:['conversations','turns','items','attachments','conversation_harness_sessions','conversation_turn_locks','conversation_workspace_selection','harness_health','conversation_provider_consent','automation_state','automation_trigger_cursor','trigger_ingress','conversation_archive','conversation_digest']},
 {id:'sync',label:'Sync — connectors, credentials, cursors, import staging',tables:['connection','external_entity','import_batch','import_row','connection_cursor','connection_run','connection_credential','connection_health']},
 {id:'enrich',label:'Enrichment — requests, policy cascade, provenance stamps, vectors',tables:['embedding','request','policy','derivation','policy_rule']},
-{id:'outbox',label:'Outbox — external writes as inert artifacts the owner decides on',tables:['item','grant']},
+{id:'outbox',label:'Outbox — external writes as inert artifacts the owner decides on',tables:['item']},
 {id:'notifications',label:'Notifications — durable notices',tables:['notice']},
 {id:'blob',label:'Blob custody — local-vs-replicated state, rebuilt on the sweep',tables:['custody_state','custody_rollup']},
 {id:'share',label:'Sharing — the authority plane, fulfillment, links, commons',tables:['party_vault_binding','circle_grant','commons_member_state','commons_op','commons_replay','commons_receipt','commons_cursor','commons_lineage','commons_retained','commons_intent','commons_invitation','authority','authority_request','authority_use','delivery_config','fulfillment','commons_verified','commons_supersession','commons_device_reach','commons_steward_contact']},
