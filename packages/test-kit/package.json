@@ -3,24 +3,86 @@
   "version": "0.1.0",
   "private": true,
   "description": "Shared, dev-only test infrastructure for Centraid packages and quality lanes.",
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
   "type": "module",
   "exports": {
-    "./automation-handler-harness": "./src/automation-handler-harness.ts",
-    "./fake-clock": "./src/fake-clock.ts",
-    "./flush": "./src/flush.ts",
-    "./sequential": "./src/sequential.ts",
-    "./sqlite": "./src/sqlite.ts",
-    "./vitest": "./src/vitest.ts",
-    "./quality-result": "./src/quality-result.ts",
-    "./random": "./src/random.ts",
-    "./temp-dir": "./src/temp-dir.ts",
-    "./vault": "./src/vault.ts",
-    "./volume-fixture": "./src/volume-fixture.ts",
-    "./year3-vault": "./src/year3-vault.ts",
-    "./year3-replica": "./src/year3-replica.ts",
-    "./fast-check": "./src/fast-check.ts"
+    "./automation-handler-harness": {
+      "types": "./dist/automation-handler-harness.d.ts",
+      "import": "./dist/automation-handler-harness.js",
+      "default": "./dist/automation-handler-harness.js"
+    },
+    "./fake-clock": {
+      "types": "./dist/fake-clock.d.ts",
+      "import": "./dist/fake-clock.js",
+      "default": "./dist/fake-clock.js"
+    },
+    "./flush": {
+      "types": "./dist/flush.d.ts",
+      "import": "./dist/flush.js",
+      "default": "./dist/flush.js"
+    },
+    "./sequential": {
+      "types": "./dist/sequential.d.ts",
+      "import": "./dist/sequential.js",
+      "default": "./dist/sequential.js"
+    },
+    "./sqlite": {
+      "types": "./dist/sqlite.d.ts",
+      "import": "./dist/sqlite.js",
+      "default": "./dist/sqlite.js"
+    },
+    "./vitest": {
+      "types": "./dist/vitest.d.ts",
+      "import": "./dist/vitest.js",
+      "default": "./dist/vitest.js"
+    },
+    "./quality-result": {
+      "types": "./dist/quality-result.d.ts",
+      "import": "./dist/quality-result.js",
+      "default": "./dist/quality-result.js"
+    },
+    "./random": {
+      "types": "./dist/random.d.ts",
+      "import": "./dist/random.js",
+      "default": "./dist/random.js"
+    },
+    "./temp-dir": {
+      "types": "./dist/temp-dir.d.ts",
+      "import": "./dist/temp-dir.js",
+      "default": "./dist/temp-dir.js"
+    },
+    "./vault": {
+      "types": "./dist/vault.d.ts",
+      "import": "./dist/vault.js",
+      "default": "./dist/vault.js"
+    },
+    "./volume-fixture": {
+      "types": "./dist/volume-fixture.d.ts",
+      "import": "./dist/volume-fixture.js",
+      "default": "./dist/volume-fixture.js"
+    },
+    "./year3-vault": {
+      "types": "./dist/year3-vault.d.ts",
+      "import": "./dist/year3-vault.js",
+      "default": "./dist/year3-vault.js"
+    },
+    "./year3-replica": {
+      "types": "./dist/year3-replica.d.ts",
+      "import": "./dist/year3-replica.js",
+      "default": "./dist/year3-replica.js"
+    },
+    "./fast-check": {
+      "types": "./dist/fast-check.d.ts",
+      "import": "./dist/fast-check.js",
+      "default": "./dist/fast-check.js"
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test": "node ../../node_modules/vitest/vitest.mjs run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

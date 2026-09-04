@@ -86,11 +86,28 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # #927 — the soak's history comes off gh-pages, not an actions cache. The
+      # `quality-history-soak-*` cache that used to sit here was evictable (7
+      # days idle, 10 GB repository-wide), and a drift budget whose 30-sample
+      # window silently empties is a gate that stops gating without saying so.
+      # gh-pages is where `candidate.yml` already reads its journey history from
+      # and it is never evicted; the copy is best-effort because the first run
+      # after this lands has nothing to restore.
+      - name: Restore the durable rig history (gh-pages)
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          path: artifacts/scale
-          key: quality-history-soak-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: quality-history-soak-${{ runner.os }}-
+          ref: gh-pages
+          path: .gh-pages-history
+      - name: Stage the durable rig history
+        run: |
+          mkdir -p artifacts/scale
+          if [ -d .gh-pages-history/test-report/rig-history/scale ]; then
+            cp .gh-pages-history/test-report/rig-history/scale/*.json artifacts/scale/ 2>/dev/null || true
+          else
+            echo "::warning::no durable scale-rig history on gh-pages yet; rigDriftBudgetMs returns null and the drift budget states no opinion (tests/helpers/rig-budgets.ts)"
+          fi
+          rm -rf .gh-pages-history
       - run: bun run build
       # Four hours is the whole point of this lane. The nightly scale job runs
       # the same file at its 0.75-minute default; a weekly job that quietly fell
