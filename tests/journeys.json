@@ -828,8 +828,18 @@
           }
         },
         "tapToVisualResponse": {
-          "status": "unmeasured",
-          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — the INP capture above is the closest proxy; a dedicated per-control probe does not exist"
+          "status": "measured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — the warm tap\u2192app-view attach probe: the palette is already open, the click on the app row starts the clock, the `inline-app-view` region becoming visible stops it",
+          "ceilingMs": 600,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, Playwright headless_shell 1194",
+            "runs": 7,
+            "observedMs": 191,
+            "observedSpreadMs": "126 / 121 / 191 / 191 / 170 / 109 / 99 over seven consecutive runs; the ceiling is set off the worst of them",
+            "note": "PROMOTED FROM `unmeasured`. This is the web seat's half of the desktop `warm-switch` tapToVisualResponse, which is measured on dev-darwin-arm64 because Electron does not launch on a display-less runner. IT STOPS AT ATTACH \u2014 the app view is in the tree \u2014 and NOT at a usable screen: the app's host bridge and its first replica read are outside it, because the seeded harness in this container cannot reach them (the replica re-bootstraps in a loop on `main` as well as on this branch; receipts/issue-922-snappier-blueprints.md carries the console evidence). So this fences the route mount and its chunk, which is what the desktop entry's `desktop.appview.attach` span fences too, and it does NOT yet fence the read that follows.",
+            "headroom": "~3x the worst observed"
+          }
         }
       }
     },

@@ -40,11 +40,12 @@ import type {
   VaultImportRow,
 } from "../../gateway-client-vault-imports.js";
 import type { ReplicaShellSession } from "../../replica/shell-session.js";
-import type { ReplicaInvalidation } from "../../replica/types.js";
 import { postStatus } from "../../status-channel.js";
 import { authorizeBlobText, authorizeBlobUrl } from "./blob-auth.js";
 import { stageBlob, stageDerivative } from "./blob-staging.js";
 import type { GrantBridge } from "./grant-seat.js";
+import { collapseInlineChanges } from "./inline-change-batch.js";
+import type { InlineChangeDetail } from "./inline-change-batch.js";
 import { runInlineQuery } from "./inlineQueryCtx.js";
 import { placementWireFromEdge } from "./placement-wire.js";
 import {
@@ -72,15 +73,6 @@ interface InlineCommonsResident {
 interface InlineCommonsShareResult extends Record<string, unknown> {
   grantId: string;
   claims: Array<{ partyId: string; claimToken: string }>;
-}
-
-interface InlineChangeDetail {
-  tables?: string[];
-  source?: string;
-  intentId?: string;
-  intentState?: string;
-  ts?: number;
-  scope?: string;
 }
 
 export type InlineScopeSession = Pick<
@@ -378,36 +370,6 @@ async function gatewayAction(
     ...(signal ? { signal } : {}),
   });
   return readJson(response, `write ${action}`);
-}
-
-/** Wildcard the coordinator emits for bootstrap, commit, purge or scope
- *  teardown: "everything here may have moved". Never a table name. */
-const EVERYTHING = "*";
-
-/**
- * One invalidation as the page-side change event. `tables` carries the actual
- * entity, so an app whose declared list omits it does not re-derive; the
- * wildcard must collapse to the EMPTY list, which `onDataChange` fires on
- * unconditionally, because `["*"]` would match nobody (#883).
- */
-function toChangeDetail(
-  invalidation: ReplicaInvalidation,
-  scope: string
-): InlineChangeDetail {
-  const named =
-    invalidation.entity && invalidation.entity !== EVERYTHING
-      ? [invalidation.entity]
-      : [];
-  return {
-    tables: named,
-    source: invalidation.source,
-    ...(invalidation.intentId ? { intentId: invalidation.intentId } : {}),
-    ...(invalidation.intentState
-      ? { intentState: invalidation.intentState }
-      : {}),
-    ts: Date.now(),
-    ...(scope ? { scope } : {}),
-  };
 }
 
 function errorDetail(error: unknown): { code?: string; message: string } {
@@ -724,9 +686,11 @@ export function createInlineCentraidClient(
     binding: InlineScopeBinding
   ): (() => void) =>
     binding.session.subscribe(appId, undefined, (invalidations) =>
-      invalidations.forEach((invalidation) =>
-        cb(toChangeDetail(invalidation, binding.scope.id))
-      )
+      collapseInlineChanges(
+        invalidations,
+        binding.scope.id,
+        Date.now()
+      ).forEach((detail) => cb(detail))
     );
 
   const readIn = async <T>(

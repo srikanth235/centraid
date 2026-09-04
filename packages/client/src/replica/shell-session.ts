@@ -1011,7 +1011,8 @@ export async function openReplicaShellSession(
   return session;
 }
 
-/** One mounted scope. Last-holder release stays warm for idle grace (#599). */
+/** One mounted scope. Last-holder release stays warm while the page is
+ *  visible; `replicaScopeDisposition` decides (#599, #922 C6). */
 interface SessionEntry {
   key: string;
   identity: ReplicaIdentity;
@@ -1028,6 +1029,36 @@ export interface ReplicaScopeLease {
 
 const sessions = new Map<string, SessionEntry>();
 const SESSION_IDLE_GRACE_MS = 30_000;
+
+/** The page as the scope registry sees it (#922 C6). */
+export type ReplicaPageState = "visible" | "hidden" | "frozen";
+let pageState: ReplicaPageState = "visible";
+export function replicaPageState(): ReplicaPageState {
+  return pageState;
+}
+
+/**
+ * WHAT A SCOPE NOBODY IS READING DOES NEXT (#922 C6).
+ *
+ * `warm` is the 30-second grace (#599): leaving an app and coming back must not
+ * pay a second open, so a released scope keeps its SQLite handles that long.
+ * The grace is a bet that the owner is still here, and a hidden or frozen page
+ * has lost that bet — the browser freezes hidden pages precisely when it wants
+ * their memory back, and a replica holding OPFS access handles it is not
+ * reading is the first thing that should give them up.
+ *
+ * A scope a screen still holds is never closed under it: the lease hands the
+ * session object straight to the mounted app, so closing it would fail the
+ * app's next read rather than reopen. Those close when their last holder
+ * releases, which under `hidden`/`frozen` is at once rather than in 30 s.
+ */
+export function replicaScopeDisposition(
+  page: ReplicaPageState,
+  refs: number
+): "hold" | "warm" | "close" {
+  if (refs > 0) return "hold";
+  return page === "visible" ? "warm" : "close";
+}
 let addressedFallback:
   | { key: string; promise: Promise<string | undefined> }
   | undefined;
@@ -1080,6 +1111,38 @@ function scheduleIdleClose(entry: SessionEntry): void {
   entry.idleTimer = timer;
 }
 
+function reclaimScope(entry: SessionEntry): void {
+  const disposition = replicaScopeDisposition(pageState, entry.refs);
+  if (disposition === "hold") return;
+  if (disposition === "warm") {
+    scheduleIdleClose(entry);
+    return;
+  }
+  void dropEntry(entry, "close");
+}
+
+/**
+ * The page-lifecycle signals the scope registry acts on (#922 C6). `freeze` is
+ * this platform's memory-pressure event: the browser fires it on a hidden page
+ * whose memory it is reclaiming, and a page that is discarded after it never
+ * runs again — so the handles have to go back before it returns.
+ */
+function installPageLifecycle(): void {
+  if (typeof document === "undefined") return;
+  const enter = (next: ReplicaPageState): void => {
+    pageState = next;
+    if (next === "visible") return;
+    // Snapshot: reclaiming a scope deletes it from the map being walked.
+    const open = [...sessions.values()];
+    for (const entry of open) reclaimScope(entry);
+  };
+  document.addEventListener("visibilitychange", () => {
+    enter(document.visibilityState === "hidden" ? "hidden" : "visible");
+  });
+  document.addEventListener("freeze", () => enter("frozen"));
+  document.addEventListener("resume", () => enter("visible"));
+}
+
 async function dropEntry(
   entry: SessionEntry,
   mode: "purge" | "close"
@@ -1111,7 +1174,7 @@ export async function acquireReplicaShellSession(
     if (released) return;
     released = true;
     entry.refs = Math.max(0, entry.refs - 1);
-    if (entry.refs === 0) scheduleIdleClose(entry);
+    reclaimScope(entry);
   };
   try {
     return { session: await entry.promise, release };
@@ -1176,12 +1239,14 @@ export async function closeReplicaShellSession(): Promise<void> {
 }
 
 /**
- * Terminal events only (#599). Do not re-wire `onVaultChanged` to purge —
- * focus change must close warm, not wipe the scope just left.
+ * Terminal events plus the page's own lifecycle (#599, #922 C6). Do not re-wire
+ * `onVaultChanged` to purge — focus change must close warm, not wipe the scope
+ * just left; hiding and freezing close warm too, they only skip the grace.
  */
 export function installReplicaStorageLifecycle(): void {
   if (lifecycleInstalled) return;
   lifecycleInstalled = true;
+  installPageLifecycle();
   terminalPurgeRetryLoop.start();
   window.CentraidApi.onGatewayChanged?.((detail) => {
     queueLifecyclePurge(() => handleGatewayChanged(detail));

@@ -2061,6 +2061,38 @@ bun run test:scale tests/scale/mobile-screen-reads.scale.test.ts
 **Doc debt.** `docs/mobile-offline.md` describes the phone's reads as accepting the default window; that sentence is now wrong for People and Agenda (fixed in slice 4, which owns that file's Tally rows).
 
 **Full paths for coverage:** `apps/mobile/src/apps/agenda/useAgenda.ts`, `apps/mobile/src/apps/people/usePeople.ts`, `apps/mobile/src/kit/hooks/useReplicaQuery.ts`, `apps/mobile/src/lib/replica/offline-budgets.ts`, `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`, `apps/mobile/src/kit/hooks/useReplicaQuery.reads.test.tsx`, `tests/scale/mobile-screen-reads.scale.test.ts`, `tests/perf/replica-sync-io.perf.test.ts`
+## Mega-lane E2 slice 1 — web kit reads (D1) and the scope's survival law (C6)
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/react/blueprints/inline-change-batch.ts` + `.test.ts` | one applied batch is one change event: the collapse, with the owner's settling intents kept one-per-intent |
+| `packages/client/src/react/blueprints/centraid-inline.ts` | the host door emits the collapsed batch instead of fanning the array out |
+| `packages/client/src/react/blueprints/inline-change-feed.test.ts` | the counter at the real seam: 40 invalidations in, one `window.centraid.onChange` call out |
+| `packages/client/src/replica/shell-session.ts` + `shell-session-lifecycle.test.ts` | `replicaScopeDisposition` plus the page-lifecycle listeners: warm for 30 s while visible, closed on `visibilitychange`→hidden and on `freeze` |
+| `apps/web/tests/e2e/perf-waterfall.spec.ts` | the warm tap→app-view attach probe and its ui-impact screenshot |
+| `tests/journeys.json` | `web/warm-switch/seeded-demo/ci-linux-x64-4c#tapToVisualResponse` promoted from `unmeasured` |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Change events an app is charged for one applied batch of 40 | 40 | 1 | `inline-change-feed.test.ts`, counted at `window.centraid.onChange`; demonstrated red at 40 by restoring the fan-out (log below) |
+| Web warm switch, tap → app view attached | not measured | 191 ms worst of 7 | `perf-waterfall.spec.ts -g "warm switch"`, seeded-demo volume, linux x64 4c/15 GB, headless_shell 1194; spread 99–191 ms, ceiling 600 ms |
+| Idle grace a hidden page pays before its replica handles come back | 30 s | 0 | `shell-session-lifecycle.test.ts` over `replicaScopeDisposition` |
+
+**Deleted/replaced.** `toChangeDetail` and its per-invalidation fan-out; `InlineChangeDetail` moved to the module that now builds it. The `unmeasured` `tapToVisualResponse` probe note is replaced by the probe that fills it.
+
+**Decisions.** A held scope is never closed under its screen — the lease hands the session object straight to the mounted app, so a close would fail the app's next read rather than reopen it; held scopes close when their last holder releases, which under hidden/frozen skips the grace. `freeze` is taken as this platform's memory-pressure signal: the browser fires it on a hidden page whose memory it is reclaiming, and there is no other shipped one. The collapse carries no timer, so the owner's own write still reaches the screen with nothing between it and the read.
+
+```
+# tree hash: quoted for both this lane's slices in its closing commit (self-audit
+# reads HEAD's tree, so a section cannot carry the hash of the commit it lands in)
+bun run --cwd packages/client typecheck && bun run --cwd apps/web typecheck
+bun run --cwd packages/client test src/react/blueprints src/replica   # 51 files, 424 tests
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- perf-waterfall.spec.ts -g "warm switch"   # 3/3 green
+```
+
+**Findings.** (1) **The web e2e app-open lane is RED ON `main` (84ef5404d) in this container, not only on this branch**: the replica re-bootstraps in a loop — `ReplicaRebootstrapRequiredError: … (cursor-gap)` from `Worker.onMessage`, `409` from the replica routes, and `opfs-sahpool: NoModificationAllowedError` because the previous store's OPFS access handles are still open when the next one opens the same file — so Tasks never leaves "Loading Tasks…" and `window.centraid` is never installed. `perf-waterfall.spec.ts -g "app-open waterfall"` and both `tasks.spec.ts` cases fail on both revisions. Not this lane's files (`coordinator.ts`, `store-core.ts` `changeMismatch`, `replica-routes.ts`); it is why the ledger number stops at attach. (2) D1's "the user's own overlay re-read has no debounce/coalesce window" is NOT met and is not reachable from this file set: `onDataChange` in `packages/design/src/elements/refresh.ts` delays every detail by `debounceMs = 200`, overlay and settlement included, so the owner's own write waits 200 ms for its re-read after this collapse as before it. (3) `bun run build` on `main` leaves 184 untracked `.js` files under `packages/blueprints/apps/**`; this branch's build does not.
+
+**Doc debt.** `docs/client-keying.md` and `docs/mobile-offline.md` describe the replica session's lifecycle without the hidden/frozen close (this slice).
 
 ### Falsification
 | Claim at risk | Throwaway check | Result |
@@ -2093,3 +2125,12 @@ bun run --cwd packages/client typecheck && bun run --cwd packages/client test
 bash .governance/run.sh   # repo-hygiene green
 ```
 
+| The collapse merges two settling intents into one event and one of them goes unnarrated | asserted intent-bearing invalidations stay one-per-intent with their `intentState`, then re-ran `inline-change-feed.test.ts` (which drives the real `installInlineCentraid` + `onDataChange` pair) and `inlineQueryCtx`/`centraid-inline` suites | held — 4/4 and the whole `src/react/blueprints` tree green; the fan-out restored puts the counter back to 40, so the test is not vacuous |
+| Closing a scope when the page hides breaks a screen that is still mounted | traced every `acquireReplicaShellSession` holder (`InlineAppRoute`) and the lease-less readers (`homeTileContent`, `paletteRecents`, `settingsAccessData`), then pinned `refs > 0 ⇒ hold` for all three page states | held for leased scopes; a lease-less reader that holds the session across an await and reads after the tab hides now sees `Replica session closed` where it used to wait out the grace — declared, not silent |
+
+## User impact
+Switching to an app and back is unchanged to look at; what changed is what a screen does while a batch of other people's edits arrives. Forty rows landing in one sync used to redraw the board forty times, so the list stuttered while it caught up; it now redraws once, and the member's own edit is still answered on its own event with nothing waiting on it. And a tab left in the background gives its replica's files back straight away instead of holding them for another half minute, so the browser has less reason to throw the whole page away while it is not being looked at.
+
+First-run: nothing new on a first run — a fresh vault has no batch to collapse and no second app to switch to.
+
+Screenshot from the changed harness: `artifacts/e2e/ui-impact/issue-922-web-warm-switch-app-view.png` (`apps/web/tests/e2e/perf-waterfall.spec.ts`, the warm tap→app-view attach probe).

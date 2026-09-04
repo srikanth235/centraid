@@ -1037,3 +1037,66 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
     );
   }
 });
+
+/**
+ * TAP TO APP VIEW, THE WARM SWITCH (#922 C6).
+ *
+ * The ledger's `desktop/warm-switch` entry measures "click an app tile → the
+ * app view attaches", and it is measured on a host this container has not got:
+ * Electron does not launch without a display. This is the same interval on the
+ * seat that DOES run here, and it stops where the desktop probe stops: the app
+ * view is ATTACHED. It does not wait for the app's host bridge or its first
+ * read, and the ceiling says so — that interval belongs to the replica, and
+ * this container cannot reach it (the receipt's bootstrap-loop finding).
+ *
+ * WARM, not cold: the scope the first open left behind is still inside its
+ * grace, so this is the switch a member makes all day, and the number moves
+ * when that grace stops covering it.
+ */
+const TAP_EVIDENCE = path.resolve(
+  here,
+  "../../../../artifacts/e2e/ui-impact/issue-922-web-warm-switch-app-view.png"
+);
+
+/** `goHome` proves `window.centraid` is gone; an app that never installed it
+ *  has nothing to prove, so the unmount is the view leaving the tree. */
+async function goHomeFromAttached(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Home", exact: true }).click();
+  await expect(page.getByTestId("inline-app-view")).toBeHidden();
+  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
+}
+
+async function attachAppAndMeasure(page: Page): Promise<number> {
+  await openPalette(page);
+  // Settle if the timeline will: this measures an INTERVAL, not bytes, so a
+  // timeline that never goes count-stable is noise to absorb rather than a
+  // failure. It does not go stable in this container — the replica's bootstrap
+  // retry keeps issuing requests behind the shell — and failing here would
+  // report that loop as a slow app open.
+  await settleResourceTimeline(page, 5_000).catch(() => undefined);
+  const started = Date.now();
+  await pickAppFromPalette(page);
+  await expect(page.getByTestId("inline-app-view")).toBeVisible();
+  return Date.now() - started;
+}
+
+test("warm switch — tap to app view attach", async ({ page }) => {
+  const KEY = "web/warm-switch/seeded-demo/ci-linux-x64-4c";
+  const ceilingMs = journeyCeiling(KEY, "tapToVisualResponse", "ceilingMs");
+
+  await page.goto("/");
+  await waitForShellBundle(page);
+  await establishSession(page);
+
+  await attachAppAndMeasure(page);
+  await goHomeFromAttached(page);
+  const warmMs = await attachAppAndMeasure(page);
+
+  await fs.mkdir(path.dirname(TAP_EVIDENCE), { recursive: true });
+  await page.screenshot({ path: TAP_EVIDENCE, timeout: 15_000 });
+
+  console.log(
+    `\nwarm switch tap→app-view attach: ${warmMs} ms (ceiling ${ceilingMs} ms)\n`
+  );
+  expect(warmMs, "tap to app view attach").toBeLessThanOrEqual(ceilingMs);
+});
