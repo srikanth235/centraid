@@ -1,6 +1,12 @@
 import {
   decoratePendingMutation,
+  pendingOverlayFacts,
   projectPendingWrite,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type {
+  PendingIntentPresentationInput,
+  PendingOverlayFacts,
+  PendingOverlaySidecar,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { pendingProjectionFor } from "@centraid/blueprints/apps/_shared/pending-projections";
 
@@ -25,6 +31,12 @@ import type {
   ReplicaIntent,
   ReplicaValue,
 } from "./types.js";
+
+/** The overlay a read applies: projected rows, and the facts behind them. */
+export interface ReplicaOverlay {
+  mutations: OptimisticMutation[];
+  sidecar: PendingOverlaySidecar;
+}
 
 /**
  * Intent transitions share one durable queue; preserve outcome order instead
@@ -228,7 +240,17 @@ export function presentPendingIntentMutation(
           ),
         }
       : { ...mutation };
-  return decoratePendingMutation(visible, {
+  return decoratePendingMutation(
+    visible,
+    pendingPresentation(intent)
+  ) as OptimisticMutation;
+}
+
+/** The presented facts of one intent, for the row's key and for the sidecar. */
+function pendingPresentation(
+  intent: ReplicaIntent
+): PendingIntentPresentationInput {
+  return {
     intentId: intent.intentId,
     state: intent.state,
     action: intent.action,
@@ -236,7 +258,15 @@ export function presentPendingIntentMutation(
     ...(intent.reason ? { reason: intent.reason } : {}),
     ...(intent.conflict ? { conflict: intent.conflict } : {}),
     ...(intent.enqueuedAt ? { enqueuedAt: intent.enqueuedAt } : {}),
-  }) as OptimisticMutation;
+    ...(intent.stewardLabel ? { stewardLabel: intent.stewardLabel } : {}),
+  };
+}
+
+/** What one intent tells a read's sidecar, or nothing once it has executed. */
+export function presentPendingIntentFacts(
+  intent: ReplicaIntent
+): PendingOverlayFacts | undefined {
+  return pendingOverlayFacts(pendingPresentation(intent));
 }
 
 export class IntentQueue {
@@ -272,6 +302,7 @@ export class IntentQueue {
       optimistic: input.optimistic ?? [],
       dependencies: input.dependencies ?? [],
       ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
+      ...(input.stewardLabel ? { stewardLabel: input.stewardLabel } : {}),
     });
   }
 
@@ -365,20 +396,29 @@ export class IntentQueue {
     return recovered;
   }
 
-  async overlayMutations(
-    shapeId?: string,
-    entity?: string
-  ): Promise<OptimisticMutation[]> {
+  /**
+   * The overlay one read must apply: the mutations, and the sidecar that says
+   * what is happening to each write behind them. Built together because a row
+   * carrying an intent whose facts are missing is a badge with nothing behind
+   * it (#922 G3).
+   */
+  async overlay(shapeId?: string, entity?: string): Promise<ReplicaOverlay> {
     const intents = await this.pending();
-    const result: OptimisticMutation[] = [];
+    const mutations: OptimisticMutation[] = [];
+    const sidecar: Record<string, PendingOverlayFacts> = {};
     for (const intent of intents) {
+      let projected = false;
       for (const mutation of intent.optimistic) {
         if (shapeId && mutation.shapeId !== shapeId) continue;
         if (entity && mutation.entity !== entity) continue;
-        result.push(presentPendingIntentMutation(mutation, intent));
+        mutations.push(presentPendingIntentMutation(mutation, intent));
+        projected = true;
       }
+      if (!projected) continue;
+      const facts = presentPendingIntentFacts(intent);
+      if (facts) sidecar[intent.intentId] = facts;
     }
-    return result;
+    return { mutations, sidecar };
   }
 
   list(): Promise<ReplicaIntent[]> {

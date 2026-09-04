@@ -16,6 +16,7 @@ import { sha256Hex } from "../ids.js";
 import { assertTextBodyWithinBudget } from "./inline-body-guard.js";
 import { RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { releaseContentIfUnreferenced } from "./media.js";
+import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
 import { recordRevision } from "./revisions.js";
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
@@ -78,6 +79,7 @@ const CREATE_NOTE: CommandDefinition = {
     required: ["title", "body_text"],
     additionalProperties: false,
     properties: {
+      note_id: MINTED_ID_PROPERTY,
       title: { type: "string", minLength: 1 },
       body_text: { type: "string", minLength: 1 },
       format: { type: "string", enum: ["markdown", "html", "plain"] },
@@ -93,6 +95,7 @@ const CREATE_NOTE: CommandDefinition = {
     },
   },
   preconditions: [
+    mintedIdIsFree("knowledge_note", "note_id", "note", "note_id"),
     {
       // Filing is optional; a named notebook must exist. Optional inputs
       // bind as NULL, so an unfiled create passes trivially.
@@ -137,7 +140,7 @@ function createNote(ctx: HandlerCtx): Record<string, unknown> {
   };
   const format = input.format ?? "plain";
   const contentId = contentItemFor(ctx, input.body_text, format);
-  const noteId = ctx.newId();
+  const noteId = mintedId(ctx, "note_id");
   ctx.db
     .prepare(
       `INSERT INTO knowledge_note (note_id, author_party_id, title, body_content_id, format, pinned, created_at, updated_at)
@@ -370,6 +373,7 @@ const CREATE_NOTEBOOK: CommandDefinition = {
     required: ["name"],
     additionalProperties: false,
     properties: {
+      notebook_id: MINTED_ID_PROPERTY,
       name: { type: "string", minLength: 1 },
       parent_notebook_id: { type: "string", minLength: 1 },
     },
@@ -380,6 +384,12 @@ const CREATE_NOTEBOOK: CommandDefinition = {
     properties: { notebook_id: { type: "string" } },
   },
   preconditions: [
+    mintedIdIsFree(
+      "core_collection",
+      "notebook_id",
+      "notebook",
+      "collection_id"
+    ),
     {
       name: "parent_exists_if_given",
       sql: `SELECT CASE WHEN :parent_notebook_id IS NULL THEN 1
@@ -417,7 +427,7 @@ const CREATE_NOTEBOOK: CommandDefinition = {
 
 function createNotebook(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { name: string; parent_notebook_id?: string };
-  const notebookId = ctx.newId();
+  const notebookId = mintedId(ctx, "notebook_id");
   ctx.db
     .prepare(
       // sort_order is sibling-scoped; IS (not =) so NULL parents group too.

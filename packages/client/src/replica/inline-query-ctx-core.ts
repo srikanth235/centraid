@@ -1,3 +1,4 @@
+import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 /**
  * The ONE inline-query `ctx`, for every seat that holds a replica (#922).
  *
@@ -100,6 +101,8 @@ export function receiptIdFor(result: {
 export interface InlineRowsResult {
   rows: unknown[];
   receiptId: string;
+  /** What is happening to the queued writes these rows carry (#922 G3). */
+  pending?: PendingOverlaySidecar;
 }
 
 /**
@@ -118,6 +121,7 @@ export interface InlineCtxReads<Read, Search> {
  */
 export interface InlineWireResult {
   rows: ReplicaRowEnvelope[];
+  pending?: PendingOverlaySidecar;
   cursor?: { epoch: string; seq: number };
   /** The window filled and rows were cut off. */
   truncated?: boolean;
@@ -156,14 +160,21 @@ export interface InlineWireSession<Read, Search> {
 export function inlineReadsFor<Read, Search>(
   session: InlineWireSession<Read, Search>,
   appId: string,
-  row: (envelope: ReplicaRowEnvelope) => unknown,
+  row: (
+    envelope: ReplicaRowEnvelope,
+    sidecar: PendingOverlaySidecar
+  ) => unknown,
   hooks: InlineReadHooks<Read, Search> = {}
 ): InlineCtxReads<Read, Search> {
   const project = (result: InlineWireResult): InlineRowsResult => {
     hooks.onResult?.(result);
+    // One sidecar per read, shared by every row it answers for: the rows carry
+    // the intent key, this carries what the member is told about it (#922 G3).
+    const sidecar = result.pending ?? {};
     return {
-      rows: result.rows.map((envelope) => row(envelope)),
+      rows: result.rows.map((envelope) => row(envelope, sidecar)),
       receiptId: receiptIdFor(result),
+      pending: sidecar,
     };
   };
   return {

@@ -21,7 +21,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
 
-import { decoratePendingMutation } from "../_shared/pending-overlay.ts";
+import { pendingOverlayRow } from "../_shared/pending-overlay.ts";
 import type { InlineFrame } from "../inline-types.ts";
 import { Root } from "./app-root.tsx";
 import type { AgEvent } from "./types.ts";
@@ -276,7 +276,7 @@ describe("conflict names both versions and both ways out", () => {
 
   /** A cancel the vault refused because the row moved underneath it, decorated
    *  by the one shared overlay engine every seat consumes. */
-  const CONFLICTED = decoratePendingMutation(
+  const CONFLICTED = pendingOverlayRow(
     {
       op: "upsert" as const,
       entity: "core.event",
@@ -294,7 +294,7 @@ describe("conflict names both versions and both ways out", () => {
       action: "cancel-event",
       conflict: { expectedVersion: 4, actualVersion: 7 },
     }
-  ).values as unknown as AgEvent;
+  ) as unknown as AgEvent;
 
   test("the detail panel reports the versions and offers retry and discard", async () => {
     // The outbox doors record what reached them, so the assertion below is the

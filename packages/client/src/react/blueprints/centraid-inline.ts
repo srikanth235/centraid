@@ -1,7 +1,7 @@
 import { isAddressablePartyKind } from "@centraid/blueprints/apps/_shared/party-kind";
 import {
   projectPendingWrite,
-  readPendingOverlay,
+  pendingRowIntentId,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { PendingProjectionDeclaration } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
@@ -456,7 +456,9 @@ async function loadShareTargets(
       partyId,
       label: displayName,
       ...(vaultId ? { vaultId } : {}),
-      ...(readPendingOverlay(row.values) ? { pending: true } : {}),
+      // Queued-ness is the row's one pending column; the facts behind it are
+      // not needed to refuse a destination that is not real yet (#922 G3).
+      ...(pendingRowIntentId(row.values) ? { pending: true } : {}),
     });
   }
   for (const link of links) {

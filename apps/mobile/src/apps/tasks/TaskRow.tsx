@@ -8,7 +8,10 @@
 import React from "react";
 import { Pressable, View } from "react-native";
 
-import { readPendingOverlay } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  pendingSidecarOf,
+  readPendingOverlay,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { Task } from "@centraid/blueprints/apps/tasks/types";
 import {
   PENDING_ROW,
@@ -61,9 +64,8 @@ export default function TaskRow({
   const { colors } = useTheme();
   // The pending marker is drawn INLINE: one unsettled row in one app is not
   // yet kit vocabulary.
-  const pending = readPendingOverlay(
-    task as unknown as Record<string, unknown>
-  );
+  const taskRow = task as unknown as Record<string, unknown>;
+  const pending = readPendingOverlay(taskRow, pendingSidecarOf(taskRow));
   const done = isClosed(task);
   const writable = rowCanWrite(task);
   const { meta, priority } = taskRowModel({

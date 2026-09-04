@@ -2,6 +2,8 @@ import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
 /** tally.add_expense — contract in app.json. */
 const KEYS = [
+  // The seat mints the row's id and the origin honours it (#922 G2).
+  "expense_id",
   "group_id",
   "description",
   "amount_minor",

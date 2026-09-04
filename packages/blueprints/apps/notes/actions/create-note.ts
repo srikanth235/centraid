@@ -12,6 +12,8 @@ export default async function createNote({ body, ctx }: HandlerArgs) {
     command: "knowledge.create_note",
     input: {
       title: String(input.title ?? ""),
+      // The seat mints the row's id and the origin honours it (#922 G2).
+      ...(input.note_id ? { note_id: String(input.note_id) } : {}),
       body_text: normalizeCommonMark(input.body_text),
       format: input.format == null ? "markdown" : String(input.format),
       ...(input.notebook_id == null

@@ -561,8 +561,12 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     expect(found.rows[0]?.values).toMatchObject({
       description: SPENT,
       amount_minor: 1234,
-      [PENDING_OVERLAY_FIELDS.status]: "queued",
       __centraidScopeId: VAULT,
+    });
+    const intentId = found.rows[0]?.values[PENDING_OVERLAY_FIELDS.key];
+    // Queued is a fact about the WRITE, so the read's sidecar says it (G3).
+    expect(found.pending?.[String(intentId)]).toMatchObject({
+      status: "queued",
     });
   });
 });

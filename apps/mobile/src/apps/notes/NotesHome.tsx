@@ -15,6 +15,7 @@ import { Alert, Pressable, RefreshControl, View } from "react-native";
 
 import {
   pendingChangeLabel,
+  pendingSidecarOf,
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import {
@@ -117,7 +118,7 @@ function NoteRow({
 }): React.JSX.Element {
   const { colors } = useTheme();
   const shown = promote({ title: note.title, body: note.body });
-  const overlay = readPendingOverlay(note.raw);
+  const overlay = readPendingOverlay(note.raw, pendingSidecarOf(note.raw));
   const pending = overlay ? pendingChangeLabel(overlay) : "";
   return (
     <Pressable

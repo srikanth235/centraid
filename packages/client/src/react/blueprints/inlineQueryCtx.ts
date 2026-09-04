@@ -1,4 +1,9 @@
-import { PENDING_OVERLAY_FIELDS } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  PENDING_OVERLAY_FIELDS,
+  attachPendingSidecar,
+  pendingRowIntentId,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 import type { InlineQueryModule } from "@centraid/blueprints/apps/inline-types";
 
@@ -53,16 +58,15 @@ export interface InlineCtxOptions {
 interface PendingRowMarker {
   rowId: string;
   identityFields: readonly string[];
-  fields: Record<string, unknown>;
+  /** The intent that projected the row: its ONE pending column (#922 G3). */
+  intentId: string;
 }
-
-const pendingFieldNames = Object.values(PENDING_OVERLAY_FIELDS);
 
 function pendingMarker(
   envelope: ReplicaRowEnvelope
 ): PendingRowMarker | undefined {
-  if (typeof envelope.values[PENDING_OVERLAY_FIELDS.key] !== "string")
-    return undefined;
+  const intentId = pendingRowIntentId(envelope.values);
+  if (intentId === undefined) return undefined;
   const identityFields = Object.entries(envelope.values).flatMap(
     ([field, value]) =>
       (field === "id" || field.endsWith("_id")) && value === envelope.rowId
@@ -70,17 +74,7 @@ function pendingMarker(
         : []
   );
   if (identityFields.length === 0) return undefined;
-  return {
-    rowId: envelope.rowId,
-    identityFields,
-    fields: Object.fromEntries(
-      pendingFieldNames.flatMap((field) =>
-        envelope.values[field] === undefined
-          ? []
-          : [[field, envelope.values[field]]]
-      )
-    ),
-  };
+  return { rowId: envelope.rowId, identityFields, intentId };
 }
 
 function carriedPendingMarker(
@@ -106,36 +100,44 @@ function carriedPendingMarker(
 }
 
 // Pending identity is shell-owned: carry it across product-field projections
-// by row identity. Apps never copy overlay fields by hand.
+// by row identity. Apps never copy overlay fields by hand — and there is only
+// one to copy, the key; the facts stay on the read's sidecar (#922 G3).
 function carryPendingRows(
   value: unknown,
   markers: readonly PendingRowMarker[],
-  scopeId: string | undefined
+  scopeId: string | undefined,
+  sidecar: PendingOverlaySidecar
 ): unknown {
   if (Array.isArray(value))
-    return value.map((item) => carryPendingRows(item, markers, scopeId));
+    return value.map((item) =>
+      carryPendingRows(item, markers, scopeId, sidecar)
+    );
   if (!value || typeof value !== "object") return value;
   const record = value as Record<string | symbol, unknown>;
   const carried = Object.fromEntries(
     Object.entries(record as Record<string, unknown>).map(([key, item]) => [
       key,
-      carryPendingRows(item, markers, scopeId),
+      carryPendingRows(item, markers, scopeId, sidecar),
     ])
   );
   const matched = carriedPendingMarker(record, carried, markers);
   if (!matched) return carried;
-  return {
-    ...carried,
-    ...matched.fields,
-    ...(scopeId ? { __centraidScopeId: scopeId } : {}),
-  };
+  return attachPendingSidecar(
+    {
+      ...carried,
+      [PENDING_OVERLAY_FIELDS.key]: matched.intentId,
+      ...(scopeId ? { __centraidScopeId: scopeId } : {}),
+    },
+    sidecar
+  );
 }
 
 // `resolve` NEVER rejects — `{ cards: [] }` rather than blanking the board.
 export function buildInlineCtx(
   options: InlineCtxOptions,
   guard: OnlineOnlyGuard,
-  pendingRows: PendingRowMarker[] = []
+  pendingRows: PendingRowMarker[] = [],
+  sidecars: PendingOverlaySidecar[] = []
 ): unknown {
   const { session, appId, signal } = options;
   return buildInlineCtxCore<ShellReplicaReadRequest, ShellReplicaSearchRequest>(
@@ -147,14 +149,17 @@ export function buildInlineCtx(
       reads: inlineReadsFor(
         session,
         appId,
-        (envelope) => {
+        (envelope, sidecar) => {
           const marker = pendingMarker(envelope);
           if (marker) pendingRows.push(marker);
-          return guardedRow(
+          const row = guardedRow(
             envelope,
             guard,
             marker ? [[PENDING_ROW_PROVENANCE, marker]] : []
           );
+          // The row a handler holds answers for itself: the key names its
+          // intent, the sidecar it carries says what is happening to it.
+          return marker ? attachPendingSidecar(row, sidecar) : row;
         },
         {
           // THE WEB SEAT'S BOUNDARY (#922 0a). A query that declares no window
@@ -168,6 +173,7 @@ export function buildInlineCtx(
           // list read hides rows, and says so on the same line (#922 0a) —
           // which is why this is `onResult` and not two copies.
           onResult: (result: InlineWireResult) => {
+            if (result.pending) sidecars.push(result.pending);
             if (result.truncated && result.appliedLimit !== undefined)
               postStatus(truncatedListNotice(result.appliedLimit));
           },
@@ -185,7 +191,8 @@ export async function runInlineQuery(
 ): Promise<unknown> {
   const guard = new OnlineOnlyGuard();
   const pendingRows: PendingRowMarker[] = [];
-  const ctx = buildInlineCtx(options, guard, pendingRows);
+  const sidecars: PendingOverlaySidecar[] = [];
+  const ctx = buildInlineCtx(options, guard, pendingRows, sidecars);
   const value = await runInlineQueryCore(
     module as never,
     {
@@ -195,5 +202,11 @@ export async function runInlineQuery(
     },
     guard
   );
-  return carryPendingRows(value, pendingRows, options.scopeId);
+  // One query reads several entities; the view model it returns is answered by
+  // all of their sidecars at once.
+  const sidecar = Object.assign({}, ...sidecars) as PendingOverlaySidecar;
+  return attachPendingSidecar(
+    carryPendingRows(value, pendingRows, options.scopeId, sidecar),
+    sidecar
+  );
 }

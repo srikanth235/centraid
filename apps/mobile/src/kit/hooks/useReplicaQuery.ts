@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { attachPendingSidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 import { UnboundedReplicaReadError } from "@centraid/client/replica/native";
 import type {
@@ -40,14 +41,18 @@ function latestSync(scopes: ReplicaContextValue["scopes"]): string | undefined {
  * Project a wire result into `{ ...values, __rowId }` rows. Pure and exported
  * so the identity-stability contract (one mapped array per underlying result,
  * memoized in the hook) is unit-testable without a renderer.
+ *
+ * Every row carries the read's ONE pending sidecar (#922 G3) — one object for
+ * the whole result, so a row a queued write projected can be read with
+ * `readPendingOverlay(row, pendingSidecarOf(row))` wherever it lands.
  */
 export function mapReplicaRows(
   result: ReplicaReadWireResult | undefined
 ): Array<ReplicaRow & { __rowId: string }> {
-  return (result?.rows ?? []).map((row) => ({
-    ...row.values,
-    __rowId: row.rowId,
-  }));
+  const sidecar = result?.pending ?? {};
+  return (result?.rows ?? []).map((row) =>
+    attachPendingSidecar({ ...row.values, __rowId: row.rowId }, sidecar)
+  );
 }
 
 export function useReplicaQuery(

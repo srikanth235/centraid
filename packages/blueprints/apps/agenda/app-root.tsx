@@ -22,7 +22,10 @@ import {
 import type { ReadSubscription } from "@centraid/design/elements";
 
 import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";
-import { readPendingOverlay } from "../_shared/pending-overlay.ts";
+import {
+  pendingSidecarOf,
+  readPendingOverlay,
+} from "../_shared/pending-overlay.ts";
 import { libraryReachability } from "../_shared/view-state-kit.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
@@ -445,13 +448,12 @@ export function Root({
       }
     : undefined;
 
-  const pendingFor = useCallback(
-    (ev: AgEvent) =>
-      readPendingOverlay(ev as unknown as Record<string, unknown>) as
-        | { status: string; action: string }
-        | undefined,
-    []
-  );
+  const pendingFor = useCallback((ev: AgEvent) => {
+    const record = ev as unknown as Record<string, unknown>;
+    return readPendingOverlay(record, pendingSidecarOf(record)) as
+      | { status: string; action: string }
+      | undefined;
+  }, []);
 
   // ──── chrome wiring: attach input, doorbell, focus, width ────
   useEffect(() => {

@@ -13,6 +13,7 @@
  *
  * Nothing in the product imports this yet — product wiring is E7's.
  */
+import { attachPendingSidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import {
   buildInlineCtxCore,
   guardedRow,
@@ -53,8 +54,11 @@ export function buildNativeInlineCtx(
   const { session, appId, signal } = options;
   return buildInlineCtxCore<NativeReadRequest, NativeSearchRequest>(
     {
-      reads: inlineReadsFor(session, appId, (envelope) =>
-        guardedRow(envelope, guard)
+      // Every row the handler sees carries the read's pending sidecar, so the
+      // phone answers `readPendingOverlay(row, pendingSidecarOf(row))` exactly
+      // as the shell does (#922 G3).
+      reads: inlineReadsFor(session, appId, (envelope, sidecar) =>
+        attachPendingSidecar(guardedRow(envelope, guard), sidecar)
       ),
       ...(signal ? { signal } : {}),
     },

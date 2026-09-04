@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   PENDING_OVERLAY_FIELDS,
-  enrichPendingRows,
+  enrichPendingSidecar,
   expirePendingOverlay,
   pendingChangeLabel,
   pendingOverlayCanDiscard,
@@ -29,6 +29,7 @@ import {
   settlePendingOverlay,
 } from "./pending-overlay.ts";
 import type {
+  PendingOverlayFacts,
   PendingOverlayPresentation,
   PendingOverlayStatus,
 } from "./pending-overlay.ts";
@@ -51,78 +52,63 @@ function presentation(
   return { key: "intent-1", status: "queued", action: "add", ...patch };
 }
 
-function row(patch: Record<string, unknown> = {}): Record<string, unknown> {
+/** A projected row: ONE pending column, the intent that projected it (G3). */
+function row(intentId = "intent-1"): Record<string, unknown> {
+  return { [PENDING_OVERLAY_FIELDS.key]: intentId };
+}
+
+function sidecar(
+  patch: Partial<PendingOverlayFacts> = {},
+  intentId = "intent-1"
+): Record<string, PendingOverlayFacts> {
   return {
-    [PENDING_OVERLAY_FIELDS.key]: "intent-1",
-    [PENDING_OVERLAY_FIELDS.status]: "queued",
-    [PENDING_OVERLAY_FIELDS.action]: "add",
-    ...patch,
+    [intentId]: { status: "queued", action: "add", ...patch },
   };
 }
 
 describe("reading an overlay back off a row", () => {
   it("reads nothing from a row that is not there", () => {
-    expect(readPendingOverlay(undefined)).toBeUndefined();
+    expect(readPendingOverlay(undefined, sidecar())).toBeUndefined();
   });
 
   it("reads nothing from an ordinary vault row", () => {
     expect(
-      readPendingOverlay({ task_id: "t1", title: "Book train" })
+      readPendingOverlay({ task_id: "t1", title: "Book train" }, sidecar())
     ).toBeUndefined();
   });
 
-  it("requires all three of key, status and action", () => {
+  it("requires a string key, and a sidecar that names it", () => {
     expect(
-      readPendingOverlay(row({ [PENDING_OVERLAY_FIELDS.key]: 7 }))
+      readPendingOverlay({ [PENDING_OVERLAY_FIELDS.key]: 7 }, sidecar())
     ).toBeUndefined();
+    expect(readPendingOverlay(row(), undefined)).toBeUndefined();
+    expect(readPendingOverlay(row("intent-9"), sidecar())).toBeUndefined();
     expect(
-      readPendingOverlay(row({ [PENDING_OVERLAY_FIELDS.action]: null }))
-    ).toBeUndefined();
-    expect(
-      readPendingOverlay(row({ [PENDING_OVERLAY_FIELDS.status]: "nonsense" }))
+      readPendingOverlay(row(), {
+        "intent-1": { status: "nonsense", action: "add" } as never,
+      })
     ).toBeUndefined();
   });
 
   it("accepts every status the engine names, and only those", () => {
     for (const status of ALL_STATUSES) {
-      expect(
-        readPendingOverlay(row({ [PENDING_OVERLAY_FIELDS.status]: status }))
-          ?.status
-      ).toBe(status);
+      expect(readPendingOverlay(row(), sidecar({ status }))?.status).toBe(
+        status
+      );
     }
-    expect(
-      readPendingOverlay(row({ [PENDING_OVERLAY_FIELDS.status]: "executed" }))
-    ).toBeUndefined();
   });
 
-  it("omits an optional field rather than carrying a wrongly-typed one", () => {
-    const read = readPendingOverlay(
-      row({
-        [PENDING_OVERLAY_FIELDS.reason]: 42,
-        [PENDING_OVERLAY_FIELDS.steward]: null,
-        [PENDING_OVERLAY_FIELDS.expectedVersion]: "4",
-        [PENDING_OVERLAY_FIELDS.actualVersion]: "7",
-        [PENDING_OVERLAY_FIELDS.attempts]: "3",
-        [PENDING_OVERLAY_FIELDS.enqueuedAt]: 1_770_000_000_000,
-      })
-    );
-    expect(read).toStrictEqual({
-      key: "intent-1",
-      status: "queued",
-      action: "add",
-    });
-  });
-
-  it("carries every optional field that IS well typed", () => {
+  it("carries every optional field the sidecar holds", () => {
     expect(
       readPendingOverlay(
-        row({
-          [PENDING_OVERLAY_FIELDS.reason]: "Because.",
-          [PENDING_OVERLAY_FIELDS.steward]: "Asha's phone",
-          [PENDING_OVERLAY_FIELDS.expectedVersion]: 4,
-          [PENDING_OVERLAY_FIELDS.actualVersion]: 7,
-          [PENDING_OVERLAY_FIELDS.attempts]: 3,
-          [PENDING_OVERLAY_FIELDS.enqueuedAt]: "2026-08-27T09:00:00.000Z",
+        row(),
+        sidecar({
+          reason: "Because.",
+          stewardLabel: "Asha's phone",
+          expectedVersion: 4,
+          actualVersion: 7,
+          attempts: 3,
+          enqueuedAt: "2026-08-27T09:00:00.000Z",
         })
       )
     ).toStrictEqual({
@@ -136,6 +122,15 @@ describe("reading an overlay back off a row", () => {
       attempts: 3,
       enqueuedAt: "2026-08-27T09:00:00.000Z",
     });
+  });
+
+  it("keeps one sidecar for a whole page, keyed by intent", () => {
+    const page = {
+      "intent-1": sidecar()["intent-1"]!,
+      ...sidecar({ status: "denied" }, "intent-2"),
+    };
+    expect(readPendingOverlay(row(), page)?.status).toBe("queued");
+    expect(readPendingOverlay(row("intent-2"), page)?.status).toBe("denied");
   });
 });
 
@@ -344,85 +339,56 @@ describe("expiry is terminal, and only reachable from a live state", () => {
   });
 });
 
-describe("enriching rows from elsewhere", () => {
-  it("leaves an ordinary vault row untouched", () => {
-    const plain = { task_id: "t1" };
+describe("enriching a sidecar from elsewhere", () => {
+  it("leaves an intent no enrichment names untouched", () => {
     expect(
-      enrichPendingRows([plain], [{ intentId: "intent-1", status: "denied" }])
-    ).toStrictEqual([plain]);
+      enrichPendingSidecar(sidecar(), [{ intentId: "other", status: "denied" }])
+    ).toStrictEqual(sidecar());
   });
 
-  it("leaves a pending row no enrichment names untouched", () => {
-    const pending = row();
-    expect(
-      enrichPendingRows([pending], [{ intentId: "other", status: "denied" }])
-    ).toStrictEqual([pending]);
+  it("moves an intent back to queued or sending without settling it", () => {
+    const moved = enrichPendingSidecar(sidecar({ status: "parked" }), [
+      { intentId: "intent-1", status: "sending" },
+    ]);
+    expect(readPendingOverlay(row(), moved)?.status).toBe("sending");
   });
 
-  it("moves a row back to queued or sending without settling it", () => {
-    const [moved] = enrichPendingRows(
-      [row({ [PENDING_OVERLAY_FIELDS.status]: "parked" })],
-      [{ intentId: "intent-1", status: "sending" }]
-    );
-    expect(moved?.[PENDING_OVERLAY_FIELDS.status]).toBe("sending");
-  });
-
-  it("settles a row through the same law settlement uses", () => {
-    const [settled] = enrichPendingRows(
-      [row({ [PENDING_OVERLAY_FIELDS.status]: "parked" })],
-      [
-        {
-          intentId: "intent-1",
-          status: "expired",
-          reason: "The review window ended.",
-          stewardLabel: "Asha's phone",
-        },
-      ]
-    );
-    expect(settled?.[PENDING_OVERLAY_FIELDS.status]).toBe("expired");
-    expect(settled?.[PENDING_OVERLAY_FIELDS.reason]).toBe(
-      "The review window ended."
-    );
-    expect(settled?.[PENDING_OVERLAY_FIELDS.steward]).toBe("Asha's phone");
-  });
-
-  it("applies copy alone when the enrichment names no status", () => {
-    const [enriched] = enrichPendingRows(
-      [row({ [PENDING_OVERLAY_FIELDS.status]: "parked" })],
-      [{ intentId: "intent-1", stewardLabel: "Asha's phone" }]
-    );
-    expect(enriched?.[PENDING_OVERLAY_FIELDS.status]).toBe("parked");
-    expect(enriched?.[PENDING_OVERLAY_FIELDS.steward]).toBeUndefined();
-  });
-
-  it("keeps every other column of the row it enriched", () => {
-    const [enriched] = enrichPendingRows(
-      [
-        {
-          ...row(),
-          expense_id: "pending:intent-1:expense",
-          amount_minor: 1200,
-        },
-      ],
-      [{ intentId: "intent-1", status: "failed", reason: "Refused." }]
-    );
-    expect(enriched).toMatchObject({
-      expense_id: "pending:intent-1:expense",
-      amount_minor: 1200,
+  it("settles through the same law settlement uses", () => {
+    const settled = enrichPendingSidecar(sidecar({ status: "parked" }), [
+      {
+        intentId: "intent-1",
+        status: "expired",
+        reason: "The review window ended.",
+        stewardLabel: "Asha's phone",
+      },
+    ]);
+    expect(readPendingOverlay(row(), settled)).toMatchObject({
+      status: "expired",
+      reason: "The review window ended.",
+      stewardLabel: "Asha's phone",
     });
   });
 
-  it("enriches each row against its OWN intent, across a mixed window", () => {
-    const rows = [
-      row({ [PENDING_OVERLAY_FIELDS.key]: "a" }),
-      row({ [PENDING_OVERLAY_FIELDS.key]: "b" }),
-      { task_id: "plain" },
-    ];
-    const enriched = enrichPendingRows(rows, [
+  it("applies copy alone when the enrichment names no status", () => {
+    const enriched = enrichPendingSidecar(sidecar({ status: "parked" }), [
+      { intentId: "intent-1", stewardLabel: "Asha's phone" },
+    ]);
+    expect(readPendingOverlay(row(), enriched)).toMatchObject({
+      status: "parked",
+      stewardLabel: "Asha's phone",
+    });
+  });
+
+  it("enriches each intent on its OWN entry, across a mixed page", () => {
+    const page = {
+      ...sidecar({}, "a"),
+      ...sidecar({}, "b"),
+    };
+    const enriched = enrichPendingSidecar(page, [
       { intentId: "b", status: "denied", reason: "No grant." },
     ]);
-    expect(enriched[0]?.[PENDING_OVERLAY_FIELDS.status]).toBe("queued");
-    expect(enriched[1]?.[PENDING_OVERLAY_FIELDS.status]).toBe("denied");
-    expect(enriched[2]).toStrictEqual({ task_id: "plain" });
+    expect(readPendingOverlay(row("a"), enriched)?.status).toBe("queued");
+    expect(readPendingOverlay(row("b"), enriched)?.status).toBe("denied");
+    expect(readPendingOverlay({ task_id: "plain" }, enriched)).toBeUndefined();
   });
 });

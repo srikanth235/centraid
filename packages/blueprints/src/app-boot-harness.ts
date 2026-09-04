@@ -21,7 +21,9 @@ import type { Root as ReactRoot } from "react-dom/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  attachPendingSidecar,
   decoratePendingMutation,
+  pendingOverlayFacts,
   definePendingProjection,
   pendingPatch,
   projectPendingWrite,
@@ -378,7 +380,7 @@ export function describeAppBoot(
           });
           const mutation = projected.optimistic[0];
           if (!mutation || mutation.op !== "upsert") return;
-          const decorated = decoratePendingMutation(mutation, {
+          const presentation = {
             intentId: AGENDA_INTENT_ID,
             state: intentState,
             action: "cancel-event",
@@ -387,7 +389,12 @@ export function describeAppBoot(
               : intentState === "denied"
                 ? { reason: "The owner denied this cancellation." }
                 : {}),
-          });
+          } as const;
+          const decorated = decoratePendingMutation(mutation, presentation);
+          // The row carries the intent; the read's sidecar carries the rest,
+          // exactly as the shell's inline ctx hands it to the app (#922 G3).
+          const facts = pendingOverlayFacts(presentation);
+          const sidecar = facts ? { [AGENDA_INTENT_ID]: facts } : {};
           const current = response as {
             events: Array<Record<string, unknown>>;
             calendars: Array<Record<string, unknown>>;
@@ -396,7 +403,10 @@ export function describeAppBoot(
             ...current,
             events: current.events.map((event) =>
               event.event_id === mutation.rowId
-                ? { ...event, ...decorated.values }
+                ? attachPendingSidecar(
+                    { ...event, ...decorated.values },
+                    sidecar
+                  )
                 : event
             ),
           };

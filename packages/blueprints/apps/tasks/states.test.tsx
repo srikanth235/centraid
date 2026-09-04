@@ -23,7 +23,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { decoratePendingMutation } from "../_shared/pending-overlay.ts";
+import { pendingOverlayRow } from "../_shared/pending-overlay.ts";
 import type { InlineFrame } from "../inline-types.ts";
 import { Root } from "./app-root.tsx";
 import { Notices } from "./components/States.tsx";
@@ -187,8 +187,8 @@ describe("stale is the reachability verdict, reaching the board", () => {
 
 describe("a held write speaks on the row that carries it", () => {
   /** Decorated by the one shared overlay engine every seat consumes. */
-  const held = (intent: Parameters<typeof decoratePendingMutation>[1]): Task =>
-    decoratePendingMutation(
+  const held = (intent: Parameters<typeof pendingOverlayRow>[1]): Task =>
+    pendingOverlayRow(
       {
         op: "upsert" as const,
         entity: "schedule.task",
@@ -201,7 +201,7 @@ describe("a held write speaks on the row that carries it", () => {
         },
       },
       intent
-    ).values as unknown as Task;
+    ) as unknown as Task;
 
   let reactRoot: ReturnType<typeof createRoot> | undefined;
 

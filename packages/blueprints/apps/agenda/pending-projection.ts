@@ -25,14 +25,23 @@ export const agendaPendingProjection = definePendingProjection({
   },
   actions: {
     propose: ({ input, intentId }) => {
-      const eventId = stablePendingRowId(intentId, "event");
-      return [
-        pendingUpsert("core.event", eventId, {
-          event_id: eventId,
-          status: "tentative",
-          ...pendingInputValues(input, EVENT_FIELDS),
-        }),
-      ];
+      // An id the write already carries is REUSED, never re-minted, so a
+      // revision keeps the row it already showed (#922 G2).
+      const eventId =
+        typeof input.event_id === "string" && input.event_id.length > 0
+          ? input.event_id
+          : stablePendingRowId(intentId, "event");
+      return {
+        // The id the projection minted rides the write (#922 G2).
+        input: { event_id: eventId },
+        optimistic: [
+          pendingUpsert("core.event", eventId, {
+            event_id: eventId,
+            status: "tentative",
+            ...pendingInputValues(input, EVENT_FIELDS),
+          }),
+        ],
+      };
     },
     rsvp: ({ input }) => pendingPatch("core.event", input.event_id, input),
     "edit-event": ({ input }) =>

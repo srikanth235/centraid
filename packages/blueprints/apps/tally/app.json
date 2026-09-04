@@ -238,6 +238,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "expense_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "group_id": {
             "type": "string",
             "minLength": 1
@@ -392,6 +397,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "expense_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "group_id": {
             "type": "string",
             "minLength": 1
@@ -1064,6 +1074,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "settlement_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "from_party": {
             "type": "string",
             "minLength": 1
@@ -1153,6 +1168,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "name": {
             "type": "string",
             "minLength": 1

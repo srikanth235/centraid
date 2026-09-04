@@ -23,28 +23,37 @@ export const peoplePendingProjection = definePendingProjection({
   },
   actions: {
     "add-person": ({ input, intentId }) => {
-      const partyId = stablePendingRowId(intentId, "party");
+      // An id the write already carries is REUSED, never re-minted, so a
+      // revision keeps the row it already showed (#922 G2).
+      const partyId =
+        typeof input.party_id === "string" && input.party_id.length > 0
+          ? input.party_id
+          : stablePendingRowId(intentId, "party");
       const profileId = stablePendingRowId(intentId, "profile");
-      return [
-        pendingUpsert("core.party", partyId, {
-          party_id: partyId,
-          display_name:
-            typeof input.display_name === "string"
-              ? input.display_name
-              : "Pending person",
-        }),
-        pendingUpsert("people.profile", profileId, {
-          profile_id: profileId,
-          party_id: partyId,
-          deleted_at: null,
-          ...pendingInputValues(input, [
-            "role",
-            "cadence_days",
-            "avatar_color",
-            "list_id",
-          ]),
-        }),
-      ];
+      return {
+        // The id the projection minted rides the write (#922 G2).
+        input: { party_id: partyId },
+        optimistic: [
+          pendingUpsert("core.party", partyId, {
+            party_id: partyId,
+            display_name:
+              typeof input.display_name === "string"
+                ? input.display_name
+                : "Pending person",
+          }),
+          pendingUpsert("people.profile", profileId, {
+            profile_id: profileId,
+            party_id: partyId,
+            deleted_at: null,
+            ...pendingInputValues(input, [
+              "role",
+              "cadence_days",
+              "avatar_color",
+              "list_id",
+            ]),
+          }),
+        ],
+      };
     },
     "edit-person": ({ input }) => [...person(input), ...profile(input)],
     "set-cadence": ({ input }) => profile(input),
@@ -82,14 +91,23 @@ export const peoplePendingProjection = definePendingProjection({
       reason: "A debt id does not identify the parent People row.",
     },
     "create-list": ({ input, intentId }) => {
-      const listId = stablePendingRowId(intentId, "list");
-      return [
-        pendingUpsert("core.concept", listId, {
-          concept_id: listId,
-          pref_label:
-            typeof input.name === "string" ? input.name : "Pending list",
-        }),
-      ];
+      // An id the write already carries is REUSED, never re-minted, so a
+      // revision keeps the row it already showed (#922 G2).
+      const listId =
+        typeof input.list_id === "string" && input.list_id.length > 0
+          ? input.list_id
+          : stablePendingRowId(intentId, "list");
+      return {
+        // The id the projection minted rides the write (#922 G2).
+        input: { list_id: listId },
+        optimistic: [
+          pendingUpsert("core.concept", listId, {
+            concept_id: listId,
+            pref_label:
+              typeof input.name === "string" ? input.name : "Pending list",
+          }),
+        ],
+      };
     },
     "rename-list": ({ input }) =>
       pendingPatch("core.concept", input.list_id, { pref_label: input.name }, [

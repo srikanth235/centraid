@@ -7,6 +7,7 @@ import {
   pendingOverlayCanRetry,
   pendingChangeLabel,
   pendingOverlayCopy,
+  pendingSidecarOf,
   readPendingOverlay,
 } from "./pending-overlay.ts";
 
@@ -17,7 +18,7 @@ export function PendingWriteActions({
   row: Readonly<Record<string, unknown>>;
   onEdit?: () => void;
 }) {
-  const pending = readPendingOverlay(row);
+  const pending = readPendingOverlay(row, pendingSidecarOf(row));
   if (!pending) return null;
   const scopeId =
     typeof row.__centraidScopeId === "string"
