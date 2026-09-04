@@ -1719,3 +1719,5 @@ bun run scripts:test
 ### Audit
 
 Verdict: PASS. The follow-up diff is limited to restoring the purpose-free recognition calls, migrating synthetic and scale fixtures to recordAppInstall, rebuilding their committed bundles, and updating the conformance/fingerprint ledgers required by those changes. The affected unit, quality, typecheck, product-gate, and script suites are recorded above.
+
+- Post-rebase verification: `tests/quality/classification-ratchet.json` was re-pinned to the current `tests/claims.json` digest after the PR branch's placement refactor; `bun run lint:product` passed all 42 gates.
