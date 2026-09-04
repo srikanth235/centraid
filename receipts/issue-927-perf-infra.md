@@ -1337,3 +1337,24 @@ Every path this lane's two commits touch that the tables above name only by grou
 
 1. *Claim: no journey entry is stated at an empty volume.* Walked all 51 entries and printed the volume of every one whose journey is not marked "Not a journey" in the ledger's own vocabulary: none is `empty`. The three that remain — `composite-load`, `soak`, `stress-recovery` — are declared non-journeys in the same file.
 2. *Claim: the promoted web ceilings actually gate.* Ran the probe against them after promotion: LCP 436 ms against the new 1200 ms ceiling and INP 24 ms against 120 ms, both asserted (they were annotations before). Setting the LCP ceiling to 300 ms reds the spec on the next run.
+
+## w3 profiles — every gateway journey under both durability modes
+
+### Numbers
+
+| Journey | standard (`synchronous=FULL`) | constrained (`synchronous=NORMAL`) |
+| --- | --- | --- |
+| `first-bootstrap` bootstrap page | 112.9 ms | **149.2 ms** |
+| `own-echo` replica intent, warm p50 | 112.6 ms | **173.6 ms** |
+| `peer-echo` last-subscriber delivery, N=1 | 66.1 ms | **79.6 ms** |
+| `converge` last-subscriber delivery, N=10 | 65.9 ms | **83.2 ms** |
+
+`node packages/server/scripts/bench-journeys.mjs --profile <p> --intents 8 --fill 500 --subscribers 1,10`, linux x64 / 4 cores / 15 GB, 2026-09-04. Ceilings are ~3x observed, per profile.
+
+### Findings
+
+1. **Constrained is slower on all four**, which is the opposite of the intuition that a weaker fsync is cheaper. The profile also shrinks the worker pool, and that term dominates: the intent path pays +54% while the fan-out pays +21%. Anyone quoting a `standard` number for a phone is quoting a number 20–54% too good.
+
+### Falsification
+
+1. *Claim: the paired runner cannot compare a FULL-fsync sample against a NORMAL-fsync ceiling.* The per-profile rows carry the same `pairedSample` path, so `pairedEntries()` would have picked up twelve rows where four exist; it is pinned to the unprofiled hardware key and returns exactly the four. Printed and checked.

@@ -168,7 +168,15 @@ export function sampleAt(report, dotted) {
 export function pairedEntries(ledger = journeyLedger()) {
   const found = [];
   for (const [key, entry] of Object.entries(ledger.entries ?? {}))
-    for (const [metric, value] of Object.entries(entry.metrics ?? {}))
+    // The per-PROFILE rows carry the same `pairedSample` path and are seeded by
+    // a profile-pinned run, not by this one: sampling them here would compare a
+    // FULL-fsync number against a NORMAL-fsync ceiling.
+    for (const [metric, value] of Object.entries(
+      entry.hardware.includes("-standard") ||
+        entry.hardware.includes("-constrained")
+        ? {}
+        : (entry.metrics ?? {})
+    ))
       if (value.pairedSample)
         found.push({
           key,

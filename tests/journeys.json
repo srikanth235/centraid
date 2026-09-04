@@ -12,7 +12,9 @@
     "dev-darwin-arm64": "Apple-silicon development host, NVMe. Faster than any CI runner; a ceiling seeded here carries extra headroom and says so.",
     "ci-ios-sim": "iOS simulator on a macOS runner, release-configuration build with the Hermes bundle embedded.",
     "ci-android-emu": "Android emulator on a linux runner, release-configuration build.",
-    "any": "Hardware-independent — a build artifact weighed on disk, or a count of statements the product issues."
+    "any": "Hardware-independent — a build artifact weighed on disk, or a count of statements the product issues.",
+    "ci-linux-x64-4c-standard": "The same runner as `ci-linux-x64-4c`, with CENTRAID_HARDWARE_PROFILE=standard pinned: SQLite `synchronous=FULL`, the desktop-class durability setting. The gateway resolves the profile at boot, so a number is only comparable to another taken under the SAME profile.",
+    "ci-linux-x64-4c-constrained": "The same runner with CENTRAID_HARDWARE_PROFILE=constrained: SQLite `synchronous=NORMAL`, the phone/low-end setting. Every gateway journey is stated under BOTH profiles because the durability mode is the single biggest lever on a write path and one number would hide which side of it moved."
   },
   "volumes": {
     "year3": "The golden year-3 artifact: ~27,600 domain rows (5,000 parties, 10,000 photos, 200 conversations x 12 turns, 1,000 notes, 1,096 events, 12 grantees, 365 receipt days). packages/test-kit/src/year3-vault.ts.",
@@ -1296,6 +1298,222 @@
             "breakdown": "grant written 1.9-4.0 ms, grant FULFILLED 130.8-240.0 ms, grantee's own read 0.3-0.4 ms",
             "note": "BEFORE number. Fulfillment is 98% of the interval and the only term that scales with the size of the share: writing the standing grant and the grantee's read are both under 4 ms at 200 photos. Ceiling is ~3x the slowest of three samples on a contended container, the same convention every single-host measurement here uses.",
             "headroom": "~3x slowest observed (three samples, single host)"
+          }
+        }
+      }
+    },
+    "gateway/first-bootstrap/year3-replica/ci-linux-x64-4c-standard": {
+      "surface": "gateway",
+      "journey": "first-bootstrap",
+      "volume": "year3-replica",
+      "hardware": "ci-linux-x64-4c-standard",
+      "spans": ["gateway.replica.bootstrap"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "bootstrapPageMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
+          "pairedSample": "journeys.bootstrapPage.durationMs",
+          "ceilingMs": 340,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=standard",
+            "observedMs": 112.9,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/first-bootstrap/year3-replica/ci-linux-x64-4c-constrained": {
+      "surface": "gateway",
+      "journey": "first-bootstrap",
+      "volume": "year3-replica",
+      "hardware": "ci-linux-x64-4c-constrained",
+      "spans": ["gateway.replica.bootstrap"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "bootstrapPageMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — paired candidate/PR rounds against packages/server/scripts/bench-journeys.mjs",
+          "pairedSample": "journeys.bootstrapPage.durationMs",
+          "ceilingMs": 450,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=constrained",
+            "observedMs": 149.2,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/own-echo/seeded-demo/ci-linux-x64-4c-standard": {
+      "surface": "gateway",
+      "journey": "own-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-standard",
+      "spans": ["gateway.turn.dispatch"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "replicaIntentWarmP50": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — 8 intents, warm p50",
+          "pairedSample": "journeys.replicaIntent.warm.p50Ms",
+          "ceilingMs": 340,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=standard",
+            "observedMs": 112.6,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/own-echo/seeded-demo/ci-linux-x64-4c-constrained": {
+      "surface": "gateway",
+      "journey": "own-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-constrained",
+      "spans": ["gateway.turn.dispatch"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "replicaIntentWarmP50": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — 8 intents, warm p50",
+          "pairedSample": "journeys.replicaIntent.warm.p50Ms",
+          "ceilingMs": 520,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=constrained",
+            "observedMs": 173.6,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/peer-echo/seeded-demo/ci-linux-x64-4c-standard": {
+      "surface": "gateway",
+      "journey": "peer-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-standard",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "lastSubscriberDeliveryMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — one subscriber, 5 commits",
+          "pairedSample": "journeys.sseProjection.0.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 200,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=standard",
+            "observedMs": 66.1,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/peer-echo/seeded-demo/ci-linux-x64-4c-constrained": {
+      "surface": "gateway",
+      "journey": "peer-echo",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-constrained",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "lastSubscriberDeliveryMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — one subscriber, 5 commits",
+          "pairedSample": "journeys.sseProjection.0.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 240,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=constrained",
+            "observedMs": 79.6,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/converge/seeded-demo/ci-linux-x64-4c-standard": {
+      "surface": "gateway",
+      "journey": "converge",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-standard",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "tenSubscriberCommitMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — ten subscribers, 5 commits",
+          "pairedSample": "journeys.sseProjection.1.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 200,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=standard",
+            "observedMs": 65.9,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
+          }
+        }
+      }
+    },
+    "gateway/converge/seeded-demo/ci-linux-x64-4c-constrained": {
+      "surface": "gateway",
+      "journey": "converge",
+      "volume": "seeded-demo",
+      "hardware": "ci-linux-x64-4c-constrained",
+      "spans": ["gateway.replica.commit", "gateway.replica.fanout"],
+      "consumers": [
+        "packages/server/scripts/bench-journeys.mjs",
+        "scripts/ci/paired-journeys.mjs"
+      ],
+      "tolerancePercent": 10,
+      "metrics": {
+        "tenSubscriberCommitMs": {
+          "status": "measured",
+          "probe": "scripts/ci/paired-journeys.mjs — ten subscribers, 5 commits",
+          "pairedSample": "journeys.sseProjection.1.lastSubscriberDelivery.p50Ms",
+          "ceilingMs": 250,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, CENTRAID_HARDWARE_PROFILE=constrained",
+            "observedMs": 83.2,
+            "note": "Same journey, same run shape, the OTHER durability mode. standard is SQLite `synchronous=FULL`, constrained is `NORMAL`; the gateway resolves the profile at boot, so the two numbers are not interchangeable and neither may be quoted for the other. Constrained is slower on every one of the four, which is the opposite of the intuition that a weaker fsync is cheaper — the constrained profile also shrinks the worker pool.",
+            "headroom": "~3x observed, single host"
           }
         }
       }
