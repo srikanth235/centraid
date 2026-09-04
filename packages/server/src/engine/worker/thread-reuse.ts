@@ -57,7 +57,7 @@ export function runResultFlags(
 export function bindHostFetch(
   hostFetch: typeof globalThis.fetch,
   signal: AbortSignal
-): (input: string, init?: RequestInit) => ReturnType<typeof globalThis.fetch> {
+): typeof globalThis.fetch {
   return (input, init) => hostFetch(input, { ...init, signal });
 }
 

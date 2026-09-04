@@ -97,7 +97,7 @@ describe("host fetch binding", () => {
     const seen: AbortSignal[] = [];
     const hostFetch: typeof fetch = (input, init) => {
       seen.push(init?.signal as AbortSignal);
-      expect(input).toBe("https://example.test/");
+      expect(String(input)).toBe("https://example.test/");
       return Promise.resolve(new Response("ok"));
     };
     const fetch = bindHostFetch(hostFetch, run.signal);
