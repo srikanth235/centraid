@@ -1699,6 +1699,7 @@ packages/server/src/serve/vault-quarantine.test.ts
 - The six generated bundles were rebuilt: packages/blueprints/automations/embed-image/automations/embed-image/handler.js, packages/blueprints/automations/embed-text/automations/embed-text/handler.js, packages/blueprints/automations/faces/automations/faces/handler.js, packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js, packages/blueprints/automations/place-names/automations/place-names/handler.js, and packages/blueprints/automations/transcript/automations/transcript/handler.js.
 - tests/quality/chaos-planner-app.ts and tests/quality/component-chaos-world.ts register the planner's declared app scope through recordAppInstall, including after a synthetic gateway restart.
 - tests/quality/offline-reconnect.integration.test.ts, tests/scale/replica-bootstrap.scale.test.ts, tests/scale/replica-reconnect.scale.test.ts, tests/scale/replica-sse-fanout.scale.test.ts, and tests/scale/large-vault.scale.test.ts follow the retired app-grant and purpose-free test APIs.
+- packages/server/src/serve/vault-plane.ts and packages/vault/src/commands/provider-writeback.ts read and insert the renamed outbox_item.authority_id column; packages/server/src/serve/outbox-executor.test.ts follows the authority_id output contract.
 - scripts/lint-engine-conformance.mjs follows the action kit's removed ACTION_PURPOSE export. tests/quality/classification-ratchet.json re-pins the changed manifest and claims fingerprints; thresholds and classifications are unchanged.
 
 ### Verification

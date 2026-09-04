@@ -1054,7 +1054,7 @@ export class VaultPlane {
     const rows = this.db.vault
       .prepare(
         `SELECT i.item_id, i.actor_id, i.actor_kind, i.verb, i.target, i.artifact_json,
-                i.status, i.grant_id, i.staged_at, i.decided_at, i.drained_at, i.result_json,
+                i.status, i.authority_id, i.staged_at, i.decided_at, i.drained_at, i.result_json,
                 i.note, c.kind, c.label
            FROM outbox_item i JOIN sync_connection c ON c.connection_id = i.connection_id
           ${filter ? `WHERE i.status IN (${filter.map(() => "?").join(", ")})` : ""}
@@ -1068,7 +1068,7 @@ export class VaultPlane {
       target: string;
       artifact_json: string;
       status: string;
-      grant_id: string | null;
+      authority_id: string | null;
       staged_at: string;
       decided_at: string | null;
       drained_at: string | null;
@@ -1087,7 +1087,7 @@ export class VaultPlane {
       target: r.target,
       artifact: JSON.parse(r.artifact_json) as Record<string, unknown>,
       status: r.status,
-      grantId: r.grant_id,
+      grantId: r.authority_id,
       stagedAt: r.staged_at,
       decidedAt: r.decided_at,
       drainedAt: r.drained_at,

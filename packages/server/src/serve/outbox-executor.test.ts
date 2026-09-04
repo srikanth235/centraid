@@ -669,8 +669,8 @@ describe("outbox-executor", () => {
       alwaysAllow: true,
     });
     expect(decide.status).toBe("executed");
-    const grantId = (decide as { output: { grant_id?: string } }).output
-      .grant_id;
+    const grantId = (decide as { output: { authority_id?: string } }).output
+      .authority_id;
     expect(grantId).toBeTruthy();
 
     // Second stage under the standing grant — auto-approved at staging time.
@@ -692,12 +692,12 @@ describe("outbox-executor", () => {
     });
     expect(stage2.status).toBe("executed");
     expect(
-      (stage2 as { output: { status: string; grant_id?: string } }).output
+      (stage2 as { output: { status: string; authority_id?: string } }).output
         .status
     ).toBe("approved");
-    expect((stage2 as { output: { grant_id?: string } }).output.grant_id).toBe(
-      grantId
-    );
+    expect(
+      (stage2 as { output: { authority_id?: string } }).output.authority_id
+    ).toBe(grantId);
 
     const feed = plane.reviewFeed(50);
     const autoAllowed = feed.find(

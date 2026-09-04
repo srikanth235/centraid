@@ -265,7 +265,7 @@ function queue(
       `INSERT INTO outbox_item
          (item_id, connection_id, actor_id, actor_kind, verb, target,
           target_type, target_id, recipient_party_id, artifact_json, request_json,
-          status, grant_id, staged_at, decided_at, drained_at, result_json,
+          status, authority_id, staged_at, decided_at, drained_at, result_json,
           published_message_id, note)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'approved', NULL, ?, ?, NULL,
                NULL, NULL, 'approved by the explicit local edit of this provider-sourced row')`
