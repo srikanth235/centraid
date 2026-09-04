@@ -413,48 +413,46 @@ tests/schema-export-fingerprint.json
 
 ## Slice 5 — the after number
 
-The share journey's BEFORE number lives on `origin/claude/927-w2` as
-`gateway/share/shared-album/ci-linux-x64-4c` → `grantToVisible`, and the entry
-says the AFTER lands beside it. That ledger (`tests/journeys.json`,
-`tests/helpers/journeys.ts`, `tests/scale/share-journey.scale.test.ts`) does not
-exist on this lane's base, so cherry-picking it would import another lane's
-whole rig; the numbers are here instead, with the key they belong under.
+The share journey's AFTER lands beside its BEFORE, under the same key, taken by
+the same rig with one term changed: delivery is `startShareSubscription` now,
+so the rig that named `fulfillShareGrant` no longer compiled and is updated
+rather than replaced. The interval, the volume and the topology are untouched,
+which is the only reason the two numbers are comparable.
 
-| key | metric | before (#927 w3) | after (#929) |
-| --- | --- | --- | --- |
-| `gateway/share/shared-album/ci-linux-x64-4c` | `grantToVisible`, median of 3 | 212.1 ms | 235.7 ms |
-| | spread over three runs | 133.1 / 212.1 / 244.4 | 215.9 / 235.7 / 236.9 |
-| | grant written | 1.9-4.0 ms | 1.7-5.7 ms |
-| | delivery (fulfill → subscribe) | 130.8-240.0 ms | 209.7-233.7 ms |
-| | grantee's own read | 0.3-0.4 ms | 0.3-0.5 ms |
+| file | what changed |
+| --- | --- |
+| `tests/scale/share-journey.scale.test.ts` | delivery term -> `startShareSubscription` over `loopbackShareTransports`; same key, same three intervals |
+| `tests/journeys.json` | `_afterProvenance` beside `_provenance` on `gateway/share/shared-album/ci-linux-x64-4c#grantToVisible`, and a declared `grantToVisibleCrossGateway` metric |
 
-Provenance: same rig as the before number — `household()`, a 200-photo album,
-two vaults CO-HOSTED so no transport is inside the interval — re-run with
-`startShareSubscription` over the loopback transport, on the same host class
-(linux x64, 4 cores / 15 GB) with `vitest.scale.config.ts`. The rig itself is
-NOT committed: it is the before test with one call swapped, and its home is the
-#927 ledger. THE HOST IS SHARED with sibling agents, which the before
-number's own note also warns about: the same rig read 267/318/495 ms at load
-average 15-16 and 216/236/237 ms at 7.4. The numbers above are the quieter
-window, and the difference between the two windows is larger than the
-difference being reported — a direction, not a verdict.
+| number | value | provenance |
+| --- | --- | --- |
+| `grantToVisible` after, median of 3 | 232.2 ms | this rig, host linux x64 4c/15 GB, load average 4.1-5.6, `vitest.scale.config.ts` |
+| spread | 220.2 / 232.2 / 234.2 ms | same three runs |
+| breakdown | grant 1.7-4.2 ms, subscription 218.2-230.1 ms, read 0.4 ms | same |
+| before, for comparison | 212.1 ms median (133.1 / 212.1 / 244.4) | `_provenance` on the same metric, #927 wave 3 |
+| `ceilingMs` | 750, UNCHANGED | tighten-only; three samples on a contended host are not a distribution to re-seed from |
 
-The direction is real and named: a subscription pays for a SHAPE where
-fulfillment paid for a projection — a size check, a structure digest and one
-lineage row per projected row. One cost was measured and removed here: the pass
-composed the closure once for the ceiling and again per audience, so a
-single-audience grant read its closure twice. It now composes once and re-stamps
-the audience id, which also makes every audience of a grant provably receive the
-same shape.
+Decisions. The 212 -> 232 ms difference is SMALLER than the spread contention
+alone produces on this host — the before note records 216-237 ms at load
+average 7.4 and 267-495 ms at 15-16 — so it is written down as a DIRECTION with
+the load stated, not as a verdict. The direction itself is named: a
+subscription pays for a shape (one size check, one structure digest, one
+lineage row per projected row) where fulfillment paid for a projection.
 
-Cross-gateway is NOT folded into this number and belongs in its own entry, as
-the before note says: `share-subscription-peer.test.ts` proves the six subject
-types travel it, but a peer delivery on this host is a loopback dial in one
-process, so timing it would measure the harness. The web row stays `_intended`.
+Cross-gateway is a DECLARED metric at `unmeasured` with its reason, not a
+silent hole: the peer plane on this container is a loopback dial inside one
+process, so a number taken here measures the harness. The web and phone rows
+(`web/share/seeded-demo`, `mobile/share/device-fixture`) stay `unmeasured` on
+main's own reasons — no web share rig, no device — and are named in Findings.
+
+```sh
+node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/share-journey.scale.test.ts
+node scripts/lint-journey-ledger.mjs
+```
 
 ### Falsification
 
 | claim | throwaway check | result |
 | --- | --- | --- |
-| the after number is a like-for-like comparison | captured `uptime` beside every run | FALSIFIED as a verdict: the same rig read 216-237 ms at load average 7.4 and 267-516 ms at 15-16. Reported as a direction, with the load stated |
-| composing once per pass changed the number | re-ran the same rig three times either side of the change, in the same window | held in sign, not in size: medians 307 → 267 ms at equal contention, inside the spread above |
+| the after is the same interval as the before | diffed the rig against `origin/main`'s copy: only the delivery call, its import and the transport it needs | held — `createShareGrant`, the album of 200, and the audience's own read are byte-identical |
+| the ledger accepts the after without weakening a gate | `node scripts/lint-journey-ledger.mjs` with `ceilingMs` left at 750 | held: ok, and the after median is 3.2x under the ceiling it did not move |
