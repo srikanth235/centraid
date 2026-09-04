@@ -1756,3 +1756,49 @@ bun run --cwd packages/server test src/routes/replica-routes.test.ts src/routes/
 | --- | --- | --- |
 | A pushed batch applied out of order or across a gap corrupts the replica | emitted a batch whose `from` is `epoch:7` at a replica sitting on `epoch:0` | held — the batch is dropped and `/changes` is pulled from `epoch:0`; `takePushedBatch` requires an exact `from` match and discards anything at or behind the cursor |
 | The per-entry nudges that follow the batch re-trigger the pull it replaced | emitted the batch and then the `centraid:vault-change` for the same commit in the frame's own order | held — 0 pulls; the batch is consumed by the first feed-sync pass and the nudge's target is already reached |
+
+## Mega-lane A slice 4 — overlay (G6 tripwire, G9 age, G2 probe, G5 states)
+
+| File | Change |
+| --- | --- |
+| `packages/blueprints/src/pending-projection-tripwire.ts` + `.test.ts` | static tripwire: every destructive action projects a delete or a tombstone, or carries a written exclusion |
+| `tests/claims.json` | law `pending-destructive-projection` registered to the tripwire test (a tightening) |
+| `packages/blueprints/src/pending-parent-probe.test.ts` | the pending-parent child-write probe, as a measurement with a held number |
+| `packages/blueprints/apps/_shared/pending-overlay.ts` | `pendingDelete`, `pendingTombstone`, `isPendingRowId`, `PENDING_OVERLAY_AGED_MS`, aged-badge copy, the two new verdicts |
+| `packages/blueprints/apps/{docs,notes,locker,people,photos,tally}/pending-projection.ts` | 16 destructive actions fixed: 9 delete, 5 tombstone, 2 written exclusions |
+| `packages/client/src/replica/{types,intents}.ts` | `conflict`, `conflict-base-missing`, `expired` are real intent states; `denied` carries a structured `denial` |
+| `packages/client/src/replica/intent-verdict.ts` | the outcome-to-state policy and the structured denial, extracted so `intents.ts` stays under the file-size floor |
+| `apps/mobile/src/lib/replica/{sqlite-intent-store,native-session,multi-vault-session}.ts`, `src/kit/replica/pending-copy.ts` | the same vocabulary on the phone, and member-facing words for it |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Destructive actions across the eight apps projecting neither a delete nor a tombstone | 16 | 0 | `pending-projection-tripwire.test.ts` against the real tree; the 16 are listed in the demonstrated red below |
+| Destructive actions judged, by app (actions / destructive / delete / tombstone / excluded) | — | agenda 7/1/0/0/1 · docs 15/3/1/1/1 · locker 16/3/2/1/0 · notes 15/4/1/1/2 · people 28/3/1/0/2 · photos 18/5/2/1/2 · tally 21/3/1/1/1 · tasks 11/3/1/0/2 | asserted in the tripwire test, not printed, so a destructive action quietly becoming an exclusion moves a number |
+| Pending-parent child-write edges (an action input that can carry a parent id a projection mints) | — | **66** — docs 11, notes 9, people 16, tally 20, tasks 10 | `pending-parent-probe.test.ts`, inline snapshot over the eight `app.json` + `pending-projection.ts` pairs |
+| Outbox schema changes for the three new verdicts | — | 0 | `sqlite-intent-store.test.ts` compares `sqlite_master` DDL before and after storing all three; `state` is unconstrained TEXT, so this is a vocabulary widening, not a migration |
+
+**Demonstrated red.** The tripwire's first run against the real tree failed with 16 findings, every one a real defect: docs `trash`, `delete-folder`; locker `trash-item`, `purge-item`, `remove-field`; notes `delete-notebook`, `delete-note`; people `trash-person`, `delete-list`; photos `delete-asset`, `purge-asset`, `delete-album`, `remove-from-album`; tally `delete-expense`, `remove-group-member`, `delete-group`. Each projected a plain patch, so the row stayed on screen while the delete was queued. Two further reds followed from the tripwire's own parsing — a comma inside a `//` comment split an entry, and `pendingTombstone` was not recognized as a tombstone — both fixed and both now covered.
+
+**Deleted/replaced.** The "conflict is a wire outcome, not a persisted outbox state" collapse in `applyOutcomes` is gone, with its comment; so is the `intent.conflict ? "conflict" : intent.state` re-derivation in `decoratePendingMutation` and in the phone's attention list. `pendingItemAction` no longer serves locker's three destructive actions.
+
+**Decisions.** Three exclusions are structural and written: people `trash-person` (the trashed row is `people.profile`, keyed by `profile_id`; the payload carries only `party_id`, and the `core.party` row this app overlays has no tombstone column), photos `remove-from-album` (`core.collection_entry`'s key is a surrogate `entry_id`), tally `remove-group-member` (the row is `social.circle_member`, which Tally's manifest does not scope). `cancel-event` is deliberately NOT destructive — it sets a status and the event stays on the calendar. `conflict-base-missing` is discardable but never retryable: a retry would re-create rather than reconcile.
+
+## User impact
+A destructive change now looks destructive the moment it is made: tapping delete, trash or purge removes the row (or greys it out via its tombstone) instead of leaving it in place wearing a badge, on all six apps that had the defect. A queued change older than 24 hours says which day it was saved on this device — and nothing about that number expires it; only the sentence changes. A conflict now says whether the row changed elsewhere or is gone altogether, and an expiry says it waited too long, instead of all three reading "could not apply".
+
+First-run: nothing new appears on a first run — every change here is to what an existing pending row says and does, and a fresh vault has no pending rows.
+
+```
+bun run --cwd packages/blueprints typecheck && bun run --cwd packages/client typecheck && bun run --cwd apps/mobile typecheck
+bun run --cwd packages/blueprints test
+bun run --cwd packages/client test src/replica
+bun run --cwd apps/mobile test src/lib/replica
+```
+
+**Findings.** (1) **G3 (the pending sidecar) is not in this diff and cannot be, from this lane's file set.** Rows carry nine `__centraid_pending_*` columns today; collapsing them to one key plus a per-result sidecar means changing `readPendingOverlay`'s signature, which is called from `packages/client/src/replica/query.ts`, `packages/client/src/react/blueprints/inlineQueryCtx.ts`, `packages/blueprints/apps/{agenda,tasks}/app-root.tsx`, `apps/tasks/components/TaskRow.tsx`, `apps/locker/{components/Rows.tsx,format.ts}`, `apps/tally/queries/dashboard.ts`, `apps/photos/components/FaceReview.tsx` and `apps/_shared/PendingWriteActions.tsx` — none of them in this brief, and a compatibility shim beside the old reader would be exactly the dual path the standards forbid. It wants its own slice. (2) People's `trash-person` is the one destructive action on the eight apps whose overlay cannot hide the row, because the app anchors pending state on `core.party` while the vault tombstones `people.profile`; closing it needs the profile id at enqueue time. (3) `check:ui-receipt` is expected to fire on this diff and demand a screenshot from a changed e2e harness; no screenshot is fabricated here — the `## User impact` and `First-run:` halves are above.
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| The tripwire passes because it silently reads nothing, not because the apps are clean | asserted the scanned app list, a non-zero destructive total, and that every destructive action of every app is accounted for as delete + tombstone + excluded; then re-seeded a plain-patch destructive action, an exclusion with no reason, and an action the map never mentions | held — all three seed a finding, and the two parsing bugs that DID make it read nothing were both caught by the real tree, not by the synthetic cases |
+| Widening the intent vocabulary breaks a phone that already holds queued writes | stored all three new verdicts through the real SQLite store and compared `sqlite_master`'s DDL for `replica_intent_outbox` before and after | held — byte-identical DDL; the column is unconstrained TEXT and nothing was rebuilt |

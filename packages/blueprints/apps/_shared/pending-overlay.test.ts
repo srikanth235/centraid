@@ -273,4 +273,41 @@ describe("pending-write overlay law", () => {
       }
     }
   });
+
+  // #922 G9: an old queued change says WHEN it was saved on this device, and
+  // nothing about that number expires the intent — only the sentence changes.
+  test("a badge older than 24 h names the day it was saved", () => {
+    const enqueuedAt = "2026-09-01T09:00:00.000Z";
+    const fresh = pendingOverlayCopy(
+      { key: "i", status: "queued", action: "add", enqueuedAt },
+      Date.parse("2026-09-01T20:00:00.000Z")
+    );
+    expect(fresh).toBe("Waiting for a connection.");
+    const aged = pendingOverlayCopy(
+      { key: "i", status: "queued", action: "add", enqueuedAt },
+      Date.parse("2026-09-03T09:00:00.000Z")
+    );
+    expect(aged).toContain("Waiting for a connection.");
+    expect(aged).toContain("Saved on this device on");
+    // A queued intent with no stamp still reads as waiting, never as expired.
+    expect(
+      pendingOverlayCopy(
+        { key: "i", status: "queued", action: "add" },
+        Date.parse("2030-01-01T00:00:00.000Z")
+      )
+    ).toBe("Waiting for a connection.");
+  });
+
+  test("the two new verdicts read as sentences, not database words", () => {
+    expect(
+      pendingOverlayCopy({
+        key: "i",
+        status: "conflict-base-missing",
+        action: "edit",
+      })
+    ).toContain("is gone");
+    expect(
+      pendingOverlayCopy({ key: "i", status: "expired", action: "edit" })
+    ).toContain("waited too long");
+  });
 });

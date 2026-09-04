@@ -25,6 +25,7 @@ import type {
   EnqueueIntentInput,
   GatewayAuth,
   IntentOutcome,
+  IntentState,
   ReplicaChangeFeedAdapter,
   ReplicaCursor,
   ReplicaBaseVersion,
@@ -614,14 +615,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     Array<
       | {
           intentId: string;
-          status:
-            | "queued"
-            | "sending"
-            | "awaiting-change"
-            | "parked"
-            | "denied"
-            | "conflict"
-            | "failed";
+          status: Exclude<IntentState, "executed">;
           appId: string;
           action: string;
           reason?: string;
@@ -643,7 +637,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
         : [
             {
               intentId: intent.intentId,
-              status: intent.conflict ? ("conflict" as const) : intent.state,
+              // The intent's own state is the verdict (#922 G5); a conflict
+              // is no longer re-derived from the presence of `conflict`.
+              status: intent.state,
               appId: intent.appId,
               action: intent.action,
               ...(intent.reason ? { reason: intent.reason } : {}),

@@ -1,6 +1,8 @@
 import {
   definePendingProjection,
+  pendingDelete,
   pendingPatch,
+  pendingTombstone,
   pendingUpsert,
   stablePendingRowId,
 } from "../_shared/pending-overlay.js";
@@ -37,8 +39,9 @@ export const docsPendingProjection = definePendingProjection({
       pendingPatch("core.document", input.document_id, input, ["title"]),
     move: ({ input }) =>
       pendingPatch("core.document", input.document_id, input),
-    trash: ({ input }) =>
-      pendingPatch("core.document", input.document_id, input),
+    // `core.trash_document` sets `deleted_at`; the overlay stamps it so the
+    // document leaves every list the moment the member taps trash.
+    trash: ({ input }) => pendingTombstone("core.document", input.document_id),
     restore: ({ input }) =>
       pendingPatch("core.document", input.document_id, input),
     star: ({ input }) =>
@@ -74,6 +77,6 @@ export const docsPendingProjection = definePendingProjection({
         ["pref_label"]
       ),
     "delete-folder": ({ input }) =>
-      pendingPatch("core.concept", input.folder_id, input),
+      pendingDelete("core.concept", input.folder_id),
   },
 });

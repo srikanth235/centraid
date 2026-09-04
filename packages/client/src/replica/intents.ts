@@ -8,6 +8,7 @@ import { webCryptoDigest, webCryptoIdFactory } from "./digest.js";
 import type { ReplicaDigest, ReplicaIdFactory } from "./digest.js";
 import { ReplicaProtocolError } from "./errors.js";
 import type { IntentRecordStore } from "./intent-record-store.js";
+import { intentVerdict } from "./intent-verdict.js";
 import { intentPayloadHash } from "./payload-hash.js";
 import type {
   EnqueueIntentInput,
@@ -25,6 +26,9 @@ const OVERLAY_STATES = new Set<IntentState>([
   "awaiting-change",
   "parked",
   "denied",
+  "conflict",
+  "conflict-base-missing",
+  "expired",
   "failed",
 ]);
 /**
@@ -198,6 +202,9 @@ function retainedAttention(
   return (
     intent?.state === "denied" ||
     intent?.state === "failed" ||
+    intent?.state === "conflict" ||
+    intent?.state === "conflict-base-missing" ||
+    intent?.state === "expired" ||
     intent?.state === "parked"
   );
 }
@@ -205,7 +212,12 @@ function retainedAttention(
 function actionableAttention(
   intent: ReplicaIntent | undefined
 ): intent is ReplicaIntent {
-  return intent?.state === "denied" || intent?.state === "failed";
+  return (
+    intent?.state === "denied" ||
+    intent?.state === "failed" ||
+    intent?.state === "conflict" ||
+    intent?.state === "conflict-base-missing"
+  );
 }
 
 function markSupersededIntent(
@@ -262,7 +274,7 @@ export function presentPendingIntentMutation(
       : { ...mutation };
   return decoratePendingMutation(visible, {
     intentId: intent.intentId,
-    state: intent.conflict ? "conflict" : intent.state,
+    state: intent.state,
     action: intent.action,
     attempts: intent.attempts,
     ...(intent.reason ? { reason: intent.reason } : {}),
@@ -335,13 +347,13 @@ export class IntentQueue {
     await applyInIntentOrder(outcomes, async (outcome) => {
       const existing = await this.store.get(outcome.intentId);
       if (!existing || !OVERLAY_STATES.has(existing.state)) return;
-      // Conflict is a wire outcome, not a persisted outbox state. Preserve its
-      // structured detail on the existing `failed` state so the schema and the
-      // gateway's outcome vocabulary remain unchanged.
-      const state: IntentState =
-        outcome.status === "conflict" ? "failed" : outcome.status;
+      // A conflict is a state of its own, and a conflict whose BASE ROW IS
+      // GONE is a third one (#922 G5): the member's remedy differs, so the
+      // verdict must too. The outbox `state` column is unconstrained TEXT, so
+      // widening the vocabulary needs no migration on either store.
+      const verdict = intentVerdict(outcome);
       const patch = {
-        state,
+        ...verdict,
         reason: outcome.reason,
         output: outcome.output,
         ...(outcome.conflict ? { conflict: outcome.conflict } : {}),

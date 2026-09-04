@@ -283,9 +283,10 @@ describe(IntentQueue, () => {
       },
     ]);
 
-    expect(settled).toMatchObject({ state: "failed", conflict });
+    // #922 G5: a conflict is its OWN state, not `failed` wearing a detail.
+    expect(settled).toMatchObject({ state: "conflict", conflict });
     await expect(queue.list()).resolves.toMatchObject([
-      { intentId: "intent-conflict", state: "failed", conflict },
+      { intentId: "intent-conflict", state: "conflict", conflict },
     ]);
     await expect(queue.overlayMutations()).resolves.toMatchObject([
       {
@@ -297,6 +298,77 @@ describe(IntentQueue, () => {
       },
     ]);
     await expect(queue.listSettled()).resolves.toStrictEqual([]);
+  });
+
+  // A conflict whose BASE ROW IS GONE gets its own verdict (#922 G5): there is
+  // nothing to compare against, so "look before you retry" is the wrong advice.
+  test("a conflict whose base row is gone is its own state", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-gone",
+    });
+    await queue.enqueue({
+      appId: "agenda",
+      action: "edit",
+      input: { title: "offline" },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          rowId: "event-1",
+          values: { title: "offline" },
+        },
+      ],
+    });
+    await queue.claimNext();
+    const [settled] = await queue.applyOutcomes([
+      {
+        intentId: "intent-gone",
+        status: "conflict",
+        reason: "the row is gone",
+        conflict: {
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          rowId: "event-1",
+          expectedVersion: 4,
+          actualVersion: 0,
+        },
+      },
+    ]);
+    expect(settled).toMatchObject({ state: "conflict-base-missing" });
+  });
+
+  // `denied` carries a STRUCTURED refusal, so a seat never parses prose.
+  test("a denial is structured even before #928 fills it", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-denied",
+    });
+    await queue.enqueue({
+      appId: "agenda",
+      action: "edit",
+      input: { title: "offline" },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          rowId: "event-2",
+          values: { title: "offline" },
+        },
+      ],
+    });
+    await queue.claimNext();
+    const [settled] = await queue.applyOutcomes([
+      {
+        intentId: "intent-denied",
+        status: "denied",
+        reason: "the grant was revoked",
+      },
+    ]);
+    expect(settled).toMatchObject({
+      state: "denied",
+      denial: { code: "denied", message: "the grant was revoked" },
+    });
   });
 
   test("revises a terminal add with a fresh immutable intent and settles the old result honestly", async () => {

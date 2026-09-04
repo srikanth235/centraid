@@ -50,7 +50,7 @@ interface StoredIntentRow {
 
 export interface NativeIntentAttention {
   intentId: string;
-  status: "denied" | "failed" | "conflict";
+  status: AttentionRow["status"];
   appId: string;
   action: string;
   reason?: string;
@@ -59,7 +59,12 @@ export interface NativeIntentAttention {
 
 interface AttentionRow {
   intent_id: string;
-  status: "denied" | "failed" | "conflict";
+  status:
+    | "denied"
+    | "failed"
+    | "conflict"
+    | "conflict-base-missing"
+    | "expired";
   app_id: string;
   action: string;
   reason: string | null;
@@ -71,12 +76,24 @@ interface AttentionRow {
  * are its own inside the shared replica database, so a schema rebuild, `wipe`
  * or rebootstrap never touches queued intents.
  */
+const ATTENTION_STATES = new Set<IntentState>([
+  "denied",
+  "failed",
+  "conflict",
+  "conflict-base-missing",
+  "expired",
+]);
+
 export class SqliteIntentStore implements IntentRecordStore {
   private constructor(private readonly driver: ReplicaSqliteDriver) {}
 
   static create(driver: ReplicaSqliteDriver): SqliteIntentStore {
     driver.exec(DDL);
-    // Durable member state: widen it by ALTER, never by rebuild.
+    // Durable member state: widen it by ALTER, never by rebuild. `state` and
+    // the attention `status` are unconstrained TEXT, so #922 G5's new
+    // verdicts (`conflict`, `conflict-base-missing`, `expired`) are a
+    // vocabulary widening with no migration at all — a rebuild here would
+    // throw away queued member writes.
     const columns = driver.all<{ name: string }>(
       "PRAGMA table_info(replica_intent_outbox)"
     );
@@ -163,12 +180,11 @@ export class SqliteIntentStore implements IntentRecordStore {
   ): Promise<ReplicaIntent> {
     return this.transaction(() => {
       const settled = this.applyPatch(intentId, allowed, patch, "settle");
-      if (
-        settled.state === "denied" ||
-        settled.state === "failed" ||
-        settled.conflict !== undefined
-      ) {
-        const attentionStatus = settled.conflict ? "conflict" : settled.state;
+      // The intent's own state IS the attention status now (#922 G5): a
+      // conflict, a conflict whose base row is gone, and an expiry are real
+      // states, so nothing is re-derived from `settled.conflict` here.
+      if (ATTENTION_STATES.has(settled.state)) {
+        const attentionStatus = settled.state as AttentionRow["status"];
         this.driver.run(
           `INSERT INTO replica_intent_attention
              (intent_id, status, app_id, action, reason, created_at)

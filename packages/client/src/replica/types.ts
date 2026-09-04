@@ -93,12 +93,24 @@ export interface ReplicaConflict {
   entity: string;
   rowId: string;
   expectedVersion: number;
+  /**
+   * The version the gateway found. ZERO MEANS THE ROW IS GONE: replica row
+   * versions are change-log sequences and a live row always has one, so a
+   * conflict reporting 0 is the base row's absence, not a lower version.
+   */
   actualVersion: number;
+}
+
+/** The base row a conflict was measured against no longer exists. */
+export function conflictBaseIsMissing(conflict: ReplicaConflict): boolean {
+  return conflict.actualVersion === 0;
 }
 
 export interface IntentOutcome {
   intentId: string;
   status: IntentOutcomeStatus;
+  /** Structured refusal detail; #928 fills it, the shape is fixed now. */
+  denial?: ReplicaDenial;
   reason?: string;
   output?: ReplicaValue;
   conflict?: ReplicaConflict;
@@ -276,6 +288,16 @@ export interface OptimisticDelete {
 
 export type OptimisticMutation = OptimisticUpsert | OptimisticDelete;
 
+/**
+ * `conflict` and `expired` are REAL states, not wire outcomes folded into
+ * `failed` (#922 G5). Folding them cost the seat the only two verdicts a
+ * member can act on differently: a conflict is "someone else changed this,
+ * look before you retry", an expiry is "this waited too long, decide again".
+ *
+ * `conflict-base-missing` is its own verdict because the remedy differs: the
+ * row the change was based on is GONE, so there is nothing to compare against
+ * and a retry re-creates rather than reconciles.
+ */
 export type IntentState =
   | "queued"
   | "sending"
@@ -283,7 +305,24 @@ export type IntentState =
   | "parked"
   | "executed"
   | "denied"
+  | "conflict"
+  | "conflict-base-missing"
+  | "expired"
   | "failed";
+
+/**
+ * A refusal the seat can render without reading prose. #928 fills `code` and
+ * `subject` from the consent plane; the shape is fixed here so a seat written
+ * against it does not change when the fill lands.
+ */
+export interface ReplicaDenial {
+  code: string;
+  message: string;
+  /** The grant, scope or verb the refusal named, when it named one. */
+  subject?: string;
+  /** Set when the refusal is a REVOCATION, so the seat can say when. */
+  revokedAt?: string;
+}
 
 export interface ReplicaIntent {
   intentId: string;
@@ -301,6 +340,8 @@ export interface ReplicaIntent {
   /** App-visible replica reads that must receive this intent's settlement signal. */
   dependencies?: ReplicaDependency[];
   reason?: string;
+  /** Structured refusal detail for a `denied` intent. */
+  denial?: ReplicaDenial;
   output?: ReplicaValue;
   /** Optional optimistic concurrency preconditions captured by the app. */
   baseVersions?: ReplicaBaseVersion[];
