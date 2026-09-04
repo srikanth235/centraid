@@ -535,7 +535,7 @@ export interface SeveranceProbe {
   state: ShareFulfillmentState | undefined;
 }
 
-/** The minimal deterministic walk to defect D1, pinned by `commons-sim.test.ts`. */
+/** The minimal deterministic walk to defect D1, pinned by `subscription-sim.test.ts`. */
 export function runRevocationSeveranceProbe(): SeveranceProbe {
   const world = createWorld({ seed: 839_000, actions: 0, seats: 2 });
   try {

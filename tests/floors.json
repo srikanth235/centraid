@@ -186,7 +186,7 @@
       "blob-custody-properties": 12,
       "vault-json-schema-properties": 7,
       "commons-convergence-properties": 3,
-      "commons-grant-plane-simulation": 6,
+      "commons-grant-plane-simulation": 3,
       "backup-crypto-properties": 8,
       "backup-wal-address-properties": 7,
       "blob-format-cbsf-properties": 6,

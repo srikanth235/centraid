@@ -674,3 +674,52 @@ bun run knip
 bun run lint:engine-conformance
 node --test scripts/lint-engine-conformance.test.mjs
 ```
+
+Fingerprint re-pin for this CI wave (must match `tests/quality/classification-ratchet.json#approvedDeviation` exactly):
+
+> #929 re-pins the tests/claims.json whole-file fingerprint after retiring the commons-rail law `commons-steward-ordered-convergence`, retargeting joinLaws and `commons-grant-plane-simulation` onto `packages/vault/src/share/subscription-sim.test.ts` (floor 6→3 with an `approvedMinimumTestsDeviation`: the dropped cases named the rail), retargeting `commons-convergence-properties` onto `subscription.test.ts`, and pointing `scope-commons` at `subscription-seat.ts`. No claim row, severity, evidence selector or demonstrated-red date moves, so claimsGovernanceFingerprint is unchanged. Prior: #922. #930 re-pins the tests/claims.json whole-file fingerprint after removing the spent rename marker on the `golden-vault-archaeology` flow, superseding the #916 re-pin note rather than contradicting it — every sentence of #916's account of what that flow took over is kept, in receipts/issue-916-vault-ontology-review.md and in the flow's own `_comment`. `replacesMinimumTestsFlow` is a ONE-SHOT claim about the change set that makes a rename, checked against the merge base; once #916 landed, `schema-migration-corpus` existed at no base any more, so the marker could only ever report an unknown predecessor and `lint:ledgers` / `test:ratchet` were red on main itself. The marker and the `approvedMinimumTestsDeviation` that authorized it are removed together, because that note waives a future minimumTests drop on this flow by presence alone; the floor stays at 5, no claim row, severity, evidence selector or demonstrated-red date moves, and claimsGovernanceFingerprint is unchanged. Prior: #916. #928 w1b re-pins tests/claims.json once more, for the static app entity tripwire: it registers the new law `app-entity-tripwire` and its flow `blueprint-app-entity-tripwire-law` (owner packages/blueprints/src/app-entity-tripwire.test.ts, minimumTests 17), mirroring how `one-computation` is registered so the lane is owned. Additions to the law and flow registries only, and a NEW minimumTests floor, which is a tightening — no claim row, severity, evidence selector, demonstrated-red date or existing floor moves, and the 45 claim rows stay byte-identical, so claimsGovernanceFingerprint is unchanged. Prior: #930. #931 re-pins it once more after registering ONE new rung-3 lane, `rung1-on-main`, in `lanes` — the row `candidate.yml`'s new job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept it. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or `minimumTests` floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #928 w1b. #927 w2 re-pins tests/claims.json for the JOURNEY LEDGER: every `knob` and `seed` string that named tests/experience-budgets/*.json now names tests/journeys.json and the entry key inside it, because those five files were absorbed into one ledger keyed `surface / journey / volume / hardware`. A knob path rename only: no claim row is added or removed, no severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and every seeded-red recipe still points at the same number under its new address. Prior: #931. #927 w3 re-pins tests/claims.json once more to register ONE new rung-3 lane, `paired-journeys` — the row candidate.yml's paired candidate/PR journey job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept its evidence step. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and the claim rows stay byte-identical, so claimsGovernanceFingerprint moves only because `lanes` shares the file with `claims`. Prior: #927 w2. #922 re-pins tests/claims.json after registering ONE new flow, `pending-destructive-projection` (owner packages/blueprints/src/pending-projection-tripwire.test.ts, flow blueprint-pending-overlay-law). Flow registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law or minimumTests floor moves, and claimsGovernanceFingerprint (digest of claims.claims alone) stays byte-identical.
+
+## User impact
+
+A parked write on the phone now names **who it is waiting on**. Approvals and the pending overlay print the origin's link label (`Alex's device`) — or `the owner's device` when the link carries no name — instead of the deleted commons steward label. Owner, origin and gateway seats share one structured `waitingOn`. The share-sheet inline link ticket (S6) is out of scope.
+
+First-run: onboarding and first-run are unchanged.
+
+Screenshot: `artifacts/e2e/ui-impact/issue-929-share-reach.png` (emitted by `tests/agent-e2e-mobile/flows/sharing-reach.mjs`).
+
+## CI — claims, law registry, UI receipt
+
+PR 972 remaining gates: the commons rail's law, joinLaws and flow owners still named deleted `commons-sim` / `commons-chain` files; user-facing `packages/client/**` and `apps/mobile/**/*.tsx` changes needed a `## User impact` screenshot emitter.
+
+- Retired law `commons-steward-ordered-convergence` (owner was the deleted convergence-properties suite).
+- Retargeted live joinLaws onto `packages/vault/src/share/subscription-sim.test.ts`; dropped the three rail-only cases (`sim-grant-plane-replay`, `sim-wide-overlap`, `sim-grant-commons-interleave`). Flow `commons-grant-plane-simulation` floor 6→3 with `approvedMinimumTestsDeviation` citing #929. The 320-action seed already interleaves grant create / fulfil / origin-edit / revoke / propagate.
+- Retargeted flow `commons-convergence-properties` onto `packages/vault/src/share/subscription.test.ts` (origin-authoritative ingest; floor stays 3).
+- Engine `scope-commons` `source` is `packages/vault/src/share/subscription-seat.ts` plus `scope-merge.ts`; `propertyFlow` is the live subscription sim.
+- `tests/floors.json#minimumTests` mirror refreshed. `tests/quality/classification-ratchet.json` re-pinned. Fixture `scripts/test-report/fixtures/claims.json` follows.
+- UI-impact harness `tests/agent-e2e-mobile/flows/sharing-reach.mjs` emits `issue-929-share-reach.png`.
+- Docs: `TESTING.md` property-contract row; `docs/glossary.md` pin example; comment in `packages/vault/src/share/subscription-sim.test-fixtures.ts`.
+
+Files this section names that earlier waves did not:
+
+```
+tests/claims.json
+tests/floors.json
+tests/quality/classification-ratchet.json
+scripts/test-report/fixtures/claims.json
+tests/agent-e2e-mobile/flows/sharing-reach.mjs
+TESTING.md
+docs/glossary.md
+packages/vault/src/share/subscription-sim.test-fixtures.ts
+packages/vault/src/share/subscription.test.ts
+packages/vault/src/share/subscription-sim.test.ts
+packages/vault/src/share/subscription-seat.ts
+```
+
+```sh
+bun run lint:law-registry
+bun run test:claims
+bun run check:ui-receipt
+bun run knip
+bun run lint:engine-conformance
+bash .governance/run.sh
+```
