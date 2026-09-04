@@ -47,6 +47,7 @@ import {
 } from "../../packages/server/src/routes/route-security.js";
 import { buildGateway } from "../../packages/server/src/serve/build-gateway.js";
 import { EXPECTED_HEALTH_COMPONENTS } from "../../packages/server/src/serve/health-registry.js";
+import { runWithVaultContext } from "../../packages/server/src/serve/vault-context.js";
 import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import { forEachSequentially } from "../../packages/test-kit/src/sequential.js";
 import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
@@ -473,11 +474,21 @@ describe("issue #679 user-facing quality gates", () => {
       });
       expect(added.status).toBe("executed");
       const itemId = (added as { output: { item_id: string } }).output.item_id;
-      const parked = await plane.invokeAsAssistant({
-        command: "locker.purge_item",
-        input: { item_id: itemId },
-        purpose: "dpv:ServiceProvision",
-      });
+      // The assistant has no standing grant: the shell must supply the
+      // acting owner's frame for its authority to ride.
+      const parked = await runWithVaultContext(
+        {
+          vaultId: plane.boot.vaultId,
+          ownerId: plane.boot.ownerPartyId,
+          ownsVault: true,
+        },
+        () =>
+          plane.invokeAsAssistant({
+            command: "locker.purge_item",
+            input: { item_id: itemId },
+            purpose: "dpv:ServiceProvision",
+          })
+      );
       expect(parked.status).toBe("parked");
       expect(
         plane.db.vault

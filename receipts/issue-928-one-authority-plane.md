@@ -688,3 +688,22 @@ bun run --cwd packages/server test -- --run src/serve/authz-deny-matrix.test.ts 
 | --- | --- | --- |
 | The assistant allowance cannot be widened to every agent without a suite noticing | flipped the flag in `authenticate` to match every enrolment key, rebuilt `packages/vault`, re-ran | **red** on `an ordinary automation on the same owner frame is still capped`. It took two attempts to make this bite: the deny-matrix and smoke suites stayed green under the same mutation, and so did the first version of the case, which built its bridge outside the owner's frame and was therefore denied for the ordinary reason. Both facts are in the diff — the case now builds the bridge inside the frame, and the comment says why |
 | Deleting the standing grant left the assistant working through some other path | disabled the new clause in `evaluateAccess` (`if (false && …)`), rebuilt, re-ran | **red**: the low-risk execute becomes `denied`, so the clause is the only thing carrying it |
+
+## Follow-up — PR verification repair
+
+The w3b authority change requires `invokeAsAssistant` to run inside the
+owner request frame; otherwise an assistant call has no acting owner and is
+correctly denied. `tests/quality/user-facing-qualities.test.ts` retained one
+pre-w3b unscoped call in the classified-write canary. The test now supplies
+the same owner frame as the server shell, preserving the no-standing-grant
+and confirmation-parking contract.
+
+### Verification
+
+```
+bun run test:qualities                                      # 10 files, 60 tests passed
+bun run format:check                                        # passed
+bun run lint -- --format github                             # 0 warnings, 0 errors
+bun run --cwd packages/server typecheck                     # passed
+bun run --cwd packages/server test -- --run src/serve/vault-plane-assistant.test.ts  # 6 passed
+```
