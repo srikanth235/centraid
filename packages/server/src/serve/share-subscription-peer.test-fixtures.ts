@@ -5,16 +5,21 @@
  */
 
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 import {
   createGateway,
+  createGrant,
+  ensureAppEnrolled,
+  purposeConceptId,
   createShareGrant,
   nowIso,
   registerDocumentCommands,
   registerTallyCommands,
   uuidv7,
 } from "@centraid/vault";
-import type { Credential } from "@centraid/vault";
+import type { Credential, ScopeSpec } from "@centraid/vault";
 
 import type { PeerReplicaPullOutcome } from "../routes/peer-replica-route.js";
 import { seedPhoto, transportTo } from "./peer-give.test-fixtures.js";
@@ -286,4 +291,55 @@ export function addAudienceParty(origin: Side, audience: Side): string {
 
 export function addLocalParty(side: Side, name: string): string {
   return addParty(side, name);
+}
+
+/**
+ * A blueprint query's `ctx.vault`, over a REAL vault (#929). The app is
+ * enrolled and granted its shipped manifest scopes, and every read goes
+ * through the gateway that clamps to them — so a scope the manifest forgot to
+ * declare fails here exactly as it would on a member's machine.
+ */
+export function appQueryCtx(
+  side: Side,
+  appId: string
+): { ctx: { vault: VaultApiish } } {
+  const manifest = JSON.parse(
+    readFileSync(
+      path.resolve(
+        import.meta.dirname,
+        `../../../blueprints/apps/${appId}/app.json`
+      ),
+      "utf8"
+    )
+  ) as { vault: { purpose: string; scopes: ScopeSpec[] } };
+  const app = ensureAppEnrolled(side.vault, appId);
+  const purpose = purposeConceptId(side.vault, manifest.vault.purpose);
+  if (!purpose) throw new Error(`unknown purpose ${manifest.vault.purpose}`);
+  createGrant(side.vault, {
+    appId: app.appId,
+    purposeConceptId: purpose,
+    grantedByPartyId: side.ownerPartyId,
+    scopes: manifest.vault.scopes,
+  });
+  const credential: Credential = {
+    kind: "app",
+    appId: app.appId,
+    signingKey: app.signingKey,
+  };
+  const read = async (request: Record<string, unknown>): Promise<unknown> =>
+    side.gateway.read(credential, request as never);
+  return {
+    ctx: {
+      vault: {
+        read,
+        search: async (request: Record<string, unknown>) =>
+          side.gateway.search(credential, request as never),
+      },
+    },
+  };
+}
+
+interface VaultApiish {
+  read: (request: Record<string, unknown>) => Promise<unknown>;
+  search: (request: Record<string, unknown>) => Promise<unknown>;
 }

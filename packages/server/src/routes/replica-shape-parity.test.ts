@@ -35,15 +35,19 @@ const logger = {
 /**
  * Grant-derived shape ids, captured on `origin/main` before wave 2.
  *
- * `docs` and `people` were RE-PINNED by #929: they scope `share.circle_grant`,
+ * `docs` and `people` were RE-PINNED by #929: they scoped `share.circle_grant`,
  * `share.commons_member_state` and `share.commons_invitation`, which the
- * commons rail's deletion took with it, so their closures are three tables
- * smaller. That is a deliberate reshape — those devices rebootstrap once — and
- * the other six ids are unchanged, which is what this file is here to show.
+ * commons rail's deletion took with it. `docs` was re-pinned a SECOND time in
+ * the same umbrella when its shared surfaces moved onto the subscription plane
+ * — it now scopes `share.authority`, `share.fulfillment`, `share.subscription`
+ * and `share.subscription_lineage` in place of the commons pair and
+ * `core.share_origin`. Both are deliberate reshapes: those devices rebootstrap
+ * once. The other six ids are unchanged, which is what this file is here to
+ * show.
  */
 const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
   agenda: "agenda:818f3f9a7dd361669630fd53",
-  docs: "docs:8020cd25b4e9c6a62546b895",
+  docs: "docs:a81016f19ab7350d276a6e8e",
   locker: "locker:945ff2d895547b2e737301c9",
   notes: "notes:7de2cbbeeda5506d0fdcd35f",
   people: "people:cde59ac8f6e982ac17c88289",

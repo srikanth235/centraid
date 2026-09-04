@@ -208,4 +208,23 @@ test("People renders a person, survives a reload, and opens the person screen", 
   await expect(
     page.getByRole("button", { name: "Log", exact: true })
   ).toBeVisible();
+
+  // THE VAULTS SECTION IS THE LINK, AND ONLY THE LINK (#929). The commons
+  // rail's invitation rows went with the plane that held them: a share that
+  // has not reached someone is said by the grant dashboard below, off the live
+  // plane. An "Invitation sent" row here would be a fact this seat can no
+  // longer establish.
+  await expect(personScreen.getByText("Vaults").first()).toBeVisible();
+  await expect(personScreen.getByText("Invitation sent")).toHaveCount(0);
+
+  // #929 UI-impact evidence: the person screen's sharing standing.
+  const personEvidenceDir = path.join(
+    import.meta.dirname,
+    "../../../../artifacts/e2e/ui-impact"
+  );
+  await mkdir(personEvidenceDir, { recursive: true });
+  await page.screenshot({
+    path: path.join(personEvidenceDir, "issue-929-person-vaults.png"),
+    fullPage: true,
+  });
 });

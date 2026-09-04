@@ -723,3 +723,84 @@ bun run knip
 bun run lint:engine-conformance
 bash .governance/run.sh
 ```
+## H4 — the shared surfaces read shape lineage
+
+| File | Change |
+| --- | --- |
+| `packages/blueprints/apps/docs/queries/_shared.ts` | `shared_with` off `share.authority` x `share.fulfillment` x `share.party_vault_binding`; `shared_from` off `share.subscription` x `share.subscription_lineage` |
+| `packages/blueprints/apps/docs/queries/drive.ts` | the origin door is read BEFORE the folders-scheme gate (bug below) |
+| `packages/blueprints/apps/docs/types.ts` | `SharedWith.circle_id` nullable + `audience: person \| circle` |
+| `packages/blueprints/apps/people/queries/_shared.ts` · `person.ts` · `types.ts` · `PersonRoute.tsx` · `people-copy.ts` | `pending_invites` deleted with replacement (decision 1) |
+| `packages/blueprints/apps/{docs,people}/app.json` | scopes + query descriptions |
+| `packages/blueprints/src/{app-entity-tripwire.ts,app-manifest-reads.test.ts}` | the two registries |
+| `apps/mobile/src/apps/docs/{docs-projection-shares.ts,useDocs.ts,docs-copy.ts}` | same two joins over the replica |
+| `apps/mobile/src/apps/people/{usePeople,people-share-model,people-model,PersonView}` | link section is the binding alone |
+| `packages/server/src/serve/share-surface-queries.test.ts` | **new**: the shipped handlers on the golden pair's real vaults |
+| `packages/server/src/serve/share-subscription-peer.test-fixtures.ts` | `appQueryCtx` — an app enrolled and granted its shipped manifest scopes |
+| `packages/server/src/routes/replica-shape-parity.test.ts` | `docs` re-pinned `docs:a81016f19ab7350d276a6e8e` (people's id did not move) |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| docs/people query reads naming a deleted table | 5 | **0** | `git grep -n "commons_\|core.share_origin" packages/blueprints apps/mobile/src` |
+| shared surfaces covered by a REAL-vault test | 0 | **4** | `share-surface-queries.test.ts`, two gateways, one delivered subscription |
+| docs replica shape id | `docs:8020cd25…` | `docs:a81016f1…` | `replica-shape-parity.test.ts`, deliberate reshape |
+
+**Deleted with replacement.** `PendingInvite` and `pending_invites` on both seats — replaced by `PersonGrants.tsx`, which already reads every live grant reaching the party, with its delivery state, from the gateway grant plane (online, and honest when it cannot read).
+
+**Decisions.** (1) Ruling (2) named `peer-link-tickets.ts` as the gateway read behind `pending_invites`; a link ticket carries NO party (`gateway-schema.ts`), so it cannot answer a per-person question. Rather than build a surface that would be wrong, the field is deleted and the ruling's outcome — read live, online, honest offline — is served by the grant dashboard that already does exactly that. Nothing is projected into the vault. (2) The new suite loads blueprint handlers through a COMPUTED specifier: they are written against blueprints' ambient `HandlerCtx`, and a literal import would make `packages/server`'s tsc typecheck modules it has no types for; widening a tsconfig for one test was the alternative and is worse.
+
+**Findings.** (1) **Fixed here, found by the real-vault test:** `drive.ts` returned an empty drive with `shared_from_known: true` whenever the vault held no folders scheme. The scheme is created on first use (`commands/documents.ts`), so a member who had received a document but never filed one of their own was told nothing had arrived — the exact claim #903's second door exists to prevent. The origin read now runs before that gate. (2) `social_circle_member` has no `capability` column; the pre-#929 reader on both seats read one and always fell back to `read`. Capability is now the answer's `verb`.
+
+```sh
+bunx vitest run apps/docs apps/people src/app-manifest-reads.test.ts src/docs-drive.test.ts --root packages/blueprints
+bunx vitest run src/apps/docs src/apps/people --root apps/mobile
+bunx vitest run src/serve/share-surface-queries.test.ts src/routes/replica-shape-parity.test.ts --root packages/server
+bun run --cwd packages/blueprints typecheck && bun run --cwd apps/mobile typecheck && bun run --cwd packages/server typecheck
+```
+
+**Full paths for coverage:**
+
+```
+apps/mobile/src/apps/docs/DocsHome.test.tsx
+apps/mobile/src/apps/docs/INTEGRATION-NOTES.md
+apps/mobile/src/apps/docs/docs-copy.ts
+apps/mobile/src/apps/docs/docs-projection-shares.ts
+apps/mobile/src/apps/docs/docs-projection.test.ts
+apps/mobile/src/apps/docs/useDocs.ts
+apps/mobile/src/apps/people/INTEGRATION-NOTES.md
+apps/mobile/src/apps/people/PersonView.tsx
+apps/mobile/src/apps/people/people-model.test.ts
+apps/mobile/src/apps/people/people-model.ts
+apps/mobile/src/apps/people/people-share-model.ts
+apps/mobile/src/apps/people/usePeople.ts
+packages/blueprints/apps/docs/app.json
+packages/blueprints/apps/docs/queries/_shared.ts
+packages/blueprints/apps/docs/queries/drive.ts
+packages/blueprints/apps/docs/queries/shared-origin.test.ts
+packages/blueprints/apps/docs/queries/shares.test.ts
+packages/blueprints/apps/docs/types.ts
+packages/blueprints/apps/people/app.json
+packages/blueprints/apps/people/components/PersonRoute.tsx
+packages/blueprints/apps/people/people-copy.ts
+packages/blueprints/apps/people/queries/_shared.ts
+packages/blueprints/apps/people/queries/person.ts
+packages/blueprints/apps/people/queries/share-links.test.ts
+packages/blueprints/apps/people/types.ts
+packages/blueprints/src/app-entity-tripwire.ts
+packages/blueprints/src/app-manifest-reads.test.ts
+packages/server/src/routes/replica-shape-parity.test.ts
+packages/server/src/serve/share-subscription-peer.test-fixtures.ts
+packages/server/src/serve/share-surface-queries.test.ts
+apps/web/tests/e2e/people.spec.ts
+```
+
+## User impact
+
+Docs' "Shared with" and "Shared with you" read the sharing plane the product actually keeps. A document shared with one person now says that person's name instead of a machine-named circle standing in for them, and says "invited" until it has really reached their vault rather than until a roster row was written. The Shared shelf lists what arrived even on a vault whose owner has never filed a document of their own — before, that member was shown an empty shelf and told the read had answered. On the People screen the Vaults section is the link and nothing else; a share still on its way is said by the grant dashboard beneath it, which reads the live plane and says plainly when it cannot.
+
+First-run: a member who has never received a share sees the Shared shelf's own empty state, not a denial — and a member whose share scopes are still parked for approval sees "shared with" withheld entirely rather than drawn as "shared with nobody".
+
+Screenshot: `artifacts/e2e/ui-impact/issue-929-person-vaults.png`, emitted by `apps/web/tests/e2e/people.spec.ts`.
+
+**NOT RUN HERE, NOT FABRICATED.** `bun run --cwd apps/web e2e -- people.spec.ts` fails in this container before it reaches the person screen: the inline app view never leaves `Loading People…`, with the browser replica reporting `opfs-sahpool: NoModificationAllowedError` and `409` on `/centraid/_vault/replica/checkpoint`. Reproduced on the base commit `6f7526095` with this lane's source reverted — same failure, same line — so it is a red on the branch, not this change (`docs-drive.spec.ts` fails identically). **CI must run `apps/web e2e -- people.spec.ts`** for the screenshot above.
+

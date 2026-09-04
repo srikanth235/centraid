@@ -37,13 +37,6 @@ export interface VaultBinding {
 
 export type ShareCapability = "read" | "read+write";
 
-export interface PendingInvite {
-  invitation_id: string;
-  container_label: string | null;
-  capability: ShareCapability;
-  created_at: string;
-}
-
 /** Every reach row is a `social.contact_channel` (#883, ruling O-contact). */
 export interface ContactChannel {
   channel_id?: string;
@@ -94,7 +87,6 @@ export interface PersonDetail {
   /** NULL IS NOT AN EMPTY LIST: denied reads draw no vault section, never an
    *  empty one. Standing grants live in the grant plane (#825). */
   vaults: VaultBinding[] | null;
-  pending_invites: PendingInvite[] | null;
 }
 
 /** Joined in from the roster read, so optional. */

@@ -14,10 +14,11 @@
       { "schema": "core", "table": "content_item", "verbs": "read" },
       { "schema": "social", "table": "circle", "verbs": "read" },
       { "schema": "social", "table": "circle_member", "verbs": "read" },
-      { "schema": "share", "table": "circle_grant", "verbs": "read" },
-      { "schema": "share", "table": "commons_member_state", "verbs": "read" },
+      { "schema": "share", "table": "authority", "verbs": "read" },
+      { "schema": "share", "table": "fulfillment", "verbs": "read" },
       { "schema": "core", "table": "party", "verbs": "read" },
-      { "schema": "core", "table": "share_origin", "verbs": "read" },
+      { "schema": "share", "table": "subscription", "verbs": "read" },
+      { "schema": "share", "table": "subscription_lineage", "verbs": "read" },
       { "schema": "share", "table": "party_vault_binding", "verbs": "read" },
       { "schema": "core", "table": "link", "verbs": "read" },
       { "schema": "core", "table": "tag", "verbs": "read" },
@@ -436,7 +437,7 @@
   "queries": [
     {
       "name": "drive",
-      "description": "The drive as a bounded recent window: every folder in the owner's folders scheme, plus the most recently filed documents (core.document wrappers carrying a folders-scheme tag) newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates, each row decorated with starred (a flags-scheme tag on the wrapper), the current content's media_type/byte_size joined by current_content_id, and shared_with — the live commons grants (share.circle_grant, plane 'commons') over the document itself or over any folder above it, each carrying the circle's label, its members (social.circle, social.circle_member, core.party) and how many have not accepted yet (share.commons_member_state). shared_with is null, never empty, when those reads are denied: unknown is not the same fact as shared with nobody. truncated=true means older documents exist beyond the window; grow limit or use the search query to reach them. Version history is a separate read (the history query) — this projection only ever ships the current version.",
+      "description": "The drive as a bounded recent window: every folder in the owner's folders scheme, plus the most recently filed documents (core.document wrappers carrying a folders-scheme tag) newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates, each row decorated with starred (a flags-scheme tag on the wrapper), the current content's media_type/byte_size joined by current_content_id, and shared_with — the live standing answers (share.authority, decision 'granted') over the document itself or over any folder above it, each carrying the audience's label — one person, or a circle resolved through social.circle/social.circle_member/core.party — and how many the subject has not reached yet (share.fulfillment). shared_with is null, never empty, when those reads are denied: unknown is not the same fact as shared with nobody. truncated=true means older documents exist beyond the window; grow limit or use the search query to reach them. Version history is a separate read (the history query) — this projection only ever ships the current version.",
       "input": {
         "type": "object",
         "properties": {
@@ -458,7 +459,7 @@
     },
     {
       "name": "search",
-      "description": "Full-text document search through the vault's FTS5 index (title + the current version's decoded text body) — returns only the ranked matches in the drive's document row shape — tags, custody_state and shared_with (the same share.circle_grant × social.circle_member × share.commons_member_state × core.party join, null when denied) decorate a match exactly as they decorate a browsed row — plus a hit snippet, never a whole-table pull. Only wrappers carrying a folders-scheme tag come back; trashed documents never match.",
+      "description": "Full-text document search through the vault's FTS5 index (title + the current version's decoded text body) — returns only the ranked matches in the drive's document row shape — tags, custody_state and shared_with (the same share.authority × social.circle_member × share.fulfillment × core.party join, null when denied) decorate a match exactly as they decorate a browsed row — plus a hit snippet, never a whole-table pull. Only wrappers carrying a folders-scheme tag come back; trashed documents never match.",
       "input": {
         "type": "object",
         "properties": {

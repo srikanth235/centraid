@@ -1,10 +1,11 @@
 // Person screen (v12 handoff § Screens 4): hero, two commits, three record
 // sections, the acts that end a person. Rows/chips/metrics come from
 // Shared.tsx so screen and roster cannot disagree.
-// Vault-link section is ABSENT when the sharing plane could not be read
-// (null vaults+pending_invites together) — never an empty answer over a denied
-// read. Share/Revoke are live (#825); no `Link vault` commit — linking is not
-// a member act. Adding is a composer field where the row will be, never a new
+// Vault-link section is ABSENT when the sharing plane could not be read (null
+// `vaults`) — never an empty answer over a denied read. A share that has not
+// reached them yet is said by the grant dashboard below, which reads the live
+// plane (#929); this section is the LINK alone. Share/Revoke are live (#825);
+// no `Link vault` commit — linking is not a member act. Adding is a composer field where the row will be, never a new
 // screen; composer state lives in app-root.
 import type { ReactNode } from "react";
 
@@ -97,7 +98,6 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
 
   // The sharing plane answers all three or none; one flag gates sections + ring.
   const vaults = person.vaults;
-  const invites = person.pending_invites;
   const linksAvailable = vaults !== null;
   const linked = (vaults?.length ?? 0) > 0;
 
@@ -145,35 +145,22 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
         </button>
       </Commits>
 
-      {/* Always open, never collapsible: live bindings first, then unanswered
-          invites — an invitation keeps its own row, not a link count. */}
+      {/* Always open, never collapsible: the live bindings, and nothing else
+          — a link is a fact this vault holds. */}
       {linksAvailable ? (
-        <Section
-          title={SECTIONS.vaults}
-          count={(vaults?.length ?? 0) + (invites?.length ?? 0)}
-        >
-          {(vaults?.length ?? 0) === 0 && (invites?.length ?? 0) === 0 ? (
+        <Section title={SECTIONS.vaults} count={vaults?.length ?? 0}>
+          {(vaults?.length ?? 0) === 0 ? (
             <EmptyState title={EMPTY.vaults} />
           ) : (
-            <>
-              {(vaults ?? []).map((binding) => (
-                <Row
-                  key={binding.binding_id}
-                  name={LINK.vaultRow}
-                  strong
-                  sub={LINK.linkedWhen(whenLabel(binding.linked_at))}
-                  subNumeric
-                />
-              ))}
-              {(invites ?? []).map((invite) => (
-                <Row
-                  key={invite.invitation_id}
-                  name={LINK.inviteRow}
-                  strong
-                  sub={invite.container_label ?? LINK.inviteWaiting}
-                />
-              ))}
-            </>
+            (vaults ?? []).map((binding) => (
+              <Row
+                key={binding.binding_id}
+                name={LINK.vaultRow}
+                strong
+                sub={LINK.linkedWhen(whenLabel(binding.linked_at))}
+                subNumeric
+              />
+            ))
           )}
         </Section>
       ) : null}

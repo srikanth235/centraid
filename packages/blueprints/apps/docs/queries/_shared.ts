@@ -120,18 +120,25 @@ export async function readCustodyByContent({
   );
 }
 
-// ─── Who a document is shared with (#821) ─────
+// ─── Who a document is shared with (#821, #929) ─────
 // GRACEFUL DENIAL: on an existing vault a newly declared scope parks for the
 // owner to approve, and a denial must never take the drive down. This catches
 // its own denial and returns `null`, which callers ship as `shared_with: null`
 // — "we cannot see", not "shared with nobody" (`[]`).
+//
+// A SHARE IS A STANDING ANSWER, NOT A ROSTER (#929). `share_authority` holds
+// who may reach this document — one person, or one circle — and
+// `share_fulfillment` holds whether it has actually reached them. Nothing here
+// reads a membership plane of its own.
 
-interface GrantRow {
-  grant_id: string;
-  circle_id: string;
-  container_type: string;
-  container_id: string;
-  implicit_circle?: number | null;
+interface AuthorityRow {
+  authority_id: string;
+  principal_kind: string;
+  principal_id: string;
+  subject_type: string;
+  subject_id: string;
+  verb: string;
+  expires_at?: string | null;
 }
 
 interface CircleRow {
@@ -142,13 +149,12 @@ interface CircleRow {
 interface CircleMemberRow {
   circle_id: string;
   party_id: string;
-  capability?: "read" | "read+write" | null;
 }
 
-interface MemberStateRow {
+interface FulfillmentRow {
   grant_id: string;
-  party_id: string;
-  status: "invited" | "current" | "refused";
+  peer_vault_id: string;
+  delivered_at?: string | null;
 }
 
 interface PartyRow {
@@ -160,25 +166,25 @@ export interface SharedMember {
   party_id: string;
   label: string;
   capability: "read" | "read+write";
-  /** `invited` until their vault accepts. REFUSED is not listed: naming them
-   *  would assert a reach that was declined. */
+  /** `invited` until the subject has reached their vault. */
   status: "invited" | "current";
 }
 
-interface OriginRow {
-  target_id: string;
+interface SubscriptionRow {
+  shape_id: string;
   origin_vault_id: string;
-  shared_at?: number | string | null;
+  subscribed_at?: string | null;
+}
+
+interface LineageRow {
+  shape_id: string;
+  target_type: string;
+  target_id: string;
 }
 
 interface BindingRow {
   party_id: string;
   vault_id: string;
-}
-
-interface PartyRow {
-  party_id: string;
-  display_name?: string | null;
 }
 
 /** One inbound placement: which vault delivered a document, and when. */
@@ -193,8 +199,11 @@ export interface SharedFromEntry {
 
 export interface SharedWithEntry {
   grant_id: string;
-  circle_id: string;
-  /** Circle name, or recipients for an implicit circle (stored name is machine). */
+  /** The circle a `circle` audience names; `null` where one person is it. */
+  circle_id: string | null;
+  /** Which kind of audience the standing answer names (#929). */
+  audience: "person" | "circle";
+  /** The circle's name, or the person's — whoever the answer is about. */
   label: string;
   /** THIS document or a folder above it — never tell a member the document
    *  itself was shared when it only sits in a shared folder. */
@@ -209,9 +218,15 @@ export interface SharedWithEntry {
 const shareLimit = (ids: number): number =>
   Math.min(Math.max(ids, 1) * 4, 2000);
 
+/** The two verbs a share answer carries, in the words both seats print. */
+const CAPABILITY_OF_VERB: Readonly<Record<string, "read" | "read+write">> = {
+  view: "read",
+  edit: "read+write",
+};
+
 /**
- * Concept chain above a document, root included. A grant on any of them
- * reaches the document, so this chain bounds the folder-side grant read.
+ * Concept chain above a document, root included. An answer over any of them
+ * reaches the document, so this chain bounds the folder-side read.
  */
 function folderChain(
   conceptId: string | undefined,
@@ -229,21 +244,12 @@ function folderChain(
 }
 
 /**
- * A named circle carries the owner's word for the audience. An
- * `implicit_circle` has a machine-generated name nobody chose — the honest
- * label is who is in it.
+ * LIVE is granted AND not run out (#916, review 6.1): `revoked_at` is filtered
+ * in the read, `expires_at` here, because a time-boxed share that keeps
+ * answering yes is the same defect on the drive as it was in the resolver.
  */
-function shareLabel(
-  grant: GrantRow,
-  circle: CircleRow | undefined,
-  memberLabels: string[]
-): string {
-  const implicit = Number(grant.implicit_circle ?? 0) === 1;
-  if (!implicit && circle?.name) return circle.name;
-  if (memberLabels.length === 0) return circle?.name ?? "a circle";
-  const shown = memberLabels.slice(0, 2).join(" and ");
-  const rest = memberLabels.length - 2;
-  return rest > 0 ? `${shown} +${rest}` : shown;
+function liveAt(row: AuthorityRow, now: string): boolean {
+  return row.expires_at == null || row.expires_at > now;
 }
 
 /**
@@ -275,52 +281,68 @@ export async function readSharesByDocument({
   const folderIds = [...new Set([...chainByDoc.values()].flat())];
 
   try {
-    const grantRead = (type: string, ids: string[]) => ({
-      entity: "share.circle_grant",
+    const answerRead = (subjectType: string, ids: string[]) => ({
+      entity: "share.authority",
       where: [
-        { column: "plane", op: "eq" as const, value: "commons" },
-        { column: "container_type", op: "eq" as const, value: type },
-        { column: "container_id", op: "in" as const, value: ids },
+        { column: "subject_type", op: "eq" as const, value: subjectType },
+        { column: "subject_id", op: "in" as const, value: ids },
+        { column: "decision", op: "eq" as const, value: "granted" },
         { column: "revoked_at", op: "is-null" as const },
       ],
       limit: shareLimit(ids.length),
       purpose,
     });
-    const [docGrants, folderGrants] = await Promise.all([
-      ctx.vault.read(grantRead(DOCUMENT_TARGET_TYPE, documentIds)),
+    const [docAnswers, folderAnswers] = await Promise.all([
+      ctx.vault.read(answerRead(DOCUMENT_TARGET_TYPE, documentIds)),
       folderIds.length > 0
-        ? ctx.vault.read(grantRead(FOLDER_CONTAINER_TYPE, folderIds))
+        ? ctx.vault.read(answerRead(FOLDER_CONTAINER_TYPE, folderIds))
         : { rows: [] as Record<string, unknown>[] },
     ]);
-    // Dedupe by grant_id: a grant arriving through both reads would otherwise
-    // print the same audience twice on one row.
-    const grants = [
+    const now = new Date().toISOString();
+    // Dedupe by authority_id: an answer arriving through both reads would
+    // otherwise print the same audience twice on one row.
+    const answers = [
       ...new Map(
         [
-          ...((docGrants.rows ?? []) as unknown as GrantRow[]),
-          ...((folderGrants.rows ?? []) as unknown as GrantRow[]),
-        ].map((g) => [g.grant_id, g] as const)
+          ...((docAnswers.rows ?? []) as unknown as AuthorityRow[]),
+          ...((folderAnswers.rows ?? []) as unknown as AuthorityRow[]),
+        ].map((a) => [a.authority_id, a] as const)
       ).values(),
-    ];
-    if (grants.length === 0) return new Map();
+    ].filter(
+      (a) =>
+        (a.principal_kind === "person" || a.principal_kind === "circle") &&
+        liveAt(a, now)
+    );
+    if (answers.length === 0) return new Map();
 
-    const circleIds = [...new Set(grants.map((g) => g.circle_id))];
-    const grantIds = grants.map((g) => g.grant_id);
-    const [circles, members, states] = await Promise.all([
+    const circleIds = [
+      ...new Set(
+        answers
+          .filter((a) => a.principal_kind === "circle")
+          .map((a) => a.principal_id)
+      ),
+    ];
+    const grantIds = answers.map((a) => a.authority_id);
+    const noRows = { rows: [] as Record<string, unknown>[] };
+    const [circles, members, fulfillments] = await Promise.all([
+      circleIds.length > 0
+        ? ctx.vault.read({
+            entity: "social.circle",
+            where: [{ column: "circle_id", op: "in", value: circleIds }],
+            limit: shareLimit(circleIds.length),
+            purpose,
+          })
+        : noRows,
+      circleIds.length > 0
+        ? ctx.vault.read({
+            entity: "social.circle_member",
+            where: [{ column: "circle_id", op: "in", value: circleIds }],
+            limit: shareLimit(circleIds.length),
+            purpose,
+          })
+        : noRows,
       ctx.vault.read({
-        entity: "social.circle",
-        where: [{ column: "circle_id", op: "in", value: circleIds }],
-        limit: shareLimit(circleIds.length),
-        purpose,
-      }),
-      ctx.vault.read({
-        entity: "social.circle_member",
-        where: [{ column: "circle_id", op: "in", value: circleIds }],
-        limit: shareLimit(circleIds.length),
-        purpose,
-      }),
-      ctx.vault.read({
-        entity: "share.commons_member_state",
+        entity: "share.fulfillment",
         where: [{ column: "grant_id", op: "in", value: grantIds }],
         limit: shareLimit(grantIds.length),
         purpose,
@@ -328,63 +350,98 @@ export async function readSharesByDocument({
     ]);
     const circleRows = (circles.rows ?? []) as unknown as CircleRow[];
     const memberRows = (members.rows ?? []) as unknown as CircleMemberRow[];
-    const stateRows = (states.rows ?? []) as unknown as MemberStateRow[];
+    const fulfillmentRows = (fulfillments.rows ??
+      []) as unknown as FulfillmentRow[];
 
-    // Bounded by the roster the circles just named; a member with no party row
-    // is "Someone", never an id.
-    const partyIds = [...new Set(memberRows.map((m) => m.party_id))];
-    const parties =
+    const membersByCircle = new Map<string, string[]>();
+    for (const m of memberRows) {
+      const list = membersByCircle.get(m.circle_id);
+      if (list) list.push(m.party_id);
+      else membersByCircle.set(m.circle_id, [m.party_id]);
+    }
+    const rosterOf = (answer: AuthorityRow): string[] =>
+      answer.principal_kind === "person"
+        ? [answer.principal_id]
+        : (membersByCircle.get(answer.principal_id) ?? []);
+
+    // Bounded by the roster the answers just named; a party with no row is
+    // "Someone", never an id.
+    const partyIds = [...new Set(answers.flatMap(rosterOf))];
+    const [parties, bindings] = await Promise.all([
       partyIds.length > 0
-        ? await ctx.vault.read({
+        ? ctx.vault.read({
             entity: "core.party",
             where: [{ column: "party_id", op: "in", value: partyIds }],
             limit: shareLimit(partyIds.length),
             purpose,
           })
-        : { rows: [] as Record<string, unknown>[] };
+        : noRows,
+      partyIds.length > 0
+        ? ctx.vault.read({
+            entity: "share.party_vault_binding",
+            where: [
+              { column: "party_id", op: "in", value: partyIds },
+              // A revoked binding no longer says which vault is theirs.
+              { column: "revoked_at", op: "is-null" },
+            ],
+            limit: shareLimit(partyIds.length),
+            purpose,
+          })
+        : noRows,
+    ]);
     const nameByParty = new Map(
       ((parties.rows ?? []) as unknown as PartyRow[]).map((p) => [
         p.party_id,
         p.display_name ?? null,
       ])
     );
-
-    const circleById = new Map(circleRows.map((c) => [c.circle_id, c]));
-    const membersByCircle = new Map<string, CircleMemberRow[]>();
-    for (const m of memberRows) {
-      const list = membersByCircle.get(m.circle_id);
-      if (list) list.push(m);
-      else membersByCircle.set(m.circle_id, [m]);
-    }
-    const statusByGrantParty = new Map(
-      stateRows.map((s) => [`${s.grant_id} ${s.party_id}`, s.status])
+    const vaultByParty = new Map(
+      ((bindings.rows ?? []) as unknown as BindingRow[]).map((b) => [
+        b.party_id,
+        b.vault_id,
+      ])
+    );
+    // DELIVERED IS THE DURABLE FACT, NOT THE LIVE STATE (#846): an unreachable
+    // pass drops `delivered` back to `syncing`, and reading that as "invited"
+    // would tell the member a share they watched land had never arrived.
+    const deliveredTo = new Set(
+      fulfillmentRows.flatMap((f) =>
+        f.delivered_at == null ? [] : [`${f.grant_id} ${f.peer_vault_id}`]
+      )
     );
 
+    const circleById = new Map(circleRows.map((c) => [c.circle_id, c]));
     const entryByGrant = new Map<string, SharedWithEntry>();
-    for (const grant of grants) {
-      const roster = (membersByCircle.get(grant.circle_id) ?? [])
-        .map((m) => ({
-          party_id: m.party_id,
-          label: nameByParty.get(m.party_id) ?? "Someone",
-          capability: m.capability ?? "read",
-          // No state row: the invitation went out and nothing came back.
-          status:
-            statusByGrantParty.get(`${grant.grant_id} ${m.party_id}`) ??
-            "invited",
-        }))
-        .filter((m) => m.status !== "refused")
-        .toSorted((a, b) => a.label.localeCompare(b.label)) as SharedMember[];
-      entryByGrant.set(grant.grant_id, {
-        grant_id: grant.grant_id,
-        circle_id: grant.circle_id,
-        label: shareLabel(
-          grant,
-          circleById.get(grant.circle_id),
-          roster.map((m) => m.label)
-        ),
+    for (const answer of answers) {
+      const capability = CAPABILITY_OF_VERB[answer.verb] ?? "read";
+      const roster = rosterOf(answer)
+        .map((partyId) => {
+          const vaultId = vaultByParty.get(partyId);
+          return {
+            party_id: partyId,
+            label: nameByParty.get(partyId) ?? "Someone",
+            capability,
+            // No delivery yet: the answer stands and nothing has landed.
+            status:
+              vaultId !== undefined &&
+              deliveredTo.has(`${answer.authority_id} ${vaultId}`)
+                ? "current"
+                : "invited",
+          } satisfies SharedMember;
+        })
+        .toSorted((a, b) => a.label.localeCompare(b.label));
+      const audience = answer.principal_kind === "person" ? "person" : "circle";
+      entryByGrant.set(answer.authority_id, {
+        grant_id: answer.authority_id,
+        circle_id: audience === "circle" ? answer.principal_id : null,
+        audience,
+        label:
+          audience === "circle"
+            ? (circleById.get(answer.principal_id)?.name ?? "a circle")
+            : (roster[0]?.label ?? "Someone"),
         via:
-          grant.container_type === DOCUMENT_TARGET_TYPE ? "document" : "folder",
-        container_id: grant.container_id,
+          answer.subject_type === DOCUMENT_TARGET_TYPE ? "document" : "folder",
+        container_id: answer.subject_id,
         members: roster,
         member_count: roster.length,
         pending_count: roster.filter((m) => m.status === "invited").length,
@@ -393,16 +450,16 @@ export async function readSharesByDocument({
 
     const byDocument = new Map<string, SharedWithEntry[]>();
     for (const documentId of documentIds) {
-      // Match per container TYPE, never id alone: document ids and folder
+      // Match per subject TYPE, never id alone: document ids and folder
       // concept ids are different namespaces.
       const chain = chainByDoc.get(documentId) ?? [];
-      const entries = grants
-        .filter((g) =>
-          g.container_type === DOCUMENT_TARGET_TYPE
-            ? g.container_id === documentId
-            : chain.includes(g.container_id)
+      const entries = answers
+        .filter((a) =>
+          a.subject_type === DOCUMENT_TARGET_TYPE
+            ? a.subject_id === documentId
+            : chain.includes(a.subject_id)
         )
-        .map((g) => entryByGrant.get(g.grant_id))
+        .map((a) => entryByGrant.get(a.authority_id))
         .filter((e): e is SharedWithEntry => e !== undefined)
         .toSorted(
           (a, b) =>
@@ -473,9 +530,12 @@ async function readSenderNames({
 }
 
 /**
- * Where a document came from (#903). NOT bounded by the caller's window: it is
- * what DISCOVERS rows, so the caller unions these ids in and `limit` is the
- * only bound. No binding, no name — never a vault id worn as one.
+ * Where a document came from (#903, #929). NOT bounded by the caller's window:
+ * it is what DISCOVERS rows, so the caller unions these ids in and `limit` is
+ * the only bound. No binding, no name — never a vault id worn as one.
+ *
+ * SHAPE-KEYED, NOT ROW-KEYED: a document arrives because a SHAPE placed it, so
+ * the subscription this vault holds is what names the sender and the moment.
  */
 export async function readOriginsByDocument({
   ctx,
@@ -487,35 +547,54 @@ export async function readOriginsByDocument({
   limit: number;
 }): Promise<Map<string, SharedFromEntry> | null> {
   try {
-    const origins = await ctx.vault.read({
+    const subscriptions = await ctx.vault.read({
       acceptTruncation: true,
-      entity: "core.share_origin",
-      where: [{ column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE }],
-      orderBy: { column: "shared_at", dir: "desc" },
+      entity: "share.subscription",
+      where: [{ column: "state", op: "eq", value: "subscribed" }],
+      orderBy: { column: "subscribed_at", dir: "desc" },
       limit,
       purpose,
     });
-    const originRows = (origins.rows ?? []) as unknown as OriginRow[];
-    if (originRows.length === 0) return new Map();
+    const subscriptionRows = (subscriptions.rows ??
+      []) as unknown as SubscriptionRow[];
+    if (subscriptionRows.length === 0) return new Map();
+    const shapeIds = [...new Set(subscriptionRows.map((s) => s.shape_id))];
+    const lineage = await ctx.vault.read({
+      acceptTruncation: true,
+      entity: "share.subscription_lineage",
+      where: [
+        { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
+        { column: "shape_id", op: "in", value: shapeIds },
+      ],
+      limit,
+      purpose,
+    });
+    const lineageRows = (lineage.rows ?? []) as unknown as LineageRow[];
+    if (lineageRows.length === 0) return new Map();
+    const shapeById = new Map(subscriptionRows.map((s) => [s.shape_id, s]));
 
     // A LOST NAME IS NOT A LOST ARRIVAL: only a denied placement is unknown.
     const { partyByVault, nameByParty } = await readSenderNames({
       ctx,
       purpose,
-      vaultIds: [...new Set(originRows.map((o) => o.origin_vault_id))],
+      vaultIds: [...new Set(subscriptionRows.map((s) => s.origin_vault_id))],
     });
 
     return new Map(
-      originRows.map((o) => {
-        const partyId = partyByVault.get(o.origin_vault_id) ?? null;
+      lineageRows.flatMap((row) => {
+        const subscription = shapeById.get(row.shape_id);
+        if (!subscription) return [];
+        const partyId = partyByVault.get(subscription.origin_vault_id) ?? null;
         return [
-          o.target_id,
-          {
-            vault_id: o.origin_vault_id,
-            party_id: partyId,
-            name: partyId ? (nameByParty.get(partyId) ?? null) : null,
-            at: Number(o.shared_at) || 0,
-          } satisfies SharedFromEntry,
+          [
+            row.target_id,
+            {
+              vault_id: subscription.origin_vault_id,
+              party_id: partyId,
+              name: partyId ? (nameByParty.get(partyId) ?? null) : null,
+              at: Date.parse(subscription.subscribed_at ?? "") || 0,
+            } satisfies SharedFromEntry,
+          ] as const,
         ];
       })
     );

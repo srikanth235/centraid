@@ -1,6 +1,8 @@
-// The sharing plane People projects per person (#821): linked/unlinked
-// on the roster, the vaults / pending invitations / shared containers on the
-// profile, and the linked / to_link headline counts.
+// The sharing plane People projects per person (#821, #929): linked/unlinked
+// on the roster, the linked vaults on the profile, and the linked / to_link
+// headline counts. A share still on its way is NOT here — the person screen
+// reads the live grant plane for that, and there is no second, vault-side
+// invitation list to project.
 //
 // The load-bearing case is the SECOND one in each pair. People's `share.*`
 // scopes are newer than the app, and on an existing vault newly declared
@@ -16,9 +18,6 @@ import personHandler from "./person.ts";
 
 const SHARE_ENTITIES = new Set([
   "share.party_vault_binding",
-  "share.circle_grant",
-  "share.commons_member_state",
-  "share.commons_invitation",
   "social.circle_member",
 ]);
 
@@ -50,46 +49,7 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
     },
   ],
   "social.circle_member": [
-    {
-      circle_id: "circle-family",
-      party_id: "party-linked",
-      capability: "read+write",
-    },
-  ],
-  "share.circle_grant": [
-    {
-      grant_id: "grant-trip",
-      circle_id: "circle-family",
-      container_type: "media.album",
-      container_id: "album-trip",
-      created_at: "2026-03-01T00:00:00Z",
-    },
-  ],
-  "share.commons_member_state": [
-    {
-      grant_id: "grant-trip",
-      party_id: "party-linked",
-      status: "current",
-      accepted_at: "2026-03-02T00:00:00Z",
-    },
-  ],
-  "share.commons_invitation": [
-    {
-      invitation_id: "invite-trip",
-      grant_id: "grant-trip",
-      container_label: "Kerala trip",
-      capability: "read+write",
-      status: "accepted",
-      created_at: "2026-03-01T00:00:00Z",
-    },
-    {
-      invitation_id: "invite-recipes",
-      grant_id: "grant-recipes",
-      container_label: "Recipes",
-      capability: "read",
-      status: "pending",
-      created_at: "2026-04-01T00:00:00Z",
-    },
+    { circle_id: "circle-family", party_id: "party-linked" },
   ],
 };
 
@@ -142,8 +102,8 @@ describe("People roster link chips (#821)", () => {
   });
 });
 
-describe("People profile sharing standing (#821)", () => {
-  it("reports vaults and pending invitations", async () => {
+describe("People profile sharing standing (#821, #929)", () => {
+  it("reports the linked vaults, and nothing that is not a link", async () => {
     const result = await personHandler({
       input: { party_id: "party-linked" },
       ...ctxOf(false),
@@ -158,18 +118,11 @@ describe("People profile sharing standing (#821)", () => {
         linked_at: "2026-02-01T00:00:00Z",
       },
     ]);
-    // Only the unanswered invitation — the accepted one is already a share.
-    expect(person.pending_invites).toStrictEqual([
-      {
-        invitation_id: "invite-recipes",
-        container_label: "Recipes",
-        capability: "read",
-        created_at: "2026-04-01T00:00:00Z",
-      },
-    ]);
-    // WHAT IS SHARED WITH THEM IS NOT THIS QUERY'S ANSWER (#825): standing
-    // grants come from the grant plane, read live by the person screen.
+    // WHAT IS SHARED WITH THEM IS NOT THIS QUERY'S ANSWER (#825, #929):
+    // standing grants — including one still on its way — come from the grant
+    // plane, read live by the person screen.
     expect(person).not.toHaveProperty("shared_with_them");
+    expect(person).not.toHaveProperty("pending_invites");
   });
 
   it("keeps the profile whole and the sharing fields null when share reads deny", async () => {
@@ -184,7 +137,6 @@ describe("People profile sharing standing (#821)", () => {
     expect(result.vaultDenied).toBeUndefined();
     expect(person.name).toBe("Priya");
     expect(person.vaults).toBeNull();
-    expect(person.pending_invites).toBeNull();
   });
 });
 

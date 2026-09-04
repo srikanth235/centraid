@@ -154,7 +154,6 @@ export default function PersonView({
     if (!person) return <EmptyLine text={EMPTY.noMatch} />;
 
     const vaults = person.vaults;
-    const invites = person.pending_invites;
     const linksAvailable = vaults !== null;
     const linked = (vaults?.length ?? 0) > 0;
     const overdue = isOverdue(person);
@@ -273,37 +272,22 @@ export default function PersonView({
         </Commits>
 
         {/* Vaults: always open, never collapses — the one fact this app is
-            built around. Bindings first, then unanswered invitations. */}
+            built around. The LINK alone; a share still on its way is said by
+            the grant dashboard below, off the live plane (#929). */}
         {linksAvailable ? (
-          <PeopleSection
-            title={SECTIONS.vaults}
-            count={(vaults?.length ?? 0) + (invites?.length ?? 0)}
-          >
-            {(vaults?.length ?? 0) === 0 && (invites?.length ?? 0) === 0 ? (
+          <PeopleSection title={SECTIONS.vaults} count={vaults?.length ?? 0}>
+            {(vaults?.length ?? 0) === 0 ? (
               <EmptyLine text={EMPTY.vaults} />
             ) : (
-              <>
-                {(vaults ?? []).map((binding, index) => (
-                  <PersonRow
-                    key={binding.binding_id}
-                    name={LINK.vaultRow}
-                    sub={LINK.linkedWhen(whenLabel(binding.linked_at))}
-                    subNumeric
-                    last={
-                      index === (vaults?.length ?? 0) - 1 &&
-                      (invites?.length ?? 0) === 0
-                    }
-                  />
-                ))}
-                {(invites ?? []).map((invite, index) => (
-                  <PersonRow
-                    key={invite.invitation_id}
-                    name={LINK.inviteRow}
-                    sub={invite.container_label ?? LINK.inviteWaiting}
-                    last={index === (invites?.length ?? 0) - 1}
-                  />
-                ))}
-              </>
+              (vaults ?? []).map((binding, index) => (
+                <PersonRow
+                  key={binding.binding_id}
+                  name={LINK.vaultRow}
+                  sub={LINK.linkedWhen(whenLabel(binding.linked_at))}
+                  subNumeric
+                  last={index === (vaults?.length ?? 0) - 1}
+                />
+              ))
             )}
           </PeopleSection>
         ) : null}

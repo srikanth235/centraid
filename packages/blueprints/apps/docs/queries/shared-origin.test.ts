@@ -1,4 +1,5 @@
-// The Shared shelf's data door (#903): a document DELIVERED into this vault.
+// The Shared shelf's data door (#903, #929): a document DELIVERED into this
+// vault by a SHAPE this vault subscribes to.
 //
 // A join, not a filter — the drive's window is built from folders-scheme tags
 // and a delivered copy carries none.
@@ -14,7 +15,8 @@ import {
 import driveHandler from "./drive.ts";
 
 const ORIGIN_ENTITIES = new Set([
-  "core.share_origin",
+  "share.subscription",
+  "share.subscription_lineage",
   "share.party_vault_binding",
 ]);
 
@@ -58,12 +60,25 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
     { content_id: "content-filed", media_type: "text/plain" },
     { content_id: "content-sent", media_type: "text/markdown" },
   ],
-  "core.share_origin": [
+  // One shape, from Ravi's vault, claiming the one row it placed here.
+  "share.subscription": [
     {
+      shape_id: "shape-ferry",
+      audience_vault_id: "vault-mine",
+      grant_id: "grant-ferry",
+      origin_vault_id: "vault-ravi",
+      subject_type: "core.document",
+      state: "subscribed",
+      subscribed_at: "2026-02-25T04:53:20.000Z",
+    },
+  ],
+  "share.subscription_lineage": [
+    {
+      shape_id: "shape-ferry",
       target_type: "core.document",
       target_id: "doc-sent",
-      origin_vault_id: "vault-ravi",
-      shared_at: 1_772_000_000_000,
+      origin_item_id: "doc-sent",
+      origin_row_version: 3,
     },
   ],
   "share.party_vault_binding": [
@@ -156,7 +171,7 @@ describe("the drive's shared_from (#903)", () => {
       vault_id: "vault-ravi",
       party_id: "party-ravi",
       name: "Ravi",
-      at: 1_772_000_000_000,
+      at: Date.parse("2026-02-25T04:53:20.000Z"),
     });
   });
 
@@ -175,13 +190,13 @@ describe("the drive's shared_from (#903)", () => {
       vault_id: "vault-ravi",
       party_id: null,
       name: null,
-      at: 1_772_000_000_000,
+      at: Date.parse("2026-02-25T04:53:20.000Z"),
     });
   });
 
   it("says it cannot say when the placement read itself is denied", async () => {
     const { documents, shared_from_known } = await run({
-      deniedEntities: new Set(["core.share_origin"]),
+      deniedEntities: new Set(["share.subscription_lineage"]),
     });
     // ABSENT IS NOT EMPTY: the tagged half still answers, and the shelf is told
     // the read failed rather than drawing an empty inbox.

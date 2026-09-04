@@ -111,13 +111,12 @@ describe("[law:people-link-tristate] the link fact is linked, unlinked or ABSENT
     expect(applyRosterFilter(roster.people, "unlinked")).toStrictEqual([]);
   });
 
-  it("nulls the whole person share answer when either table is unreadable", () => {
-    expect(
-      projectShareLinks({ partyId: "p1", bindings: [], invitations: null })
-    ).toBeNull();
-    expect(
-      projectShareLinks({ partyId: "p1", bindings: null, invitations: [] })
-    ).toBeNull();
+  it("nulls the person share answer when the binding read is unreadable", () => {
+    expect(projectShareLinks({ partyId: "p1", bindings: null })).toBeNull();
+    // An answered read with no rows is a FACT: nobody is linked.
+    expect(projectShareLinks({ partyId: "p1", bindings: [] })).toStrictEqual({
+      vaults: [],
+    });
   });
 });
 
