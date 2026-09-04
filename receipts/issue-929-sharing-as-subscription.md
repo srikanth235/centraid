@@ -456,3 +456,84 @@ node scripts/lint-journey-ledger.mjs
 | --- | --- | --- |
 | the after is the same interval as the before | diffed the rig against `origin/main`'s copy: only the delivery call, its import and the transport it needs | held — `createShareGrant`, the album of 200, and the audience's own read are byte-identical |
 | the ledger accepts the after without weakening a gate | `node scripts/lint-journey-ledger.mjs` with `ceilingMs` left at 750 | held: ok, and the after median is 3.2x under the ceiling it did not move |
+
+## Wave 4c — the reshape the deletion caused
+
+Deleting the rail's tables is not shape-neutral for the apps that SCOPED them.
+`packages/blueprints/apps/docs/app.json` reads `share.circle_grant` and
+`share.commons_member_state`; `packages/blueprints/apps/people/app.json` reads
+`share.commons_invitation`. Those tables are gone, so both closures compose
+three tables smaller and both shape ids moved.
+
+| file | what changed |
+| --- | --- |
+| `packages/server/src/routes/replica-shape-parity.test.ts` | `docs` and `people` re-pinned, with the reason the file's own header demands; the other six ids are byte-identical, which is the evidence that only the rail moved |
+
+| id | before | after |
+| --- | --- | --- |
+| docs | `docs:e0411274ff437478b64cd632` | `docs:8020cd25b4e9c6a62546b895` |
+| people | `people:4bfab9fdc7a82790649b344c` | `people:cde59ac8f6e982ac17c88289` |
+
+Decisions. RE-PINNED, not waived: the reshape is deliberate (the rail is gone)
+and the cost is one rebootstrap for devices holding those two shapes. The six
+unchanged ids are what proves the deletion did not reshape anything else.
+
+FINDING, NOT FIXED HERE — the blueprint scopes and the queries behind them are
+surface files this lane does not own (#929 out-of-scope names the share sheet as
+lane H's). Three declared scopes now name deleted tables, and two query builders
+still join them: `packages/blueprints/apps/docs/queries/_shared.ts` (the drive's
+and search's `shared_with`) and `packages/blueprints/apps/people/queries/
+_shared.ts` (share links). Their unit tests pass because they assert the PLAN,
+not a vault, so nothing went red — at runtime `shared_with` and the people share
+links read tables that no longer exist. Replacing them with the subscription
+plane (`share_subscription`, `share_delivery`) is a slice, and it is the root's
+to place.
+
+### Falsification
+
+| claim | throwaway check | result |
+| --- | --- | --- |
+| only docs and people reshaped | ran `replica-shape-parity.test.ts` and diffed all eight ids | held: six identical, two moved, and both movers scope a deleted table |
+| the blueprint readers are merely dead scopes | grepped the query builders, not just the manifests | FALSIFIED: `docs/queries/_shared.ts` and `people/queries/_shared.ts` still JOIN those entities — recorded as the finding above rather than silently left as a scope trim |
+
+### File coverage, waves 2-3
+
+Paths the earlier waves changed and their own sections did not enumerate:
+
+```
+packages/client/src/replica/purge-selector.test.ts
+packages/server/src/serve/authz-deny-matrix.test.ts
+packages/server/src/serve/share-subscription-peer.test-fixtures.ts
+packages/vault/src/grant/fulfillment.roster.test.ts
+packages/vault/src/replica/intents.ts
+packages/vault/src/share/project-closure.ts
+```
+
+Renamed away by wave 4b, named here so the rename's old halves are covered:
+
+```
+packages/vault/src/share/commons-sim-grant-world.test-fixtures.ts
+packages/vault/src/share/commons-sim-grant.test-fixtures.ts
+```
+
+### Lane verification
+
+```sh
+bun run --cwd packages/vault build && bun run --cwd packages/server build
+bun run --cwd packages/{core,vault,client,server} typecheck
+bun run --cwd apps/mobile typecheck
+bun run --cwd packages/vault test          # 186 files, 1527 passed, 2 skipped
+bun run --cwd packages/client test         # 269 files, 2459 passed
+bun run --cwd packages/server test         # 383 passed; reds below
+bunx vitest run src/routes/replica-shape-parity.test.ts --root packages/server
+node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/share-journey.scale.test.ts
+node scripts/lint-journey-ledger.mjs && bash .governance/run.sh
+```
+
+Gate tree `e561b683fa0ee08442cc81e0682611ddb5e99bc2` (self-audit PASS); this
+evidence block is appended above it. `packages/server` carries three red files,
+none of them this lane's: `serve/gateway-db-lock.integration` and
+`acp/backends/acp/launch` are the container's known reds, and
+`routes/replica-shape-parity` is the one wave 4c re-pinned and re-ran green.
+`.governance/run.sh` is green but for `receipt-per-issue` on the absent
+`## Audit`, which is the wave verifier's section.

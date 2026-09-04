@@ -32,13 +32,21 @@ const logger = {
   error: () => undefined,
 };
 
-/** Grant-derived shape ids, captured on `origin/main` before wave 2. */
+/**
+ * Grant-derived shape ids, captured on `origin/main` before wave 2.
+ *
+ * `docs` and `people` were RE-PINNED by #929: they scope `share.circle_grant`,
+ * `share.commons_member_state` and `share.commons_invitation`, which the
+ * commons rail's deletion took with it, so their closures are three tables
+ * smaller. That is a deliberate reshape — those devices rebootstrap once — and
+ * the other six ids are unchanged, which is what this file is here to show.
+ */
 const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
   agenda: "agenda:818f3f9a7dd361669630fd53",
-  docs: "docs:e0411274ff437478b64cd632",
+  docs: "docs:8020cd25b4e9c6a62546b895",
   locker: "locker:945ff2d895547b2e737301c9",
   notes: "notes:7de2cbbeeda5506d0fdcd35f",
-  people: "people:4bfab9fdc7a82790649b344c",
+  people: "people:cde59ac8f6e982ac17c88289",
   photos: "photos:66ebc07a3d159a98246ea3a9",
   tally: "tally:be8a5d156b1776ee3c75bac5",
   tasks: "tasks:1caed2924d41b44c6562807a",
