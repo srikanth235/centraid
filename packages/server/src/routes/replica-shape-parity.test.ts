@@ -112,7 +112,9 @@ describe("replica shape parity with the shipped manifests", () => {
     });
     expect(
       Object.fromEntries(
-        shapes.map((shape) => [shape.appId, shape.shapeId]).toSorted()
+        shapes
+          .map((shape) => [shape.appId, shape.shapeId] as const)
+          .toSorted(([left], [right]) => left.localeCompare(right))
       )
     ).toStrictEqual(SHIPPED_SHAPE_IDS);
   }, 120_000);
@@ -139,7 +141,9 @@ describe("replica shape parity with the shipped manifests", () => {
     // of the manifest and the schema and not of the rows underneath it.
     expect(
       Object.fromEntries(
-        shapes.map((shape) => [shape.appId, shape.shapeId]).toSorted()
+        shapes
+          .map((shape) => [shape.appId, shape.shapeId] as const)
+          .toSorted(([left], [right]) => left.localeCompare(right))
       )
     ).toStrictEqual(SHIPPED_SHAPE_IDS);
   }, 180_000);
@@ -158,7 +162,7 @@ describe("replica shape parity with the shipped manifests", () => {
       ...new Set(
         Object.values(SEALED_COLUMNS).flatMap((columns) => [...columns])
       ),
-    ].toSorted();
+    ].toSorted((left, right) => left.localeCompare(right));
     // Not vacuous: the registry has to be naming real secrets for this to bite.
     expect(sealedNames.length).toBeGreaterThan(5);
     expect(

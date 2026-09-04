@@ -75,6 +75,7 @@ Fresh-context verifier on `claude/928-w1a-rulings` at `8401083a`, wave 1a (rulin
 | date | harness | session |
 | --- | --- | --- |
 | 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-04 | codex | 01a06aae-4aeb-72f0-b2a6-97f24ffc02ed |
 
 ## w1b — the static app entity tripwire
 
