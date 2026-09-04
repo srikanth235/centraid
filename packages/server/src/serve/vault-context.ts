@@ -16,7 +16,9 @@ export interface VaultRequestContext {
   ownerId?: string;
   /** The one write predicate (#726); false for a tombstoned binding. */
   ownsVault?: boolean;
-  grantProfile?: readonly string[];
+  /** Present only for an attenuated Companion device (#928 A6): the surfaces
+   *  its authority rows name, as projected for this vault. */
+  companionSurfaces?: readonly string[];
 }
 
 /** Absent for hosts whose transport carries no device identity (loopback, tests). */

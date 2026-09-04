@@ -18,7 +18,13 @@ import type { WrappedRecoveryKitDocument } from "@centraid/backup";
 import { startFakeProviderServer } from "@centraid/backup/dist/testing/fake-provider-server.js";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { FsBlobStore, KeyStore, ReplicaIndex } from "@centraid/vault";
+import {
+  FsBlobStore,
+  isLiveEgressAuthority,
+  KeyStore,
+  recordEgressAuthority,
+  ReplicaIndex,
+} from "@centraid/vault";
 
 import { daemonKeyStore } from "../cli/key-store.js";
 import { daemonLayoutFor } from "../cli/paths.js";
@@ -99,16 +105,17 @@ describe("backup/recover", () => {
         body: '{"raw":"x"}',
       },
     })["item_id"] as string;
-    const grantId = crypto.randomUUID();
+    const grantId = recordEgressAuthority(plane.db.vault, {
+      actorId: "owner",
+      actorKind: "owner",
+      verb: "gmail.send",
+      target: "ravi@example.com",
+      grantedBy: plane.boot.ownerPartyId,
+      now: new Date().toISOString(),
+    });
     plane.db.vault
       .prepare(
-        `INSERT INTO outbox_grant (grant_id, actor_id, verb, target, created_at, revoked_at)
-       VALUES (?, 'owner', 'gmail.send', 'ravi@example.com', ?, NULL)`
-      )
-      .run(grantId, new Date().toISOString());
-    plane.db.vault
-      .prepare(
-        `UPDATE outbox_item SET status = 'approved', decided_at = ?, grant_id = ? WHERE item_id = ?`
+        `UPDATE outbox_item SET status = 'approved', decided_at = ?, authority_id = ? WHERE item_id = ?`
       )
       .run(new Date().toISOString(), grantId, itemId);
     return { itemId, grantId };
@@ -534,10 +541,7 @@ describe("backup/recover", () => {
       .prepare("SELECT status FROM outbox_item WHERE item_id = ?")
       .get(a.itemId) as { status: string };
     expect(item.status).toBe("pending"); // approved → parked back to pending
-    const grant = mountedPlane.db.vault
-      .prepare("SELECT revoked_at FROM outbox_grant WHERE grant_id = ?")
-      .get(a.grantId) as { revoked_at: string | null };
-    expect(grant.revoked_at).not.toBeNull();
+    expect(isLiveEgressAuthority(mountedPlane.db.vault, a.grantId)).toBe(false);
 
     const gatewayDb = new DatabaseSync(layout.gatewayDbFile, {
       readOnly: true,

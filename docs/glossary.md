@@ -187,7 +187,7 @@ Enforced structurally by the `owner_id` relation — no role to escalate, no "mi
 
 Two things people expect to be roles are not:
 
-- **Device attenuation** — `grant_profile_json` on the device row, a capability mask, orthogonal to ownership, untouched by #726.
+- **Device attenuation** — the surfaces a Companion device is confined to. Since [#928](https://github.com/srikanth235/centraid/issues/928) it is `share_authority` rows (principal `device`, subject type `app.surface`), projected into `gateway.db` for the pre-open request path; orthogonal to ownership, untouched by #726.
 - **Writability, as blueprints see it** — `scope.canWrite` keeps its exact shape; an owned vault is writable, while a commons membership's `read` / `read+write` capability governs commands to its shared container.
 
 Invariants:
@@ -199,7 +199,7 @@ Invariants:
 - **Auto-founding** enrolls the founding owner with no prompt (#603): a fresh data dir gets **Personal**, recorded in `vault_owners` for that owner in one transaction. `Shared` is created later only when an owner explicitly asks for another vault; nothing on its record says "sharing".
 - **Sharing is residency, not filtering.** Data crosses only by projection into another vault, under a standing **grant** (#825): a `view` grant re-projects the origin's rows on change, and commons reconciles a circle's container into every joined member's vault as the `edit` strategy. No one queries another person's vault.
 
-One deliberate mapping, simplified by #726: a device's trust (`full`/`readonly`) is a **capability mirror**, not ownership. Ownership is binary — an owner owns a vault or does not, no partial grade — so every enrolled device lands `full`; device attenuation is the separate `grant_profile_json` mask, orthogonal to trust. Since [#883](https://github.com/srikanth235/centraid/issues/883) that trust is a `device`-principal row of the one authority table rather than an `access_device.trust` column — `access_device` is identity, the plane carries the answer.
+One deliberate mapping, simplified by #726: a device's trust (`full`/`readonly`) is a **capability mirror**, not ownership. Ownership is binary — an owner owns a vault or does not, no partial grade — so every enrolled device lands `full`; device attenuation is a separate set of `device`-principal rows over `app.surface` subjects ([#928](https://github.com/srikanth235/centraid/issues/928)), orthogonal to trust. Since [#883](https://github.com/srikanth235/centraid/issues/883) that trust is a `device`-principal row of the one authority table rather than an `access_device.trust` column — `access_device` is identity, the plane carries the answer.
 
 ## Sharing: the grant plane, commons, links, and the peer plane (#726, #731, #825)
 
@@ -249,7 +249,7 @@ Two retired vocabularies, historical only. **lend** — #726's live edges, borro
 | "template app" after install | **app** (blueprint is the shipped source) |
 | "plugin" for declared handlers | **handler** / **query** / **action** |
 | "identity.sqlite" / multi-user gateway identity | vault owner _is_ the user (#280) |
-| "role" for what a device may do | **ownership** (does the acting owner own this vault) plus **device attenuation** (`grant_profile_json`) — #726 deleted the role lattice; trust remains proved identity only |
+| "role" for what a device may do | **ownership** (does the acting owner own this vault) plus **device attenuation** (`device`-principal rows over `app.surface`) — #726 deleted the role lattice; trust remains proved identity only |
 | "share target" / "default share target" for where a placement lands | **audience vault** — #726 P0 deleted the default share-target pointer (`share-target.ts`, `defaultShareTargetVaultId`, mobile `frame.shareTarget`) outright; the destination is a picker over the caller's own mounted, writable scopes, never a remembered default |
 | "placement_intents" for the sharing table | **`share_edges`** for same-owner add/move placements; `share_authority` for every standing answer the member has given, shares included (#825, unified by #883), `share_circle_grant` for the commons control record |
 | “lend”, “borrow”, “borrowed scope” for current sharing | **commons** for co-owned resident data, which is the `edit` fulfillment strategy under a **grant**. Lending is deleted historical vocabulary. |

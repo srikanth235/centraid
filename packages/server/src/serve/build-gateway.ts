@@ -255,7 +255,10 @@ import { pollProviderEventSource } from "./automation-event-sources.js";
 import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
 import { createBrokerHealthProbe } from "./broker-health.js";
 import { commonsObservabilitySection } from "./commons-observability.js";
-import { companionRequestAllowed } from "./companion-access.js";
+import {
+  companionAccess,
+  projectCompanionAttenuation,
+} from "./companion-access.js";
 import { ConnectionBroker } from "./connection-broker.js";
 import type { DataPlaneHttpOptions } from "./data-plane-handoff.js";
 import { defaultLogger } from "./default-logger.js";
@@ -4530,22 +4533,38 @@ export async function buildGateway(
       });
     }
     const enrollment = enrollmentStore.get(deviceKey, vaultId);
-    if (enrollment?.grantProfile !== undefined) {
-      if (
-        !companionRequestAllowed(
-          req,
-          enrollment.grantProfile,
-          enrollment.enrollmentId
-        )
-      ) {
-        return sendJson(res, 403, {
-          error: "companion_profile",
-          message:
-            "this Companion device is not granted access to that gateway surface",
-        });
-      }
-      req.headers[COMPANION_GRANTS_HEADER] = enrollment.grantProfile.join(",");
+    // A Companion device is confined to a set of surfaces the vault holds the
+    // answer for. Before the vault opens the gateway has only the PROJECTION
+    // of that answer, and an absent projection denies (#928 A6) — widening a
+    // confined device to full reach because a file could not be read is the
+    // one failure mode this boundary must not have.
+    const access = companionAccess({
+      attenuated: enrollment?.attenuated === true,
+      projected:
+        enrollment?.attenuated === true
+          ? enrollmentStore.projectedSurfaces(deviceKey, vaultId)
+          : undefined,
+      req,
+      enrollmentId: enrollment?.enrollmentId ?? "",
+    });
+    if (access.kind === "unreadable") {
+      return sendJson(res, 403, {
+        error: "companion_attenuation_unavailable",
+        message:
+          "this Companion device's surface answer has not been read from the vault yet",
+      });
     }
+    if (access.kind === "refused") {
+      return sendJson(res, 403, {
+        error: "companion_profile",
+        message:
+          "this Companion device is not granted access to that gateway surface",
+      });
+    }
+    const companionSurfaces =
+      access.kind === "allowed" ? access.surfaces : undefined;
+    if (companionSurfaces !== undefined)
+      req.headers[COMPANION_GRANTS_HEADER] = companionSurfaces.join(",");
     return runWithVaultContext(
       {
         vaultId,
@@ -4556,9 +4575,7 @@ export async function buildGateway(
         ...(enrollment
           ? { ownerId: enrollment.ownerId, ownsVault: !enrollment.revoked }
           : {}),
-        ...(enrollment?.grantProfile === undefined
-          ? {}
-          : { grantProfile: enrollment.grantProfile }),
+        ...(companionSurfaces === undefined ? {} : { companionSurfaces }),
       },
       () => dispatchChain(req, res)
     );
@@ -4588,6 +4605,7 @@ export async function buildGateway(
     unsubscribeLateMount();
     unsubscribeLateMount = vaultRegistry.onMount((plane) => {
       pushWakeRelay.attach(plane);
+      projectCompanionAttenuation(enrollmentStore, plane);
       const task = Promise.all([
         hostFor(plane).catch((error) =>
           logger.warn(
@@ -4607,6 +4625,8 @@ export async function buildGateway(
       lateMountTasks.add(task);
       void task.finally(() => lateMountTasks.delete(task));
     });
+    for (const plane of vaultRegistry.planesList())
+      projectCompanionAttenuation(enrollmentStore, plane);
     pushWakeRelay.start();
     webControlSessions.startSweeping();
     peerPlaneSweep.start();

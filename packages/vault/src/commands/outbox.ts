@@ -5,6 +5,12 @@
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import {
+  isLiveEgressAuthority,
+  liveEgressAuthorityId,
+  recordEgressAuthority,
+  revokeEgressAuthority,
+} from "../grant/egress-authority.js";
 import { sha256Hex } from "../ids.js";
 import { resolveEntity } from "../schema/tables.js";
 import { partyForReach } from "./contact-reach.js";
@@ -49,7 +55,7 @@ const STAGE: CommandDefinition = {
       kind: { type: "string", minLength: 1 },
       label: { type: "string", minLength: 1 },
       // Semantic verb, e.g. `gmail.send` / `gcal.create_event` — one half of
-      // the standing-grant key.
+      // the standing-answer key.
       verb: { type: "string", minLength: 1 },
       // Semantic destination (recipient, calendar id) — the other half.
       target: { type: "string", minLength: 1 },
@@ -70,7 +76,7 @@ const STAGE: CommandDefinition = {
     properties: {
       item_id: { type: "string" },
       status: { type: "string" },
-      grant_id: { type: "string" },
+      authority_id: { type: "string" },
     },
   },
   preconditions: [],
@@ -151,25 +157,23 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
   } else {
     recipientPartyId = partyForAddress(ctx, input.target);
   }
-  // Standing grants (#306 phase 3): a live (actor, verb, target) rule
-  // approves at staging time — still drains through the executor, never
-  // silently.
-  const grant = ctx.db
-    .prepare(
-      `SELECT grant_id FROM outbox_grant
-        WHERE actor_id = ? AND verb = ? AND target = ? AND revoked_at IS NULL`
-    )
-    .get(ctx.identity.callerId, input.verb, input.target) as
-    | { grant_id: string }
-    | undefined;
+  // Standing answers (#306 phase 3, re-homed by #928 A6): a live egress row
+  // for this (actor, verb, target) approves at staging time — the item still
+  // drains through the executor, never silently.
+  const authorityId = liveEgressAuthorityId(ctx.db, {
+    actorId: ctx.identity.callerId,
+    actorKind: ctx.identity.provAgentKind,
+    verb: input.verb,
+    target: input.target,
+  });
   const itemId = ctx.newId();
-  const status = grant ? "approved" : "pending";
+  const status = authorityId ? "approved" : "pending";
   ctx.db
     .prepare(
       `INSERT INTO outbox_item
          (item_id, connection_id, actor_id, actor_kind, verb, target,
           target_type, target_id, recipient_party_id, artifact_json, request_json,
-          status, grant_id, staged_at, decided_at, drained_at, result_json, published_message_id, note)
+          status, authority_id, staged_at, decided_at, drained_at, result_json, published_message_id, note)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)`
     )
     .run(
@@ -185,14 +189,14 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
       JSON.stringify(input.artifact),
       JSON.stringify(input.request),
       status,
-      grant?.grant_id ?? null,
+      authorityId ?? null,
       ctx.now,
-      grant ? ctx.now : null
+      authorityId ? ctx.now : null
     );
   ctx.wrote("outbox.item", itemId);
   ctx.cite({
-    claim: grant
-      ? `outbox item auto-approved by standing grant (${input.verb} → ${input.target})`
+    claim: authorityId
+      ? `outbox item auto-approved by a standing egress answer (${input.verb} → ${input.target})`
       : `outbox item staged for owner decision (${input.verb} → ${input.target})`,
     entityType: "outbox.item",
     entityId: itemId,
@@ -200,7 +204,7 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
   return {
     item_id: itemId,
     status,
-    ...(grant ? { grant_id: grant.grant_id } : {}),
+    ...(authorityId ? { authority_id: authorityId } : {}),
   };
 }
 
@@ -218,7 +222,7 @@ const DECIDE: CommandDefinition = {
       artifact: { type: "object" },
       request: REQUEST_SCHEMA,
       // "Always allow this actor this kind of write to this target": mints
-      // the standing (actor, verb, target) grant from this concrete item.
+      // the standing egress answer from this concrete item.
       always_allow: { type: "boolean" },
       note: { type: "string" },
     },
@@ -229,7 +233,7 @@ const DECIDE: CommandDefinition = {
     properties: {
       item_id: { type: "string" },
       status: { type: "string" },
-      grant_id: { type: "string" },
+      authority_id: { type: "string" },
     },
   },
   preconditions: [
@@ -274,32 +278,29 @@ function decideItem(ctx: HandlerCtx): Record<string, unknown> {
     );
   }
   const item = ctx.db
-    .prepare("SELECT actor_id, verb, target FROM outbox_item WHERE item_id = ?")
+    .prepare(
+      "SELECT actor_id, actor_kind, verb, target FROM outbox_item WHERE item_id = ?"
+    )
     .get(input.item_id) as
-    | { actor_id: string; verb: string; target: string }
+    | { actor_id: string; actor_kind: string; verb: string; target: string }
     | undefined;
   if (!item) throw new Error(`no outbox item ${input.item_id}`);
-  let grantId: string | undefined;
+  let authorityId: string | undefined;
   if (input.decision === "approve" && input.always_allow === true) {
-    const existing = ctx.db
-      .prepare(
-        `SELECT grant_id FROM outbox_grant
-          WHERE actor_id = ? AND verb = ? AND target = ? AND revoked_at IS NULL`
-      )
-      .get(item.actor_id, item.verb, item.target) as
-      | { grant_id: string }
-      | undefined;
-    grantId = existing?.grant_id;
-    if (!grantId) {
-      grantId = ctx.newId();
-      ctx.db
-        .prepare(
-          `INSERT INTO outbox_grant (grant_id, actor_id, verb, target, created_at, revoked_at)
-           VALUES (?, ?, ?, ?, ?, NULL)`
-        )
-        .run(grantId, item.actor_id, item.verb, item.target, ctx.now);
-      ctx.wrote("outbox.grant", grantId);
-    }
+    // The member approving THIS item is the party who answered — an
+    // `automation` row minted without one would be an automation granting
+    // itself (#928 A3).
+    const minted = recordEgressAuthority(ctx.db, {
+      actorId: item.actor_id,
+      actorKind: item.actor_kind,
+      verb: item.verb,
+      target: item.target,
+      grantedBy: ownerPartyId(ctx),
+      now: ctx.now,
+      authorityId: ctx.newId(),
+    });
+    authorityId = minted;
+    ctx.wrote("share.authority", minted);
   }
   const status = input.decision === "approve" ? "approved" : "discarded";
   ctx.db
@@ -308,7 +309,7 @@ function decideItem(ctx: HandlerCtx): Record<string, unknown> {
           SET status = ?, decided_at = ?,
               artifact_json = coalesce(?, artifact_json),
               request_json = coalesce(?, request_json),
-              grant_id = coalesce(?, grant_id),
+              authority_id = coalesce(?, authority_id),
               note = coalesce(?, note)
         WHERE item_id = ?`
     )
@@ -317,7 +318,7 @@ function decideItem(ctx: HandlerCtx): Record<string, unknown> {
       ctx.now,
       input.artifact ? JSON.stringify(input.artifact) : null,
       input.request ? JSON.stringify(input.request) : null,
-      grantId ?? null,
+      authorityId ?? null,
       input.note ?? null,
       input.item_id
     );
@@ -325,7 +326,7 @@ function decideItem(ctx: HandlerCtx): Record<string, unknown> {
   ctx.cite({
     claim:
       input.decision === "approve"
-        ? `owner approved outbox item (${item.verb} → ${item.target})${grantId ? " and minted a standing grant" : ""}`
+        ? `owner approved outbox item (${item.verb} → ${item.target})${authorityId ? " and minted a standing egress answer" : ""}`
         : `owner discarded outbox item (${item.verb} → ${item.target}) — no egress`,
     entityType: "outbox.item",
     entityId: input.item_id,
@@ -333,7 +334,7 @@ function decideItem(ctx: HandlerCtx): Record<string, unknown> {
   return {
     item_id: input.item_id,
     status,
-    ...(grantId ? { grant_id: grantId } : {}),
+    ...(authorityId ? { authority_id: authorityId } : {}),
   };
 }
 
@@ -573,19 +574,21 @@ const REVOKE_GRANT: CommandDefinition = {
   ownerSchema: "outbox",
   inputSchema: {
     type: "object",
-    required: ["grant_id"],
+    required: ["authority_id"],
     additionalProperties: false,
-    properties: { grant_id: { type: "string", minLength: 1 } },
+    properties: { authority_id: { type: "string", minLength: 1 } },
   },
   outputSchema: {
     type: "object",
-    required: ["grant_id"],
-    properties: { grant_id: { type: "string" } },
+    required: ["authority_id"],
+    properties: { authority_id: { type: "string" } },
   },
   preconditions: [
     {
-      name: "grant_is_live",
-      sql: `SELECT count(*) AS n FROM outbox_grant WHERE grant_id = :grant_id AND revoked_at IS NULL`,
+      name: "answer_is_live",
+      sql: `SELECT count(*) AS n FROM share_authority
+              WHERE authority_id = :authority_id AND subject_type = 'egress'
+                AND revoked_at IS NULL`,
       column: "n",
       op: "eq",
       value: 1,
@@ -593,17 +596,19 @@ const REVOKE_GRANT: CommandDefinition = {
   ],
   postconditions: [
     {
-      name: "grant_revoked",
-      sql: `SELECT count(*) AS n FROM outbox_grant WHERE grant_id = :grant_id AND revoked_at IS NOT NULL`,
+      name: "answer_revoked",
+      sql: `SELECT count(*) AS n FROM share_authority
+              WHERE authority_id = :authority_id AND subject_type = 'egress'
+                AND revoked_at IS NOT NULL`,
       column: "n",
       op: "eq",
       value: 1,
     },
     {
-      // Revocation retro-invalidates (#308): nothing this grant
+      // Revocation retro-invalidates (#308): nothing this answer
       // approved may still be waiting to drain.
-      name: "no_approved_items_ride_the_grant",
-      sql: `SELECT count(*) AS n FROM outbox_item WHERE grant_id = :grant_id AND status = 'approved'`,
+      name: "no_approved_items_ride_the_answer",
+      sql: `SELECT count(*) AS n FROM outbox_item WHERE authority_id = :authority_id AND status = 'approved'`,
       column: "n",
       op: "eq",
       value: 0,
@@ -612,37 +617,37 @@ const REVOKE_GRANT: CommandDefinition = {
   idempotency: "once",
   risk: "low",
   handler: (ctx) => {
-    requireOwner(ctx, "only the owner revokes standing outbox grants");
-    const input = ctx.input as { grant_id: string };
-    ctx.db
-      .prepare("UPDATE outbox_grant SET revoked_at = ? WHERE grant_id = ?")
-      .run(ctx.now, input.grant_id);
-    ctx.wrote("outbox.grant", input.grant_id);
+    requireOwner(ctx, "only the owner revokes standing egress answers");
+    const input = ctx.input as { authority_id: string };
+    if (!isLiveEgressAuthority(ctx.db, input.authority_id))
+      throw new Error(`no live egress answer ${input.authority_id}`);
+    revokeEgressAuthority(ctx.db, input.authority_id, ctx.now);
+    ctx.wrote("share.authority", input.authority_id);
     // Undrained approved items park back to pending (#308): revoking the
     // rule withdraws the consent it minted, not just future matches.
     const undrained = ctx.db
       .prepare(
-        `SELECT item_id FROM outbox_item WHERE grant_id = ? AND status = 'approved'`
+        `SELECT item_id FROM outbox_item WHERE authority_id = ? AND status = 'approved'`
       )
-      .all(input.grant_id) as { item_id: string }[];
+      .all(input.authority_id) as { item_id: string }[];
     if (undrained.length > 0) {
       ctx.db
         .prepare(
           `UPDATE outbox_item
-              SET status = 'pending', decided_at = NULL, grant_id = NULL,
+              SET status = 'pending', decided_at = NULL, authority_id = NULL,
                   staged_at = ?,
-                  note = 'standing grant revoked before drain — awaiting a fresh decision'
-            WHERE grant_id = ? AND status = 'approved'`
+                  note = 'standing egress answer revoked before drain — awaiting a fresh decision'
+            WHERE authority_id = ? AND status = 'approved'`
         )
-        .run(ctx.now, input.grant_id);
+        .run(ctx.now, input.authority_id);
       for (const item of undrained) ctx.wrote("outbox.item", item.item_id);
       ctx.cite({
-        claim: `standing grant revoked; ${undrained.length} approved-but-undrained item(s) parked back to pending`,
-        entityType: "outbox.grant",
-        entityId: input.grant_id,
+        claim: `standing egress answer revoked; ${undrained.length} approved-but-undrained item(s) parked back to pending`,
+        entityType: "share.authority",
+        entityId: input.authority_id,
       });
     }
-    return { grant_id: input.grant_id, reparked: undrained.length };
+    return { authority_id: input.authority_id, reparked: undrained.length };
   },
 };
 
@@ -697,7 +702,7 @@ const REPARK: CommandDefinition = {
       .prepare(
         `UPDATE outbox_item
             SET status = 'pending', staged_at = ?, decided_at = NULL,
-                grant_id = NULL, note = coalesce(?, note)
+                authority_id = NULL, note = coalesce(?, note)
           WHERE item_id = ?`
       )
       .run(ctx.now, input.note ?? null, input.item_id);

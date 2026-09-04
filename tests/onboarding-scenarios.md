@@ -119,7 +119,7 @@ Worktree trap: `bun install` + `bun run build` inside the worktree, private data
 | B8 | Gateway unreachable at redeem | Stop the gateway; paste a valid ticket | Fails at the `reach` stage / `unreachable` copy; retry without losing entered state; offline banner suppressed pre-onboarding |
 | B9 | Gateway down on revisit | With a remembered connection, stop the gateway, reload | App boots (no re-onboarding); offline state surfaced; recovers when the gateway returns, no re-pair |
 | B10 | Concurrent double-redeem race | Two profiles submit the same ticket simultaneously | Exactly one wins (`BEGIN IMMEDIATE`, `changes === 1`); loser gets `invalid_ticket`; one enrollment row |
-| B11 | ~~Read-only role~~ (removed, #726) | — | Ownership is binary, not a role lattice: every enrolled device gets full trust on the vaults it lands in (a `device`-principal `edit` row of `share_authority` since #883); there is no read-only ticket any more. Attenuation is device-side (`grant_profile_json`), orthogonal to pairing |
+| B11 | ~~Read-only role~~ (removed, #726) | — | Ownership is binary, not a role lattice: every enrolled device gets full trust on the vaults it lands in (a `device`-principal `edit` row of `share_authority` since #883); there is no read-only ticket any more. Attenuation is a set of `device`-principal rows over `app.surface` subjects (#928), orthogonal to pairing |
 | B12 | Vault-targeted ticket | Explicitly create a second vault named `Shared`; mint `--vault Shared`; onboard | Active vault is Shared, not the Personal default (an unnamed mint lands in Personal) |
 | B13 | Installed PWA pass | Repeat B1–B2 from the installed PWA | Same behaviour; storage survives; install banner doesn't interfere |
 

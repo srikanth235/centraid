@@ -138,6 +138,10 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     ENTITY_REVISIONS_DDL,
     TIME_ORGANIZE_DDL,
     ENRICH_DDL,
+    // The authority plane's table before `outbox_item`, whose standing-answer
+    // pointer is a real reference into it (#928 A6), and before the trigger
+    // that revokes into it (#916, E2).
+    SHARE_AUTHORITY_DDL,
     OUTBOX_DDL,
     REPLICA_DDL,
     FTS_DDL,
@@ -148,9 +152,6 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     RENAME_INBOX_NOTICE_DDL,
     SHARE_COMMONS_DDL,
     COMMONS_RESILIENCE_DDL,
-    // The authority plane's table before the trigger that revokes into it
-    // (#916, E2).
-    SHARE_AUTHORITY_DDL,
     // A trigger ON `core_entity` that writes to `share_authority` and
     // `share_circle_grant`, so both must exist (#916, E2).
     ENTITY_PURGE_REVOKE_DDL,

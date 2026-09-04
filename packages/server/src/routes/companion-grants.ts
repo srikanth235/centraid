@@ -1,3 +1,8 @@
+// The surfaces a Companion device can be confined to. WHICH ones a given
+// device holds is not here and is not JSON on an enrollment: it is a set of
+// `share_authority` rows in the vault, principal `device` over subject type
+// `app.surface` (#928 A6), projected to the gateway for the pre-open request
+// path by `serve/companion-access.ts`.
 export const COMPANION_MODULES = [
   "locker",
   "tasks",

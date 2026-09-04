@@ -36,7 +36,7 @@ function verify(rows: Row[]): boolean {
       prevHash: prev,
       receiptId: row.receipt_id,
       seq: row.seq,
-      authorityId: row.grant_id,
+      authorityId: row.authority_id,
       invocationId: row.invocation_id,
       action: row.action,
       objectType: row.object_type,

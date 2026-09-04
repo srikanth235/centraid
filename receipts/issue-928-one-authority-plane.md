@@ -1551,3 +1551,66 @@ packages/vault/src/schema/party-pointers.ts
 | --- | --- | --- |
 | "No widening" is asserted, not assumed | ran the named invariant suites on the landed head: the deny matrix, the authz smoke matrix and all four automation clamp sweeps | **186 passed, 3 expected fail** — including `[law:consent-standing-answer-required]`, which asserts a `surface` identity's decision is byte-identical to the bare owner device's over the generated table × verb space |
 | The five retired tables really have no reader left, rather than a reader the grep missed | `grep -rn 'access_grant\\b\|access_grant_scope\|access_policy\|access_scope_tombstone\|access_scope_request\|purpose_concept_id' packages apps` over non-test source | 5 hits before this commit, 3 after: `schema/access.ts`'s deliberate supersession marker and two comments — now one. No code path |
+
+## w5a — the attenuations: companion surfaces and egress answers are rows
+
+`outbox_grant` and `devices.grant_profile_json` are deleted. Both were real answers held outside the one
+plane; both are now `share_authority` rows, and the one that is read before a vault can open keeps a
+projection whose absence DENIES.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/vault/src/grant/egress-authority.ts` | new — the egress accessors over `share_authority` (`subject_type = 'egress'`, destination as subject, semantic verb as verb); `automation` principal for an `ai_agent` actor, `device` for the owner's surfaces |
+| `packages/vault/src/grant/companion-surfaces.ts` | new — companion attenuation as `device`-principal rows over `app.surface`, verb `use`; a dropped surface revokes, an added one inserts |
+| `packages/vault/src/grant/authority-registry.ts` | three triples: `device × app.surface × use`, and `device`/`automation × egress` (verbs closed by the connection contract, so the strategy is the enrichment gate) |
+| `packages/vault/src/schema/outbox.ts` | `outbox_grant` deleted; `outbox_item.grant_id` → `authority_id REFERENCES share_authority(authority_id)`, index renamed |
+| `packages/vault/src/schema/migrate.ts` | `SHARE_AUTHORITY_DDL` moves ahead of `OUTBOX_DDL` — the new reference is real |
+| `packages/vault/src/schema/entity-catalog.ts` | `outbox.grant` removed from the registry |
+| `packages/vault/src/commands/outbox.ts` | stage/decide/revoke read and write the authority row; output key `grant_id` → `authority_id` |
+| `packages/vault/src/gateway/assistant-context.ts`, `packages/vault/src/index.ts` | the context sentence and the barrel follow |
+| `packages/vault/src/gateway/evidence.test.ts` | `row.grant_id` → `row.authority_id` — a **pre-existing** typecheck red on `claude/928-w4` (w4a's rename) |
+| `packages/server/src/serve/gateway-schema.ts` | `devices.grant_profile_json` → `attenuated INTEGER`; new `device_surface_projection(endpoint_id, vault_id, surfaces_json, projected_at)` |
+| `packages/server/src/serve/enrollment-store.ts` | `grantProfile` → `attenuated` + `projectedSurfaces` / `projectSurfaces` / `attenuatedEndpointsFor`; revoke and vault removal clear the projection |
+| `packages/server/src/serve/companion-access.ts` | the whole boundary: `projectCompanionAttenuation`, `recordCompanionAttenuation`, and `companionAccess` — one decision with `unreadable` as a case |
+| `packages/server/src/serve/build-gateway.ts` | the request path reads the projection; re-projects on boot and on every `onMount` |
+| `packages/server/src/cli/endpoint-host.ts` | pairing writes the authority rows into each enrolled vault, then projects |
+| `packages/server/src/serve/vault-plane.ts`, `vault-quarantine.ts` | outbox grant readers → the egress accessors; the review feed's `authorityId` is now one id space |
+| `packages/server/src/serve/vault-context.ts`, `routes/vault-routes.ts`, `routes/devices-routes.ts`, `routes/companion-grants.ts` | `grantProfile` → `companionSurfaces`; the devices DTO keeps its wire name, filled from the projection |
+| `SECURITY.md`, `docs/decisions.md`, `docs/glossary.md`, `docs/vault-ontology.md`, `tests/onboarding-scenarios.md` | AP-egress-rows and AP-companion-projection recorded with their property; V-split's companion sentence marked superseded; ONT-20 closed; four sentences that named the deleted column |
+| tests | `packages/vault/src/grant/egress-authority.test.ts` (new), `packages/vault/src/commands/outbox.test.ts`, `packages/server/src/serve/companion-access.test.ts`, `device-plane.test.ts`, `vault-quarantine.test.ts`, `packages/server/src/automation/fire/enrich-gate.test.ts`, `packages/server/src/backup/backup.integration.test.ts`, `recover.integration.test.ts` |
+
+### Decisions
+
+- **The gateway keeps a PROJECTION, not the answer.** Root ruling: the rows are the source of truth; the
+  pre-open request path reads a `gateway.db` projection rebuilt on vault mount and on every write of the
+  answer. An attenuated device with no projection is **refused** (`companion_attenuation_unavailable`),
+  never widened — which is why `devices` keeps one `attenuated` flag: the fact the boundary needs before
+  any vault is open is "is this device confined", not "to what".
+- **The wire keeps `grantProfile`.** The pairing request and the devices DTO keep the field name; renaming
+  them reaches `packages/client`, `apps/mobile` and `packages/tunnel` for no model gain. Doc debt below.
+- **`outbox.revoke_grant` keeps its command name** (its input is now `authority_id`). Renaming the command
+  and the `/outbox/grants` route would ripple into mobile for a vocabulary gain alone.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck
+bun run --cwd packages/vault test -- --run src/commands/outbox.test.ts src/grant/egress-authority.test.ts src/grant/authority-registry.test.ts src/schema/{migrate,ontology-shape,atlas-census}.test.ts
+bun run --cwd packages/server test -- --run src/serve/{authz-deny-matrix,authz-matrix.smoke,vault-quarantine,companion-access,device-plane}.test.ts src/routes/{enrich-search-routes,devices-routes}.test.ts src/automation/fire/enrich-gate.test.ts
+bun run lint && bun run lint:vault-sql
+```
+
+### Findings
+
+- `packages/vault/src/gateway/evidence.test.ts` did not compile on `claude/928-w4` (`row.grant_id` after
+  w4a renamed the column). Fixed here; the base's typecheck was red before this lane touched it.
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| "A missing projection denies" is asserted, not built | `companionAccess({attenuated:true, projected:undefined})` in `companion-access.test.ts`, plus reading the one call site in `build-gateway.ts`: the `unreadable` case returns 403 before the header is ever set | **holds** — and `projectedSurfaces` returns `undefined` (not `[]`) for an absent row, so the two are distinguishable |
+| `grant_profile_json` / `outbox_grant` really have no reader | `grep -rn 'grant_profile_json\|outbox_grant' packages apps docs tests SECURITY.md` outside receipts/CHANGELOG | **no code hit** — every survivor is a register/supersession row naming the deleted store as history. The surviving `grantProfile` identifiers are the pairing wire field and the devices DTO, both fed from the projection |

@@ -290,6 +290,28 @@ export {
   type AutomationSubject,
   type AutomationVerb,
 } from "./grant/automation-authority.js";
+// Egress answers and companion attenuation, both rows of the one plane (#928).
+export {
+  EGRESS_SUBJECT_TYPE,
+  egressPrincipalKind,
+  isLiveEgressAuthority,
+  listEgressAuthorities,
+  liveEgressAuthorityId,
+  liveEgressAuthorityIdsFor,
+  recordEgressAuthority,
+  revokeAllEgressAuthorities,
+  revokeEgressAuthority,
+  type EgressAuthorityKey,
+  type EgressAuthorityRecord,
+  type EgressPrincipalKind,
+} from "./grant/egress-authority.js";
+export {
+  SURFACE_SUBJECT_TYPE,
+  SURFACE_VERB,
+  listCompanionSurfaces,
+  readCompanionSurfaces,
+  setCompanionSurfaces,
+} from "./grant/companion-surfaces.js";
 // The closed declaration of what the plane may be asked (#883).
 export {
   AUTHORITY_REGISTRY,

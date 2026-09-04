@@ -596,7 +596,7 @@ export function makeVaultRouteHandler(
       }
 
       if (method === "GET" && segments[0] === "apps" && segments.length === 1) {
-        const companionProfile = vaultContext()?.grantProfile;
+        const companionProfile = vaultContext()?.companionSurfaces;
         if (companionProfile !== undefined) {
           const allowed = new Set(companionProfile);
           const installed = new Set(plane.listApps().map((app) => app.name));
@@ -823,7 +823,7 @@ export function makeVaultRouteHandler(
         segments.length === 1
       ) {
         const blocking = plane.blocking();
-        if (vaultContext()?.grantProfile !== undefined) {
+        if (vaultContext()?.companionSurfaces !== undefined) {
           return sendJson(res, 200, {
             count:
               blocking.outbox.length +
@@ -848,7 +848,7 @@ export function makeVaultRouteHandler(
         );
         // Each projection ETags its OWN body (#659), so a grant-profiled
         // caller can never revalidate into the other shape's cached response.
-        if (vaultContext()?.grantProfile !== undefined) {
+        if (vaultContext()?.companionSurfaces !== undefined) {
           return sendJsonConditional(req, res, 200, {
             count: notifications.decisions.count,
           });

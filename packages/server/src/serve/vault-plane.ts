@@ -29,6 +29,8 @@ import {
   automationSubjectsOf,
   hasAnsweredEver,
   scopeForSubject,
+  listEgressAuthorities,
+  liveEgressAuthorityIdsFor,
   buildAssistantContext,
   createGateway,
   nowIso,
@@ -283,11 +285,8 @@ export interface ReviewEntry {
   actorId: string | null;
   actorKind: string | null;
   actor: string | null;
-  /**
-   * The standing answer that auto-allowed this receipt (#552, #928). Still
-   * carries an `outbox_grant` id for an outbox send; wave 5(a) makes those
-   * automation-principal rows, and then this is one id space throughout.
-   */
+  /** The standing answer that auto-allowed this receipt (#552, #928) — one
+   *  id space: every value here is a `share_authority.authority_id`. */
   authorityId: string | null;
   context: { kind: "fill"; origin: string } | null;
 }
@@ -774,29 +773,27 @@ export class VaultPlane {
     const outboxRevocations: string[] = [];
     for (const actorId of [app?.appId, agent?.agentId]) {
       if (!actorId) continue;
-      const rules = this.db.vault
-        .prepare(
-          "SELECT grant_id FROM outbox_grant WHERE actor_id = ? AND revoked_at IS NULL"
-        )
-        .all(actorId) as { grant_id: string }[];
-      for (const rule of rules) {
-        outboxRevocations.push(rule.grant_id);
+      for (const authorityId of liveEgressAuthorityIdsFor(
+        this.db.vault,
+        actorId
+      )) {
+        outboxRevocations.push(authorityId);
       }
     }
     const revokeResults = this.gateway.invokeBatchSettled(
       outboxRevocations.map(
-        (grantId) => () =>
+        (authorityId) => () =>
           this.gateway.invoke(this.ownerCredential, {
             command: "outbox.revoke_grant",
-            input: { grant_id: grantId },
+            input: { authority_id: authorityId },
           })
       )
     );
     for (const [index, result] of revokeResults.entries()) {
       if (!result.ok) throw result.error;
-      const revokedGrantId = outboxRevocations[index]!;
+      const revokedAuthorityId = outboxRevocations[index]!;
       this.logger.info(
-        `vault plane: revoked standing outbox grant ${revokedGrantId} for "${appId}"`
+        `vault plane: revoked standing egress answer ${revokedAuthorityId} for "${appId}"`
       );
     }
     closeObsoleteScopeRequest(this.db, appId);
@@ -1156,36 +1153,23 @@ export class VaultPlane {
     createdAt: string;
     revokedAt: string | null;
   }> {
-    const rows = this.db.vault
-      .prepare(
-        `SELECT grant_id, actor_id, verb, target, created_at, revoked_at
-           FROM outbox_grant ORDER BY revoked_at IS NOT NULL, created_at DESC`
-      )
-      .all() as {
-      grant_id: string;
-      actor_id: string;
-      verb: string;
-      target: string;
-      created_at: string;
-      revoked_at: string | null;
-    }[];
-    return rows.map((r) => ({
-      grantId: r.grant_id,
+    return listEgressAuthorities(this.db.vault).map((row) => ({
+      grantId: row.authorityId,
       actor:
-        this.actorName(r.actor_id, "ai_agent") ??
-        this.actorName(r.actor_id, "app"),
-      actorId: r.actor_id,
-      verb: r.verb,
-      target: r.target,
-      createdAt: r.created_at,
-      revokedAt: r.revoked_at,
+        this.actorName(row.actorId, "ai_agent") ??
+        this.actorName(row.actorId, "app"),
+      actorId: row.actorId,
+      verb: row.verb,
+      target: row.target,
+      createdAt: row.grantedAt,
+      revokedAt: row.revokedAt,
     }));
   }
 
-  revokeOutboxGrant(grantId: string): Promise<InvokeOutcome> {
+  revokeOutboxGrant(authorityId: string): Promise<InvokeOutcome> {
     return this.invoke(this.ownerCredential, {
       command: "outbox.revoke_grant",
-      input: { grant_id: grantId },
+      input: { authority_id: authorityId },
     });
   }
 
@@ -1273,8 +1257,8 @@ export class VaultPlane {
       caller_id: string | null;
     }[];
     const riskRank: Record<string, number> = { high: 2, medium: 1, low: 0 };
-    const outboxGrantLookup = this.db.vault.prepare(
-      "SELECT grant_id FROM outbox_item WHERE item_id = ?"
+    const outboxAuthorityLookup = this.db.vault.prepare(
+      "SELECT authority_id FROM outbox_item WHERE item_id = ?"
     );
     const entries = window.map((r) => {
       let risk: string | null = null;
@@ -1305,15 +1289,15 @@ export class VaultPlane {
             : null;
         if (
           output &&
-          typeof output.grant_id === "string" &&
-          output.grant_id.length > 0
+          typeof output.authority_id === "string" &&
+          output.authority_id.length > 0
         ) {
-          grantId = output.grant_id;
+          grantId = output.authority_id;
         } else if (output && typeof output.item_id === "string") {
-          const item = outboxGrantLookup.get(output.item_id) as
-            | { grant_id: string | null }
+          const item = outboxAuthorityLookup.get(output.item_id) as
+            | { authority_id: string | null }
             | undefined;
-          if (item?.grant_id) grantId = item.grant_id;
+          if (item?.authority_id) grantId = item.authority_id;
         } else if (Array.isArray(detail.writes)) {
           for (const write of detail.writes) {
             if (
@@ -1323,11 +1307,11 @@ export class VaultPlane {
                 "outbox.item" &&
               typeof (write as { entityId?: unknown }).entityId === "string"
             ) {
-              const item = outboxGrantLookup.get(
+              const item = outboxAuthorityLookup.get(
                 (write as { entityId: string }).entityId
-              ) as { grant_id: string | null } | undefined;
-              if (item?.grant_id) {
-                grantId = item.grant_id;
+              ) as { authority_id: string | null } | undefined;
+              if (item?.authority_id) {
+                grantId = item.authority_id;
                 break;
               }
             }

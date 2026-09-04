@@ -224,8 +224,8 @@ describe("outbox", () => {
         always_allow: true,
       });
       expect(decided.status).toBe("executed");
-      const grantId = (decided as { output?: { grant_id?: string } }).output
-        ?.grant_id;
+      const grantId = (decided as { output?: { authority_id?: string } }).output
+        ?.authority_id;
       expect(grantId).toBeTruthy();
 
       const second = invoke(agent, "outbox.stage", stageInput());
@@ -233,10 +233,10 @@ describe("outbox", () => {
       const out = second.output as {
         item_id: string;
         status: string;
-        grant_id?: string;
+        authority_id?: string;
       };
       expect(out.status).toBe("approved");
-      expect(out.grant_id).toBe(grantId);
+      expect(out.authority_id).toBe(grantId);
 
       const other = invoke(
         agent,
@@ -255,10 +255,10 @@ describe("outbox", () => {
         decision: "approve",
         always_allow: true,
       });
-      const grantId = (decided as { output?: { grant_id?: string } }).output
-        ?.grant_id as string;
+      const grantId = (decided as { output?: { authority_id?: string } }).output
+        ?.authority_id as string;
       const revoked = invoke(owner, "outbox.revoke_grant", {
-        grant_id: grantId,
+        authority_id: grantId,
       });
       expect(revoked.status).toBe("executed");
       const next = invoke(agent, "outbox.stage", stageInput());
@@ -274,8 +274,8 @@ describe("outbox", () => {
         decision: "approve",
         always_allow: true,
       });
-      const grantId = (decided as { output?: { grant_id?: string } }).output
-        ?.grant_id as string;
+      const grantId = (decided as { output?: { authority_id?: string } }).output
+        ?.authority_id as string;
       const second = invoke(agent, "outbox.stage", stageInput());
       const third = invoke(agent, "outbox.stage", stageInput());
       if (second.status !== "executed" || third.status !== "executed")
@@ -290,7 +290,7 @@ describe("outbox", () => {
           );
       }
       const revoked = invoke(owner, "outbox.revoke_grant", {
-        grant_id: grantId,
+        authority_id: grantId,
       });
       expect(revoked.status).toBe("executed");
       expect(
@@ -300,7 +300,7 @@ describe("outbox", () => {
         const row = itemRow((outcome.output as { item_id: string }).item_id);
         expect(row.status).toBe("pending");
         expect(row.decided_at).toBeNull();
-        expect(row.grant_id).toBeNull();
+        expect(row.authority_id).toBeNull();
         expect(row.staged_at).not.toBe(previousEpisode);
         expect(String(row.note)).toContain("revoked");
       }
@@ -315,15 +315,15 @@ describe("outbox", () => {
         decision: "approve",
         always_allow: true,
       });
-      const grantId = (decided as { output?: { grant_id?: string } }).output
-        ?.grant_id as string;
+      const grantId = (decided as { output?: { authority_id?: string } }).output
+        ?.authority_id as string;
       invoke(owner, "outbox.record_result", {
         item_id: firstId,
         disposition: "sent",
         status_code: 200,
       });
       const revoked = invoke(owner, "outbox.revoke_grant", {
-        grant_id: grantId,
+        authority_id: grantId,
       });
       expect(revoked.status).toBe("executed");
       expect(

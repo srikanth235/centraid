@@ -535,7 +535,6 @@ export const VAULT_ENTITIES: EntityRegistry = {
   },
   outbox: {
     item: { label: "Outbox items", lifecycle: "machinery" },
-    grant: { label: "Outbox grants", lifecycle: "machinery" },
   },
   // Commons control truth and local mechanics (#731). These must stay in the
   // canonical walk: a portable restore without the grant/roster bindings,

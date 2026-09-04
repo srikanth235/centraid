@@ -56,7 +56,15 @@ export function installGatewaySchema(db: DatabaseSync): void {
       label TEXT NOT NULL,
       platform TEXT,
       remember_device INTEGER NOT NULL CHECK (remember_device IN (0, 1)),
-      grant_profile_json TEXT,
+      /*
+       * Is this device confined to a subset of the owner's surfaces (#928 A6)?
+       * The SET of surfaces is not here — it is share_authority rows in the
+       * vault, principal 'device' over subject type 'app.surface'. This flag
+       * is the one fact the gateway must know BEFORE any vault is open, and
+       * it is the reason a missing projection can deny instead of guessing:
+       * attenuated with nothing projected is a refusal, not a full device.
+       */
+      attenuated INTEGER NOT NULL DEFAULT 0 CHECK (attenuated IN (0, 1)),
       compute_json TEXT,
       revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
       added_at TEXT NOT NULL
@@ -65,6 +73,21 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * Replica checkpoints are the one genuinely per-(device, vault) fact, so
      * they keep their own table now that 'devices' no longer fans out.
      */
+    /*
+     * The PROJECTION of a Companion device's attenuation (#928 A6), per
+     * (device, vault) because the answer lives in a vault and a device may be
+     * enrolled in several. The authority rows are the source of truth; this
+     * table exists only because the gateway authorizes a Companion request
+     * BEFORE it opens a vault. It is rebuilt from those rows whenever the
+     * vault opens or the answer changes, and an absent row denies.
+     */
+    CREATE TABLE IF NOT EXISTS device_surface_projection (
+      endpoint_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
+      vault_id TEXT NOT NULL,
+      surfaces_json TEXT NOT NULL,
+      projected_at TEXT NOT NULL,
+      PRIMARY KEY (endpoint_id, vault_id)
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS device_checkpoints (
       endpoint_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
       vault_id TEXT NOT NULL,
