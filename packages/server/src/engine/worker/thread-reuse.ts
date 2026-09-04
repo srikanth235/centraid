@@ -6,6 +6,7 @@
  * installs the sandbox is not the only place the contract can be falsified.
  */
 
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 /**
@@ -59,6 +60,44 @@ export function bindHostFetch(
   signal: AbortSignal
 ): typeof globalThis.fetch {
   return (input, init) => hostFetch(input, { ...init, signal });
+}
+
+const SEED_FILE = /(?:^|[\\/])seed\.(?:m?js|tsx?)$/u;
+
+/** A seed's fs grant is scoped to its app dir, so the dir is part of the key. */
+export function isAppSeedFile(handlerFile: string): boolean {
+  return SEED_FILE.test(handlerFile);
+}
+
+export function appRunSandboxKey(handlerFile: string, lane: string): string {
+  return isAppSeedFile(handlerFile)
+    ? `app-seed:${path.dirname(handlerFile)}`
+    : lane;
+}
+
+/** Lane plus the roots and runtime dir that scoped the install. */
+export function automationRunSandboxKey(
+  lane: string,
+  roots: readonly string[],
+  runtimeDir: string | null | undefined
+): string {
+  return JSON.stringify([lane, roots, runtimeDir ?? null]);
+}
+
+export function handlerHostCtx<Vault>(
+  hostFetch: typeof globalThis.fetch,
+  signal: AbortSignal,
+  vault: Vault
+): {
+  fetch: typeof globalThis.fetch;
+  abortSignal: AbortSignal;
+  vault: Vault;
+} {
+  return {
+    fetch: bindHostFetch(hostFetch, signal),
+    abortSignal: signal,
+    vault,
+  };
 }
 
 export interface ThreadSession {

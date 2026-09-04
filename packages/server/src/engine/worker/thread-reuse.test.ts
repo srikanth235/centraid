@@ -4,10 +4,14 @@ import { describe, expect, test } from "vitest";
 
 import {
   MAX_RUNS_PER_WORKER,
+  appRunSandboxKey,
+  automationRunSandboxKey,
   bindHostFetch,
   createGlobalScrubber,
   createThreadSession,
+  handlerHostCtx,
   handlerImportHref,
+  isAppSeedFile,
   runResultFlags,
 } from "./thread-reuse.js";
 
@@ -87,6 +91,39 @@ describe("run result flags", () => {
     expect(runResultFlags(undefined, MAX_RUNS_PER_WORKER + 1)).toStrictEqual({
       retire: true,
     });
+  });
+});
+
+describe("sandbox keys", () => {
+  test("a seed file keys the thread to its app dir, not the handler lane", () => {
+    expect(isAppSeedFile("/apps/notes/seed.ts")).toBe(true);
+    expect(isAppSeedFile("/apps/notes/queries/library.js")).toBe(false);
+    expect(appRunSandboxKey("/apps/notes/seed.ts", "app-handler")).toBe(
+      "app-seed:/apps/notes"
+    );
+    expect(
+      appRunSandboxKey("/apps/notes/queries/library.js", "app-handler")
+    ).toBe("app-handler");
+  });
+
+  test("an automation key includes the lane, roots, and planted runtime dir", () => {
+    expect(
+      automationRunSandboxKey("model-runtime", ["/models"], "/opt/runtime")
+    ).toBe(JSON.stringify(["model-runtime", ["/models"], "/opt/runtime"]));
+    expect(automationRunSandboxKey("automation-handler", [], undefined)).toBe(
+      JSON.stringify(["automation-handler", [], null])
+    );
+  });
+});
+
+describe("handler host ctx", () => {
+  test("the run's abort signal is the one ctx.fetch and abortSignal share", () => {
+    const run = new AbortController();
+    const vault = { read: () => Promise.resolve(1) };
+    const ctx = handlerHostCtx(globalThis.fetch, run.signal, vault);
+    expect(ctx.abortSignal).toBe(run.signal);
+    expect(ctx.vault).toBe(vault);
+    expect(ctx.fetch).toBeTypeOf("function");
   });
 });
 

@@ -1544,7 +1544,7 @@ symmetrically in both runs. Every other check is green in both, and
 | `packages/server/src/engine/handlers/worker-pool.ts` | Keyed reuse: `acquire(key)` / `release(worker, key)` / `retire(worker)`, refill accounts for threads that are coming back. |
 | `packages/server/src/engine/handlers/handler-runner.ts` | Releases a thread that completed the protocol, retires it on timeout/error/exit; parks under the lane the WORKER reports. |
 | `packages/server/src/engine/worker/runner.ts` | Per-run `AbortController`, per-run handler URL, global scrub between runs, `MAX_RUNS_PER_WORKER`, reports its installed `sandboxKey`. |
-| `packages/server/src/engine/worker/thread-reuse.ts` | The four reuse properties as an in-process kernel both runners import. Worker isolates are outside the v8 coverage map; the kernel is what the 80% diff-coverage gate can actually see. `bindHostFetch` is typed as `typeof fetch` so a caller-supplied `Request` still forwards the run's abort signal. |
+| `packages/server/src/engine/worker/thread-reuse.ts` | The four reuse properties as an in-process kernel both runners import. Worker isolates are outside the v8 coverage map; the kernel is what the 80% diff-coverage gate can actually see. Also owns the sandbox-key and host-ctx helpers the runners used to inline, so those lines are not invisible to v8. |
 | `packages/server/src/engine/worker/thread-reuse.test.ts` | Scrub, per-run URL, run budget, abort-and-drop, host `fetch` signal. |
 | `packages/server/src/automation/worker/runner.ts` | The same four, for the automation lane. |
 | `packages/server/src/automation/handler/runner.ts` | Keyed acquire/release; a timed-out thread never returns to the pool. |

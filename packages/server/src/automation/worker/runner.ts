@@ -143,7 +143,8 @@ if (!parentPort) {
   throw new Error("centraid automation worker must be run as a worker_thread");
 }
 const port = parentPort;
-const { createThreadSession } = await loadThreadReuse();
+const { automationRunSandboxKey, createThreadSession } =
+  await loadThreadReuse();
 const session = createThreadSession();
 
 const boot = workerData as { pooled?: boolean } & Partial<WorkerRequest>;
@@ -500,13 +501,11 @@ function execute(request: WorkerRequest): void {
           redactLaunchArgs: true,
         });
         sandbox.taint(pathToFileURL(req.handlerFile).href);
-        // The lane actually installed, plus what scopes it: the pool parks
-        // under this, never under the parent's guess.
-        sandboxKey = JSON.stringify([
+        sandboxKey = automationRunSandboxKey(
           sandbox.policy.lane,
           roots,
-          request.sandboxRuntimeDir ?? null,
-        ]);
+          request.sandboxRuntimeDir
+        );
         session.scrub();
       }
       const mod = (await import(session.importHref(req.handlerFile))) as {

@@ -40,7 +40,8 @@ async function loadSandboxBoot(): Promise<typeof import("../sandbox/boot.js")> {
 
 /** Captured BEFORE the sandbox revokes the global. */
 const hostFetch = globalThis.fetch;
-const { bindHostFetch, createThreadSession } = await loadThreadReuse();
+const { appRunSandboxKey, createThreadSession, handlerHostCtx, isAppSeedFile } =
+  await loadThreadReuse();
 const session = createThreadSession();
 
 let tsLoaderRegistered = false;
@@ -205,15 +206,6 @@ const log = {
     port.postMessage({ type: "log", level: "error", msg } satisfies LogMessage),
 };
 
-function baseCtx() {
-  const signal = session.signal;
-  return {
-    fetch: bindHostFetch(hostFetch, signal),
-    abortSignal: signal,
-    vault,
-  };
-}
-
 function execute(req: WorkerRequest): void {
   session.beginRun();
   let sandboxKey: string | undefined;
@@ -250,18 +242,13 @@ function execute(req: WorkerRequest): void {
       const { loadSandbox } = await loadSandboxBoot();
       const sandboxApi = await loadSandbox();
       // Lane chosen per file, so no handler inherits the seed's `fs` grant.
-      const isSeed = /(?:^|[\\/])seed\.(?:m?js|tsx?)$/u.test(req.handlerFile);
       const sandbox = sandboxApi.installWorkerSandbox(
-        isSeed
+        isAppSeedFile(req.handlerFile)
           ? sandboxApi.appSeedPolicy(path.dirname(req.handlerFile))
           : sandboxApi.appHandlerPolicy(),
         { redactLaunchArgs: true }
       );
-      // A seed's grant is scoped to ITS app dir, so the dir is part of the
-      // identity two runs must share to run on one thread.
-      sandboxKey = isSeed
-        ? `app-seed:${path.dirname(req.handlerFile)}`
-        : sandbox.policy.lane;
+      sandboxKey = appRunSandboxKey(req.handlerFile, sandbox.policy.lane);
       session.scrub();
       sandbox.taint(pathToFileURL(req.handlerFile).href);
       const mod = (await import(session.importHref(req.handlerFile))) as {
@@ -273,7 +260,7 @@ function execute(req: WorkerRequest): void {
       const fullArgs = {
         ...(req.args as object),
         log,
-        ctx: { ...baseCtx(), time },
+        ctx: { ...handlerHostCtx(hostFetch, session.signal, vault), time },
       };
       const value = await mod.default(fullArgs);
       port.postMessage({
