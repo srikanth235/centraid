@@ -126,6 +126,10 @@
       "input": {
         "type": "object",
         "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          },
           "title": {
             "type": "string",
             "minLength": 1

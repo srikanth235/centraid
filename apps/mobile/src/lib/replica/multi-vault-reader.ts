@@ -1,6 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit (#738) the mounted-reader transaction boundary keeps attach, schema, overlay, FTS, provenance, and cursor composition in one audited class
 import {
   applyOptimisticMutations,
+  assertReplicaOrder,
   assertReplicaPage,
   assertReplicaTieCensus,
   DEFAULT_REPLICA_PURPOSE,
@@ -359,6 +360,16 @@ export class MultiVaultReplicaReader {
     // Escalating rows sort ahead of the whole union, so one page proves every
     // mounted database clean or names the first refusal.
     assertReplicaPage(probed, plan);
+    // The order guards ride their own statement since #922 C3, so the mounted
+    // reader runs it too — the escalation must not depend on which reader is
+    // asking.
+    if (plan.orderCensus && probed.length > 0) {
+      const census = await this.query<Record<string, number>>(
+        plan.orderCensus.sql,
+        plan.orderCensus.binds
+      );
+      assertReplicaOrder(census[0], plan);
+    }
     if (plan.tieCensus) {
       const census = await this.query<ReplicaTieCensusRow>(
         plan.tieCensus.sql,

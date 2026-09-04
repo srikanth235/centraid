@@ -8,25 +8,24 @@ import { webCryptoDigest, webCryptoIdFactory } from "./digest.js";
 import type { ReplicaDigest, ReplicaIdFactory } from "./digest.js";
 import { ReplicaProtocolError } from "./errors.js";
 import type { IntentRecordStore } from "./intent-record-store.js";
+import {
+  OVERLAY_STATES,
+  actionableAttention,
+  intentVerdict,
+  retainedAttention,
+} from "./intent-verdict.js";
+import { mirrorOutbox } from "./outbox-mirror.js";
+import type { OutboxMirror } from "./outbox-mirror.js";
 import { intentPayloadHash } from "./payload-hash.js";
 import type {
   EnqueueIntentInput,
   IntentOutcome,
-  IntentState,
   OptimisticMutation,
   ReplicaBaseVersion,
   ReplicaIntent,
   ReplicaValue,
 } from "./types.js";
 
-const OVERLAY_STATES = new Set<IntentState>([
-  "queued",
-  "sending",
-  "awaiting-change",
-  "parked",
-  "denied",
-  "failed",
-]);
 /**
  * Intent transitions share one durable queue; preserve outcome order instead
  * of racing state reads and writes for the same optimistic overlay.
@@ -49,9 +48,7 @@ export interface IntentQueueOptions {
   onSupersededRetired?: (intentId: string) => void;
 }
 
-const SYNTHETIC_PENDING_ROW = /^pending:(?<intentId>[^:]+):/u;
 const PENDING_SUPERSEDES_FIELD = "__centraid_pending_supersedes";
-const REVISION_IDENTITY_PROBE = "__centraid_revision_identity_probe__";
 const replacementLocks = new Map<string, Promise<void>>();
 
 interface WebLockManager {
@@ -124,37 +121,20 @@ export interface PendingIntentReplacement {
   supersededIntentId: string;
 }
 
-/** Resolve only an explicitly declared edit of a projected synthetic row. */
-export function pendingIntentIdFromInput(
-  appId: string,
-  action: string,
-  input: ReplicaValue
-): PendingIntentRevisionTarget | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input))
-    return undefined;
-  const declaration = pendingProjectionFor(appId);
-  const expectedActions = declaration?.revisions?.[action];
-  if (!declaration || !expectedActions || expectedActions.length === 0)
-    return undefined;
-  const projected = projectPendingWrite(declaration, {
-    appId,
-    action,
-    input: input as Readonly<Record<string, unknown>>,
-    intentId: REVISION_IDENTITY_PROBE,
-  });
-  for (const mutation of projected.optimistic) {
-    const match = SYNTHETIC_PENDING_ROW.exec(mutation.rowId);
-    const intentId = match?.groups?.intentId;
-    if (intentId && intentId !== REVISION_IDENTITY_PROBE)
-      return { intentId, expectedActions };
-  }
-  return undefined;
+/** Every row id a write's identity fields name. */
+function namedRowIds(input: ReplicaValue): string[] {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return [];
+  return Object.entries(input as Record<string, ReplicaValue>)
+    .filter(
+      ([key, value]) => isRowIdentityField(key) && typeof value === "string"
+    )
+    .map(([, value]) => value as string);
 }
 
 function revisedInput(
   existing: ReplicaValue,
   revision: ReplicaValue,
-  intentId: string
+  mintedRowIds: ReadonlySet<string>
 ): ReplicaValue {
   if (
     !existing ||
@@ -167,10 +147,14 @@ function revisedInput(
     return revision;
   const merged = cloneReplicaValue(existing) as Record<string, ReplicaValue>;
   for (const [key, value] of Object.entries(revision)) {
+    // The revision names the row this intent already minted; the identity is
+    // not the thing being revised, so it never overwrites itself (#922 G2 —
+    // the id no longer spells which intent made it, so the intent's own
+    // projected rows are the answer).
     if (
       isRowIdentityField(key) &&
       typeof value === "string" &&
-      value.startsWith(`pending:${intentId}:`)
+      mintedRowIds.has(value)
     )
       continue;
     if (key.startsWith("clear_") && value === true) {
@@ -190,22 +174,6 @@ function revisedInput(
     merged[key] = cloneReplicaValue(value);
   }
   return merged;
-}
-
-function retainedAttention(
-  intent: ReplicaIntent | undefined
-): intent is ReplicaIntent {
-  return (
-    intent?.state === "denied" ||
-    intent?.state === "failed" ||
-    intent?.state === "parked"
-  );
-}
-
-function actionableAttention(
-  intent: ReplicaIntent | undefined
-): intent is ReplicaIntent {
-  return intent?.state === "denied" || intent?.state === "failed";
 }
 
 function markSupersededIntent(
@@ -262,7 +230,7 @@ export function presentPendingIntentMutation(
       : { ...mutation };
   return decoratePendingMutation(visible, {
     intentId: intent.intentId,
-    state: intent.conflict ? "conflict" : intent.state,
+    state: intent.state,
     action: intent.action,
     attempts: intent.attempts,
     ...(intent.reason ? { reason: intent.reason } : {}),
@@ -275,11 +243,13 @@ export class IntentQueue {
   readonly #idFactory: ReplicaIdFactory;
   readonly #digest: ReplicaDigest;
   readonly #onSupersededRetired: ((intentId: string) => void) | undefined;
+  readonly #mirror: OutboxMirror;
+  /** The mirrored store: every write through it invalidates the overlay. */
+  private readonly store: IntentRecordStore;
 
-  constructor(
-    private readonly store: IntentRecordStore,
-    options: IntentQueueOptions = {}
-  ) {
+  constructor(store: IntentRecordStore, options: IntentQueueOptions = {}) {
+    this.#mirror = mirrorOutbox(store);
+    this.store = this.#mirror.store;
     this.#idFactory = options.idFactory ?? webCryptoIdFactory;
     this.#digest = options.digest ?? webCryptoDigest;
     this.#onSupersededRetired = options.onSupersededRetired;
@@ -335,13 +305,13 @@ export class IntentQueue {
     await applyInIntentOrder(outcomes, async (outcome) => {
       const existing = await this.store.get(outcome.intentId);
       if (!existing || !OVERLAY_STATES.has(existing.state)) return;
-      // Conflict is a wire outcome, not a persisted outbox state. Preserve its
-      // structured detail on the existing `failed` state so the schema and the
-      // gateway's outcome vocabulary remain unchanged.
-      const state: IntentState =
-        outcome.status === "conflict" ? "failed" : outcome.status;
+      // A conflict is a state of its own, and a conflict whose BASE ROW IS
+      // GONE is a third one (#922 G5): the member's remedy differs, so the
+      // verdict must too. The outbox `state` column is unconstrained TEXT, so
+      // widening the vocabulary needs no migration on either store.
+      const verdict = intentVerdict(outcome);
       const patch = {
-        state,
+        ...verdict,
         reason: outcome.reason,
         output: outcome.output,
         ...(outcome.conflict ? { conflict: outcome.conflict } : {}),
@@ -367,8 +337,12 @@ export class IntentQueue {
     return updated;
   }
 
+  /**
+   * The overlay every replica read composes over. It comes from the mirror,
+   * so an empty outbox costs no IndexedDB work per read (#922 C1).
+   */
   async pending(): Promise<ReplicaIntent[]> {
-    return this.store.list([...OVERLAY_STATES]);
+    return this.#mirror.pending([...OVERLAY_STATES]);
   }
 
   /** A renderer crash can strand claimed work; replay it with the same id and hash. */
@@ -465,9 +439,42 @@ export class IntentQueue {
       if (!actionableAttention(existing)) return undefined;
       if (expectedActions && !expectedActions.includes(existing.action))
         return undefined;
-      const input = revisedInput(existing.input, revision, intentId);
+      const input = revisedInput(
+        existing.input,
+        revision,
+        new Set(existing.optimistic.map((mutation) => mutation.rowId))
+      );
       return this.replace(existing, input, refreshedBaseVersions);
     });
+  }
+
+  /**
+   * The queued intent whose projection minted a row id this write NAMES
+   * (#922 G2).
+   *
+   * It replaces the `pending:` grammar, which encoded the intent id in the
+   * row id so a caller could read it back out. Ids are canonical now, so the
+   * OUTBOX is asked instead — exact, and it does not care what the id looks
+   * like. Only declared revisions match: an app says which action revises
+   * which in `revisions`, and nothing is guessed from an arbitrary `*_id`.
+   */
+  async pendingIntentForInput(
+    appId: string,
+    action: string,
+    input: ReplicaValue
+  ): Promise<PendingIntentRevisionTarget | undefined> {
+    const expectedActions = pendingProjectionFor(appId)?.revisions?.[action];
+    if (!expectedActions || expectedActions.length === 0) return undefined;
+    const named = new Set(namedRowIds(input));
+    if (named.size === 0) return undefined;
+    const match = (await this.store.list()).findLast(
+      (intent) =>
+        intent.appId === appId &&
+        OVERLAY_STATES.has(intent.state) &&
+        expectedActions.includes(intent.action) &&
+        intent.optimistic.some((mutation) => named.has(mutation.rowId))
+    );
+    return match ? { intentId: match.intentId, expectedActions } : undefined;
   }
 
   /**

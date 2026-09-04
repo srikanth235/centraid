@@ -1,6 +1,8 @@
 import {
   definePendingProjection,
+  pendingDelete,
   pendingPatch,
+  pendingTombstone,
   pendingUpsert,
   stablePendingRowId,
 } from "../_shared/pending-overlay.js";
@@ -33,9 +35,11 @@ export const photosPendingProjection = definePendingProjection({
         "Photo byte custody and upload use the custody/transfer engine, not row overlay.",
     },
     "update-asset": ({ input }) => asset(input),
-    "delete-asset": ({ input }) => asset(input),
+    // `media.delete_asset` sets `deleted_at`; `purge_asset` removes the row.
+    "delete-asset": ({ input }) =>
+      pendingTombstone("media.asset", input.asset_id),
     restore: ({ input }) => asset(input),
-    "purge-asset": ({ input }) => asset(input),
+    "purge-asset": ({ input }) => pendingDelete("media.asset", input.asset_id),
     "create-album": ({ input, intentId }) => {
       const albumId = stablePendingRowId(intentId, "album");
       return [
@@ -47,14 +51,18 @@ export const photosPendingProjection = definePendingProjection({
     },
     "rename-album": ({ input }) => album(input),
     "set-album-cover": ({ input }) => album(input),
-    "delete-album": ({ input }) => album(input),
+    "delete-album": ({ input }) =>
+      pendingDelete("core.collection", input.album_id),
     "restore-album": ({ input }) => album(input),
     // Membership is a relation, but its visible anchor is the photograph.
     // Keep that anchor on-screen until canonical collection_entry settlement.
     "add-to-album": ({ input }) =>
       pendingPatch("media.asset", input.asset_id, input),
-    "remove-from-album": ({ input }) =>
-      pendingPatch("media.asset", input.asset_id, input),
+    "remove-from-album": {
+      excluded: true,
+      reason:
+        "The membership row is core.collection_entry, keyed by a surrogate entry_id the payload does not carry; the album and asset ids alone cannot address it.",
+    },
     // Changing review_state optimistically would filter the only visible row
     // out of the queue. Project status onto it without guessing settlement.
     "answer-face": ({ input }) =>

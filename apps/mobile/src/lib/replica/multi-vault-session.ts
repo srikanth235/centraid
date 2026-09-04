@@ -76,6 +76,8 @@ export type PendingChangeStatus =
   | "parked"
   | "denied"
   | "conflict"
+  | "conflict-base-missing"
+  | "expired"
   | "failed"
   | "executed";
 

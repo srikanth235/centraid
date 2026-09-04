@@ -1,5 +1,8 @@
 import { isAddressablePartyKind } from "@centraid/blueprints/apps/_shared/party-kind";
-import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  projectPendingWrite,
+  readPendingOverlay,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { PendingProjectionDeclaration } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 // governance: allow-repo-hygiene file-size-limit (#731) the inline host bridge keeps query, write, sharing, Commons claim, resident-save, and replica invalidation doors in one security boundary.
@@ -147,6 +150,12 @@ export interface InlineShareTarget {
   partyId: string;
   label: string;
   vaultId?: string;
+  /**
+   * The person's row is still queued. Read off the row's overlay, never off
+   * the shape of the id (#922 G2): a minted id IS the row's real id, so only
+   * the overlay knows whether the origin has seen it yet.
+   */
+  pending?: boolean;
 }
 
 export interface InlineShareCircle {
@@ -447,6 +456,7 @@ async function loadShareTargets(
       partyId,
       label: displayName,
       ...(vaultId ? { vaultId } : {}),
+      ...(readPendingOverlay(row.values) ? { pending: true } : {}),
     });
   }
   for (const link of links) {
@@ -462,7 +472,7 @@ async function loadShareTargets(
 
 const QUICK_ADD_CADENCE_DAYS = 30;
 
-/** Only an `executed` intent has a real identity: queued/parked are still waiting, denied/expired/cancelled never happened, and a `pending:` id names nobody. */
+/** Only an `executed` intent has a real identity: queued/parked are still waiting, denied/expired/cancelled never happened. */
 export function settledPartyIdFromOutcome(outcome: unknown): string {
   const settled = outcome as {
     status?: unknown;
@@ -473,7 +483,7 @@ export function settledPartyIdFromOutcome(outcome: unknown): string {
       `Adding a person did not complete (${String(settled?.status ?? "no outcome")}).`
     );
   const partyId = settled.output?.party_id;
-  if (typeof partyId !== "string" || !partyId || partyId.startsWith("pending:"))
+  if (typeof partyId !== "string" || !partyId)
     throw new Error("Adding a person did not return a settled identity.");
   return partyId;
 }
@@ -818,7 +828,9 @@ export function createInlineCentraidClient(
       });
       const result = await binding.session.write(appId, {
         action: opts.action,
-        input: (opts.input ?? {}) as never,
+        // The ids the projection minted ride the write (#922 G2), so the
+        // origin creates the very row the seat is already showing.
+        input: { ...opts.input, ...projected.input } as never,
         intentId,
         ...(projected.optimistic.length > 0
           ? { optimistic: projected.optimistic }

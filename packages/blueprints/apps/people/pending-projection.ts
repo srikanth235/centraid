@@ -1,5 +1,6 @@
 import {
   definePendingProjection,
+  pendingDelete,
   pendingInputValues,
   pendingPatch,
   pendingUpsert,
@@ -47,7 +48,11 @@ export const peoplePendingProjection = definePendingProjection({
     },
     "edit-person": ({ input }) => [...person(input), ...profile(input)],
     "set-cadence": ({ input }) => profile(input),
-    "trash-person": ({ input }) => profile(input),
+    "trash-person": {
+      excluded: true,
+      reason:
+        "The trashed row is people.profile, keyed by profile_id; the payload carries only party_id, and the party row this app overlays has no tombstone column.",
+    },
     "restore-person": ({ input }) => profile(input),
     "undo-person": ({ input }) => profile(input),
     "log-interaction": ({ input }) => profile(input),
@@ -90,8 +95,7 @@ export const peoplePendingProjection = definePendingProjection({
       pendingPatch("core.concept", input.list_id, { pref_label: input.name }, [
         "pref_label",
       ]),
-    "delete-list": ({ input }) =>
-      pendingPatch("core.concept", input.list_id, input),
+    "delete-list": ({ input }) => pendingDelete("core.concept", input.list_id),
     "add-journal-entry": {
       excluded: true,
       reason: "The journal entry has no People row identity.",

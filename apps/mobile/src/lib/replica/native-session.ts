@@ -14,7 +14,6 @@ import {
   IntentQueue,
   postReplicaCheckpoint,
   postReplicaIntent,
-  pendingIntentIdFromInput,
   ReplicaCoordinator,
   ReplicaProtocolError,
   ReplicaTransportError,
@@ -25,6 +24,7 @@ import type {
   EnqueueIntentInput,
   GatewayAuth,
   IntentOutcome,
+  IntentState,
   ReplicaChangeFeedAdapter,
   ReplicaCursor,
   ReplicaBaseVersion,
@@ -376,7 +376,10 @@ export class NativeReplicaSession implements MobileReplicaSession {
     // Before ANY projection, id minting or queue touch: an online-only write
     // has no representation in the outbox at all.
     if (input.onlineOnly === true) return this.postAction(appId, input);
-    const retainedIntent = pendingIntentIdFromInput(
+    // #922 G2: the row id no longer spells which intent minted it, so the
+    // OUTBOX answers instead — exact, and it works for an id the origin has
+    // already honoured too.
+    const retainedIntent = await this.#coordinator.pendingIntentForInput(
       appId,
       input.action,
       input.input
@@ -404,6 +407,13 @@ export class NativeReplicaSession implements MobileReplicaSession {
       input: input.input as Readonly<Record<string, unknown>>,
       intentId,
     });
+    // The ids the projection minted ride the write (#922 G2).
+    const minted = projected.input
+      ? ({
+          ...(input.input as Readonly<Record<string, unknown>>),
+          ...projected.input,
+        } as typeof input.input)
+      : input.input;
     // No catalog yet (first-open offline launch): keep the durable intent, defer
     // only its projection, and RECORD the deferral so
     // `backfillDeferredProjections` can finish it when page one lands.
@@ -428,7 +438,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     const matched = await this.#coordinator.reviseIntentForProjection(
       appId,
       input.action,
-      input.input,
+      minted,
       optimistic,
       baseVersions
     );
@@ -440,7 +450,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       intentId,
       appId,
       action: input.action,
-      input: input.input,
+      input: minted,
       optimistic,
       dependencies,
       ...(baseVersions.length > 0 ? { baseVersions } : {}),
@@ -614,14 +624,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     Array<
       | {
           intentId: string;
-          status:
-            | "queued"
-            | "sending"
-            | "awaiting-change"
-            | "parked"
-            | "denied"
-            | "conflict"
-            | "failed";
+          status: Exclude<IntentState, "executed">;
           appId: string;
           action: string;
           reason?: string;
@@ -643,7 +646,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
         : [
             {
               intentId: intent.intentId,
-              status: intent.conflict ? ("conflict" as const) : intent.state,
+              // The intent's own state is the verdict (#922 G5); a conflict
+              // is no longer re-derived from the presence of `conflict`.
+              status: intent.state,
               appId: intent.appId,
               action: intent.action,
               ...(intent.reason ? { reason: intent.reason } : {}),

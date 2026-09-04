@@ -39,6 +39,7 @@ const ALL_STATUSES: readonly PendingOverlayStatus[] = [
   "parked",
   "denied",
   "conflict",
+  "conflict-base-missing",
   "failed",
   "expired",
   "cancelled",
@@ -199,12 +200,7 @@ describe("what a pending row says", () => {
   });
 
   it("says something for every terminal state, reason or not", () => {
-    for (const status of [
-      "denied",
-      "failed",
-      "expired",
-      "cancelled",
-    ] as const) {
+    for (const status of ["denied", "failed", "cancelled"] as const) {
       expect(pendingOverlayCopy(presentation({ status }))).toBe(
         "This change was not applied."
       );
@@ -212,6 +208,19 @@ describe("what a pending row says", () => {
         pendingOverlayCopy(presentation({ status, reason: "Not allowed." }))
       ).toBe("Not allowed.");
     }
+    // #922 G5/G9: the two verdicts a member acts on differently say so, and
+    // an expiry still yields to a reason the gateway supplied.
+    expect(pendingOverlayCopy(presentation({ status: "expired" }))).toBe(
+      "This change waited too long to be sent."
+    );
+    expect(
+      pendingOverlayCopy(
+        presentation({ status: "expired", reason: "Not allowed." })
+      )
+    ).toBe("Not allowed.");
+    expect(
+      pendingOverlayCopy(presentation({ status: "conflict-base-missing" }))
+    ).toContain("is gone");
   });
 
   it("prefixes the badge label, and prefixes it once", () => {
@@ -227,6 +236,10 @@ describe("what a member may still do about it", () => {
       pendingOverlayCanRetry(presentation({ status }))
     );
     expect(retryable).toStrictEqual(["denied", "conflict", "failed"]);
+    // A conflict whose base row is gone is NOT one of them.
+    expect(
+      pendingOverlayCanRetry(presentation({ status: "conflict-base-missing" }))
+    ).toBe(false);
   });
 
   it("offers a discard for every state that has stopped moving", () => {
@@ -236,6 +249,7 @@ describe("what a member may still do about it", () => {
     expect(discardable).toStrictEqual([
       "denied",
       "conflict",
+      "conflict-base-missing",
       "failed",
       "expired",
       "cancelled",

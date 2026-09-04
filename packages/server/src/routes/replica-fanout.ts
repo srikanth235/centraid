@@ -2,13 +2,23 @@
 // replica subscriber (#883 C2). THE MEMO KEY MUST DETERMINE THE ANSWER: a new
 // input to `projectReplicaPage` that misses `memoKey` serves one subscriber's
 // page to all. The clock is bounded by the generation bump and the TTL.
+//
+// `deviceId` is deliberately NOT in the key (#922 A4). A projection is
+// device-neutral by construction — the one device-specific part, an intent's
+// outcome, is resolved by `applyReplicaIntentOutcomes` on top of the shared
+// page — so N identically-authorized devices in a household cost ONE
+// projection per commit instead of N. Any future device-specific input to
+// `projectReplicaPage` must go back into the key or be layered the same way.
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { subscribeReplicaCommits } from "@centraid/vault";
 import type { ReplicaCursor } from "@centraid/vault";
 
-import { projectReplicaPage } from "./replica-projection.js";
+import {
+  applyReplicaIntentOutcomes,
+  projectReplicaPage,
+} from "./replica-projection.js";
 import type {
   ReplicaProjectedPage,
   ReplicaProjectionOptions,
@@ -37,7 +47,6 @@ function memoKey(
     access.canWrite,
     access.rememberDevice,
     access.appId ?? null,
-    access.deviceId ?? null,
     since.epoch,
     since.seq,
     limit,
@@ -83,7 +92,11 @@ export class ReplicaProjectionHub {
     };
   }
 
-  /** The returned page is SHARED across subscribers — read it, never mutate. */
+  /**
+   * The returned page is SHARED across subscribers — read it, never mutate.
+   * The device's intent outcomes are layered on a copy; the memoized page
+   * itself stays device-neutral.
+   */
   project(
     access: ReplicaHubAccess,
     since: ReplicaCursor,
@@ -99,7 +112,7 @@ export class ReplicaProjectionHub {
       cached.generation === this.generation &&
       now - cached.computedAt < PROJECTION_MEMO_TTL_MS
     ) {
-      return cached.page;
+      return applyReplicaIntentOutcomes(this.db, cached.page, access);
     }
     const page = projectReplicaPage(this.db, access, since, limit, options);
     // Re-set moves the key to the end of insertion order, so eviction drops
@@ -111,7 +124,7 @@ export class ReplicaProjectionHub {
       if (oldest.done) break;
       this.memo.delete(oldest.value);
     }
-    return page;
+    return applyReplicaIntentOutcomes(this.db, page, access);
   }
 }
 

@@ -7,6 +7,18 @@ import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 
 const STRING = { type: "string", minLength: 1 } as const;
 
+/*
+ * SAVE IS AN UPSERT, so a seat-minted id is honoured but NOT refused (#922
+ * G2). The seat mints `project_id`/`section_id` only when it is making the
+ * row, but by the time the write arrives a create and a rename look the same:
+ * both carry the id. Refusing an id the vault already holds would refuse every
+ * rename, so `mintedIdIsFree` — which `schedule.add_task` uses because adding
+ * is only ever a create — deliberately does not apply here. The consequence,
+ * stated so nobody has to rediscover it: a second save with the same id
+ * OVERWRITES the row's fields, which is what "save" means and what
+ * `idempotency: "idempotent"` below declares. Splitting create from edit is
+ * the change that would let these two refuse.
+ */
 export const SAVE_PROJECT: CommandDefinition = {
   name: "schedule.save_project",
   ownerSchema: "schedule",

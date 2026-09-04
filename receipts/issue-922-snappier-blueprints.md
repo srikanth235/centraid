@@ -165,7 +165,7 @@ Falsification attempts:
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-03 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 | 2026-09-03 | codex | 01a06827-b506-78d1-b396-f4b14307e138 |
 
 ## w1 Metro-loader spike — ADOPT
@@ -1609,3 +1609,364 @@ Demonstrated red, both new isolation properties, seeded by reverting one line ea
 - **Base drift in `packages/blueprints/manifest.json`.** `bun run build` regenerates it with two entries the checked-in copy lacks (`notes/queries/history.test.ts`, `docs/queries/history.test.ts`, both added by the branch's base commit `f782cfb6d`). Reverted rather than carried, per the wave's base-drift rule.
 - **`compositeLoadFactor.ceilingWorstLaneP95Ms` (3500) is now loose** against an observed 646.7–754.3 ms. A tightening, not taken here: it is not this lane's budget and a flaky ceiling is worse than a loose one.
 - **A pool full of one key never serves another.** `acquire` falls back to a fresh thread when no idle spare matches, and does not evict a mismatched spare to make room. Harmless while app seeds are rare and every automation lane is `automation-handler`, and visible the moment a household runs two lanes hot.
+## lane 4a — commit path
+
+Host for every number below: Linux 6.18.44 x86-64, 4 cores / 15 GB, container filesystem, `synchronous = FULL` unless a row says otherwise.
+
+| file | change |
+| --- | --- |
+| `packages/server/src/routes/replica-intent-crash-replay.test.ts` | new: the commit path's crash boundaries, one case each |
+| `packages/server/src/serve/group-commit-queue.ts` | idle queue commits on the next microtask; window sized from the measured fsync |
+| `packages/server/src/serve/group-commit-queue.test.ts` | lone write, writes issued together, the window opening and closing again |
+| `packages/server/src/serve/vault-plane.ts` | `storageFsyncMs` option feeding the window; fallback checkpoint reduced to one call |
+| `packages/server/src/serve/vault-registry.ts` | passes `storageFsyncMs` to each plane |
+| `packages/server/src/serve/build-gateway.ts` | passes the boot probe's `storageFsyncMs` to the registry |
+| `packages/vault/src/db.ts` | `checkpointIfLargerThan`: the size test and a reader-safe PASSIVE checkpoint |
+| `packages/vault/src/db.test.ts` | the threshold, the bound under a reading client, and why not TRUNCATE |
+| `packages/vault/src/index.ts` | exports `VaultWalCheckpoint` |
+
+**Deleted with replacement.** The `synchronous === "NORMAL" ? 8 : 5` group-commit window pair in `vault-plane.ts` — two numbers with no measurement behind either — replaced by `groupCommitWindowMs(storageFsyncMs)`. The inline `existsSync`/`statSync`/`gateway.checkpoint` block in the plane's WAL tick, replaced by `VaultDb.checkpointIfLargerThan`.
+
+**Decisions.** B8's fold is refused with evidence rather than landed; see the verdict below.
+
+### B8 — durable commits per offline intent
+
+**Measured, not assumed.** The gate landed first: `packages/server/src/routes/replica-intent-crash-replay.test.ts` walks the offline-intent commit path boundary by boundary — crash before admission, crash after admission and before the canonical commit, crash after the canonical commit, and a clean commit redelivered — stopping the plane at each point, reopening the vault FROM DISK and resubmitting the same intent. Convergence is the assertion everywhere: one write, one terminal outcome, one receipt.
+
+| number | before | after | provenance |
+| --- | --- | --- | --- |
+| durable commits (fsync+fdatasync) per offline intent | 3.00 | 3.00 (unchanged — see verdict) | `strace -f -e trace=fsync,fdatasync -c node <lane bench>` over `handleReplicaIntent` on a real `VaultPlane`, differenced at N=10/30/50 intents (527/587/647 calls) to cancel boot; Linux 6.18.44, 4 cores / 15 GB |
+
+**Verdict: the B8 finding does not survive the code, and the fold is refused with reasons.** The ruling's "~4 durable commits per intent … the separate finalizations protect no crash property" is stale. Three commits are paid, and the invocation's own work is already **one** of them: `invokeBatchSettled` opens one `BEGIN IMMEDIATE` per arrival window, and the mutation, the `replica_invocation_commit` marker, the audit finalisation, the receipt row and the journal proof are savepoints inside it (#916). The other two are the intent-status protocol pair, and each is load-bearing:
+
+- **Admission (`sending`), before dispatch.** The only durable carrier of the device-visible intent identity — device, app, action, payload hash — which no canonical transaction can reconstruct; the latch that makes a concurrent or redelivered duplicate conceal instead of dispatch; and the row a parked command transitions days later, which `transitionReplicaIntentOutcome` can only do to a row that exists.
+- **The terminal outcome, after dispatch.** It is the **action's** outcome, not the invocation's: an action may span several canonical commits and may end contradicting one. `replica-intent-route.test.ts` › "a post-invoke denial is durable and does not re-dispatch on retry" pins exactly that — a durable `schedule_task` row and a `denied` intent. Publishing `executed` from inside the canonical transaction was implemented, and it failed that test plus "a later invocation finalization error replays the complete action exactly once"; both were kept, the fold was reverted.
+- **The audit finalisation as a releasable savepoint, not a folded step, is a property too.** That second test pins a canonical write that is durable while its journal finalisation aborted, repaired on the next retry without re-entering the handler. Folding it into the mutation would turn that into a rollback of a write the member already made.
+
+### B7 — the group-commit window opens only under concurrency
+
+`GroupCommitQueue` no longer holds an arriving write when there is nothing in flight to share a commit with. An idle queue commits on the next **microtask**, which still gathers every write issued together without awaiting the last one into a single transaction at no added latency for any of them; the `windowMs` window is kept for the turn AFTER a batch larger than one has committed — concurrency observed, not assumed — and shuts again as soon as batches are back to one. `packages/server/src/serve/group-commit-queue.test.ts` pins both arms plus the closing.
+
+The window's size is now the measured cost of the fsync it exists to share: `groupCommitWindowMs(storageFsyncMs)`, clamped to `[1, GROUP_COMMIT_MAX_WINDOW_MS]`, fed from the boot probe already published on `GatewayHardwareProfile.storageFsyncMs` (build-gateway → vault-registry → vault-plane). The `synchronous === "NORMAL" ? 8 : 5` pair it replaces was two numbers with no measurement behind either.
+
+| number | before | after | provenance |
+| --- | --- | --- | --- |
+| lone write through the plane's queue, p50 | 12.29 ms | 7.33 ms | 200 sequential `plane.invoke("schedule.add_task")`, median of 3 runs (before 11.89/12.29/13.64, after 5.38/7.33/7.98); Linux 6.18.44, 4 cores / 15 GB, tmpfs-backed vault dir |
+| one offline intent end to end, p50 | 14.59 ms | 9.33 ms | 50 intents through `handleReplicaIntent` on a real `VaultPlane`, median of 3 runs (before 14.52/14.59/15.44, after 9.14/9.33/10.25), same host |
+| durable commits per offline intent | 3.00 | 3.00 | unchanged by B7 — the window never changed how many transactions a serial writer opens, only how long each waited |
+
+### B6 — a size-based checkpoint that survives a reading client
+
+`VaultDb.checkpointIfLargerThan(thresholdBytes)` in `packages/vault/src/db.ts` is the size test and the checkpoint in one place, independent of shipper state. It is **PASSIVE, never TRUNCATE**: with a client holding a read transaction, TRUNCATE does not merely fail — it blocks the gateway's own connection for the vault's 30 s `busy_timeout` and then changes nothing, while PASSIVE returns at once having backfilled every frame no reader still needs, so the WAL is reused rather than grown. `packages/vault/src/db.test.ts` pins the threshold, the bound under a reading client and that refusal. The vault-plane fallback is reduced to one call; when a shipper IS attached it stays the sole checkpointer (#408), and the 64 MiB fallback threshold stays the plane's to choose — gating it is lane 3b's.
+
+| number | before | after | provenance |
+| --- | --- | --- | --- |
+| WAL bytes after 600 × 8 KiB writes with a client reading between rounds | 14.80 MB | 2.47 MB | `node` over `node:sqlite` with the vault's own pragmas (8 KiB pages, WAL, `wal_autocheckpoint=0`, `busy_timeout=30000`), 1 MiB threshold; same host |
+| `wal_checkpoint` on the gateway's connection while a client holds a read transaction | 30,103.5 ms, `busy=1`, WAL unchanged (TRUNCATE) | 0.1 ms, `busy=0`, 901 frames backfilled (PASSIVE) | same script, 300 × 8 KiB writes before the call |
+
+### Verification
+
+```
+bun run --cwd packages/vault test -- --run src/db.test.ts src/replica
+bun run --cwd packages/server test -- --run src/serve/group-commit-queue.test.ts src/serve/vault-plane-wal.test.ts src/routes/replica-intent-route.test.ts src/routes/replica-intent-crash-replay.test.ts
+bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck
+bun run --cwd packages/vault test && bun run --cwd packages/server test
+bash .governance/run.sh
+```
+
+Full suites and governance ran green against tree `7156dad154a136f348b828a81d8704a0c0787705` (vault 1584 passed; server 3449 passed). Three server reds are this container, not the diff: `IS_SANDBOX=yes` is set in the environment (`acp/backends/acp/launch.test.ts`, two cases) and the `sqlite3` CLI is absent (`serve/gateway-db-lock.integration.test.ts`); no file in either is touched here.
+
+Seeded reds, each run before its fix landed: dropping the journal-proof stamp fails three of the four crash-replay cases on an unfinished marker; making `checkpointIfLargerThan` skip the pragma grows the WAL 13.33 MB → 18.26 MB under the same workload and fails the bound.
+
+**Findings.** (1) The B8 row in `docs/decisions.md` ("~4 durable commits per intent … no remaining crash property") is stale and should be superseded: the measured cost is 3, one of which is already the folded canonical transaction, and the other two are named above with the property each keeps. (2) `gateway.checkpoint` → `checkpointVault` is TRUNCATE on a connection with `busy_timeout = 30000`; any caller reaching it while a replica session reads stalls the gateway for 30 s. The fallback tick no longer does; the owner-facing `checkpoint` verb still can. (3) The intent-status pair could still share commits with the canonical writes if the route's two writes went through the group-commit queue — worth nothing until [#880](https://github.com/srikanth235/centraid/issues/880)'s one-intent-per-round-trip drain (A6) makes intents concurrent, so it is not landed here.
+
+## Mega-lane A slice 1 — gateway plane 4b (A2/A4/A5 + dispatcher envelope)
+
+| File | Change |
+| --- | --- |
+| `packages/vault/src/replica/snapshot.ts` | canonical entity shapes memoized per connection; `readReplicaRow`/`readReplicaRows` on cached statements; the snapshot's pinned epoch threaded to every row read |
+| `packages/server/src/routes/replica-projection.ts` | projection made device-neutral: raw `replica.intent` entries ride the page as `intentEntries`, resolved by the new `applyReplicaIntentOutcomes` |
+| `packages/server/src/routes/replica-fanout.ts` | `deviceId` removed from the memo key; the per-device outcome layer applied over the shared page |
+| `packages/server/src/routes/replica-routes.ts` | the `/changes` pull layers outcomes on the same device-neutral projection |
+| `packages/server/src/routes/replica-fanout.test.ts` | the deviceId divergence case replaced by the sharing claim it supersedes |
+| `packages/server/src/engine/handlers/dispatcher.ts` | `recordTruncatedReads` aggregates every `ctx.vault.read` the gateway cut short into `ToolSuccessResult.truncatedReads` |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Prepared statements for 39 further identically-authorized devices, one commit generation | 390 | 0 | throwaway vitest in `packages/server/src/routes`, bootstrapped vault, `db.vault.prepare` counted across `hub.project` per device; container 4 cores / 15 GB |
+| Projections per commit per household, N identically-authorized devices | N | 1 | same run; memo key no longer carries `deviceId` |
+| `buildReplicaShapes` uncached prepares per projection (memo miss, warm) | 0 | 0 | same run, SQL texts captured: all 10 remaining come from `packages/vault/src/replica/change-log.ts` (9) and the grantee lookup (1) |
+| `withReplicaSnapshot` + one `readReplicaRow` on the change path: prepares / `PRAGMA` | 4 / 1 | 2 / 0 | same run; the 2 remaining are the snapshot's own once-per-transaction log-state reads, not per row — `readReplicaRow` itself now issues 0 of each |
+
+**SSE cap.** Not raised. `SSE_MAX_SUBSCRIBERS = 32` refuses an N=40 fan-out sample and no property of this change needs 40 concurrent subscribers, so the shipped claim is stated at **N = 32**: 31 further identically-authorized subscribers cost 0 projections and 0 prepared statements per commit. The measurement above ran 39 askers directly against the hub, above what the SSE plane will admit, which only makes the claim at 32 stronger.
+
+**Deleted/replaced.** The per-device projection branch in `projectReplicaPage` is gone, replaced by `applyReplicaIntentOutcomes`; no second path remains. The fanout test's "a different `deviceId` is a different answer" case is deleted because this change makes it false — the structural claim (`batch.outcomes` absent and `intentEntries` unresolved on the shared page) plus the existing device-scoped outcome suites (`replica-routes.test.ts` "device-scoped outcomes through the snapshot cursor", `replica-intent-route.test.ts`) carry the correctness it stood for.
+
+**Decisions.** Entity shapes are memoized for canonical entities only; the dynamic ext band may gain a table or column while the vault is open, so `parseExtLogical` entities keep re-reading `PRAGMA table_info`. Intent outcomes are read outside the projection's read transaction: outcome rows are keyed by (intent, device) and only move forward, so a later read returns a newer verdict, never an older one.
+
+```
+bun run --cwd packages/vault build && bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck
+bun run --cwd packages/vault test src/replica/snapshot.test.ts src/replica/change-log.test.ts
+bun run --cwd packages/server test src/routes/replica-fanout.test.ts src/routes/replica-projection.test.ts src/routes/replica-routes.test.ts src/routes/replica-intent-route.test.ts src/routes/multiplex-replica-routes.test.ts src/engine/handlers/dispatcher.test.ts
+```
+
+**Findings.** (1) `currentReplicaLogState` and `readReplicaChanges` in `packages/vault/src/replica/change-log.ts` prepare uncached: 9 of the 10 statements a warm projection still compiles are theirs (`replica_meta` ×3, `MAX(seq)` ×3, the change window ×2, the presence probe ×1). Outside this lane's files; the same `prepared()` seam `snapshot.ts` now uses would take it to 0. (2) The grantee `SELECT DISTINCT` behind `buildReplicaShapes` is the tenth, and lives in `replica-grantees.ts`, which lane 1 owns.
+
+**Doc debt.** `docs/decisions.md` SB-replica-sync (C2) describes the shared projection as keyed by authorization *and device*; it is now authorization-only with a per-device outcome layer — the row is not yet wrong about the product, but it under-describes the mechanism.
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| A shared projection leaks one device's intent outcome to another | asserted on the memoized page itself that `batch.outcomes` is undefined and `intentEntries` is `[]`, then re-ran both device-scoped outcome suites | held — 43 route tests green, no outcome crosses devices |
+| The memoized entity shape serves a stale column set after a schema change | ext entities excluded from the memo by `parseExtLogical`; re-ran `snapshot.test.ts` + `change-log.test.ts` (24 tests) and the ext-touching route suites | held — canonical shapes are fixed at open, ext still re-reads `PRAGMA table_info` every call |
+
+## Mega-lane A slice 2 — wire (A1 payload frame)
+
+| File | Change |
+| --- | --- |
+| `packages/server/src/routes/replica-routes.ts` | the SSE `change` frame carries `batch`, the page the hub already projected |
+| `packages/client/src/vault-change-sse.ts` | `centraid:vault-batch` added to the platform-neutral message grammar; the batch stays opaque here |
+| `packages/client/src/vault-change-feed.ts` | the batch is emitted BEFORE the per-entry nudges it covers |
+| `apps/mobile/src/lib/replica/native-change-feed.ts` | the same emit on the React Native feed |
+| `packages/client/src/replica/coordinator.ts` | a bounded pushed-batch queue; the feed sync applies the pushed batch for the current cursor and pulls only when there is none |
+| `packages/client/src/replica/coordinator.test.ts` | one-hop apply with zero pulls, and the gap case that must still pull |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| `/changes` pulls per change frame, happy path | 1 | 0 | `coordinator.test.ts` — the pre-existing "uses the shared feed as a pull trigger" case records one pulled cursor per nudge; the new "applies the batch the change frame carries" case asserts `pulls === 0` for the same commit |
+| Projections per commit for a subscribed device | 2 | 1 | the pull re-projected the same window through `/changes`, outside the hub memo (slice 1's `applyReplicaIntentOutcomes` path); the frame reuses the hub's page |
+| Round trips from commit to applied on a subscribed device | 2 (frame + pull) | 1 (frame) | same cases |
+
+**Deleted/replaced.** The pull-on-every-nudge path is gone as the happy path — the losing side of the doorbell/payload contradiction (`SB-payload`). `pullChanges` itself is kept and still exercised: catch-up on `hasMore`, on reconnect, and on a cursor gap, with the gap case now asserted (a pushed batch whose `from` is not the local cursor is dropped and the pull runs). `changes` stays the doorbell on the frame so shape routing does not have to open the batch.
+
+**Decisions.** No protocol-version bump: `batch` is an additive frame field a client that does not know it ignores, and `REPLICA_PROTOCOL_VERSION` fences the batch's own shape, which is unchanged. Bumping it would force every device to re-bootstrap for a strictly backward-compatible frame. The pushed-batch queue is capped at 32; past that the oldest are dropped and the pull path catches up, so a stalled applier cannot grow it without bound.
+
+**Not reached in this slice.** A6 (the batched intent drain) and G1/G8 (pending-badge clearing on held row versions, `executed` carrying resulting row versions) are NOT in this diff — the lane's tool budget ran to the payload frame only. The 40-offline-edits and no-frame-in-which-a-row-is-neither-pending-nor-canonical boxes are therefore still open.
+
+```
+bun run --cwd packages/client typecheck && bun run --cwd packages/server typecheck && bun run --cwd apps/mobile typecheck
+bun run --cwd packages/client test src/replica/coordinator.test.ts src/replica/convergence-properties.test.ts src/replica/app-convergence.contract.test.ts src/replica/multi-writer.contract.test.ts src/vault-change-feed.test.ts src/vault-change-sse.test.ts
+bun run --cwd packages/server test src/routes/replica-routes.test.ts src/routes/replica-intent-route.test.ts
+```
+
+**Finding — the identity stamp fights `doc-integrity` on a date rollover.** The `agent-session-identity` pre-commit hook UPDATES the existing `date | harness | session` row in place when the same session commits on a later day. That row sits above the frozen prefix, so the trunk's copy of this receipt stops being a byte-prefix and every append-only audit fails on a line no author wrote. Restoring the date by hand does not survive: the hook re-stamps it on the next commit. Adding a second row for the new date would keep the prefix intact and is the fix, but it belongs to the hook, not to this lane.
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| A pushed batch applied out of order or across a gap corrupts the replica | emitted a batch whose `from` is `epoch:7` at a replica sitting on `epoch:0` | held — the batch is dropped and `/changes` is pulled from `epoch:0`; `takePushedBatch` requires an exact `from` match and discards anything at or behind the cursor |
+| The per-entry nudges that follow the batch re-trigger the pull it replaced | emitted the batch and then the `centraid:vault-change` for the same commit in the frame's own order | held — 0 pulls; the batch is consumed by the first feed-sync pass and the nudge's target is already reached |
+
+## Mega-lane A slice 4 — overlay (G6 tripwire, G9 age, G2 probe, G5 states)
+
+| File | Change |
+| --- | --- |
+| `packages/blueprints/src/pending-projection-tripwire.ts` + `.test.ts` | static tripwire: every destructive action projects a delete or a tombstone, or carries a written exclusion |
+| `tests/claims.json` | law `pending-destructive-projection` registered to the tripwire test (a tightening) |
+| `packages/blueprints/src/pending-parent-probe.test.ts` | the pending-parent child-write probe, as a measurement with a held number |
+| `packages/blueprints/apps/_shared/pending-overlay.ts` | `pendingDelete`, `pendingTombstone`, `isPendingRowId`, `PENDING_OVERLAY_AGED_MS`, aged-badge copy, the two new verdicts |
+| `packages/blueprints/apps/{docs,notes,locker,people,photos,tally}/pending-projection.ts` | 16 destructive actions fixed: 9 delete, 5 tombstone, 2 written exclusions |
+| `packages/client/src/replica/{types,intents}.ts` | `conflict`, `conflict-base-missing`, `expired` are real intent states; `denied` carries a structured `denial` |
+| `packages/client/src/replica/intent-verdict.ts` | the outcome-to-state policy and the structured denial, extracted so `intents.ts` stays under the file-size floor |
+| `apps/mobile/src/lib/replica/{sqlite-intent-store,native-session,multi-vault-session}.ts`, `src/kit/replica/pending-copy.ts` | the same vocabulary on the phone, and member-facing words for it |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Destructive actions across the eight apps projecting neither a delete nor a tombstone | 16 | 0 | `pending-projection-tripwire.test.ts` against the real tree; the 16 are listed in the demonstrated red below |
+| Destructive actions judged, by app (actions / destructive / delete / tombstone / excluded) | — | agenda 7/1/0/0/1 · docs 15/3/1/1/1 · locker 16/3/2/1/0 · notes 15/4/1/1/2 · people 28/3/1/0/2 · photos 18/5/2/1/2 · tally 21/3/1/1/1 · tasks 11/3/1/0/2 | asserted in the tripwire test, not printed, so a destructive action quietly becoming an exclusion moves a number |
+| Pending-parent child-write edges (an action input that can carry a parent id a projection mints) | — | **66** — docs 11, notes 9, people 16, tally 20, tasks 10 | `pending-parent-probe.test.ts`, inline snapshot over the eight `app.json` + `pending-projection.ts` pairs |
+| Outbox schema changes for the three new verdicts | — | 0 | `sqlite-intent-store.test.ts` compares `sqlite_master` DDL before and after storing all three; `state` is unconstrained TEXT, so this is a vocabulary widening, not a migration |
+
+**Demonstrated red.** The tripwire's first run against the real tree failed with 16 findings, every one a real defect: docs `trash`, `delete-folder`; locker `trash-item`, `purge-item`, `remove-field`; notes `delete-notebook`, `delete-note`; people `trash-person`, `delete-list`; photos `delete-asset`, `purge-asset`, `delete-album`, `remove-from-album`; tally `delete-expense`, `remove-group-member`, `delete-group`. Each projected a plain patch, so the row stayed on screen while the delete was queued. Two further reds followed from the tripwire's own parsing — a comma inside a `//` comment split an entry, and `pendingTombstone` was not recognized as a tombstone — both fixed and both now covered.
+
+**Deleted/replaced.** The "conflict is a wire outcome, not a persisted outbox state" collapse in `applyOutcomes` is gone, with its comment; so is the `intent.conflict ? "conflict" : intent.state` re-derivation in `decoratePendingMutation` and in the phone's attention list. `pendingItemAction` no longer serves locker's three destructive actions.
+
+**Decisions.** Three exclusions are structural and written: people `trash-person` (the trashed row is `people.profile`, keyed by `profile_id`; the payload carries only `party_id`, and the `core.party` row this app overlays has no tombstone column), photos `remove-from-album` (`core.collection_entry`'s key is a surrogate `entry_id`), tally `remove-group-member` (the row is `social.circle_member`, which Tally's manifest does not scope). `cancel-event` is deliberately NOT destructive — it sets a status and the event stays on the calendar. `conflict-base-missing` is discardable but never retryable: a retry would re-create rather than reconcile.
+
+## User impact
+A destructive change now looks destructive the moment it is made: tapping delete, trash or purge removes the row (or greys it out via its tombstone) instead of leaving it in place wearing a badge, on all six apps that had the defect. A queued change older than 24 hours says which day it was saved on this device — and nothing about that number expires it; only the sentence changes. A conflict now says whether the row changed elsewhere or is gone altogether, and an expiry says it waited too long, instead of all three reading "could not apply".
+
+First-run: nothing new appears on a first run — every change here is to what an existing pending row says and does, and a fresh vault has no pending rows.
+
+Evidence: `artifacts/e2e/ui-impact/issue-922-web-queued-pending-task.png`, emitted by `apps/web/tests/e2e/tasks.spec.ts`. That case deletes a landed Tasks row with the harness gateway down (the row leaves the board instead of staying under a badge) and then adds one; the frame is the minted pending add, with `queued` on the chip and "not in the vault yet" on the row.
+
+```
+bun run --cwd packages/blueprints typecheck && bun run --cwd packages/client typecheck && bun run --cwd apps/mobile typecheck
+bun run --cwd packages/blueprints test
+bun run --cwd packages/client test src/replica
+bun run --cwd apps/mobile test src/lib/replica
+```
+
+**Findings.** (1) **G3 (the pending sidecar) is not in this diff and cannot be, from this lane's file set.** Rows carry nine `__centraid_pending_*` columns today; collapsing them to one key plus a per-result sidecar means changing `readPendingOverlay`'s signature, which is called from `packages/client/src/replica/query.ts`, `packages/client/src/react/blueprints/inlineQueryCtx.ts`, `packages/blueprints/apps/{agenda,tasks}/app-root.tsx`, `apps/tasks/components/TaskRow.tsx`, `apps/locker/{components/Rows.tsx,format.ts}`, `apps/tally/queries/dashboard.ts`, `apps/photos/components/FaceReview.tsx` and `apps/_shared/PendingWriteActions.tsx` — none of them in this brief, and a compatibility shim beside the old reader would be exactly the dual path the standards forbid. It wants its own slice. (2) People's `trash-person` is the one destructive action on the eight apps whose overlay cannot hide the row, because the app anchors pending state on `core.party` while the vault tombstones `people.profile`; closing it needs the profile id at enqueue time. (3) `check:ui-receipt` is expected to fire on this diff and demand a screenshot from a changed e2e harness; no screenshot is fabricated here — the `## User impact` and `First-run:` halves are above.
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| The tripwire passes because it silently reads nothing, not because the apps are clean | asserted the scanned app list, a non-zero destructive total, and that every destructive action of every app is accounted for as delete + tombstone + excluded; then re-seeded a plain-patch destructive action, an exclusion with no reason, and an action the map never mentions | held — all three seed a finding, and the two parsing bugs that DID make it read nothing were both caught by the real tree, not by the synthetic cases |
+| Widening the intent vocabulary breaks a phone that already holds queued writes | stored all three new verdicts through the real SQLite store and compared `sqlite_master`'s DDL for `replica_intent_outbox` before and after | held — byte-identical DDL; the column is unconstrained TEXT and nothing was rebuilt |
+
+## Mega-lane A slice 3 — client engine (C1–C5 + E1)
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/replica/outbox-mirror.ts` + `.test.ts` | the overlay in memory: an empty outbox costs no IndexedDB work per read, and every non-read invalidates by default |
+| `packages/client/src/replica/{intents,intent-verdict}.ts` | `pending()` reads the mirror; the state policy moved beside the verdict it belongs to |
+| `packages/client/src/replica/store-core.ts` | per-seat `synchronous`; snapshot writes skip the guard and the two search deletes; `INSERT OR REPLACE` for the index entry; schema and order-census memos; the ordering index; off-thread `bootstrapPageAsync`/`applyChangesAsync` |
+| `packages/client/src/replica/read-plan.ts` | the order guards leave the paging statement for their own census |
+| `packages/client/src/replica/wasm-sqlite-driver.ts` | `synchronous=NORMAL` on web and desktop; a prepared-statement cache |
+| `packages/client/src/replica/windowed-bootstrap.ts` | page N+1 is fetched while page N applies |
+| `apps/mobile/src/lib/replica/{op-sqlite,node-sqlite}-driver.ts` | `runBatchAsync`: a write batch on the driver's own thread |
+| `apps/mobile/src/lib/replica/{native-replica-store,multi-vault-reader}.ts` | the phone's heavy paths take the off-thread form; the mounted reader runs the order census too |
+| `packages/blueprints/apps/tasks/app-root.tsx` | the completion waiter waits on the change push, not a 50 ms clock |
+
+Also in this diff, by full path: `packages/client/src/replica/intents.ts`, `packages/client/src/replica/outbox-mirror.test.ts`, `packages/client/src/replica/store-core-storage-lifecycle.test.ts`, `packages/client/src/replica/windowed-bootstrap.test.ts`, `apps/mobile/src/lib/replica/node-sqlite-driver.ts`, `apps/mobile/src/lib/replica/bootstrap-statement-budget.test.ts`, `apps/mobile/src/lib/replica/ordered-read-plan.test.ts`, `apps/mobile/src/lib/replica/off-thread-apply.test.ts`, `apps/mobile/src/lib/replica/reader-statement-budget.test.ts`.
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Outbox reads per replica read, empty outbox (after one warm-up) | 1 IndexedDB `list` (9 indexed `getAll`s) | 0 | `outbox-mirror.test.ts`, counting store calls |
+| Bootstrap statements per row | 5.01 | 1.01 | `bootstrap-statement-budget.test.ts`, 500 rows through the store core on `node:sqlite` with a statement cache |
+| Search-index deletes issued by a bootstrap | one per row | 0 | `store-core-storage-lifecycle.test.ts` |
+| Warm ordered read, 50k-row library, `LIMIT 50` | 131 ms, `USE TEMP B-TREE FOR ORDER BY` | 1 ms, `SEARCH … USING INDEX replica_row_ord_…` with no temp b-tree | throwaway vitest over `ReplicaSqliteStore` on `node:sqlite`, 50 000 `knowledge.note` rows; container 4 cores / 15 GB. Cold read after a write is ~104 ms (the census, once per write batch) |
+| Order-guard censuses per ordered read | 4 window aggregates inside the page | 1 statement, cached until the next write | `ordered-read-plan.test.ts`; `reader-statement-budget.test.ts` classifies it and holds the unchanged 148-statement cold-start ceiling |
+| Longest JS-thread block, 5 000-row bootstrap page | 33 ms | 13 ms (statement recording only; SQLite runs off-thread) | throwaway sampler over `NativeReplicaStore`, sync driver vs `runBatchAsync` driver |
+| Bootstrap pages fetched while a page applies | 0 | 1 | `windowed-bootstrap.test.ts` — page 2 applies with page 3's request already made |
+| Screen re-reads per second while a repeating task settles | 20 | 0 (one per change push) | the 50 ms poll in `tasks/app-root.tsx` is deleted |
+
+**Deleted/replaced.** The 50 ms pending poll and its `pause()`; the per-row version SELECT and the two search-index deletes on both bootstrap paths; the `DELETE`+`INSERT` pair for a search entry (one `INSERT OR REPLACE`); the `max(...) OVER ()` order guards in the paging statement; the per-row schema lookup. Three tests asserting the superseded shapes were rewritten to the stronger claim they supersede: the bootstrap's search deletes, the home tile's window columns, and the reader's statement shape.
+
+**Decisions.** `synchronous=NORMAL` lands on the WASM seat only (ruling SB-replica-sync); mobile stays `FULL` because B4's phone fsync number does not exist yet, and the driver's absent declaration means `FULL` so a new driver gets the safe answer. The `journal_mode=DELETE` seam was re-judged as C2 asks: nothing depends on DELETE — `op-sqlite-driver.ts`'s own comment describes a reader's SHARED lock BLOCKING the writer under it, which is a cost of DELETE, not a property WAL would break — so the citation is not a justification, and the move to WAL stays gated on B4's number rather than on this seam. The ordering index is created lazily, on the writer's handle, capped at 64 (entity, column, direction, tie-break) combinations.
+
+```
+bun run --cwd packages/client typecheck && bun run --cwd packages/blueprints typecheck && bun run --cwd apps/mobile typecheck
+bun run --cwd packages/client test
+bun run --cwd packages/blueprints test
+bun run --cwd apps/mobile test
+```
+
+**Findings.** (1) The order census is still one scan of the entity per write batch; the design that would remove it is two index probes (`ORDER BY <expr>` ASC and DESC, `LIMIT 1`) reading the type at each end of the ordering index, which is exact for the straddle guard because the index orders by type class. Not landed here: it changes what the guard PROVES, and that wants its own red-first slice. (2) `packages/blueprints/apps/tasks/app-root.tsx` and `apps/mobile/src/lib/replica/multi-vault-reader.ts` are outside this brief's file set; the first is where the named 50 ms poll lives, the second had to run the census or the mounted reader would have lost the escalation the paging statement used to carry. Both are declared here rather than left silent. (3) C4's "≤ 1 screen re-read per write, counter-verified" is NOT proven in this diff — the poll is gone and the push is the only trigger, but no counter test spans the eight apps' seats; it wants a harness this lane does not have.
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| Skipping the version guard on a bootstrap write lets an older row overwrite a newer one | traced both bootstrap paths: single-shot clears every table first, and a windowed page replays the same rows at the same versions from the cursor its walk is pinned to; ran the bootstrap-walk, resume and convergence suites | held — 268 client and 276 mobile files green, including the resumed-walk cases |
+| Moving the order guards out of the paging statement loses the escalation | ran the mounted-reader pushdown cases, which are the ones that escalate; they went RED first, which is how the missing census in `multi-vault-reader.ts` was found, and green after | held — the escalation is now proven on both readers, and a straddling value still refuses after the cache is warm |
+
+**Full paths named for coverage** (this lane's brace-expanded rows above, spelled out): `packages/blueprints/apps/docs/pending-projection.ts`, `packages/blueprints/apps/notes/pending-projection.ts`, `packages/blueprints/apps/locker/pending-projection.ts`, `packages/blueprints/apps/people/pending-projection.ts`, `packages/blueprints/apps/photos/pending-projection.ts`, `packages/blueprints/apps/tally/pending-projection.ts`, `packages/blueprints/apps/_shared/pending-overlay.test.ts`, `packages/blueprints/apps/_shared/pending-overlay-presentation.test.ts`, `packages/blueprints/src/pending-projection-tripwire.test.ts`, `packages/client/src/replica/intents.contract.test.ts`, `apps/mobile/src/lib/replica/sqlite-intent-store.test.ts`, `apps/mobile/src/kit/replica/pending-copy.ts`.
+
+## Mega-lane A slice 5 — G2 client-minted row ids (red-first)
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/replica/offline-parent-child.test.ts` | the red-first case: an offline child write on an offline-created parent |
+| `packages/blueprints/apps/_shared/pending-overlay.ts` | `stablePendingRowId` mints a canonical UUIDv8 derived from (intent, suffix); a projection may declare `input` — the ids the write must carry; `isPendingRowId` and the `pending:` prefix are gone |
+| `packages/blueprints/apps/tasks/pending-projection.ts` | `add`, `save-project`, `save-section` declare their minted id on the input, and `add` REUSES an id the write already carries |
+| `packages/blueprints/apps/tasks/app.json`, `packages/blueprints/apps/tasks/actions/add.ts` | the action accepts and forwards `task_id` |
+| `packages/vault/src/commands/tasks.ts` | `schedule.add_task` honours a seat-minted `task_id` and REFUSES one it already holds |
+| `packages/client/src/react/blueprints/centraid-inline.ts`, `apps/mobile/src/lib/replica/native-session.ts` | both write doors merge the minted ids into the input they send |
+| `packages/client/src/replica/{intents,coordinator,shell-session}.ts` | `pendingIntentForInput` asks the OUTBOX which queued intent minted the row a write names; `SYNTHETIC_PENDING_ROW` and the revision-identity probe are deleted |
+| `packages/blueprints/apps/tasks/writes.ts`, `packages/blueprints/apps/_shared/{share-kit,grant-audiences}.ts` | `isPendingTaskId`, `landedTask` and `isPendingPartyId` are gone; the pending fact is the row's overlay on both seats |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Offline child writes landing on the parent the member saw | 0 (the child named `pending:<intent>:project`, which no row ever had) | 1 of 1 | `offline-parent-child.test.ts`, red then green (below) |
+| Row-id spellings that mean "not yet real" | 1 (`pending:` + 3 predicates over it) | 0 | `grep -rn '"pending:' packages apps` finds only ordinary user text in tests |
+| Pending-parent child-write edges | 66 | 67 | `pending-parent-probe.test.ts` — Tasks' `add` now accepts the id its own projection mints, which is the point of the count |
+| Screen re-reads waiting for a completion to "land" | a 15 s wait loop | 0 | the waiter is deleted outright: the id is the row's id from the moment it is minted |
+
+**Demonstrated red, then green.**
+
+```
+# RED — before the projection minted into the write:
+bun run --cwd packages/client test src/replica/offline-parent-child.test.ts
+#   × lands on reconnect naming the row the seat already showed
+#     AssertionError: expected undefined to be 'pending:intent-project:project'
+#   × the origin refuses a row id it already holds rather than merging into it
+#     AssertionError: expected 'executed' to be 'denied'
+# GREEN — after:
+bun run --cwd packages/client test src/replica/offline-parent-child.test.ts   # 2 passed
+bun run --cwd packages/vault test src/commands/tasks.test.ts                  # 21 passed
+bun run --cwd packages/blueprints test && bun run --cwd packages/client test
+bun run --cwd packages/vault test && bun run --cwd apps/mobile test
+```
+
+**Deleted/replaced.** `PENDING_ROW_ID_PREFIX` and the `pending:<intent>:<suffix>` grammar; `SYNTHETIC_PENDING_ROW`; `REVISION_IDENTITY_PROBE` and `pendingIntentIdFromInput`, replaced by `IntentQueue.pendingIntentForInput`, an outbox lookup by the row id the write names; `isPendingRowId`; `isPendingTaskId` and `landedTask` (title-matching a row whose id would never become canonical), replaced by `boardTask`, an id lookup; `isPendingPartyId`, replaced by the destination's own `pending` flag, which web now reads off the row's overlay exactly as native already did; the 15-second completion waiter in the Tasks seat, which existed only to wait for an id that no longer changes.
+
+**Decisions.** Ids are UUIDv8 ("custom" per RFC 9562) derived deterministically from (intent id, suffix) — deterministic because a replayed intent must project the SAME row rather than a second one, canonical in shape because the column holds row ids. A revision reuses the id its predecessor minted rather than minting a new one, so a child write filed against the first is still correct after an edit. The origin REFUSES a duplicate rather than merging: a seat-minted id the vault already holds is a replay or a collision, never an instruction to overwrite.
+
+## User impact
+Work done on a plane holds together. Create a project and file a task in it with no signal, and on reconnect the task is in that project — before this, the task landed pointing at a project id that never existed. Completing a task you just added no longer waits up to fifteen seconds for the vault to "land" it, and no longer refuses with "This task has not landed yet": the row you are looking at is the row the vault will hold.
+
+First-run: nothing new appears on a first run; every change here is to what an id means and when a queued row can be acted on.
+
+Evidence: `artifacts/e2e/ui-impact/issue-922-web-queued-pending-task.png`, emitted by `apps/web/tests/e2e/tasks.spec.ts`. The queued add's `data-task-id` is the canonical UUIDv8 the seat minted; the row is the one the vault will hold.
+
+**Findings.** (1) Only TASKS carries its minted ids through to the origin in this diff. The other seven apps mint canonical ids and show them, but their manifests and commands do not yet accept them, so their offline children still name a row the origin will not create: `notes` (note, body, notebook), `docs` (document, content, folder), `photos` (album), `tally` (expense, payer, split, settlement, party, friend), `people` (party, profile, list), `agenda` (event), `locker` (item). Each needs the same three edits — the projection's `input`, the manifest property, the command's honour-or-refuse — and the probe's 67 edges are the map. (2) `packages/vault/src/commands/tasks.ts`, `packages/blueprints/apps/tasks/{app.json,actions/add.ts}` and both write doors are outside this brief's file sets; the box names the behaviour they carry, so they are declared here rather than left silent.
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| A seat that mints its own ids lets one device overwrite another's row | added the duplicate case to the vault suite: the second `add_task` with an id the vault already holds must not execute | held — the `task_id_is_free` precondition refuses it, and the first row is untouched |
+| Deleting the `pending:` grammar loses the "this row is not real yet" signal the seats depend on | traced every reader of the grammar — Tasks' completion, Share's audience filter, the inline party guard — and moved each to the row's own overlay or to an id lookup; ran all four package suites | held — 212 blueprints, 269 client, 202 vault and 276 mobile files green, and Share still refuses to offer a person whose row is queued |
+
+**Full paths named for coverage** (slice 5's brace-expanded rows, spelled out): `packages/blueprints/apps/_shared/share-kit.ts`, `packages/blueprints/apps/_shared/grant-audiences.ts`, `packages/blueprints/apps/_shared/grant-audiences.test.ts`, `packages/blueprints/apps/_shared/pending-overlay-law.test.ts`, `packages/blueprints/apps/tasks/writes.test.ts`, `packages/blueprints/src/share-kit.test.ts`, `packages/client/src/replica/shell-session.ts`, `packages/client/src/replica/shell-session.test.ts`, `packages/client/src/react/blueprints/centraid-inline.test.ts`, `packages/client/src/react/blueprints/inlineQueryCtx.test.ts`, `packages/vault/src/commands/tasks.test.ts`.
+
+Also in slice 5: `packages/vault/src/commands/minted-id.ts` — the honour-or-refuse pair (input property + duplicate precondition) extracted so a creating command cannot declare one half without the other, and so the seven remaining apps have a seam to reach for.
+
+### Audit
+2026-09-04, fresh-context verifier, worktree at `7bbbb5687` / tree `48c8e9ad5d4155255221552230465be38be0b1c0`.
+
+**Verdict: REFUTED.**
+
+1. `packages/vault/src/commands/schedule-projects.ts:32,92` (`preconditions: []`) → this slice newly SENDS the minted `project_id`/`section_id` (`pending-projection.ts` `input:` + both write doors), and both commands take them into `INSERT … ON CONFLICT DO UPDATE` with no `mintedIdIsFree`. Two of Tasks' own three minted ids are honoured but never refused. Driven against the real gateway: a second `schedule.save_project` with the same id returns `executed` and the row's name becomes `OVERWRITTEN` — one row, merged. The section's **Decisions** ("The origin REFUSES a duplicate rather than merging") and `minted-id.ts`'s header ("a command that declares one without the other is the bug this module exists to make impossible to write by accident") assert a property these two do not have, and **Findings** names only the other seven apps. Fix: name the exclusion in Findings and beside the seam (both commands are also the EDIT path, so `mintedIdIsFree` as written cannot simply be added), or split create from edit.
+2. `packages/vault/src/commands/minted-id.ts:19-22` → `MINTED_ID_PROPERTY` is `{type:"string",minLength:1}`, so the origin honours ANY non-empty string as a primary key. Against the real gateway, `schedule.add_task` executed and stored `task_id: "  "`, `task_id: "'; DROP TABLE schedule_task; --"` and a 5 000-character id verbatim (no injection — binding is parameterized — but the row id is now caller-controlled with no shape). The Decisions claim ids are "canonical in shape because the column holds row ids"; nothing enforces it, and this is the seam the seven remaining apps will copy. Fix: give the property a UUID `pattern` (and a `maxLength`), with a test.
+3. Verification block quotes **no tree hash**, so the gate-trust rule does not apply and the suites were replayed in full (below).
+4. `packages/blueprints/apps/tasks/app.json` → machine re-serialized: 115 changed lines for 4 of substance, and the em dash in `description` became a `\u2014` escape, leaving tasks the only one of the eight manifests with `\u` escapes and one-property-per-line objects. The section describes the file as "the action accepts and forwards `task_id`". Fix: restore the original formatting, keep only the `task_id` property.
+
+**Verified.** Red-first reproduces exactly: reverting the slice's sources onto `1fdf32ba2` and keeping the new test gives `× lands on reconnect naming the row the seat already showed / expected undefined to be 'pending:intent-project:project'` and `× the origin refuses a row id it already holds / expected 'executed' to be 'denied'`; at `7bbbb5687`, 2 passed. The `pending:` grammar is gone from source — no `PENDING_ROW_ID_PREFIX`, `SYNTHETIC_PENDING_ROW`, `REVISION_IDENTITY_PROBE`, `pendingIntentIdFromInput`, `isPendingRowId`, `isPendingTaskId`, `isPendingPartyId` or `landedTask` outside receipts/CHANGELOG/`docs/decisions.md`; remaining `pending:` strings are inert test fixtures and prose. The seven-app gap is stated honestly. `IntentQueue.pendingIntentForInput`'s `store.list()` is bounded — settled intents are deleted from the store (`intent-store.ts:205`).
+
+**Gates run** (this worktree, under `flock`). `.governance/run.sh` → 22/22 pass. `bun run typecheck` → pass. `bun run --cwd packages/blueprints test` → 212 files, 6643 passed. `bun run --cwd packages/client test` → 269 files, 2448 passed. `bun run --cwd packages/vault test` → 202 files, 1585 passed. `bun run --cwd apps/mobile test` → 276 files, 2380 passed. `self-audit.sh 922` reports one receipt-prefix FAIL that predates this slice (the pre-commit hook restamped the `### Identifiers` date at line 168 in `0940a7922`); slice 5's own receipt edit is a single append-only hunk and the `doc-integrity` directive passes.
+
+## Mega-lane A slice 5 — verifier round 1 corrections
+
+The audit at `44b5384f4` was right on all four counts. What changed, and what the earlier section claimed that was not true:
+
+| Finding | Correction |
+| --- | --- |
+| `save_project`/`save_section` honour a minted id and never refuse a repeat | **The behaviour is correct and the claim was wrong.** Both commands are UPSERTS — one command makes the row and renames it — so a create and a rename arrive carrying the same id and are indistinguishable at the origin; `mintedIdIsFree` would refuse every rename. The exclusion is now written beside both commands and in `minted-id.ts`'s header, with the consequence stated plainly: a second save with the same id overwrites the row's fields. `packages/vault/src/commands/schedule-organize.test.ts` pins that (executed, renamed, still one row) so the difference from `add_task` is asserted, not assumed. |
+| `MINTED_ID_PROPERTY` honoured any non-empty string as a primary key | `minLength`/`maxLength` 36 and a UUID `pattern` covering the seat's v8 and `ctx.newId()`'s v7. `tasks.test.ts` refuses whitespace, a SQL-shaped string, a 5,000-character id and a zero version nibble, and asserts the table is left empty. The refused-duplicate case now also asserts the first row is untouched. |
+| No tree hash in the verification block | Quoted below, and in the report. |
+| `app.json` machine re-serialized (115 lines, `\u` escapes) | Restored to the file's own style; the diff against `1fdf32ba2` is now the four-line `task_id` property and nothing else. |
+
+**The claim, corrected.** Slice 5's Decisions said "the origin REFUSES a duplicate rather than merging". True of `schedule.add_task`, which is only ever a create. NOT true of `schedule.save_project` and `schedule.save_section`, which are upserts and deliberately merge. `minted-id.ts` now says which kind of command each half is for.
+
+```
+# The four suites and governance below ran against tree
+# 2b004f3b6946ab8d906f2a4e03899ab1ca505db0, which is the tree of commit
+# a41fb44cc exactly. Only this corrected hash was written after that run, so
+# the landed tree differs from it by these four lines and nothing else.
+bun run --cwd packages/vault test src/commands/tasks.test.ts            # 22 passed
+bun run --cwd packages/vault test src/commands/schedule-organize.test.ts # 7 passed
+bun run --cwd packages/vault test && bun run --cwd packages/blueprints test
+bun run --cwd packages/client test && bun run --cwd apps/mobile test
+bash .governance/run.sh
+```
+
+**Findings.** (1) **Splitting create from edit for `save_project`/`save_section` is not done here.** It is the change that would let those two refuse a duplicate minted id, and it needs a new action on the Tasks manifest plus a seat change — outside this fix's two files, and mega-lane E is working from this head on `claude/922-reads`. Named so it is not mistaken for an oversight. (2) The seven remaining apps still do not carry their minted ids to the origin; lane E owns generalising `minted-id.ts` to them, and `MINTED_ID_PROPERTY` now carries the shape they will inherit.
+
+### Audit — round 2
+2026-09-04, same verifier, worktree at `c7e30bcad` / tree `f0fb989e68e385e4ee7cabfce0e0dc90a4be619c`; delta re-checked is `976ceff47..c7e30bcad`.
+
+**Verdict: PASS.**
+
+- **Finding 1 (`save_project`/`save_section` never refuse) — resolved as documentation, and the reasoning holds.** Both commands are the rename path as well as the create path, and the id is the key the rename addresses, so `mintedIdIsFree` would refuse every rename; refusing would need a create/edit split. The exclusion is now stated at `schedule-projects.ts:10-20` and in `minted-id.ts`'s header with the overwrite consequence spelled out, `schedule-organize.test.ts:339-365` pins it (executed, renamed, one row), and the split is carried as an open finding rather than left implicit. `bun run --cwd packages/vault test src/commands/tasks.test.ts src/commands/schedule-organize.test.ts` → 2 files, 29 passed.
+- **Finding 2 (any non-empty string was a primary key) — resolved, and enforcement verified against the real gateway.** `MINTED_ID_PROPERTY` is now 36/36 plus `UUID_PATTERN`. Throwaway probe: the four shapes I demonstrated in round 1 are refused, and so are five near misses — uppercase hex, variant nibble `c`, version `9`, a trailing space, an embedded space — each leaving `schedule_task` empty; the JSON-Schema `pattern` is genuinely applied, not ignored. The other half also holds: `stablePendingRowId` output for four suffixes is accepted end to end and echoed back as `output.task_id`, and 200 000 minted ids match the pattern with no rejection and no collision.
+- **Finding 3 (no tree hash) — resolved.** The block quotes `2b004f3b6946ab8d906f2a4e03899ab1ca505db0`, which is commit `a41fb44cc`'s tree. That is one receipt-only commit behind the landed head, so I replayed rather than trusted: `.governance/run.sh` → 22/22, `bun run typecheck` → pass, and the touched suites above plus `offline-parent-child.test.ts` (2 passed) and `pending-overlay-law.test.ts` + `pending-parent-probe.test.ts` (28 passed), all on tree `f0fb989e6`.
+- **Finding 4 (`app.json` re-serialized) — resolved.** `git diff 0697efb38 c7e30bcad -- packages/blueprints/apps/tasks/app.json` is the four-line `task_id` property and nothing else; the em dash is intact and the file carries no `\u` escapes.
+
+**Two nits, not findings.** The correction section cites `1fdf32ba2` for the `app.json` comparison — a pre-rebase hash that is no longer on the branch (`0697efb38` now). The Tasks manifest keeps `task_id` at `minLength: 1` while the command enforces the UUID shape; the origin is the right enforcement point, so this is only worth knowing when lane E copies the seam to the other seven apps.
+
+## Decisions
+
+#930 re-pins the tests/claims.json whole-file fingerprint after removing the spent rename marker on the `golden-vault-archaeology` flow, superseding the #916 re-pin note rather than contradicting it — every sentence of #916's account of what that flow took over is kept, in receipts/issue-916-vault-ontology-review.md and in the flow's own `_comment`. `replacesMinimumTestsFlow` is a ONE-SHOT claim about the change set that makes a rename, checked against the merge base; once #916 landed, `schema-migration-corpus` existed at no base any more, so the marker could only ever report an unknown predecessor and `lint:ledgers` / `test:ratchet` were red on main itself. The marker and the `approvedMinimumTestsDeviation` that authorized it are removed together, because that note waives a future minimumTests drop on this flow by presence alone; the floor stays at 5, no claim row, severity, evidence selector or demonstrated-red date moves, and claimsGovernanceFingerprint is unchanged. Prior: #916. #928 w1b re-pins tests/claims.json once more, for the static app entity tripwire: it registers the new law `app-entity-tripwire` and its flow `blueprint-app-entity-tripwire-law` (owner packages/blueprints/src/app-entity-tripwire.test.ts, minimumTests 17), mirroring how `one-computation` is registered so the lane is owned. Additions to the law and flow registries only, and a NEW minimumTests floor, which is a tightening — no claim row, severity, evidence selector, demonstrated-red date or existing floor moves, and the 45 claim rows stay byte-identical, so claimsGovernanceFingerprint is unchanged. Prior: #930. #931 re-pins it once more after registering ONE new rung-3 lane, `rung1-on-main`, in `lanes` — the row `candidate.yml`'s new job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept it. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or `minimumTests` floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #928 w1b. #927 w2 re-pins tests/claims.json for the JOURNEY LEDGER: every `knob` and `seed` string that named tests/experience-budgets/*.json now names tests/journeys.json and the entry key inside it, because those five files were absorbed into one ledger keyed `surface / journey / volume / hardware`. A knob path rename only: no claim row is added or removed, no severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and every seeded-red recipe still points at the same number under its new address. Prior: #931. #927 w3 re-pins tests/claims.json once more to register ONE new rung-3 lane, `paired-journeys` — the row candidate.yml's paired candidate/PR journey job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept its evidence step. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and the claim rows stay byte-identical, so claimsGovernanceFingerprint moves only because `lanes` shares the file with `claims`. Prior: #927 w2. #922 re-pins tests/claims.json after registering ONE new flow, `pending-destructive-projection` (owner packages/blueprints/src/pending-projection-tripwire.test.ts, flow blueprint-pending-overlay-law). Flow registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law or minimumTests floor moves, and claimsGovernanceFingerprint (digest of claims.claims alone) stays byte-identical.
+
+`pending-parent-probe.test.ts` now passes `localeCompare` to `Map.entries().sort` so `lint:types` `require-array-sort-compare` is satisfied; snapshot order is unchanged.

@@ -895,6 +895,9 @@ export async function buildGateway(
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
     synchronous: hardwareProfile.sqliteSynchronous,
+    ...(hardwareProfile.storageFsyncMs === null
+      ? {}
+      : { storageFsyncMs: hardwareProfile.storageFsyncMs }),
     replicationConcurrency: hardwareProfile.replicationConcurrency,
     footprintBudget:
       hardwareProfile.class === "constrained"

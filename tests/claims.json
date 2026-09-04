@@ -1616,6 +1616,11 @@
       "statement": "A queued People change says so on its own row: the overlay sentence is a third line under the sub, and a row with no pending change draws no pending line at all.",
       "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
       "flow": "people-crm"
+    },
+    "pending-destructive-projection": {
+      "statement": "Every destructive action the eight blueprint apps declare projects a delete or a tombstone while its intent is queued, or carries a written structural exclusion; a plain patch that leaves the row on screen is a finding.",
+      "owner": "packages/blueprints/src/pending-projection-tripwire.test.ts",
+      "flow": "blueprint-pending-overlay-law"
     }
   },
   "consentLedger": [

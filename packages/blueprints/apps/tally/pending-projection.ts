@@ -1,7 +1,9 @@
 import {
   definePendingProjection,
+  pendingDelete,
   pendingInputValues,
   pendingPatch,
+  pendingTombstone,
   pendingUpsert,
   stablePendingRowId,
 } from "../_shared/pending-overlay.js";
@@ -112,8 +114,10 @@ export const tallyPendingProjection = definePendingProjection({
     "add-receipt-expense": expenseProjection,
     "edit-expense": ({ input }) =>
       pendingPatch("tally.expense", input.expense_id, input, EXPENSE_FIELDS),
+    // `tally.delete_expense` sets `deleted_at`; the expense must leave the
+    // ledger and the balances at once, not sit there wearing a badge.
     "delete-expense": ({ input }) =>
-      pendingPatch("tally.expense", input.expense_id, input),
+      pendingTombstone("tally.expense", input.expense_id),
     "undo-expense": ({ input }) =>
       pendingPatch("tally.expense", input.expense_id, input),
     "restore-expense": ({ input }) =>
@@ -168,10 +172,12 @@ export const tallyPendingProjection = definePendingProjection({
       pendingPatch("tally.group", input.group_id, input),
     "add-group-member": ({ input }) =>
       pendingPatch("tally.group", input.group_id, input),
-    "remove-group-member": ({ input }) =>
-      pendingPatch("tally.group", input.group_id, input),
-    "delete-group": ({ input }) =>
-      pendingPatch("tally.group", input.group_id, input),
+    "remove-group-member": {
+      excluded: true,
+      reason:
+        "The membership row is social.circle_member, which Tally's manifest does not scope, so it is not in this replica to project away.",
+    },
+    "delete-group": ({ input }) => pendingDelete("tally.group", input.group_id),
     "save-recurring-expense": ({ input, intentId }) => {
       const templateId =
         typeof input.template_id === "string"

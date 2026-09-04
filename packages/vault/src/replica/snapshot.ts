@@ -1,6 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import { prepared } from "../grant/prepared.js";
 import { DEFAULT_REPLICA_TEXT_CEILING_BYTES } from "../schema/entity-declaration.js";
+import { parseExtLogical } from "../schema/ext.js";
 import { sealedColumnsOf } from "../schema/sealed.js";
 import { resolveEntity } from "../schema/tables.js";
 import { currentReplicaLogState } from "./change-log.js";
@@ -47,6 +49,13 @@ export interface ReadReplicaRowsOptions {
   after?: string;
   limit?: number;
   maxValueBytes?: number;
+  /**
+   * The replica epoch the caller already pinned. `withReplicaSnapshot` passes
+   * the epoch it read once for the whole transaction; without it every row
+   * read re-derives the log state, which is a second query per changed row on
+   * the fan-out path (#922 A5).
+   */
+  epoch?: string;
 }
 
 interface ColumnInfo {
@@ -66,7 +75,17 @@ function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-function shapeOf(vault: DatabaseSync, entity: string): EntityShape {
+/**
+ * Canonical entity shapes are stable for the life of a connection: the
+ * schema-changing rungs run at OPEN, before any replica read compiles against
+ * the old shape (the same invariant `grant/prepared.ts` relies on). The
+ * dynamic ext band is NOT stable — an app may add a table or a column while
+ * the vault is open — so ext entities keep re-reading `PRAGMA table_info` and
+ * only canonical entities are memoized.
+ */
+const SHAPES = new WeakMap<DatabaseSync, Map<string, EntityShape>>();
+
+function readShape(vault: DatabaseSync, entity: string): EntityShape {
   const ref = resolveEntity(entity, vault);
   if (!ref) throw new Error(`unknown replica entity "${entity}"`);
   const info = vault
@@ -86,6 +105,20 @@ function shapeOf(vault: DatabaseSync, entity: string): EntityShape {
       .sort((a, b) => a.pk - b.pk)
       .map((column) => column.name),
   };
+}
+
+function shapeOf(vault: DatabaseSync, entity: string): EntityShape {
+  if (parseExtLogical(entity)) return readShape(vault, entity);
+  let perVault = SHAPES.get(vault);
+  if (!perVault) {
+    perVault = new Map<string, EntityShape>();
+    SHAPES.set(vault, perVault);
+  }
+  const hit = perVault.get(entity);
+  if (hit) return hit;
+  const shape = readShape(vault, entity);
+  perVault.set(entity, shape);
+  return shape;
 }
 
 function rowIdOf(row: Record<string, unknown>, primaryKey: string[]): string {
@@ -251,15 +284,14 @@ export function readReplicaRows(
     where = ` WHERE ${lhs} > ${rhs}`;
     params = values;
   }
-  const rawRows = vault
-    .prepare(
-      `SELECT ${selected} FROM ${quoteIdentifier(shape.physical)}${where}
+  const rawRows = prepared(
+    vault,
+    `SELECT ${selected} FROM ${quoteIdentifier(shape.physical)}${where}
         ORDER BY ${order} LIMIT ?`
-    )
-    .all(
-      ...(params as (string | number | bigint | Uint8Array | null)[]),
-      limit + 1
-    ) as unknown as Record<string, unknown>[];
+  ).all(
+    ...(params as (string | number | bigint | Uint8Array | null)[]),
+    limit + 1
+  ) as unknown as Record<string, unknown>[];
   const hasMore = rawRows.length > limit;
   const pageRows = hasMore ? rawRows.slice(0, limit) : rawRows;
   const rowIds = pageRows.map((row) => rowIdOf(row, shape.primaryKey));
@@ -267,7 +299,7 @@ export function readReplicaRows(
     vault,
     entity,
     rowIds,
-    currentReplicaLogState(vault).epoch
+    options.epoch ?? currentReplicaLogState(vault).epoch
   );
   const { ceilingBytes, policy } = ceilingFor(entity, maxValueBytes);
   const rows = pageRows.map((row) =>
@@ -294,7 +326,7 @@ export function readReplicaRow(
   vault: DatabaseSync,
   entity: string,
   rowId: string,
-  options: Pick<ReadReplicaRowsOptions, "maxValueBytes"> = {}
+  options: Pick<ReadReplicaRowsOptions, "maxValueBytes" | "epoch"> = {}
 ): ReplicaRow | undefined {
   const shape = shapeOf(vault, entity);
   if (shape.primaryKey.length === 0) {
@@ -306,23 +338,23 @@ export function readReplicaRow(
     .map((column) => `${quoteIdentifier(column)} = ?`)
     .join(" AND ");
   const selected = shape.columns.map(quoteIdentifier).join(", ");
-  const raw = vault
-    .prepare(
-      `SELECT ${selected} FROM ${quoteIdentifier(shape.physical)} WHERE ${where}`
-    )
-    .get(...(values as (string | number | bigint | Uint8Array | null)[])) as
+  const raw = prepared(
+    vault,
+    `SELECT ${selected} FROM ${quoteIdentifier(shape.physical)} WHERE ${where}`
+  ).get(...(values as (string | number | bigint | Uint8Array | null)[])) as
     | Record<string, unknown>
     | undefined;
   if (!raw) return undefined;
   const canonicalRowId = rowIdOf(raw, shape.primaryKey);
-  const version = vault
-    .prepare(
-      `SELECT MAX(seq) AS seq FROM replica_change
+  const version = prepared(
+    vault,
+    `SELECT MAX(seq) AS seq FROM replica_change
         WHERE epoch = ? AND entity = ? AND row_id = ?`
-    )
-    .get(currentReplicaLogState(vault).epoch, entity, canonicalRowId) as {
-    seq: number | null;
-  };
+  ).get(
+    options.epoch ?? currentReplicaLogState(vault).epoch,
+    entity,
+    canonicalRowId
+  ) as { seq: number | null };
   const { ceilingBytes, policy } = ceilingFor(entity, maxValueBytes);
   return publicRow(raw, shape, ceilingBytes, policy, version.seq ?? 0);
 }
@@ -359,9 +391,15 @@ export function withReplicaSnapshot<T>(
     const state = currentReplicaLogState(vault);
     const reader: ReplicaSnapshotReader = {
       state,
-      readRows: (entity, options) => readReplicaRows(vault, entity, options),
+      // The snapshot already pinned the epoch; threading it keeps every row
+      // read to one query instead of re-deriving the log state per row.
+      readRows: (entity, options) =>
+        readReplicaRows(vault, entity, { ...options, epoch: state.epoch }),
       readRow: (entity, rowId, options) =>
-        readReplicaRow(vault, entity, rowId, options),
+        readReplicaRow(vault, entity, rowId, {
+          ...options,
+          epoch: state.epoch,
+        }),
     };
     const value = read(reader);
     vault.exec("ROLLBACK");

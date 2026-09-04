@@ -31,16 +31,22 @@ import {
 import type { PendingProjectionMutation } from "./pending-overlay.ts";
 
 describe("a synthetic row id is derived, never invented twice", () => {
-  it("namespaces the intent so it can never collide with a vault row id", () => {
-    expect(stablePendingRowId("intent-1")).toBe("pending:intent-1:row");
+  // #922 G2: the id IS the row's id, so it is canonical in shape and the
+  // origin can honour it. It no longer spells the intent that minted it —
+  // pendingness is the overlay's own column on the row.
+  it("is a canonical id, not a spelling that says pending", () => {
+    expect(stablePendingRowId("intent-1")).toMatch(
+      /^[\da-f]{8}-[\da-f]{4}-8[\da-f]{3}-8[\da-f]{3}-[\da-f]{12}$/u
+    );
+    expect(stablePendingRowId("intent-1")).not.toContain("pending:");
   });
 
   it("names each row of a multi-row projection apart", () => {
-    expect(stablePendingRowId("intent-1", "split-0")).toBe(
-      "pending:intent-1:split-0"
-    );
     expect(stablePendingRowId("intent-1", "split-0")).not.toBe(
       stablePendingRowId("intent-1", "split-1")
+    );
+    expect(stablePendingRowId("intent-1", "split-0")).not.toBe(
+      stablePendingRowId("intent-2", "split-0")
     );
   });
 
@@ -210,7 +216,7 @@ describe("projecting one write", () => {
         {
           op: "upsert",
           entity: "schedule.task",
-          rowId: "pending:intent-1:row",
+          rowId: stablePendingRowId("intent-1"),
           values: { title: "Book train" },
         },
       ],

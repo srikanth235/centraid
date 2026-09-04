@@ -16,8 +16,10 @@ import {
 import { createReplicaCoordinator } from "./coordinator-web.js";
 import type { ReplicaWebCoordinatorOptions } from "./coordinator-web.js";
 import { ReplicaProtocolError } from "./errors.js";
-import { pendingIntentIdFromInput } from "./intents.js";
-import type { PendingIntentReplacement } from "./intents.js";
+import type {
+  PendingIntentReplacement,
+  PendingIntentRevisionTarget,
+} from "./intents.js";
 import {
   fetchReplicaBootstrap,
   fetchReplicaChanges,
@@ -129,6 +131,12 @@ export interface ShellReplicaCoordinator {
     request: ReplicaSearchRequest
   ) => Promise<ReplicaSearchWireResult>;
   enqueue: (input: EnqueueIntentInput) => Promise<ReplicaIntent>;
+  /** The queued intent this write revises, by the row id it names (#922 G2). */
+  pendingIntentForInput?: (
+    appId: string,
+    action: string,
+    input: ReplicaValue
+  ) => Promise<PendingIntentRevisionTarget | undefined>;
   captureBaseVersions?: (
     mutations: readonly OptimisticMutation[]
   ) => Promise<ReplicaBaseVersion[]>;
@@ -300,7 +308,7 @@ export class ReplicaShellSession {
     this.assertOpen();
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
-    const retainedIntent = pendingIntentIdFromInput(
+    const retainedIntent = await this.coordinator.pendingIntentForInput?.(
       appId,
       input.action,
       input.input

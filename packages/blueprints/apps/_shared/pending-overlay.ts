@@ -26,9 +26,19 @@ export type PendingOverlayStatus =
   | "parked"
   | "denied"
   | "conflict"
+  | "conflict-base-missing"
   | "failed"
   | "expired"
   | "cancelled";
+
+/**
+ * Past this, a queued change stops being "in a moment" and starts being a
+ * thing the member left behind, so the badge names the day it was saved.
+ * NOTHING EXPIRES ON ITS OWN because of this number (#922 G9): it changes the
+ * SENTENCE, never the intent — a queued write waits until the member or the
+ * gateway settles it.
+ */
+export const PENDING_OVERLAY_AGED_MS = 24 * 60 * 60 * 1_000;
 
 export type PendingOverlaySettlement =
   | { status: "executed" }
@@ -78,6 +88,12 @@ export interface PendingProjectionContext {
 
 export interface PendingProjectionResult {
   optimistic: PendingProjectionMutation[];
+  /**
+   * Values the projection MINTED that the write must carry (#922 G2) — the
+   * row ids above all. The write door merges them into the action input, so
+   * the origin creates the very row the seat is already showing.
+   */
+  input?: Record<string, PendingProjectionValue>;
   baseVersions?: Array<{
     shapeId?: string;
     entity: string;
@@ -140,8 +156,41 @@ export function definePendingProjection<T extends PendingProjectionDeclaration>(
   return declaration;
 }
 
+/**
+ * THE ROW'S REAL ID, MINTED AT THE SEAT (#922 G2).
+ *
+ * It used to be `pending:<intent>:<suffix>` — a spelling that announced "this
+ * row does not exist yet", which meant the origin minted a DIFFERENT id and
+ * every child write filed against the pending one pointed at a row that never
+ * existed. Now the projection mints the id the row will actually have, the
+ * write carries it, and the origin honours it or refuses it.
+ *
+ * Deterministic in (intent, suffix), because a replayed intent must project
+ * the SAME row rather than a second one; UUID-shaped, because that is what the
+ * column holds. Pendingness is not spelled in the id any more — the overlay's
+ * own `__centraid_pending_key` says it, on the row, where a reader can see it.
+ */
 export function stablePendingRowId(intentId: string, suffix = "row"): string {
-  return `pending:${intentId}:${suffix}`;
+  const seed = `${intentId}:${suffix}`;
+  const words = [0x811c_9dc5, 0x0100_0193, 0x9e37_79b9, 0x85eb_ca6b].map(
+    (offset, index) => {
+      let hash = offset;
+      for (let at = 0; at < seed.length; at += 1) {
+        hash ^= seed.charCodeAt(at) + index * 0x27d4_eb2d;
+        hash = Math.imul(hash, 0x0100_0193) >>> 0;
+      }
+      return hash >>> 0;
+    }
+  );
+  const hex = words.map((word) => word.toString(16).padStart(8, "0")).join("");
+  // Version 8 (RFC 9562: "custom"), because it IS custom — derived, not random.
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    `8${hex.slice(13, 16)}`,
+    `8${hex.slice(17, 20)}`,
+    hex.slice(20, 32),
+  ].join("-");
 }
 
 export function pendingUpsert(
@@ -165,6 +214,36 @@ export function pendingPatch(
     if (isPendingProjectionValue(value)) values[key] = value;
   }
   return [pendingUpsert(entity, rowId, values)];
+}
+
+/**
+ * Project the row AWAY while a destructive intent is queued (#922 G6).
+ *
+ * Without this a member taps delete and the row stays on screen until the
+ * gateway answers, with only a badge to say anything happened. Use it wherever
+ * the vault command HARD-deletes the row.
+ */
+export function pendingDelete(
+  entity: string,
+  rowId: unknown
+): PendingProjectionMutation[] {
+  if (typeof rowId !== "string" || rowId.length === 0) return [];
+  return [{ op: "delete", entity, rowId }];
+}
+
+/**
+ * The soft-delete half of {@link pendingDelete}: stamp the tombstone column
+ * the vault command sets, so every read that filters it out hides the row at
+ * once. The instant is cosmetic — what the overlay needs is a NON-NULL value;
+ * the canonical timestamp arrives with the answer and replaces it.
+ */
+export function pendingTombstone(
+  entity: string,
+  rowId: unknown,
+  column = "deleted_at"
+): PendingProjectionMutation[] {
+  if (typeof rowId !== "string" || rowId.length === 0) return [];
+  return [pendingUpsert(entity, rowId, { [column]: new Date().toISOString() })];
 }
 
 export function pendingInputValues(
@@ -193,6 +272,7 @@ export function projectPendingWrite(
     ? { optimistic: projected }
     : {
         optimistic: projected.optimistic,
+        ...(projected.input ? { input: projected.input } : {}),
         ...(projected.baseVersions
           ? { baseVersions: projected.baseVersions }
           : {}),
@@ -272,11 +352,41 @@ export function readPendingOverlay(
   };
 }
 
+/** "on 3 September" — the day, not a duration, so it reads the same tomorrow. */
+function savedOn(enqueuedAt: string): string {
+  const saved = new Date(enqueuedAt);
+  return Number.isNaN(saved.getTime())
+    ? ""
+    : ` Saved on this device on ${saved.toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "long",
+      })}.`;
+}
+
+function agedSuffix(pending: PendingOverlayPresentation, now: number): string {
+  if (!pending.enqueuedAt) return "";
+  const saved = new Date(pending.enqueuedAt).getTime();
+  if (Number.isNaN(saved) || now - saved < PENDING_OVERLAY_AGED_MS) return "";
+  return savedOn(pending.enqueuedAt);
+}
+
 export function pendingOverlayCopy(
-  pending: PendingOverlayPresentation
+  pending: PendingOverlayPresentation,
+  now: number = Date.now()
 ): string {
-  if (pending.status === "queued") return "Waiting for a connection.";
-  if (pending.status === "sending") return "Sending this change.";
+  if (pending.status === "queued")
+    return `Waiting for a connection.${agedSuffix(pending, now)}`;
+  if (pending.status === "sending")
+    return `Sending this change.${agedSuffix(pending, now)}`;
+  if (pending.status === "conflict-base-missing") {
+    return (
+      pending.reason ??
+      "The row this change was based on is gone, so there is nothing to merge with."
+    );
+  }
+  if (pending.status === "expired") {
+    return `${pending.reason ?? "This change waited too long to be sent."}${agedSuffix(pending, now)}`;
+  }
   if (pending.status === "parked")
     return pending.stewardLabel
       ? `Waiting for ${pending.stewardLabel}.`
@@ -307,6 +417,9 @@ export function pendingOverlayCanDiscard(
 ): boolean {
   return (
     pendingOverlayCanRetry(pending) ||
+    // Retrying a change whose base row is gone would re-CREATE, not
+    // reconcile, so it is discardable but never retryable (#922 G5).
+    pending.status === "conflict-base-missing" ||
     pending.status === "expired" ||
     pending.status === "cancelled"
   );
@@ -401,6 +514,7 @@ function isPendingOverlayStatus(value: unknown): value is PendingOverlayStatus {
     value === "parked" ||
     value === "denied" ||
     value === "conflict" ||
+    value === "conflict-base-missing" ||
     value === "failed" ||
     value === "expired" ||
     value === "cancelled"

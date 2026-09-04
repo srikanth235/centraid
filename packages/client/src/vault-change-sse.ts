@@ -18,8 +18,19 @@ export interface VaultChangeEntry {
   changedAt: string;
 }
 
+/**
+ * The projected batch a `change` frame carries (SB-payload, #922 A1). Opaque
+ * here on purpose: this module is the platform-neutral frame grammar and must
+ * not depend on the replica's row shapes. The coordinator narrows it, and
+ * applies it only when its `from` matches the local cursor exactly.
+ */
 export type VaultChangeMessage =
   | { type: "centraid:vault-change"; detail: VaultChangeEntry }
+  | {
+      type: "centraid:vault-batch";
+      batch: unknown;
+      cursor: VaultChangeCursor;
+    }
   | { type: "centraid:vault-cursor"; cursor: VaultChangeCursor }
   | { type: "centraid:vault-rebootstrap"; detail: unknown };
 

@@ -201,8 +201,9 @@ describe("inlineQueryCtx", () => {
   });
 
   it("does not let a pending foreign key overwrite a child row's controls", async () => {
-    const taskId = "pending:intent-task:task";
-    const projectId = "pending:intent-project:project";
+    // #922 G2: minted ids are canonical; the pending fact is the overlay's.
+    const taskId = "1f2e3d4c-0000-8000-8000-00000000000a";
+    const projectId = "1f2e3d4c-0000-8000-8000-00000000000b";
     const pendingSession = seededSession({
       async read(
         _appId: string,

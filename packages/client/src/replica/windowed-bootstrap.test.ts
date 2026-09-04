@@ -74,6 +74,69 @@ describe(runWindowedBootstrap, () => {
     expect(requests[1]).toContain("after=token-2");
   });
 
+  // #922 C5: the walk must not take turns. Page N+1 leaves for the gateway
+  // before page N has finished landing, so a cold start costs the LONGER of
+  // fetch and apply rather than their sum.
+  test("fetches the next page while the current one is applying", async () => {
+    const target = createTarget();
+    const { fetcher, requests } = createFetcher({
+      "": {
+        protocolVersion: 1,
+        vaultId: "vault-a",
+        schemaEpoch: "schema-1",
+        cursor: { epoch: "replica-1", seq: 10 },
+        shapes,
+        rows: [row("photo-1")],
+        complete: false,
+        next: "token-2",
+      },
+      "token-2": {
+        protocolVersion: 1,
+        vaultId: "vault-a",
+        schemaEpoch: "schema-1",
+        cursor: { epoch: "replica-1", seq: 12 },
+        rows: [row("photo-2")],
+        complete: false,
+        next: "token-3",
+      },
+      "token-3": {
+        protocolVersion: 1,
+        vaultId: "vault-a",
+        schemaEpoch: "schema-1",
+        cursor: { epoch: "replica-1", seq: 14 },
+        rows: [row("photo-3")],
+        complete: true,
+      },
+    });
+    // What the gateway had been asked for at the moment each page started
+    // applying. Serial, page 3's request has not been made when page 2 lands.
+    const requestsWhenApplying: number[] = [];
+    const applied = target.bootstrapPage.bind(target);
+    target.bootstrapPage = async (rows, advance) => {
+      requestsWhenApplying.push(requests.length);
+      await applied(rows, advance);
+    };
+
+    await runWindowedBootstrap({
+      gatewayAuth,
+      target,
+      fetcher,
+      window: 1,
+      pullChanges: vi.fn<RunWindowedBootstrapOptions["pullChanges"]>(
+        async (cursor) => emptyBatch(cursor)
+      ),
+    });
+
+    expect(target.rows.map((item) => item.rowId)).toStrictEqual([
+      "photo-1",
+      "photo-2",
+      "photo-3",
+    ]);
+    // Page 2 applies with THREE requests already made — its own and page 3's.
+    expect(requestsWhenApplying).toStrictEqual([1, 3, 3]);
+    expect(requests).toHaveLength(3);
+  });
+
   test("commits at the page-1 cursor and replays the log from it", async () => {
     const target = createTarget();
     const { fetcher } = createFetcher({

@@ -1,7 +1,9 @@
 import {
   definePendingProjection,
+  pendingDelete,
   pendingInputValues,
   pendingPatch,
+  pendingTombstone,
   pendingUpsert,
   stablePendingRowId,
 } from "../_shared/pending-overlay.js";
@@ -52,9 +54,11 @@ export const notesPendingProjection = definePendingProjection({
     "rename-notebook": ({ input }) =>
       pendingPatch("core.collection", input.notebook_id, input, ["name"]),
     "delete-notebook": ({ input }) =>
-      pendingPatch("core.collection", input.notebook_id, input),
+      pendingDelete("core.collection", input.notebook_id),
+    // `knowledge.delete_note` sets `deleted_at`; the note leaves the library
+    // and the notebook at once instead of lingering with a badge.
     "delete-note": ({ input }) =>
-      pendingPatch("knowledge.note", input.note_id, input),
+      pendingTombstone("knowledge.note", input.note_id),
     "restore-note": ({ input }) =>
       pendingPatch("knowledge.note", input.note_id, input),
     "restore-note-version": ({ input }) =>

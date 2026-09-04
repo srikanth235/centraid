@@ -23,6 +23,8 @@ interface ShareDestination {
   label: string;
   partyId?: string;
   vaultId?: string;
+  /** The row is still queued; the overlay says so, never the id (#922 G2). */
+  pending?: boolean;
 }
 
 const moduleUrl = pathToFileURL(
@@ -60,7 +62,6 @@ const shareKit = (await import(moduleUrl)) as {
   readShareDestinations: (
     scopes: readonly Scope[]
   ) => Promise<ShareDestination[]>;
-  isPendingPartyId: (partyId: string) => boolean;
 };
 
 const OWN: Scope = {
@@ -203,30 +204,21 @@ describe("peopleDestinations — joined and invited identities", () => {
     ]);
   });
 
-  it("drops a selected person whose identity is still a pending overlay id", () => {
+  it("drops a selected person whose row is still queued", () => {
     expect(
       shareKit.selectedShareMembers(
         [
           {
-            id: "party:pending:intent-1:0",
+            id: "party:cara",
             label: "Cara",
-            partyId: "pending:intent-1:0",
+            partyId: "cara",
+            pending: true,
           },
           { id: "party:asha", label: "Asha", partyId: "asha" },
         ],
-        {
-          "party:pending:intent-1:0": "read",
-          "party:asha": "read",
-        }
+        { "party:cara": "read", "party:asha": "read" }
       )
     ).toStrictEqual([{ partyId: "asha", capability: "read" }]);
-  });
-});
-
-describe("isPendingPartyId", () => {
-  it("names the offline overlay's placeholder id and nothing else", () => {
-    expect(shareKit.isPendingPartyId("pending:intent-1:0")).toBe(true);
-    expect(shareKit.isPendingPartyId("asha")).toBe(false);
   });
 });
 

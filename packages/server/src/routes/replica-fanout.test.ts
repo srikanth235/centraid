@@ -128,7 +128,6 @@ describe("replica projection hub", () => {
       { ...ACCESS, canWrite: false },
       { ...ACCESS, rememberDevice: true },
       { ...ACCESS, appId: "notes" },
-      { ...ACCESS, deviceId: "device-1" },
     ]) {
       expect(
         countStatements(db, () => hub.project(other, since, 100)),
@@ -146,6 +145,33 @@ describe("replica projection hub", () => {
         hub.project(ACCESS, since, 100, { doorbellOnly: true })
       )
     ).toBeGreaterThan(0);
+    db.close();
+  });
+
+  // `deviceId` is the one input that is NOT a different answer (#922 A4): the
+  // projection is device-neutral, and an intent's outcome is layered on top of
+  // the shared page per device. The per-device half of that contract — an
+  // outcome only ever reaches the device that queued the intent — is owned by
+  // `replica-routes.test.ts` ("device-scoped outcomes through the snapshot
+  // cursor") and `replica-intent-route.test.ts`.
+  test("identically-authorized devices share ONE projection per commit", () => {
+    const db = vault();
+    const epoch = currentReplicaLogState(db.vault).epoch;
+    const since = { ...CURSOR, epoch };
+    const hub = new ReplicaProjectionHub(db.vault);
+    hub.subscribe(() => undefined);
+    const first = hub.project({ ...ACCESS, deviceId: "device-1" }, since, 100);
+    // Nine more household devices in the same generation: no second projection.
+    expect(
+      countStatements(db, () => {
+        for (let index = 2; index <= 10; index += 1)
+          hub.project({ ...ACCESS, deviceId: `device-${index}` }, since, 100);
+      })
+    ).toBe(0);
+    // Nothing device-specific may be baked into the shared page: unresolved
+    // intent entries are what the per-device layer resolves.
+    expect(first.batch.outcomes).toBeUndefined();
+    expect(first.intentEntries).toStrictEqual([]);
     db.close();
   });
 
