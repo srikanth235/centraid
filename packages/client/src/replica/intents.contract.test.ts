@@ -5,11 +5,7 @@ import { stablePendingRowId } from "@centraid/blueprints/apps/_shared/pending-ov
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { MemoryIntentStore } from "./intent-store.js";
-import {
-  IntentQueue,
-  pendingIntentIdFromInput,
-  SHAPE_REVOKED_REASON,
-} from "./intents.js";
+import { IntentQueue, SHAPE_REVOKED_REASON } from "./intents.js";
 import type { ReplicaValue } from "./types.js";
 
 describe(IntentQueue, () => {

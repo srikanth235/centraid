@@ -55,8 +55,8 @@ import { isReplicaStorageFullError } from "./replica-storage-error";
 import { noteResyncVerdict } from "./resync-notice";
 import { SqliteIntentStore } from "./sqlite-intent-store";
 import type { NativeIntentAttention } from "./sqlite-intent-store";
-import { stewardDeviceLabel } from "./steward-label";
-import type { MountedSteward } from "./steward-label";
+import { waitingOnLabel } from "./waiting-on";
+import type { MountedOrigin } from "./waiting-on";
 
 export type NativeReadRequest = Omit<ReplicaReadRequest, "shapeId"> & {
   shapeId?: string;
@@ -165,9 +165,10 @@ export interface CreateNativeReplicaSessionOptions {
   /**
    * Who a queued write into THIS vault may wait for. Set only where
    * `MountedReplicaScope.personal === false`; absent means the member's own
-   * vault, where a write waits for nobody and a steward label would be fiction.
+   * vault, where a write waits for nobody and naming an owner would be
+   * fiction.
    */
-  steward?: MountedSteward;
+  origin?: MountedOrigin;
 }
 
 /** Ceiling, not the usual wait: reconnect, foreground and writes all reset. */
@@ -210,7 +211,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #onBootstrapProgress:
     | CreateNativeReplicaSessionOptions["onBootstrapProgress"]
     | undefined;
-  readonly #stewardLabel: string | undefined;
+  readonly #waitingOnLabel: string | undefined;
   readonly #onGatewayOutcome: ((reachable: boolean) => void) | undefined;
   #previewReady:
     | { resolve: () => void; reject: (error: unknown) => void }
@@ -244,7 +245,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       | "progressiveBootstrap"
       | "onBootstrapProgress"
       | "onGatewayOutcome"
-      | "steward"
+      | "origin"
     > & { idFactory: ReplicaIdFactory }
   ) {
     this.#coordinator = coordinator;
@@ -274,8 +275,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#progressiveBootstrap = options.progressiveBootstrap ?? false;
     this.#onBootstrapProgress = options.onBootstrapProgress;
     this.#onGatewayOutcome = options.onGatewayOutcome;
-    this.#stewardLabel = options.steward
-      ? stewardDeviceLabel(options.steward.displayName)
+    this.#waitingOnLabel = options.origin
+      ? waitingOnLabel(options.origin.displayName)
       : undefined;
   }
 
@@ -478,13 +479,13 @@ export class NativeReplicaSession implements MobileReplicaSession {
   }
 
   /**
-   * The steward label is a fact about the MOUNT, so stamping it at admission
-   * lets the overlay name it before any round trip. Runs AFTER
+   * Who the write waits on is a fact about the MOUNT, so stamping it at
+   * admission lets the overlay name a person before any round trip. Runs AFTER
    * `validateOptimisticMutation`: `PENDING_OVERLAY_FIELDS` skip column checks.
    */
   private stamped(prepared: PreparedReplicaWrite): PreparedReplicaWrite {
-    const steward = this.#stewardLabel;
-    if (steward === undefined) return prepared;
+    const waitingOn = this.#waitingOnLabel;
+    if (waitingOn === undefined) return prepared;
     return {
       ...prepared,
       optimistic: prepared.optimistic.map((mutation) =>
@@ -493,7 +494,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
               ...mutation,
               values: {
                 ...mutation.values,
-                [PENDING_OVERLAY_FIELDS.steward]: steward,
+                [PENDING_OVERLAY_FIELDS.steward]: waitingOn,
               },
             }
           : mutation

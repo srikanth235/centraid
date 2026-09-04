@@ -10,10 +10,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   currentReplicaLogState,
   judgeMemberIntent,
+  partiesBoundToVault,
   verifyMemberIntent,
   writeReceipt,
 } from "@centraid/vault";
-import type { MemberIntentEnvelope, VaultDb } from "@centraid/vault";
+import type { MemberIntentEnvelope } from "@centraid/vault";
 
 import type { PeerIdentity } from "./peer-plane.js";
 import { admitAtOrigin } from "./peer-replica-route.js";
@@ -70,8 +71,8 @@ export async function handlePeerReplicaIntent(
       state: "refused",
       reason: "the member's vault signature does not verify",
     });
-  const memberPartyIds = memberPartiesOf(
-    admission.origin,
+  const memberPartyIds = partiesBoundToVault(
+    admission.origin.vault,
     envelope.memberVaultId
   );
   const verdict = judgeMemberIntent(admission.origin, {
@@ -177,18 +178,6 @@ function readEnvelope(
         }
       : {}),
   };
-}
-
-/** Parties the ORIGIN's own graph binds to the member's vault. */
-function memberPartiesOf(origin: VaultDb, memberVaultId: string): string[] {
-  return (
-    origin.vault
-      .prepare(
-        `SELECT party_id FROM share_party_vault_binding
-          WHERE vault_id = ? AND revoked_at IS NULL ORDER BY party_id`
-      )
-      .all(memberVaultId) as { party_id: string }[]
-  ).map((row) => row.party_id);
 }
 
 function answeredVersionsFor(

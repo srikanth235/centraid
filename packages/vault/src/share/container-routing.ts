@@ -1,12 +1,12 @@
-// DECLARED command→container routing for the Commons plane (#750). Routing is
-// decided by DECLARATION here, never by the shape of a command name or input
-// keys. A command that writes a shared container but misses the rail lands as
-// a PRIVATE local mutation that the next compile reverts.
+// DECLARED command→container routing for the sharing plane (#750, #929).
+// Routing is decided by DECLARATION here, never by the shape of a command name
+// or input keys. A command that writes a shared container but misses this
+// table lands as a PRIVATE local mutation the origin never sees.
 //
-// ROUTABLE — input can address this container type, so it must reach the rail.
-// ACTABLE — the container type DECLARES this command as its shared write
-// surface. Routable-but-not-actable is refused by name. UI filtering is never
-// the security boundary.
+// ROUTABLE — input can address this container type, so it must be resolved
+// against the standing answers. ACTABLE — the container type DECLARES this
+// command as its shared write surface. Routable-but-not-actable is refused by
+// name. UI filtering is never the security boundary.
 
 import type { ShareableItemType } from "./closure.js";
 
@@ -16,116 +16,29 @@ import type { ShareableItemType } from "./closure.js";
  * `folder-descendant` / `folder-document` — under the granted `docs.folder`.
  * `tally-expense` — expense whose group is the granted `tally.group`.
  */
-export type CommonsRouteResolution =
+export type ContainerRouteResolution =
   | "container"
   | "folder-descendant"
   | "folder-document"
   | "tally-expense";
 
-export interface CommonsCommandRoute {
+export interface ContainerCommandRoute {
   command: string;
   ownerSchema: string;
   inputKey: string;
   containerType: ShareableItemType;
-  resolution: CommonsRouteResolution;
+  resolution: ContainerRouteResolution;
   actable: boolean;
 }
-
-/**
- * Key vocabulary for the conformance test: a new command that grows a
- * `group_id` cannot quietly skip the rail. Scoped by owner schema on purpose:
- * `locker.save_item` and `outbox.decide` also carry `item_id`.
- */
-export interface CommonsContainerKey {
-  ownerSchema: string;
-  inputKey: string;
-  containerType: ShareableItemType;
-  resolution: CommonsRouteResolution;
-}
-
-export const COMMONS_CONTAINER_KEYS: readonly CommonsContainerKey[] = [
-  {
-    ownerSchema: "tally",
-    inputKey: "group_id",
-    containerType: "tally.group",
-    resolution: "container",
-  },
-  {
-    ownerSchema: "tally",
-    inputKey: "expense_id",
-    containerType: "tally.group",
-    resolution: "tally-expense",
-  },
-  {
-    ownerSchema: "core",
-    inputKey: "document_id",
-    containerType: "docs.folder",
-    resolution: "folder-document",
-  },
-  {
-    ownerSchema: "core",
-    inputKey: "document_id",
-    containerType: "core.document",
-    resolution: "container",
-  },
-  {
-    ownerSchema: "core",
-    inputKey: "folder_id",
-    containerType: "docs.folder",
-    resolution: "folder-descendant",
-  },
-  {
-    ownerSchema: "core",
-    inputKey: "parent_folder_id",
-    containerType: "docs.folder",
-    resolution: "folder-descendant",
-  },
-  {
-    ownerSchema: "core",
-    inputKey: "content_id",
-    containerType: "core.content_item",
-    resolution: "container",
-  },
-  {
-    ownerSchema: "knowledge",
-    inputKey: "content_id",
-    containerType: "core.content_item",
-    resolution: "container",
-  },
-  {
-    ownerSchema: "media",
-    inputKey: "album_id",
-    containerType: "core.collection",
-    resolution: "container",
-  },
-  {
-    ownerSchema: "media",
-    inputKey: "asset_id",
-    containerType: "media.asset",
-    resolution: "container",
-  },
-  {
-    ownerSchema: "enrich",
-    inputKey: "asset_id",
-    containerType: "media.asset",
-    resolution: "container",
-  },
-  {
-    ownerSchema: "locker",
-    inputKey: "item_id",
-    containerType: "locker.item",
-    resolution: "container",
-  },
-];
 
 function route(
   command: string,
   ownerSchema: string,
   inputKey: string,
   containerType: ShareableItemType,
-  resolution: CommonsRouteResolution,
+  resolution: ContainerRouteResolution,
   actable = false
-): CommonsCommandRoute {
+): ContainerCommandRoute {
   return {
     command,
     ownerSchema,
@@ -136,9 +49,12 @@ function route(
   };
 }
 
-const tallyGroup = (command: string, actable = false): CommonsCommandRoute =>
+const tallyGroup = (command: string, actable = false): ContainerCommandRoute =>
   route(command, "tally", "group_id", "tally.group", "container", actable);
-const tallyExpense = (command: string, actable = false): CommonsCommandRoute =>
+const tallyExpense = (
+  command: string,
+  actable = false
+): ContainerCommandRoute =>
   route(
     command,
     "tally",
@@ -147,7 +63,7 @@ const tallyExpense = (command: string, actable = false): CommonsCommandRoute =>
     "tally-expense",
     actable
   );
-const inFolder = (command: string, actable = false): CommonsCommandRoute =>
+const inFolder = (command: string, actable = false): ContainerCommandRoute =>
   route(
     command,
     "core",
@@ -156,33 +72,36 @@ const inFolder = (command: string, actable = false): CommonsCommandRoute =>
     "folder-document",
     actable
   );
-const onDocument = (command: string, actable = false): CommonsCommandRoute =>
+const onDocument = (command: string, actable = false): ContainerCommandRoute =>
   route(command, "core", "document_id", "core.document", "container", actable);
 const onFolder = (
   command: string,
   inputKey: "folder_id" | "parent_folder_id",
   actable = false
-): CommonsCommandRoute =>
+): ContainerCommandRoute =>
   route(command, "core", inputKey, "docs.folder", "folder-descendant", actable);
 const onContent = (
   command: string,
   ownerSchema = "core"
-): CommonsCommandRoute =>
+): ContainerCommandRoute =>
   route(command, ownerSchema, "content_id", "core.content_item", "container");
-const onAsset = (command: string, ownerSchema = "media"): CommonsCommandRoute =>
+const onAsset = (
+  command: string,
+  ownerSchema = "media"
+): ContainerCommandRoute =>
   route(command, ownerSchema, "asset_id", "media.asset", "container");
-const onAlbum = (command: string): CommonsCommandRoute =>
+const onAlbum = (command: string): ContainerCommandRoute =>
   route(command, "media", "album_id", "core.collection", "container");
-const onLockerItem = (command: string): CommonsCommandRoute =>
+const onLockerItem = (command: string): ContainerCommandRoute =>
   route(command, "locker", "item_id", "locker.item", "container");
 
 /**
- * Declaration order IS resolution order: `commonsGrantForCommand` walks a
+ * Declaration order IS resolution order: `routeShareGrantEdit` walks a
  * command's routes top to bottom and returns the first active grant. A
  * document that lives inside a shared folder resolves to the FOLDER's grant
- * before its own, which is what keeps a shared subtree one commons.
+ * before its own, which is what keeps a shared subtree one answer.
  */
-export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
+export const CONTAINER_COMMAND_ROUTES: readonly ContainerCommandRoute[] = [
   // Tally — full declared write surface.
   tallyGroup("tally.add_expense", true),
   tallyGroup("tally.add_group_member", true),
@@ -192,7 +111,7 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   tallyExpense("tally.edit_expense", true),
   tallyExpense("tally.delete_expense", true),
   tallyExpense("tally.restore_expense", true),
-  // Routable, NOT declared: these reach the rail so the steward refuses them
+  // Routable, NOT declared: these resolve so the ORIGIN refuses them
   // by name instead of writing privately into a shared group.
   tallyGroup("tally.add_receipt_expense"),
   tallyGroup("tally.delete_group"),
@@ -265,7 +184,7 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   onAsset("enrich.upsert_faces", "enrich"),
 
   // Locker items are single-vault — none of these is declared actable, so the
-  // rail refuses them by NAME rather than letting a write land privately.
+  // origin refuses them by NAME rather than letting a write land privately.
   // Every command carrying `item_id` must be here (#750 conformance), which
   // is why the #872 surface joins the list rather than quietly bypassing it.
   onLockerItem("locker.archive_item"),
@@ -286,25 +205,28 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   onLockerItem("locker.unstar_item"),
 ];
 
-const ROUTES_BY_COMMAND = new Map<string, CommonsCommandRoute[]>();
-for (const declared of COMMONS_COMMAND_ROUTES) {
+const ROUTES_BY_COMMAND = new Map<string, ContainerCommandRoute[]>();
+for (const declared of CONTAINER_COMMAND_ROUTES) {
   const existing = ROUTES_BY_COMMAND.get(declared.command);
   if (existing) existing.push(declared);
   else ROUTES_BY_COMMAND.set(declared.command, [declared]);
 }
 
-export function commonsRoutesForCommand(
+export function containerRoutesForCommand(
   command: string
-): readonly CommonsCommandRoute[] {
+): readonly ContainerCommandRoute[] {
   return ROUTES_BY_COMMAND.get(command) ?? [];
 }
 
-/** Declared write surface? The rail refuses everything else, including routed commands. */
-export function isCommonsCommandActable(
+/**
+ * Declared write surface? Everything else is refused, routed commands
+ * included.
+ */
+export function isContainerCommandActable(
   containerType: ShareableItemType,
   command: string
 ): boolean {
-  return commonsRoutesForCommand(command).some(
+  return containerRoutesForCommand(command).some(
     (declared) => declared.containerType === containerType && declared.actable
   );
 }

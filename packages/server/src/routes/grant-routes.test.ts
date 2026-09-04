@@ -499,7 +499,7 @@ describe("routes/grants", () => {
     expect(subjects.body.subjects).toContainEqual({
       subjectType: "tally.group",
       capabilities: ["view", "edit"],
-      fulfillment: { view: "closure-reprojection", edit: "commons-routing" },
+      fulfillment: { view: "closure-reprojection", edit: "replica-intent" },
     });
 
     const anonymous = await call(house, {

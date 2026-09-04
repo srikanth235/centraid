@@ -90,6 +90,23 @@
 // `share.party_vault_binding` — the entities this issue's Docs manifest reads —
 // were already registered and already exported.
 
+// Schema/export audit #929 (a share is a replica subscription): the commons
+// rail's fourteen tables LEAVE the schema and `share_subscription` +
+// `share_subscription_lineage` enter it, both in the canonical walk. That is
+// deliberate, and the lineage is the load-bearing half: it is the only record
+// of WHICH local rows an audience holds under WHICH shape, so a bundle that
+// dropped it would restore a seat that can no longer remove what a revocation
+// ends. `origin_row_version` rides along in the same `SELECT *`. The rail's
+// own tables carried no row the walk still needs — every projected row is a
+// real entity row the walk already carries, and the op log, chain,
+// checkpoints and roster were CONTROL state for a plane that no longer
+// exists; `migrateCommonsToSubscriptions` turns their contents into standing
+// answers before dropping them, so an old file loses nothing it could still
+// use. `replica_intent` gained `waiting_on` and `answered_versions`; it is
+// LOCAL by registration (device-scoped), so neither column enters a bundle,
+// which is right: who a parked write waits on is a fact about this device's
+// queue, not about the vault's data.
+
 import { createHash } from "node:crypto";
 
 import { sha256OfBytes } from "../blob/store.js";

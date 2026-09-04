@@ -1,9 +1,9 @@
-// Conformance between the DECLARED commons routing table and the REAL
-// registered command schemas (#750). The defect this test exists for:
+// Conformance between the DECLARED container routing table and the REAL
+// registered command schemas (#750, #929). The defect this test exists for:
 // routing decided by string heuristics over the command name and a
 // hand-maintained list of container-id keys lets a renamed input key silently
-// bypass the commons rail — the write lands private and the next compile
-// reverts it. Here the table is data, and this test walks the
+// bypass the shared-container refusal — a member's write lands private and the
+// origin never sees it. Here the table is data, and this test walks the
 // command registry every command pack actually installs.
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -17,13 +17,103 @@ import { registerMediaCommands } from "../commands/media.js";
 import { registerOutboxCommands } from "../commands/outbox.js";
 import { registerTallyCommands } from "../commands/tally.js";
 import { createGateway } from "../gateway/gateway.js";
+import type { ShareableItemType } from "./closure.js";
 import {
-  COMMONS_COMMAND_ROUTES,
-  COMMONS_CONTAINER_KEYS,
-  commonsRoutesForCommand,
-  isCommonsCommandActable,
-} from "./commons-routing.js";
+  CONTAINER_COMMAND_ROUTES,
+  containerRoutesForCommand,
+  isContainerCommandActable,
+} from "./container-routing.js";
+import type { ContainerRouteResolution } from "./container-routing.js";
 import { closeOpenVaults, household } from "./placement-fixture.js";
+
+/**
+ * THE CONFORMANCE VOCABULARY, deliberately a SECOND declaration: derived
+ * from the route table it checks, it would prove nothing. Kept here because
+ * this test is its only reader — a new command that grows a
+ * `group_id` cannot quietly skip the rail. Scoped by owner schema on purpose:
+ * `locker.save_item` and `outbox.decide` also carry `item_id`.
+ */
+interface ContainerKey {
+  ownerSchema: string;
+  inputKey: string;
+  containerType: ShareableItemType;
+  resolution: ContainerRouteResolution;
+}
+
+const CONTAINER_KEYS: readonly ContainerKey[] = [
+  {
+    ownerSchema: "tally",
+    inputKey: "group_id",
+    containerType: "tally.group",
+    resolution: "container",
+  },
+  {
+    ownerSchema: "tally",
+    inputKey: "expense_id",
+    containerType: "tally.group",
+    resolution: "tally-expense",
+  },
+  {
+    ownerSchema: "core",
+    inputKey: "document_id",
+    containerType: "docs.folder",
+    resolution: "folder-document",
+  },
+  {
+    ownerSchema: "core",
+    inputKey: "document_id",
+    containerType: "core.document",
+    resolution: "container",
+  },
+  {
+    ownerSchema: "core",
+    inputKey: "folder_id",
+    containerType: "docs.folder",
+    resolution: "folder-descendant",
+  },
+  {
+    ownerSchema: "core",
+    inputKey: "parent_folder_id",
+    containerType: "docs.folder",
+    resolution: "folder-descendant",
+  },
+  {
+    ownerSchema: "core",
+    inputKey: "content_id",
+    containerType: "core.content_item",
+    resolution: "container",
+  },
+  {
+    ownerSchema: "knowledge",
+    inputKey: "content_id",
+    containerType: "core.content_item",
+    resolution: "container",
+  },
+  {
+    ownerSchema: "media",
+    inputKey: "album_id",
+    containerType: "core.collection",
+    resolution: "container",
+  },
+  {
+    ownerSchema: "media",
+    inputKey: "asset_id",
+    containerType: "media.asset",
+    resolution: "container",
+  },
+  {
+    ownerSchema: "enrich",
+    inputKey: "asset_id",
+    containerType: "media.asset",
+    resolution: "container",
+  },
+  {
+    ownerSchema: "locker",
+    inputKey: "item_id",
+    containerType: "locker.item",
+    resolution: "container",
+  },
+];
 
 interface RegisteredCommand {
   name: string;
@@ -74,7 +164,7 @@ describe("Commons routing conformance", () => {
   test("every declared route names a real command and a real input key", () => {
     const commands = registeredCommands();
     const drift: string[] = [];
-    for (const declared of COMMONS_COMMAND_ROUTES) {
+    for (const declared of CONTAINER_COMMAND_ROUTES) {
       const command = commands.get(declared.command);
       if (!command) {
         drift.push(`${declared.command}: no such registered command`);
@@ -96,13 +186,13 @@ describe("Commons routing conformance", () => {
     const commands = registeredCommands();
     const missing: string[] = [];
     for (const command of commands.values())
-      for (const key of COMMONS_CONTAINER_KEYS) {
+      for (const key of CONTAINER_KEYS) {
         if (
           key.ownerSchema !== command.ownerSchema ||
           !command.inputKeys.has(key.inputKey)
         )
           continue;
-        const routed = commonsRoutesForCommand(command.name).some(
+        const routed = containerRoutesForCommand(command.name).some(
           (declared) =>
             declared.inputKey === key.inputKey &&
             declared.containerType === key.containerType
@@ -117,12 +207,12 @@ describe("Commons routing conformance", () => {
 
   test("no route invents a container key outside the declared vocabulary", () => {
     const vocabulary = new Set(
-      COMMONS_CONTAINER_KEYS.map(
+      CONTAINER_KEYS.map(
         (key) =>
           `${key.ownerSchema}|${key.inputKey}|${key.containerType}|${key.resolution}`
       )
     );
-    const invented = COMMONS_COMMAND_ROUTES.filter(
+    const invented = CONTAINER_COMMAND_ROUTES.filter(
       (declared) =>
         !vocabulary.has(
           `${declared.ownerSchema}|${declared.inputKey}|${declared.containerType}|${declared.resolution}`
@@ -134,20 +224,22 @@ describe("Commons routing conformance", () => {
   test("actability is a declared subset of routing, never a name pattern", () => {
     // A container's declared write surface never includes a command that
     // deletes the shared root, and routing a command is not declaring it.
-    expect(isCommonsCommandActable("docs.folder", "core.delete_folder")).toBe(
+    expect(isContainerCommandActable("docs.folder", "core.delete_folder")).toBe(
       false
     );
-    expect(commonsRoutesForCommand("core.delete_folder")).not.toStrictEqual([]);
-    expect(isCommonsCommandActable("media.asset", "media.update_asset")).toBe(
+    expect(containerRoutesForCommand("core.delete_folder")).not.toStrictEqual(
+      []
+    );
+    expect(isContainerCommandActable("media.asset", "media.update_asset")).toBe(
       false
     );
-    expect(isCommonsCommandActable("tally.group", "tally.add_expense")).toBe(
+    expect(isContainerCommandActable("tally.group", "tally.add_expense")).toBe(
       true
     );
     // Deleting a child document does not delete the docs.folder root, so it
     // stays declared for the folder that survives it.
-    expect(isCommonsCommandActable("docs.folder", "core.trash_document")).toBe(
-      true
-    );
+    expect(
+      isContainerCommandActable("docs.folder", "core.trash_document")
+    ).toBe(true);
   });
 });

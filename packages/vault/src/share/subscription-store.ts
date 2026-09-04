@@ -69,31 +69,6 @@ export function readSubscription(
   return row ? toRecord(row) : undefined;
 }
 
-export function listSubscriptions(
-  db: DatabaseSync,
-  filter: { grantId?: string; state?: "subscribed" | "removed" } = {}
-): SubscriptionRecord[] {
-  const clauses: string[] = [];
-  const values: string[] = [];
-  if (filter.grantId !== undefined) {
-    clauses.push("grant_id = ?");
-    values.push(filter.grantId);
-  }
-  if (filter.state !== undefined) {
-    clauses.push("state = ?");
-    values.push(filter.state);
-  }
-  const where = clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "";
-  return (
-    db
-      .prepare(
-        `SELECT ${SUBSCRIPTION_COLUMNS} FROM share_subscription${where}
-          ORDER BY shape_id, audience_vault_id`
-      )
-      .all(...values) as unknown as SubscriptionRow[]
-  ).map(toRecord);
-}
-
 export interface RecordSubscriptionInput {
   shapeId: string;
   audienceVaultId: string;
@@ -188,31 +163,4 @@ export function readSubscriptionLineage(
     originItemId: row.origin_item_id,
     originRowVersion: row.origin_row_version,
   }));
-}
-
-/**
- * G1 (#929): does this seat already hold the ORIGIN version an answer stands
- * for? The lineage is the only place that fact lives — the audience's own
- * replica sequence is a different clock — so a member's pending row asks here
- * rather than guessing from its own log.
- */
-export function subscriptionHoldsOriginVersion(
-  db: DatabaseSync,
-  input: {
-    shapeId: string;
-    entity: string;
-    /** The ORIGIN row id the answer named. */
-    rowId: string;
-    version: number;
-  }
-): boolean {
-  const row = db
-    .prepare(
-      `SELECT origin_row_version FROM share_subscription_lineage
-        WHERE shape_id = ? AND target_type = ? AND origin_item_id = ?`
-    )
-    .get(input.shapeId, input.entity, input.rowId) as
-    | { origin_row_version: number }
-    | undefined;
-  return row !== undefined && row.origin_row_version >= input.version;
 }

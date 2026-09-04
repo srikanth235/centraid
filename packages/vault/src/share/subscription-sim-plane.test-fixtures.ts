@@ -1,26 +1,23 @@
-// Physical world for the SHARE-GRANT half of the Commons simulator (#839):
-// the grant plane hangs off the SAME on-disk vaults the commons rail uses.
-// Two isolation rules keep that safe.
+// Physical world for the SUBSCRIPTION plane (#839, #929): one slot per ordered
+// (origin, audience, album) triple over the world's real on-disk vaults.
 //
-//   1. THE AUDIENCE IS A SYNTHETIC PARTY ON A SYNTHETIC PEER VAULT ID, because
-//      the rail resolves a member with a single-row `SELECT party_id FROM
-//      share_party_vault_binding WHERE vault_id = ?`.
-//   2. PLANE SEATS ARE STEWARD SEATS ONLY: `stale_restore` rewinds a whole
-//      SQLite file, resurrecting projections a revocation hard-deleted, and
-//      stewards are never rewound (`replicaOnlySeats`).
+// THE AUDIENCE IS A SYNTHETIC PARTY ON A SYNTHETIC PEER VAULT ID, because
+// delivery resolves a member with a single-row `SELECT party_id FROM
+// share_party_vault_binding WHERE vault_id = ?`: one party per slot keeps the
+// slots from answering for each other.
 
 import { createGrant, enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { Credential } from "../gateway/types.js";
 import type { ShareShapeTransport } from "../grant/fulfillment.js";
 import type { ShareFulfillmentState } from "../grant/grant-store.js";
 import { uuidv7 } from "../ids.js";
-import type { Seat, World } from "./commons-sim-world.test-fixtures.js";
-import { NOW, armConfirmGate } from "./commons-sim-world.test-fixtures.js";
 import {
   bindPartyToVault,
   revokePartyVaultBinding,
 } from "./party-vault-binding.js";
 import type { ShareVaultRef } from "./placement.js";
+import type { Seat, World } from "./subscription-sim-world.test-fixtures.js";
+import { NOW, armConfirmGate } from "./subscription-sim-world.test-fixtures.js";
 import { loopbackShareTransports } from "./subscription-transport.js";
 
 /** Marked loud so a non-owner caller parks on it. Deliberately OUTSIDE the
@@ -74,7 +71,7 @@ export interface PlaneAgent {
   consentGrantId: string;
 }
 
-export interface GrantPlane {
+export interface SharePlane {
   /** Seats the plane runs on (stewards only). */
   seats: Seat[];
   slots: ShareSlot[];
@@ -85,7 +82,7 @@ export interface GrantPlane {
 /** `undefined` means "this host cannot reach that vault right now" — the fact
  *  `startShareSubscription` and `stopShareSubscription` branch on. */
 export function seatRefFor(
-  plane: GrantPlane,
+  plane: SharePlane,
   reachable: boolean
 ): (vaultId: string) => ShareVaultRef | undefined {
   return (vaultId) => {
@@ -97,7 +94,7 @@ export function seatRefFor(
 
 /** The same reach, as the loopback transport the subscription rail takes. */
 export function transportRefFor(
-  plane: GrantPlane,
+  plane: SharePlane,
   reachable: boolean,
   origin: ShareVaultRef
 ): (vaultId: string) => ShareShapeTransport | undefined {
@@ -286,11 +283,13 @@ export function freshConsentGrant(seat: Seat, agentPartyId: string): string {
 /** One slot per ordered steward pair per album. Every slot starts with a live
  *  channel and one photograph, so the first `grant_fulfill` carries something
  *  real. */
-export function buildGrantPlane(
+export function buildSharePlane(
   world: World,
   albumsPerPair: number
-): GrantPlane {
-  const seats = world.grants.map((grant) => grant.steward);
+): SharePlane {
+  // EVERY seat is an origin and an audience here: without a commons rail there
+  // is no steward, so the plane is the ordered pairs of the world's own seats.
+  const seats = [...world.seats];
   const agents = new Map<number, PlaneAgent>();
   for (const seat of seats) {
     armConfirmGate(seat, PARKING_COMMAND);

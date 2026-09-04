@@ -124,20 +124,8 @@ export const ALLOW_LIST = {
     "owns share_authority and share_fulfillment",
   "packages/server/src/serve/share-notices.ts":
     "names the party a share notice is about",
-  "packages/server/src/routes/commons-routes.ts":
-    "serves the commons control tables the share plane owns",
-  "packages/server/src/routes/peer-commons-route.ts":
-    "answers a peer from the commons membership tables",
-  "packages/server/src/serve/peer-commons-client.ts":
-    "is the commons transport's own client",
-  "packages/server/src/serve/peer-commons-sweep.ts":
-    "sweeps expired commons intents",
-  "packages/server/src/serve/commons-notices.ts":
-    "raises notices from commons invitations",
-  "packages/server/src/serve/commons-observability.ts":
-    "reports the commons plane's own health counters",
-  "packages/server/src/serve/commons-recovery-invites.ts":
-    "issues steward recovery invitations from commons bindings",
+  "packages/server/src/routes/peer-replica-intent-route.ts":
+    "reads the change log versions a member intent is answered against",
   // ── connection broker + outbox: the sync plane's own storage ──
   "packages/server/src/serve/connection-broker.ts":
     "owns sync_connection and its credential rows",
@@ -170,8 +158,8 @@ export const ALLOW_LIST = {
     "seeds the throwaway vault the injection corpus runs against",
   "packages/server/src/serve/outbox-executor-test-kit.ts":
     "is the outbox executor's test kit",
-  "packages/server/src/serve/commons-b6.test-fixtures.ts":
-    "is a commons suite's fixture builder",
+  "packages/server/src/serve/share-subscription-peer.test-fixtures.ts":
+    "seeds the golden pair's six subject types directly, as a fixture",
   "packages/server/src/serve/peer-give.test-fixtures.ts":
     "is a peer-give suite's fixture builder",
   "packages/server/src/serve/vault-plane.test-fixtures.ts":

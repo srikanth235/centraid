@@ -6,11 +6,9 @@
 // stating: neither column holds an entity id under a type column beside it.
 // `share_authority.principal_id` is polymorphic on `principal_kind`, which
 // selects a party, a circle, an engine class or a device, so no single
-// REFERENCES clause can express it; `share_commons_invitation.member_party_id`
-// names a party that the receiving vault may not hold a row for yet. So this
-// stays what it always was: the enumerated set of party pointers a MERGE must
-// re-point, kept in one place so the next one is an entry here rather than a
-// remembered clause.
+// REFERENCES clause can express it. So this stays what it always was: the
+// enumerated set of party pointers a MERGE must re-point, kept in one place so
+// the next one is an entry here rather than a remembered clause.
 //
 // "A PERSON IS NEVER PURGED" IS RETIRED (#916, owner decision D1). A party
 // carries the trash pair now and a purge is the ordinary hard DELETE, so both
@@ -23,12 +21,9 @@
 //     is history and is meant to outlive the row it names; a LIVE one that
 //     cannot be resolved to a peer vault is a share that silently stops being
 //     delivered.
-//   - `share_commons_invitation.member_party_id` is the purge COMMAND's
-//     (W2a): an invitation is an ask that has to be withdrawn deliberately and
-//     receipted, not stamped by a trigger.
 //
 // The registry itself STAYS, because MERGE still has no other way to find
-// these two: a merge DELETES the folded-in party, and a pointer left behind
+// it: a merge DELETES the folded-in party, and a pointer left behind
 // names a row that no longer exists with nothing reporting the failure. It is
 // the enumerated set of party pointers the engine cannot see, kept in one
 // place so the next one is an entry here rather than a remembered clause.
@@ -52,7 +47,6 @@
 //   `tally_*` party column, `core_account.*`,
 //   `core_transaction.counterparty_party_id`, `access_grant.*`,
 //   `access_scope_tombstone.grantee_party_id`, `share_authority.granted_by`,
-//   `share_circle_grant.steward_party_id`,
 //   `share_party_vault_binding.party_id`, `outbox_item.recipient_party_id`,
 //   `core_vault.self_party_id` (the vault's own person is not purgeable at
 //   all). Roster and ownership rows by the same reading — a purge that
@@ -101,11 +95,5 @@ export const PARTY_POINTER_REGISTRY: readonly PartyPointer[] = [
     predicate: "principal_kind = 'person'",
     collision: "revoke",
     note: "The authority plane is polymorphic on BOTH sides, so `principal_id` holds a party id, a circle id, an engine class or a device id depending on `principal_kind`. A standing grant left naming the folded-in party cannot be resolved to a peer vault, so a share the owner already granted stops being delivered.",
-  },
-  {
-    table: "share_commons_invitation",
-    column: "member_party_id",
-    collision: "delete",
-    note: "A pending invitation names the party it is addressed to. Left behind, the ask can never be matched to the person it was for, and `UNIQUE (grant_id, member_party_id)` no longer does its job: the two ids are different rows, so one person ends up holding two open invitations to the same commons.",
   },
 ];

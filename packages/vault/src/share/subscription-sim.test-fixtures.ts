@@ -22,28 +22,35 @@ import {
 } from "../grant/grant-store.js";
 import { readDurableParkedPayload } from "../replica/parked.js";
 import type {
-  GrantPlane,
+  SharePlane,
   ShareSlot,
-} from "./commons-sim-grant-world.test-fixtures.js";
+} from "./subscription-sim-plane.test-fixtures.js";
 import {
   PARKING_COMMAND,
   addAlbumPhoto,
   audienceTitles,
   bindSlotChannel,
-  buildGrantPlane,
+  buildSharePlane,
   freshConsentGrant,
   originTitles,
   projectedAlbumId,
   projectionRowCount,
   transportRefFor,
   tamperAudience,
-} from "./commons-sim-grant-world.test-fixtures.js";
-import type { Rng, Seat, World } from "./commons-sim-world.test-fixtures.js";
+} from "./subscription-sim-plane.test-fixtures.js";
+import type {
+  Rng,
+  Seat,
+  SimOptions,
+  SimReport,
+  World,
+} from "./subscription-sim-world.test-fixtures.js";
 import {
   NOW,
   closeWorld,
   createWorld,
-} from "./commons-sim-world.test-fixtures.js";
+  rngFor,
+} from "./subscription-sim-world.test-fixtures.js";
 
 /** Fulfillment outweighs lifecycle verbs: mostly delivery under churn. */
 export const GRANT_ACTION_WEIGHTS = {
@@ -63,20 +70,31 @@ export type GrantActionName = keyof typeof GRANT_ACTION_WEIGHTS;
 
 /**
  * Every legal edge, keyed by the state observed BEFORE an action; `none` is
- * "no row yet". Propagation never falls an existing row back to
- * `awaiting_channel`; one action can cross `syncing` to `delivered`;
- * propagation alone writes `remove_sent`/`removed`, which are terminal.
+ * "no row yet". One action can cross `syncing` to `delivered`; propagation
+ * alone writes `remove_sent`/`removed`, which are terminal.
+ *
+ * A LIVE ROW MAY FALL BACK to `awaiting_channel` when the channel it was
+ * carried over is unlinked: the column says what delivery owes now, not what
+ * the audience once received. That demotion is safe only because
+ * `delivered_at` is durable (#846) — severance reads the stamp, never the
+ * state — and `checkSeverance` holds that seam on every step below.
  */
 const LEGAL_TRANSITIONS: Record<string, readonly ShareFulfillmentState[]> = {
   none: ["awaiting_channel", "syncing", "delivered"],
   awaiting_channel: ["awaiting_channel", "syncing", "delivered", "removed"],
-  syncing: ["syncing", "delivered", "removed"],
-  delivered: ["syncing", "delivered", "remove_sent", "removed"],
+  syncing: ["awaiting_channel", "syncing", "delivered", "removed"],
+  delivered: [
+    "awaiting_channel",
+    "syncing",
+    "delivered",
+    "remove_sent",
+    "removed",
+  ],
   remove_sent: ["remove_sent", "removed"],
   removed: ["removed"],
 };
 
-function plane(world: World): GrantPlane {
+function plane(world: World): SharePlane {
   if (!world.plane) throw new Error("the grant plane was never built");
   return world.plane;
 }
@@ -465,7 +483,7 @@ function revokeAction(world: World, slot: ShareSlot): void {
 }
 
 /** Anything still divergent after this rest is a defect, not a race. */
-export function quiesceGrantPlane(world: World): void {
+export function quiesceSharePlane(world: World): void {
   for (const slot of plane(world).slots) {
     if (!slot.linked) bindSlotChannel(slot, true);
     if (slot.grantId === undefined) continue;
@@ -509,7 +527,7 @@ export function checkGrantInvariants(world: World): void {
 }
 
 export function buildPlaneFor(world: World, albumsPerPair: number): void {
-  world.plane = buildGrantPlane(world, albumsPerPair);
+  world.plane = buildSharePlane(world, albumsPerPair);
 }
 
 export interface SeveranceProbe {
@@ -519,7 +537,7 @@ export interface SeveranceProbe {
 
 /** The minimal deterministic walk to defect D1, pinned by `commons-sim.test.ts`. */
 export function runRevocationSeveranceProbe(): SeveranceProbe {
-  const world = createWorld({ seed: 839_000, actions: 0, seats: 2, grants: 2 });
+  const world = createWorld({ seed: 839_000, actions: 0, seats: 2 });
   try {
     buildPlaneFor(world, 1);
     const slot = plane(world).slots[0] as ShareSlot;
@@ -531,6 +549,52 @@ export function runRevocationSeveranceProbe(): SeveranceProbe {
     return {
       audienceTitles: audienceTitles(slot) ?? [],
       state: slot.fulfillment,
+    };
+  } finally {
+    closeWorld(world);
+  }
+}
+
+function pickGrantAction(rng: Rng): GrantActionName {
+  const names = Object.keys(GRANT_ACTION_WEIGHTS) as GrantActionName[];
+  const total = names.reduce(
+    (sum, name) => sum + GRANT_ACTION_WEIGHTS[name],
+    0
+  );
+  let ticket = rng.int(total);
+  for (const name of names) {
+    ticket -= GRANT_ACTION_WEIGHTS[name];
+    if (ticket < 0) return name;
+  }
+  return names[0] as GrantActionName;
+}
+
+/**
+ * One randomized program over the subscription plane, quiesced, then held to
+ * the golden claims. A failure prints the seed, which replays the schedule
+ * byte for byte — so LENGTHEN an existing seed's program rather than adding a
+ * seed: opening the real vaults dwarfs the per-action cost.
+ */
+export function runSubscriptionSimulation(options: SimOptions): SimReport {
+  const world = createWorld(options);
+  const rng = rngFor(options.seed);
+  try {
+    buildPlaneFor(world, 1);
+    for (let step = 0; step < options.actions; step += 1) {
+      world.step = step;
+      const name = pickGrantAction(rng);
+      world.stats[name] = (world.stats[name] ?? 0) + 1;
+      runGrantAction(world, rng, name);
+    }
+    world.step = options.actions;
+    quiesceSharePlane(world);
+    checkGrantInvariants(world);
+    return {
+      seed: options.seed,
+      trace: world.trace,
+      failures: world.failures,
+      pinned: world.pinned,
+      stats: world.stats,
     };
   } finally {
     closeWorld(world);

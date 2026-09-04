@@ -1,16 +1,15 @@
-// The schema for vault.db — ONE file, ONE baseline, no ladder.
+// The schema for vault.db — ONE file, ONE baseline, then rungs.
 //
-// v0 has no vaults in the field, so there is nothing to walk forward from: a
-// rung that reconstructs a shape the baseline can simply state is
-// compatibility code for a compatibility problem nobody has. `VAULT_MIGRATIONS`
-// therefore holds exactly one entry — every owner table's DDL in dependency
-// order — and a fresh file lands on `PRAGMA user_version = 1`.
+// Rung one is the #916 baseline: every owner table's DDL in dependency order,
+// stated rather than reconstructed, because v0 had no vaults in the field to
+// walk forward from. It is HISTORY now and does not grow: #929 needed to reach
+// files that already exist, which is the moment migrate.ts always said the
+// baseline text freezes and rung two begins. A fresh file runs both and lands
+// on `PRAGMA user_version = 2`; a file frozen at 1 runs only rung two.
 //
 // That number stays load-bearing beyond this file: it is the downgrade guard
 // (`VaultSchemaAheadError`) and the "schema version this build understands"
-// the backup/recovery provenance reports from `VAULT_MIGRATIONS.length`. The
-// first shipped release that must reach an existing file adds rung two — and
-// the baseline text becomes history at that moment, not before.
+// the backup/recovery provenance reports from `VAULT_MIGRATIONS.length`.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -20,7 +19,6 @@ import { AUDIT_DDL } from "./audit.js";
 import { SHARE_AUTHORITY_DDL } from "./authority.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
 import { BLOB_DDL } from "./blob.js";
-import { COMMONS_RESILIENCE_DDL } from "./commons-resilience.js";
 import { CORE_DDL, LINK_ANCHOR_DDL, SHARE_ORIGIN_DDL } from "./core.js";
 import {
   LOCKER_ADDRESS_DDL,
@@ -50,9 +48,9 @@ import { FTS_DDL, assertFtsSpecsRegistered } from "./fts.js";
 import { LEDGER_DDL } from "./ledger.js";
 import { RENAME_INBOX_NOTICE_DDL } from "./notifications.js";
 import { OUTBOX_DDL } from "./outbox.js";
+import { SHARE_PARTY_BINDING_DDL } from "./party-vault-binding.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
-import { SHARE_COMMONS_DDL } from "./share-commons.js";
 import { SHARE_SUBSCRIPTION_DDL } from "./subscription.js";
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
 import { assertVaultRegistryLabels } from "./tables.js";
@@ -100,10 +98,8 @@ export const ONTOLOGY_VERSION = "1.0";
 //   - BLOB_DDL dead last: it re-creates the document's FTS sync with the
 //     derivative-aware body expression (extracted text feeds the owning
 //     document's row), overriding the generated triggers by name;
-//   - the Commons control plane and, composed with it, the local-only
-//     resilience/instrumentation tables that hang off it. `SHARE_COMMONS_DDL`
-//     alters `social_circle_member` (added by SOCIAL_DDL above) so it must run
-//     after the domains;
+//   - the party↔vault bindings, which alter `social_circle_member` (added by
+//     SOCIAL_DDL above) and so must run after the domains;
 //   - the LEDGER band last of the machinery: it is engine-owned store code
 //     over vault-owned tables and nothing in the ontology references it.
 export const VAULT_MIGRATIONS: readonly string[] = [
@@ -148,18 +144,28 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     // Notifications is a rebuildable projection; its pre-release rename is
     // part of the composed base rather than a compatibility rung.
     RENAME_INBOX_NOTICE_DDL,
-    SHARE_COMMONS_DDL,
-    COMMONS_RESILIENCE_DDL,
+    SHARE_PARTY_BINDING_DDL,
     // The authority plane's table before the trigger that revokes into it
     // (#916, E2).
     SHARE_AUTHORITY_DDL,
-    // The subscription seat (#929), after `core_entity` (its lineage FKs the
-    // entity supertype) and after the authority plane it delivers under.
-    SHARE_SUBSCRIPTION_DDL,
-    // A trigger ON `core_entity` that writes to `share_authority` and
-    // `share_circle_grant`, so both must exist (#916, E2).
+    // A trigger ON `core_entity` that writes to `share_authority` (#916, E2).
     ENTITY_PURGE_REVOKE_DDL,
     LEDGER_DDL,
+  ].join("\n"),
+  // RUNG TWO (#929) — the first change that has to reach an EXISTING file, so
+  // the baseline above became history rather than growing. The subscription
+  // seat: two tables, after `core_entity` (the lineage keys the supertype) and
+  // after the authority plane they deliver under, both of which rung one
+  // already built. The rail those tables replace is not dropped here: its rows
+  // become standing answers first, in `migrateCommonsToSubscriptions`, which
+  // is JS and therefore cannot be a rung — it runs on open, right after this.
+  [
+    SHARE_SUBSCRIPTION_DDL,
+    // The purge trigger loses its clause over the rail's own grant table, so a
+    // file frozen with the old body is re-cut here. `refreshEntityTriggers`
+    // does not own this one — it is stated DDL, and stated DDL migrates.
+    "DROP TRIGGER IF EXISTS core_entity_revoke_on_purge;",
+    ENTITY_PURGE_REVOKE_DDL,
   ].join("\n"),
 ];
 

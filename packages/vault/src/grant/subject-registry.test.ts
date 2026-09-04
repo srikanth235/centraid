@@ -2,9 +2,9 @@ import { describe, expect, test } from "vitest";
 
 import type { ShareableItemType } from "../share/closure.js";
 import {
-  COMMONS_COMMAND_ROUTES,
-  isCommonsCommandActable,
-} from "../share/commons-routing.js";
+  CONTAINER_COMMAND_ROUTES,
+  isContainerCommandActable,
+} from "../share/container-routing.js";
 import { SHARE_GRANT_CO_CONTRIBUTION_TYPES } from "./fulfillment-edit.js";
 import {
   fulfillmentAnswerFor,
@@ -15,7 +15,7 @@ import {
 
 /** Container types the routing table can actually apply a member write to. */
 const ACTABLE_CONTAINER_TYPES = new Set<ShareableItemType>(
-  COMMONS_COMMAND_ROUTES.filter((route) => route.actable).map(
+  CONTAINER_COMMAND_ROUTES.filter((route) => route.actable).map(
     (route) => route.containerType
   )
 );
@@ -98,10 +98,10 @@ describe("grant/subject-registry", () => {
       "docs.folder",
       "tally.group",
     ]);
-    expect(isCommonsCommandActable("tally.group", "tally.add_expense")).toBe(
+    expect(isContainerCommandActable("tally.group", "tally.add_expense")).toBe(
       true
     );
-    expect(isCommonsCommandActable("media.asset", "media.update_asset")).toBe(
+    expect(isContainerCommandActable("media.asset", "media.update_asset")).toBe(
       false
     );
   });

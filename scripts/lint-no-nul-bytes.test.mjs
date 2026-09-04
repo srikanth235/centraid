@@ -68,7 +68,7 @@ test("binary extensions are skipped and text ones are not", () => {
   // The golden corpus binaries and the fuzz seeds are the reason `.gz` and
   // `.bin` are on the list at all.
   assert.equal(
-    isScanned("packages/vault/tests/golden/issue-916/vault.db.gz"),
+    isScanned("packages/vault/tests/golden/issue-929/vault.db.gz"),
     false
   );
   assert.equal(

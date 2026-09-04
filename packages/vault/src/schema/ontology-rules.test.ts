@@ -24,8 +24,6 @@ import {
   tableSql,
   vaultRow,
 } from "./baseline-fixture.js";
-import { VAULT_ENTITIES } from "./entity-catalog.js";
-import { LOCAL_TABLES } from "./local-tables.js";
 
 describe("R1 — money says which money", () => {
   it("puts a currency on the group, the expense and the settlement", () => {
@@ -225,25 +223,6 @@ describe("R7 — one live answer per question", () => {
     ).sql;
     expect(sql).toContain("verb");
     expect(sql).not.toContain("duration");
-  });
-});
-
-describe("R8 — the commons control tables ride the canonical walk", () => {
-  it("registers all four and leaves them out of LOCAL_TABLES", () => {
-    for (const t of [
-      "commons_verified",
-      "commons_supersession",
-      "commons_device_reach",
-      "commons_steward_contact",
-    ])
-      expect(VAULT_ENTITIES.share?.[t]).toBeDefined();
-    for (const t of [
-      "share_commons_verified",
-      "share_commons_supersession",
-      "share_commons_device_reach",
-      "share_commons_steward_contact",
-    ])
-      expect(LOCAL_TABLES.has(t)).toBe(false);
   });
 });
 

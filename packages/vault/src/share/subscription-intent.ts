@@ -8,7 +8,7 @@
  *     Ed25519 identity key, so the receipt the origin writes names the member
  *     and not the owner whose credential executed it;
  *   ROUTING — which container a write addresses is DECLARED
- *     (`commons-routing.ts`), never inferred from a command's name, so a
+ *     (`container-routing.ts`), never inferred from a command's name, so a
  *     routed-but-undeclared command is refused BY NAME rather than landing as
  *     a private mutation the next pass reverts;
  *   ONE WRITER — the origin executes; the member's seat holds a pending row
@@ -19,7 +19,6 @@ import { routeShareGrantEdit } from "../grant/fulfillment-edit.js";
 import type { ShareGrantEditRoute } from "../grant/fulfillment-edit.js";
 import type { ShareGrantRecord } from "../grant/grant-store.js";
 import { resolveGrantAudienceParties } from "../grant/grant-store.js";
-import { sha256Hex } from "../ids.js";
 import {
   signWithVaultIdentity,
   verifyVaultIdentitySignature,
@@ -68,13 +67,6 @@ export function memberIntentBytes(envelope: MemberIntentEnvelope): Buffer {
     ]),
   ]);
   return Buffer.from(canonical, "utf8");
-}
-
-/** The payload hash the device-tier intent door already speaks. */
-export function memberIntentPayloadHash(
-  envelope: MemberIntentEnvelope
-): string {
-  return sha256Hex(memberIntentBytes(envelope).toString("utf8"));
 }
 
 export function signMemberIntent(

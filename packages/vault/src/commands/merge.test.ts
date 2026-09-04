@@ -173,48 +173,6 @@ describe("merge", () => {
     expect(loser.revoked_at).not.toBeNull();
   });
 
-  function inviteTo(
-    invitationId: string,
-    grantId: string,
-    partyId: string
-  ): void {
-    db.vault
-      .prepare(
-        `INSERT INTO share_commons_invitation
-           (invitation_id, grant_id, steward_vault_id, member_party_id,
-            capability, container_type, container_id, current_size_bytes,
-            status, created_at)
-         VALUES (?, ?, 'vault-steward', ?, 'read', 'tally.group', 'group-1', 0,
-                 'pending', '2026-08-01T00:00:00Z')`
-      )
-      .run(invitationId, grantId, partyId);
-  }
-
-  // Same shape as the authority principal, different answer on collision: an
-  // invitation is machinery, not a standing answer, so the duplicate ask is
-  // dropped rather than kept as history.
-  test("a pending invitation follows the merge, and a duplicate ask is dropped", () => {
-    const asha = addParty("Asha Rao");
-    const dupe = addParty("Asha R.");
-    inviteTo("inv-follow", "grant-a", dupe);
-    inviteTo("inv-keep", "grant-b", asha);
-    inviteTo("inv-dupe", "grant-b", dupe);
-
-    expect(merge(asha, dupe).status).toBe("executed");
-
-    const invitations = db.vault
-      .prepare(
-        `SELECT invitation_id, grant_id, member_party_id
-           FROM share_commons_invitation ORDER BY invitation_id`
-      )
-      .all() as { invitation_id: string; member_party_id: string }[];
-    expect(invitations.map((row) => row.invitation_id)).toStrictEqual([
-      "inv-follow",
-      "inv-keep",
-    ]);
-    for (const row of invitations) expect(row.member_party_id).toBe(asha);
-  });
-
   test("merging the vault owner away is refused by contract", () => {
     const other = addParty("Someone Else");
     const outcome = merge(other, boot.ownerPartyId);

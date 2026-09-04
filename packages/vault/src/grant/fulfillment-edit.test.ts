@@ -3,7 +3,6 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { nowIso, uuidv7 } from "../ids.js";
-import { createCommonsGrant } from "../share/commons.js";
 import { closeOpenVaults, household } from "../share/placement-fixture.js";
 import {
   routeShareGrantEdit,
@@ -25,19 +24,11 @@ function addParty(db: DatabaseSync, name: string, now: string): string {
 describe("grant/fulfillment-edit", () => {
   afterEach(closeOpenVaults);
 
-  test("an edit on a shared tally group routes back to the commons rail", () => {
+  test("an edit on a shared tally group routes to its container", () => {
     const { origin, originBoot } = household();
     const now = nowIso();
     const ravi = addParty(origin.vault, "Ravi", now);
     const groupId = uuidv7();
-    const commons = createCommonsGrant({
-      origin: origin.vault,
-      ownerPartyId: originBoot.ownerPartyId,
-      containerType: "tally.group",
-      containerId: groupId,
-      members: [{ partyId: ravi, capability: "read+write" }],
-      now,
-    });
     createShareGrant(origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "tally.group",
@@ -56,7 +47,6 @@ describe("grant/fulfillment-edit", () => {
       containerId: groupId,
       actable: true,
     });
-    expect(commons.grantId).toBeTruthy();
     expect(route?.refusal).toBeUndefined();
     expect(route?.grants).toHaveLength(1);
   });
@@ -67,17 +57,6 @@ describe("grant/fulfillment-edit", () => {
     const ravi = addParty(origin.vault, "Ravi", now);
     const asha = addParty(origin.vault, "Asha", now);
     const groupId = uuidv7();
-    createCommonsGrant({
-      origin: origin.vault,
-      ownerPartyId: originBoot.ownerPartyId,
-      containerType: "tally.group",
-      containerId: groupId,
-      members: [
-        { partyId: ravi, capability: "read+write" },
-        { partyId: asha, capability: "read" },
-      ],
-      now,
-    });
     for (const [party, capability] of [
       [ravi, "edit"],
       [asha, "view"],
@@ -132,14 +111,6 @@ describe("grant/fulfillment-edit", () => {
     const now = nowIso();
     const ravi = addParty(origin.vault, "Ravi", now);
     const groupId = uuidv7();
-    createCommonsGrant({
-      origin: origin.vault,
-      ownerPartyId: originBoot.ownerPartyId,
-      containerType: "tally.group",
-      containerId: groupId,
-      members: [{ partyId: ravi, capability: "read" }],
-      now,
-    });
     createShareGrant(origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "tally.group",
@@ -179,17 +150,6 @@ describe("grant/fulfillment-edit", () => {
          VALUES (?, ?, 'trip', 'Trip', NULL, NULL, NULL)`
       )
       .run(folderId, schemeId);
-    createCommonsGrant({
-      origin: origin.vault,
-      ownerPartyId: originBoot.ownerPartyId,
-      containerType: "docs.folder",
-      containerId: folderId,
-      // `read`, so the roster mints a `view` answer and this case stays about
-      // the audience whose answer stops short. Folders became edit-capable in
-      // #929, so a `read+write` member here would (rightly) be routed.
-      members: [{ partyId: ravi, capability: "read" }],
-      now,
-    });
     createShareGrant(origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "docs.folder",
@@ -201,8 +161,7 @@ describe("grant/fulfillment-edit", () => {
 
     // Adding a document to someone else's shared folder, and editing one
     // already inside it, refuse for the SAME reason in v1: the folder is
-    // shared for view. The commons rail is live either way — it is the grant
-    // that stops short, not the routing.
+    // shared for view: it is the ANSWER that stops short, not the routing.
     expect(
       routeShareGrantEdit(origin.vault, {
         command: "core.add_document",

@@ -5,10 +5,9 @@
  * commons of three members across two gateways must come out the other side
  * with every member still reachable and every ledger row still there.
  *
- * The steward vault BECOMES the origin, which it already was in every way that
- * mattered: it held the container and serialized the writes. What changes is
- * that the roster stops being a second membership plane and becomes what it
- * describes — one standing answer per party, and one delivery row per audience.
+ * The rail's tables are NOT in the composed schema any more, so this seeds them
+ * the way a pre-migration file holds them. That is the honest fixture for a
+ * migration: the shape it reads is one no current code writes.
  */
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -18,14 +17,40 @@ import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import { listShareGrantsForSubject } from "../grant/grant-store.js";
 import { nowIso, uuidv7 } from "../ids.js";
-import { createCommonsGrant } from "./commons.js";
+import type { Household } from "./placement-fixture.js";
 import { closeOpenVaults, household } from "./placement-fixture.js";
 import { migrateCommonsToSubscriptions } from "./subscription-migration.js";
 
-function addParty(db: ReturnType<typeof household>["origin"], name: string) {
+/** The rail tables the migration reads, as a pre-#929 file holds them. */
+const LEGACY_RAIL_DDL = `
+CREATE TABLE share_circle_grant (
+  grant_id          TEXT PRIMARY KEY,
+  circle_id         TEXT NOT NULL,
+  container_type    TEXT NOT NULL,
+  container_id      TEXT NOT NULL,
+  departure_policy  TEXT NOT NULL DEFAULT 'remove-member-only',
+  steward_party_id  TEXT NOT NULL,
+  created_at        TEXT NOT NULL,
+  revoked_at        TEXT,
+  max_size_bytes    INTEGER
+) STRICT;
+CREATE TABLE share_commons_member_state (
+  grant_id    TEXT NOT NULL,
+  party_id    TEXT NOT NULL,
+  status      TEXT NOT NULL,
+  accepted_at TEXT,
+  PRIMARY KEY (grant_id, party_id)
+) STRICT;
+CREATE TABLE share_commons_op (
+  grant_id TEXT NOT NULL, sequence INTEGER NOT NULL,
+  PRIMARY KEY (grant_id, sequence)
+) STRICT;
+`;
+
+function addParty(home: Household, name: string): string {
   const partyId = uuidv7();
   const now = nowIso();
-  db.vault
+  home.origin.vault
     .prepare(
       `INSERT INTO core_party
          (party_id, kind, display_name, sort_name, created_at, updated_at)
@@ -35,12 +60,8 @@ function addParty(db: ReturnType<typeof household>["origin"], name: string) {
   return partyId;
 }
 
-function bind(
-  db: ReturnType<typeof household>["origin"],
-  partyId: string,
-  vaultId: string
-): void {
-  db.vault
+function bind(home: Household, partyId: string, vaultId: string): void {
+  home.origin.vault
     .prepare(
       `INSERT INTO share_party_vault_binding
          (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
@@ -49,20 +70,88 @@ function bind(
     .run(uuidv7(), partyId, vaultId, nowIso());
 }
 
+interface LegacyMember {
+  partyId: string;
+  capability: "read" | "read+write";
+  status: "current" | "invited" | "refused";
+}
+
+/** One live commons grant on the steward's seat, as the rail wrote it. */
+function seedLegacyCommons(
+  home: Household,
+  input: {
+    circleId: string;
+    containerType: string;
+    containerId: string;
+    members: readonly LegacyMember[];
+  }
+): void {
+  const grantId = uuidv7();
+  const now = nowIso();
+  home.origin.vault
+    .prepare(
+      `INSERT INTO share_circle_grant
+         (grant_id, circle_id, container_type, container_id, departure_policy,
+          steward_party_id, created_at, revoked_at, max_size_bytes)
+       VALUES (?, ?, ?, ?, 'retain-ledger-history', ?, ?, NULL, NULL)`
+    )
+    .run(
+      grantId,
+      input.circleId,
+      input.containerType,
+      input.containerId,
+      home.originBoot.ownerPartyId,
+      now
+    );
+  const state = home.origin.vault.prepare(
+    `INSERT INTO share_commons_member_state
+       (grant_id, party_id, status, accepted_at) VALUES (?, ?, ?, ?)`
+  );
+  const capability = home.origin.vault.prepare(
+    `INSERT INTO social_circle_member
+       (member_id, circle_id, party_id, added_at, capability)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(circle_id, party_id)
+       DO UPDATE SET capability = excluded.capability`
+  );
+  for (const member of input.members) {
+    state.run(grantId, member.partyId, member.status, now);
+    capability.run(
+      uuidv7(),
+      input.circleId,
+      member.partyId,
+      now,
+      member.capability
+    );
+  }
+}
+
+function legacyTablesLeft(home: Household): string[] {
+  return (
+    home.origin.vault
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'table'
+          AND (name LIKE 'share_commons_%' OR name = 'share_circle_grant')`
+      )
+      .all() as { name: string }[]
+  ).map((row) => row.name);
+}
+
 describe("migrating a live commons", () => {
   afterEach(closeOpenVaults);
 
   test("a three-member Tally commons across two gateways keeps every member and every ledger row", () => {
     const home = household();
     const now = nowIso();
-    const bob = addParty(home.origin, "Bob");
-    const carol = addParty(home.origin, "Carol");
-    const dev = addParty(home.origin, "Dev");
+    home.origin.vault.exec(LEGACY_RAIL_DDL);
+    const bob = addParty(home, "Bob");
+    const carol = addParty(home, "Carol");
+    const dev = addParty(home, "Dev");
     // Two gateways: Bob co-hosted, Carol and Dev on another. The migration
     // must not care — reach is a fact about the host, not about the roster.
-    bind(home.origin, bob, "vault-family");
-    bind(home.origin, carol, "vault-far-1");
-    bind(home.origin, dev, "vault-far-2");
+    bind(home, bob, "vault-family");
+    bind(home, carol, "vault-far-1");
+    bind(home, dev, "vault-far-2");
 
     const gateway = createGateway(home.origin);
     registerTallyCommands(gateway);
@@ -97,53 +186,36 @@ describe("migrating a live commons", () => {
       purpose: "dpv:ServiceProvision",
     });
     expect(expense.status, JSON.stringify(expense)).toBe("executed");
-
-    // The stored roster is what a named circle's grant must agree with. Tally
-    // makes every group member a writer, so the one READER is marked here.
     const circle = home.origin.vault
       .prepare("SELECT circle_id FROM tally_group WHERE group_id = ?")
       .get(groupId) as { circle_id: string };
-    home.origin.vault
-      .prepare(
-        `UPDATE social_circle_member SET capability = 'read'
-          WHERE circle_id = ? AND party_id = ?`
-      )
-      .run(circle.circle_id, dev);
-
-    const commons = createCommonsGrant({
-      origin: home.origin.vault,
-      ownerPartyId: home.originBoot.ownerPartyId,
+    seedLegacyCommons(home, {
+      circleId: circle.circle_id,
       containerType: "tally.group",
       containerId: groupId,
-      circleId: circle.circle_id,
-      // `vaultId` is what made a member `current` on the commons rail — the
-      // roster fact the migration reads as "this person is an audience".
       members: [
-        { partyId: bob, capability: "read+write", vaultId: "vault-family" },
-        { partyId: carol, capability: "read+write", vaultId: "vault-far-1" },
-        { partyId: dev, capability: "read", vaultId: "vault-far-2" },
+        { partyId: bob, capability: "read+write", status: "current" },
+        { partyId: carol, capability: "read+write", status: "current" },
+        { partyId: dev, capability: "read", status: "current" },
       ],
-      now,
     });
     const ledgerBefore = home.origin.vault
       .prepare("SELECT count(*) AS n FROM tally_expense_split")
       .get() as { n: number };
 
-    const report = migrateCommonsToSubscriptions(home.origin, {
+    const report = migrateCommonsToSubscriptions(home.origin.vault, {
       stewardVaultId: "vault-priya",
       now,
     });
 
     // EVERY MEMBER: one standing answer each, and the capability survives.
+    expect(report.legacyPresent).toBe(true);
     expect(report.grantsMigrated).toBe(1);
     expect(report.audiences).toBe(3);
-    const grants = listShareGrantsForSubject(
-      home.origin.vault,
-      "tally.group",
-      groupId
-    );
     const byParty = new Map(
-      grants.map((grant) => [grant.audience.id, grant.capability])
+      listShareGrantsForSubject(home.origin.vault, "tally.group", groupId).map(
+        (grant) => [grant.audience.id, grant.capability]
+      )
     );
     expect(byParty.get(bob)).toBe("edit");
     expect(byParty.get(carol)).toBe("edit");
@@ -169,47 +241,53 @@ describe("migrating a live commons", () => {
         )
         .get(groupId)
     ).toMatchObject({ n: 3 });
-    expect(commons.grantId).toBeTruthy();
+    // The rail goes with the pass that emptied it.
+    expect([...report.tablesDropped].sort()).toStrictEqual([
+      "share_circle_grant",
+      "share_commons_member_state",
+      "share_commons_op",
+    ]);
+    expect(legacyTablesLeft(home)).toStrictEqual([]);
 
-    // ONE-SHOT: a second pass migrates nothing and changes nothing.
-    const again = migrateCommonsToSubscriptions(home.origin, {
+    // ONE-SHOT: a second pass has nothing to read and changes nothing.
+    const again = migrateCommonsToSubscriptions(home.origin.vault, {
       stewardVaultId: "vault-priya",
       now,
     });
-    expect(again.audiences).toBe(0);
+    expect(again).toMatchObject({ legacyPresent: false, audiences: 0 });
     expect(
       listShareGrantsForSubject(home.origin.vault, "tally.group", groupId)
     ).toHaveLength(3);
   });
 
-  test("a departed member's answer is revoked, and the ledger keeps their rows", () => {
+  test("a roster row that is not current is not an audience", () => {
     const home = household();
     const now = nowIso();
-    const bob = addParty(home.origin, "Bob");
-    const carol = addParty(home.origin, "Carol");
-    bind(home.origin, bob, "vault-family");
-    bind(home.origin, carol, "vault-far-1");
-    const groupId = uuidv7();
-    createCommonsGrant({
-      origin: home.origin.vault,
-      ownerPartyId: home.originBoot.ownerPartyId,
-      containerType: "core.collection",
-      containerId: groupId,
-      members: [
-        { partyId: bob, capability: "read", vaultId: "vault-family" },
-        { partyId: carol, capability: "read", vaultId: "vault-far-1" },
-      ],
-      now,
-    });
-    // Carol refused: a roster row that is not `current` is not an audience.
+    home.origin.vault.exec(LEGACY_RAIL_DDL);
+    const bob = addParty(home, "Bob");
+    const carol = addParty(home, "Carol");
+    bind(home, bob, "vault-family");
+    bind(home, carol, "vault-far-1");
+    const circleId = uuidv7();
     home.origin.vault
       .prepare(
-        `UPDATE share_commons_member_state SET status = 'refused'
-          WHERE party_id = ?`
+        `INSERT INTO social_circle
+           (circle_id, name, kind, owner_party_id, created_at)
+         VALUES (?, 'Trip', 'custom', ?, ?)`
       )
-      .run(carol);
+      .run(circleId, home.originBoot.ownerPartyId, now);
+    const containerId = uuidv7();
+    seedLegacyCommons(home, {
+      circleId,
+      containerType: "core.collection",
+      containerId,
+      members: [
+        { partyId: bob, capability: "read", status: "current" },
+        { partyId: carol, capability: "read", status: "refused" },
+      ],
+    });
 
-    const report = migrateCommonsToSubscriptions(home.origin, {
+    const report = migrateCommonsToSubscriptions(home.origin.vault, {
       stewardVaultId: "vault-priya",
       now,
     });
@@ -218,7 +296,7 @@ describe("migrating a live commons", () => {
       listShareGrantsForSubject(
         home.origin.vault,
         "core.collection",
-        groupId
+        containerId
       ).map((grant) => grant.audience.id)
     ).toStrictEqual([bob]);
   });

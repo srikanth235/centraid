@@ -789,14 +789,14 @@ cols:[
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
 ]},
-{ n:'circle_member', std:'vCard MEMBER', p:'Membership join with history-friendly timestamps and the member’s commons capability.',
+{ n:'circle_member', std:'vCard MEMBER', p:'Membership join with history-friendly timestamps and the member’s sharing capability.',
 cols:[
 ['member_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Membership identity.'],
 ['circle_id','TEXT','FK NN','social.circle', 'Circle; UNIQUE(circle_id,party_id).'],
 ['party_id','TEXT','FK NN','core.party', 'Member as identity.'],
 ['added_at','TEXT (iso8601)','NN','', 'Join instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
-['capability','TEXT','NN CK','', 'CHECK in (\'read\',\'read+write\'); default read. What circle-backed commons sharing lets this member do (issue #731).'],
+['capability','TEXT','NN CK','', 'CHECK in (\'read\',\'read+write\'); default read. What circle-backed sharing offers this member when a circle is made an audience (issues #731, #929).'],
 ]},
 { n:'thread', std:'RFC 5322 threading · JMAP mailbox/thread · Nextcloud Talk rooms', p:'A message-thread container across channels — the same shape for SMS, email, DM, group.',
 cols:[
@@ -1346,7 +1346,7 @@ const MACHINERY = [
 {id:'outbox',label:'Outbox — external writes as inert artifacts the owner decides on',tables:['item','grant']},
 {id:'notifications',label:'Notifications — durable notices',tables:['notice']},
 {id:'blob',label:'Blob custody — local-vs-replicated state, rebuilt on the sweep',tables:['custody_state','custody_rollup']},
-{id:'share',label:'Sharing — the authority plane, fulfillment, links, commons',tables:['party_vault_binding','circle_grant','commons_member_state','commons_op','commons_replay','commons_receipt','commons_cursor','commons_lineage','commons_retained','commons_intent','commons_invitation','authority','delivery_config','fulfillment','commons_verified','commons_supersession','commons_device_reach','commons_steward_contact','subscription','subscription_lineage']},
+{id:'share',label:'Sharing — the authority plane, fulfillment, links, subscriptions',tables:['party_vault_binding','authority','delivery_config','fulfillment','subscription','subscription_lineage']},
 ];
 
 /* ---------- §02 entity map data ---------- */

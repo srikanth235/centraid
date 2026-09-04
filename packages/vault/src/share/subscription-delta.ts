@@ -14,8 +14,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { sha256Hex } from "../ids.js";
-import type { ShareableItemType, WireClosure, WireRow } from "./closure.js";
-import { shareOriginEntityType } from "./closure.js";
+import type { WireClosure, WireRow } from "./closure.js";
 import type { ShareShapeFrame } from "./subscription-frame.js";
 import type { SubscriptionLineageRow } from "./subscription-store.js";
 
@@ -276,16 +275,4 @@ export function applyShareShapeFields(
     if (Number(changes) > 0) applied += 1;
   }
   return applied;
-}
-
-/** Item types whose closure is a sub-graph, so a field update cannot express
- *  them. Read by the seat's tests and by the receipt's cost note. */
-export const REPROJECTED_ITEM_TYPES: readonly ShareableItemType[] = [
-  "locker.item",
-  "tally.group",
-];
-
-/** The lineage key a projected item is claimed under. */
-export function lineageEntityOf(itemType: ShareableItemType): string {
-  return shareOriginEntityType(itemType);
 }

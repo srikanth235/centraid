@@ -245,9 +245,9 @@ describe("grant/fulfillment", () => {
     expect(
       home.origin.vault
         .prepare(
-          `SELECT COUNT(*) AS n FROM share_commons_invitation WHERE grant_id = ?`
+          "SELECT COUNT(*) AS n FROM share_party_vault_binding WHERE party_id = ?"
         )
-        .get(grant.grantId)
+        .get(nila)
     ).toMatchObject({ n: 0 });
 
     // The pass is idempotent: it parks again and still mints nothing.

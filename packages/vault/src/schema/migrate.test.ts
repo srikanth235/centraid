@@ -145,20 +145,19 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("ONE rung: a fresh vault is the baseline and stops at user_version 1", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(1);
+  test("TWO rungs: the baseline plus #929, and a fresh vault stops at user_version 2", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(2);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(1);
+    expect(version.user_version).toBe(2);
     for (const table of [
       "locker_auth_credential",
       "core_entity",
       "core_entity_revision",
       "social_contact_channel",
       "notifications_notice",
-      "share_circle_grant",
       "share_authority",
       "share_delivery_config",
       "share_fulfillment",
@@ -180,6 +179,13 @@ describe("schema/migrate", () => {
     for (const gone of [
       "people_merge",
       "share_grant",
+      // The commons rail (#929): a fresh file never had it, and a file that
+      // did loses it to `migrateCommonsToSubscriptions`.
+      "share_circle_grant",
+      "share_commons_op",
+      "share_commons_member_state",
+      "share_commons_intent",
+      "share_commons_invitation",
       "enrich_consent",
       "consent_app",
       "locker_item_history",
@@ -468,10 +474,10 @@ describe("schema/migrate", () => {
     first.close();
 
     const vaultFile = path.join(dir, "vault.db");
-    expect(userVersionOf(vaultFile)).toBe(1);
+    expect(userVersionOf(vaultFile)).toBe(2);
 
     const second = openVaultDb({ dir });
-    expect(userVersionOf(vaultFile)).toBe(1);
+    expect(userVersionOf(vaultFile)).toBe(2);
     expect(shapeOf(second)).toBe(before);
     second.close();
   });

@@ -1,6 +1,6 @@
 /*
  * EDIT routing (#825, #929). NOTHING HERE AUTHORIZES ANYTHING: routing only,
- * over the DECLARED table (commons-routing.ts) and never the command's name.
+ * over the DECLARED table (container-routing.ts) and never the command's name.
  * The refusals are never silent successes — a write off the rail is a local
  * mutation the origin's next pass reverts, so it is refused BY NAME instead.
  *
@@ -13,10 +13,10 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type { ShareableItemType } from "../share/closure.js";
 import {
-  commonsRoutesForCommand,
-  isCommonsCommandActable,
-} from "../share/commons-routing.js";
-import type { CommonsCommandRoute } from "../share/commons-routing.js";
+  containerRoutesForCommand,
+  isContainerCommandActable,
+} from "../share/container-routing.js";
+import type { ContainerCommandRoute } from "../share/container-routing.js";
 import type { ShareGrantRecord } from "./grant-store.js";
 import { listShareGrantsForSubject } from "./grant-store.js";
 import { SHARE_SUBJECT_REGISTRY } from "./subject-registry.js";
@@ -54,7 +54,7 @@ export interface ShareGrantEditRoute {
 /** NEAREST FIRST: the closest folder keeps a subtree one share. */
 function candidateContainers(
   db: DatabaseSync,
-  route: CommonsCommandRoute,
+  route: ContainerCommandRoute,
   value: string
 ): string[] {
   if (route.resolution === "container") return [value];
@@ -137,7 +137,7 @@ export function routeShareGrantEdit(
   db: DatabaseSync,
   input: { command: string; commandInput: Record<string, unknown> }
 ): ShareGrantEditRoute | undefined {
-  for (const route of commonsRoutesForCommand(input.command)) {
+  for (const route of containerRoutesForCommand(input.command)) {
     const value = input.commandInput[route.inputKey];
     if (typeof value !== "string" || !value) continue;
     for (const containerId of candidateContainers(db, route, value)) {
@@ -147,7 +147,7 @@ export function routeShareGrantEdit(
         containerId
       );
       if (grants.length === 0) continue;
-      const actable = isCommonsCommandActable(
+      const actable = isContainerCommandActable(
         route.containerType,
         input.command
       );

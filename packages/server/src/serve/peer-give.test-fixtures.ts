@@ -192,12 +192,6 @@ export function transportTo(
       vaultId === side.vaultId ? side.ownerPartyId : undefined,
     localRoute: () => ({ endpointId: side.endpointId, relayHints: [] }),
     localLabel: () => side.label,
-    commonsVaultFor: (vaultId) =>
-      vaultId === side.vaultId ? side.vault : undefined,
-    commonsGatewayFor: (vaultId) =>
-      vaultId === side.vaultId ? side.gateway : undefined,
-    commonsCredentialFor: (vaultId) =>
-      vaultId === side.vaultId ? side.ownerCredential : undefined,
     ...(replica
       ? {
           replica: {
@@ -213,7 +207,7 @@ export function transportTo(
 
 /**
  * Like `transportTo`, but for two or more vaults co-hosted on one gateway:
- * `vaultFor`/`vaultPublicKey`/`gatewayFor` recognize ANY of `sides` as local;
+ * `vaultPublicKey`/`ownerPartyFor` recognize ANY of `sides` as local;
  * `links`/`gatewayDb`/`endpointId` are already shared, so any one side names them.
  */
 export function transportToHost(
@@ -230,9 +224,6 @@ export function transportToHost(
     ownerPartyFor: (vaultId) => sideFor(vaultId)?.ownerPartyId,
     localRoute: () => ({ endpointId: host.endpointId, relayHints: [] }),
     localLabel: () => host.label,
-    commonsVaultFor: (vaultId) => sideFor(vaultId)?.vault,
-    commonsGatewayFor: (vaultId) => sideFor(vaultId)?.gateway,
-    commonsCredentialFor: (vaultId) => sideFor(vaultId)?.ownerCredential,
   });
   return wireHandler(handler, callerEndpointId, host.proof);
 }

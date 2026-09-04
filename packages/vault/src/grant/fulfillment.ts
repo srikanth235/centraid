@@ -195,11 +195,14 @@ export function startShareSubscription(
     throw new Error(
       `share grant ${input.grantId} is revoked; stop its subscriptions instead`
     );
-  // Composed once for the ceiling, so an over-ceiling grant leaves no
-  // fulfillment row and dials no transport. The audience is unnamed here: the
-  // frame is discarded, and the size and digest do not depend on who receives.
-  const probe = frameFor(input, grant, "");
-  const digest = sha256Hex(JSON.stringify(probe.closure));
+  // COMPOSED ONCE, for every audience of this grant. The ceiling is judged
+  // here, so an over-ceiling grant leaves no fulfillment row and dials no
+  // transport; and the only thing the audience contributes to a frame is the
+  // vault id it is addressed to, so re-stamping beats re-reading the closure —
+  // one composition per pass rather than one per audience plus this one, and
+  // every audience of a grant provably receives the same shape.
+  const shape = frameFor(input, grant, "");
+  const digest = sha256Hex(JSON.stringify(shape.closure));
   const steps: ShareSubscriptionStep[] = [];
   const audience = resolveGrantAudienceParties(db, grant);
   const reached = new Map<string, string>();
@@ -259,7 +262,10 @@ export function startShareSubscription(
       state: "syncing",
       updatedAt: input.now,
     });
-    const delivery = transport.deliver(frameFor(input, grant, peerVaultId));
+    const delivery = transport.deliver({
+      ...shape,
+      audienceVaultId: peerVaultId,
+    });
     if (delivery.outcome === "unreachable") {
       setFulfillmentState(db, {
         grantId: grant.grantId,
@@ -444,24 +450,4 @@ export function stopShareSubscription(
     });
   }
   return { grantId: grant.grantId, shapeId, steps };
-}
-
-export interface ShareSubscriptionReportRow {
-  peerVaultId: string;
-  state: ShareFulfillmentState;
-  detail: string | null;
-  deliveredAt: string | null;
-}
-
-/** What the member is told: one row per audience vault, no derivation. */
-export function reportShareSubscription(
-  origin: ShareVaultRef,
-  grantId: string
-): readonly ShareSubscriptionReportRow[] {
-  return listFulfillment(origin.vault, grantId).map((row) => ({
-    peerVaultId: row.peerVaultId,
-    state: row.state,
-    detail: row.detail,
-    deliveredAt: row.deliveredAt,
-  }));
 }

@@ -17,7 +17,6 @@ import {
   PEER_PLANE_PREFIX,
   PEER_PROOF_HEADER,
 } from "@centraid/tunnel";
-import type { ExecuteCommonsCommandInput } from "@centraid/vault";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
 import {
@@ -26,22 +25,6 @@ import {
 } from "../serve/peer-route-assertion.js";
 import type { LinkedPeer } from "../serve/vault-link-row.js";
 import type { VaultLinksStore } from "../serve/vault-links-store.js";
-import {
-  handlePeerCommonsBlob,
-  handlePeerCommonsBlobAuthorize,
-  handlePeerCommonsBootstrap,
-  handlePeerCommonsCommand,
-  handlePeerCommonsClaim,
-  handlePeerCommonsInvite,
-  handlePeerCommonsRefuse,
-  PEER_COMMONS_BLOB_AUTH_PATH,
-  PEER_COMMONS_BLOB_PATH,
-  PEER_COMMONS_BOOTSTRAP_PATH_PREFIX,
-  PEER_COMMONS_COMMAND_PATH,
-  PEER_COMMONS_CLAIM_PATH,
-  PEER_COMMONS_INVITE_PATH,
-  PEER_COMMONS_REFUSE_PATH,
-} from "./peer-commons-route.js";
 import { handlePeerReplicaIntent } from "./peer-replica-intent-route.js";
 import {
   handlePeerReplicaBlob,
@@ -67,15 +50,6 @@ export interface PeerPlaneDeps {
   localRoute: () => { endpointId?: string; relayHints: string[] };
   localLabel: () => string;
   budget?: TokenBucket;
-  commonsVaultFor?: (
-    vaultId: string
-  ) => ExecuteCommonsCommandInput["steward"] | undefined;
-  commonsGatewayFor?: (
-    vaultId: string
-  ) => ExecuteCommonsCommandInput["gateway"] | undefined;
-  commonsCredentialFor?: (
-    vaultId: string
-  ) => ExecuteCommonsCommandInput["credential"] | undefined;
   /** The subscription doors (#929). Absent on a host that mounts no vault. */
   replica?: PeerReplicaDeps;
 }
@@ -302,55 +276,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     // COPY-AS-SHARE IS OFF THIS WIRE (#825, ruling G-copy): remote-give frames
     // and the ranged byte pull answer `not_found` like any unknown path.
     // Closure reading survives only BENEATH a grant, never as a peer frame.
-    if (
-      deps.commonsVaultFor &&
-      deps.commonsGatewayFor &&
-      deps.commonsCredentialFor
-    ) {
-      const commonsDeps = {
-        vaultFor: deps.commonsVaultFor,
-        gatewayFor: deps.commonsGatewayFor,
-        credentialFor: deps.commonsCredentialFor,
-      };
-      if (
-        pathname.startsWith(PEER_COMMONS_BOOTSTRAP_PATH_PREFIX) &&
-        method === "GET"
-      ) {
-        const grantId = decodeURIComponent(
-          pathname.slice(PEER_COMMONS_BOOTSTRAP_PATH_PREFIX.length)
-        );
-        if (!grantId) return notFound(res);
-        return handlePeerCommonsBootstrap(
-          res,
-          peer,
-          grantId,
-          new URL(target, "http://gateway.local").searchParams,
-          commonsDeps
-        );
-      }
-      if (pathname === PEER_COMMONS_BLOB_AUTH_PATH && method === "GET")
-        return handlePeerCommonsBlobAuthorize(
-          res,
-          peer,
-          new URL(target, "http://gateway.local").searchParams,
-          commonsDeps
-        );
-      if (pathname === PEER_COMMONS_BLOB_PATH && method === "GET")
-        return handlePeerCommonsBlob(
-          res,
-          peer,
-          new URL(target, "http://gateway.local").searchParams,
-          commonsDeps
-        );
-      if (pathname === PEER_COMMONS_COMMAND_PATH && method === "POST")
-        return handlePeerCommonsCommand(req, res, peer, commonsDeps);
-      if (pathname === PEER_COMMONS_INVITE_PATH && method === "POST")
-        return handlePeerCommonsInvite(req, res, peer, commonsDeps);
-      if (pathname === PEER_COMMONS_CLAIM_PATH && method === "POST")
-        return handlePeerCommonsClaim(req, res, peer, commonsDeps);
-      if (pathname === PEER_COMMONS_REFUSE_PATH && method === "POST")
-        return handlePeerCommonsRefuse(req, res, peer, commonsDeps);
-    }
     return notFound(res);
   };
 }

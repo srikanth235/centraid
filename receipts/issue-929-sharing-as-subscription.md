@@ -213,3 +213,248 @@ standing for one is revoked by the migration rather than left to drift — a liv
 answer whose roster row is gone is the exact state the authority plane exists to
 prevent. Their ledger rows stay: the origin owns them, and a departure has never
 been a reason to rewrite history.
+
+## Wave 4b — the deletion, and the ladder it forced
+
+57 files gone. `grep -rn "share_commons_\|share_circle_grant" packages apps
+--include=*.ts` now matches only the migration's own `LEGACY_COMMONS_TABLES` and
+the "these must NOT exist" list in `schema/migrate.test.ts`.
+
+| deleted | replacement |
+| --- | --- |
+| `share/commons*.ts` — op log, chain, checkpoint, compaction, replay, recovery, decide, lifecycle, bootstrap, signature | the subscription rail, waves 2-3 |
+| `routes/commons-*.ts`, `routes/peer-commons-route.ts`, `serve/commons-*.ts`, `serve/peer-commons-*.ts` | `routes/peer-replica-route.ts`, `serve/share-subscriber.ts`, `serve/share-subscription-sweep.ts` |
+| `schema/share-commons.ts` + `schema/commons-resilience.ts` (14 tables) | `schema/subscription.ts` (2); the binding's DDL moved byte-identical to `schema/party-vault-binding.ts` |
+| steward transfer + recovery drills, `docs/recovery/commons-steward-loss.md`, `apps/mobile/.../steward-label.ts` | RE-ORIGIN: `docs/recovery/shared-origin-loss.md` (the audience already holds the rows) and `apps/mobile/.../waiting-on.ts` |
+| `commons-sim*` | `subscription-sim*` — rewritten, not dropped: same golden invariants, seeds `839_001`/`839_002`, D1 severance probe kept |
+| `gateway.ts`'s commons branch, the commons half of `gateway-client-edges.ts` | nothing: a member's write is a signed intent to the origin |
+| `commons-routing.ts` | `container-routing.ts` — same declared table, no dead plane in its name; its conformance vocabulary moved into the test that is its only reader |
+| `reportShareSubscription`, `listSubscriptions`, `subscriptionHoldsOriginVersion`, `memberIntentPayloadHash`, `REPROJECTED_ITEM_TYPES` | exports with no production caller, named by the sharing-plane reachability gate. "Report" is `listFulfillment`, which `grant-routes.ts` already reads |
+
+| number | value | provenance |
+| --- | --- | --- |
+| files deleted | 57 | `git show --stat` on this commit |
+| `share_%` tables on a fresh vault | 6 | throwaway probe over `openVaultDb` + `bootstrapVault`, host 4c/15GB |
+| registered entities | 110 → 98; base tables 150 → 139 | `VAULT_ENTITIES`, same host |
+| per-grant size ceilings | 3 → 1 (`share_delivery_config`) | `subscription-frame.ts` |
+
+THE LADDER MOVED, and that is the finding. Deleting the rail is not schema-
+neutral for a file that already exists: the golden corpus stopped opening at all
+(`no such table: main.share_subscription`, from `refreshReplicaTriggers`),
+because `VAULT_MIGRATIONS` held ONE rung and a file at `user_version = 1` never
+re-runs it. So #929 is the release `migrate.ts` always said would add **rung
+two** — the subscription tables, plus the purge trigger re-cut without the
+rail's grant table — and the baseline text is history. The rail's tables are NOT
+dropped by a rung: `migrateCommonsToSubscriptions` turns their rows into
+standing answers first and drops them itself, from `openVaultDb`, so every seat
+that can open a vault brings the file forward the same way.
+
+`tests/golden/issue-916` is re-frozen as `issue-929`. Before replacing it,
+today's build was run against it: it opened, kept every frozen row, passed
+`vaultDoctor` and reached `user_version = 2`. The one test it cannot pass is
+`carries the schema today's baseline builds`, a byte comparison of stored DDL —
+SQLite appends an `ALTER`-added column to the end of a table's text, so no
+additive column change can ever match a fresh file. The gate's own instruction
+for a shape change is to re-freeze in the release that makes it.
+
+```sh
+bun run --cwd packages/vault build && bun run --cwd packages/vault typecheck
+bunx vitest run src/golden-vault.test.ts src/schema/migrate.test.ts --root packages/vault
+bun run lint:vault-sql && node scripts/check-share-reachability.mjs
+bun run lint:schema-export && bun run lint && bun run format
+```
+
+Also touched, each following one of the rows above:
+`packages/vault/src/db.ts` (the migration runs on open),
+`packages/vault/src/replica/change-log.ts` (the `waiting_on` /
+`answered_versions` ALTERs now carry the baseline's CHECKs, or a migrated file
+is one this build could not have written),
+`packages/vault/src/schema/entity-catalog.ts` and `packages/vault/src/index.ts`
+(registry and barrel), `packages/vault/src/gateway/gateway.ts` (the commons
+branch), `packages/server/src/serve/build-gateway.ts` (its deps and the route
+re-announcement it must keep), `apps/mobile/src/lib/replica/native-session.ts`
+(steward label → waiting-on label),
+`packages/vault/src/share/container-routing.ts`,
+`packages/vault/src/share/container-routing.test.ts`,
+`packages/vault/src/share/subscription-sim.test.ts`,
+`packages/vault/src/share/subscription-sim.test-fixtures.ts`,
+`packages/vault/src/share/subscription-sim-plane.test-fixtures.ts`,
+and the tests that had a retired premise:
+`packages/vault/src/gateway/share-grant-seam.test.ts`,
+`packages/vault/src/grant/fulfillment-edit.test.ts`,
+`packages/vault/src/grant/fulfillment.test.ts`,
+`packages/vault/src/grant/subject-registry.test.ts`,
+`packages/server/src/serve/peer-give.test-fixtures.ts`.
+
+Docs brought to current state: the ladder (`docs/decisions.md` ONT-ladder,
+`packages/vault/README.md`, `docs/recovery/backup-restore.md`), the fresh-vault
+shape and share band (`docs/vault-ontology.md`, the published ontology page).
+Doc debt for the umbrella pass: ARCHITECTURE.md, SECURITY.md, `docs/glossary.md`,
+`docs/protocol.md`, `docs/mobile-offline.md`, `docs/blueprint-seats.md` still
+speak the commons vocabulary.
+
+
+Rebased onto `main` at 541f0720c, where #966 landed on the same client file:
+`intents.ts` keeps main's `OVERLAY_STATES`/`intentVerdict`/`mirrorOutbox` and
+its `pendingIntentForInput` method, and `intent-revision.ts` — the split this
+wave made when `intents.ts` passed the source cap — carries main's versions of
+`revisedInput` (minted row ids, not a `pending:` prefix), `namedRowIds` and
+`presentPendingIntentMutation`. `pendingIntentIdFromInput` is NOT re-exported:
+#966 deleted it, and re-adding it through the split would restore a symbol main
+had removed. `ReplicaProvider` passes `origin`, not the deleted `steward`.
+
+### Every file this wave touched
+
+The rows above group them; the gate wants each path once, so here they are.
+
+```
+apps/mobile/src/kit/replica/ReplicaProvider.tsx
+apps/mobile/src/lib/replica/pending-write-visibility.test.ts
+apps/mobile/src/lib/replica/steward-label.ts
+apps/mobile/src/lib/replica/waiting-on.ts
+packages/client/src/gateway-client-commons-recovery.contract.test.ts
+packages/client/src/gateway-client-edges.ts
+packages/client/src/gateway-client.ts
+packages/client/src/replica/intent-revision.ts
+packages/client/src/replica/intents.contract.test.ts
+packages/client/src/replica/intents.ts
+packages/server/src/engine/stores/gateway-db.test.ts
+packages/server/src/routes/commons-recovery-routes.test.ts
+packages/server/src/routes/commons-recovery-routes.ts
+packages/server/src/routes/commons-routes-decide.test.ts
+packages/server/src/routes/commons-routes-intents.test.ts
+packages/server/src/routes/commons-routes.test.ts
+packages/server/src/routes/commons-routes.ts
+packages/server/src/routes/commons-steward-loss-drill.test.ts
+packages/server/src/routes/grant-routes.test.ts
+packages/server/src/routes/peer-commons-route.ts
+packages/server/src/serve/commons-b6.test-fixtures.ts
+packages/server/src/serve/commons-notices.test.ts
+packages/server/src/serve/commons-notices.ts
+packages/server/src/serve/commons-observability.test.ts
+packages/server/src/serve/commons-observability.ts
+packages/server/src/serve/commons-recovery-invites.ts
+packages/server/src/serve/peer-commons-b6.test.ts
+packages/server/src/serve/peer-commons-client.ts
+packages/server/src/serve/peer-commons-docs-b6.test.ts
+packages/server/src/serve/peer-commons-hardening.test.ts
+packages/server/src/serve/peer-commons-pull.test.ts
+packages/server/src/serve/peer-commons-sweep.test.ts
+packages/server/src/serve/peer-commons-sweep.ts
+packages/server/src/serve/peer-commons-tally-b6.test.ts
+packages/server/src/serve/peer-plane-sweep.ts
+packages/server/src/serve/vault-plane-commons.test.ts
+packages/vault/src/commands/merge.test.ts
+packages/vault/src/gateway/portability.test.ts
+packages/vault/src/gateway/portable-export.ts
+packages/vault/src/grant/channel.test.ts
+packages/vault/src/schema/commons-resilience.ts
+packages/vault/src/schema/entity-refs.ts
+packages/vault/src/schema/entity.ts
+packages/vault/src/schema/local-tables.ts
+packages/vault/src/schema/migrate.test.ts
+packages/vault/src/schema/ontology-rules.test.ts
+packages/vault/src/schema/party-pointers.ts
+packages/vault/src/schema/party-vault-binding.ts
+packages/vault/src/schema/share-commons.ts
+packages/vault/src/share/commons-automation-b6.test.ts
+packages/vault/src/share/commons-blobs.test-fixtures.ts
+packages/vault/src/share/commons-bootstrap.ts
+packages/vault/src/share/commons-chain.test.ts
+packages/vault/src/share/commons-chain.ts
+packages/vault/src/share/commons-convergence-properties.test.ts
+packages/vault/src/share/commons-cursor.ts
+packages/vault/src/share/commons-decide.test.ts
+packages/vault/src/share/commons-decide.ts
+packages/vault/src/share/commons-derived-removal.test.ts
+packages/vault/src/share/commons-docs-b6.test.ts
+packages/vault/src/share/commons-docs-command.test.ts
+packages/vault/src/share/commons-hardening.test.ts
+packages/vault/src/share/commons-increment.test.ts
+packages/vault/src/share/commons-intent-lifecycle.test.ts
+packages/vault/src/share/commons-intent.test-fixtures.ts
+packages/vault/src/share/commons-invoke.test.ts
+packages/vault/src/share/commons-lifecycle.test.ts
+packages/vault/src/share/commons-lifecycle.ts
+packages/vault/src/share/commons-recovery.test.ts
+packages/vault/src/share/commons-recovery.ts
+packages/vault/src/share/commons-replay.test-fixtures.ts
+packages/vault/src/share/commons-replay.test.ts
+packages/vault/src/share/commons-replay.ts
+packages/vault/src/share/commons-retain-closure.test.ts
+packages/vault/src/share/commons-signature.ts
+packages/vault/src/share/commons-sim-world.test-fixtures.ts
+packages/vault/src/share/commons-sim.test-fixtures.ts
+packages/vault/src/share/commons-sim.test.ts
+packages/vault/src/share/commons-size.test.ts
+packages/vault/src/share/commons-stale-lifecycle.test.ts
+packages/vault/src/share/commons-tally-b6.test.ts
+packages/vault/src/share/commons-tally-grant.test.ts
+packages/vault/src/share/commons.test.ts
+packages/vault/src/share/party-vault-binding.ts
+packages/vault/src/share/removal.ts
+packages/vault/src/share/subscription-sim-world.test-fixtures.ts
+packages/vault/tests/golden/issue-916/vault.db.gz
+packages/vault/tests/golden/issue-929/manifest.json
+packages/vault/tests/golden/issue-929/vault.db.gz
+scripts/lint-no-nul-bytes.test.mjs
+scripts/lint-vault-sql.mjs
+share-reachability.json
+tests/schema-export-fingerprint.json
+```
+
+### Falsification
+
+| claim | throwaway check | result |
+| --- | --- | --- |
+| the deletion is schema-neutral for an existing file | opened the frozen golden corpus with today's build | FALSIFIED: it did not open at all. That forced rung two; the corpus opens and migrates now |
+| no reader of the rail survives | `grep -rn "share_commons_\|share_circle_grant" packages apps`, minus the migration and the migrate test's "must not exist" list | held: no matches (exit 1) |
+
+
+## Slice 5 — the after number
+
+The share journey's BEFORE number lives on `origin/claude/927-w2` as
+`gateway/share/shared-album/ci-linux-x64-4c` → `grantToVisible`, and the entry
+says the AFTER lands beside it. That ledger (`tests/journeys.json`,
+`tests/helpers/journeys.ts`, `tests/scale/share-journey.scale.test.ts`) does not
+exist on this lane's base, so cherry-picking it would import another lane's
+whole rig; the numbers are here instead, with the key they belong under.
+
+| key | metric | before (#927 w3) | after (#929) |
+| --- | --- | --- | --- |
+| `gateway/share/shared-album/ci-linux-x64-4c` | `grantToVisible`, median of 3 | 212.1 ms | 235.7 ms |
+| | spread over three runs | 133.1 / 212.1 / 244.4 | 215.9 / 235.7 / 236.9 |
+| | grant written | 1.9-4.0 ms | 1.7-5.7 ms |
+| | delivery (fulfill → subscribe) | 130.8-240.0 ms | 209.7-233.7 ms |
+| | grantee's own read | 0.3-0.4 ms | 0.3-0.5 ms |
+
+Provenance: same rig as the before number — `household()`, a 200-photo album,
+two vaults CO-HOSTED so no transport is inside the interval — re-run with
+`startShareSubscription` over the loopback transport, on the same host class
+(linux x64, 4 cores / 15 GB) with `vitest.scale.config.ts`. The rig itself is
+NOT committed: it is the before test with one call swapped, and its home is the
+#927 ledger. THE HOST IS SHARED with sibling agents, which the before
+number's own note also warns about: the same rig read 267/318/495 ms at load
+average 15-16 and 216/236/237 ms at 7.4. The numbers above are the quieter
+window, and the difference between the two windows is larger than the
+difference being reported — a direction, not a verdict.
+
+The direction is real and named: a subscription pays for a SHAPE where
+fulfillment paid for a projection — a size check, a structure digest and one
+lineage row per projected row. One cost was measured and removed here: the pass
+composed the closure once for the ceiling and again per audience, so a
+single-audience grant read its closure twice. It now composes once and re-stamps
+the audience id, which also makes every audience of a grant provably receive the
+same shape.
+
+Cross-gateway is NOT folded into this number and belongs in its own entry, as
+the before note says: `share-subscription-peer.test.ts` proves the six subject
+types travel it, but a peer delivery on this host is a loopback dial in one
+process, so timing it would measure the harness. The web row stays `_intended`.
+
+### Falsification
+
+| claim | throwaway check | result |
+| --- | --- | --- |
+| the after number is a like-for-like comparison | captured `uptime` beside every run | FALSIFIED as a verdict: the same rig read 216-237 ms at load average 7.4 and 267-516 ms at 15-16. Reported as a direction, with the load stated |
+| composing once per pass changed the number | re-ran the same rig three times either side of the change, in the same window | held in sign, not in size: medians 307 → 267 ms at equal contention, inside the spread above |

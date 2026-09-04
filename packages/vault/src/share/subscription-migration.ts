@@ -19,7 +19,6 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import type { VaultDb } from "../db.js";
 import { channelForParty } from "../grant/channel.js";
 import { setFulfillmentState } from "../grant/grant-fulfillment-rows.js";
 import {
@@ -32,7 +31,46 @@ import { fulfillmentAnswerFor } from "../grant/subject-registry.js";
 import type { ShareableItemType } from "./closure.js";
 import { isShareableItemType } from "./closure.js";
 
+/**
+ * The commons rail's own tables, in dependency order for the drop (#929). They
+ * are NOT in the composed schema any more, so a fresh vault has none of them;
+ * a file written before this wave still does, and the migration is what turns
+ * their contents into subscriptions and then takes them away. Deletion with
+ * replacement: leaving them would leave a second membership plane no code
+ * reads and every backup carries.
+ */
+export const LEGACY_COMMONS_TABLES: readonly string[] = [
+  "share_commons_intent",
+  "share_commons_invitation",
+  "share_commons_lineage",
+  "share_commons_retained",
+  "share_commons_receipt",
+  "share_commons_replay",
+  "share_commons_cursor",
+  "share_commons_verified",
+  "share_commons_device_reach",
+  "share_commons_steward_contact",
+  "share_commons_supersession",
+  "share_commons_member_state",
+  "share_commons_op",
+  "share_circle_grant",
+];
+
+function tableExists(db: DatabaseSync, name: string): boolean {
+  return (
+    db
+      .prepare(
+        "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?"
+      )
+      .get(name) !== undefined
+  );
+}
+
 export interface CommonsMigrationReport {
+  /** False when this vault never held a commons rail — a fresh file. */
+  legacyPresent: boolean;
+  /** Legacy tables dropped once their contents became subscriptions. */
+  tablesDropped: readonly string[];
   /** Circle grants walked. */
   grantsMigrated: number;
   /** Audiences that gained a subscription in this pass. */
@@ -96,14 +134,22 @@ function capabilityOf(
  * the one outcome running it again cannot repair.
  */
 export function migrateCommonsToSubscriptions(
-  origin: VaultDb,
+  db: DatabaseSync,
   input: { stewardVaultId: string; now: string }
 ): CommonsMigrationReport {
-  const db = origin.vault;
   const unofferable: string[] = [];
   let grantsMigrated = 0;
   let audiences = 0;
   let revoked = 0;
+  if (!tableExists(db, "share_circle_grant"))
+    return {
+      legacyPresent: false,
+      tablesDropped: [],
+      grantsMigrated: 0,
+      audiences: 0,
+      revoked: 0,
+      unofferable: [],
+    };
   for (const grant of liveCircleGrants(db)) {
     grantsMigrated += 1;
     if (!isShareableItemType(grant.container_type)) {
@@ -158,5 +204,21 @@ export function migrateCommonsToSubscriptions(
       audiences += 1;
     }
   }
-  return { grantsMigrated, audiences, revoked, unofferable };
+  // The rail's tables go with the pass that emptied them. A drop after the
+  // walk, never during it: a half-dropped rail is the one state a re-run
+  // cannot read its way out of.
+  const tablesDropped: string[] = [];
+  for (const table of LEGACY_COMMONS_TABLES) {
+    if (!tableExists(db, table)) continue;
+    db.exec(`DROP TABLE ${JSON.stringify(table)}`);
+    tablesDropped.push(table);
+  }
+  return {
+    legacyPresent: true,
+    tablesDropped,
+    grantsMigrated,
+    audiences,
+    revoked,
+    unofferable,
+  };
 }

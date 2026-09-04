@@ -544,22 +544,12 @@ export const VAULT_ENTITIES: EntityRegistry = {
     item: { label: "Outbox items", lifecycle: "machinery" },
     grant: { label: "Outbox grants", lifecycle: "machinery" },
   },
-  // Commons control truth and local mechanics (#731). These must stay in the
-  // canonical walk: a portable restore without the grant/roster bindings,
-  // ordered op log, cursors, intent overlay, or pending invitations would
-  // silently turn shared content into an unrelated local copy.
+  // The sharing plane's control truth (#731, #929). These must stay in the
+  // canonical walk: a portable restore without the bindings, the standing
+  // answers, the delivery state or the subscription lineage would silently turn
+  // shared content into an unrelated local copy.
   share: {
     party_vault_binding: { label: "Vault bindings", lifecycle: "machinery" },
-    circle_grant: { label: "Circle grants", lifecycle: "machinery" },
-    commons_member_state: { label: "Member state", lifecycle: "machinery" },
-    commons_op: { label: "Commons operations", lifecycle: "machinery" },
-    commons_replay: { label: "Replayed operations", lifecycle: "machinery" },
-    commons_receipt: { label: "Commons receipts", lifecycle: "machinery" },
-    commons_cursor: { label: "Commons cursors", lifecycle: "machinery" },
-    commons_lineage: { label: "Commons lineage", lifecycle: "machinery" },
-    commons_retained: { label: "Retained commons", lifecycle: "machinery" },
-    commons_intent: { label: "Commons intents", lifecycle: "machinery" },
-    commons_invitation: { label: "Invitations", lifecycle: "machinery" },
     // The authority plane (#825, unified by #883). `authority` is EVERY
     // standing answer the member has given — to a person, a circle, a harness
     // or one of their own devices — `delivery_config` the per-grant
@@ -577,23 +567,6 @@ export const VAULT_ENTITIES: EntityRegistry = {
     subscription: { label: "Subscriptions", lifecycle: "machinery" },
     subscription_lineage: {
       label: "Subscription lineage",
-      lifecycle: "machinery",
-    },
-    // #916, R8 / review 6.4: these four were in `LOCAL_TABLES` as "device
-    // observation", which contradicted the comment above — they are Commons
-    // CONTROL truth, and a restore without them hands back a seat that has
-    // forgotten which op hashes it verified, which recovery it is the
-    // successor of, and how far behind its steward it had fallen. Being
-    // unregistered also meant no replica change-log trigger, so none of it
-    // ever reached a second device. Machinery, like the rest of the band.
-    commons_verified: { label: "Verified checkpoints", lifecycle: "machinery" },
-    commons_supersession: {
-      label: "Commons recovery lineage",
-      lifecycle: "machinery",
-    },
-    commons_device_reach: { label: "Device reach", lifecycle: "machinery" },
-    commons_steward_contact: {
-      label: "Steward contact",
       lifecycle: "machinery",
     },
   },

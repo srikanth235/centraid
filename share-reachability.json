@@ -13,14 +13,21 @@
     "packages/blueprints/apps/_shared/placement-registry.ts",
     "packages/blueprints/apps/_shared/share-kit.ts",
     "packages/blueprints/apps/people/grant-dashboard.ts",
-    "packages/server/src/routes/commons-*.ts",
     "packages/server/src/routes/edges-*.ts",
-    "packages/server/src/serve/commons-*.ts",
     "packages/server/src/serve/peer-*.ts",
     "packages/server/src/serve/share-*.ts",
     "packages/server/src/serve/vault-links-store.ts",
     "packages/vault/src/grant/*.ts",
     "packages/vault/src/share/*.ts"
   ],
-  "allowlist": []
+  "allowlist": [
+    {
+      "capability": "packages/vault/src/share/placement.ts#unshareFromVault",
+      "reason": "The same-owner placement plane's un-place. Its last production caller was the commons rail deleted in #929; the give plane that would call it next is #928's subject, so this is held for that lane rather than deleted underneath it."
+    },
+    {
+      "capability": "packages/vault/src/share/subscription-intent.ts#signMemberIntent",
+      "reason": "The MEMBER's half of the signed-intent pair (#929 wave 3). The origin's door, its refusals and its receipts are proved against it today; the seat that signs is the share sheet's, which lands in the surfaces lane of the same umbrella."
+    }
+  ]
 }
