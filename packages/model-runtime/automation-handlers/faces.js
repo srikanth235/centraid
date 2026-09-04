@@ -26,7 +26,6 @@ async function assetById(ctx, assetId) {
       { column: "deleted_at", op: "is-null" },
     ],
     limit: 1,
-    purpose: PURPOSE,
   });
   return rows.rows?.[0];
 }
@@ -39,7 +38,6 @@ async function deriveAsset(ctx, asset, model) {
       { column: "variant", op: "eq", value: "faces" },
     ],
     limit: 1,
-    purpose: PURPOSE,
   });
   if (stamps.rows?.[0]?.model === model)
     return { settled: true, derived: 0, skipped: 1 };
@@ -47,7 +45,6 @@ async function deriveAsset(ctx, asset, model) {
     contentId: asset.content_id,
     variant: "preview",
     maxBytes: 4 * 1024 * 1024,
-    purpose: PURPOSE,
   });
   if (content?.status !== "ok" || content.kind !== "bytes")
     throw new Error(`asset ${asset.asset_id}: preview is unavailable`);
@@ -66,7 +63,6 @@ async function deriveAsset(ctx, asset, model) {
   await ctx.vault.invoke({
     command: "enrich.upsert_faces",
     input: { asset_id: asset.asset_id, model, faces: result.faces },
-    purpose: PURPOSE,
   });
   return { settled: true, derived: 1, skipped: 0 };
 }
@@ -77,7 +73,6 @@ async function seedConsentCursor(ctx, model) {
     where: [{ column: "variant", op: "eq", value: "faces" }],
     orderBy: { column: "target_id", dir: "desc" },
     limit: 1,
-    purpose: PURPOSE,
   });
   return latest.rows?.[0]?.model === model ? latest.rows[0].target_id : "";
 }
@@ -103,7 +98,6 @@ export default async function handler({ ctx }) {
     ],
     orderBy: { column: "request_id", dir: "asc" },
     limit: BATCH,
-    purpose: PURPOSE,
   });
   let derived = 0;
   let skipped = 0;
@@ -146,7 +140,6 @@ export default async function handler({ ctx }) {
       ],
       orderBy: { column: "asset_id", dir: "asc" },
       limit: capacity,
-      purpose: PURPOSE,
     });
     for (const asset of assets.rows ?? []) {
       const result = await deriveAsset(ctx, asset, model);
@@ -172,7 +165,6 @@ export default async function handler({ ctx }) {
       ],
       orderBy: { column: "target_id", dir: "asc" },
       limit: capacity,
-      purpose: PURPOSE,
     });
     for (const stamp of stamps.rows ?? []) {
       if (processed.has(stamp.target_id)) continue;
@@ -194,13 +186,11 @@ export default async function handler({ ctx }) {
     await ctx.vault.invoke({
       command: "enrich.mark_requests_drained",
       input: { request_ids: drained },
-      purpose: PURPOSE,
     });
   if (derived > 0)
     await ctx.vault.invoke({
       command: "enrich.rebuild_face_clusters",
       input: {},
-      purpose: PURPOSE,
     });
   return {
     summary: `faces derived ${derived}; skipped ${skipped}; consent queue batch ${requests.rows?.length ?? 0}/${BATCH}`,

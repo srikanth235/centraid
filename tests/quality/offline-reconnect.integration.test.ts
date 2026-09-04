@@ -57,7 +57,7 @@ describe("R2 product offline/reconnect transport", () => {
       enableWalShipper: false,
     });
     cleanups.push(() => plane.stop());
-    plane.approveGrant("planner", {
+    plane.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", verbs: "act" }],
     });
     await fs.mkdir(path.join(codeDir, "actions"), { recursive: true });

@@ -76,6 +76,7 @@ Fresh-context verifier on `claude/928-w1a-rulings` at `8401083a`, wave 1a (rulin
 | --- | --- | --- |
 | 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 | 2026-09-04 | codex | 01a06aae-4aeb-72f0-b2a6-97f24ffc02ed |
+| 2026-09-04 | codex | 01a06cb4-14e6-7ae3-a265-663bd6c39c1e |
 
 ## w1b — the static app entity tripwire
 
@@ -1689,3 +1690,31 @@ packages/server/src/serve/vault-quarantine.test.ts
 | --- | --- | --- |
 | "One call" is a rename, not a real collapse | read the new POST path end to end: no `share_edges` row is written, no effect enqueued, no sweep involved — and `grep -rn 'share_edges\|share_effects' packages apps` over code is empty | **holds** — the only survivors are register rows in `docs/` naming the deleted tables as history |
 | A move now half-completes where it used to resume | `moveItemsOutOfVault` opens ONE `BEGIN IMMEDIATE` over the whole set (it used to be one per item), and the album test asserts both photographs and the collection left together while the destination holds all of it | **holds** — the crash window narrowed rather than widened; the projection still commits before any release |
+
+## Follow-up — CI repair
+
+### What changed
+
+- packages/model-runtime/automation-handlers/embed-image.js, packages/model-runtime/automation-handlers/embed-text.js, packages/model-runtime/automation-handlers/faces.js, packages/model-runtime/automation-handlers/photo-ocr.js, packages/model-runtime/automation-handlers/place-names.js, and packages/model-runtime/automation-handlers/transcript.js now match the purpose-free recognition handler contract at every vault call.
+- The six generated bundles were rebuilt: packages/blueprints/automations/embed-image/automations/embed-image/handler.js, packages/blueprints/automations/embed-text/automations/embed-text/handler.js, packages/blueprints/automations/faces/automations/faces/handler.js, packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js, packages/blueprints/automations/place-names/automations/place-names/handler.js, and packages/blueprints/automations/transcript/automations/transcript/handler.js.
+- tests/quality/chaos-planner-app.ts and tests/quality/component-chaos-world.ts register the planner's declared app scope through recordAppInstall, including after a synthetic gateway restart.
+- tests/quality/offline-reconnect.integration.test.ts, tests/scale/replica-bootstrap.scale.test.ts, tests/scale/replica-reconnect.scale.test.ts, tests/scale/replica-sse-fanout.scale.test.ts, and tests/scale/large-vault.scale.test.ts follow the retired app-grant and purpose-free test APIs.
+- scripts/lint-engine-conformance.mjs follows the action kit's removed ACTION_PURPOSE export. tests/quality/classification-ratchet.json re-pins the changed manifest and claims fingerprints; thresholds and classifications are unchanged.
+
+### Verification
+
+```sh
+bun run --cwd packages/model-runtime test -- automation-handlers/embed-image.test.ts
+bun run --cwd packages/model-runtime build:automations
+bun run typecheck
+bun run lint:product
+bun run scripts:test
+```
+
+### Decisions
+
+- #928 re-pins classification fingerprints after the authority-plane migration changed the governed manifest and claim statements; thresholds and classifications are unchanged.
+
+### Audit
+
+Verdict: PASS. The follow-up diff is limited to restoring the purpose-free recognition calls, migrating synthetic and scale fixtures to recordAppInstall, rebuilding their committed bundles, and updating the conformance/fingerprint ledgers required by those changes. The affected unit, quality, typecheck, product-gate, and script suites are recorded above.

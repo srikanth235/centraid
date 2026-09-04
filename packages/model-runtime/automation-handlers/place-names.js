@@ -76,7 +76,6 @@ export default async function handler({ ctx, log }) {
     where: [{ column: "place_id", op: "gt", value: cursor }],
     orderBy: { column: "place_id", dir: "asc" },
     limit: BATCH,
-    purpose: PURPOSE,
   });
   const rows = read.rows ?? [];
   let named = 0;
@@ -108,7 +107,6 @@ export default async function handler({ ctx, log }) {
           source: GAZETTEER_SOURCE,
           snapshot: GAZETTEER_SNAPSHOT,
         },
-        purpose: PURPOSE,
       });
       none += 1;
       continue;
@@ -124,7 +122,6 @@ export default async function handler({ ctx, log }) {
         source: GAZETTEER_SOURCE,
         snapshot: GAZETTEER_SNAPSHOT,
       },
-      purpose: PURPOSE,
     });
     log.info(`place ${place.place_id}: near ${hit.displayName}`);
     named += 1;

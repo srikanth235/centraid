@@ -226,7 +226,7 @@ describe("replica-sse-fanout.scale", () => {
     const plane = handle.vaults.get(handle.vaults.defaultVaultId());
     if (!plane)
       throw new Error("the auto-founded Personal vault is not mounted");
-    plane.approveGrant("agenda", {
+    plane.recordAppInstall("agenda", {
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
 

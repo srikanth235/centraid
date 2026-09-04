@@ -32,7 +32,6 @@ async function seedCursor(ctx, model) {
     where: [{ column: "variant", op: "in", value: ["text", "transcript"] }],
     orderBy: { column: "derivative_id", dir: "desc" },
     limit: 1,
-    purpose: PURPOSE,
   });
   const item = latest.rows?.[0];
   if (!item) return "";
@@ -43,7 +42,6 @@ async function seedCursor(ctx, model) {
       { column: "variant", op: "eq", value: "embedding" },
     ],
     limit: 1,
-    purpose: PURPOSE,
   });
   return stampMatchesSource(stamps.rows?.[0], model, item.derivative_id)
     ? item.derivative_id
@@ -82,7 +80,6 @@ export default async function handler({ ctx, log }) {
     ],
     orderBy: { column: "derivative_id", dir: "asc" },
     limit: BATCH,
-    purpose: PURPOSE,
   });
   let derived = 0;
   let skipped = 0;
@@ -94,7 +91,6 @@ export default async function handler({ ctx, log }) {
         { column: "variant", op: "eq", value: "embedding" },
       ],
       limit: 1,
-      purpose: PURPOSE,
     });
     if (stampMatchesSource(stamps.rows?.[0], model, item.derivative_id)) {
       skipped += 1;
@@ -104,7 +100,6 @@ export default async function handler({ ctx, log }) {
       contentId: item.content_id,
       variant: item.variant,
       maxBytes: 1024 * 1024,
-      purpose: PURPOSE,
     });
     if (content?.status !== "ok" || content.kind !== "text")
       throw new Error(
@@ -126,7 +121,6 @@ export default async function handler({ ctx, log }) {
         capability: "embed-text",
         source_version: item.derivative_id,
       },
-      purpose: PURPOSE,
     });
     derived += 1;
   }

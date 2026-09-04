@@ -83,9 +83,9 @@ async function writePlannerApp(codeDir: string): Promise<void> {
   );
 }
 
-/** Grant the planner app the one scope its action needs. */
+/** Install the planner app's declared scope into the mounted vault. */
 export function approvePlanner(plane: VaultPlane): void {
-  plane.approveGrant(PLANNER_APP_ID, {
+  plane.recordAppInstall(PLANNER_APP_ID, {
     scopes: [{ schema: "schedule", verbs: "act" }],
   });
 }

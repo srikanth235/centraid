@@ -232,7 +232,6 @@ async function seedAssetCursor(ctx, model, profile) {
     ],
     orderBy: { column: "asset_id", dir: "desc" },
     limit: 1,
-    purpose: PURPOSE,
   });
   const asset = latest.rows?.[0];
   if (!asset) return "";
@@ -244,7 +243,6 @@ async function seedAssetCursor(ctx, model, profile) {
       { column: "profile", op: "eq", value: profile },
     ],
     limit: 1,
-    purpose: PURPOSE,
   });
   return stamps.rows?.[0]?.model === model ? asset.asset_id : "";
 }
@@ -254,7 +252,6 @@ async function deterministicRegions(ctx, asset) {
     contentId: asset.content_id,
     variant: "preview",
     maxBytes: 4 * 1024 * 1024,
-    purpose: PURPOSE,
   });
   if (content?.status !== "ok" || content.kind !== "bytes")
     throw new Error(`asset ${asset.asset_id}: preview is unavailable`);
@@ -315,7 +312,6 @@ export default async function handler({ ctx, log }) {
     ],
     orderBy: { column: "asset_id", dir: "asc" },
     limit: BATCH,
-    purpose: PURPOSE,
   });
   const assets = (read.rows ?? []).filter(
     (row) => row.kind === "photo" || row.kind === "scan"
@@ -334,7 +330,6 @@ export default async function handler({ ctx, log }) {
         { column: "profile", op: "eq", value: profileId },
       ],
       limit: 1,
-      purpose: PURPOSE,
     });
     const stamp = stamps.rows?.[0];
     let confirmedModel = delegateStep
@@ -407,7 +402,6 @@ export default async function handler({ ctx, log }) {
         ...(delegateStep ? { prompt_rev: PROMPT_REV } : {}),
         ...(confidence === undefined ? {} : { confidence }),
       },
-      purpose: PURPOSE,
     });
     derived += 1;
   }
