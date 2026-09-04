@@ -15,7 +15,6 @@ import {
   recordCompanionAttenuation,
 } from "./companion-access.js";
 
-/** The gateway-side projection store, reduced to the two calls it makes. */
 function projectionStore(endpoints: readonly string[]) {
   const projected = new Map<string, string[]>();
   return {
@@ -98,7 +97,6 @@ describe("Companion attenuation is an answer in the vault (#928 A6)", () => {
       "notes",
     ]);
 
-    // Dropping a surface revokes its row; the projection follows the rows.
     recordCompanionAttenuation(store, plane, {
       endpointId: "ep-1",
       surfaces: ["locker"],
@@ -127,8 +125,6 @@ describe("Companion attenuation is an answer in the vault (#928 A6)", () => {
       enrollmentId: "enrollment-1",
     });
     expect(access.kind).toBe("allowed");
-    // The path shape passes; the per-surface gate is what refuses, and it
-    // reads exactly the surfaces the rows named.
     const profile = new Set(surfaces);
     expect(companionHandlerAllowed(profile, "query", "notes", "list")).toBe(
       false
@@ -147,7 +143,6 @@ describe("Companion attenuation is an answer in the vault (#928 A6)", () => {
         enrollmentId: "enrollment-1",
       })
     ).toStrictEqual({ kind: "unreadable" });
-    // An UNattenuated device is untouched by any of this.
     expect(
       companionAccess({
         attenuated: false,
@@ -156,7 +151,6 @@ describe("Companion attenuation is an answer in the vault (#928 A6)", () => {
         enrollmentId: "enrollment-1",
       })
     ).toStrictEqual({ kind: "unattenuated" });
-    // A projected-but-empty answer is an answer: it denies every surface.
     expect(
       companionAccess({
         attenuated: true,

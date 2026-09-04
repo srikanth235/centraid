@@ -65,14 +65,17 @@ export {
 export {
   shareItemsToVault,
   unshareFromVault,
-  moveOutOfVault,
+  moveItemsOutOfVault,
+  placeItemsInVault,
   readShareOrigin,
   type ShareVaultRef,
   type ShareItemsToVaultInput,
   type ShareItemsToVaultResult,
   type UnshareFromVaultInput,
   type UnshareFromVaultResult,
-  type MoveOutOfVaultInput,
+  type MoveItemsOutOfVaultInput,
+  type PlaceItemsInVaultInput,
+  type PlaceItemsInVaultResult,
   type ShareOriginRecord,
 } from "./share/placement.js";
 // The two halves of a share (#726): `readShareClosure` is origin-side and

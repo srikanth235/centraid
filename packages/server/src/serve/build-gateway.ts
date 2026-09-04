@@ -182,7 +182,6 @@ import { makeDemoRouteHandler } from "../routes/demo-routes.js";
 import { makeDeviceWorkRouteHandler } from "../routes/device-work-routes.js";
 import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
 import { makeDiagnosticsRouteHandler } from "../routes/diagnostics-routes.js";
-import { EDGES_PATH, makeEdgesRouteHandler } from "../routes/edges-routes.js";
 import {
   ENRICH_PROFILES_PREFIX,
   makeEnrichProfilesRouteHandler,
@@ -208,6 +207,10 @@ import {
 } from "../routes/multiplex-replica-routes.js";
 import { makeOwnersRouteHandler } from "../routes/owners-routes.js";
 import { makePeerPlaneHandler } from "../routes/peer-plane.js";
+import {
+  EDGES_PATH,
+  makePlacementRouteHandler,
+} from "../routes/placement-routes.js";
 import {
   makePushRegistrationRouteHandler,
   PUSH_REGISTRATIONS_PATH,
@@ -4172,7 +4175,7 @@ export async function buildGateway(
     vaultRegistry,
     enrollmentStore
   );
-  const edgesHandler = makeEdgesRouteHandler({
+  const placementHandler = makePlacementRouteHandler({
     gatewayDatabase,
     enrollments: enrollmentStore,
     links: vaultLinksStore,
@@ -4315,10 +4318,7 @@ export async function buildGateway(
   // backs off on failure, never throws out of the timer. `dial` is read LIVE,
   // so a build that wires it later (or never) still behaves — the sweep idles.
   const peerPlaneSweep = createPeerPlaneSweep({
-    db: gatewayDatabase,
     links: vaultLinksStore,
-    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    partyIdFor: (vaultId) => vaultRegistry.get(vaultId)?.boot.ownerPartyId,
     commonsVaults: () =>
       vaultRegistry.planesList().map((plane) => ({
         vaultId: plane.boot.vaultId,
@@ -4493,7 +4493,7 @@ export async function buildGateway(
       (await multiplexReplicaHandler(req, res))
     )
       return true;
-    if (url.pathname === EDGES_PATH && (await edgesHandler(req, res)))
+    if (url.pathname === EDGES_PATH && (await placementHandler(req, res)))
       return true;
     if (
       (url.pathname === COMMONS_PATH ||

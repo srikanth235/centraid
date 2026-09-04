@@ -1614,3 +1614,78 @@ bun run lint && bun run lint:vault-sql
 | --- | --- | --- |
 | "A missing projection denies" is asserted, not built | `companionAccess({attenuated:true, projected:undefined})` in `companion-access.test.ts`, plus reading the one call site in `build-gateway.ts`: the `unreadable` case returns 403 before the header is ever set | **holds** — and `projectedSurfaces` returns `undefined` (not `[]`) for an absent row, so the two are distinguishable |
 | `grant_profile_json` / `outbox_grant` really have no reader | `grep -rn 'grant_profile_json\|outbox_grant' packages apps docs tests SECURITY.md` outside receipts/CHANGELOG | **no code hit** — every survivor is a register/supersession row naming the deleted store as history. The surviving `grantProfile` identifiers are the pairing wire field and the devices DTO, both fed from the projection |
+
+## w5b — the give-plane residue is deleted; a placement is one call
+
+`share_edges`, `share_effects` and the machinery around them served one act: moving or copying a set of
+items between two of the owner's OWN vaults, with both vaults open in the same process. That is not a
+distributed obligation, so the edge row, the reducer, the effect outbox, the executor, the local
+reconciler, the retry sweep and the retirement pass are gone.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/vault/src/share/placement.ts` | `placeItemsInVault` — grant the placement authority, project, then release the source; `moveOutOfVault` (one item, one transaction each) becomes `moveItemsOutOfVault` (the whole set, ONE transaction) |
+| `packages/server/src/routes/placement-routes.ts` | replaces `routes/edges-routes.ts`: the same path and wire, one synchronous vault call, `share_access_receipts` as the exactly-once anchor; a vault not open here is a retryable `503 vault_not_open`, a failed placement a `502` that audits nothing |
+| `packages/server/src/serve/share-access-receipts.ts` | gains `placement_kind` / `created_by_device` and the two readers the route lists and replays from; ids are parsed, never cast |
+| `packages/server/src/serve/gateway-schema.ts` | `share_edges` and `share_effects` deleted with their indexes; `share_access_receipts` kept as history |
+| `packages/server/src/serve/peer-plane-sweep.ts` | the effect drain leaves the tick; commons + route re-announcement remain (and `db` / `vaultFor` / `partyIdFor` leave its options) |
+| `packages/server/src/serve/gateway-db.ts` | the once-per-file retirement drain is gone with the queue |
+| deleted | `serve/share-coordinator.ts` (+test), `share-edge-row.ts`, `share-edge-store.ts`, `share-effects.ts`, `share-effect-executor.ts`, `share-effects-retire.ts`, `share-outbox-obligation.contract.test.ts`, `share-receipt-authority.contract.test.ts`, `routes/edges-reconcile.ts`, `routes/edges-routes.ts` |
+| `packages/server/src/serve/build-gateway.ts`, `src/index.ts` | route + sweep wiring |
+| `scripts/lint-vault-sql.mjs` | five allowlist entries for deleted files removed (`allow-toolchain-config`) |
+| `tests/claims.json`, `tests/floors.json` | `share-receipt-authority` re-homed to `routes/placement-routes.test.ts`; `share-outbox-obligation` replaced one-to-one by `same-owner-placement` (floor 4 → 4) |
+| `tests/inventory.json` | pins for the six added files, pins for the twelve deleted files removed, `companion-access.ts` hand-raised (see Decisions) |
+| tests | `packages/vault/src/share/placement-move.test.ts` (new), `placement.test.ts`, `routes/placement-routes.test.ts`, `serve/peer-plane-sweep.test.ts`, `gateway-db.test.ts`, `vault-links-store.test.ts`, `peer-transport-remote.test.ts`, `vault-plane-commons.test.ts` |
+| docs | `ARCHITECTURE.md`, `docs/decisions.md` (the drained-obligation ruling marked superseded), `docs/glossary.md` (**edge** → **placement**), `docs/vault-ontology.md` ONT-21 closed, `apps/desktop/tests/e2e/fixtures.ts` comments |
+
+### Decisions
+
+- **The route path and wire stay.** `POST/GET /centraid/_gateway/edges` keeps its shape so the phone's
+  placement outbox, `centraid-inline.ts` and the desktop e2e fixture are untouched; only the module and
+  the machinery behind it change. `status` is always `completed`, because a placement that did not
+  complete leaves no history row and the caller learns that from the HTTP status.
+- **Retry moved to the caller that already had it.** The phone's placement outbox is the durable queue;
+  the gateway-side outbox was a second one. A vault not open here is now `503`, which that outbox retries.
+- **`share-outbox-obligation` is replaced, not dropped.** `same-owner-placement` (floor 4, unchanged)
+  carries the durability claim in its new home; the full rationale is in `tests/claims.json`.
+- **`companion-access.ts`'s density pin is hand-raised** 23.76% → 28.41% (`[245,1031]` → `[963,3390]`):
+  the file grew from a single request predicate to the whole Companion boundary, and its header is the
+  argument for why a missing projection denies. The comments were cut back once before re-pinning.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck
+bun run --cwd packages/vault test -- --run src/share/ src/grant/
+bun run --cwd packages/server test -- --run src/routes/placement-routes.test.ts src/serve/{peer-plane-sweep,gateway-db,vault-links-store}.test.ts
+bun run lint && bun run lint:vault-sql && bun run lint:ledgers
+grep -rn 'share_edges\|share_effects' packages apps docs   # register rows only
+```
+
+### Paths
+
+```
+packages/server/src/backup/recover.integration.test.ts
+packages/server/src/routes/devices-routes.ts
+packages/server/src/serve/device-plane.test.ts
+packages/server/src/serve/vault-quarantine.ts
+packages/server/src/serve/vault-quarantine.test.ts
+```
+
+### Findings
+
+- **`bun run test:comment-density` is red on `claude/928-w4` before this lane**: 569 pinned files measure
+  above their pin on the committed base tree (`git stash && bun run test:comment-density` → 569). Not
+  chased here; the root owns whether the branch re-pins wholesale or the rises are real.
+- **`bun run lint:ledgers` reports eleven `tests/journeys.json` removals against `origin/main`** that this
+  lane did not make (`git diff HEAD -- tests/journeys.json` is empty) — base lag, per the slice contract.
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| "One call" is a rename, not a real collapse | read the new POST path end to end: no `share_edges` row is written, no effect enqueued, no sweep involved — and `grep -rn 'share_edges\|share_effects' packages apps` over code is empty | **holds** — the only survivors are register rows in `docs/` naming the deleted tables as history |
+| A move now half-completes where it used to resume | `moveItemsOutOfVault` opens ONE `BEGIN IMMEDIATE` over the whole set (it used to be one per item), and the album test asserts both photographs and the collection left together while the destination holds all of it | **holds** — the crash window narrowed rather than widened; the projection still commits before any release |

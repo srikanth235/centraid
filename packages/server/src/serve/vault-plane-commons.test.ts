@@ -176,10 +176,7 @@ describe("VaultPlane ordinary Commons commands", () => {
     fixture.push(() => gatewayDb.close());
     const links = VaultLinksStore.open(gatewayDb);
     sweep = createPeerPlaneSweep({
-      db: gatewayDb,
       links,
-      vaultFor,
-      partyIdFor: () => "edge-party",
       commonsVaults: () =>
         [steward, member].map((plane) => ({
           vaultId: plane.boot.vaultId,
