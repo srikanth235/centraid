@@ -7,7 +7,7 @@ import {
 } from "./errors.js";
 import type { RebootstrapReason } from "./errors.js";
 import { applyOptimisticMutations } from "./query.js";
-import { jsonValue } from "./read-plan-clauses.js";
+import { censusClass, jsonValue } from "./read-plan-clauses.js";
 import {
   assertReplicaOrder,
   assertReplicaPage,
@@ -1397,9 +1397,31 @@ export class ReplicaSqliteStore {
     this.orderCensuses.clear();
   }
 
+  /**
+   * The census index (#922 C3): one entry per row on `censusClass`, so each
+   * order guard is a seek instead of an aggregate over the entity. Spelled
+   * EXACTLY as `censusSql`'s probes spell it, or SQLite serves neither, and
+   * created for the ordered column AND its tie-break because both carry guards.
+   */
+  private readonly censusIndexes = new Set<string>();
+
+  private ensureCensusIndex(entity: string, column: string): void {
+    const key = `${entity}\u0000${column}`;
+    if (this.censusIndexes.has(key)) return;
+    this.censusIndexes.add(key);
+    if (this.censusIndexes.size > ORDER_INDEX_MAX) return;
+    this.driver.exec(
+      `CREATE INDEX IF NOT EXISTS replica_row_cen_${orderIndexSuffix(key)}
+         ON replica_row(shape_id, entity, ${censusClass(column)});`
+    );
+  }
+
   private ensureOrderIndex(entity: string, plan: ReplicaReadPlan): void {
     const column = plan.orderColumn;
     if (column === undefined) return;
+    this.ensureCensusIndex(entity, column);
+    if (plan.orderTieBreak !== undefined)
+      this.ensureCensusIndex(entity, plan.orderTieBreak);
     const direction = plan.orderDirection === "desc" ? "DESC" : "ASC";
     const tieBreak = plan.orderTieBreak;
     const key = `${entity}\u0000${column}\u0000${direction}\u0000${tieBreak ?? ""}`;

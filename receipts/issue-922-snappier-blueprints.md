@@ -2139,3 +2139,47 @@ Screenshot from the changed harness: `artifacts/e2e/ui-impact/issue-922-web-warm
 
 The lane's integration branch was replayed onto `main` after the #922 engine chain landed there, so the change set now spans mega-lane E2's landed commit as well. Two of its paths are named in its own section by brace expansion; spelled out here for the coverage crosswalk, which matches whole paths: `packages/client/src/react/blueprints/inline-change-batch.test.ts`, `packages/client/src/replica/shell-session-lifecycle.test.ts`.
 
+## Mega-lane E2 slice 2 — the order census is a seek (C3) and the change log compiles once (A3)
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/replica/read-plan-clauses.ts` | `censusClass` — one integer per stored value, and the ladder both the index and the probes spell |
+| `packages/client/src/replica/read-plan.ts` | the guards become census probes: each asks `class >= N ORDER BY class ASC LIMIT 1`, still one statement, same aliases, same escalations |
+| `packages/client/src/replica/store-core.ts` | `ensureCensusIndex` for the ordered column and its tie-break, under the same 64-index cap |
+| `packages/client/src/replica/order-census.test.ts` | the red-first suite: every census access must name `replica_row_cen_`, plus the masking and straddle cases |
+| `packages/vault/src/replica/change-log.ts` | the twelve fixed statements of the change path go through `prepared()` |
+| `packages/vault/src/replica/change-log-statement-cache.test.ts` | the counter: a warm change-log pass compiles nothing |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Ordered read after a write, 50k-row entity (the census is re-asked) | 37.9 ms | 1.03 ms | throwaway vitest over `ReplicaSqliteStore` on `node:sqlite`, 50 000 `knowledge.note` rows, 5 read/write cycles; before `[37.45, 37.04, 36.95, 37.15, 38.05]`, after `[1.30, 1.20, 1.08, 1.25, 1.31]`; container 4 cores / 15 GB |
+| Warm ordered read (census cached), same fixture | 0.40 ms | 0.44 ms | same run — the win is in the after-a-write column, and the warm path is unchanged |
+| One-row write batch, same fixture | 0.36 ms | 0.55 ms | same run; the extra b-tree per ordered column, paid once per write against 37 ms saved on the next ordered read |
+| Census statements per ordered read | 1 (a scan of the whole entity) | 1 (index seeks only) | `order-census.test.ts`: every `replica_row` step in the census plan names `replica_row_cen_`; RED today at `SEARCH replica_row USING INDEX replica_row_ord_… (shape_id=? AND entity=?)` |
+| Statements a warm change-log pass compiles | 12 | 0 | `change-log-statement-cache.test.ts`, spying `prepare` on the vault handle |
+
+**Deleted/replaced.** The `max(CASE WHEN … END)` census aggregate and the `census: string[]` select list it was built from. `orderGuards` no longer emits SQL; it emits the classes its guard asks about.
+
+**Decisions.** The class ladder is FIXED (0 oversized, 1 undisclosed, 2 unordered, 3 numeric, 4 text, 5 JSON null and anything later SQLite adds) and does not vary with the role or the schema, because the index and the probe must spell it identically or SQLite serves neither. Each guard asks its OWN question (`class >= N`, answer is N iff that class exists) rather than reading one minimum, so no class masks another and the guards keep the priority `assertReplicaOrder` already gave them — which a single `min(class)` would have broken for a schema with no unavailable fields. `plan.orderCensus` keeps its `{ sql, binds }` shape and its aliases, so the mounted reader on the phone runs the new probes without a line changing there.
+
+```
+# tree hash: quoted for both this lane's slices in its closing commit
+bun run --cwd packages/{client,vault} typecheck && bun run --cwd packages/{vault,client} build
+bun run --cwd packages/client test                 # 273 files, 2472 tests
+bun run --cwd packages/vault test src/replica      # 9 files
+bun run --cwd apps/mobile test src/lib/replica     # 33 files, 223 tests
+bun run --cwd packages/client test src/replica/order-census.test.ts   # red first, see below
+```
+
+**Findings.** (1) `tieCensus` — the `count(*) / count(DISTINCT …) / count(…)` aggregate that runs when the primary key is synthetic — is STILL one scan of the kept set per ordered read, and it is not cached at all, so it is now the largest remaining O(entity) term on that path. Same shape as the census this slice fixed; not in this brief's file set to re-plan. (2) Two vault suites are RED ON THE BASE (`ee434678e`), with `change-log.ts` reverted as well as with it: `gateway.contract.test.ts` (`propose_event` now records 5 pre-checks, the test expects 4) and `commons-routing.test.ts` (seven commands write a shareable container through a minted id and declare no commons route). Both are mega-lane E's minted-id landing, not this lane's files. (3) `packages/client/src/replica/intents.ts` is 657 lines against the 625-line `repo-hygiene` cap on the base; `bash .governance/run.sh` fails on it for any commit in this branch.
+
+**Full paths for coverage** (this lane's two slices, spelled out): `packages/client/src/react/blueprints/inline-change-batch.ts`, `packages/client/src/react/blueprints/inline-change-batch.test.ts`, `packages/client/src/react/blueprints/inline-change-feed.test.ts`, `packages/client/src/react/blueprints/centraid-inline.ts`, `packages/client/src/replica/shell-session.ts`, `packages/client/src/replica/shell-session-lifecycle.test.ts`, `packages/client/src/replica/read-plan.ts`, `packages/client/src/replica/read-plan-clauses.ts`, `packages/client/src/replica/store-core.ts`, `packages/client/src/replica/order-census.test.ts`, `packages/vault/src/replica/change-log.ts`, `packages/vault/src/replica/change-log-statement-cache.test.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `tests/journeys.json`.
+
+**Doc debt.** `docs/traps/` has no entry for the census index's spelling rule (the index expression and the probe expression must be byte-identical); `docs/mobile-offline.md` states the replica's per-write index cost without the census index (this slice).
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| The probes disagree with the aggregate they replace on some value mix | 4 000 randomized entities (1–6 rows drawn from integers, reals, booleans, text, `{`-leading text, JSON null, objects, arrays, absent paths, oversized fields) compared the guard that the old aggregate raises against the guard the probes raise, through `assertReplicaOrder`'s own first-match priority | 0 mismatches in 4 000; the earlier ladder that folded JSON null into `text` produced 70, which is how class 5 exists |
+| The census index is created but not used, so the win is imaginary | `EXPLAIN QUERY PLAN` on the plan the store executes, asserted in the committed suite and read by hand on the 50k fixture | held — every `replica_row` step is `SEARCH … USING COVERING INDEX replica_row_cen_… (shape_id=? AND entity=? AND <expr>>?)`; reverting the three files puts it back to a full-range `replica_row_ord_` scan and the suite goes red |
+| Caching the change log's statements serves a stale shape after a migration | traced the DDL in `change-log.ts` (`refreshReplicaTriggers`, `ensureReplicaCommitColumns`, epoch bump) against what each cached statement reads, and ran the whole `packages/vault` replica suite plus the route suites | held — the cache is keyed by the connection, every cached statement is fixed text over `replica_meta`/`replica_change`, and SQLite re-prepares across a schema-version bump |
