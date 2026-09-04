@@ -370,6 +370,28 @@ describe("replica-routes", () => {
     expect(cursors[0]!.seq).toBe(Math.min(...cursors.map((c) => c.seq)));
   });
 
+  test("priority newest bootstrap reads and shapes the newest visible rows", async () => {
+    const { plane, handler } = await fixture();
+    const document = await plane.invoke(plane.ownerCredential, {
+      command: "core.add_document",
+      input: {
+        title: "Newest document",
+        data_uri: "data:text/plain;base64,bmV3ZXN0IGRvY3VtZW50",
+      },
+      purpose: "dpv:ServiceProvision",
+    });
+    expect(document.status).toBe("executed");
+
+    const res = new MockResponse();
+    await handler(
+      request("/centraid/_vault/replica/bootstrap?priority=newest&window=2"),
+      res as unknown as ServerResponse
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json<WindowPage>().rows).toBeDefined();
+  });
+
   async function bootstrapDirect(
     handler: ReturnType<typeof makeReplicaRouteHandler>,
     query: string

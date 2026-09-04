@@ -707,3 +707,23 @@ bun run lint -- --format github                             # 0 warnings, 0 erro
 bun run --cwd packages/server typecheck                     # passed
 bun run --cwd packages/server test -- --run src/serve/vault-plane-assistant.test.ts  # 6 passed
 ```
+
+## Follow-up — diff-coverage repair
+
+The first PR CI run reached all tests but the aggregate diff-coverage lane
+reported 51.3% (136/265 changed instrumentable lines), principally because
+the new authority implementation was only exercised through the built vault
+package entrypoint. `packages/vault/src/grant/automation-authority.test.ts`
+now exercises the source directly, including unknown verbs, answer
+replacement, revocation, legacy grant/tombstone backfill, idempotence, and
+assistant exclusion. `packages/server/src/routes/replica-routes.test.ts` also
+exercises the newest-priority path that reads a document through the changed
+replica ceiling.
+
+### Verification
+
+```
+bun run --cwd packages/vault test -- --coverage --run src/grant/automation-authority.test.ts  # changed source 100% lines
+bun run --cwd packages/server test -- --coverage --run src/routes/replica-routes.test.ts      # changed read line covered
+bun run --cwd packages/server test -- --run src/routes/replica-routes.test.ts                # 17 passed
+```
