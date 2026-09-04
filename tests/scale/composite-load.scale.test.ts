@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-
 import { describe, expect, onTestFinished, test } from "vitest";
 
 import { HARNESSES, runTurn } from "@centraid/server/acp";
@@ -22,6 +20,7 @@ import type {
   CompositeGateway,
   LaneResult,
 } from "../helpers/composite-workload.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
@@ -72,16 +71,6 @@ const LANE_CONCURRENCY = 2;
 const TURNS = 128;
 /** Automations whose missed windows are scanned during the composite phase. */
 const AUTOMATIONS = 200;
-
-interface CeilingFile {
-  metrics: {
-    compositeLoadFactor: {
-      ceilingThroughputFactor: number;
-      ceilingWorstLaneP95Ms: number;
-    };
-    refSearchUnderComposition: { ceilingP95Ms: number };
-  };
-}
 
 async function httpLanes(
   gateway: CompositeGateway,
@@ -160,18 +149,25 @@ async function inProcessLanes(): Promise<{
 
 describe("composite-load.scale", () => {
   test("sync + search + writes + blob ingest + turns + automations hold their budgets when run together", async () => {
-    const ceilings = JSON.parse(
-      await readFile("tests/experience-budgets/gateway.json", "utf8")
-    ) as CeilingFile;
-    const ceilingThroughputFactor =
-      ceilings.metrics.compositeLoadFactor.ceilingThroughputFactor;
-    const ceilingWorstLaneP95Ms =
-      ceilings.metrics.compositeLoadFactor.ceilingWorstLaneP95Ms;
+    const COMPOSITE_KEY = "gateway/composite-load/empty/ci-linux-x64-4c";
+    const ceilingThroughputFactor = journeyCeiling(
+      COMPOSITE_KEY,
+      "compositeLoadFactor",
+      "ceilingThroughputFactor"
+    );
+    const ceilingWorstLaneP95Ms = journeyCeiling(
+      COMPOSITE_KEY,
+      "compositeLoadFactor",
+      "ceilingWorstLaneP95Ms"
+    );
     // #883 C2 item 4. The worst-lane ceiling only ever fences whichever lane
     // happens to be slowest, so the READ lane the blob-reference CTE work
     // touches gets its own number rather than hiding behind the write lane's.
-    const ceilingRefSearchP95Ms =
-      ceilings.metrics.refSearchUnderComposition.ceilingP95Ms;
+    const ceilingRefSearchP95Ms = journeyCeiling(
+      "gateway/search/empty/ci-linux-x64-4c",
+      "refSearchUnderComposition",
+      "ceilingP95Ms"
+    );
     const refSearch = () =>
       factors.find((entry) => entry.lane === "browse")?.compositeP95 ??
       Number.NaN;

@@ -329,5 +329,10 @@
     "class": "contract",
     "rung": 2,
     "why": "30.5 s, the second-largest non-test pole. ci.yml's mobile-smoke job already runs it on exactly the diffs that matter (ci.yml #782 note); paying it on every push duplicated a rung-2 answer."
+  },
+  "lint:journey-ledger": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The journey ledger's own shape (#927): every entry keyed surface/journey/volume/hardware, naming a declared volume and hardware, its spans and a consumer that exists — and no surviving reference to the five files it replaced."
   }
 }

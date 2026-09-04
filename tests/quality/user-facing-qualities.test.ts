@@ -1292,13 +1292,12 @@ describe("issue #679 user-facing quality gates", () => {
   });
 
   test("P2: first-paint query budgets are per-screen identities, never an aggregate", async () => {
-    const budgets = await json(
-      "tests/experience-budgets/client-query-counts.json"
-    );
-    const screens = budgets["screens"] as Record<
+    const ledger = await json("tests/journeys.json");
+    const entries = ledger["entries"] as Record<
       string,
-      { sqlStatements: number; httpRequests: number }
+      { metrics: Record<string, Record<string, number>> }
     >;
+    const screens = entries["client/first-paint-work/year3/any"]?.metrics ?? {};
     expect(Object.keys(screens).sort()).toStrictEqual([
       "assistant",
       "atlas",
@@ -1306,8 +1305,8 @@ describe("issue #679 user-facing quality gates", () => {
       "photos-grid",
     ]);
     for (const budget of Object.values(screens)) {
-      expect(budget.sqlStatements).toBeGreaterThan(0);
-      expect(budget.httpRequests).toBeGreaterThan(0);
+      expect(budget["maxStatements"]).toBeGreaterThan(0);
+      expect(budget["maxHttpRequests"]).toBeGreaterThan(0);
     }
   });
 

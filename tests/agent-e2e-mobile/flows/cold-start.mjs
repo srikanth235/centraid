@@ -20,13 +20,13 @@ import { AWAIT_LAUNCHER, runFlow } from "../lib/harness.mjs";
  * distribution yet, and a guessed ceiling would either fence nothing or red the
  * mobile lane on simulator jitter. The gate is the sustained-drift budget every
  * other rig now uses (30 samples, 1.5x the trailing median — the knobs live in
- * tests/budgets.json#qualityRigs). An absolute ceiling lands in
- * tests/experience-budgets/mobile.json once the distribution exists.
+ * tests/journeys.json#rigs). An absolute ceiling lands in
+ * tests/journeys.json once the distribution exists.
  *
  * Year-3 declared volume (docs/coding-standards.md D6): NOT MET. These launches
  * run against whatever the e2e first-run flow seeded — effectively an empty
  * device-local replica, not the declared year-3 volume (50,000 replica rows;
- * see tests/experience-budgets/README.md). So this bounds the app's own boot
+ * see tests/journeys.json `volumes`). So this bounds the app's own boot
  * cost and CANNOT catch a launch that degrades with replica size. Closing that
  * needs the CI gateway to seed a year-3 replica before pairing.
  */

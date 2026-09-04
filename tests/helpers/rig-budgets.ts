@@ -3,8 +3,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
- * Single reader for `tests/budgets.json#qualityRigs` (issue #656 Layer 1F;
- * merged into the budgets ledger by #915 Wave 4).
+ * Single reader for the rig half of `tests/journeys.json` (#927; the registry
+ * began as `tests/journeys.json#rigs` in #656 and passed through
+ * `tests/journeys.json#rigs`).
  *
  * Before this, three perf rigs and two scale rigs each carried their absolute
  * catastrophic-failure ceiling as a `const BUDGET_MS` in their own source. Those
@@ -18,35 +19,37 @@ import path from "node:path";
  * Resolution is from this file, not `process.cwd()`: perf and scale rigs run
  * under the repo-root vitest configs but a forked child fixture may not.
  */
-const REGISTRY_PATH = path.resolve(import.meta.dirname, "../budgets.json");
+const LEDGER_PATH = path.resolve(import.meta.dirname, "../journeys.json");
 
 interface RigEntry {
   lane: "perf" | "scale";
   volume: string;
+  /** Ledger keys (`surface/journey/volume/hardware`) this rig produces numbers for. */
+  entries: string[];
+  gate?: "deterministic-counters";
   budgetMs?: number;
   budgetsMs?: Record<string, number>;
 }
 
-interface RigRegistry {
+interface RigDrift {
   minimumSamples: number;
   regressionMultiplier: number;
   minimumDriftSamples: number;
   driftMultiplier: number;
-  rigs: Record<string, RigEntry>;
 }
 
-const registry = (
-  JSON.parse(readFileSync(REGISTRY_PATH, "utf8")) as {
-    qualityRigs: RigRegistry;
-  }
-).qualityRigs;
+const ledger = JSON.parse(readFileSync(LEDGER_PATH, "utf8")) as {
+  drift: RigDrift;
+  rigs: Record<string, RigEntry>;
+};
+const registry = { ...ledger.drift, rigs: ledger.rigs };
 
 /** Full registry entry for a rig, keyed by its `OWNER` path. */
 export function rigEntry(owner: string): RigEntry {
   const entry = registry.rigs[owner];
   if (!entry)
     throw new Error(
-      `${owner} is not registered in tests/budgets.json#qualityRigs — add its lane and volume before recording quality results`
+      `${owner} is not registered in tests/journeys.json#rigs — add its lane and volume before recording quality results`
     );
   return entry;
 }
@@ -61,7 +64,7 @@ export function rigBudgetMs(owner: string): number {
   const { budgetMs } = rigEntry(owner);
   if (typeof budgetMs !== "number")
     throw new Error(
-      `${owner} has no budgetMs in tests/budgets.json#qualityRigs — declare one there rather than inlining a constant`
+      `${owner} has no budgetMs in tests/journeys.json#rigs — declare one there rather than inlining a constant`
     );
   return budgetMs;
 }
@@ -81,7 +84,7 @@ export function rigBudgetMsNamed(owner: string, key: string): number {
   const budget = rigEntry(owner).budgetsMs?.[key];
   if (typeof budget !== "number")
     throw new Error(
-      `${owner} has no budgetsMs.${key} in tests/budgets.json#qualityRigs — declare it there beside the volume rather than inlining a constant`
+      `${owner} has no budgetsMs.${key} in tests/journeys.json#rigs — declare it there beside the volume rather than inlining a constant`
     );
   return budget;
 }
@@ -104,7 +107,7 @@ export function rigBudgetMsNamed(owner: string, key: string): number {
  * long enough that one slow runner cannot move the median, short enough to
  * catch a regression inside a release cycle), then fail above
  * `driftMultiplier` x the trailing median. Both knobs live in
- * `tests/budgets.json#qualityRigs` so `bun run test:ratchet` holds them
+ * `tests/journeys.json#rigs` so `bun run test:ratchet` holds them
  * tighten-only; nothing here invents a number.
  *
  * Returns `null` until the history is deep enough. A null must be treated as
@@ -135,7 +138,7 @@ export function driftBudget(
   {
     minimumDriftSamples,
     driftMultiplier,
-  }: Pick<RigRegistry, "minimumDriftSamples" | "driftMultiplier">
+  }: Pick<RigDrift, "minimumDriftSamples" | "driftMultiplier">
 ): number | null {
   const samples = values
     .filter((value) => Number.isFinite(value) && value >= 0)

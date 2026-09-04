@@ -1,6 +1,6 @@
 /**
  * The CLIENT-SIDE TERM of reconnect-to-fresh, at year-3 phone volume. Method,
- * scope and ceiling: `tests/experience-budgets/mobile.json`. The number is a
+ * scope and ceiling: `tests/journeys.json`. The number is a
  * LOWER BOUND on what the owner feels — no network RTT, no device flash, no
  * render.
  *
@@ -13,8 +13,6 @@
  * with no shape catalog must refuse rather than answer empty (#883 D1) — stays
  * in the ordinary suite next to the fixture both share.
  */
-import { promises as fs } from "node:fs";
-import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
@@ -31,7 +29,6 @@ import {
   sequentialIds,
 } from "../../apps/mobile/src/lib/replica/native-session.test-fixtures";
 import { NodeSqliteDriver } from "../../apps/mobile/src/lib/replica/node-sqlite-driver";
-import type { CeilingFile } from "../../apps/mobile/src/lib/replica/reconnect-to-fresh.fixture";
 import {
   APP_ID,
   bootstrapPage,
@@ -44,6 +41,7 @@ import {
   RESUME_DEADLINE_MS,
   SCREEN_PAGE,
 } from "../../apps/mobile/src/lib/replica/reconnect-to-fresh.fixture";
+import { journeyCeiling } from "../helpers/journeys.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/mobile-reconnect-to-fresh.scale.test.ts";
@@ -52,20 +50,11 @@ describe("reconnect-to-fresh probe", () => {
   test(
     "a backgrounded native session resumes to a fresh screen inside the mobile ceiling",
     async () => {
-      const ceilings = JSON.parse(
-        await fs.readFile(
-          path.resolve(
-            import.meta.dirname,
-            "../experience-budgets/mobile.json"
-          ),
-          "utf8"
-        )
-      ) as CeilingFile;
-      const ceilingMs = ceilings.metrics.reconnectToFresh.ceilingMs;
-      expect(
-        ceilingMs,
-        "tests/experience-budgets/mobile.json#reconnectToFresh must carry a ceilingMs for this probe to gate on"
-      ).toBeTypeOf("number");
+      const ceilingMs = journeyCeiling(
+        "mobile/converge/year3-replica/ci-linux-x64-4c",
+        "reconnectToFresh",
+        "ceilingMs"
+      );
 
       const rows = corpus();
       const gateway = createGateway()
@@ -160,7 +149,7 @@ describe("reconnect-to-fresh probe", () => {
           lane: "scale",
           owner: OWNER,
           name: `Mobile reconnect to fresh at ${REPLICA_ROWS} rows`,
-          status: withinDrift && freshMs < ceilingMs! ? "passed" : "failed",
+          status: withinDrift && freshMs < ceilingMs ? "passed" : "failed",
           measurements: [
             {
               name: "reconnect to fresh",
@@ -175,7 +164,7 @@ describe("reconnect-to-fresh probe", () => {
           withinDrift,
           `sustained drift: ${freshMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
         ).toBe(true);
-        expect(freshMs).toBeLessThan(ceilingMs!);
+        expect(freshMs).toBeLessThan(ceilingMs);
       } finally {
         await session.close();
       }

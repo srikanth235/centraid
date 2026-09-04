@@ -63,7 +63,7 @@ const FRAME_DEADLINE_MS = 30_000;
  *
  * #873 retired the statement count as a proxy for scan COST — a screen whose
  * scanned bytes double while its statement count holds reads as unchanged, and
- * `tests/experience-budgets/client-query-counts.json` says so at length. That
+ * `tests/journeys.json` says so at length. That
  * caution is about using a statement count to bound how EXPENSIVE work is.
  * This ceiling asks a different question, which a statement count answers
  * exactly: does the projection happen ONCE per commit, or once per subscriber?

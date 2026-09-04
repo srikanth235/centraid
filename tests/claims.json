@@ -561,7 +561,7 @@
       "evidence": "HTTP erase → blank-machine product recovery",
       "lane": "restore-year3",
       "wallClockCost": "high",
-      "knob": "tests/experience-budgets/gateway.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -993,7 +993,7 @@
       "evidence": "core route p95 and cold start",
       "lane": "nightly",
       "wallClockCost": "medium",
-      "knob": "tests/experience-budgets/gateway.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -1011,7 +1011,7 @@
       "evidence": "P2 first-paint query counts",
       "lane": "vitest",
       "wallClockCost": "low",
-      "knob": "tests/experience-budgets/client-query-counts.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -1047,12 +1047,12 @@
       "evidence": "the whole household run together costs about the same wall clock as the lanes run one at a time; worst-lane p95 under composition stays under an absolute ceiling",
       "lane": "nightly",
       "wallClockCost": "medium",
-      "knob": "tests/experience-budgets/gateway.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
         "command": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/composite-load.scale.test.ts",
-        "seed": "tighten metrics.compositeLoadFactor.ceilingWorstLaneP95Ms in tests/experience-budgets/gateway.json from 3500 to 300",
+        "seed": "tighten entries.gateway/composite-load/empty/ci-linux-x64-4c.metrics.compositeLoadFactor.ceilingWorstLaneP95Ms in tests/journeys.json from 3500 to 300",
         "failure": "lane starvation: write p95 reached 1551.0 ms under composition (solo 278.2 ms), ceiling 300 ms"
       }
     },
@@ -1263,7 +1263,7 @@
       "evidence": "HTTP export → staged reimport → HTTP re-export",
       "lane": "nightly",
       "wallClockCost": "medium",
-      "knob": "tests/experience-budgets/gateway.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -1335,12 +1335,12 @@
       "evidence": "RSS, open-descriptor, database and latency growth measured across looped household cycles; growth ceilings assert at the declared soak duration, the always-true invariants at every duration",
       "lane": "nightly",
       "wallClockCost": "high",
-      "knob": "tests/experience-budgets/gateway.json",
+      "knob": "tests/journeys.json",
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
         "command": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/long-run-soak.scale.test.ts",
-        "seed": "tighten metrics.soakDegradation.ceilingOpenDescriptors in tests/experience-budgets/gateway.json from 256 to 16",
+        "seed": "tighten entries.gateway/soak/empty/ci-linux-x64-4c.metrics.soakDegradation.ceilingOpenDescriptors in tests/journeys.json from 256 to 16",
         "failure": "descriptor ceiling: peaked at 80 open descriptors, ceiling 16"
       }
     },

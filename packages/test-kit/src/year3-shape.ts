@@ -22,7 +22,7 @@ import type { SQLInputValue } from "node:sqlite";
  * Every field here is DECLARED, not measured — the fixture states the shape of
  * the owner's third year, and the rigs measure against it. Changing a number
  * here changes what "year-3 volume" means repo-wide, so it moves with
- * `tests/experience-budgets/README.md`'s year-3 table and a version bump.
+ * `tests/journeys.json`'s year-3 table and a version bump.
  */
 export interface Year3Distributions {
   /** `knowledge_note` rows. README year-3 table: Notes = 1,000. */

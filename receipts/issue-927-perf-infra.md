@@ -1133,3 +1133,46 @@ bun run --cwd packages/test-kit test
 
 1. *Claim: no rig ceiling was widened by the photos-timeline move.* Diffed the four registry values against the deleted constants — 30000/2000/1000/2000 both sides; `lint:ledgers` green against `origin/main`.
 2. *Claim: the deterministic-gate exemption cannot be claimed silently.* Removed `_gateNote` from the entry and re-ran `validate-nightly-wiring.mjs`: it errors. Restored.
+
+## w2 ledger — one journey ledger, keyed surface × journey × volume × hardware
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `tests/journeys.json` (new) | THE ledger. 32 entries keyed `surface/journey/volume/hardware`, each naming its spans, its consumers and its `tolerancePercent`; plus `rigs` (46) and `drift`. Declares the journey, volume, hardware and status vocabularies inline, so no ceiling is stated at an unnamed volume. |
+| `tests/experience-budgets/**` (deleted, 6 files) | Absorbed. `web/desktop/mobile/gateway.json` → per-surface entries; `client-query-counts.json` → `client/first-paint-work`; `README.md` → the ledger's own `volumes`/`journeys`/`hardware`/`_statusVocabulary`. |
+| `tests/budgets.json` | `qualityRigs` and `experience` removed; the file keeps only the SUITE and LADDER ceilings no journey owns. |
+| `tests/helpers/journeys.ts`, `scripts/lib/journey-ledger.mjs` (new) | The two readers. A missing entry, metric or numeric field throws; nothing parses the ledger by hand. |
+| `scripts/lint-journey-ledger.mjs` + `.test.mjs` (new) | The ledger's own shape gate, wired into `lint:product` and `gate-classes.json` as a rung-1 contract gate. |
+| 18 consumers (`tests/perf/**`, `tests/scale/**`, `tests/quality/**`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `scripts/perf/*.mjs`, `tests/agent-e2e-mobile/flows/scroll-frames.mjs`) | Read the ledger through a reader instead of a JSON file. |
+| `tests/quality/first-paint-query-counts.test.ts` | Counts through `gatewayWorkCounters` (the trace contract) instead of monkey-patching `DatabaseSync.prepare`. |
+| `scripts/test-report/{ratchet-floors,derive,validate-nightly-wiring}.mjs`, `scripts/check-ledgers.mjs`, `scripts/check-quality-knobs.mjs` | Point at the ledger. |
+| `TESTING.md`, `docs/decisions.md` | Four ledgers → five; ruling **G-experience-reference** marked superseded (it said the opposite of the code). |
+
+### Numbers
+
+| Measurement | Was | Now | Provenance |
+| --- | --- | --- | --- |
+| first paint, statements per screen (photos-grid / notifications / atlas / assistant) | 68 / 8 / 13 / 22 (SELECT PREPARES seen by a test-local monkey-patch) | **76 / 7 / 7 / 5** (statement EXECUTIONS from the product's own counter) | `node node_modules/vitest/vitest.mjs run tests/quality/first-paint-query-counts.test.ts`, linux x64 / 4 cores / 15 GB, 2026-09-04. NOT comparable to the old numbers — different instrument, recorded on the entry. Atlas and Assistant read handles the gateway never wrapped, so the probe instruments each screen's own handle instead of reporting 0. |
+| every other ceiling | — | unchanged | Carried across mechanically; falsified below. |
+
+### Decisions
+
+- The counts above are seeded at **observed with no headroom**: the count is deterministic on a fixed fixture, so one extra statement fails on the first run — the counter-gate discipline, not the p95 one.
+- `tests/quality/classification-ratchet.json` approvedDeviation, in full: #930 re-pins the tests/claims.json whole-file fingerprint after removing the spent rename marker on the `golden-vault-archaeology` flow, superseding the #916 re-pin note rather than contradicting it — every sentence of #916's account of what that flow took over is kept, in receipts/issue-916-vault-ontology-review.md and in the flow's own `_comment`. `replacesMinimumTestsFlow` is a ONE-SHOT claim about the change set that makes a rename, checked against the merge base; once #916 landed, `schema-migration-corpus` existed at no base any more, so the marker could only ever report an unknown predecessor and `lint:ledgers` / `test:ratchet` were red on main itself. The marker and the `approvedMinimumTestsDeviation` that authorized it are removed together, because that note waives a future minimumTests drop on this flow by presence alone; the floor stays at 5, no claim row, severity, evidence selector or demonstrated-red date moves, and claimsGovernanceFingerprint is unchanged. Prior: #916. #928 w1b re-pins tests/claims.json once more, for the static app entity tripwire: it registers the new law `app-entity-tripwire` and its flow `blueprint-app-entity-tripwire-law` (owner packages/blueprints/src/app-entity-tripwire.test.ts, minimumTests 17), mirroring how `one-computation` is registered so the lane is owned. Additions to the law and flow registries only, and a NEW minimumTests floor, which is a tightening — no claim row, severity, evidence selector, demonstrated-red date or existing floor moves, and the 45 claim rows stay byte-identical, so claimsGovernanceFingerprint is unchanged. Prior: #930. #931 re-pins it once more after registering ONE new rung-3 lane, `rung1-on-main`, in `lanes` — the row `candidate.yml`'s new job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept it. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or `minimumTests` floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #928 w1b. #927 w2 re-pins tests/claims.json for the JOURNEY LEDGER: every `knob` and `seed` string that named tests/experience-budgets/*.json now names tests/journeys.json and the entry key inside it, because those five files were absorbed into one ledger keyed `surface / journey / volume / hardware`. A knob path rename only: no claim row is added or removed, no severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and every seeded-red recipe still points at the same number under its new address. Prior: #931.
+- A third status word, `bound`, names what `mobile/scroll`'s 50% frame-drop ceiling always was: a catastrophe bound, not observed + headroom. The linter makes it argue itself.
+
+### Verification
+
+```
+bun run lint:journey-ledger && bun run lint:ledgers && bun run lint:quality-knobs
+bun run test:ratchet && node scripts/test-report/validate-nightly-wiring.mjs
+node --test scripts/lint-journey-ledger.test.mjs scripts/ci/gate-classes.test.mjs
+bun run typecheck   # 25/25
+```
+
+### Falsification
+
+1. *Claim: absorbing five files into one ledger widened no ceiling.* Flattened every number from `origin/main`'s five files plus `budgets.json#qualityRigs` (61 values) and matched them as a multiset against the ledger's 97: **nothing lost**, and the 36 additions are 31 `tolerancePercent`, one `0`, and the four `photos-timeline` ceilings this lane's earlier commit moved.
+2. *Claim: the linter actually refuses a ledger that rots the way the old files did.* Nine fixture cases in `scripts/lint-journey-ledger.test.mjs` — key/field disagreement, undeclared volume, no span and no consumer, missing consumer file, `unmeasured` shipping a number, a `bound` that does not argue itself, a dangling rig cross-link, a surviving retired reference. All nine fail the linter; the well-formed ledger passes.

@@ -40,7 +40,7 @@ const OWNER = "tests/scale/photos-timeline.scale.test.ts";
 const PHOTO_COUNT = 50_000;
 const ONE_DAY_PHOTO_COUNT = 10_000;
 // Ceilings live beside the volume they were measured at, in
-// tests/budgets.json#qualityRigs, so the ratchet holds them tighten-only.
+// tests/journeys.json#rigs, so the ratchet holds them tighten-only.
 const SEED_BUDGET_MS = rigBudgetMsNamed(OWNER, "seedMs");
 const PAGE_READ_BUDGET_MS = rigBudgetMsNamed(OWNER, "pageReadMs");
 const ONE_DAY_READ_BUDGET_MS = rigBudgetMsNamed(OWNER, "oneDayReadMs");

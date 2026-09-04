@@ -44,16 +44,6 @@ const root = path.resolve(import.meta.dirname, "../..");
 export const PERF_BUDGET_SOURCES = [
   { path: "apps/web/tests/e2e/perf-budgets.ts", exportName: "perfBudgets" },
   { path: "packages/server/benchmarks/low-end-budgets.json" },
-  // #656 Layer 1F — the nightly rig registry. `regressionMultiplier` and each
-  // rig's `budgetMs` are ceilings (tighten-only); `minimumSamples` is a min*
-  // floor and may only rise. Before this the absolute ceilings lived as
-  // `const BUDGET_MS` inside five rig files, where widening one to make a slow
-  // rig green was an unreviewed one-line edit.
-  {
-    path: "tests/budgets.json",
-    section: "qualityRigs",
-    legacy: "tests/quality-rig-budgets.json",
-  },
   // #656 Layer 5 — the PR lane's total wall clock. Tighten-only for the same
   // reason as any perf ceiling: it is the only gate that pushes back on adding
   // tests, so widening it must be a reviewed edit rather than a quiet one.
@@ -69,18 +59,15 @@ export const PERF_BUDGET_SOURCES = [
   // roster is still ratcheted at its own source by check-mobile-suite-budgets;
   // this holds the mirror to the same direction so neither copy can drift up.
   { path: "tests/budgets.json", section: "mobileSuites" },
-  // #659 R2 — the EXPERIENCE budgets: the same regressions the files above
-  // fence, restated as what the vault owner feels (cold open → first usable
-  // screen, tap → visual response, send → first token, scroll frame drops,
-  // sync staleness after reconnect). One file per shipping surface; see
-  // tests/experience-budgets/README.md for the status vocabulary and the
-  // year-3 volume table every ceiling is stated at. Entries with
-  // `status: "unmeasured"` deliberately carry NO number, so they contribute
-  // nothing to the ratchet until a real run fills them in.
-  { path: "tests/experience-budgets/web.json" },
-  { path: "tests/experience-budgets/desktop.json" },
-  { path: "tests/experience-budgets/mobile.json" },
-  { path: "tests/experience-budgets/gateway.json" },
+  // #927 — THE JOURNEY LEDGER, keyed `surface / journey / volume / hardware`.
+  // It replaced four per-surface experience files, the rig register and the
+  // query-count file, whose keys said which SURFACE a ceiling belonged to but
+  // not the volume or the hardware it held at. `legacy` keeps the merge that
+  // created it from reading as a wholesale widen. A metric with
+  // `status: "unmeasured"` carries NO number and contributes nothing here
+  // until a real run fills it in; a leading underscore is invisible, which is
+  // how an intended-but-unobserved ceiling is parked without gating.
+  { path: "tests/journeys.json" },
   // #842 W3.5 — the renderer-leak ceilings. Same tighten-only posture as every
   // budget above: a ceiling may drop freely, and widening one must be a
   // reviewed edit. These are load-bearing in a way a perf number is not — the

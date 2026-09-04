@@ -9,7 +9,7 @@
  * is what makes "same input" a fact rather than a claim.
  *
  * 50,000 rows is the repo's declared year-3 replica volume for one device
- * (`tests/experience-budgets/README.md`, `docs/mobile-offline.md`). The entity
+ * (`tests/journeys.json`, `docs/mobile-offline.md`). The entity
  * is `core.content_item` — Photos and Docs both read it, and it is the largest
  * replicated table on a phone.
  *

@@ -162,23 +162,21 @@ export async function deriveVitestProjects() {
   );
 }
 
-/** Quality-rig budgets, keyed by rig path (`tests/budgets.json#qualityRigs`). */
+/** Quality-rig budgets, keyed by rig path (`tests/journeys.json#rigs`). */
 export function deriveRigBudgets() {
-  return readJson("tests/budgets.json", {}).qualityRigs?.rigs ?? {};
+  return readJson("tests/journeys.json", {}).rigs ?? {};
 }
 
-/** Experience budgets, one entry per surface ledger under tests/experience-budgets. */
+/**
+ * The journey ledger's entries, grouped by surface so the report page keeps
+ * its per-surface section (#927). The grouping is derived from each entry's
+ * own `surface`, so a new surface needs no edit here.
+ */
 export function deriveExperienceBudgets() {
-  const dir = path.join(ROOT, "tests/experience-budgets");
-  if (!existsSync(dir)) return {};
+  const entries = readJson("tests/journeys.json", {}).entries ?? {};
   const out = {};
-  for (const name of readdirSync(dir)) {
-    if (!name.endsWith(".json")) continue;
-    out[path.basename(name, ".json")] = readJson(
-      `tests/experience-budgets/${name}`,
-      {}
-    );
-  }
+  for (const [key, entry] of Object.entries(entries))
+    (out[entry.surface] ??= {})[key] = entry;
   return out;
 }
 

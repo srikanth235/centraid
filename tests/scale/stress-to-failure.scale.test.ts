@@ -1,4 +1,4 @@
-import { glob, readFile } from "node:fs/promises";
+import { glob } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -16,6 +16,7 @@ import type {
   CompositeGateway,
   OpOutcome,
 } from "../helpers/composite-workload.js";
+import { journeyCeiling } from "../helpers/journeys.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
@@ -66,12 +67,6 @@ const WRITE_STORM = 64;
 
 /** Statuses the product is allowed to shed load with. Anything else is a bug. */
 const REFUSAL_STATUSES = new Set([429, 503]);
-
-interface CeilingFile {
-  metrics: {
-    stressRecovery: { ceilingRecoveryMs: number };
-  };
-}
 
 interface Rung {
   concurrency: number;
@@ -135,10 +130,11 @@ async function vaultDbPath(vaultDir: string): Promise<string> {
 
 describe("stress-to-failure.scale", () => {
   test("past the knee the gateway refuses by name, keeps the vault intact, and recovers", async () => {
-    const ceilings = JSON.parse(
-      await readFile("tests/experience-budgets/gateway.json", "utf8")
-    ) as CeilingFile;
-    const ceilingRecoveryMs = ceilings.metrics.stressRecovery.ceilingRecoveryMs;
+    const ceilingRecoveryMs = journeyCeiling(
+      "gateway/stress-recovery/empty/ci-linux-x64-4c",
+      "stressRecovery",
+      "ceilingRecoveryMs"
+    );
 
     const gateway = await bootCompositeGateway("stress-to-failure-");
     onTestFinished(() => gateway.close());

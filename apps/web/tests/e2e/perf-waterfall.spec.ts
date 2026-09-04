@@ -5,6 +5,10 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+import {
+  journeyCeiling,
+  optionalJourneyCeiling,
+} from "../../../../tests/helpers/journeys.js";
 import { SERVICE_WORKER_VERSION } from "../../src/sw-version.js";
 import { installHarnessControlTransport } from "./control-transport.js";
 import { enforceTiming, perfBudgets } from "./perf-budgets.js";
@@ -736,7 +740,7 @@ test("iroh pool — connects stay far below streams (or contract is present)", a
 // ─── Test D — WEB VITALS (#659) ─────
 // Observers must install via addInitScript, BEFORE the document runs: one
 // attached after paint sees a truncated timeline (`buffered: true` covers LCP,
-// not `event`). Ceilings: tests/experience-budgets/web.json.
+// not `event`). Ceilings: tests/journeys.json, web/cold-open and web/warm-switch.
 
 const VITALS_REPORT_PATH = path.resolve(
   here,
@@ -864,7 +868,7 @@ async function readVitals(page: Page): Promise<VitalsCapture> {
  * it. A headless shell driving no display presents nothing on its own, so this
  * probe could sit for its whole run on a fully rendered screen with
  * `first-paint` alone on the timeline and report `LCP: n/a` — the "missing
- * first-contentful-paint" that tests/experience-budgets/web.json parked its
+ * first-contentful-paint" that the journey ledger parked its
  * LCP ceiling behind. It is neither a webfont nor an unresolved transition:
  * animation frames and forced layout reads are not enough either, because they
  * never reach presentation. A capture does, which is the whole reason this
@@ -879,24 +883,35 @@ async function flushPaint(page: Page): Promise<void> {
 }
 
 test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => {
-  const budgets = JSON.parse(
-    await fs.readFile(
-      path.resolve(here, "../../../..", "tests/experience-budgets/web.json"),
-      "utf8"
-    )
-  ) as {
-    metrics: {
-      largestContentfulPaint: {
-        ceilingMs?: number;
-        _intendedCeilingMs?: number;
-      };
-      interactionToNextPaint: {
-        ceilingMs?: number;
-        _intendedCeilingMs?: number;
-      };
-      cumulativeLayoutShift: { maxScore: number };
-    };
-  };
+  const COLD_OPEN_KEY = "web/cold-open/empty/ci-linux-x64-4c";
+  const INTERACTION_KEY = "web/warm-switch/empty/ci-linux-x64-4c";
+  const lcpCeilingMs =
+    optionalJourneyCeiling(
+      COLD_OPEN_KEY,
+      "largestContentfulPaint",
+      "ceilingMs"
+    ) ??
+    optionalJourneyCeiling(
+      COLD_OPEN_KEY,
+      "largestContentfulPaint",
+      "_intendedCeilingMs"
+    );
+  const inpCeilingMs =
+    optionalJourneyCeiling(
+      INTERACTION_KEY,
+      "interactionToNextPaint",
+      "ceilingMs"
+    ) ??
+    optionalJourneyCeiling(
+      INTERACTION_KEY,
+      "interactionToNextPaint",
+      "_intendedCeilingMs"
+    );
+  const clsCeiling = journeyCeiling(
+    COLD_OPEN_KEY,
+    "cumulativeLayoutShift",
+    "maxScore"
+  );
 
   await installVitalsObservers(page);
 
@@ -955,7 +970,7 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
     capturedAt: new Date().toISOString(),
     harness: { apiUrl: API_URL, appId: APP_ID },
     // A ceiling with no stated volume is not a budget
-    // (tests/experience-budgets/README.md).
+    // (tests/journeys.json `volumes`).
     volume: "empty (web-e2e fixture vault, loopback, headless Chromium)",
     interactionDriven: clicked,
     lcpDelivered,
@@ -965,15 +980,11 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
   await fs.writeFile(VITALS_REPORT_PATH, JSON.stringify(report, null, 2));
 
   console.log("\n================ WEB VITALS SUMMARY ==================");
+  console.log(`LCP: ${vitals.lcpMs ?? "n/a"} ms   (ceiling ${lcpCeilingMs})`);
   console.log(
-    `LCP: ${vitals.lcpMs ?? "n/a"} ms   (ceiling ${budgets.metrics.largestContentfulPaint.ceilingMs})`
+    `INP: ${vitals.inpMs ?? "n/a"} ms   (ceiling ${inpCeilingMs}, interaction driven: ${clicked})`
   );
-  console.log(
-    `INP: ${vitals.inpMs ?? "n/a"} ms   (ceiling ${budgets.metrics.interactionToNextPaint.ceilingMs}, interaction driven: ${clicked})`
-  );
-  console.log(
-    `CLS: ${vitals.clsScore}          (ceiling ${budgets.metrics.cumulativeLayoutShift.maxScore})`
-  );
+  console.log(`CLS: ${vitals.clsScore}          (ceiling ${clsCeiling})`);
   console.log(
     `DCL: ${vitals.domContentLoadedMs ?? "n/a"} ms   load: ${vitals.loadEventMs ?? "n/a"} ms`
   );
@@ -992,7 +1003,7 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
 
   // CLS is the one vital this harness measures honestly — a HARD gate.
   expect(vitals.clsScore, "cumulative layout shift").toBeLessThanOrEqual(
-    budgets.metrics.cumulativeLayoutShift.maxScore
+    clsCeiling
   );
 
   // Assert when the browser produced them, annotate when it did not: the
@@ -1005,16 +1016,12 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
       description:
         `no largest-contentful-paint entry (paint timeline: [${vitals.paintEntries}], ` +
         `candidate delivered: ${lcpDelivered}, visibility: ${vitals.visibility}). ` +
-        `LCP not asserted this run; tests/experience-budgets/web.json keeps it unmeasured.`,
+        `LCP not asserted this run; tests/journeys.json keeps it unmeasured.`,
     });
   } else {
-    // Live ceiling first; the parked intended one until web.json is re-seeded.
-    const lcpCeiling =
-      budgets.metrics.largestContentfulPaint.ceilingMs ??
-      budgets.metrics.largestContentfulPaint._intendedCeilingMs;
-    expect(lcpCeiling, "LCP ceiling configured").toEqual(expect.any(Number));
+    expect(lcpCeilingMs, "LCP ceiling configured").toEqual(expect.any(Number));
     expect(vitals.lcpMs, "largest contentful paint").toBeLessThanOrEqual(
-      lcpCeiling
+      lcpCeilingMs
     );
   }
   if (vitals.inpMs === null) {
@@ -1023,12 +1030,9 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
       description: `no event-timing entry recorded (interaction driven: ${clicked}); INP not asserted this run`,
     });
   } else {
-    const inpCeiling =
-      budgets.metrics.interactionToNextPaint.ceilingMs ??
-      budgets.metrics.interactionToNextPaint._intendedCeilingMs;
-    expect(inpCeiling, "INP ceiling configured").toEqual(expect.any(Number));
+    expect(inpCeilingMs, "INP ceiling configured").toEqual(expect.any(Number));
     expect(vitals.inpMs, "interaction to next paint").toBeLessThanOrEqual(
-      inpCeiling
+      inpCeilingMs
     );
   }
 });

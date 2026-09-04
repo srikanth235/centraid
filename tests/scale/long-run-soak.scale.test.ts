@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-
 import { describe, expect, onTestFinished, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
@@ -18,6 +16,7 @@ import {
   writeLane,
 } from "../helpers/composite-workload.js";
 import type { SoakSample } from "../helpers/composite-workload.js";
+import { journeyNumbers } from "../helpers/journeys.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
@@ -55,7 +54,7 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
  *
  * It does NOT prove the absence of a slow leak. Slope over ~45 s of cycles is
  * dominated by cache warming, so the GROWTH ceilings are asserted only at or
- * above `declaredSoakMinutes` (see tests/experience-budgets/gateway.json) —
+ * above `declaredSoakMinutes` (see tests/journeys.json) —
  * exactly the pattern `restore-10gib.scale.test.ts` uses for its 10 GiB
  * ceilings. Below that the growth axes are measured and PUBLISHED but do not
  * gate, while the always-true invariants (every cycle completed, no transport
@@ -98,27 +97,24 @@ const OPS_PER_LANE = 3;
  */
 const RUNAWAY_GUARD_MS = 36_000_000;
 
-interface CeilingFile {
-  metrics: {
-    soakDegradation: {
-      declaredSoakMinutes: number;
-      ceilingLatencyCreepFactor: number;
-      ceilingRssGrowthBytesPerCycle: number;
-      ceilingOpenDescriptors: number;
-      ceilingDescriptorGrowth: number;
-    };
-  };
+const SOAK_KEY = "gateway/soak/empty/ci-linux-x64-4c";
+
+interface SoakCeilings {
+  declaredSoakMinutes: number;
+  ceilingLatencyCreepFactor: number;
+  ceilingRssGrowthBytesPerCycle: number;
+  ceilingOpenDescriptors: number;
+  ceilingDescriptorGrowth: number;
 }
 
 describe("long-run-soak.scale", () => {
   test(
     "a long-lived gateway under continuous household use does not creep in memory, descriptors, DB size or latency",
     async () => {
-      const ceilings = (
-        JSON.parse(
-          await readFile("tests/experience-budgets/gateway.json", "utf8")
-        ) as CeilingFile
-      ).metrics.soakDegradation;
+      const ceilings = journeyNumbers(
+        SOAK_KEY,
+        "soakDegradation"
+      ) as unknown as SoakCeilings;
       const atDeclaredDuration = SOAK_MINUTES >= ceilings.declaredSoakMinutes;
 
       const gateway = await bootCompositeGateway("long-run-soak-");

@@ -1,7 +1,7 @@
 /**
  * DESKTOP MAIN-PROCESS IMPORT-GRAPH PROBE (#883 C1).
  *
- * The desktop cold-start finding on the record (tests/experience-budgets/
+ * The desktop cold-start finding on the record (tests/journeys.json
  * desktop.json, 2026-07-31) is that 99% of the 4.5 s a vault owner waits is
  * MAIN-PROCESS boot before any window exists. Nothing in the continuous lanes
  * could see that: `tests/perf/desktop-cold.perf.test.ts` used to import

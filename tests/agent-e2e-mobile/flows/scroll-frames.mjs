@@ -1,6 +1,6 @@
-import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { journeyCeiling } from "../../../scripts/lib/journey-ledger.mjs";
 import {
   recordQualityResult,
   rigDriftBudget,
@@ -153,13 +153,11 @@ ${CONFIRM_SYSTEM_OPEN}# Prove the arm took BEFORE flinging — a fling against a
 await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.configureGateway();
 
-  const budgets = JSON.parse(
-    await fs.readFile(
-      path.join(REPO_ROOT, "tests/experience-budgets/mobile.json"),
-      "utf8"
-    )
+  const ceiling = journeyCeiling(
+    "mobile/scroll/empty/ci-ios-sim",
+    "maxDroppedFramePercent",
+    "maxPercent"
   );
-  const ceiling = budgets.metrics.maxDroppedFramePercent.maxPercent;
 
   // ---- Photos grid ---------------------------------------------------------
   const photosStartedAt = Date.now();

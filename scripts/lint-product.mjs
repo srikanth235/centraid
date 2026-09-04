@@ -43,6 +43,7 @@ export const PRODUCT_GATES = Object.freeze([
   "test:advisory-expiry",
   "lint:law-registry",
   "lint:ledgers",
+  "lint:journey-ledger",
   "lint:test-reachability",
   "lint:tsconfigs",
   "test:accessibility",

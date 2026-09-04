@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
+import { journeyCeiling } from "../helpers/journeys.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/desktop-launch.perf.test.ts";
@@ -25,8 +26,8 @@ const OWNER = "tests/perf/desktop-launch.perf.test.ts";
  *
  * NO ABSOLUTE CEILING BY DESIGN. A cold Electron launch on a shared CI runner
  * has no distribution yet; the gate is the trailing-median drift budget every
- * other rig now uses (30 samples, 1.5x — tests/budgets.json#qualityRigs). An
- * absolute ceiling lands in tests/experience-budgets/desktop.json once ~10
+ * other rig now uses (30 samples, 1.5x — tests/journeys.json#drift). An
+ * absolute ceiling lands in tests/journeys.json once ~10
  * green nightlies justify one, and not before.
  *
  * Year-3 declared volume: NONE — the launch is measured against the mock
@@ -36,19 +37,13 @@ const OWNER = "tests/perf/desktop-launch.perf.test.ts";
 const input = "artifacts/perf-input/desktop-launch-report.json";
 
 /**
- * The owner-facing ceilings live in tests/experience-budgets/desktop.json and
+ * The owner-facing ceilings live in tests/journeys.json and
  * are asserted HERE. A budget file nobody reads is the failure #659 R4 exists
  * to close, so this rig consumes both gates: the absolute ceiling (measured
  * 2026-07-31 + headroom) and the sustained-drift budget.
  */
-const budgets = JSON.parse(
-  await readFile("tests/experience-budgets/desktop.json", "utf8")
-) as {
-  metrics: {
-    coldOpenToUsable: { ceilingMs: number };
-    tapToVisualResponse: { ceilingMs: number };
-  };
-};
+const COLD_KEY = "desktop/cold-open/empty/dev-darwin-arm64";
+const TAP_KEY = "desktop/warm-switch/empty/dev-darwin-arm64";
 
 interface LaunchReport {
   volume: string;
@@ -84,8 +79,16 @@ describe("desktop-launch.perf", () => {
       const drift = await rigDriftBudgetMs("perf", OWNER);
       const withinDrift =
         drift === null || measurements.coldOpenToUsableMs <= drift;
-      const coldCeiling = budgets.metrics.coldOpenToUsable.ceilingMs;
-      const tapCeiling = budgets.metrics.tapToVisualResponse.ceilingMs;
+      const coldCeiling = journeyCeiling(
+        COLD_KEY,
+        "coldOpenToUsable",
+        "ceilingMs"
+      );
+      const tapCeiling = journeyCeiling(
+        TAP_KEY,
+        "tapToVisualResponse",
+        "ceilingMs"
+      );
       const withinCeilings =
         measurements.coldOpenToUsableMs <= coldCeiling &&
         measurements.tapToVisualResponseMs <= tapCeiling;

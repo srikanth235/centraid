@@ -47,7 +47,7 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
  * Five is the declared year-3 vault count for one household: the gateway
  * auto-founds one marked `Personal` vault on a fresh data dir (#603,
  * ARCHITECTURE.md) and a household adds four more vaults explicitly. The full
- * volume table lives in tests/experience-budgets/README.md.
+ * volume table lives in tests/journeys.json.
  *
  * **The row volume is deliberately bootstrap-only, and that is a real limit of
  * this rig.** The pragmas under test are reservations made at open time, so

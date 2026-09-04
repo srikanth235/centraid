@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // A FIXED-DELAY ACP AGENT for the mobile CI gateway (#890 follow-up).
 //
-// WHY THIS EXISTS. `tests/experience-budgets/mobile.json` carries
+// WHY THIS EXISTS. `tests/journeys.json` carries
 // `sendToFirstToken` — the interval between tapping send in the Assistant and
 // the first token appearing on screen, which is the most-felt latency in the
 // product on a phone. It has been `unmeasured` with `probe: "NONE TODAY"`

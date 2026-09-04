@@ -12,7 +12,7 @@ import type {
 
 import type { AppStateLike } from "./native-session";
 
-/** Year-3 replica rows on a phone (tests/experience-budgets/README.md). */
+/** Year-3 replica rows on a phone (tests/journeys.json `volumes.year3-replica`). */
 export const REPLICA_ROWS = 50_000;
 /** Changes committed while the phone was away. */
 export const MISSED_CHANGES = 200;
@@ -24,10 +24,6 @@ export const RESUME_DEADLINE_MS = 120_000;
 export const SHAPE_ID = "shape-library";
 export const ENTITY = "core.content_item";
 export const APP_ID = "photos";
-
-export interface CeilingFile {
-  metrics: { reconnectToFresh: { ceilingMs?: number } };
-}
 
 /** Clock-free: the same rows on every host. */
 export function seededRandom(seed: number): () => number {
