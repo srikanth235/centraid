@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import {
+  DEFAULT_REPLICA_TEXT_CEILING_BYTES,
   readReplicaChanges,
   readReplicaIntentOutcome,
   withReplicaSnapshot,
@@ -13,7 +14,6 @@ import type {
 
 import {
   buildReplicaShapes,
-  REPLICA_MAX_VALUE_BYTES,
   REPLICA_PROTOCOL_VERSION,
   replicaHistoricalRowState,
   replicaRowColumns,
@@ -93,19 +93,17 @@ export interface ReplicaProjectedPage {
 }
 
 // These rows change what a client may retain: advancing past one as ordinary
-// data leaves a stale local shape behind.
+// data leaves a stale local shape behind. Two survive #928's AP-apps-declare,
+// because a shape is now a function of the install register and the sealed
+// registry alone: `access.app` says whether an app is installed and carries
+// the key its row ids are derived from, and `access.app_ext` carries an ext
+// band's declared sealed columns.
 //
-// The verdict below reads the ENTRY, not the row's end state: a grant that
-// went active, revoked, then active again must force a bootstrap for the
+// The verdict below reads the ENTRY, not the row's end state: an app that was
+// installed, revoked, then installed again must force a bootstrap for the
 // middle transition too. Retention compaction therefore may not fold these
-// entries away — `REPLICA_COMPACTION_HELD_ENTITIES` covers exactly this set.
-export const SHAPE_CONTROL_ENTITIES = new Set([
-  "access.app",
-  "access.app_ext",
-  "access.grant",
-  "access.grant_scope",
-  "access.policy",
-]);
+// entries away — `REPLICA_COMPACTION_HELD_ENTITIES` covers this set.
+export const SHAPE_CONTROL_ENTITIES = new Set(["access.app", "access.app_ext"]);
 
 const WIRE_OUTCOMES = new Set([
   "parked",
@@ -175,18 +173,6 @@ function oldValues(
   }
 }
 
-function activeAt(
-  row: Record<string, unknown> | undefined,
-  now: string
-): boolean {
-  return (
-    row?.status === "active" &&
-    row.revoked_at === null &&
-    (row.expires_at === null ||
-      (typeof row.expires_at === "string" && row.expires_at > now))
-  );
-}
-
 function appMatches(
   db: DatabaseSync,
   access: ReplicaShapeAccess,
@@ -204,21 +190,13 @@ function appMatches(
   );
 }
 
-function grantMatches(
-  db: DatabaseSync,
-  access: ReplicaShapeAccess,
-  row: Record<string, unknown> | undefined
-): boolean {
-  return appMatches(db, access, row?.app_id);
-}
-
 function currentRow(
   db: DatabaseSync,
   table: string,
   key: string,
   rowId: string
 ): Record<string, unknown> | undefined {
-  // Table/key come from a closed set of consent tables, never the wire.
+  // Table/key come from a closed set of install-register tables, never the wire.
   return preparedStatement(
     db,
     `SELECT * FROM "${table}" WHERE "${key}" = ?`
@@ -228,66 +206,16 @@ function currentRow(
 function shapeControlChange(
   db: DatabaseSync,
   access: ReplicaShapeAccess,
-  change: ReplicaChangeEntry,
-  now: string
+  change: ReplicaChangeEntry
 ): boolean {
-  const before = oldValues(change);
-  if (change.entity === "core.concept") {
-    const restriction = access.appId ? ` AND (a.app_id = ? OR a.name = ?)` : "";
-    return (
-      preparedStatement(
-        db,
-        `SELECT 1 AS matched
-             FROM access_grant g
-             JOIN access_app a ON a.app_id = g.app_id
-            WHERE g.purpose_concept_id = ? AND a.status = 'active'
-              AND g.status = 'active' AND g.revoked_at IS NULL
-              AND (g.expires_at IS NULL OR g.expires_at > ?)${restriction}
-            LIMIT 1`
-      ).get(
-        change.rowId,
-        now,
-        ...(access.appId ? [access.appId, access.appId] : [])
-      ) !== undefined
-    );
-  }
   if (!SHAPE_CONTROL_ENTITIES.has(change.entity)) return false;
-  if (change.entity === "access.policy") {
-    const after = currentRow(db, "access_policy", "policy_id", change.rowId);
-    return [before, after].some(
-      (row) =>
-        typeof row?.effective_from === "string" && row.effective_from <= now
-    );
-  }
+  const before = oldValues(change);
   if (change.entity === "access.app") {
     const after = currentRow(db, "access_app", "app_id", change.rowId);
     return [before, after].some(
       (row) =>
         row?.status === "active" && appMatches(db, access, row.app_id, row.name)
     );
-  }
-  if (change.entity === "access.grant") {
-    const after = currentRow(db, "access_grant", "grant_id", change.rowId);
-    return [before, after].some(
-      (row) => activeAt(row, now) && grantMatches(db, access, row)
-    );
-  }
-  if (change.entity === "access.grant_scope") {
-    const after = currentRow(
-      db,
-      "access_grant_scope",
-      "scope_id",
-      change.rowId
-    );
-    for (const grantId of new Set(
-      [before?.grant_id, after?.grant_id].filter(
-        (value): value is string => typeof value === "string"
-      )
-    )) {
-      const grant = currentRow(db, "access_grant", "grant_id", grantId);
-      if (activeAt(grant, now) && grantMatches(db, access, grant)) return true;
-    }
-    return false;
   }
   let keyAppId: unknown;
   try {
@@ -370,12 +298,7 @@ export function projectReplicaPage(
         shapeIds,
       },
     });
-    const sampledNow = new Date(nowMs).toISOString();
-    if (
-      page.changes.some((change) =>
-        shapeControlChange(db, access, change, sampledNow)
-      )
-    ) {
+    if (page.changes.some((change) => shapeControlChange(db, access, change))) {
       return rebootstrap();
     }
 
@@ -386,7 +309,7 @@ export function projectReplicaPage(
         rows.set(
           key,
           reader.readRow(entity, rowId, {
-            maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+            maxValueBytes: DEFAULT_REPLICA_TEXT_CEILING_BYTES,
           })
         );
       }

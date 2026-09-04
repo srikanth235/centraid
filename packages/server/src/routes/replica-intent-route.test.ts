@@ -109,7 +109,7 @@ describe("replica-intent-route suite", () => {
 
   async function bridgeFinalizationFixture() {
     const vault = await plane();
-    vault.approveGrant("planner", {
+    vault.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", verbs: "act" }],
     });
@@ -206,7 +206,7 @@ describe("replica-intent-route suite", () => {
 
   test("a crash-left sending row deterministically re-dispatches, then terminal retry dedupes", async () => {
     const vault = await plane();
-    vault.approveGrant("planner", {
+    vault.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
@@ -333,7 +333,7 @@ describe("replica-intent-route suite", () => {
 
   test("a dispatch exception stays in-flight, then retry terminalizes without durable output", async () => {
     const vault = await plane();
-    vault.approveGrant("planner", {
+    vault.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
@@ -422,7 +422,7 @@ describe("replica-intent-route suite", () => {
 
   test("a live replica response is redacted from the durable outcome and terminal replay", async () => {
     const vault = await plane();
-    vault.approveGrant("planner", {
+    vault.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", verbs: "act" }],
     });
@@ -905,7 +905,7 @@ describe("replica-intent-route suite", () => {
 
   test("read-only policy denial is a durable outcome, not a revocation-shaped 403", async () => {
     const vault = await plane();
-    vault.approveGrant("planner", {
+    vault.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
@@ -949,7 +949,7 @@ describe("replica-intent-route suite", () => {
 
   test("checks opaque row versions before dispatching an offline edit", async () => {
     const vault = await plane();
-    vault.approveGrant("planner", {
+    vault.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [
         {
@@ -1042,7 +1042,7 @@ describe("replica-intent-route suite", () => {
 
   test("owner role may act — it is full plus admin, not a lesser tier", async () => {
     const vault = await plane();
-    vault.approveGrant("planner", {
+    vault.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
@@ -1086,7 +1086,7 @@ describe("replica-intent-route suite", () => {
 
   test("act-only consent reaches the canonical dispatcher without requiring a read shape", async () => {
     const vault = await plane();
-    vault.approveGrant("planner", {
+    vault.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", table: "task", verbs: "act" }],
     });

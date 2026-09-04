@@ -69,7 +69,7 @@ describe("replica projection doorbell-only mode", () => {
     since: ReturnType<typeof currentReplicaLogState>["watermark"];
   }> {
     const vault = await plane();
-    vault.approveGrant("planner", {
+    vault.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [
         {
@@ -163,13 +163,12 @@ describe("replica projection doorbell-only mode", () => {
     expect(doorbellOnly.batch.to).not.toStrictEqual(since);
   });
 
-  test("a consent change still rebootstraps identically in both modes", async () => {
+  test("an install-register change still rebootstraps identically in both modes", async () => {
     const { vault, since } = await mixedPage();
-    // Shape control: neither mode may advance past it as data.
-    vault.approveGrant("planner", {
-      purpose: "dpv:ServiceProvision",
-      scopes: [{ schema: "schedule", table: "event", verbs: "read" }],
-    });
+    // Shape control: neither mode may advance past it as data. Since #928 the
+    // register — whether the app is installed — is what moves a shape, not a
+    // grant, and revoking the install is what takes the shape away.
+    vault.revokeApp("planner");
 
     const full = projectReplicaPage(vault.db.vault, access, since);
     const doorbellOnly = projectReplicaPage(
@@ -218,7 +217,7 @@ describe("replica projection under retention compaction", () => {
       () => fs.rm(dir, { recursive: true, force: true }),
       () => vault.stop()
     );
-    vault.approveGrant("planner", {
+    vault.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [
         {
@@ -230,8 +229,8 @@ describe("replica projection under retention compaction", () => {
         },
       ],
     });
-    // Consent settles before the replayed window; a grant change inside it
-    // would rebootstrap instead.
+    // The install settles before the replayed window; a register change inside
+    // it would rebootstrap instead.
     const granted = currentReplicaLogState(vault.db.vault).watermark;
     const insert = vault.db.vault.prepare(
       `INSERT INTO schedule_task
@@ -410,7 +409,7 @@ describe("replica projection of declared long text", () => {
       () => fs.rm(dir, { recursive: true, force: true }),
       () => vault.stop()
     );
-    vault.approveGrant("planner", {
+    vault.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [
         {

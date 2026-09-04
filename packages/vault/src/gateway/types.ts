@@ -49,6 +49,13 @@ export interface Identity {
   scopeClamp?: readonly ExecutionScopeSpec[];
   /** Carried from the credential; independent of `mayAct` on purpose. */
   onBehalfOfOwner?: { ownerId: string; mayAct: boolean };
+  /**
+   * The one agent that holds NO standing answer (#928 A3): the assistant is
+   * the owner's own voice, so its reach is the acting owner's, capped by the
+   * same trust tier and the same per-run clamp. Set from the enrolment row,
+   * never from the credential, so it cannot be claimed.
+   */
+  assistant?: true;
 }
 
 export interface FilterClause {

@@ -11,6 +11,7 @@ import {
 
 import { GatewayDatabase } from "./gateway-db.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
+import { runWithVaultContext } from "./vault-context.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 import type { VaultPlane } from "./vault-plane.js";
 import { usePlaneFixture } from "./vault-plane.test-fixtures.js";
@@ -379,11 +380,19 @@ describe("VaultPlane ordinary Commons commands", () => {
         .get("Must be refused")
     ).toMatchObject({ n: 0 });
 
-    const background = await member.invokeAsAssistant({
-      command: "tally.add_expense",
-      input: expenseInput("Member automation must not run"),
-      intentId: "member-background-write",
-    });
+    const background = await runWithVaultContext(
+      {
+        vaultId: member.boot.vaultId,
+        ownerId: member.boot.ownerPartyId,
+        ownsVault: true,
+      },
+      () =>
+        member.invokeAsAssistant({
+          command: "tally.add_expense",
+          input: expenseInput("Member automation must not run"),
+          intentId: "member-background-write",
+        })
+    );
     expect(background).toMatchObject({
       status: "denied",
       reason: "commons automations execute only at the steward's seat",
@@ -396,14 +405,22 @@ describe("VaultPlane ordinary Commons commands", () => {
         .get("member-background-write")
     ).toMatchObject({ n: 0 });
 
-    const stewardBackground = await steward.invokeAsAssistant({
-      command: "tally.add_expense",
-      input: {
-        ...expenseInput("Steward automation"),
-        paid_by: steward.boot.ownerPartyId,
+    const stewardBackground = await runWithVaultContext(
+      {
+        vaultId: steward.boot.vaultId,
+        ownerId: steward.boot.ownerPartyId,
+        ownsVault: true,
       },
-      intentId: "steward-background-write",
-    });
+      () =>
+        steward.invokeAsAssistant({
+          command: "tally.add_expense",
+          input: {
+            ...expenseInput("Steward automation"),
+            paid_by: steward.boot.ownerPartyId,
+          },
+          intentId: "steward-background-write",
+        })
+    );
     expect(stewardBackground.status).toBe("executed");
     expect(
       steward.db.vault

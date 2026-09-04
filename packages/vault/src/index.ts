@@ -273,6 +273,21 @@ export {
   type DeclineShareInput,
   type DeclineShareResult,
 } from "./grant/grant-store.js";
+// An automation's standing answer in the one plane (#928 A3).
+export {
+  automationAnswers,
+  automationSubjectsOf,
+  backfillAutomationAnswers,
+  recordAutomationAnswers,
+  revokeAutomationAnswers,
+  AUTOMATION_ENTITY_SUBJECT,
+  AUTOMATION_PACK_SUBJECT,
+  type AutomationAnswer,
+  type AutomationDecision,
+  type AutomationScope,
+  type AutomationSubject,
+  type AutomationVerb,
+} from "./grant/automation-authority.js";
 // The closed declaration of what the plane may be asked (#883).
 export {
   AUTHORITY_REGISTRY,

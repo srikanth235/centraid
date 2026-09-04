@@ -26,9 +26,15 @@ import type {
 } from "@centraid/server/engine";
 import {
   assertExtSchemaOwnership,
+  automationAnswers,
+  automationSubjectsOf,
+  backfillAutomationAnswers,
   buildAssistantContext,
   createGateway,
   createGrant,
+  nowIso,
+  recordAutomationAnswers,
+  revokeAutomationAnswers,
   ensureAgentEnrolled,
   ensureAppEnrolled,
   bootstrapVault,
@@ -95,6 +101,7 @@ import {
   vaultFileBytes,
 } from "@centraid/vault";
 import type {
+  AutomationAnswer,
   VaultFootprintBudget,
   InstalledAppRow,
   ScopeRequestSummary,
@@ -133,6 +140,7 @@ import type {
 
 import { loadSqliteVec } from "../enrich/sqlite-vec.js";
 import { unrefTimer } from "../lib/unref-timer.js";
+import { recordDeclaredManifest } from "../routes/replica-declared-scopes.js";
 import { GroupCommitQueue } from "./group-commit-queue.js";
 import { decideJournalArchive } from "./journal-limit.js";
 import { NoticeStore } from "./notices.js";
@@ -241,6 +249,9 @@ export interface GrantRequest {
   scopes: ScopeSpec[];
   expiresAt?: string;
 }
+
+/** What a manifest with no stated purpose is installed under (#306). */
+const DEFAULT_INSTALL_PURPOSE = "dpv:ServiceProvision";
 
 export interface InstallScopeBlock {
   purpose?: string;
@@ -576,6 +587,20 @@ export class VaultPlane {
     this.walCaptureConfigured = options.walCaptureConfigured ?? (() => true);
     this.walShipperOptions = options.walShipper ?? {};
     this.walShipper = this.createWalShipperIfOwner();
+    // ONE-SHOT (#928 A3): an automation grant recorded before the plane moved
+    // becomes a standing answer, and an owner's refusal a `declined` row. Open
+    // at mount is the one path every vault takes, and the backfill returns at
+    // its first statement once any automation answer exists.
+    const backfilled = backfillAutomationAnswers(
+      this.db.vault,
+      this.boot.ownerPartyId,
+      nowIso()
+    );
+    if (backfilled.granted + backfilled.declined > 0) {
+      this.logger.info(
+        `vault plane: migrated automation authority (${backfilled.granted} granted, ${backfilled.declined} declined)`
+      );
+    }
   }
 
   private ownsWalLifecycle(): boolean {
@@ -791,8 +816,10 @@ export class VaultPlane {
     // Uninstall WIPES the consent memory (#308): it is "no to the whole app",
     // not "no to these scopes forever" — a reinstall is a fresh consent.
     if (app) clearAllScopeTombstones(this.db, { appId: app.appId });
-    if (agent)
+    if (agent) {
       clearAllScopeTombstones(this.db, { granteePartyId: agent.partyId });
+      revokeAutomationAnswers(this.db.vault, appId, nowIso());
+    }
     closeObsoleteScopeRequest(this.db, "app", appId);
     closeObsoleteScopeRequest(this.db, "agent", appId);
     if (hadOpenScopeRequest) this.ringNotificationsChanged(false);
@@ -840,6 +867,18 @@ export class VaultPlane {
       { granteePartyId: agent.partyId },
       request.scopes
     );
+    // The owner's YES, in the one plane (#928 A3). Minted here because this is
+    // the one path both the install-time approval and the owner's decision on
+    // a parked widening run through — a manifest that only PARKS reaches
+    // `openScopeRequest` instead and mints nothing, which is what keeps a
+    // widened manifest parked rather than silently answered.
+    recordAutomationAnswers(this.db.vault, {
+      principalId: appId,
+      ownerPartyId: this.boot.ownerPartyId,
+      subjects: automationSubjectsOf(request.scopes),
+      decision: "granted",
+      now: nowIso(),
+    });
     return createGrant(this.db, {
       granteePartyId: agent.partyId,
       purposeConceptId: purpose,
@@ -854,6 +893,21 @@ export class VaultPlane {
    *  manifests, so a re-publish would steer its own containment (#306). */
   ensureAppInstallGrant(appId: string, block: InstallScopeBlock): void {
     const app = ensureAppEnrolled(this.db, appId);
+    // The app's own build-time declaration, which is what a replica shape is
+    // composed from (#928, AP-apps-declare). Recorded here because this is the
+    // one path that reads an `app.json`, and recorded whether or not the block
+    // widens: a widening still parks as a GRANT below, while the declaration
+    // itself is the reviewable artefact the static tripwire holds.
+    recordDeclaredManifest(this.db.vault, appId, {
+      purpose: block.purpose ?? DEFAULT_INSTALL_PURPOSE,
+      scopes: block.scopes.map((scope) => ({
+        schema: scope.schema,
+        ...(scope.table === undefined ? {} : { table: scope.table }),
+        verbs: scope.verbs,
+        ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
+        ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
+      })),
+    });
     this.ensureInstallGrant({
       plane: "app",
       appId,
@@ -886,7 +940,7 @@ export class VaultPlane {
     grants: GrantSummary[];
     approve: (request: GrantRequest) => void;
   }): void {
-    const purpose = input.block.purpose ?? "dpv:ServiceProvision";
+    const purpose = input.block.purpose ?? DEFAULT_INSTALL_PURPOSE;
     const existingRequest = this.listScopeRequests().find(
       (request) =>
         request.plane === input.plane && request.appId === input.appId
@@ -954,6 +1008,17 @@ export class VaultPlane {
       else this.approveAgentGrant(request.appId, grantRequest);
     } else {
       writeScopeTombstones(this.db, grantee, request.scopes);
+      // A refusal is an ANSWER (#883 V-table): without the row, the next
+      // compile cannot tell "told no" from "never asked" and re-asks.
+      if (request.plane === "agent") {
+        recordAutomationAnswers(this.db.vault, {
+          principalId: request.appId,
+          ownerPartyId: this.boot.ownerPartyId,
+          subjects: automationSubjectsOf(request.scopes),
+          decision: "declined",
+          now: nowIso(),
+        });
+      }
     }
     markScopeRequestDecided(
       this.db,
@@ -996,10 +1061,18 @@ export class VaultPlane {
     }));
   }
 
-  listAgents(): Array<AgentSummary & { grants: GrantSummary[] }> {
+  listAgents(): Array<
+    AgentSummary & { grants: GrantSummary[]; answers: AutomationAnswer[] }
+  > {
+    const answers = automationAnswers(this.db.vault);
     return listEnrolledAgents(this.db).map((agent) => ({
       ...agent,
       grants: listActiveAgentGrants(this.db, agent.partyId),
+      // The standing answer the Approvals surfaces read (#928 A3), keyed by
+      // the automation's own id rather than by its agent party.
+      answers: answers.filter(
+        (answer) => answer.principalId === agent.enrollmentKey
+      ),
     }));
   }
 
@@ -1516,83 +1589,54 @@ export class VaultPlane {
   }
 
   /**
-   * THE ASSISTANT'S AUTHORITY, WRITTEN DOWN (#308). Writes ride an enrolled
+   * THE ASSISTANT HOLDS NO STANDING ANSWER (#928 A3). Writes ride the enrolled
    * `_assistant` agent, not the owner-device credential, so confirm-gated
-   * commands park for the owner. `_assistant` holds a standing `act` grant
-   * over EVERY command schema — more privileged than any installed app — and
-   * that is intentional; the containment is that confirm-gated commands park,
-   * it cannot decide the outbox or reveal sealed plaintext, and every act is
-   * receipted under its own identity. The owner can narrow it durably: a
-   * revoked grant tombstones its schemas and the self-heal skips them.
+   * commands still park for the owner and every act is receipted under its own
+   * identity — but its REACH is the acting owner's, carried on the on-behalf-of
+   * identity and capped by that owner's trust tier. With no acting owner behind
+   * the call there is nothing to ride and the gateway refuses.
    */
   async invokeAsAssistant(request: InvokeRequest): Promise<InvokeOutcome> {
     const agent = ensureAgentEnrolled(this.db, "_assistant", {
       modelRef: "centraid-assistant",
       displayName: "Assistant",
     });
-    // Self-healing: a later app's ext band joins with no re-enrollment.
-    const schemas = this.db.vault
-      .prepare(
-        `SELECT DISTINCT owner_schema FROM agent_command ORDER BY owner_schema`
-      )
-      .all() as { owner_schema: string }[];
-    const covered = new Set(
-      (
-        this.db.vault
-          .prepare(
-            // R10 (#916): one dotted `entity` column, so the schema half is
-            // the text before the dot — a whole-schema scope has no dot and
-            // is its own schema name.
-            `SELECT DISTINCT s.entity FROM access_grant_scope s
-               JOIN access_grant g ON g.grant_id = s.grant_id
-              WHERE g.grantee_party_id = ? AND g.status = 'active' AND g.revoked_at IS NULL`
-          )
-          .all(agent.partyId) as { entity: string }[]
-      ).map((r) =>
-        r.entity.includes(".")
-          ? r.entity.slice(0, r.entity.indexOf("."))
-          : r.entity
-      )
-    );
-    // The owner's "no" binds the assistant too (#308 A4/B3).
-    for (const t of listScopeTombstones(this.db, {
-      granteePartyId: agent.partyId,
-    })) {
-      if (t.verbs === "act") covered.add(t.schema);
-    }
-    const missing = schemas.filter((s) => !covered.has(s.owner_schema));
-    if (missing.length > 0) {
-      const purpose = purposeConceptId(this.db, "dpv:ServiceProvision");
-      if (!purpose)
-        throw new Error("vault vocabulary missing dpv:ServiceProvision");
-      createGrant(this.db, {
-        granteePartyId: agent.partyId,
-        purposeConceptId: purpose,
-        grantedByPartyId: this.boot.ownerPartyId,
-        scopes: missing.map((s) => ({
-          schema: s.owner_schema,
-          verbs: "act" as const,
-        })),
-      });
-      this.logger.info(
-        `vault plane: extended the _assistant standing act grant (+${missing.length} schema(s))`
-      );
-    }
+    const scope = vaultContext();
     const cred: Credential = {
       kind: "agent",
       agentId: agent.agentId,
       deviceId: this.boot.deviceId,
       deviceKey: this.boot.deviceKey,
+      ...(scope?.ownerId === undefined
+        ? {}
+        : {
+            onBehalfOfOwner: {
+              ownerId: scope.ownerId,
+              mayAct: scope.ownsVault === true,
+            },
+          }),
     };
     return this.invoke(cred, request);
   }
 
-  /** OWNER-DEVICE credential: no grant keyhole applies. */
-  sqlAsOwner(sql: string, maxRows?: number): VaultSqlResult {
+  /**
+   * Whole-model SQL is the OWNER'S surface, and the assistant only ever holds
+   * it on the owner's behalf (#928 A3). The acting owner is checked here rather
+   * than assumed: with nobody behind the call — a scheduler-fired run — there is
+   * no authority to exercise. `gateway.sql` receipts both the allow and the
+   * refusal, so the exercise is evidence either way.
+   */
+  sqlAsAssistant(sql: string, maxRows?: number): VaultSqlResult {
+    const scope = vaultContext();
+    if (scope?.ownsVault !== true) {
+      throw new GatewayError(
+        "access",
+        "whole-model sql is the owner's surface — the assistant holds it only on an acting owner's behalf"
+      );
+    }
     return this.gateway.sql(this.ownerCredential, {
       sql,
       ...(maxRows === undefined ? {} : { maxRows }),
-      purpose: "owner-assistant",
     });
   }
 

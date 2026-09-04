@@ -97,16 +97,14 @@ export const ALLOW_LIST = {
     "owns the phone's replica intent outbox tables",
   "packages/client/src/replica/store-core.ts":
     "owns the client's replica mirror tables",
-  "packages/server/src/routes/replica-grantees.ts":
-    "resolves which grants a replica may mirror from the consent tables",
   "packages/server/src/routes/replica-intent-shape.ts":
     "reads the invocation commit log the replica acknowledges against",
   "packages/server/src/routes/replica-projection.ts":
-    "projects a grant's scope into the shape a replica receives",
+    "reads the install register a replica shape is controlled by",
   "packages/server/src/routes/replica-routes.ts":
     "streams the change log rows that ARE the replica protocol",
   "packages/server/src/routes/replica-shape.ts":
-    "answers what a replica may hold, from the change log's own state",
+    "answers what a replica may hold, from the install register and the change log",
   // ── the share / commons plane: server-owned tables, not vault entities ──
   "packages/server/src/serve/gateway-schema.ts":
     "creates the server-owned share-plane tables themselves",

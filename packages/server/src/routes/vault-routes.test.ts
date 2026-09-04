@@ -14,6 +14,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { NotificationsEventBus } from "../serve/notifications-events.js";
+import { runWithVaultContext } from "../serve/vault-context.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";
 import { makeVaultRouteHandler } from "./vault-routes.js";
@@ -305,11 +306,19 @@ describe("vault-routes", () => {
       severity: "high",
       detail: { sourceType: "automation", outcome: "failure" },
     });
-    const parkedResult = await plane.invokeAsAssistant({
-      command: "social.send_message",
-      input: { message_id: "not-yet-real" },
-      purpose: "dpv:ServiceProvision",
-    });
+    const parkedResult = await runWithVaultContext(
+      {
+        vaultId: plane.boot.vaultId,
+        ownerId: plane.boot.ownerPartyId,
+        ownsVault: true,
+      },
+      () =>
+        plane.invokeAsAssistant({
+          command: "social.send_message",
+          input: { message_id: "not-yet-real" },
+          purpose: "dpv:ServiceProvision",
+        })
+    );
     expect(parkedResult.status).toBe("parked");
 
     const freshNotifications = await get(
