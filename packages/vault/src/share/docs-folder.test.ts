@@ -7,8 +7,9 @@ import {
   closeOpenVaults,
   household,
   placementAuthority,
+  unplaceProjection,
 } from "./placement-fixture.js";
-import { shareItemsToVault, unshareFromVault } from "./placement.js";
+import { shareItemsToVault } from "./placement.js";
 
 describe("Docs folder placement", () => {
   afterEach(closeOpenVaults);
@@ -95,13 +96,7 @@ describe("Docs folder placement", () => {
         .get(later)
     ).toMatchObject({ n: 1 });
 
-    expect(
-      unshareFromVault({
-        audience,
-        itemType: "docs.folder",
-        itemId: trip,
-      }).removed
-    ).toBe(true);
+    expect(unplaceProjection(audience, "docs.folder", trip).removed).toBe(true);
     expect(
       audience.vault.prepare("SELECT COUNT(*) AS n FROM core_document").get()
     ).toMatchObject({ n: 0 });

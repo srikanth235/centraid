@@ -64,16 +64,12 @@ export {
 // they sit outside the per-vault handler path by design.
 export {
   shareItemsToVault,
-  unshareFromVault,
   moveOutOfVault,
-  readShareOrigin,
   type ShareVaultRef,
   type ShareItemsToVaultInput,
   type ShareItemsToVaultResult,
-  type UnshareFromVaultInput,
   type UnshareFromVaultResult,
   type MoveOutOfVaultInput,
-  type ShareOriginRecord,
 } from "./share/placement.js";
 // The two halves of a share (#726): `readShareClosure` is origin-side and
 // read-only, `projectShareClosure` audience-side and opens the single

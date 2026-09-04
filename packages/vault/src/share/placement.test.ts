@@ -16,14 +16,11 @@ import {
   casPath,
   closeOpenVaults,
   household,
-  seedPhoto,
   placementAuthority,
-} from "./placement-fixture.js";
-import {
-  moveOutOfVault,
   readShareOrigin,
-  shareItemsToVault,
-} from "./placement.js";
+  seedPhoto,
+} from "./placement-fixture.js";
+import { moveOutOfVault, shareItemsToVault } from "./placement.js";
 
 describe("placement suite", () => {
   afterEach(closeOpenVaults);

@@ -5,18 +5,24 @@
 
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 
 import { expect } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { sweepLocalOrphans } from "../blob/local-orphan-sweep.js";
+import { liveBlobShas } from "../blob/read.js";
 import { blobUriFor } from "../blob/store.js";
 import { bootstrapVault } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
+import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
+import { isShareableItemType, shareOriginEntityType } from "./closure.js";
+import type { ShareableItemType } from "./closure.js";
+import { deleteProjectedClosure } from "./removal.js";
 
 const open: VaultDb[] = [];
 
@@ -179,4 +185,98 @@ export function placementAuthority(
     principalId: audiencePartyId,
     verb: "view",
   };
+}
+
+/**
+ * The provenance row a placement writes. It lives HERE, with the un-place that
+ * reads it: no production path asks a projected row who sent it any more — the
+ * subscription seat asks its own lineage, which is keyed by shape and answers
+ * for two grants over one photograph, where this table names one sender.
+ */
+export interface ShareOriginRecord {
+  itemType: string;
+  itemId: string;
+  originVaultId: string;
+  originItemId: string;
+  sharedBy: string;
+  sharedAt: number;
+}
+
+export function readShareOrigin(
+  audience: DatabaseSync,
+  itemType: string,
+  itemId: string
+): ShareOriginRecord | undefined {
+  const row = audience
+    .prepare(
+      `SELECT origin_vault_id, origin_item_id, shared_by, shared_at
+         FROM core_share_origin WHERE target_type = ? AND target_id = ?`
+    )
+    .get(
+      isShareableItemType(itemType)
+        ? shareOriginEntityType(itemType)
+        : itemType,
+      itemId
+    ) as
+    | {
+        origin_vault_id: string;
+        origin_item_id: string;
+        shared_by: string;
+        shared_at: number;
+      }
+    | undefined;
+  if (!row) return undefined;
+  return {
+    itemType,
+    itemId,
+    originVaultId: row.origin_vault_id,
+    originItemId: row.origin_item_id,
+    sharedBy: row.shared_by,
+    sharedAt: row.shared_at,
+  };
+}
+
+export interface UnplaceResult {
+  removed: boolean;
+  /** The inode survives until the LAST vault lets go; origin bytes stay. */
+  orphanedShas: string[];
+}
+
+/**
+ * Un-place a same-owner placement, for the tests that measure what removal
+ * leaves behind — blob liveness, inode survival, an audience's own rows.
+ *
+ * This is a FIXTURE, not a plane: `unshareFromVault` was production code with
+ * no production caller once #929 deleted the commons rail, and a share's
+ * removal is `purgeShareShape` (subscription-seat.ts), which walks the shape's
+ * own lineage rather than guessing at reachability. What is kept here is the
+ * one thing these tests need and that path cannot give them — removal of rows
+ * placed by `shareItemsToVault`, which writes no lineage.
+ */
+export function unplaceProjection(
+  audience: VaultDb,
+  itemType: ShareableItemType,
+  itemId: string
+): UnplaceResult {
+  const db = audience.vault;
+  if (!readShareOrigin(db, itemType, itemId))
+    return { removed: false, orphanedShas: [] };
+  db.exec("BEGIN IMMEDIATE");
+  let shas: string[];
+  try {
+    const commit = beginReplicaCommit(db);
+    const removal = deleteProjectedClosure(db, itemType, itemId);
+    db.prepare(
+      "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
+    ).run(shareOriginEntityType(itemType), itemId);
+    shas = removal.shas;
+    endReplicaCommit(db, commit);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  // AFTER the commit: a sha another row still holds reads live, never guessed.
+  const live = liveBlobShas(db);
+  return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
 }

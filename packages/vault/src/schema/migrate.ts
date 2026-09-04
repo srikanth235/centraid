@@ -4,8 +4,9 @@
 // stated rather than reconstructed, because v0 had no vaults in the field to
 // walk forward from. It is HISTORY now and does not grow: #929 needed to reach
 // files that already exist, which is the moment migrate.ts always said the
-// baseline text freezes and rung two begins. A fresh file runs both and lands
-// on `PRAGMA user_version = 2`; a file frozen at 1 runs only rung two.
+// baseline text freezes and rung two begins. A fresh file runs every rung and
+// lands on `PRAGMA user_version = 3`; a file frozen at 1 runs rungs two and
+// three, and one frozen at 2 runs only rung three.
 //
 // That number stays load-bearing beyond this file: it is the downgrade guard
 // (`VaultSchemaAheadError`) and the "schema version this build understands"
@@ -16,7 +17,10 @@ import type { DatabaseSync } from "node:sqlite";
 import { ACCESS_DDL, ACCESS_INSTALL_MEMORY_DDL } from "./access.js";
 import { AGENT_DDL } from "./agent.js";
 import { AUDIT_DDL } from "./audit.js";
-import { SHARE_AUTHORITY_DDL } from "./authority.js";
+import {
+  SHARE_AUTHORITY_DDL,
+  SHARE_DELIVERY_CONFIG_RECUT_DDL,
+} from "./authority.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
 import { BLOB_DDL } from "./blob.js";
 import { CORE_DDL, LINK_ANCHOR_DDL, SHARE_ORIGIN_DDL } from "./core.js";
@@ -167,6 +171,13 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     "DROP TRIGGER IF EXISTS core_entity_revoke_on_purge;",
     ENTITY_PURGE_REVOKE_DDL,
   ].join("\n"),
+  // RUNG THREE (#929, round 2) — `share_delivery_config` gains the rail's
+  // `departure_policy`, and it is its OWN rung rather than an addition to rung
+  // two because the golden corpus is frozen AT user_version 2: a file that has
+  // already climbed a rung never climbs it again, so a shape change made after
+  // a release is a new rung or it reaches nothing. The pass that reads the
+  // rail's column (`migrateCommonsToSubscriptions`) runs on open, after this.
+  SHARE_DELIVERY_CONFIG_RECUT_DDL,
 ];
 
 /**

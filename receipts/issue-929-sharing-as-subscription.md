@@ -195,7 +195,7 @@ RED, against a stub that returned zeros (`grantsMigrated: 0, audiences: 0`):
 
 ```
 × a three-member Tally commons across two gateways keeps every member and every ledger row
-× a departed member's answer is revoked, and the ledger keeps their rows
+× a departed member's answer is revoked, stopped, and their ledger rows stay
 AssertionError: expected +0 to be 1
 Test Files  1 failed (1)   Tests  2 failed (2)
 ```
@@ -813,3 +813,102 @@ Screenshot: `artifacts/e2e/ui-impact/issue-929-person-vaults.png`, emitted by `a
 
 **NOT RUN HERE, NOT FABRICATED.** `bun run --cwd apps/web e2e -- people.spec.ts` fails in this container before it reaches the person screen: the inline app view never leaves `Loading People…`, with the browser replica reporting `opfs-sahpool: NoModificationAllowedError` and `409` on `/centraid/_vault/replica/checkpoint`. Reproduced on the base commit `6f7526095` with this lane's source reverted — same failure, same line — so it is a red on the branch, not this change (`docs-drive.spec.ts` fails identically). **CI must run `apps/web e2e -- people.spec.ts`** for the screenshot above.
 
+
+## Wave 4d — the verifier's six, answered
+
+Round 1 of the wave audit REFUTED 4a and 4b. Each finding, and what closes it.
+
+| # | finding | fix |
+| --- | --- | --- |
+| 1 | the revoke loop walked EVERY live answer on the container, so a plain `share.grant` to a non-roster party was revoked on the next `openVaultDb` | `rosterParties()` — the loop is scoped to parties `share_commons_member_state` holds a row for, any status |
+| 2 | `isShareableItemType` admits `locker.item`, which `createShareGrant` refuses; the throw escaped `openVaultDb` and the file never opened again | guard is `isOfferableSubjectType` (the registry `createShareGrant` itself asks), and an unofferable container now KEEPS its rail — a pass that did not empty the tables does not drop them, so the only record of that share survives |
+| 3 | `max_size_bytes` and `departure_policy` were dropped with the table: a ceiling the owner set was widened to the 4 GiB default | `liveCircleGrants` selects both; `createShareGrant` takes `departurePolicy` and writes both halves into `share_delivery_config`, which gains the column in RUNG THREE (below) |
+| 4 | revoking is not stopping: a `delivered` row under a revoked answer is never swept | the revoke calls `stopShareSubscription`, which is what moves it to `remove_sent`; its `origin` narrows to the handle it actually reads, so a caller holding no blob store can settle a removal |
+| 5 | the 4b rewrite dropped the only case exercising the revoke path; `revoked`/`unofferable` were asserted by nothing | four cases restored/added (below); 4a's RED block now quotes a test that exists |
+| 6 | `share-reachability.json` went from `[]` to two entries with no sign-off | `unshareFromVault` DELETED with `strandedProjections`, `UnshareFromVaultInput` and its barrel export; its allowlist row is gone |
+
+`departure_policy` is not a new idea: it is the rail's own column, and
+SECURITY.md § departure rests on `retain-ledger-history` keeping a departed
+member's rows in the REMAINING members' ledgers. `defaultDeparturePolicy`
+carries the rail's own rule — `tally.group` retains, everything else removes —
+so a new `share.grant` over an accounting group answers the same way a
+migrated one does. A row exists when either half is not the default.
+
+Deletion with replacement for #6: a share's removal is `purgeShareShape`
+(`subscription-seat.ts`), which walks the shape's own lineage — that is what
+makes BUG-9's stranded projections structural rather than a sweep, and it
+answers correctly for two grants over one photograph, where `core_share_origin`
+names one sender. What the four placement tests still need — removal of rows
+`shareItemsToVault` placed, which write no lineage — is `unplaceProjection` in
+`placement-fixture.ts`, a FIXTURE that says so. `readShareOrigin` and
+`ShareOriginRecord` moved there with it: they lost their last production caller
+in the same cut, and the gate named them the moment `unshareFromVault` went.
+
+RED first, against the pre-fix migration (revoke unscoped, closure guard, no
+stop, no delivery config, unconditional drop):
+
+```
+× a departed member's answer is revoked, stopped, and their ledger rows stay
+× an answer the rail never wrote survives the migration
+× a container the registry cannot honour is named, never thrown, and keeps its rail
+× the rail's ceiling and departure policy travel with the answer
+Test Files  1 failed (1)   Tests  4 failed | 2 passed (6)
+```
+
+GREEN, same command, with the fixes:
+
+```
+Test Files  1 passed (1)   Tests  6 passed (6)
+```
+
+```sh
+bunx vitest run src/share/subscription-migration.test.ts --root packages/vault
+bun run --cwd packages/vault typecheck && bun run --cwd packages/vault test
+bun run lint:schema-export && bun run lint:vault-sql
+node scripts/check-share-reachability.mjs
+```
+
+THE LADDER MOVED AGAIN, and the reason is the same one wave 4b recorded, one
+turn later: the golden corpus is frozen AT `user_version = 2`, so extending
+rung two reaches nothing that has already climbed it. `departure_policy` is
+RUNG THREE. It is a RE-CUT of `share_delivery_config`, not an
+`ALTER … ADD COLUMN`: SQLite appends an added column to the table's stored
+text, so a migrated file would carry DDL no fresh build can produce and
+`golden-vault.test.ts` compares exactly that — the re-cut leaves one text for
+both, and the corpus does not need re-freezing. `migrate.test.ts` moves from
+two rungs to three, and the schema fingerprint with it.
+
+Files: `packages/vault/src/share/subscription-migration.ts`,
+`packages/vault/src/share/subscription-migration.test.ts`,
+`packages/vault/src/share/placement.ts`,
+`packages/vault/src/share/placement-fixture.ts`,
+`packages/vault/src/share/placement.test.ts`,
+`packages/vault/src/share/placement-lifecycle.test.ts`,
+`packages/vault/src/share/household.test.ts`,
+`packages/vault/src/share/docs-folder.test.ts`,
+`packages/vault/src/blob/local-orphan-sweep.test.ts`,
+`packages/vault/src/grant/fulfillment.ts`,
+`packages/vault/src/grant/grant-store.ts`,
+`packages/vault/src/grant/grant-records.ts`,
+`packages/vault/src/schema/authority.ts`,
+`packages/vault/src/schema/migrate.ts`,
+`packages/vault/src/schema/migrate.test.ts`,
+`packages/vault/src/gateway/portable-export.ts`,
+`packages/vault/src/index.ts`,
+`packages/server/src/engine/stores/gateway-db.test.ts` (the ledger band reads
+the VAULT's rung count, which is the point of that assertion),
+`share-reachability.json`, `tests/schema-export-fingerprint.json`.
+
+Finding, for the root. The allowlist is ONE entry, not `[]`:
+`subscription-intent.ts#signMemberIntent` is wave 3's member half, whose caller
+is the share sheet in lane H. Removing it would delete verified engine code
+ahead of the seat that signs with it, which is a different call from #6's — that
+capability had lost its caller, this one has not gained it yet.
+
+### Falsification
+
+| claim | throwaway check | result |
+| --- | --- | --- |
+| the revoke loop no longer reaches a non-roster answer | seeded a `share.grant` to Carol beside a one-member commons and migrated | held: `revoked` is 0, both answers stand, and the pre-fix build fails the same case |
+| the ceiling really travelled, rather than the default matching by luck | seeded 5,000,000 — a value the 4 GiB default cannot produce — and read `maxSizeBytes` back off the migrated answer | held; the pre-fix build reads `null` |
+| the new column could ride rung two | put it there first and ran `golden-vault.test.ts` | FALSIFIED: the corpus is frozen at `user_version = 2` and never re-runs rung two, so the frozen and fresh DDL diverged. It is rung three, and an `ALTER` was falsified the same way — SQLite's stored text for an added column is one no fresh `CREATE` produces |

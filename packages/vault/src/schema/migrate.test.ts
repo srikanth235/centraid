@@ -145,13 +145,13 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("TWO rungs: the baseline plus #929, and a fresh vault stops at user_version 2", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(2);
+  test("THREE rungs: the baseline plus #929's two, and a fresh vault stops at user_version 3", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(3);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(2);
+    expect(version.user_version).toBe(3);
     for (const table of [
       "locker_auth_credential",
       "core_entity",
@@ -454,7 +454,7 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("a fresh file on disk reopens with no second rung and no schema drift", () => {
+  test("a fresh file on disk reopens with no further rung and no schema drift", () => {
     // ONE BASELINE (#916): "reopen is a no-op" is the whole compatibility
     // story a v0 file has. On a REAL file — the replay above re-runs `migrate`
     // on a handle that never left the process.
@@ -474,10 +474,10 @@ describe("schema/migrate", () => {
     first.close();
 
     const vaultFile = path.join(dir, "vault.db");
-    expect(userVersionOf(vaultFile)).toBe(2);
+    expect(userVersionOf(vaultFile)).toBe(3);
 
     const second = openVaultDb({ dir });
-    expect(userVersionOf(vaultFile)).toBe(2);
+    expect(userVersionOf(vaultFile)).toBe(3);
     expect(shapeOf(second)).toBe(before);
     second.close();
   });

@@ -162,3 +162,32 @@ CREATE TABLE share_fulfillment (
 ) STRICT;
 ${touchUpdatedAt("share_fulfillment", ["grant_id", "peer_vault_id"])}
 `;
+
+/**
+ * `share_delivery_config` RE-CUT with the rail's second half (#929, rung two).
+ *
+ * A grant's delivery config now carries `departure_policy` beside its ceiling:
+ * what a departing audience leaves behind in the REMAINING audiences'
+ * projections — `remove-member-only` scrubs their rows, `retain-ledger-history`
+ * keeps them so an accounting group's balances stay computable (SECURITY.md
+ * § departure). It is the commons rail's own column, carried across by
+ * `migrateCommonsToSubscriptions` before the rail is dropped.
+ *
+ * A RE-CUT, not an `ALTER … ADD COLUMN`: SQLite appends an added column to the
+ * table's STORED text, so a migrated file would carry DDL no fresh build can
+ * produce, and `golden-vault.test.ts` compares exactly that. Rebuilding the
+ * table leaves one text for both.
+ */
+export const SHARE_DELIVERY_CONFIG_RECUT_DDL = `
+ALTER TABLE share_delivery_config RENAME TO share_delivery_config_pre929;
+CREATE TABLE share_delivery_config (
+  grant_id         TEXT PRIMARY KEY
+    REFERENCES share_authority(authority_id) ON DELETE CASCADE,
+  max_size_bytes   INTEGER CHECK (max_size_bytes IS NULL OR max_size_bytes >= 0),
+  departure_policy TEXT NOT NULL DEFAULT 'remove-member-only'
+    CHECK (departure_policy IN ('remove-member-only','retain-ledger-history'))
+) STRICT;
+INSERT INTO share_delivery_config (grant_id, max_size_bytes)
+  SELECT grant_id, max_size_bytes FROM share_delivery_config_pre929;
+DROP TABLE share_delivery_config_pre929;
+`;

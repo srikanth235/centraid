@@ -421,3 +421,11 @@ export function importPortableVault(
   }
   return { ...result, blobs };
 }
+
+// Schema/export audit #929 (round 2): `share_delivery_config` gains
+// `departure_policy` — the second half of a grant's delivery config, carried
+// from the commons rail's own grant table so a migrated accounting group keeps
+// `retain-ledger-history`. The walk is `SELECT *` over a registered table, so
+// the column travels with the row it belongs to and needs no adapter; what
+// dropping it would cost is the same as dropping the ceiling beside it, which
+// is why the comment above extends rather than repeats.

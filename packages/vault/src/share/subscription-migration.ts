@@ -20,16 +20,22 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { channelForParty } from "../grant/channel.js";
+import { stopShareSubscription } from "../grant/fulfillment.js";
 import { setFulfillmentState } from "../grant/grant-fulfillment-rows.js";
 import {
   createShareGrant,
   listShareGrantsForSubject,
   revokeShareGrant,
 } from "../grant/grant-store.js";
-import type { ShareGrantCapability } from "../grant/grant-store.js";
-import { fulfillmentAnswerFor } from "../grant/subject-registry.js";
+import type {
+  ShareDeparturePolicy,
+  ShareGrantCapability,
+} from "../grant/grant-store.js";
+import {
+  fulfillmentAnswerFor,
+  isOfferableSubjectType,
+} from "../grant/subject-registry.js";
 import type { ShareableItemType } from "./closure.js";
-import { isShareableItemType } from "./closure.js";
 
 /**
  * The commons rail's own tables, in dependency order for the drop (#929). They
@@ -87,6 +93,8 @@ interface CircleGrantRow {
   container_type: string;
   container_id: string;
   steward_party_id: string;
+  departure_policy: string;
+  max_size_bytes: number | null;
 }
 
 interface RosterRow {
@@ -98,7 +106,7 @@ function liveCircleGrants(db: DatabaseSync): CircleGrantRow[] {
   return db
     .prepare(
       `SELECT grant_id, circle_id, container_type, container_id,
-              steward_party_id
+              steward_party_id, departure_policy, max_size_bytes
          FROM share_circle_grant
         WHERE revoked_at IS NULL
         ORDER BY created_at, grant_id`
@@ -120,6 +128,21 @@ function currentRoster(db: DatabaseSync, grant: CircleGrantRow): RosterRow[] {
     .all(grant.circle_id, grant.grant_id) as unknown as RosterRow[];
 }
 
+/**
+ * EVERY party the rail ever wrote a row for, whatever its status. The revoke
+ * pass is scoped to these and no wider: an answer this rail never wrote — a
+ * plain `share.grant` to somebody outside the circle — is not the migration's
+ * to end, and ending it would delete a share nobody asked to end.
+ */
+function rosterParties(db: DatabaseSync, grant: CircleGrantRow): Set<string> {
+  const rows = db
+    .prepare(
+      `SELECT party_id FROM share_commons_member_state WHERE grant_id = ?`
+    )
+    .all(grant.grant_id) as unknown as { party_id: string }[];
+  return new Set(rows.map((row) => row.party_id));
+}
+
 /** `edit` only where the subject registry can honour it; otherwise `view`. */
 function capabilityOf(
   containerType: ShareableItemType,
@@ -127,6 +150,14 @@ function capabilityOf(
 ): ShareGrantCapability {
   const editable = fulfillmentAnswerFor(containerType, "edit") !== undefined;
   return editable && rosterCapability === "read+write" ? "edit" : "view";
+}
+
+/** The rail's column is TEXT; anything the CHECK did not constrain reads as
+ *  the conservative half. */
+function departurePolicyOf(value: string): ShareDeparturePolicy {
+  return value === "retain-ledger-history"
+    ? "retain-ledger-history"
+    : "remove-member-only";
 }
 
 /**
@@ -152,7 +183,10 @@ export function migrateCommonsToSubscriptions(
     };
   for (const grant of liveCircleGrants(db)) {
     grantsMigrated += 1;
-    if (!isShareableItemType(grant.container_type)) {
+    // The registry, not the closure's item list: the closure admits types
+    // (`locker.item`) that `createShareGrant` refuses, and the throw escapes
+    // `openVaultDb` — a file that can never be opened again.
+    if (!isOfferableSubjectType(grant.container_type)) {
       unofferable.push(`${grant.container_type} ${grant.container_id}`);
       continue;
     }
@@ -161,7 +195,10 @@ export function migrateCommonsToSubscriptions(
     const current = new Map(
       roster.map((member) => [member.party_id, member.capability])
     );
-    // An answer whose roster row is gone ends here, not at the next drift.
+    // A DEPARTED MEMBER's answer ends here, not at the next drift — and only
+    // a departed member's: the loop is scoped to parties this rail wrote a row
+    // for, so an answer that came from anywhere else survives untouched.
+    const onRail = rosterParties(db, grant);
     for (const answer of listShareGrantsForSubject(
       db,
       containerType,
@@ -169,8 +206,22 @@ export function migrateCommonsToSubscriptions(
     )) {
       if (answer.audience.kind !== "party") continue;
       if (answer.audience.id === grant.steward_party_id) continue;
+      if (!onRail.has(answer.audience.id)) continue;
       if (current.has(answer.audience.id)) continue;
       revokeShareGrant(db, { grantId: answer.grantId, revokedAt: input.now });
+      // REVOKING IS NOT STOPPING. Only `stopShareSubscription` moves a
+      // delivered row to `remove_sent`, and only `remove_sent`/`syncing` rows
+      // are swept — a projection left `delivered` under a revoked answer is an
+      // audience holding rows the origin no longer projects.
+      stopShareSubscription({
+        origin: { vault: db },
+        originVaultId: input.stewardVaultId,
+        grantId: answer.grantId,
+        // No transport on an OPEN: this settles state, and the sweep carries
+        // the removal the moment the gateway has a channel again.
+        transportFor: () => undefined,
+        now: input.now,
+      });
       revoked += 1;
     }
     for (const member of roster) {
@@ -182,6 +233,12 @@ export function migrateCommonsToSubscriptions(
         capability: capabilityOf(containerType, member.capability),
         grantedAt: input.now,
         grantedBy: grant.steward_party_id,
+        // Both halves of the rail's delivery config travel with it. A ceiling
+        // the owner set must not be silently widened to the vault default, and
+        // an accounting group's `retain-ledger-history` is the property
+        // SECURITY.md § departure rests on.
+        maxSizeBytes: grant.max_size_bytes,
+        departurePolicy: departurePolicyOf(grant.departure_policy),
       });
       // A delivery row is what the subscription loop reads, so a migrated
       // audience is picked up on the next pass rather than on the next edit.
@@ -204,15 +261,18 @@ export function migrateCommonsToSubscriptions(
       audiences += 1;
     }
   }
-  // The rail's tables go with the pass that emptied them. A drop after the
-  // walk, never during it: a half-dropped rail is the one state a re-run
-  // cannot read its way out of.
+  // The rail's tables go with the pass that EMPTIED them, and a pass that did
+  // not empty them must not drop them: an unofferable container's grant has no
+  // standing answer to become, so dropping its rail would destroy the only
+  // record that the share existed. The rows survive, `unofferable` names them,
+  // and a later release that teaches the registry that type finishes the job.
   const tablesDropped: string[] = [];
-  for (const table of LEGACY_COMMONS_TABLES) {
-    if (!tableExists(db, table)) continue;
-    db.exec(`DROP TABLE ${JSON.stringify(table)}`);
-    tablesDropped.push(table);
-  }
+  if (unofferable.length === 0)
+    for (const table of LEGACY_COMMONS_TABLES) {
+      if (!tableExists(db, table)) continue;
+      db.exec(`DROP TABLE ${JSON.stringify(table)}`);
+      tablesDropped.push(table);
+    }
   return {
     legacyPresent: true,
     tablesDropped,

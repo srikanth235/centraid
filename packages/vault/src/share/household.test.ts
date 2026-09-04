@@ -7,8 +7,9 @@ import {
   household,
   placementAuthority,
   seedPhoto,
+  unplaceProjection,
 } from "./placement-fixture.js";
-import { shareItemsToVault, unshareFromVault } from "./placement.js";
+import { shareItemsToVault } from "./placement.js";
 
 describe("household audience placement", () => {
   afterEach(closeOpenVaults);
@@ -61,11 +62,8 @@ describe("household audience placement", () => {
     ).toMatchObject({ n: 2 });
 
     expect(
-      unshareFromVault({
-        audience,
-        itemType: "core.collection",
-        itemId: shared.items[0]!.itemId,
-      }).removed
+      unplaceProjection(audience, "core.collection", shared.items[0]!.itemId)
+        .removed
     ).toBe(true);
     expect(
       audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()

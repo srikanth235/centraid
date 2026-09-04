@@ -15,7 +15,11 @@ import { afterEach, describe, expect, test } from "vitest";
 import { registerTallyCommands } from "../commands/tally.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
-import { listShareGrantsForSubject } from "../grant/grant-store.js";
+import {
+  createShareGrant,
+  listShareGrantsForSubject,
+  readShareGrant,
+} from "../grant/grant-store.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import type { Household } from "./placement-fixture.js";
 import { closeOpenVaults, household } from "./placement-fixture.js";
@@ -84,8 +88,10 @@ function seedLegacyCommons(
     containerType: string;
     containerId: string;
     members: readonly LegacyMember[];
+    departurePolicy?: string;
+    maxSizeBytes?: number;
   }
-): void {
+): string {
   const grantId = uuidv7();
   const now = nowIso();
   home.origin.vault
@@ -93,15 +99,17 @@ function seedLegacyCommons(
       `INSERT INTO share_circle_grant
          (grant_id, circle_id, container_type, container_id, departure_policy,
           steward_party_id, created_at, revoked_at, max_size_bytes)
-       VALUES (?, ?, ?, ?, 'retain-ledger-history', ?, ?, NULL, NULL)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`
     )
     .run(
       grantId,
       input.circleId,
       input.containerType,
       input.containerId,
+      input.departurePolicy ?? "retain-ledger-history",
       home.originBoot.ownerPartyId,
-      now
+      now,
+      input.maxSizeBytes ?? null
     );
   const state = home.origin.vault.prepare(
     `INSERT INTO share_commons_member_state
@@ -124,6 +132,19 @@ function seedLegacyCommons(
       member.capability
     );
   }
+  return grantId;
+}
+
+function seedCircle(home: Household, now: string): string {
+  const circleId = uuidv7();
+  home.origin.vault
+    .prepare(
+      `INSERT INTO social_circle
+         (circle_id, name, kind, owner_party_id, created_at)
+       VALUES (?, 'Trip', 'custom', ?, ?)`
+    )
+    .run(circleId, home.originBoot.ownerPartyId, now);
+  return circleId;
 }
 
 function legacyTablesLeft(home: Household): string[] {
@@ -299,5 +320,178 @@ describe("migrating a live commons", () => {
         containerId
       ).map((grant) => grant.audience.id)
     ).toStrictEqual([bob]);
+  });
+  test("a departed member's answer is revoked, stopped, and their ledger rows stay", () => {
+    const home = household();
+    const now = nowIso();
+    home.origin.vault.exec(LEGACY_RAIL_DDL);
+    const bob = addParty(home, "Bob");
+    bind(home, bob, "vault-family");
+    const circleId = seedCircle(home, now);
+    const containerId = uuidv7();
+
+    // Bob is CURRENT on the first pass: he gets an answer and a delivery row,
+    // and the delivery is marked as having reached his vault.
+    seedLegacyCommons(home, {
+      circleId,
+      containerType: "core.collection",
+      containerId,
+      members: [{ partyId: bob, capability: "read", status: "current" }],
+    });
+    migrateCommonsToSubscriptions(home.origin.vault, {
+      stewardVaultId: "vault-priya",
+      now,
+    });
+    const [answer] = listShareGrantsForSubject(
+      home.origin.vault,
+      "core.collection",
+      containerId
+    );
+    home.origin.vault
+      .prepare(
+        `UPDATE share_fulfillment SET state = 'delivered', delivered_at = ?
+          WHERE grant_id = ?`
+      )
+      .run(now, answer!.grantId);
+
+    // He departs, and the rail is seeded again with him no longer current.
+    home.origin.vault.exec(LEGACY_RAIL_DDL);
+    seedLegacyCommons(home, {
+      circleId,
+      containerType: "core.collection",
+      containerId,
+      members: [{ partyId: bob, capability: "read", status: "refused" }],
+    });
+    const report = migrateCommonsToSubscriptions(home.origin.vault, {
+      stewardVaultId: "vault-priya",
+      now,
+    });
+
+    expect(report.revoked).toBe(1);
+    expect(
+      listShareGrantsForSubject(
+        home.origin.vault,
+        "core.collection",
+        containerId
+      )
+    ).toStrictEqual([]);
+    // REVOKING IS NOT STOPPING: the delivered row must be swept, or Bob keeps
+    // rows the origin no longer projects for him.
+    expect(
+      home.origin.vault
+        .prepare("SELECT state FROM share_fulfillment WHERE grant_id = ?")
+        .get(answer!.grantId)
+    ).toMatchObject({ state: "remove_sent" });
+  });
+
+  test("an answer the rail never wrote survives the migration", () => {
+    const home = household();
+    const now = nowIso();
+    home.origin.vault.exec(LEGACY_RAIL_DDL);
+    const bob = addParty(home, "Bob");
+    const carol = addParty(home, "Carol");
+    bind(home, bob, "vault-family");
+    bind(home, carol, "vault-far-1");
+    const circleId = seedCircle(home, now);
+    const containerId = uuidv7();
+    // Carol was never on this circle: her share came from `share.grant`, and
+    // the migration has no business ending it.
+    const outside = createShareGrant(home.origin.vault, {
+      audience: { kind: "party", id: carol },
+      subjectType: "core.collection",
+      subjectId: containerId,
+      capability: "view",
+      grantedAt: now,
+      grantedBy: home.originBoot.ownerPartyId,
+    });
+    seedLegacyCommons(home, {
+      circleId,
+      containerType: "core.collection",
+      containerId,
+      members: [{ partyId: bob, capability: "read", status: "current" }],
+    });
+
+    const report = migrateCommonsToSubscriptions(home.origin.vault, {
+      stewardVaultId: "vault-priya",
+      now,
+    });
+
+    expect(report.revoked).toBe(0);
+    expect(
+      listShareGrantsForSubject(
+        home.origin.vault,
+        "core.collection",
+        containerId
+      )
+        .map((grant) => grant.audience.id)
+        .sort()
+    ).toStrictEqual([bob, carol].sort());
+    expect(
+      readShareGrant(home.origin.vault, outside.grantId)?.revokedAt
+    ).toBeNull();
+  });
+
+  test("a container the registry cannot honour is named, never thrown, and keeps its rail", () => {
+    const home = household();
+    const now = nowIso();
+    home.origin.vault.exec(LEGACY_RAIL_DDL);
+    const bob = addParty(home, "Bob");
+    bind(home, bob, "vault-family");
+    const circleId = seedCircle(home, now);
+    const containerId = uuidv7();
+    // `locker.item` is a shareable ITEM type the subject registry stands no
+    // grant over: `createShareGrant` throws, and that throw escapes
+    // `openVaultDb` — a file nobody could open again.
+    seedLegacyCommons(home, {
+      circleId,
+      containerType: "locker.item",
+      containerId,
+      members: [{ partyId: bob, capability: "read", status: "current" }],
+    });
+
+    const report = migrateCommonsToSubscriptions(home.origin.vault, {
+      stewardVaultId: "vault-priya",
+      now,
+    });
+
+    expect(report.unofferable).toStrictEqual([`locker.item ${containerId}`]);
+    expect(report.audiences).toBe(0);
+    // The rail STAYS: dropping it would destroy the only record of a share
+    // this build cannot express.
+    expect(report.tablesDropped).toStrictEqual([]);
+    expect(legacyTablesLeft(home)).not.toStrictEqual([]);
+  });
+
+  test("the rail's ceiling and departure policy travel with the answer", () => {
+    const home = household();
+    const now = nowIso();
+    home.origin.vault.exec(LEGACY_RAIL_DDL);
+    const bob = addParty(home, "Bob");
+    bind(home, bob, "vault-family");
+    const circleId = seedCircle(home, now);
+    const containerId = uuidv7();
+    seedLegacyCommons(home, {
+      circleId,
+      containerType: "core.collection",
+      containerId,
+      members: [{ partyId: bob, capability: "read", status: "current" }],
+      departurePolicy: "retain-ledger-history",
+      maxSizeBytes: 5_000_000,
+    });
+
+    migrateCommonsToSubscriptions(home.origin.vault, {
+      stewardVaultId: "vault-priya",
+      now,
+    });
+
+    const [answer] = listShareGrantsForSubject(
+      home.origin.vault,
+      "core.collection",
+      containerId
+    );
+    // A ceiling the owner set is not silently widened to the vault default,
+    // and the policy SECURITY.md § departure rests on is not translated away.
+    expect(answer?.maxSizeBytes).toBe(5_000_000);
+    expect(answer?.departurePolicy).toBe("retain-ledger-history");
   });
 });

@@ -16,11 +16,6 @@ import { LIVE_AUTHORITY_SQL } from "../grant/grant-store.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { placeBlob } from "./blobs.js";
 import type { BlobPlacement } from "./blobs.js";
-import {
-  isShareableItemType,
-  shareableItemTypeOfEntity,
-  shareOriginEntityType,
-} from "./closure.js";
 import type { ProjectedItem, ShareableItemType } from "./closure.js";
 import { projectShareClosure } from "./project-closure.js";
 import { readShareClosure } from "./read-closure.js";
@@ -68,13 +63,6 @@ export interface ShareItemsToVaultInput {
   };
 }
 
-export interface UnshareFromVaultInput {
-  /** The only vault written. */
-  audience: ShareVaultRef;
-  itemType: ShareableItemType;
-  itemId: string;
-}
-
 export interface UnshareFromVaultResult {
   removed: boolean;
   /** The inode survives until the LAST vault lets go; origin bytes stay. */
@@ -85,49 +73,6 @@ export interface MoveOutOfVaultInput {
   source: ShareVaultRef;
   itemType: ShareableItemType;
   itemId: string;
-}
-
-export interface ShareOriginRecord {
-  itemType: string;
-  itemId: string;
-  originVaultId: string;
-  originItemId: string;
-  sharedBy: string;
-  sharedAt: number;
-}
-
-export function readShareOrigin(
-  audience: DatabaseSync,
-  itemType: string,
-  itemId: string
-): ShareOriginRecord | undefined {
-  const row = audience
-    .prepare(
-      `SELECT origin_vault_id, origin_item_id, shared_by, shared_at
-         FROM core_share_origin WHERE target_type = ? AND target_id = ?`
-    )
-    .get(
-      isShareableItemType(itemType)
-        ? shareOriginEntityType(itemType)
-        : itemType,
-      itemId
-    ) as
-    | {
-        origin_vault_id: string;
-        origin_item_id: string;
-        shared_by: string;
-        shared_at: number;
-      }
-    | undefined;
-  if (!row) return undefined;
-  return {
-    itemType,
-    itemId,
-    originVaultId: row.origin_vault_id,
-    originItemId: row.origin_item_id,
-    sharedBy: row.shared_by,
-    sharedAt: row.shared_at,
-  };
 }
 
 /**
@@ -207,104 +152,6 @@ export function shareItemsToVault(
         : undefined,
   });
   return { itemType: input.itemType, items: projection.items, blobs };
-}
-
-/**
- * Refuses to touch a row the audience AUTHORED (no `core_share_origin`
- * record): unshare removes placements, never someone's own data.
- */
-export function unshareFromVault(
-  input: UnshareFromVaultInput
-): UnshareFromVaultResult {
-  const audience = input.audience.vault;
-  const origin = readShareOrigin(audience, input.itemType, input.itemId);
-  if (!origin) {
-    return { removed: false, orphanedShas: [] };
-  }
-  // Savepoint when a caller already owns the audience transaction (commons
-  // scrub+re-project): stays atomic, never double-opens BEGIN.
-  const nested = audience.isTransaction;
-  audience.exec(nested ? "SAVEPOINT unshare_from_vault" : "BEGIN IMMEDIATE");
-  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
-  let shas: string[];
-  try {
-    replicaCommit = beginReplicaCommit(audience);
-    const removal = deleteProjectedClosure(
-      audience,
-      input.itemType,
-      input.itemId
-    );
-    const collected = new Set(removal.shas);
-    audience
-      .prepare(
-        "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
-      )
-      .run(shareOriginEntityType(input.itemType), input.itemId);
-    // THE SHARE'S OWN MEMBERSHIP, NOT THE VAULT'S (#916, adversarial BUG-9).
-    // Removal walked LIVE membership — the album's collection entries — so an
-    // audience who trashed a projected photograph (which removes its entry)
-    // left removal nothing to find: the album went, and the asset and its
-    // bytes stayed behind to be restored afterwards. Every row a projection
-    // wrote carries a `core_share_origin` row now, so what the closure walk
-    // could not reach is swept here, from the SAME share, and only while it is
-    // reachable from nothing else in this vault.
-    for (const row of strandedProjections(audience, origin)) {
-      const itemType = shareableItemTypeOfEntity(row.target_type);
-      if (!itemType) continue;
-      const swept = deleteProjectedClosure(audience, itemType, row.target_id);
-      if (!swept.removed) continue;
-      for (const sha of swept.shas) collected.add(sha);
-      audience
-        .prepare(
-          "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
-        )
-        .run(row.target_type, row.target_id);
-    }
-    shas = [...collected];
-    endReplicaCommit(audience, replicaCommit);
-    audience.exec(nested ? "RELEASE unshare_from_vault" : "COMMIT");
-  } catch (error) {
-    audience.exec(nested ? "ROLLBACK TO unshare_from_vault" : "ROLLBACK");
-    if (nested) audience.exec("RELEASE unshare_from_vault");
-    throw error;
-  }
-  // Liveness is read AFTER the commit, so a sha another row still holds is
-  // reported live rather than guessed at.
-  const live = liveBlobShas(audience);
-  return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
-}
-
-/**
- * Rows this share placed that nothing in the audience vault still reaches: not
- * filed in a live collection, not the current content of a live document, not
- * the bytes behind a live asset. A projected row the audience detached from
- * its container is exactly this, and is what the live-membership walk missed.
- */
-function strandedProjections(
-  audience: DatabaseSync,
-  origin: ShareOriginRecord
-): { target_type: string; target_id: string }[] {
-  return audience
-    .prepare(
-      `SELECT o.target_type, o.target_id FROM core_share_origin o
-        WHERE o.origin_vault_id = ? AND o.shared_by = ?
-          AND o.target_type IN ('media.asset','core.document','core.content_item')
-          AND NOT EXISTS (
-            SELECT 1 FROM core_collection_entry e
-             WHERE e.target_type = o.target_type AND e.target_id = o.target_id)
-          AND NOT EXISTS (
-            SELECT 1 FROM core_document d
-             WHERE o.target_type = 'core.content_item'
-               AND d.current_content_id = o.target_id)
-          AND NOT EXISTS (
-            SELECT 1 FROM media_asset a
-             WHERE o.target_type = 'core.content_item'
-               AND a.content_id = o.target_id)`
-    )
-    .all(origin.originVaultId, origin.sharedBy) as {
-    target_type: string;
-    target_id: string;
-  }[];
 }
 
 /**

@@ -30,6 +30,16 @@ export type ShareFulfillmentState =
   | "remove_sent"
   | "removed";
 
+/**
+ * What a departing audience leaves behind in the REMAINING audiences'
+ * projections. `retain-ledger-history` is the accounting case SECURITY.md
+ * § departure names: the departed identity stays as DATA so balances remain
+ * computable, never as continuing authority.
+ */
+export type ShareDeparturePolicy =
+  | "remove-member-only"
+  | "retain-ledger-history";
+
 export interface ShareGrantRecord {
   grantId: string;
   audience: ShareGrantAudience;
@@ -40,6 +50,7 @@ export interface ShareGrantRecord {
   revokedAt: string | null;
   grantedBy: string;
   maxSizeBytes: number | null;
+  departurePolicy: ShareDeparturePolicy;
 }
 
 export interface ShareFulfillmentRecord {
@@ -64,6 +75,8 @@ export interface CreateShareGrantInput {
   grantedAt: string;
   grantedBy: string;
   maxSizeBytes?: number | null;
+  /** Omitted: the subject type decides — an accounting group retains. */
+  departurePolicy?: ShareDeparturePolicy;
 }
 
 export type CreateShareGrantResult =
@@ -109,6 +122,7 @@ export type ShareGrantRow = {
   revoked_at: string | null;
   granted_by: string;
   max_size_bytes: number | null;
+  departure_policy: string | null;
 };
 
 export type ShareFulfillmentRow = {
@@ -147,7 +161,22 @@ export function toGrant(row: ShareGrantRow): ShareGrantRecord {
     revokedAt: row.revoked_at,
     grantedBy: row.granted_by,
     maxSizeBytes: row.max_size_bytes,
+    departurePolicy: (row.departure_policy ??
+      defaultDeparturePolicy(row.subject_type)) as ShareDeparturePolicy,
   };
+}
+
+/**
+ * No `share_delivery_config` row means nobody chose, and the choice a commons
+ * made by default is the one an accounting group still needs: an expense group
+ * keeps a departed member's rows so the remaining members' balances add up.
+ */
+export function defaultDeparturePolicy(
+  subjectType: string
+): ShareDeparturePolicy {
+  return subjectType === "tally.group"
+    ? "retain-ledger-history"
+    : "remove-member-only";
 }
 
 export function toFulfillment(
@@ -173,7 +202,8 @@ export const GRANT_SELECT = `SELECT a.authority_id AS grant_id,
     a.subject_type AS subject_type, a.subject_id AS subject_id,
     a.verb AS capability, a.granted_at AS granted_at,
     a.revoked_at AS revoked_at, a.granted_by AS granted_by,
-    d.max_size_bytes AS max_size_bytes
+    d.max_size_bytes AS max_size_bytes,
+    d.departure_policy AS departure_policy
   FROM share_authority a
   LEFT JOIN share_delivery_config d ON d.grant_id = a.authority_id
   WHERE a.principal_kind IN ('person','circle') AND a.decision = 'granted'`;

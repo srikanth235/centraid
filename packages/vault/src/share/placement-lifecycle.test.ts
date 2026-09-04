@@ -12,15 +12,13 @@ import {
   casPath,
   closeOpenVaults,
   household,
+  placementAuthority,
+  readShareOrigin,
   reclaimOrphans,
   seedPhoto,
-  placementAuthority,
+  unplaceProjection,
 } from "./placement-fixture.js";
-import {
-  readShareOrigin,
-  shareItemsToVault,
-  unshareFromVault,
-} from "./placement.js";
+import { shareItemsToVault } from "./placement.js";
 
 describe("placement-lifecycle suite", () => {
   afterEach(closeOpenVaults);
@@ -135,11 +133,11 @@ describe("placement-lifecycle suite", () => {
     });
     const originalIno = statSync(casPath(origin, photo.sha256)).ino;
 
-    const result = unshareFromVault({
+    const result = unplaceProjection(
       audience,
-      itemType: "media.asset",
-      itemId: shared.items[0]!.itemId,
-    });
+      "media.asset",
+      shared.items[0]!.itemId
+    );
 
     expect(result.removed).toBe(true);
     expect(result.orphanedShas.sort()).toStrictEqual(
@@ -200,11 +198,7 @@ describe("placement-lifecycle suite", () => {
       });
 
     share();
-    unshareFromVault({
-      audience,
-      itemType: "media.asset",
-      itemId: photo.assetId,
-    });
+    unplaceProjection(audience, "media.asset", photo.assetId);
     reclaimOrphans(audience);
     const again = share();
 
@@ -222,11 +216,7 @@ describe("placement-lifecycle suite", () => {
     seedPhoto(origin, originBoot, "i");
     const own = seedPhoto(audience, audienceBoot, "own");
 
-    const result = unshareFromVault({
-      audience,
-      itemType: "media.asset",
-      itemId: own.assetId,
-    });
+    const result = unplaceProjection(audience, "media.asset", own.assetId);
 
     expect(result).toStrictEqual({ removed: false, orphanedShas: [] });
     expect(
@@ -277,11 +267,7 @@ describe("placement-lifecycle suite", () => {
     expect(statSync(casPath(audience, photo.sha256)).nlink).toBe(1);
 
     // And only after the LAST vault unlinks does the content actually go.
-    unshareFromVault({
-      audience,
-      itemType: "media.asset",
-      itemId: photo.assetId,
-    });
+    unplaceProjection(audience, "media.asset", photo.assetId);
     reclaimOrphans(audience);
     expect(audience.blobs.hasSync(photo.sha256)).toBe(false);
     expect(audience.blobs.localPathSync(photo.sha256)).toBeNull();

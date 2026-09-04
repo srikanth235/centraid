@@ -354,7 +354,14 @@ export interface ShareSubscriptionStopResult {
 }
 
 export interface StopShareSubscriptionInput {
-  origin: ShareVaultRef;
+  /**
+   * The HANDLE only. Stopping settles delivery rows and dials a transport; it
+   * reads no blobs and no keys, and asking for a full `ShareVaultRef` would
+   * shut out the callers that hold nothing else — the one-shot migration among
+   * them, which must settle a revoked answer's deliveries or leave an audience
+   * holding rows the origin no longer projects.
+   */
+  origin: Pick<ShareVaultRef, "vault">;
   originVaultId: string;
   grantId: string;
   transportFor: (peerVaultId: string) => ShareShapeTransport | undefined;
