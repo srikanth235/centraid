@@ -26,9 +26,15 @@ import type {
 } from "@centraid/server/engine";
 import {
   assertExtSchemaOwnership,
+  automationAnswers,
+  automationSubjectsOf,
+  backfillAutomationAnswers,
   buildAssistantContext,
   createGateway,
   createGrant,
+  nowIso,
+  recordAutomationAnswers,
+  revokeAutomationAnswers,
   ensureAgentEnrolled,
   ensureAppEnrolled,
   bootstrapVault,
@@ -95,6 +101,7 @@ import {
   vaultFileBytes,
 } from "@centraid/vault";
 import type {
+  AutomationAnswer,
   VaultFootprintBudget,
   InstalledAppRow,
   ScopeRequestSummary,
@@ -580,6 +587,20 @@ export class VaultPlane {
     this.walCaptureConfigured = options.walCaptureConfigured ?? (() => true);
     this.walShipperOptions = options.walShipper ?? {};
     this.walShipper = this.createWalShipperIfOwner();
+    // ONE-SHOT (#928 A3): an automation grant recorded before the plane moved
+    // becomes a standing answer, and an owner's refusal a `declined` row. Open
+    // at mount is the one path every vault takes, and the backfill returns at
+    // its first statement once any automation answer exists.
+    const backfilled = backfillAutomationAnswers(
+      this.db.vault,
+      this.boot.ownerPartyId,
+      nowIso()
+    );
+    if (backfilled.granted + backfilled.declined > 0) {
+      this.logger.info(
+        `vault plane: migrated automation authority (${backfilled.granted} granted, ${backfilled.declined} declined)`
+      );
+    }
   }
 
   private ownsWalLifecycle(): boolean {
@@ -795,8 +816,10 @@ export class VaultPlane {
     // Uninstall WIPES the consent memory (#308): it is "no to the whole app",
     // not "no to these scopes forever" — a reinstall is a fresh consent.
     if (app) clearAllScopeTombstones(this.db, { appId: app.appId });
-    if (agent)
+    if (agent) {
       clearAllScopeTombstones(this.db, { granteePartyId: agent.partyId });
+      revokeAutomationAnswers(this.db.vault, appId, nowIso());
+    }
     closeObsoleteScopeRequest(this.db, "app", appId);
     closeObsoleteScopeRequest(this.db, "agent", appId);
     if (hadOpenScopeRequest) this.ringNotificationsChanged(false);
@@ -844,6 +867,18 @@ export class VaultPlane {
       { granteePartyId: agent.partyId },
       request.scopes
     );
+    // The owner's YES, in the one plane (#928 A3). Minted here because this is
+    // the one path both the install-time approval and the owner's decision on
+    // a parked widening run through — a manifest that only PARKS reaches
+    // `openScopeRequest` instead and mints nothing, which is what keeps a
+    // widened manifest parked rather than silently answered.
+    recordAutomationAnswers(this.db.vault, {
+      principalId: appId,
+      ownerPartyId: this.boot.ownerPartyId,
+      subjects: automationSubjectsOf(request.scopes),
+      decision: "granted",
+      now: nowIso(),
+    });
     return createGrant(this.db, {
       granteePartyId: agent.partyId,
       purposeConceptId: purpose,
@@ -973,6 +1008,17 @@ export class VaultPlane {
       else this.approveAgentGrant(request.appId, grantRequest);
     } else {
       writeScopeTombstones(this.db, grantee, request.scopes);
+      // A refusal is an ANSWER (#883 V-table): without the row, the next
+      // compile cannot tell "told no" from "never asked" and re-asks.
+      if (request.plane === "agent") {
+        recordAutomationAnswers(this.db.vault, {
+          principalId: request.appId,
+          ownerPartyId: this.boot.ownerPartyId,
+          subjects: automationSubjectsOf(request.scopes),
+          decision: "declined",
+          now: nowIso(),
+        });
+      }
     }
     markScopeRequestDecided(
       this.db,
@@ -1015,10 +1061,18 @@ export class VaultPlane {
     }));
   }
 
-  listAgents(): Array<AgentSummary & { grants: GrantSummary[] }> {
+  listAgents(): Array<
+    AgentSummary & { grants: GrantSummary[]; answers: AutomationAnswer[] }
+  > {
+    const answers = automationAnswers(this.db.vault);
     return listEnrolledAgents(this.db).map((agent) => ({
       ...agent,
       grants: listActiveAgentGrants(this.db, agent.partyId),
+      // The standing answer the Approvals surfaces read (#928 A3), keyed by
+      // the automation's own id rather than by its agent party.
+      answers: answers.filter(
+        (answer) => answer.principalId === agent.enrollmentKey
+      ),
     }));
   }
 

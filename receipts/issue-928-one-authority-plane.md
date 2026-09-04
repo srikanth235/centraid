@@ -74,7 +74,7 @@ Fresh-context verifier on `claude/928-w1a-rulings` at `8401083a`, wave 1a (rulin
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-03 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 
 ## w1b — the static app entity tripwire
 
@@ -567,3 +567,57 @@ secrets before looking for them. **Pre-existing reds on this host, reproduced wi
 3. Doc debt: `docs/vault-ontology.md` ONT-18 (`access_policy` read twice per non-owner read) — the shape path
    no longer consults it, still true of `gateway/access.ts`, wave 4 closes; `year3-shape.ts` and
    `replica/snapshot.ts` both name `DEFAULT_REPLICA_MAX_VALUE_BYTES`, a constant with no such name today.
+
+## w3a — automations are principals
+
+#928 A3 / AP-automation-principal. An automation's standing answer leaves the app-grant plane and becomes
+`share_authority` rows. Acceptance clause served: **"Every automation's standing answer is a `share_authority`
+row with `principal_kind = 'automation'`; the owner's prior refusals survive as `declined` rows (count and
+content asserted by the migration test); a widened manifest still parks."** Nothing ticked above.
+
+| file | change |
+| --- | --- |
+| `packages/vault/src/grant/automation-authority.ts` | new: `automationSubjectsOf` (manifest scope → `agent.pack`/`core.entity` × read\|act, `reveal` mints nothing), `recordAutomationAnswers`, `revokeAutomationAnswers`, `automationAnswers`, `backfillAutomationAnswers` |
+| `packages/vault/src/index.ts` | the five functions, two subject constants and five types exported |
+| `packages/server/src/serve/vault-plane.ts` | `approveAgentGrant` mints `granted`; `decideScopeRequest`'s deny branch mints `declined`; `revokeApp` revokes; `listAgents()` carries `answers`; the constructor runs the one-shot backfill |
+| `packages/server/src/serve/vault-plane-automation-authority.test.ts` | new: the seven cases below |
+
+| measure | value |
+| --- | --- |
+| rows minted for a 3-scope manifest (`read+act` pack, entity `read`, `reveal`) | 3 (`reveal` mints none) |
+| backfill statements per vault open once any answer exists | 1 (`automationAnswers` probe) |
+| legacy rows deleted by the migration | 0 — lossless; wave 4 deletes the tables |
+| open scope requests altered by the migration | 0 — a parked ask is not an answer |
+
+### Decisions
+
+- **Answers are minted where the owner ANSWERS, not where the manifest is read.** `approveAgentGrant` is the
+  one path both the install-time approval and the decision on a parked widening run through; a manifest that
+  only parks reaches `openScopeRequest` and mints nothing, which is what keeps "a widened manifest still parks"
+  true by construction rather than by a second check.
+- **One row per automation** (open question 4): `principal_id` is the automation's own id, its agent
+  enrolment's `enrollment_key`, not its agent party or its pack.
+- **The migration is a mount-time one-shot in `packages/vault`, not a `VAULT_MIGRATIONS` rung.** `VAULT_MIGRATIONS`
+  holds exactly one composed baseline rung, and the ONT-ladder ruling reserves a second rung for the first
+  change after a release. It is idempotent (returns at its first statement once any answer exists), lossless
+  (reads legacy rows, deletes none) and excludes `_assistant` by name, since the assistant holds no standing
+  answer at all.
+- **Not landed, and why**: `headless-automation-compile.ts` "minus purpose" — `vault.purpose` is `requireString`
+  in `packages/server/src/automation/manifest/manifest.ts` and is read by `build-gateway.ts:2998`,
+  `automation-turn-context.ts:87` and `build-extra-prompt.ts:93`, all outside this lane's reading set.
+  Reported to the root; it costs nothing to defer, because the install path already defaults the purpose.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}   # the tree these ran against; quoted in the lane report
+bun run --cwd packages/vault build ; bun run --cwd packages/server typecheck   # clean
+bun run --cwd packages/server test -- --run src/serve/vault-plane-automation-authority.test.ts   # 7 passed
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| The migration actually migrates — the assertions are not satisfied by the live write path that already ran | early-returned `backfillAutomationAnswers` before its guard, rebuilt `packages/vault`, re-ran | **red**: `re-opening a vault backfills automation grants and refusals losslessly` fails, 6 others pass — so only that case depends on the backfill |
+| A widened manifest could be answered by the install path rather than parked | asserted the widened scope is absent from the answers AND that a scope request is open, in the same case, before deciding it | held: `granted agent.pack media read` appears only after `decideScopeRequest(_, true)` |
