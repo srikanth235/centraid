@@ -23,7 +23,7 @@ import {
 } from "./authority.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
 import { BLOB_DDL } from "./blob.js";
-import { CORE_DDL, LINK_ANCHOR_DDL, SHARE_ORIGIN_DDL } from "./core.js";
+import { CORE_DDL, LINK_ANCHOR_DDL } from "./core.js";
 import {
   LOCKER_ADDRESS_DDL,
   LOCKER_ALIAS_DDL,
@@ -111,7 +111,6 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     CORE_DDL,
     CORE_ENTITY_DDL,
     LINK_ANCHOR_DDL,
-    SHARE_ORIGIN_DDL,
     ACCESS_DDL,
     ACCESS_INSTALL_MEMORY_DDL,
     SEED_DDL,
@@ -178,6 +177,15 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // a release is a new rung or it reaches nothing. The pass that reads the
   // rail's column (`migrateCommonsToSubscriptions`) runs on open, after this.
   SHARE_DELIVERY_CONFIG_RECUT_DDL,
+  // RUNG FOUR (#929) — `core_share_origin` goes. It answered "which vault did
+  // this row come from" keyed by the ROW, so it could name only one sender:
+  // two grants over the same photograph left the second invisible, and
+  // revoking the first purged a row the second still delivered.
+  // `share_subscription_lineage` (rung two) is the many-to-many the model
+  // actually has, and it is the only thing that answers a placement's
+  // provenance now. A rung, not a JS pass: the table must leave every EXISTING
+  // file, and nothing survives it that a later restore would have to interpret.
+  "DROP TABLE IF EXISTS core_share_origin;",
 ];
 
 /**

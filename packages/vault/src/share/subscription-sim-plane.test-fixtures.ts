@@ -195,11 +195,14 @@ export function originTitles(slot: ShareSlot): string[] {
 }
 
 export function projectedAlbumId(slot: ShareSlot): string | undefined {
+  // SHAPE-KEYED (#929): the claim names the origin row it stands for, and the
+  // subscription beside it names the vault that served the shape.
   const row = slot.audience.db.vault
     .prepare(
-      `SELECT target_id FROM core_share_origin
-        WHERE target_type = 'core.collection' AND origin_vault_id = ?
-          AND origin_item_id = ?`
+      `SELECT l.target_id FROM share_subscription_lineage l
+         JOIN share_subscription s ON s.shape_id = l.shape_id
+        WHERE l.target_type = 'core.collection' AND s.origin_vault_id = ?
+          AND l.origin_item_id = ?`
     )
     .get(slot.origin.vaultId, slot.album.albumId) as
     | { target_id: string }
@@ -220,9 +223,10 @@ export function projectionRowCount(slot: ShareSlot): number {
   return (
     slot.audience.db.vault
       .prepare(
-        `SELECT COUNT(*) AS n FROM core_share_origin
-          WHERE target_type = 'core.collection' AND origin_vault_id = ?
-            AND origin_item_id = ?`
+        `SELECT COUNT(*) AS n FROM share_subscription_lineage l
+           JOIN share_subscription s ON s.shape_id = l.shape_id
+          WHERE l.target_type = 'core.collection' AND s.origin_vault_id = ?
+            AND l.origin_item_id = ?`
       )
       .get(slot.origin.vaultId, slot.album.albumId) as { n: number }
   ).n;

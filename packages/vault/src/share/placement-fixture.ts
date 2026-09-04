@@ -5,7 +5,6 @@
 
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import type { DatabaseSync } from "node:sqlite";
 
 import { expect } from "vitest";
 
@@ -20,7 +19,6 @@ import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
-import { isShareableItemType, shareOriginEntityType } from "./closure.js";
 import type { ShareableItemType } from "./closure.js";
 import { deleteProjectedClosure } from "./removal.js";
 
@@ -187,55 +185,6 @@ export function placementAuthority(
   };
 }
 
-/**
- * The provenance row a placement writes. It lives HERE, with the un-place that
- * reads it: no production path asks a projected row who sent it any more — the
- * subscription seat asks its own lineage, which is keyed by shape and answers
- * for two grants over one photograph, where this table names one sender.
- */
-export interface ShareOriginRecord {
-  itemType: string;
-  itemId: string;
-  originVaultId: string;
-  originItemId: string;
-  sharedBy: string;
-  sharedAt: number;
-}
-
-export function readShareOrigin(
-  audience: DatabaseSync,
-  itemType: string,
-  itemId: string
-): ShareOriginRecord | undefined {
-  const row = audience
-    .prepare(
-      `SELECT origin_vault_id, origin_item_id, shared_by, shared_at
-         FROM core_share_origin WHERE target_type = ? AND target_id = ?`
-    )
-    .get(
-      isShareableItemType(itemType)
-        ? shareOriginEntityType(itemType)
-        : itemType,
-      itemId
-    ) as
-    | {
-        origin_vault_id: string;
-        origin_item_id: string;
-        shared_by: string;
-        shared_at: number;
-      }
-    | undefined;
-  if (!row) return undefined;
-  return {
-    itemType,
-    itemId,
-    originVaultId: row.origin_vault_id,
-    originItemId: row.origin_item_id,
-    sharedBy: row.shared_by,
-    sharedAt: row.shared_at,
-  };
-}
-
 export interface UnplaceResult {
   removed: boolean;
   /** The inode survives until the LAST vault lets go; origin bytes stay. */
@@ -252,6 +201,11 @@ export interface UnplaceResult {
  * own lineage rather than guessing at reachability. What is kept here is the
  * one thing these tests need and that path cannot give them — removal of rows
  * placed by `shareItemsToVault`, which writes no lineage.
+ *
+ * IT REFUSES NOTHING. `unshareFromVault` read a row-keyed provenance row and
+ * declined to touch a row the audience had authored; that table is gone, and
+ * the guarantee is `releaseShapeRows`'s for a stronger reason — it deletes
+ * only what the shape CLAIMS, and nothing claims an authored row.
  */
 export function unplaceProjection(
   audience: VaultDb,
@@ -259,16 +213,15 @@ export function unplaceProjection(
   itemId: string
 ): UnplaceResult {
   const db = audience.vault;
-  if (!readShareOrigin(db, itemType, itemId))
-    return { removed: false, orphanedShas: [] };
   db.exec("BEGIN IMMEDIATE");
   let shas: string[];
   try {
     const commit = beginReplicaCommit(db);
     const removal = deleteProjectedClosure(db, itemType, itemId);
-    db.prepare(
-      "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
-    ).run(shareOriginEntityType(itemType), itemId);
+    if (!removal.removed) {
+      db.exec("ROLLBACK");
+      return { removed: false, orphanedShas: [] };
+    }
     shas = removal.shas;
     endReplicaCommit(db, commit);
     db.exec("COMMIT");

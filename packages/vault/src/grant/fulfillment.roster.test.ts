@@ -280,7 +280,7 @@ describe("grant/fulfillment — roster and ceiling", () => {
     });
     const projectedId = (
       home.audience.vault
-        .prepare("SELECT target_id FROM core_share_origin LIMIT 1")
+        .prepare("SELECT target_id FROM share_subscription_lineage LIMIT 1")
         .get() as { target_id: string }
     ).target_id;
     const changesAfterFirst = (
@@ -297,7 +297,7 @@ describe("grant/fulfillment — roster and ceiling", () => {
     // Nothing moved: row identity, change stream, timestamp.
     expect(
       home.audience.vault
-        .prepare("SELECT target_id FROM core_share_origin LIMIT 1")
+        .prepare("SELECT target_id FROM share_subscription_lineage LIMIT 1")
         .get()
     ).toMatchObject({ target_id: projectedId });
     expect(

@@ -98,8 +98,8 @@ describe("openLedgerDb (the conversation-ledger band of vault.db)", () => {
     // and opening does not move it.
     const pathLocal = freshDbPath();
     const before = userVersion(pathLocal);
-    // Three rungs since #929; the number is the VAULT's, which is the point.
-    expect(before).toBe(3);
+    // Four rungs since #929; the number is the VAULT's, which is the point.
+    expect(before).toBe(4);
     openLedgerDb(pathLocal).close();
     expect(userVersion(pathLocal)).toBe(before);
     // A BARE path is not a ledger: without the vault's DDL there is no band,

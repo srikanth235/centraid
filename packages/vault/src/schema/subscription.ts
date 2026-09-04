@@ -43,12 +43,11 @@ CREATE TABLE share_subscription (
 ) STRICT;
 CREATE INDEX share_subscription_grant ON share_subscription(grant_id);
 
--- SHAPE-KEYED LINEAGE. \`core_share_origin\` answers "which vault did this row
--- come from" and is keyed by the row, so it can name only ONE sender; two
--- grants over the same photograph therefore left the second one invisible, and
--- revoking the first purged a row the second still delivers. This table is the
--- many-to-many the model actually has: a row survives a purge while any other
--- live shape still claims it.
+-- SHAPE-KEYED LINEAGE, the one answer to "which vault did this row come from".
+-- A ROW-KEYED provenance table can name only ONE sender, so two grants over
+-- the same photograph left the second invisible and revoking the first purged
+-- a row the second still delivers. This table is the many-to-many the model
+-- actually has: a row survives a purge while any other live shape claims it.
 --
 -- \`origin_row_version\` is the ORIGIN's current-epoch replica change sequence
 -- for the row at ingest. It is what lets a member's phone drop a pending write

@@ -138,13 +138,12 @@ describe("closure split", () => {
     expect(
       rowsOf(audience, "SELECT COUNT(*) AS n FROM media_asset")
     ).toStrictEqual([{ n: 3 }]);
+    // A PLACEMENT CLAIMS NOTHING (#929): it is a move between the owner's own
+    // vaults, so no shape claims the rows and none is owed one.
+    expect(shared.items).toHaveLength(3);
     expect(
-      rowsOf(
-        audience,
-        `SELECT COUNT(*) AS n FROM core_share_origin
-          WHERE target_type = 'media.asset' AND shared_at = 1700000000000`
-      )
-    ).toStrictEqual([{ n: 3 }]);
+      rowsOf(audience, "SELECT COUNT(*) AS n FROM share_subscription_lineage")
+    ).toStrictEqual([{ n: 0 }]);
   });
 
   test("a projected photograph is re-registered by the audience, not handed the origin's derived state", () => {
@@ -306,12 +305,16 @@ describe("closure split", () => {
     // oxlint-disable-next-line vitest/prefer-strict-equal -- see comment above: toStrictEqual fails on prototype provenance, not on data
     expect(wire).toEqual(closure);
 
+    const shape = {
+      shapeId: "shape-priya",
+      rowVersions: new Map<string, number>(),
+    };
     const inProcess = projectShareClosure(audience.vault, closure, {
-      sharedBy: "member-priya",
+      shape,
       now: at,
     });
     const overWire = projectShareClosure(other.vault, wire, {
-      sharedBy: "member-priya",
+      shape,
       now: at,
     });
 
@@ -325,7 +328,8 @@ describe("closure split", () => {
       "SELECT content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at FROM core_content_item",
       "SELECT derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at FROM core_content_derivative",
       "SELECT asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, place_id, camera_device_id, width, height, duration_s, exif_json, source_asset_id, archived_at, deleted_at, purge_at FROM media_asset",
-      "SELECT target_type, target_id, origin_vault_id, origin_item_id, shared_by, shared_at FROM core_share_origin",
+      `SELECT shape_id, target_type, target_id, origin_item_id, origin_row_version
+         FROM share_subscription_lineage ORDER BY target_type, target_id`,
       `SELECT target_type, target_id, reason, contribution_variant, requested_at
          FROM enrich_request`,
     ]) {
@@ -346,7 +350,7 @@ describe("closure split", () => {
       projectShareClosure(
         audience.vault,
         { ...closure, formatVersion: 3 as unknown as 2 },
-        { sharedBy: "member-priya" }
+        { shape: { shapeId: "shape-priya", rowVersions: new Map() } }
       )
     ).toThrow(/unsupported share closure format/u);
     expect(

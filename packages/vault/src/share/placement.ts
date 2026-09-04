@@ -37,7 +37,12 @@ export interface ShareItemsToVaultInput {
   itemType: ShareableItemType;
   /** ORIGIN row ids; one closure covers the set. */
   itemIds: readonly string[];
-  /** An attribution, never a principal this vault can look up (#726). */
+  /**
+   * An attribution, never a principal this vault can look up (#726). The vault
+   * records NOTHING from it since #929: a placement is a MOVE between the
+   * owner's own vaults, so the item lands as the owner's own row with no shape
+   * to name a sender for. The give plane that passes it is #928 A6's to delete.
+   */
   sharedBy: string;
   now?: () => number;
   /**
@@ -144,7 +149,6 @@ export function shareItemsToVault(
   }));
 
   const projection = projectShareClosure(input.audience.vault, closure, {
-    sharedBy: input.sharedBy,
     now: input.now,
     keys:
       input.origin.sealKey && input.audience.sealKey
@@ -174,11 +178,6 @@ export function moveOutOfVault(
       input.itemType,
       input.itemId
     );
-    source
-      .prepare(
-        "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
-      )
-      .run(input.itemType, input.itemId);
     shas = removal.shas;
     endReplicaCommit(source, replicaCommit);
     source.exec("COMMIT");

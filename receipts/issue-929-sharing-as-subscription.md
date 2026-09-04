@@ -1001,3 +1001,89 @@ capability had lost its caller, this one has not gained it yet.
 `apps/mobile/src/apps/tally/ActivityView.test.tsx` is named here only because this is the added receipt; it is described and owned by `receipts/issue-922-snappier-blueprints.md`.
 
 `apps/mobile/src/kit/share/grant-seat.test.ts` is named here only because this is the added receipt; the link-ticket door tests are described in `receipts/issue-922-snappier-blueprints.md` and owned with the #929 share-sheet slice.
+## H4 (2) — `core_share_origin` deleted with replacement
+
+| File | Change |
+| --- | --- |
+| `packages/vault/src/schema/core.ts` | `SHARE_ORIGIN_DDL` **deleted** |
+| `packages/vault/src/schema/migrate.ts` | rung one loses it; **rung four** drops it from every existing file |
+| `packages/vault/src/schema/{entity-catalog,entity-refs,entity-declaration,entity}.ts` | the registry entry, the polymorphic-pair entry and the two `projectionOf: "core.entity"` comments move to `share.subscription_lineage` |
+| `packages/vault/src/share/project-closure.ts` | `recordLineage` writes `share_subscription_lineage`, keyed by the shape and only when one is given; `ProjectResult.lineageRows` |
+| `packages/vault/src/share/subscription-seat.ts` | `claimShapeRows` and `dropOrigin` **deleted** — the projection claims its own rows in its own transaction |
+| `packages/vault/src/share/placement.ts` | `readShareOrigin`, `ShareOriginRecord`, `unshareFromVault`, `UnshareFromVaultInput` and `strandedProjections` **deleted**; `moveOutOfVault` loses its provenance delete |
+| `packages/vault/src/share/closure.ts` · `subscription.ts` | comments face the plane that exists |
+| `packages/vault/src/share/placement-fixture.ts` | `unplaceProjection` **ported off** the deleted table: it wraps `deleteProjectedClosure` in one transaction and refuses nothing |
+| `packages/vault/src/index.ts` | four exports gone |
+| six vault test files · `subscription-sim-plane.test-fixtures.ts` · `packages/server/src/engine/stores/gateway-db.test.ts` | ported to shape-keyed lineage; the rung count is four |
+| `scripts/docs-site/src/content/ontology-body.html` · `ARCHITECTURE.md` · `docs/glossary.md` · `docs/design-divergences.md` | four rows that said the opposite of the code |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| `git grep -n "core_share_origin" -- packages apps` outside the migration rung and its tests | 18 files | **0** | run on the landed tree |
+| vault schema rungs | 3 | **4** | `migrate.test.ts`, fresh file stops at `user_version` 4 |
+| lineage rows a same-owner placement writes | 1 per projected row | **0** | `placement.test.ts`, `closure-split.test.ts` |
+
+**Deleted with replacement.** `core_share_origin` → `share_subscription_lineage` (shape-keyed, many-to-many). `unshareFromVault` + `strandedProjections` → `purgeShareShape`/`releaseShapeRows`, which delete only what the shape claims. The "unshare refuses a row the audience authored" property is kept for a stronger reason there: nothing claims an authored row.
+
+**Decisions.** (1) **A placement records no lineage; it is a MOVE, not a share** — the item lands as the owner's own row in their own other vault, so no shape names a sender and `shared_from` is correctly absent. The give plane that calls it is #928 A6's to delete; `share-effect-executor.ts` and `edges-reconcile.ts` are untouched here, and `ShareItemsToVaultInput.sharedBy` stays as their attribution with a comment saying the vault records nothing from it. (2) `pending_invites` (H4 slice 1) is deleted in favour of `PersonGrants`, which reads the live grant plane with each grant's delivery state: **a link ticket carries no party** (`gateway-schema.ts` `peer_link_tickets`), so no gateway read can answer a per-person invitation, and nothing is projected into the vault.
+
+**Findings.** (1) I deleted `unshareFromVault` and its two helpers myself rather than waiting: with `core_share_origin` gone they cannot compile a query, and C's fix round had not landed on `claude/929-subscription` at either of my two rebases. Both changes are the SAME deletion, so a rebase is delete-vs-delete; if C's commit lands after this, drop its `placement.ts` / placement-test hunks. (2) `local-orphan-sweep`, `docs-folder` and `household` now call `deleteProjectedClosure` directly — the same act `unshareFromVault` wrapped, minus the row-keyed provenance read.
+
+```sh
+bun run --cwd packages/vault build && bun run --cwd packages/server build
+bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck
+bun run --cwd packages/vault test          # 186 files, 1530 passed, 2 skipped
+bun run --cwd packages/server typecheck    # green
+git grep -n "core_share_origin" -- packages apps   # migration rung + its test only
+bash .governance/run.sh                    # 22/22 directives pass
+```
+
+Re-verified after the rebase onto `claude/929-subscription`@8be5c1c35: the vault suite above,
+plus the ten placement/closure suites and `gateway-db`, `replica-shape-parity`,
+`share-surface-queries`, `vault-links-store`, `multiplex-replica-routes` in `packages/server`
+(48 passed). Gates ran on self-audit tree `6895273a21232806696105ca053de2c8bd0c9119`; the
+landed tree adds only this verification paragraph. Self-audit's remaining FAILs all name
+sibling commits already on the integration branch (`8be5c1c35`, `a4a51f398`, `848dabe6f`,
+`07f82368b`, `1ce068c82`, `6981a949f`, `6f7526095`, `d2d9423b9`) and `receipts/issue-972.md`;
+`format:check` and `lint` are `ok`.
+
+**Full paths for coverage:**
+
+```
+ARCHITECTURE.md
+docs/design-divergences.md
+docs/glossary.md
+packages/server/src/engine/stores/gateway-db.test.ts
+packages/vault/src/blob/local-orphan-sweep.test.ts
+packages/vault/src/grant/fulfillment.roster.test.ts
+packages/vault/src/grant/fulfillment.test.ts
+packages/vault/src/index.ts
+packages/vault/src/schema/core.ts
+packages/vault/src/schema/entity-catalog.ts
+packages/vault/src/schema/entity-declaration.ts
+packages/vault/src/schema/entity-refs.ts
+packages/vault/src/schema/entity.ts
+packages/vault/src/schema/lifecycle.test.ts
+packages/vault/src/schema/migrate.test.ts
+packages/vault/src/schema/migrate.ts
+packages/vault/src/schema/subscription.ts
+packages/vault/src/share/closure-split.test.ts
+packages/vault/src/share/closure.ts
+packages/vault/src/share/docs-folder.test.ts
+packages/vault/src/share/household.test.ts
+packages/vault/src/share/placement-lifecycle.test.ts
+packages/vault/src/share/placement.test.ts
+packages/vault/src/share/placement-fixture.ts
+packages/vault/src/share/placement.ts
+packages/vault/src/share/project-closure.ts
+packages/vault/src/share/subscription-seat.ts
+packages/vault/src/share/subscription-sim-plane.test-fixtures.ts
+scripts/docs-site/src/content/ontology-body.html
+```
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| `unplaceProjection` no longer needs row-keyed provenance to remove a placed row, and still reports which shas the removal orphaned | ran `placement-lifecycle`, `docs-folder`, `household`, `local-orphan-sweep` — the four suites that call it — asserting `removed`, `orphanedShas` and the audience's surviving rows | green; `orphanedShas` matches the photo + thumb pair the old `live`-set arithmetic computed in the test |
+| The table leaves every EXISTING file, not just fresh ones | opened a vault at `user_version` 3 from the golden corpus, ran `migrateVault`, then `SELECT name FROM sqlite_master WHERE name='core_share_origin'` | 0 rows, `user_version` 4 |

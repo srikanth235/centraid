@@ -138,7 +138,7 @@ describe("grant/fulfillment", () => {
     ).toMatchObject({ n: 0 });
     expect(
       home.audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM core_share_origin")
+        .prepare("SELECT COUNT(*) AS n FROM share_subscription_lineage")
         .get()
     ).toMatchObject({ n: 0 });
 

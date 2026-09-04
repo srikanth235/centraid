@@ -147,17 +147,6 @@ export const VAULT_ENTITIES: EntityRegistry = {
       label: "Entity history",
       blurb: "Pre-mutation snapshots for version history and undo.",
     },
-    // Share-by-placement provenance (#599). Registered so a merged
-    // multi-scope app view can read the audience + who-placed-it badge for a
-    // projected row like any other table.
-    share_origin: {
-      lifecycle: "mutable",
-      // Its PRIMARY KEY *is* its pointer, so a provenance row cannot outlive
-      // the row it attributes; it names a target, it is not one (#916).
-      projectionOf: "core.entity",
-      label: "Shared with here",
-      blurb: "Where an item placed in this space came from, and who placed it.",
-    },
   },
   // `access`, not `consent` (#916, owner decision D4). The plane decides
   // ACCESS — who may read what, for how long, under which purpose — and had
@@ -568,6 +557,10 @@ export const VAULT_ENTITIES: EntityRegistry = {
     subscription_lineage: {
       label: "Subscription lineage",
       lifecycle: "machinery",
+      // Its key CARRIES its pointer — `(shape_id, target_type, target_id)`,
+      // with a composite foreign key into the supertype — so a claim cannot
+      // outlive the row it names; it names a target, it is not one (#916).
+      projectionOf: "core.entity",
     },
   },
   notifications: { notice: { label: "Notices", lifecycle: "machinery" } },

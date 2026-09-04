@@ -4,8 +4,9 @@
 // STRUCTURAL ONLY: item + content item + derivatives, never tags, links,
 // annotations or enrichment; the audience derives its own via
 // projection-ingest.ts. Cross-vault FKs (party/device/place/camera) project
-// NULL — provenance lives on core_share_origin.shared_by. Projected rows are
-// INDEPENDENT; nothing syncs back.
+// NULL — which vault a row came from is the SUBSCRIPTION's answer
+// (share_subscription x share_subscription_lineage), never a column here.
+// Projected rows are INDEPENDENT; nothing syncs back.
 
 export type ShareableItemType =
   | "core.collection"
@@ -28,8 +29,8 @@ const SHAREABLE_ITEM_TYPES: readonly ShareableItemType[] = [
 
 /**
  * The ENTITY a shareable item is. `docs.folder` is Docs' word for a
- * `core.concept`, and `core_share_origin.(target_type, target_id)` is a
- * composite foreign key into the entity supertype (#916), so provenance names
+ * `core.concept`, and `share_subscription_lineage.(target_type, target_id)` is
+ * a composite foreign key into the entity supertype (#916), so a claim names
  * the entity rather than the app's word for it.
  */
 export function shareOriginEntityType(itemType: ShareableItemType): string {
@@ -190,10 +191,11 @@ export interface ProjectResult {
   items: ProjectedItem[];
   /**
    * EVERY row the projection resolved, named items included. A share's lineage
-   * is keyed by the shape, and `core_share_origin` is keyed by the row and so
-   * names one sender only: a second grant over the same photograph stamps
-   * nothing and would claim nothing if the caller read provenance back instead
-   * of this (#929).
+   * is keyed by the SHAPE, so this — not a per-row provenance read — is what a
+   * seat claims: a second grant over the same photograph is a second claim
+   * over the same rows, and the first one's revoke leaves them (#929).
    */
   rows: ProjectedItem[];
+  /** Claims written. Zero on the placement path, which claims nothing. */
+  lineageRows: number;
 }

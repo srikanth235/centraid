@@ -6,8 +6,8 @@
  *
  * The lineage is what makes a purge safe: two grants over one photograph are
  * two lineage rows, so revoking one leaves the row the other still delivers.
- * `core_share_origin` cannot say that — it is keyed by the row and names one
- * sender — which is why removal reads that table and not this one.
+ * A row-keyed provenance table could not say that — it names one sender — so
+ * removal reads the shape's claims and nothing else.
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -15,7 +15,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { VaultShareError } from "../errors.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import type { ProjectedItem, ShareableItemType } from "./closure.js";
-import { shareableItemTypeOfEntity, shareOriginEntityType } from "./closure.js";
+import { shareableItemTypeOfEntity } from "./closure.js";
 import { projectShareClosure } from "./project-closure.js";
 import { deleteProjectedClosure } from "./removal.js";
 import {
@@ -92,9 +92,6 @@ function releaseShapeRows(
     `SELECT 1 AS present FROM share_subscription_lineage
       WHERE target_type = ? AND target_id = ? LIMIT 1`
   );
-  const dropOrigin = audience.prepare(
-    "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
-  );
   const shas = new Set<string>();
   let removed = 0;
   let retained = 0;
@@ -106,47 +103,11 @@ function releaseShapeRows(
     const itemType = shareableItemTypeOfEntity(claim.targetType);
     if (!itemType) continue;
     const outcome = deleteProjectedClosure(audience, itemType, claim.targetId);
-    dropOrigin.run(claim.targetType, claim.targetId);
     if (!outcome.removed) continue;
     removed += 1;
     for (const sha of outcome.shas) shas.add(sha);
   }
   return { removed, retained, shas: [...shas] };
-}
-
-/**
- * Claim every row the projection resolved — named items and the rows beneath
- * them — with the origin version each stands for. Read off the projection, not
- * off `core_share_origin`: that table is keyed by the row and names one sender,
- * so a SECOND grant over the same photograph would claim nothing.
- */
-function claimShapeRows(
-  audience: DatabaseSync,
-  frame: ShareShapeFrame,
-  rows: readonly ProjectedItem[],
-  versions: ReadonlyMap<string, number>
-): number {
-  const claim = audience.prepare(
-    `INSERT INTO share_subscription_lineage
-       (shape_id, target_type, target_id, origin_item_id, origin_row_version)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (shape_id, target_type, target_id) DO UPDATE SET
-       origin_item_id = excluded.origin_item_id,
-       origin_row_version = excluded.origin_row_version`
-  );
-  let claimed = 0;
-  for (const item of rows) {
-    const entity = shareOriginEntityType(item.itemType);
-    claim.run(
-      frame.shapeId,
-      entity,
-      item.itemId,
-      item.originItemId,
-      versions.get(versionKey(entity, item.originItemId)) ?? 0
-    );
-    claimed += 1;
-  }
-  return claimed;
 }
 
 /**
@@ -213,12 +174,13 @@ export function ingestShareShape(
     } else {
       if (plan.apply === "reproject") releaseShapeRows(audience, frame.shapeId);
       const projection = projectShareClosure(audience, frame.closure, {
-        // SHAPE-KEYED, so provenance and lineage answer the same question.
-        sharedBy: frame.shapeId,
+        // The projection claims its own rows, in its own transaction: a claim
+        // written afterwards could survive a projection that rolled back.
+        shape: { shapeId: frame.shapeId, rowVersions: versions },
         now: () => Date.parse(options.now),
       });
       items = projection.items;
-      lineageRows = claimShapeRows(audience, frame, projection.rows, versions);
+      lineageRows = projection.lineageRows;
     }
     recordSubscription(audience, {
       shapeId: frame.shapeId,

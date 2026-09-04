@@ -78,11 +78,6 @@ export const ENTITY_POINTERS: readonly EntityPointer[] = [
     note: "An attachment ON a purged target dangles (#441 A1). It was swept only for notes before this registry existed; now the engine does it for every target.",
   },
   {
-    table: "core_share_origin",
-    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
-    note: "Share-by-placement provenance (#599 decision 11): where a PROJECTED row came from. Its (type, id) IS its primary key, so the provenance row cannot outlive the row it attributes.",
-  },
-  {
     table: "knowledge_annotation",
     pairs: [{ typeCol: "target_type", idCol: "target_id" }],
     note: "A margin note on a purged target dangles (#441 A1) — previously swept only for notes, now for photos, documents and transactions too.",

@@ -431,55 +431,74 @@ function resolve(into: Projected, item: WireItem): ProjectedItem {
 }
 
 /**
- * A SHARE-ORIGIN ROW FOR EVERY PROJECTED ROW (#916, adversarial BUG-9).
+ * A LINEAGE CLAIM FOR EVERY PROJECTED ROW, KEYED BY THE SHAPE (#929).
  *
- * This used to stamp provenance on the top-level ITEMS only — the album, the
- * folder — and leave the rows inside them unattributed. That is the revoke
- * evasion: an audience trashed a projected photograph, which removed its
- * collection entry, so removal's closure walk over LIVE membership found
- * nothing to sweep; it deleted the album and its one origin row, and the
- * asset and its content survived for the audience to restore afterwards.
- * Removal sweeps by share_origin now, so every row the projection wrote must
- * carry one.
+ * Every row the projection wrote is claimed, not only the top-level items —
+ * the album, the folder. Stamping the items alone was the revoke evasion
+ * (#916, adversarial BUG-9): an audience trashed a projected photograph, which
+ * removed its collection entry, so removal's walk over LIVE membership found
+ * nothing to sweep, and the asset and its content survived to be restored.
+ *
+ * SHAPE-KEYED, so two grants over one photograph are two claims and the second
+ * one keeps the row when the first is revoked. That is the whole reason a
+ * row-keyed provenance table, which names one sender, could not stay.
+ *
+ * A PLACEMENT CLAIMS NOTHING. Same-owner placement is a MOVE between the
+ * owner's own vaults: the item ends up as the owner's own row, with no shape
+ * to end and no sender to name, so a lineage row would assert a subscription
+ * that does not exist (#928 A6).
  */
 function recordLineage(
   audience: DatabaseSync,
-  closure: WireClosure,
+  shape: ShareShapeClaim,
   projected: Projected,
-  items: readonly ProjectedItem[],
-  sharedBy: string,
-  sharedAt: number
-): void {
+  items: readonly ProjectedItem[]
+): number {
   const write = audience.prepare(
-    `INSERT INTO core_share_origin
-       (target_type, target_id, origin_vault_id, origin_item_id, shared_by, shared_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT (target_type, target_id) DO NOTHING`
+    `INSERT INTO share_subscription_lineage
+       (shape_id, target_type, target_id, origin_item_id, origin_row_version)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (shape_id, target_type, target_id) DO UPDATE SET
+       origin_item_id = excluded.origin_item_id,
+       origin_row_version = excluded.origin_row_version`
   );
-  const stamp = (
+  const claimed = new Set<string>();
+  const claim = (
     itemType: ShareableItemType,
     itemId: string,
     originItemId: string
   ): void => {
+    const entity = shareOriginEntityType(itemType);
     write.run(
-      shareOriginEntityType(itemType),
+      shape.shapeId,
+      entity,
       itemId,
-      closure.originVaultId,
       originItemId,
-      sharedBy,
-      sharedAt
+      shape.rowVersions.get(`${entity} ${originItemId}`) ?? 0
     );
+    claimed.add(`${entity} ${itemId}`);
   };
   for (const row of projected.values())
-    stamp(row.itemType, row.itemId, row.originItemId);
-  // The named items last, so a top-level id wins the ON CONFLICT if the two
-  // walks ever disagree about which origin id a row came from.
+    claim(row.itemType, row.itemId, row.originItemId);
+  // The named items last, so a top-level id wins the upsert if the two walks
+  // ever disagree about which origin id a row came from.
   for (const item of items)
-    stamp(item.itemType, item.itemId, item.originItemId);
+    claim(item.itemType, item.itemId, item.originItemId);
+  return claimed.size;
+}
+
+/**
+ * The subscription a projection is being ingested FOR. Absent on the placement
+ * path, which claims nothing — see `recordLineage`.
+ */
+export interface ShareShapeClaim {
+  shapeId: string;
+  /** `<entity> <originItemId>` → the origin's replica change sequence. */
+  rowVersions: ReadonlyMap<string, number>;
 }
 
 export interface ProjectShareClosureOptions {
-  sharedBy: string;
+  shape?: ShareShapeClaim;
   now?: () => number;
   keys?: { origin: Buffer; audience: Buffer };
 }
@@ -503,20 +522,15 @@ export function projectShareClosure(
     replicaCommit = beginReplicaCommit(audience);
     const projected = projectRows(audience, closure, options.keys);
     const items = closure.items.map((item) => resolve(projected, item));
-    recordLineage(
-      audience,
-      closure,
-      projected,
-      items,
-      options.sharedBy,
-      sharedAt
-    );
+    const lineageRows = options.shape
+      ? recordLineage(audience, options.shape, projected, items)
+      : 0;
     runProjectionIngest(audience, [...projected.values()], {
       now: new Date(sharedAt).toISOString(),
     });
     endReplicaCommit(audience, replicaCommit);
     audience.exec(nested ? "RELEASE project_share_closure" : "COMMIT");
-    return { items, rows: [...projected.values()] };
+    return { items, rows: [...projected.values()], lineageRows };
   } catch (error) {
     audience.exec(nested ? "ROLLBACK TO project_share_closure" : "ROLLBACK");
     if (nested) audience.exec("RELEASE project_share_closure");

@@ -145,13 +145,13 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("THREE rungs: the baseline plus #929's two, and a fresh vault stops at user_version 3", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(3);
+  test("FOUR rungs: the baseline plus #929's three, and a fresh vault stops at user_version 4", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(4);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(3);
+    expect(version.user_version).toBe(4);
     for (const table of [
       "locker_auth_credential",
       "core_entity",
@@ -186,6 +186,10 @@ describe("schema/migrate", () => {
       "share_commons_member_state",
       "share_commons_intent",
       "share_commons_invitation",
+      // Row-keyed placement provenance (#929, rung three): shape-keyed
+      // `share_subscription_lineage` is the only answer to "which vault did
+      // this row come from" now.
+      "core_share_origin",
       "enrich_consent",
       "consent_app",
       "locker_item_history",
@@ -474,10 +478,10 @@ describe("schema/migrate", () => {
     first.close();
 
     const vaultFile = path.join(dir, "vault.db");
-    expect(userVersionOf(vaultFile)).toBe(3);
+    expect(userVersionOf(vaultFile)).toBe(4);
 
     const second = openVaultDb({ dir });
-    expect(userVersionOf(vaultFile)).toBe(3);
+    expect(userVersionOf(vaultFile)).toBe(4);
     expect(shapeOf(second)).toBe(before);
     second.close();
   });

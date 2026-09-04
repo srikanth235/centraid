@@ -32,7 +32,7 @@
 // PROJECTIONS of the row they are keyed by, and so are the composite-keyed
 // join rows (`media.memory_member`, `tally.expense_split`,
 // `tally.expense_payer`, `tally.expense_line_allocation`) and
-// `core.share_origin`, whose key IS its pointer. `locker.item_alias` is a
+// `share.subscription_lineage`, whose key carries its pointer. `locker.item_alias` is a
 // projection for a sharper reason: its key is a word the member chose, and
 // entity ids are one opaque namespace — an alias called "github" would occupy
 // an entity id, and a later entity minted with that id would satisfy the
