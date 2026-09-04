@@ -334,4 +334,33 @@ describe("schedule organization commands", () => {
       (completed as { output: { next_due_at?: string } }).output.next_due_at
     ).toBe("2026-08-29T12:15:00.000Z");
   });
+
+  // #922 G2: SAVE IS AN UPSERT, so a seat-minted id is honoured but never
+  // refused — a create and a rename arrive looking identical, and refusing a
+  // repeat would refuse every rename. Pinned rather than assumed, because the
+  // sibling create (`schedule.add_task`) refuses and the difference matters:
+  // splitting create from edit is what would let these two refuse too.
+  test("a repeated save_project id updates the row instead of being refused", () => {
+    const minted = "1f2e3d4c-0000-8000-8000-0000000000bb";
+    const first = invoke("schedule.save_project", {
+      project_id: minted,
+      name: "House",
+    });
+    expect((first as { status: string }).status).toBe("executed");
+    const again = invoke("schedule.save_project", {
+      project_id: minted,
+      name: "Renamed",
+    });
+    expect((again as { status: string }).status).toBe("executed");
+    expect(
+      db.vault
+        .prepare("SELECT name FROM schedule_project WHERE project_id = ?")
+        .get(minted)
+    ).toMatchObject({ name: "Renamed" });
+    expect(
+      db.vault.prepare("SELECT count(*) AS n FROM schedule_project").get() as {
+        n: number;
+      }
+    ).toMatchObject({ n: 1 });
+  });
 });

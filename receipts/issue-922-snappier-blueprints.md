@@ -1921,3 +1921,30 @@ Also in slice 5: `packages/vault/src/commands/minted-id.ts` — the honour-or-re
 **Verified.** Red-first reproduces exactly: reverting the slice's sources onto `1fdf32ba2` and keeping the new test gives `× lands on reconnect naming the row the seat already showed / expected undefined to be 'pending:intent-project:project'` and `× the origin refuses a row id it already holds / expected 'executed' to be 'denied'`; at `7bbbb5687`, 2 passed. The `pending:` grammar is gone from source — no `PENDING_ROW_ID_PREFIX`, `SYNTHETIC_PENDING_ROW`, `REVISION_IDENTITY_PROBE`, `pendingIntentIdFromInput`, `isPendingRowId`, `isPendingTaskId`, `isPendingPartyId` or `landedTask` outside receipts/CHANGELOG/`docs/decisions.md`; remaining `pending:` strings are inert test fixtures and prose. The seven-app gap is stated honestly. `IntentQueue.pendingIntentForInput`'s `store.list()` is bounded — settled intents are deleted from the store (`intent-store.ts:205`).
 
 **Gates run** (this worktree, under `flock`). `.governance/run.sh` → 22/22 pass. `bun run typecheck` → pass. `bun run --cwd packages/blueprints test` → 212 files, 6643 passed. `bun run --cwd packages/client test` → 269 files, 2448 passed. `bun run --cwd packages/vault test` → 202 files, 1585 passed. `bun run --cwd apps/mobile test` → 276 files, 2380 passed. `self-audit.sh 922` reports one receipt-prefix FAIL that predates this slice (the pre-commit hook restamped the `### Identifiers` date at line 168 in `0940a7922`); slice 5's own receipt edit is a single append-only hunk and the `doc-integrity` directive passes.
+
+## Mega-lane A slice 5 — verifier round 1 corrections
+
+The audit at `44b5384f4` was right on all four counts. What changed, and what the earlier section claimed that was not true:
+
+| Finding | Correction |
+| --- | --- |
+| `save_project`/`save_section` honour a minted id and never refuse a repeat | **The behaviour is correct and the claim was wrong.** Both commands are UPSERTS — one command makes the row and renames it — so a create and a rename arrive carrying the same id and are indistinguishable at the origin; `mintedIdIsFree` would refuse every rename. The exclusion is now written beside both commands and in `minted-id.ts`'s header, with the consequence stated plainly: a second save with the same id overwrites the row's fields. `packages/vault/src/commands/schedule-organize.test.ts` pins that (executed, renamed, still one row) so the difference from `add_task` is asserted, not assumed. |
+| `MINTED_ID_PROPERTY` honoured any non-empty string as a primary key | `minLength`/`maxLength` 36 and a UUID `pattern` covering the seat's v8 and `ctx.newId()`'s v7. `tasks.test.ts` refuses whitespace, a SQL-shaped string, a 5,000-character id and a zero version nibble, and asserts the table is left empty. The refused-duplicate case now also asserts the first row is untouched. |
+| No tree hash in the verification block | Quoted below, and in the report. |
+| `app.json` machine re-serialized (115 lines, `\u` escapes) | Restored to the file's own style; the diff against `1fdf32ba2` is now the four-line `task_id` property and nothing else. |
+
+**The claim, corrected.** Slice 5's Decisions said "the origin REFUSES a duplicate rather than merging". True of `schedule.add_task`, which is only ever a create. NOT true of `schedule.save_project` and `schedule.save_section`, which are upserts and deliberately merge. `minted-id.ts` now says which kind of command each half is for.
+
+```
+# Slice 5 landed at 7bbbb5687. The suites and governance below ran against
+# tree 710619d4777b2090617473253f5cd8ad48d03919 — this section's own text is
+# the only thing added after it, so the landed commit tree differs from it by
+# these three lines and nothing else.
+bun run --cwd packages/vault test src/commands/tasks.test.ts            # 22 passed
+bun run --cwd packages/vault test src/commands/schedule-organize.test.ts # 7 passed
+bun run --cwd packages/vault test && bun run --cwd packages/blueprints test
+bun run --cwd packages/client test && bun run --cwd apps/mobile test
+bash .governance/run.sh
+```
+
+**Findings.** (1) **Splitting create from edit for `save_project`/`save_section` is not done here.** It is the change that would let those two refuse a duplicate minted id, and it needs a new action on the Tasks manifest plus a seat change — outside this fix's two files, and mega-lane E is working from this head on `claude/922-reads`. Named so it is not mistaken for an oversight. (2) The seven remaining apps still do not carry their minted ids to the origin; lane E owns generalising `minted-id.ts` to them, and `MINTED_ID_PROPERTY` now carries the shape they will inherit.

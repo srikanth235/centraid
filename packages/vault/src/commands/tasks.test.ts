@@ -525,5 +525,36 @@ describe("tasks", () => {
       purpose: "dpv:ServiceProvision",
     });
     expect(again.status).not.toBe("executed");
+    // The refused write left the first row exactly as it was.
+    expect(
+      db.vault
+        .prepare("SELECT title FROM schedule_task WHERE task_id = ?")
+        .get(minted)
+    ).toMatchObject({ title: "Grout" });
+  });
+
+  // A row id the CALLER chose has a shape the origin enforces. Honouring any
+  // non-empty string would have made the primary key caller-controlled prose.
+  test("refuses a minted id that is not a UUID", () => {
+    for (const bad of [
+      "  ",
+      "'; DROP TABLE schedule_task; --",
+      "x".repeat(5_000),
+      "1f2e3d4c-0000-0000-8000-0000000000aa",
+    ]) {
+      const outcome = gw.invoke(owner, {
+        command: "schedule.add_task",
+        input: { task_id: bad, title: "Shaped like nothing" },
+        purpose: "dpv:ServiceProvision",
+      });
+      expect(outcome.status, `${bad.slice(0, 24)} must be refused`).not.toBe(
+        "executed"
+      );
+    }
+    expect(
+      db.vault.prepare("SELECT count(*) AS n FROM schedule_task").get() as {
+        n: number;
+      }
+    ).toMatchObject({ n: 0 });
   });
 });

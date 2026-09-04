@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "tasks",
   "name": "Tasks",
-  "description": "A Todoist-depth task manager as a projection of the personal vault: canonical tasks from schedule.task, nothing stored here. Adding, completing and editing all run through the schedule domain's typed task commands \u2014 consent-checked, contract-checked and receipted. Revoke the grant and the app goes dark while the tasks, history and receipts remain the owner's.",
+  "description": "A Todoist-depth task manager as a projection of the personal vault: canonical tasks from schedule.task, nothing stored here. Adding, completing and editing all run through the schedule domain's typed task commands — consent-checked, contract-checked and receipted. Revoke the grant and the app goes dark while the tasks, history and receipts remain the owner's.",
   "version": "0.3.1",
   "iconKey": "Check",
   "colorKey": "ochre",
@@ -126,6 +126,10 @@
       "input": {
         "type": "object",
         "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          },
           "title": {
             "type": "string",
             "minLength": 1
@@ -158,10 +162,6 @@
           "remind_before_min": {
             "type": "integer",
             "minimum": 0
-          },
-          "task_id": {
-            "type": "string",
-            "minLength": 1
           }
         },
         "required": ["title"],
@@ -328,23 +328,11 @@
       "input": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "name": {
-            "type": "string",
-            "minLength": 1
-          },
-          "area": {
-            "type": "string"
-          },
-          "color": {
-            "type": "string"
-          },
-          "sort_order": {
-            "type": "integer"
-          }
+          "project_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "area": { "type": "string" },
+          "color": { "type": "string" },
+          "sort_order": { "type": "integer" }
         },
         "required": ["name"],
         "additionalProperties": false
@@ -352,15 +340,9 @@
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": ["schedule.project"]
@@ -372,21 +354,10 @@
       "input": {
         "type": "object",
         "properties": {
-          "section_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "project_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "name": {
-            "type": "string",
-            "minLength": 1
-          },
-          "sort_order": {
-            "type": "integer"
-          }
+          "section_id": { "type": "string", "minLength": 1 },
+          "project_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "sort_order": { "type": "integer" }
         },
         "required": ["project_id", "name"],
         "additionalProperties": false
@@ -394,15 +365,9 @@
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": ["schedule.section"]
@@ -414,30 +379,16 @@
       "input": {
         "type": "object",
         "properties": {
-          "task_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "project_id": {
-            "type": "string"
-          },
-          "section_id": {
-            "type": "string"
-          },
-          "clear_project": {
-            "type": "boolean",
-            "const": true
-          },
-          "sort_order": {
-            "type": "integer"
-          },
+          "task_id": { "type": "string", "minLength": 1 },
+          "project_id": { "type": "string" },
+          "section_id": { "type": "string" },
+          "clear_project": { "type": "boolean", "const": true },
+          "sort_order": { "type": "integer" },
           "recurrence_anchor": {
             "type": "string",
             "enum": ["scheduled", "completion"]
           },
-          "recurrence_tz": {
-            "type": "string"
-          }
+          "recurrence_tz": { "type": "string" }
         },
         "required": ["task_id", "sort_order"],
         "additionalProperties": false
@@ -445,15 +396,9 @@
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": ["schedule.task"]
@@ -546,7 +491,7 @@
     },
     {
       "name": "add-tag",
-      "description": "Tag a task through core.tag_item \u2014 a free-form label shared with every other app that tags through the same command (one shared Tags concept scheme). Idempotent.",
+      "description": "Tag a task through core.tag_item — a free-form label shared with every other app that tags through the same command (one shared Tags concept scheme). Idempotent.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -614,7 +559,7 @@
   "queries": [
     {
       "name": "board",
-      "description": "The task board as a bounded window (newest open tasks by creation, caller-sized, families kept whole; the logbook read is capped at its visible 50 most recently closed), each row carrying its tags (`[{tag_id, concept_id, label}]`), plus the distinct tag list (`[{concept_id, label}]`) seen within the window \u2014 never a whole-table pull; `truncated` says more open tasks exist beyond the window.",
+      "description": "The task board as a bounded window (newest open tasks by creation, caller-sized, families kept whole; the logbook read is capped at its visible 50 most recently closed), each row carrying its tags (`[{tag_id, concept_id, label}]`), plus the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull; `truncated` says more open tasks exist beyond the window.",
       "input": {
         "type": "object",
         "properties": {
@@ -655,7 +600,7 @@
     },
     {
       "name": "search",
-      "description": "Full-text task search through the vault's FTS5 index (title + description) \u2014 returns only the ranked matches in the board's per-task row shape plus a hit snippet, never a whole-table pull.",
+      "description": "Full-text task search through the vault's FTS5 index (title + description) — returns only the ranked matches in the board's per-task row shape plus a hit snippet, never a whole-table pull.",
       "input": {
         "type": "object",
         "properties": {
