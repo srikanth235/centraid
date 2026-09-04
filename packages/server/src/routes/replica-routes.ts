@@ -38,6 +38,7 @@ import { replicaProjectionHub } from "./replica-fanout.js";
 import { handleReplicaIntent } from "./replica-intent-route.js";
 import type { ReplicaIntentDispatcher } from "./replica-intent-route.js";
 import {
+  applyReplicaIntentOutcomes,
   projectReplicaPage,
   replicaOutcomeWire,
   replicaShapeIds,
@@ -1128,11 +1129,17 @@ export function makeReplicaRouteHandler(
           rebootstrapBody("initial", currentReplicaLogState(plane.db.vault))
         );
       try {
-        const page = projectReplicaPage(
+        // The projection is device-neutral; this device's intent outcomes are
+        // layered on top (#922 A4).
+        const page = applyReplicaIntentOutcomes(
           plane.db.vault,
-          access,
-          parseSince(url),
-          limit ?? 1_000
+          projectReplicaPage(
+            plane.db.vault,
+            access,
+            parseSince(url),
+            limit ?? 1_000
+          ),
+          access
         );
         const expected = expectedReplicaShapeIds(url);
         if (

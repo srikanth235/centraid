@@ -90,6 +90,24 @@ export interface ReplicaProjectedPage {
   doorbell: ReplicaDoorbellChange[];
   shapes: ReplicaServerShape[];
   rebootstrapReason?: "shape-changed";
+  /**
+   * The `replica.intent` log entries in this window, unresolved. THE PAGE IS
+   * DEVICE-NEUTRAL (#922 A4): an intent outcome is the one part of a
+   * projection that differs between two identically-authorized devices, so it
+   * is carried as raw entries here and resolved per device by
+   * `applyReplicaIntentOutcomes`. Everything else — shapes, visibility, shaped
+   * values, doorbell — is computed once per commit and shared.
+   */
+  intentEntries: ReplicaIntentEntry[];
+}
+
+export interface ReplicaIntentEntry {
+  seq: number;
+  commitId: string;
+  entity: string;
+  rowId: string;
+  op: ReplicaChangeEntry["op"];
+  changedAt: string;
 }
 
 // These rows change what a client may retain: advancing past one as ordinary
@@ -287,6 +305,7 @@ export function projectReplicaPage(
     const rebootstrap = (): ReplicaProjectedPage => ({
       shapes,
       doorbell: [],
+      intentEntries: [],
       rebootstrapReason: "shape-changed",
       batch: {
         protocolVersion: REPLICA_PROTOCOL_VERSION,
@@ -316,35 +335,19 @@ export function projectReplicaPage(
       return rows.get(key);
     };
     const changes = new Map<string, ReplicaChangeWire>();
-    const outcomes = new Map<string, ReplicaIntentOutcomeWire>();
     const doorbell: ReplicaDoorbellChange[] = [];
+    const intentEntries: ReplicaIntentEntry[] = [];
 
     const coalesced = new Map<string, CoalescedChange>();
     for (const raw of page.changes) {
       if (raw.entity === "replica.intent") {
-        if (!access.deviceId) continue;
-        const outcome = readReplicaIntentOutcome(
-          db,
-          raw.rowId,
-          access.deviceId
-        );
-        if (!outcome || (access.appId && outcome.appId !== access.appId))
-          continue;
-        const wire = outcomeWire(outcome);
-        if (!wire) continue;
-        outcomes.set(wire.intentId, wire);
-        const outcomeShapeIds = shapes
-          .filter((shape) => shape.appId === outcome.appId)
-          .map((shape) => shape.shapeId)
-          .sort();
-        doorbell.push({
+        intentEntries.push({
           seq: raw.seq,
           commitId: raw.commitId,
           entity: raw.entity,
           rowId: raw.rowId,
           op: raw.op,
           changedAt: raw.changedAt,
-          shapeIds: outcomeShapeIds,
         });
         continue;
       }
@@ -431,16 +434,61 @@ export function projectReplicaPage(
     return {
       shapes,
       doorbell,
+      intentEntries,
       batch: {
         protocolVersion: REPLICA_PROTOCOL_VERSION,
         schemaEpoch: String(page.schemaEpoch),
         from: since,
         to: page.next,
         changes: [...changes.values()],
-        ...(outcomes.size > 0 ? { outcomes: [...outcomes.values()] } : {}),
         ...(page.hasMore ? { hasMore: true } : {}),
         shapeIds,
       },
     };
   }).value;
+}
+
+/**
+ * Resolve one device's intent outcomes onto a device-neutral page.
+ *
+ * Outcome rows are keyed by (intent, device) and only ever move forward, so
+ * they are read outside the projection's read transaction: a later read can
+ * return a newer verdict for the same intent, never an older one. A page with
+ * no intent entries — the overwhelmingly common case — is returned untouched,
+ * so sharing it across devices costs nothing.
+ */
+export function applyReplicaIntentOutcomes(
+  db: DatabaseSync,
+  page: ReplicaProjectedPage,
+  access: ReplicaShapeAccess & { deviceId?: string }
+): ReplicaProjectedPage {
+  if (page.intentEntries.length === 0 || !access.deviceId) return page;
+  const deviceId = access.deviceId;
+  const outcomes = new Map<string, ReplicaIntentOutcomeWire>();
+  const doorbell: ReplicaDoorbellChange[] = [];
+  for (const entry of page.intentEntries) {
+    const outcome = readReplicaIntentOutcome(db, entry.rowId, deviceId);
+    if (!outcome || (access.appId && outcome.appId !== access.appId)) continue;
+    const wire = outcomeWire(outcome);
+    if (!wire) continue;
+    outcomes.set(wire.intentId, wire);
+    doorbell.push({
+      seq: entry.seq,
+      commitId: entry.commitId,
+      entity: entry.entity,
+      rowId: entry.rowId,
+      op: entry.op,
+      changedAt: entry.changedAt,
+      shapeIds: page.shapes
+        .filter((shape) => shape.appId === outcome.appId)
+        .map((shape) => shape.shapeId)
+        .sort(),
+    });
+  }
+  if (outcomes.size === 0) return page;
+  return {
+    ...page,
+    doorbell: [...doorbell, ...page.doorbell],
+    batch: { ...page.batch, outcomes: [...outcomes.values()] },
+  };
 }

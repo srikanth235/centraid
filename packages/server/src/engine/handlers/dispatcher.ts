@@ -54,10 +54,23 @@ export interface ToolErrorResult {
   readonly structuredContent: ToolErrorContent;
 }
 
+/** One `ctx.vault.read` that hit its row ceiling during a handler run. */
+export interface TruncatedRead {
+  readonly entity: string;
+  readonly appliedLimit: number;
+}
+
 export interface ToolSuccessResult {
   readonly isError: false;
   readonly content: readonly [{ readonly type: "text"; readonly text: string }];
   readonly structuredContent: unknown;
+  /**
+   * TRUNCATION IS NEVER SILENT (#922 0a) — and it must not go silent one layer
+   * up either. The gateway marks a read that hit its ceiling; a handler is
+   * free to ignore that flag, so the dispatcher aggregates every truncated
+   * read of the run into the envelope. Absent means every read was complete.
+   */
+  readonly truncatedReads?: readonly TruncatedRead[];
 }
 
 export type ToolResult = ToolErrorResult | ToolSuccessResult;
@@ -78,11 +91,47 @@ function errorResult(
   };
 }
 
-function successResult(value: unknown): ToolSuccessResult {
+function successResult(
+  value: unknown,
+  truncatedReads: readonly TruncatedRead[] = []
+): ToolSuccessResult {
   return {
     isError: false,
     content: [{ type: "text", text: JSON.stringify(value ?? null) }],
     structuredContent: value,
+    ...(truncatedReads.length > 0 ? { truncatedReads } : {}),
+  };
+}
+
+/**
+ * Wrap a bridge so the run records which reads the gateway had to cut short.
+ * The recorder is per handler run, never per app, so two concurrent runs never
+ * see each other's truncations.
+ */
+function recordTruncatedReads(bridge: VaultBridge): {
+  bridge: VaultBridge;
+  truncated: readonly TruncatedRead[];
+} {
+  const seen = new Map<string, TruncatedRead>();
+  const wrapped: VaultBridge = async (call) => {
+    const outcome = await bridge(call);
+    if (call.op !== "read" || !outcome.ok) return outcome;
+    const result = outcome.result as
+      | { truncated?: unknown; appliedLimit?: unknown }
+      | null
+      | undefined;
+    if (result?.truncated !== true) return outcome;
+    const entity = String(call.payload.entity ?? "unknown");
+    const appliedLimit =
+      typeof result.appliedLimit === "number" ? result.appliedLimit : 0;
+    seen.set(`${entity}\u0000${appliedLimit}`, { entity, appliedLimit });
+    return outcome;
+  };
+  return {
+    bridge: wrapped,
+    get truncated() {
+      return [...seen.values()];
+    },
   };
 }
 
@@ -396,6 +445,13 @@ export class Dispatcher {
     );
     if (validation) return validation;
 
+    const reads = this.vaultFor
+      ? recordTruncatedReads(
+          intentId
+            ? bindIntentToVaultBridge(this.vaultFor(appId), intentId)
+            : this.vaultFor(appId)
+        )
+      : undefined;
     const outcome = await runHandler({
       app: { id: entry.id, dir: dataDir },
       handlerFile: await this.resolveHandlerFile(
@@ -410,13 +466,7 @@ export class Dispatcher {
       // instead of making every listener re-derive the app (#883 D2).
       declaredWrites: entryDef.writes ?? [],
       ...(this.onWriteFor ? { onWrite: this.onWriteFor(appId) } : {}),
-      ...(this.vaultFor
-        ? {
-            vault: intentId
-              ? bindIntentToVaultBridge(this.vaultFor(appId), intentId)
-              : this.vaultFor(appId),
-          }
-        : {}),
+      ...(reads ? { vault: reads.bridge } : {}),
       ...(this.timeModuleUrl ? { timeModuleUrl: this.timeModuleUrl } : {}),
     });
     if (!outcome.ok) {
@@ -446,7 +496,7 @@ export class Dispatcher {
           : `action returned status ${result.status}`;
       return errorResult("HANDLER_ERROR", bodyText);
     }
-    return successResult(result?.body ?? null);
+    return successResult(result?.body ?? null, reads?.truncated ?? []);
   }
 
   async read(
@@ -499,6 +549,9 @@ export class Dispatcher {
     );
     if (validation) return validation;
 
+    const reads = this.vaultFor
+      ? recordTruncatedReads(this.vaultFor(appId))
+      : undefined;
     const outcome = await runHandler({
       app: { id: entry.id, dir: dataDir },
       handlerFile: await this.resolveHandlerFile(codeDir, "queries", queryName),
@@ -510,7 +563,7 @@ export class Dispatcher {
         input: handlerInput,
       },
       timeoutMs: 10_000,
-      ...(this.vaultFor ? { vault: this.vaultFor(appId) } : {}),
+      ...(reads ? { vault: reads.bridge } : {}),
       ...(this.timeModuleUrl ? { timeModuleUrl: this.timeModuleUrl } : {}),
     });
     if (!outcome.ok) {
@@ -522,7 +575,7 @@ export class Dispatcher {
         outcome.error ?? "query handler failed"
       );
     }
-    return successResult(outcome.value ?? null);
+    return successResult(outcome.value ?? null, reads?.truncated ?? []);
   }
 
   private validateInput(

@@ -165,7 +165,7 @@ Falsification attempts:
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-03 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 | 2026-09-03 | codex | 01a06827-b506-78d1-b396-f4b14307e138 |
 
 ## w1 Metro-loader spike — ADOPT
@@ -1679,3 +1679,43 @@ Full suites and governance ran green against tree `7156dad154a136f348b828a81d870
 Seeded reds, each run before its fix landed: dropping the journal-proof stamp fails three of the four crash-replay cases on an unfinished marker; making `checkpointIfLargerThan` skip the pragma grows the WAL 13.33 MB → 18.26 MB under the same workload and fails the bound.
 
 **Findings.** (1) The B8 row in `docs/decisions.md` ("~4 durable commits per intent … no remaining crash property") is stale and should be superseded: the measured cost is 3, one of which is already the folded canonical transaction, and the other two are named above with the property each keeps. (2) `gateway.checkpoint` → `checkpointVault` is TRUNCATE on a connection with `busy_timeout = 30000`; any caller reaching it while a replica session reads stalls the gateway for 30 s. The fallback tick no longer does; the owner-facing `checkpoint` verb still can. (3) The intent-status pair could still share commits with the canonical writes if the route's two writes went through the group-commit queue — worth nothing until [#880](https://github.com/srikanth235/centraid/issues/880)'s one-intent-per-round-trip drain (A6) makes intents concurrent, so it is not landed here.
+
+## Mega-lane A slice 1 — gateway plane 4b (A2/A4/A5 + dispatcher envelope)
+
+| File | Change |
+| --- | --- |
+| `packages/vault/src/replica/snapshot.ts` | canonical entity shapes memoized per connection; `readReplicaRow`/`readReplicaRows` on cached statements; the snapshot's pinned epoch threaded to every row read |
+| `packages/server/src/routes/replica-projection.ts` | projection made device-neutral: raw `replica.intent` entries ride the page as `intentEntries`, resolved by the new `applyReplicaIntentOutcomes` |
+| `packages/server/src/routes/replica-fanout.ts` | `deviceId` removed from the memo key; the per-device outcome layer applied over the shared page |
+| `packages/server/src/routes/replica-routes.ts` | the `/changes` pull layers outcomes on the same device-neutral projection |
+| `packages/server/src/routes/replica-fanout.test.ts` | the deviceId divergence case replaced by the sharing claim it supersedes |
+| `packages/server/src/engine/handlers/dispatcher.ts` | `recordTruncatedReads` aggregates every `ctx.vault.read` the gateway cut short into `ToolSuccessResult.truncatedReads` |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Prepared statements for 39 further identically-authorized devices, one commit generation | 390 | 0 | throwaway vitest in `packages/server/src/routes`, bootstrapped vault, `db.vault.prepare` counted across `hub.project` per device; container 4 cores / 15 GB |
+| Projections per commit per household, N identically-authorized devices | N | 1 | same run; memo key no longer carries `deviceId` |
+| `buildReplicaShapes` uncached prepares per projection (memo miss, warm) | 0 | 0 | same run, SQL texts captured: all 10 remaining come from `packages/vault/src/replica/change-log.ts` (9) and the grantee lookup (1) |
+| `withReplicaSnapshot` + one `readReplicaRow` on the change path: prepares / `PRAGMA` | 4 / 1 | 2 / 0 | same run; the 2 remaining are the snapshot's own once-per-transaction log-state reads, not per row — `readReplicaRow` itself now issues 0 of each |
+
+**SSE cap.** Not raised. `SSE_MAX_SUBSCRIBERS = 32` refuses an N=40 fan-out sample and no property of this change needs 40 concurrent subscribers, so the shipped claim is stated at **N = 32**: 31 further identically-authorized subscribers cost 0 projections and 0 prepared statements per commit. The measurement above ran 39 askers directly against the hub, above what the SSE plane will admit, which only makes the claim at 32 stronger.
+
+**Deleted/replaced.** The per-device projection branch in `projectReplicaPage` is gone, replaced by `applyReplicaIntentOutcomes`; no second path remains. The fanout test's "a different `deviceId` is a different answer" case is deleted because this change makes it false — the structural claim (`batch.outcomes` absent and `intentEntries` unresolved on the shared page) plus the existing device-scoped outcome suites (`replica-routes.test.ts` "device-scoped outcomes through the snapshot cursor", `replica-intent-route.test.ts`) carry the correctness it stood for.
+
+**Decisions.** Entity shapes are memoized for canonical entities only; the dynamic ext band may gain a table or column while the vault is open, so `parseExtLogical` entities keep re-reading `PRAGMA table_info`. Intent outcomes are read outside the projection's read transaction: outcome rows are keyed by (intent, device) and only move forward, so a later read returns a newer verdict, never an older one.
+
+```
+bun run --cwd packages/vault build && bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck
+bun run --cwd packages/vault test src/replica/snapshot.test.ts src/replica/change-log.test.ts
+bun run --cwd packages/server test src/routes/replica-fanout.test.ts src/routes/replica-projection.test.ts src/routes/replica-routes.test.ts src/routes/replica-intent-route.test.ts src/routes/multiplex-replica-routes.test.ts src/engine/handlers/dispatcher.test.ts
+```
+
+**Findings.** (1) `currentReplicaLogState` and `readReplicaChanges` in `packages/vault/src/replica/change-log.ts` prepare uncached: 9 of the 10 statements a warm projection still compiles are theirs (`replica_meta` ×3, `MAX(seq)` ×3, the change window ×2, the presence probe ×1). Outside this lane's files; the same `prepared()` seam `snapshot.ts` now uses would take it to 0. (2) The grantee `SELECT DISTINCT` behind `buildReplicaShapes` is the tenth, and lives in `replica-grantees.ts`, which lane 1 owns.
+
+**Doc debt.** `docs/decisions.md` SB-replica-sync (C2) describes the shared projection as keyed by authorization *and device*; it is now authorization-only with a per-device outcome layer — the row is not yet wrong about the product, but it under-describes the mechanism.
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| A shared projection leaks one device's intent outcome to another | asserted on the memoized page itself that `batch.outcomes` is undefined and `intentEntries` is `[]`, then re-ran both device-scoped outcome suites | held — 43 route tests green, no outcome crosses devices |
+| The memoized entity shape serves a stale column set after a schema change | ext entities excluded from the memo by `parseExtLogical`; re-ran `snapshot.test.ts` + `change-log.test.ts` (24 tests) and the ext-touching route suites | held — canonical shapes are fixed at open, ext still re-reads `PRAGMA table_info` every call |
