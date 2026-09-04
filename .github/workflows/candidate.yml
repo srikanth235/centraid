@@ -718,12 +718,15 @@ jobs:
           sha="$(git rev-parse refs/candidates/latest)"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           git worktree add ../candidate-baseline "$sha"
+      - name: Set up the baseline
+        if: steps.baseline.outcome == 'success'
+        uses: ./.github/actions/setup
+        with:
+          working-directory: ../candidate-baseline
       - name: Build the baseline
         if: steps.baseline.outcome == 'success'
         working-directory: ../candidate-baseline
-        run: |
-          bun install --frozen-lockfile
-          bun run build
+        run: bun run build
       - name: Paired candidate/PR journeys
         id: paired
         if: steps.baseline.outcome == 'success'

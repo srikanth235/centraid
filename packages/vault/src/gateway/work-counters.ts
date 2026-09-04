@@ -50,9 +50,14 @@ function cellBytes(value: unknown): number {
       return 8;
     case "boolean":
       return 1;
-    default:
+    case "object":
       return value instanceof Uint8Array ? value.byteLength : 0;
+    case "function":
+    case "symbol":
+    case "undefined":
+      return 0;
   }
+  return 0;
 }
 
 function rowBytes(row: unknown): number {
