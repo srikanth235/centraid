@@ -7,11 +7,10 @@ import {
 } from "./errors.js";
 import { replicaIntentInvalidations } from "./intent-invalidations.js";
 import type {
-  IntentQueue,
-  IntentQueueOptions,
   PendingIntentReplacement,
   PendingIntentRevisionTarget,
-} from "./intents.js";
+} from "./intent-revision.js";
+import type { IntentQueue, IntentQueueOptions } from "./intents.js";
 import { LiveQueryRegistry } from "./live-query-registry.js";
 import { LiveQuery } from "./live-query.js";
 import type {

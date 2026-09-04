@@ -19,7 +19,7 @@ import { ReplicaProtocolError } from "./errors.js";
 import type {
   PendingIntentReplacement,
   PendingIntentRevisionTarget,
-} from "./intents.js";
+} from "./intent-revision.js";
 import {
   fetchReplicaBootstrap,
   fetchReplicaChanges,

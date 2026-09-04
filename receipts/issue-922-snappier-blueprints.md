@@ -2074,3 +2074,22 @@ A roster of 5,000 people is a roster of 5,000 people: People and Agenda were rea
 First-run: a fresh device shows the same empty states; the window only matters once a vault has more than a thousand rows of anything.
 
 `check:ui-receipt` fires on `apps/mobile/src/apps/**`; this slice changes no e2e harness (the visible states are unchanged — the same rows, drawn fewer times), so no screenshot is fabricated. CI must run the mobile evidence lane against this branch.
+
+## Mega-lane E slice 2 follow-up — the intent revision transaction gets its own module
+
+Rebasing this lane onto `main` put slice 1's overlay/sidecar work on top of the engine's own growth of `packages/client/src/replica/intents.ts`: 657 lines against `repo-hygiene`'s 625. Split rather than waived.
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/replica/intent-revision.ts` | new: the revise-a-pending-intent transaction — the per-intent lock, the engine-private successor marker, the identity-preserving input merge, and the predecessor's retirement |
+| `packages/client/src/replica/intents.ts` | 657 → 513 lines; `IntentQueue` imports the transaction rather than housing it |
+| `packages/client/src/replica/{index,native}.ts` | the new module joins both replica barrels, so no consumer's import moves |
+| `packages/client/src/replica/{coordinator,shell-session}.ts` | `PendingIntentReplacement`/`PendingIntentRevisionTarget` are imported from the module that owns them |
+
+Behaviour-preserving: no assertion was rewritten, and the whole `@centraid/client` suite (270 files, 2,459 tests) is green on the moved seam.
+
+```
+bun run --cwd packages/client typecheck && bun run --cwd packages/client test
+bash .governance/run.sh   # repo-hygiene green
+```
+
