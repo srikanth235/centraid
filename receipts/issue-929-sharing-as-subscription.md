@@ -537,3 +537,98 @@ none of them this lane's: `serve/gateway-db-lock.integration` and
 `routes/replica-shape-parity` is the one wave 4c re-pinned and re-ran green.
 `.governance/run.sh` is green but for `receipt-per-issue` on the absent
 `## Audit`, which is the wave verifier's section.
+
+## Audit
+
+Fresh-context wave verifier, 2026-09-04, on `claude/929-subscription` @ `37e04f564`
+(base `541f0720c`), judging the wave-4 sections and the relaunch note only.
+
+Gates run here: `bash $S/self-audit.sh 929` PASS; `bash .governance/run.sh` 21 pass,
+the single fail is this absent section; `node scripts/lint-journey-ledger.mjs` ok;
+`node scripts/check-share-reachability.mjs` ok (2 allowlisted);
+`bunx vitest run src/golden-vault.test.ts src/schema/migrate.test.ts
+src/gateway/portability.test.ts --root packages/vault` 31 passed;
+`bunx vitest run src/routes/replica-shape-parity.test.ts --root packages/server` 3
+passed. The gate tree quoted at the end of Lane verification is not a commit on the
+branch, but it differs from `37e04f564^{tree}` in the receipt alone, so the worker's
+suites stand under the tree-hash rule.
+
+### Audit — Wave 4a
+
+Verdict: REFUTED
+
+- Red-first reproduced. Stubbing `migrateCommonsToSubscriptions` to return zeros gives
+  `AssertionError: expected +0 to be 1`, 2 failed; restored, 2 passed. Mutating
+  `currentRoster` to `LIMIT 2` fails the member count (`expected 2 to be 3`), so the
+  test does guard "every member".
+- `packages/vault/src/share/subscription-migration.ts:165-174` → the revoke loop walks
+  every live answer on the CONTAINER, not the answers the rail wrote. A share made
+  through `share.grant` (`packages/vault/src/commands/share.ts:170`) to somebody
+  outside the roster is revoked, silently and irreversibly, on the next
+  `openVaultDb`. Probe: a plain `core.collection` grant to Carol plus a one-member
+  commons over the same id — Carol's answer is gone after the pass. Fix: scope the
+  loop to parties the roster holds a row for, not to the subject.
+- `subscription-migration.ts:155` → the guard is `isShareableItemType`, which admits
+  `locker.item`; `createShareGrant` refuses that type and the `UnofferableSubjectError`
+  escapes `packages/vault/src/db.ts:230-241`, so the file can never be opened again.
+  Probe: a one-member commons over `locker.item` throws. Fix: guard on
+  `fulfillmentAnswerFor(type, "view")`, and put `unofferable` somewhere a caller reads
+  before the tables are dropped at :205.
+- `subscription-migration.ts:96-106` + `:178` → `liveCircleGrants` selects neither
+  `max_size_bytes` nor `departure_policy`, and `createShareGrant` is called without
+  `maxSizeBytes`. A commons whose owner set a ceiling comes out at the 4 GiB default
+  (`share/subscription-frame.ts:54`): the one-shot widens a limit its owner set.
+- `subscription-migration.ts:173` → revoking is not stopping. `stopShareSubscription`
+  (`grant/fulfillment.ts:372`) is what moves a delivered row to `remove_sent`, and
+  `listPendingShareDeliveries` sweeps only `syncing`/`remove_sent`, so a projection
+  delivered under an answer this migration revokes is never purged.
+- `subscription-migration.test.ts:263-302` → the 4b rewrite dropped the only case that
+  exercised the revoke path (4a's "a departed member's answer is revoked"); `revoked`
+  and `unofferable` are asserted by nothing at HEAD, while this section still quotes
+  that test's title in its RED block and rests its Decisions paragraph on it.
+
+### Audit — Wave 4b
+
+Verdict: REFUTED
+
+- Verified. `git grep "share_commons_\|share_circle_grant" -- packages apps` matches
+  only `schema/migrate.test.ts` (the must-not-exist list), `subscription-migration.ts`
+  (`LEGACY_COMMONS_TABLES`) and `subscription-migration.test.ts` (the red-first
+  fixture) — every remaining hit is one the section names, and
+  `git grep -l commons -- 'packages/*/src' 'apps/*/src'` is empty. `steward-label.ts`
+  is deleted and `ReplicaProvider.tsx:372` passes `origin`. Three ceilings collapse to
+  one: `share_delivery_config.max_size_bytes` is the only one left, the rail's two went
+  with `schema/share-commons.ts`. The rung-two ladder, the re-frozen corpus and the
+  portable export replay green.
+- `share-reachability.json:24-33` → the gate's allowlist goes from `[]` to two entries
+  and no section says so; the gate itself reports them as `TODO(#750)`.
+  `unshareFromVault`'s last production caller is the rail this wave deleted, which
+  makes it the "delete the old path in the same change series" case, and holding it for
+  #928 is the deference CLAUDE.md rules a finding rather than a justification. Fix:
+  delete it with its caller, or name the widening here with the root's sign-off.
+- Not a finding, for the record: `ReplicaProvider` hands `{ origin: {} }`, so the
+  phone's pre-reply label is always `UNNAMED_ORIGIN_LABEL`. That is unchanged from
+  `{ steward: {} }` and the link's label rides on wave 3's `IntentOutcome.waitingOn`.
+
+### Audit — Slice 5
+
+Verdict: PASS
+
+- `tests/journeys.json` carries `_afterProvenance` with host, load average, the three
+  samples and the breakdown; every number in the section matches the ledger (232.2 ms
+  median, 220.2 / 232.2 / 234.2). `ceilingMs` stays 750, so tighten-only holds, and the
+  cross-gateway hole is a declared `unmeasured` metric with its reason rather than a
+  silence. `node scripts/lint-journey-ledger.mjs` → ok.
+- The 4b commit message quotes a superseded 235.7 ms; receipt and ledger agree on
+  232.2, which is the number that matters.
+
+### Audit — Wave 4c
+
+Verdict: PASS
+
+- `bunx vitest run src/routes/replica-shape-parity.test.ts --root packages/server` → 3
+  passed. Two ids re-pinned, six byte-identical, and both movers scope a table the
+  rail took with it, which is the evidence the section claims.
+- The blueprint readers are disclosed rather than buried: `docs/queries/_shared.ts` and
+  `people/queries/_shared.ts` do still join deleted entities. Naming it for the root to
+  place is the right disposition for a lane that does not own those files.
