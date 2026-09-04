@@ -2183,3 +2183,21 @@ bun run --cwd packages/client test src/replica/order-census.test.ts   # red firs
 | The probes disagree with the aggregate they replace on some value mix | 4 000 randomized entities (1–6 rows drawn from integers, reals, booleans, text, `{`-leading text, JSON null, objects, arrays, absent paths, oversized fields) compared the guard that the old aggregate raises against the guard the probes raise, through `assertReplicaOrder`'s own first-match priority | 0 mismatches in 4 000; the earlier ladder that folded JSON null into `text` produced 70, which is how class 5 exists |
 | The census index is created but not used, so the win is imaginary | `EXPLAIN QUERY PLAN` on the plan the store executes, asserted in the committed suite and read by hand on the 50k fixture | held — every `replica_row` step is `SEARCH … USING COVERING INDEX replica_row_cen_… (shape_id=? AND entity=? AND <expr>>?)`; reverting the three files puts it back to a full-range `replica_row_ord_` scan and the suite goes red |
 | Caching the change log's statements serves a stale shape after a migration | traced the DDL in `change-log.ts` (`refreshReplicaTriggers`, `ensureReplicaCommitColumns`, epoch bump) against what each cached statement reads, and ran the whole `packages/vault` replica suite plus the route suites | held — the cache is keyed by the connection, every cached statement is fixed text over `replica_meta`/`replica_change`, and SQLite re-prepares across a schema-version bump |
+
+## Mega-lane E2 — the trees the gates ran against
+
+Both slices' code is gated on ONE tree, because slice 1 was rebased onto main by mega-lane E after it landed and slice 2's gate run therefore covers both.
+
+| What | Head | Tree |
+| --- | --- | --- |
+| Slice 1 as first landed (superseded by the rebase) | `c7a8a6909` | `fee9a083efe753012053565920e253c69eaf478a` |
+| Slice 1 + slice 2 as landed | `efc169d68` | `16d8cd78ee6b41f0019607cd21c7290d46531d6b` |
+
+```
+bash $S/self-audit.sh 922            # SELF-AUDIT PASS on 16d8cd78…
+bash .governance/run.sh              # 22/22
+bun run --cwd packages/client test   # 273 files, 2472 tests
+bun run --cwd packages/vault test src/replica      # 8 files, 49 tests
+bun run --cwd apps/mobile test src/lib/replica     # 33 files, 223 tests
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- perf-waterfall.spec.ts -g "warm switch"   # 107 ms, ceiling 600
+```
