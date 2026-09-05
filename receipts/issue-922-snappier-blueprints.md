@@ -2451,3 +2451,5 @@ Locker on a phone is a list you can read on a plane — once you are through the
 First-run: a device that has not finished mounting the vault says so — "This device has not finished mounting the vault yet." — rather than drawing an empty locker that reads as a vault with nothing in it.
 
 `check:ui-receipt` fires on `packages/blueprints/apps/locker/**` and `apps/mobile/src/apps/locker/**`. This slice changes no e2e harness — the rendered states are unchanged except that `stale` can no longer occur on this seat and Review names two more unrunnable checks — so no screenshot is fabricated here; CI must run the mobile evidence lane against this branch.
+
+Slice 4c's gates ran on tree `19eaa08330a76c8fb64a75dd781bf9f07fac7c15`, landed as `a8b9d1d75`. `self-audit.sh` reports only `FAIL receipt edits text above the appended section`: base lag, and `origin/claude/922-reads`'s own copy fails the same prefix test against `origin/main@d8502fc05` with nothing of this lane applied. `.governance/run.sh` is 22/22 on that tree.
