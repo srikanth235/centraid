@@ -145,13 +145,13 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("FOUR rungs: the baseline plus #929's three, and a fresh vault stops at user_version 4", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(4);
+  test("FIVE rungs: the baseline plus #929's three and the #928 ask tables, and a fresh vault stops at user_version 5", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(5);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(4);
+    expect(version.user_version).toBe(5);
     for (const table of [
       "locker_auth_credential",
       "core_entity",
@@ -159,6 +159,8 @@ describe("schema/migrate", () => {
       "social_contact_channel",
       "notifications_notice",
       "share_authority",
+      "share_authority_request",
+      "share_authority_use",
       "share_delivery_config",
       "share_fulfillment",
       "access_provenance",
@@ -217,6 +219,31 @@ describe("schema/migrate", () => {
     expect(columnNames(db.vault, "media_asset")).not.toContain("favorite");
     expect(columnNames(db.vault, "core_vault")).toContain("self_party_id");
     db.close();
+  });
+
+  test("rung five lands the #928 ask tables on a file already at user_version 4", () => {
+    // The #929 golden froze at v2; files that have climbed past rung 1 never
+    // re-run SHARE_AUTHORITY_DDL, so the ask/use tables #928 composed into
+    // the baseline need their own rung. IF NOT EXISTS keeps a fresh file
+    // (which already created them) honest.
+    const raw = new DatabaseSync(":memory:");
+    raw.exec("PRAGMA user_version = 4");
+    migrate(raw, VAULT_MIGRATIONS);
+    const version = raw.prepare("PRAGMA user_version").get() as {
+      user_version: number;
+    };
+    expect(version.user_version).toBe(5);
+    for (const table of ["share_authority_request", "share_authority_use"]) {
+      expect(
+        raw
+          .prepare(
+            `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`
+          )
+          .get(table),
+        table
+      ).toBeTruthy();
+    }
+    raw.close();
   });
 
   test("the composed rung includes Locker authentication columns", () => {
@@ -475,10 +502,10 @@ describe("schema/migrate", () => {
     first.close();
 
     const vaultFile = path.join(dir, "vault.db");
-    expect(userVersionOf(vaultFile)).toBe(4);
+    expect(userVersionOf(vaultFile)).toBe(5);
 
     const second = openVaultDb({ dir });
-    expect(userVersionOf(vaultFile)).toBe(4);
+    expect(userVersionOf(vaultFile)).toBe(5);
     expect(shapeOf(second)).toBe(before);
     second.close();
   });

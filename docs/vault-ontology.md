@@ -16,7 +16,7 @@ Vocabulary is [glossary.md](glossary.md); rulings are [decisions.md](decisions.m
 | What the design says | The published page: thesis, entity map, §03 schema, principles, layer stack, ownership matrix, gateway contract, the ten rules | [`ontology-body.html`](../scripts/docs-site/src/content/ontology-body.html) |
 | Whether the page and the DDL agree | A test compares §03 column by column with `PRAGMA table_info` of a freshly migrated vault, the machinery list with the band declarations, and the version label with `ONTOLOGY_VERSION` | [`ontology-doc.test.ts`](../packages/vault/src/schema/ontology-doc.test.ts) over [`ontology-doc.ts`](../packages/vault/src/schema/ontology-doc.ts) |
 | What the model looks like over real rows | Operations → Vault Atlas: Kinds (census), Relations (the reference graph centred on `core.party`), Browse (receipted editor) | `packages/client/src/react/screens/AtlasScreen.tsx` |
-| The version | `ONTOLOGY_VERSION` (**1.0**), stamped on `agent_command` contracts only; the gateway refuses a command contract on any other version. The file's own version is `PRAGMA user_version` (4), a different number. No row carries a version. | [`migrate.ts`](../packages/vault/src/schema/migrate.ts) |
+| The version | `ONTOLOGY_VERSION` (**1.0**), stamped on `agent_command` contracts only; the gateway refuses a command contract on any other version. The file's own version is `PRAGMA user_version` (5), a different number. No row carries a version. | [`migrate.ts`](../packages/vault/src/schema/migrate.ts) |
 
 ## One file, three bands
 
@@ -32,7 +32,7 @@ One file also collapsed the backup protocol. A snapshot manifest now carries **e
 
 ## The shape today
 
-A fresh vault at `PRAGMA user_version = 4`: **137 base tables** (plus 18 FTS indexes and their shadow tables), 382 indexes, 548 triggers, 1 view. **97 tables are registered entities**; the other 40 are declared local, band-declared, or FTS.
+A fresh vault at `PRAGMA user_version = 5`: **137 base tables** (plus 18 FTS indexes and their shadow tables), 382 indexes, 548 triggers, 1 view. **97 tables are registered entities**; the other 40 are declared local, band-declared, or FTS.
 
 | Schema | Kind | Tables | What it holds | Bundled consumer |
 | --- | --- | --- | --- | --- |
@@ -44,14 +44,14 @@ A fresh vault at `PRAGMA user_version = 4`: **137 base tables** (plus 18 FTS ind
 | `people` | pack | 2 | profile, important date | People |
 | `locker` | pack | 5 registered (+ `locker_auth_credential` local by ruling) | item, address, alias, field, passkey | Locker |
 | `tally` | pack | 12 | friend, group, expense, split, recurring split, payer, line item, line allocation, recurring expense, settlement, obligation, nudge | Tally |
-| `access` | plane | 10 | app, agent, app ext, grant, grant scope, tombstone, scope request, policy, device, seed row | the gateway |
+| `access` | plane | 5 | app, agent, app ext, device, seed row | the gateway |
 | `agent` | plane | 2 | command, capability | the gateway |
 | `audit` | band | 8 (band-declared) | provenance, receipt, invocation, check, evidence, explanation, archive manifest, archive pass | the gateway |
 | `ledger` | band | 14 (band-declared) | conversations, turns, items, attachments, harness sessions, locks, workspace selection, health, provider consent, automation state and cursors, trigger ingress, archive, digest | app-engine |
-| `share` | machinery | 6 | authority, delivery config, fulfillment, party↔vault binding, and the subscription seat's own pair — subscription and subscription lineage ([#929](https://github.com/srikanth235/centraid/issues/929)) | the grant plane |
+| `share` | machinery | 8 | authority, pending asks, last-used stamps, delivery config, fulfillment, party↔vault binding, and the subscription seat's own pair — subscription and subscription lineage ([#929](https://github.com/srikanth235/centraid/issues/929)) | the grant plane |
 | `sync` | machinery | 8 | connection, credential, cursor, run, health, external id, import batch, import row | connectors |
 | `enrich` | machinery | 5 | request, policy, policy rule, derivation, embedding | recognition automations |
-| `outbox`, `notifications`, `blob` | machinery | 2 + 1 + 2 registered (+ 11 blob tables local) | outbox items and grants; notices; custody state and rollup | the gateway |
+| `outbox`, `notifications`, `blob` | machinery | 1 + 1 + 2 registered (+ 11 blob tables local) | outbox items; notices; custody state and rollup | the gateway |
 
 Domains the design carried and the implementation dropped, each for having **no consumer**: `home` and `business` in [#883](https://github.com/srikanth235/centraid/issues/883) (ruling O-domains; product case in the closed proposal [#885](https://github.com/srikanth235/centraid/issues/885)), then `health`, `finance`, the observation spine, the learn loop (`agent.correction` / `agent.judgment`), `consent.app_view`, `consent.export_job` and `schedule.availability_rule` in #916 (ruling ONT-06).
 

@@ -48,7 +48,7 @@ const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
   docs: "docs:ad333598074be54babecc6b9",
   locker: "locker:53c326dc225e3d6f436255c1",
   notes: "notes:ff225f22383fa792b7d09117",
-  people: "people:61c86dbbe0b51c00b5d67945",
+  people: "people:eff4efd9c59248235a8580ad",
   photos: "photos:2a63ca460ee7dbf27beab4ed",
   tally: "tally:c9884ce02ea2c78b10b0e847",
   tasks: "tasks:01cbb634f9b8703989d97fea",

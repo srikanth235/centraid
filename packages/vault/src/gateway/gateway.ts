@@ -89,7 +89,11 @@ import { demoStatus, purgeDemoRows } from "./demo.js";
 import type { DemoPurgeResult } from "./demo.js";
 import { revokeAuthorityCascade, sweepLifecycle } from "./duties.js";
 import type { RevocationResult, SweepResult } from "./duties.js";
-import { actingOwnerDetail, writeAuthorityReceipt } from "./evidence.js";
+import {
+  actingOwnerDetail,
+  skipsAllowReceipt,
+  writeAuthorityReceipt,
+} from "./evidence.js";
 import {
   assertInvocationIdentity,
   insertInvocation,
@@ -552,7 +556,7 @@ export class Gateway {
     if (
       ref.schema === "access" &&
       ref.table === "provenance" &&
-      identity.kind !== "owner-device"
+      (identity.kind !== "owner-device" || identity.surface !== undefined)
     ) {
       const failing = provenanceScopeFailure(this.db.vault, identity, request);
       if (failing) {
@@ -644,18 +648,20 @@ export class Gateway {
         }
       }
     }
-    const receiptId = writeAuthorityReceipt(this.db, {
-      authorityId: access.authorityId,
-      invocationId: null,
-      action: "read",
-      objectType: request.entity,
-      objectId: null,
-      decision: "allow",
-      detail: { filter: request.where ?? [], rowCount: rows.length },
-    });
+    const receiptId = skipsAllowReceipt(identity)
+      ? undefined
+      : writeAuthorityReceipt(this.db, {
+          authorityId: access.authorityId,
+          invocationId: null,
+          action: "read",
+          objectType: request.entity,
+          objectId: null,
+          decision: "allow",
+          detail: { filter: request.where ?? [], rowCount: rows.length },
+        });
     return {
       rows,
-      receiptId,
+      ...(receiptId === undefined ? {} : { receiptId }),
       ...(truncated ? { truncated: true, appliedLimit: limit } : {}),
     };
   }
@@ -1001,16 +1007,22 @@ export class Gateway {
       if (last) cursor = last.provId;
       else if (watermark > cursor) cursor = watermark;
     }
-    const receiptId = writeAuthorityReceipt(this.db, {
-      authorityId: null,
-      invocationId: null,
-      action: "read",
-      objectType: "access.provenance",
-      objectId: null,
-      decision: "allow",
-      detail: { entities: request.entities, rowCount: changes.length },
-    });
-    return { changes, cursor, receiptId };
+    const receiptId = skipsAllowReceipt(identity)
+      ? undefined
+      : writeAuthorityReceipt(this.db, {
+          authorityId: null,
+          invocationId: null,
+          action: "read",
+          objectType: "access.provenance",
+          objectId: null,
+          decision: "allow",
+          detail: { entities: request.entities, rowCount: changes.length },
+        });
+    return {
+      changes,
+      cursor,
+      ...(receiptId === undefined ? {} : { receiptId }),
+    };
   }
 
   /**
@@ -1178,17 +1190,23 @@ export class Gateway {
     if (replayed) return this.trackBatchInvocation(replayed);
 
     // Confirmation routing (#306 decision 2, amending #294 decision 4): risk
-    // never parks; only `confirm: true` does, for EVERY non-owner caller — and
-    // for a member's write the origin is carrying (#929), which is not the
-    // owner's own act however owner-shaped the credential carrying it is.
+    // never parks; only `confirm: true` does, for every caller but the owner's
+    // own unnamed hand.
     const sealedInput = this.commands.get(request.command)?.sealedInput ?? [];
     const capability = this.db.vault
       .prepare(
         `SELECT requires_confirmation FROM agent_capability WHERE command_id = ?`
       )
       .get(command.command_id) as { requires_confirmation: number } | undefined;
+    // A SURFACE STILL ASKS (#928 A1). A first-party app runs on the owner's own
+    // credential, but "loud on purpose" is about the ACT, not the plane: a
+    // command the owner must confirm is one they must confirm whoever raised
+    // it, and only the owner's OWN hand — a device with no surface named —
+    // skips the prompt. A member write the origin carries (#929) is not the
+    // owner's own act however owner-shaped the credential carrying it is.
     if (
       (identity.kind !== "owner-device" ||
+        identity.surface !== undefined ||
         request.onBehalfOfMember !== undefined) &&
       capability?.requires_confirmation === 1
     ) {
@@ -1338,21 +1356,21 @@ export class Gateway {
         `handler missing for parked command ${entry.commandName}`
       );
     }
-    // A durable confirmation may outlive its grant — re-check at decision
-    // time or a revoked grant could still execute.
+    // A durable confirmation may outlive the answer it rode — re-check at
+    // decision time, or a withdrawn answer could still execute.
     const decisionAt = nowIso();
-    const grantStillActive =
+    const answerStillLive =
       entry.grantId === null ||
       this.db.vault
         .prepare(
-          `SELECT 1 AS active FROM share_authority
+          `SELECT 1 AS live FROM share_authority
             WHERE authority_id = ? AND decision = 'granted'
               AND ${LIVE_AUTHORITY_SQL}`
         )
         .get(entry.grantId) !== undefined;
-    if (!approve || !grantStillActive) {
+    if (!approve || !answerStillLive) {
       const denialReason = approve
-        ? "consent grant no longer active"
+        ? "standing answer no longer live"
         : "owner denied confirmation";
       const denial = recordDurableParkedDenial(this.db, {
         payload: entry,
@@ -1990,8 +2008,10 @@ export class Gateway {
   }
 
   /**
-   * Refines `Identity['kind']`'s `'agent'` into `'assistant'` for the vault
-   * assistant's own enrolled identity (`_assistant`, `invokeAsAssistant`).
+   * Refines `Identity['kind']`: `'agent'` into `'assistant'` for the vault
+   * assistant's own enrolled identity (`_assistant`, `invokeAsAssistant`), and
+   * an owner device that NAMES a surface into `'app'` — the owner still wants
+   * to read "Planner is asking", not "your laptop is asking" (#928 A1).
    */
   private callerKind(identity: Identity): ParkedCallerKind {
     if (identity.surface !== undefined) return "app";
@@ -2004,7 +2024,6 @@ export class Gateway {
 
   /** WHO wants the act, for the owner. */
   private callerName(identity: Identity): string | null {
-    if (identity.kind === "owner-device") return "owner";
     if (identity.surface !== undefined) {
       const app = this.db.vault
         .prepare(
@@ -2013,6 +2032,7 @@ export class Gateway {
         .get(identity.surface) as { name: string } | undefined;
       return app?.name ?? null;
     }
+    if (identity.kind === "owner-device") return "owner";
     const row = this.db.vault
       .prepare(
         `SELECT p.display_name AS name FROM access_agent a

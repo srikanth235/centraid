@@ -27,6 +27,8 @@
       { "schema": "social", "table": "contact_channel", "verbs": "read" },
       { "schema": "share", "table": "party_vault_binding", "verbs": "read" },
       { "schema": "share", "table": "authority", "verbs": "read" },
+      { "schema": "share", "table": "authority_use", "verbs": "read" },
+      { "schema": "share", "table": "authority_request", "verbs": "read" },
       { "schema": "social", "table": "save_contact_channel", "verbs": "act" },
       {
         "schema": "social",
@@ -76,6 +78,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "party_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "display_name": { "type": "string", "minLength": 1 },
           "role": { "type": "string" },
           "avatar_color": { "type": "string" },

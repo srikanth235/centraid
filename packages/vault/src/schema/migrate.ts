@@ -5,7 +5,7 @@
 // walk forward from. It is HISTORY now and does not grow: #929 needed to reach
 // files that already exist, which is the moment migrate.ts always said the
 // baseline text freezes and rung two begins. A fresh file runs every rung and
-// lands on `PRAGMA user_version = 4`; a file frozen at N runs the rungs above
+// lands on `PRAGMA user_version = 5`; a file frozen at N runs the rungs above
 // N and no others, which is why a shape change made after a release is a new
 // rung rather than an edit to one already climbed.
 //
@@ -19,6 +19,7 @@ import { ACCESS_DDL } from "./access.js";
 import { AGENT_DDL } from "./agent.js";
 import { AUDIT_DDL } from "./audit.js";
 import {
+  SHARE_AUTHORITY_ASK_DDL,
   SHARE_AUTHORITY_DDL,
   SHARE_DELIVERY_CONFIG_RECUT_DDL,
 } from "./authority.js";
@@ -186,6 +187,13 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // provenance now. A rung, not a JS pass: the table must leave every EXISTING
   // file, and nothing survives it that a later restore would have to interpret.
   "DROP TABLE IF EXISTS core_share_origin;",
+  // RUNG FIVE (#928 tables, after the #929 freeze). `share_authority_request`
+  // and `share_authority_use` were added to the composed baseline (rung 1)
+  // after the #929 golden froze at user_version 2. A file that has climbed a
+  // rung never climbs it again, so a shape change made after a freeze is its
+  // own rung or it reaches nothing. `CREATE TABLE IF NOT EXISTS` because a
+  // fresh file already created them on rung 1.
+  SHARE_AUTHORITY_ASK_DDL,
 ];
 
 /**

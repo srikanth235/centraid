@@ -31,12 +31,21 @@ Obsolete edge rows, effect-outbox code, and peer-sweep draining were removed bec
 ## Verification
 
 ```text
-bun run typecheck
-bun run check:reachability
-bun run lint:vault-sql
-bun run lint:product
+bun run --cwd packages/vault typecheck
+bun run --cwd packages/vault test -- src/gateway/gateway.contract.test.ts src/gateway/read-batch.test.ts src/golden-vault.test.ts src/schema/ontology-doc.test.ts src/schema/migrate.test.ts
+bun run --cwd packages/server test -- src/routes/push-wake-routes.test.ts src/routes/vault-routes.test.ts src/lifecycle/automation-anchor-scopes.test.ts src/serve/vault-plane-consent.test.ts src/serve/protocol-join-lane.test.ts src/serve/manifest-scope-denial.sweep.test.ts src/routes/replica-shape-parity.test.ts
+bun run test:integration:mobile -- tests/integration-mobile/denied.integration.test.ts tests/integration-mobile/parked.integration.test.ts
 ```
 
 ## Audit
 
 PASS — the reconciliation removes the obsolete edge/outbox dependency, restores the subscription-compatible placement route, and was independently checked against the PR's requested merge-and-green-build outcome.
+
+## What changed (CI green, #928 restore)
+
+- Restored #928 owner-direct `skipsAllowReceipt` on `read()` / `changes()`, confirmation parking when a first-party app names a `surface`, provenance-scope surface check, `callerName` surface-before-owner order, and confirm-after-revoke reason `standing answer no longer live`, while keeping #929 `onBehalfOfMember` parking.
+- Added vault schema **rung 5** (`SHARE_AUTHORITY_ASK_DDL`) so `share_authority_request` / `share_authority_use` reach files frozen at `user_version` 2 (the #929 golden never re-runs rung 1).
+- Synced `ontology-body.html` access-plane tables, machinery outbox (`item` only), and share ask/use tables to live schema.
+- Re-froze `packages/vault/tests/golden/issue-929` at schema v5 after the ladder grew (DDL-equality after migrate); the freeze founds a current vault, it does not rewrite history.
+- Restored People's `share.authority_use` / `share.authority_request` reads so Settings → Access can date answers and draw pending asks; re-pinned the people replica shape id.
+- Restored `add-person`'s seat-minted `party_id` (#922 G2) so a mobile write made while the app is still trusted is not a schema denial.
