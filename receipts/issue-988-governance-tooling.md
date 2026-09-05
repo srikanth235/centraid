@@ -354,3 +354,51 @@ $ node --test scripts/ci/run-gates.test.mjs scripts/ci/gate-stamp.test.mjs \
     scripts/ci/gate-classes.test.mjs scripts/validate-ui-receipt.test.mjs \
     scripts/ci/turbo.test.mjs                 # 32 pass, 0 fail
 ```
+
+## Audit
+
+Fresh-context verifier, 2026-09-05. Absent from the trunk copy because PR #992 squash-merged from
+`f89fc6417`, before the round-1 audit commit; appended here so the branch the PR opens from carries
+the verdict. Nothing above this heading is rewritten.
+
+**Round 1** — head `f89fc6417`, tree `5b5820dfb…`. **REFUTED**, three findings. (1) The `static`
+stamp was recorded when every member the invocation *named* passed, so
+`run-gates.mjs --stamp format:check` wrote a whole-tier stamp and the next `check:push:static`
+skipped four gates having run one — reproduced, 0 gates queued. (2) `.json` in
+`NOT_ON_AN_IMPORT_EDGE_RE` exempted a real surface: an app manifest's `description` is copied into
+the generated `packages/blueprints/manifest.json`, mapped to `desc` in `useShellApps.ts` and to
+`blurb` in `homeData.ts`, and painted by `AppCard.tsx` on the Home tile. (3) Hoisting `TEST_FILE_RE`
+ahead of the client and `apps/*` arms silently dropped their test files too, undescribed.
+
+**Round 2** — head `426670771`. **REFUTED.** Findings 2 and 3 were fixed, but `run-gates.mjs:130`
+called `tierIsComplete` without importing it, on exactly the green-and-stamping path: every green
+`check:push` / `check:push:static` ran its gates, then exited 1 with a `ReferenceError`. `lint` did
+not flag it and the unit cases exercised the predicate directly, so 20/20 stayed green over a runner
+that could not complete.
+
+**Round 3 — head `16ef04e93`, tree `fb06f9e9433cdf24840dd236a394eade8c24bde5`, base
+`origin/main@77254d808`. Verdict: PASS.**
+
+- Finding 1 and the ReferenceError: `tierIsComplete` is imported; `scripts/ci/run-gates.test.mjs`
+  spawns the runner end to end and asserts exit codes, which is the class a predicate unit test
+  cannot see. Replayed: subset run → `EXIT=0`, stamp directory absent; full tier → `EXIT=0`,
+  `✓ 4/4 gates passed in 15.7s`, `static.json` written; second full run → `EXIT=0`, `⊘ … 0 gates`.
+- Finding 2: `.json` is off the extension list, and the field-level cut is sound. I re-derived it
+  rather than taking it: `manifestVaultBlock` (`appSettingsData.ts:73-85`) returns only `why` and
+  `scopes`, dropping `purpose`; `build-gateway.ts:4664` copies `purpose` into `InstallScopeBlock`,
+  where `vault-plane.ts:346` declares it and **nothing reads it**; the `row.purpose` that
+  `ApprovalsQueue.tsx:109` paints is a runtime scope request, not the manifest field. Adversarial
+  run of `isSurface` on the real `people/app.json`: purpose-only edit → `false`; `description` edit
+  → `true`; `vault.why` edit → `true`; no base, no readers, and unparseable JSON → `true`. Fail-
+  closed in every direction.
+- Finding 3: `TEST_FILE_RE` is scoped back to the blueprints arm, so `AppCard.test.tsx` is a surface
+  again as on `origin/main` while `app.test.ts`, `ReplicaProvider.tsx`, `.md` and `.lock` stay out.
+- The round-2 evidence defect is corrected in the receipt itself: every entry in the follow-up
+  section now quotes an exit code rather than a fragment of a run's output.
+- Recorded, not a finding: the stamp key is the working tree plus `origin/main`, so gitignored
+  derived state (`dist/**`, read by `typecheck:affected`) can differ between the stamped run and the
+  skipped one. CI recomputes; the cost is a missed local red.
+
+Replayed on `fb06f9e94…`: `node --test` over run-gates / gate-stamp / gate-classes /
+validate-ui-receipt / turbo → 32 pass, 0 fail; the three stamp reproductions above; `self-audit.sh
+988` → PASS; `format:check` and `lint` green inside it.
