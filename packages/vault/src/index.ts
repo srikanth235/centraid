@@ -130,7 +130,6 @@ export {
 export {
   judgeMemberIntent,
   memberIntentBytes,
-  signMemberIntent,
   verifyMemberIntent,
   type MemberIntentEnvelope,
   type MemberIntentVerdict,

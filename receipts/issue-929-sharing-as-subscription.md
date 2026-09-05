@@ -109,13 +109,12 @@ Open questions ruled by the maintainer before wave 1(b), recorded here so the do
 - **Each `- [x]` against the diff.** PASS. The receipt has zero `- [x]` items; every checklist row is `- [ ]` remaining work and is not required to be realized in this diff.
 - **The `## Checklist` against the issue's acceptance criteria.** PASS. `gh issue view 929` Acceptance criteria is 13 unchecked items; the receipt checklist is those same 13, same order, all still `- [ ]`. The last three drop the issue's `**(amended 2026-09-03)**` prefix and keep the criterion text.
 
-## Session
-
 bun run --cwd packages/blueprints test                                # 211 files, 6644 passed
 bun run --cwd packages/client test -- src/react/blueprints            # 9 files, 81 passed
 bun run --cwd apps/mobile test -- src/kit/share src/apps/people       # 11 files, 105 passed
 bun run --cwd packages/blueprints typecheck && bun run --cwd packages/client typecheck
 bun run --cwd apps/mobile typecheck
+
 # self-audit PASS on tree de198294689e61dc8c2bdee7f6b777098a08c207 (head 46d93d572,
 # base 276273831 — the branch's previous head, this slice alone). Governance:
 # 20/22, the two reds being `receipt-per-issue` on the `## Audit` the wave
@@ -145,7 +144,7 @@ CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-05 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 
 ## Wave 2 — the view over the replica
 
@@ -1087,3 +1086,65 @@ scripts/docs-site/src/content/ontology-body.html
 | --- | --- | --- |
 | `unplaceProjection` no longer needs row-keyed provenance to remove a placed row, and still reports which shas the removal orphaned | ran `placement-lifecycle`, `docs-folder`, `household`, `local-orphan-sweep` — the four suites that call it — asserting `removed`, `orphanedShas` and the audience's surviving rows | green; `orphanedShas` matches the photo + thumb pair the old `live`-set arithmetic computed in the test |
 | The table leaves every EXISTING file, not just fresh ones | opened a vault at `user_version` 3 from the golden corpus, ran `migrateVault`, then `SELECT name FROM sqlite_master WHERE name='core_share_origin'` | 0 rows, `user_version` 4 |
+
+## Wave 4d — gates on the landed tree, and the allowlist back to empty
+
+The 4d fix (`6e2d52ec0`) landed before its gate block was written. Here is that
+evidence, plus the last half of finding 6: the allowlist is `[]` again.
+
+| finding | pinned by |
+| --- | --- |
+| 1 non-roster answer revoked | `subscription-migration.test.ts` "an answer the rail never wrote survives the migration" — `revoked` 0, both answers stand |
+| 2 unofferable container throws out of `openVaultDb` | same file, "a container the registry cannot honour is named, never thrown, and keeps its rail" — `unofferable` named, `tablesDropped` `[]` |
+| 3 ceiling and departure policy dropped | same file, "the rail's ceiling and departure policy travel with the answer" — `maxSizeBytes` 5_000_000, `departurePolicy` `retain-ledger-history` |
+| 4 delivered projection never swept | same file, "a departed member's answer is revoked, stopped, and their ledger rows stay" — `share_fulfillment.state` is `remove_sent` |
+| 5 revoke path asserted; 4a's RED block quotes a live test | that same case, whose title the 4a block now matches |
+| 6 allowlist `[]`, `unshareFromVault` deleted | `node scripts/check-share-reachability.mjs` → 270 capabilities, no allowlist |
+
+**Deleted with replacement.** `signMemberIntent` was the second allowlist row
+and the last unreachable capability: its only callers were four lines of
+`share-member-intent.test.ts`, and holding an unreachable export for a seat that
+has not landed is the widening the audit named. It was a one-line composition of
+two exports that both stay — `memberIntentBytes` (the canonical bytes, which
+`verifyMemberIntent` reads) and `signWithVaultIdentity` — so the test signs
+through `signAs`, over the same bytes the origin's door verifies, and the member
+seat composes the same two when it lands.
+
+**Receipt repair.** A `## Session` heading sat inside an earlier slice's fenced
+verification block, ahead of the real one. `session_upsert` binds to the FIRST
+`## Session`, so it stamped a second `### Identifiers` table there and
+`agent-session-identity` then refused every commit on this branch as a duplicate
+session. The stray heading is removed; the identifier table is untouched.
+
+```sh
+# self-audit tree b4865b5ceda9d421bc83aa250e2d1f7e3c536db0 (head 72bb56bed); governance
+# 23/23. This hash line is the only edit after that run. Its FAIL rows all name
+# commits from other lanes on the integration branch, listed below.
+bunx vitest run src/share/subscription-migration.test.ts src/schema/migrate.test.ts \
+  src/golden-vault.test.ts src/share/placement.test.ts src/share/placement-lifecycle.test.ts \
+  src/share/household.test.ts src/share/docs-folder.test.ts src/blob/local-orphan-sweep.test.ts \
+  src/gateway/portability.test.ts --root packages/vault             # 9 files, 62 passed
+bunx vitest run src/serve/share-member-intent.test.ts src/engine/stores/gateway-db.test.ts \
+  src/routes/replica-shape-parity.test.ts --root packages/server    # 3 files, 21 passed
+bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck
+bun run lint:vault-sql && bun run lint:schema-export
+node scripts/check-share-reachability.mjs                           # 270 capabilities, 0 allowlisted
+```
+
+Files: `packages/vault/src/share/subscription-intent.ts`,
+`packages/vault/src/index.ts`,
+`packages/server/src/serve/share-member-intent.test.ts`,
+`share-reachability.json`.
+
+Full `packages/vault` suite deferred to CI (lock wait > 10 min). Self-audit's
+`format:check` and `lint` arms are green; its remaining arms fire on commits
+this lane does not own — `receipts/issue-972.md` coverage and the
+trailer/doc-integrity rows for `07f82368b`, `1ce068c82`, `6981a949f`,
+`a4a51f398`, `848dabe6f`, `6f7526095`, `d2d9423b9`.
+
+### Falsification
+
+| claim | throwaway check | result |
+| --- | --- | --- |
+| `signAs` signs the same bytes `signMemberIntent` did | ran `share-member-intent.test.ts`, whose forged-signature case refuses and whose three valid cases are accepted by the origin's door | held: 21 passed; signing a mutated `action` inside `signAs` fails 3 of the 4 cases (the forged-signature case still refuses, as it must) |
+| the allowlist is empty because nothing is unreachable, not because the gate stopped looking | `check-share-reachability.mjs` still reports 270 capabilities across the same 19 module globs (271 before, minus the deleted one) | held |

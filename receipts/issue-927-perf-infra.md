@@ -1472,3 +1472,4 @@ The 0.15 floor is unchanged. This is a graph mistake, not a cache-policy miss.
 ## CI-green — journey re-key waiver at file root
 
 `scripts/test-report/ratchet-floors.mjs` loads `tests/journeys.json` as a whole file (no `section`), so it only sees a root `approvedDeviation`. The W4 re-key note lived under `entries`, which `lint:journey-ledger` requires, and the ratchet read the ten `seeded-demo` keys as deletions. The same rationale now sits at the file root as well; the entries copy is unchanged.
+

@@ -19,10 +19,7 @@ import { routeShareGrantEdit } from "../grant/fulfillment-edit.js";
 import type { ShareGrantEditRoute } from "../grant/fulfillment-edit.js";
 import type { ShareGrantRecord } from "../grant/grant-store.js";
 import { resolveGrantAudienceParties } from "../grant/grant-store.js";
-import {
-  signWithVaultIdentity,
-  verifyVaultIdentitySignature,
-} from "../schema/vault-identity.js";
+import { verifyVaultIdentitySignature } from "../schema/vault-identity.js";
 import type { ShareVaultRef } from "./placement.js";
 
 /** What a member's seat signs. Canonical, so both ends hash the same bytes. */
@@ -67,16 +64,6 @@ export function memberIntentBytes(envelope: MemberIntentEnvelope): Buffer {
     ]),
   ]);
   return Buffer.from(canonical, "utf8");
-}
-
-export function signMemberIntent(
-  identitySeed: Buffer,
-  envelope: MemberIntentEnvelope
-): string {
-  return signWithVaultIdentity(
-    identitySeed,
-    memberIntentBytes(envelope)
-  ).toString("base64");
 }
 
 /**

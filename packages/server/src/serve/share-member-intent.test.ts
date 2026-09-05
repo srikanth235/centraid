@@ -15,8 +15,9 @@ import { describe, expect, test, vi } from "vitest";
 import { PEER_REPLICA_INTENTS_PATH } from "@centraid/core/protocol";
 import {
   createShareGrant,
+  memberIntentBytes,
   nowIso,
-  signMemberIntent,
+  signWithVaultIdentity,
   uuidv7,
 } from "@centraid/vault";
 import type { MemberIntentEnvelope } from "@centraid/vault";
@@ -32,6 +33,14 @@ import {
 } from "./share-subscription-peer.test-fixtures.js";
 
 vi.setConfig({ testTimeout: 60_000 });
+
+/** The member seat's half of the signed pair, which the origin's door verifies. */
+function signAs(identitySeed: Buffer, envelope: MemberIntentEnvelope): string {
+  return signWithVaultIdentity(
+    identitySeed,
+    memberIntentBytes(envelope)
+  ).toString("base64");
+}
 
 function shapeIdFor(grantId: string): string {
   return `@share:${grantId}`;
@@ -97,7 +106,7 @@ describe("a member's write to a shared container", () => {
       target: PEER_REPLICA_INTENTS_PATH,
       body: {
         ...envelope,
-        signature: signMemberIntent(member.vault.identitySeed, envelope),
+        signature: signAs(member.vault.identitySeed, envelope),
       },
     });
     const body = response.json as { state: string; answeredVersions?: unknown };
@@ -180,7 +189,7 @@ describe("a member's write to a shared container", () => {
       target: PEER_REPLICA_INTENTS_PATH,
       body: {
         ...envelope,
-        signature: signMemberIntent(member.vault.identitySeed, envelope),
+        signature: signAs(member.vault.identitySeed, envelope),
       },
     });
     expect(denied.json).toMatchObject({
@@ -201,7 +210,7 @@ describe("a member's write to a shared container", () => {
       target: PEER_REPLICA_INTENTS_PATH,
       body: {
         ...envelope,
-        signature: signMemberIntent(origin.vault.identitySeed, envelope),
+        signature: signAs(origin.vault.identitySeed, envelope),
       },
     });
     expect(forged.status).toBe(403);
@@ -262,7 +271,7 @@ describe("a member's write to a shared container", () => {
       target: PEER_REPLICA_INTENTS_PATH,
       body: {
         ...envelope,
-        signature: signMemberIntent(member.vault.identitySeed, envelope),
+        signature: signAs(member.vault.identitySeed, envelope),
       },
     });
     expect(

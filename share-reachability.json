@@ -20,10 +20,5 @@
     "packages/vault/src/grant/*.ts",
     "packages/vault/src/share/*.ts"
   ],
-  "allowlist": [
-    {
-      "capability": "packages/vault/src/share/subscription-intent.ts#signMemberIntent",
-      "reason": "The MEMBER's half of the signed-intent pair (#929 wave 3). The origin's door, its refusals and its receipts are proved against it today; the seat that signs is the share sheet's, which lands in the surfaces lane of the same umbrella."
-    }
-  ]
+  "allowlist": []
 }
