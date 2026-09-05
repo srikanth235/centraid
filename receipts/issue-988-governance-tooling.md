@@ -5,7 +5,7 @@ Lane: governance tooling. Branch `claude/988-governance-tooling`, one commit per
 ## Checklist
 
 - [ ] Per-lane receipt files: `receipts/issue-<N>/` read as one receipt
-- [ ] Gate stamps keyed by tree hash for the static tier, outside the repo, never read by CI
+- [x] Gate stamps keyed by tree hash for the static tier, outside the repo, never read by CI
 - [ ] Tiered push check by branch: static tier off `main`, full tier on `main`
 - [ ] False positives: agent-session-identity date row
 - [ ] False positives: check:ui-receipt surface predicate keyed on imports
@@ -39,6 +39,29 @@ into the directory.
 This receipt is therefore a single file, `receipts/issue-988-governance-tooling.md`, not the
 directory shape the brief asked for.
 
+**Box 2 — gate stamps keyed by tree hash for the static tier, outside the repo, never read by CI.**
+
+| File | Change |
+| --- | --- |
+| `scripts/ci/gate-stamp.mjs` | New. `STATIC_TIER` (`format:check`, `lint`, `turbo:lint`, `typecheck:affected`), the key, the store, the CI kill-switch |
+| `scripts/ci/gate-stamp.test.mjs` | New. Key movement, freshness, the CI guard, `CENTRAID_GATE_STAMPS=0`, tier membership |
+| `scripts/ci/run-gates.mjs` | `--stamp` skips the static members when their stamp matches, and re-stamps only on a fully green run |
+| `scripts/ci/governance-run.mjs` | New. `bun run governance` — the stamped entry point to the digest-locked `.governance/run.sh` |
+| `.githooks/pre-push` | The deferred repo-wide directives (~86s) take the `governance-deferred` stamp |
+| `package.json` | `check:push` gains `--stamp`; new `governance` script; `scripts:test` runs the new test |
+
+The key is a pair, not one hash: the oid of a real git tree built in a **copy** of the index (so the
+caller's staging area is untouched and git's stat cache still spares unchanged files — 56 ms on this
+tree), plus `origin/main`, because `typecheck:affected` filters on `[origin/main]` and the same tree
+has a different affected set once the base moves. A tier is stamped only when every one of its gates
+ran and passed in that invocation; a red or partial run leaves the previous stamp alone. `CI` in the
+environment disables both reading and writing, so the enforcing copy always recomputes.
+
+`.governance/run.sh` itself is digest-locked and could not take the stamp, which is why
+`scripts/ci/governance-run.mjs` exists — the same shape as the #915 deferral living in
+`.githooks/pre-commit`. A directive filter (`bun run governance repo-hygiene`) never touches the
+stamp: one directive's verdict cannot be promoted into a claim about all of them.
+
 ## Out of scope
 
 - Editing anything under `.governance/packs/**` or `.governance/run.sh` (digest-locked).
@@ -53,6 +76,14 @@ directory shape the brief asked for.
   stop on a box that cannot be met without weakening a check.
 
 ## Verification
+
+```sh
+# Box 2 — the stamp is written by a green run and skips the next one:
+rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/centraid/gate-stamps"
+time bun run governance </dev/null   # runs
+time bun run governance </dev/null   # skips
+node --test scripts/ci/gate-stamp.test.mjs
+```
 
 ```sh
 # The reproduction, on a clean tree:
