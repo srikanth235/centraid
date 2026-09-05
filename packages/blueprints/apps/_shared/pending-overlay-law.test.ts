@@ -25,6 +25,7 @@ import {
   definePendingProjection,
   pendingInputValues,
   pendingPatch,
+  pendingRowIntentId,
   pendingUpsert,
   projectPendingWrite,
   stablePendingRowId,
@@ -54,6 +55,18 @@ describe("a synthetic row id is derived, never invented twice", () => {
   it("is stable for the same intent — a re-read must not move the row", () => {
     expect(stablePendingRowId("intent-1", "task")).toBe(
       stablePendingRowId("intent-1", "task")
+    );
+  });
+
+  it("uses the canonical derived UUID for default and suffixed rows", () => {
+    expect(stablePendingRowId("intent-1")).toBe(
+      "7d0d71b7-d167-8479-8d56-09db54bdbf21"
+    );
+    expect(stablePendingRowId("intent-1", "split-0")).toBe(
+      "4f0df622-a8d9-86ba-80d0-883a2f795d62"
+    );
+    expect(stablePendingRowId("intent-2", "split-1")).toBe(
+      "6813b620-fbe9-8cc8-8cab-3d0cc048d4c4"
     );
   });
 });
@@ -109,6 +122,11 @@ describe("the projection builders", () => {
     expect(pendingPatch("schedule.task", "r1", { title: "New" })).toStrictEqual(
       [{ op: "upsert", entity: "schedule.task", rowId: "r1", values: {} }]
     );
+    expect(
+      pendingPatch("schedule.task", "r1", { "Stryker was here": "sentinel" })
+    ).toStrictEqual([
+      { op: "upsert", entity: "schedule.task", rowId: "r1", values: {} },
+    ]);
   });
 
   it("carries every JSON-shaped value and drops everything else", () => {
@@ -150,6 +168,17 @@ describe("the projection builders", () => {
       "text",
     ]);
     expect(values.list).toStrictEqual([1, "two", { deep: true }]);
+
+    expect(
+      pendingInputValues(
+        {
+          all: [1, { ok: true }],
+          mixed: [1, () => {}],
+          nested: { ok: true, bad: () => {} },
+        },
+        ["all", "mixed", "nested"]
+      )
+    ).toStrictEqual({ all: [1, { ok: true }] });
   });
 });
 
@@ -173,6 +202,10 @@ describe("projecting one write", () => {
         baseVersions: [{ entity: "schedule.task", rowId: "r1", version: 3 }],
       }),
       "add-unversioned": () => ({ optimistic: [] }),
+      "add-with-input": () => ({
+        optimistic: [],
+        input: { title: "Book train", priority: 2 },
+      }),
       "reveal-secret": {
         excluded: true,
         reason: "A revealed secret must never be written to a replica row.",
@@ -240,6 +273,33 @@ describe("projecting one write", () => {
       action: "add-unversioned",
     });
     expect("baseVersions" in result).toBe(false);
+  });
+
+  it("carries only the projection's JSON-shaped input values", () => {
+    expect(
+      projectPendingWrite(declaration, {
+        ...context,
+        action: "add-with-input",
+      })
+    ).toStrictEqual({
+      optimistic: [],
+      input: { title: "Book train", priority: 2 },
+    });
+  });
+});
+
+describe("the pending key reader", () => {
+  it("returns only a non-empty string pending key", () => {
+    expect(
+      pendingRowIntentId({ [PENDING_OVERLAY_FIELDS.key]: "intent-1" })
+    ).toBe("intent-1");
+    expect(
+      pendingRowIntentId({ [PENDING_OVERLAY_FIELDS.key]: 7 })
+    ).toBeUndefined();
+    expect(
+      pendingRowIntentId({ [PENDING_OVERLAY_FIELDS.key]: undefined })
+    ).toBeUndefined();
+    expect(pendingRowIntentId(undefined)).toBeUndefined();
   });
 });
 

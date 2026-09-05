@@ -144,6 +144,26 @@ describe("what a pending row says", () => {
     );
   });
 
+  it("adds the saved day only after a full day, and ignores invalid dates", () => {
+    const now = Date.parse("2026-09-05T00:00:00.000Z");
+    const exactlyOneDayOld = presentation({
+      status: "queued",
+      enqueuedAt: "2026-09-04T00:00:00.000Z",
+    });
+    expect(pendingOverlayCopy(exactlyOneDayOld, now)).toContain(
+      "Saved on this device on September 4."
+    );
+    expect(pendingOverlayCopy(exactlyOneDayOld, now - 1)).toBe(
+      "Waiting for a connection."
+    );
+    expect(
+      pendingOverlayCopy(
+        presentation({ status: "queued", enqueuedAt: "not-a-date" }),
+        now
+      )
+    ).toBe("Waiting for a connection.");
+  });
+
   it("ignores a reason on queued and sending — those states are not explanations", () => {
     expect(
       pendingOverlayCopy(presentation({ status: "queued", reason: "hmm" }))
@@ -351,6 +371,11 @@ describe("enriching a sidecar from elsewhere", () => {
       { intentId: "intent-1", status: "sending" },
     ]);
     expect(readPendingOverlay(row(), moved)?.status).toBe("sending");
+
+    const queued = enrichPendingSidecar(sidecar({ status: "parked" }), [
+      { intentId: "intent-1", status: "queued" },
+    ]);
+    expect(readPendingOverlay(row(), queued)?.status).toBe("queued");
   });
 
   it("settles through the same law settlement uses", () => {
@@ -367,6 +392,21 @@ describe("enriching a sidecar from elsewhere", () => {
       reason: "The review window ended.",
       stewardLabel: "Asha's phone",
     });
+    expect(settled["intent-1"]).toStrictEqual({
+      status: "expired",
+      action: "add",
+      reason: "The review window ended.",
+      stewardLabel: "Asha's phone",
+    });
+  });
+
+  it("leaves the entry alone when an invalid terminal status settles to no facts", () => {
+    const original = sidecar({ status: "parked" });
+    expect(
+      enrichPendingSidecar(original, [
+        { intentId: "intent-1", status: "executed" as never },
+      ])
+    ).toStrictEqual(original);
   });
 
   it("applies copy alone when the enrichment names no status", () => {
