@@ -175,7 +175,7 @@ interactive run should have nothing between it and its TTY.
 
 ## Verification
 
-Tree hash `%TREE%` (self-audit), head `%HEAD%`, base `origin/main@50ab218cf`, this container
+Tree hash `5b5820dfb32a726a01c5eaf5157fdd5662829a5e` (self-audit), head `49d42e158`, base `origin/main@50ab218cf`, this container
 (4 cores / 15 GB, Linux 6.18). Every command below was run from
 `centraid-wt/claude/988-governance-tooling`.
 
