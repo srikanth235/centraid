@@ -25,6 +25,7 @@
 // nothing here is committable, and a stale stamp must die with the cache rather
 // than travel in a diff. `docs/toolchain.md` names the directory.
 import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
   copyFileSync,
   mkdirSync,
@@ -90,9 +91,12 @@ export function repoRoot() {
  * @returns {string} A 40-char tree oid.
  */
 export function workingTreeOid(root) {
+  // Unique per call: node --test runs files concurrently, and Date.now()
+  // collides inside one millisecond, so pid+clock would share GIT_INDEX_FILE
+  // and two trees would hash as one (scripts/ci/gate-stamp.test.mjs).
   const scratch = path.join(
     tmpdir(),
-    `centraid-gate-stamp-${process.pid}-${Date.now()}.index`
+    `centraid-gate-stamp-${process.pid}-${randomBytes(8).toString("hex")}.index`
   );
   try {
     copyFileSync(

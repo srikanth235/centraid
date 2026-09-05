@@ -24,6 +24,13 @@ const BUSY_TIMEOUT_MS = 5000;
 export class OpSqliteDriver implements ReplicaSqliteDriver {
   private constructor(private readonly db: DB) {}
 
+  /**
+   * The one seat that must SAY it: two live handles per file (see the note
+   * above `BUSY_TIMEOUT_MS`), so the locking rules this driver's busy timeout
+   * assumes have to be the rollback journal's and not WAL's.
+   */
+  readonly journalMode = "DELETE" as const;
+
   static open(options: { name: string; location?: string }): OpSqliteDriver {
     try {
       const db = open({

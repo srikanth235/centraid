@@ -7,7 +7,7 @@ Umbrella receipt for [#927](https://github.com/srikanth235/centraid/issues/927).
 - [x] A developer can run one command that opens each of the eight apps against the golden vault and prints a span waterfall against the last baseline taken on that machine, in under a minute for in-process journeys
 - [x] The per-PR perf gate is a work-counter comparison: deterministic, no retry step, no history required; a seeded extra statement or fsync on a hot path fails it on the first run
 - [x] The candidate rung runs paired candidate/PR journeys and fails a seeded 20% slow-down with a stated confidence on its first run, with no 30-sample warm-up
-- [ ] One ledger keyed `surface × journey × volume × hardware` replaces the five budget files, the rig register and the query-count file; every entry names its spans and its consumer; no rig reads the old files
+- [x] One ledger keyed `surface × journey × volume × hardware` replaces the five budget files, the rig register and the query-count file; every entry names its spans and its consumer; no rig reads the old files
 - [ ] The nine journeys have `measured` entries at year-3 volume on web, desktop and gateway, and on a real Android and iOS device for the mobile rows; `"volume": "empty"` appears in no journey entry
 - [x] Perf history lives in the gh-pages test-report beside the candidate history; nothing perf-related is stored in an actions cache
 - [x] The device rung exists as a lane; the parked mobile lanes are unparked onto it or deleted with the reason recorded
@@ -30,6 +30,10 @@ Two more boxes tick in the follow-up commit, one of them after its own text was 
 
 - **A developer can run one command that opens each of the eight apps against the golden vault and prints a span waterfall against the last baseline taken on that machine, in under a minute for in-process journeys** — the box read "against the last candidate baseline"; **the box moved, not the command**, on the maintainer's ruling. `scripts/perf/app-waterfall.mjs`'s baseline is machine-local by design and the header argues why: a number from a CI runner is not a number about this laptop, and a developer asking "did my change make Photos slower" is asking about the machine in front of them. `--save` writes the baseline; every later run prints the difference beside the journey's own tolerance from `tests/journeys.json` — the same comparison the candidate rung makes between two trees, done between two runs. Eight apps, one gateway, 4.3 s of measurement and 9.2 s wall against the one-minute cap (`## w2 paired runner`).
 - **Perf history lives in the gh-pages test-report beside the candidate history; nothing perf-related is stored in an actions cache** — the last one is deleted: `.github/workflows/soak-weekly.yml`'s "Save evidence for the nightly health report" step `actions/cache/save`d `artifacts/scale/` under `soak-weekly-<os>-<run_id>`, a key **nothing restored**. `grep -rn "actions/cache" .github/workflows/*.yml` no longer names a perf or scale path. The evidence itself is unaffected: the same `artifacts/` tree still rides `actions/upload-artifact` on the step above, and `write-evidence.mjs` still writes the lane's row for the gh-pages report.
+
+**Close follow-up (#927), ledger hygiene.** Quoted for the crosswalk; the verdict is `## Follow-up — #927 close (ledger hygiene)` at the end of this receipt.
+
+- **One ledger keyed `surface × journey × volume × hardware` replaces the five budget files, the rig register and the query-count file; every entry names its spans and its consumer; no rig reads the old files** — the eighteen entries that still carried `consumers: []` now each name a real reader; three of them are additionally marked `_folded_into` a sibling that owns the same fact, with the reason beside the marker. `bun run lint:journey-ledger` is green and its own message is the claim: "every entry names its volume, hardware, spans and consumers".
 
 ## Out of scope
 
@@ -1657,3 +1661,143 @@ Nothing was loosened to go green: no surviving floor, ceiling or budget moves, a
 | Deleting the shared fixture is safe | Deleted `browser-replica-query.fixture.ts`, then grepped importers | REFUTED — a surviving client test imports it; restored |
 | The retirement marker cannot launder an unreviewed drop | Unit cases: unmarked deletion, marker without a removed row, wrong owner, duplicate owner, missing reason/issue | All red as intended; only the fully-named deletion passes |
 | A spent marker will not red main later | `diffMinimumTests(landed, landed)` with the marker on both sides | No errors — validated only while new |
+
+## Follow-up — #927 close (ledger hygiene)
+
+Three things the close pass left: eighteen entries with no reader, one ceiling that did not obey its own stated headroom rule, and no successor for the four backup rigs the rig diet deleted.
+
+### Crosswalk
+
+| Box | Verdict |
+| --- | --- |
+| 4 one ledger; every entry names its spans and its consumer | **satisfied**: 18 empty `consumers` lists → 0. `bun run lint:journey-ledger` green, `bun run test:ratchet` green |
+| 5 the nine journeys `measured` at year-3 on web, desktop and gateway, and on real devices for mobile; no `"volume": "empty"` | **still open**, untouched by this lane: most web/desktop/mobile rows are `unmeasured` for want of a probe or a device, and `composite-load`, `soak` and `stress-recovery` are still keyed `empty` |
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `tests/journeys.json` | 18 consumer lists filled; 3 `_folded_into` + `_folded_why` markers; `mobile/app-weight` largest-chunk ceiling tightened; the `backup` journey declared; `gateway/backup/year3/ci-linux-x64-4c` and `gateway/restore/year3/ci-linux-x64-4c` added, both `measured` |
+| `tests/perf/backup-restore.perf.test.ts` | new, 122 lines: the successor rig. Snapshot + restore of the golden year-3 vault, work counters as the gate, the two ceilings asserted through `journeyCeiling` |
+| `receipts/issue-927-perf-infra.md` | one tick, its crosswalk evidence, this section |
+
+### The eighteen, and what now reads them
+
+| Entries | Reader named |
+| --- | --- |
+| `web/{peer-echo,converge}` | `apps/web/tests/e2e/offline-reconnect.spec.ts` — the harness that drives replica resume and apply in a real browser |
+| `web/share` · `web/search` · `web/scroll` · `web/first-bootstrap` | `docs-grant.spec.ts` · `offline-search.spec.ts` · `perf-waterfall.spec.ts` · `pwa-offline-journey.spec.ts` |
+| `desktop/{peer-echo,search,converge}` | `apps/desktop/tests/e2e/fixtures.ts`, already the named reader of `desktop/own-echo` |
+| `desktop/share` · `desktop/first-bootstrap` | `household.spec.ts` · `onboarding-home.spec.ts` |
+| `mobile/warm-switch` · `mobile/{peer-echo,first-bootstrap}` · `mobile/search` | `home-loads.mjs` · `pairing-canary.mjs` · `photos-search.mjs` |
+| `desktop/scroll` **folded into** `mobile/scroll` | `tests/agent-e2e-mobile/flows/scroll-frames.mjs` — the frame-drop ceiling has one owner and it is the phone |
+| `gateway/scroll` **folded into** `gateway/warm-switch` | `tests/perf/gateway-request.perf.test.ts` — the gateway's only half of a scroll is the paged read, already fenced |
+| `mobile/share/device-fixture` **folded into** `mobile/share/shared-album` | `tests/agent-e2e-mobile/flows/sharing-reach.mjs` — same probe, and `shared-album` is the volume its measured gateway twin uses |
+
+### Numbers
+
+| Measurement | Value | Provenance |
+| --- | --- | --- |
+| entries with `consumers: []` | 18 → **0** | `bun run lint:journey-ledger`, this tree |
+| `mobile/app-weight` `maxLargestChunkBytes` | 8,220,000 → **6,863,614** | tighten-only, to the row's own stated rule: observed 6,355,198 × 1.08. The old ceiling carried 29.3% headroom against a note that said 8%. `approvedDeviation` untouched |
+| `gateway/backup/year3` snapshot | 998.7 / 1050.2 / **1056.3** ms over three runs; ceiling 3,200 ms | `node node_modules/vitest/vitest.mjs run --config vitest.perf.config.ts tests/perf/backup-restore.perf.test.ts`, linux x64 container 4 cores / 15 GB (shared), 2026-09-05; golden year-3 `vault.db` = 105,603,072 B |
+| `gateway/restore/year3` restore | 1640.4 / 1678.7 / **1712.3** ms over three runs; ceiling 5,200 ms | same run. Restore costs ~1.6× its own backup |
+| work counters over both calls | statements 0, and that zero is the gate | same run |
+
+**Deleted:** nothing here. The four backup rigs the rig diet removed now have their successor, which is the replacement half of that deletion.
+
+**Decisions.** (1) `_folded_into` is a marker, not a deletion: the grid check requires an entry per surface × journey, so a folded row stays and points at the sibling that owns the fact. (2) The two new rows are `measured` rather than `unmeasured` — the measurement ran here, three samples, and the ceiling is ~3× the slowest, the same convention every other single-host row uses. (3) `gateway/restore/year3-10gib/dev-darwin-arm64` is **not** superseded: it is the byte axis, the new row is the row axis.
+
+### Verification
+
+```sh
+bun run lint:journey-ledger
+bun run test:ratchet
+node node_modules/vitest/vitest.mjs run --config vitest.perf.config.ts tests/perf/backup-restore.perf.test.ts
+npx tsc -p tests
+```
+
+**Findings.** (1) **Naming a consumer is not the same as being measured, and the ledger cannot tell the two apart.** Fifteen of the eighteen now name the harness that OWNS the journey while the metric stays `unmeasured` — which is the ledger's existing convention (`web/own-echo`, `desktop/own-echo`, `mobile/own-echo` all shipped that way) but is one rung weaker than "a reader that asserts this ceiling". Box 4's clause is satisfied as written; a stronger clause would ask the linter to require a consumer that actually resolves the metric, and that is a #927 follow-up worth its own issue. (2) The `maxTotalBytes` ceiling on the same `mobile/app-weight` row carries 8.4% against the stated 8% (it is 12 MiB exactly). Left alone: the brief names the largest-chunk ceiling, and 0.4% is a rounding to a power of two, not a drift.
+
+**Doc debt:** none.
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "the work counters are the gate for backup" — a gate that always reads zero fences nothing | read `packages/vault/src/gateway/work-counters.ts`: the counters are bumped from the instrumented statement layer, which only wraps handles passed to `instrumentVaultStatements` | the zero is real AND load-bearing: `createSnapshot`/`restoreSnapshot` move files and never open the vault, so any future version that starts querying rows to decide what to copy flips the integer on its first run. Stated in the rig's own comment rather than left to be rediscovered |
+| "tightening `maxLargestChunkBytes` is safe" — a ceiling below the real artifact reds the mobile-smoke job | recomputed from the row's own `_provenance`: 6,355,198 × 1.08 = 6,863,613.84, and the observed value is 6,355,198 | the new ceiling is 8% above the last observed chunk and 1.36 MB below the old one; the ratchet accepted it as a tighten (`test:ratchet` green). The risk it leaves is a *real* future growth failing sooner, which is the point of a budget |
+
+## Follow-up — #927 close (the two high-severity advisories)
+
+GitHub reports two high-severity Dependabot alerts on the default branch. They are **one advisory against one package in two manifests**: `pdfjs-dist` 6.1.200, declared directly by `packages/blueprints` and `packages/client`.
+
+| Advisory | Package | Vulnerable | Fixed in | Was | Now |
+| --- | --- | --- | --- | --- | --- |
+| [GHSA-hq66-cqwq-w95j](https://github.com/advisories/GHSA-hq66-cqwq-w95j) — PDF.js: arbitrary JavaScript execution upon opening a malicious PDF | `pdfjs-dist` | `>=5.6.83 <6.2.108` | 6.2.108 | 6.1.200 (×2 manifests) | **6.2.108** |
+
+The bump is the smallest one that clears it: 6.2.108, not the newest 6.3.289. The lockfile was regenerated by `bun install`, never hand-edited — one package installed, three lines of `bun.lock`.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `packages/blueprints/package.json`, `packages/client/package.json` | `pdfjs-dist` 6.1.200 → 6.2.108 |
+| `bun.lock` | regenerated by `bun install` |
+| `packages/blueprints/src/docs-media.test.ts` | the pinned runtime version, which the file's own comment says to "bump in lockstep with the `pdfjs-dist` dependency" |
+
+### Numbers
+
+| Measurement | Before | After | Provenance |
+| --- | --- | --- | --- |
+| `bun audit` findings naming `pdfjs-dist` | 1 high | **0** | `bun audit`, this tree, 2026-09-05 |
+| total `bun audit` findings | 72 (32 high, 35 moderate, 5 low) | 71 (31 high, 35 moderate, 5 low) | same runs |
+
+**Decisions.** Only `pdfjs-dist` is bumped. The other 31 highs `bun audit` reports are TRANSITIVE — `brace-expansion`, `undici`, `ws`, `image-size`, `browserslist`, `fast-uri`, all beneath `expo`, `react-native`, `electron-builder`, `wrangler` or `@stryker-mutator/core`. None is a direct manifest entry, none can be fixed without moving a framework major, and none is what Dependabot alerts on. Forcing them through overrides would be a framework migration wearing a security bump's clothes, and this lane is not that change. This is recorded as a finding, not fixed quietly.
+
+### Verification
+
+```sh
+bun audit                                  # no pdfjs-dist finding
+bun install                                # lockfile regenerated, not hand-edited
+bun run build                              # 13/13 tasks
+bun run --cwd packages/blueprints test     # 7065 passed, 2 expected fail
+bun run --cwd packages/client test src/device-enrichment
+```
+
+**Findings.** (1) **31 high-severity transitive advisories remain**, every one of them under `expo`/`react-native`/`electron-builder`/`wrangler`/`@stryker-mutator/core`. The repo's own policy already says why they are not a gate — `SECURITY.md`'s table: OSV-Scanner fails on CRITICAL only, HIGH is logged, and dependency-review blocks new HIGH on a PR diff. That is a defensible line for a transitive DoS, and a bad one to discover only from a receipt: the toolchain doc names no command for a framework-major security bump, so today there is no written answer to "a HIGH lands in `react-native`'s tree — then what". Worth an issue. (2) `docs/toolchain.md` documents no dependency-bump or lockfile-regeneration procedure at all; `bun install` after editing the manifest is the de facto one, inferred here from `G-turbo-floor-waiver`'s list of global-hash inputs rather than from any instruction.
+
+**Doc debt:** `docs/toolchain.md` — no section on dependency bumps or lockfile regeneration, which this slice needed and had to infer. This lane's brief does not own that doc.
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "the two GitHub alerts are `pdfjs-dist`" — `bun audit` reports 32 highs, so picking two is a guess | cross-walked every `high:` finding against the DIRECT dependency set parsed out of every workspace `package.json` | exactly one package matched — `pdfjs-dist`, declared in two manifests, which is why Dependabot counts two alerts. Every other high is transitive, and Dependabot's default-branch alerts are per manifest entry |
+| "bumping a PDF runtime is behaviour-neutral" | ran `packages/blueprints`'s full suite and the two files that import it | one red, and it was the RIGHT one: `docs-media.test.ts` pins the runtime's version on purpose "to prove the real client-bundled runtime loaded rather than a stub", with a comment saying to bump it in lockstep. Pin updated; 7065 passed |
+
+
+## Follow-up — CI green on the close-followups PR
+
+The close-followup commit tightened `mobile/app-weight` from a darwin worktree observation the CI artifact does not match, landed a backup/restore rig without a `#rigs` row, and inherited a stale `tests/claims.json` whole-file pin that is also red on origin/main.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `tests/journeys.json` | `maxLargestChunkBytes` restored to 8,220,000 (the number already on main; CI's Hermes chunk is 8,168,314 B). `tests/perf/backup-restore.perf.test.ts` registered under `#rigs` with lane, volume and the two ledger entries it feeds |
+| `tests/quality/classification-ratchet.json` | `fingerprints["tests/claims.json"]` re-pinned e8a89064… → 2354dd6f…; `claimsGovernanceFingerprint` unchanged |
+
+### Numbers
+
+| Measurement | Value | Provenance |
+| --- | --- | --- |
+| CI iOS largest Hermes chunk | 8,147,138 B | ci.yml mobile-smoke, run 33967158721 |
+| CI Android largest Hermes chunk | 8,168,314 B | same |
+| ceiling after restore | **8,220,000** | same number as origin/main; 0.6% above the CI chunk |
+
+## Decisions
+
+The classification-ratchet `approvedDeviation`, verbatim:
+
+> #927 re-pins the tests/claims.json whole-file fingerprint (e8a89064… → 2354dd6f…) after the pin drifted from the file with no claim-row, severity, evidence selector, demonstrated-red date, law, flow or minimumTests change — claimsGovernanceFingerprint is unchanged. Prior: #929. #929 re-pins the tests/claims.json whole-file fingerprint after retiring the commons-rail law `commons-steward-ordered-convergence`, retargeting joinLaws and `commons-grant-plane-simulation` onto `packages/vault/src/share/subscription-sim.test.ts` (floor 6→3 with an `approvedMinimumTestsDeviation`: the dropped cases named the rail), retargeting `commons-convergence-properties` onto `subscription.test.ts`, and pointing `scope-commons` at `subscription-seat.ts`. No claim row, severity, evidence selector or demonstrated-red date moves, so claimsGovernanceFingerprint is unchanged. Prior: #922. #930 re-pins the tests/claims.json whole-file fingerprint after removing the spent rename marker on the `golden-vault-archaeology` flow, superseding the #916 re-pin note rather than contradicting it — every sentence of #916's account of what that flow took over is kept, in receipts/issue-916-vault-ontology-review.md and in the flow's own `_comment`. `replacesMinimumTestsFlow` is a ONE-SHOT claim about the change set that makes a rename, checked against the merge base; once #916 landed, `schema-migration-corpus` existed at no base any more, so the marker could only ever report an unknown predecessor and `lint:ledgers` / `test:ratchet` were red on main itself. The marker and the `approvedMinimumTestsDeviation` that authorized it are removed together, because that note waives a future minimumTests drop on this flow by presence alone; the floor stays at 5, no claim row, severity, evidence selector or demonstrated-red date moves, and claimsGovernanceFingerprint is unchanged. Prior: #916. #928 w1b re-pins tests/claims.json once more, for the static app entity tripwire: it registers the new law `app-entity-tripwire` and its flow `blueprint-app-entity-tripwire-law` (owner packages/blueprints/src/app-entity-tripwire.test.ts, minimumTests 17), mirroring how `one-computation` is registered so the lane is owned. Additions to the law and flow registries only, and a NEW minimumTests floor, which is a tightening — no claim row, severity, evidence selector, demonstrated-red date or existing floor moves, and the 45 claim rows stay byte-identical, so claimsGovernanceFingerprint is unchanged. Prior: #930. #931 re-pins it once more after registering ONE new rung-3 lane, `rung1-on-main`, in `lanes` — the row `candidate.yml`'s new job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept it. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or `minimumTests` floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #928 w1b. #927 w2 re-pins tests/claims.json for the JOURNEY LEDGER: every `knob` and `seed` string that named tests/experience-budgets/*.json now names tests/journeys.json and the entry key inside it, because those five files were absorbed into one ledger keyed `surface / journey / volume / hardware`. A knob path rename only: no claim row is added or removed, no severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and every seeded-red recipe still points at the same number under its new address. Prior: #931. #927 w3 re-pins tests/claims.json once more to register ONE new rung-3 lane, `paired-journeys` — the row candidate.yml's paired candidate/PR journey job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept its evidence step. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and the claim rows stay byte-identical, so claimsGovernanceFingerprint moves only because `lanes` shares the file with `claims`. Prior: #927 w2. #922 re-pins tests/claims.json after registering ONE new flow, `pending-destructive-projection` (owner packages/blueprints/src/pending-projection-tripwire.test.ts, flow blueprint-pending-overlay-law). Flow registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law or minimumTests floor moves, and claimsGovernanceFingerprint (digest of claims.claims alone) stays byte-identical.

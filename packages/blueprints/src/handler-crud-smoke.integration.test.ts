@@ -43,7 +43,8 @@ interface VaultScope {
 interface AppJson {
   id: string;
   vault: {
-    purpose: string;
+    /** Absent on every manifest since #928 retired the DPV vocabulary. */
+    purpose?: string;
     scopes: VaultScope[];
   };
   actions?: ManifestHandler[];

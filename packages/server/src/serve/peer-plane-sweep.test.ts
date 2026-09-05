@@ -25,7 +25,6 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
       db,
       links,
       vaultFor: () => undefined,
-      partyIdFor: () => undefined,
       dial: () => undefined,
       announceRoutes: async () => {
         announced += 1;
@@ -46,7 +45,6 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
       db,
       links,
       vaultFor: () => undefined,
-      partyIdFor: () => undefined,
       dial: () => undefined,
       announceRoutes: () => {
         throw new Error("simulated announce failure");

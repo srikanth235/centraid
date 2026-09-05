@@ -96,6 +96,21 @@ export interface ReplicaSqliteDriver {
    */
   synchronous?: "FULL" | "NORMAL";
   /**
+   * `DELETE`, and only from a seat that needs to SAY so (#922 B ruling).
+   *
+   * DELETE is SQLite's own default for an on-disk file, so asserting it costs
+   * a write at every open and buys nothing — except on the seat where two live
+   * handles share one file. That seat is the PHONE: `op-sqlite-driver.ts`
+   * opens a per-vault writer and a gateway-scoped multi-ATTACH reader over the
+   * same database, and rollback-journal locking is what makes the reader's
+   * SHARED lock and the writer's RESERVED lock interact the way its busy
+   * timeout assumes. WAL there would give the two handles different rules.
+   *
+   * ABSENT MEANS "take the file's default", which for every seat that has one
+   * handle is DELETE already.
+   */
+  journalMode?: "DELETE";
+  /**
    * Run a whole write batch OFF THE JS THREAD, in one transaction (#922 E1).
    *
    * A first-launch bootstrap page and a reconnect's edits are thousands of
@@ -352,7 +367,8 @@ export class ReplicaSqliteStore {
     private readonly durability: ReplicaDurability = "durable"
   ) {
     this.driver.exec("PRAGMA foreign_keys=ON;");
-    this.driver.exec("PRAGMA journal_mode=DELETE;");
+    if (this.driver.journalMode)
+      this.driver.exec(`PRAGMA journal_mode=${this.driver.journalMode};`);
     this.driver.exec(
       `PRAGMA synchronous=${this.driver.synchronous ?? "FULL"};`
     );

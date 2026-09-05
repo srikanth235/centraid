@@ -150,6 +150,8 @@ import type {
 } from "./vault-picker.js";
 import { applyRestoreQuarantine } from "./vault-quarantine.js";
 import type { QuarantineStatus } from "./vault-quarantine.js";
+import { createReadCoalescer } from "./vault-read-coalescer.js";
+import type { SyncVaultRead } from "./vault-read-coalescer.js";
 
 /** For a vault with no backup provider (#599). */
 const LOCAL_ORPHAN_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -404,6 +406,10 @@ export class VaultPlane {
   readonly dir: string;
   readonly cacheDir: string;
   private readonly groupCommitQueue: GroupCommitQueue;
+  /** One durable commit per tool batch on the agent plane (#922 B.1). */
+  private readonly coalesceAgentRead: (
+    run: SyncVaultRead
+  ) => Promise<VaultCallResult>;
   readonly quarantine: QuarantineStatus | null;
   /** The capture clock sleeps until a backup destination exists (#408). */
   walShipper: WalShipper | undefined;
@@ -542,6 +548,7 @@ export class VaultPlane {
       groupCommitWindowMs(options.storageFsyncMs),
       (runs) => this.gateway.invokeBatchSettled(runs)
     );
+    this.coalesceAgentRead = createReadCoalescer(this.gateway);
     registerScheduleCommands(this.gateway);
     registerTaskCommands(this.gateway);
     registerSocialCommands(this.gateway);
@@ -1865,54 +1872,61 @@ export class VaultPlane {
             : {}),
         });
       }
-      return asVaultCallResult(() => {
-        switch (call.op) {
-          case "read":
-            return this.gateway.read(
-              cred,
-              call.payload as unknown as ReadRequest
-            );
-          case "search":
-            return this.gateway.search(
-              cred,
-              call.payload as unknown as SearchRequest
-            );
-          case "invoke":
-            throw new Error("invoke is handled by the group-commit queue");
-          case "describe":
-            return this.gateway.discover(cred);
-          case "parked":
-            return this.gateway
-              .listParked()
-              .filter(
-                (p) => p.callerKind === "agent" && p.callerId === agent.agentId
+      // ONE DURABLE COMMIT PER TOOL BATCH (#922 B.1): the reads a model turn
+      // issues together settle in one commit, and the commit is inside a
+      // single synchronous drain, so no model turn is ever inside the write
+      // lock and no receipt outlives its own reply.
+      return this.coalesceAgentRead(() =>
+        asVaultCallResult(() => {
+          switch (call.op) {
+            case "read":
+              return this.gateway.read(
+                cred,
+                call.payload as unknown as ReadRequest
               );
-          case "resolve":
-            return this.gateway.resolveRefs(
-              cred,
-              call.payload as unknown as RefRequest
-            );
-          case "reveal":
-            return this.gateway.reveal(
-              cred,
-              call.payload as unknown as RevealRequest
-            );
-          case "authenticate":
-            throw new GatewayError(
-              "access",
-              "Locker authentication is an interactive app surface"
-            );
-          case "changes":
-            return this.gateway.changes(
-              cred,
-              call.payload as unknown as ChangesRequest
-            );
-          case "content":
-            throw new Error("content op is handled on the async path above");
-          default:
-            throw new Error(`unsupported vault op ${call.op}`);
-        }
-      });
+            case "search":
+              return this.gateway.search(
+                cred,
+                call.payload as unknown as SearchRequest
+              );
+            case "invoke":
+              throw new Error("invoke is handled by the group-commit queue");
+            case "describe":
+              return this.gateway.discover(cred);
+            case "parked":
+              return this.gateway
+                .listParked()
+                .filter(
+                  (p) =>
+                    p.callerKind === "agent" && p.callerId === agent.agentId
+                );
+            case "resolve":
+              return this.gateway.resolveRefs(
+                cred,
+                call.payload as unknown as RefRequest
+              );
+            case "reveal":
+              return this.gateway.reveal(
+                cred,
+                call.payload as unknown as RevealRequest
+              );
+            case "authenticate":
+              throw new GatewayError(
+                "access",
+                "Locker authentication is an interactive app surface"
+              );
+            case "changes":
+              return this.gateway.changes(
+                cred,
+                call.payload as unknown as ChangesRequest
+              );
+            case "content":
+              throw new Error("content op is handled on the async path above");
+            default:
+              throw new Error(`unsupported vault op ${call.op}`);
+          }
+        })
+      );
     };
   }
 
