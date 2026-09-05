@@ -252,3 +252,33 @@ Two claims in this diff a reviewer would doubt, and the throwaway checks run aga
 | date | harness | session |
 | --- | --- | --- |
 | 2026-09-05 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+
+## Follow-up — verifier findings
+
+The lane's PR (#992) merged before the verifier's audit was answered, so the three findings are
+fixed here on top of `main`. Everything above this heading is the trunk's copy, unchanged.
+
+### Finding 1 (blocking, landed first) — a partial run must not stamp the tier
+
+`scripts/ci/run-gates.mjs` recorded the `static` stamp when every member the invocation NAMED
+passed, not every member of `STATIC_TIER`. `node scripts/ci/run-gates.mjs --stamp format:check` — a
+legal call on the CLI this lane added — therefore wrote a whole-tier stamp, and the next
+`bun run check:push:static` skipped four gates having run one. Every non-`main` push is gated by
+that tier, so the stamp could assert that `lint`, `turbo:lint` and `typecheck:affected` had passed
+when nobody ran them. This was a live hole on `main`, which is why it lands before finding 2.
+
+`tierIsComplete()` in `scripts/ci/gate-stamp.mjs` now answers the only question the stamp may be
+read as answering — is every member of `STATIC_TIER` green in THIS invocation — and
+`scripts/ci/run-gates.mjs` calls it. An invocation naming a subset stamps nothing.
+`scripts/ci/gate-stamp.test.mjs` pins the four cases purely (whole tier green, empty, one-member
+subset, one red member) plus the one that must stay true: a failure OUTSIDE the tier is the
+caller's gate to report, not this predicate's.
+
+```txt
+$ rm -rf /tmp/p2
+$ CENTRAID_GATE_STAMP_DIR=/tmp/p2 node scripts/ci/run-gates.mjs --stamp format:check
+$ ls /tmp/p2                                    # absent — a subset run stamps nothing
+$ CENTRAID_GATE_STAMP_DIR=/tmp/p2 bun run check:push:static
+▶ 4 gates, 2 at a time                          # was: ⊘ static tier stamped … 0 gates
+$ node --test scripts/ci/gate-stamp.test.mjs scripts/ci/gate-classes.test.mjs
+```
