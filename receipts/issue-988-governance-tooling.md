@@ -6,7 +6,7 @@ Lane: governance tooling. Branch `claude/988-governance-tooling`, one commit per
 
 - [ ] Per-lane receipt files: `receipts/issue-<N>/` read as one receipt
 - [x] Gate stamps keyed by tree hash for the static tier, outside the repo, never read by CI
-- [ ] Tiered push check by branch: static tier off `main`, full tier on `main`
+- [x] Tiered push check by branch: static tier off `main`, full tier on `main`
 - [ ] False positives: agent-session-identity date row
 - [ ] False positives: check:ui-receipt surface predicate keyed on imports
 - [ ] False positives: lint:product tolerates a spent one-shot marker
@@ -62,6 +62,22 @@ environment disables both reading and writing, so the enforcing copy always reco
 `.githooks/pre-commit`. A directive filter (`bun run governance repo-hygiene`) never touches the
 stamp: one directive's verdict cannot be promoted into a claim about all of them.
 
+**Box 3 — tiered push check by branch.**
+
+| File | Change |
+| --- | --- |
+| `.governance/packs/srikanth235/centraid/directives/pre-push-gate/check.sh` | Reads the remote ref off stdin and picks the tier by destination |
+| `.governance/packs/srikanth235/centraid/directives/pre-push-gate/directive.yaml` | Summary states the two tiers and the widening knob |
+| `package.json` | New `check:push:static` — `format:check`, `lint`, `turbo:lint`, `typecheck:affected` |
+| `scripts/test.sh` | Pins the choice with a stub `bun` on PATH: `main` → `check:push`, a branch → `check:push:static`, `CENTRAID_PUSH_TIER=full` → `check:push` |
+| `scripts/ci/gate-classes.test.mjs` | The branch tier must be a subset of the full tier and every member must be in `STATIC_TIER` |
+
+Nothing left the ladder. `ci.yml` and `governance.yml` both listen on a bare `pull_request:`, so
+every branch's PR runs the full tier on every commit; the full **local** tier moved to the push that
+is the last moment before the trunk moves. `SKIP_CHECK_PR=1`, `SKIP_GOVERNANCE=1` and `--no-verify`
+are untouched, and `CENTRAID_PUSH_TIER=full` only ever widens — there is no value that narrows the
+`main` tier.
+
 ## Out of scope
 
 - Editing anything under `.governance/packs/**` or `.governance/run.sh` (digest-locked).
@@ -76,6 +92,12 @@ stamp: one directive's verdict cannot be promoted into a claim about all of them
   stop on a box that cannot be met without weakening a check.
 
 ## Verification
+
+```sh
+# Box 3 — the tier is chosen by the ref being pushed:
+GOVERNANCE_SHELL_FULL=1 bash scripts/test.sh
+node --test scripts/ci/gate-classes.test.mjs
+```
 
 ```sh
 # Box 2 — the stamp is written by a green run and skips the next one:

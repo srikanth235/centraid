@@ -28,6 +28,7 @@
     "check:na-cells": "node scripts/audit-na-cells.mjs",
     "check:pr": "bun install --frozen-lockfile && bun run check:push && bun run typecheck && bun run lint:types && bun run lint:workflow-pins && bun run check:diff-coverage",
     "check:push": "node scripts/ci/run-gates.mjs --stamp test:affected test:qualities design:gallery knip typecheck:affected scripts:test test:ratchet:unit check:reachability format:check turbo:lint lint lint:product lint:hermes-surface test:claims lint:evidence-mapping test:report:smoke test:governance-shell",
+    "check:push:static": "node scripts/ci/run-gates.mjs --stamp format:check lint turbo:lint typecheck:affected",
     "check:reachability": "node scripts/check-share-reachability.mjs",
     "check:ui-receipt": "node scripts/validate-ui-receipt.mjs",
     "ci": "bun run check:pr",
