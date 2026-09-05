@@ -6,32 +6,32 @@ Umbrella receipt for [#922](https://github.com/srikanth235/centraid/issues/922).
 
 **Part 0**
 - [x] No read on any seat truncates silently: the replica read plan and the gateway read report `truncated` when the default cap fills, undeclared unbounded reads are refused at the kit boundary, and the honesty grammar renders the truncation (test per layer)
-- [ ] A text value above the old 64 KB ceiling is either present on the device or visibly absent; no client stores an oversized list it never reads (the decision in open question 7 recorded)
+- [x] A text value above the old 64 KB ceiling is either present on the device or visibly absent; no client stores an oversized list it never reads (the decision in open question 7 recorded)
 
 **Part A**
 - [ ] A change committed on the gateway reaches a subscribed device's replica in one SSE frame with no `/changes` pull on the happy path; catch-up still pulls and the convergence suites pass; the losing side of the doorbell/payload contradiction is deleted
 - [ ] Projections per commit per household ≤ 1 for identically-authorized devices; `buildReplicaShapes` statement preparations per projection ≈ 0 after warm-up (met through #928's static composition; numbers from #927)
-- [ ] `readReplicaRow` issues no `PRAGMA` and no uncached prepare on the change path
+- [x] `readReplicaRow` issues no `PRAGMA` and no uncached prepare on the change path
 - [ ] 40 offline edits converge on reconnect in ≤ 2 batch round trips, in order; the pending badge clears on the server's answer, not on the feed's echo (#927 converge journey before/after, web and phone)
 
 **Part B**
 - [ ] A handler invocation's remaining reads commit once (`readBatch`) off the read path, with every grantee/agent/reveal receipt still written in the same chain; strace fsync-per-read measured before/after under both profiles
 - [ ] Blueprint handlers run precompiled; no esbuild hook on the app-handler path; per-call `fs.stat`s gone
 - [ ] Workers are reused across clean runs and terminated only on timeout/error/limit; the pool size has one source and constrained hosts keep ≥1 warm worker; #842 W4.1 ref-search p95 under composition re-measured and budgeted
-- [ ] A lone write commits without waiting the group-commit window; the window opens only under concurrency (test on the queue)
-- [ ] Durable commits per offline intent measured before/after; each surviving transaction is named with the crash property it protects
+- [x] A lone write commits without waiting the group-commit window; the window opens only under concurrency (test on the queue)
+- [x] Durable commits per offline intent measured before/after; each surviving transaction is named with the crash property it protects
 - [ ] Standard-profile benchmark exists with provenance; fsync per offline intent recorded; `storageFsyncMs` feeds the window/sync choice
 - [ ] Audit-band bytes/read and WAL size are gated numbers; a size-based checkpoint exists
 
 **Part C**
-- [ ] An empty outbox costs zero IDB work per read; a non-empty one costs one memory lookup
+- [x] An empty outbox costs zero IDB work per read; a non-empty one costs one memory lookup
 - [ ] Ordered replica reads use an index (measured on the 50k fixture: the QUALITY.md item closed)
 - [ ] Bootstrap statements per row ≤ 3 with a driver statement cache; the wasm replica store runs `synchronous=NORMAL` on web and desktop (the outbox is IndexedDB, outside the pragma); on mobile the replica stays `FULL` unless B4's phone fsync-per-offline-intent number justifies WAL + `NORMAL` with `FULL`-bracketed outbox transactions (the `journal_mode=DELETE` second-reader seam re-judged first; a separate outbox file only if that seam proves real), with a power-loss case proving no acknowledged outbox write is lost; before/after cold-bootstrap time in the receipt (amended 2026-09-03 per SB-replica-sync)
 - [ ] A replica session survives 30 s idle and closes on hide/memory pressure; desktop tap-to-app-view reduced against #927's warm-switch journey
 
 **Part D**
 - [ ] One write on any of the eight apps causes ≤ 1 screen re-read on the same seat (counter-verified); the user's own overlay re-read has no debounce/coalesce window; the 50 ms pending poll is gone
-- [ ] A cold bootstrap does not re-run live queries per page, and fetches page N+1 while applying page N
+- [x] A cold bootstrap does not re-run live queries per page, and fetches page N+1 while applying page N
 
 **Part E**
 - [ ] A first-launch bootstrap page and a 40-edit reconnect apply without freezing the JS thread (frame sampler on device via #927's device rung; the store core runs off the JS thread)
@@ -39,12 +39,12 @@ Umbrella receipt for [#922](https://github.com/srikanth235/centraid/issues/922).
 - [ ] One entity change re-runs only the reads that depend on it; Photos does not reparse the library per change
 - [ ] The five capped roster/drive/ledger surfaces are virtualised on one kit primitive
 - [ ] Cold start has a ceiling with provenance; navigators are lazy; a first mount opens local replica files before any network request completes (#927 cold-open journey, online and airplane mode, within the same budget)
-- [ ] **Tally on the phone reads balances from the replica** through the imported balance module; `tally-gateway.ts`'s read RPCs and the stale clock are deleted; a balance-parity test holds phone vs web on the same rows; the Tally home renders complete balances in airplane mode; the Tally carve-outs in `docs/mobile-offline.md` and `blueprint-seats.md` are reverted and the ruling superseded in `docs/decisions.md`
-- [ ] **Locker's list, shelves and search on the phone read the replica**; `reveal`/`authenticate`/permits/secret-bearing writes are unchanged and still online-only; a test asserts no sealed column name appears in any `locker.item` replica shape; `ONLINE_ONLY_ACTIONS` is unchanged
-- [ ] The Metro-loadable `queries/*.ts` decision is recorded, adopted or refused with its reason; if adopted, at least Tally runs the web query handler on the phone and its projection fork is deleted
+- [x] **Tally on the phone reads balances from the replica** through the imported balance module; `tally-gateway.ts`'s read RPCs and the stale clock are deleted; a balance-parity test holds phone vs web on the same rows; the Tally home renders complete balances in airplane mode; the Tally carve-outs in `docs/mobile-offline.md` and `blueprint-seats.md` are reverted and the ruling superseded in `docs/decisions.md`
+- [x] **Locker's list, shelves and search on the phone read the replica**; `reveal`/`authenticate`/permits/secret-bearing writes are unchanged and still online-only; a test asserts no sealed column name appears in any `locker.item` replica shape; `ONLINE_ONLY_ACTIONS` is unchanged
+- [x] The Metro-loadable `queries/*.ts` decision is recorded, adopted or refused with its reason; if adopted, at least Tally runs the web query handler on the phone and its projection fork is deleted
 
 **Part F**
-- [ ] F1/F3/F5 landed in wave 1 with provenance and folded into #927's trace and ledger when those land; F2/F4 closed as superseded
+- [x] F1/F3/F5 landed in wave 1 with provenance and folded into #927's trace and ledger when those land; F2/F4 closed as superseded
 - [ ] Every fix above carries a before/after number (wave-1 instruments, then the #927 ledger); budgets tightened where wins landed, never widened
 
 ## What changed
@@ -60,6 +60,20 @@ Wave 1, rulings slice — **documentation only**. No code file is touched by THI
 - `receipts/issue-922-snappier-blueprints.md` — this file, created as the umbrella receipt with the issue's acceptance criteria mirrored verbatim.
 
 Added by the wave-1 root doc commit (see `## w1 root doc commit` below), so the one box it ticks on this receipt crosswalks to evidence in this section, as `receipt-per-issue` rule 3 requires — the crosswalk reads only `## What changed` and `## Verification` and never an appended wave section. **No read on any seat truncates silently: the replica read plan and the gateway read report `truncated` when the default cap fills, undeclared unbounded reads are refused at the kit boundary, and the honesty grammar renders the truncation (test per layer)** — realized by the `## 0a` slice and its `### Verifier follow-ups`: `packages/client/src/replica/read-plan.ts` (`trimReplicaPage`, `UnboundedReplicaReadError`, `assertBoundedReplicaRead`) and `packages/vault/src/gateway/gateway.ts` both fetch one probe row past the window so a filled window is distinguished from a set that merely ends there; `apps/mobile/src/kit/hooks/useReplicaQuery.ts` on the phone and the web inline ctx (`assertBoundedReplicaRead` at `packages/client/src/react/blueprints/inlineQueryCtx.ts`) refuse an undeclared unbounded read at the kit boundary with `UnboundedReplicaReadError`; the honesty grammar renders it on every seat, and follow-up 1 closed the last silent layer by giving the replica FTS `search` path the same probe, named bounds (`REPLICA_DEFAULT_SEARCH_ROWS` 100, `REPLICA_MAX_SEARCH_ROWS` 1,000) and `truncated` + `appliedLimit`, rendered once per seat for all three phone search screens. Tests per layer: `packages/vault/src/gateway/read-truncation.test.ts`, `packages/client/src/replica/read-plan-truncation.test.ts`, `apps/mobile/src/kit/hooks/useReplicaQuery.truncation.test.tsx`, `apps/mobile/src/lib/replica/multi-vault-reader.test.ts`. Both verifier passes on the 0a section end PASS, the second re-deriving the numbers and closing five follow-ups.
+
+
+**Close pass (#922).** The ten boxes the close pass ticked, quoted verbatim so `receipt-per-issue`'s crosswalk reads them, each with the landed evidence. Nothing above this paragraph is rewritten; the full verdict table, including the fourteen boxes still open, is `## Close pass — checklist crosswalk` at the end of this receipt.
+
+- **A text value above the old 64 KB ceiling is either present on the device or visibly absent; no client stores an oversized list it never reads (the decision in open question 7 recorded)** — `packages/vault/src/schema/entity-catalog.ts` declares the ceiling per entity (`core.content_item` and `core.content_derivative` at 1 MiB) and `enrich.embedding.vector` is the one column declared lazy; `fieldNotOnThisDevice` (`packages/blueprints/apps/_shared/shared-copy.ts`) names an absent value on both seats, from `read-plan.ts` and `query.ts`. The decision is recorded as `SB-text` in `docs/decisions.md`. See `## 0b`.
+- **`readReplicaRow` issues no `PRAGMA` and no uncached prepare on the change path** — measured 4 prepares / 1 `PRAGMA` → 2 / 0 on the change path, and the two that remain are the snapshot's own once-per-transaction log-state reads, not per row. See `## Mega-lane A slice 1`.
+- **A lone write commits without waiting the group-commit window; the window opens only under concurrency (test on the queue)** — an idle `GroupCommitQueue` commits on the next microtask; the window opens only for the turn after a batch larger than one committed, and its size is `groupCommitWindowMs(storageFsyncMs)` from the boot probe. Lone write p50 12.29 ms → 7.33 ms, `group-commit-queue.test.ts`. See `## lane 4a` › B7.
+- **Durable commits per offline intent measured before/after; each surviving transaction is named with the crash property it protects** — 3.00 before, 3.00 after, `strace -c` differenced at N=10/30/50 to cancel boot; the fold is refused with reasons and each of the three is named with its property. See `## lane 4a` › B8.
+- **An empty outbox costs zero IDB work per read; a non-empty one costs one memory lookup** — `outbox-mirror.ts`: 1 IndexedDB `list` (9 indexed `getAll`s) → 0, counted in `outbox-mirror.test.ts`. See `## Mega-lane A slice 3`.
+- **A cold bootstrap does not re-run live queries per page, and fetches page N+1 while applying page N** — `windowed-bootstrap.ts`; `windowed-bootstrap.test.ts` asserts page 2 applies with page 3's request already made. See `## Mega-lane A slice 3` and `## Mega-lane E3 slice 1`.
+- **Tally on the phone reads balances from the replica through the imported balance module; `tally-gateway.ts`'s read RPCs and the stale clock are deleted; a balance-parity test holds phone vs web on the same rows; the Tally home renders complete balances in airplane mode; the Tally carve-outs in `docs/mobile-offline.md` and `blueprint-seats.md` are reverted and the ruling superseded in `docs/decisions.md`** — `tally-reads.ts` over the mounted replica, 7 of 7 gateway-reachable reads → 0, `tally-airplane.test.ts` with every `lib/gateway` door throwing, `tests/integration-mobile/tally-balance-parity.integration.test.ts`; the `blueprint-seats.md` carve-out is reverted by this close pass and `mobile-offline.md`'s by `## Mega-lane E slice 4a`; `SB-tally` and the superseded pointer carry the ruling.
+- **Locker's list, shelves and search on the phone read the replica; `reveal`/`authenticate`/permits/secret-bearing writes are unchanged and still online-only; a test asserts no sealed column name appears in any `locker.item` replica shape; `ONLINE_ONLY_ACTIONS` is unchanged** — `apps/mobile/src/apps/locker/locker-reads.ts`; `packages/vault/src/replica/locker-sealed-columns.test.ts`; `packages/blueprints/apps/locker/writes.ts`'s `ONLINE_ONLY_ACTIONS` untouched. See `## Mega-lane E slice 4c`.
+- **The Metro-loadable `queries/*.ts` decision is recorded, adopted or refused with its reason; if adopted, at least Tally runs the web query handler on the phone and its projection fork is deleted** — ADOPTED, recorded as `SB-loader` with the spike's numbers (+4 modules, +31,494 B of Hermes bytecode, `expo export` exit 0, `metro.config.js` untouched); Tally runs the web query handlers on the phone and the read fork is gone. See `## w1 Metro-loader spike` and `## Mega-lane E slice 4a`.
+- **F1/F3/F5 landed in wave 1 with provenance and folded into #927's trace and ledger when those land; F2/F4 closed as superseded** — F3/F5 landed in `## w1b(i)` and `## lane 3a` with host, volume and command; F1 is absorbed into #927's gateway trace slice, which has landed (`packages/server/src/serve/gateway-trace.ts`); F2 and F4 are closed as superseded by the journey ledger and the device rung (`SB-instrument`, `PS-922-instruments`).
 
 ## Out of scope
 
@@ -2619,3 +2633,102 @@ and this section, and its own files are clean.
 | --- | --- | --- |
 | The fsync drop is the receipt write, not measurement noise | ran `idle` (same process, no reads) under both profiles and subtracted it; re-ran `owner` and `agent` — the 105-syscall gap is exactly the 50 receipting reads, and it vanishes under `NORMAL` where commits do not fsync | **holds** — 0.00 vs 2.06 per read, reproducible |
 | Batching quietly drops or reorders receipts | counted `access_receipt` rows and re-hashed the whole chain with `receiptHash` in the same process, batched and unbatched | **51 rows, chain ok, both ways** |
+
+## Ledger citations (close pass)
+
+`PS-922-instruments` requires every section from wave 2 onward to state its before/after against [`tests/journeys.json`](../tests/journeys.json). Backfilled here rather than rewritten in place: one row per section, naming the ledger entry that holds the ceiling for the journey the section moved, or saying plainly that no entry covers it and what the number is instead. A row that names no entry is a gap in the ledger, not in the section.
+
+| Section | Ledger entry | Number it carries |
+| --- | --- | --- |
+| `## lane 5 — handlers` | `gateway/own-echo/seeded-demo/ci-linux-x64-4c-standard` and `…-constrained` (`replicaIntentWarmP50`) | handler p50/p99 217.6/303.9 → 4.3/67.4 ms standard warm; 273.9/333.7 → 3.8/56.8 ms constrained warm |
+| `## lane 4a — commit path` (B7) | same two entries | lone write through the plane's queue, p50 12.29 → 7.33 ms |
+| `## lane 4a — commit path` (B8) | **no entry** — durable commits per intent is a work counter (`fsyncs`), not a journey ceiling | 3.00 → 3.00, fold refused |
+| `## Mega-lane A slice 1` | `gateway/peer-echo/seeded-demo/ci-linux-x64-4c-standard` / `…-constrained` (`lastSubscriberDeliveryMs`) | projections per commit per household 1 at N = 32 subscribers; change-path prepares/`PRAGMA` 4/1 → 2/0 |
+| `## Mega-lane A slice 2` (A1 payload frame) | `gateway/peer-echo/seeded-demo/…` | one frame, no `/changes` pull on the happy path |
+| `## Mega-lane A slice 4` (G6/G9/G2/G5) | **no entry** — a correctness tripwire and a copy change; the gate is `tests/claims.json` | 16 seeded findings on the tripwire's first run |
+| `## Mega-lane A slice 3` (C1–C5, E1) | `mobile/search/year3-replica/dev-darwin-arm64` (`mountedReplicaReadWithOutbox`); `gateway/first-bootstrap/year3-replica/…` (`bootstrapPageMs`) | bootstrap statements per row 5.01 → 1.01; warm ordered read 131 → 1 ms; longest JS-thread block 33 → 13 ms |
+| `## Mega-lane A slice 5`, `## Mega-lane E slice 1` (G2/G3) | **no entry** — id minting and the sidecar are correctness, not a ceiling | — |
+| `## Mega-lane E slice 2` (mobile reads) | `mobile/search/year3-replica/dev-darwin-arm64` | reads bounded; People/Agenda at 5,000 rows |
+| `## Mega-lane E2 slice 1` (D1, C6) | `web/warm-switch/year3/ci-linux-x64-4c` (`interactionToNextPaint`, `tapToVisualResponse`) — the entry this section cites as `web/warm-switch/seeded-demo/…`, re-keyed to `year3` by #927 W4 with every number carried across byte-identical | screen re-reads per write ≤ 1 |
+| `## Mega-lane E2 slice 2` (C3, A3) | `mobile/search/year3-replica/dev-darwin-arm64`; `client/first-paint-work/year3/any` | ordered read after a write 37.9 → 1.03 ms; warm change-log pass compiles 12 → 0 statements |
+| `## Mega-lane E slice 4a` (Tally) | `mobile/search/year3-replica/dev-darwin-arm64` | Tally reads needing a reachable gateway 7 → 0 |
+| `## Mega-lane E slice 4b`, `## slice 4c` (Locker) | same entry | Locker list/shelves/search reads needing a reachable gateway → 0 |
+| `## Mega-lane E3 slice 1` (bootstrap loop, warm switch) | `web/cold-open/year3/ci-linux-x64-4c` (`largestContentfulPaint`, `cumulativeLayoutShift`); `web/warm-switch/year3/ci-linux-x64-4c` | LCP 484/516/524 ms against the unchanged 1,200 ms ceiling; INP 24 ms; CLS 0 |
+| `## Mega-lane E3 slice 2` (own echo, tie census) | `gateway/own-echo/none/ci-linux-x64-4c` (`sendToFirstToken`); `mobile/search/year3-replica/…` | the owner's own overlay re-read skips the window |
+| `## H1` (E6, E8) | `mobile/app-weight/build-artifact/any`; `mobile/cold-open/device-fixture/ci-ios-sim` (`coldOpenToUsable`, still `unmeasured`) | five capped surfaces on one virtualisation primitive; cold start has no device number until the device rung runs |
+| `## B1` (fsyncs per read) | `gateway/read-cost/year3/ci-linux-x64-4c` (`auditBandPerRead` 450 B, `walBytesPerRead` 65,536 B) plus the `fsyncs` work counter | owner-direct 2.06 → 0.00 fsync/read under `FULL`; agent 2.06 → 0.12 in `readBatch` |
+
+**Two ledger gaps this exposes**, both reported to the root rather than fixed here: the mobile seat has no `own-echo` or `warm-switch` entry measured at `year3-replica`, so every phone-side win above is stated against `mobile/search`; and `mobile/cold-open` is `unmeasured` on `device-fixture`, so E8's cold start has a ceiling in the receipt and none in the ledger.
+
+## Close pass — checklist crosswalk
+
+Docs-only close pass over `origin/main` @ `50ab218cf`. Twenty-four boxes re-read against the tree; ten tick (quoted in `## What changed`), fourteen stay open. A box is ticked only when every clause holds.
+
+| Box | Verdict |
+| --- | --- |
+| 0.1 no silent truncation | already ticked (wave 1, `## 0a`) |
+| 0.2 text ceiling, oversized value visibly absent | **satisfied** — `entity-catalog.ts`, `fieldNotOnThisDevice`, `SB-text` |
+| A.1 one SSE frame, no `/changes` pull, losing side deleted | **NOT satisfied**: the frame and the deletion landed (`## Mega-lane A slice 2`), but the box also demands the convergence suites and the catch-up pull, and `## Mega-lane E3 slice 1` narrowed `changeMismatch` afterwards — no single run asserts the whole clause end to end |
+| A.2 projections per commit ≤ 1; `buildReplicaShapes` prepares ≈ 0 | **NOT satisfied**: projections per commit per household is 1 at N = 32 and prepares are 0 on the change path, but the box's fan-out is a household, and `SSE_MAX_SUBSCRIBERS = 32` refuses a larger sample — the claim is stated at 32, not at a household |
+| A.3 `readReplicaRow` issues no `PRAGMA`, no uncached prepare | **satisfied** (`## Mega-lane A slice 1`) |
+| A.4 40 offline edits converge in ≤ 2 round trips, web and phone | **NOT satisfied**: `mobile/converge/year3-replica/ci-linux-x64-4c` is measured on a Linux runner, not a phone; the box asks for the #927 converge journey on both |
+| B.1 `readBatch` off the read path | **NOT satisfied**, and half of it is refused with evidence: owner-direct reads already cost 0 fsyncs and `readBatch` removes 94% of the rest, but wrapping an automation FIRE would either hold the vault write lock across model turns (a fault for every other writer on the handle) or defer the audit band past a crash window. `## B1` names three options and recommends batching per tool-batch; that is the root's ruling |
+| B.2 handlers precompiled, no esbuild hook, per-call `fs.stat`s gone | **NOT satisfied as written**: the app-handler dispatch no longer registers the worker's esbuild hook (`dispatcher.ts`), but `packages/server/src/engine/worker/ts-loader-hooks.ts` still imports esbuild for the plain-Node runner path, so "no esbuild hook on the app-handler path" holds while "precompiled" does not hold for every handler |
+| B.3 workers reused; pool has one source; ref-search p95 re-measured | **NOT satisfied**: reuse and the single source landed (see `SB-reuse`, `SB-pool`), and `refSearchUnderComposition` is re-measured in `gateway/composite-load/empty/ci-linux-x64-4c` — but that entry's volume is `empty`, which #927's own box 5 calls an admission rather than a budget |
+| B.4 lone write commits without the window | **satisfied** (`## lane 4a` › B7) |
+| B.5 durable commits per intent measured; each transaction named | **satisfied** (`## lane 4a` › B8; the fold is refused with evidence and the register row is superseded in `docs/decisions.md`) |
+| B.6 standard-profile benchmark; fsync per offline intent; `storageFsyncMs` feeds the window | **satisfied in substance, left open on one clause**: the benchmark and the fsync number exist with provenance (`## w1b(i)`) and `groupCommitWindowMs(storageFsyncMs)` reads the boot probe, but "the sync choice" half never happened — the mobile `synchronous` decision is still waiting on a phone measurement |
+| B.7 audit-band bytes/read and WAL size gated; size-based checkpoint exists | **NOT satisfied**: both numbers are gated (`gateway/read-cost/year3/ci-linux-x64-4c`), and a size-based rollover exists in the WAL shipper (`walGroupBytes`, 16 MiB), but that is the shipper's group rollover, not a checkpoint the vault takes on WAL size — `custody.ts` still checkpoints on `TRUNCATE` only |
+| C.1 empty outbox costs zero IDB work | **satisfied** (`## Mega-lane A slice 3`) |
+| C.2 ordered reads use an index; the QUALITY.md item closed | **satisfied** — C3 replaced the window-function census with index seeks (37.9 → 1.03 ms on the 50k fixture) and this pass moved the QUALITY.md observation to `## Resolved`; not ticked above only because the box is phrased around the measurement, which `## Mega-lane E2 slice 2` already carries. Root's call whether to tick it |
+| C.3 bootstrap statements ≤ 3; wasm `NORMAL`; mobile gated; power-loss case | **NOT satisfied**: 1.01 statements per row and `synchronous=NORMAL` on the wasm seat landed; the mobile half is untouched and its condition unmet, and no power-loss case proving no acknowledged outbox write is lost was landed |
+| C.4 session survives 30 s idle; closes on hide/memory pressure; desktop tap-to-app-view reduced | **NOT satisfied**: `replicaScopeDisposition` landed and is narrower than the box — a held scope never closes, an unheld one keeps the 30 s grace only while visible — and `desktop/warm-switch/mock-gateway/dev-darwin-arm64` is measured against a mock gateway, so no desktop reduction is attributable |
+| D.1 ≤ 1 screen re-read per write; no debounce on the owner's own overlay; the 50 ms poll gone | **NOT satisfied**: the poll is deleted and the owner's own echo skips the window (`## Mega-lane E3 slice 2`), but "on any of the eight apps, counter-verified" is asserted for the kit path, not per app |
+| D.2 cold bootstrap does not re-run live queries per page; fetches N+1 while applying N | **satisfied** |
+| E.1 bootstrap and 40-edit reconnect without freezing the JS thread (device rung) | **NOT satisfied**, parked on hardware: the store core runs off the JS thread and the longest block is 33 → 13 ms, but the frame sampler needs #927's device rung, which is skipped until its secrets exist |
+| E.2 no unbounded `useReplicaQuery`; People/Agenda at 5,000 rows | **NOT satisfied**: the kit refuses an undeclared unbounded read, but call sites carrying `acceptTruncation: true` are the declared debt, so "no read is unbounded" holds only in the typed sense |
+| E.3 one entity change re-runs only dependent reads; Photos does not reparse per change | **NOT satisfied**: no section claims the Photos half |
+| E.4 five capped surfaces virtualised on one kit primitive | **NOT satisfied**: `packages/blueprints/apps/_shared/VirtualWindow.tsx` is the one primitive, but QUALITY.md still carries the two unvirtualized phone surfaces `NotesPlaces.tsx` / `NotesHistory.tsx` under `## Open` |
+| E.5 cold start ceiling with provenance; lazy navigators; first mount opens local files first | **NOT satisfied**: `mobile/cold-open/device-fixture/ci-ios-sim` is `unmeasured`, so the ceiling has provenance in the receipt and none in the ledger |
+| E.6 Tally on the phone | **satisfied** (`## Mega-lane E slice 4a`, plus this pass's `blueprint-seats.md` revert) |
+| E.7 Locker on the phone | **satisfied** (`## Mega-lane E slice 4c`) |
+| E.8 Metro-loadable decision recorded/adopted | **satisfied** (`SB-loader`) |
+| F.1 F1/F3/F5 landed; F2/F4 superseded | **satisfied** |
+| F.2 every fix carries a before/after; budgets tightened, never widened | **NOT satisfied**: `## Ledger citations (close pass)` shows five sections with no ledger entry to cite, and no #922 win produced a tightening of a `tests/journeys.json` ceiling |
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `docs/decisions.md` | `SB-payload`, `SB-pool`, `SB-reuse`, `SB-replica-sync`, `SB-session` state landed state and the mechanism that landed; the B7 and B8 register rows are re-verdicted from the measurements; five superseded pointers move to past tense |
+| `docs/mobile-offline.md` | the catch-up overlap rule (`changeMismatch` raises `cursor-gap` only for a batch that starts ahead); what an ordered read costs and what a write pays for it |
+| `docs/client-keying.md` | rule 8 — a replica scope's lifetime is keyed on page state, not a clock |
+| `docs/blueprint-seats.md` | the Tally read carve-out is reverted on both rows it appeared on |
+| `docs/traps/expression-index-spelling.md` (new), `docs/traps/README.md` | the census/order index spelling rule |
+| `QUALITY.md` | the ordered-page observation moves from `## Open` to `## Resolved` with the C3 numbers |
+| `receipts/issue-922-snappier-blueprints.md` | ten ticks, the crosswalk paragraph in `## What changed`, `## Ledger citations (close pass)`, this section |
+
+**Decisions:** none — no ruling moved. B8's row is re-verdicted to what the measurement said, which is the ruling `## lane 4a` already recorded.
+
+**Findings.** (1) `store-core.ts` sets `PRAGMA journal_mode=DELETE` for BOTH seats from the shared core, while the property behind it — two live handles per vault file — exists only on the phone (`op-sqlite-driver.ts`); on web it is an inherited spelling with nothing depending on it. (2) `refSearchUnderComposition` is budgeted at volume `empty`. (3) The two unvirtualized phone surfaces in QUALITY.md are still open, so E.4 cannot tick. (4) No #922 win tightened a journey ceiling.
+
+**Doc debt:** none — every statement above is about the tree it was written against.
+
+### Verification
+
+```sh
+bun run format:check && bun run lint
+bash .governance/run.sh
+bun run lint:journey-ledger && bun run test:ratchet
+grep -n "journal_mode=DELETE" packages/client/src/replica/store-core.ts   # 355, both seats
+grep -n "An ordered replica page" QUALITY.md                             # now under ## Resolved
+```
+
+Tree hash: quoted in the lane report to the root.
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "The Tally carve-out is reverted in `blueprint-seats.md`" — the receipt's E7 section already claimed the doc revert | `grep -n -i tally docs/blueprint-seats.md` before editing | the seat row still read "its derived READS take the gateway's query handlers because `queries/dashboard.ts` holds the app's one balance engine", and the record-only row still named "the one exception the Tally row names" — the revert had landed in `mobile-offline.md` only, so the box could not have been ticked before this pass |
+| "`SB-pool`'s preset defaults are deleted" — the ruling says so, but a preset could have kept the key | read `BUDGET_PRESETS` in `hardware-profile.ts` and the boot block in `build-gateway.ts` | no preset carries `workerPoolSize`; `build-gateway.ts` writes `CENTRAID_WORKER_POOL_SIZE` only when the resolved source is `prefs`, and the pool's own constants are 1 (constrained) and 2 (default) |

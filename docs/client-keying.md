@@ -29,6 +29,8 @@ Which UI/query state is keyed on which durable axis. Issue #504 batch 1.
 
 7. **The active vault pointer is visible context, not identity** (issues #608, #665). The sidebar vault switcher may update `setActiveVault` (and `setActiveGateway` with it, when the picked vault is hosted by another gateway), and the identity row must render the scope named by that pointer rather than `scopes[0]`. Explicitly targeted operations and pinned conversations do not follow it; only ambient requests and surfaces with no stronger key do.
 
+8. **A replica scope's lifetime is keyed on the page state, not on a clock** ([#922](https://github.com/srikanth235/centraid/issues/922) C6). `replicaScopeDisposition(page, refs)` in `packages/client/src/replica/shell-session.ts` is the whole rule: a scope a screen still holds is never closed under it (`hold`); an unheld scope on a `visible` page keeps a 30-second warm grace (`warm`), so leaving an app and coming back pays no second worker + WASM + OPFS open; an unheld scope on a `hidden` or `frozen` page closes at once (`close`), because the browser freezes a hidden page precisely when it wants its memory back. Do not add a second timer beside this, and do not key a scope's survival on the active-vault pointer — that pointer moving is not a reason to close a handle.
+
 ## Related
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md)

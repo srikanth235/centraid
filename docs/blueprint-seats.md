@@ -22,7 +22,7 @@ Code constant: each bundle declares `SEAT: "origin" | "custodian" | "viewer"` as
 
 | Class | Apps | What the seats must do |
 | --- | --- | --- |
-| **record-only** | tasks, agenda, people, tally | Payloads are rows. The replica gives every seat offline reads and queued writes for free, with the one exception the Tally row names. No custody states, no upload queue, no download gate. |
+| **record-only** | tasks, agenda, people, tally | Payloads are rows. The replica gives every seat offline reads and queued writes for free. No custody states, no upload queue, no download gate. |
 | **byte-bearing** | photos, docs; notes and locker via attachments | Needs the custody triple, the backup engine (up), the pin/download engine (down), free-up-space, and the metered gate. |
 
 Every hard per-seat question in the Photos v4 audit was a byte-bearing problem. An agent building a record-only app should not touch any of that machinery.
@@ -60,7 +60,7 @@ Web's `TileMediaState` (`pending | bytes | gateway | failed`) is the **paint pip
 | **Tasks** | Todoist | Same shape as Agenda: tiny payloads, all seats equal, write queue. Todoist alone as of [#834](https://github.com/srikanth235/centraid/issues/834) — one north star per blueprint, and Todoist is the depth bar ([R-northstar](decisions.md#rebuilding-agenda-notes-and-tasks-834)). The backend keeps its Things-shaped vocabulary; the north star names the depth, not the words. |
 | **People** | Google Contacts | Full replica; mobile wants OS-contacts import and share-sheet in/out. Every seat draws the v12 screens ([#821](https://github.com/srikanth235/centraid/issues/821)): desktop/web inline, mobile native over replica entity reads. |
 | **Locker** | 1Password | Biometric unlock + OS autofill on mobile. **Disabled on the PWA seat for now** — a shared browser is the risky seat; revisit post-v0 with a re-auth-per-open design. |
-| **Tally** | Splitwise | Shared expense splitting: multi-party balances ("who owes whom"), naturally at home in a shared/household vault. Record-only, and its WRITES are fully offline, but its derived READS take the gateway's query handlers because `queries/dashboard.ts` holds the app's one balance engine ([mobile-offline.md](mobile-offline.md), [#883](https://github.com/srikanth235/centraid/issues/883)). Mobile origin act: receipt photo (byte-bearing only at that edge). |
+| **Tally** | Splitwise | Shared expense splitting: multi-party balances ("who owes whom"), naturally at home in a shared/household vault. Record-only, and offline in both directions: its writes queue, and its derived READS run on the device — the phone imports the same `queries/*.ts` modules and the same `tally-balance.ts` / `tally-simplify.ts` fold the web seat uses, over the mounted replica, so "who owes whom" is one derivation on both seats and the gateway read RPCs are gone ([#922](https://github.com/srikanth235/centraid/issues/922) SB-tally / E7; parity held by `tests/integration-mobile/tally-balance-parity.integration.test.ts`). Mobile origin act: receipt photo (byte-bearing only at that edge). |
 
 ## Shared engines (build once, per-app never)
 
