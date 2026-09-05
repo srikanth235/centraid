@@ -166,6 +166,10 @@ export const ALLOW_LIST = {
     "is a peer-give suite's fixture builder",
   "packages/server/src/serve/vault-plane.test-fixtures.ts":
     "is a vault-plane suite's fixture builder",
+  "apps/mobile/src/lib/replica/locker-vault.test-fixtures.ts":
+    "is the Locker replica fixture builder; it seeds replica_row directly after bootstrap",
+  "apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts":
+    "is the Tally replica fixture builder; it seeds replica_row directly after bootstrap",
   // ── this linter ──
   "scripts/lint-vault-sql.mjs":
     "its own fixtures name physical tables on purpose",
