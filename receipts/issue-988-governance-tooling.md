@@ -291,6 +291,24 @@ $ node --test scripts/ci/gate-stamp.test.mjs scripts/ci/gate-classes.test.mjs \
 $ bun run check:ui-receipt                               # evidence verified
 ```
 
+The whole run is green now that this receipt is on the trunk and grandfathered, which finally makes
+the governance-tier stamp demonstrable end to end on this tree:
+
+```txt
+$ bash .governance/run.sh </dev/null      # 1m16.5s — ✓ all 22 directive(s) passed
+$ rm -rf ~/.cache/centraid/gate-stamps
+$ time bun run governance </dev/null      # 1m17.4s — green, governance.json written
+$ time bun run governance </dev/null      # 0.085s  — ⊘ governance stamped for tree 9da1d223a (base 93cb7418a)
+```
+
+Base note for whoever replays this: `doc-integrity` and `receipt-per-issue` resolve their baseline
+with `for candidate in origin/main origin/master main master`, taking the first whose merge-base is
+not HEAD. This container's local `main` is stale (f782cfb6), so while a branch sits exactly on
+`origin/main` the baseline falls through to it and four sibling receipts #989 legitimately edited
+read as modified frozen files. One commit ahead of `origin/main` and the baseline resolves
+correctly, which is why the commit carrying this section used the `SKIP_GOVERNANCE=1` hatch and the
+run above was taken immediately after it.
+
 ### Falsification
 
 | Claim | Check | Result |
