@@ -136,8 +136,9 @@ test("UI receipt evidence: a packages/client data-client change needs no screens
 // that had not moved, and re-validated every screenshot the change set named.
 test("UI receipt evidence: a file on no import edge needs no screenshot", () => {
   for (const file of [
-    "packages/blueprints/apps/people/app.json",
     "packages/blueprints/apps/locker/README.md",
+    "packages/client/src/react/CSS-CONVENTIONS.md",
+    "packages/blueprints/apps/locker/tsconfig.yml",
     // A provider under the replica store: it renders no pixels and reads no
     // stylesheet, so a change to it photographs nothing.
     "packages/client/src/replica/ReplicaProvider.tsx",
@@ -153,9 +154,103 @@ test("UI receipt evidence: a file on no import edge needs no screenshot", () => 
   }
 });
 
-// The manifest exemption must not reach the drawing beside it.
-test("UI receipt evidence: a blueprint app's drawing files are still surfaces", () => {
+// An app manifest is NOT exempt, whatever its extension says. `app.json`'s
+// `description` is copied into the generated packages/blueprints/manifest.json,
+// mapped to `desc` in react/shell/useShellApps.ts and `blurb` in
+// react/shell/routes/homeData.ts, and painted by react/ui/AppCard.tsx on the
+// Home tile — member copy that happens to live in JSON.
+const MANIFEST = "packages/blueprints/apps/people/app.json";
+const manifestJson = (over = {}) =>
+  JSON.stringify({
+    id: "people",
+    name: "People",
+    description: "Your circle, remembered.",
+    iconKey: "users",
+    vault: {
+      purpose: "dpv:ServiceProvision",
+      why: "Keeps light records on the people you care about.",
+      scopes: [{ schema: "people", verbs: "read+act" }],
+    },
+    ...over,
+  });
+
+// `vault.purpose` is the one manifest field nothing reads: manifestVaultBlock in
+// react/shell/routes/appSettingsData.ts drops it while lifting `why` and
+// `scopes` into the Declared access section VaultScreen.tsx renders.
+test("UI receipt evidence: a manifest edit confined to vault.purpose needs no screenshot", () => {
+  const base = manifestJson();
+  const head = manifestJson({
+    vault: {
+      purpose: "dpv:PersonalisedBenefits",
+      why: "Keeps light records on the people you care about.",
+      scopes: [{ schema: "people", verbs: "read+act" }],
+    },
+  });
+  assert.deepEqual(
+    validateUiReceipt({
+      changed: [MANIFEST, receipt],
+      readText: (file) => (file === MANIFEST ? head : ""),
+      readBase: (file) => (file === MANIFEST ? base : null),
+    }),
+    []
+  );
+});
+
+test("UI receipt evidence: every other manifest field still demands evidence", () => {
+  const base = manifestJson();
+  for (const over of [
+    { description: "A different sentence a member reads." },
+    { name: "Circle" },
+    { iconKey: "contacts" },
+    // The consent copy and the declared scopes are both painted.
+    {
+      vault: {
+        purpose: "dpv:ServiceProvision",
+        why: "A different reason the owner reads before granting.",
+        scopes: [{ schema: "people", verbs: "read+act" }],
+      },
+    },
+    {
+      vault: {
+        purpose: "dpv:ServiceProvision",
+        why: "Keeps light records on the people you care about.",
+        scopes: [{ schema: "people", verbs: "read+act+write" }],
+      },
+    },
+  ]) {
+    assert.deepEqual(
+      validateUiReceipt({
+        changed: [MANIFEST, receipt],
+        readText: (file) =>
+          file === MANIFEST
+            ? manifestJson(over)
+            : "## User impact\n\nFirst-run: unchanged.\n",
+        readBase: (file) => (file === MANIFEST ? base : null),
+      }),
+      [DEMANDS_EVIDENCE],
+      JSON.stringify(over)
+    );
+  }
+});
+
+test("UI receipt evidence: with no merge-base copy a manifest is a surface", () => {
+  assert.deepEqual(
+    validateUiReceipt({
+      changed: [MANIFEST, receipt],
+      readText: (file) =>
+        file === MANIFEST
+          ? manifestJson()
+          : "## User impact\n\nFirst-run: unchanged.\n",
+      readBase: () => null,
+    }),
+    [DEMANDS_EVIDENCE],
+    "a manifest added on this branch cannot be diffed, so it must not be exempt"
+  );
+});
+
+test("UI receipt evidence: a blueprint app's manifest and drawing files are surfaces", () => {
   for (const file of [
+    "packages/blueprints/apps/people/app.json",
     "packages/blueprints/apps/people/app-root.tsx",
     "packages/blueprints/apps/people/Chrome.module.css",
   ]) {

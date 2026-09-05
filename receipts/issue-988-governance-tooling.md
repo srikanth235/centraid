@@ -282,3 +282,38 @@ $ CENTRAID_GATE_STAMP_DIR=/tmp/p2 bun run check:push:static
 ▶ 4 gates, 2 at a time                          # was: ⊘ static tier stamped … 0 gates
 $ node --test scripts/ci/gate-stamp.test.mjs scripts/ci/gate-classes.test.mjs
 ```
+
+### Finding 2 (blocking) — an app manifest is member copy, exempt one field, not the extension
+
+`.json` in `NOT_ON_AN_IMPORT_EDGE_RE` exempted a real surface, and the justification ("no module
+imports it as code … nothing in it is painted") was false for the file that motivated the rule.
+`.json` is off the list. The exemption is now field-level and cut where the code says it can be:
+
+| Manifest field | Renders? | Where |
+| --- | --- | --- |
+| `description` | yes | copied into the generated `packages/blueprints/manifest.json`, mapped to `desc` in `packages/client/src/react/shell/useShellApps.ts` and to `blurb` in `packages/client/src/react/shell/routes/homeData.ts`, painted by `packages/client/src/react/ui/AppCard.tsx` on the Home tile |
+| `name`, `iconKey`, `colorKey` | yes | the Home tile itself |
+| `vault.why`, `vault.scopes` | **yes** | `manifestVaultBlock` in `packages/client/src/react/shell/routes/appSettingsData.ts` lifts both into the "Declared access" section `packages/client/src/react/screens/VaultScreen.tsx` renders — the consent the owner reads before granting |
+| `vault.purpose` | no | `manifestVaultBlock` drops it and no other consumer names it |
+
+So the exemption the root asked for could be cut for the purpose field only: the scope fields beside
+it are painted, and exempting them would have re-opened the hole one field over. An `app.json` edit
+is exempt only when it touches **nothing but `vault.purpose`**, compared field-by-field against the
+merge base; with no base to compare (a manifest added on this branch, a shallow checkout, a caller
+injecting no reader) the manifest is a surface. That is exactly the close-docs lane's dead `dpv:`
+purpose, and not the description sentence beside it — the gate was right about that half.
+
+### Finding 3 (non-blocking) — the TEST_FILE_RE scope, stated
+
+The first draft hoisted `TEST_FILE_RE` ahead of `isClientSurface` and the `apps/*` rule, which also
+dropped `packages/client/**` and `apps/*/**` test files from the gate. That was undescribed and out
+of this lane's scope: #930 ruled a **blueprint app's** suite is not a surface, and widening the
+ruling to two more trees is a separate judgement with its own evidence. Reverted —
+`TEST_FILE_RE` guards the blueprints arm only, exactly as #930 left it.
+
+```txt
+$ node --test scripts/validate-ui-receipt.test.mjs        # 12 pass, 0 fail
+$ # live, against the real manifest:
+$ python - <<'EOF'  # flip vault.purpose only, then also flip description
+$ bun run check:ui-receipt   # dpv-only edit → exit 0; description edit → exit 1
+```
