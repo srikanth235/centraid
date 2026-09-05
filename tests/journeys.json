@@ -269,16 +269,16 @@
           "status": "measured",
           "probe": "scripts/perf/app-weight.mjs --surface mobile (weighs dist/mobile-bundle-smoke/ios and .../android, both produced by the existing `bun run --cwd apps/mobile ci:bundle` in the ci.yml mobile-smoke job)",
           "maxTotalBytes": 12582912,
-          "maxLargestChunkBytes": 6863614,
+          "maxLargestChunkBytes": 8220000,
           "_provenance": {
-            "at": "2026-07-31",
-            "host": "darwin arm64, `bun run --cwd apps/mobile ci:bundle` (expo export, both platforms) in this worktree",
-            "observedIosShippedBytes": 11596398,
-            "observedAndroidShippedBytes": 11604148,
-            "observedLargestChunkBytes": 6355198,
+            "at": "2026-09-05",
+            "host": "GitHub-hosted ubuntu-latest, `bun run --cwd apps/mobile ci:bundle` in ci.yml mobile-smoke (expo export, both platforms, release Hermes bytecode)",
+            "observedIosShippedBytes": 8293552,
+            "observedAndroidShippedBytes": 8313794,
+            "observedLargestChunkBytes": 8168314,
             "observedLargestChunk": "_expo/static/js/<platform>/index-*.hbc (Hermes bytecode)",
-            "note": "MEASURED. One ceiling covers both platforms because they differ by 7,750 B (0.07%). The Hermes bundle is 55% of the weight and the @expo/vector-icons font set is most of the rest — MaterialCommunityIcons.ttf alone is 1.31 MB and is the largest single asset. Ceilings are the larger observed value + ~8% headroom.",
-            "headroom": "observed + 8% \u2014 6,355,198 * 1.08 = 6,863,614 for the largest chunk (the ceiling read ~29% until #927's close pass tightened it to the rule this note states); 8.4% on the total, which is 12 MiB exactly"
+            "note": "MEASURED on the CI artifact this consumer weighs. A 2026-07-31 darwin worktree export observed a 6,355,198 B chunk and the close pass tightened the ceiling to 6,355,198 \u00d7 1.08 = 6,863,614; CI's Hermes chunk is 8,147,138 B (iOS) / 8,168,314 B (Android), so that observation was not this job's artifact. The ceiling stays at the previous 8,220,000 B, which still clears 8,168,314. Tightening it to the CI observation + 8% would be 8,821,779 and is a widen vs the number already on main \u2014 not taken here.",
+            "headroom": "8,220,000 against CI largest chunk 8,168,314 (0.6%); 12 MiB total against 8,313,794 shipped (51%)"
           }
         }
       }
@@ -1668,6 +1668,15 @@
   },
   "rigs": {
     "approvedDeviation": "#927 RIG DIET removes the thirty rigs that cited no entry in this ledger, and their budgetMs/budgetsMs numbers with them (maintainer approval 2026-09-05, recorded in receipts/issue-927-perf-infra.md). Every number deleted here belonged to a rig deleted in the same change set: a rig fencing no journey was fencing a machine cost with no vault owner above it. NO SURVIVING RIG'S CEILING MOVES. `tests/scale/large-vault` (now cited) and `tests/perf/work-counters` (it times nothing) were excluded from the diet and keep their rows. This key is reserved rather than a rig path — see scripts/test-report/journey-rigs.mjs.",
+    "tests/perf/backup-restore.perf.test.ts": {
+      "lane": "perf",
+      "volume": "The golden year-3 vault (packages/test-kit, ~27,600 domain rows / 105,603,072 B vault.db) \u2014 one snapshot and one restore, work-counted rather than sampled",
+      "_noBudgetMs": "Deliberate. The ceilings this rig asserts are `snapshotToDurable` and `snapshotToUsableVault` on the two ledger entries it feeds; an absolute duration ceiling here would fence the golden-vault copy, which is setup. The work-counter delta (zero statements) is the gate.",
+      "entries": [
+        "gateway/backup/year3/ci-linux-x64-4c",
+        "gateway/restore/year3/ci-linux-x64-4c"
+      ]
+    },
     "tests/perf/desktop-launch.perf.test.ts": {
       "lane": "perf",
       "volume": "1 REAL Electron cold launch (mock gateway, 1 app, fresh userData — an EMPTY vault, not year-3); measured by apps/desktop/tests/e2e/launch-time.spec.ts and consumed here as an artifact",

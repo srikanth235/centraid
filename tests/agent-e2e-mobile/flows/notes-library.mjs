@@ -71,6 +71,15 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Notes.*")}
 - extendedWaitUntil:
     visible: "New note"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+# A write round-trip needs a reachable gateway. Reuse-paired can land with
+# the replica still showing Gateway asleep (the CI digest on both this PR
+# and origin/main carried that row plus Pending changes 1, and the capture
+# stayed in the outbox). Wake help is the product's own re-probe.
+- runFlow:
+    when:
+      visible: "Wake help"
+    commands:
+      - tapOn: "Wake help"
 # The row's own accessible name, built by the blueprint's promote().
 - assertVisible: "Open Mom's chili, written down properly"
 # …and the preview under it, which is the note's BODY. The row collapses the

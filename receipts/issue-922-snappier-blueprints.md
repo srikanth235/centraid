@@ -2810,3 +2810,21 @@ The three `packages/server` reds are **base state on this container, not this ch
 | "the crash window did not move" — the easy way to win this number is to reply first and commit later | asserted `host.open === false` inside each read's own `.then()` | every reply settles after the commit. Written as a test rather than checked once, because it is the property the whole ruling rests on |
 | "`journal_mode=DELETE` was load-bearing everywhere" — dropping a pragma from every seat is how a locking assumption dies quietly | read `op-sqlite-driver.ts`'s own header (two live handles per file, busy timeout 5 s) and `store-core.ts`'s vacuum note, then ran the full client replica suite | it is load-bearing on ONE seat and is SQLite's own default on the others. The phone now says so in its driver; 273 files / 2479 tests green |
 | "the three `packages/server` reds are mine" — the safe assumption for a lane that edits `vault-plane.ts` | `git stash -u`, re-ran the two files, `git stash pop` | identical 3 failures on the clean tree: root-vs-non-root `IS_SANDBOX` planning and a missing `sqlite3` CLI. Neither file is on any import edge from this diff |
+
+
+## Follow-up — CI green: SeatList coverage and notes capture
+
+Diff coverage on the E.4 SeatList land was 78.6% (the two screens and the `journalMode` field). The notes-library device journey failed on this PR and on origin/main the same way: after Save, the replica showed Gateway asleep and Pending changes 1, and the captured note never became `notes-row-first`.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `apps/mobile/src/apps/notes/NotesHistory.test.tsx` | unreadable door vs SeatList header/rows |
+| `apps/mobile/src/apps/notes/NotesPlaces.test.tsx` | More sheet draws through SeatList |
+| `apps/mobile/src/lib/replica/op-sqlite-driver.test.ts` | `journalMode === "DELETE"` on the opened driver |
+| `tests/agent-e2e-mobile/flows/notes-library.mjs` | tap Wake help when it is showing, before the capture, so a reuse-paired session that has not yet probed the gateway does not queue the write into a dead outbox |
+
+### Decisions
+
+Wake help is the product's own re-probe, not a weakened assertion: the capture still requires the new note as `notes-row-first`. Classifying Gateway asleep as infrastructure would have been the shape `failure-class.mjs` forbids.
