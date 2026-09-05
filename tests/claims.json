@@ -4924,9 +4924,7 @@
       "dimension": "durability",
       "tier": "contract",
       "owner": "packages/vault/src/share/placement-move.test.ts",
-      "minimumTests": 4,
-      "replacesMinimumTestsFlow": "share-outbox-obligation",
-      "approvedMinimumTestsDeviation": "#928 (AP-give-residue) deletes the share effect outbox, its reducer, its executor and the retry sweep that drained it. The durability question the retired flow guarded — an obligation never lost, never spinning — is not weakened but RELOCATED: a same-owner placement between two of the owner's vaults is now one synchronous call (packages/vault/src/share/placement.ts::placeItemsInVault), so there is no obligation row to lose, the projection still commits before the source is released, and the source set leaves in ONE transaction rather than one per item. Retry belongs to the caller that owns the offline queue (the phone's placement outbox), which is where it already was; the gateway answers a retryable 5xx instead of parking a row. The floor does not drop: 4 before, 4 after, over the four cases that pin the new act (an album lands whole in the destination and leaves the source, an add releases nothing, the placement mints its own authority, and a move ends that answer because the subject was purged)."
+      "minimumTests": 4
     },
     {
       "id": "gateway-experimental-gate-law",

@@ -166,6 +166,9 @@ export const ALLOW_LIST = {
     "is a peer-give suite's fixture builder",
   "packages/server/src/serve/vault-plane.test-fixtures.ts":
     "is a vault-plane suite's fixture builder",
+  // ── measurement rigs that verify gateway-owned audit state ──
+  "scripts/measure-read-fsync.mjs":
+    "measures gateway receipt durability and re-hashes its audit chain",
   // ── this linter ──
   "scripts/lint-vault-sql.mjs":
     "its own fixtures name physical tables on purpose",

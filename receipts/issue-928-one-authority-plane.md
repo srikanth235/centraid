@@ -78,6 +78,7 @@ Fresh-context verifier on `claude/928-w1a-rulings` at `8401083a`, wave 1a (rulin
 | 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 | 2026-09-04 | codex | 01a06aae-4aeb-72f0-b2a6-97f24ffc02ed |
 | 2026-09-04 | codex | 01a06cb4-14e6-7ae3-a265-663bd6c39c1e |
+| 2026-09-05 | codex | 01a06fa9-1e83-7b20-9d87-f1595f52198e |
 
 ## w1b — the static app entity tripwire
 
@@ -1731,3 +1732,28 @@ Verdict: PASS. The follow-up diff is limited to restoring the purpose-free recog
 - Post-CI verification: coverage shard 3 caught the `issue-916` golden corpus and ontology page still naming retired `outbox_grant` machinery after the authority-plane schema landed. Re-froze `packages/vault/tests/golden/issue-916` with `bun run --cwd packages/vault build && bun run golden-vault:freeze -- --label issue-916`, removed `grant` from the ontology outbox band, and ran `bun run --cwd packages/vault test -- --run src/golden-vault.test.ts src/schema/ontology-doc.test.ts` — 15/15 passed.
 
 - Post-CI verification: SonarCloud reported two reliability findings on new code: the `scopeForSubject` method reference passed directly to `.map()` and a redundant `| undefined` on optional `ScopeTriple.table`. The map now uses an explicit subject callback and the optional property uses the canonical form; the focused authority-request and vault-plane tests passed 14/14, and both package typechecks passed.
+
+## Follow-up — green PR gates
+
+### What changed
+
+- `tests/claims.json` drops the one-shot `replacesMinimumTestsFlow` marker for `same-owner-placement`; its predecessor is already absent from `origin/main`, so the marker would otherwise name an unknown flow.
+- `tests/quality/classification-ratchet.json` re-pins the `tests/claims.json` file digest after that metadata cleanup.
+- `scripts/lint-vault-sql.mjs` allow-lists `scripts/measure-read-fsync.mjs` as a measurement rig that reads and re-hashes gateway-owned audit state after exercising the gateway.
+
+### Verification
+
+```sh
+bun run test:ratchet
+bun run lint:product
+bun run lint:vault-sql
+bun run format:check
+```
+
+### Decisions
+
+- #928 re-pins classification fingerprints after the authority-plane migration changed the governed manifest and claim statements, and after merging current main's ledger updates; thresholds and classifications are unchanged.
+
+### Audit
+
+Verdict: PASS. The follow-up removes only a stale flow-renaming marker, updates its required file digest, and records the narrowly scoped measurement-rig allowance; no product threshold or gateway policy is relaxed.

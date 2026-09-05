@@ -2036,3 +2036,95 @@ bash .governance/run.sh                                 # 22/22
 `apps/mobile/src/apps/tally/ActivityView.test.tsx` draws one expense and one settlement through `SeatList`, so the day-heading flatten and both row kinds are covered. `nativeLinkTicketDoor` in `grant-seat.test.ts` covers the mint / refuse / missing-vault branches the diff-coverage floor named.
 
 The `mintLinkTicket` mock uses `as never`, matching the gateway mock in the same file, so `tsc --noEmit` accepts the factory.
+
+## B1 — what a gateway read costs in fsyncs, measured; and why the invocation-wide batch is a ruling
+
+B1 asks that a handler invocation's remaining reads commit once. Half of it is already landed and is
+verified here; the other half cannot be built safely as written, and the number that decides it is below.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `scripts/measure-read-fsync.mjs` | new — the rig behind the numbers below: fsync cost per gateway read by principal, batched and not, under either `synchronous` profile, with the receipt count and a full chain re-hash printed so a "win" that lost evidence cannot pass |
+
+### Numbers
+
+Host: this container, 4 cores / 15 GB, ext4. Volume: one bootstrapped vault on disk, 50 reads of
+`core.party` (`limit 1`) after one warm read. The rig is `scripts/measure-read-fsync.mjs`, added here:
+
+```
+bun run --cwd packages/vault build
+strace -f -c -e trace=fsync,fdatasync \
+  node scripts/measure-read-fsync.mjs . FULL agent 50
+```
+
+`idle` is the same process without the 50 reads, so it is the bootstrap baseline to subtract.
+
+| profile | idle | owner-direct ×50 | agent ×50 | agent ×50 in `readBatch` |
+| --- | --- | --- | --- | --- |
+| `synchronous=FULL` | 146 | 146 (**0.00**/read) | 251 (**2.06**/read) | 152 (**0.12**/read) |
+| `synchronous=NORMAL` | 12 | 12 (0.00/read) | 12 (0.00/read) | 12 (0.00/read) |
+
+Receipts written and chain state, same runs: owner-direct 0; agent 51; agent-in-batch 51 — identical
+count, and the full `access_receipt` chain re-hashed with `receiptHash` verifies **ok** in every run.
+
+### What this says
+
+- **Owner-direct reads already cost nothing.** #928 wave 4's `skipsAllowReceipt` (an owner reading their
+  own vault exercises no authority, so it writes no `allow` receipt) took a gateway read from 2.06 fsyncs
+  to 0 under `FULL`. That is B1's first clause, landed, and this is its measurement.
+- **The remaining fsyncs belong to the principals that still receipt** — agent, grantee, reveal, denial —
+  and `readBatch` removes 94% of them (2.06 → 0.12 per read) with the same 51 receipts in the same chain.
+- **Under `NORMAL` there is nothing to win on this axis**: WAL + `synchronous=NORMAL` does not fsync on
+  commit at all, so the whole effect is a `FULL`-profile effect. Stated because a budget measured on one
+  profile and quoted on the other is the failure mode this table exists to prevent.
+
+### Findings — the invocation-wide batch is not a worker's call
+
+`Gateway.readBatch` holds `BEGIN IMMEDIATE` — the vault's write lock — for the length of `body`. The
+scope B1 names is an automation FIRE: `automation/fire/fire.ts` resolves ONE `vaultBridge` per run
+(`fire.ts:205`) and hands it to the handler, whose reads are separated by model turns and network I/O.
+Wrapping that scope means one of two things, and both are worse than the 2.06 fsyncs:
+
+1. **Hold the write lock across the fire.** Every other writer on `plane.db.vault` — the group-commit
+   queue, the sweep, the replica apply — shares that one handle, so their `BEGIN IMMEDIATE` throws
+   "cannot start a transaction within a transaction" while the batch is open. Not a slowdown, a fault.
+2. **Buffer the receipts and flush at the end.** That defers the AUDIT BAND past a crash window, which is
+   exactly what `readBatch`'s contract refuses ("nothing is deferred past the return") and what makes a
+   refusal's receipt trustworthy.
+
+A batch is safe only over a CONTIGUOUS run of reads with no await in it — which is what
+`routes/push-wake-routes.ts` already does, and what an automation fire is not. Options for the root:
+(a) leave the fire unbatched and take the measured 2.06 fsyncs per receipting read; (b) give the plane a
+write mutex every writer goes through, then batch the fire behind it; (c) batch per tool-batch inside the
+handler run, where the reads ARE contiguous. Recommendation: **(c)**, and it needs the dispatcher's tool
+loop, which is outside this lane's files. Not landed — this is the root's ruling, not a worker's.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+strace -f -c -e trace=fsync,fdatasync node scripts/measure-read-fsync.mjs . FULL agent 50
+strace -f -c -e trace=fsync,fdatasync node scripts/measure-read-fsync.mjs . FULL agent-batch 50
+bun run --cwd packages/vault test -- --run src/gateway/read-batch.test.ts src/gateway/evidence.test.ts
+bun run --cwd packages/vault test    # 206 files, 1610 passed | 2 skipped
+bun run --cwd packages/server test   # 393/397 files passed; the 3 reds are this container's known
+                                     # ones (acp/launch x2, gateway-db-lock), untouched by this diff
+bash .governance/run.sh              # 22/22
+# self-audit on tree 95b036b36d0d96c32a579e8395680b3eb6614a21 (head 1e8c736a9): receipt append-only,
+# format:check and lint ok; this comment is the only edit after that run. Its file-coverage and
+# commit-hygiene FAILs are branch-wide against origin/main (the w4/w5 commits already on
+# claude/928-w4), not this diff.
+```
+
+The branch-wide self-audit also reports commit-hygiene and ratchet notes against `origin/main` for the
+w4/w5 commits already landed on `claude/928-w4`; this commit adds only `scripts/measure-read-fsync.mjs`
+and this section, and its own files are clean.
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| The fsync drop is the receipt write, not measurement noise | ran `idle` (same process, no reads) under both profiles and subtracted it; re-ran `owner` and `agent` — the 105-syscall gap is exactly the 50 receipting reads, and it vanishes under `NORMAL` where commits do not fsync | **holds** — 0.00 vs 2.06 per read, reproducible |
+| Batching quietly drops or reorders receipts | counted `access_receipt` rows and re-hashed the whole chain with `receiptHash` in the same process, batched and unbatched | **51 rows, chain ok, both ways** |
