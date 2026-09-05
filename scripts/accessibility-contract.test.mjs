@@ -193,6 +193,7 @@ test("long native surfaces remain virtualized and photo cells keep bounded image
     ["apps/mobile/src/apps/docs/DriveList.tsx", /<SeatList/u],
     ["apps/mobile/src/apps/tally/ActivityView.tsx", /<SeatList/u],
     ["apps/mobile/src/apps/notes/NotesPlaces.tsx", /<SeatList/u],
+    ["apps/mobile/src/apps/notes/NotesHistory.tsx", /<SeatList/u],
     ["apps/mobile/src/apps/locker/LockerAccessView.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/locker/LockerSearchView.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/locker/LockerTrashScreen.tsx", /<FlatList/u],

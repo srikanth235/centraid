@@ -37,7 +37,7 @@ Umbrella receipt for [#922](https://github.com/srikanth235/centraid/issues/922).
 - [ ] A first-launch bootstrap page and a 40-edit reconnect apply without freezing the JS thread (frame sampler on device via #927's device rung; the store core runs off the JS thread)
 - [ ] No `useReplicaQuery` read is unbounded; People/Agenda pass the scale lane at 5,000 rows
 - [ ] One entity change re-runs only the reads that depend on it; Photos does not reparse the library per change
-- [ ] The five capped roster/drive/ledger surfaces are virtualised on one kit primitive
+- [x] The five capped roster/drive/ledger surfaces are virtualised on one kit primitive
 - [ ] Cold start has a ceiling with provenance; navigators are lazy; a first mount opens local replica files before any network request completes (#927 cold-open journey, online and airplane mode, within the same budget)
 - [x] **Tally on the phone reads balances from the replica** through the imported balance module; `tally-gateway.ts`'s read RPCs and the stale clock are deleted; a balance-parity test holds phone vs web on the same rows; the Tally home renders complete balances in airplane mode; the Tally carve-outs in `docs/mobile-offline.md` and `blueprint-seats.md` are reverted and the ruling superseded in `docs/decisions.md`
 - [x] **Locker's list, shelves and search on the phone read the replica**; `reveal`/`authenticate`/permits/secret-bearing writes are unchanged and still online-only; a test asserts no sealed column name appears in any `locker.item` replica shape; `ONLINE_ONLY_ACTIONS` is unchanged
@@ -74,6 +74,18 @@ Added by the wave-1 root doc commit (see `## w1 root doc commit` below), so the 
 - **Locker's list, shelves and search on the phone read the replica; `reveal`/`authenticate`/permits/secret-bearing writes are unchanged and still online-only; a test asserts no sealed column name appears in any `locker.item` replica shape; `ONLINE_ONLY_ACTIONS` is unchanged** — `apps/mobile/src/apps/locker/locker-reads.ts`; `packages/vault/src/replica/locker-sealed-columns.test.ts`; `packages/blueprints/apps/locker/writes.ts`'s `ONLINE_ONLY_ACTIONS` untouched. See `## Mega-lane E slice 4c`.
 - **The Metro-loadable `queries/*.ts` decision is recorded, adopted or refused with its reason; if adopted, at least Tally runs the web query handler on the phone and its projection fork is deleted** — ADOPTED, recorded as `SB-loader` with the spike's numbers (+4 modules, +31,494 B of Hermes bytecode, `expo export` exit 0, `metro.config.js` untouched); Tally runs the web query handlers on the phone and the read fork is gone. See `## w1 Metro-loader spike` and `## Mega-lane E slice 4a`.
 - **F1/F3/F5 landed in wave 1 with provenance and folded into #927's trace and ledger when those land; F2/F4 closed as superseded** — F3/F5 landed in `## w1b(i)` and `## lane 3a` with host, volume and command; F1 is absorbed into #927's gateway trace slice, which has landed (`packages/server/src/serve/gateway-trace.ts`); F2 and F4 are closed as superseded by the journey ledger and the device rung (`SB-instrument`, `PS-922-instruments`).
+
+**Close follow-up (#922).** Quoted for the crosswalk; the verdicts are `## Follow-up — #922 close (B.1, the journal pragma, E.4, F.2)` at the end of this receipt.
+
+- **The five capped roster/drive/ledger surfaces are virtualised on one kit primitive** — People, Docs, Tally, Locker and the Notes places all draw through `apps/mobile/src/kit/components/SeatList.tsx`. The last hand-wired `ScrollView` + `.map()` on any of them — `NotesPlaces.tsx`'s More sheet — is converted here, and `NotesHistory.tsx` (a note's whole version chain, unbounded by construction) joins them; `scripts/accessibility-contract.test.mjs` pins both by the component's own tag.
+
+## User impact
+
+Two Notes surfaces on the phone stop mounting every row they are handed. The **More** sheet of Notes places and a note's **version history** now draw through the same windowed list the roster, the drive, the ledger and the Locker item window use, so a note with a long editing history opens as fast as one with two versions and scrolling it holds its frame rate instead of degrading with the chain's length. Nothing about the surfaces themselves changes: the same rows, the same words, the same Restore control, the same order — the newest version is still first, and the status line above the list ("N versions") is now the list's own header so it scrolls with the rows rather than pinning chrome nobody asked to keep.
+
+First-run: a fresh vault has one version of each note and no extra places, so both lists draw a single row (or the empty state) exactly as before — the windowing is invisible until a history grows.
+
+Evidence: `artifacts/e2e/ui-impact/issue-922-mobile-notes-library.png`, published by `tests/agent-e2e-mobile/flows/notes-library.mjs` from the frame it already captures. It is produced on the DEVICE RUNG — this container has no simulator, and the copy is a note in the flow rather than an assertion, so a run without a device says so instead of inventing a frame.
 
 ## Out of scope
 
@@ -2732,3 +2744,69 @@ Tree hash: quoted in the lane report to the root.
 | --- | --- | --- |
 | "The Tally carve-out is reverted in `blueprint-seats.md`" — the receipt's E7 section already claimed the doc revert | `grep -n -i tally docs/blueprint-seats.md` before editing | the seat row still read "its derived READS take the gateway's query handlers because `queries/dashboard.ts` holds the app's one balance engine", and the record-only row still named "the one exception the Tally row names" — the revert had landed in `mobile-offline.md` only, so the box could not have been ticked before this pass |
 | "`SB-pool`'s preset defaults are deleted" — the ruling says so, but a preset could have kept the key | read `BUDGET_PRESETS` in `hardware-profile.ts` and the boot block in `build-gateway.ts` | no preset carries `workerPoolSize`; `build-gateway.ts` writes `CENTRAID_WORKER_POOL_SIZE` only when the resolved source is `prefs`, and the pool's own constants are 1 (constrained) and 2 (default) |
+
+## Follow-up — #922 close (B.1, the journal pragma, E.4, F.2)
+
+### Crosswalk
+
+| Box | Verdict |
+| --- | --- |
+| B.1 a handler invocation's remaining reads commit once (`readBatch`) off the read path; strace fsync-per-read before/after under both profiles | **still open, and deliberately so.** The root's ruling (2026-09-05) adopted option (c) — batch per TOOL BATCH, not per invocation — because per-invocation is the option `## B1` measured and refused: it either holds the write lock across model turns or defers the audit band past a crash window. The mechanism landed here and is measured (10 → 1 durable commits for a five-read turn), but the box says "a handler invocation's" and asks for strace under both profiles, and neither is what this is. Re-wording it is the owner's call, not this lane's |
+| E.4 the five capped surfaces virtualised on one kit primitive | **satisfied**: the last `.map()` on any of the five is gone and `NotesHistory.tsx` is pinned beside them |
+| F.2 every fix carries a before/after number; budgets tightened where wins landed | **nothing ticked**, per the brief: the two rows added here are `unmeasured`, and no #922 win tightens a ceiling with provenance on this tree |
+| C-lane `journal_mode` clause (part of the Part C bootstrap box) | **advanced, not ticked**: the `journal_mode=DELETE` second-reader seam is re-judged and is now declared by the seat that needs it, which is the amendment's own precondition. The rest of that box (statements per row ≤ 3, `synchronous=NORMAL` on web, the power-loss case) is untouched |
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `packages/server/src/serve/vault-read-coalescer.ts` (new) | one durable commit per tool batch: the reads of one event-loop turn settle in one `readBatch`, the transaction opens and closes inside a single synchronous drain, and every reply settles after its own commit |
+| `packages/server/src/serve/vault-read-coalescer.test.ts` (new) | the batch boundary and the crash window: reads of one turn commit together, a later turn is its own commit, a lone read takes no write lock, no reply settles while the transaction is open, a failed COMMIT tells every caller, a batch that cannot open reads nothing outside one |
+| `packages/server/src/serve/vault-plane.ts` | `agentBridgeFor`'s synchronous read path runs through the coalescer; one coalescer per plane, because `readBatch` refuses to nest and every bridge shares one handle |
+| `packages/client/src/replica/store-core.ts` | `journal_mode` becomes a driver capability (`journalMode?: "DELETE"`) asserted only by the seat that needs it; absent means the file's own default, which is DELETE for every one-handle seat |
+| `apps/mobile/src/lib/replica/op-sqlite-driver.ts` | declares `journalMode = "DELETE"` — the one seat with two live handles per file |
+| `apps/mobile/src/apps/notes/NotesPlaces.tsx`, `apps/mobile/src/apps/notes/NotesHistory.tsx` | both draw through `SeatList` with `NEWEST_FIRST_ANCHORING` stated at the call site |
+| `scripts/accessibility-contract.test.mjs` | `NotesHistory.tsx` pinned to `<SeatList` |
+| `tests/agent-e2e-mobile/flows/notes-library.mjs` | publishes `issue-922-mobile-notes-library.png` as UI-impact evidence, as a note and never an assertion |
+| `QUALITY.md` | the "two surfaces #882 added to the phone are unvirtualized" item moves from Open to Resolved with what closed it |
+| `tests/journeys.json` | `mobile/own-echo/year3-replica/ci-ios-sim` and `mobile/warm-switch/year3-replica/ci-ios-sim`, `unmeasured`, each with a named consumer and a stated reason |
+| `receipts/issue-922-snappier-blueprints.md` | one tick, its crosswalk evidence, `## User impact`, this section |
+
+### Numbers
+
+| Measurement | Before | After | Provenance |
+| --- | --- | --- | --- |
+| durable commits (fsyncs) for five agent-plane reads issued in one turn | **10** | **1** | throwaway probe over `VaultPlane.agentBridgeFor("digest")` on a bootstrapped vault, `gatewayWorkCounters()`/`diffCounters`, linux x64 container 4 cores / 15 GB, 2026-09-05. Five serial awaited reads (the same five, one per turn) still cost 10 |
+| statements for the same five reads | 45 | 47 | same probe — the batch adds one `BEGIN IMMEDIATE` and one `COMMIT`, which is the whole cost of the win |
+| receipts written | 5 | 5 | same probe: nothing is suppressed, only committed together |
+
+**Deleted:** the unconditional `PRAGMA journal_mode=DELETE` at every replica open; its replacement is the driver capability the phone declares.
+
+**Decisions.** (1) The batch window is closed by `setImmediate`, not by anything a handler says: the worker's vault calls arrive as separate message events in the same poll phase, so a microtask boundary falls between two of them and the check phase does not. (2) A lone read is NOT wrapped — opening a transaction for one read takes the write lock for no gain. (3) The coalescer belongs to the plane, not to a bridge: `readBatch` refuses to nest and every bridge shares one `vault.db`. (4) The brief named `packages/blueprints/apps/_shared/VirtualWindow.tsx` for E.4; that is the WEB primitive and these are React Native screens. The seat's equivalent is `SeatList` (#922 E6), which is what the accessibility contract already pins for the other four surfaces, so it is what was used.
+
+### Verification
+
+```sh
+bun run --cwd packages/vault test     # 191 files, 1568 passed, 2 skipped
+bun run --cwd packages/server test    # 387 files, 3459 passed, 3 expected-fail; 3 pre-existing reds (below)
+bun run --cwd packages/client test    # 273 files, 2479 passed
+bun run --cwd apps/mobile test        # 283 files, 2433 passed
+node --test scripts/accessibility-contract.test.mjs
+node scripts/lint-e2e-flows.mjs && bun run lint:journey-ledger && bun run test:ratchet
+bun run check:ui-receipt              # evidence verified
+```
+
+The three `packages/server` reds are **base state on this container, not this change**: `src/acp/backends/acp/launch.test.ts` (two cases) asserts the `IS_SANDBOX` bypass by whether the process is root, and this container runs as root; `src/serve/gateway-db-lock.integration.test.ts` wants the `sqlite3` CLI. Both fail identically with this lane's diff stashed — the run is in the falsification table below.
+
+**Findings.** (1) **A per-file virtualization pin says nothing about the rest of the file.** `NotesPlaces.tsx` was already pinned to `<SeatList` and still carried a hand-wired `ScrollView` + `.map()`, because the pin is a regex over the source and three matching tags satisfy it. The gate would not have caught a fourth list added tomorrow either. A stronger rung would be "this file contains no `ScrollView` + `.map()`", which is a contract change and its own issue. (2) **B.1's box outlived its own measurement.** `## B1` measured the per-invocation batch and refused it on evidence; the checklist still asks for it. A box that the receipt beneath it has already disproved should be re-worded rather than left to be ticked by someone who did not read the section.
+
+**Doc debt:** none — the `journal_mode` seam's own note in `store-core.ts` and `op-sqlite-driver.ts` is beside the invariant, and `QUALITY.md`'s row is moved in the same commit.
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "batching per tool batch wins something" — a window nothing lands in is churn | ran the probe both ways: five reads awaited one at a time, then five issued together with `Promise.all` | serial stays 10 fsyncs (the coalescer sees one read per window and does not wrap it); together it is 1. The win is real and is exactly scoped to the shape the ruling names — which also means an automation that never issues concurrent reads pays nothing and gains nothing, and that is stated rather than hidden |
+| "the crash window did not move" — the easy way to win this number is to reply first and commit later | asserted `host.open === false` inside each read's own `.then()` | every reply settles after the commit. Written as a test rather than checked once, because it is the property the whole ruling rests on |
+| "`journal_mode=DELETE` was load-bearing everywhere" — dropping a pragma from every seat is how a locking assumption dies quietly | read `op-sqlite-driver.ts`'s own header (two live handles per file, busy timeout 5 s) and `store-core.ts`'s vacuum note, then ran the full client replica suite | it is load-bearing on ONE seat and is SQLite's own default on the others. The phone now says so in its driver; 273 files / 2479 tests green |
+| "the three `packages/server` reds are mine" — the safe assumption for a lane that edits `vault-plane.ts` | `git stash -u`, re-ran the two files, `git stash pop` | identical 3 failures on the clean tree: root-vs-non-root `IS_SANDBOX` planning and a missing `sqlite3` CLI. Neither file is on any import edge from this diff |

@@ -1350,6 +1350,40 @@
         }
       }
     },
+    "mobile/own-echo/year3-replica/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "own-echo",
+      "volume": "year3-replica",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.replica.apply", "client.interaction"],
+      "consumers": ["tests/agent-e2e-mobile/flows/notes-library.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "writeToVisualResponse": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/notes-library.mjs \u2014 drives a write and its own echo on a simulator; the year-3 replica behind it is @centraid/test-kit's goldenYear3Replica",
+          "_intendedCeilingMs": null,
+          "_reason": "NO PHONE IN THIS CONTAINER, and the existing `mobile/own-echo/none/ci-ios-sim` row is the EMPTY-replica case \u2014 the whole point of #922's replica reads is what an own echo costs when the store is full, which no `none` volume can say. Declared at `year3-replica` so the gap is a row rather than an absence; the number needs the device rung on a macOS runner."
+        }
+      }
+    },
+    "mobile/warm-switch/year3-replica/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "warm-switch",
+      "volume": "year3-replica",
+      "hardware": "ci-ios-sim",
+      "spans": ["client.interaction", "native.replica.read"],
+      "consumers": ["tests/agent-e2e-mobile/flows/home-loads.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "tapToVisualResponse": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/home-loads.mjs \u2014 app-to-app switch on a simulator over a year-3 replica",
+          "_intendedCeilingMs": null,
+          "_reason": "Same reason as the own-echo row beside it: no phone here, and the `none`-volume twin measures a switch with nothing to read. #922 E-lane's wins are read-path wins, so a warm switch stated at an empty replica cannot show one. No #922 ceiling is tightened on this row \u2014 a win with no measurement is not a win."
+        }
+      }
+    },
     "gateway/backup/year3/ci-linux-x64-4c": {
       "surface": "gateway",
       "journey": "backup",

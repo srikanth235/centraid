@@ -7,7 +7,7 @@
 // notebook, a tag or a countdown in a second spelling.
 
 import React, { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import type {
   NotebookShelf,
@@ -309,11 +309,19 @@ export interface MoreSheetProps {
 
 export function MoreSheet(props: MoreSheetProps): React.JSX.Element {
   const { colors } = useTheme();
+  // The shelves are few, but the row COUNT is not what E6 is about: the pin in
+  // `scripts/accessibility-contract.test.mjs` names this file, and a screen
+  // that keeps one hand-wired `.map()` beside three `SeatList`s is the drift a
+  // per-file pin cannot see.
   return (
-    <ScrollView contentContainerStyle={styles.list}>
-      {props.rows.map((row) => (
+    <SeatList
+      accessibilityLabel="More places"
+      anchoring={NEWEST_FIRST_ANCHORING}
+      rows={props.rows}
+      keyOf={(row) => String(row.shelf)}
+      contentContainerStyle={styles.list}
+      renderRow={(row) => (
         <Pressable
-          key={String(row.shelf)}
           accessibilityRole="button"
           accessibilityLabel={row.label}
           onPress={() => props.onPick(row.shelf)}
@@ -331,8 +339,8 @@ export function MoreSheet(props: MoreSheetProps): React.JSX.Element {
             ) : null}
           </View>
         </Pressable>
-      ))}
-    </ScrollView>
+      )}
+    />
   );
 }
 
