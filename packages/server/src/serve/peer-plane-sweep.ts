@@ -14,7 +14,6 @@ import type { ShareVaultRef, VaultDb } from "@centraid/vault";
 import { unrefTimer } from "../lib/unref-timer.js";
 import type { GatewayDatabase } from "./gateway-db.js";
 import type { PeerDial } from "./peer-link-client.js";
-import { drainShareEffects } from "./share-effect-executor.js";
 import { sweepShareSubscriptions } from "./share-subscription-sweep.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
 
@@ -81,16 +80,6 @@ export function createPeerPlaneSweep(
       // delivery until IT has re-asserted to us, and our own move must not
       // wait behind this tick's other work either way.
       if (options.announceRoutes) await options.announceRoutes();
-      // The share outbox drains WITHOUT a dial since #825: its one surviving
-      // obligation is a same-owner placement between two vaults open here.
-      const effects = drainShareEffects(
-        {
-          db: options.db,
-          vaultFor: options.vaultFor,
-          partyIdFor: options.partyIdFor,
-        },
-        { limit: rowLimit }
-      );
       // The peer-routed half of a subscription (#929): the pass that started
       // it left the row pending because a dial has no business on a commit
       // path, and this is what rings the audience.
@@ -112,10 +101,7 @@ export function createPeerPlaneSweep(
             (step) => step.result.outcome !== "unreachable"
           ).length;
         }
-      const progressed =
-        effects.done.length > 0 ||
-        effects.abandoned.length > 0 ||
-        delivered > 0;
+      const progressed = delivered > 0;
       schedule(progressed ? activeMs : idleMs);
     } catch (error) {
       options.logger?.warn(

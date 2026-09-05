@@ -12,6 +12,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type { LocalBlobStore } from "../blob/local.js";
 import { liveBlobShas } from "../blob/read.js";
 import { VaultShareError } from "../errors.js";
+import { grantPlacementAuthority } from "../grant/grant-authority.js";
 import { LIVE_AUTHORITY_SQL } from "../grant/grant-store.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { placeBlob } from "./blobs.js";
@@ -74,10 +75,22 @@ export interface UnshareFromVaultResult {
   orphanedShas: string[];
 }
 
-export interface MoveOutOfVaultInput {
+export interface MoveItemsOutOfVaultInput {
   source: ShareVaultRef;
   itemType: ShareableItemType;
-  itemId: string;
+  /** The whole set leaves in ONE transaction — a half-moved album is not a state. */
+  itemIds: readonly string[];
+}
+
+export interface PlaceItemsInVaultInput extends Omit<
+  ShareItemsToVaultInput,
+  "authority"
+> {
+  /** `move` releases the source after the projection commits. */
+  kind: "add" | "move";
+  /** The audience vault's own party — the principal the placement runs as. */
+  audiencePartyId: string;
+  grantedAt?: string;
 }
 
 /**
@@ -115,6 +128,13 @@ export interface ShareItemsToVaultResult {
   /** One entry per requested id, in order. */
   items: ProjectedItem[];
   blobs: BlobPlacement[];
+}
+
+export interface PlaceItemsInVaultResult extends ShareItemsToVaultResult {
+  /** Ids of the projected rows in the AUDIENCE vault. */
+  targetItemIds: string[];
+  /** Non-empty only for a move: bytes the source no longer references. */
+  orphanedShas: string[];
 }
 
 /**
@@ -164,28 +184,70 @@ export function shareItemsToVault(
  * first (the gateway placement ledger owns that ordering), and this stays
  * separate so no ordinary share path reaches authored deletion.
  */
-export function moveOutOfVault(
-  input: MoveOutOfVaultInput
+/**
+ * Source side of a completed cross-vault MOVE over a set of roots. The
+ * projection commits first; only then does this one source transaction
+ * release the complete set, so an album cannot be half-moved.
+ */
+export function moveItemsOutOfVault(
+  input: MoveItemsOutOfVaultInput
 ): UnshareFromVaultResult {
   const source = input.source.vault;
   source.exec("BEGIN IMMEDIATE");
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
-  let shas: string[];
+  const shas: string[] = [];
+  let removedAny = false;
   try {
     replicaCommit = beginReplicaCommit(source);
-    const removal = deleteProjectedClosure(
-      source,
-      input.itemType,
-      input.itemId
-    );
-    shas = removal.shas;
+    for (const itemId of input.itemIds) {
+      const removal = deleteProjectedClosure(source, input.itemType, itemId);
+      shas.push(...removal.shas);
+      removedAny ||= removal.removed;
+    }
     endReplicaCommit(source, replicaCommit);
     source.exec("COMMIT");
-    if (!removal.removed) return { removed: false, orphanedShas: [] };
   } catch (error) {
     source.exec("ROLLBACK");
     throw error;
   }
+  if (!removedAny) return { removed: false, orphanedShas: [] };
   const live = liveBlobShas(source);
   return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
+}
+
+/**
+ * SAME-OWNER PLACEMENT AS ONE CALL (#928 A7). The owner's act mints the live
+ * authority in the origin, the destination projection commits, and a move
+ * releases the source only after that commit succeeds.
+ */
+export function placeItemsInVault(
+  input: PlaceItemsInVaultInput
+): PlaceItemsInVaultResult {
+  grantPlacementAuthority(input.origin.vault, {
+    itemType: input.itemType,
+    itemIds: input.itemIds,
+    audiencePartyId: input.audiencePartyId,
+    grantedAt: input.grantedAt ?? new Date().toISOString(),
+  });
+  const projected = shareItemsToVault({
+    ...input,
+    authority: {
+      principalKind: "person",
+      principalId: input.audiencePartyId,
+      verb: "view",
+    },
+  });
+  const released =
+    input.kind === "move"
+      ? moveItemsOutOfVault({
+          source: input.origin,
+          itemType: input.itemType,
+          itemIds: input.itemIds,
+        })
+      : { removed: false, orphanedShas: [] };
+  return {
+    ...projected,
+    targetItemIds: projected.items.map((item) => item.itemId),
+    orphanedShas: released.orphanedShas,
+  };
 }

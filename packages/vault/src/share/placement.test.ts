@@ -19,7 +19,7 @@ import {
   placementAuthority,
   seedPhoto,
 } from "./placement-fixture.js";
-import { moveOutOfVault, shareItemsToVault } from "./placement.js";
+import { moveItemsOutOfVault, shareItemsToVault } from "./placement.js";
 
 describe("placement suite", () => {
   afterEach(closeOpenVaults);
@@ -323,10 +323,10 @@ describe("placement suite", () => {
       sha256: content.sha256,
     });
 
-    const moved = moveOutOfVault({
+    const moved = moveItemsOutOfVault({
       source: origin,
       itemType: "core.document",
-      itemId: documentId,
+      itemIds: [documentId],
     });
     expect(moved.removed).toBe(true);
     expect(

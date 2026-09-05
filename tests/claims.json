@@ -1569,14 +1569,9 @@
       "flow": "share-closure-confinement"
     },
     "share-receipt-authority": {
-      "statement": "A cross-vault access receipt exists exactly when an edge's rows landed at the audience, naming the authorised origin scope and the audience ids created, once per edge; a refused, parked, revoked or peer-handed-off edge leaves none, and a malformed scope refuses the transition atomically.",
-      "owner": "packages/server/src/serve/share-receipt-authority.contract.test.ts",
+      "statement": "A cross-vault access receipt exists exactly when a placement's rows landed at the audience, naming the authorised origin scope and the audience ids created, once per placement token; a refused placement, one this gateway could not perform, and a malformed scope each leave none.",
+      "owner": "packages/server/src/routes/placement-routes.test.ts",
       "flow": "share-receipt-authority"
-    },
-    "share-outbox-obligation": {
-      "statement": "Every share obligation is durable and keyed by what it is about: a replayed enqueue reuses the row without rewinding its retry clock, a human-awaiting obligation is never machine-claimed, an unreadable row never blocks its neighbours, and a failed attempt backs off while a progressed transfer does not.",
-      "owner": "packages/server/src/serve/share-outbox-obligation.contract.test.ts",
-      "flow": "share-outbox-obligation"
     },
     "experimental-gate-parity": {
       "statement": "An experimental feature is advertised in the C1 handshake exactly when its own routes are mounted: gated off it is absent from capabilities and its surfaces are unowned; gated on, and only then, they answer.",
@@ -4882,19 +4877,17 @@
       "surface": "gateway",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/server/src/serve/share-receipt-authority.contract.test.ts",
+      "owner": "packages/server/src/routes/placement-routes.test.ts",
       "minimumTests": 4
     },
     {
-      "id": "share-outbox-obligation",
-      "name": "Share effect outbox: one obligation, never lost, never spinning",
+      "id": "same-owner-placement",
+      "name": "A same-owner placement is one act: it lands whole or not at all",
       "surface": "gateway",
       "dimension": "durability",
       "tier": "contract",
-      "owner": "packages/server/src/serve/share-outbox-obligation.contract.test.ts",
-      "minimumTests": 4,
-      "replacesMinimumTestsFlow": "same-owner-placement",
-      "approvedMinimumTestsDeviation": "The newer subscription architecture removes same-owner placement routes and their dedicated contract flow; the surviving share-effect outbox contract owns the equivalent gateway durability boundary and retains the four required cases."
+      "owner": "packages/vault/src/share/placement-move.test.ts",
+      "minimumTests": 4
     },
     {
       "id": "gateway-experimental-gate-law",
