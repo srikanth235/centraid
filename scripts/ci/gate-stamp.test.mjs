@@ -49,7 +49,10 @@ test("the key moves with an uncommitted edit and with the base", () => {
   const { dir, git } = scratchRepo();
   try {
     const before = workingTreeOid(dir);
-    writeFileSync(path.join(dir, "a.txt"), "two\n");
+    // Length must change: git's racy-git check skips a same-size rewrite in
+    // the same second as the index entry, and this test commits then edits
+    // immediately. "two\n" is the same 4 bytes as "one\n".
+    writeFileSync(path.join(dir, "a.txt"), "changed\n");
     assert.notEqual(
       workingTreeOid(dir),
       before,

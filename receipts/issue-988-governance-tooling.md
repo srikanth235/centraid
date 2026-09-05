@@ -402,3 +402,7 @@ that could not complete.
 Replayed on `fb06f9e94…`: `node --test` over run-gates / gate-stamp / gate-classes /
 validate-ui-receipt / turbo → 32 pass, 0 fail; the three stamp reproductions above; `self-audit.sh
 988` → PASS; `format:check` and `lint` green inside it.
+
+## Follow-up — stamp key flake
+
+`workingTreeOid` scratch indexes are unique per call (`randomBytes`), and the stamp unit test writes a different-length file so git's same-second same-size racy-git check cannot skip the edit. CI `scripts:test` failed `the key moves with an uncommitted edit` when `"one\n"` was overwritten with `"two\n"` (both 4 bytes) in the same second as the seed commit.
