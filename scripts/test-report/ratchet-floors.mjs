@@ -156,6 +156,17 @@ export function diffMinimumTests(base, head) {
   const baseMap = new Map(baseFlows.filter((f) => f?.id).map((f) => [f.id, f]));
   const headMap = new Map(headFlows.filter((f) => f?.id).map((f) => [f.id, f]));
   const replacements = new Map();
+  // A marker is SPENT once the change set that used it lands: the same flow, on
+  // the base, already carries the identical `replacesMinimumTestsFlow`, and the
+  // predecessor it names is long gone. Left in place it reported "unknown
+  // predecessor" on every later branch — a red on a tree nobody had touched —
+  // so the shape checks below run only over markers this diff INTRODUCED or
+  // MOVED. A spent marker can still grant nothing: the removal loop only
+  // consults `replacements` for a flow present on the base, and a spent
+  // marker's predecessor is not. Re-spending one (pointing a second flow at the
+  // same predecessor) puts a NEW marker in the group, which re-arms the whole
+  // group including its spent members.
+  const spent = new Set();
   for (const candidate of headFlows) {
     if (
       typeof candidate?.replacesMinimumTestsFlow !== "string" ||
@@ -164,11 +175,18 @@ export function diffMinimumTests(base, head) {
       continue;
     }
     const previousId = candidate.replacesMinimumTestsFlow.trim();
+    if (
+      candidate.id !== undefined &&
+      baseMap.get(candidate.id)?.replacesMinimumTestsFlow?.trim() === previousId
+    ) {
+      spent.add(candidate);
+    }
     const claimed = replacements.get(previousId) ?? [];
     claimed.push(candidate);
     replacements.set(previousId, claimed);
   }
   for (const [previousId, candidates] of replacements) {
+    if (candidates.every((candidate) => spent.has(candidate))) continue;
     if (!baseMap.has(previousId)) {
       errors.push(`flow replacement names unknown predecessor "${previousId}"`);
     } else if (headMap.has(previousId)) {

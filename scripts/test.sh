@@ -63,6 +63,38 @@ echo "governance-shell: self-test ok (synthetic violation observed)"
 echo "governance-shell: coverage-scope-reachability live check"
 bash "$SCOPE_CHECK"
 
+# #988 — the pre-push tier is chosen by the ref being pushed. A stub `bun` on
+# PATH turns the directive's own decision into an observable string, so this
+# pins the choice rather than the gate it delegates to.
+echo "governance-shell: pre-push-gate tier selection"
+PPG=".governance/packs/srikanth235/centraid/directives/pre-push-gate/check.sh"
+tier_for() {
+  local ref="$1"
+  shift
+  local stub
+  stub="$(mktemp -d)"
+  printf '#!/usr/bin/env bash\necho "STUB-BUN $*"\n' > "$stub/bun"
+  chmod +x "$stub/bun"
+  printf 'refs/heads/local %s %s %s\n' "$(git rev-parse HEAD)" "$ref" "$(git rev-parse HEAD)" \
+    | PATH="$stub:$PATH" env -u SKIP_CHECK_PR "$@" bash "$PPG" 2>&1
+  rm -rf "$stub"
+}
+expect_tier() {  # expect_tier <remote-ref> <expected gate> [env...]
+  local ref="$1" want="$2"
+  shift 2
+  local out
+  out="$(tier_for "$ref" "$@")"
+  if ! grep -qx "STUB-BUN run $want" <<<"$out"; then
+    echo "governance-shell: pushing $ref must run '$want'" >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+  fi
+}
+expect_tier refs/heads/main check:push
+expect_tier refs/heads/claude/988-governance-tooling check:push:static
+expect_tier refs/heads/claude/988-governance-tooling check:push CENTRAID_PUSH_TIER=full
+echo "governance-shell: tier selection ok"
+
 if ! command -v shellcheck >/dev/null 2>&1; then
   echo "governance-shell: shellcheck not installed — skipping static shell lint (install shellcheck for full D9)"
   exit 0

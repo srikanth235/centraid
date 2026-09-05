@@ -108,13 +108,37 @@ function isClientSurface(file) {
   return !CLIENT_NOT_A_SURFACE.some((pattern) => pattern.test(file));
 }
 
-export function validateUiReceipt({ changed, readText }) {
-  const touchesUi = changed.some(
-    (file) =>
-      isClientSurface(file) ||
-      /^apps\/[^/]+\/.*\.(?:tsx|css)$/u.test(file) ||
-      (file.startsWith("packages/blueprints/apps/") && !TEST_FILE_RE.test(file))
+/*
+ * A file that is on NO import edge and draws nothing is not a surface (#988).
+ *
+ * The path rule below fires on everything under `packages/blueprints/apps/`,
+ * which includes each app's `app.json` manifest. Editing two strings in
+ * `packages/blueprints/apps/people/app.json` — a dead `dpv:` purpose and a
+ * description sentence — therefore demanded `## User impact`, a `First-run:`
+ * note and a fresh screenshot emitted by a changed e2e harness, and then
+ * re-validated every screenshot every receipt in the change set already named.
+ *
+ * A manifest is data: no module imports it as code, it imports nothing itself,
+ * and nothing in it is painted. The same holds for the docs, ledgers and lock
+ * files that live beside a surface. Stylesheets, HTML documents and SVG are the
+ * opposite case and stay surfaces — they ARE the drawing, which is why this is
+ * keyed on the import graph rather than on "is it source".
+ */
+const NOT_ON_AN_IMPORT_EDGE_RE = /\.(?:json|md|ya?ml|txt|lock|snap)$/iu;
+
+/** Does this changed path draw something a member can see? */
+export function isSurface(file) {
+  if (TEST_FILE_RE.test(file) || NOT_ON_AN_IMPORT_EDGE_RE.test(file))
+    return false;
+  return (
+    isClientSurface(file) ||
+    /^apps\/[^/]+\/.*\.(?:tsx|css)$/u.test(file) ||
+    file.startsWith("packages/blueprints/apps/")
   );
+}
+
+export function validateUiReceipt({ changed, readText }) {
+  const touchesUi = changed.some((file) => isSurface(file));
   if (!touchesUi) return [];
   const errors = [];
   const receipts = changed.filter((file) =>

@@ -133,7 +133,7 @@ The local half of the six-rung quality ladder ([#915](https://github.com/srikant
 | Rung | When | Budget | Cost | What runs |
 | --- | --- | --- | --- | --- |
 | 0 commit | pre-commit hook | ≤ 5s | 6.2s | The governance directives that fit the budget, plus `oxfmt` and `oxlint` **on staged files only**. The two repo-wide ones are deferred to rung 1 (below) |
-| 1 push | pre-push hook | ≤ 90s | bounded by `test:affected` | The deferred directives (~86s), then `bun run check:push` — **17 gate names**, run concurrently |
+| 1 push | pre-push hook | ≤ 90s | bounded by `test:affected` | The deferred directives (~86s), then the tier the pushed ref earns (#988): `main` gets `bun run check:push` — **17 gate names**, run concurrently — every other branch gets `check:push:static` |
 | 1.5 | want CI's answer early | — | ~4 min | `bun run check:pr` — `check:push` plus full `typecheck`, `lint:types`, `lint:workflow-pins`, diff coverage |
 | 2 merge | PR, required `check` | ≤ 15 min | minutes | `ci.yml`. Locally: `bun run check:full`, including dependents, coverage, mutation/perf, and client e2e |
 | 3 candidate | push to `main` | ≤ 45 min | — | `candidate.yml` |
@@ -180,6 +180,18 @@ What is left at rung 0 is 5.6s of directives, and the two poles are now `interna
 **Why these tiers and not others (#576).** A CI round trip is 12.3 minutes of wall clock. Local gates do not shrink that — a green PR takes 12.3 minutes no matter what runs here — so the only thing a local gate buys is not paying those 12.3 minutes twice. That makes the rule arithmetic: a gate earns its slot if it fails more often than `local_cost / 738s`. `oxlint` at 1.7s needs a 0.2% hit rate; `knip` at 28.8s needs 3.9%; a full instrumented `coverage` run at 418s needs 57%, which is why it is scoped rather than run whole.
 
 Rung 0 is scoped to **staged files** on purpose. A repo-wide gate at commit time fires on debt in files you never opened, and a gate that fires for someone else's mess is one people learn to bypass.
+
+### Tiers, stamps, and one cache (#988)
+
+Five agents work this repo in parallel, each in its own worktree, and each pushes several times an hour. Three costs were being paid per worktree and per push for answers that were already known.
+
+**The push tier is chosen by the ref being pushed.** A push to `main` runs the full `bun run check:push`; every other ref runs `bun run check:push:static` — `format:check`, `lint`, `turbo:lint`, `typecheck:affected`. Nothing left the ladder: `ci.yml` and `governance.yml` both listen on a bare `pull_request:`, so **CI runs the full tier on every commit of every branch**; what moved is the local rung, from "every push" to "the push that is the last moment before the trunk moves". `CENTRAID_PUSH_TIER=full` widens a branch push back to the full tier — there is deliberately no value that narrows the `main` tier, and `SKIP_CHECK_PR=1`, `SKIP_GOVERNANCE=1` and `--no-verify` behave exactly as they did.
+
+**A tier does not re-run against a tree it already passed.** `scripts/ci/gate-stamp.mjs` keys a pass on a pair: the oid of a real git tree built from the working copy in a _copy_ of the index (56 ms on this tree — git's stat cache still applies, and your staging area is untouched), and `origin/main`, because the `[origin/main]` filters give the same tree a different affected set once the base moves. `check:push --stamp` skips the static members on a match; `bun run governance` and `.githooks/pre-push`'s deferred-directive loop take the same treatment. Three properties make it a cache rather than a hole: a tier is stamped only when **every** one of its gates ran and passed in that invocation, `CI` in the environment disables reading and writing outright so the enforcing copy always recomputes from zero, and `CENTRAID_GATE_STAMPS=0` turns it off — a knob that can only ever make more run. `.governance/run.sh` itself is digest-locked and could not carry the stamp, which is why `bun run governance` exists; it delegates the whole run to the managed script unchanged.
+
+**One turbo cache for every worktree.** Turbo's default `cacheDir` is `.turbo/cache`, per checkout, so a build one worktree had already paid for was re-paid in the next — and a fresh worktree started from a fully cold graph (4 m 09.7 s here, 278 s of it one release cargo compile). The cache key is turbo's own content hash, so entries were always interchangeable across checkouts of the same repo; only the directory was not. Every root script that runs turbo goes through `scripts/ci/turbo.mjs`, which points it at the shared directory named in [toolchain.md](toolchain.md#where-the-caches-live). Measured on this container: a fresh worktree with no `.turbo` of its own restores 13/13 build tasks in **0.48 s**. `dev:*` keeps the plain binary — persistent tasks are never cached, and an interactive run should have nothing between it and its TTY.
+
+**Stamps and caches live outside the repository**, under the user's cache home, and are never committed. A stale one dies with the cache instead of travelling in a diff.
 
 ### Reaching the vault from outside it
 

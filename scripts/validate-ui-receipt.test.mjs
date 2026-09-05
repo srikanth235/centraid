@@ -130,6 +130,46 @@ test("UI receipt evidence: a packages/client data-client change needs no screens
   );
 });
 
+// #988 — a file on no import edge that draws nothing is not a surface. The
+// manifest case is the one that bit: two strings in People's `app.json` (a dead
+// `dpv:` purpose and a description sentence) demanded a screenshot of a screen
+// that had not moved, and re-validated every screenshot the change set named.
+test("UI receipt evidence: a file on no import edge needs no screenshot", () => {
+  for (const file of [
+    "packages/blueprints/apps/people/app.json",
+    "packages/blueprints/apps/locker/README.md",
+    // A provider under the replica store: it renders no pixels and reads no
+    // stylesheet, so a change to it photographs nothing.
+    "packages/client/src/replica/ReplicaProvider.tsx",
+  ]) {
+    assert.deepEqual(
+      validateUiReceipt({
+        changed: [file, receipt],
+        readText: () => "",
+      }),
+      [],
+      file
+    );
+  }
+});
+
+// The manifest exemption must not reach the drawing beside it.
+test("UI receipt evidence: a blueprint app's drawing files are still surfaces", () => {
+  for (const file of [
+    "packages/blueprints/apps/people/app-root.tsx",
+    "packages/blueprints/apps/people/Chrome.module.css",
+  ]) {
+    assert.deepEqual(
+      validateUiReceipt({
+        changed: [file, receipt],
+        readText: () => "## User impact\n\nFirst-run: unchanged.\n",
+      }),
+      [DEMANDS_EVIDENCE],
+      file
+    );
+  }
+});
+
 test("UI receipt evidence: accepts a path emitted by a changed e2e harness", () => {
   assert.deepEqual(
     validateUiReceipt({

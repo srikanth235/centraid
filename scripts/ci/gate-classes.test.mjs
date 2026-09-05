@@ -15,6 +15,7 @@ import test from "node:test";
 
 import { HYGIENE_GATES } from "../hygiene-lane.mjs";
 import { PRODUCT_GATES } from "../lint-product.mjs";
+import { STATIC_TIER } from "./gate-stamp.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const read = (rel) => readFileSync(path.join(root, rel), "utf8");
@@ -38,6 +39,24 @@ test("check:push names at most 25 gates", () => {
     `check:push names ${checkPushGates.length} gates (#915 Wave 4 caps it at 25)`
   );
   assert.equal(new Set(checkPushGates).size, checkPushGates.length);
+});
+
+test("the branch tier is a subset of the full tier, and every member is static", () => {
+  const staticGates = pkg.scripts["check:push:static"]
+    .split(/\s+/u)
+    .slice(2)
+    .filter((token) => !token.startsWith("--"));
+  assert.ok(staticGates.length > 0, "check:push:static names no gate");
+  for (const gate of staticGates) {
+    assert.ok(
+      checkPushGates.includes(gate),
+      `${gate} is in the branch tier but not in the full tier — the branch tier may only ever be a subset`
+    );
+    assert.ok(
+      STATIC_TIER.includes(gate),
+      `${gate} is in the branch tier but is not tree-determined (scripts/ci/gate-stamp.mjs STATIC_TIER)`
+    );
+  }
 });
 
 test("every gate in check:push is classified", () => {

@@ -17,6 +17,7 @@ An umbrella issue is worked by one **root agent** that owns the plan; sub-agents
 - **Doc pass per umbrella at close**, from the doc-debt ledger; in-slice doc edits only for a row the change makes actively wrong or a doc a later lane reads.
 - **Worktrees are reused, and landed ones deleted**; each costs over a gigabyte.
 - The worker/verifier split, isolation defaults, and iteration caps below apply to every sub-agent.
+- **Gate stamps, tiered push check and per-lane receipt files: [#988](https://github.com/srikanth235/centraid/issues/988).** Parallel lanes re-pay the same tree-determined gates and the same cold build in every worktree. The static tier is stamped by (working tree, `origin/main`) and skipped when it matches, a push off `main` runs the static tier only, and every worktree shares one turbo cache — see [dev-environment.md](dev-environment.md#the-local-gate-loop). One receipt per issue still means one FILE per issue; the directory shape needs a change to a digest-locked vendored directive.
 
 ### A slice exits on its lanes' gates, not on its own files
 
