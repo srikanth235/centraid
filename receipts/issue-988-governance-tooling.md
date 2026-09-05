@@ -317,3 +317,40 @@ $ # live, against the real manifest:
 $ python - <<'EOF'  # flip vault.purpose only, then also flip description
 $ bun run check:ui-receipt   # dpv-only edit → exit 0; description edit → exit 1
 ```
+
+### Correction to Finding 1 — the fix shipped a ReferenceError, and this is how it got past me
+
+`scripts/ci/run-gates.mjs` called `tierIsComplete(results)` without importing the symbol. The call
+sits on the green-and-stamping path, so **every** green `bun run check:push` and
+`bun run check:push:static` ran all its gates and then died with
+`ReferenceError: tierIsComplete is not defined`, exit 1 — a harder break than the hole it replaced,
+across rung 1 for the whole repo. `tierIsComplete` is now on the import.
+
+Two things let it through, and both are my error, not the tooling's. `oxlint` does not resolve
+cross-module references, and `scripts/ci/gate-stamp.test.mjs` calls the predicate directly, so 20
+unit cases stayed green over a runner that could not finish. Worse, the verification block above
+quotes `▶ 4 gates, 2 at a time` for that exact command as proof — a real line, printed by a run that
+exited 1. **I quoted a fragment of output instead of an exit code.** Every entry in this section now
+quotes the status.
+
+`scripts/ci/run-gates.test.mjs` is the missing gate: it spawns the runner end to end against stub
+gates in a throwaway git repo and asserts the EXIT CODE plus the stamp's absence or presence. Its
+own footnote records why the stamp store must sit outside that repo — a stamp written inside the
+working tree moves the very oid it is keyed on, which is also why the real default is the user's
+cache home. `scripts/ci/gate-stamp.mjs` additionally stops leaking git's "ambiguous argument
+'origin/main'" fatal to the terminal in a clone that has no such ref.
+
+```txt
+$ rm -rf /tmp/v5
+$ CENTRAID_GATE_STAMP_DIR=/tmp/v5 bun run check:push:static ; echo EXIT=$?
+▶ 4 gates, 2 at a time
+✓ 4/4 gates passed in 16.3s — slowest: typecheck:affected 8.5s, format:check 7.9s, lint 7.4s, turbo:lint 0.4s
+EXIT=0                                        # stamp written: /tmp/v5/static.json
+$ CENTRAID_GATE_STAMP_DIR=/tmp/v5 bun run check:push:static ; echo EXIT=$?
+⊘ static tier stamped for tree 47e6c8f22 (base 77254d808): format:check, lint, turbo:lint, typecheck:affected skipped
+▶ 0 gates, 2 at a time
+EXIT=0
+$ node --test scripts/ci/run-gates.test.mjs scripts/ci/gate-stamp.test.mjs \
+    scripts/ci/gate-classes.test.mjs scripts/validate-ui-receipt.test.mjs \
+    scripts/ci/turbo.test.mjs                 # 32 pass, 0 fail
+```

@@ -126,7 +126,13 @@ export function workingTreeOid(root) {
 export function stampKey(root) {
   let base = "none";
   try {
-    base = git(["rev-parse", "origin/main"], root);
+    // stderr is dropped: a clone with no `origin/main` is a legitimate state
+    // here, and git's "ambiguous argument" fatal is not the caller's problem.
+    base = execFileSync("git", ["rev-parse", "origin/main"], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
   } catch {
     // A clone with no `origin/main` (a detached CI checkout, a fork mid-fetch)
     // still gets a usable key; it just never matches one taken with a base.

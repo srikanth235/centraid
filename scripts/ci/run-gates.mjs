@@ -27,6 +27,7 @@ import {
   repoRoot,
   stampKey,
   STATIC_TIER,
+  tierIsComplete,
 } from "./gate-stamp.mjs";
 
 const args = process.argv.slice(2);
