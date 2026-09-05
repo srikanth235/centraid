@@ -6,12 +6,11 @@ import { AWAIT_LAUNCHER, runFlow } from "../lib/harness.mjs";
 /**
  * PER-LAUNCH mobile cold start (issue #659 R3c).
  *
- * `volume-proof.mjs` already relaunches the app 20 times, but it times the
- * whole repeat block as ONE wall clock: a single 10-second launch disappears
- * into a 20-launch sum, and nobody can read the number as an experience. This
- * flow launches the app one chunk at a time and reports the distribution —
- * median and p95 of the interval a person actually waits, from tapping the
- * icon to Home being ready.
+ * Launches the app one chunk at a time and reports the DISTRIBUTION — median
+ * and p95 of the interval a person actually waits, from tapping the icon to
+ * Home being ready. A repeat block timed as one wall clock cannot say that: a
+ * single 10-second launch disappears into the sum, so the aggregate is
+ * unreadable as an experience.
  *
  * NO ABSOLUTE CEILING. An on-device number from a CI simulator has no
  * distribution yet, and a guessed ceiling would either fence nothing or red the

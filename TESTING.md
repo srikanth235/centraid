@@ -163,7 +163,7 @@ An opt-in environment gate is not itself a defect: it is honest only when its re
 | --- | --- |
 | Clawgnition backup interop | `interop-weekly.yml` sets `CLAWGNITION_INTEROP=1` but does not provision `CLAWGNITION_REPO` or its `.dev.vars`, so the suite collection-skips on a clean runner; no effective rig |
 | 10 GiB restore | `restore-year3` in `.github/workflows/e2e.yml` runs `CENTRAID_SCALE_RESTORE_GIB=10 node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/restore-10gib.scale.test.ts` on an isolated 90-minute Linux job |
-| vault-write fsync count | Linux PR installs `strace`, sets `CENTRAID_BENCH_REQUIRE_FSYNC=1`, and runs `bun run test:perf:pr`; nightly installs `strace` and runs `bun run test:perf`. Missing `strace` in Linux CI is a hard failure |
+| vault-write fsync count | No rig. `bench-low-end.mjs` still counts fsync(2) when `strace` is present and `CENTRAID_BENCH_REQUIRE_FSYNC=1` demands it, but no lane provisions either: the nightly `strace` install went with the rig deleted under #927, and the merge rung never had one — `ci.yml` keeps that lane to deterministic integers, which need no external tracer. Local Linux opt-in only |
 | launchd install/uninstall | No named mutable macOS user-session rig; local opt-in only |
 | native QUIC relay | The Linux `verify` job builds the workspace then runs `bun run --cwd packages/tunnel test:native` (the package command sets `CENTRAID_RUN_NATIVE_TUNNEL=1`) |
 | real disk-full filesystem | No privileged APFS image or Linux loop-device rig; local Darwin opt-in only |

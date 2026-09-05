@@ -100,6 +100,26 @@ export async function validateClaimsFile(claims, options = {}) {
     });
   }
 
+  // Retirement markers (#927). The rig each names was DELETED on purpose, so
+  // its owner is the one owner path in this file that must NOT exist on disk —
+  // it is never added to the stat set above, and stating it here would refuse
+  // the very deletion the marker records. What is checked is the marker's own
+  // shape: an unreadable marker is a floor drop nobody can review.
+  for (const [id, marker] of Object.entries(
+    claims.removedMinimumTestsFlows ?? {}
+  )) {
+    if (id.startsWith("_")) continue;
+    const label = `removedMinimumTestsFlows["${id}"]`;
+    if (typeof marker?.owner !== "string" || !marker.owner.trim())
+      errors.push(`${label}: must name the owner path of the deleted rig`);
+    if (typeof marker?.reason !== "string" || !marker.reason.trim())
+      errors.push(`${label}: must give a reason citing the approval`);
+    if (typeof marker?.issue !== "string" || !/^#\d+$/u.test(marker.issue))
+      errors.push(`${label}: must name its change set as an issue`);
+    if (flowIds.has(id))
+      errors.push(`${label}: flow "${id}" is still declared; drop the marker`);
+  }
+
   for (const [tag, law] of Object.entries(claims.laws ?? {})) {
     if (law.flow && !flowIds.has(law.flow)) {
       errors.push(

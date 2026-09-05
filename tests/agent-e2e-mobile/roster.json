@@ -56,7 +56,7 @@
       "onBudgetBreach": "macOS minutes are the scarcest thing this repo spends \u2014 move a claim down a tier rather than raising the ceiling."
     },
     "probes-suite": {
-      "budgetMs": 2100000,
+      "budgetMs": 1560000,
       "doc": "tests/agent-e2e-mobile/flows/probes-budget.md",
       "rungs": [4],
       "platform": ["android"],
@@ -68,8 +68,7 @@
         "home-loads.mjs",
         "native-v0-resilience.mjs",
         "places-seat.mjs",
-        "scroll-frames.mjs",
-        "volume-proof.mjs"
+        "scroll-frames.mjs"
       ],
       "why": "A BUDGET WRAPPER, not a shared-boot suite: `home-loads` must face a CLEARED client and `native-v0-resilience` restarts the app process, so no member may inherit another's pairing. Depth, on the nightly only (#915 rung 4).",
       "onBudgetBreach": "See flows/probes-budget.md."
@@ -324,14 +323,6 @@
       "platform": ["android", "ios"],
       "budgetMs": 60000,
       "claim": "Dropped-frame percentage during a driven scroll on the Photos grid and the People directory, sampled by the release build's own rAF sampler."
-    },
-    "tests/agent-e2e-mobile/flows/volume-proof.mjs": {
-      "status": "scheduled",
-      "suite": ["probes-suite"],
-      "rungs": [4],
-      "platform": ["android"],
-      "budgetMs": 300000,
-      "claim": "The native replica holds up across twenty relaunches on a volume vault."
     },
     "tests/agent-e2e-mobile/flows/places-seat.mjs": {
       "status": "scheduled",

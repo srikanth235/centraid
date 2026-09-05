@@ -1598,3 +1598,62 @@ bash .governance/run.sh
 | --- | --- | --- |
 | Deleting the cache save loses evidence the nightly report reads | re-read `soak-weekly.yml` around the deleted step, then grepped the whole workflow tree and `scripts/` for a restore of that key | the step above it uploads the same `artifacts/` tree as an artifact and the step above that runs `write-evidence.mjs`; the deleted key had **zero** restores anywhere, so nothing read it to begin with |
 | Amending an acceptance box is a way to make a red box green | re-read `scripts/perf/app-waterfall.mjs`'s header against the amended text | the command already did every other clause; the amendment narrows the box to the behaviour the code argues for, and the candidate-vs-candidate comparison the old text wanted is not lost — it is box 3's paired runner, which is ticked on its own evidence |
+## Rig diet — deletion (#927)
+
+Thirty rigs cited no `tests/journeys.json` entry. Maintainer approved the diet list 2026-09-05; `tests/scale/large-vault` (now cited) and `tests/perf/work-counters` (times nothing) were excluded and stay. Census before deleting: all 30 carried `entries: []` in `#rigs`, and none was named as a `consumer` of any entry.
+
+| Deleted rig(s) | Replacement |
+| --- | --- |
+| `tests/scale/photos-timeline`, `photos-memories` | `web\|mobile/scroll` at `year3-photos` |
+| `tests/scale/browser-replica-query`, `replica-bootstrap` | `mobile/first-bootstrap` |
+| `tests/scale/replica-sse-fanout` | `gateway/peer-echo` |
+| `tests/scale/replica-retention` | `gateway/converge` |
+| `tests/scale/blob-gc`, `backup-restore`, `backup-manifest-size`, `tests/perf/backup-throughput` | NONE — no `restore`/`backup` entry exists (finding below) |
+| `tests/perf/harness-turn`, `app-engine-handler`, `automation-fire`, `blob-egress`, `desktop-cold`, `pwa-waterfall`, `replica-sync-io`, `tunnel-native`, `tunnel-throughput`, `vault-write`; `tests/scale/harness-sessions`, `automations-fire`, `blueprint-clones`, `conversation-ledger`, `desktop-windows`, `gateway-sessions`, `ontology`, `tunnel-pairs`, `web-tabs`; `tests/agent-e2e-mobile/flows/volume-proof` | Ruled: machine costs with no journey above them |
+
+Also deleted: `tests/perf/fixtures/blob-egress-server.mjs`, `tests/perf/fixtures/desktop-main-graph.mjs` and `tests/perf/fixtures/vault-write-child.mjs` (each used by one deleted rig only). `tests/scale/browser-replica-query.fixture.ts` STAYS — `packages/client/src/replica/read-plan-parity.test.ts` still imports it.
+
+Readers removed: `tests/journeys.json#rigs` (30 rows) + 4 prose notes; `tests/claims.json#flows` (21 rows) and its mirror `scripts/test-report/fixtures/claims.json`; `tests/floors.json#minimumTests` (21, regenerated via `check-ledgers --write`); `tests/inventory.json` (3 `skips`, 2 `envRed` rows); `tests/agent-e2e-mobile/roster.json` and `tests/agent-e2e-mobile/flows/claim-pins.json` (`volume-proof` row, suite membership, and its claim pin — pulled from `baseline` too so the down-only ratchet tightens); `tests/agent-e2e-mobile/flows/probes-budget.md` + `tests/agent-e2e-mobile/README.md` retotalled 6→5 flows and the suite ceiling 35→26 min (`tests/budgets.json` mirror refreshed); `.github/workflows/e2e.yml` nightly `strace` install (no surviving perf/scale rig traces syscalls); comment readers in `scripts/perf/send-to-first-token.mjs`, `scripts/lint-e2e-flows.test.mjs`, `tests/perf/desktop-launch.perf.test.ts`, `tests/helpers/composite-workload.ts`, `packages/server/src/routes/replica-fanout.test.ts`, `tests/agent-e2e-mobile/flows/cold-start.mjs`, `tests/agent-e2e-mobile/lib/harness.mjs`; `TESTING.md` fsync row. `CHANGELOG.md` records the removal. No workflow job or package script named a deleted rig — the lanes run `test:perf` / `test:scale` wholesale — so `e2e.yml` is the only workflow touched.
+
+No surviving rig's ceiling moves. `tests/journeys.json` root `approvedDeviation` was extended for the 30 removed rig budgets.
+
+```
+bun run format:check && bun run lint && bun run typecheck   # green
+bun run lint:journey-ledger && bun run test:claims          # green
+bun run test:ratchet && bun run lint:ledgers                # green
+bun run test:report:smoke && bun run test:ratchet:unit      # green
+node --test scripts/check-ledgers.test.mjs scripts/lint-e2e-flows.test.mjs  # green
+node scripts/lint-e2e-claims.mjs && node scripts/lint-e2e-wiring.mjs        # green
+bun run --cwd packages/client test src/replica/read-plan-parity.test.ts     # 33 passed
+bun run --cwd packages/server test src/routes/replica-fanout.test.ts        # 7 passed
+bun run test:perf:counters                                                  # 2 passed
+bun run test:ratchet:unit                                                   # 515 passed (37 files)
+bash .governance/run.sh                                                     # all 22 green
+```
+
+Findings. (1) and (2) below were the two gate gaps this deletion hit; both are now closed by added vocabulary, ruled by the root and recorded under Decisions. (3) `tests/scale/mobile-screen-reads.scale.test.ts` also carries `entries: []` and is NOT on the approved diet list — a 31st uncited rig, left in place. (4) A `restore`/`backup` journey entry is a gap: four rigs were deleted with no successor entry to answer to; none was invented. (5) `TESTING.md`'s fsync row was already stale before this change — no lane sets `CENTRAID_BENCH_REQUIRE_FSYNC=1`; corrected. (6) `tests/scale/browser-replica-query.fixture.ts` now has no rig in `tests/scale/` — its only consumer is a `packages/client` test, so it is misfiled.
+
+Doc debt: `packages/server/benchmarks/README.md` says "CI sets `CENTRAID_BENCH_REQUIRE_FSYNC=1`" — no lane does (this lane). `docs/harnesses.md` names no rig and holds no build-vs-mount wording, so the brief's row-deletion and wording fix had nothing to act on (this lane).
+
+### Decisions
+
+**Added vocabulary for a reviewed deletion; no floor loosened.** Two gates refused an approved outright rig retirement, and neither refusal was wrong about its own property — they simply had no way to say "deleted on purpose, with no successor".
+
+1. **`removedMinimumTestsFlows` in `tests/claims.json`, honoured by `scripts/test-report/ratchet-floors.mjs`.** `diffMinimumTests` waived a removed `flows` row only via a one-to-one `replacesMinimumTestsFlow` successor or by KEEPING the row with `approvedMinimumTestsDeviation` — and a kept row is refused by `validate-claims.mjs`, which requires every `flows[].owner` to exist on disk. So a rig deleted outright could not be recorded at all. The marker is a map from the retired flow id to `{ owner, reason, issue }`. **The property the ratchet defends is unchanged: no floor drops SILENTLY.** A marker is a reviewed line in the diff that names the deleted rig, cites the approval and its change set; an unmarked deletion is still red, a marker whose row is not actually removed is red, a marker naming the wrong owner or a flow the base never declared is red, and two markers may not retire one owner. `validate-claims.mjs` checks the marker's shape but never stats its owner — that owner is the one path in the file that must NOT exist. The marker is ONE-SHOT: it is validated only while NEW against the base, so a spent marker carried on main re-litigates nothing and cannot red a later PR (`replacesMinimumTestsFlow` left main red between the spend and the cleanup — see the #930 note above; this shape does not).
+
+2. **Reserved keys in `tests/journeys.json#rigs`, via `scripts/test-report/journey-rigs.mjs`.** `check-ledgers.mjs` requires a budget removal's waiver to sit in the SECTION being widened, but `validate-nightly-wiring.mjs` read every `#rigs` key as a rig path to stat — so declaring the waiver that gate demands made this one report `approvedDeviation` as a missing rig. `approvedDeviation` and `_comment` are now reserved and skipped by the walker; every real rig path is still validated. **`ratchet-floors.mjs` does not accept the section note** — it loads the ledger whole and sees only a root `approvedDeviation` — so the same rationale sits in BOTH places, and neither copy waives anything the other does not.
+
+Files carrying that vocabulary: `scripts/test-report/ratchet-floors.mjs` (the marker rule) and `scripts/test-report/ratchet-floors.test.mjs` (eight cases: approved deletion green; unmarked deletion, marker without a removed row, unknown flow, wrong owner, duplicate owner and a malformed marker all red; a spent marker inert), `scripts/test-report/validate-claims.mjs` (marker shape checked, owner never stat-ed), `scripts/test-report/journey-rigs.mjs` with cases in `scripts/test-report/validate-nightly-wiring.test.mjs` (a reserved key is skipped, a real rig path is still validated), and `scripts/test-report/validate-nightly-wiring.mjs` reading rig paths through it.
+
+Nothing was loosened to go green: no surviving floor, ceiling or budget moves, and every escape added is refused unless the diff names what was deleted and why.
+
+### Falsification
+
+| Claim | Check | Result |
+| --- | --- | --- |
+| No deleted rig was a journey's rig/consumer | Walked `tests/journeys.json` with a JSON walker over keys AND values, not grep | All 30 had `entries: []`; 0 named as a `consumer` |
+| No reader of a deleted rig survives | Re-ran `git grep -F` for all 30 rig paths outside `receipts/`, `CHANGELOG.md`, `docs/decisions.md` | Empty |
+| The rig registry still loads after the cut | `bun run test:perf:counters` (a surviving rig, reads `#rigs`) | 2 passed |
+| Deleting the shared fixture is safe | Deleted `browser-replica-query.fixture.ts`, then grepped importers | REFUTED — a surviving client test imports it; restored |
+| The retirement marker cannot launder an unreviewed drop | Unit cases: unmarked deletion, marker without a removed row, wrong owner, duplicate owner, missing reason/issue | All red as intended; only the fully-named deletion passes |
+| A spent marker will not red main later | `diffMinimumTests(landed, landed)` with the marker on both sides | No errors — validated only while new |

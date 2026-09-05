@@ -1,5 +1,6 @@
-// The MECHANISM of the shared replica projection (#883 C2); the cost it buys is
-// proven by `tests/scale/replica-sse-fanout.scale.test.ts`.
+// The MECHANISM of the shared replica projection (#883 C2). The cost it buys
+// has no rig: the fan-out scale rig was deleted under #927 as citing no journey
+// ledger entry, and `gateway/peer-echo` is the entry a successor would answer to.
 
 import { describe, expect, test } from "vitest";
 

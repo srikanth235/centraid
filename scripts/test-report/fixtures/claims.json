@@ -3294,24 +3294,6 @@
       "minimumTests": 21
     },
     {
-      "id": "vault-write-budget",
-      "name": "Vault write latency and durability budget",
-      "surface": "vault-core",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/vault-write.perf.test.ts",
-      "minimumTests": 2
-    },
-    {
-      "id": "ontology-10k-query",
-      "name": "Atlas and Browse queries at 10k entities",
-      "surface": "vault-core",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/ontology.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "blob-custody-state",
       "name": "Blob custody and CAS state machine",
       "surface": "blob-custody",
@@ -3475,24 +3457,6 @@
       "minimumTests": 2
     },
     {
-      "id": "blob-egress-budget",
-      "name": "Large-blob egress TTFB and memory ceiling",
-      "surface": "blob-custody",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/blob-egress.perf.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "blob-gc-volume",
-      "name": "Eviction and GC preserve mixed custody states at volume",
-      "surface": "blob-custody",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/blob-gc.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "backup-round-trip",
       "name": "Backup and restore round-trip with fencing",
       "surface": "backup-restore",
@@ -3521,15 +3485,6 @@
       "minimumTests": 11
     },
     {
-      "id": "backup-big-vault",
-      "name": "Backup and restore a large deterministic vault",
-      "surface": "backup-restore",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/backup-restore.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "replica-intents",
       "name": "Replica convergence and intent idempotency",
       "surface": "replica-sync",
@@ -3555,15 +3510,6 @@
       "tier": "contract",
       "owner": "packages/client/src/replica/multi-writer.contract.test.ts",
       "minimumTests": 3
-    },
-    {
-      "id": "replica-bootstrap-volume",
-      "name": "Windowed bootstrap converges with deletions at volume",
-      "surface": "replica-sync",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/replica-bootstrap.scale.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "gateway-session-boundaries",
@@ -3610,15 +3556,6 @@
       "tier": "contract",
       "owner": "packages/server/src/engine/conversation/archive/archive.contract.test.ts",
       "minimumTests": 4
-    },
-    {
-      "id": "conversation-years",
-      "name": "Conversation archive and prune over years of history",
-      "surface": "app-engine",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/conversation-ledger.scale.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "scheduler-no-backfill",
@@ -3703,15 +3640,6 @@
       "tier": "unit",
       "owner": "apps/mobile/src/lib/upload/crash.test.ts",
       "minimumTests": 6
-    },
-    {
-      "id": "pwa-waterfall-budget",
-      "name": "#404 PWA fast-path browser waterfall stays within budget (nightly perf lane)",
-      "surface": "web",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/pwa-waterfall.perf.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "mobile-pairing-canary",
@@ -3814,15 +3742,6 @@
       "tier": "contract",
       "owner": "packages/tunnel/src/wire-conformance.contract.test.ts",
       "minimumTests": 10
-    },
-    {
-      "id": "tunnel-throughput",
-      "name": "Paired local QUIC tunnel throughput stays above its floor",
-      "surface": "tunnel-pairing",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/tunnel-throughput.perf.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "pairing-device-lifecycle",
@@ -4005,15 +3924,6 @@
       "dimension": "accessibility",
       "tier": "accessibility",
       "owner": "apps/mobile/src/apps/photos/PhotosHome.test.tsx",
-      "minimumTests": 1
-    },
-    {
-      "id": "backup-throughput-budget",
-      "name": "Backup encrypt + verify throughput budget",
-      "surface": "backup-restore",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/backup-throughput.perf.test.ts",
       "minimumTests": 1
     },
     {
@@ -4242,15 +4152,6 @@
       "minimumTests": 3
     },
     {
-      "id": "app-engine-handler-budget",
-      "name": "Isolated handler dispatch stays inside the nightly ceiling",
-      "surface": "app-engine",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/app-engine-handler.perf.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "app-vault-bridge-authz",
       "name": "ctx.vault worker channel binds and scopes every handler invocation",
       "surface": "app-engine",
@@ -4287,15 +4188,6 @@
       "minimumTests": 16
     },
     {
-      "id": "automation-fire-budget",
-      "name": "Automation fire latency through the real ledger",
-      "surface": "automations",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/automation-fire.perf.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "automations-desktop-journey",
       "name": "List, view, run and recover an automation in the desktop app",
       "surface": "automations",
@@ -4303,89 +4195,6 @@
       "tier": "e2e",
       "owner": "apps/desktop/tests/e2e/automations.spec.ts",
       "minimumTests": 14
-    },
-    {
-      "id": "harness-turn-budget",
-      "name": "Harness turn dispatch budget through the registry",
-      "surface": "agent-runtime",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/harness-turn.perf.test.ts",
-      "minimumTests": 1,
-      "approvedMinimumTestsDeviation": "#743 vocabulary-only flow and file rename; the one-test floor is unchanged."
-    },
-    {
-      "id": "harness-sessions-volume",
-      "name": "Concurrent harness sessions fan out through the registry",
-      "surface": "agent-runtime",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/harness-sessions.scale.test.ts",
-      "minimumTests": 1,
-      "approvedMinimumTestsDeviation": "#743 vocabulary-only flow and file rename; the one-test floor is unchanged."
-    },
-    {
-      "id": "blueprint-clones-volume",
-      "name": "Template cloning at multi-app catalog volume",
-      "surface": "blueprints",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/blueprint-clones.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "desktop-windows-volume",
-      "name": "Gateway state broadcast fans across many desktop windows",
-      "surface": "desktop",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/desktop-windows.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "web-tabs-volume",
-      "name": "One replica invalidation reaches many tab contexts",
-      "surface": "web",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/web-tabs.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "tunnel-pairs-volume",
-      "name": "Multi-pair allowlist persists and resolves at volume",
-      "surface": "tunnel-pairing",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/tunnel-pairs.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "mobile-volume-proof",
-      "name": "Native mobile replica holds up on a volume vault",
-      "surface": "mobile",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
-      "minimumTests": 1
-    },
-    {
-      "id": "photos.scale-50k",
-      "name": "Photos media-asset queries hold up at 50k assets plus a 10k-one-day degenerate corpus",
-      "surface": "mobile",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/photos-timeline.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "photos.memories-scale-50k",
-      "name": "Memories v0 rebuildMemories sweep holds up at 50k assets over a 3-year span",
-      "surface": "vault-core",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/photos-memories.scale.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "vault-atlas-census",

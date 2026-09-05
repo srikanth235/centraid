@@ -174,30 +174,6 @@
         "reason": "#659 R3b. The REAL Electron launch is measured by apps/desktop/tests/e2e/launch-time.spec.ts (vitest cannot start Electron on a display-less runner) and handed to this lane as nightly-evidence-desktop. A missing input is a HARD failure under CI — see the throw above the describe — and a skip locally, exactly like pwa-waterfall (rig lane split to #790 by #781; originally #659).",
         "expires": "2026-12-01"
       },
-      "tests/perf/pwa-waterfall.perf.test.ts#1": {
-        "kind": "conditional-skip",
-        "line": 71,
-        "snippet": "test.skipIf(!waterfall)(",
-        "issue": 864,
-        "reason": "The rig consumes a waterfall report published by the nightly web-e2e job; a missing input is a hard failure under CI and a local skip otherwise (rig lane split to #790 by #781; originally #659).",
-        "expires": "2026-12-01"
-      },
-      "tests/perf/tunnel-native.perf.test.ts#1": {
-        "kind": "conditional-skip",
-        "line": 32,
-        "snippet": "test.skipIf(!hasNative)(",
-        "issue": 864,
-        "reason": "Cold-load budget for the native QUIC dylib; skipped where the vendored module is not built (rig lane split to #790 by #781; originally #659).",
-        "expires": "2026-12-01"
-      },
-      "tests/perf/tunnel-native.perf.test.ts#2": {
-        "kind": "conditional-skip",
-        "line": 77,
-        "snippet": "test.skipIf(hasNative)(",
-        "issue": 864,
-        "reason": "The inverse arm: it asserts the absent-module fallback path, so it is skipped exactly when the dylib is present (rig lane split to #790 by #781; originally #659).",
-        "expires": "2026-12-01"
-      },
       "tests/scale/restore-10gib.scale.test.ts#1": {
         "kind": "conditional-skip",
         "line": 115,
@@ -252,26 +228,6 @@
         "guard": "skipIf",
         "issue": 864,
         "revisitTrigger": "Revisit if CI gains a btrfs/xfs runner where reflink holds — the guard could then narrow from platform to filesystem capability (rig tracker: #790)."
-      },
-      "tests/perf/vault-write.perf.test.ts#1": {
-        "kind": "platform-guard",
-        "line": 115,
-        "snippet": "process.platform === \"linux\" &&",
-        "test": "journalled vault writes stay within the nightly latency and fsync budget",
-        "environment": "The fsync-per-write count is countable only via strace on linux; off linux the test asserts latency alone rather than failing on an unmeasurable law.",
-        "guard": "reduced-assertion",
-        "issue": 864,
-        "revisitTrigger": "Revisit if a darwin syscall counter usable without SIP friction (dtrace) becomes available to the perf lane; then the fsync gate can widen (rig tracker: #790)."
-      },
-      "tests/perf/vault-write.perf.test.ts#2": {
-        "kind": "platform-guard",
-        "line": 118,
-        "snippet": "if (process.env.CI && process.platform === \"linux\") {",
-        "test": "journalled vault writes stay within the nightly latency and fsync budget",
-        "environment": "The inverse arm of site #1: in linux CI, where strace is provisioned by e2e.yml, a missing strace throws rather than skipping the fsync gate into a false green.",
-        "guard": "hard-fail",
-        "issue": 864,
-        "revisitTrigger": "Stands as long as the nightly perf lane installs strace (.github/workflows/e2e.yml); revisit together with site #1 (rig tracker: #790)."
       }
     }
   },

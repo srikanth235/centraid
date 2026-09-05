@@ -29,7 +29,7 @@
       "pr-gate": 480000,
       "resilience": 720000,
       "ios-smoke": 600000,
-      "probes-suite": 2100000,
+      "probes-suite": 1560000,
       "photos": 480000,
       "home-apps": 720000,
       "sharing": 300000,

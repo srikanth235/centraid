@@ -3588,6 +3588,114 @@
       }
     ]
   },
+  "removedMinimumTestsFlows": {
+    "_comment": "#927 RIG DIET. Each entry retires a flow whose owning rig was DELETED with maintainer approval on 2026-09-05 for citing no tests/journeys.json entry. A rig earns its wall clock by fencing an interval a vault owner can feel; these timed machine costs with nothing above them, so their floors have no successor to carry. ONE-SHOT: scripts/test-report/ratchet-floors.mjs validates a marker only while it is new against the base, so these rows are inert once landed and are dropped by the next change set that touches this file.",
+    "vault-write-budget": {
+      "owner": "tests/perf/vault-write.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "ontology-10k-query": {
+      "owner": "tests/scale/ontology.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "blob-egress-budget": {
+      "owner": "tests/perf/blob-egress.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "blob-gc-volume": {
+      "owner": "tests/scale/blob-gc.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "backup-big-vault": {
+      "owner": "tests/scale/backup-restore.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "replica-bootstrap-volume": {
+      "owner": "tests/scale/replica-bootstrap.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 mobile/first-bootstrap is the entry a successor would answer to. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "conversation-years": {
+      "owner": "tests/scale/conversation-ledger.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "pwa-waterfall-budget": {
+      "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "tunnel-throughput": {
+      "owner": "tests/perf/tunnel-throughput.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "backup-throughput-budget": {
+      "owner": "tests/perf/backup-throughput.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "app-engine-handler-budget": {
+      "owner": "tests/perf/app-engine-handler.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "automation-fire-budget": {
+      "owner": "tests/perf/automation-fire.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "harness-turn-budget": {
+      "owner": "tests/perf/harness-turn.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "harness-sessions-volume": {
+      "owner": "tests/scale/harness-sessions.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "blueprint-clones-volume": {
+      "owner": "tests/scale/blueprint-clones.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "desktop-windows-volume": {
+      "owner": "tests/scale/desktop-windows.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "web-tabs-volume": {
+      "owner": "tests/scale/web-tabs.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "tunnel-pairs-volume": {
+      "owner": "tests/scale/tunnel-pairs.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "mobile-volume-proof": {
+      "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "photos.scale-50k": {
+      "owner": "tests/scale/photos-timeline.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 web|mobile/scroll at year3-photos is the entry a successor would answer to. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "photos.memories-scale-50k": {
+      "owner": "tests/scale/photos-memories.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 web|mobile/scroll at year3-photos is the entry a successor would answer to. No surviving rig's floor moves.",
+      "issue": "#927"
+    }
+  },
   "flows": [
     {
       "id": "consent-chain-properties",
@@ -3732,24 +3840,6 @@
       "tier": "unit",
       "owner": "packages/vault/src/gateway/seal-custody.test.ts",
       "minimumTests": 21
-    },
-    {
-      "id": "vault-write-budget",
-      "name": "Vault write latency and durability budget",
-      "surface": "vault-core",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/vault-write.perf.test.ts",
-      "minimumTests": 2
-    },
-    {
-      "id": "ontology-10k-query",
-      "name": "Atlas and Browse queries at 10k entities",
-      "surface": "vault-core",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/ontology.scale.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "blob-custody-state",
@@ -3916,24 +4006,6 @@
       "minimumTests": 2
     },
     {
-      "id": "blob-egress-budget",
-      "name": "Large-blob egress TTFB and memory ceiling",
-      "surface": "blob-custody",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/blob-egress.perf.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "blob-gc-volume",
-      "name": "Eviction and GC preserve mixed custody states at volume",
-      "surface": "blob-custody",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/blob-gc.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "backup-round-trip",
       "name": "Backup and restore round-trip with fencing",
       "surface": "backup-restore",
@@ -3962,15 +4034,6 @@
       "minimumTests": 11
     },
     {
-      "id": "backup-big-vault",
-      "name": "Backup and restore a large deterministic vault",
-      "surface": "backup-restore",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/backup-restore.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "replica-intents",
       "name": "Replica convergence and intent idempotency",
       "surface": "replica-sync",
@@ -3996,15 +4059,6 @@
       "tier": "contract",
       "owner": "packages/client/src/replica/multi-writer.contract.test.ts",
       "minimumTests": 3
-    },
-    {
-      "id": "replica-bootstrap-volume",
-      "name": "Windowed bootstrap converges with deletions at volume",
-      "surface": "replica-sync",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/replica-bootstrap.scale.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "gateway-session-boundaries",
@@ -4051,15 +4105,6 @@
       "tier": "contract",
       "owner": "packages/server/src/engine/conversation/archive/archive.contract.test.ts",
       "minimumTests": 4
-    },
-    {
-      "id": "conversation-years",
-      "name": "Conversation archive and prune over years of history",
-      "surface": "app-engine",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/conversation-ledger.scale.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "scheduler-no-backfill",
@@ -4144,15 +4189,6 @@
       "tier": "unit",
       "owner": "apps/mobile/src/lib/upload/crash.test.ts",
       "minimumTests": 6
-    },
-    {
-      "id": "pwa-waterfall-budget",
-      "name": "#404 PWA fast-path browser waterfall stays within budget (nightly perf lane)",
-      "surface": "web",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/pwa-waterfall.perf.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "mobile-pairing-canary",
@@ -4253,15 +4289,6 @@
       "tier": "contract",
       "owner": "packages/tunnel/src/wire-conformance.contract.test.ts",
       "minimumTests": 10
-    },
-    {
-      "id": "tunnel-throughput",
-      "name": "Paired local QUIC tunnel throughput stays above its floor",
-      "surface": "tunnel-pairing",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/tunnel-throughput.perf.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "pairing-device-lifecycle",
@@ -4444,15 +4471,6 @@
       "dimension": "accessibility",
       "tier": "accessibility",
       "owner": "apps/mobile/src/apps/photos/PhotosHome.test.tsx",
-      "minimumTests": 1
-    },
-    {
-      "id": "backup-throughput-budget",
-      "name": "Backup encrypt + verify throughput budget",
-      "surface": "backup-restore",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/backup-throughput.perf.test.ts",
       "minimumTests": 1
     },
     {
@@ -4681,15 +4699,6 @@
       "minimumTests": 3
     },
     {
-      "id": "app-engine-handler-budget",
-      "name": "Isolated handler dispatch stays inside the nightly ceiling",
-      "surface": "app-engine",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/app-engine-handler.perf.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "app-vault-bridge-authz",
       "name": "ctx.vault worker channel binds and scopes every handler invocation",
       "surface": "app-engine",
@@ -4726,15 +4735,6 @@
       "minimumTests": 16
     },
     {
-      "id": "automation-fire-budget",
-      "name": "Automation fire latency through the real ledger",
-      "surface": "automations",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/automation-fire.perf.test.ts",
-      "minimumTests": 1
-    },
-    {
       "id": "automations-desktop-journey",
       "name": "List, view, run and recover an automation in the desktop app",
       "surface": "automations",
@@ -4742,89 +4742,6 @@
       "tier": "e2e",
       "owner": "apps/desktop/tests/e2e/automations.spec.ts",
       "minimumTests": 14
-    },
-    {
-      "id": "harness-turn-budget",
-      "name": "Harness turn dispatch budget through the registry",
-      "surface": "agent-runtime",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/harness-turn.perf.test.ts",
-      "minimumTests": 1,
-      "approvedMinimumTestsDeviation": "#743 vocabulary-only flow and file rename; the one-test floor is unchanged."
-    },
-    {
-      "id": "harness-sessions-volume",
-      "name": "Concurrent harness sessions fan out through the registry",
-      "surface": "agent-runtime",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/harness-sessions.scale.test.ts",
-      "minimumTests": 1,
-      "approvedMinimumTestsDeviation": "#743 vocabulary-only flow and file rename; the one-test floor is unchanged."
-    },
-    {
-      "id": "blueprint-clones-volume",
-      "name": "Template cloning at multi-app catalog volume",
-      "surface": "blueprints",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/blueprint-clones.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "desktop-windows-volume",
-      "name": "Gateway state broadcast fans across many desktop windows",
-      "surface": "desktop",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/desktop-windows.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "web-tabs-volume",
-      "name": "One replica invalidation reaches many tab contexts",
-      "surface": "web",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/web-tabs.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "tunnel-pairs-volume",
-      "name": "Multi-pair allowlist persists and resolves at volume",
-      "surface": "tunnel-pairing",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/tunnel-pairs.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "mobile-volume-proof",
-      "name": "Native mobile replica holds up on a volume vault",
-      "surface": "mobile",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
-      "minimumTests": 1
-    },
-    {
-      "id": "photos.scale-50k",
-      "name": "Photos media-asset queries hold up at 50k assets plus a 10k-one-day degenerate corpus",
-      "surface": "mobile",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/photos-timeline.scale.test.ts",
-      "minimumTests": 1
-    },
-    {
-      "id": "photos.memories-scale-50k",
-      "name": "Memories v0 rebuildMemories sweep holds up at 50k assets over a 3-year span",
-      "surface": "vault-core",
-      "dimension": "scalability",
-      "tier": "scale",
-      "owner": "tests/scale/photos-memories.scale.test.ts",
-      "minimumTests": 1
     },
     {
       "id": "vault-atlas-census",

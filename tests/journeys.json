@@ -1,5 +1,5 @@
 {
-  "approvedDeviation": "#927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`. ratchet-floors.mjs reads this file as a whole (no `section`), so the waiver has to sit at the root — `entries.approvedDeviation` is the journey-ledger's own copy of the same note, which `lint:journey-ledger` requires on a re-key. Every number is carried across byte-identical; only the address moves.",
+  "approvedDeviation": "#927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`. ratchet-floors.mjs reads this file as a whole (no `section`), so the waiver has to sit at the root — `entries.approvedDeviation` is the journey-ledger's own copy of the same note, which `lint:journey-ledger` requires on a re-key. Every number is carried across byte-identical; only the address moves. #927 RIG DIET deletes the thirty rigs under `rigs` that cited no entry here, with their budgetMs/budgetsMs numbers (maintainer approval 2026-09-05, recorded in receipts/issue-927-perf-infra.md). The SAME rationale sits on `rigs.approvedDeviation`, which is where `scripts/check-ledgers.mjs` reads a section waiver; `scripts/test-report/ratchet-floors.mjs` loads this file whole and sees only a root note, so the two readers need the note in both places and neither copy waives anything the other does not. No surviving rig's ceiling moves.",
   "_comment": "THE JOURNEY LEDGER (#927). ONE ledger, keyed `surface / journey / volume / hardware`. It replaces tests/experience-budgets/{web,desktop,mobile,gateway,client-query-counts}.json, tests/budgets.json#qualityRigs and tests/budgets.json#experience: a ceiling stated without the volume and the hardware it was measured on is not a budget, and four files keyed by surface alone could not say so. Every entry names the SPANS it is measured from (packages/core/src/protocol/trace.ts) and the CONSUMERS that assert it, so a ceiling with no reader and a reader with no ceiling are both visible here. Read through tests/helpers/journeys.ts (TypeScript) or scripts/lib/journey-ledger.mjs (scripts); nothing parses this file by hand. Ratcheted tighten-only as a PERF_BUDGET_SOURCE (scripts/test-report/ratchet-floors.mjs): `max*`/`ceiling*` fall freely and widening one needs an `approvedDeviation`; `min*` may only rise. A leading underscore is invisible to the ratchet, which is how an intended-but-unobserved ceiling is parked without gating vacuously. RE-KEYING an entry (a journey measured at a new volume, say) renames its flattened numbers, which the ratchet reads as a removal plus an addition — i.e. a widen: carry the same numbers across and add an `approvedDeviation` saying what moved and why.",
   "_statusVocabulary": {
     "measured": "A real run on the stated date and hardware produced `_provenance.observed*`; the ceiling is that value plus the stated headroom.",
@@ -649,7 +649,7 @@
       "consumers": ["tests/quality/first-paint-query-counts.test.ts"],
       "tolerancePercent": 0,
       "_approvedDeviation": "None outstanding. The Atlas budget no longer needs one: #873 batches the census row counts into one compound SELECT per file (atlas-graph.ts countRowsBatched), so registering a table costs a COUNT(*) scan but never a first-paint statement, and the measured baseline drops 147 -> 13. That retires the deviation chain (#731 128 -> 138, #807 138 -> 140) that raised this budget once per registered table; the knob is tighten-only (tests/claims.json P2) and 13 is the measured number.",
-      "_instrumentNote": "INSTRUMENT CHANGED, so these integers are NOT comparable to the ones this file held before #927. The old numbers counted PREPARES of SELECT/WITH/PRAGMA seen by a monkey-patch over `DatabaseSync.prepare` inside the test; these count statement EXECUTIONS reported by the product's own counter (`gatewayWorkCounters`, packages/vault/src/gateway/work-counters.ts) — the same instrument the merge-rung counter gate reads, so a screen and the gate can no longer disagree about what a statement is. Old -> new on the same fixture: photos-grid 68 -> 76, notifications 8 -> 7, atlas 13 -> 7, assistant 22 -> 5. Atlas and Assistant read handles the gateway never wrapped, so the probe now instruments each screen's own handle rather than reporting zero. WHAT THIS INSTRUMENT CAN AND CANNOT SEE, recorded with #883 C1 against the #873 ruling in docs/decisions.md (\"Performance and Rust byte plane\"). Since the Atlas census batched its per-table COUNT(*) calls into one compound SELECT per database file, registering a table costs a SCAN and never a STATEMENT — so a statement count no longer proxies per-table scan cost. These budgets still catch what they were built for: a screen that starts issuing N+1 round trips on first paint. What they can no longer see is growth in the registry, which they used to track by accident; a screen whose scanned bytes double while its statement count holds at 13 reads as unchanged here. The successor instrument for that trend is wall-clock or scanned-table, NOT a re-raised statement count — raising these numbers back would restore the coupling #873 removed rather than restore the signal. Read the same caution wherever a statement count is published as a mechanism witness (for example `vault statements per commit` in tests/scale/replica-sse-fanout.scale.test.ts, which is published beside a wall clock and deliberately not gated).",
+      "_instrumentNote": "INSTRUMENT CHANGED, so these integers are NOT comparable to the ones this file held before #927. The old numbers counted PREPARES of SELECT/WITH/PRAGMA seen by a monkey-patch over `DatabaseSync.prepare` inside the test; these count statement EXECUTIONS reported by the product's own counter (`gatewayWorkCounters`, packages/vault/src/gateway/work-counters.ts) — the same instrument the merge-rung counter gate reads, so a screen and the gate can no longer disagree about what a statement is. Old -> new on the same fixture: photos-grid 68 -> 76, notifications 8 -> 7, atlas 13 -> 7, assistant 22 -> 5. Atlas and Assistant read handles the gateway never wrapped, so the probe now instruments each screen's own handle rather than reporting zero. WHAT THIS INSTRUMENT CAN AND CANNOT SEE, recorded with #883 C1 against the #873 ruling in docs/decisions.md (\"Performance and Rust byte plane\"). Since the Atlas census batched its per-table COUNT(*) calls into one compound SELECT per database file, registering a table costs a SCAN and never a STATEMENT — so a statement count no longer proxies per-table scan cost. These budgets still catch what they were built for: a screen that starts issuing N+1 round trips on first paint. What they can no longer see is growth in the registry, which they used to track by accident; a screen whose scanned bytes double while its statement count holds at 13 reads as unchanged here. The successor instrument for that trend is wall-clock or scanned-table, NOT a re-raised statement count — raising these numbers back would restore the coupling #873 removed rather than restore the signal. Read the same caution wherever a statement count is published as a mechanism witness beside a wall clock rather than gated on its own.",
       "metrics": {
         "photos-grid": {
           "status": "measured",
@@ -868,7 +868,7 @@
             "observedMedianMs": 69.5,
             "observedMinMs": 38.4,
             "observedMaxMs": 197.9,
-            "note": "MEASURED — and what it replaces is NO NUMBER AT ALL. Before this the product's most-felt latency had no rig: tests/perf/harness-turn.perf.test.ts measures 2,000 registry dispatches against a stubbed runTurn, so it never spawns a harness, never speaks ACP, and could not see this interval. The stub the old probe text asked for turned out to already exist (fake-acp-harness.mjs, the ACP backend suite's fixture); the missing piece was a rig pointing at it. Thirteen independent runs of 25-30 samples put per-run p95 between 53.4 ms on an idle container and 123.0 ms under concurrent load, while the per-run MEDIAN barely moved (47.9-69.5 ms) — so the spread is host contention on the process spawn, not variance in the path itself. Every observed* value above records the WORST run seen, never the friendliest. The number is dominated by node process spawn plus the JSON-RPC handshake, which is the honest shape of a first turn. READ IT AS A LOWER BOUND on what the vault owner feels: it fences a gateway-side regression — a slower spawn, an added handshake round trip, a blocking step inserted before the prompt goes out — not the whole perceived interval.",
+            "note": "MEASURED — and what it replaces is NO NUMBER AT ALL. Before this the product's most-felt latency had no rig: registry-dispatch throughput against a stubbed runTurn never spawns a harness, never speaks ACP, and could not see this interval. The stub is fake-acp-harness.mjs, the ACP backend suite's fixture; the missing piece was a rig pointing at it. Thirteen independent runs of 25-30 samples put per-run p95 between 53.4 ms on an idle container and 123.0 ms under concurrent load, while the per-run MEDIAN barely moved (47.9-69.5 ms) — so the spread is host contention on the process spawn, not variance in the path itself. Every observed* value above records the WORST run seen, never the friendliest. The number is dominated by node process spawn plus the JSON-RPC handshake, which is the honest shape of a first turn. READ IT AS A LOWER BOUND on what the vault owner feels: it fences a gateway-side regression — a slower spawn, an added handshake round trip, a blocking step inserted before the prompt goes out — not the whole perceived interval.",
             "headroom": "~3.3x worst observed p95 (~2x the worst single sample), in the same grammar as requestToFirstByte above. Sized against the CONTENDED measurement on purpose, because a shared CI runner IS the contended case: a ceiling seeded from the idle 53 ms p95 would fence runner jitter rather than a regression, and a gate that flakes is a gate that gets widened. The ratchet is tighten-only, so this can only come DOWN — re-seed it from a real distribution on the lane that runs it."
           }
         }
@@ -976,7 +976,7 @@
             "host": "darwin arm64, worktree build, Playwright _electron.launch",
             "observedMs": 4540,
             "breakdown": "process → first window 4494 ms; first window → usable Home 46 ms",
-            "note": "MEASURED, ONE SAMPLE, and NOT re-run since #883 C5 cut the term below — this 4540 ms stands as the last real Electron launch on the record, so the ceiling stays where it is until a fresh launch-time.spec.ts artifact justifies moving it. The headline finding: 99% of the 4.5 s a vault owner waits is MAIN-PROCESS boot before any window exists — the renderer reaches a usable Home 46 ms after it appears. That main-process term is instrumented continuously by the `desktop-cold` rig (tests/perf/desktop-cold.perf.test.ts, budget in tests/quality-rig-budgets.json), which imports the REAL main-process graph in a child process with `electron` stubbed. C1 measured it at 752-855 ms across 1,001 modules on a linux x64 container; before #883 the rig imported gateway-supervisor-core.ts, a file with ZERO imports, so it timed one module parse (~64 ms) and could not have moved if that graph doubled. #883 C5 then attacked the graph itself: three main-process modules were pulling the entire @centraid/server barrel (900 modules, ~770 ms of cold import on its own) — gateway-paths.ts for one path resolver, detached-gateway.ts for one HMAC helper, and embedded-gateway.ts for serve(). The first two now import narrow @centraid/server subpath exports; embedded-gateway.js became a DYNAMIC import inside local-gateway.ts's startEmbedded, which a production launch never reaches (the embedded gateway is selected by CENTRAID_EMBEDDED_GATEWAY=1, for tests — production spawns a DETACHED gateway child). On the same contended container the rig fell from 952-1105 ms / 1,003 modules to 396-431 ms / 430-431 modules, and the main entry's full direct dependency set from 1,034 modules / 815 ms to 461 / 365 ms; the rig budget was ratcheted 3000 -> 1300 ms to match. What is left is dominated by the @centraid/vault barrel (296 modules) that gateway-secrets.ts needs for KeyStore. None of this covers Electron's own runtime start, V8 snapshot restore or window creation, which is why this Playwright ceiling remains the cold-start budget and why the ~450 ms of import cost removed is a floor on, not a measure of, what a vault owner will feel. TIGHTEN this ceiling once ~10 nightly launch samples exist. The sustained-drift gate (30 samples, 1.5x) is what actually catches a slow walk.",
+            "note": "MEASURED, ONE SAMPLE, and NOT re-run since #883 C5 cut the term below — this 4540 ms stands as the last real Electron launch on the record, so the ceiling stays where it is until a fresh launch-time.spec.ts artifact justifies moving it. The headline finding: 99% of the 4.5 s a vault owner waits is MAIN-PROCESS boot before any window exists — the renderer reaches a usable Home 46 ms after it appears. That main-process term has NO continuous instrument: the `desktop-cold` import-graph rig was deleted under #927 as citing no entry here, so a main-process import regression is now visible only in this Playwright ceiling. #883 C1 measured the term at 752-855 ms across 1,001 modules on a linux x64 container. #883 C5 then attacked the graph itself: three main-process modules were pulling the entire @centraid/server barrel (900 modules, ~770 ms of cold import on its own) — gateway-paths.ts for one path resolver, detached-gateway.ts for one HMAC helper, and embedded-gateway.ts for serve(). The first two now import narrow @centraid/server subpath exports; embedded-gateway.js became a DYNAMIC import inside local-gateway.ts's startEmbedded, which a production launch never reaches (the embedded gateway is selected by CENTRAID_EMBEDDED_GATEWAY=1, for tests — production spawns a DETACHED gateway child). On the same contended container the measured import cost fell from 952-1105 ms / 1,003 modules to 396-431 ms / 430-431 modules, and the main entry's full direct dependency set from 1,034 modules / 815 ms to 461 / 365 ms. What is left is dominated by the @centraid/vault barrel (296 modules) that gateway-secrets.ts needs for KeyStore. None of this covers Electron's own runtime start, V8 snapshot restore or window creation, which is why this Playwright ceiling remains the cold-start budget and why the ~450 ms of import cost removed is a floor on, not a measure of, what a vault owner will feel. TIGHTEN this ceiling once ~10 nightly launch samples exist. The sustained-drift gate (30 samples, 1.5x) is what actually catches a slow walk.",
             "headroom": "~2.6x observed (single-sample, cross-host)"
           }
         }
@@ -1020,7 +1020,7 @@
         "coldOpenToUsable": {
           "status": "unmeasured",
           "probe": "tests/agent-e2e-mobile/flows/cold-start.mjs — PER-LAUNCH cold start (stopApp → launchApp → Home ready marker), 8 launches, reports median and p95. Runs on the nightly mobile-e2e-ios / mobile-e2e-android jobs and on the run-probes-suite path of the per-merge canary.",
-          "_note": "The pre-existing tests/agent-e2e-mobile/flows/volume-proof.mjs measures 20 relaunches as ONE wall-clock total, so a single 10 s launch hides inside a 20-launch sum and the number is unreadable as an experience. The new flow reports per-launch statistics. No ceilingMs on first land: an on-device number from a CI simulator has no distribution yet, so the flow gates on the trailing-median drift budget (>1.5x sustained) from its own 30-sample history. The replica volume is also not year-3 yet — docs/mobile-offline.md's 90k figure is an explicitly labelled PROJECTION, not a run. #890 W1 changed WHAT this measures: the lane now installs a release-configuration build with the Hermes bundle embedded, so a launch is a real app start rather than a dev-client bundle fetch from Metro. Every sample recorded before that change was taken against a __DEV__ build and is not comparable — the drift history starts again here."
+          "_note": "This flow reports PER-LAUNCH statistics: a repeat block timed as one wall-clock total hides a single 10 s launch inside the sum and is unreadable as an experience. No ceilingMs on first land: an on-device number from a CI simulator has no distribution yet, so the flow gates on the trailing-median drift budget (>1.5x sustained) from its own 30-sample history. The replica volume is also not year-3 yet — docs/mobile-offline.md's 90k figure is an explicitly labelled PROJECTION, not a run. #890 W1 changed WHAT this measures: the lane now installs a release-configuration build with the Hermes bundle embedded, so a launch is a real app start rather than a dev-client bundle fetch from Metro. Every sample recorded before that change was taken against a __DEV__ build and is not comparable — the drift history starts again here."
         }
       }
     },
@@ -1561,38 +1561,7 @@
     }
   },
   "rigs": {
-    "tests/perf/harness-turn.perf.test.ts": {
-      "lane": "perf",
-      "volume": "2,000 runner dispatches",
-      "entries": []
-    },
-    "tests/perf/app-engine-handler.perf.test.ts": {
-      "lane": "perf",
-      "volume": "20 isolated handlers",
-      "entries": []
-    },
-    "tests/perf/automation-fire.perf.test.ts": {
-      "lane": "perf",
-      "volume": "10 automation fires",
-      "entries": []
-    },
-    "tests/perf/backup-throughput.perf.test.ts": {
-      "lane": "perf",
-      "volume": "32 MiB encrypt + verify",
-      "entries": []
-    },
-    "tests/perf/blob-egress.perf.test.ts": {
-      "lane": "perf",
-      "volume": "128 MiB local blob egress — first byte + RSS in a forked child",
-      "entries": []
-    },
-    "tests/perf/desktop-cold.perf.test.ts": {
-      "lane": "perf",
-      "volume": "1 cold import of the desktop MAIN-PROCESS graph in a fresh child process with `electron` stubbed — apps/desktop/dist/main/local-gateway.js and the sibling main modules it drags in (430-431 modules since #883 C5, down from 1,001-1,003 in C1). Before #883 C1 this rig imported gateway-supervisor-core.ts, a ZERO-import file, and timed one module parse.",
-      "_budgetMsNote": "Ratcheted 3000 -> 1300 by #883 C5. C5 took the @centraid/server barrel off the main-process critical path (subpath imports in gateway-paths.ts/detached-gateway.ts, dynamic import of embedded-gateway.js) and 16 samples on a SHARED linux x64 container measured 396-431 ms at load average ~1.5 and 500-649 ms at load average ~8 (4 cores), against 952-1105 ms on the same host before the change. 1300 ms is ~3x the quiet-host maximum and ~2x the contended one, the same headroom convention the experience budgets use for a single-host measurement.",
-      "budgetMs": 1300,
-      "entries": []
-    },
+    "approvedDeviation": "#927 RIG DIET removes the thirty rigs that cited no entry in this ledger, and their budgetMs/budgetsMs numbers with them (maintainer approval 2026-09-05, recorded in receipts/issue-927-perf-infra.md). Every number deleted here belonged to a rig deleted in the same change set: a rig fencing no journey was fencing a machine cost with no vault owner above it. NO SURVIVING RIG'S CEILING MOVES. `tests/scale/large-vault` (now cited) and `tests/perf/work-counters` (it times nothing) were excluded from the diet and keep their rows. This key is reserved rather than a rig path — see scripts/test-report/journey-rigs.mjs.",
     "tests/perf/desktop-launch.perf.test.ts": {
       "lane": "perf",
       "volume": "1 REAL Electron cold launch (mock gateway, 1 app, fresh userData — an EMPTY vault, not year-3); measured by apps/desktop/tests/e2e/launch-time.spec.ts and consumed here as an artifact",
@@ -1621,28 +1590,6 @@
         "gateway/cold-open/year3/ci-linux-x64-4c"
       ]
     },
-    "tests/perf/pwa-waterfall.perf.test.ts": {
-      "lane": "perf",
-      "volume": "Chromium PWA shell + app-open request waterfall (cold vs warm)",
-      "entries": []
-    },
-    "tests/perf/replica-sync-io.perf.test.ts": {
-      "lane": "perf",
-      "volume": "IndexedDB store open + 200 serial enqueue/list + 200-overlay enumeration/composition",
-      "budgetMs": 2500,
-      "entries": []
-    },
-    "tests/perf/tunnel-native.perf.test.ts": {
-      "lane": "perf",
-      "volume": "1 native QUIC module cold dylib load (skipped without the native module)",
-      "budgetMs": 5000,
-      "entries": []
-    },
-    "tests/perf/tunnel-throughput.perf.test.ts": {
-      "lane": "perf",
-      "volume": "16 MiB payload over a paired local QUIC tunnel",
-      "entries": []
-    },
     "tests/perf/work-counters.perf.test.ts": {
       "lane": "perf",
       "volume": "The golden year-3 artifact (packages/test-kit, ~27,600 domain rows) — one fixed workload per hot path, counted rather than timed",
@@ -1650,77 +1597,10 @@
       "_noBudgetMs": "Deliberate — nothing here is timed.",
       "entries": []
     },
-    "tests/perf/vault-write.perf.test.ts": {
-      "lane": "perf",
-      "volume": "250 journalled commits (p95) + 500 fsync-traced writes",
-      "entries": []
-    },
-    "tests/scale/harness-sessions.scale.test.ts": {
-      "lane": "scale",
-      "volume": "256 concurrent sessions",
-      "entries": []
-    },
-    "tests/scale/automations-fire.scale.test.ts": {
-      "lane": "scale",
-      "volume": "200 automations, 6 h missed window, hourly cron",
-      "budgetMs": 10000,
-      "entries": []
-    },
-    "tests/scale/backup-restore.scale.test.ts": {
-      "lane": "scale",
-      "volume": "500 party rows + 160 CAS-backed content items, backup then restore",
-      "entries": []
-    },
-    "tests/scale/blob-gc.scale.test.ts": {
-      "lane": "scale",
-      "volume": "5,000 mixed-custody CAS objects on a real FS tier + 100,000 on an in-memory tier",
-      "budgetMs": 60000,
-      "entries": []
-    },
-    "tests/scale/blueprint-clones.scale.test.ts": {
-      "lane": "scale",
-      "volume": "1,000 app clones",
-      "entries": []
-    },
-    "tests/scale/conversation-ledger.scale.test.ts": {
-      "lane": "scale",
-      "volume": "7,300 turns digested, archived, and pruned",
-      "entries": []
-    },
-    "tests/scale/desktop-windows.scale.test.ts": {
-      "lane": "scale",
-      "volume": "128 windows × 500 events",
-      "entries": []
-    },
-    "tests/scale/gateway-sessions.scale.test.ts": {
-      "lane": "scale",
-      "volume": "40 concurrent gateway session probes",
-      "budgetMs": 15000,
-      "entries": []
-    },
     "tests/scale/large-vault.scale.test.ts": {
       "lane": "scale",
       "volume": "10,000 photos + 5,000 contacts + 1,000 notes, then daily-use queries",
       "entries": ["gateway/read-cost/year3/ci-linux-x64-4c"]
-    },
-    "tests/scale/photos-timeline.scale.test.ts": {
-      "lane": "scale",
-      "volume": "50,000 media assets spread over 3 years + a 10,000-photo one-calendar-day degenerate corpus, MOUNTED from the golden year-3 artifact (packages/test-kit materializeYear3Fixture, profile photos=50,000), then their own ordered/bucketed reads",
-      "_budgetsMsNote": "#927 — the volume above and the ceilings below move together. These four were `const SEED_BUDGET_MS`/`PAGE_READ_BUDGET_MS`/`ONE_DAY_READ_BUDGET_MS`/`DAY_BUCKET_BUDGET_MS` in the rig body, invisible to `bun run test:ratchet`, so raising one to make a slow rig green was an unreviewed one-line edit. There is no single `budgetMs` because the rig makes FOUR measurements and one rig duration would not say which read regressed.",
-      "budgetsMs": {
-        "seedMs": 30000,
-        "pageReadMs": 2000,
-        "oneDayReadMs": 1000,
-        "dayBucketMs": 2000
-      },
-      "entries": []
-    },
-    "tests/scale/photos-memories.scale.test.ts": {
-      "lane": "scale",
-      "volume": "50,000 media assets over a 3-year span (~27 trip blocks, ~1,500 capture-group/phash 'similar' pairs), then one rebuildMemories pass",
-      "_measured": "Three consecutive 2026-08-07 development-host runs measured 1,153 ms / 14,921 ms / 2,399 ms (365 on-this-day, 28 trip, 1,000 similar memories, 58,394 member rows every run) — a shared, loaded dev host, not a clean bench. budgetMs is set as a catastrophic-failure ceiling well above the observed spread rather than tight headroom over the lowest sample; the 30-sample/1.5x drift gate (once it has history) is what actually tracks steady-state cost.",
-      "budgetMs": 20000,
-      "entries": []
     },
     "tests/scale/phash-clustering.scale.test.ts": {
       "lane": "scale",
@@ -1733,16 +1613,6 @@
       "volume": "5 mounted vaults = 10 SQLite handles (year-3 household: Personal auto-founded per #603, plus one shared or personal vault per additional member) under ONE host footprint budget",
       "_noBudgetMs": "Not a duration rig. The ceilings are the host footprint totals themselves, read from DEFAULT_VAULT_FOOTPRINT, and the drift series is summed page cache in bytes rather than wall clock.",
       "entries": ["gateway/footprint/year3-household/ci-linux-x64-4c"]
-    },
-    "tests/scale/ontology.scale.test.ts": {
-      "lane": "scale",
-      "volume": "10,000 entities paged through Atlas kinds + relations",
-      "entries": []
-    },
-    "tests/scale/backup-manifest-size.scale.test.ts": {
-      "lane": "scale",
-      "volume": "manifests at 25k / 50k / 100k chunk-index entries — size growth bound",
-      "entries": []
     },
     "tests/scale/composite-load.scale.test.ts": {
       "lane": "scale",
@@ -1774,24 +1644,11 @@
         "gateway/integrity-check/year3-10gib/dev-darwin-arm64"
       ]
     },
-    "tests/scale/browser-replica-query.scale.test.ts": {
-      "lane": "scale",
-      "volume": "YEAR-3: 50,000 replica rows in one entity inside the shipping client query core (ReplicaSqliteStore over a node:sqlite driver — the same read path web and native run), then three reads: a full-entity materialisation, a filtered + sorted 200-row page, and an `in` over 1,000 ids (#883 C1 before-instrument, re-baselined by C3 once the grammar was compiled to SQL)",
-      "_noBudgetMs": "Deliberate. The rig's ceilings are PER READ, not per rig — FULL_READ_CEILING_MS / FILTERED_READ_CEILING_MS / IN_READ_CEILING_MS in its own body, each asserted there — because one rig duration would say nothing about which of the three reads regressed. #883 C3 pushed the read grammar into SQL and the seeded `in` DEBT MARKER is paid: 122,300 ms observed on 2026-08-28 became 64-70 ms, so the three ceilings were tightened from 20,000 / 10,000 / 400,000 to 4,000 / 1,500 / 1,500 and the whole rig now runs in about six seconds instead of two to three minutes. All three stay tighten-only, and the 30-sample/1.5x drift gate is the steady-state gate.",
-      "entries": []
-    },
     "tests/scale/photo-similarity.scale.test.ts": {
       "lane": "scale",
       "volume": "YEAR-3: 90,000 media assets each with one 512-float `embed-image` embedding (184 MB of float32 vectors), 8 planted near-matches, then one 20-hit semantic search through EACH shipping ranker (#883 C2, the measurement docs/decisions.md ruling Q12 defers the vector-engine choice to)",
       "_noBudgetMs": "Deliberate. The ceilings are PER ENGINE and per resource, not per rig — `photoSemanticSearchAtYear3` in tests/experience-budgets/gateway.json (ceilingMs, ceilingRssDeltaBytes, ceilingEventLoopBlockMs), each asserted in the rig body for both rankers — because one rig duration would be dominated by seeding 90,000 rows and would say nothing about which engine regressed. The 30-sample/1.5x drift gate is the duration gate.",
       "entries": ["gateway/search/year3-photos/ci-linux-x64-4c"]
-    },
-    "tests/scale/replica-sse-fanout.scale.test.ts": {
-      "lane": "scale",
-      "volume": "16 concurrent replica SSE subscriptions against one real serve() gateway over a 2,000-row replicated table, then 50 commits pushed one at a time — each commit waited out to EVERY subscriber before the next is written (#883 C1's before-instrument, now C2's gate for the shared projection + subscriber cap)",
-      "_measured": "BEFORE (#883 C1): two 2026-08-28 runs on a shared 4-vCPU linux container measured 16,969 ms and 16,781 ms of fan-out wall clock (per-commit median 333/327 ms, p95 429/419 ms, 11,904/11,860 prepared vault statements PER COMMIT — about 744 per subscriber, the O(subscribers) projection cost this rig exists to witness); a third on the C2 container measured 13,443 ms at 10,784 statements. AFTER (#883 C2, routes/replica-fanout.ts — one commit registration and one memoised projection per (authorization x cursor) per commit generation, fanned to every subscriber): three consecutive runs on that same container measured 1,077 / 1,183 / 1,151 ms, per-commit median 19-21 ms, p95 53-54 ms, and 658 statements per commit on all three — one projection per commit rather than sixteen. budgetMs is ratcheted 45,000 -> 3,600, ~3x the worst of the three, the same contended-runner headroom convention the previous number used; the 30-sample/1.5x drift gate tracks steady state. The statement count is now ALSO gated, in the rig body (SHARED_PROJECTION_STATEMENTS_CEILING = 1,200), as a mechanism assertion rather than a cost budget — the rig's comment argues why that survives #873.",
-      "budgetMs": 3600,
-      "entries": []
     },
     "tests/scale/replica-reconnect.scale.test.ts": {
       "lane": "scale",
@@ -1808,32 +1665,6 @@
     "tests/scale/mobile-screen-reads.scale.test.ts": {
       "lane": "scale",
       "volume": "YEAR-3: two mounted mobile vaults with 5,000 people and 5,000 agenda rows per vault, validating full-window screen reads and constant statement count",
-      "entries": []
-    },
-    "tests/scale/replica-bootstrap.scale.test.ts": {
-      "lane": "scale",
-      "volume": "50,000 rows — client windowed bootstrap with an in-flight deletion, plus the gateway windowed-page walk resumed across a vault-plane restart (#750)",
-      "entries": []
-    },
-    "tests/scale/replica-retention.scale.test.ts": {
-      "lane": "scale",
-      "volume": "45 simulated days x 4,000 replica writes (90% of them concentrated on 400 hot rows), run TWICE — once with the entry cap alone and once with compaction — then the worst-day resumable window measured on each (#883, the retention half of change-log.ts)",
-      "_noBudgetMs": "Deliberate. What this rig gates is a WINDOW IN DAYS, not a duration: the worst day a returning phone can still resume from, asserted in the rig body against REPLICA_RETENTION_DAYS. The wall clock is dominated by seeding 360,000 writes twice, which is setup for that measurement rather than the measurement, and no absolute ceiling has a distribution behind it yet — the 30-sample/1.5x drift gate is the duration gate.",
-      "entries": []
-    },
-    "tests/scale/tunnel-pairs.scale.test.ts": {
-      "lane": "scale",
-      "volume": "200 paired devices",
-      "entries": []
-    },
-    "tests/scale/web-tabs.scale.test.ts": {
-      "lane": "scale",
-      "volume": "64 tab contexts",
-      "entries": []
-    },
-    "tests/agent-e2e-mobile/flows/volume-proof.mjs": {
-      "lane": "scale",
-      "volume": "20 on-device relaunches",
       "entries": []
     },
     "tests/agent-e2e-mobile/flows/cold-start.mjs": {

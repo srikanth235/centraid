@@ -15,8 +15,7 @@
     "scroll-frames",
     "share-intent-in",
     "tally-derived",
-    "tasks-board",
-    "volume-proof"
+    "tasks-board"
   ],
   "flows": [
     "agenda-week",
@@ -33,7 +32,6 @@
     "scroll-frames",
     "share-intent-in",
     "tally-derived",
-    "tasks-board",
-    "volume-proof"
+    "tasks-board"
   ]
 }

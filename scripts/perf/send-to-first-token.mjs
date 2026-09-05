@@ -1,13 +1,10 @@
 /**
  * Gateway send → first token dead-time probe (issue #842 W0.5).
  *
- * `sendToFirstToken` is the single most-felt latency in the product, and until
- * now the journey ledger carried it as `unmeasured` with
- * the honest note that no rig existed: every path in
- * `tests/perf/harness-turn.perf.test.ts` measures DISPATCH throughput (2,000
- * registry dispatches against a stubbed `runTurn`), which never spawns a
- * harness, never speaks ACP, and therefore cannot see the interval this
- * budget is about.
+ * `sendToFirstToken` is the single most-felt latency in the product. A
+ * dispatch-throughput measurement cannot stand in for it: driving the registry
+ * against a stubbed `runTurn` never spawns a harness and never speaks ACP, so
+ * it cannot see the interval this budget is about.
  *
  * WHAT THIS MEASURES, EXACTLY — read this before trusting the number:
  *
@@ -177,8 +174,7 @@ async function main() {
   );
 
   // Both passes are STRICTLY SERIAL, and the reduce-over-a-promise-chain
-  // idiom (the same one tests/perf/harness-turn.perf.test.ts uses) is how
-  // that is expressed without an await inside a loop. Serial is the
+  // idiom is how that is expressed without an await inside a loop. Serial is the
   // measurement, not an oversight: N harness processes spawned at once on a
   // 4-cpu host would measure contention between the samples rather than the
   // gateway's dead time, which is the one thing this probe exists to see.
