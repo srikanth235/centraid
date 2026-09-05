@@ -315,3 +315,96 @@ run above was taken immediately after it.
 | --- | --- | --- |
 | The stamp fix is not merely a comment change | Re-ran the verifier's exact reproduction | The subset run leaves the stamp directory absent, and `check:push:static` runs 4 gates where it previously ran 0 |
 | Watching `app.json` again does not re-break what #988 fixed | Ran `bun run check:ui-receipt` over this diff and the cases for `README.md`, `CSS-CONVENTIONS.md` and `ReplicaProvider.tsx` | Prose and config files stay exempt; the manifest and the drawing files beside it both demand evidence |
+
+## Audit
+
+Re-added as an append: the audit commit `e8f9f140e` was on `claude/988-governance-tooling`
+when PR #992 squash-merged, so the trunk's copy of this receipt carries no `## Audit` section.
+Round 1's verdict is reproduced verbatim below, followed by round 2.
+
+Verifier, fresh context, 2026-09-05. Worktree `centraid-wt/claude/988-verify` at `f89fc6417`
+(gate tree `5b5820dfb…` at `49d42e158` matches the quoted hash; last commit is receipt-only).
+
+**Verdict: REFUTED** — two of the three gate changes weaken what a gate checks.
+
+1. `scripts/ci/run-gates.mjs:120-129` → the `static` stamp is recorded when every member of
+   `gates ∩ STATIC_TIER` passed, not every member of `STATIC_TIER`. `node scripts/ci/run-gates.mjs
+   --stamp format:check` (a legal call on the CLI this lane added) writes a whole-tier stamp:
+   reproduced with `CENTRAID_GATE_STAMP_DIR=/tmp/v988-stampprobe`, then `bun run check:push:static`
+   printed `⊘ static tier stamped … format:check, lint, turbo:lint, typecheck:affected skipped`
+   and ran 0 gates. Every non-`main` push is now gated by that tier, so a stamp can assert three
+   gates nobody ran — contradicting the module comment, the receipt's box-2 prose and
+   `docs/dev-environment.md` ("a tier is stamped only when **every** one of its gates ran and
+   passed"). Fix: record only when `STATIC_TIER.every(g => results.some(r => r.name === g &&
+   r.code === 0))`.
+2. `scripts/validate-ui-receipt.mjs:126-138` → `NOT_ON_AN_IMPORT_EDGE_RE` exempts `.json`, and the
+   receipt's justification ("no module imports it as code … nothing in it is painted") is false for
+   the very file that motivated it. `packages/blueprints/apps/people/app.json#description` is copied
+   verbatim into the generated `packages/blueprints/manifest.json` (checked), served in the app
+   listing, mapped to `desc` at `useShellApps.ts:105,125` and `blurb` at `homeData.ts:70`, and
+   painted by `AppCard.tsx:64` on the Home tile. `isSurface("packages/blueprints/apps/people/
+   app.json")` returns `false` and `validateUiReceipt` returns `[]` for a lone edit to it, so member-
+   visible copy now ships with no `## User impact`, no `First-run:` note and no screenshot. That is
+   what a gate checks, not its mechanics. Fix: keep app manifests a surface (or exempt only fields
+   no screen renders) and narrow the extension list to files with no member-visible copy.
+3. `scripts/validate-ui-receipt.mjs:131` → hoisting `TEST_FILE_RE` ahead of `isClientSurface` and the
+   `apps/*` rule also drops `packages/client/**` and `apps/*/**` test files from the gate. Defensible,
+   but undescribed: the receipt's box-4 table names only the extension exemption. Describe or scope it.
+
+Verified and not disputed: box 1 and box 4(a) are genuinely blocked — `receipt-per-issue`'s
+`RECEIPTS_DIR`/`RECEIPT_FILENAME_REGEX`/`NEW_RECEIPT_FILENAME_REGEX`/`REQUIRED_SECTIONS` and
+`agent-session-identity`'s `RECEIPTS_DIR` are all `tunable: false`, `.governance/lib.sh:1576` consumes
+an overlay only for `tunable: true`, and both directives are digest-pinned in `.governance/packs.lock`
+(`governance-kit/audit`); the receipt is correctly a single file and the two boxes stay unticked.
+Box 3 (`scripts/test.sh` tier cases; `main` → `check:push`, branch → `check:push:static`,
+`CENTRAID_PUSH_TIER=full` → `check:push`; `SKIP_CHECK_PR`/`SKIP_GOVERNANCE`/`--no-verify` untouched)
+and box 5 (shared `~/.cache/centraid/turbo`, 96 entries, turbo 2.10.7 honours `TURBO_CACHE_DIR`;
+the key is turbo's content hash, so cross-worktree staleness is not reachable) hold.
+
+Caveat, not a finding: the stamp key is the working *tree* plus `origin/main`, so gitignored derived
+state (`dist/**`, which `typecheck:affected` reads) can differ between the stamped run and the skipped
+one. CI recomputes, so it costs a missed local red at worst.
+
+Gates replayed on this tree (this container, 4 cores / 15 GB):
+`bash $S/self-audit.sh 988` → PASS (warns: receipt is 254 lines vs the 80-line cap).
+`node --test scripts/ci/{gate-stamp,turbo,gate-classes}.test.mjs scripts/validate-ui-receipt.test.mjs`
+→ 25/25 pass; `bun run test:ratchet:unit` → green.
+`bun run check:push:static` → run 1 4/4 in 15.7s (stamp written), run 2 0.08s (skip).
+`bun run typecheck` → 25/25 successful. `format:check` + `lint` → green (inside self-audit).
+`bash .governance/run.sh </dev/null` → 21 pass, 1 fail: `receipt-per-issue`, the missing `## Audit`
+this section supplies. No other receipt is named.
+
+### Re-verification — 2026-09-05, round 2 (head `426670771`, after #992 merged)
+
+**Verdict: REFUTED.** Findings 2 and 3 are fixed; finding 1's fix does not run.
+
+- `scripts/ci/run-gates.mjs:130` calls `tierIsComplete(results)`, but the import block at lines 24-30
+  still names only `isFresh, record, repoRoot, stampKey, STATIC_TIER` — `tierIsComplete` is never
+  imported. The reference is reached on exactly the green-and-stamping path, so **every green
+  `bun run check:push` and `bun run check:push:static` now dies with
+  `ReferenceError: tierIsComplete is not defined` and exits 1**: all four gates pass, then the
+  process crashes. Reproduced at `426670771`:
+  `CENTRAID_GATE_STAMP_DIR=/tmp/v988-r3 bun run check:push:static` → `▶ 4 gates`, then
+  `ReferenceError`, `EXIT=1`. That breaks rung 1 for every push in the repo and the CI `check:push`
+  step, and it is a harder failure than the hole it replaces. `bun run lint` does not catch it and
+  `scripts/ci/gate-stamp.test.mjs` exercises `tierIsComplete` directly, so 20/20 unit cases stay
+  green over a runner that cannot complete. Fix: add `tierIsComplete` to the import from
+  `./gate-stamp.mjs`, and add one case that runs `run-gates.mjs` end to end on a green subset and a
+  green full tier, asserting exit 0 and the stamp's presence/absence — a unit test of the predicate
+  cannot see this class.
+- The receipt's Round 2 `### Verification` block quotes `▶ 4 gates, 2 at a time` for that command as
+  evidence the fix works. The line is real; the run it came from exited 1. A quoted fragment is not
+  an exit code.
+- Finding 2 fixed and re-checked: `.json` is out of `NOT_ON_AN_IMPORT_EDGE_RE`;
+  `isSurface("packages/blueprints/apps/people/app.json")` is `true` and `validateUiReceipt` returns
+  1 error for a lone edit to it. The render path is now named in the module comment.
+- Finding 3 fixed and re-checked: `TEST_FILE_RE` is scoped back to the blueprints arm, so
+  `packages/client/src/react/ui/AppCard.test.tsx` is a surface again as on `origin/main`, while
+  `packages/blueprints/apps/people/app.test.ts`, `ReplicaProvider.tsx`, `.md` and `.lock` stay out.
+- The `dist/**` caveat is recorded honestly in the new section; no action asked.
+
+Gates replayed on tree `cd153eddfd33b16cad2c0e3c2ae62a84f1b6d80c`: `self-audit.sh 988` → PASS
+(append-only prefix 16613 bytes, `format:check`, `lint` green);
+`node --test scripts/ci/gate-stamp.test.mjs scripts/validate-ui-receipt.test.mjs` → 15/15;
+`bun run check:push:static` → **exit 1** (the finding above).
+
