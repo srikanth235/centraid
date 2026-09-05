@@ -4,19 +4,32 @@ Umbrella receipt for [#927](https://github.com/srikanth235/centraid/issues/927).
 
 ## Checklist
 
-- [ ] A developer can run one command that opens each of the eight apps against the golden vault and prints a span waterfall against the last candidate baseline, in under a minute for in-process journeys
-- [ ] The per-PR perf gate is a work-counter comparison: deterministic, no retry step, no history required; a seeded extra statement or fsync on a hot path fails it on the first run
-- [ ] The candidate rung runs paired candidate/PR journeys and fails a seeded 20% slow-down with a stated confidence on its first run, with no 30-sample warm-up
+- [x] A developer can run one command that opens each of the eight apps against the golden vault and prints a span waterfall against the last baseline taken on that machine, in under a minute for in-process journeys
+- [x] The per-PR perf gate is a work-counter comparison: deterministic, no retry step, no history required; a seeded extra statement or fsync on a hot path fails it on the first run
+- [x] The candidate rung runs paired candidate/PR journeys and fails a seeded 20% slow-down with a stated confidence on its first run, with no 30-sample warm-up
 - [ ] One ledger keyed `surface × journey × volume × hardware` replaces the five budget files, the rig register and the query-count file; every entry names its spans and its consumer; no rig reads the old files
 - [ ] The nine journeys have `measured` entries at year-3 volume on web, desktop and gateway, and on a real Android and iOS device for the mobile rows; `"volume": "empty"` appears in no journey entry
-- [ ] Perf history lives in the gh-pages test-report beside the candidate history; nothing perf-related is stored in an actions cache
-- [ ] The device rung exists as a lane; the parked mobile lanes are unparked onto it or deleted with the reason recorded
-- [ ] `docs/decisions.md` § Performance names the journey ledger as the gate for the five evidence-gated designs
-- [ ] Every #922 receipt from its wave 2 onward cites before/after numbers from this ledger
+- [x] Perf history lives in the gh-pages test-report beside the candidate history; nothing perf-related is stored in an actions cache
+- [x] The device rung exists as a lane; the parked mobile lanes are unparked onto it or deleted with the reason recorded
+- [x] `docs/decisions.md` § Performance names the journey ledger as the gate for the five evidence-gated designs
+- [x] Every #922 receipt from its wave 2 onward cites before/after numbers from this ledger
 
 ## What changed
 
 Nothing yet at the umbrella level — the first slice's changes are in its own section below. This heading exists because `receipt-per-issue` requires it on the file that creates the receipt; every subsequent slice appends rather than rewrites.
+
+**Close pass (#927).** The five boxes the close pass ticked, each quoted so `receipt-per-issue`'s crosswalk can read it, with the landed evidence beside it. Nothing above this paragraph is rewritten.
+
+- **The per-PR perf gate is a work-counter comparison: deterministic, no retry step, no history required; a seeded extra statement or fsync on a hot path fails it on the first run** — `scripts/ci/work-counter-gate.mjs` compares the product's own integers against `scripts/ci/work-counters.expected.json`; `.github/workflows/ci.yml` runs `bun run test:perf:counters` with the `strace` install and the retry-once wrapper deleted; both seeds (an extra `SELECT 1`, an extra autocommit barrier) failed on the first run — see `## w1-gate`.
+- **The candidate rung runs paired candidate/PR journeys and fails a seeded 20% slow-down with a stated confidence on its first run, with no 30-sample warm-up** — `scripts/ci/paired-journeys.mjs` at rung 3 in `candidate.yml`; a seeded 26 ms (20%) regression read `regressed`, +28.4 ms = 23.3%, 95% CI [18.9, 38.6] ms against a 12.2 ms tolerance, 14 paired rounds, first run — see `## w2 paired runner`.
+- **The device rung exists as a lane; the parked mobile lanes are unparked onto it or deleted with the reason recorded** — `.github/workflows/e2e.yml` carries `device-rung-gate`, `device-rung-android`, `device-rung-ios` and `device-rung-gateway-pi` at rung 5, each secret-gated and skipped-not-failed, with `tests/quarantine.json` holding the three parked lanes and their reasons; the #870 parks on `mobile-e2e-android` / `mobile-e2e-ios` are deleted, the reason recorded in `PS-device-rung` — see `## H3`.
+- **`docs/decisions.md` § Performance names the journey ledger as the gate for the five evidence-gated designs** — § Performance and Rust byte plane now names `tests/journeys.json` as the gate in the present tense and states what an entry must carry before one of the five is adopted; `PS-evidence-gate`'s "Lands in" cell reads `landed`.
+- **Every #922 receipt from its wave 2 onward cites before/after numbers from this ledger** — backfilled as `## Ledger citations (close pass)` in `receipts/issue-922-snappier-blueprints.md`, one row per wave-2-and-later section mapping its number to the ledger entry key it is stated against, or naming the counter/instrument where no ledger entry covers it.
+
+Two more boxes tick in the follow-up commit, one of them after its own text was amended:
+
+- **A developer can run one command that opens each of the eight apps against the golden vault and prints a span waterfall against the last baseline taken on that machine, in under a minute for in-process journeys** — the box read "against the last candidate baseline"; **the box moved, not the command**, on the maintainer's ruling. `scripts/perf/app-waterfall.mjs`'s baseline is machine-local by design and the header argues why: a number from a CI runner is not a number about this laptop, and a developer asking "did my change make Photos slower" is asking about the machine in front of them. `--save` writes the baseline; every later run prints the difference beside the journey's own tolerance from `tests/journeys.json` — the same comparison the candidate rung makes between two trees, done between two runs. Eight apps, one gateway, 4.3 s of measurement and 9.2 s wall against the one-minute cap (`## w2 paired runner`).
+- **Perf history lives in the gh-pages test-report beside the candidate history; nothing perf-related is stored in an actions cache** — the last one is deleted: `.github/workflows/soak-weekly.yml`'s "Save evidence for the nightly health report" step `actions/cache/save`d `artifacts/scale/` under `soak-weekly-<os>-<run_id>`, a key **nothing restored**. `grep -rn "actions/cache" .github/workflows/*.yml` no longer names a perf or scale path. The evidence itself is unaffected: the same `artifacts/` tree still rides `actions/upload-artifact` on the step above, and `write-evidence.mjs` still writes the lane's row for the gh-pages report.
 
 ## Out of scope
 
@@ -273,7 +286,7 @@ Judged and not findings:
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-05 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 
 ## w1c — golden year-3 vault and golden phone replica
 
@@ -1472,3 +1485,116 @@ The 0.15 floor is unchanged. This is a graph mistake, not a cache-policy miss.
 ## CI-green — journey re-key waiver at file root
 
 `scripts/test-report/ratchet-floors.mjs` loads `tests/journeys.json` as a whole file (no `section`), so it only sees a root `approvedDeviation`. The W4 re-key note lived under `entries`, which `lint:journey-ledger` requires, and the ratchet read the ten `seeded-demo` keys as deletions. The same rationale now sits at the file root as well; the entries copy is unchanged.
+
+## Close pass — checklist crosswalk
+
+Docs-only close pass over `origin/main` @ `50ab218cf`. Nine boxes re-read against the tree; five tick, four do not, each with what remains. No box is ticked on a clause the code does not hold.
+
+| Box | Verdict |
+| --- | --- |
+| 1 developer command, waterfall against the last baseline taken on that machine | **satisfied**, after the box moved. The close pass first read this NOT satisfied — `bun run perf:waterfall` compares against a baseline taken on the developer's own machine, not the candidate's — and put the choice to the maintainer, who ruled that the box was wrong and the command was right: a CI number is not a number about this laptop. The box text is amended in this follow-up commit, which is the one edit permitted above an appended section, and everything else it asks for already held (eight apps, golden vault, span waterfall, 9.2 s wall against a one-minute cap). |
+| 2 per-PR gate is a work-counter comparison | **satisfied** by `## w1-gate` (`scripts/ci/work-counter-gate.mjs`, `tests/perf/work-counters.perf.test.ts`, retry and `strace` deleted, both seeds red on the first run) |
+| 3 paired candidate/PR journeys, seeded 20% | **satisfied** by `## w2 paired runner` (`scripts/ci/paired-journeys.mjs`, +23.3% with a 95% CI over 14 paired rounds, first run) |
+| 4 one ledger; every entry names its spans and its consumer | **NOT satisfied**: `tests/journeys.json` replaces the five files, `lint:journey-ledger` fails any surviving reference, and all 60 entries name spans — but **18 carry `consumers: []`** (the `_intended` grid rows on `web/*`, `desktop/*`, `mobile/*` and `gateway/scroll`). Each states its absence with a `_reason`, which is the ledger's design; the box's clause is still unmet. |
+| 5 nine journeys `measured` at year-3 on web/desktop/gateway and on real devices; no `"volume": "empty"` | **NOT satisfied**, parked by hardware: `"volume": "empty"` appears in **3** entries (`gateway/composite-load`, `gateway/soak`, `gateway/stress-recovery`), every `desktop/*` row is keyed `mock-gateway` and every mobile seat row `ci-ios-sim` / `device-fixture`. The device rung (box 7) is the rung that ends it; until a cell runs, no mobile ceiling may leave `_intended` (`PS-device-rung`). |
+| 6 perf history on gh-pages; nothing perf-related in an actions cache | **satisfied** by this follow-up commit: the write-only `actions/cache/save` of `artifacts/scale/` in `.github/workflows/soak-weekly.yml` is deleted — nothing restored that key, so nothing reads less than it did. The nightly's `quality-history-soak-*` cache went in `## w2 ledger`; this was the last one. |
+| 7 device rung exists as a lane; parked mobile lanes unparked or deleted with the reason | **satisfied** by `## H3` and `PS-device-rung` |
+| 8 § Performance names the journey ledger as the gate | **satisfied** by this pass |
+| 9 every #922 receipt from wave 2 on cites ledger numbers | **satisfied** by this pass — `## Ledger citations (close pass)` in the #922 receipt |
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `docs/decisions.md` | § Performance and Rust byte plane names `tests/journeys.json` as the gate, present tense; `PS-evidence-gate` and `PS-trace` "Lands in" cells state landed state; `PS-922-instruments` drops "until the ledger lands" and points at the #922 receipt's citation map |
+| `TESTING.md` | ledger rule 4 states why every `desktop/*` and mobile seat row is parked under `_intendedCeilingMs` and what ends the park |
+| `receipts/issue-927-perf-infra.md` | five ticks, the crosswalk paragraph in `## What changed`, this section |
+| `receipts/issue-922-snappier-blueprints.md` | `## Ledger citations (close pass)` (box 9's evidence) |
+
+**Decisions:** none — no ruling moved. Four boxes were left open rather than ticked on a partial clause.
+
+**Findings.** (1) `soak-weekly.yml`'s `actions/cache/save` of `artifacts/scale/` is both the last perf-in-a-cache and dead (no restore); a workflow file, outside this lane's reading set. (2) 18 ledger entries carry `consumers: []`; the grid is complete, the readers are not. (3) `bun run perf:waterfall`'s baseline is machine-local by ruling and the acceptance box says candidate — one of the two should move.
+
+**Doc debt:** none — every statement this pass makes is about the tree it was written against.
+
+### Verification
+
+```sh
+bun run format:check && bun run lint
+bash .governance/run.sh
+bun run lint:journey-ledger
+bun run test:ratchet
+node -e 'const j=require("./tests/journeys.json");console.log(Object.values(j.entries).filter(v=>v&&v.metrics&&(!v.consumers||!v.consumers.length)).length)'   # 18
+grep -n "actions/cache/save" .github/workflows/soak-weekly.yml   # 138
+```
+
+Tree hash: quoted in the lane report to the root (a tree hash cannot be written inside the tree it names).
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "§ Performance names the ledger as the gate" is now true of the tree, not of a plan | `grep -n "tests/journeys.json" docs/decisions.md` inside the § Performance paragraph, and re-read for any surviving "when it lands" | present tense, one link to `../tests/journeys.json`; no future tense left in the paragraph |
+| Box 6 is genuinely unmet — the receipt's own w2 section claims the perf cache was deleted | `grep -rn "actions/cache" .github/workflows/*.yml` and then `grep -rn "soak-weekly-" .github scripts` for a restore | one `save` at `soak-weekly.yml:138` over `artifacts/scale/`, zero restores anywhere — the box fails and the cache is dead |
+
+## Close pass — budget tightening (all four umbrellas)
+
+The close pass owes one tighten-only pass over [`tests/journeys.json`](../tests/journeys.json) per umbrella, where a landed win left a ceiling above what the tree now measures. **Nothing was tightened, and the reason is the same for all four**: every `measured` ceiling in the ledger was set by the wave that measured it and carries its own argued headroom in `_provenance.headroom`, so there is no entry sitting at a pre-win value. Tightening one further would mean either contradicting a rationale someone wrote beside the number, or inventing a number this pass did not measure — and this pass ran no rig.
+
+| Umbrella | Entries a landed win could have loosened | Outcome |
+| --- | --- | --- |
+| #927 | `client/first-paint-work/year3/any` (four screens) | already `headroom: "NONE, deliberately"` — observed IS the ceiling on all four; nothing to take |
+| #927 | `gateway/read-cost/year3/ci-linux-x64-4c` | `auditBandPerRead` observed + ~25% (the receipt size moves in steps when a purpose is renamed, not continuously); `walBytesPerRead` observed + ~41%, sized to one SQLite page cluster. Both headrooms are the argument, not slack |
+| #922 | `gateway/own-echo/seeded-demo/…-standard` and `…-constrained`, `gateway/first-bootstrap/year3-replica/…` | `~3x observed` and `~4.6x observed`, both stamped "single host". A single-host ceiling tightened toward its own observation is a CI flake, which is why the wave stated the multiple rather than the observation |
+| #922 | `web/cold-open/year3/ci-linux-x64-4c` LCP | ceiling 1,200 ms against observed 484 / 516 / 524 ms — the widest gap in the file, and deliberately carried across unchanged when #927 W4 re-keyed the entry from `seeded-demo` to `year3`. Tightening it needs a run of `apps/web/tests/e2e/perf-waterfall.spec.ts`, which this pass did not do |
+| #928 | none | no #928 win has a ledger entry; its numbers are work counters and statement counts |
+| #929 | `gateway/share/shared-album/ci-linux-x64-4c` | `grantToVisible` is the only measured metric and its cross-gateway sibling is still `unmeasured`; a ceiling tightened on the co-hosted half alone would fence the wrong journey |
+
+**Finding, for the root rather than for this commit.** `mobile/app-weight/build-artifact/any` states `headroom: "observed + 8%"`, and `maxTotalBytes` (12,582,912 against 11,604,148 observed) matches it — but `maxLargestChunkBytes` is **8,220,000 against 6,355,198 observed, ~29%**, where the sibling `web/app-weight` entry states "largest chunk + ~10%". Either the mobile chunk ceiling should come down to ~7.0 MB or its `headroom` string should say why the Hermes bundle needs three times the web seat's slack. Not taken here: the consumer is `scripts/perf/app-weight.mjs` over a release-configuration Expo export, which this container cannot produce, and a tightening nobody ran is exactly the change this section refuses on every other row.
+
+### Verification
+
+```sh
+bun run lint:journey-ledger    # ok — every entry names its volume, hardware, spans and consumers
+bun run test:ratchet           # ratchet-floors: ok (no decreases vs origin/main)
+node -e 'const j=require("./tests/journeys.json");for(const[k,v]of Object.entries(j.entries)){if(v&&v.metrics)for(const[m,x]of Object.entries(v.metrics))if(x._provenance&&x._provenance.headroom)console.log(k,m,x._provenance.headroom)}'
+```
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "Every measured ceiling already carries an argued headroom" — a claim about all 60 entries, made after reading a handful | enumerated `_provenance.headroom` across the whole file and read the ones that had none | every `measured` metric either states a headroom or states `NONE, deliberately`; the only mismatch between a stated headroom and its own numbers is the mobile largest-chunk row above, which is why it is a finding rather than a silent tightening |
+| `lint:journey-ledger` passing means every entry names a consumer, which would contradict this pass's #927 box-4 verdict | ran it, then re-read `scripts/lint-journey-ledger.mjs` against the 18 entries with `consumers: []` | the linter accepts an empty array as "named"; it fences the KEY and the retired-file references, not the readership. The box-4 verdict stands, and the gate is not the thing that would have caught it |
+
+## Close pass — follow-up: the two findings that were one-line fixes
+
+The root's ruling on the close pass's own findings, landed. Two of #927's four open boxes close here; the other two (4 and 5) are unchanged and still parked on readership and hardware.
+
+| File | Change |
+| --- | --- |
+| `.github/workflows/soak-weekly.yml` | the "Save evidence for the nightly health report" step is deleted — six lines, an `actions/cache/save` of `artifacts/scale/` under `soak-weekly-<os>-<run_id>` that **no workflow and no script restored**. Nothing downstream loses evidence: the same `artifacts/` tree still rides the `actions/upload-artifact` step directly above it, and `write-evidence.mjs` writes the lane's row for the gh-pages report on the step above that |
+| `receipts/issue-927-perf-infra.md` | box 1's text amended to the machine-local baseline; boxes 1 and 6 ticked, both crosswalked in `## What changed`; their two verdict rows rewritten |
+
+**Decisions.** One, and it is the maintainer's: **the box moved, not the command.** `perf:waterfall`'s baseline stays machine-local. The acceptance text said "against the last candidate baseline" because the candidate rung was the model in view when it was written; a developer running the command is asking about the machine in front of them, and a CI runner's number cannot answer that. The candidate comparison still exists and is box 3's — `scripts/ci/paired-journeys.mjs`, between two trees rather than two runs.
+
+**Findings.** `PeerPlaneSweepOptions.partyIdFor` (`packages/server/src/serve/peer-plane-sweep.ts:31`) is **declared, supplied twice by `build-gateway.ts`, and read nowhere** — it was the principal an edge placement ran as, and edge placement is deleted. Removing it reaches three files and a typecheck, so it is filed rather than taken here.
+
+**Doc debt:** none.
+
+### Verification
+
+```sh
+grep -rn "actions/cache" .github/workflows/*.yml      # no perf or scale path left
+grep -rn "soak-weekly-" .github/workflows scripts     # only the concurrency group and the artifact name
+bun run lint:journey-ledger                            # ok
+bun run format:check && bun run lint
+bash .governance/run.sh
+```
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| Deleting the cache save loses evidence the nightly report reads | re-read `soak-weekly.yml` around the deleted step, then grepped the whole workflow tree and `scripts/` for a restore of that key | the step above it uploads the same `artifacts/` tree as an artifact and the step above that runs `write-evidence.mjs`; the deleted key had **zero** restores anywhere, so nothing read it to begin with |
+| Amending an acceptance box is a way to make a red box green | re-read `scripts/perf/app-waterfall.mjs`'s header against the amended text | the command already did every other clause; the amendment narrows the box to the behaviour the code argues for, and the candidate-vs-candidate comparison the old text wanted is not lost — it is box 3's paired runner, which is ticked on its own evidence |

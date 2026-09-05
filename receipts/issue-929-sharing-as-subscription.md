@@ -6,21 +6,31 @@ Umbrella receipt for [#929](https://github.com/srikanth235/centraid/issues/929).
 
 - [ ] A view share of each of the six subject types reaches an audience vault on **another gateway** over the peer plane and renders on that audience's phone; the same share to a co-hosted vault takes the loopback route
 - [ ] Editing one field of one item in a shared album produces exactly one delta row on the audience (work counters, #927) and wakes audience devices for that row only
-- [ ] A member's write to a shared `tally.group`, `docs.folder` or `core.document` is a signed replica intent executed by the origin; the receipt names the member; a confirmation-gated write parks and is decided from the phone
-- [ ] Steward transfer is re-origin; a migrated commons group keeps every member and every ledger row (red-first migration test)
+- [x] A member's write to a shared `tally.group`, `docs.folder` or `core.document` is a signed replica intent executed by the origin; the receipt names the member; a confirmation-gated write parks and is decided from the phone
+- [x] Steward transfer is re-origin; a migrated commons group keeps every member and every ledger row (red-first migration test)
 - [ ] `share_commons_*` tables, the peer commons rail, sweep, recovery, chain, replay and intent surfaces are deleted; `grep -r share_commons_ packages apps` is empty
 - [ ] Revocation of a delivered share purges the shape's rows on the audience and settles `removed` only on the audience's cursor acknowledgement; never-delivered settles with the "nothing had been delivered" detail; D1 and BUG-9 lanes green, plus the two-overlapping-grants case
-- [ ] The share sheet offers the link ticket inline for an unlinked person; #903's refusal is unchanged
-- [ ] One size ceiling per grant; three ceilings collapse to one
+- [x] The share sheet offers the link ticket inline for an unlinked person; #903's refusal is unchanged
+- [x] One size ceiling per grant; three ceilings collapse to one
 - [ ] The share journey (#927) is `measured` before and after, on web and on a phone, co-hosted and cross-gateway
-- [ ] `docs/decisions.md`, ARCHITECTURE.md, SECURITY.md and the glossary describe subscriptions, re-origin and signed intents; the commons vocabulary is marked retired
+- [x] `docs/decisions.md`, ARCHITECTURE.md, SECURITY.md and the glossary describe subscriptions, re-origin and signed intents; the commons vocabulary is marked retired
 - [ ] A member's pending write on their phone is dropped only when the audience replica holds the origin's answered row versions; the origin `rowVersion` survives subscription ingest (parity test on the golden pair)
-- [ ] `parked` carries a structured `waitingOn` (owner, origin, gateway) with the label from the link on both seats; `steward-label.ts` is deleted with the commons rail
+- [x] `parked` carries a structured `waitingOn` (owner, origin, gateway) with the label from the link on both seats; `steward-label.ts` is deleted with the commons rail
 - [ ] Revoking a share settles the audience device's queued intents for that shape as `expired` with "no longer shared with you"; no pending row survives over a purged shape
 
 ## What changed
 
 Wave 1(b), the subscriber contract. `packages/core/src/protocol/replica-subscription.ts` is the whole of the difference a subscription makes: the peer-plane replica paths, the grant-keyed shape id, and the vault-keyed subscriber credential. `packages/core/src/protocol/replica-subscription.test.ts` is the contract test that lands before any server behaviour and proves everything after admission is unchanged. `packages/core/src/protocol/version.ts` moves the peer protocol to 2 with the floor, `packages/core/src/protocol/index.ts` exports the surface, `packages/core/src/protocol/peer.test.ts` follows the now-live update-wall arm, and `packages/server/src/routes/peer-plane.test.ts` holds core's mirrored prefix to `@centraid/tunnel`'s guard.
+
+
+**Close pass (#929).** The six boxes the close pass ticked, quoted so `receipt-per-issue`'s crosswalk reads them, with the landed evidence. Nothing above this paragraph is rewritten; the verdicts for the seven still open are `## Close pass — checklist crosswalk` at the end of this receipt.
+
+- **A member's write to a shared `tally.group`, `docs.folder` or `core.document` is a signed replica intent executed by the origin; the receipt names the member; a confirmation-gated write parks and is decided from the phone** — `packages/vault/src/share/subscription-intent.ts` (canonical signed bytes, `judgeMemberIntent` refusing by name), `packages/server/src/routes/peer-replica-intent-route.ts` (verify, route, execute, receipt naming the member, park with `waitingOn`); member writes landing in the member's own vault: 0, on the golden pair. See `## Wave 3`.
+- **Steward transfer is re-origin; a migrated commons group keeps every member and every ledger row (red-first migration test)** — `packages/vault/src/share/subscription-migration.ts`, landed red first against a stub returning zeros. See `## Wave 4a`.
+- **The share sheet offers the link ticket inline for an unlinked person; #903's refusal is unchanged** — `packages/blueprints/apps/_shared/{grant-plane,grant-copy,link-ticket-panel,GrantSheetTicket}.ts(x)`; already ticked on this file's second checklist, ticked here on the umbrella's.
+- **One size ceiling per grant; three ceilings collapse to one** — `share_delivery_config.max_size_bytes` is the only one left; the rail's two went with `schema/share-commons.ts`. See `## Wave 4d`.
+- **`docs/decisions.md`, ARCHITECTURE.md, SECURITY.md and the glossary describe subscriptions, re-origin and signed intents; the commons vocabulary is marked retired** — landed by this close pass: `docs/decisions.md` § Sharing as subscription (SS-subscribe … SS-one-ceiling), ARCHITECTURE.md § A share is a subscription, SECURITY.md § Subscription custody and member writes, and the glossary's `subscription` / `origin` / `re-origin` rows plus a forbidden-synonym row retiring `commons`, `steward`, `compile` and `edge-retire`.
+- **`parked` carries a structured `waitingOn` (owner, origin, gateway) with the label from the link on both seats; `steward-label.ts` is deleted with the commons rail** — `waiting_on` on `replica_intent_outcome`, `ReplicaWaitingOn` on the client, `waitingOn?: { seat: "owner" | "origin" | "gateway"; label?: string }` on the projection wire; `apps/mobile/src/lib/replica/steward-label.ts` does not exist. See `## Wave 3`.
 
 ## Out of scope
 
@@ -1247,3 +1257,62 @@ PR merge is the integration work that removed the obsolete edge/outbox rail.
 The final #972 gate cleanup also refreshed
 `packages/blueprints/src/pending-parent-probe.test.ts`; the current contract
 counts 104 child-write edges after the obsolete People edge was removed.
+
+## Close pass — checklist crosswalk
+
+Docs-only close pass over `origin/main` @ `50ab218cf`. Thirteen boxes re-read against the tree; six tick, seven do not. This receipt carries two concatenated headers from two lanes that each created it; the crosswalk gate reads the FIRST `## Checklist` and the FIRST `## What changed`, which is where the ticks and their quoted evidence are.
+
+| Box | Verdict |
+| --- | --- |
+| 1 view share of six subject types cross-gateway, rendering on the audience's phone | **NOT satisfied**, parked: the cross-gateway rig does not exist in this container (no second gateway, no phone). The loopback route is exercised by the subscription sims; the cross-gateway leg is asserted at the protocol layer only |
+| 2 one field edited ⇒ exactly one delta row on the audience, waking that row only | **NOT satisfied**: the mechanism landed — `structure_digest` unequal is re-projection, equal turns a refreshed shape into one UPDATE per moved row — but no section states the delta count from #927's work counters, which is what the box asks for |
+| 3 member write is a signed replica intent the origin executes | **satisfied** (`## Wave 3`) |
+| 4 steward transfer is re-origin, red-first migration test | **satisfied** (`## Wave 4a`) |
+| 5 the rail deleted; `grep -r share_commons_ packages apps` empty | **NOT satisfied on the grep clause.** Every table, the peer rail, the sweep, recovery, chain, replay and intent surfaces are gone and `git grep -l commons -- 'packages/*/src' 'apps/*/src'` is empty. What the grep still finds is `subscription-migration.ts`'s `LEGACY_COMMONS_TABLES` — the DROP list — `migrate.test.ts`'s must-not-exist list, and the migration's red-first fixture. A migration cannot drop a table without naming it; the box's clause and its intent disagree, and the box should say "outside the migration that drops them" |
+| 6 revocation purges and settles on acknowledgement; D1 and BUG-9 green; two overlapping grants | **NOT ticked here**: the mechanism is `SS-settle-on-ack` and the shape-keyed lineage, and the sections claim the lanes green, but this close pass ran no suite and has no evidence of its own |
+| 7 share sheet link ticket inline | **satisfied** |
+| 8 one size ceiling per grant | **satisfied** (`## Wave 4d`) |
+| 9 the share journey `measured` before and after, web and phone, co-hosted and cross-gateway | **NOT satisfied**, parked on rigs: `gateway/share/shared-album/ci-linux-x64-4c` has `grantToVisible` **measured** and `grantToVisibleCrossGateway` still `unmeasured` with an `_intended` ceiling; there is no phone row at all |
+| 10 the four docs describe subscriptions, re-origin and signed intents; commons marked retired | **satisfied** by this pass |
+| 11 a pending write drops only when the audience holds the origin's answered versions; `rowVersion` survives ingest (parity test on the golden pair) | **NOT ticked here**: `subscriptionHoldsOriginVersion` and `origin_row_version` are the mechanism and `## Wave 3` names them, but the parity test on the golden pair is the clause, and no section names one asserting the survival of `rowVersion` through ingest |
+| 12 `waitingOn` on both seats; `steward-label.ts` deleted | **satisfied** (`## Wave 3`) |
+| 13 revoking settles queued intents `expired` with "no longer shared with you"; no pending row survives a purged shape | **NOT ticked here**: `expireShape` in `packages/client/src/replica/intents.ts` lands the first half with exactly that copy; the second half — no pending row survives over a purged shape — is asserted by no section this pass could find |
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `docs/decisions.md` | new § **Sharing as subscription (#929)** — SS-subscribe, SS-one-writer, SS-re-origin, SS-lineage, SS-settle-on-ack, SS-waiting-on, SS-delete-the-rail, SS-one-ceiling — plus the retired vocabulary and the five-rung ladder |
+| `ARCHITECTURE.md` | § Circle-backed commons becomes § **A share is a subscription**: the two-seat `share_subscription` row, shape-keyed lineage with `origin_row_version`, signed member intents, re-origin, and the two cursor levels restated |
+| `SECURITY.md` | § Commons custody becomes § **Subscription custody and member writes**: purge-and-settle-on-acknowledgement, the origin as single writer and its censorship surface, the signature/routing/replay refusals |
+| `docs/glossary.md` | `subscription`, `origin` and `re-origin` replace `commons`, `steward` and `compile`; a forbidden-synonym row retires the old four and names the two wire paths that still spell `commons` |
+| `docs/protocol.md` | the commons stream/cursor contract becomes the **subscription** stream and cursor contract; one intent grammar states the signed-intent shape and the `waitingOn` vocabulary; routing points at `container-routing.ts` |
+| `docs/mobile-offline.md` | § Commons writes and cursors becomes § **Shared-container writes and cursors** |
+| `docs/blueprint-seats.md` | the container-sharing verb, the scope kit's shared-container paragraph, and the overlay's `parked` grammar |
+| `docs/vault-ontology.md`, `docs/recovery/backup-restore.md` | the two remaining "one rung" / "single-rung baseline" sentences, against a five-rung ladder |
+| `receipts/issue-929-sharing-as-subscription.md` | six ticks, the crosswalk paragraph in the first `## What changed`, this section |
+
+**Decisions:** one — the two `/centraid/_gateway/commons/intents/<id>/{cancel,decide}` paths keep their names, and the glossary and protocol doc say so rather than pretending the word is gone. Renaming a wire path is a compatibility act; the plane behind it is already the new one.
+
+**Findings.** (1) Boxes 5 and #928's box 4 fail on the same shape of clause — a `grep` that a migration or a must-not-exist list legitimately matches. Both should be re-worded rather than chased. (2) Three boxes (6, 11, 13) are unticked only because this pass ran no suite; a verifier with the wave PR's CI run can close them without new code. (3) The share journey has no phone row in `tests/journeys.json` at all, so box 9 cannot close even when a device runs.
+
+**Doc debt:** none.
+
+### Verification
+
+```sh
+bun run format:check && bun run lint
+bash .governance/run.sh
+bun run lint:journey-ledger && bun run test:ratchet
+git grep -l commons -- 'packages/*/src' 'apps/*/src'    # empty
+grep -rn -i commons ARCHITECTURE.md SECURITY.md docs/protocol.md docs/mobile-offline.md docs/blueprint-seats.md
+```
+
+Tree hash: quoted in the lane report to the root.
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "The ladder is four rungs" — the lane brief said so and five docs had to be made to agree | read `migrate.ts`'s RUNG comments and `migrate.test.ts`'s pinning case | it is **five**: the test's title is "FIVE rungs … a fresh vault stops at user_version 5", #972 added rung five for `share_authority_request` / `share_authority_use`. Every doc already said five except two sentences (`vault-ontology.md`'s "the ladder is one rung" and `backup-restore.md`'s "single-rung baseline"), which this pass fixed. Writing "four" would have made six docs wrong instead of two |
+| "The commons vocabulary is retired" is a claim about docs, not about the wire | `grep -rn commons packages/core/src/protocol/routes.ts` | `commonsIntentCancelPath` and `commonsIntentDecidePath` are still exported and still spell `/centraid/_gateway/commons/intents/…`. The retirement is real for the plane and not for two path strings, and both the glossary and `SS-delete-the-rail`'s note now say exactly that |
