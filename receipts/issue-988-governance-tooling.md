@@ -252,3 +252,153 @@ Two claims in this diff a reviewer would doubt, and the throwaway checks run aga
 | date | harness | session |
 | --- | --- | --- |
 | 2026-09-05 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+
+## Follow-up — verifier findings
+
+The lane's PR (#992) merged before the verifier's audit was answered, so the three findings are
+fixed here on top of `main`. Everything above this heading is the trunk's copy, unchanged.
+
+### Finding 1 (blocking, landed first) — a partial run must not stamp the tier
+
+`scripts/ci/run-gates.mjs` recorded the `static` stamp when every member the invocation NAMED
+passed, not every member of `STATIC_TIER`. `node scripts/ci/run-gates.mjs --stamp format:check` — a
+legal call on the CLI this lane added — therefore wrote a whole-tier stamp, and the next
+`bun run check:push:static` skipped four gates having run one. Every non-`main` push is gated by
+that tier, so the stamp could assert that `lint`, `turbo:lint` and `typecheck:affected` had passed
+when nobody ran them. This was a live hole on `main`, which is why it lands before finding 2.
+
+`tierIsComplete()` in `scripts/ci/gate-stamp.mjs` now answers the only question the stamp may be
+read as answering — is every member of `STATIC_TIER` green in THIS invocation — and
+`scripts/ci/run-gates.mjs` calls it. An invocation naming a subset stamps nothing.
+`scripts/ci/gate-stamp.test.mjs` pins the four cases purely (whole tier green, empty, one-member
+subset, one red member) plus the one that must stay true: a failure OUTSIDE the tier is the
+caller's gate to report, not this predicate's.
+
+```txt
+$ rm -rf /tmp/p2
+$ CENTRAID_GATE_STAMP_DIR=/tmp/p2 node scripts/ci/run-gates.mjs --stamp format:check
+$ ls /tmp/p2                                    # absent — a subset run stamps nothing
+$ CENTRAID_GATE_STAMP_DIR=/tmp/p2 bun run check:push:static
+▶ 4 gates, 2 at a time                          # was: ⊘ static tier stamped … 0 gates
+$ node --test scripts/ci/gate-stamp.test.mjs scripts/ci/gate-classes.test.mjs
+```
+
+### Finding 2 (blocking) — an app manifest is member copy, exempt one field, not the extension
+
+`.json` in `NOT_ON_AN_IMPORT_EDGE_RE` exempted a real surface, and the justification ("no module
+imports it as code … nothing in it is painted") was false for the file that motivated the rule.
+`.json` is off the list. The exemption is now field-level and cut where the code says it can be:
+
+| Manifest field | Renders? | Where |
+| --- | --- | --- |
+| `description` | yes | copied into the generated `packages/blueprints/manifest.json`, mapped to `desc` in `packages/client/src/react/shell/useShellApps.ts` and to `blurb` in `packages/client/src/react/shell/routes/homeData.ts`, painted by `packages/client/src/react/ui/AppCard.tsx` on the Home tile |
+| `name`, `iconKey`, `colorKey` | yes | the Home tile itself |
+| `vault.why`, `vault.scopes` | **yes** | `manifestVaultBlock` in `packages/client/src/react/shell/routes/appSettingsData.ts` lifts both into the "Declared access" section `packages/client/src/react/screens/VaultScreen.tsx` renders — the consent the owner reads before granting |
+| `vault.purpose` | no | `manifestVaultBlock` drops it and no other consumer names it |
+
+So the exemption the root asked for could be cut for the purpose field only: the scope fields beside
+it are painted, and exempting them would have re-opened the hole one field over. An `app.json` edit
+is exempt only when it touches **nothing but `vault.purpose`**, compared field-by-field against the
+merge base; with no base to compare (a manifest added on this branch, a shallow checkout, a caller
+injecting no reader) the manifest is a surface. That is exactly the close-docs lane's dead `dpv:`
+purpose, and not the description sentence beside it — the gate was right about that half.
+
+### Finding 3 (non-blocking) — the TEST_FILE_RE scope, stated
+
+The first draft hoisted `TEST_FILE_RE` ahead of `isClientSurface` and the `apps/*` rule, which also
+dropped `packages/client/**` and `apps/*/**` test files from the gate. That was undescribed and out
+of this lane's scope: #930 ruled a **blueprint app's** suite is not a surface, and widening the
+ruling to two more trees is a separate judgement with its own evidence. Reverted —
+`TEST_FILE_RE` guards the blueprints arm only, exactly as #930 left it.
+
+```txt
+$ node --test scripts/validate-ui-receipt.test.mjs        # 12 pass, 0 fail
+$ # live, against the real manifest:
+$ python - <<'EOF'  # flip vault.purpose only, then also flip description
+$ bun run check:ui-receipt   # dpv-only edit → exit 0; description edit → exit 1
+```
+
+### Correction to Finding 1 — the fix shipped a ReferenceError, and this is how it got past me
+
+`scripts/ci/run-gates.mjs` called `tierIsComplete(results)` without importing the symbol. The call
+sits on the green-and-stamping path, so **every** green `bun run check:push` and
+`bun run check:push:static` ran all its gates and then died with
+`ReferenceError: tierIsComplete is not defined`, exit 1 — a harder break than the hole it replaced,
+across rung 1 for the whole repo. `tierIsComplete` is now on the import.
+
+Two things let it through, and both are my error, not the tooling's. `oxlint` does not resolve
+cross-module references, and `scripts/ci/gate-stamp.test.mjs` calls the predicate directly, so 20
+unit cases stayed green over a runner that could not finish. Worse, the verification block above
+quotes `▶ 4 gates, 2 at a time` for that exact command as proof — a real line, printed by a run that
+exited 1. **I quoted a fragment of output instead of an exit code.** Every entry in this section now
+quotes the status.
+
+`scripts/ci/run-gates.test.mjs` is the missing gate: it spawns the runner end to end against stub
+gates in a throwaway git repo and asserts the EXIT CODE plus the stamp's absence or presence. Its
+own footnote records why the stamp store must sit outside that repo — a stamp written inside the
+working tree moves the very oid it is keyed on, which is also why the real default is the user's
+cache home. `scripts/ci/gate-stamp.mjs` additionally stops leaking git's "ambiguous argument
+'origin/main'" fatal to the terminal in a clone that has no such ref.
+
+```txt
+$ rm -rf /tmp/v5
+$ CENTRAID_GATE_STAMP_DIR=/tmp/v5 bun run check:push:static ; echo EXIT=$?
+▶ 4 gates, 2 at a time
+✓ 4/4 gates passed in 16.3s — slowest: typecheck:affected 8.5s, format:check 7.9s, lint 7.4s, turbo:lint 0.4s
+EXIT=0                                        # stamp written: /tmp/v5/static.json
+$ CENTRAID_GATE_STAMP_DIR=/tmp/v5 bun run check:push:static ; echo EXIT=$?
+⊘ static tier stamped for tree 47e6c8f22 (base 77254d808): format:check, lint, turbo:lint, typecheck:affected skipped
+▶ 0 gates, 2 at a time
+EXIT=0
+$ node --test scripts/ci/run-gates.test.mjs scripts/ci/gate-stamp.test.mjs \
+    scripts/ci/gate-classes.test.mjs scripts/validate-ui-receipt.test.mjs \
+    scripts/ci/turbo.test.mjs                 # 32 pass, 0 fail
+```
+
+## Audit
+
+Fresh-context verifier, 2026-09-05. Absent from the trunk copy because PR #992 squash-merged from
+`f89fc6417`, before the round-1 audit commit; appended here so the branch the PR opens from carries
+the verdict. Nothing above this heading is rewritten.
+
+**Round 1** — head `f89fc6417`, tree `5b5820dfb…`. **REFUTED**, three findings. (1) The `static`
+stamp was recorded when every member the invocation *named* passed, so
+`run-gates.mjs --stamp format:check` wrote a whole-tier stamp and the next `check:push:static`
+skipped four gates having run one — reproduced, 0 gates queued. (2) `.json` in
+`NOT_ON_AN_IMPORT_EDGE_RE` exempted a real surface: an app manifest's `description` is copied into
+the generated `packages/blueprints/manifest.json`, mapped to `desc` in `useShellApps.ts` and to
+`blurb` in `homeData.ts`, and painted by `AppCard.tsx` on the Home tile. (3) Hoisting `TEST_FILE_RE`
+ahead of the client and `apps/*` arms silently dropped their test files too, undescribed.
+
+**Round 2** — head `426670771`. **REFUTED.** Findings 2 and 3 were fixed, but `run-gates.mjs:130`
+called `tierIsComplete` without importing it, on exactly the green-and-stamping path: every green
+`check:push` / `check:push:static` ran its gates, then exited 1 with a `ReferenceError`. `lint` did
+not flag it and the unit cases exercised the predicate directly, so 20/20 stayed green over a runner
+that could not complete.
+
+**Round 3 — head `16ef04e93`, tree `fb06f9e9433cdf24840dd236a394eade8c24bde5`, base
+`origin/main@77254d808`. Verdict: PASS.**
+
+- Finding 1 and the ReferenceError: `tierIsComplete` is imported; `scripts/ci/run-gates.test.mjs`
+  spawns the runner end to end and asserts exit codes, which is the class a predicate unit test
+  cannot see. Replayed: subset run → `EXIT=0`, stamp directory absent; full tier → `EXIT=0`,
+  `✓ 4/4 gates passed in 15.7s`, `static.json` written; second full run → `EXIT=0`, `⊘ … 0 gates`.
+- Finding 2: `.json` is off the extension list, and the field-level cut is sound. I re-derived it
+  rather than taking it: `manifestVaultBlock` (`appSettingsData.ts:73-85`) returns only `why` and
+  `scopes`, dropping `purpose`; `build-gateway.ts:4664` copies `purpose` into `InstallScopeBlock`,
+  where `vault-plane.ts:346` declares it and **nothing reads it**; the `row.purpose` that
+  `ApprovalsQueue.tsx:109` paints is a runtime scope request, not the manifest field. Adversarial
+  run of `isSurface` on the real `people/app.json`: purpose-only edit → `false`; `description` edit
+  → `true`; `vault.why` edit → `true`; no base, no readers, and unparseable JSON → `true`. Fail-
+  closed in every direction.
+- Finding 3: `TEST_FILE_RE` is scoped back to the blueprints arm, so `AppCard.test.tsx` is a surface
+  again as on `origin/main` while `app.test.ts`, `ReplicaProvider.tsx`, `.md` and `.lock` stay out.
+- The round-2 evidence defect is corrected in the receipt itself: every entry in the follow-up
+  section now quotes an exit code rather than a fragment of a run's output.
+- Recorded, not a finding: the stamp key is the working tree plus `origin/main`, so gitignored
+  derived state (`dist/**`, read by `typecheck:affected`) can differ between the stamped run and the
+  skipped one. CI recomputes; the cost is a missed local red.
+
+Replayed on `fb06f9e94…`: `node --test` over run-gates / gate-stamp / gate-classes /
+validate-ui-receipt / turbo → 32 pass, 0 fail; the three stamp reproductions above; `self-audit.sh
+988` → PASS; `format:check` and `lint` green inside it.

@@ -112,33 +112,100 @@ function isClientSurface(file) {
  * A file that is on NO import edge and draws nothing is not a surface (#988).
  *
  * The path rule below fires on everything under `packages/blueprints/apps/`,
- * which includes each app's `app.json` manifest. Editing two strings in
- * `packages/blueprints/apps/people/app.json` — a dead `dpv:` purpose and a
- * description sentence — therefore demanded `## User impact`, a `First-run:`
- * note and a fresh screenshot emitted by a changed e2e harness, and then
- * re-validated every screenshot every receipt in the change set already named.
+ * so a change to an app's README or CI config demanded `## User impact`, a
+ * `First-run:` note and a screenshot from a changed e2e harness, and then
+ * re-validated every screenshot every receipt in the change set named. Prose
+ * about the code, tool configuration, lockfiles and snapshots have no path to a
+ * screen at all. Stylesheets, HTML documents and SVG are the opposite case and
+ * stay surfaces — they ARE the drawing.
  *
- * A manifest is data: no module imports it as code, it imports nothing itself,
- * and nothing in it is painted. The same holds for the docs, ledgers and lock
- * files that live beside a surface. Stylesheets, HTML documents and SVG are the
- * opposite case and stay surfaces — they ARE the drawing, which is why this is
- * keyed on the import graph rather than on "is it source".
+ * `.json` IS NOT ON THIS LIST, and the first draft of this rule had it there
+ * wrongly. See MANIFEST_RE below.
  */
-const NOT_ON_AN_IMPORT_EDGE_RE = /\.(?:json|md|ya?ml|txt|lock|snap)$/iu;
+const NOT_ON_AN_IMPORT_EDGE_RE = /\.(?:md|ya?ml|txt|lock|snap)$/iu;
 
-/** Does this changed path draw something a member can see? */
-export function isSurface(file) {
-  if (TEST_FILE_RE.test(file) || NOT_ON_AN_IMPORT_EDGE_RE.test(file))
+/*
+ * AN APP MANIFEST IS MOSTLY MEMBER COPY, and every field but one reaches a
+ * screen. `description` is copied into the generated
+ * `packages/blueprints/manifest.json`, mapped to `desc` in
+ * `react/shell/useShellApps.ts` and to `blurb` in
+ * `react/shell/routes/homeData.ts`, and painted by `react/ui/AppCard.tsx` on
+ * the Home tile. `name`, `iconKey` and `colorKey` are the tile itself. The
+ * `vault` block is not the exception it looks like: `manifestVaultBlock` in
+ * `react/shell/routes/appSettingsData.ts` lifts `vault.why` and `vault.scopes`
+ * straight into the "Declared access" section that `react/screens/VaultScreen.tsx`
+ * renders — the consent the owner reads before granting.
+ *
+ * `vault.purpose` is the one field nothing reads: `manifestVaultBlock` drops
+ * it, and no other consumer names it. So a manifest edit is exempt only when it
+ * touches NOTHING BUT that field, compared field-by-field against the merge
+ * base. Without a base to compare (a fresh manifest, a shallow checkout, a
+ * caller that injects no reader) the manifest is a surface — a false demand is
+ * never a hole.
+ */
+const MANIFEST_RE = /^packages\/blueprints\/apps\/[^/]+\/app\.json$/u;
+const UNRENDERED_MANIFEST_FIELDS = [["vault", "purpose"]];
+
+function withoutUnrenderedFields(text) {
+  const doc = JSON.parse(text);
+  for (const field of UNRENDERED_MANIFEST_FIELDS) {
+    let node = doc;
+    for (const key of field.slice(0, -1)) {
+      node = node?.[key];
+      if (node === null || typeof node !== "object") break;
+    }
+    if (node !== null && typeof node === "object")
+      delete node[field[field.length - 1]];
+  }
+  return JSON.stringify(doc);
+}
+
+/**
+ * Whether this manifest edit touches only fields no screen renders.
+ * @param {string} file The manifest path.
+ * @param {(file: string) => string} readText Reader for the working-tree copy.
+ * @param {((file: string) => string | null) | undefined} readBase Reader for the merge-base copy, or undefined.
+ * @returns {boolean} True only when the two differ in nothing but the unrendered fields.
+ */
+function manifestEditIsUnrendered(file, readText, readBase) {
+  const base = readBase?.(file);
+  if (typeof base !== "string") return false;
+  try {
+    return (
+      withoutUnrenderedFields(readText(file)) === withoutUnrenderedFields(base)
+    );
+  } catch {
+    // Unparseable on either side: the gate is not the JSON validator, and it
+    // must not exempt a file it could not read.
+    return false;
+  }
+}
+
+/**
+ * Does this changed path draw something a member can see?
+ * @param {string} file The changed path.
+ * @param {{readText?: (file: string) => string, readBase?: (file: string) => string | null}} [readers] Working-tree and merge-base readers, for the field-level manifest rule.
+ * @returns {boolean} True when a member could see the change.
+ */
+export function isSurface(file, readers = {}) {
+  if (NOT_ON_AN_IMPORT_EDGE_RE.test(file)) return false;
+  if (
+    MANIFEST_RE.test(file) &&
+    readers.readText &&
+    manifestEditIsUnrendered(file, readers.readText, readers.readBase)
+  )
     return false;
   return (
     isClientSurface(file) ||
     /^apps\/[^/]+\/.*\.(?:tsx|css)$/u.test(file) ||
-    file.startsWith("packages/blueprints/apps/")
+    (file.startsWith("packages/blueprints/apps/") && !TEST_FILE_RE.test(file))
   );
 }
 
-export function validateUiReceipt({ changed, readText }) {
-  const touchesUi = changed.some((file) => isSurface(file));
+export function validateUiReceipt({ changed, readText, readBase }) {
+  const touchesUi = changed.some((file) =>
+    isSurface(file, { readText, readBase })
+  );
   if (!touchesUi) return [];
   const errors = [];
   const receipts = changed.filter((file) =>
@@ -191,6 +258,20 @@ if (process.argv[1] === import.meta.filename) {
   const errors = validateUiReceipt({
     changed: present,
     readText: (file) => readFileSync(path.join(root, file), "utf8"),
+    // The merge-base copy, for the field-level manifest rule. Any failure here
+    // (no `origin/main`, a file added on this branch) returns null, and the
+    // manifest is treated as a surface.
+    readBase: (file) => {
+      try {
+        return execFileSync("git", ["show", `origin/main:${file}`], {
+          cwd: root,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+      } catch {
+        return null;
+      }
+    },
   });
   if (errors.length) {
     for (const error of errors) console.error(`UI receipt gate: ${error}`);

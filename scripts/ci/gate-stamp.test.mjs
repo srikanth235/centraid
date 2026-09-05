@@ -14,6 +14,7 @@ import {
   stampKey,
   stampsEnabled,
   STATIC_TIER,
+  tierIsComplete,
   workingTreeOid,
 } from "./gate-stamp.mjs";
 
@@ -171,6 +172,30 @@ test("CENTRAID_GATE_STAMPS=0 disables the skip", () => {
   } finally {
     rmSync(store, { recursive: true, force: true });
   }
+});
+
+// A stamp is a claim about the WHOLE tier, so a run that names a subset must
+// leave it alone — otherwise the next `check:push:static` skips gates nobody
+// ran, and every non-main push is gated by that tier.
+test("only a run of the whole tier earns the stamp", () => {
+  const green = STATIC_TIER.map((name) => ({ name, code: 0 }));
+  assert.equal(tierIsComplete(green), true);
+  assert.equal(tierIsComplete([]), false, "an empty run stamps nothing");
+  assert.equal(
+    tierIsComplete(green.slice(0, 1)),
+    false,
+    "`run-gates.mjs --stamp format:check` names one member and must stamp nothing"
+  );
+  assert.equal(
+    tierIsComplete(green.map((r, i) => (i === 2 ? { ...r, code: 1 } : r))),
+    false,
+    "one red member must stamp nothing"
+  );
+  assert.equal(
+    tierIsComplete([...green, { name: "knip", code: 1 }]),
+    true,
+    "a failure OUTSIDE the tier is the caller's gate to report, not this predicate's"
+  );
 });
 
 test("the static tier holds only tree-determined gates named by check:push", () => {

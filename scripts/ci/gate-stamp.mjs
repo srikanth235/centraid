@@ -43,6 +43,20 @@ export const STATIC_TIER = Object.freeze([
   "typecheck:affected",
 ]);
 
+/**
+ * Whether a run's results earn the static stamp: EVERY member of the tier ran
+ * in that one invocation and passed. An invocation that names a subset stamps
+ * nothing — the stamp is read as a claim about the whole tier, so a partial
+ * one would let the next `check:push:static` skip gates nobody ran.
+ * @param {ReadonlyArray<{name: string, code: number}>} results One run's per-gate outcomes.
+ * @returns {boolean} True when the whole tier is green in these results.
+ */
+export function tierIsComplete(results) {
+  return STATIC_TIER.every((gate) =>
+    results.some((r) => r.name === gate && r.code === 0)
+  );
+}
+
 /** Where stamps live: overridable, defaulting under the user's cache home. */
 export function stampDir() {
   if (process.env.CENTRAID_GATE_STAMP_DIR) {
@@ -112,7 +126,13 @@ export function workingTreeOid(root) {
 export function stampKey(root) {
   let base = "none";
   try {
-    base = git(["rev-parse", "origin/main"], root);
+    // stderr is dropped: a clone with no `origin/main` is a legitimate state
+    // here, and git's "ambiguous argument" fatal is not the caller's problem.
+    base = execFileSync("git", ["rev-parse", "origin/main"], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
   } catch {
     // A clone with no `origin/main` (a detached CI checkout, a fork mid-fetch)
     // still gets a usable key; it just never matches one taken with a base.
