@@ -4,14 +4,18 @@ import { describe, expect, it, vi } from "vitest";
 
 const executeSync = vi.fn<(sql: string) => unknown>();
 
-vi.mock(import("@op-engineering/op-sqlite"), () => ({
-  open: () => ({
-    close: () => undefined,
-    execute: async () => ({ rows: [] }),
-    executeBatch: async () => undefined,
-    executeSync,
-  }),
-}));
+vi.mock(
+  import("@op-engineering/op-sqlite"),
+  () =>
+    ({
+      open: () => ({
+        close: () => undefined,
+        execute: async () => ({ rows: [] }),
+        executeBatch: async () => undefined,
+        executeSync,
+      }),
+    }) as never
+);
 
 const { OpSqliteDriver } = await import("./op-sqlite-driver");
 

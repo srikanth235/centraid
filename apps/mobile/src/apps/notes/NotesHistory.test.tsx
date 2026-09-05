@@ -22,21 +22,26 @@ vi.mock(import("@shopify/flash-list"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.flashListStub() as unknown as typeof import("@shopify/flash-list");
 });
-vi.mock(import("../../kit/hooks/useReplicaQuery"), () => ({
-  useReplicaQuery: () => ({
-    connection: "current" as const,
-    error: undefined,
-    loading: false,
-    refresh: async () => undefined,
-    rows: [
-      {
-        content_id: "c-head",
-        content_uri: "data:text/markdown,The current body",
-        media_type: "text/markdown",
-      },
-    ],
-  }),
-}));
+vi.mock(import("../../kit/hooks/useReplicaQuery"), async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    useReplicaQuery: () => ({
+      connection: "current" as const,
+      error: undefined,
+      loading: false,
+      refresh: async () => undefined,
+      rows: [
+        {
+          __rowId: "c-head",
+          content_id: "c-head",
+          content_uri: "data:text/markdown,The current body",
+          media_type: "text/markdown",
+        },
+      ],
+    }),
+  };
+});
 
 const NOTE = {
   body: "The current body",
