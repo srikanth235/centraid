@@ -33,7 +33,10 @@ import {
   routeShareGrantEdit,
   shareGrantEditRefusal,
 } from "../grant/fulfillment-edit.js";
-import { resolveAudienceParties } from "../grant/grant-store.js";
+import {
+  LIVE_AUTHORITY_SQL,
+  resolveAudienceParties,
+} from "../grant/grant-store.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { importIcsEvents, importVcardParties } from "../ingest/import.js";
 import type { ImportResult } from "../ingest/import.js";
@@ -1342,11 +1345,11 @@ export class Gateway {
       entry.grantId === null ||
       this.db.vault
         .prepare(
-          `SELECT 1 AS active FROM access_grant
-            WHERE grant_id = ? AND status = 'active' AND revoked_at IS NULL
-              AND (expires_at IS NULL OR expires_at > ?)`
+          `SELECT 1 AS active FROM share_authority
+            WHERE authority_id = ? AND decision = 'granted'
+              AND ${LIVE_AUTHORITY_SQL}`
         )
-        .get(entry.grantId, decisionAt) !== undefined;
+        .get(entry.grantId) !== undefined;
     if (!approve || !grantStillActive) {
       const denialReason = approve
         ? "consent grant no longer active"
