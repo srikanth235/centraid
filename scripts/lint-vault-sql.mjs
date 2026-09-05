@@ -170,6 +170,9 @@ export const ALLOW_LIST = {
     "is the Locker replica fixture builder; it seeds replica_row directly after bootstrap",
   "apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts":
     "is the Tally replica fixture builder; it seeds replica_row directly after bootstrap",
+  // ── measurement rigs that verify gateway-owned audit state ──
+  "scripts/measure-read-fsync.mjs":
+    "measures gateway receipt durability and re-hashes its audit chain",
   // ── this linter ──
   "scripts/lint-vault-sql.mjs":
     "its own fixtures name physical tables on purpose",
