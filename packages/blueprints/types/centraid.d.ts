@@ -103,6 +103,14 @@ interface VaultInvokeRequest {
   command: string;
   input?: Record<string, unknown>;
   purpose: string;
+  /**
+   * This invocation DECORATES the answer; the answer stands without it. A seat
+   * with no gateway behind it (a replica seat running the handler locally)
+   * settles it as `{status: "failed"}` instead of refusing the whole run, so
+   * the caller's existing `status !== "executed"` branch is the offline
+   * branch too. The gateway ignores the field and executes as always.
+   */
+  optional?: boolean;
 }
 
 /** The card resolver (#272): (type, id) refs → renderable cards. */

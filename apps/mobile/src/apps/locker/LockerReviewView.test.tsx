@@ -54,17 +54,20 @@ const textOf = (container: HTMLElement): string => container.textContent ?? "";
 
 function view(rows: LockerRow[]): React.JSX.Element {
   return (
-    <LockerReviewView
-      lastReadAt={null}
-      onOpen={noop}
-      pending={0}
-      rows={rows}
-      state="ready"
-    />
+    <LockerReviewView onOpen={noop} pending={0} rows={rows} state="ready" />
   );
 }
 
-const CLEAN: LockerRow = { item_id: "a", type: "login", title: "Mail" };
+// A DECORATED row with nothing against it: `weak`/`reused` present and false
+// is "checked, and found nothing". Their absence is the other sentence — the
+// derivation did not run — and `servedFields` reads exactly that difference.
+const CLEAN: LockerRow = {
+  item_id: "a",
+  type: "login",
+  title: "Mail",
+  weak: false,
+  reused: false,
+};
 const WEAK: LockerRow = {
   item_id: "b",
   type: "login",

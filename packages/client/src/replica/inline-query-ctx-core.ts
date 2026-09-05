@@ -210,6 +210,19 @@ export interface InlineCtxCoreOptions<Read, Search> {
 }
 
 /**
+ * What an invocation the handler declared OPTIONAL settles to here. A
+ * decoration the answer does not depend on must not refuse the answer — a
+ * Locker search that cannot reach Watchtower still has its rows — so it
+ * settles as the failed outcome every such call site already reads, and the
+ * run stays local. An invocation that did NOT declare itself optional is an
+ * effect this seat cannot perform and marks the run, as before.
+ */
+const OPTIONAL_INVOKE_UNAVAILABLE = {
+  status: "failed",
+  reason: "invoke is online-only",
+} as const;
+
+/**
  * Assemble the `ctx`. `resolve` answers `{ cards: [] }` rather than failing —
  * empty cards, never a blank board (#505 P4) — and every remaining verb is an
  * online-only effect.
@@ -229,7 +242,10 @@ export function buildInlineCtxCore<Read, Search>(
       search: options.reads.search,
       resolve: (): Promise<{ cards: unknown[] }> =>
         Promise.resolve({ cards: [] }),
-      invoke: effect("invoke"),
+      invoke: (request: { optional?: boolean }): Promise<unknown> =>
+        request.optional === true
+          ? Promise.resolve(OPTIONAL_INVOKE_UNAVAILABLE)
+          : Promise.reject(guard.mark("invoke is online-only")),
       query: effect("query"),
       describe: effect("describe"),
       parked: effect("parked"),

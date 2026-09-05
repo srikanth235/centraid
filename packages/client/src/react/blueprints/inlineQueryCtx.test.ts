@@ -116,6 +116,41 @@ describe("inlineQueryCtx", () => {
     expect(guard.required).toBe(false);
   });
 
+  it("settles an OPTIONAL invocation as failed and leaves the run local", async () => {
+    const guard = new OnlineOnlyGuard();
+    const ctx = buildInlineCtx(
+      { session: seededSession(), appId: "locker" },
+      guard
+    ) as {
+      vault: {
+        invoke: (request: {
+          command: string;
+          purpose: string;
+          optional?: boolean;
+        }) => Promise<{ status: string }>;
+      };
+    };
+    // A DECORATION the answer stands without: the handler's own
+    // `status !== "executed"` branch is the offline branch (#928).
+    await expect(
+      ctx.vault.invoke({
+        command: "locker.watchtower",
+        purpose: "dpv:ServiceProvision",
+        optional: true,
+      })
+    ).resolves.toMatchObject({ status: "failed" });
+    expect(guard.required).toBe(false);
+    // An invocation that did NOT declare itself optional is an effect this
+    // seat cannot perform, and it still marks the run.
+    await expect(
+      ctx.vault.invoke({
+        command: "locker.watchtower",
+        purpose: "dpv:ServiceProvision",
+      })
+    ).rejects.toThrow(/online-only/u);
+    expect(guard.required).toBe(true);
+  });
+
   it("marks the online-only guard when a query reads an undisclosed field", async () => {
     const undisclosed = seededSession({
       async read(): Promise<ReplicaReadWireResult> {

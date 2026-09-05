@@ -28,6 +28,13 @@ export function ctxOf(
     revealValues?: Record<string, string | null>;
     outputs?: Record<string, unknown>;
     authenticated?: boolean;
+    /**
+     * A seat holding a REPLICA rather than a gateway: no verb but read is
+     * performable. An invocation the handler declared `optional` settles as a
+     * failed outcome; every other effect refuses, exactly as
+     * `buildInlineCtxCore` answers on the shell and the phone.
+     */
+    localSeat?: boolean;
   } = {}
 ) {
   const calls = options.calls ?? [];
@@ -49,12 +56,25 @@ export function ctxOf(
         reveals.push(request);
         return { values: options.revealValues ?? {} };
       },
-      authenticate: async () => ({
-        authenticated: options.authenticated !== false,
-        configured: true,
-      }),
-      invoke: async (request: { command: string }) => {
+      authenticate: async () => {
+        if (options.localSeat)
+          throw Object.assign(new Error("authenticate is online-only"), {
+            code: "ONLINE_ONLY",
+          });
+        return {
+          authenticated: options.authenticated !== false,
+          configured: true,
+        };
+      },
+      invoke: async (request: { command: string; optional?: boolean }) => {
         invoked.push(request);
+        if (options.localSeat) {
+          if (request.optional !== true)
+            throw Object.assign(new Error("invoke is online-only"), {
+              code: "ONLINE_ONLY",
+            });
+          return { status: "failed", reason: "invoke is online-only" };
+        }
         return {
           status: "executed",
           output: options.outputs?.[request.command] ?? {},

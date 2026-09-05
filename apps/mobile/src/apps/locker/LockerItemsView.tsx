@@ -57,7 +57,6 @@ export interface LockerItemsViewProps {
   state: LockerScreenState;
   pending: number;
   waiting?: string | null;
-  lastReadAt: string | null;
   loaded: boolean;
   truncated: boolean;
   /** The device-credential offer, present only where this phone can hold one
@@ -135,7 +134,6 @@ export default function LockerItemsView(
         state={props.state}
         pending={props.pending}
         waiting={props.waiting ?? null}
-        lastReadAt={props.lastReadAt}
       />
       {props.offerDevice ? (
         <View style={styles.offer}>

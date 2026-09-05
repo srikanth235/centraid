@@ -224,6 +224,9 @@ export const UNSERVED_WHY: Readonly<Record<string, string>> = {
   expiring:
     "The expiry is in the vault; this read did not carry it, so nothing was checked.",
   age: "The date the password was set is in the vault; this read did not carry it, so nothing was checked.",
+  weak: "Password strength is derived inside the vault's sealed boundary; this read could not reach it, so nothing was checked.",
+  reused:
+    "Reuse is derived inside the vault's sealed boundary; this read could not reach it, so nothing was checked.",
 };
 
 /** The three checks with no source at all (GAPS §3.3 #6c, #6d, #6e). */

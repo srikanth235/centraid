@@ -4,7 +4,12 @@
  * same decorate() path as the live window.
  */
 
-import { decorate, readTags, readStarred } from "./items.ts";
+import {
+  decorate,
+  readTags,
+  readStarred,
+  rethrowIfLocalReadRefused,
+} from "./items.ts";
 import type { RawItem } from "./items.ts";
 
 export default async function trash({ ctx }: HandlerArgs) {
@@ -25,6 +30,7 @@ export default async function trash({ ctx }: HandlerArgs) {
     ]);
     return { items: decorate(rows, tagsByItem, starredIds) };
   } catch (error) {
+    rethrowIfLocalReadRefused(error);
     const e = error as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }
