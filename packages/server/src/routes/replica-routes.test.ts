@@ -81,8 +81,7 @@ describe("replica-routes", () => {
       () => fs.rm(dir, { recursive: true, force: true }),
       () => plane.stop()
     );
-    plane.ensureAppInstallGrant("agenda", {
-      purpose: "dpv:ServiceProvision",
+    plane.recordAppInstall("agenda", {
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
     return { plane, enrollments, handler, unscopedHandler };
@@ -378,7 +377,6 @@ describe("replica-routes", () => {
         title: "Newest document",
         data_uri: "data:text/plain;base64,bmV3ZXN0IGRvY3VtZW50",
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(document.status).toBe("executed");
 
@@ -588,8 +586,7 @@ describe("replica-routes", () => {
     const { plane, handler } = await fixture();
     // Re-declaring the manifest IS the reshape (#928): the columns a shape
     // carries are the ones the app's own scope names.
-    plane.ensureAppInstallGrant("agenda", {
-      purpose: "dpv:ServiceProvision",
+    plane.recordAppInstall("agenda", {
       scopes: [
         {
           schema: "schedule",
@@ -656,8 +653,7 @@ describe("replica-routes", () => {
 
   test("synthetic lazy-row lookup is bounded instead of scanning an unbounded entity", async () => {
     const { plane, handler } = await fixture({ maxSyntheticLookupRows: 1 });
-    plane.ensureAppInstallGrant("agenda", {
-      purpose: "dpv:ServiceProvision",
+    plane.recordAppInstall("agenda", {
       scopes: [
         {
           schema: "schedule",

@@ -47,7 +47,6 @@ interface RawMemory {
 }
 
 export default async function libraryHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
   const before =
     typeof input?.before === "string" && input.before !== ""
@@ -67,7 +66,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           where: liveWhere,
           orderBy: { column: "captured_at", dir: "desc" },
           limit: window,
-          purpose,
         }),
         // A ~30-day shelf the sweep keeps short: 200 needs no knob.
         ctx.vault.read({
@@ -75,17 +73,15 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           where: [{ column: "deleted_at", op: "not-null" }],
           orderBy: { column: "deleted_at", dir: "desc" },
           limit: 200,
-          purpose,
         }),
         ctx.vault.read({
           acceptTruncation: true,
           entity: "core.collection",
-          purpose,
         }),
-        readPlaces({ ctx, purpose }),
+        readPlaces({ ctx }),
         before
           ? { rows: [] }
-          : ctx.vault.read({ entity: "media.memory", limit: 200, purpose }),
+          : ctx.vault.read({ entity: "media.memory", limit: 200 }),
       ]);
 
     // Joins stay `in`-bounded: only the windowed photos' bytes travel.
@@ -107,7 +103,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
               { column: "target_type", op: "eq", value: "media.asset" },
               { column: "target_id", op: "in", value: assetIds },
             ],
-            purpose,
           })
         : { rows: [] },
       contentIds.length > 0
@@ -115,17 +110,15 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] },
-      readAssetJoins({ ctx, purpose, assetIds, contentIds }),
+      readAssetJoins({ ctx, assetIds, contentIds }),
       memoryIds.length > 0
         ? ctx.vault.read({
             entity: "media.memory_member",
             where: [{ column: "memory_id", op: "in", value: memoryIds }],
             orderBy: { column: "ordinal", dir: "asc" },
             limit: 4000,
-            purpose,
           })
         : { rows: [] },
     ]);

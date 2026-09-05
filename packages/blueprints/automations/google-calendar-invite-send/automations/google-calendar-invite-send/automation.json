@@ -18,7 +18,6 @@
     "label": "personal"
   },
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Reads needs-action invites (event, attendee, their email) and stages each as an outbox artifact for your decision. Holds no send capability of its own — external writes are the outbox executor's, behind your approval.",
     "scopes": [
       { "schema": "schedule", "verbs": "read" },

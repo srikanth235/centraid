@@ -23,7 +23,6 @@ export default async function autofillCandidates({
   input?: Record<string, unknown>;
   ctx: HandlerCtx;
 }) {
-  const purpose = "dpv:ServiceProvision";
   try {
     // When Locker auth is configured, candidate enumeration requires the
     // vault to be unlocked (any live session on this gateway) — same lock that
@@ -59,9 +58,8 @@ export default async function autofillCandidates({
         ],
         orderBy: { column: "updated_at", dir: "desc" },
         limit: 2000,
-        purpose,
       }),
-      ctx.vault.invoke({ command: "locker.watchtower", input: {}, purpose }),
+      ctx.vault.invoke({ command: "locker.watchtower", input: {} }),
     ]);
     const warned = new Set(
       watchtower.status === "executed"

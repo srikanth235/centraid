@@ -43,6 +43,7 @@ describe("gateway-db scenarios", () => {
       "backup_targets",
       "cas_reconciliations",
       "device_checkpoints",
+      "device_surface_projection",
       "devices",
       "erase_intents",
       "gateway_meta",
@@ -53,8 +54,6 @@ describe("gateway-db scenarios", () => {
       "push_registrations",
       "recovery_kit",
       "share_access_receipts",
-      "share_edges",
-      "share_effects",
       "storage_connections",
       "storage_limits",
       "tickets",
@@ -218,7 +217,6 @@ describe("gateway-db scenarios", () => {
           username: "priya",
           password: "real-sealed-row",
         },
-        purpose: "dpv:ServiceProvision",
       }).status
     ).toBe("executed");
     const vaultSecret = keyStore.export(`${vault.vaultId}.sealkey`);

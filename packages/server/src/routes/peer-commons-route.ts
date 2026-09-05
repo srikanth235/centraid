@@ -550,7 +550,6 @@ export async function handlePeerCommonsCommand(
           {
             command: replicaCommand,
             input: replicaInput,
-            purpose: "dpv:ServiceProvision",
             invocationId,
           },
           { idSeed: invocationId }

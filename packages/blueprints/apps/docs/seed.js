@@ -9,7 +9,6 @@
  * text, so they stay in the row and the FTS triggers index them, and
  * core.edit_document (text-only) can revise them in place.
  */
-const PURPOSE = "dpv:ServiceProvision";
 
 export default async function seedHandler({ input, log, ctx }) {
   const now = new Date(input?.now ?? Date.now()).getTime();
@@ -18,7 +17,6 @@ export default async function seedHandler({ input, log, ctx }) {
     const out = await ctx.vault.invoke({
       command,
       input: args,
-      purpose: PURPOSE,
     });
     if (out.status !== "executed") {
       throw new Error(`${command} ${out.status}: ${out.reason ?? "no reason"}`);

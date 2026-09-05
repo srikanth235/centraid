@@ -1,5 +1,4 @@
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
-export const DEFAULT_REPLICA_PURPOSE = "dpv:ServiceProvision";
 export const REPLICA_SYNTHETIC_PRIMARY_KEY = "__centraid_row_id" as const;
 
 export type ReplicaScalar = null | boolean | number | string;
@@ -32,7 +31,6 @@ export interface ReplicaEntitySchema {
 export interface ReplicaShape {
   shapeId: string;
   appId: string;
-  purpose: string;
   entities: ReplicaEntitySchema[];
 }
 
@@ -160,7 +158,6 @@ export interface ReplicaReadRequest {
   where?: ReplicaFilterClause[];
   orderBy?: ReplicaOrderBy;
   limit?: number;
-  purpose?: string;
   /**
    * "I have not declared a window; give me the default one and tell me when it
    * fills." The kit boundary refuses a read that sets neither this nor `limit`
@@ -179,7 +176,6 @@ export interface ReplicaSearchRequest {
   query: string;
   where?: ReplicaFilterClause[];
   limit?: number;
-  purpose?: string;
   // NO `acceptTruncation` HERE, deliberately (#922 0a). The flag exists so a
   // READ that declares no window can still be admitted at the kit boundary;
   // a search always has one — the default is 100 and the ceiling 1,000 — so

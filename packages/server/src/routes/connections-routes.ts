@@ -80,7 +80,6 @@ async function invokeAsOwner(
   const outcome = await plane.invoke(plane.ownerCredential, {
     command,
     input,
-    purpose: "dpv:ServiceProvision",
   });
   if (outcome.status === "executed") {
     sendJson(res, 200, {
@@ -382,7 +381,6 @@ export function makeConnectionsRouteHandler(
       const outcome = await plane.invoke(plane.ownerCredential, {
         command: "sync.remove_connection",
         input: { connection_id: connectionId },
-        purpose: "dpv:ServiceProvision",
       });
       if (outcome.status === "executed") {
         sendJson(res, 200, {

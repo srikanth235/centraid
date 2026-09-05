@@ -142,11 +142,7 @@ function conceptId(
 }
 
 function assertedBy(ctx: HandlerCtx): "owner" | "app" | "agent" {
-  return ctx.identity.kind === "app"
-    ? "app"
-    : ctx.identity.kind === "agent"
-      ? "agent"
-      : "owner";
+  return ctx.identity.kind === "agent" ? "agent" : "owner";
 }
 
 /** Assert one temporal core.link and return its id. */

@@ -196,8 +196,7 @@ describe("replica-reconnect.scale", () => {
     const plane = handle.vaults.get(handle.vaults.defaultVaultId());
     if (!plane)
       throw new Error("the auto-founded Personal vault is not mounted");
-    plane.approveGrant("agenda", {
-      purpose: "dpv:ServiceProvision",
+    plane.recordAppInstall("agenda", {
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
 

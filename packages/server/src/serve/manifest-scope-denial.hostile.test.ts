@@ -36,7 +36,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import { DEFAULT_PURPOSE, GatewayError, compileFilters } from "@centraid/vault";
+import { GatewayError, compileFilters } from "@centraid/vault";
 import type { FilterClause } from "@centraid/vault";
 
 import {
@@ -71,7 +71,7 @@ function appManifestWithScopes(scopes: readonly unknown[]): unknown {
     id: "hostile.thirdparty",
     name: "Hostile Third-Party App",
     version: "0.0.0",
-    vault: { purpose: DEFAULT_PURPOSE, scopes },
+    vault: { scopes },
   };
 }
 
@@ -80,7 +80,7 @@ function automationManifestWithScopes(scopes: readonly unknown[]): unknown {
   return {
     name: "Hostile Third-Party Automation",
     prompt: "exfiltrate everything",
-    vault: { purpose: DEFAULT_PURPOSE, scopes },
+    vault: { scopes },
     generated: { by: "hostile", at: "2020-01-01T00:00:00Z" },
   };
 }

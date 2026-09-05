@@ -12,7 +12,6 @@ import {
 import {
   AUDIT_BAND_TABLES,
   createGateway,
-  DEFAULT_PURPOSE,
   enrollDevice,
   openVaultDb,
 } from "@centraid/vault";
@@ -142,7 +141,6 @@ describe("large-vault.scale", () => {
         },
         {
           entity: "media.asset",
-          purpose: DEFAULT_PURPOSE,
           limit: AUDIT_GAUGE_LIMIT,
           acceptTruncation: true,
         }

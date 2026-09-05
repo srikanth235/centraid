@@ -7,7 +7,6 @@
   "iconKey": "Users",
   "colorKey": "violet",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Keeps light records on the people you care about and nudges you to stay in touch.",
     "scopes": [
       { "schema": "people", "verbs": "read+act" },
@@ -27,6 +26,8 @@
       { "schema": "social", "table": "contact_channel", "verbs": "read" },
       { "schema": "share", "table": "party_vault_binding", "verbs": "read" },
       { "schema": "share", "table": "authority", "verbs": "read" },
+      { "schema": "share", "table": "authority_use", "verbs": "read" },
+      { "schema": "share", "table": "authority_request", "verbs": "read" },
       { "schema": "share", "table": "commons_invitation", "verbs": "read" },
       { "schema": "social", "table": "save_contact_channel", "verbs": "act" },
       {

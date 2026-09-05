@@ -306,7 +306,7 @@
       "app-handler-dispatch": 9,
       "share-closure-confinement": 5,
       "share-receipt-authority": 4,
-      "share-outbox-obligation": 4,
+      "same-owner-placement": 4,
       "gateway-experimental-gate-law": 10,
       "insights-rollup-law": 22,
       "mobile-block-parity-law": 11,

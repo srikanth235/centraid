@@ -69,10 +69,9 @@ function checkOf(body: string): { total: number; done: number } {
 }
 
 export default async function journalHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
-    const journalNoteIds = await readJournalNoteIds(ctx.vault, purpose);
+    const journalNoteIds = await readJournalNoteIds(ctx.vault);
     if (journalNoteIds.size === 0)
       return { entries: [], truncated: false, window };
 
@@ -85,7 +84,6 @@ export default async function journalHandler({ input, ctx }: HandlerArgs) {
       ],
       orderBy: { column: "updated_at", dir: "desc" },
       limit: window,
-      purpose,
     });
     // INCLUDE-ONLY is this query's whole contract: re-narrow in memory so an
     // over-wide read cannot put a non-journal note in the Journal place.
@@ -103,7 +101,6 @@ export default async function journalHandler({ input, ctx }: HandlerArgs) {
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
             limit: contentIds.length,
-            purpose,
           })
         : { rows: [] };
     const uriById = new Map(

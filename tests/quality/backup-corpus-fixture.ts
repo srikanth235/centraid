@@ -149,7 +149,7 @@ function seed(db: DatabaseSync): void {
    * stays empty and the check is not vacuous.
    */
   const receipt = db.prepare(
-    "INSERT INTO access_receipt (receipt_id, grant_id, invocation_id, action, object_type, object_id, purpose_concept_id, decision, occurred_at, hash, detail_json) VALUES (?, NULL, NULL, 'read', 'core.party', ?, NULL, 'allow', ?, ?, NULL)"
+    "INSERT INTO access_receipt (receipt_id, authority_id, invocation_id, action, object_type, object_id, decision, occurred_at, hash, detail_json) VALUES (?, NULL, NULL, 'read', 'core.party', ?, 'allow', ?, ?, NULL)"
   );
   for (let i = 0; i < EXPECTED_CENSUS.receipt; i += 1) {
     receipt.run(

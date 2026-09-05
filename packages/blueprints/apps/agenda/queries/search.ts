@@ -130,7 +130,6 @@ function recurrenceSummary(
 }
 
 export default async function searchHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "").trim();
   if (!term) return { events: [] };
   try {
@@ -138,7 +137,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       entity: "core.event",
       query: term,
       limit: 100,
-      purpose,
     });
     const hits = ((matches.rows ?? []) as unknown as RawSearchHit[]).filter(
       (e) => e.status !== "cancelled"
@@ -151,7 +149,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         acceptTruncation: true,
         entity: "schedule.event_ext",
         where: [{ column: "event_id", op: "in", value: eventIds }],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -160,15 +157,13 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           { column: "target_type", op: "eq", value: "core.event" },
           { column: "target_id", op: "in", value: eventIds },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
         entity: "schedule.attendee",
         where: [{ column: "event_id", op: "in", value: eventIds }],
-        purpose,
       }),
-      ctx.vault.read({ acceptTruncation: true, entity: "core.vault", purpose }),
+      ctx.vault.read({ acceptTruncation: true, entity: "core.vault" }),
     ]);
     const attendeeRows = (attendeesRes.rows ?? []) as unknown as RawAttendee[];
     const mePartyId =
@@ -182,7 +177,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
             acceptTruncation: true,
             entity: "core.party",
             where: [{ column: "party_id", op: "in", value: attendeePartyIds }],
-            purpose,
           })
         : { rows: [] };
     const partyNameById = new Map<string, unknown>(
@@ -205,7 +199,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
             acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] };
     const contentById = new Map<string, RawContent>(

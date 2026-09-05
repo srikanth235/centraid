@@ -2,19 +2,16 @@ import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollApp,
-  enrollDevice,
-} from "../bootstrap.js";
+import { bootstrapVault, enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerLockerCommands } from "../commands/locker.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import type { Gateway } from "../gateway/gateway.js";
 import { createGateway } from "../gateway/gateway.js";
-import type { Credential } from "../gateway/types.js";
+import type { Credential, ExecutionScopeSpec } from "../gateway/types.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
+import { uuidv7 } from "../ids.js";
 import { assertNoSealedFtsColumns } from "../schema/fts.js";
 import type { FtsEntitySpec } from "../schema/fts.js";
 import {
@@ -32,7 +29,6 @@ let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
-const PURPOSE = "dpv:ServiceProvision";
 const AEAD_TAG_MISMATCH = "Unsupported state or unable to authenticate data";
 
 describe("sealed", () => {
@@ -61,24 +57,42 @@ describe("sealed", () => {
         url: "https://example.com",
         otp_seed: "JBSWY3DPEHPK3PXP",
       },
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("executed");
     return (out as { output: { item_id: string } }).output.item_id;
   }
 
+  /** An automation the owner answered YES for, run under its own clamp. */
   function appWithScopes(
-    scopes: Parameters<typeof createGrant>[1]["scopes"]
+    scopes: readonly ExecutionScopeSpec[],
+    options: { clamped?: boolean; assistant?: boolean } = {}
   ): Credential {
-    const app = enrollApp(db, { name: "locker-app" });
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts[PURPOSE] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes,
-    });
-    return { kind: "app", appId: app.appId, signingKey: app.signingKey };
+    const name = options.assistant ? "_assistant" : `locker-app-${nextApp++}`;
+    const app = enrollAgent(db, { name, modelRef: "test-automation" });
+    answerScopes(
+      db,
+      boot,
+      name,
+      scopes.map((scope) => ({
+        schema: scope.schema,
+        ...(scope.table === undefined ? {} : { table: scope.table }),
+        verbs: scope.verbs,
+      }))
+    );
+    return {
+      kind: "agent",
+      agentId: app.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+      ...(options.clamped ? { scopeClamp: scopes } : {}),
+      ...(options.assistant
+        ? {
+            onBehalfOfOwner: { ownerId: boot.ownerPartyId, mayAct: true },
+          }
+        : {}),
+    };
   }
+  let nextApp = 0;
 
   test("sealed values roundtrip; a swapped cell (different AAD) refuses to open", () => {
     const key = ephemeralSealKey();
@@ -112,7 +126,6 @@ describe("sealed", () => {
     const read = gw.read(owner, {
       entity: "locker.item",
       where: [{ column: "item_id", op: "eq", value: itemId }],
-      purpose: PURPOSE,
     });
     expect(read.rows[0]?.password).toBe(SEALED_PLACEHOLDER);
     expect(read.rows[0]?.username).toBe("priya");
@@ -158,7 +171,6 @@ describe("sealed", () => {
       entityId: itemId,
       columns: ["password"],
       context: { kind: "fill", origin: "https://example.com" },
-      purpose: PURPOSE,
     });
     expect(revealed.values.password).toBe("pw-for-reveal");
     const receipt = db.audit
@@ -193,7 +205,6 @@ describe("sealed", () => {
         entityId: itemId,
         columns: ["password"],
         context: { kind: "fill", origin: "https://example.com/login" },
-        purpose: PURPOSE,
       })
     ).toThrow(/absolute HTTP origin/u);
     const denied = db.audit
@@ -205,48 +216,87 @@ describe("sealed", () => {
     expect(denied.detail_json).toContain("absolute HTTP origin");
   });
 
-  test("read scope does not reveal; an explicit reveal scope does — clamped by its row filter", () => {
+  test("REVEAL RIDES NO STANDING ANSWER: an automation is refused however it is scoped (#873, #928)", () => {
     const itemA = addLogin("secret-A");
-    const itemB = addLogin("secret-B");
     const readOnlyApp = appWithScopes([
       { schema: "locker", table: "item", verbs: "read" },
     ]);
     expect(() =>
-      gw.reveal(readOnlyApp, {
-        entity: "locker.item",
-        entityId: itemA,
-        purpose: PURPOSE,
-      })
+      gw.reveal(readOnlyApp, { entity: "locker.item", entityId: itemA })
     ).toThrow(/deny/u);
 
-    const revealApp = appWithScopes([
-      { schema: "locker", table: "item", verbs: "read" },
-      {
-        schema: "locker",
-        table: "item",
-        verbs: "reveal",
-        rowFilter: [{ column: "item_id", op: "eq", value: itemA }],
-      },
-    ]);
-    const ok = gw.reveal(revealApp, {
-      entity: "locker.item",
-      entityId: itemA,
-      columns: ["password"],
-      purpose: PURPOSE,
-    });
-    expect(ok.values.password).toBe("secret-A");
+    // Even with the owner's YES for `reveal` AND a covering clamp: a sealed
+    // reveal is Locker's permit, never a standing answer.
+    const revealApp = appWithScopes(
+      [
+        { schema: "locker", table: "item", verbs: "read" },
+        { schema: "locker", table: "item", verbs: "reveal" },
+      ],
+      { clamped: true }
+    );
     expect(() =>
       gw.reveal(revealApp, {
         entity: "locker.item",
-        entityId: itemB,
-        purpose: PURPOSE,
+        entityId: itemA,
+        columns: ["password"],
       })
     ).toThrow(/deny/u);
+
     const revealOnlyApp = appWithScopes([
       { schema: "locker", table: "item", verbs: "reveal" },
     ]);
+    expect(() => gw.read(revealOnlyApp, { entity: "locker.item" })).toThrow(
+      /deny/u
+    );
+
+    // TWO WALLS, and this asserts the second one. `automationSubjectsOf` mints
+    // no `reveal` row, so the ordinary path never has one to find; forge one
+    // straight into the plane and `evaluateAccess` still refuses, because
+    // reveal is not a verb a standing answer can carry at all (#873).
+    db.vault
+      .prepare(
+        `INSERT INTO share_authority
+           (authority_id, principal_kind, principal_id, subject_type,
+            subject_id, verb, duration, expires_at, decision, granted_at,
+            granted_by, revoked_at, revoked_reason, receipt_id)
+         VALUES (?, 'automation', ?, 'core.entity', 'locker.item', 'reveal',
+                 'standing', NULL, 'granted', ?, ?, NULL, NULL, NULL)`
+      )
+      .run(
+        uuidv7(),
+        "locker-app-1",
+        new Date().toISOString(),
+        boot.ownerPartyId
+      );
     expect(() =>
-      gw.read(revealOnlyApp, { entity: "locker.item", purpose: PURPOSE })
+      gw.reveal(revealApp, { entity: "locker.item", entityId: itemA })
+    ).toThrow(/deny/u);
+  });
+
+  test("the assistant reveals on the owner's behalf, clamped by its row filter", () => {
+    const itemA = addLogin("secret-A");
+    const itemB = addLogin("secret-B");
+    const assistant = appWithScopes(
+      [
+        { schema: "locker", table: "item", verbs: "read" },
+        {
+          schema: "locker",
+          table: "item",
+          verbs: "reveal",
+          rowFilter: [{ column: "item_id", op: "eq", value: itemA }],
+        },
+      ],
+      { clamped: true, assistant: true }
+    );
+    const ok = gw.reveal(assistant, {
+      entity: "locker.item",
+      entityId: itemA,
+      columns: ["password"],
+    });
+    expect(ok.values.password).toBe("secret-A");
+    // The clamp is the boundary the connector's run declared.
+    expect(() =>
+      gw.reveal(assistant, { entity: "locker.item", entityId: itemB })
     ).toThrow(/deny/u);
   });
 
@@ -261,14 +311,12 @@ describe("sealed", () => {
     const read = gw.read(cred, {
       entity: "locker.item",
       where: [{ column: "item_id", op: "eq", value: itemId }],
-      purpose: PURPOSE,
     });
     expect(read.rows[0]?.password).toBe(SEALED_PLACEHOLDER);
     expect(() =>
       gw.reveal(cred, {
         entity: "locker.item",
         entityId: itemId,
-        purpose: PURPOSE,
       })
     ).toThrow(/readonly/u);
   });
@@ -291,19 +339,21 @@ describe("sealed", () => {
       sealedInput: ["password"],
       handler: () => ({}),
     });
-    const app = enrollApp(db, { name: "importer", riskCeiling: "low" });
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts[PURPOSE] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: "locker", verbs: "act" }],
+    const app = enrollAgent(db, {
+      name: "importer",
+      modelRef: "test-automation",
     });
+    answerScopes(db, boot, "importer", [{ schema: "locker", verbs: "act" }]);
     const parked = gw.invoke(
-      { kind: "app", appId: app.appId, signingKey: app.signingKey },
+      {
+        kind: "agent",
+        agentId: app.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
+      },
       {
         command: "locker.import_secret",
         input: { password: "park-me-secret" },
-        purpose: PURPOSE,
       }
     );
     expect(parked.status).toBe("parked");
@@ -339,7 +389,6 @@ describe("sealed", () => {
     const out = gw.invoke(owner, {
       command: "locker.totp_code",
       input: { item_id: itemId },
-      purpose: PURPOSE,
     });
     const after = totpAt("JBSWY3DPEHPK3PXP", Date.now()).code;
     expect(out.status).toBe("executed");
@@ -367,14 +416,12 @@ describe("sealed", () => {
         card_number: "4111 1111 1111 1234",
         cvv: "321",
       },
-      purpose: PURPOSE,
     });
     const cardId = (cardOut as { output: { item_id: string } }).output.item_id;
 
     const out = gw.invoke(owner, {
       command: "locker.watchtower",
       input: {},
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("executed");
     const items = (
@@ -406,14 +453,12 @@ describe("sealed", () => {
         title: "renamed",
         password: SEALED_PLACEHOLDER,
       },
-      purpose: PURPOSE,
     });
     expect(edit.status).toBe("executed");
     const revealed = gw.reveal(owner, {
       entity: "locker.item",
       entityId: itemId,
       columns: ["password"],
-      purpose: PURPOSE,
     });
     expect(revealed.values.password).toBe("keep-me-safe");
   });
@@ -446,7 +491,6 @@ describe("sealed", () => {
     const out = gw.invoke(owner, {
       command: "locker.rogue_probe",
       input: { item_id: itemId },
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("failed");
     expect((out as { reason: string }).reason).toMatch(
@@ -496,7 +540,6 @@ describe("sealed", () => {
       entity: "locker.item",
       entityId: item.item_id,
       columns: ["password", "otp_seed"],
-      purpose: PURPOSE,
     });
     expect(revealed.values.password).toBe("gh-s3cret-!x");
     expect(revealed.values.otp_seed).toBe("JBSWY3DPEHPK3PXP");

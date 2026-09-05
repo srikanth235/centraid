@@ -480,8 +480,8 @@ describe("change-log", () => {
     const epoch = currentReplicaLogState(vault).epoch;
     for (const op of ["insert", "update", "update"] as const) {
       appendReplicaChange(vault, {
-        entity: "access.grant",
-        rowId: "grant-1",
+        entity: "access.app",
+        rowId: "app-1",
         op,
       });
     }
@@ -507,9 +507,9 @@ describe("change-log", () => {
         since: { epoch, seq: result.floor.seq },
       }).changes.map((change) => `${change.entity}:${change.seq}`)
     ).toStrictEqual([
-      "access.grant:1",
-      "access.grant:2",
-      "access.grant:3",
+      "access.app:1",
+      "access.app:2",
+      "access.app:3",
       "core.party:5",
     ]);
   });

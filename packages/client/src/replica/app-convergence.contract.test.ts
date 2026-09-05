@@ -14,7 +14,6 @@ const shapes: ReplicaShape[] = [
   {
     shapeId: "tasks",
     appId: "tasks",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "schedule.task",
@@ -26,7 +25,6 @@ const shapes: ReplicaShape[] = [
   {
     shapeId: "people",
     appId: "people",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "social.contact_channel",
@@ -38,7 +36,6 @@ const shapes: ReplicaShape[] = [
   {
     shapeId: "tally",
     appId: "tally",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "tally.expense",
@@ -50,7 +47,6 @@ const shapes: ReplicaShape[] = [
   {
     shapeId: "agenda",
     appId: "agenda",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.event",

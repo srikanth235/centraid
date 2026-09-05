@@ -14,7 +14,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { ACCESS_DDL, ACCESS_INSTALL_MEMORY_DDL } from "./access.js";
+import { ACCESS_DDL } from "./access.js";
 import { AGENT_DDL } from "./agent.js";
 import { AUDIT_DDL } from "./audit.js";
 import { SHARE_AUTHORITY_DDL } from "./authority.js";
@@ -83,7 +83,7 @@ export const ONTOLOGY_VERSION = "1.0";
 // Composition order is dependency order:
 //   - CORE first (everything references the spine), and the entity supertype
 //     with it: every ontology table carries a foreign key into `core_entity`;
-//   - the access plane (apps, grants, install memory, the seed registry, the
+//   - the access plane (the app install register, the seed registry, the
 //     ext-band registry) before anything that enrolls or scopes;
 //   - the agent plane's model tables, then the AUDIT band it writes into —
 //     `core_entity_revision` names an invocation, so the band precedes it;
@@ -112,7 +112,6 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     LINK_ANCHOR_DDL,
     SHARE_ORIGIN_DDL,
     ACCESS_DDL,
-    ACCESS_INSTALL_MEMORY_DDL,
     SEED_DDL,
     APP_EXT_DDL,
     AGENT_DDL,
@@ -139,6 +138,10 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     ENTITY_REVISIONS_DDL,
     TIME_ORGANIZE_DDL,
     ENRICH_DDL,
+    // The authority plane's table before `outbox_item`, whose standing-answer
+    // pointer is a real reference into it (#928 A6), and before the trigger
+    // that revokes into it (#916, E2).
+    SHARE_AUTHORITY_DDL,
     OUTBOX_DDL,
     REPLICA_DDL,
     FTS_DDL,
@@ -149,9 +152,6 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     RENAME_INBOX_NOTICE_DDL,
     SHARE_COMMONS_DDL,
     COMMONS_RESILIENCE_DDL,
-    // The authority plane's table before the trigger that revokes into it
-    // (#916, E2).
-    SHARE_AUTHORITY_DDL,
     // A trigger ON `core_entity` that writes to `share_authority` and
     // `share_circle_grant`, so both must exist (#916, E2).
     ENTITY_PURGE_REVOKE_DDL,

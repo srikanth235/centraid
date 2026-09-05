@@ -99,8 +99,7 @@ describe("replica-bootstrap.scale", () => {
       label: "Scale device",
       rememberDevice: true,
     });
-    plane.approveGrant("agenda", {
-      purpose: "dpv:ServiceProvision",
+    plane.recordAppInstall("agenda", {
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
 

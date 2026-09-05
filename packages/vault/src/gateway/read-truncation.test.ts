@@ -7,13 +7,12 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { answeredAutomation } from "../grant/automation-principal.test-fixtures.js";
 import { openOwnerVault } from "./owner-vault.test-fixtures.js";
 import type { OwnerVault } from "./owner-vault.test-fixtures.js";
 import { GATEWAY_DEFAULT_READ_ROWS } from "./types.js";
 
 let vault: OwnerVault;
-
-const PURPOSE = "dpv:ServiceProvision";
 
 /**
  * Rows straight into the physical table: this suite is about the WINDOW, and a
@@ -54,7 +53,6 @@ describe("gateway read truncation", () => {
     seedNotes(GATEWAY_DEFAULT_READ_ROWS + 1);
     const result = vault.gateway.read(vault.owner, {
       entity: "knowledge.note",
-      purpose: PURPOSE,
     });
     expect(result.rows).toHaveLength(GATEWAY_DEFAULT_READ_ROWS);
     expect(result.truncated).toBe(true);
@@ -65,7 +63,6 @@ describe("gateway read truncation", () => {
     seedNotes(3);
     const result = vault.gateway.read(vault.owner, {
       entity: "knowledge.note",
-      purpose: PURPOSE,
     });
     expect(result.rows).toHaveLength(3);
     expect(result.truncated).toBeUndefined();
@@ -77,7 +74,6 @@ describe("gateway read truncation", () => {
     const result = vault.gateway.read(vault.owner, {
       entity: "knowledge.note",
       limit: 4,
-      purpose: PURPOSE,
     });
     expect(result.rows).toHaveLength(4);
     expect(result.truncated).toBeUndefined();
@@ -88,7 +84,6 @@ describe("gateway read truncation", () => {
     const result = vault.gateway.read(vault.owner, {
       entity: "knowledge.note",
       limit: 4,
-      purpose: PURPOSE,
     });
     expect(result.rows).toHaveLength(4);
     expect(result.truncated).toBe(true);
@@ -97,14 +92,19 @@ describe("gateway read truncation", () => {
 
   test("the receipt counts the rows the caller got, never the probe row", () => {
     seedNotes(10);
-    const result = vault.gateway.read(vault.owner, {
+    // Owner-direct reads write no receipt (#928), so the count is asserted
+    // where a receipt still exists: a non-owner principal's read.
+    const reader = answeredAutomation(vault.db, vault.boot, "counter", [
+      { schema: "knowledge", verbs: "read" },
+      { schema: "core", table: "content_item", verbs: "read" },
+    ]);
+    const result = vault.gateway.read(reader.credential, {
       entity: "knowledge.note",
       limit: 4,
-      purpose: PURPOSE,
     });
     const receipt = vault.db.audit
       .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
-      .get(result.receiptId) as { detail_json: string } | undefined;
+      .get(result.receiptId!) as { detail_json: string } | undefined;
     expect(
       (JSON.parse(receipt!.detail_json) as { rowCount: number }).rowCount
     ).toBe(4);

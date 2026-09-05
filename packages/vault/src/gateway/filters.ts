@@ -250,7 +250,7 @@ export function scalarPrimaryKeyColumn(
 }
 
 /**
- * Column allow-list from access.grant_scope.field_mask_json — minimization
+ * Column allow-list from the execution clamp's field mask — minimization
  * by default (§03). Returns the SELECT list; a mask never widens past real
  * columns, and an empty intersection fails closed.
  */

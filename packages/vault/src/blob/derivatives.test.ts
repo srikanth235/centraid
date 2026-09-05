@@ -46,7 +46,6 @@ describe("derivatives", () => {
     return gw.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 
@@ -176,7 +175,6 @@ describe("derivatives", () => {
         .search(owner, {
           entity: "core.document",
           query: "narwhal",
-          purpose: "dpv:ServiceProvision",
         })
         .rows.map((row) => row.document_id)
     ).toContain(doc.document_id);
@@ -192,7 +190,6 @@ describe("derivatives", () => {
         .search(owner, {
           entity: "core.content_item",
           query: "cobalt",
-          purpose: "dpv:ServiceProvision",
         })
         .rows.map((row) => row.content_id)
     ).toContain(doc.content_id);

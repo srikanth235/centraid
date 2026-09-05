@@ -161,7 +161,6 @@ function attachmentsBySubject(
 }
 
 export default async function libraryHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
     // Pinned notes ride beside the window: a pin survives the note aging out.
@@ -173,7 +172,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           where: [{ column: "deleted_at", op: "is-null" }],
           orderBy: { column: "updated_at", dir: "desc" },
           limit: window,
-          purpose,
         }),
         ctx.vault.read({
           entity: "knowledge.note",
@@ -183,23 +181,20 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           ],
           orderBy: { column: "updated_at", dir: "desc" },
           limit: 200,
-          purpose,
         }),
         ctx.vault.read({
           entity: "knowledge.note",
           where: [{ column: "deleted_at", op: "not-null" }],
           orderBy: { column: "deleted_at", dir: "desc" },
           limit: 200,
-          purpose,
         }),
         // Notebooks are collections (#274) — the one curation mechanism.
         ctx.vault.read({
           acceptTruncation: true,
           entity: "core.collection",
-          purpose,
         }),
         // Rides this Promise.all so the exclusion costs no extra round trip.
-        readJournalNoteIds(ctx.vault, purpose),
+        readJournalNoteIds(ctx.vault),
       ]);
     const byId = new Map<string, NoteRow>();
     for (const n of [
@@ -243,7 +238,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             { column: "target_type", op: "eq", value: "knowledge.note" },
             { column: "target_id", op: "in", value: noteIds },
           ],
-          purpose,
         }),
         ctx.vault.read({
           acceptTruncation: true,
@@ -252,7 +246,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             { column: "target_type", op: "eq", value: "knowledge.note" },
             { column: "target_id", op: "in", value: noteIds },
           ],
-          purpose,
         }),
         ctx.vault.read({
           acceptTruncation: true,
@@ -262,7 +255,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             { column: "from_id", op: "in", value: noteIds },
             { column: "valid_to", op: "is-null" },
           ],
-          purpose,
         }),
         ctx.vault.read({
           acceptTruncation: true,
@@ -272,7 +264,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             { column: "to_id", op: "in", value: noteIds },
             { column: "valid_to", op: "is-null" },
           ],
-          purpose,
         }),
         ctx.vault.read({
           acceptTruncation: true,
@@ -281,7 +272,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             { column: "target_type", op: "eq", value: "knowledge.note" },
             { column: "target_id", op: "in", value: noteIds },
           ],
-          purpose,
         }),
       ]
     );
@@ -298,7 +288,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             acceptTruncation: true,
             entity: "core.concept",
             where: [{ column: "concept_id", op: "in", value: conceptIds }],
-            purpose,
           })
         : { rows: [] };
     // Same re-narrowing one link on: a read may answer wider than it was asked.
@@ -343,7 +332,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     // Standoff anchors (#282): ship the selector; resolving it is presentation.
     const [resolved, anchors] = await Promise.all([
       uniqueRefs.length > 0
-        ? ctx.vault.resolve({ refs: uniqueRefs, purpose })
+        ? ctx.vault.resolve({ refs: uniqueRefs })
         : Promise.resolve({ cards: [] as Array<Record<string, unknown>> }),
       linkRows.length > 0
         ? ctx.vault.read({
@@ -356,7 +345,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
                 value: linkRows.map((l) => l.link_id),
               },
             ],
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
     ]);
@@ -419,7 +407,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] };
 

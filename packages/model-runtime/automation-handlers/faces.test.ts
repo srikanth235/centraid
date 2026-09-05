@@ -107,7 +107,6 @@ describe("faces handler", () => {
       expect(harness.invokes[0]).toStrictEqual({
         command: "enrich.upsert_faces",
         input: { asset_id: "a1", model: MODEL, faces: FACES },
-        purpose: "dpv:ServiceProvision",
       });
     });
 
@@ -154,7 +153,6 @@ describe("faces handler", () => {
         {
           command: "enrich.mark_requests_drained",
           input: { request_ids: ["r1"] },
-          purpose: "dpv:ServiceProvision",
         },
       ]);
     });

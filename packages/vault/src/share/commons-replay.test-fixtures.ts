@@ -42,7 +42,7 @@ export function replicaExecutor(
   return (command, input, invocationId) =>
     side.gateway.invokeCommonsCanonical(
       side.credential,
-      { command, input, purpose: "dpv:ServiceProvision", invocationId },
+      { command, input, invocationId },
       { idSeed: invocationId }
     );
 }
@@ -103,7 +103,6 @@ export function folderCommons(documentCount: number): FolderCommons {
     const outcome = stewardGateway.invoke(steward.credential, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
     if (outcome.status !== "executed")
       throw new Error(`${command} failed: ${JSON.stringify(outcome)}`);

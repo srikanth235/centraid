@@ -13,7 +13,6 @@
   ],
   "requires": {},
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Reads newly readable documents' text and the party list, and asserts anchored references (core.link_entities, both endpoints already readable) from documents to the people they mention (issue #299 phase 4).",
     "scopes": [
       { "schema": "core", "verbs": "read+act" },

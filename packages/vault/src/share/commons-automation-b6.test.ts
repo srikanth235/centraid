@@ -5,12 +5,13 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { bootstrapVault, createGrant, enrollAgent } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import { registerTallyCommands } from "../commands/tally.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { nowIso } from "../ids.js";
 import { commonsSeats } from "./commons-lifecycle.js";
 import { compileCommons, createCommonsGrant } from "./commons.js";
@@ -35,12 +36,9 @@ function openSeat(root: string, vaultId: string, name: string): Seat {
     name: "tally-commons-writer",
     modelRef: "centraid-automation",
   });
-  createGrant(db, {
-    granteePartyId: agent.partyId,
-    purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-    grantedByPartyId: boot.ownerPartyId,
-    scopes: [{ schema: "tally", verbs: "act" }],
-  });
+  answerScopes(db, boot, "tally-commons-writer", [
+    { schema: "tally", verbs: "act" },
+  ]);
   return {
     vaultId,
     db,

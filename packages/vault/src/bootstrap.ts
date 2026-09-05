@@ -32,10 +32,6 @@ interface SeedConcept {
 }
 
 const SEED_SCHEMES: Record<string, { uri: string; title: string }> = {
-  purposes: {
-    uri: "https://w3id.org/dpv#Purpose",
-    title: "Consent purposes (DPV)",
-  },
   relations: { uri: "urn:duaility:relations", title: "Link relation types" },
   "activity-kinds": {
     uri: "urn:duaility:activity-kinds",
@@ -52,17 +48,6 @@ const SEED_SCHEMES: Record<string, { uri: string; title: string }> = {
   doctype: { uri: "urn:centraid:doctype", title: "Document types (machine)" },
 };
 const SEED_CONCEPTS: SeedConcept[] = [
-  {
-    scheme: "purposes",
-    notation: "dpv:ServiceProvision",
-    label: "Service provision",
-  },
-  { scheme: "purposes", notation: "dpv:Billing", label: "Billing" },
-  {
-    scheme: "purposes",
-    notation: "dpv:HealthMonitoring",
-    label: "Health monitoring",
-  },
   { scheme: "relations", notation: "same-as", label: "Same as" },
   { scheme: "relations", notation: "about", label: "About" },
   { scheme: "relations", notation: "works-for", label: "Works for" },
@@ -163,10 +148,6 @@ export function bootstrapVault(
        VALUES (?, ?, 'Personal', NULL, ?, 'private', NULL)`
     )
     .run(uuidv7(), ownerPartyId, options.defaultTz ?? "UTC");
-  // No access_policy row is seeded (#916, ruling ONT-06). The one row every
-  // vault used to carry named `health.condition`, a schema that left the
-  // ontology in rung eight — and a policy plane whose only content is a
-  // policy about a table that does not exist is a plane with no producer.
   const device = enrollDevice(
     db,
     ownerPartyId,
@@ -272,55 +253,4 @@ export interface ScopeSpec {
   verbs: "read" | "read+act" | "act" | "reveal";
   rowFilter?: FilterClause[];
   fieldMask?: string[];
-}
-
-export function createGrant(
-  db: VaultDb,
-  options: {
-    appId?: string;
-    granteePartyId?: string;
-    purposeConceptId: string;
-    grantedByPartyId: string;
-    scopes: ScopeSpec[];
-    expiresAt?: string;
-  }
-): string {
-  const grantId = uuidv7();
-  db.vault
-    .prepare(
-      `INSERT INTO access_grant
-         (grant_id, app_id, grantee_party_id, purpose_concept_id, granted_by_party_id, granted_at, expires_at, revoked_at, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'active')`
-    )
-    .run(
-      grantId,
-      options.appId ?? null,
-      options.granteePartyId ?? null,
-      options.purposeConceptId,
-      options.grantedByPartyId,
-      nowIso(),
-      options.expiresAt ?? null
-    );
-  // ONE DOTTED ENCODING (#916, R10). `ScopeSpec` keeps its `{schema, table}`
-  // shape — every bundled app manifest is written in it, and an app.json is
-  // not a schema decision — but what LANDS is the dotted name the rest of the
-  // vault speaks: a bare pack (`core`) for a whole-pack scope, `core.event`
-  // for one entity.
-  const stmt = db.vault.prepare(
-    `INSERT INTO access_grant_scope (scope_id, grant_id, entity, verbs, row_filter_json, field_mask_json)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  );
-  for (const scope of options.scopes) {
-    stmt.run(
-      uuidv7(),
-      grantId,
-      scope.table === undefined
-        ? scope.schema
-        : `${scope.schema}.${scope.table}`,
-      scope.verbs,
-      scope.rowFilter ? JSON.stringify(scope.rowFilter) : null,
-      scope.fieldMask ? JSON.stringify(scope.fieldMask) : null
-    );
-  }
-  return grantId;
 }

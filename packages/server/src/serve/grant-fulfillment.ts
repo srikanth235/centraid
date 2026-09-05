@@ -168,12 +168,11 @@ function receiptRosterDrift(
   const { masked, departed } = result.drift;
   if (masked.length === 0 && departed.length === 0) return;
   writeReceipt(input.origin.audit, {
-    grantId: input.grantId,
+    authorityId: input.grantId,
     invocationId: null,
     action: "act share.fulfill",
     objectType: "share.authority",
     objectId: input.grantId,
-    purpose: null,
     decision: "allow",
     detail: {
       rosterDrift: true,

@@ -1,17 +1,13 @@
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollAgent,
-  enrollDevice,
-} from "../bootstrap.js";
+import { bootstrapVault, enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import type { Gateway } from "../gateway/gateway.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { uuidv7 } from "../ids.js";
 import { registerLinkCommands } from "./links.js";
 import { registerPeopleCommands } from "./people.js";
@@ -64,7 +60,6 @@ describe("social", () => {
         channel: "email",
         subject: "Invoice 2026-014",
       },
-      purpose: "dpv:ServiceProvision",
     });
     if (outcome.status !== "executed")
       throw new Error(`draft failed: ${JSON.stringify(outcome)}`);
@@ -112,7 +107,6 @@ describe("social", () => {
     const outcome = gw.invoke(owner, {
       command: "social.send_message",
       input: { message_id: messageId },
-      purpose: "dpv:Billing",
     });
     expect(outcome.status).toBe("executed");
     const message = db.vault
@@ -130,12 +124,10 @@ describe("social", () => {
     gw.invoke(owner, {
       command: "social.send_message",
       input: { message_id: messageId },
-      purpose: "dpv:Billing",
     });
     const again = gw.invoke(owner, {
       command: "social.send_message",
       input: { message_id: messageId },
-      purpose: "dpv:Billing",
     });
     expect(again.status).toBe("failed");
     assert(again.status === "failed");
@@ -146,12 +138,9 @@ describe("social", () => {
     const { messageId } = draft();
     const agent = enrollAgent(db, { name: "assistant", modelRef: "model-x" });
     const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
-    createGrant(db, {
-      granteePartyId: agent.partyId,
-      purposeConceptId: boot.concepts["dpv:Billing"] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: "social", verbs: "read+act" }],
-    });
+    answerScopes(db, boot, "assistant", [
+      { schema: "social", verbs: "read+act" },
+    ]);
     const cred: Credential = {
       kind: "agent",
       agentId: agent.agentId,
@@ -161,7 +150,6 @@ describe("social", () => {
     const parked: InvokeOutcome = gw.invoke(cred, {
       command: "social.send_message",
       input: { message_id: messageId },
-      purpose: "dpv:Billing",
     });
     expect(parked.status).toBe("parked");
     if (parked.status !== "parked") return;
@@ -208,7 +196,6 @@ describe("social", () => {
     const outcome = gw.invoke(owner, {
       command: "social.resolve_identity",
       input: { party_id: raviId, scheme: "email", value: "ravi@example.com" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     if (outcome.status !== "executed") return;
@@ -232,7 +219,6 @@ describe("social", () => {
     gw.invoke(owner, {
       command: "social.resolve_identity",
       input: { party_id: raviId, scheme: "email", value: "ravi@example.com" },
-      purpose: "dpv:ServiceProvision",
     });
     const other = uuidv7();
     const now = new Date().toISOString();
@@ -245,7 +231,6 @@ describe("social", () => {
     const outcome = gw.invoke(owner, {
       command: "social.resolve_identity",
       input: { party_id: other, scheme: "email", value: "ravi@example.com" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
@@ -269,21 +254,18 @@ describe("social", () => {
     const edit = gw.invoke(owner, {
       command: "people.edit_person",
       input: { party_id: raviId, nickname: "Rav" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(edit.status).toBe("executed");
     expect(
       gw.invoke(owner, {
         command: "people.star_person",
         input: { party_id: raviId },
-        purpose: "dpv:ServiceProvision",
       }).status
     ).toBe("executed");
     expect(
       gw.invoke(owner, {
         command: "people.add_note",
         input: { party_id: raviId, text: "met at the wedding" },
-        purpose: "dpv:ServiceProvision",
       }).status
     ).toBe("executed");
     // The nickname is a `people_profile` column.
@@ -317,7 +299,6 @@ describe("social", () => {
       gw.invoke(owner, {
         command: favorite === 1 ? "people.star_person" : "people.unstar_person",
         input: { party_id: raviId },
-        purpose: "dpv:ServiceProvision",
       });
     expect(setFavorite(1).status).toBe("executed");
     expect(setFavorite(1).status).toBe("executed");
@@ -337,7 +318,6 @@ describe("social", () => {
         recipient_party_id: boot.ownerPartyId,
         channel: "dm",
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     const output = (
@@ -355,7 +335,6 @@ describe("social", () => {
     const sent = gw.invoke(owner, {
       command: "social.send_message",
       input: { message_id: output.message_id },
-      purpose: "dpv:ServiceProvision",
     });
     expect(sent.status).toBe("executed");
   });
@@ -365,7 +344,6 @@ describe("social", () => {
     const first = gw.invoke(owner, {
       command: "social.mark_thread_read",
       input: { thread_id: threadId, read_at: "2026-07-03T10:00:00Z" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(first.status).toBe("executed");
     const rows = db.vault
@@ -381,7 +359,6 @@ describe("social", () => {
     const again = gw.invoke(owner, {
       command: "social.mark_thread_read",
       input: { thread_id: threadId, read_at: "2026-07-03T11:30:00Z" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(again.status).toBe("executed");
     const later = db.vault
@@ -394,7 +371,6 @@ describe("social", () => {
     const ghost = gw.invoke(owner, {
       command: "social.mark_thread_read",
       input: { thread_id: "no-such-thread", read_at: "2026-07-03T10:00:00Z" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(ghost.status).toBe("failed");
   });
@@ -413,7 +389,6 @@ describe("social", () => {
     const card = gw.invoke(owner, {
       command: "people.edit_person",
       input: { party_id: raviId, role: "Design lead, Acme Studio" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(card.status).toBe("executed");
     const row = db.vault
@@ -430,7 +405,6 @@ describe("social", () => {
         to_id: orgId,
         relation: "works-for",
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(link.status).toBe("executed");
     const stored = db.vault

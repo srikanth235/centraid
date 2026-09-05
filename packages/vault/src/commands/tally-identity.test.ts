@@ -41,7 +41,7 @@ describe("tally.add_friend enrolls an existing party rather than minting a secon
   });
 
   const invoke = (command: string, input: Record<string, unknown>) =>
-    gw.invoke(owner, { command, input, purpose: "dpv:ServiceProvision" });
+    gw.invoke(owner, { command, input });
 
   function out<T>(outcome: ReturnType<typeof invoke>): T {
     expect(outcome.status).toBe("executed");

@@ -216,7 +216,6 @@ const SPENT = "Airplane dinner at the Ship";
 const TALLY_SHAPE = {
   shapeId: "tally-default",
   appId: "tally",
-  purpose: "dpv:ServiceProvision",
   entities: [
     {
       entity: "tally.expense",

@@ -306,7 +306,6 @@ function parkAction(world: World, seat: Seat): void {
   const outcome = seat.gateway.invoke(agent.credential, {
     command: PARKING_COMMAND,
     input: { name: `sim-friend-${seat.index}-${world.step}` },
-    purpose: "dpv:ServiceProvision",
   });
   if (outcome.status !== "parked") {
     fail(world, `seat ${seat.index} park_confirmable: ${outcome.status}`);
@@ -351,7 +350,7 @@ function settleAction(world: World, rng: Rng, approve: boolean): void {
 function consentRevokeAction(world: World, seat: Seat): void {
   const agent = plane(world).agents.get(seat.index);
   if (!agent) return;
-  seat.gateway.revokeGrant(seat.credential, agent.consentGrantId);
+  seat.gateway.revokeAuthority(seat.credential, agent.consentGrantId);
   for (const fact of plane(world).parked)
     if (!fact.settled && fact.consentGrantId === agent.consentGrantId) {
       fact.settled = true;

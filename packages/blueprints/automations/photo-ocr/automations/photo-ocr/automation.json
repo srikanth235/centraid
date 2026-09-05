@@ -13,7 +13,6 @@
   ],
   "requires": {},
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Reads photograph previews and derivation stamps, then writes validated searchable text.",
     "scopes": [
       {

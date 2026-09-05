@@ -44,7 +44,6 @@ interface ContentRow {
 }
 
 export default async function searchHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "").trim();
   if (!term) return { documents: [] };
   try {
@@ -52,7 +51,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       entity: "core.document",
       query: term,
       limit: 100,
-      purpose,
     });
     const hits = (matches.rows ?? []) as unknown as SearchHit[];
     if (hits.length === 0) return { documents: [] };
@@ -65,9 +63,8 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
           { column: "target_id", op: "in", value: documentIds },
         ],
-        purpose,
       }),
-      ...conceptTaxonomyReads(ctx.vault, purpose),
+      ...conceptTaxonomyReads(ctx.vault),
     ]);
     const tagRows = (tags.rows ?? []) as unknown as TagRow[];
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
@@ -76,7 +73,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // read over the same matched ids.
     const tagsByDoc = await readLabelsByDocument({
       ctx,
-      purpose,
       documentIds,
       schemes: schemeRows,
       concepts: conceptRows,
@@ -120,14 +116,12 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
             acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] as Record<string, unknown>[] },
-      readCustodyByContent({ ctx, purpose, contentIds }),
+      readCustodyByContent({ ctx, contentIds }),
       // Shares (#821) bounded by matched documents; same join drive.ts makes.
       readSharesByDocument({
         ctx,
-        purpose,
         documentIds: [...folderByDoc.keys()],
         folderByDoc,
         folderConcepts: schemeConcepts,

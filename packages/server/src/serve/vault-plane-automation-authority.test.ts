@@ -24,7 +24,6 @@ const logger = {
 const cleanups: Array<() => Promise<void> | void> = [];
 
 const BLOCK = {
-  purpose: "dpv:ServiceProvision",
   scopes: [
     { schema: "schedule", verbs: "read+act" as const },
     { schema: "core", table: "party", verbs: "read" as const },
@@ -92,7 +91,7 @@ describe("an automation is a principal in the one plane", () => {
     );
     const parked = vault
       .listScopeRequests()
-      .find((request) => request.appId === "digest");
+      .find((request) => request.principalId === "digest");
     expect(parked).toBeDefined();
 
     vault.decideScopeRequest(parked!.requestId, false);
@@ -111,7 +110,7 @@ describe("an automation is a principal in the one plane", () => {
     });
     const parked = vault
       .listScopeRequests()
-      .find((request) => request.appId === "digest")!;
+      .find((request) => request.principalId === "digest")!;
     vault.decideScopeRequest(parked.requestId, true);
     expect(answerFacts(vault, "digest")).toContain(
       "granted agent.pack media read"
@@ -126,13 +125,15 @@ describe("an automation is a principal in the one plane", () => {
   });
 
   /*
-   * THE MIGRATION. A vault whose automation authority lives only in the app
-   * plane is opened again; the answers must appear with the same content, and
-   * the owner's refusal must survive as `declined`. Seeded by deleting the
-   * rows the first open wrote, which is exactly the pre-#928 state.
+   * THE MIGRATION IS GONE WITH WHAT IT MIGRATED FROM (#928 w4a). The app grant
+   * plane it read — `access_grant`, `access_grant_scope`,
+   * `access_scope_tombstone` — no longer exists, so a one-shot backfill would
+   * be a reader of tables nothing writes. What w3a's migration case proved
+   * (answers and refusals survive a re-open) is now proved by the plane
+   * itself: the rows ARE the storage, and re-opening reads them back.
    */
-  test("re-opening a vault backfills automation grants and refusals losslessly", async () => {
-    const dir = await tempDir(`automation-migrate-${crypto.randomUUID()}-`);
+  test("a re-opened vault reads its answers and refusals back unchanged", async () => {
+    const dir = await tempDir(`automation-reopen-${crypto.randomUUID()}-`);
     cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
     const first = await plane(dir);
     first.ensureAgentInstallGrant("digest", BLOCK);
@@ -142,7 +143,7 @@ describe("an automation is a principal in the one plane", () => {
     });
     const parked = first
       .listScopeRequests()
-      .find((request) => request.appId === "digest")!;
+      .find((request) => request.principalId === "digest")!;
     first.decideScopeRequest(parked.requestId, false);
     const expected = answerFacts(first, "digest").toSorted();
     expect(expected).toStrictEqual([
@@ -152,41 +153,29 @@ describe("an automation is a principal in the one plane", () => {
       "granted core.entity core.party read",
     ]);
     const openRequests = first.listScopeRequests().length;
-    // The pre-#928 state: grants and tombstones, no answers.
-    first.db.vault.exec(
-      `DELETE FROM share_authority WHERE principal_kind = 'automation'`
-    );
-    expect(automationAnswers(first.db.vault)).toStrictEqual([]);
     first.stop();
 
     const second = await plane(dir);
     expect(answerFacts(second, "digest").toSorted()).toStrictEqual(expected);
-    // Lossless: the legacy rows are still there for wave 4 to delete, and a
-    // parked ask is not an answer, so it survives the migration unanswered.
-    expect(
-      second.db.vault
-        .prepare(`SELECT count(*) AS n FROM access_grant_scope`)
-        .get()
-    ).toMatchObject({ n: expect.any(Number) });
+    // A parked ask is not an answer, so it neither settles nor multiplies.
     expect(second.listScopeRequests()).toHaveLength(openRequests);
-    // One-shot: a third open adds nothing.
-    const after = answerFacts(second, "digest").toSorted();
+    // And re-running the top-up on the same manifest adds nothing.
+    second.ensureAgentInstallGrant("digest", BLOCK);
+    expect(answerFacts(second, "digest").toSorted()).toStrictEqual(expected);
     second.stop();
-    const third = await plane(dir);
-    expect(answerFacts(third, "digest").toSorted()).toStrictEqual(after);
   });
 
-  test("the assistant is never given a standing answer by the migration", async () => {
+  test("the assistant holds no standing answer, and no path mints it one", async () => {
     const dir = await tempDir(`automation-assistant-${crypto.randomUUID()}-`);
     cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
     const first = await plane(dir);
-    first.approveAgentGrant("_assistant", {
-      purpose: "dpv:ServiceProvision",
+    // The install path is the one that answers; run it for `_assistant` and
+    // the plane still holds nothing, because the assistant's reach is the
+    // acting owner's and is never a row (#928 A3).
+    first.ensureAgentInstallGrant("_assistant", {
       scopes: [{ schema: "schedule", verbs: "act" }],
     });
-    first.db.vault.exec(
-      `DELETE FROM share_authority WHERE principal_kind = 'automation'`
-    );
+    expect(answerFacts(first, "_assistant")).toStrictEqual([]);
     first.stop();
     const second = await plane(dir);
     expect(answerFacts(second, "_assistant")).toStrictEqual([]);

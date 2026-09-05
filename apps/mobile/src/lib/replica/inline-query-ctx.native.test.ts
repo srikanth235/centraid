@@ -384,7 +384,6 @@ function seedScope(file: string): void {
       {
         shapeId: SHAPE_ID,
         appId: "tally",
-        purpose: "dpv:ServiceProvision",
         entities: entities.map((entity) => ({
           entity: entity.entity,
           primaryKey: entity.primaryKey,

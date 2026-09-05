@@ -3,12 +3,17 @@ import { StyleSheet, View } from "react-native";
 
 import {
   ACCESS_ENTITY,
+  ACCESS_REQUEST_ENTITY,
   ACCESS_SCOPE,
+  ACCESS_USE_ENTITY,
   groupAnswers,
   parseAccessAnswers,
+  parseAccessRequests,
+  parseAccessUse,
   parseLociBody,
 } from "@centraid/client/access-lens";
 import type {
+  AccessAnswer,
   AccessGroup,
   AccessLocusCopy,
 } from "@centraid/client/access-lens";
@@ -36,6 +41,16 @@ export default function AccessSection(): React.JSX.Element {
     ACCESS_SCOPE,
     useMemo(() => ({ entity: ACCESS_ENTITY, limit: 2_000 }), [])
   );
+  // Beside the answers, never instead of them: an unread use or ask table
+  // leaves "never used" and no pending question rather than blanking the list.
+  const uses = useReplicaQuery(
+    ACCESS_SCOPE,
+    useMemo(() => ({ entity: ACCESS_USE_ENTITY, limit: 2_000 }), [])
+  );
+  const asks = useReplicaQuery(
+    ACCESS_SCOPE,
+    useMemo(() => ({ entity: ACCESS_REQUEST_ENTITY, limit: 2_000 }), [])
+  );
   const replica = useReplica();
   const base = replica.gatewayBase ?? "";
   const [loci, setLoci] = useState<AccessLocusCopy>({});
@@ -56,9 +71,11 @@ export default function AccessSection(): React.JSX.Element {
   }, [base]);
 
   const groups = useMemo(
-    () => groupAnswers(parseAccessAnswers(answers.rows)),
-    [answers.rows]
+    () =>
+      groupAnswers(parseAccessAnswers(answers.rows, parseAccessUse(uses.rows))),
+    [answers.rows, uses.rows]
   );
+  const requests = useMemo(() => parseAccessRequests(asks.rows), [asks.rows]);
 
   return (
     <SettingsSection label="Access">
@@ -69,14 +86,30 @@ export default function AccessSection(): React.JSX.Element {
           }`}
         </Text>
       ) : (
-        groups.map((group) => (
-          <AccessGroupCard
-            key={group.id}
-            group={group}
-            promise={loci[group.locus]}
-            styles={styles}
-          />
-        ))
+        <>
+          {requests.length > 0 ? (
+            <View style={styles.card}>
+              <Text style={styles.groupLabel}>Waiting on you</Text>
+              {requests.map((request) => (
+                <Text key={request.requestId} style={styles.row}>
+                  {`${request.principalId} is asking for ${
+                    request.scopes.length === 0
+                      ? "access"
+                      : request.scopes.join(", ")
+                  }`}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+          {groups.map((group) => (
+            <AccessGroupCard
+              key={group.id}
+              group={group}
+              promise={loci[group.locus]}
+              styles={styles}
+            />
+          ))}
+        </>
       )}
     </SettingsSection>
   );
@@ -98,15 +131,18 @@ function AccessGroupCard({
         <Text style={styles.help}>No standing answers here.</Text>
       ) : (
         group.answers.map((answer) => (
-          <Text key={answer.authorityId} style={styles.row}>
-            {`${answer.principalId} ${
-              answer.decision === "declined" ? "may not" : "may"
-            } ${answer.verb} ${
-              answer.subjectId === ""
-                ? answer.subjectType
-                : `${answer.subjectType} ${answer.subjectId}`
-            }`}
-          </Text>
+          <View key={answer.authorityId}>
+            <Text style={styles.row}>
+              {`${answer.principalId} ${
+                answer.decision === "declined" ? "may not" : "may"
+              } ${answer.verb} ${
+                answer.subjectId === ""
+                  ? answer.subjectType
+                  : `${answer.subjectType} ${answer.subjectId}`
+              }`}
+            </Text>
+            <Text style={styles.help}>{lastUsed(answer)}</Text>
+          </View>
         ))
       )}
       {/* Verbatim from the vault (ruling V-locus), or nothing. */}
@@ -115,6 +151,19 @@ function AccessGroupCard({
       ) : null}
     </View>
   );
+}
+
+/** NEVER USED IS A FACT, NOT A BLANK (#928) — see the desktop seat's twin. */
+function lastUsed(answer: AccessAnswer): string {
+  if (answer.lastUsedAt === null) return "never used";
+  const at = new Date(answer.lastUsedAt);
+  return Number.isNaN(at.getTime())
+    ? "never used"
+    : `last used ${at.toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })}`;
 }
 
 const makeStyles = (colors: ThemeColors) =>

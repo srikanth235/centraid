@@ -105,6 +105,10 @@ export async function openComponentChaosWorld(): Promise<ComponentChaosWorld> {
     restartGateway: () => {
       plane.stop();
       plane = openPlane();
+      // The synthetic app has no real gateway install pass to replay its
+      // build-time declaration after a restart, so restore the same fixture
+      // declaration on the replacement plane.
+      approvePlanner(plane);
     },
     setBackend: (mode) => backend.setMode(mode),
     openOutbox: () => {

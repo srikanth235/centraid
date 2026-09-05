@@ -42,7 +42,6 @@ interface RawCollection {
 }
 
 export default async function searchHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "").trim();
   if (!term) return { assets: [] };
   try {
@@ -50,7 +49,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       entity: "core.content_item",
       query: term,
       limit: 300,
-      purpose,
     });
     const contentIds = [
       ...new Set(
@@ -68,7 +66,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         { column: "deleted_at", op: "is-null" },
       ],
       limit: 300,
-      purpose,
     });
     const assetsRaw = (liveAssets.rows ?? []) as unknown as RawAsset[];
     if (assetsRaw.length === 0) return { assets: [] };
@@ -79,7 +76,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         acceptTruncation: true,
         entity: "core.content_item",
         where: [{ column: "content_id", op: "in", value: contentIds }],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -88,15 +84,13 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           { column: "target_type", op: "eq", value: "media.asset" },
           { column: "target_id", op: "in", value: assetIds },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
         entity: "core.collection",
-        purpose,
       }),
-      readPlaces({ ctx, purpose }),
-      readAssetJoins({ ctx, purpose, assetIds, contentIds }),
+      readPlaces({ ctx }),
+      readAssetJoins({ ctx, assetIds, contentIds }),
     ]);
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as RawContent[]).map(

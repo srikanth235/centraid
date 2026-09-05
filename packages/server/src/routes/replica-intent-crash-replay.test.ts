@@ -133,7 +133,6 @@ describe("replica intent crash replay", () => {
       const outcome = await plane.invoke(plane.ownerCredential, {
         command: "schedule.add_task",
         input: input.input as Record<string, unknown>,
-        purpose: "dpv:ServiceProvision",
         invocationId: replicaInvocationId(input.intentId, 0),
         intentId: input.intentId,
         intentDeviceId: DEVICE_ID,

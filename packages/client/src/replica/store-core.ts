@@ -287,8 +287,7 @@ const DDL = `
   );
   CREATE TABLE IF NOT EXISTS replica_shape (
     shape_id TEXT PRIMARY KEY,
-    app_id TEXT NOT NULL,
-    purpose TEXT NOT NULL
+    app_id TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS replica_entity_schema (
     shape_id TEXT NOT NULL,
@@ -386,12 +385,11 @@ export class ReplicaSqliteStore {
 
   /** Shape metadata survives reopen and rebuilds the app/entity lookup offline. */
   catalog(): ReplicaShape[] {
-    return this.all<{ shape_id: string; app_id: string; purpose: string }>(
-      "SELECT shape_id, app_id, purpose FROM replica_shape ORDER BY shape_id"
+    return this.all<{ shape_id: string; app_id: string }>(
+      "SELECT shape_id, app_id FROM replica_shape ORDER BY shape_id"
     ).map((shape) => ({
       shapeId: shape.shape_id,
       appId: shape.app_id,
-      purpose: shape.purpose,
       entities: this.all<StoredSchema & { entity: string }>(
         `SELECT entity, primary_key, columns_json, has_unavailable_fields
            FROM replica_entity_schema WHERE shape_id = ? ORDER BY entity`,
@@ -1113,10 +1111,10 @@ export class ReplicaSqliteStore {
   private writeShapes(shapes: readonly ReplicaShape[]): void {
     this.schemas.clear();
     for (const shape of shapes) {
-      this.run(
-        "INSERT INTO replica_shape(shape_id, app_id, purpose) VALUES (?, ?, ?)",
-        [shape.shapeId, shape.appId, shape.purpose]
-      );
+      this.run("INSERT INTO replica_shape(shape_id, app_id) VALUES (?, ?)", [
+        shape.shapeId,
+        shape.appId,
+      ]);
       for (const schema of shape.entities) {
         this.run(
           `INSERT INTO replica_entity_schema
@@ -1601,10 +1599,8 @@ export class ReplicaSqliteStore {
     const schemas = new Map<string, ReplicaEntitySchema>();
     const shapeIds = new Set<string>();
     for (const shape of header.shapes) {
-      if (!shape.shapeId || !shape.appId || !shape.purpose) {
-        throw new ReplicaProtocolError(
-          "Shape identity and purpose are required"
-        );
+      if (!shape.shapeId || !shape.appId) {
+        throw new ReplicaProtocolError("Shape identity is required");
       }
       if (shapeIds.has(shape.shapeId)) {
         throw new ReplicaProtocolError(`Duplicate shape ${shape.shapeId}`);

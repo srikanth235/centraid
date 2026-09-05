@@ -145,12 +145,47 @@ export const AUTHORITY_REGISTRY: readonly AuthorityTriple[] = [
     strategyFor: { view: "device-attenuation", edit: "device-attenuation" },
     citation: "#883 V-split and V-locus",
   },
+  // A COMPANION DEVICE'S ATTENUATION (#928 A6). The device row above answers
+  // "may this device act on this vault at all"; this one answers "over which
+  // of the owner's surfaces", one row per surface. It is fulfilled at the
+  // gateway boundary, ahead of any vault open, from a projection of these
+  // rows — so the strategy is the same `device-attenuation` the vault-wide
+  // device answer uses, and the locus is the same one.
+  {
+    principalKind: "device",
+    subjectType: "app.surface",
+    verbs: { kind: "closed", verbs: ["use"] },
+    strategyFor: { use: "device-attenuation" },
+    citation: "#928 A6 over #883 V-split",
+  },
   {
     principalKind: "harness",
     subjectType: "enrich.scope",
     verbs: { kind: "contract", closedBy: "#807 capability contract registry" },
     strategyFor: {},
     citation: "#883 V-split over #807",
+  },
+  // AN EGRESS ANSWER (#928 A6): the standing "always allow" for an external
+  // write, minted from a concrete outbox item rather than configured up front
+  // (#306 decision 3). The subject is the destination, the verb the semantic
+  // capability (`gmail.send`) — a capability plus an egress class, which is
+  // what the enrichment gate decides on, so the verb vocabulary is closed by
+  // the connector contract rather than restated here. Two principals, because
+  // the outbox has two kinds of actor: an automation, and the owner's own
+  // surfaces, which reach it on the device credential.
+  {
+    principalKind: "device",
+    subjectType: "egress",
+    verbs: { kind: "contract", closedBy: "#304 connection verb contract" },
+    strategyFor: {},
+    citation: "#928 A6 over #306 decision 3",
+  },
+  {
+    principalKind: "automation",
+    subjectType: "egress",
+    verbs: { kind: "contract", closedBy: "#304 connection verb contract" },
+    strategyFor: {},
+    citation: "#928 A6 over #306 decision 3",
   },
   // AN AUTOMATION'S STANDING ANSWER (#928 A3), accepted before its writer
   // exists: wave 3 mints these rows from the compiled manifest. Its manifest

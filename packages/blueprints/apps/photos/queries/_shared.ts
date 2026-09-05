@@ -88,17 +88,10 @@ export function srcOf(content: SrcContent | undefined) {
   };
 }
 
-export async function readPlaces({
-  ctx,
-  purpose,
-}: {
-  ctx: HandlerCtx;
-  purpose: string;
-}) {
+export async function readPlaces({ ctx }: { ctx: HandlerCtx }) {
   const result = await ctx.vault.read({
     acceptTruncation: true,
     entity: "core.place",
-    purpose,
   });
   // Coordinates for the map — `null`, never 0°,0°; `kind` and gazetteer
   // because a location is a PHRASE before it is a pin.
@@ -116,12 +109,10 @@ export async function readPlaces({
 /** WINDOWED ids only — never a table scan. */
 export async function readAssetJoins({
   ctx,
-  purpose,
   assetIds,
   contentIds,
 }: {
   ctx: HandlerCtx;
-  purpose: string;
   assetIds: string[];
   contentIds: string[];
 }) {
@@ -129,15 +120,13 @@ export async function readAssetJoins({
     ctx.vault.read({
       acceptTruncation: true,
       entity: "core.concept_scheme",
-      purpose,
     }),
-    ctx.vault.read({ acceptTruncation: true, entity: "core.concept", purpose }),
+    ctx.vault.read({ acceptTruncation: true, entity: "core.concept" }),
     contentIds.length > 0
       ? ctx.vault.read({
           acceptTruncation: true,
           entity: "blob.custody_state",
           where: [{ column: "content_id", op: "in", value: contentIds }],
-          purpose,
         })
       : { rows: [] },
   ]);
@@ -176,7 +165,6 @@ export async function readAssetJoins({
         { column: "target_type", op: "eq", value: "media.asset" },
         { column: "target_id", op: "in", value: assetIds },
       ],
-      purpose,
     });
     for (const t of (assetTags.rows ?? []) as unknown as TagRow[]) {
       if (starredConcept && t.concept_id === starredConcept.concept_id) {

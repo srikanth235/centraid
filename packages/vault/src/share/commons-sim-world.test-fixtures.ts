@@ -76,7 +76,6 @@ export interface Seat {
   credential: Credential;
   sealKey: Buffer;
   identitySeed: Buffer;
-  purposeConceptId: string;
   // Crash-restart re-registers tally and would disarm confirmation; attach re-arms from this list.
   confirmGated: string[];
 }
@@ -167,7 +166,6 @@ function openSeat(root: string, index: number): Seat {
     },
     sealKey: Buffer.from(db.sealKey),
     identitySeed: Buffer.from(db.identitySeed),
-    purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
     confirmGated: [],
   };
 }
@@ -256,7 +254,6 @@ function createGrant(steward: Seat, index: number, memberSeats: Seat[]): Grant {
       icon: "🧪",
       member_ids: memberSeats.map((seat) => seat.partyId),
     },
-    purpose: "dpv:ServiceProvision",
   });
   if (created.status !== "executed")
     throw new Error(`sim group ${index} did not create: ${created.status}`);
@@ -514,7 +511,6 @@ export function replicaExecutor(
       {
         command,
         input: commandInput,
-        purpose: "dpv:ServiceProvision",
         invocationId,
       },
       { idSeed: invocationId }

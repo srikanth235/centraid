@@ -97,7 +97,6 @@ function deriveConnectors(row: CentraidAutomationRow): AuEditorConnectorsDTO {
     connections: bindings,
     mcps: [...(manifest.requires.mcps ?? [])],
     secrets: [...(manifest.requires.secrets ?? [])],
-    vaultPurpose: vault?.purpose ?? null,
     vaultScopes: vault ? vault.scopes.map(vaultScopeLabel) : [],
   };
 }

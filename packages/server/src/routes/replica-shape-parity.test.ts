@@ -1,10 +1,15 @@
 /*
- * #928 wave 2, acceptance box 2. Composing a replica shape from an app's own
- * manifest instead of from its grant rows must be a REFACTOR, not a reshape: a
- * shape id that moves rebootstraps every device that holds it. The eight ids
- * below were taken from the grant-derived builder on `origin/main` before it
- * was replaced, so this file fails if the static composition drifts from what
- * the evaluator answered.
+ * #928, acceptance box 2. A shape id that moves rebootstraps every device that
+ * holds it, so composing a replica shape from an app's own manifest instead of
+ * from its grant rows had to be a REFACTOR, not a reshape — and wave 2 kept
+ * all eight ids byte-identical to the grant-derived builder on `origin/main`.
+ *
+ * WAVE 4 RE-PINS THEM, ONCE AND DELIBERATELY: `purpose` left the vault with
+ * the DPV vocabulary (#928, AP-one-id-space), and it was part of the shape
+ * digest, so every id moves by exactly that removal. The declared row filters
+ * and field masks STAY in the shape — they are the app's own build-time
+ * declaration, not a grant — so nothing a device mirrors widens. Every holder
+ * re-bootstraps once on upgrade, which is the copy #883 wrote for exactly this.
  *
  * The ids are pinned rather than recomputed because a parity test that derives
  * both sides from the same code proves nothing. Re-pin ONLY when a shape is
@@ -32,23 +37,23 @@ const logger = {
   error: () => undefined,
 };
 
-/** Grant-derived shape ids, captured on `origin/main` before wave 2. */
+/** The shipping shape ids, re-pinned by #928 wave 4 — see the header. */
 const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
-  agenda: "agenda:818f3f9a7dd361669630fd53",
-  docs: "docs:e0411274ff437478b64cd632",
-  locker: "locker:945ff2d895547b2e737301c9",
-  notes: "notes:7de2cbbeeda5506d0fdcd35f",
-  people: "people:4bfab9fdc7a82790649b344c",
-  photos: "photos:66ebc07a3d159a98246ea3a9",
-  tally: "tally:be8a5d156b1776ee3c75bac5",
-  tasks: "tasks:1caed2924d41b44c6562807a",
+  agenda: "agenda:16b6c558aa4f52ee7cebd0bb",
+  docs: "docs:cfe1477018e17dfe32bebee8",
+  locker: "locker:53c326dc225e3d6f436255c1",
+  notes: "notes:ff225f22383fa792b7d09117",
+  people: "people:68c1916a53e3c018b6faf958",
+  photos: "photos:2a63ca460ee7dbf27beab4ed",
+  tally: "tally:c9884ce02ea2c78b10b0e847",
+  tasks: "tasks:01cbb634f9b8703989d97fea",
 };
 
 const APPS_ROOT = path.resolve(import.meta.dirname, "../../../blueprints/apps");
 
 interface ShippedManifest {
   name: string;
-  vault: { purpose: string; scopes: { schema: string; verbs: string }[] };
+  vault: { scopes: { schema: string; verbs: string }[] };
 }
 
 /** Read off disk, exactly like the gateway's install path does. */
@@ -94,10 +99,9 @@ describe("replica shape parity with the shipped manifests", () => {
     );
     for (const [appId, manifest] of await shippedManifests()) {
       opened.installApp(appId, manifest.name);
-      opened.ensureAppInstallGrant(appId, {
-        purpose: manifest.vault.purpose,
+      opened.recordAppInstall(appId, {
         scopes: manifest.vault.scopes as Parameters<
-          VaultPlane["ensureAppInstallGrant"]
+          VaultPlane["recordAppInstall"]
         >[1]["scopes"],
       });
     }

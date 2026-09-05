@@ -108,6 +108,10 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "share.party_vault_binding",
     // V-dashboard: Settings → Access reads the authority plane through People.
     "share.authority",
+    // #928: when each answer was last exercised, and what an automation has
+    // asked for that the member has not decided — drawn on the same screen.
+    "share.authority_request",
+    "share.authority_use",
     "share.commons_invitation",
     "core.entity_revision",
   ],

@@ -88,9 +88,13 @@ export interface ManifestVaultScope {
   readonly fieldMask?: readonly string[];
 }
 
-/** A REQUEST, never a grant: deny-by-default until the owner approves. */
+/**
+ * WHAT THE APP'S CODE DECLARES (#928 A1). A first-party app is not a
+ * principal: this block is not a request the owner answers, it is the app's
+ * own build-time statement of reach, held to by the static entity tripwire
+ * and composed into the replica shape.
+ */
 export interface ManifestVaultBlock {
-  readonly purpose: string;
   readonly why?: string;
   readonly scopes: readonly ManifestVaultScope[];
 }
@@ -275,9 +279,8 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
     },
     vault: {
       type: "object",
-      required: ["purpose", "scopes"],
+      required: ["scopes"],
       properties: {
-        purpose: { type: "string", minLength: 1 },
         why: { type: "string" },
         scopes: {
           type: "array",

@@ -75,7 +75,6 @@ describe("fts-index-budget", () => {
     const outcome = gw.invoke(owner, {
       command: "knowledge.create_note",
       input: { title: "Long note", body_text: bodyText },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     const { note_id, body_content_id } = (
@@ -106,7 +105,6 @@ describe("fts-index-budget", () => {
     const outcome = gw.invoke(owner, {
       command: "knowledge.create_note",
       input: { title: "Rebuild me", body_text: "original body" },
-      purpose: "dpv:ServiceProvision",
     });
     const { note_id } = (outcome as { output: { note_id: string } }).output;
 
@@ -153,7 +151,6 @@ describe("fts-index-budget", () => {
         title: "Scan",
         data_uri: `data:application/pdf;base64,${Buffer.from("%PDF-fake").toString("base64")}`,
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     const { document_id, content_id } = (

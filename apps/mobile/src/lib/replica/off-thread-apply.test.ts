@@ -16,7 +16,6 @@ import { NodeSqliteDriver } from "./node-sqlite-driver";
 const SHAPE = {
   shapeId: "shape-notes",
   appId: "notes",
-  purpose: "dpv:ServiceProvision",
   entities: [
     {
       entity: "knowledge.note",

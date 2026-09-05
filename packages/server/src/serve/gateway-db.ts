@@ -8,7 +8,6 @@ import { DatabaseSync } from "node:sqlite";
 import type { SQLInputValue } from "node:sqlite";
 
 import { installGatewaySchema } from "./gateway-schema.js";
-import { retireDeadShareEffectsOnce } from "./share-effects-retire.js";
 
 export const GATEWAY_DB_FILE = "gateway.db";
 
@@ -91,8 +90,6 @@ export class GatewayDatabase {
         lockMode,
         options.networkFileSystem ?? detectNetworkFileSystem(root)
       );
-      // Once per file, not per open (#883 C2).
-      if (lockMode !== "read-only") retireDeadShareEffectsOnce(opened);
       return opened;
     } catch (error) {
       db.close();

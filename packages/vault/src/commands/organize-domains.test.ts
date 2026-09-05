@@ -36,7 +36,6 @@ describe("People and Tally organization contracts", () => {
     return gateway.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 

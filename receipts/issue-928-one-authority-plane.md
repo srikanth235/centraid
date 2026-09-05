@@ -51,6 +51,7 @@ bun run check:push
 - **The drift register rows are opened, not closed.** The contract for this slice and the register's own convention agree: a finding whose mechanism has not landed is deferred and says so. The acceptance criterion that names them therefore stays unticked even though the three docs now state the model.
 - **`docs/vault-ontology.md`'s "Was the starting design right?" §2 still says the `access` plane survives as "the machinery beneath manifests, and nothing else".** That sentence is contradicted by AP-owner-direct but describes a mechanism that is still in the code today; rewriting it now would claim a deletion that has not happened. It is re-stated in the wave that deletes the machinery (wave 4), and ONT-16 is the register row that keeps it from being forgotten.
 - **The `consent / grant` glossary entry was adjusted beyond the four terms the contract named.** It asserted the exact carve-out #928 supersedes ("App and device scope grants are strategy machinery beneath manifests"), so leaving it would have left a defined term contradicting the ruling on the same page.
+- **CI fingerprint re-pin.** #928 re-pins classification fingerprints after the authority-plane migration changed the governed manifest and claim statements, and after merging current main's ledger updates; thresholds and classifications are unchanged.
 - **SECURITY.md's "Cannot: protect against a malicious app the owner installed with broad grants" is left alone.** It sits in the transport section, is still true of the code as it stands, and rewriting it belongs to the wave that removes the grants it names.
 
 ## Audit
@@ -76,6 +77,7 @@ Fresh-context verifier on `claude/928-w1a-rulings` at `8401083a`, wave 1a (rulin
 | --- | --- | --- |
 | 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 | 2026-09-04 | codex | 01a06aae-4aeb-72f0-b2a6-97f24ffc02ed |
+| 2026-09-04 | codex | 01a06cb4-14e6-7ae3-a265-663bd6c39c1e |
 
 ## w1b — the static app entity tripwire
 
@@ -727,3 +729,1005 @@ bun run --cwd packages/vault test -- --coverage --run src/grant/automation-autho
 bun run --cwd packages/server test -- --coverage --run src/routes/replica-routes.test.ts      # changed read line covered
 bun run --cwd packages/server test -- --run src/routes/replica-routes.test.ts                # 17 passed
 ```
+
+## w4a — the evaluator retires; the vault engine
+
+`packages/vault` only. `evaluateAccess` stops asking the app grant plane, the app grant tables leave the
+schema, and `access_receipt` is re-keyed to one id space. Serves in part: **"`evaluateAccess` has no `app`
+identity path"**, **"`access_grant`, `access_grant_scope`, `access_policy`, `access_scope_tombstone`,
+`access_scope_request` and every reader of them are gone"**, **"`access_receipt` references `authority_id`
+from one id space; the purpose column is gone"**. The bridge, dashboard and `dpv:` sweep land in w4b/w4c.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `gateway/access.ts` | rewritten (>50%): owner-direct, assistant-on-acting-owner, `share_authority` `automation` row. No purpose, policy, grant or `app` |
+| `gateway/types.ts` | `Credential.app` deleted; `device` gains `surface` (attribution) + host-resolved `scopeClamp` (narrows only); `Identity` gains `principalId`/`surface`; `purpose` off every request |
+| `gateway/identity.ts` | app branch gone; an agent carries `enrollment_key` as `principalId`; a surface names itself on the owner's own credential |
+| `gateway/evidence.ts` | `ReceiptInput.authorityId`; purpose off the row and out of the hash; new `skipsAllowReceipt` |
+| `gateway/duties.ts` | `revokeGrantCascade` → `revokeAuthorityCascade`; `enforceRetention` + `RETENTION_REFUSALS` **deleted** with `access_policy` |
+| `gateway/gateway.ts` | a named surface still confirms; `callerKind`/`callerName` read the surface for the owner's prompt |
+| `schema/{access,audit,authority,migrate,entity-catalog}.ts` | five tables dropped; `access_app.revoked_at`; `access_receipt.authority_id` replaces `grant_id`; `share_authority_request` added |
+| `{bootstrap,host}.ts` | `createGrant`, `listActiveGrants`, `listActiveAgentGrants`, `purposeConceptId`, `GrantSummary`, DPV seeds deleted; a revoked enrolment name is reusable |
+| `install-memory.ts` → `grant/authority-request.ts` | tombstones and `hasGrantHistory` deleted; the parking half re-homed, keyed by principal |
+| `grant/automation-authority.ts` | `hasAnsweredEver`, `scopeForSubject`; `backfillAutomationAnswers` deleted with the legacy tables |
+| `grant/automation-principal.test-fixtures.ts` | new: what 31 suites used `createGrant` + an app credential for |
+| `tests/claims.json` | four `consent-*` law statements rewritten one for one to the new plane |
+| `scripts/docs-site/src/content/ontology-body.html` | §03 drops the four retired tables; `share.authority_request` joins the machinery band |
+
+### Numbers
+
+| measure | before | after |
+| --- | --- | --- |
+| statements an owner-device read runs against grant/policy tables | 4 | **0** |
+| durable audit appends per owner-direct read/search/resolve/changes | 1 | **0** |
+| refusal classes the manifest sweep can produce | 6 | **4** |
+
+### Deleted, with its replacement
+
+`access_grant`/`access_grant_scope` → `share_authority` rows with `principal_kind='automation'`;
+`access_scope_tombstone` → `declined` answers; `access_scope_request` → `share_authority_request`;
+`access_policy` + `enforceRetention` → nothing (no writer since #916; the purge canary moves to the
+thread-projection heal); the `app` credential → the owner's device naming a `surface`; DPV purposes → nothing.
+
+### Decisions
+
+- **Declared row filters and field masks stay** (root ruling, deviating from A1): build-time properties of an
+  app's own code, not grants. `evaluateAccess` stops reading the grant plane for them; the host bridge passes
+  them as the same `scopeClamp` an automation already carries, which only ever narrows.
+- **`Identity.surface` is attribution, never authority** — never read by `evaluateAccess`;
+  `consent-standing-answer-required` asserts a surface identity reaches exactly what the bare owner device does.
+- **A parked ask is not an answer**: `share_authority_request` is registered, so a restore keeps an open question.
+- **The golden corpus is re-frozen, not migrated** — `golden-vault.test.ts` names re-freezing as the remedy.
+
+### Laws rewritten in `tests/claims.json`
+
+Five `consent-*` statements re-stated on the new plane, one for one, each keeping its property;
+`consent-explicit-scope-unbypassable` (the minimization-policy law, whose table is deleted) is replaced by
+`consent-standing-answer-required`, which carries the surface-confers-nothing property instead. No law deleted
+without a replacement: `consent-denial-monotone`, `consent-clamp-only-narrows`, `consent-reveal-never-rides`,
+`consent-standing-answer-required`, `consent-onbehalf-cap-precedes-grants`. A tightening, not a widening — no root
+sign-off owed.
+
+### Paths
+
+```
+packages/test-kit/src/year3-replica.ts
+packages/vault/README.md
+packages/vault/src/blob/derivatives.test.ts
+packages/vault/src/blob/flow.test.ts
+packages/vault/src/blob/preview.test.ts
+packages/vault/src/bootstrap.ts
+packages/vault/src/commands/atlas.test.ts
+packages/vault/src/commands/attachments.test.ts
+packages/vault/src/commands/documents-purge.test.ts
+packages/vault/src/commands/documents.test.ts
+packages/vault/src/commands/inline-body-guard.test.ts
+packages/vault/src/commands/knowledge.test.ts
+packages/vault/src/commands/links.test.ts
+packages/vault/src/commands/links.ts
+packages/vault/src/commands/locker-test-kit.ts
+packages/vault/src/commands/locker.test.ts
+packages/vault/src/commands/media-forget-person.test.ts
+packages/vault/src/commands/media-gazetteer.test.ts
+packages/vault/src/commands/media-places.test.ts
+packages/vault/src/commands/media-purge.test.ts
+packages/vault/src/commands/media.test.ts
+packages/vault/src/commands/merge.test.ts
+packages/vault/src/commands/organize-domains.test.ts
+packages/vault/src/commands/outbox.test.ts
+packages/vault/src/commands/parties.test.ts
+packages/vault/src/commands/people-dates.test.ts
+packages/vault/src/commands/people-debts.test.ts
+packages/vault/src/commands/people.test.ts
+packages/vault/src/commands/people.ts
+packages/vault/src/commands/provider-writeback.test.ts
+packages/vault/src/commands/revisions.ts
+packages/vault/src/commands/schedule-organize.test.ts
+packages/vault/src/commands/schedule.test.ts
+packages/vault/src/commands/share.test.ts
+packages/vault/src/commands/share.ts
+packages/vault/src/commands/social.test.ts
+packages/vault/src/commands/sync.test.ts
+packages/vault/src/commands/tags.test.ts
+packages/vault/src/commands/tally-groups.test.ts
+packages/vault/src/commands/tally-identity.test.ts
+packages/vault/src/commands/tally-ledger-test-kit.ts
+packages/vault/src/commands/tally-receipts.test.ts
+packages/vault/src/commands/tally.test.ts
+packages/vault/src/commands/tasks.test.ts
+packages/vault/src/enrich/clusters.test.ts
+packages/vault/src/enrich/enrich.test.ts
+packages/vault/src/enrich/face-clusters.test.ts
+packages/vault/src/enrich/memories.test.ts
+packages/vault/src/gateway/access-properties.test.ts
+packages/vault/src/gateway/access.ts
+packages/vault/src/gateway/acting-owner.test.ts
+packages/vault/src/gateway/activity-read.test.ts
+packages/vault/src/gateway/cards.test.ts
+packages/vault/src/gateway/cards.ts
+packages/vault/src/gateway/custody.ts
+packages/vault/src/gateway/demo.test.ts
+packages/vault/src/gateway/demo.ts
+packages/vault/src/gateway/duties-helpers.test.ts
+packages/vault/src/gateway/duties.test.ts
+packages/vault/src/gateway/duties.ts
+packages/vault/src/gateway/evidence.test.ts
+packages/vault/src/gateway/evidence.ts
+packages/vault/src/gateway/execution-clamp.test.ts
+packages/vault/src/gateway/execution.test.ts
+packages/vault/src/gateway/execution.ts
+packages/vault/src/gateway/ext-sealed.test.ts
+packages/vault/src/gateway/ext.test.ts
+packages/vault/src/gateway/filters.ts
+packages/vault/src/gateway/gateway.contract.test.ts
+packages/vault/src/gateway/gateway.ts
+packages/vault/src/gateway/identity.ts
+packages/vault/src/gateway/locker-auth.ts
+packages/vault/src/gateway/locker-sidecar-reveal.test.ts
+packages/vault/src/gateway/portability.test.ts
+packages/vault/src/gateway/portability.ts
+packages/vault/src/gateway/portable-sealed-custody.test.ts
+packages/vault/src/gateway/read-batch.test.ts
+packages/vault/src/gateway/read-order.test.ts
+packages/vault/src/gateway/read-truncation.test.ts
+packages/vault/src/gateway/reseal.ts
+packages/vault/src/gateway/seal-custody.test.ts
+packages/vault/src/gateway/sealed.test.ts
+packages/vault/src/gateway/search.test.ts
+packages/vault/src/gateway/search.ts
+packages/vault/src/gateway/share-grant-seam.test.ts
+packages/vault/src/gateway/sql.test.ts
+packages/vault/src/gateway/types.ts
+packages/vault/src/grant/authority-request.test.ts
+packages/vault/src/grant/authority-request.ts
+packages/vault/src/grant/automation-authority.test.ts
+packages/vault/src/grant/automation-authority.ts
+packages/vault/src/grant/automation-principal.test-fixtures.ts
+packages/vault/src/grant/fulfillment.test.ts
+packages/vault/src/host.test.ts
+packages/vault/src/host.ts
+packages/vault/src/index.ts
+packages/vault/src/ingest/staging.test.ts
+packages/vault/src/ingest/staging.ts
+packages/vault/src/install-memory.test.ts
+packages/vault/src/install-memory.ts
+packages/vault/src/journal-archive.test.ts
+packages/vault/src/replica/change-log.test.ts
+packages/vault/src/replica/change-log.ts
+packages/vault/src/replica/intents.test.ts
+packages/vault/src/replica/invocation-commits.test.ts
+packages/vault/src/replica/invocation-commits.ts
+packages/vault/src/replica/parked.test.ts
+packages/vault/src/replica/parked.ts
+packages/vault/src/schema/access.ts
+packages/vault/src/schema/audit-band.test.ts
+packages/vault/src/schema/audit.ts
+packages/vault/src/schema/authority.ts
+packages/vault/src/schema/entity-catalog.ts
+packages/vault/src/schema/fts-index-budget.test.ts
+packages/vault/src/schema/migrate.ts
+packages/vault/src/schema/ontology-rules.test.ts
+packages/vault/src/schema/ontology-shape.test.ts
+packages/vault/src/share/closure-confinement.contract.test.ts
+packages/vault/src/share/commons-automation-b6.test.ts
+packages/vault/src/share/commons-convergence-properties.test.ts
+packages/vault/src/share/commons-decide.ts
+packages/vault/src/share/commons-invoke.test.ts
+packages/vault/src/share/commons-replay.test-fixtures.ts
+packages/vault/src/share/commons-sim-grant-world.test-fixtures.ts
+packages/vault/src/share/commons-sim-grant.test-fixtures.ts
+packages/vault/src/share/commons-sim-world.test-fixtures.ts
+packages/vault/src/share/commons-tally-grant.test.ts
+packages/vault/src/share/commons.test.ts
+packages/vault/src/share/commons.ts
+packages/vault/src/share/docs-folder.test.ts
+packages/vault/src/wal-shipper.ts
+packages/vault/tests/golden/issue-916/manifest.json
+packages/vault/tests/golden/issue-916/vault.db.gz
+scripts/docs-site/src/content/ontology-body.html
+tests/claims.json
+```
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/vault typecheck    # passed
+bun run --cwd packages/vault build        # clean
+bun run --cwd packages/vault test         # 204 files, 1600 passed, 2 skipped, 0 failed
+bun run golden-vault:freeze -- --label issue-916
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| An automation is refused reveal because reveal rides no answer, not because fixtures stopped asking | removed the `verb === "reveal"` early return in `standingAnswerId`, re-ran `sealed.test.ts` | **green at first** — the finding: `automationSubjectsOf` mints no `reveal` row, so the guard was untested. The case now FORGES a `granted` reveal row into `share_authority`; with the guard removed it is **red** |
+| Owner-direct reads really stopped receipting, rather than the tests stopping counting | forced `skipsAllowReceipt` to `false`, re-ran `read-batch` | **red** on `an owner-direct batch writes NO receipts at all` (3 rows appear) and on the refusal case (2 instead of 1) |
+
+## w4b — the host: the app bridge stops asking for a grant
+
+`packages/server`, the automation handler pack and the root suites. The app bridge issues no app credential:
+it opens the owner's own device credential, NAMES the surface, and carries the app's build-time manifest as
+the execution clamp the gateway already had. The grant routes and the grant half of the vault plane go with
+the tables w4a dropped. Serves in part: **"the app bridge issues no app credential; an owner-device read of
+the owner's vault runs 0 grant statements"** and **"every reader of them is gone"**.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/server/src/serve/vault-plane.ts` | `bridgeFor` mints `{kind:"device", surface, scopeClamp}` from `declaredManifestFor`; `approveGrant`/`listGrants`/`revokeGrant`/park-by-grant deleted; `recordAppInstall` replaces the install grant; `readBatch` bridge op |
+| `packages/server/src/routes/vault-routes.ts` | `POST /apps/:id/grants` deleted with `parseGrantRequest`'s purpose; the automation answer route keeps the same URL and loses `purpose`; companion module state reads the install register |
+| `packages/server/src/routes/replica-shape.ts` | shape composition reads the declared manifest only |
+| `packages/server/src/serve/build-gateway.ts` | `grantScopesFromDir` records a declaration; no grant is minted at mount |
+| `packages/server/src/automation/handler/runner.ts` | the handler rail stops sending a purpose with every `invoke` |
+| `packages/server/src/serve/manifest-scope-denial.*` | the clamp sweeps keep their refusal classes against the one plane |
+| root suites (`tests/quality`, `tests/scale`, `tests/perf`, `tests/integration-mobile`) | the retired `purpose` field off every fixture and call |
+
+### Numbers
+
+| measure | before | after |
+| --- | --- | --- |
+| `packages/server` suite | — | 400 files, 3512 passed, 3 expected-fail, 7 skipped, **3 failed (container-known)** |
+| HTTP routes that mint or read an app grant | 3 | **0** |
+
+### Deleted, with its replacement
+
+`POST /vaults/:id/apps/:app/grants` and `plane.approveGrant`/`listGrants`/`revokeGrant` → `recordAppInstall`,
+which records the app's own `app.json` manifest; the grant-shaped `purpose` on the automation answer route →
+nothing.
+
+### Decisions
+
+- **A declaration is not durable state.** An app's reach is its build-time manifest, re-read from `app.json`
+  by the mount pass (`hostFor`) on every boot for every store and bundled app, so it is held per vault handle
+  rather than persisted. An app the mount pass has not run for reaches nothing — the fail-closed direction.
+  Three suites that reached an APP bridge after `approveAgentGrant` (an AUTOMATION answer) now declare through
+  `recordAppInstall`, which is the real install path; `vault-plane-wal` re-declares after the restart exactly
+  as mounting would.
+- **The declared manifest is enforced as the execution clamp**, not as a grant (root ruling, deviating from
+  A1's "minus filters and masks"). The property that depends on it: a first-party surface must not reach past
+  what it declared — without the clamp, `notes` running on the owner's credential could reveal a Locker
+  sidecar. It only ever narrows, so no deny in `authz-deny-matrix` becomes an allow.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/server build       # tsc -p tsconfig.json, clean
+bun run --cwd packages/server typecheck   # passed
+bun run --cwd packages/server test        # 3512 passed; reds: acp/launch x2 (IS_SANDBOX set), gateway-db-lock (no sqlite3 CLI)
+bun run --cwd packages/server test -- --run src/serve/vault-plane-wal.test.ts src/serve/protocol-join-lane.test.ts src/serve/vault-plane-consent.test.ts   # 18 passed
+```
+
+### Paths
+
+```
+packages/model-runtime/automation-handlers/embed-image.js
+packages/model-runtime/automation-handlers/embed-image.test.ts
+packages/model-runtime/automation-handlers/embed-text.js
+packages/model-runtime/automation-handlers/faces.js
+packages/model-runtime/automation-handlers/faces.test.ts
+packages/model-runtime/automation-handlers/photo-ocr.js
+packages/model-runtime/automation-handlers/photo-ocr.test.ts
+packages/model-runtime/automation-handlers/place-names.js
+packages/model-runtime/automation-handlers/place-names.test.ts
+packages/model-runtime/automation-handlers/transcript.js
+packages/model-runtime/automation-handlers/transcript.test.ts
+packages/server/src/acp/prompt-injection/harness.ts
+packages/server/src/automation/fire/condition.test.ts
+packages/server/src/automation/fire/condition.ts
+packages/server/src/automation/fire/connector.test.ts
+packages/server/src/automation/fire/fire-vault.test.ts
+packages/server/src/automation/fire/fire.ts
+packages/server/src/automation/handler/runner.ts
+packages/server/src/automation/manifest/enricher-templates.test.ts
+packages/server/src/automation/manifest/manifest-vault.test.ts
+packages/server/src/automation/manifest/manifest.test.ts
+packages/server/src/automation/manifest/manifest.ts
+packages/server/src/automation/scaffold/scaffold-files.test.ts
+packages/server/src/brief/daily-brief.ts
+packages/server/src/engine/handlers/build-extra-prompt.ts
+packages/server/src/engine/handlers/vault-bridge.test.ts
+packages/server/src/engine/registry/manifest.test.ts
+packages/server/src/engine/registry/manifest.ts
+packages/server/src/enrich/semantic-search.test.ts
+packages/server/src/lifecycle/automation-anchor-scopes.test.ts
+packages/server/src/lifecycle/automation-anchor-scopes.ts
+packages/server/src/lifecycle/automation-lifecycle-over-http.test.ts
+packages/server/src/lifecycle/automation-turn-context.test.ts
+packages/server/src/lifecycle/automation-turn-context.ts
+packages/server/src/lifecycle/ext-band-over-http.test.ts
+packages/server/src/lifecycle/headless-automation-compile.test.ts
+packages/server/src/lifecycle/headless-automation-compile.ts
+packages/server/src/lifecycle/install-over-http.test.ts
+packages/server/src/lifecycle/interactive-automation-turn.test.ts
+packages/server/src/reminders/due-reminders.test.ts
+packages/server/src/reminders/due-reminders.ts
+packages/server/src/routes/blob-routes-hardening.test.ts
+packages/server/src/routes/blob-routes.test.ts
+packages/server/src/routes/companion-grants.test.ts
+packages/server/src/routes/companion-grants.ts
+packages/server/src/routes/connections-routes.ts
+packages/server/src/routes/enrich-search-routes.test.ts
+packages/server/src/routes/grant-routes.test.ts
+packages/server/src/routes/import-routes.ts
+packages/server/src/routes/peer-commons-route.ts
+packages/server/src/routes/push-wake-routes.test.ts
+packages/server/src/routes/replica-declared-scopes.ts
+packages/server/src/routes/replica-grant-shape.test.ts
+packages/server/src/routes/replica-intent-attribution.test.ts
+packages/server/src/routes/replica-intent-crash-replay.test.ts
+packages/server/src/routes/replica-intent-route.test.ts
+packages/server/src/routes/replica-projection.test.ts
+packages/server/src/routes/replica-routes.test.ts
+packages/server/src/routes/replica-shape-parity.test.ts
+packages/server/src/routes/replica-shape.test.ts
+packages/server/src/routes/replica-shape.ts
+packages/server/src/routes/vault-enrich-rules-routes.ts
+packages/server/src/routes/vault-routes.test.ts
+packages/server/src/routes/vault-routes.ts
+packages/server/src/runs/assistant-conversation-runner.ts
+packages/server/src/serve/agent-owner-cap.test.ts
+packages/server/src/serve/build-gateway.test.ts
+packages/server/src/serve/build-gateway.ts
+packages/server/src/serve/connection-broker.test.ts
+packages/server/src/serve/connection-broker.ts
+packages/server/src/serve/gateway-db.test.ts
+packages/server/src/serve/grant-fulfillment.ts
+packages/server/src/serve/manifest-scope-denial.closed-grammar.test.ts
+packages/server/src/serve/manifest-scope-denial.fuzz.test.ts
+packages/server/src/serve/manifest-scope-denial.hostile.test.ts
+packages/server/src/serve/manifest-scope-denial.sweep.test-fixtures.ts
+packages/server/src/serve/manifest-scope-denial.sweep.test.ts
+packages/server/src/serve/outbox-executor.test.ts
+packages/server/src/serve/peer-commons-client.ts
+packages/server/src/serve/peer-commons-pull.test.ts
+packages/server/src/serve/peer-commons-sweep.ts
+packages/server/src/serve/protocol-join-lane.test.ts
+packages/server/src/serve/serve-scheduler-reconcile.test.ts
+packages/server/src/serve/vault-picker.ts
+packages/server/src/serve/vault-plane-app-bridge.test.ts
+packages/server/src/serve/vault-plane-assistant.test.ts
+packages/server/src/serve/vault-plane-automation-authority.test.ts
+packages/server/src/serve/vault-plane-commons.test.ts
+packages/server/src/serve/vault-plane-consent.test.ts
+packages/server/src/serve/vault-plane-links.test.ts
+packages/server/src/serve/vault-plane-scopes.test.ts
+packages/server/src/serve/vault-plane-wal.test.ts
+packages/server/src/serve/vault-plane.ts
+packages/server/src/serve/vault-registry.test.ts
+packages/server/src/validate-manifest.test.ts
+tests/integration-mobile/lib/gateway.ts
+tests/perf/blob-egress.perf.test.ts
+tests/quality/chaos-planner-app.ts
+tests/quality/fixtures/kill-mid-write-child.ts
+tests/quality/offline-reconnect.integration.test.ts
+tests/quality/replica-bootstrap-fixture.ts
+tests/quality/user-facing-qualities.test.ts
+tests/scale/browser-replica-query.fixture.ts
+tests/scale/replica-bootstrap.scale.test.ts
+tests/scale/replica-reconnect.scale.test.ts
+tests/scale/replica-sse-fanout.scale.test.ts
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| The bridge clamp really bites — an app is held to its declared manifest, not merely enrolled | ran the three repaired suites with `recordAppInstall` reverted to `approveAgentGrant` | **red**: `denied`, not `parked`/`executed`, in all three — an app with no recorded declaration reaches nothing, so the clamp is the thing deciding, not the enrolment row |
+| The three remaining suite reds are the container's, not this diff's | read the two failing assertions and probed the environment they name: `env | grep IS_SANDBOX`, `which sqlite3` | `IS_SANDBOX=yes` is exported into this container (the suite asserts it is unset / `1`) and there is no `sqlite3` binary (the lock test shells out to it and reads `null`). Neither assertion touches the authority plane |
+
+## w4c — the seats: one plane on screen, and when it was last used
+
+`packages/client`, `packages/blueprints`, `apps/mobile`, plus the vault half that makes "last used" a fact
+rather than a guess. The retired `purpose` selector leaves every replica shape, request and manifest; an app's
+pane states what it DECLARED instead of offering a grant; and Settings → Access grows an Automations group, a
+last-used line on every row, and the asks still waiting on the owner. Serves in part: **"Settings → Access
+shows last-used for every row"** and **"`grep -r \"dpv:\" packages apps` is empty outside receipts and
+CHANGELOG"**.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/vault/src/schema/authority.ts` | new `share_authority_use` (authority_id → last_used_at), one row per answer, no history, no FK — the audit band's `authority_id` is a value, and the commons rail receipts under ids this table does not hold |
+| `packages/vault/src/gateway/evidence.ts` | new `writeAuthorityReceipt(db, input)`: the receipt and the stamp in one transaction from one id, so last-used can never disagree with the chain; `writeReceipt` stays band-agnostic for the journal and steward writers |
+| `packages/vault/src/schema/entity-catalog.ts` | `share.authority_use` registered — a restore that forgot it would reset every row to "never used" |
+| `packages/client/src/access-lens.ts` | `automation` joins the principal kinds and gets its own group; `AccessAnswer.lastUsedAt`; `AccessRequest` + `parseAccessRequests`/`parseAccessUse`; the two side reads are best-effort beside the answers |
+| `packages/client/src/react/screens/SettingsAccessScreen.tsx` · `apps/mobile/src/screens/settings/AccessSection.tsx` | both seats draw "last used <date>" / "never used" per row and a "Waiting on you" block for undecided asks |
+| `packages/client/src/react/screens/VaultScreen.tsx` | `GrantSection` **deleted**; "Requested access" becomes "Declared access" and the Purpose line goes — an app declares, it is not granted |
+| `packages/client/src/react/screens/privacyStores.ts` | two kinds of holder: a DECLARED app (no revoke) and an ANSWERED automation (revocable), from `app.scopes` and `agent.answers` |
+| `packages/client/src/gateway-client-vault.ts` | `approveVaultGrant` and `VaultGrant` **deleted**; `VaultAppEntry.scopes`, `VaultAgentEntry.answers` |
+| `packages/client/src/replica/{types,shell-session,store-core,write-helpers}.ts` · `apps/mobile/src/lib/replica/{native-session,multi-vault-reader}.ts` | one app, one shape: `purpose` off the shape, the read, the search and the `replica_shape` table; the shape id is the only selector |
+| `packages/blueprints/types/centraid.d.ts` + 34 app query modules | `purpose` off `ctx.vault.read/search/invoke/resolve/query` and every call site |
+| `packages/blueprints/apps/people/app.json` | declares `share.authority_use` and `share.authority_request` |
+| `packages/server/src/serve/vault-plane.ts` | `listApps()` carries each app's declared manifest, which is what the privacy store view draws |
+| `apps/web/tests/e2e/settings-access.spec.ts` | new harness: the shipped screen in a real browser, emitting the evidence screenshot |
+
+### Numbers
+
+| measure | before | after |
+| --- | --- | --- |
+| `dpv:` occurrences under `packages/` + `apps/` (excluding `dist/`) | 12 | **0** |
+| replica shapes an app may hold for one entity | many, selected by a caller-supplied purpose string | **one**, or an explicitly named shape id |
+| Access rows carrying a last-used date | 0 | **every row** ("never used" where nothing has) |
+| principal kinds the dashboard groups | 4 | **5** (automations) |
+| suites | vault 204 files/1600 · client 270/2460 · blueprints 212/6651 · mobile 277/2387 · server 400/3512, all passing bar the three container reds |
+
+### Deleted, with its replacement
+
+`DEFAULT_REPLICA_PURPOSE` and `replica_shape.purpose` → the shape id alone; `VaultScreen`'s grant/revoke
+section and `approveVaultGrant` → a statement of what the app declared; `VaultGrant`/`VaultAppEntry.grants` →
+`VaultAppEntry.scopes` (declarations) and `VaultAgentEntry.answers` (answers); the ctx `purpose` argument →
+nothing.
+
+### Decisions
+
+- **Last-used is a row of its own, not a column on the answer.** `share_authority` is what the member SAID and
+  is immutable but for `revoked_at`; stamping it on every use would rewrite the answer and push a replica
+  change each time an automation read anything. `share_authority_use` is one row per authority, upserted
+  beside the receipt that cites it — O(1), no history, and a replica change only when the date actually moves.
+- **The privacy store view keeps app rows.** Dropping them would have been simpler, but "which apps reach my
+  photos" is the question that screen exists to answer; what changed is that an app's row is not offered a
+  Revoke, because a declaration is not a grant and the button could not keep its promise.
+- **A pinned digest moved, a policy did not.** `replica-shape-parity`'s `people` shape id and the sweep's
+  `declaredScopes` count are pins over derived values; People declares two more entities on purpose, so both
+  are re-pinned with the reason in the test.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/{vault,client,blueprints,server,test-kit,core,design} typecheck   # all pass
+bun run --cwd apps/mobile typecheck                                                      # passes
+bun run --cwd packages/vault test        # 204 files, 1600 passed, 2 skipped
+bun run --cwd packages/client test       # 270 files, 2460 passed
+bun run --cwd packages/blueprints test   # 212 files, 6651 passed
+bun run --cwd apps/mobile test           # 277 files, 2387 passed
+bun run --cwd packages/server test       # 400 files, 3512 passed; 3 container reds (IS_SANDBOX, no sqlite3)
+CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell \
+  bun run --cwd apps/web e2e -- settings-access.spec.ts   # 1 passed
+node scripts/golden-vault/build.mjs --label issue-916     # re-frozen for share_authority_use
+```
+
+## User impact
+
+Settings → Access finally answers the question it was built for. Every answer now carries the date it was last
+used — "last used Sep 3, 2026", or "never used" for one nothing has touched — so an automation you approved
+months ago and forgot is visible as exactly that instead of sitting indistinguishable beside the ones you rely
+on. Automations join people, harnesses and your devices as a group of their own, because an automation's reach
+is now the same kind of standing answer theirs is. And an automation asking for MORE than you have agreed to
+no longer waits silently: it appears at the top under "Waiting on you", with the scopes it is asking for, above
+everything you have already answered. On an app's own settings pane, "Requested access" becomes "Declared
+access": a first-party app runs on your device against your vault and its reach is fixed by its own code, so
+the pane now states it plainly rather than offering a Grant button — and a Revoke that could not have kept its
+promise is gone from the privacy ledger for apps, while automations keep theirs.
+
+First-run: a fresh vault has no answers and nothing has used anything, so Access shows each group's "No
+standing answers here." and no "Waiting on you" block at all — the empty state is unchanged, and no row is
+drawn as "never used" until there is a row.
+
+Evidence: `artifacts/e2e/ui-impact/issue-928-settings-access.png`, emitted by
+`apps/web/tests/e2e/settings-access.spec.ts` (the shipped `SettingsAccessScreen`, its loader stubbed, in
+headless Chromium). The phone seat renders the same `access-lens.ts` groups and the same two strings; there is
+no mobile screenshot harness in this container, so CI must run the mobile evidence lane against this branch —
+nothing is fabricated here.
+
+### Paths
+
+```
+apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx
+apps/mobile/src/lib/replica/bootstrap-statement-budget.test.ts
+apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts
+apps/mobile/src/lib/replica/mounted-read-plan.pushdown.test.ts
+apps/mobile/src/lib/replica/mounted-read-plan.test.ts
+apps/mobile/src/lib/replica/multi-vault-read-parity.test.ts
+apps/mobile/src/lib/replica/multi-vault-reader.test.ts
+apps/mobile/src/lib/replica/multi-vault-reader.ts
+apps/mobile/src/lib/replica/native-replica-store.test.ts
+apps/mobile/src/lib/replica/native-session.test-fixtures.ts
+apps/mobile/src/lib/replica/native-session.ts
+apps/mobile/src/lib/replica/off-thread-apply.test.ts
+apps/mobile/src/lib/replica/ordered-read-plan.test.ts
+apps/mobile/src/lib/replica/pending-write-visibility.test.ts
+apps/mobile/src/lib/replica/reader-statement-budget.test.ts
+apps/mobile/src/lib/replica/reconnect-to-fresh.fixture.ts
+apps/mobile/src/screens/home/home-tile-reads.test.ts
+apps/mobile/src/screens/settings/AccessSection.tsx
+apps/web/tests/e2e/settings-access.spec.ts
+packages/blueprints/apps/_shared/action-kit.test.ts
+packages/blueprints/apps/_shared/action-kit.ts
+packages/blueprints/apps/_shared/journal-scheme.ts
+packages/blueprints/apps/_shared/pending-overlay.ts
+packages/blueprints/apps/_shared/taxonomy-reads.ts
+packages/blueprints/apps/agenda/app.json
+packages/blueprints/apps/agenda/queries/day-context.ts
+packages/blueprints/apps/agenda/queries/parties.ts
+packages/blueprints/apps/agenda/queries/search.ts
+packages/blueprints/apps/agenda/queries/upcoming.ts
+packages/blueprints/apps/agenda/seed.js
+packages/blueprints/apps/docs/app.json
+packages/blueprints/apps/docs/queries/_shared.ts
+packages/blueprints/apps/docs/queries/activity.ts
+packages/blueprints/apps/docs/queries/drive.ts
+packages/blueprints/apps/docs/queries/history.ts
+packages/blueprints/apps/docs/queries/search.ts
+packages/blueprints/apps/docs/seed.js
+packages/blueprints/apps/locker/app.json
+packages/blueprints/apps/locker/queries/access.ts
+packages/blueprints/apps/locker/queries/autofill-candidates.ts
+packages/blueprints/apps/locker/queries/autofill-item.ts
+packages/blueprints/apps/locker/queries/item-sidecars.ts
+packages/blueprints/apps/locker/queries/item.ts
+packages/blueprints/apps/locker/queries/items.ts
+packages/blueprints/apps/locker/queries/search.ts
+packages/blueprints/apps/locker/queries/trash.ts
+packages/blueprints/apps/locker/queries/watchtower.ts
+packages/blueprints/apps/notes/actions/send-to-tasks.ts
+packages/blueprints/apps/notes/app.json
+packages/blueprints/apps/notes/queries/history.ts
+packages/blueprints/apps/notes/queries/journal.ts
+packages/blueprints/apps/notes/queries/library.ts
+packages/blueprints/apps/notes/queries/link-targets.ts
+packages/blueprints/apps/notes/queries/note.ts
+packages/blueprints/apps/notes/queries/search.ts
+packages/blueprints/apps/notes/seed.js
+packages/blueprints/apps/people/app.json
+packages/blueprints/apps/people/queries/_shared.ts
+packages/blueprints/apps/people/queries/dashboard.ts
+packages/blueprints/apps/people/queries/history.ts
+packages/blueprints/apps/people/queries/journal.ts
+packages/blueprints/apps/people/queries/people.ts
+packages/blueprints/apps/people/queries/person.ts
+packages/blueprints/apps/people/queries/search.ts
+packages/blueprints/apps/people/queries/trash.ts
+packages/blueprints/apps/people/seed.js
+packages/blueprints/apps/photos/app.json
+packages/blueprints/apps/photos/queries/_shared.ts
+packages/blueprints/apps/photos/queries/duplicates.ts
+packages/blueprints/apps/photos/queries/enrichment-status.ts
+packages/blueprints/apps/photos/queries/face-queue.ts
+packages/blueprints/apps/photos/queries/faces.ts
+packages/blueprints/apps/photos/queries/library.ts
+packages/blueprints/apps/photos/queries/people.ts
+packages/blueprints/apps/photos/queries/search.ts
+packages/blueprints/apps/photos/queries/storage.ts
+packages/blueprints/apps/photos/seed.js
+packages/blueprints/apps/tally/app.json
+packages/blueprints/apps/tally/queries/activity.ts
+packages/blueprints/apps/tally/queries/dashboard.ts
+packages/blueprints/apps/tally/queries/export.ts
+packages/blueprints/apps/tally/queries/friend.ts
+packages/blueprints/apps/tally/queries/group.ts
+packages/blueprints/apps/tally/queries/history.ts
+packages/blueprints/apps/tally/queries/search.ts
+packages/blueprints/apps/tally/seed.js
+packages/blueprints/apps/tasks/app.json
+packages/blueprints/apps/tasks/queries/board.ts
+packages/blueprints/apps/tasks/queries/search.ts
+packages/blueprints/apps/tasks/seed.js
+packages/blueprints/automations/doc-entity-linker/automations/doc-entity-linker/automation.json
+packages/blueprints/automations/doc-entity-linker/automations/doc-entity-linker/handler.js
+packages/blueprints/automations/doc-filer/automations/doc-filer/automation.json
+packages/blueprints/automations/doc-filer/automations/doc-filer/handler.js
+packages/blueprints/automations/doc-text-extractor/automations/doc-text-extractor/automation.json
+packages/blueprints/automations/doc-text-extractor/automations/doc-text-extractor/handler.js
+packages/blueprints/automations/dropbox-pull/automations/dropbox-pull/automation.json
+packages/blueprints/automations/embed-image/automations/embed-image/automation.json
+packages/blueprints/automations/embed-image/automations/embed-image/handler.js
+packages/blueprints/automations/embed-text/automations/embed-text/automation.json
+packages/blueprints/automations/embed-text/automations/embed-text/handler.js
+packages/blueprints/automations/faces/automations/faces/automation.json
+packages/blueprints/automations/faces/automations/faces/handler.js
+packages/blueprints/automations/github-pull/automations/github-pull/automation.json
+packages/blueprints/automations/gitlab-pull/automations/gitlab-pull/automation.json
+packages/blueprints/automations/google-calendar-invite-send/automations/google-calendar-invite-send/automation.json
+packages/blueprints/automations/google-calendar-pull/automations/google-calendar-pull/automation.json
+packages/blueprints/automations/google-contacts-pull/automations/google-contacts-pull/automation.json
+packages/blueprints/automations/google-drive-pull/automations/google-drive-pull/automation.json
+packages/blueprints/automations/google-gmail-pull/automations/google-gmail-pull/automation.json
+packages/blueprints/automations/google-gmail-send/automations/google-gmail-send/automation.json
+packages/blueprints/automations/linear-pull/automations/linear-pull/automation.json
+packages/blueprints/automations/microsoft-calendar-pull/automations/microsoft-calendar-pull/automation.json
+packages/blueprints/automations/microsoft-contacts-pull/automations/microsoft-contacts-pull/automation.json
+packages/blueprints/automations/microsoft-onedrive-pull/automations/microsoft-onedrive-pull/automation.json
+packages/blueprints/automations/microsoft-outlook-pull/automations/microsoft-outlook-pull/automation.json
+packages/blueprints/automations/notion-pull/automations/notion-pull/automation.json
+packages/blueprints/automations/obligation-extractor/automations/obligation-extractor/automation.json
+packages/blueprints/automations/obligation-extractor/automations/obligation-extractor/handler.js
+packages/blueprints/automations/photo-ocr/automations/photo-ocr/automation.json
+packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js
+packages/blueprints/automations/place-names/automations/place-names/automation.json
+packages/blueprints/automations/place-names/automations/place-names/handler.js
+packages/blueprints/automations/renewal-reminders/automations/renewal-reminders/automation.json
+packages/blueprints/automations/slack-pull/automations/slack-pull/automation.json
+packages/blueprints/automations/todoist-pull/automations/todoist-pull/automation.json
+packages/blueprints/automations/transcript/automations/transcript/automation.json
+packages/blueprints/automations/transcript/automations/transcript/handler.js
+packages/blueprints/src/app-manifest-reads.test.ts
+packages/blueprints/types/centraid.d.ts
+packages/client/src/access-lens.test.ts
+packages/client/src/access-lens.ts
+packages/client/src/gateway-client-automation-editing.ts
+packages/client/src/gateway-client-outbox.ts
+packages/client/src/gateway-client-vault.contract.test.ts
+packages/client/src/gateway-client-vault.ts
+packages/client/src/react/screen-contracts.ts
+packages/client/src/react/screens/ApprovalsScreen.test.tsx
+packages/client/src/react/screens/ApprovalsScreen.tsx
+packages/client/src/react/screens/AutomationEditorScreen.test.tsx
+packages/client/src/react/screens/AutomationEditorTriggers.test.tsx
+packages/client/src/react/screens/SettingsAccessScreen.tsx
+packages/client/src/react/screens/VaultScreen.test.tsx
+packages/client/src/react/screens/VaultScreen.tsx
+packages/client/src/react/screens/privacyStores.test.ts
+packages/client/src/react/screens/privacyStores.ts
+packages/client/src/react/shell/routes/ApprovalsRoute.tsx
+packages/client/src/react/shell/routes/AutomationEditorRoute.test.tsx
+packages/client/src/react/shell/routes/appSettingsData.test.ts
+packages/client/src/react/shell/routes/appSettingsData.ts
+packages/client/src/react/shell/routes/approvalsData.test.ts
+packages/client/src/react/shell/routes/approvalsData.ts
+packages/client/src/react/shell/routes/automationEditorData.ts
+packages/client/src/react/shell/routes/automationEditorTriggers.ts
+packages/client/src/react/shell/routes/automationEditorVault.test.ts
+packages/client/src/react/shell/routes/automationThreadData.test.ts
+packages/client/src/react/shell/routes/homeTileContent.test.ts
+packages/client/src/react/shell/routes/homeTileContent.ts
+packages/client/src/replica/app-convergence.contract.test.ts
+packages/client/src/replica/convergence-properties.test.ts
+packages/client/src/replica/coordinator.test.ts
+packages/client/src/replica/deferred-values.test.ts
+packages/client/src/replica/read-plan-parity.test-fixtures.ts
+packages/client/src/replica/read-plan-refusals.test.ts
+packages/client/src/replica/read-plan-truncation.test.ts
+packages/client/src/replica/shell-session-admission.contract.test.ts
+packages/client/src/replica/shell-session-scopes.test.ts
+packages/client/src/replica/shell-session.test.ts
+packages/client/src/replica/shell-session.ts
+packages/client/src/replica/sqlite-store.test.ts
+packages/client/src/replica/store-core-bootstrap-walk.test.ts
+packages/client/src/replica/store-core.test-fixtures.ts
+packages/client/src/replica/store-core.ts
+packages/client/src/replica/store-docs-search.test.ts
+packages/client/src/replica/types.ts
+packages/client/src/replica/windowed-bootstrap.test-fixtures.ts
+packages/client/src/replica/write-helpers.ts
+packages/server/skills/automation-authoring/SKILL.md
+packages/server/src/routes/replica-shape-parity.test.ts
+packages/server/src/serve/manifest-scope-denial.sweep.test.ts
+packages/server/src/serve/vault-plane.ts
+packages/test-kit/src/year3-distributions.ts
+packages/test-kit/src/year3-replica.ts
+packages/vault/src/gateway/custody.ts
+packages/vault/src/gateway/demo.ts
+packages/vault/src/gateway/duties.ts
+packages/vault/src/gateway/evidence.test.ts
+packages/vault/src/gateway/evidence.ts
+packages/vault/src/gateway/execution.ts
+packages/vault/src/gateway/gateway.ts
+packages/vault/src/gateway/locker-auth.ts
+packages/vault/src/gateway/portability.ts
+packages/vault/src/gateway/reseal.ts
+packages/vault/src/gateway/search.ts
+packages/vault/src/ingest/staging.ts
+packages/vault/src/replica/parked.ts
+packages/vault/src/schema/authority.ts
+packages/vault/src/schema/entity-catalog.ts
+packages/vault/src/schema/migrate.test.ts
+packages/vault/tests/golden/issue-916/manifest.json
+packages/vault/tests/golden/issue-916/vault.db.gz
+scripts/docs-site/src/content/ontology-body.html
+tests/quality/backup-corpus-fixture.ts
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| "Last used" is really the receipt chain's date, not a write-time guess | forced `writeAuthorityReceipt` to skip the upsert and re-ran `access-lens.test.ts` plus the vault suite | the lens test stays green (it feeds rows directly), which was the finding: the LENS cannot prove the stamp. The proof is the seam — one function, one transaction, one `authorityId` — and the vault suite is what would break if the two disagreed. Recorded as the weaker of the two claims |
+| The dashboard really shows an undecided ask, rather than the harness drawing one | deleted the `requests` block from `SettingsAccessScreen` and re-ran the e2e spec | **red** on `getByText("Waiting on you")`; and `access-lens.test.ts` asserts a DECIDED request is dropped, so the block cannot fill with settled history |
+
+## w5c — Locker's boundary, said accurately; and one runtime filter becomes SQL
+
+Wave 5's Locker slice, plus the root's ruling that a declared row filter is not a WHERE clause. Serves in
+part: **"Locker: sealed set, permits, reveal and `ONLINE_ONLY_ACTIONS` unchanged; its history query filters
+in SQL; `locker-online-only.test.ts` green"**.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/blueprints/apps/locker/queries/access.ts` | header only: "THE ROW FILTER IS THE BOUNDARY" said the boundary was a grant's filter. It is now the app's own declared manifest carried as the execution clamp, and the `where` in the query is the inner wall — the header says both, and why the SQL filter is not redundant with the clamp |
+| `packages/blueprints/apps/tally/queries/export.ts` | the revision read NAMES the exported expenses (`entity_id IN (…)`) instead of reading the newest 2 000 revisions of everything and discarding most — a window is not a filter |
+| `packages/blueprints/apps/tally/queries/export.test.ts` | the ctx double honours `where`, so the clause is what the case proves rather than the handler's leftovers |
+
+### Numbers
+
+| measure | before | after |
+| --- | --- | --- |
+| revision rows the Tally export reads to ship N expenses' revisions | up to 2 000, of every entity type the clamp allows | **exactly the rows for those N expenses** |
+| Locker sealed set / permits / reveal / `ONLINE_ONLY_ACTIONS` | — | **unchanged; no file under `gateway/{sealed,locker-auth,reseal}.ts` is in this diff** |
+
+### Deleted, with its replacement
+
+The export's post-read `.filter((row) => exported.has(row.entity_id))` → the `IN` clause that made it
+unnecessary. Nothing else.
+
+### Decisions
+
+- **No user-visible change in this slice.** `check:ui-receipt` fires because both files sit under
+  `packages/blueprints/apps/**`; the branch's `## User impact` and its screenshot belong to w4c, and this
+  slice adds nothing to see: Locker's history renders the same rows in the same order, and the export ships
+  the same revisions it always did. No screenshot is fabricated for it.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/blueprints typecheck                                    # passes
+bun run --cwd packages/blueprints test -- --run apps/tally apps/locker         # 34 files, 661 passed
+bun run --cwd packages/blueprints test -- --run src/locker-online-only.test.ts # 1 passed
+bun run --cwd apps/mobile test -- --run src/lib/replica/locker-online-only.test.ts  # 3 passed
+```
+
+### Paths
+
+```
+packages/blueprints/apps/locker/queries/access.ts
+packages/blueprints/apps/tally/queries/export.ts
+packages/blueprints/apps/tally/queries/export.test.ts
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| The export's `IN` clause is what narrows the revisions, not a surviving JS filter | the test double previously ignored `where`; with the clause in and the double ignoring it, `ships only the revisions of the expenses that travel` was **red** (both revisions came back). The double now applies the clause and the case passes — so the assertion bites on the SQL | **red then green**, and the case cannot pass again on discarded leftovers |
+| Locker's own walls really are untouched | `git diff origin/main -- packages/vault/src/gateway/{sealed,locker-auth,reseal}.ts packages/blueprints/apps/locker/actions` | `sealed.ts` and the actions are empty. `locker-auth.ts` and `reseal.ts` each carry ONE hunk from w4a and nothing else: `writeReceipt(db.audit, {grantId: null, purpose: "dpv:Security"})` → `writeAuthorityReceipt(db, {authorityId: null})`. Same receipt, same chain, no authority to stamp — the sealed set, the permits and the reveal path are not in the branch at all |
+
+## w4/w5 lane close — what landed, and what wave 5 still owes
+
+Two comments named columns of tables w4a deleted; both are corrected here. The rest of this section is the
+lane's own account of what it did NOT land, so the next worker starts from state rather than from memory.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/vault/src/schema/core.ts` | the "no party column confers permission" list cited `access_grant.granted_by_party_id`; it now cites `share_authority.granted_by`, which is the column that exists |
+| `packages/vault/src/schema/party-pointers.ts` | the RESTRICT roll-call cited `access_grant.*` and `access_scope_tombstone.grantee_party_id`; both tables are gone, and `share_authority.granted_by` already stood beside them |
+
+### Acceptance clauses served by this branch
+
+| clause | state |
+| --- | --- |
+| `evaluateAccess` has no `app` identity path; the app bridge issues no app credential; an owner-device read runs 0 grant statements | **served** (w4a, w4b) |
+| the five grant tables and every reader are gone; `grep -r "dpv:" packages apps` empty | **served** — the only remaining mentions are `schema/access.ts`'s supersession marker and one test's pre-#928 replica fixture |
+| `access_receipt` references `authority_id` from one id space; purpose column gone; chain verifier green; Settings → Access shows last-used for every row | **served** (w4a, w4c) |
+| Locker: sealed set, permits, reveal, `ONLINE_ONLY_ACTIONS` unchanged; history filters in SQL; `locker-online-only.test.ts` green | **served** (w5c) |
+| Companion attenuation and outbox grants are rows in the one plane; `grant_profile_json` has no reader | **NOT served** — see below |
+| the give-plane coordinator, edge store, effects, edge routes and retire pass are deleted; a same-owner album move is one command | **NOT served** |
+| a handler invocation's remaining reads commit once off the read path, with fsync-per-read measured (#922 B1) | **NOT served** — `Gateway.readBatch` exists (#916) and `push-wake-routes.ts` is its one caller; the app/agent bridge in `serve/vault-plane.ts` does not wrap a handler invocation's reads yet, and no before/after strace was taken |
+
+### Findings — two design questions wave 5(a) cannot answer for itself
+
+1. **`outbox_grant` has three actor kinds, and only one of them is an automation.** `outbox_item.actor_kind`
+   is `identity.provAgentKind`, so a standing "always allow" rule can belong to the OWNER (a device caller)
+   or, since w4b, to a first-party SURFACE — neither of which is an `automation` principal, and a surface is
+   not a principal at all. The rule is also not a reach question: it is egress consent ("send this shape of
+   thing to this address without asking again"), which `share_authority.verb`'s per-(kind × subject) registry
+   has no vocabulary for. Options: (a) `principal_kind='automation'` for agent actors only, leaving owner and
+   surface rules where they are — half a migration, and `outbox_grant` keeps a reader; (b) admit an `egress`
+   subject_type across `device`/`automation` principals, with the surface as `subject_id`; (c) leave the
+   outbox rule out of the one plane and say so in the issue. Recommendation: (b). Not landed — this is the
+   root's ruling, not a worker's.
+2. **Companion attenuation is read before a vault is open.** `devices.grant_profile_json` lives in the
+   gateway's own store and `build-gateway.ts` reads it per request to authorize a companion. Making it a
+   `share_authority` row puts a vault open on the companion authorization path, which changes what happens
+   when the vault cannot be opened — today the companion is refused by the host, afterwards it would depend
+   on the vault. That is a security-relevant failure-mode change and wants a ruling before the code.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/server test -- --run src/serve/authz-deny-matrix.test.ts src/serve/authz-matrix.smoke.test.ts src/serve/manifest-scope-denial.{sweep,fuzz,hostile,closed-grammar}.test.ts   # 6 files, 186 passed, 3 expected fail
+bun run --cwd packages/vault test -- --run src/gateway/{access-properties,evidence,read-batch}.test.ts       # 3 files, 13 passed
+```
+
+### Paths
+
+```
+packages/vault/src/schema/core.ts
+packages/vault/src/schema/party-pointers.ts
+```
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| "No widening" is asserted, not assumed | ran the named invariant suites on the landed head: the deny matrix, the authz smoke matrix and all four automation clamp sweeps | **186 passed, 3 expected fail** — including `[law:consent-standing-answer-required]`, which asserts a `surface` identity's decision is byte-identical to the bare owner device's over the generated table × verb space |
+| The five retired tables really have no reader left, rather than a reader the grep missed | `grep -rn 'access_grant\\b\|access_grant_scope\|access_policy\|access_scope_tombstone\|access_scope_request\|purpose_concept_id' packages apps` over non-test source | 5 hits before this commit, 3 after: `schema/access.ts`'s deliberate supersession marker and two comments — now one. No code path |
+
+## w5a — the attenuations: companion surfaces and egress answers are rows
+
+`outbox_grant` and `devices.grant_profile_json` are deleted. Both were real answers held outside the one
+plane; both are now `share_authority` rows, and the one that is read before a vault can open keeps a
+projection whose absence DENIES.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/vault/src/grant/egress-authority.ts` | new — the egress accessors over `share_authority` (`subject_type = 'egress'`, destination as subject, semantic verb as verb); `automation` principal for an `ai_agent` actor, `device` for the owner's surfaces |
+| `packages/vault/src/grant/companion-surfaces.ts` | new — companion attenuation as `device`-principal rows over `app.surface`, verb `use`; a dropped surface revokes, an added one inserts |
+| `packages/vault/src/grant/authority-registry.ts` | three triples: `device × app.surface × use`, and `device`/`automation × egress` (verbs closed by the connection contract, so the strategy is the enrichment gate) |
+| `packages/vault/src/schema/outbox.ts` | `outbox_grant` deleted; `outbox_item.grant_id` → `authority_id REFERENCES share_authority(authority_id)`, index renamed |
+| `packages/vault/src/schema/migrate.ts` | `SHARE_AUTHORITY_DDL` moves ahead of `OUTBOX_DDL` — the new reference is real |
+| `packages/vault/src/schema/entity-catalog.ts` | `outbox.grant` removed from the registry |
+| `packages/vault/src/commands/outbox.ts` | stage/decide/revoke read and write the authority row; output key `grant_id` → `authority_id` |
+| `packages/vault/src/gateway/assistant-context.ts`, `packages/vault/src/index.ts` | the context sentence and the barrel follow |
+| `packages/vault/src/gateway/evidence.test.ts` | `row.grant_id` → `row.authority_id` — a **pre-existing** typecheck red on `claude/928-w4` (w4a's rename) |
+| `packages/server/src/serve/gateway-schema.ts` | `devices.grant_profile_json` → `attenuated INTEGER`; new `device_surface_projection(endpoint_id, vault_id, surfaces_json, projected_at)` |
+| `packages/server/src/serve/enrollment-store.ts` | `grantProfile` → `attenuated` + `projectedSurfaces` / `projectSurfaces` / `attenuatedEndpointsFor`; revoke and vault removal clear the projection |
+| `packages/server/src/serve/companion-access.ts` | the whole boundary: `projectCompanionAttenuation`, `recordCompanionAttenuation`, and `companionAccess` — one decision with `unreadable` as a case |
+| `packages/server/src/serve/build-gateway.ts` | the request path reads the projection; re-projects on boot and on every `onMount` |
+| `packages/server/src/cli/endpoint-host.ts` | pairing writes the authority rows into each enrolled vault, then projects |
+| `packages/server/src/serve/vault-plane.ts`, `vault-quarantine.ts` | outbox grant readers → the egress accessors; the review feed's `authorityId` is now one id space |
+| `packages/server/src/serve/vault-context.ts`, `routes/vault-routes.ts`, `routes/devices-routes.ts`, `routes/companion-grants.ts` | `grantProfile` → `companionSurfaces`; the devices DTO keeps its wire name, filled from the projection |
+| `SECURITY.md`, `docs/decisions.md`, `docs/glossary.md`, `docs/vault-ontology.md`, `tests/onboarding-scenarios.md` | AP-egress-rows and AP-companion-projection recorded with their property; V-split's companion sentence marked superseded; ONT-20 closed; four sentences that named the deleted column |
+| tests | `packages/vault/src/grant/egress-authority.test.ts` (new), `packages/vault/src/commands/outbox.test.ts`, `packages/server/src/serve/companion-access.test.ts`, `device-plane.test.ts`, `vault-quarantine.test.ts`, `packages/server/src/automation/fire/enrich-gate.test.ts`, `packages/server/src/backup/backup.integration.test.ts`, `recover.integration.test.ts` |
+
+### Decisions
+
+- **The gateway keeps a PROJECTION, not the answer.** Root ruling: the rows are the source of truth; the
+  pre-open request path reads a `gateway.db` projection rebuilt on vault mount and on every write of the
+  answer. An attenuated device with no projection is **refused** (`companion_attenuation_unavailable`),
+  never widened — which is why `devices` keeps one `attenuated` flag: the fact the boundary needs before
+  any vault is open is "is this device confined", not "to what".
+- **The wire keeps `grantProfile`.** The pairing request and the devices DTO keep the field name; renaming
+  them reaches `packages/client`, `apps/mobile` and `packages/tunnel` for no model gain. Doc debt below.
+- **`outbox.revoke_grant` keeps its command name** (its input is now `authority_id`). Renaming the command
+  and the `/outbox/grants` route would ripple into mobile for a vocabulary gain alone.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck
+bun run --cwd packages/vault test -- --run src/commands/outbox.test.ts src/grant/egress-authority.test.ts src/grant/authority-registry.test.ts src/schema/{migrate,ontology-shape,atlas-census}.test.ts
+bun run --cwd packages/server test -- --run src/serve/{authz-deny-matrix,authz-matrix.smoke,vault-quarantine,companion-access,device-plane}.test.ts src/routes/{enrich-search-routes,devices-routes}.test.ts src/automation/fire/enrich-gate.test.ts
+bun run lint && bun run lint:vault-sql
+```
+
+### Findings
+
+- `packages/vault/src/gateway/evidence.test.ts` did not compile on `claude/928-w4` (`row.grant_id` after
+  w4a renamed the column). Fixed here; the base's typecheck was red before this lane touched it.
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| "A missing projection denies" is asserted, not built | `companionAccess({attenuated:true, projected:undefined})` in `companion-access.test.ts`, plus reading the one call site in `build-gateway.ts`: the `unreadable` case returns 403 before the header is ever set | **holds** — and `projectedSurfaces` returns `undefined` (not `[]`) for an absent row, so the two are distinguishable |
+| `grant_profile_json` / `outbox_grant` really have no reader | `grep -rn 'grant_profile_json\|outbox_grant' packages apps docs tests SECURITY.md` outside receipts/CHANGELOG | **no code hit** — every survivor is a register/supersession row naming the deleted store as history. The surviving `grantProfile` identifiers are the pairing wire field and the devices DTO, both fed from the projection |
+
+## w5b — the give-plane residue is deleted; a placement is one call
+
+`share_edges`, `share_effects` and the machinery around them served one act: moving or copying a set of
+items between two of the owner's OWN vaults, with both vaults open in the same process. That is not a
+distributed obligation, so the edge row, the reducer, the effect outbox, the executor, the local
+reconciler, the retry sweep and the retirement pass are gone.
+
+### Files
+
+| file | change |
+| --- | --- |
+| `packages/vault/src/share/placement.ts` | `placeItemsInVault` — grant the placement authority, project, then release the source; `moveOutOfVault` (one item, one transaction each) becomes `moveItemsOutOfVault` (the whole set, ONE transaction) |
+| `packages/server/src/routes/placement-routes.ts` | replaces `routes/edges-routes.ts`: the same path and wire, one synchronous vault call, `share_access_receipts` as the exactly-once anchor; a vault not open here is a retryable `503 vault_not_open`, a failed placement a `502` that audits nothing |
+| `packages/server/src/serve/share-access-receipts.ts` | gains `placement_kind` / `created_by_device` and the two readers the route lists and replays from; ids are parsed, never cast |
+| `packages/server/src/serve/gateway-schema.ts` | `share_edges` and `share_effects` deleted with their indexes; `share_access_receipts` kept as history |
+| `packages/server/src/serve/peer-plane-sweep.ts` | the effect drain leaves the tick; commons + route re-announcement remain (and `db` / `vaultFor` / `partyIdFor` leave its options) |
+| `packages/server/src/serve/gateway-db.ts` | the once-per-file retirement drain is gone with the queue |
+| deleted | `serve/share-coordinator.ts` (+test), `share-edge-row.ts`, `share-edge-store.ts`, `share-effects.ts`, `share-effect-executor.ts`, `share-effects-retire.ts`, `share-outbox-obligation.contract.test.ts`, `share-receipt-authority.contract.test.ts`, `routes/edges-reconcile.ts`, `routes/edges-routes.ts` |
+| `packages/server/src/serve/build-gateway.ts`, `src/index.ts` | route + sweep wiring |
+| `scripts/lint-vault-sql.mjs` | five allowlist entries for deleted files removed (`allow-toolchain-config`) |
+| `tests/claims.json`, `tests/floors.json` | `share-receipt-authority` re-homed to `routes/placement-routes.test.ts`; `share-outbox-obligation` replaced one-to-one by `same-owner-placement` (floor 4 → 4) |
+| `tests/inventory.json` | pins for the six added files, pins for the twelve deleted files removed, `companion-access.ts` hand-raised (see Decisions) |
+| tests | `packages/vault/src/share/placement-move.test.ts` (new), `placement.test.ts`, `routes/placement-routes.test.ts`, `serve/peer-plane-sweep.test.ts`, `gateway-db.test.ts`, `vault-links-store.test.ts`, `peer-transport-remote.test.ts`, `vault-plane-commons.test.ts` |
+| docs | `ARCHITECTURE.md`, `docs/decisions.md` (the drained-obligation ruling marked superseded), `docs/glossary.md` (**edge** → **placement**), `docs/vault-ontology.md` ONT-21 closed, `apps/desktop/tests/e2e/fixtures.ts` comments |
+
+### Decisions
+
+- **The route path and wire stay.** `POST/GET /centraid/_gateway/edges` keeps its shape so the phone's
+  placement outbox, `centraid-inline.ts` and the desktop e2e fixture are untouched; only the module and
+  the machinery behind it change. `status` is always `completed`, because a placement that did not
+  complete leaves no history row and the caller learns that from the HTTP status.
+- **Retry moved to the caller that already had it.** The phone's placement outbox is the durable queue;
+  the gateway-side outbox was a second one. A vault not open here is now `503`, which that outbox retries.
+- **`share-outbox-obligation` is replaced, not dropped.** `same-owner-placement` (floor 4, unchanged)
+  carries the durability claim in its new home; the full rationale is in `tests/claims.json`.
+- **`companion-access.ts`'s density pin is hand-raised** 23.76% → 28.41% (`[245,1031]` → `[963,3390]`):
+  the file grew from a single request predicate to the whole Companion boundary, and its header is the
+  argument for why a missing projection denies. The comments were cut back once before re-pinning.
+
+### Verification
+
+```
+git rev-parse HEAD^{tree}
+bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck
+bun run --cwd packages/vault test -- --run src/share/ src/grant/
+bun run --cwd packages/server test -- --run src/routes/placement-routes.test.ts src/serve/{peer-plane-sweep,gateway-db,vault-links-store}.test.ts
+bun run lint && bun run lint:vault-sql && bun run lint:ledgers
+grep -rn 'share_edges\|share_effects' packages apps docs   # register rows only
+```
+
+### Paths
+
+```
+packages/server/src/backup/recover.integration.test.ts
+packages/server/src/routes/devices-routes.ts
+packages/server/src/serve/device-plane.test.ts
+packages/server/src/serve/vault-quarantine.ts
+packages/server/src/serve/vault-quarantine.test.ts
+```
+
+### Findings
+
+- **`bun run test:comment-density` is red on `claude/928-w4` before this lane**: 569 pinned files measure
+  above their pin on the committed base tree (`git stash && bun run test:comment-density` → 569). Not
+  chased here; the root owns whether the branch re-pins wholesale or the rises are real.
+- **`bun run lint:ledgers` reports eleven `tests/journeys.json` removals against `origin/main`** that this
+  lane did not make (`git diff HEAD -- tests/journeys.json` is empty) — base lag, per the slice contract.
+
+### Falsification
+
+| claim at risk | throwaway check | result |
+| --- | --- | --- |
+| "One call" is a rename, not a real collapse | read the new POST path end to end: no `share_edges` row is written, no effect enqueued, no sweep involved — and `grep -rn 'share_edges\|share_effects' packages apps` over code is empty | **holds** — the only survivors are register rows in `docs/` naming the deleted tables as history |
+| A move now half-completes where it used to resume | `moveItemsOutOfVault` opens ONE `BEGIN IMMEDIATE` over the whole set (it used to be one per item), and the album test asserts both photographs and the collection left together while the destination holds all of it | **holds** — the crash window narrowed rather than widened; the projection still commits before any release |
+
+## Follow-up — CI repair
+
+### What changed
+
+- packages/model-runtime/automation-handlers/embed-image.js, packages/model-runtime/automation-handlers/embed-text.js, packages/model-runtime/automation-handlers/faces.js, packages/model-runtime/automation-handlers/photo-ocr.js, packages/model-runtime/automation-handlers/place-names.js, and packages/model-runtime/automation-handlers/transcript.js now match the purpose-free recognition handler contract at every vault call.
+- The six generated bundles were rebuilt: packages/blueprints/automations/embed-image/automations/embed-image/handler.js, packages/blueprints/automations/embed-text/automations/embed-text/handler.js, packages/blueprints/automations/faces/automations/faces/handler.js, packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js, packages/blueprints/automations/place-names/automations/place-names/handler.js, and packages/blueprints/automations/transcript/automations/transcript/handler.js.
+- tests/quality/chaos-planner-app.ts and tests/quality/component-chaos-world.ts register the planner's declared app scope through recordAppInstall, including after a synthetic gateway restart.
+- tests/quality/offline-reconnect.integration.test.ts, tests/scale/replica-bootstrap.scale.test.ts, tests/scale/replica-reconnect.scale.test.ts, tests/scale/replica-sse-fanout.scale.test.ts, and tests/scale/large-vault.scale.test.ts follow the retired app-grant and purpose-free test APIs.
+- packages/server/src/serve/vault-plane.ts and packages/vault/src/commands/provider-writeback.ts read and insert the renamed outbox_item.authority_id column; packages/server/src/serve/outbox-executor.test.ts follows the authority_id output contract.
+- scripts/lint-engine-conformance.mjs follows the action kit's removed ACTION_PURPOSE export. tests/quality/classification-ratchet.json re-pins the changed manifest and claims fingerprints; thresholds and classifications are unchanged.
+
+### Verification
+
+```sh
+bun run --cwd packages/model-runtime test -- automation-handlers/embed-image.test.ts
+bun run --cwd packages/model-runtime build:automations
+bun run typecheck
+bun run lint:product
+bun run scripts:test
+```
+
+### Decisions
+
+- #928 re-pins classification fingerprints after the authority-plane migration changed the governed manifest and claim statements; thresholds and classifications are unchanged.
+
+### Audit
+
+Verdict: PASS. The follow-up diff is limited to restoring the purpose-free recognition calls, migrating synthetic and scale fixtures to recordAppInstall, rebuilding their committed bundles, and updating the conformance/fingerprint ledgers required by those changes. The affected unit, quality, typecheck, product-gate, and script suites are recorded above.
+
+- Post-rebase verification: `tests/quality/classification-ratchet.json` was re-pinned to the current `tests/claims.json` digest after the PR branch's placement refactor; `bun run lint:product` passed all 42 gates.
+- Post-main-sync verification: `tests/integration-mobile/lib/write-conditions.ts` and `tests/integration-mobile/denied.integration.test.ts` now assert first-party app withdrawal through installation state (`appRevoked`), not standing grant count; `bun run test:integration:mobile -- --run tests/integration-mobile/denied.integration.test.ts` passed 8/8.
+
+- Post-CI verification: `check:reachability` found the retired `parseEdgeScope` and `parseTargetItemIds` exports had only test callers. They were deleted with their obsolete tests from `packages/server/src/serve/share-scope.ts` and `packages/server/src/serve/share-scope.test.ts`; `validateItemIds` remains the production placement boundary. `bun run check:reachability` passed with 363 capabilities across 21 module globs, `format:check` passed, the focused server test passed 6/6, and `bun run typecheck` passed all 25 tasks.
+
+- Post-CI verification: the PR `verify` lane caught the work-counter expectation left behind by the owner-direct read change: the measured read cost was `statements=3`, `rowsScanned=23`, `fsyncs=0`, `bytesRead=2028`, `bytesWritten=0`, while the old budget still required one audit fsync. The expectation now records those tighter values and documents the zero-barrier invariant; `bun run test:perf:counters` passed locally after the update.
+
+- Post-CI verification: coverage shard 3 caught the `issue-916` golden corpus and ontology page still naming retired `outbox_grant` machinery after the authority-plane schema landed. Re-froze `packages/vault/tests/golden/issue-916` with `bun run --cwd packages/vault build && bun run golden-vault:freeze -- --label issue-916`, removed `grant` from the ontology outbox band, and ran `bun run --cwd packages/vault test -- --run src/golden-vault.test.ts src/schema/ontology-doc.test.ts` — 15/15 passed.
+
+- Post-CI verification: SonarCloud reported two reliability findings on new code: the `scopeForSubject` method reference passed directly to `.map()` and a redundant `| undefined` on optional `ScopeTriple.table`. The map now uses an explicit subject callback and the optional property uses the canonical form; the focused authority-request and vault-plane tests passed 14/14, and both package typechecks passed.

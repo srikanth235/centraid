@@ -17,11 +17,10 @@ import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 // nothing. Authority is gateway-side (`vault_owners(vault_id, owner_id)`,
 // #726) and, for everything the member has answered about, in
 // `share_authority`. NO PARTY COLUMN ANYWHERE IN THIS FILE CONFERS
-// PERMISSION: `access_device.owner_party_id`,
-// `access_grant.granted_by_party_id`, `core_collection.
-// owner_party_id` and their kin are ATTRIBUTION — who this is about, who did
-// it — which is why only the one column that read as a permission claim was
-// renamed: `owner_party_id` -> `self_party_id`.
+// PERMISSION: `access_device.owner_party_id`, `share_authority.granted_by`,
+// `core_collection.owner_party_id` and their kin are ATTRIBUTION — who this is
+// about, who did it — which is why only the one column that read as a
+// permission claim was renamed: `owner_party_id` -> `self_party_id`.
 export const CORE_DDL = `
 CREATE TABLE core_vault (
   vault_id        TEXT PRIMARY KEY,

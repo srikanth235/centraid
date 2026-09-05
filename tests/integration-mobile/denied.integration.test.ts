@@ -48,10 +48,7 @@ describe("a denied write on a real gateway", () => {
         (entry) => entry.intentId === observed.deniedIntentId
       );
 
-      expect(
-        observed.grantsRevoked,
-        `${appId} had no grant to revoke — the arrangement withdrew nothing`
-      ).toBeGreaterThan(0);
+      expect(observed.appRevoked, `${appId} was not withdrawn`).toBe(true);
       expect(denied?.status, `${appId} revoked intent`).toBe("denied");
       // Terminal AND explained: a refusal with no reason is a spinner.
       expect(denied?.reason).toBeTypeOf("string");

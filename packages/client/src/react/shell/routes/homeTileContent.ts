@@ -20,15 +20,10 @@ export interface HomeTileReader {
     request: {
       entity: string;
       limit?: number;
-      purpose?: string;
       where?: { column: string; op: "eq"; value: string }[];
     }
   ) => Promise<{ rows: readonly { values: Record<string, unknown> }[] }>;
 }
-
-// TRAP (#708): `purpose` is a SHAPE SELECTOR, not an audit label — an
-// unregistered value matches nothing and the read throws silently. Omit it
-// for `DEFAULT_REPLICA_PURPOSE`.
 
 const WINDOW = { faces: 24, mosaic: 24, recent: 8, tasks: 24 } as const;
 

@@ -90,16 +90,16 @@ function renderVaultBlock(
       )
       .join(", ");
     lines.push(
-      `This app declares access to the owner's personal vault — purpose \`${vault.purpose}\`, requested scopes: ${scopes}.${vault.why ? ` Rationale: ${vault.why}` : ""}`,
+      `This app declares access to the owner's personal vault — requested scopes: ${scopes}.${vault.why ? ` Rationale: ${vault.why}` : ""}`,
       ``
     );
   }
   lines.push(
     `Handlers reach the vault through \`ctx.vault\` — the ONLY data door (there is no per-app database):`,
     ``,
-    `- \`await ctx.vault.read({ entity, where?, limit?, purpose })\` — consent-checked read of an entity (canonical like \`core.event\`, or this app's own \`ext.${appId}.<table>\`). Returns \`{ rows, receiptId }\`.`,
-    `- \`await ctx.vault.search({ entity, query, where?, limit?, purpose })\` — full-text search over a text-indexed entity. \`query\` is the owner's typed words (matched as AND-ed prefixes; FTS operators are treated as literals). Returns \`{ rows, receiptId }\` ranked best-first; each row adds \`_snippet\` — the matched fragment with \`⟦\`/\`⟧\` around hits (escape the text FIRST, then turn markers into markup). ALWAYS search this way instead of reading a whole entity and filtering text in JS — vault data has no upper bound.`,
-    `- \`await ctx.vault.invoke({ command, input, purpose })\` — typed command (e.g. \`schedule.propose_event\`). Returns an outcome: \`{ status: 'executed' | 'denied' | 'parked' | 'failed', output?, … }\` — check \`status\` before assuming the write landed; \`parked\` means the owner must confirm.`,
+    `- \`await ctx.vault.read({ entity, where?, limit? })\` — consent-checked read of an entity (canonical like \`core.event\`, or this app's own \`ext.${appId}.<table>\`). Returns \`{ rows, receiptId }\`.`,
+    `- \`await ctx.vault.search({ entity, query, where?, limit? })\` — full-text search over a text-indexed entity. \`query\` is the owner's typed words (matched as AND-ed prefixes; FTS operators are treated as literals). Returns \`{ rows, receiptId }\` ranked best-first; each row adds \`_snippet\` — the matched fragment with \`⟦\`/\`⟧\` around hits (escape the text FIRST, then turn markers into markup). ALWAYS search this way instead of reading a whole entity and filtering text in JS — vault data has no upper bound.`,
+    `- \`await ctx.vault.invoke({ command, input })\` — typed command (e.g. \`schedule.propose_event\`). Returns an outcome: \`{ status: 'executed' | 'denied' | 'parked' | 'failed', output?, … }\` — check \`status\` before assuming the write landed; \`parked\` means the owner must confirm.`,
     `- \`await ctx.vault.describe()\` — the commands this app can discover (name, schema, risk).`,
     ``,
     `Every call is consent-checked host-side and receipted. A denial throws with the receipt id in the message — do not retry in a loop; surface the denial. Until the owner approves the requested scopes, calls fail closed.`

@@ -33,7 +33,6 @@ const SHAPES = [
   {
     shapeId: "docs-default",
     appId: "docs",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.document",
@@ -68,7 +67,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "tasks-default",
     appId: "tasks",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "schedule.task",
@@ -100,7 +98,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "tally-default",
     appId: "tally",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "tally.expense",
@@ -142,7 +139,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "agenda-default",
     appId: "agenda",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.event",
@@ -154,7 +150,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "notes-default",
     appId: "notes",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "knowledge.note",

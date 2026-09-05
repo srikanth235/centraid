@@ -104,7 +104,6 @@ export default async function itemHandler({
   input?: Record<string, unknown>;
   ctx: HandlerCtx;
 }) {
-  const purpose = "dpv:ServiceProvision";
   const itemId = String(input?.item_id ?? "");
   if (!itemId) return { item: null };
   const sidecar = sidecarAsk(input);
@@ -118,7 +117,6 @@ export default async function itemHandler({
       acceptTruncation: true,
       entity: "locker.item",
       where: [{ column: "item_id", op: "eq", value: itemId }],
-      purpose,
     });
     const row = ((res.rows ?? []) as unknown as FullRow[])[0];
     if (!row) return { item: null };
@@ -132,7 +130,6 @@ export default async function itemHandler({
         entityId: sidecar.entityId,
         columns: [sidecar.column],
         authentication,
-        purpose,
       })) as { values?: Record<string, string | null> };
       sidecarValue = revealed.values?.[sidecar.column] ?? null;
     } else {
@@ -142,7 +139,6 @@ export default async function itemHandler({
           entityId: itemId,
           columns: SEALED_FIELDS,
           authentication,
-          purpose,
         })) as { values?: Partial<Record<SealedField, string | null>> };
         for (const field of SEALED_FIELDS)
           row[field] = revealed.values?.[field] ?? null;
@@ -165,22 +161,17 @@ export default async function itemHandler({
       history,
       attachments,
     ] = await Promise.all([
-      readTags(ctx, [itemId], purpose),
-      readStarred(ctx, [itemId], purpose),
-      readAlias(ctx, itemId, purpose),
-      readFields(ctx, itemId, purpose),
-      readAddresses(ctx, itemId, purpose),
-      readPasskey(ctx, itemId, purpose),
+      readTags(ctx, [itemId]),
+      readStarred(ctx, [itemId]),
+      readAlias(ctx, itemId),
+      readFields(ctx, itemId),
+      readAddresses(ctx, itemId),
+      readPasskey(ctx, itemId),
       // The item as it stands is what the newest revision is diffed against.
       // `row`'s sealed cells may be plaintext by now; the revision read reaches
       // for PLAIN columns only, and never for one of them.
-      readHistory(
-        ctx,
-        itemId,
-        row as unknown as Record<string, unknown>,
-        purpose
-      ),
-      readAttachments(ctx, itemId, purpose),
+      readHistory(ctx, itemId, row as unknown as Record<string, unknown>),
+      readAttachments(ctx, itemId),
     ]);
     const item = {
       item_id: row.item_id,

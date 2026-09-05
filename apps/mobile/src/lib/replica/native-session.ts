@@ -6,7 +6,6 @@ import { pendingProjectionFor } from "@centraid/blueprints/apps/_shared/pending-
 // governance: allow-repo-hygiene file-size-limit (#419) the native session is one cohesive coordinator wiring store, intent outbox, windowed bootstrap, SSE feed, and AppState drain across a single lifecycle
 import {
   authHeaders,
-  DEFAULT_REPLICA_PURPOSE,
   fetchReplicaChanges,
   fetchReplicaIntentOutcomes,
   runWindowedBootstrap,
@@ -343,12 +342,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     request: NativeReadRequest
   ): Promise<ReplicaReadWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(
-      appId,
-      request.entity,
-      request.shapeId,
-      request.purpose
-    );
+    const shapeId = this.resolveShapeId(appId, request.entity, request.shapeId);
     return this.#coordinator.readWire({ ...request, shapeId });
   }
 
@@ -357,12 +351,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     request: NativeSearchRequest
   ): Promise<ReplicaSearchWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(
-      appId,
-      request.entity,
-      request.shapeId,
-      request.purpose
-    );
+    const shapeId = this.resolveShapeId(appId, request.entity, request.shapeId);
     return this.#coordinator.searchWire({ ...request, shapeId });
   }
 
@@ -1097,15 +1086,14 @@ export class NativeReplicaSession implements MobileReplicaSession {
   private resolveShapeId(
     appId: string,
     entity: string,
-    requested?: string,
-    purpose?: string
+    requested?: string
   ): string {
-    const resolvedPurpose =
-      purpose ?? (requested ? undefined : DEFAULT_REPLICA_PURPOSE);
+    // ONE APP, ONE SHAPE (#928 A1). A shape is composed from the app's own
+    // declared manifest, so there is nothing left for a caller-supplied
+    // purpose to select between: the app and the entity name it.
     const candidates = this.#catalog.filter(
       (shape) =>
         shape.appId === appId &&
-        (resolvedPurpose === undefined || shape.purpose === resolvedPurpose) &&
         shape.entities.some((item) => item.entity === entity)
     );
     if (requested) {

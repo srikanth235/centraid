@@ -42,13 +42,11 @@ interface RawContent {
 }
 
 export default async function duplicatesHandler({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   try {
     const phashRows = await ctx.vault.read({
       entity: "media.asset_phash",
       where: [{ column: "cluster_id", op: "not-null" }],
       limit: 4000,
-      purpose,
     });
     const rows = (phashRows.rows ?? []) as unknown as RawPhash[];
     if (rows.length === 0) return { clusters: [] };
@@ -71,7 +69,6 @@ export default async function duplicatesHandler({ ctx }: HandlerArgs) {
         { column: "deleted_at", op: "is-null" },
       ],
       limit: 4000,
-      purpose,
     });
     const assetById = new Map(
       ((assetsResult.rows ?? []) as unknown as RawAsset[]).map(
@@ -90,7 +87,6 @@ export default async function duplicatesHandler({ ctx }: HandlerArgs) {
             acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] };
     const contentById = new Map(

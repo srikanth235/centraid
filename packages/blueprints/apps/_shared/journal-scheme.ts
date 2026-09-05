@@ -30,13 +30,11 @@ interface TagRow {
 // Bounded `op: "eq"` reads only. A denied read THROWS — answering "empty"
 // would leak journal notes into excluded surfaces.
 export async function readJournalNoteIds(
-  vault: VaultApi,
-  purpose: string
+  vault: VaultApi
 ): Promise<Set<string>> {
   const schemes = await vault.read({
     entity: "core.concept_scheme",
     where: [{ column: "uri", op: "eq", value: JOURNAL_SCHEME_URI }],
-    purpose,
   });
   const scheme = findScheme(
     (schemes.rows ?? []) as unknown as SchemeRow[],
@@ -47,7 +45,6 @@ export async function readJournalNoteIds(
   const concepts = await vault.read({
     entity: "core.concept",
     where: [{ column: "scheme_id", op: "eq", value: scheme.scheme_id }],
-    purpose,
   });
   const marker = findConcept(
     (concepts.rows ?? []) as unknown as ConceptRow[],
@@ -62,7 +59,6 @@ export async function readJournalNoteIds(
       { column: "target_type", op: "eq", value: "knowledge.note" },
       { column: "concept_id", op: "eq", value: marker.concept_id },
     ],
-    purpose,
   });
   return new Set(
     ((tags.rows ?? []) as unknown as TagRow[])

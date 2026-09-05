@@ -21,12 +21,14 @@ import {
   PROBE_TABLE,
   VERBS,
   clampCovers,
+  clampDeclares,
   classifyDeny,
   closeSweepVault,
   decide,
   identityFor,
   openSweepVault,
   sweep,
+  noStandingAnswerSentence,
   undeclaredSentence,
 } from "./manifest-scope-denial.sweep.test-fixtures.js";
 import type { ClampScope } from "./manifest-scope-denial.sweep.test-fixtures.js";
@@ -86,20 +88,22 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
               table,
               verb
             );
-            const covered = clampCovers(scopes, schema, table, verb);
+            const declared = clampDeclares(scopes, schema, table, verb);
             const refusedByManifest =
               decision.decision === "deny" &&
               decision.failing === undeclaredSentence(schema, table, verb);
-            // The biconditional IS the law: the manifest layer refuses exactly
-            // the combinations the declared scopes do not cover. `false === true`
-            // would be the clamp widening; `true === false` would be it refusing
-            // something it declared.
+            // The biconditional IS the law, and it is about the CLAMP layer
+            // alone: the manifest refuses exactly the combinations the declared
+            // scopes do not name. `false === true` would be the clamp widening;
+            // `true === false` would be it refusing something it declared. What
+            // the plane then does with a declared `reveal` is the next wall's
+            // business, asserted in `closed-grammar`.
             expect(
               refusedByManifest,
-              `${schema}.${table}/${verb} covered=${covered} decision=${
+              `${schema}.${table}/${verb} declared=${declared} decision=${
                 decision.decision === "deny" ? decision.failing : "allow"
               }`
-            ).toBe(!covered);
+            ).toBe(!declared);
           }
         ),
         { numRuns: 300 }
@@ -123,7 +127,7 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
               decision.decision === "allow"
                 ? "allow"
                 : classifyDeny(decision.failing);
-            // Closed vocabulary: "allow" or one of the six named refusals.
+            // Closed vocabulary: "allow" or one of the four named refusals.
             // Anything else means a new `failing` string escaped the receipt
             // grammar without anyone naming it.
             expect(["allow", ...DENY_CLASSES]).toContain(outcome);
@@ -154,8 +158,15 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
                 ? { decision: "allow" }
                 : {
                     decision: "deny",
-                    failing: undeclaredSentence(scope.schema, table, verb),
-                    grantId: null,
+                    failing: clampDeclares(
+                      manifest.scopes,
+                      scope.schema,
+                      table,
+                      verb
+                    )
+                      ? noStandingAnswerSentence(scope.schema, table, verb)
+                      : undeclaredSentence(scope.schema, table, verb),
+                    authorityId: null,
                   }
             );
           }

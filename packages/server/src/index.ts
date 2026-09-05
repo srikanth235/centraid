@@ -130,7 +130,10 @@ export {
   makeMultiplexReplicaRouteHandler,
   MULTIPLEX_REPLICA_CHANGES_PATH,
 } from "./routes/multiplex-replica-routes.js";
-export { makeEdgesRouteHandler, EDGES_PATH } from "./routes/edges-routes.js";
+export {
+  makePlacementRouteHandler,
+  EDGES_PATH,
+} from "./routes/placement-routes.js";
 export {
   makeVaultLinksRouteHandler,
   LINKS_PATH,

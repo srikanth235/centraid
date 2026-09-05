@@ -5,7 +5,6 @@ import { bootstrappedVault } from "@centraid/test-kit/vault";
 
 import {
   bootstrapVault,
-  createGrant,
   enrollAgent,
   enrollApp,
   enrollDevice,
@@ -14,6 +13,8 @@ import type { BootstrapResult } from "../bootstrap.js";
 import { registerScheduleCommands } from "../commands/schedule.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { automationAnswers } from "../grant/automation-authority.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { uuidv7 } from "../ids.js";
 import {
   deleteReplicaIntentOutcomesForDevice,
@@ -75,7 +76,7 @@ describe("gateway", () => {
       expect(() =>
         gw.read(
           { kind: "device", deviceId: "nope", deviceKey: "nope" },
-          { entity: "core.party", purpose: "dpv:ServiceProvision" }
+          { entity: "core.party" }
         )
       ).toThrow(/unknown caller/u);
       const receipts = db.audit
@@ -90,48 +91,45 @@ describe("gateway", () => {
       expect(() =>
         gw.read(
           { kind: "device", deviceId: boot.deviceId, deviceKey: "wrong" },
-          { entity: "core.party", purpose: "dpv:ServiceProvision" }
+          { entity: "core.party" }
         )
       ).toThrow(/unknown caller/u);
     });
   });
 
   describe("S2 consent", () => {
-    test("owner-direct read is allowed and receipted", () => {
+    test("owner-direct read is allowed and writes NO receipt (#928, #922 B1)", () => {
+      const before = (
+        db.audit.prepare("SELECT count(*) AS n FROM access_receipt").get() as {
+          n: number;
+        }
+      ).n;
       const result = gw.read(owner, {
         entity: "core.party",
-        purpose: "dpv:ServiceProvision",
       });
       expect(result.rows.length).toBeGreaterThan(0);
-      const receipt = db.audit
-        .prepare(
-          "SELECT decision, action, object_type, grant_id FROM access_receipt WHERE receipt_id = ?"
-        )
-        .get(result.receiptId) as {
-        decision: string;
-        action: string;
-        object_type: string;
-        grant_id: string | null;
-      };
-      expect(receipt).toMatchObject({
-        decision: "allow",
-        action: "read",
-        object_type: "core.party",
-        grant_id: null,
-      });
+      // Nothing was exercised against the owner, so there is nothing to prove:
+      // no receipt id on the result, and not one row appended to the band.
+      expect(result.receiptId).toBeUndefined();
+      expect(
+        db.audit.prepare("SELECT count(*) AS n FROM access_receipt").get()
+      ).toMatchObject({ n: before });
     });
 
     test("app without a grant is denied with a deny receipt", () => {
-      const app = enrollApp(db, { name: "vitals-widget" });
+      const app = enrollAgent(db, {
+        name: "vitals-widget",
+        modelRef: "test-automation",
+      });
       const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
+        kind: "agent",
+        agentId: app.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
       };
       expect(() =>
         gw.read(cred, {
           entity: "core.observation",
-          purpose: "dpv:HealthMonitoring",
         })
       ).toThrow(/deny/u);
       const deny = db.audit
@@ -142,53 +140,54 @@ describe("gateway", () => {
       expect(deny.n).toBe(1);
     });
 
-    test("granted app reads only within scope; ungranted schema still denied", () => {
-      const app = enrollApp(db, { name: "calendar-app" });
-      createGrant(db, {
-        appId: app.appId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [
-          { schema: "schedule", verbs: "read" },
-          { schema: "core", table: "event", verbs: "read" },
-        ],
+    test("an answered automation reads only within its answer; an unanswered pack is denied", () => {
+      const app = enrollAgent(db, {
+        name: "calendar-app",
+        modelRef: "test-automation",
       });
+      answerScopes(db, boot, "calendar-app", [
+        { schema: "schedule", verbs: "read" },
+        { schema: "core", table: "event", verbs: "read" },
+      ]);
       const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
+        kind: "agent",
+        agentId: app.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
       };
       // 2 = the bootstrap-minted default "Personal" calendar + seedCalendar()'s.
       expect(
         gw.read(cred, {
           entity: "schedule.calendar",
-          purpose: "dpv:ServiceProvision",
         }).rows
       ).toHaveLength(2);
       expect(() =>
         gw.read(cred, {
           entity: "core.transaction",
-          purpose: "dpv:ServiceProvision",
         })
-      ).toThrow(/deny/u);
-      // Wrong purpose on a valid scope is also a deny (purpose limitation).
-      expect(() =>
-        gw.read(cred, { entity: "schedule.calendar", purpose: "dpv:Billing" })
       ).toThrow(/deny/u);
     });
 
-    test("row filter and field mask clamp what a grant surfaces", () => {
+    test("row filter and field mask clamp what an answer surfaces", () => {
       gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
-      const app = enrollApp(db, { name: "masked-app" });
-      createGrant(db, {
-        appId: app.appId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [
+      const app = enrollAgent(db, {
+        name: "masked-app",
+        modelRef: "test-automation",
+      });
+      answerScopes(db, boot, "masked-app", [
+        { schema: "core", table: "event", verbs: "read" },
+      ]);
+      const cred: Credential = {
+        kind: "agent",
+        agentId: app.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
+        // Rows and fields come from the RUN's clamp now (#928): the owner's
+        // answer says whether, the manifest says how narrow.
+        scopeClamp: [
           {
             schema: "core",
             table: "event",
@@ -197,21 +196,12 @@ describe("gateway", () => {
             fieldMask: ["event_id", "summary"],
           },
         ],
-      });
-      const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
       };
-      // Tentative event filtered out by the grant's row filter.
-      expect(
-        gw.read(cred, { entity: "core.event", purpose: "dpv:ServiceProvision" })
-          .rows
-      ).toHaveLength(0);
+      // Tentative event filtered out by the clamp's row filter.
+      expect(gw.read(cred, { entity: "core.event" }).rows).toHaveLength(0);
       db.vault.prepare(`UPDATE core_event SET status='confirmed'`).run();
       const rows = gw.read(cred, {
         entity: "core.event",
-        purpose: "dpv:ServiceProvision",
       }).rows;
       expect(rows).toHaveLength(1);
       expect(Object.keys(rows[0] ?? {}).sort()).toStrictEqual([
@@ -247,7 +237,6 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
 
       expect(outcome.status).toBe("executed");
@@ -328,18 +317,16 @@ describe("gateway", () => {
       ).toBe(0);
     });
 
-    test("an app invocation is bound to the durable intent owner device and app", () => {
+    test("a surface invocation is bound to the durable intent owner device and app", () => {
+      // A first-party app is not a principal (#928 A1): it runs on the owner's
+      // own device and NAMES itself, so an intent is still bound to the device
+      // and the app that queued it.
       const app = enrollApp(db, { name: "agenda" });
-      createGrant(db, {
-        appId: app.appId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [{ schema: "schedule", verbs: "read+act" }],
-      });
       const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
+        kind: "device",
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
+        surface: app.appId,
       };
       recordReplicaIntentOutcome(db.vault, {
         intentId: "owned-intent",
@@ -354,7 +341,6 @@ describe("gateway", () => {
         gw.invoke(cred, {
           command: "schedule.propose_event",
           input: proposeInput(),
-          purpose: "dpv:ServiceProvision",
           intentId: "owned-intent",
           intentDeviceId: "paired-device-b",
         })
@@ -369,7 +355,6 @@ describe("gateway", () => {
         gw.invoke(cred, {
           command: "schedule.propose_event",
           input: proposeInput(),
-          purpose: "dpv:ServiceProvision",
           intentId: "owned-intent",
           intentDeviceId: "paired-device-a",
         })
@@ -380,7 +365,6 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
       if (outcome.status !== "executed") return;
@@ -422,7 +406,6 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput({ calendar_id: "missing-calendar" }),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("failed");
       if (outcome.status !== "failed") return;
@@ -455,7 +438,6 @@ describe("gateway", () => {
       gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
@@ -464,7 +446,6 @@ describe("gateway", () => {
           dtstart: "2026-07-03T09:10:00Z",
           dtend: "2026-07-03T09:30:00Z",
         }),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("failed");
       assert(outcome.status === "failed");
@@ -477,7 +458,6 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: { summary: "No times", calendar_id: calendarId },
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("failed");
       assert(outcome.status === "failed");
@@ -488,7 +468,6 @@ describe("gateway", () => {
       const proposed = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       if (proposed.status !== "executed") throw new Error("propose failed");
       const eventId = (proposed.output as { event_id: string }).event_id;
@@ -499,7 +478,6 @@ describe("gateway", () => {
           dtstart: "2026-07-03T10:00:00Z",
           dtend: "2026-07-03T10:15:00Z",
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
       const event = db.vault
@@ -516,7 +494,6 @@ describe("gateway", () => {
       const first = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       });
       expect(first.status).toBe("executed");
@@ -524,7 +501,6 @@ describe("gateway", () => {
       const replay = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       });
       expect(replay).toMatchObject({
@@ -544,7 +520,6 @@ describe("gateway", () => {
       const failed = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput({ calendar_id: "missing-calendar" }),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       });
       expect(failed).toMatchObject({ status: "failed", invocationId });
@@ -557,7 +532,6 @@ describe("gateway", () => {
             dtstart: "2026-07-03T10:00:00Z",
             dtend: "2026-07-03T10:15:00Z",
           },
-          purpose: "dpv:ServiceProvision",
           invocationId,
         })
       ).toThrow(/already bound/u);
@@ -588,7 +562,6 @@ describe("gateway", () => {
       const request = {
         command: "schedule.propose_event",
         input: proposeInput({ calendar_id: "missing-calendar" }),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       } as const;
       const first = gw.invoke(owner, request);
@@ -608,7 +581,6 @@ describe("gateway", () => {
       const first = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
         intentId: "offline-intent-crash-gap",
       });
@@ -703,7 +675,6 @@ describe("gateway", () => {
         gw.invoke(owner, {
           command: "schedule.propose_event",
           input: proposeInput(),
-          purpose: "dpv:ServiceProvision",
           invocationId,
           intentId: "offline-intent-crash-gap",
         })
@@ -766,7 +737,6 @@ describe("gateway", () => {
       const replay = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
         intentId: "offline-intent-crash-gap",
       });
@@ -816,7 +786,6 @@ describe("gateway", () => {
         gw.invoke(owner, {
           command: "schedule.propose_event",
           input: proposeInput(),
-          purpose: "dpv:ServiceProvision",
           invocationId,
           intentId: invocationId,
         })
@@ -841,7 +810,6 @@ describe("gateway", () => {
       const retry = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
         intentId: invocationId,
       });
@@ -876,7 +844,6 @@ describe("gateway", () => {
         gw.invoke(owner, {
           command: "schedule.propose_event",
           input: proposeInput(),
-          purpose: "dpv:ServiceProvision",
           invocationId,
         })
       ).toThrow(/ordinary finalization failure/u);
@@ -907,7 +874,6 @@ describe("gateway", () => {
       const retry = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       });
 
@@ -940,7 +906,6 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId,
       });
       expect(outcome.status).toBe("executed");
@@ -963,12 +928,9 @@ describe("gateway", () => {
     function grantedAgent(): { cred: Credential; grantId: string } {
       const agent = enrollAgent(db, { name: "assistant", modelRef: "model-x" });
       const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
-      const grantId = createGrant(db, {
-        granteePartyId: agent.partyId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [{ schema: "schedule", verbs: "read+act" }],
-      });
+      const grantId = answerScopes(db, boot, "assistant", [
+        { schema: "schedule", verbs: "read+act" },
+      ])[0]!;
       return {
         cred: {
           kind: "agent",
@@ -1007,7 +969,6 @@ describe("gateway", () => {
       const parked = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         intentId: "offline-intent-1",
       });
       expect(parked.status).toBe("parked");
@@ -1062,7 +1023,6 @@ describe("gateway", () => {
       const request = {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId: "offline-intent-journal-gap",
         intentId: "offline-intent-journal-gap",
       } as const;
@@ -1115,16 +1075,12 @@ describe("gateway", () => {
         deviceId: assistantDevice.deviceId,
         deviceKey: assistantDevice.deviceKey,
       };
-      createGrant(db, {
-        granteePartyId: assistantAgent.partyId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [{ schema: "schedule", verbs: "read+act" }],
-      });
+      answerScopes(db, boot, "_assistant", [
+        { schema: "schedule", verbs: "read+act" },
+      ]);
       const assistantParked = gw.invoke(assistantCred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       expect(assistantParked.status).toBe("parked");
       if (assistantParked.status !== "parked") return;
@@ -1134,7 +1090,6 @@ describe("gateway", () => {
       const automationParked = gw.invoke(automationCred, {
         command: "schedule.propose_event",
         input: proposeInput({ summary: "Automation event" }),
-        purpose: "dpv:ServiceProvision",
       });
       expect(automationParked.status).toBe("parked");
       if (automationParked.status !== "parked") return;
@@ -1160,7 +1115,6 @@ describe("gateway", () => {
       const outcome = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
       if (outcome.status !== "executed") return;
@@ -1170,8 +1124,8 @@ describe("gateway", () => {
       expect(JSON.parse(receipt.detail_json).risk).toBe("medium");
     });
 
-    test("an omitted purpose defaults and is journaled (issue #306)", () => {
-      const { cred } = grantedAgent();
+    test("an invocation receipt names the standing answer it rode (#928)", () => {
+      const { cred, grantId } = grantedAgent();
       const outcome = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
@@ -1179,43 +1133,18 @@ describe("gateway", () => {
       expect(outcome.status).toBe("executed");
       if (outcome.status !== "executed") return;
       const receipt = db.audit
-        .prepare(
-          "SELECT purpose_concept_id FROM access_receipt WHERE receipt_id = ?"
-        )
-        .get(outcome.receiptId) as { purpose_concept_id: string | null };
-      expect(receipt.purpose_concept_id).toBe("dpv:ServiceProvision");
-      // A purposeless read rides the same default and still receipts it.
-      const read = gw.read(cred, { entity: "schedule.calendar" });
-      const readReceipt = db.audit
-        .prepare(
-          "SELECT purpose_concept_id FROM access_receipt WHERE receipt_id = ?"
-        )
-        .get(read.receiptId) as { purpose_concept_id: string | null };
-      expect(readReceipt.purpose_concept_id).toBe("dpv:ServiceProvision");
-    });
-
-    test("access.policy purpose rules still evaluate when a purpose IS supplied (issue #306)", () => {
-      db.vault
-        .prepare(
-          `INSERT INTO access_policy (policy_id, kind, entity, rule_json, retention_days, effective_from, priority)
-         VALUES (?, 'purpose', 'schedule', '{"allowed_purposes":["dpv:ServiceProvision"]}', NULL, '2020-01-01T00:00:00Z', 1)`
-        )
-        .run(uuidv7());
-      const { cred } = grantedAgent();
-      const denied = gw.invoke(cred, {
-        command: "schedule.propose_event",
-        input: proposeInput(),
-        purpose: "dpv:Billing",
-      });
-      expect(denied.status).toBe("denied");
-      assert(denied.status === "denied");
-      expect(denied.reason).toContain("policy forbids");
-      // The defaulted purpose satisfies the same policy.
-      const allowed = gw.invoke(cred, {
-        command: "schedule.propose_event",
-        input: proposeInput(),
-      });
-      expect(allowed.status).toBe("executed");
+        .prepare("SELECT authority_id FROM access_receipt WHERE receipt_id = ?")
+        .get(outcome.receiptId) as { authority_id: string | null };
+      // ONE ID SPACE: the receipt names a `share_authority` row, or NULL for
+      // an owner-direct act. There is no third thing it can be.
+      expect(receipt.authority_id).toBe(grantId);
+      expect(
+        db.vault
+          .prepare(
+            "SELECT count(*) AS n FROM share_authority WHERE authority_id = ?"
+          )
+          .get(receipt.authority_id)
+      ).toMatchObject({ n: 1 });
     });
 
     test("owner denial of a parked invocation is receipted as deny", () => {
@@ -1229,7 +1158,6 @@ describe("gateway", () => {
       const parked = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       if (parked.status !== "parked") throw new Error("expected parked");
       const outcome = gw.confirm(owner, parked.invocationId, false);
@@ -1262,7 +1190,6 @@ describe("gateway", () => {
       const parked = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId: intentId,
         intentId,
       });
@@ -1345,7 +1272,6 @@ describe("gateway", () => {
       const parked = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         invocationId: intentId,
         intentId,
       });
@@ -1384,18 +1310,15 @@ describe("gateway", () => {
       const parked = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
         intentId: "offline-intent-revoked-before-confirm",
       });
       if (parked.status !== "parked") throw new Error("expected parked");
 
-      // Model a process crash after the grant row committed but before the
-      // revocation cascade removed this durable parked payload.
+      // Model a process crash after the withdrawal committed but before the
+      // cascade removed this durable parked payload.
       db.vault
         .prepare(
-          `UPDATE access_grant
-            SET status = 'revoked', revoked_at = ?
-          WHERE grant_id = ?`
+          `UPDATE share_authority SET revoked_at = ? WHERE authority_id = ?`
         )
         .run(new Date().toISOString(), grantId);
 
@@ -1403,7 +1326,7 @@ describe("gateway", () => {
 
       expect(outcome).toMatchObject({
         status: "denied",
-        reason: "consent grant no longer active",
+        reason: "standing answer no longer live",
       });
       expect({
         ...db.vault.prepare("SELECT count(*) AS n FROM core_event").get(),
@@ -1419,17 +1342,16 @@ describe("gateway", () => {
         )
       ).toMatchObject({
         status: "denied",
-        reason: "consent grant no longer active",
+        reason: "standing answer no longer live",
       });
     });
 
     test("revocation cascade: agent goes dark instantly, receipts remain", () => {
-      const { cred, grantId } = grantedAgent();
+      const { cred } = grantedAgent();
       // 2 = the bootstrap-minted default "Personal" calendar + seedCalendar()'s.
       expect(
         gw.read(cred, {
           entity: "schedule.calendar",
-          purpose: "dpv:ServiceProvision",
         }).rows
       ).toHaveLength(2);
       const before = db.audit
@@ -1437,12 +1359,12 @@ describe("gateway", () => {
         .get() as {
         n: number;
       };
-      const result = gw.revokeGrant(owner, grantId);
-      expect(result.grantId).toBe(grantId);
+      // Withdraw every answer the automation holds: `read+act` is two rows.
+      for (const answer of automationAnswers(db.vault, "assistant"))
+        gw.revokeAuthority(owner, answer.authorityId);
       expect(() =>
         gw.read(cred, {
           entity: "schedule.calendar",
-          purpose: "dpv:ServiceProvision",
         })
       ).toThrow(/deny/u);
       const after = db.audit
@@ -1453,15 +1375,21 @@ describe("gateway", () => {
       expect(after.n).toBeGreaterThan(before.n); // history kept, plus new receipts
     });
 
-    test("sweep expires lapsed grants and purges scheduled content", () => {
-      const app = enrollApp(db, { name: "expiring-app" });
-      createGrant(db, {
-        appId: app.appId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [{ schema: "schedule", verbs: "read" }],
-        expiresAt: "2020-01-01T00:00:00Z",
+    test("sweep lapses a time-boxed answer and purges scheduled content", () => {
+      enrollAgent(db, {
+        name: "expiring-app",
+        modelRef: "test-automation",
       });
+      const [expiring] = answerScopes(db, boot, "expiring-app", [
+        { schema: "schedule", verbs: "read" },
+      ]);
+      db.vault
+        .prepare(
+          `UPDATE share_authority
+              SET duration = 'until-date', expires_at = '2020-01-01T00:00:00Z'
+            WHERE authority_id = ?`
+        )
+        .run(expiring!);
       db.vault
         .prepare(
           `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, deleted_at, purge_at, created_at)
@@ -1477,7 +1405,7 @@ describe("gateway", () => {
         )
         .run(boot.concepts["anomaly"] as string);
       const result = gw.sweep(owner);
-      expect(result.grantsExpired).toBe(1);
+      expect(result.authorityRevoked).toBe(1);
       expect(result.contentPurged).toBe(1);
       const gone = db.vault
         .prepare(
@@ -1537,13 +1465,11 @@ describe("gateway", () => {
         deviceKey: ro.deviceKey,
       };
       expect(
-        gw.read(cred, { entity: "core.party", purpose: "dpv:ServiceProvision" })
-          .rows.length
+        gw.read(cred, { entity: "core.party" }).rows.length
       ).toBeGreaterThan(0);
       const outcome = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("denied");
     });
@@ -1566,7 +1492,6 @@ describe("gateway", () => {
     const result = gw.read(owner, {
       entity: "schedule.task",
       where: [{ column: "due_at", op: "within-next-days", value: 3 }],
-      purpose: "dpv:ServiceProvision",
     });
     expect(result.rows.map((r) => r.title)).toStrictEqual(["due tomorrow"]);
   });
@@ -1581,20 +1506,14 @@ describe("gateway", () => {
         deviceId: boot.deviceId,
         deviceKey: boot.deviceKey,
       };
-      createGrant(db, {
-        granteePartyId: agent.partyId,
-        purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-        grantedByPartyId: boot.ownerPartyId,
-        scopes: [
-          { schema: "schedule", verbs: "read+act" },
-          { schema: "core", table: "event", verbs: "read" },
-        ],
-      });
+      answerScopes(db, boot, "reconciler", [
+        { schema: "schedule", verbs: "read+act" },
+        { schema: "core", table: "event", verbs: "read" },
+      ]);
 
       // Bootstrap: no rows, a watermark to persist.
       const boot1 = gw.changes(agentCred, {
         entities: ["core.event"],
-        purpose: "dpv:ServiceProvision",
         cursor: null,
       });
       expect(boot1.changes).toStrictEqual([]);
@@ -1603,14 +1522,12 @@ describe("gateway", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput({ calendar_id: cal }),
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
 
       // … and the feed surfaces it exactly once.
       const pull = gw.changes(agentCred, {
         entities: ["core.event"],
-        purpose: "dpv:ServiceProvision",
         cursor: boot1.cursor,
       });
       expect(pull.changes.length).toBeGreaterThan(0);
@@ -1623,7 +1540,6 @@ describe("gateway", () => {
       expect(cursorAdvanced, `${pull.cursor} > ${boot1.cursor}`).toBe(true);
       const again = gw.changes(agentCred, {
         entities: ["core.event"],
-        purpose: "dpv:ServiceProvision",
         cursor: pull.cursor,
       });
       expect(again.changes).toStrictEqual([]);
@@ -1632,7 +1548,6 @@ describe("gateway", () => {
       expect(() =>
         gw.changes(agentCred, {
           entities: ["core.event", "core.transaction"],
-          purpose: "dpv:ServiceProvision",
           cursor: pull.cursor,
         })
       ).toThrow(/deny/u);
@@ -1642,17 +1557,11 @@ describe("gateway", () => {
       const cal = seedCalendar();
       const a = enrollAgent(db, { name: "agent-a", modelRef: "test" });
       const b = enrollAgent(db, { name: "agent-b", modelRef: "test" });
-      const purposeId = boot.concepts["dpv:ServiceProvision"] as string;
-      for (const agent of [a, b]) {
-        createGrant(db, {
-          granteePartyId: agent.partyId,
-          purposeConceptId: purposeId,
-          grantedByPartyId: boot.ownerPartyId,
-          scopes: [
-            { schema: "schedule", verbs: "read+act" },
-            { schema: "agent", table: "command_invocation", verbs: "read" },
-          ],
-        });
+      for (const name of ["agent-a", "agent-b"]) {
+        answerScopes(db, boot, name, [
+          { schema: "schedule", verbs: "read+act" },
+          { schema: "agent", table: "command_invocation", verbs: "read" },
+        ]);
       }
       const credFor = (agent: { agentId: string }): Credential => ({
         kind: "agent",
@@ -1660,6 +1569,7 @@ describe("gateway", () => {
         deviceId: boot.deviceId,
         deviceKey: boot.deviceKey,
       });
+      void b;
       // Each agent invokes once (disjoint windows — no busy conflict).
       [a, b].forEach((agent, i) => {
         const outcome = gw.invoke(credFor(agent), {
@@ -1670,13 +1580,11 @@ describe("gateway", () => {
             dtstart: `2026-08-0${i + 1}T09:00:00Z`,
             dtend: `2026-08-0${i + 1}T09:15:00Z`,
           }),
-          purpose: "dpv:ServiceProvision",
         });
         expect(outcome.status).toBe("executed");
       });
       const mine = gw.read(credFor(a), {
         entity: "agent.command_invocation",
-        purpose: "dpv:ServiceProvision",
       });
       expect(mine.rows.length).toBeGreaterThan(0);
       expect(mine.rows.every((r) => r.caller_id === a.agentId)).toBe(true);

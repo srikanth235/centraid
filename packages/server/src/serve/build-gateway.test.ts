@@ -215,7 +215,6 @@ describe("build-gateway scenarios", () => {
               // A connector manifest must declare the vault access its
               // staged rows land under.
               vault: {
-                purpose: "dpv:ServiceProvision",
                 why: "stage pulled rows",
                 scopes: [{ schema: "sync", verbs: "read+act" }],
               },

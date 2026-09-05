@@ -14,7 +14,6 @@ describe("vault-plane cross-references", () => {
   test("cross-referencing (issue #272): shell pick → owner link → app resolves the far end without a scope", async () => {
     const plane = fixture.openPlane(await tempDir());
     const owner = plane.ownerCredential;
-    const purpose = "dpv:ServiceProvision";
     const PNG =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
@@ -22,14 +21,12 @@ describe("vault-plane cross-references", () => {
     const note = plane.gateway.invoke(owner, {
       command: "knowledge.create_note",
       input: { title: "Trip plan", body_text: "pack the camera" },
-      purpose,
     });
     expect(note.status).toBe("executed");
     const noteId = (note as { output: { note_id: string } }).output.note_id;
     const photo = plane.gateway.invoke(owner, {
       command: "media.add_asset",
       input: { data_uri: PNG, title: "Beach sunset" },
-      purpose,
     });
     expect(photo.status).toBe("executed");
     const assetId = (photo as { output: { asset_id: string } }).output.asset_id;
@@ -73,9 +70,7 @@ describe("vault-plane cross-references", () => {
 
     // A notes-shaped app (knowledge + core.link read, NO media scope) renders
     // the photo's card through its own bridge via resolvable-if-linked.
-    plane.enrollApp("notes");
-    plane.approveGrant("notes", {
-      purpose,
+    plane.recordAppInstall("notes", {
       scopes: [
         { schema: "knowledge", verbs: "read" },
         { schema: "core", table: "link", verbs: "read" },
@@ -84,34 +79,30 @@ describe("vault-plane cross-references", () => {
     const bridge = plane.bridgeFor("notes");
     const resolved = await bridge({
       op: "resolve",
-      payload: { refs: [{ type: "media.asset", id: assetId }], purpose },
+      payload: { refs: [{ type: "media.asset", id: assetId }] },
     });
     expect(resolved.ok).toBe(true);
     const cards = (resolved.result as { cards: Array<Record<string, unknown>> })
       .cards;
     expect(cards[0]).toMatchObject({ status: "live", title: "Beach sunset" });
 
-    // The issue's acceptance test, revoke half: pull the app's grant and its
-    // projections go dark — while the note, the photo and the link all remain
-    // the owner's, untouched.
-    const grants =
-      plane.listApps().find((a) => a.name === "notes")?.grants ?? [];
-    expect(grants).toHaveLength(1);
-    plane.revokeGrant(grants[0]!.grantId);
+    // The issue's acceptance test, revoke half. Pulling a first-party app's
+    // access is UNINSTALLING it (#928 A1): it holds no grant to withdraw, so
+    // the register row is the whole of its reach. Its projections go dark —
+    // while the note, the photo and the link all remain the owner's.
+    expect(plane.revokeApp("notes").grantsRevoked).toBe(0);
     const revoked = await bridge({
       op: "resolve",
-      payload: { refs: [{ type: "media.asset", id: assetId }], purpose },
+      payload: { refs: [{ type: "media.asset", id: assetId }] },
     });
-    expect(revoked.ok).toBe(true);
-    expect(
-      (revoked.result as { cards: Array<{ status: string }> }).cards[0]!.status
-    ).toBe("denied");
+    expect(revoked.ok).toBe(false);
+    expect(revoked.code).toBe("VAULT_NOT_ENROLLED");
     const darkRead = await bridge({
       op: "read",
-      payload: { entity: "knowledge.note", purpose },
+      payload: { entity: "knowledge.note" },
     });
     expect(darkRead.ok).toBe(false);
-    expect(darkRead.code).toBe("VAULT_ACCESS");
+    expect(darkRead.code).toBe("VAULT_NOT_ENROLLED");
     const survivors = plane.db.vault
       .prepare(
         `SELECT (SELECT count(*) FROM knowledge_note WHERE note_id = ?)
@@ -121,9 +112,8 @@ describe("vault-plane cross-references", () => {
       .get(noteId, assetId, linkId) as { n: number };
     expect(survivors.n).toBe(3);
 
-    // Re-grant, then end the link: unlink ends the authorization too.
-    plane.approveGrant("notes", {
-      purpose,
+    // Reinstall, then end the link: unlink ends the resolvability too.
+    plane.recordAppInstall("notes", {
       scopes: [
         { schema: "knowledge", verbs: "read" },
         { schema: "core", table: "link", verbs: "read" },
@@ -133,7 +123,7 @@ describe("vault-plane cross-references", () => {
     expect(unlinked.status).toBe("executed");
     const dark = await bridge({
       op: "resolve",
-      payload: { refs: [{ type: "media.asset", id: assetId }], purpose },
+      payload: { refs: [{ type: "media.asset", id: assetId }] },
     });
     expect(dark.ok).toBe(true);
     expect(
@@ -151,20 +141,17 @@ describe("vault-plane cross-references", () => {
     registry.create("Personal");
     fixture.push(() => registry.stop());
     const plane = registry.current();
-    const purpose = "dpv:ServiceProvision";
     const note = plane.gateway.invoke(plane.ownerCredential, {
       command: "knowledge.create_note",
       input: {
         title: "Camera shopping",
         body_text: "compare mirrorless bodies",
       },
-      purpose,
     });
     const noteId = (note as { output: { note_id: string } }).output.note_id;
     const task = plane.gateway.invoke(plane.ownerCredential, {
       command: "schedule.add_task",
       input: { title: "Visit the camera store" },
-      purpose,
     });
     const taskId = (task as { output: { task_id: string } }).output.task_id;
 

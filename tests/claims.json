@@ -1410,7 +1410,7 @@
   ],
   "laws": {
     "consent-denial-monotone": {
-      "statement": "Deleting a grant, removing a grant_scope, narrowing a clamp verb, or adding an access_policy row can only turn an allow into a deny, never a deny into an allow.",
+      "statement": "Withdrawing a standing answer, replacing it with a declined row, or narrowing a clamp verb can only turn an allow into a deny, never a deny into an allow.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
@@ -1420,22 +1420,22 @@
       "flow": "consent-chain-properties"
     },
     "consent-clamp-only-narrows": {
-      "statement": "For every allow, the returned rowFilter is a superset of the grant scope's and the clamp's clauses, and the fieldMask is exactly grantMask ∩ clampMask (null only when both are null).",
+      "statement": "For every allow, the returned rowFilter is exactly the covering clamp scopes' clauses and the fieldMask exactly their intersection (null only when every covering scope leaves it null); a standing answer contributes no rows and no fields of its own.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "consent-reveal-never-rides": {
-      "statement": "Reveal is allowed only when both a grant_scope and a clamp scope carry the 'reveal' verb; a 'reveal' scope never satisfies a read or act request.",
+      "statement": "No standing answer ever confers reveal, so an automation is refused reveal whatever it holds; a clamp scope carrying only 'reveal' satisfies no read or act request.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
-    "consent-explicit-scope-unbypassable": {
-      "statement": "A table under a kind:'minimization' policy row is never allowed by a whole-schema (table_name IS NULL) grant scope; only a scope naming the table explicitly covers it.",
+    "consent-standing-answer-required": {
+      "statement": "No caller but the owner's own device reaches anything without a live granted share_authority row covering the entity for the verb, and naming a first-party surface confers nothing: a surface identity reaches exactly what the bare owner device reaches.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "consent-onbehalf-cap-precedes-grants": {
-      "statement": "When onBehalfOfOwner.mayAct is false, no grant set produces an allow for act or reveal, and the deny names the owner id, checked before any grant is consulted.",
+      "statement": "When onBehalfOfOwner.mayAct is false, no standing answer produces an allow for act or reveal, and the deny names the owner id, checked before any answer is consulted.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
@@ -1574,14 +1574,9 @@
       "flow": "share-closure-confinement"
     },
     "share-receipt-authority": {
-      "statement": "A cross-vault access receipt exists exactly when an edge's rows landed at the audience, naming the authorised origin scope and the audience ids created, once per edge; a refused, parked, revoked or peer-handed-off edge leaves none, and a malformed scope refuses the transition atomically.",
-      "owner": "packages/server/src/serve/share-receipt-authority.contract.test.ts",
+      "statement": "A cross-vault access receipt exists exactly when a placement's rows landed at the audience, naming the authorised origin scope and the audience ids created, once per placement token; a refused placement, one this gateway could not perform, and a malformed scope each leave none.",
+      "owner": "packages/server/src/routes/placement-routes.test.ts",
       "flow": "share-receipt-authority"
-    },
-    "share-outbox-obligation": {
-      "statement": "Every share obligation is durable and keyed by what it is about: a replayed enqueue reuses the row without rewinding its retry clock, a human-awaiting obligation is never machine-claimed, an unreadable row never blocks its neighbours, and a failed attempt backs off while a progressed transfer does not.",
-      "owner": "packages/server/src/serve/share-outbox-obligation.contract.test.ts",
-      "flow": "share-outbox-obligation"
     },
     "experimental-gate-parity": {
       "statement": "An experimental feature is advertised in the C1 handshake exactly when its own routes are mounted: gated off it is absent from capabilities and its surfaces are unowned; gated on, and only then, they answer.",
@@ -4919,17 +4914,19 @@
       "surface": "gateway",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/server/src/serve/share-receipt-authority.contract.test.ts",
+      "owner": "packages/server/src/routes/placement-routes.test.ts",
       "minimumTests": 4
     },
     {
-      "id": "share-outbox-obligation",
-      "name": "Share effect outbox: one obligation, never lost, never spinning",
+      "id": "same-owner-placement",
+      "name": "A same-owner placement is one act: it lands whole or not at all",
       "surface": "gateway",
       "dimension": "durability",
       "tier": "contract",
-      "owner": "packages/server/src/serve/share-outbox-obligation.contract.test.ts",
-      "minimumTests": 4
+      "owner": "packages/vault/src/share/placement-move.test.ts",
+      "minimumTests": 4,
+      "replacesMinimumTestsFlow": "share-outbox-obligation",
+      "approvedMinimumTestsDeviation": "#928 (AP-give-residue) deletes the share effect outbox, its reducer, its executor and the retry sweep that drained it. The durability question the retired flow guarded — an obligation never lost, never spinning — is not weakened but RELOCATED: a same-owner placement between two of the owner's vaults is now one synchronous call (packages/vault/src/share/placement.ts::placeItemsInVault), so there is no obligation row to lose, the projection still commits before the source is released, and the source set leaves in ONE transaction rather than one per item. Retry belongs to the caller that owns the offline queue (the phone's placement outbox), which is where it already was; the gateway answers a retryable 5xx instead of parking a row. The floor does not drop: 4 before, 4 after, over the four cases that pin the new act (an album lands whole in the destination and leaves the source, an add releases nothing, the placement mints its own authority, and a move ends that answer because the subject was purged)."
     },
     {
       "id": "gateway-experimental-gate-law",

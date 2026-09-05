@@ -19,7 +19,6 @@ const ROWS = 500;
 const SHAPE = {
   shapeId: "shape-notes",
   appId: "notes",
-  purpose: "dpv:ServiceProvision",
   entities: [
     {
       entity: "knowledge.note",

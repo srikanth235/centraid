@@ -6,7 +6,6 @@ import {
 } from "../src/capabilities/transcript.js";
 
 const BATCH = 2;
-const PURPOSE = "dpv:ServiceProvision";
 // Matches the existing ctx.vault.content original-audio/video ceiling. FFmpeg
 // separately caps decompressed duration, so both compressed and expanded work
 // remain bounded.
@@ -34,7 +33,6 @@ async function seedCursor(ctx, model) {
     ],
     orderBy: { column: "asset_id", dir: "desc" },
     limit: 1,
-    purpose: PURPOSE,
   });
   const asset = latest.rows?.[0];
   if (!asset) return "";
@@ -45,7 +43,6 @@ async function seedCursor(ctx, model) {
       { column: "variant", op: "eq", value: "transcript" },
     ],
     limit: 1,
-    purpose: PURPOSE,
   });
   return stamps.rows?.[0]?.model === model ? asset.asset_id : "";
 }
@@ -74,7 +71,6 @@ export default async function handler({ ctx, log }) {
     ],
     orderBy: { column: "asset_id", dir: "asc" },
     limit: BATCH,
-    purpose: PURPOSE,
   });
   let derived = 0;
   let skipped = 0;
@@ -86,7 +82,6 @@ export default async function handler({ ctx, log }) {
         { column: "variant", op: "eq", value: "transcript" },
       ],
       limit: 1,
-      purpose: PURPOSE,
     });
     if (stamps.rows?.[0]?.model === model) {
       skipped += 1;
@@ -96,7 +91,6 @@ export default async function handler({ ctx, log }) {
       contentId: asset.content_id,
       variant: "original",
       maxBytes: MAX_SOURCE_BYTES,
-      purpose: PURPOSE,
     });
     if (content?.status === "too-large") {
       // A permanent, deterministic fact about this asset — no retry ever
@@ -139,7 +133,6 @@ export default async function handler({ ctx, log }) {
         capability: "transcript",
         model,
       },
-      purpose: PURPOSE,
     });
     derived += 1;
   }

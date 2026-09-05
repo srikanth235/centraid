@@ -28,7 +28,6 @@ describe("store-docs-search", () => {
             {
               shapeId: "shape-docs",
               appId: "docs",
-              purpose: "dpv:ServiceProvision",
               entities: [
                 {
                   entity: "core.document",

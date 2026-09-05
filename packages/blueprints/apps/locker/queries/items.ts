@@ -128,15 +128,13 @@ function subtitleOf(it: RawItem, watch: WatchEntry | undefined): string {
  * passwords never leave the sealed boundary. Fail-soft: no grant → empty map.
  */
 export async function readWatchtower(
-  ctx: HandlerCtx,
-  purpose: string
+  ctx: HandlerCtx
 ): Promise<Map<string, WatchEntry>> {
   const map = new Map<string, WatchEntry>();
   try {
     const out = await ctx.vault.invoke({
       command: "locker.watchtower",
       input: {},
-      purpose,
     });
     if (out.status !== "executed") return map;
     const entries = (out.output?.items ?? []) as WatchEntry[];
@@ -189,8 +187,7 @@ export function decorate(
  */
 export async function readAliases(
   ctx: HandlerCtx,
-  ids: string[],
-  purpose: string
+  ids: string[]
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   if (ids.length === 0) return map;
@@ -199,7 +196,6 @@ export async function readAliases(
       acceptTruncation: true,
       entity: "locker.item_alias",
       where: [{ column: "item_id", op: "in", value: ids }],
-      purpose,
     });
     for (const row of (result.rows ?? []) as unknown as AliasRow[])
       map.set(row.item_id, row.alias);
@@ -217,14 +213,12 @@ export async function readAliases(
  * Fail-soft: no counts means the foot line says nothing, never a wrong number.
  */
 export async function readCounts(
-  ctx: HandlerCtx,
-  purpose: string
+  ctx: HandlerCtx
 ): Promise<CountsPayload | null> {
   try {
     const out = await ctx.vault.invoke({
       command: "locker.counts",
       input: {},
-      purpose,
     });
     if (out.status !== "executed") return null;
     return (out.output ?? null) as CountsPayload | null;
@@ -235,15 +229,13 @@ export async function readCounts(
 
 /** Read the two SKOS vocabulary tables once, shared by readTags + readStarred (#404). */
 export async function readConceptTables(
-  ctx: HandlerCtx,
-  purpose: string
+  ctx: HandlerCtx
 ): Promise<ConceptTables> {
   const [concepts, schemes] = await Promise.all([
-    ctx.vault.read({ acceptTruncation: true, entity: "core.concept", purpose }),
+    ctx.vault.read({ acceptTruncation: true, entity: "core.concept" }),
     ctx.vault.read({
       acceptTruncation: true,
       entity: "core.concept_scheme",
-      purpose,
     }),
   ]);
   return {
@@ -256,12 +248,11 @@ export async function readConceptTables(
 export async function readTags(
   ctx: HandlerCtx,
   ids: string[],
-  purpose: string,
   tables?: ConceptTables
 ): Promise<Map<string, string[]>> {
   const map = new Map<string, string[]>();
   if (ids.length === 0) return map;
-  const vocab = tables ?? (await readConceptTables(ctx, purpose));
+  const vocab = tables ?? (await readConceptTables(ctx));
   const tags = await ctx.vault.read({
     acceptTruncation: true,
     entity: "core.tag",
@@ -269,7 +260,6 @@ export async function readTags(
       { column: "target_type", op: "eq", value: ITEM_TYPE },
       { column: "target_id", op: "in", value: ids },
     ],
-    purpose,
   });
   const tagScheme = findScheme(vocab.schemes, LOCKER_TAGS_SCHEME_URI);
   if (!tagScheme) return map;
@@ -292,12 +282,11 @@ export async function readTags(
 export async function readStarred(
   ctx: HandlerCtx,
   ids: string[],
-  purpose: string,
   tables?: ConceptTables
 ): Promise<Set<string>> {
   const starred = new Set<string>();
   if (ids.length === 0) return starred;
-  const vocab = tables ?? (await readConceptTables(ctx, purpose));
+  const vocab = tables ?? (await readConceptTables(ctx));
   const starredConcept = findSchemeConcept(
     vocab.schemes,
     vocab.concepts,
@@ -313,7 +302,6 @@ export async function readStarred(
       { column: "target_type", op: "eq", value: ITEM_TYPE },
       { column: "target_id", op: "in", value: ids },
     ],
-    purpose,
   });
   for (const t of (tags.rows ?? []) as unknown as TagRow[])
     starred.add(t.target_id);
@@ -327,7 +315,6 @@ export default async function itemsHandler({
   input?: Record<string, unknown>;
   ctx: HandlerCtx;
 }) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 300, 20), 2000);
   try {
     const authentication = (await ctx.vault.authenticate({
@@ -355,20 +342,19 @@ export default async function itemsHandler({
       ],
       orderBy: { column: "updated_at", dir: "desc" },
       limit: window,
-      purpose,
     });
     const rows = (res.rows ?? []) as unknown as RawItem[];
     const ids = rows.map((r) => r.item_id);
     // One shared vocabulary read + ONE watchtower unseal (#404) — not a
     // second full read and second receipted unseal.
-    const vocab = await readConceptTables(ctx, purpose);
+    const vocab = await readConceptTables(ctx);
     const [tagsByItem, starredIds, watchByItem, aliasByItem, counts] =
       await Promise.all([
-        readTags(ctx, ids, purpose, vocab),
-        readStarred(ctx, ids, purpose, vocab),
-        readWatchtower(ctx, purpose),
-        readAliases(ctx, ids, purpose),
-        readCounts(ctx, purpose),
+        readTags(ctx, ids, vocab),
+        readStarred(ctx, ids, vocab),
+        readWatchtower(ctx),
+        readAliases(ctx, ids),
+        readCounts(ctx),
       ]);
     const items = decorate(
       rows,

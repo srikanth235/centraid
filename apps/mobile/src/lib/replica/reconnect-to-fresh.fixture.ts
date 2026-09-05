@@ -75,7 +75,6 @@ export function bootstrapPage(
       {
         shapeId: SHAPE_ID,
         appId: APP_ID,
-        purpose: "dpv:ServiceProvision",
         entities: [
           {
             entity: ENTITY,
