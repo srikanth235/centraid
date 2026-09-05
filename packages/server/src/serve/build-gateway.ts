@@ -4164,7 +4164,6 @@ export async function buildGateway(
     db: gatewayDatabase,
     links: vaultLinksStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    partyIdFor: (vaultId) => vaultRegistry.get(vaultId)?.boot.ownerPartyId,
     subscriptionVaults: () =>
       vaultRegistry
         .planesList()

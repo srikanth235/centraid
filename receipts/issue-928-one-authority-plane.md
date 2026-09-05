@@ -1956,3 +1956,34 @@ bun run check:ui-receipt                             # evidence verified
 | --- | --- | --- |
 | "the `dpv:` deletion is exempt and the description is not" — the exemption is field-scoped, so a two-field edit forfeits it | made BOTH edits and ran `bun run check:ui-receipt`, then reverted the description and ran it again | red with both, `evidence verified` with the purpose deletion alone. The exemption is compared field-by-field against the merge base exactly as `MANIFEST_RE` documents, so the split lands what is provable and leaves what is not |
 | "the description draws nothing" — the reading that would make the screenshot pointless | traced the string: app listing → `useShellApps.ts:105` (`desc: row.description`) → `AppCard.tsx:63` (`{app.desc}`) | it **is** painted, which is why #993 is right and why finding (1) is a debt rather than a shrug |
+
+## Follow-up — #928 close (the dead sweep option)
+
+The close pass's finding (2): `PeerPlaneSweepOptions.partyIdFor` is declared, supplied twice by `build-gateway.ts`, stubbed twice in the sweep's own test — and **read nowhere**. It was the principal a deleted edge placement ran as (#916), and #928 wave 5b deleted the placement. A citation is not a justification and neither is a supplier: nothing consumes it.
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `packages/server/src/serve/peer-plane-sweep.ts` | `partyIdFor` deleted from `PeerPlaneSweepOptions` |
+| `packages/server/src/serve/build-gateway.ts` | the sweep's supplier deleted. The **placement handler's** `partyIdFor` on the same page stays: `packages/server/src/routes/placement-routes.ts:137` reads it to name the audience party |
+| `packages/server/src/serve/peer-plane-sweep.test.ts` | the two `() => undefined` stubs go with the field |
+
+**Deleted:** one dead option and its two suppliers; no replacement, because there is nothing to replace — the reader went with the edge plane.
+
+**Decisions:** None.
+
+### Verification
+
+```sh
+bun run --cwd packages/server typecheck
+bun run --cwd packages/server test src/serve/peer-plane-sweep.test.ts src/routes/placement-routes.test.ts   # 2 files, 10 passed
+```
+
+**Findings:** none new. **Doc debt:** none.
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "`partyIdFor` is dead" — the name occurs eleven times in `packages/server` | grepped all of them and read each site | two distinct options share the name. `PlacementRouteDeps.partyIdFor` is LIVE (`placement-routes.ts:137`, `deps.partyIdFor(input.audienceVaultId)`); only the sweep's is dead. Deleting on the name alone would have broken placement — the typecheck would have caught it, but the grep is what stopped the wrong deletion being written |

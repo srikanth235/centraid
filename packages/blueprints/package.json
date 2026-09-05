@@ -61,7 +61,7 @@
   "dependencies": {
     "@centraid/core": "workspace:*",
     "@centraid/design": "workspace:*",
-    "pdfjs-dist": "6.1.200",
+    "pdfjs-dist": "6.2.108",
     "tldts": "7.4.9"
   },
   "devDependencies": {

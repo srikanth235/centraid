@@ -27,8 +27,6 @@ export interface PeerPlaneSweepOptions {
   db: GatewayDatabase;
   links: VaultLinksStore;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
-  /** The vault's own party — the principal an edge placement runs as (#916). */
-  partyIdFor: (vaultId: string) => string | undefined;
   /** The vaults whose peer-routed subscriptions this tick may drain (#929). */
   subscriptionVaults?: () => readonly { vaultId: string; db: VaultDb }[];
   dial: () => PeerDial | undefined;
