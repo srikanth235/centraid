@@ -1148,3 +1148,49 @@ trailer/doc-integrity rows for `07f82368b`, `1ce068c82`, `6981a949f`,
 | --- | --- | --- |
 | `signAs` signs the same bytes `signMemberIntent` did | ran `share-member-intent.test.ts`, whose forged-signature case refuses and whose three valid cases are accepted by the origin's door | held: 21 passed; signing a mutated `action` inside `signAs` fails 3 of the 4 cases (the forged-signature case still refuses, as it must) |
 | the allowlist is empty because nothing is unreachable, not because the gate stopped looking | `check-share-reachability.mjs` still reports 270 capabilities across the same 19 module globs (271 before, minus the deleted one) | held |
+
+### Audit — round 2, waves 4a / 4b (delta `6f7526095..f2977c8ac`)
+
+2026-09-05, fresh-context wave verifier, delta only. Tree rule: the receipt quotes
+`b4865b5ceda9d421bc83aa250e2d1f7e3c536db0` (head `72bb56bed`); that commit is not on
+the branch, but `git diff 72bb56bed HEAD` is the three-line hash comment in this
+receipt alone, so the worker's suites stand.
+
+Verdict: REFUTED — the six round-1 findings are CLOSED, one new finding on the delta.
+
+- 1 revoke scoped: `subscription-migration.ts:137-144,201,209` — `rosterParties()` +
+  `if (!onRail.has(...)) continue`. `"an answer the rail never wrote survives the
+  migration"` asserts `revoked` 0 and both answers standing.
+- 2 offerable guard: `:189-192` — `isOfferableSubjectType`, `unofferable` pushed and
+  the rail kept (`:270`). The test asserts `tablesDropped` `[]` and no throw.
+- 3 ceiling + policy: `:109,240-241` → `grant-store.ts:143-153` writes both halves
+  into `share_delivery_config`; `grant-records.ts:202-206` selects `departure_policy`.
+  Test reads back `5_000_000` / `retain-ledger-history`.
+- 4 revoke stops: `:216-224` calls `stopShareSubscription`; the departed-member case
+  asserts `share_fulfillment.state` = `remove_sent`.
+- 5 the revoke case exists at `subscription-migration.test.ts:324` and 4a's RED block
+  quotes that exact title.
+- 6 `share-reachability.json` `allowlist` is `[]`; `unshareFromVault` and
+  `signMemberIntent` are gone from `packages/`, replacements named
+  (`purgeShareShape`, `memberIntentBytes` + `signWithVaultIdentity`).
+
+Falsifications (throwaway, reverted): dropping the `onRail` line fails exactly
+`"an answer the rail never wrote survives the migration"`; deleting the
+`stopShareSubscription` call fails the departed-member case with
+`expected { state: 'delivered' } to match { state: 'remove_sent' }`. Both 1 failed | 5 passed.
+
+Gates here: `bash .governance/run.sh` 22/22 (the 4d block says 23/23 — a receipt
+number that does not reproduce); `bunx vitest run src/share/subscription-migration.test.ts
+src/schema/migrate.test.ts src/golden-vault.test.ts --root packages/vault` 3 files,
+28 passed.
+
+FINDING (`packages/vault/src/schema/authority.ts:167`,
+`packages/vault/src/schema/migrate.ts:7-9`, `packages/vault/README.md:14`,
+`docs/recovery/backup-restore.md:20`, `docs/decisions.md:582`,
+`docs/vault-ontology.md:19,35`) → the ladder's own docs still describe rung two and
+`user_version = 2`, while `migrate.test.ts:148` now pins FOUR rungs and 4. The
+finding-3 fix added rung three and mislabels itself "rung two" in its own DDL header;
+`migrate.ts`'s header was updated to 3 and not to 4; backup-restore still says
+`migrate.test.ts` "proves the fresh file lands on 2". Wave 4b edited exactly these
+files when it made rung two, so the same edit is owed here. Fix: six one-line
+corrections, no code.
