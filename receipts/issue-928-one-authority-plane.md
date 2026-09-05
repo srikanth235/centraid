@@ -1778,7 +1778,7 @@ Docs-only close pass over `origin/main` @ `50ab218cf`. Twelve boxes re-read agai
 | 1 no `app` identity path; no app credential; 0 grant statements owner-direct | **satisfied** (`## w4a`, `## w4b`) |
 | 2 static shape composition; shape ids unchanged; no sealed column in a shape | **satisfied** (`## w2`) |
 | 3 static tripwire fails a seeded violation | already ticked (`## w1b`) |
-| 4 the five `access_*` tables gone; `grep -r "dpv:" packages apps` empty | **NOT satisfied on the grep clause.** All five tables are gone from every DDL — only two prose comments in `party-pointers.ts` and `access.ts` still name them. But the grep returns **two** hits: `packages/blueprints/apps/people/app.json:10` still declares `"purpose": "dpv:ServiceProvision"` (seven of eight apps dropped it), and `packages/vault/src/share/subscription-sim-world.test-fixtures.ts` still mints a `purposeConceptId`. Nothing reads either. A two-line code change nobody has made. |
+| 4 the five `access_*` tables gone; `grep -r "dpv:" packages apps` empty | **NOT satisfied on the grep clause.** All five tables are gone from every DDL — only two prose comments in `party-pointers.ts` and `access.ts` still name them. The grep now returns **one** hit, down from two: `subscription-sim-world.test-fixtures.ts`'s write-only `purposeConceptId` is deleted in the follow-up commit, and `packages/blueprints/apps/people/app.json:10`'s `"purpose": "dpv:ServiceProvision"` is **left standing on the gate's account** — see `## Close pass — follow-up`. |
 | 5 every automation's answer is a `share_authority` row; prior refusals survive as `declined` rows asserted by the migration test; a widened manifest still parks | **NOT satisfied**: the row shape and the parking exist (`share_authority_request`, one open ask per automation), but the **migration is gone with the plane it read from** — there are no app grant rows left to carry forward, so no migration test asserts the count and content of surviving `declined` rows and none can. The box outlived its subject; it needs re-wording or striking, which is the owner's call. |
 | 6 assistant holds no standing grant; automations capped by their row | **satisfied** (`## w3b`) |
 | 7 one id space; purpose column gone; chain verifier green; last-used shown | **satisfied** (`## w4c`) |
@@ -1786,7 +1786,7 @@ Docs-only close pass over `origin/main` @ `50ab218cf`. Twelve boxes re-read agai
 | 9 give-plane residue deleted; placement is one command | **satisfied** (`## w5b`) |
 | 10 Locker unchanged; history filters in SQL; `locker-online-only.test.ts` green | **satisfied** (`## w5c`) |
 | 11 authz deny matrix, clamp sweeps and harness parity green at every slice exit | **NOT ticked here**: each slice's own verification block records its run, but this close pass ran no package suite, so it has no evidence of its own to tick on. CI on the wave PR is the authority. |
-| 12 the three docs state the model; the consent-plane drift rows are closed | **NOT satisfied**: `docs/decisions.md`, `SECURITY.md` and `docs/vault-ontology.md` state the model as of this pass, and ONT-16, ONT-18, ONT-19, ONT-20 and ONT-21 are closed with the PR that closed each — but **ONT-17 stays open** on box 4's two `dpv:` hits. Closing that one hit closes this box too. |
+| 12 the three docs state the model; the consent-plane drift rows are closed | **NOT satisfied**: `docs/decisions.md`, `SECURITY.md` and `docs/vault-ontology.md` state the model as of this pass, and ONT-16, ONT-18, ONT-19, ONT-20 and ONT-21 are closed with the PR that closed each — but **ONT-17 stays open** on box 4's one remaining `dpv:` hit, which `check:ui-receipt` blocks. Closing that hit closes this box too. |
 
 ### Files
 
@@ -1855,3 +1855,45 @@ ls -l CLAUDE.md                  # still a symlink to AGENTS.md
 | --- | --- | --- |
 | Editing `AGENTS.md` might have broken the `CLAUDE.md` symlink, which the fresh-clone note warns about | `ls -l CLAUDE.md` after the edit | still `CLAUDE.md -> AGENTS.md`; the edit went through the target, not through a tool that would have replaced the link with a copy |
 | The new `#927`–`#929` issue links could be malformed and pass unnoticed | `internal-doc-links` in `.governance/run.sh`, which resolves relative markdown links | green; the two new links are absolute GitHub URLs, which that directive does not police, so they were also read back by eye against the issue numbers in this receipt's own heading |
+
+## Close pass — follow-up: one dead string removed, one blocked by a gate
+
+The root's ruling on the close pass's findings (b) and (d). Half lands; the other half is **refused rather than forced**, and the refusal is the point of this section.
+
+| File | Change |
+| --- | --- |
+| `packages/vault/src/share/subscription-sim-world.test-fixtures.ts` | `purposeConceptId` deleted from `Seat` and from the seat it builds. It was **written and never read** — the only two mentions in the tree were its own declaration and its own assignment — and it was the last live use of `boot.concepts["dpv:ServiceProvision"]` |
+| `packages/server/src/serve/peer-plane-sweep.ts` | header comment only: it said the tick drains "ONE queue — the share outbox (`share_effects`)", a table #928 deleted. What the tick actually runs is `announceRoutes` and `sweepShareSubscriptions`; #750's one-drain-per-tick rule is kept and re-anchored to the queue that exists |
+| `docs/vault-ontology.md` | ONT-17 narrowed to the one remaining hit, with the reason it survives |
+| `receipts/issue-928-one-authority-plane.md` | boxes 4 and 12's verdict rows updated; **no tick** |
+
+**`packages/blueprints/apps/people/app.json` is NOT touched, and boxes 4 and 12 are NOT ticked.** The change was two strings: the dead `"purpose": "dpv:ServiceProvision"` and a description clause that still promised "revoke the grant and the app goes dark", which AP-owner-direct makes false — there is no grant to revoke. Both were made, `bun run check:ui-receipt` was run, and both were reverted:
+
+```
+UI receipt gate: artifacts/e2e/ui-impact/issue-922-web-truncation-status.png has no changed e2e harness emitter
+… 11 more, one per screenshot named by any receipt this branch changed
+error: script "check:ui-receipt" exited with code 1
+```
+
+Reverting `app.json` alone returns the gate to `UI receipt gate: evidence verified`, so the trigger is confirmed and is not base state. The gate's rule is `file.startsWith("packages/blueprints/apps/") && !TEST_FILE_RE.test(file)` (`scripts/validate-ui-receipt.mjs`), which sweeps in `app.json`; once it fires it re-validates **every** ui-impact screenshot named by any receipt in the change set, and a docs close pass changes four receipts naming twelve screenshots from earlier waves. Satisfying it honestly needs e2e harnesses this container cannot run; satisfying it dishonestly needs a fabricated screenshot, which is the one thing a receipt may never contain. So the strings stay, the boxes stay open, and the debt is written down here and in ONT-17 rather than laundered.
+
+**Findings.** (1) `check:ui-receipt` treats a manifest string as a UI change: `app.json` draws nothing, and the gate has no `app.json` carve-out beside its `CLIENT_NOT_A_SURFACE` list. That is what blocks the one-line fix, and it is a gate question, not a #928 question. (2) `PeerPlaneSweepOptions.partyIdFor` is declared and supplied twice by `build-gateway.ts` and **read nowhere** — the principal a deleted edge placement ran as.
+
+**Doc debt:** none.
+
+### Verification
+
+```sh
+grep -rn "dpv:" packages apps | grep -v /dist/     # 1 hit, packages/blueprints/apps/people/app.json:10
+bun run --cwd packages/vault test -- --run src/share/subscription-sim.test.ts
+bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck
+bun run check:ui-receipt                            # evidence verified (app.json untouched)
+bun run format:check && bun run lint && bash .governance/run.sh
+```
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "`purposeConceptId` is write-only" — deleting a fixture field that something reads breaks a sim | `grep -rn purposeConceptId packages apps --include=*.ts` before deleting, then ran the subscription sims and both package typechecks after | two hits, both in the file itself (the interface member and the assignment); sims and typechecks green after the delete |
+| "`check:ui-receipt` fires on `app.json`" could be base-state red rather than caused by the edit | made both `app.json` edits, ran the gate (red, 12 findings), reverted `app.json`, ran it again | green after the revert — the gate is caused by the edit, and the twelve findings are prior waves' screenshots re-validated because the change set touches a blueprints app file |

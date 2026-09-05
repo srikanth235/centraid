@@ -1,12 +1,13 @@
 /*
- * Adaptive peer maintenance. Since #750 there is ONE queue to drain — the
- * share outbox (`share_effects`) — instead of a drainer per lifecycle; the
- * subscription sweep and the route re-announcement remain their own concerns.
+ * Adaptive peer maintenance. #750's ONE-queue rule — one drain per tick rather
+ * than a drainer per lifecycle — still governs, but the queue it named is gone:
+ * `share_effects` and the whole share outbox were deleted with the give-plane
+ * residue (#928 AP-give-residue), a same-owner placement being one call
+ * (`placeItemsInVault`) rather than a durable obligation to retry.
  *
- * Since #825 the outbox is no longer a PEER concern at all: copy-as-share
- * retired, so its one surviving obligation is a same-owner placement between
- * two local vaults. It stays on this tick because it is still a durable
- * obligation something has to retry, not because it dials anybody.
+ * What this tick drains now is the SUBSCRIPTION sweep (#929) — the peer-routed
+ * shapes an origin owes its audiences — beside the route re-announcement, which
+ * has always been its own concern. Both dial; neither is an outbox.
  */
 
 import type { ShareVaultRef, VaultDb } from "@centraid/vault";

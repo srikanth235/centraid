@@ -59,7 +59,6 @@ export interface Seat {
   gateway: Gateway;
   partyId: string;
   credential: Credential;
-  purposeConceptId: string;
   /** A reopen re-registers tally and would disarm confirmation; re-armed here. */
   confirmGated: string[];
 }
@@ -109,7 +108,6 @@ function openSeat(root: string, index: number): Seat {
       deviceId: boot.deviceId,
       deviceKey: boot.deviceKey,
     },
-    purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
     confirmGated: [],
   };
 }

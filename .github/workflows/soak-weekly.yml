@@ -133,12 +133,6 @@ jobs:
           name: soak-weekly-evidence
           path: artifacts/
           retention-days: 14
-      - name: Save evidence for the nightly health report
-        if: always()
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: artifacts/scale/
-          key: soak-weekly-${{ runner.os }}-${{ github.run_id }}
 
   soak-failure-issue:
     needs: [resolve-candidate, long-run-soak]
