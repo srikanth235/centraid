@@ -1,0 +1,301 @@
+{
+  "slug": "2026-09-05-33958190262",
+  "date": "2026-09-05",
+  "runId": null,
+  "runUrl": null,
+  "reportPath": "test-report/nightly/runs/2026-09-05-33958190262/",
+  "summary": {
+    "schema": 1,
+    "verdict": "HOLD",
+    "why": "4 S2 blocker: desktop-e2e failed.",
+    "flip": "fix or park desktop-e2e → HOLD",
+    "blockers": [
+      {
+        "severity": "S2",
+        "lane": "desktop-e2e",
+        "case": null,
+        "platform": "desktop",
+        "firstRed": "17eda0be748a314ee2dfbb99916f1c6b14b994d6",
+        "lastGreen": null,
+        "owner": null,
+        "ageHours": 0,
+        "overSla": false,
+        "deadline": "2026-09-06 (24 h to owned)",
+        "issue": null
+      },
+      {
+        "severity": "S2",
+        "lane": "fuzz-parsers",
+        "case": null,
+        "platform": "any",
+        "firstRed": "17eda0be748a314ee2dfbb99916f1c6b14b994d6",
+        "lastGreen": null,
+        "owner": null,
+        "ageHours": 0,
+        "overSla": false,
+        "deadline": "2026-09-06 (24 h to owned)",
+        "issue": null
+      },
+      {
+        "severity": "S2",
+        "lane": "quality-performance-scale",
+        "case": null,
+        "platform": "any",
+        "firstRed": "17eda0be748a314ee2dfbb99916f1c6b14b994d6",
+        "lastGreen": null,
+        "owner": null,
+        "ageHours": 0,
+        "overSla": false,
+        "deadline": "2026-09-06 (24 h to owned)",
+        "issue": null
+      },
+      {
+        "severity": "S2",
+        "lane": "web-e2e",
+        "case": null,
+        "platform": "web",
+        "firstRed": "17eda0be748a314ee2dfbb99916f1c6b14b994d6",
+        "lastGreen": null,
+        "owner": null,
+        "ageHours": 0,
+        "overSla": false,
+        "deadline": "2026-09-06 (24 h to owned)",
+        "issue": null
+      }
+    ],
+    "deltas": {
+      "passed": 8,
+      "failed": 5,
+      "degraded": 0,
+      "noEvidence": 33,
+      "newRed": 5,
+      "newGreen": 0,
+      "previousVerdict": null
+    },
+    "parks": [
+      {
+        "lane": "mobile-e2e-android",
+        "until": "2026-09-16",
+        "issue": 870,
+        "since": null,
+        "why": ""
+      },
+      {
+        "lane": "mobile-e2e-ios",
+        "until": "2026-09-16",
+        "issue": 870,
+        "since": null,
+        "why": ""
+      },
+      {
+        "lane": "web-e2e-cross-browser",
+        "until": "2026-09-16",
+        "issue": 915,
+        "since": null,
+        "why": ""
+      }
+    ],
+    "candidate": null,
+    "generatedAt": "2026-09-05T12:01:21.875Z",
+    "label": "2026-09-05",
+    "validationErrorCount": 0,
+    "lanes": {
+      "companion-static": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "coverage": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "coverage-shard": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "dependency-review": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "design-gallery": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "docs": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "gates": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "gitleaks": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "iroh-wasm": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mobile-device-gate": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mobile-smoke": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mutation-pr": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "new-test-burn-in": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "oauth-worker": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "osv-scanner": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "static": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "verify": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "web-build": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "desktop-e2e-linux": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "desktop-e2e-macos": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "lane-gateway-package": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mobile-canary-android": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mobile-ios-smoke": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mutation-full": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "rung1-on-main": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "rust-supply-chain": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "suite": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "web-e2e-linux": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "compat-upgrade-and-skew": {
+        "verdict": "passed",
+        "durationMs": 31931
+      },
+      "dast-scan": {
+        "verdict": "passed",
+        "durationMs": 26319
+      },
+      "desktop-e2e": {
+        "verdict": "failed",
+        "durationMs": 544617
+      },
+      "fuzz-parsers": {
+        "verdict": "failed",
+        "durationMs": 689550
+      },
+      "lane-health": {
+        "verdict": "failed",
+        "durationMs": 16451
+      },
+      "mobile-e2e-android": {
+        "verdict": "parked",
+        "durationMs": 7249213
+      },
+      "mobile-e2e-ios": {
+        "verdict": "parked",
+        "durationMs": 3846253
+      },
+      "mutation-testing": {
+        "verdict": "passed",
+        "durationMs": 1527980
+      },
+      "pairing-cross-network-relay": {
+        "verdict": "passed",
+        "durationMs": 59623
+      },
+      "pairing-lifecycle": {
+        "verdict": "passed",
+        "durationMs": 38107
+      },
+      "pairing-ticket-hygiene": {
+        "verdict": "passed",
+        "durationMs": 47305
+      },
+      "protocol-join": {
+        "verdict": "passed",
+        "durationMs": 77557
+      },
+      "quality-performance-scale": {
+        "verdict": "failed",
+        "durationMs": 370343
+      },
+      "restore-year3": {
+        "verdict": "passed",
+        "durationMs": 214587
+      },
+      "web-e2e": {
+        "verdict": "failed",
+        "durationMs": 330095
+      },
+      "web-e2e-cross-browser": {
+        "verdict": "parked",
+        "durationMs": 1247997
+      },
+      "alarm": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "backup-interop": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "hygiene": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "long-run-soak": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "real-model-goldens": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      }
+    }
+  }
+}
