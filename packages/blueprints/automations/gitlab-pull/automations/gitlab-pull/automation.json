@@ -16,7 +16,6 @@
     "label": "personal"
   },
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Stages GitLab issues/MRs into the vault review band.",
     "scopes": [
       {

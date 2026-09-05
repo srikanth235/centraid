@@ -1302,12 +1302,11 @@ export class WalShipper {
     const stream = this.state.stream!;
     try {
       writeReceipt(this.db.audit, {
-        grantId: null,
+        authorityId: null,
         invocationId: null,
         action: "act access.backup_wal_generation",
         objectType: "core.vault",
         objectId: null,
-        purpose: null,
         decision: "allow",
         detail: {
           reason,

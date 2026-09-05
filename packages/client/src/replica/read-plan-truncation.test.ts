@@ -30,7 +30,6 @@ import type {
 const SHAPE: ReplicaShape = {
   shapeId: "shape-truncation",
   appId: "parity",
-  purpose: "dpv:ServiceProvision",
   entities: [
     { entity: "core.item", primaryKey: "item_id", columns: ["item_id", "n"] },
     // A locally searchable entity, so the FTS window has something to fill.

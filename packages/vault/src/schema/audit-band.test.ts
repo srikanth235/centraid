@@ -23,7 +23,7 @@ const NOW = "2026-01-01T00:00:00.000Z";
 function seedInvocation(db: DatabaseSync, id = "inv-1"): string {
   db.prepare(
     `INSERT INTO agent_command_invocation
-       (invocation_id, command_id, caller_id, grant_id, input_json, status,
+       (invocation_id, command_id, caller_id, authority_id, input_json, status,
         requested_at)
      VALUES (?, 'cmd', 'owner', NULL, '{}', 'proposed', ?)`
   ).run(id, NOW);
@@ -33,9 +33,9 @@ function seedInvocation(db: DatabaseSync, id = "inv-1"): string {
 function seedReceipt(db: DatabaseSync, id = "rcpt-1"): string {
   db.prepare(
     `INSERT INTO access_receipt
-       (receipt_id, grant_id, invocation_id, action, object_type, object_id,
-        purpose_concept_id, decision, occurred_at, hash, seq)
-     VALUES (?, NULL, NULL, 'core.create_party', 'core.party', 'p1', NULL,
+       (receipt_id, authority_id, invocation_id, action, object_type, object_id,
+        decision, occurred_at, hash, seq)
+     VALUES (?, NULL, NULL, 'core.create_party', 'core.party', 'p1',
              'allow', ?, ?, 1)`
   ).run(id, NOW, `hash-${id}`);
   return id;

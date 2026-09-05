@@ -5,18 +5,14 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollAgent,
-  enrollDevice,
-} from "../bootstrap.js";
+import { bootstrapVault, enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import type { Gateway } from "../gateway/gateway.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { uuidv7 } from "../ids.js";
 import { registerSyncCommands } from "./sync.js";
 
@@ -42,12 +38,7 @@ describe("sync", () => {
       modelRef: "model-x",
     });
     const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
-    createGrant(db, {
-      granteePartyId: enrolled.partyId,
-      purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: "sync", verbs: "act" }],
-    });
+    answerScopes(db, boot, "gmail-pull", [{ schema: "sync", verbs: "act" }]);
     agent = {
       kind: "agent",
       agentId: enrolled.agentId,
@@ -81,7 +72,6 @@ describe("sync", () => {
         label: "srikanth@crowdshakti.com",
         rows: ROWS,
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(staged.status).toBe("executed");
     const batchId = (staged as { output: { batch_id: string } }).output
@@ -99,7 +89,6 @@ describe("sync", () => {
     const publish = gw.invoke(agent, {
       command: "sync.publish_batch",
       input: { batch_id: batchId },
-      purpose: "dpv:ServiceProvision",
     });
     expect(publish.status).toBe("parked"); // confirm-gated (issue #306): parks for every non-owner
 
@@ -124,7 +113,6 @@ describe("sync", () => {
         label: "srikanth@crowdshakti.com",
         rows: ROWS,
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(
       (again as { output: { staged: { skip: number } } }).output.staged.skip
@@ -135,14 +123,12 @@ describe("sync", () => {
     const staged = gw.invoke(agent, {
       command: "sync.stage_rows",
       input: { kind: "pull.gcal", label: "work", rows: ROWS },
-      purpose: "dpv:ServiceProvision",
     });
     const batchId = (staged as { output: { batch_id: string } }).output
       .batch_id;
     const publish = gw.invoke(agent, {
       command: "sync.publish_batch",
       input: { batch_id: batchId },
-      purpose: "dpv:ServiceProvision",
     });
     const denied = gw.confirm(
       owner,
@@ -171,7 +157,6 @@ describe("sync", () => {
         label: "x",
         rows: [{ entity_type: "health.vital", external_id: "e1", payload: {} }],
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     expect((outcome as { reason: string }).reason).toMatch(/no publisher/u);
@@ -199,14 +184,12 @@ describe("sync", () => {
           },
         ],
       },
-      purpose: "dpv:ServiceProvision",
     });
     const batchId = (staged as { output: { batch_id: string } }).output
       .batch_id;
     const proposed = gw.invoke(agent, {
       command: "sync.publish_batch",
       input: { batch_id: batchId },
-      purpose: "dpv:ServiceProvision",
     });
     const published = gw.confirm(
       owner,
@@ -248,7 +231,6 @@ describe("sync", () => {
           },
         ],
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     expect((outcome as { reason: string }).reason).toMatch(/sealed/u);
@@ -258,14 +240,12 @@ describe("sync", () => {
     const staged = gw.invoke(owner, {
       command: "sync.stage_rows",
       input: { kind: "pull.gcal", label: "mine", rows: ROWS },
-      purpose: "dpv:ServiceProvision",
     });
     const batchId = (staged as { output: { batch_id: string } }).output
       .batch_id;
     const publish = gw.invoke(owner, {
       command: "sync.publish_batch",
       input: { batch_id: batchId },
-      purpose: "dpv:ServiceProvision",
     });
     expect(publish.status).toBe("executed");
   });
@@ -279,7 +259,6 @@ describe("sync", () => {
           label: "personal",
           ...(principal ? { principal } : {}),
         },
-        purpose: "dpv:ServiceProvision",
       });
     }
 
@@ -295,7 +274,6 @@ describe("sync", () => {
           connection_id: connectionId,
           principal: "me@example.com",
         },
-        purpose: "dpv:ServiceProvision",
       });
 
       expect(rebound.status).toBe("executed");
@@ -305,7 +283,6 @@ describe("sync", () => {
       const staged = gw.invoke(agent, {
         command: "sync.stage_rows",
         input: { connection_id: connectionId, rows: ROWS },
-        purpose: "dpv:ServiceProvision",
       });
       expect(staged.status).toBe("executed");
       expect(
@@ -326,7 +303,6 @@ describe("sync", () => {
       const finish = gw.invoke(agent, {
         command: "sync.finish_run",
         input: { run_id: runId, ok: true, staged: 3 },
-        purpose: "dpv:ServiceProvision",
       });
       expect(finish.status).toBe("executed");
 
@@ -367,7 +343,6 @@ describe("sync", () => {
       gw.invoke(agent, {
         command: "sync.finish_run",
         input: { run_id: runId, ok: false, error: "rate limited" },
-        purpose: "dpv:ServiceProvision",
       });
       const failing = db.vault
         .prepare(`SELECT status FROM sync_connection WHERE kind = 'mcp.gmail'`)
@@ -391,7 +366,6 @@ describe("sync", () => {
       const pause = gw.invoke(owner, {
         command: "sync.set_connection_status",
         input: { connection_id: connectionId, status: "paused" },
-        purpose: "dpv:ServiceProvision",
       });
       expect(pause.status).toBe("executed");
       const refused = beginRun("me@example.com");
@@ -402,7 +376,6 @@ describe("sync", () => {
       gw.invoke(owner, {
         command: "sync.set_connection_status",
         input: { connection_id: connectionId, status: "active" },
-        purpose: "dpv:ServiceProvision",
       });
       expect(beginRun("me@example.com").status).toBe("executed");
     });
@@ -418,7 +391,6 @@ describe("sync", () => {
           key: "history_id",
           value: { id: 42017 },
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(set.status).toBe("executed");
       const next = beginRun("me@example.com");
@@ -449,7 +421,6 @@ describe("sync", () => {
           client_secret: "GOCSPX-super-secret",
           allowed_hosts: ["gmail.googleapis.com", "*.googleapis.com"],
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
       expect((outcome as { output: { status: string } }).output.status).toBe(
@@ -502,7 +473,6 @@ describe("sync", () => {
           client_id: "shared.apps.googleusercontent.com",
           allowed_hosts: ["www.googleapis.com"],
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
       const row = db.vault
@@ -536,7 +506,6 @@ describe("sync", () => {
           client_secret: "must-never-land",
           allowed_hosts: ["www.googleapis.com"],
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(refused.status).toBe("failed");
       expect((refused as { reason: string }).reason).toMatch(
@@ -558,7 +527,6 @@ describe("sync", () => {
           cred_kind: "api_key",
           api_key: "ghp_secret",
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("failed");
       expect((outcome as { reason: string }).reason).toMatch(/allowed_hosts/u);
@@ -575,7 +543,6 @@ describe("sync", () => {
           api_key: "ghp_live_key",
           allowed_hosts: ["api.github.com"],
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
       const cred = db.vault
@@ -604,7 +571,6 @@ describe("sync", () => {
           client_id: "cid",
           allowed_hosts: ["gmail.googleapis.com"],
         },
-        purpose: "dpv:ServiceProvision",
       });
       const connectionId = (
         db.vault.prepare("SELECT connection_id FROM sync_connection").get() as {
@@ -621,7 +587,6 @@ describe("sync", () => {
           refresh_capability: "cap-for-original",
           expires_at: "2026-07-06T13:00:00Z",
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(first.status).toBe("executed");
       let row = db.vault
@@ -659,7 +624,6 @@ describe("sync", () => {
           access_token: "ya29.second",
           expires_at: "2026-07-06T14:00:00Z",
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(second.status).toBe("executed");
       row = db.vault
@@ -694,13 +658,11 @@ describe("sync", () => {
             api_key: "ghp_x",
             allowed_hosts: ["api.github.com"],
           },
-          purpose: "dpv:ServiceProvision",
         }) as { output: { connection_id: string } }
       ).output.connection_id;
       const outcome = gw.invoke(owner, {
         command: "sync.store_tokens",
         input: { connection_id: connectionId, access_token: "ya29.x" },
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("failed");
     });
@@ -718,11 +680,9 @@ describe("sync", () => {
           client_secret: "GOCSPX-journal-check",
           allowed_hosts: ["gmail.googleapis.com"],
         },
-        purpose: "dpv:ServiceProvision",
       });
       const read = gw.read(owner, {
         entity: "sync.connection_credential",
-        purpose: "dpv:ServiceProvision",
       });
       const row = read.rows[0] as Record<string, unknown>;
       expect(row.client_secret).toBe("«sealed»");
@@ -750,12 +710,10 @@ describe("sync", () => {
           client_secret: "GOCSPX-x",
           allowed_hosts: ["gmail.googleapis.com"],
         },
-        purpose: "dpv:ServiceProvision",
       });
       gw.invoke(owner, {
         command: "sync.configure_credential",
         input: { kind: "pull.gmail", label: "personal", cred_kind: "none" },
-        purpose: "dpv:ServiceProvision",
       });
       expect(
         db.vault.prepare("SELECT * FROM sync_connection_credential").get()
@@ -781,7 +739,6 @@ describe("sync", () => {
           api_key: "ghp_x",
           allowed_hosts: ["api.github.com"],
         },
-        purpose: "dpv:ServiceProvision",
       });
       const connectionId = (
         db.vault.prepare("SELECT connection_id FROM sync_connection").get() as {
@@ -795,7 +752,6 @@ describe("sync", () => {
           status: "needs-auth",
           note: "token refresh refused (invalid_grant)",
         },
-        purpose: "dpv:ServiceProvision",
       });
       let status = (
         db.vault.prepare("SELECT status FROM sync_connection").get() as {
@@ -825,7 +781,6 @@ describe("sync", () => {
           status: "needs-auth",
           note: "refresh still refused (invalid_grant)",
         },
-        purpose: "dpv:ServiceProvision",
       });
       // The note is what the member reads; `updated_at` is stamped by the
       // touch trigger every table gained in #916, so it MOVES on any write.
@@ -837,7 +792,6 @@ describe("sync", () => {
       gw.invoke(owner, {
         command: "sync.set_connection_status",
         input: { connection_id: connectionId, status: "active" },
-        purpose: "dpv:ServiceProvision",
       });
       status = (
         db.vault.prepare("SELECT status FROM sync_connection").get() as {
@@ -855,7 +809,6 @@ describe("sync", () => {
           status: "needs-auth",
           note: "a new reconnect episode",
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(
         (
@@ -887,7 +840,6 @@ describe("sync", () => {
           client_secret: "GOCSPX-evil",
           allowed_hosts: ["attacker.example"],
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(proposed.status).toBe("parked");
       // Nothing moved while parked — the pin is untouched.
@@ -923,7 +875,6 @@ describe("sync", () => {
           client_id: "cid",
           allowed_hosts: ["gmail.googleapis.com"],
         },
-        purpose: "dpv:ServiceProvision",
       });
       const connectionId = (
         db.vault.prepare("SELECT connection_id FROM sync_connection").get() as {
@@ -933,12 +884,10 @@ describe("sync", () => {
       gw.invoke(owner, {
         command: "sync.store_tokens",
         input: { connection_id: connectionId, access_token: "ya29.owner" },
-        purpose: "dpv:ServiceProvision",
       });
       const proposed = gw.invoke(agent, {
         command: "sync.store_tokens",
         input: { connection_id: connectionId, access_token: "ya29.attacker" },
-        purpose: "dpv:ServiceProvision",
       });
       expect(proposed.status).toBe("parked");
       const denied = gw.confirm(
@@ -959,7 +908,6 @@ describe("sync", () => {
           api_key: "ghp_x",
           allowed_hosts: ["api.github.com"],
         },
-        purpose: "dpv:ServiceProvision",
       });
       const connectionId = (
         db.vault.prepare("SELECT connection_id FROM sync_connection").get() as {
@@ -973,7 +921,6 @@ describe("sync", () => {
           status: "needs-auth",
           note: "secret item trashed",
         },
-        purpose: "dpv:ServiceProvision",
       });
       expect(flipped.status).toBe("executed");
     });
@@ -992,7 +939,6 @@ describe("sync", () => {
           api_key: "ghp_x",
           allowed_hosts: ["api.github.com"],
         },
-        purpose: "dpv:ServiceProvision",
       }) as { output: { connection_id: string } };
       return outcome.output.connection_id;
     }
@@ -1009,7 +955,6 @@ describe("sync", () => {
       const outcome = gw.invoke(owner, {
         command: "sync.remove_connection",
         input: { connection_id: connectionId },
-        purpose: "dpv:ServiceProvision",
       });
 
       expect(outcome.status).toBe("executed");
@@ -1048,7 +993,6 @@ describe("sync", () => {
       const outcome = gw.invoke(owner, {
         command: "sync.remove_connection",
         input: { connection_id: connectionId },
-        purpose: "dpv:ServiceProvision",
       });
 
       expect(outcome.status).toBe("failed");
@@ -1085,7 +1029,6 @@ describe("sync", () => {
       const outcome = gw.invoke(owner, {
         command: "sync.remove_connection",
         input: { connection_id: connectionId },
-        purpose: "dpv:ServiceProvision",
       });
 
       expect(outcome.status).toBe("failed");
@@ -1115,7 +1058,6 @@ describe("sync", () => {
       const outcome = gw.invoke(owner, {
         command: "sync.remove_connection",
         input: { connection_id: connectionId },
-        purpose: "dpv:ServiceProvision",
       });
 
       expect(outcome.status).toBe("failed");
@@ -1143,7 +1085,6 @@ describe("sync", () => {
       const outcome = gw.invoke(owner, {
         command: "sync.remove_connection",
         input: { connection_id: connectionId },
-        purpose: "dpv:ServiceProvision",
       });
 
       expect(outcome.status).toBe("executed");
@@ -1164,7 +1105,6 @@ describe("sync", () => {
       const outcome = gw.invoke(owner, {
         command: "sync.remove_connection",
         input: { connection_id: "no-such-connection" },
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("failed");
     });

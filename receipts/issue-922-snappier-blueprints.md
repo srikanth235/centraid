@@ -167,6 +167,7 @@ Falsification attempts:
 | --- | --- | --- |
 | 2026-09-05 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 | 2026-09-03 | codex | 01a06827-b506-78d1-b396-f4b14307e138 |
+| 2026-09-05 | codex | 01a06f93-8228-7b61-adcd-ba83151d89d6 |
 
 ## w1 Metro-loader spike — ADOPT
 
@@ -2453,3 +2454,69 @@ First-run: a device that has not finished mounting the vault says so — "This d
 `check:ui-receipt` fires on `packages/blueprints/apps/locker/**` and `apps/mobile/src/apps/locker/**`. This slice changes no e2e harness — the rendered states are unchanged except that `stale` can no longer occur on this seat and Review names two more unrunnable checks — so no screenshot is fabricated here; CI must run the mobile evidence lane against this branch.
 
 Slice 4c's gates ran on tree `19eaa08330a76c8fb64a75dd781bf9f07fac7c15`, landed as `a8b9d1d75`. `self-audit.sh` reports only `FAIL receipt edits text above the appended section`: base lag, and `origin/claude/922-reads`'s own copy fails the same prefix test against `origin/main@d8502fc05` with nothing of this lane applied. `.governance/run.sh` is 22/22 on that tree.
+## H1 — E6 one kit list primitive + E8 cold start
+
+| Path | Change |
+| --- | --- |
+| `apps/mobile/src/kit/components/SeatList.tsx`, `apps/mobile/src/kit/components/SeatList.test.tsx` | New: the seat's one virtualised list. `anchoring` is a REQUIRED prop — the type, not `scripts/lint-list-anchoring.mjs`, is what forbids the inherited default of `docs/traps/list-anchoring.md` |
+| `apps/mobile/src/kit/components/list-anchoring.ts` | `ListAnchoring` exported so the primitive can require it |
+| `apps/mobile/src/apps/people/PeopleHome.tsx`, `apps/mobile/src/apps/docs/DriveList.tsx`, `apps/mobile/src/apps/tally/ActivityView.tsx`, `apps/mobile/src/apps/locker/LockerItemsView.tsx`, `apps/mobile/src/apps/notes/NotesPlaces.tsx` | The five capped roster/drive/ledger surfaces on `SeatList` |
+| `apps/mobile/lazy-navigators.tsx` (new), `apps/mobile/lazy-screens.tsx`, `apps/mobile/App.tsx` | The seven app stacks evaluated on first navigation, not at launch |
+| `apps/mobile/src/kit/replica/replica-mount.ts`, `apps/mobile/src/kit/replica/replica-mount.test.ts` | `startCompatibilityWall` — the `/info` read started without being awaited, whose reader runs the mount's own teardown before rethrowing a refusal |
+| `apps/mobile/src/kit/replica/ReplicaProvider.tsx`, `apps/mobile/src/kit/replica/ReplicaProvider.test.tsx` | The wall is started beside the mount and read after the drivers are open, never awaited ahead of them |
+| `apps/mobile/src/test/react-native-stub.tsx`, `apps/mobile/src/apps/locker/LockerItemsView.test.tsx`, `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` | `flashListStub()`, the stub tier's seam for the primitive |
+| `tests/agent-e2e-mobile/lib/ui-impact.mjs` (new), `tests/agent-e2e-mobile/flows/pairing-canary.mjs`, `tests/agent-e2e-mobile/flows/people-roster.mjs`, `tests/agent-e2e-mobile/flows/docs-drive.mjs` | One publisher for UI-impact frames; the roster and drive frames published |
+| `tests/scale/photos-memories.scale.test.ts` | Seeds without `media_asset.favorite`, dropped by #916 ONT-03 — the rig could not seed at all. `tests/scale/photos-timeline.scale.test.ts` carries the same defect and is another lane's |
+
+**Deleted, with their replacement:** four `ScrollView` + `.map()` list bodies (Notes notebooks/tags/trash), one `FlatList` with its own `initialNumToRender`/`windowSize`/`maxToRenderPerBatch` constants (Locker items), one nested `Section` + `.map()` ledger (Tally activity) and three hand-wired `FlashList` tags (People roster, People search, Docs drive) — all `SeatList` now. `pairing-canary.mjs`'s private frame-copy helper — `tests/agent-e2e-mobile/lib/ui-impact.mjs` now, which `tests/agent-e2e-mobile/flows/pairing-canary.mjs` calls.
+
+| Number | Value | Provenance |
+| --- | --- | --- |
+| Eager launch module graph, first-party `apps/mobile` modules | 181 before → 181 after | linux x64 dev container, `node <scratch>/eager-graph.mjs <worktree>` walking static `from "…"` edges from `apps/mobile/index.ts` (a `import()` edge is not followed) |
+| Hand-written virtualised-list tags on the five surfaces | 3 before → 0 after | `bun run lint:list-anchoring` (the only tag left is `SeatList.tsx`) |
+
+The eager-graph delta is **zero and says so**: every screen behind `navigators.tsx` was already deferred, so the module it contributed is exchanged for `lazy-navigators.tsx`. What E8 defers is the seven `createNativeStackNavigator()` calls and react-navigation's per-stack wiring, which module counting cannot see and this container cannot time.
+
+**`coldOpenToUsableMs` has no ceiling here, and must not get one from this host.** The entry it will feed is `tests/experience-budgets/mobile.json#metrics.coldOpenToUsable`; the run that fills it is `node tests/agent-e2e-mobile/flows/cold-start.mjs` against a booted device on the #927 device rung (H3), 8 launches, median and p95, at the flow's own first-run replica volume. This container has no simulator and no device, so a number written here would be fabricated. Mobile rows stay `_intended` until that run (H3).
+
+**First-run:** unchanged. A first launch draws the same onboarding; what moved is that a *relaunch* opens its local replica files without waiting on `/info`, and that the five list surfaces recycle rows instead of mounting every row a read returned. Evidence, emitted by the changed journeys `tests/agent-e2e-mobile/flows/people-roster.mjs` and `tests/agent-e2e-mobile/flows/docs-drive.mjs` when they run against a booted device: `artifacts/e2e/ui-impact/issue-922-mobile-roster.png` (the People roster on `SeatList`) and `artifacts/e2e/ui-impact/issue-922-mobile-drive.png` (the Docs All shelf). `artifacts/` is gitignored, so the frames live with the run; no device or simulator exists in this container, and the nightly `mobile-e2e-ios` / `mobile-e2e-android` lanes own that proof.
+
+**Decisions:** `MoreSheet` in `NotesPlaces.tsx` keeps its `ScrollView` — a fixed hand-written menu is not a capped read. `DriveList`'s `embedded` branch keeps its `.map()`: it is mounted inside a screen that already scrolls, where a virtualised list measures nothing and the rows would not draw at all.
+
+**Findings:** (1) No mobile journey reaches the Tally Activity ledger, the Locker item window or the Notes places today — `tally-derived.mjs` stops at Balances, `locker-gate.mjs` never passes the gate, `notes-library.mjs` stays on the note list — so three of the five surfaces have no frame any lane can emit. Adding the navigation blind, in flows this container cannot run, would be worse than saying so. (2) `mountedScopes` still awaits `refreshCachedScopes` before the drivers open on the *probe* path (a fresh install); left alone because cache-first would delay a newly granted scope by a whole launch, which the ruling in `replica-mount.ts` names. (3) `ReplicaProvider.tsx` sits at 624 of `repo-hygiene`'s 625-line ceiling; `startCompatibilityWall` was extracted to `replica-mount.ts` to keep it under, but the next change to that file needs a real extraction, not another shave.
+
+**Doc debt:** none for this slice.
+
+```sh
+bun run --cwd apps/mobile typecheck                     # clean
+bun run --cwd apps/mobile test                          # 274 files, 2380 passed
+bun run lint:list-anchoring                             # ok
+node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts \
+  tests/scale/photos-memories.scale.test.ts             # 1 passed
+bash .governance/run.sh                                 # 22/22
+# self-audit PASS on tree aed81fa7e4d5b7ae684342c119486d12cd0384c9 (head 8a27d2ca0);
+# this comment is the only edit after that run. Base lag: origin/main moved to
+# 17eda0be7 under the integration branch's 2bac48118 base — not chased.
+```
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| A first mount opens local replica files before the gateway answers | Awaited the wall immediately after starting it and re-ran `ReplicaProvider.test.tsx` with the `/info` answer held open | RED — `expected [] to strictly equal [ 'vault-1', 'vault-2', 'reader' ]` |
+| The primitive actually hands its anchoring to the list | Replaced `maintainVisibleContentPosition={anchoring}` with `undefined` and re-ran `SeatList.test.tsx` | RED — 1 failed, 2 passed |
+| The memories rig was broken, not merely untidy | Restored the `favorite` column in the seed and re-ran the rig | RED — `table media_asset has no column named favorite`; GREEN after, 1 passed in 12.4 s |
+
+## CI-green — throw the wall as an Error
+
+`apps/mobile/src/kit/replica/replica-mount.ts` `startCompatibilityWall` rethrew the `.then` rejection as `unknown`, which `typescript/only-throw-error` flags. The wall already throws `MobileGatewayCompatibilityError`; the catch now rethrows that Error, or wraps a non-Error with `{ cause }`. The refused-wall test still matches `{ disposition: "update-gateway" }`.
+
+## CI-green — navigators.tsx is a knip entry
+
+`apps/mobile/navigators.tsx` is loaded only through `import()` in `lazy-navigators.tsx`, so knip's static graph never saw the seven stack exports. It is a composition-root module (same reason it sits beside `App.tsx`); `knip.json` now lists it as an entry, which is what a dynamically imported public API is. `lazy-navigators.tsx` is added to `project` so the file is still scanned.
+
+## CI-green — the activity ledger's flatten is tested
+
+`apps/mobile/src/apps/tally/ActivityView.test.tsx` draws one expense and one settlement through `SeatList`, so the day-heading flatten and both row kinds are covered. `nativeLinkTicketDoor` in `grant-seat.test.ts` covers the mint / refuse / missing-vault branches the diff-coverage floor named.
+
+The `mintLinkTicket` mock uses `as never`, matching the gateway mock in the same file, so `tsc --noEmit` accepts the factory.

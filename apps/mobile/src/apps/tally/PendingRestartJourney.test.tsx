@@ -74,6 +74,11 @@ vi.mock(import("../../screens/home/VaultBar"), () => ({
   default: (): React.JSX.Element => React.createElement("view"),
 }));
 
+vi.mock(import("@shopify/flash-list"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.flashListStub() as unknown as typeof import("@shopify/flash-list");
+});
+
 vi.mock(import("react-native"), async () => {
   const ReactModule = await import("react");
   const stub = await import("../../test/react-native-stub");
@@ -212,7 +217,6 @@ const SPENT = "Airplane dinner at the Ship";
 const TALLY_SHAPE = {
   shapeId: "tally-default",
   appId: "tally",
-  purpose: "dpv:ServiceProvision",
   entities: [
     {
       entity: "tally.expense",

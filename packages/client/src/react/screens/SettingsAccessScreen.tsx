@@ -4,6 +4,7 @@ import type {
   AccessAnswer,
   AccessGroup,
   AccessLens,
+  AccessRequest,
 } from "../shell/routes/settingsAccessData.js";
 import { useAsyncData } from "../shell/useAsyncData.js";
 import NoteBlock from "../ui/NoteBlock.js";
@@ -37,9 +38,9 @@ function answerLine(answer: AccessAnswer): string {
   return `${answer.principalId} ${verb} ${subject}`;
 }
 
-function since(answer: AccessAnswer): string {
-  if (answer.grantedAt === "") return "";
-  const at = new Date(answer.grantedAt);
+function day(iso: string): string {
+  if (iso === "") return "";
+  const at = new Date(iso);
   return Number.isNaN(at.getTime())
     ? ""
     : at.toLocaleDateString(undefined, {
@@ -47,6 +48,17 @@ function since(answer: AccessAnswer): string {
         month: "short",
         year: "numeric",
       });
+}
+
+/**
+ * NEVER USED IS A FACT, NOT A BLANK (#928). An answer nothing has exercised is
+ * the one the member most wants to find, so it says so in words rather than
+ * leaving the column empty — which would read as "we did not check".
+ */
+function lastUsed(answer: AccessAnswer): string {
+  if (answer.lastUsedAt === null) return "never used";
+  const at = day(answer.lastUsedAt);
+  return at === "" ? "never used" : `last used ${at}`;
 }
 
 function AccessRows({ group }: { group: AccessGroup }): JSX.Element {
@@ -64,13 +76,34 @@ function AccessRows({ group }: { group: AccessGroup }): JSX.Element {
           <span className={sc.rowLabel}>{answerLine(answer)}</span>
           <span className={sc.rowHint}>
             {[
-              since(answer) && `since ${since(answer)}`,
+              day(answer.grantedAt) && `since ${day(answer.grantedAt)}`,
+              lastUsed(answer),
               answer.duration === "until-date" && answer.expiresAt
                 ? `until ${answer.expiresAt}`
                 : "",
             ]
               .filter(Boolean)
               .join(" · ")}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A question the member has not answered, drawn beside what they did answer. */
+function AccessAsks({ requests }: { requests: AccessRequest[] }): JSX.Element {
+  return (
+    <ul className={sc.rowFull} data-testid="access-requests">
+      {requests.map((request) => (
+        <li key={request.requestId}>
+          <span className={sc.rowLabel}>
+            {`${request.principalId} is asking for ${
+              request.scopes.length === 0 ? "access" : request.scopes.join(", ")
+            }`}
+          </span>
+          <span className={sc.rowHint}>
+            {day(request.requestedAt) && `asked ${day(request.requestedAt)}`}
           </span>
         </li>
       ))}
@@ -101,6 +134,11 @@ export default function SettingsAccessScreen({
 
   return (
     <>
+      {lens.requests.length > 0 ? (
+        <DrawerGroup label="Waiting on you" meta={`${lens.requests.length}`}>
+          <AccessAsks requests={lens.requests} />
+        </DrawerGroup>
+      ) : null}
       {lens.groups.map((group) => (
         <DrawerGroup
           key={group.id}

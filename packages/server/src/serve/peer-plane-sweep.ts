@@ -1,26 +1,21 @@
 /*
- * Adaptive peer maintenance. Since #750 there is ONE queue to drain — the
- * share outbox (`share_effects`) — instead of a drainer per lifecycle; the
- * commons sweep and the route re-announcement remain their own concerns.
+ * Adaptive peer maintenance: the commons sweep and the route re-announcement.
  *
- * Since #825 the outbox is no longer a PEER concern at all: copy-as-share
- * retired, so its one surviving obligation is a same-owner placement between
- * two local vaults. It stays on this tick because it is still a durable
- * obligation something has to retry, not because it dials anybody.
+ * The share effect outbox left this tick with the give plane (#928 A7). Its
+ * one surviving obligation was a same-owner placement between two local
+ * vaults, and that is now one synchronous vault call at the route — nothing
+ * to retry here, and nothing to dial for it.
  */
 
 import type {
   Credential,
   Gateway as VaultGateway,
-  ShareVaultRef,
   VaultDb,
 } from "@centraid/vault";
 
 import { unrefTimer } from "../lib/unref-timer.js";
-import type { GatewayDatabase } from "./gateway-db.js";
 import { sweepPeerCommons } from "./peer-commons-sweep.js";
 import type { PeerDial } from "./peer-link-client.js";
-import { drainShareEffects } from "./share-effect-executor.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
 
 const DEFAULT_ROW_LIMIT = 25;
@@ -29,11 +24,7 @@ const DEFAULT_IDLE_MS = 60_000;
 const MAX_BACKOFF_MS = 15 * 60 * 1000;
 
 export interface PeerPlaneSweepOptions {
-  db: GatewayDatabase;
   links: VaultLinksStore;
-  vaultFor: (vaultId: string) => ShareVaultRef | undefined;
-  /** The vault's own party — the principal an edge placement runs as (#916). */
-  partyIdFor: (vaultId: string) => string | undefined;
   commonsVaults?: () => readonly {
     vaultId: string;
     db: VaultDb;
@@ -90,16 +81,6 @@ export function createPeerPlaneSweep(
       // commons work until IT has re-asserted to us, but our own move must
       // not wait behind this tick's other work either way.
       if (options.announceRoutes) await options.announceRoutes();
-      // The share outbox drains WITHOUT a dial since #825: its one surviving
-      // obligation is a same-owner placement between two vaults open here.
-      const effects = drainShareEffects(
-        {
-          db: options.db,
-          vaultFor: options.vaultFor,
-          partyIdFor: options.partyIdFor,
-        },
-        { limit: rowLimit }
-      );
       const commons = options.commonsVaults
         ? await sweepPeerCommons({
             vaults: options.commonsVaults(),
@@ -109,11 +90,7 @@ export function createPeerPlaneSweep(
             limit: rowLimit,
           })
         : { progressed: 0 };
-      const progressed =
-        effects.done.length > 0 ||
-        effects.abandoned.length > 0 ||
-        commons.progressed > 0;
-      schedule(progressed ? activeMs : idleMs);
+      schedule(commons.progressed > 0 ? activeMs : idleMs);
     } catch (error) {
       options.logger?.warn(
         `peer plane sweep failed: ${error instanceof Error ? error.message : String(error)}`

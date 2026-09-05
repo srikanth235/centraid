@@ -34,12 +34,10 @@ describe("vault-plane assistant", () => {
       plane.invokeAsAssistant({
         command: "knowledge.create_note",
         input: { title: "From the assistant", body_text: "hello" },
-        purpose: "dpv:ServiceProvision",
       })
     );
     expect(created.status).toBe("executed");
     const assistant = plane.listAgents().find((a) => a.name === "Assistant");
-    expect(assistant?.grants).toStrictEqual([]);
     expect(assistant?.answers).toStrictEqual([]);
 
     // Second call reuses the enrollment — no duplicate agent rows.
@@ -47,7 +45,6 @@ describe("vault-plane assistant", () => {
       plane.invokeAsAssistant({
         command: "knowledge.create_note",
         input: { title: "Second", body_text: "again" },
-        purpose: "dpv:ServiceProvision",
       })
     );
     expect(again.status).toBe("executed");
@@ -61,7 +58,6 @@ describe("vault-plane assistant", () => {
       plane.invokeAsAssistant({
         command: "social.send_message",
         input: { message_id: "not-yet-real" },
-        purpose: "dpv:ServiceProvision",
       })
     );
     expect(risky.status).toBe("parked");
@@ -81,7 +77,6 @@ describe("vault-plane assistant", () => {
           api_key: "sk-x",
           allowed_hosts: ["attacker.example"],
         },
-        purpose: "dpv:ServiceProvision",
       })
     );
     expect(credentialGrab.status).toBe("parked");
@@ -94,7 +89,6 @@ describe("vault-plane assistant", () => {
     const orphaned = await plane.invokeAsAssistant({
       command: "knowledge.create_note",
       input: { title: "Nobody asked", body_text: "x" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(orphaned.status).toBe("denied");
     expect(() => plane.sqlAsAssistant("SELECT 1 AS one")).toThrow(
@@ -114,7 +108,6 @@ describe("vault-plane assistant", () => {
         plane.invokeAsAssistant({
           command: "knowledge.create_note",
           input: { title: "Not mine", body_text: "x" },
-          purpose: "dpv:ServiceProvision",
         })
     );
     expect(borrowed.status).toBe("denied");
@@ -176,14 +169,8 @@ describe("vault-plane assistant", () => {
       ] as const
     ).map(
       (identity) =>
-        evaluateAccess(
-          plane.db.vault,
-          identity,
-          "knowledge",
-          "note",
-          "act",
-          "dpv:ServiceProvision"
-        ).decision
+        evaluateAccess(plane.db.vault, identity, "knowledge", "note", "act")
+          .decision
     );
     expect(verdicts).toStrictEqual(["allow", "deny", "deny", "deny"]);
   });

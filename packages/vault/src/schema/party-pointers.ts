@@ -50,8 +50,7 @@
 //   RESTRICT (left as NO ACTION) — everything else, so the purge is REFUSED
 //   while the person is still named. Money and authority by rule: every
 //   `tally_*` party column, `core_account.*`,
-//   `core_transaction.counterparty_party_id`, `access_grant.*`,
-//   `access_scope_tombstone.grantee_party_id`, `share_authority.granted_by`,
+//   `core_transaction.counterparty_party_id`, `share_authority.granted_by`,
 //   `share_circle_grant.steward_party_id`,
 //   `share_party_vault_binding.party_id`, `outbox_item.recipient_party_id`,
 //   `core_vault.self_party_id` (the vault's own person is not purgeable at

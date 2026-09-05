@@ -182,7 +182,6 @@ import { makeDemoRouteHandler } from "../routes/demo-routes.js";
 import { makeDeviceWorkRouteHandler } from "../routes/device-work-routes.js";
 import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
 import { makeDiagnosticsRouteHandler } from "../routes/diagnostics-routes.js";
-import { EDGES_PATH, makeEdgesRouteHandler } from "../routes/edges-routes.js";
 import {
   ENRICH_PROFILES_PREFIX,
   makeEnrichProfilesRouteHandler,
@@ -208,6 +207,10 @@ import {
 } from "../routes/multiplex-replica-routes.js";
 import { makeOwnersRouteHandler } from "../routes/owners-routes.js";
 import { makePeerPlaneHandler } from "../routes/peer-plane.js";
+import {
+  EDGES_PATH,
+  makePlacementRouteHandler,
+} from "../routes/placement-routes.js";
 import {
   makePushRegistrationRouteHandler,
   PUSH_REGISTRATIONS_PATH,
@@ -255,7 +258,10 @@ import { pollProviderEventSource } from "./automation-event-sources.js";
 import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
 import { createBrokerHealthProbe } from "./broker-health.js";
 import { commonsObservabilitySection } from "./commons-observability.js";
-import { companionRequestAllowed } from "./companion-access.js";
+import {
+  companionAccess,
+  projectCompanionAttenuation,
+} from "./companion-access.js";
 import { ConnectionBroker } from "./connection-broker.js";
 import type { DataPlaneHttpOptions } from "./data-plane-handoff.js";
 import { defaultLogger } from "./default-logger.js";
@@ -888,7 +894,7 @@ export async function buildGateway(
       throw new Error(`commons replica vault ${vaultId} is not mounted`);
     return mounted.gateway.invokeCommonsCanonical(
       mounted.ownerCredential,
-      { command, input, purpose: "dpv:ServiceProvision", invocationId },
+      { command, input, invocationId },
       { idSeed: invocationId }
     );
   };
@@ -1604,7 +1610,10 @@ export async function buildGateway(
       });
   };
 
-  // Installing IS the consent (#306); a malformed block grants nothing.
+  // AN APP DECLARES; IT IS NOT GRANTED (#928 A1). Installing records the
+  // app's own build-time manifest — what a replica shape is composed from and
+  // what the static entity tripwire holds it to. A malformed block declares
+  // nothing, so the app reaches nothing.
   const grantScopesFromDir = async (
     plane: VaultPlane,
     appId: string,
@@ -1614,11 +1623,9 @@ export async function buildGateway(
     try {
       const raw = JSON.parse(
         await fs.readFile(path.join(dir, "app.json"), "utf8")
-      ) as {
-        vault?: { purpose?: unknown; scopes?: unknown };
-      };
+      ) as { vault?: { scopes?: unknown } };
       const block = manifestScopeBlock(raw.vault);
-      if (block) plane.ensureAppInstallGrant(appId, block);
+      if (block) plane.recordAppInstall(appId, block);
     } catch (error) {
       logger.warn(
         `install-time grant for app "${appId}" failed: ` +
@@ -3005,7 +3012,6 @@ export async function buildGateway(
     }
     const common = {
       automationRef: input.automationRef,
-      purpose: row.manifest.vault.purpose,
       vault: vaultRegistry.agentBridgeFor(
         parsed.appId,
         executionScopeBlock(row.manifest.vault)
@@ -3913,7 +3919,6 @@ export async function buildGateway(
               plane.invoke(plane.ownerCredential, {
                 command,
                 input,
-                purpose: "dpv:ServiceProvision",
               }),
           };
         },
@@ -4170,7 +4175,7 @@ export async function buildGateway(
     vaultRegistry,
     enrollmentStore
   );
-  const edgesHandler = makeEdgesRouteHandler({
+  const placementHandler = makePlacementRouteHandler({
     gatewayDatabase,
     enrollments: enrollmentStore,
     links: vaultLinksStore,
@@ -4313,10 +4318,7 @@ export async function buildGateway(
   // backs off on failure, never throws out of the timer. `dial` is read LIVE,
   // so a build that wires it later (or never) still behaves — the sweep idles.
   const peerPlaneSweep = createPeerPlaneSweep({
-    db: gatewayDatabase,
     links: vaultLinksStore,
-    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    partyIdFor: (vaultId) => vaultRegistry.get(vaultId)?.boot.ownerPartyId,
     commonsVaults: () =>
       vaultRegistry.planesList().map((plane) => ({
         vaultId: plane.boot.vaultId,
@@ -4491,7 +4493,7 @@ export async function buildGateway(
       (await multiplexReplicaHandler(req, res))
     )
       return true;
-    if (url.pathname === EDGES_PATH && (await edgesHandler(req, res)))
+    if (url.pathname === EDGES_PATH && (await placementHandler(req, res)))
       return true;
     if (
       (url.pathname === COMMONS_PATH ||
@@ -4531,22 +4533,38 @@ export async function buildGateway(
       });
     }
     const enrollment = enrollmentStore.get(deviceKey, vaultId);
-    if (enrollment?.grantProfile !== undefined) {
-      if (
-        !companionRequestAllowed(
-          req,
-          enrollment.grantProfile,
-          enrollment.enrollmentId
-        )
-      ) {
-        return sendJson(res, 403, {
-          error: "companion_profile",
-          message:
-            "this Companion device is not granted access to that gateway surface",
-        });
-      }
-      req.headers[COMPANION_GRANTS_HEADER] = enrollment.grantProfile.join(",");
+    // A Companion device is confined to a set of surfaces the vault holds the
+    // answer for. Before the vault opens the gateway has only the PROJECTION
+    // of that answer, and an absent projection denies (#928 A6) — widening a
+    // confined device to full reach because a file could not be read is the
+    // one failure mode this boundary must not have.
+    const access = companionAccess({
+      attenuated: enrollment?.attenuated === true,
+      projected:
+        enrollment?.attenuated === true
+          ? enrollmentStore.projectedSurfaces(deviceKey, vaultId)
+          : undefined,
+      req,
+      enrollmentId: enrollment?.enrollmentId ?? "",
+    });
+    if (access.kind === "unreadable") {
+      return sendJson(res, 403, {
+        error: "companion_attenuation_unavailable",
+        message:
+          "this Companion device's surface answer has not been read from the vault yet",
+      });
     }
+    if (access.kind === "refused") {
+      return sendJson(res, 403, {
+        error: "companion_profile",
+        message:
+          "this Companion device is not granted access to that gateway surface",
+      });
+    }
+    const companionSurfaces =
+      access.kind === "allowed" ? access.surfaces : undefined;
+    if (companionSurfaces !== undefined)
+      req.headers[COMPANION_GRANTS_HEADER] = companionSurfaces.join(",");
     return runWithVaultContext(
       {
         vaultId,
@@ -4557,9 +4575,7 @@ export async function buildGateway(
         ...(enrollment
           ? { ownerId: enrollment.ownerId, ownsVault: !enrollment.revoked }
           : {}),
-        ...(enrollment?.grantProfile === undefined
-          ? {}
-          : { grantProfile: enrollment.grantProfile }),
+        ...(companionSurfaces === undefined ? {} : { companionSurfaces }),
       },
       () => dispatchChain(req, res)
     );
@@ -4589,6 +4605,7 @@ export async function buildGateway(
     unsubscribeLateMount();
     unsubscribeLateMount = vaultRegistry.onMount((plane) => {
       pushWakeRelay.attach(plane);
+      projectCompanionAttenuation(enrollmentStore, plane);
       const task = Promise.all([
         hostFor(plane).catch((error) =>
           logger.warn(
@@ -4608,6 +4625,8 @@ export async function buildGateway(
       lateMountTasks.add(task);
       void task.finally(() => lateMountTasks.delete(task));
     });
+    for (const plane of vaultRegistry.planesList())
+      projectCompanionAttenuation(enrollmentStore, plane);
     pushWakeRelay.start();
     webControlSessions.startSweeping();
     peerPlaneSweep.start();
@@ -4741,7 +4760,7 @@ async function readBundledAppMeta(dir: string): Promise<{
 
 function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
   if (raw === null || typeof raw !== "object") return undefined;
-  const block = raw as { purpose?: unknown; scopes?: unknown };
+  const block = raw as { scopes?: unknown };
   if (!Array.isArray(block.scopes)) return undefined;
   const verbs = new Set(["read", "read+act", "act", "reveal"]);
   const filterOps = new Set([
@@ -4835,12 +4854,7 @@ function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
     ];
   });
   if (scopes.length === 0) return undefined;
-  return {
-    ...(typeof block.purpose === "string" && block.purpose !== ""
-      ? { purpose: block.purpose }
-      : {}),
-    scopes,
-  };
+  return { scopes };
 }
 
 /** Every automation execution is attenuated, including manifests declaring no vault access. */

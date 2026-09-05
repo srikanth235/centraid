@@ -316,7 +316,6 @@ describe("vault-routes", () => {
         plane.invokeAsAssistant({
           command: "social.send_message",
           input: { message_id: "not-yet-real" },
-          purpose: "dpv:ServiceProvision",
         })
     );
     expect(parkedResult.status).toBe("parked");
@@ -435,7 +434,7 @@ describe("vault-routes", () => {
       "event: notifications-changed"
     );
 
-    plane.ensureAppInstallGrant("planner", {
+    plane.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
     plane.db.vault
@@ -464,7 +463,6 @@ describe("vault-routes", () => {
           dtend: "2026-07-30T09:30:00Z",
           calendar_id: "calendar-notifications-sse",
         },
-        purpose: "dpv:ServiceProvision",
       },
     });
     expect(parked.result).toMatchObject({ status: "parked" });

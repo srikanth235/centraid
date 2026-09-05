@@ -109,8 +109,7 @@ describe("replica-intent-route suite", () => {
 
   async function bridgeFinalizationFixture() {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", verbs: "act" }],
     });
     const registryDir = await tempDir(
@@ -156,10 +155,10 @@ describe("replica-intent-route suite", () => {
       `export default async ({ body, ctx }) => {
        try {
          const title = String(body?.title ?? '');
-         const invoke = (taskTitle, ordinal) => ctx.vault.invoke({ command: 'schedule.add_task', input: { title: taskTitle }, purpose: 'dpv:ServiceProvision', invocationId: 'handler-selected-' + ordinal });
+         const invoke = (taskTitle, ordinal) => ctx.vault.invoke({ command: 'schedule.add_task', input: { title: taskTitle }, invocationId: 'handler-selected-' + ordinal });
          const first = await invoke(body?.double ? title + ' first' : title, 'first');
          if (body?.deny_second) {
-           const denied = await ctx.vault.invoke({ command: 'knowledge.create_note', input: { title, body_text: title }, purpose: 'dpv:ServiceProvision', invocationId: 'handler-selected-second' });
+           const denied = await ctx.vault.invoke({ command: 'knowledge.create_note', input: { title, body_text: title }, invocationId: 'handler-selected-second' });
            return { status: 200, body: denied };
          }
          const outcome = body?.double ? await invoke(title + ' second', 'second') : first;
@@ -206,8 +205,7 @@ describe("replica-intent-route suite", () => {
 
   test("a crash-left sending row deterministically re-dispatches, then terminal retry dedupes", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
     const input = { title: "offline task" };
@@ -333,8 +331,7 @@ describe("replica-intent-route suite", () => {
 
   test("a dispatch exception stays in-flight, then retry terminalizes without durable output", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
     const input = { title: "ambiguous offline task" };
@@ -422,8 +419,7 @@ describe("replica-intent-route suite", () => {
 
   test("a live replica response is redacted from the durable outcome and terminal replay", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", verbs: "act" }],
     });
 
@@ -473,7 +469,6 @@ describe("replica-intent-route suite", () => {
          const invoke = (taskTitle, ordinal) => ctx.vault.invoke({
            command: 'schedule.add_task',
            input: { title: taskTitle },
-           purpose: 'dpv:ServiceProvision',
            invocationId: 'handler-selected-' + ordinal,
          });
          const first = await invoke(body?.double ? title + ' first' : title, 'first');
@@ -481,7 +476,6 @@ describe("replica-intent-route suite", () => {
            const denied = await ctx.vault.invoke({
              command: 'knowledge.create_note',
              input: { title, body_text: title },
-             purpose: 'dpv:ServiceProvision',
              invocationId: 'handler-selected-second',
            });
            return { status: 200, body: denied };
@@ -845,14 +839,18 @@ describe("replica-intent-route suite", () => {
       isError: false,
       structuredContent: {
         status: "denied",
-        reason: expect.stringContaining("no grant_scope covers knowledge"),
+        reason: expect.stringContaining(
+          "execution manifest does not declare knowledge"
+        ),
       },
     });
     expect(postInvokeFailure.res.statusCode).toBe(200);
     expect(postInvokeFailure.body()).toMatchObject({
       outcome: {
         status: "denied",
-        reason: expect.stringContaining("no grant_scope covers knowledge"),
+        reason: expect.stringContaining(
+          "execution manifest does not declare knowledge"
+        ),
       },
     });
     expect(
@@ -863,7 +861,9 @@ describe("replica-intent-route suite", () => {
       )
     ).toMatchObject({
       status: "denied",
-      reason: expect.stringContaining("no grant_scope covers knowledge"),
+      reason: expect.stringContaining(
+        "execution manifest does not declare knowledge"
+      ),
     });
     expect(
       plainSqliteRow(
@@ -905,8 +905,7 @@ describe("replica-intent-route suite", () => {
 
   test("read-only policy denial is a durable outcome, not a revocation-shaped 403", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
     const input = { title: "blocked task" };
@@ -949,8 +948,7 @@ describe("replica-intent-route suite", () => {
 
   test("checks opaque row versions before dispatching an offline edit", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -1042,8 +1040,7 @@ describe("replica-intent-route suite", () => {
 
   test("owner role may act — it is full plus admin, not a lesser tier", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
     const input = { title: "owner task" };
@@ -1086,8 +1083,7 @@ describe("replica-intent-route suite", () => {
 
   test("act-only consent reaches the canonical dispatcher without requiring a read shape", async () => {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [{ schema: "schedule", table: "task", verbs: "act" }],
     });
     const input = { title: "private offline task" };

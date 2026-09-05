@@ -7,13 +7,14 @@
 
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import type { Gateway } from "../gateway/gateway.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { registerMediaCommands } from "./media.js";
 
 const PIXEL =
@@ -45,7 +46,7 @@ describe("media: purge_asset", () => {
     input: Record<string, unknown>,
     cred: Credential = owner
   ) {
-    return gw.invoke(cred, { command, input, purpose: "dpv:ServiceProvision" });
+    return gw.invoke(cred, { command, input });
   }
 
   function addAsset(dataUri: string, extra: Record<string, unknown> = {}) {
@@ -63,13 +64,21 @@ describe("media: purge_asset", () => {
     return asset;
   }
 
+  /** Any live concept: the tag and link rows only need a valid pointer. */
+  function someConceptId(): string {
+    return (
+      db.vault.prepare("SELECT concept_id FROM core_concept LIMIT 1").get() as {
+        concept_id: string;
+      }
+    ).concept_id;
+  }
+
   function count(sql: string, ...params: string[]): number {
     return (db.vault.prepare(sql).get(...params) as { n: number }).n;
   }
 
   test("a trashed asset purges: the row, its faces and its phash all go", () => {
     const asset = trashed(PIXEL);
-    const conceptId = boot.concepts["dpv:ServiceProvision"] ?? "";
     db.vault
       .prepare(
         `INSERT INTO media_face_region (region_id, asset_id, bbox_json, party_id, confidence, confirmed_by_party_id)
@@ -87,7 +96,7 @@ describe("media: purge_asset", () => {
         `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
          VALUES ('tag-1', 'media.asset', ?, ?, NULL, NULL, '2026-01-01T00:00:00Z')`
       )
-      .run(asset.asset_id, conceptId);
+      .run(asset.asset_id, someConceptId());
     db.vault
       .prepare(
         `INSERT INTO knowledge_annotation (annotation_id, author_party_id, target_type, target_id, selector_json, body_text, created_at)
@@ -99,7 +108,7 @@ describe("media: purge_asset", () => {
         `INSERT INTO core_link (link_id, from_type, from_id, to_type, to_id, relation_concept_id, valid_from, valid_to, asserted_by, provenance_id)
          VALUES ('link-1', 'media.asset', ?, 'core.party', ?, ?, '2026-01-01T00:00:00Z', NULL, 'owner', NULL)`
       )
-      .run(asset.asset_id, boot.ownerPartyId, conceptId);
+      .run(asset.asset_id, boot.ownerPartyId, someConceptId());
 
     const outcome = invoke("media.purge_asset", { asset_id: asset.asset_id });
     expect(outcome.status).toBe("executed");
@@ -221,23 +230,22 @@ describe("media: purge_asset", () => {
 
   test("a caller whose grant cannot act on the command is denied", () => {
     const asset = trashed(PIXEL);
-    const app = enrollApp(db, { name: "viewer" });
+    const app = enrollAgent(db, {
+      name: "viewer",
+      modelRef: "test-automation",
+    });
     const appCred: Credential = {
-      kind: "app",
-      appId: app.appId,
-      signingKey: app.signingKey,
+      kind: "agent",
+      agentId: app.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
     };
     // A read-everything, purge-nothing grant: the shape a viewer-role mount
     // has, and the one that must never destroy a photograph.
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts["dpv:ServiceProvision"] ?? "",
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [
-        { schema: "media", verbs: "read" },
-        { schema: "media", table: "delete_asset", verbs: "act" },
-      ],
-    });
+    answerScopes(db, boot, "viewer", [
+      { schema: "media", verbs: "read" },
+      { schema: "media", table: "delete_asset", verbs: "act" },
+    ]);
     const denied = invoke(
       "media.purge_asset",
       { asset_id: asset.asset_id },

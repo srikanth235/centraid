@@ -44,15 +44,13 @@ interface RawContent {
 }
 
 export default async function faceQueue({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   try {
     const [regionsResult, partiesResult] = await Promise.all([
-      ctx.vault.read({ entity: "media.face_region", limit: 4000, purpose }),
+      ctx.vault.read({ entity: "media.face_region", limit: 4000 }),
       ctx.vault.read({
         entity: "core.party",
         orderBy: { column: "display_name", dir: "asc" },
         limit: 500,
-        purpose,
       }),
     ]);
     const regions = (regionsResult.rows ?? []) as unknown as RawRegion[];
@@ -83,7 +81,6 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
           entity: "media.asset",
           where: [{ column: "asset_id", op: "in", value: assetIds }],
           limit: assetIds.length,
-          purpose,
         })
       : { rows: [] };
     const assetById = new Map(
@@ -99,7 +96,6 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
           acceptTruncation: true,
           entity: "core.content_item",
           where: [{ column: "content_id", op: "in", value: contentIds }],
-          purpose,
         })
       : { rows: [] };
     const contentById = new Map(

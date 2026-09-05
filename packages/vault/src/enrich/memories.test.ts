@@ -51,7 +51,6 @@ describe("memories", () => {
     const outcome = gw.invoke(owner, {
       command: "media.add_asset",
       input: { data_uri: pixelDataUri(), ...input },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     return (outcome as { status: "executed"; output: { asset_id: string } })
@@ -62,7 +61,6 @@ describe("memories", () => {
     const outcome = gw.invoke(owner, {
       command: "media.set_asset_place",
       input: { asset_id: assetId, place_id: placeId },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
   }

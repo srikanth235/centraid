@@ -3,6 +3,11 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import {
+  goldenYear3Profile,
+  seedYear3Vault,
+} from "@centraid/test-kit/year3-vault";
+
 import { EnrollmentStore } from "../../../../packages/server/dist/serve/enrollment-store.js";
 import { GatewayDatabase } from "../../../../packages/server/dist/serve/gateway-db.js";
 import { PairingTicketStore } from "../../../../packages/server/dist/serve/pairing-store.js";
@@ -11,6 +16,7 @@ import {
   WebControlSessionStore,
   hashControlToken,
 } from "../../../../packages/server/dist/serve/web-session-store.js";
+import { sealAad, sealValue } from "../../../../packages/vault/dist/index.js";
 
 const dataDir = await fs.mkdtemp(
   path.join(os.tmpdir(), `centraid-web-e2e-${crypto.randomUUID()}-`)
@@ -82,17 +88,35 @@ await handle.syncApps();
 
 // A VOLUME, so the perf specs are not measuring an empty vault (#927). Every
 // journey ceiling this harness produces is stated at the volume declared in
-// `tests/journeys.json` as `seeded-demo`; before this the harness's own budget
-// file said `"volume": "empty (web-e2e fixture vault)"` in as many words, which
-// makes a cold-open number a bundle ratchet and nothing more.
+// `tests/journeys.json` as `year3`.
 //
-// Seeded through the gateway's OWN write path — the demo route each bundled app
-// owns, then Atlas rows — rather than by writing SQLite directly: a direct
-// insert skips the journal sequence the replica cursor is derived from, so the
-// vault would be big in a way no client ever produces. The kit's year-3
-// generator is not reachable from here: `@centraid/test-kit` ships TypeScript
-// sources and no build, and this file runs under `node --experimental-strip-types`,
-// which cannot resolve its `./x.js` specifiers onto `.ts` files.
+// TWO seeds, and the split is the point. The shared year-3 generator supplies
+// the row COUNT that makes a cold-open number an O(vault-size) gate rather than
+// a bundle ratchet — the same statements, the same declared distribution and
+// the same fixture version every other rig measures against. Each bundled app's
+// own demo route then runs through the gateway's WRITE PATH, because those rows
+// are what the functional specs address by name and a direct insert skips the
+// journal sequence the replica cursor is derived from.
+//
+// The generator goes FIRST, and the order is load-bearing: it plants the flags
+// concept scheme by URI, and the product's own flag writer (`flags.ts`) creates
+// that scheme on first use, so a demo seed run afterwards adopts the existing
+// row while the reverse collides on `core_concept_scheme.uri`.
+const plane = handle.vaults.get(handle.vaults.defaultVaultId());
+if (!plane) throw new Error("the auto-founded Personal vault is not mounted");
+seedYear3Vault(
+  {
+    vault: plane.db.vault,
+    sealCell: (entity, column, rowId, plaintext) =>
+      sealValue(
+        plane.db.sealKey,
+        sealAad(entity.replace(".", "_"), column, rowId),
+        plaintext
+      ),
+  },
+  goldenYear3Profile()
+);
+
 const seedHeaders = {
   Authorization: "Bearer centraid-web-e2e-token",
   "content-type": "application/json",
@@ -106,22 +130,6 @@ for (const app of listed.apps.filter((entry) => entry.seedable)) {
     method: "POST",
     headers: seedHeaders,
     body: "{}",
-  });
-}
-const FILL_ROWS = 2000;
-for (let index = 0; index < FILL_ROWS; index += 1) {
-  // oxlint-disable-next-line no-await-in-loop -- (#927) same serial write path
-  await fetch(`${handle.url}/centraid/_vault/atlas/browse/insert`, {
-    method: "POST",
-    headers: seedHeaders,
-    body: JSON.stringify({
-      table: "core.place",
-      values: {
-        name: `Web e2e fill place ${index}`,
-        kind: "venue",
-        created_at: new Date().toISOString(),
-      },
-    }),
   });
 }
 

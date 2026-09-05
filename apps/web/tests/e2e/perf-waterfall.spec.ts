@@ -883,8 +883,8 @@ async function flushPaint(page: Page): Promise<void> {
 }
 
 test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => {
-  const COLD_OPEN_KEY = "web/cold-open/seeded-demo/ci-linux-x64-4c";
-  const INTERACTION_KEY = "web/warm-switch/seeded-demo/ci-linux-x64-4c";
+  const COLD_OPEN_KEY = "web/cold-open/year3/ci-linux-x64-4c";
+  const INTERACTION_KEY = "web/warm-switch/year3/ci-linux-x64-4c";
   const lcpCeilingMs =
     optionalJourneyCeiling(
       COLD_OPEN_KEY,
@@ -972,7 +972,7 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
     // A ceiling with no stated volume is not a budget
     // (tests/journeys.json `volumes`).
     volume:
-      "seeded-demo (tests/journeys.json): every bundled app's demo seed plus 2,000 Atlas rows, written through the gateway's own write path",
+      "year3 (tests/journeys.json): the golden daily-path profile from @centraid/test-kit's year-3 generator, then every bundled app's demo seed through the gateway's own write path",
     interactionDriven: clicked,
     lcpDelivered,
     vitals,

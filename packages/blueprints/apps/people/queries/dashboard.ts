@@ -92,7 +92,6 @@ interface PartyEntry {
 }
 
 export default async function dashboard({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const window = 9_999;
   try {
     const [profiles, concepts, schemes] = await Promise.all([
@@ -101,9 +100,8 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         where: [{ column: "deleted_at", op: "is-null" }],
         orderBy: { column: "created_at", dir: "desc" },
         limit: window,
-        purpose,
       }),
-      ...conceptTaxonomyReads(ctx.vault, purpose),
+      ...conceptTaxonomyReads(ctx.vault),
     ]);
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
@@ -138,7 +136,6 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "party_id", op: "in", value: partyIds }],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -147,7 +144,6 @@ export default async function dashboard({ ctx }: HandlerArgs) {
           { column: "target_type", op: "eq", value: "core.party" },
           { column: "target_id", op: "in", value: partyIds },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -156,7 +152,6 @@ export default async function dashboard({ ctx }: HandlerArgs) {
           { column: "party_id", op: "in", value: partyIds },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -167,7 +162,6 @@ export default async function dashboard({ ctx }: HandlerArgs) {
           { column: "to_id", op: "in", value: partyIds },
           { column: "valid_to", op: "is-null" },
         ],
-        purpose,
       }),
       // Null means the sharing plane is unreadable, not that nobody is linked.
       readLiveBindings(ctx.vault, partyIds),
@@ -185,7 +179,6 @@ export default async function dashboard({ ctx }: HandlerArgs) {
             where: [{ column: "activity_id", op: "in", value: activityIds }],
             orderBy: { column: "started_at", dir: "desc" },
             limit: 30,
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
       activityIds.length
@@ -196,7 +189,6 @@ export default async function dashboard({ ctx }: HandlerArgs) {
               { column: "target_type", op: "eq", value: "core.activity" },
               { column: "target_id", op: "in", value: activityIds },
             ],
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
     ]);

@@ -26,7 +26,6 @@ import type { Year3Distributions } from "./year3-vault.js";
 
 export const YEAR3_REPLICA_PROTOCOL_VERSION = 1 as const;
 export const YEAR3_REPLICA_APP_ID = "_golden";
-export const YEAR3_REPLICA_PURPOSE = "dpv:ServiceProvision";
 export const YEAR3_REPLICA_SHAPE_ID = "golden-year3";
 
 /** The converge journey's three volumes (#927, journey table). */
@@ -105,7 +104,6 @@ export interface Year3ReplicaSnapshot {
   shapes: {
     shapeId: string;
     appId: string;
-    purpose: string;
     entities: Year3ReplicaEntitySchema[];
   }[];
   cursor: { epoch: string; seq: number };
@@ -189,7 +187,6 @@ export function buildYear3ReplicaSnapshot(
       {
         shapeId: YEAR3_REPLICA_SHAPE_ID,
         appId: YEAR3_REPLICA_APP_ID,
-        purpose: YEAR3_REPLICA_PURPOSE,
         entities: schemas,
       },
     ],

@@ -23,7 +23,6 @@ let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
-const PURPOSE = "dpv:ServiceProvision";
 const SECRET = "correct horse battery staple";
 
 /** The failing reason, with the per-call receipt id stripped off. */
@@ -61,7 +60,6 @@ describe("locker sidecar reveal", () => {
         password,
         url: "https://example.com",
       },
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("executed");
     return (out as { output: { item_id: string } }).output.item_id;
@@ -77,7 +75,6 @@ describe("locker sidecar reveal", () => {
         kind: "sealed",
         value,
       },
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("executed");
     return (out as { output: { field_id: string } }).output.field_id;
@@ -117,7 +114,6 @@ describe("locker sidecar reveal", () => {
       entityId: fieldId,
       columns: ["value_sealed"],
       authentication: { sessionToken, itemToken },
-      purpose: PURPOSE,
     });
     expect(revealed.values.value_sealed).toBe("recovery-c0de");
 
@@ -152,7 +148,6 @@ describe("locker sidecar reveal", () => {
         entity: "locker.item_field",
         entityId: fieldId,
         columns: ["value_sealed"],
-        purpose: PURPOSE,
       })
     ).toThrow(/locked/u);
   });
@@ -168,7 +163,6 @@ describe("locker sidecar reveal", () => {
       entityId: fieldId,
       columns: ["value_sealed"],
       authentication: { sessionToken, itemToken },
-      purpose: PURPOSE,
     });
     // One-shot: the same token no longer opens the item itself…
     expect(() =>
@@ -177,7 +171,6 @@ describe("locker sidecar reveal", () => {
         entityId: itemId,
         columns: ["password"],
         authentication: { sessionToken, itemToken },
-        purpose: PURPOSE,
       })
     ).toThrow(/authorization expired/u);
     // …nor the field again.
@@ -187,7 +180,6 @@ describe("locker sidecar reveal", () => {
         entityId: fieldId,
         columns: ["value_sealed"],
         authentication: { sessionToken, itemToken },
-        purpose: PURPOSE,
       })
     ).toThrow(/authorization expired/u);
   });
@@ -205,7 +197,6 @@ describe("locker sidecar reveal", () => {
         entityId: fieldId,
         columns: ["value_sealed"],
         authentication: { sessionToken, itemToken: otherToken },
-        purpose: PURPOSE,
       })
     ).toThrow(/authorization expired/u);
   });
@@ -220,7 +211,6 @@ describe("locker sidecar reveal", () => {
         entity: "locker.item_field",
         entityId: "no-such-field",
         columns: ["value_sealed"],
-        purpose: PURPOSE,
       })
     );
     const present = refusal(() =>
@@ -228,7 +218,6 @@ describe("locker sidecar reveal", () => {
         entity: "locker.item_field",
         entityId: fieldId,
         columns: ["value_sealed"],
-        purpose: PURPOSE,
       })
     );
     expect(missing).toBe(present);
@@ -240,7 +229,6 @@ describe("locker sidecar reveal", () => {
         entity: "locker.item_field",
         entityId: "no-such-field",
         columns: ["value_sealed"],
-        purpose: PURPOSE,
       })
     );
     const missingItem = refusal(() =>
@@ -248,7 +236,6 @@ describe("locker sidecar reveal", () => {
         entity: "locker.item",
         entityId: "no-such-item",
         columns: ["password"],
-        purpose: PURPOSE,
       })
     );
     expect(missingField).toBe(
@@ -263,7 +250,6 @@ describe("locker sidecar reveal", () => {
     const trashed = gw.invoke(owner, {
       command: "locker.trash_item",
       input: { item_id: itemId },
-      purpose: PURPOSE,
     });
     expect(trashed.status).toBe("executed");
 
@@ -273,7 +259,6 @@ describe("locker sidecar reveal", () => {
           entity: "locker.item_field",
           entityId: fieldId,
           columns: ["value_sealed"],
-          purpose: PURPOSE,
         })
       )
     ).toBe(`no revealable locker.item_field row ${fieldId}`);
@@ -286,7 +271,6 @@ describe("locker sidecar reveal", () => {
         entityId: fieldId,
         columns: ["value_sealed"],
         authentication: { sessionToken, itemToken },
-        purpose: PURPOSE,
       })
     ).toThrow(/authorization expired/u);
   });
@@ -302,7 +286,6 @@ describe("locker sidecar reveal", () => {
     const edited = gw.invoke(owner, {
       command: "locker.edit_item",
       input: { item_id: itemId, password: "second-p4ssword" },
-      purpose: PURPOSE,
     });
     expect(edited.status).toBe("executed");
     const revision = db.vault
@@ -331,7 +314,6 @@ describe("locker sidecar reveal", () => {
         rp_id: "example.com",
         private_key: "pk-material-xyz",
       },
-      purpose: PURPOSE,
     });
     expect(stored.status).toBe("executed");
 
@@ -342,7 +324,6 @@ describe("locker sidecar reveal", () => {
       entityId: itemId,
       columns: ["private_key"],
       authentication: { sessionToken, itemToken },
-      purpose: PURPOSE,
     });
     expect(revealed.values.private_key).toBe("pk-material-xyz");
     // The passkey's PK IS the item, so no separate item id is receipted.
@@ -376,7 +357,6 @@ describe("locker sidecar reveal", () => {
       entity: "sync.connection_credential",
       entityId: "conn-1",
       columns: ["api_key"],
-      purpose: PURPOSE,
     });
     expect(revealed.values.api_key).toBe("ak-live-123");
   });

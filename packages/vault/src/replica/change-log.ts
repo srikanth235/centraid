@@ -14,16 +14,13 @@ export const REPLICA_RETENTION_MAX_ENTRIES = 100_000;
 
 /**
  * Entities compaction never folds (#883): folding assumes the end state is the
- * whole signal, but for consent rows the server projects as SHAPE CONTROL the
- * intermediate transition is the signal. `packages/server` asserts its own set
- * is covered here.
+ * whole signal, but for the install-register rows the server projects as SHAPE
+ * CONTROL the intermediate transition is the signal. `packages/server` asserts
+ * its own set is covered here.
  */
 export const REPLICA_COMPACTION_HELD_ENTITIES: readonly string[] = [
   "access.app",
   "access.app_ext",
-  "access.grant",
-  "access.grant_scope",
-  "access.policy",
 ];
 
 // A sweep reads at most `excess + MARGIN` oldest entries, capped: work is

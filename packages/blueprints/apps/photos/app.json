@@ -7,7 +7,6 @@
   "iconKey": "Camera",
   "colorKey": "amber",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Shows your photo library and albums, and lets you upload, caption and organize.",
     "scopes": [
       { "schema": "media", "verbs": "read" },

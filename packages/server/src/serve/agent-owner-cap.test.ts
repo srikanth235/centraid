@@ -49,7 +49,6 @@ describe("agent-owner-cap suite", () => {
       () => opened.stop()
     );
     opened.approveAgentGrant("digest", {
-      purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
     return opened;

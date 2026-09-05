@@ -34,10 +34,11 @@ import LockerItemsView from "./LockerItemsView";
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
-  return {
-    ...stub.reactNativeStub(),
-    ...stub.flatListStub(),
-  } as unknown as typeof import("react-native");
+  return stub.reactNativeStub() as unknown as typeof import("react-native");
+});
+vi.mock(import("@shopify/flash-list"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.flashListStub() as unknown as typeof import("@shopify/flash-list");
 });
 vi.mock(import("@react-native-async-storage/async-storage"), async () => {
   const stub = await import("../../test/react-native-stub");

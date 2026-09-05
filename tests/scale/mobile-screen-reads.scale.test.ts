@@ -145,7 +145,6 @@ function seed(databaseName: string, vaultId: string): void {
     shapes: apps.map(([appId, entities]) => ({
       shapeId: `${appId}-default`,
       appId,
-      purpose: "dpv:ServiceProvision",
       entities: entities.map((entity) => ({
         entity: entity.entity,
         primaryKey: entity.primaryKey,

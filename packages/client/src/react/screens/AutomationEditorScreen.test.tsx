@@ -186,7 +186,6 @@ describe("screens/AutomationEditorScreen", () => {
           connector: null,
           mcps: ["weather"],
           secrets: [],
-          vaultPurpose: null,
           vaultScopes: [],
         },
         enabled: true,
@@ -264,7 +263,6 @@ describe("screens/AutomationEditorScreen", () => {
                 connector: "pull.github",
                 mcps: ["weather"],
                 secrets: ["locker:@token:password"],
-                vaultPurpose: "dpv:ServiceProvision",
                 vaultScopes: ["sync read+act"],
               },
               onFailure: "automation-a/notify-owner",
@@ -318,7 +316,6 @@ describe("screens/AutomationEditorScreen", () => {
                 ],
                 mcps: [],
                 secrets: [],
-                vaultPurpose: null,
                 vaultScopes: [],
               },
             })

@@ -42,7 +42,6 @@ describe("tags", () => {
     return gw.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 
@@ -290,12 +289,10 @@ describe("tags", () => {
     const scheme = gw.read(owner, {
       entity: "core.concept_scheme",
       where: [{ column: "uri", op: "eq", value: "centraid:tags:v1" }],
-      purpose: "dpv:ServiceProvision",
     }).rows[0] as { scheme_id: string };
     const concepts = gw.read(owner, {
       entity: "core.concept",
       where: [{ column: "scheme_id", op: "eq", value: scheme.scheme_id }],
-      purpose: "dpv:ServiceProvision",
     }).rows;
     const tags = gw.read(owner, {
       entity: "core.tag",
@@ -303,7 +300,6 @@ describe("tags", () => {
         { column: "target_type", op: "eq", value: "core.document" },
         { column: "target_id", op: "eq", value: documentId },
       ],
-      purpose: "dpv:ServiceProvision",
     }).rows;
     const labelIds = new Set(tags.map((t) => t.concept_id));
     const labels = concepts

@@ -38,7 +38,6 @@ describe("blob-egress.perf", () => {
     const attached = seed.gateway.invoke(seed.ownerCredential, {
       command: "core.add_document",
       input: { staged_sha: staged.sha256, title: "large-perf.bin" },
-      purpose: "dpv:ServiceProvision",
     });
     if (attached.status !== "executed")
       throw new Error("fixture could not attach staged blob");

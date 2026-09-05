@@ -16,7 +16,6 @@
     "label": "personal"
   },
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Stages Google Drive file metadata into the vault review band.",
     "scopes": [
       {

@@ -1304,7 +1304,6 @@ function windowedHeader(): ReplicaBootstrapHeader {
       {
         shapeId: "shape-agenda",
         appId: "agenda",
-        purpose: "dpv:ServiceProvision",
         entities: [
           { entity: "core.event", primaryKey: "id", columns: ["id", "title"] },
         ],

@@ -7,13 +7,12 @@
 import { deniedPayload, ledgerRow, loadTally } from "./dashboard.ts";
 
 export default async function search({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "")
     .trim()
     .toLowerCase();
   if (!term) return { me: null, currency: "USD", results: [] };
   try {
-    const data = await loadTally(ctx, purpose);
+    const data = await loadTally(ctx);
     const groupName = new Map(data.groups.map((g) => [g.group_id, g.name]));
     const results = data.expenses
       .filter((e) =>

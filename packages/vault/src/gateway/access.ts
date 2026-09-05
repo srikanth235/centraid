@@ -1,51 +1,40 @@
 // S2 — Access: any check may deny; a deny is an outcome, not an exception.
 //
-// The plane is `access` — grants, scopes and policy answering "may this actor
-// reach this data". The member's own act of consenting (provider egress, an
-// automation's approval) is a different thing and keeps the word `consent`.
+// ONE AUTHORITY PLANE (#928). Three answers decide a caller's reach and there
+// is no fourth: the owner's own device reaches its own vault directly, the
+// assistant rides the acting owner, and every other caller is an automation
+// whose standing answer is a `share_authority` row the owner wrote. A
+// first-party app is not a principal at all — its reach is fixed at build
+// time by its declared entity manifest and the static tripwire over it.
+//
+// The per-run execution clamp is what NARROWS an automation to the manifest
+// it was launched with; the row is what says the owner ever agreed.
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { nowIso } from "../ids.js";
+import {
+  AUTOMATION_ENTITY_SUBJECT,
+  AUTOMATION_PACK_SUBJECT,
+} from "../grant/automation-authority.js";
 import type { ExecutionScopeSpec, FilterClause, Identity } from "./types.js";
-import { DEFAULT_PURPOSE, GatewayError } from "./types.js";
-
-export interface GrantRow {
-  grant_id: string;
-  purpose_notation: string;
-  expires_at: string | null;
-}
-
-export interface ScopeRow {
-  scope_id: string;
-  grant_id: string;
-  /**
-   * ONE DOTTED ENCODING (#916, R10): a bare pack name (`core`) for a
-   * whole-pack scope, `core.event` for one entity — where a nullable
-   * `schema_name`/`table_name` pair said the same thing in two columns and
-   * four different ways across the plane.
-   */
-  entity: string;
-  verbs: "read" | "read+act" | "act" | "reveal";
-  row_filter_json: string | null;
-  field_mask_json: string | null;
-}
+import { GatewayError } from "./types.js";
 
 export interface AccessAllow {
   decision: "allow";
-  grantId: string | null;
+  /** The `share_authority` row that answered; NULL for owner-direct. */
+  authorityId: string | null;
   rowFilter: FilterClause[];
   fieldMask: string[] | null;
 }
 export interface AccessDeny {
   decision: "deny";
   failing: string;
-  grantId: string | null;
+  authorityId: string | null;
 }
 export type AccessDecision = AccessAllow | AccessDeny;
 
 function verbAllowed(
-  scopeVerb: ScopeRow["verbs"],
+  scopeVerb: ExecutionScopeSpec["verbs"],
   requested: "read" | "act" | "reveal"
 ): boolean {
   return requested === "reveal"
@@ -87,7 +76,8 @@ function conflictingPin(
 
 /**
  * Intersect every covering manifest scope: filters AND, masks intersect, order
- * independent. No covering scope is deny; empty clamp leaves the grant untouched.
+ * independent. No covering scope is deny; empty clamp leaves the caller
+ * unnarrowed by this step alone.
  */
 function executionClamp(
   identity: Identity,
@@ -126,115 +116,62 @@ function executionClamp(
   return { rowFilter, fieldMask };
 }
 
-function activeGrants(
+/**
+ * The owner's standing answer about this automation, for this entity and this
+ * verb (#928 A3). A pack answer (`agent.pack` × the schema) covers every
+ * entity in the pack; an entity answer (`core.entity` × the dotted name)
+ * covers exactly one. A `declined` row is an ANSWER and never matches, so a
+ * refusal reads as a refusal rather than as a missing grant.
+ *
+ * `reveal` is deliberately unreachable here: a sealed reveal is Locker's
+ * permit, never a standing answer (#873, AP-locker-boundary).
+ */
+function standingAnswerId(
   vault: DatabaseSync,
-  identity: Identity,
-  purpose: string,
-  evaluatedAt: string
-): GrantRow[] {
-  const selector =
-    identity.kind === "app"
-      ? { column: "g.app_id", value: identity.callerId }
-      : { column: "g.grantee_party_id", value: identity.partyId };
-  if (selector.value === null) return [];
-  // First-match: earliest still-active grant; rowid breaks same-tick ties.
-  const rows = vault
-    .prepare(
-      `SELECT g.grant_id, c.notation AS purpose_notation, g.expires_at
-         FROM access_grant g
-         JOIN core_concept c ON c.concept_id = g.purpose_concept_id
-        WHERE ${selector.column} = ?
-          AND g.status = 'active'
-          AND g.revoked_at IS NULL
-          AND (g.expires_at IS NULL OR g.expires_at > ?)
-        ORDER BY g.granted_at ASC, g.rowid ASC`
-    )
-    .all(selector.value, evaluatedAt) as unknown as GrantRow[];
-  return rows.filter((g) => g.purpose_notation === purpose);
-}
-
-function scopesFor(
-  vault: DatabaseSync,
-  grantId: string,
-  schema: string,
-  table: string
-): ScopeRow[] {
-  return vault
-    .prepare(
-      `SELECT scope_id, grant_id, entity, verbs, row_filter_json, field_mask_json
-         FROM access_grant_scope
-        WHERE grant_id = ? AND entity IN (?, ?)`
-    )
-    .all(grantId, schema, `${schema}.${table}`) as unknown as ScopeRow[];
-}
-
-/** Minimization policy: only an explicit table scope covers the table (§03/§07). */
-function requiresExplicitScope(
-  vault: DatabaseSync,
+  principalId: string,
   schema: string,
   table: string,
-  evaluatedAt: string
-): boolean {
+  verb: "read" | "act" | "reveal"
+): string | undefined {
+  if (verb === "reveal") return undefined;
   const row = vault
     .prepare(
-      `SELECT count(*) AS n FROM access_policy
-        WHERE kind = 'minimization' AND entity = ?
-          AND effective_from <= ?`
+      `SELECT authority_id FROM share_authority
+        WHERE principal_kind = 'automation' AND principal_id = ?
+          AND decision = 'granted' AND revoked_at IS NULL
+          AND verb = ?
+          AND ((subject_type = ? AND subject_id = ?)
+            OR (subject_type = ? AND subject_id = ?))
+        ORDER BY granted_at ASC, rowid ASC LIMIT 1`
     )
-    .get(`${schema}.${table}`, evaluatedAt) as { n: number };
-  return row.n > 0;
+    .get(
+      principalId,
+      verb,
+      AUTOMATION_PACK_SUBJECT,
+      schema,
+      AUTOMATION_ENTITY_SUBJECT,
+      `${schema}.${table}`
+    ) as { authority_id: string } | undefined;
+  return row?.authority_id;
 }
 
-/**
- * `entity` is ONE dotted column since #916 (R10): a policy either names a
- * whole schema (`core`) or one entity in it (`core.event`), where the pair of
- * nullable columns before it left "which entity" said four different ways.
- */
-function purposePermitted(
-  vault: DatabaseSync,
-  schema: string,
-  table: string,
-  purpose: string,
-  evaluatedAt: string
-): boolean {
-  const rows = vault
-    .prepare(
-      `SELECT rule_json FROM access_policy
-        WHERE kind = 'purpose' AND entity IN (?, ?)
-          AND effective_from <= ?
-        ORDER BY priority ASC`
-    )
-    .all(schema, `${schema}.${table}`, evaluatedAt) as {
-    rule_json: string;
-  }[];
-  for (const row of rows) {
-    const rule = JSON.parse(row.rule_json) as { allowed_purposes?: string[] };
-    if (
-      Array.isArray(rule.allowed_purposes) &&
-      !rule.allowed_purposes.includes(purpose)
-    )
-      return false;
-  }
-  return true;
-}
-
-/** Owner-direct bypasses grants but still passes policy. */
+/** Owner-direct reaches its own vault; every other caller needs a row. */
 export function evaluateAccess(
   vault: DatabaseSync,
   identity: Identity,
   schema: string,
   table: string,
-  verb: "read" | "act" | "reveal",
-  declaredPurpose?: string,
-  evaluatedAt = nowIso()
+  verb: "read" | "act" | "reveal"
 ): AccessDecision {
-  // Undeclared purpose evaluates as default; policy still applies (#306.4).
-  const purpose = declaredPurpose ?? DEFAULT_PURPOSE;
   // Reveal is read-shaped, act-graded; readonly devices cannot dump secrets (#293).
   if ((verb === "act" || verb === "reveal") && !identity.mayAct) {
-    return { decision: "deny", failing: "device is readonly", grantId: null };
+    return {
+      decision: "deny",
+      failing: "device is readonly",
+      authorityId: null,
+    };
   }
-  // On-behalf-of cap: agent cannot exceed the acting owner (#599.7, #726). Before grants.
+  // On-behalf-of cap: agent cannot exceed the acting owner (#599.7, #726).
   if (
     (verb === "act" || verb === "reveal") &&
     identity.onBehalfOfOwner?.mayAct === false
@@ -242,75 +179,57 @@ export function evaluateAccess(
     return {
       decision: "deny",
       failing: `acting owner ${identity.onBehalfOfOwner.ownerId} does not own this vault`,
-      grantId: null,
+      authorityId: null,
     };
   }
-  if (!purposePermitted(vault, schema, table, purpose, evaluatedAt)) {
-    return {
-      decision: "deny",
-      failing: `policy forbids purpose ${purpose} on ${schema}.${table}`,
-      grantId: null,
-    };
-  }
-  if (identity.kind === "owner-device") {
-    return { decision: "allow", grantId: null, rowFilter: [], fieldMask: null };
-  }
+  // THE CLAMP NARROWS WHOEVER HOLDS IT. An owner device carrying none reaches
+  // its own vault whole; one carrying a declared manifest — a first-party
+  // surface — is cut down to it, which is also what keeps an online read and
+  // that app's replica rows the same rows with the same columns.
   const clamp = executionClamp(identity, schema, table, verb);
   if (!clamp) {
     return {
       decision: "deny",
       failing: `execution manifest does not declare ${schema}.${table} for verb ${verb}`,
-      grantId: null,
+      authorityId: null,
+    };
+  }
+  if (identity.kind === "owner-device") {
+    return {
+      decision: "allow",
+      authorityId: null,
+      rowFilter: clamp.rowFilter,
+      fieldMask: clamp.fieldMask,
     };
   }
   // THE ASSISTANT HOLDS NO STANDING ANSWER (#928 A3). It reaches what the
   // acting owner reaches and nothing more: the clamp above still applies, and
   // with no acting owner who owns this vault there is nothing to ride, so a
-  // scheduler-fired run falls through to the grant path like any automation.
+  // scheduler-fired run falls through to the automation row like any other.
   if (identity.assistant && identity.onBehalfOfOwner?.mayAct === true) {
     return {
       decision: "allow",
-      grantId: null,
+      authorityId: null,
       rowFilter: clamp.rowFilter,
       fieldMask: clamp.fieldMask,
     };
   }
-  const grants = activeGrants(vault, identity, purpose, evaluatedAt);
-  if (grants.length === 0) {
+  const principalId = identity.principalId;
+  const authorityId =
+    principalId === undefined
+      ? undefined
+      : standingAnswerId(vault, principalId, schema, table, verb);
+  if (authorityId === undefined) {
     return {
       decision: "deny",
-      failing: `no active grant for purpose ${purpose}`,
-      grantId: null,
+      failing: `no standing answer covers ${schema}.${table} for verb ${verb}`,
+      authorityId: null,
     };
   }
-  const explicitOnly = requiresExplicitScope(vault, schema, table, evaluatedAt);
-  for (const grant of grants) {
-    for (const scope of scopesFor(vault, grant.grant_id, schema, table)) {
-      // Reveal never rides read or act (#293).
-      if (!verbAllowed(scope.verbs, verb)) continue;
-      // High-sensitivity tables never ride a whole-schema scope.
-      if (explicitOnly && !scope.entity.includes(".")) continue;
-      return {
-        decision: "allow",
-        grantId: grant.grant_id,
-        rowFilter: [
-          ...(scope.row_filter_json
-            ? (JSON.parse(scope.row_filter_json) as FilterClause[])
-            : []),
-          ...clamp.rowFilter,
-        ],
-        fieldMask: intersectFieldMasks(
-          scope.field_mask_json
-            ? (JSON.parse(scope.field_mask_json) as string[])
-            : null,
-          clamp.fieldMask
-        ),
-      };
-    }
-  }
   return {
-    decision: "deny",
-    failing: `no grant_scope covers ${schema}.${table} for verb ${verb}`,
-    grantId: grants[0]?.grant_id ?? null,
+    decision: "allow",
+    authorityId,
+    rowFilter: clamp.rowFilter,
+    fieldMask: clamp.fieldMask,
   };
 }

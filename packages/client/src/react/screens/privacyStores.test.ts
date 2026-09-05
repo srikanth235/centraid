@@ -18,15 +18,7 @@ function app(
     origin: "test",
     riskCeiling: "low",
     installedAt: "2026-01-01T00:00:00.000Z",
-    grants: [
-      {
-        grantId: `${appId}-grant`,
-        purposeConceptId: "dpv:ServiceProvision",
-        purpose: null,
-        expiresAt: null,
-        scopes,
-      },
-    ],
+    scopes,
   };
 }
 
@@ -46,13 +38,16 @@ describe(groupGrantsByStore, () => {
     ]);
     const groups = groupGrantsByStore([photos], []);
     const photosGroup = groups.find((g) => g.storeId === "photos");
+    // A DECLARATION IS NOT A GRANT (#928 A1): an app's row carries no
+    // authority to withdraw, so it names none and is not revocable.
     expect(photosGroup?.holders).toStrictEqual([
       {
-        grantId: "photos-grant",
+        grantId: "",
         holderKind: "app",
         holderId: "photos",
         holderLabel: "Photos",
         mode: "write",
+        revocable: false,
       },
     ]);
   });
@@ -90,13 +85,15 @@ describe(groupGrantsByStore, () => {
       name: "Aardvark automation",
       modelRef: "test",
       enrolledAt: "2026-01-01T00:00:00.000Z",
-      grants: [
+      answers: [
         {
-          grantId: "agent-grant",
-          purposeConceptId: "dpv:ServiceProvision",
-          purpose: null,
-          expiresAt: null,
-          scopes: [{ schema: "media", verbs: "read" }],
+          authorityId: "agent-answer",
+          principalId: "aardvark",
+          subjectType: "automation.pack",
+          subjectId: "media",
+          verb: "read",
+          decision: "granted",
+          grantedAt: "2026-01-01T00:00:00.000Z",
         },
       ],
     };

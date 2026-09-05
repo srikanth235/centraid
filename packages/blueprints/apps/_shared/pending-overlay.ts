@@ -62,7 +62,6 @@ export interface PendingProjectionUpsert {
   entity: string;
   rowId: string;
   values: Record<string, PendingProjectionValue>;
-  purpose?: string;
   shapeId?: string;
 }
 
@@ -70,7 +69,6 @@ export interface PendingProjectionDelete {
   op: "delete";
   entity: string;
   rowId: string;
-  purpose?: string;
   shapeId?: string;
 }
 

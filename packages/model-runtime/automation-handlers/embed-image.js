@@ -6,7 +6,6 @@ import {
 } from "../src/capabilities/embed.js";
 
 const BATCH = 16;
-const PURPOSE = "dpv:ServiceProvision";
 let infer = embedImage;
 let weightsPresent = embedWeightsPresent;
 
@@ -28,7 +27,6 @@ async function seedCursor(ctx, model) {
     ],
     orderBy: { column: "asset_id", dir: "desc" },
     limit: 1,
-    purpose: PURPOSE,
   });
   const asset = latest.rows?.[0];
   if (!asset) return "";
@@ -39,7 +37,6 @@ async function seedCursor(ctx, model) {
       { column: "variant", op: "eq", value: "embedding" },
     ],
     limit: 1,
-    purpose: PURPOSE,
   });
   return stamps.rows?.[0]?.model === model ? asset.asset_id : "";
 }
@@ -65,7 +62,6 @@ export default async function handler({ ctx, log }) {
     ],
     orderBy: { column: "asset_id", dir: "asc" },
     limit: BATCH,
-    purpose: PURPOSE,
   });
   let derived = 0;
   let skipped = 0;
@@ -81,7 +77,6 @@ export default async function handler({ ctx, log }) {
         { column: "variant", op: "eq", value: "embedding" },
       ],
       limit: 1,
-      purpose: PURPOSE,
     });
     if (stamps.rows?.[0]?.model === model) {
       skipped += 1;
@@ -91,7 +86,6 @@ export default async function handler({ ctx, log }) {
       contentId: asset.content_id,
       variant: "preview",
       maxBytes: 4 * 1024 * 1024,
-      purpose: PURPOSE,
     });
     if (content?.status !== "ok" || content.kind !== "bytes")
       throw new Error(`asset ${asset.asset_id}: preview is unavailable`);
@@ -114,7 +108,6 @@ export default async function handler({ ctx, log }) {
         vector: result.vector,
         capability: "embed-image",
       },
-      purpose: PURPOSE,
     });
     derived += 1;
   }

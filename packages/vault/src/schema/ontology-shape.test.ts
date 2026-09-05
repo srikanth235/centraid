@@ -113,9 +113,7 @@ describe("D1 — a party is trashed and then purged", () => {
     );
     // Money and authority hold the line.
     expect(onDeleteOf(db, "tally_expense", "paid_by")).toBe("NO ACTION");
-    expect(onDeleteOf(db, "access_grant", "granted_by_party_id")).toBe(
-      "NO ACTION"
-    );
+    expect(onDeleteOf(db, "share_authority", "granted_by")).toBe("NO ACTION");
   });
 });
 
@@ -184,17 +182,15 @@ describe("D4 — the access plane", () => {
         .all() as { name: string }[]
     ).map((r) => r.name);
     expect(tables).toStrictEqual([]);
+    // REGISTERS ONLY since #928: who is installed, who is enrolled, which
+    // device is which, and what the demo seeded. The plane's decisions live in
+    // `share_authority`, one plane for every principal.
     for (const t of [
       "access_app",
       "access_agent",
       "access_app_ext",
-      "access_grant",
-      "access_grant_scope",
-      "access_policy",
       "access_device",
       "access_seed_row",
-      "access_scope_request",
-      "access_scope_tombstone",
     ])
       expect(tableSql(db, t)).toContain(t);
   });

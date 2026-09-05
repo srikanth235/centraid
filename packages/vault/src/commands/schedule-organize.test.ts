@@ -42,7 +42,6 @@ describe("schedule organization commands", () => {
     return gateway.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
 

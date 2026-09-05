@@ -45,12 +45,10 @@ function knownBucket(value: unknown): StorageBucket | null {
 }
 
 export default async function storageHandler({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   try {
     const result = await ctx.vault.read({
       acceptTruncation: true,
       entity: "blob.custody_rollup",
-      purpose,
     });
     const rows = (result.rows ?? []) as unknown as RawRollupRow[];
     const buckets = zeroBuckets();

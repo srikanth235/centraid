@@ -366,7 +366,6 @@ describe("headless-automation-compile suite", () => {
         ...manifest(),
         prompt: "Notify about @[core.link_anchor/anchor-1].",
         vault: {
-          purpose: "dpv:ServiceProvision",
           scopes: [
             { schema: "schedule", table: "task", verbs: "read" },
             { schema: "schedule", table: "event", verbs: "read" },

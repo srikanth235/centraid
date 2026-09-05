@@ -33,7 +33,6 @@ function snapshotOf(
       {
         shapeId: "shape-notes",
         appId: "notes",
-        purpose: "dpv:ServiceProvision",
         entities: [SCHEMA],
       },
     ],

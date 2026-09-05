@@ -35,7 +35,6 @@ import { importVaultExport } from "./portability.js";
 import { importPortableVault, verifyPortableVault } from "./portable-export.js";
 import type { Credential } from "./types.js";
 
-const PURPOSE = "dpv:ServiceProvision";
 const PASSPHRASE = "correct horse battery staple";
 const SECRET = "hunter2-zzyzxsecret";
 
@@ -101,7 +100,6 @@ describe("portable export sealed custody", () => {
         password,
         url: "https://example.com",
       },
-      purpose: PURPOSE,
     });
     expect(out.status).toBe("executed");
     return (out as { output: { item_id: string } }).output.item_id;
@@ -143,7 +141,6 @@ describe("portable export sealed custody", () => {
       entity: "locker.item",
       entityId: itemId,
       columns: ["password"],
-      purpose: PURPOSE,
     });
     expect(revealed.values["password"]).toBe(SECRET);
   });

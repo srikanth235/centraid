@@ -10,7 +10,6 @@ interface ProvenanceRow {
 }
 
 export default async function activityHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const documentId = String(input?.document_id ?? "");
   if (!documentId) return { events: [] };
   try {
@@ -21,7 +20,6 @@ export default async function activityHandler({ input, ctx }: HandlerArgs) {
         { column: "entity_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
         { column: "entity_id", op: "eq", value: documentId },
       ],
-      purpose,
     });
     // No ordering guarantee; sort here.
     const events = ((result.rows ?? []) as unknown as ProvenanceRow[])

@@ -28,7 +28,6 @@ export default async function searchHandler({
   input?: Record<string, unknown>;
   ctx: HandlerCtx;
 }) {
-  const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "")
     .trim()
     .toLowerCase();
@@ -39,7 +38,6 @@ export default async function searchHandler({
       where: [{ column: "deleted_at", op: "is-null" }],
       orderBy: { column: "updated_at", dir: "desc" },
       limit: 500,
-      purpose,
     });
     const matched = ((res.rows ?? []) as unknown as RawItem[]).filter((it) => {
       return (
@@ -56,9 +54,9 @@ export default async function searchHandler({
     });
     const ids = matched.map((r) => r.item_id);
     const [tagsByItem, starredIds, watchByItem] = await Promise.all([
-      readTags(ctx, ids, purpose),
-      readStarred(ctx, ids, purpose),
-      readWatchtower(ctx, purpose, { optional: true }),
+      readTags(ctx, ids),
+      readStarred(ctx, ids),
+      readWatchtower(ctx, { optional: true }),
     ]);
     return { items: decorate(matched, tagsByItem, starredIds, watchByItem) };
   } catch (error) {

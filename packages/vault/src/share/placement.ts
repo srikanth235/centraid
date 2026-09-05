@@ -12,6 +12,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type { LocalBlobStore } from "../blob/local.js";
 import { liveBlobShas } from "../blob/read.js";
 import { VaultShareError } from "../errors.js";
+import { grantPlacementAuthority } from "../grant/grant-authority.js";
 import { LIVE_AUTHORITY_SQL } from "../grant/grant-store.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { placeBlob } from "./blobs.js";
@@ -81,10 +82,29 @@ export interface UnshareFromVaultResult {
   orphanedShas: string[];
 }
 
-export interface MoveOutOfVaultInput {
+export interface MoveItemsOutOfVaultInput {
   source: ShareVaultRef;
   itemType: ShareableItemType;
-  itemId: string;
+  /** The whole set leaves in ONE transaction — a half-moved album is not a state. */
+  itemIds: readonly string[];
+}
+
+export interface PlaceItemsInVaultInput extends Omit<
+  ShareItemsToVaultInput,
+  "authority"
+> {
+  /** `move` releases the source after the projection commits. */
+  kind: "add" | "move";
+  /** The audience vault's own party — the principal the placement runs as. */
+  audiencePartyId: string;
+  grantedAt?: string;
+}
+
+export interface PlaceItemsInVaultResult extends ShareItemsToVaultResult {
+  /** Ids of the projected rows in the AUDIENCE vault. */
+  targetItemIds: string[];
+  /** Non-empty only for a move: bytes the source no longer references. */
+  orphanedShas: string[];
 }
 
 export interface ShareOriginRecord {
@@ -308,38 +328,85 @@ function strandedProjections(
 }
 
 /**
- * Source side of a completed cross-vault MOVE. Unlike unshare this removes an
- * AUTHORED item: the caller must durably prove the target projection committed
- * first (the gateway placement ledger owns that ordering), and this stays
- * separate so no ordinary share path reaches authored deletion.
+ * Source side of a completed cross-vault MOVE. Unlike unshare this removes
+ * AUTHORED items: the caller must durably prove the target projection
+ * committed first, and this stays separate so no ordinary share path reaches
+ * authored deletion. The whole SET leaves in one transaction (#928 A7) —
+ * moving an album is one act, and a crash between two of its photographs is
+ * not a state anything downstream knows how to resume from.
  */
-export function moveOutOfVault(
-  input: MoveOutOfVaultInput
+export function moveItemsOutOfVault(
+  input: MoveItemsOutOfVaultInput
 ): UnshareFromVaultResult {
   const source = input.source.vault;
   source.exec("BEGIN IMMEDIATE");
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
-  let shas: string[];
+  const shas: string[] = [];
+  let removedAny = false;
   try {
     replicaCommit = beginReplicaCommit(source);
-    const removal = deleteProjectedClosure(
-      source,
-      input.itemType,
-      input.itemId
+    const forget = source.prepare(
+      "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
     );
-    source
-      .prepare(
-        "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
-      )
-      .run(input.itemType, input.itemId);
-    shas = removal.shas;
+    for (const itemId of input.itemIds) {
+      const removal = deleteProjectedClosure(source, input.itemType, itemId);
+      forget.run(input.itemType, itemId);
+      for (const sha of removal.shas) shas.push(sha);
+      if (removal.removed) removedAny = true;
+    }
     endReplicaCommit(source, replicaCommit);
     source.exec("COMMIT");
-    if (!removal.removed) return { removed: false, orphanedShas: [] };
   } catch (error) {
     source.exec("ROLLBACK");
     throw error;
   }
+  if (!removedAny) return { removed: false, orphanedShas: [] };
   const live = liveBlobShas(source);
   return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
+}
+
+/**
+ * SAME-OWNER PLACEMENT, AS ONE CALL (#928 A7). The give plane's edge rows,
+ * effect outbox, reducer and retry sweep are gone: a placement between two of
+ * the owner's own vaults is not a distributed obligation, it is a projection
+ * followed by a release, and both vaults are open in the same process.
+ *
+ * The order is the crash invariant and does not change: record the owner's
+ * agreement in the ORIGIN, project into the AUDIENCE (its own transaction),
+ * and only then release the source (one more). A crash between the two leaves
+ * the item in both vaults — visible, recoverable, and never lost — which is
+ * why the projection commits first.
+ */
+export function placeItemsInVault(
+  input: PlaceItemsInVaultInput
+): PlaceItemsInVaultResult {
+  // The placement gate demands a live answer over every item, naming the
+  // party the rows are placed FOR; the owner's act IS that answer.
+  grantPlacementAuthority(input.origin.vault, {
+    itemType: input.itemType,
+    itemIds: input.itemIds,
+    audiencePartyId: input.audiencePartyId,
+    grantedAt: input.grantedAt ?? new Date().toISOString(),
+  });
+  const projected = shareItemsToVault({
+    ...input,
+    authority: {
+      principalKind: "person",
+      principalId: input.audiencePartyId,
+      verb: "view",
+    },
+  });
+  const released =
+    input.kind === "move"
+      ? moveItemsOutOfVault({
+          source: input.origin,
+          itemType: input.itemType,
+          itemIds: input.itemIds,
+        })
+      : { removed: false, orphanedShas: [] };
+  return {
+    ...projected,
+    targetItemIds: projected.items.map((item) => item.itemId),
+    orphanedShas: released.orphanedShas,
+  };
 }

@@ -194,7 +194,6 @@ export async function sweepPeerCommons(input: {
               {
                 command: replicaCommand,
                 input: replicaInput,
-                purpose: "dpv:ServiceProvision",
                 invocationId,
               },
               { idSeed: invocationId }

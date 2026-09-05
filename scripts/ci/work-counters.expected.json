@@ -3,13 +3,13 @@
   "fixture": "@centraid/test-kit/year3-vault via goldenYear3Vault()",
   "scenarios": {
     "gateway.read core.party limit=20": {
-      "$comment": "An owner read of 20 rows. The one barrier is the audit receipt: every gateway read is also a durable write (packages/vault/src/gateway/evidence.ts).",
+      "$comment": "An owner-direct read of 20 rows. Owner allow reads skip access receipts, so this path has no durable append; the exact zero fsync budget preserves that invariant (packages/vault/src/gateway/evidence.ts).",
       "counters": {
-        "statements": { "mode": "max", "value": 6 },
-        "rowsScanned": { "mode": "max", "value": 24 },
-        "fsyncs": { "mode": "exact", "value": 1 },
-        "bytesRead": { "mode": "max", "value": 2100 },
-        "bytesWritten": { "mode": "max", "value": 198 }
+        "statements": { "mode": "max", "value": 3 },
+        "rowsScanned": { "mode": "max", "value": 23 },
+        "fsyncs": { "mode": "exact", "value": 0 },
+        "bytesRead": { "mode": "max", "value": 2028 },
+        "bytesWritten": { "mode": "max", "value": 0 }
       }
     },
     "gateway.invoke atlas.insert_row core.place": {

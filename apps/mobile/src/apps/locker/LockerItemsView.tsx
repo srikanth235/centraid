@@ -13,8 +13,7 @@
 // LOADING IS SKELETON ROWS at the list's own geometry, never a spinner.
 
 import React, { useMemo } from "react";
-import { FlatList, StyleSheet, View } from "react-native";
-import type { ListRenderItemInfo } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { rowsFor, typeCounts } from "@centraid/blueprints/apps/locker/format";
 import type {
@@ -40,7 +39,9 @@ import Button from "../../kit/components/Button";
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import type { ChipDef } from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
+import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text } from "../../kit/components/NativeText";
+import SeatList from "../../kit/components/SeatList";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -118,12 +119,6 @@ export default function LockerItemsView(
   );
   const foot = lockerWindowFoot(props.loaded, shown.length, props.truncated);
 
-  const renderItem = ({
-    item,
-  }: ListRenderItemInfo<LockerRowData>): React.JSX.Element => (
-    <LockerRow row={item} onOpen={props.onOpen} />
-  );
-
   const head = (
     <View style={styles.head}>
       <ChipsBlock
@@ -170,12 +165,15 @@ export default function LockerItemsView(
   }
 
   return (
-    <FlatList
-      data={shown}
-      keyExtractor={lockerRowKey}
-      ListHeaderComponent={head}
-      ListEmptyComponent={<Text style={styles.noMatch}>{NO_MATCH}</Text>}
-      ListFooterComponent={
+    <SeatList
+      accessibilityLabel="The item window"
+      anchoring={NEWEST_FIRST_ANCHORING}
+      rows={shown}
+      keyOf={lockerRowKey}
+      renderRow={(row) => <LockerRow row={row} onOpen={props.onOpen} />}
+      header={head}
+      empty={<Text style={styles.noMatch}>{NO_MATCH}</Text>}
+      footer={
         foot ? (
           <View style={styles.foot}>
             <Text style={styles.footText}>{foot}</Text>
@@ -185,12 +183,6 @@ export default function LockerItemsView(
           </View>
         ) : null
       }
-      // A 56pt row means ~12 fill the viewport below the app bar; ±3 viewports
-      // of retained cells absorbs a fast flick without keeping 300 mounted.
-      initialNumToRender={12}
-      maxToRenderPerBatch={12}
-      renderItem={renderItem}
-      windowSize={7}
     />
   );
 }

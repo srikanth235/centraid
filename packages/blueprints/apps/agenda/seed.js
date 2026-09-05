@@ -10,7 +10,6 @@
  * either race the people/tally seeds or mint a duplicate of their friend.
  * The dinner names her in the summary instead — cheap, honest, race-free.
  */
-const PURPOSE = "dpv:ServiceProvision";
 
 export default async function seedHandler({ input, log, ctx }) {
   const now = new Date(input?.now ?? Date.now());
@@ -18,7 +17,6 @@ export default async function seedHandler({ input, log, ctx }) {
     const out = await ctx.vault.invoke({
       command,
       input: args,
-      purpose: PURPOSE,
     });
     if (out.status !== "executed") {
       throw new Error(`${command} ${out.status}: ${out.reason ?? "no reason"}`);
@@ -31,7 +29,6 @@ export default async function seedHandler({ input, log, ctx }) {
   // one a fresh vault has. Discover it; never hardcode the id.
   const calendars = await ctx.vault.read({
     entity: "schedule.calendar",
-    purpose: PURPOSE,
     limit: 1,
   });
   const calendarId = calendars.rows?.[0]?.calendar_id;

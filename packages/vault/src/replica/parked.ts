@@ -1,5 +1,8 @@
 import type { VaultDb } from "../db.js";
-import { writeExplanation, writeReceipt } from "../gateway/evidence.js";
+import {
+  writeExplanation,
+  writeAuthorityReceipt,
+} from "../gateway/evidence.js";
 import type { Identity, InvokeRequest } from "../gateway/types.js";
 import { sealAad, sealValue, unsealValue } from "../schema/sealed.js";
 import { beginReplicaCommit, endReplicaCommit } from "./change-log.js";
@@ -225,13 +228,12 @@ export function recordDurableParkedDenial(
         `parked invocation ${payload.invocationId} is already ${invocation.status}`
       );
     }
-    const receiptId = writeReceipt(db.audit, {
-      grantId: payload.grantId,
+    const receiptId = writeAuthorityReceipt(db, {
+      authorityId: payload.grantId,
       invocationId: payload.invocationId,
       action: `act ${payload.commandName}`,
       objectType: "agent.command",
       objectId: payload.commandId,
-      purpose: payload.request.purpose,
       decision: "deny",
       detail: {
         failing: input.reason,

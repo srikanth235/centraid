@@ -7,7 +7,6 @@
   "iconKey": "Book",
   "colorKey": "slate",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Shows and manages your notes and notebooks.",
     "scopes": [
       {

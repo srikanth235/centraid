@@ -12,7 +12,6 @@
 // and no control here pretends to change it. The full register is
 // `INTEGRATION-NOTES.md`.
 
-import { FlashList } from "@shopify/flash-list";
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -56,6 +55,7 @@ import EmptyBlock from "../../kit/components/EmptyBlock";
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { TextInput } from "../../kit/components/NativeText";
 import PlaceHeader from "../../kit/components/PlaceHeader";
+import SeatList from "../../kit/components/SeatList";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
@@ -269,23 +269,21 @@ function RosterBody({
           onPress: () => onFilter(chip.id as RosterFilter),
         }))}
       />
-      {rows.length === 0 ? (
-        <EmptyLine text={EMPTY.noMatch} />
-      ) : (
-        <FlashList
-          maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
-          data={rows}
-          keyExtractor={(person) => person.party_id}
-          renderItem={({ item, index }) => (
-            <RosterRow
-              person={item}
-              first={index === 0}
-              onOpen={onOpen}
-              onStar={onStar}
-            />
-          )}
-        />
-      )}
+      <SeatList
+        accessibilityLabel="The roster"
+        anchoring={NEWEST_FIRST_ANCHORING}
+        rows={rows}
+        keyOf={(person) => person.party_id}
+        renderRow={(person, index) => (
+          <RosterRow
+            person={person}
+            first={index === 0}
+            onOpen={onOpen}
+            onStar={onStar}
+          />
+        )}
+        empty={<EmptyLine text={EMPTY.noMatch} />}
+      />
     </View>
   );
 }
@@ -537,16 +535,16 @@ function SearchBody({
       />
       {term.trim() === "" ? (
         <EmptyLine text={EMPTY.searchIdle} />
-      ) : results.length === 0 ? (
-        <EmptyLine text={EMPTY.noMatch} />
       ) : (
-        <FlashList
-          maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
-          data={results}
-          keyExtractor={(person) => person.party_id}
-          renderItem={({ item }) => (
-            <SearchRow person={item} onOpen={onOpen} onStar={onStar} />
+        <SeatList
+          accessibilityLabel="Search results"
+          anchoring={NEWEST_FIRST_ANCHORING}
+          rows={results}
+          keyOf={(person) => person.party_id}
+          renderRow={(person) => (
+            <SearchRow person={person} onOpen={onOpen} onStar={onStar} />
           )}
+          empty={<EmptyLine text={EMPTY.noMatch} />}
         />
       )}
       {term.trim() ? (

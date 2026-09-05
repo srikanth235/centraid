@@ -34,12 +34,6 @@ describe("renderer gateway owner-plane contracts", () => {
       blurb: undefined,
     });
     await vault.vaultApps();
-    await vault.approveVaultGrant({
-      appId: "daily",
-      purpose: "dpv:ServiceProvision",
-      scopes: [{ schema: "schedule", table: "task", verbs: "read" }],
-      expiresAt: "2026-08-01T00:00:00.000Z",
-    });
     await vault.revokeVaultGrant({ grantId: "grant-1" });
     await vault.vaultParked();
     await vault.confirmVaultParked({

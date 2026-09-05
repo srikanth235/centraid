@@ -101,7 +101,6 @@ export function buildSnapshot(rows: ReplicaSnapshotRow[]): ReplicaSnapshot {
       {
         shapeId: SHAPE_ID,
         appId: "photos",
-        purpose: "dpv:ServiceProvision",
         entities: [
           {
             entity: ENTITY,

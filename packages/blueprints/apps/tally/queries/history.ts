@@ -22,7 +22,6 @@ export default async function expenseHistory({ input, ctx }: HandlerArgs) {
       ],
       orderBy: { column: "recorded_at", dir: "desc" },
       limit: 100,
-      purpose: "dpv:ServiceProvision",
     });
     return {
       revisions: ((result.rows ?? []) as unknown as RevisionRow[]).map(

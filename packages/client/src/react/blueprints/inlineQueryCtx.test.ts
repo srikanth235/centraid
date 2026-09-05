@@ -125,7 +125,6 @@ describe("inlineQueryCtx", () => {
       vault: {
         invoke: (request: {
           command: string;
-          purpose: string;
           optional?: boolean;
         }) => Promise<{ status: string }>;
       };
@@ -135,7 +134,6 @@ describe("inlineQueryCtx", () => {
     await expect(
       ctx.vault.invoke({
         command: "locker.watchtower",
-        purpose: "dpv:ServiceProvision",
         optional: true,
       })
     ).resolves.toMatchObject({ status: "failed" });
@@ -145,7 +143,6 @@ describe("inlineQueryCtx", () => {
     await expect(
       ctx.vault.invoke({
         command: "locker.watchtower",
-        purpose: "dpv:ServiceProvision",
       })
     ).rejects.toThrow(/online-only/u);
     expect(guard.required).toBe(true);

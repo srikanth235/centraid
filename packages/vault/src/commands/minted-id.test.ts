@@ -153,7 +153,6 @@ describe("a row id minted at the seat", () => {
       const first = gw.invoke(owner, {
         command,
         input: input(id),
-        purpose: "dpv:ServiceProvision",
       });
       expect(first.status).toBe("executed");
       expect(
@@ -170,13 +169,11 @@ describe("a row id minted at the seat", () => {
         gw.invoke(owner, {
           command,
           input: input(id),
-          purpose: "dpv:ServiceProvision",
         }).status
       ).toBe("executed");
       const again = gw.invoke(owner, {
         command,
         input: { ...input(id), [property]: id },
-        purpose: "dpv:ServiceProvision",
       });
       expect(again.status).not.toBe("executed");
     }
@@ -189,7 +186,6 @@ describe("a row id minted at the seat", () => {
       const outcome = gw.invoke(owner, {
         command,
         input: rest,
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status).toBe("executed");
       expect(

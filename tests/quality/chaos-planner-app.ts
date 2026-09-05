@@ -79,14 +79,13 @@ async function writePlannerApp(codeDir: string): Promise<void> {
   );
   await fs.writeFile(
     path.join(codeDir, "actions", "add_task.js"),
-    "export default async ({ body, ctx }) => ({ status: 200, body: await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: body.title }, purpose: 'dpv:ServiceProvision' }) });\n"
+    "export default async ({ body, ctx }) => ({ status: 200, body: await ctx.vault.invoke({ command: 'schedule.add_task', input: { title: body.title } }) });\n"
   );
 }
 
-/** Grant the planner app the one scope its action needs. */
+/** Install the planner app's declared scope into the mounted vault. */
 export function approvePlanner(plane: VaultPlane): void {
-  plane.approveGrant(PLANNER_APP_ID, {
-    purpose: "dpv:ServiceProvision",
+  plane.recordAppInstall(PLANNER_APP_ID, {
     scopes: [{ schema: "schedule", verbs: "act" }],
   });
 }

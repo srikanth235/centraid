@@ -92,7 +92,6 @@ describe("transcript handler", () => {
             capability: "transcript",
             model: MODEL,
           },
-          purpose: "dpv:ServiceProvision",
         },
       ]);
     });

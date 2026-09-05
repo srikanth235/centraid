@@ -108,18 +108,8 @@ export const ALLOW_LIST = {
   // ── the share / commons plane: server-owned tables, not vault entities ──
   "packages/server/src/serve/gateway-schema.ts":
     "creates the server-owned share-plane tables themselves",
-  "packages/server/src/routes/edges-routes.ts":
-    "serves the share edges the share plane owns",
-  "packages/server/src/serve/share-edge-row.ts":
-    "is the row codec for share_edges",
-  "packages/server/src/serve/share-edge-store.ts":
-    "is the store for share_edges",
-  "packages/server/src/serve/share-effects.ts":
-    "owns share_effects, the audience-side projection table",
-  "packages/server/src/serve/share-effects-retire.ts":
-    "retires share_effects rows when an authority ends",
   "packages/server/src/serve/share-access-receipts.ts":
-    "owns share_access_receipts",
+    "owns share_access_receipts, the same-owner placement history",
   "packages/server/src/serve/grant-fulfillment.ts":
     "owns share_authority and share_fulfillment",
   "packages/server/src/serve/share-notices.ts":

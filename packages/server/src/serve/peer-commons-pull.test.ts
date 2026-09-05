@@ -254,7 +254,6 @@ describe("peer commons pull cost (#750 invariant 7)", () => {
         {
           command: "media.update_asset",
           input: commandInput,
-          purpose: "dpv:ServiceProvision",
         },
         { idSeed: replicaInvocationKey(pair.grantId, sequence) }
       ).status

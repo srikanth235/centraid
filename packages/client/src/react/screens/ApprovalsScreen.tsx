@@ -105,7 +105,6 @@ export interface ApprovalsParkedRowDTO {
 export interface ApprovalsScopeRequestRowDTO {
   requestId: string;
   appId: string;
-  purpose: string;
   scopeSummary: string;
   requestedAgo: string;
 }
@@ -708,12 +707,7 @@ export default function ApprovalsScreen(
         confirming={confirmingThis}
         eyebrow={`Access request · ${row.appId}`}
         facts={
-          open
-            ? [
-                { key: "purpose", value: row.purpose },
-                { key: "scopes", mono: true, value: row.scopeSummary },
-              ]
-            : []
+          open ? [{ key: "scopes", mono: true, value: row.scopeSummary }] : []
         }
         key={row.requestId}
         note={
@@ -724,7 +718,7 @@ export default function ApprovalsScreen(
         noteNet={confirmingThis}
         onToggle={() => toggle(row.requestId)}
         open={open}
-        sub={row.purpose}
+        sub={row.scopeSummary}
         title={`${row.appId} asks for wider access`}
       />
     );
@@ -1027,21 +1021,31 @@ export default function ApprovalsScreen(
                           );
                           const revoked = revokedStoreHolders.has(key);
                           return {
-                            action: {
-                              label: revoked ? "Revoked" : "Revoke",
-                              onClick: () =>
-                                setConfirming({
-                                  id: key,
-                                  verb: "revoke-holder",
-                                }),
-                              title: `Revoke ${holder.mode} access to ${group.label} from ${holder.holderLabel}`,
-                            },
-                            dangerous: !revoked,
+                            // A DECLARATION IS NOT A GRANT (#928 A1): an app's
+                            // reach is fixed by its own manifest, so the row is
+                            // shown and no Revoke is offered — a button that
+                            // could not keep its promise is worse than none.
+                            ...(holder.revocable
+                              ? {
+                                  action: {
+                                    label: revoked ? "Revoked" : "Revoke",
+                                    onClick: () =>
+                                      setConfirming({
+                                        id: key,
+                                        verb: "revoke-holder",
+                                      }),
+                                    title: `Revoke ${holder.mode} access to ${group.label} from ${holder.holderLabel}`,
+                                  },
+                                  dangerous: !revoked,
+                                }
+                              : {}),
                             id: `${holder.holderKind}-${holder.holderId}-${holder.grantId}`,
                             meta: holder.mode,
                             off: revoked || busyId === holder.grantId,
                             struck: revoked,
-                            sub: `${holder.holderKind === "agent" ? "automation" : "app"} · ${holder.mode} access`,
+                            sub: holder.revocable
+                              ? `automation · ${holder.mode} access`
+                              : `app · declared ${holder.mode} access`,
                             title: holder.holderLabel,
                           };
                         })}

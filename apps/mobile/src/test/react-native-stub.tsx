@@ -231,6 +231,50 @@ export function flatListStub(): Record<string, unknown> {
   };
 }
 
+/**
+ * `@shopify/flash-list`, for a screen that draws through `SeatList` (#922 E6).
+ * Mock the MODULE with it — FlashList does not come from react-native, and the
+ * real package does not parse in this tier at all. It renders every row it is
+ * handed, eagerly, with the header/footer/empty slots the real component
+ * honours; recycling and measurement stay Maestro's. Pass `observed` to capture
+ * the props each list was handed.
+ */
+export function flashListStub(
+  observed?: Record<string, unknown>[]
+): Record<string, unknown> {
+  return {
+    FlashList: (props: Props & { data?: unknown[] }) => {
+      observed?.push(props);
+      const data = props.data ?? [];
+      const render = props.renderItem as (info: {
+        item: unknown;
+        index: number;
+      }) => React.ReactNode;
+      const keyOf = props.keyExtractor as
+        | ((item: unknown, index: number) => string)
+        | undefined;
+      return React.createElement(
+        "div",
+        {
+          "data-label": props.accessibilityLabel,
+          "data-role": props.accessibilityRole,
+        },
+        props.ListHeaderComponent as React.ReactNode,
+        data.length === 0
+          ? (props.ListEmptyComponent as React.ReactNode)
+          : data.map((item, index) =>
+              React.createElement(
+                "div",
+                { "data-row": keyOf?.(item, index) ?? String(index) },
+                render({ index, item })
+              )
+            ),
+        props.ListFooterComponent as React.ReactNode
+      );
+    },
+  };
+}
+
 /** `react-native-svg`, for blocks reaching the icon set. */
 export function svgStub(): Record<string, unknown> {
   const glyph = (props: Props) =>

@@ -590,7 +590,7 @@ describe("outbox-executor", () => {
     });
 
     // The review feed carries acts with their salience marker, and widens
-    // actorKind / grantId for the Approvals activity surface (#552).
+    // actorKind / authorityId for the Approvals activity surface (#552).
     const feed = plane.reviewFeed(10);
     expect(feed.length).toBeGreaterThan(0);
     expect(feed.every((e) => e.action.startsWith("act "))).toBe(true);
@@ -598,7 +598,7 @@ describe("outbox-executor", () => {
     // Owner-staged acts refine to an actor kind (or null only when no
     // invocation was attached — every staged act here has one).
     expect(
-      feed.every((e) => "actorKind" in e && "grantId" in e && "actor" in e)
+      feed.every((e) => "actorKind" in e && "authorityId" in e && "actor" in e)
     ).toBe(true);
 
     // Explicit Locker fills join the same review-after-the-fact surface with
@@ -634,7 +634,7 @@ describe("outbox-executor", () => {
           actorId: null,
           actorKind: null,
           actor: null,
-          grantId: null,
+          authorityId: null,
         }),
       ])
     );
@@ -669,8 +669,8 @@ describe("outbox-executor", () => {
       alwaysAllow: true,
     });
     expect(decide.status).toBe("executed");
-    const grantId = (decide as { output: { grant_id?: string } }).output
-      .grant_id;
+    const grantId = (decide as { output: { authority_id?: string } }).output
+      .authority_id;
     expect(grantId).toBeTruthy();
 
     // Second stage under the standing grant — auto-approved at staging time.
@@ -692,19 +692,19 @@ describe("outbox-executor", () => {
     });
     expect(stage2.status).toBe("executed");
     expect(
-      (stage2 as { output: { status: string; grant_id?: string } }).output
+      (stage2 as { output: { status: string; authority_id?: string } }).output
         .status
     ).toBe("approved");
-    expect((stage2 as { output: { grant_id?: string } }).output.grant_id).toBe(
-      grantId
-    );
+    expect(
+      (stage2 as { output: { authority_id?: string } }).output.authority_id
+    ).toBe(grantId);
 
     const feed = plane.reviewFeed(50);
     const autoAllowed = feed.find(
-      (e) => e.action === "act outbox.stage" && e.grantId === grantId
+      (e) => e.action === "act outbox.stage" && e.authorityId === grantId
     );
     expect(autoAllowed).toMatchObject({
-      grantId,
+      authorityId: grantId,
       decision: "allow",
       // Owner-device stages refine to owner (or null only if table miss).
       actorKind: expect.stringMatching(/owner|app|agent|assistant/u),

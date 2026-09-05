@@ -7,7 +7,6 @@
   "iconKey": "Check",
   "colorKey": "ochre",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Shows and manages your canonical task list.",
     "scopes": [
       {

@@ -1,4 +1,4 @@
-import crypto, { randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#363) the full-story end-to-end test built exactly the way build-gateway.ts constructs BackupService (no injected provider/assembleEntries); splitting the story would break the point of an end-to-end test
 /*
@@ -18,6 +18,7 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   currentReplicaLogState,
+  recordEgressAuthority,
   sealAad,
   unsealValue,
   updateBackupPolicy,
@@ -102,16 +103,17 @@ describe("backup", () => {
       },
     });
     const itemId = staged["item_id"] as string;
-    const grantId = crypto.randomUUID();
+    const grantId = recordEgressAuthority(plane.db.vault, {
+      actorId: "owner",
+      actorKind: "owner",
+      verb: "gmail.send",
+      target: "ravi@example.com",
+      grantedBy: plane.boot.ownerPartyId,
+      now: new Date().toISOString(),
+    });
     plane.db.vault
       .prepare(
-        `INSERT INTO outbox_grant (grant_id, actor_id, verb, target, created_at, revoked_at)
-       VALUES (?, 'owner', 'gmail.send', 'ravi@example.com', ?, NULL)`
-      )
-      .run(grantId, new Date().toISOString());
-    plane.db.vault
-      .prepare(
-        `UPDATE outbox_item SET status = 'approved', decided_at = ?, grant_id = ? WHERE item_id = ?`
+        `UPDATE outbox_item SET status = 'approved', decided_at = ?, authority_id = ? WHERE item_id = ?`
       )
       .run(new Date().toISOString(), grantId, itemId);
     return { itemId, grantId };
@@ -495,13 +497,15 @@ describe("backup", () => {
       expect(plane.quarantine).not.toBeNull();
       expect(plane.quarantine?.outboxParked).toBeGreaterThanOrEqual(1);
       const outboxRow = plane.db.vault
-        .prepare("SELECT status, grant_id FROM outbox_item WHERE item_id = ?")
+        .prepare(
+          "SELECT status, authority_id FROM outbox_item WHERE item_id = ?"
+        )
         .get(h.seeded.outboxItemId) as {
         status: string;
-        grant_id: string | null;
+        authority_id: string | null;
       };
       expect(outboxRow.status).toBe("pending");
-      expect(outboxRow.grant_id).toBeNull();
+      expect(outboxRow.authority_id).toBeNull();
 
       const rows = runWithVaultContext(
         {

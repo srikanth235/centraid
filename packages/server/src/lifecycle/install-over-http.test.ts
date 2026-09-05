@@ -1,12 +1,13 @@
 import crypto from "node:crypto";
 /*
- * Bundled-app install over HTTP (#434). Install registers the
- * app + grants its declared scopes and serves it in place from the shipped
+ * Bundled-app install over HTTP (#434). Install registers the app, records the
+ * entity manifest its own code declares (#928 — a first-party app is not a
+ * principal, so nothing is granted) and serves it in place from the shipped
  * @centraid/blueprints package — no code copy, no git. This boots a real
  * git-store gateway and drives that exact wire path: install → listing union
- * → catalog install-state → per-vault rename → uninstall (grants revoked,
- * nothing in git) → reinstall (fresh consent). `tasks` is a real bundled app
- * (kind 'app', 15 declared scopes) so the grants are load-bearing.
+ * → catalog install-state → per-vault rename → uninstall (nothing in git) →
+ * reinstall. `tasks` is a real bundled app (kind 'app', 15 declared scopes) so
+ * the declaration is load-bearing.
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -55,7 +56,15 @@ interface VaultAppRow {
   name: string;
   status: string;
   origin: string;
-  grants: { scopes: { schema: string; table?: string; verbs: string }[] }[];
+}
+
+async function declaredScopes(appId: string): Promise<number> {
+  const res = await fetch(
+    `${handle.url}/centraid/_vault/apps/${appId}/scopes`,
+    { headers: auth() }
+  );
+  const body = (await res.json()) as { scopes: unknown[] };
+  return body.scopes.length;
 }
 
 async function vaultApps(): Promise<VaultAppRow[]> {
@@ -121,17 +130,14 @@ describe("install-over-http scenarios", () => {
     const vbody = (await versions.json()) as { versions: unknown[] };
     expect(vbody.versions).toHaveLength(0);
 
-    // The declared scopes were granted at mount — being installed IS the
-    // consent, and the Privacy ledger is where it is reviewed and revoked.
+    // Installing records the app's own DECLARED manifest (#928 A1) — a
+    // first-party app is not a principal, so there is no grant to mint and
+    // nothing to approve; the Privacy ledger reviews what it declared.
     const enrolled = (await vaultApps()).find((a) => a.name === "tasks");
     expect(enrolled).toBeTruthy();
     expect(enrolled!.origin).toBe("installed");
     expect(enrolled!.status).toBe("active");
-    const scopeCount = enrolled!.grants.reduce(
-      (n, g) => n + g.scopes.length,
-      0
-    );
-    expect(scopeCount).toBeGreaterThan(0);
+    await expect(declaredScopes("tasks")).resolves.toBeGreaterThan(0);
   });
 
   test("capture OCR enters the installed recipe and records service absence as a failed turn", async () => {
@@ -472,12 +478,9 @@ describe("install-over-http scenarios", () => {
     expect(row!.name).toBe("Tasks");
   });
 
-  test("uninstall revokes grants + drops from the listing, keeps nothing in git; reinstall is fresh consent", async () => {
+  test("uninstall drops the app from the listing, keeps nothing in git; reinstall is a fresh install", async () => {
     await install("tasks");
-    const grantsBefore = (await vaultApps())
-      .find((a) => a.name === "tasks")!
-      .grants.reduce((n, g) => n + g.scopes.length, 0);
-    expect(grantsBefore).toBeGreaterThan(0);
+    await expect(declaredScopes("tasks")).resolves.toBeGreaterThan(0);
 
     // Uninstall — DELETE tolerates "nothing in git" and runs the revoke cascade.
     const del = await fetch(`${handle.url}/centraid/_apps/tasks`, {
@@ -504,13 +507,9 @@ describe("install-over-http scenarios", () => {
     }[];
     expect(catRows.find((t) => t.id === "tasks")?.installed).toBe(false);
 
-    // Reinstall — fresh consent: the declared scopes are granted again (the
-    // revoke cascade cleared the tombstones).
+    // Reinstall — the app's declared manifest is recorded again.
     const re = await install("tasks");
     expect(re.status).toBe(200);
-    const grantsAfter = (await vaultApps())
-      .find((a) => a.name === "tasks")!
-      .grants.reduce((n, g) => n + g.scopes.length, 0);
-    expect(grantsAfter).toBe(grantsBefore);
+    await expect(declaredScopes("tasks")).resolves.toBeGreaterThan(0);
   });
 });

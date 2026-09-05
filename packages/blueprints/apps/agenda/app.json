@@ -7,7 +7,6 @@
   "iconKey": "Calendar",
   "colorKey": "forest",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Shows your upcoming schedule and lets you propose, move, and respond to events.",
     "scopes": [
       {

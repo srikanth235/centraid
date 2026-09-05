@@ -18,7 +18,6 @@ function snapshot(hasUnavailableFields = true): ReplicaSnapshot {
       {
         shapeId: "shape-photos",
         appId: "photos",
-        purpose: "dpv:ServiceProvision",
         entities: [
           {
             entity: "core.content_item",

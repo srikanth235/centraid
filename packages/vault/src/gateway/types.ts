@@ -13,7 +13,6 @@ export interface ExecutionScopeSpec {
 
 /** Every caller authenticates as a ROW (S1). */
 export type Credential =
-  | { kind: "app"; appId: string; signingKey: string }
   | {
       kind: "agent";
       agentId: string;
@@ -28,19 +27,45 @@ export type Credential =
        */
       onBehalfOfOwner?: { ownerId: string; mayAct: boolean };
     }
-  | { kind: "device"; deviceId: string; deviceKey: string };
+  | {
+      kind: "device";
+      deviceId: string;
+      deviceKey: string;
+      /**
+       * ATTRIBUTION, NEVER AUTHORITY (#928 A1). A first-party app is not a
+       * principal: it runs on the owner's own device against the owner's own
+       * vault, and its reach is fixed at build time by its declared entity
+       * manifest and the static tripwire over it. This names WHICH surface
+       * carried the call, so a receipt and a provenance row still say
+       * "Locker did this" — it widens nothing and is never consulted by
+       * `evaluateAccess`. `access_app.app_id`, resolved by the host bridge.
+       */
+      surface?: string;
+      /**
+       * The surface's own build-time entity manifest, enforced per call. It
+       * only ever NARROWS the owner's reach — never widens it — and is what
+       * keeps an online read and that app's replica rows the same rows with
+       * the same columns. Host-resolved, never caller-supplied.
+       */
+      scopeClamp?: readonly ExecutionScopeSpec[];
+    };
 
 export type Risk = "low" | "medium" | "high";
 
-/**
- * Purposes are off the critical path (#306): a request naming none journals
- * this. The vocabulary stays for the day sharing brings a second party.
- */
-export const DEFAULT_PURPOSE = "dpv:ServiceProvision";
-
 export interface Identity {
-  kind: "app" | "agent" | "owner-device";
+  kind: "agent" | "owner-device";
   callerId: string;
+  /**
+   * The principal this caller answers as in `share_authority` (#928 A3): an
+   * automation's own id, its enrolment key. Absent for an owner device, whose
+   * reach is direct and needs no standing answer.
+   */
+  principalId?: string;
+  /**
+   * The first-party surface that carried an owner-direct call (#928 A1).
+   * Attribution only — `evaluateAccess` never reads it.
+   */
+  surface?: string;
   provAgentKind: "app" | "ai_agent" | "owner";
   partyId: string | null;
   /** readonly devices may read but never act. */
@@ -105,8 +130,6 @@ export interface ReadRequest {
   /** Without this, a `limit` picks arbitrary rows, not recent ones. */
   orderBy?: OrderBy;
   limit?: number;
-  /** Declared DPV purpose. Absent = `DEFAULT_PURPOSE` (#306). */
-  purpose?: string;
   /**
    * The caller knowingly took the default window (#922 0a). The gateway answers
    * either way and always reports truncation; the flag is the CLIENT boundary's
@@ -125,13 +148,11 @@ export interface SearchRequest {
   query: string;
   where?: FilterClause[];
   limit?: number;
-  purpose?: string;
 }
 
 export interface InvokeRequest {
   command: string;
   input: Record<string, unknown>;
-  purpose?: string;
   /** Idempotent replay: the same id returns the recorded outcome (§10 S4). */
   invocationId?: string;
   /**
@@ -155,7 +176,14 @@ export interface InvokeRequest {
 
 export interface ReadResult {
   rows: Record<string, unknown>[];
-  receiptId: string;
+  /**
+   * ABSENT ON AN OWNER-DIRECT READ (#928, #922 B1). The owner reading their
+   * own vault is not an access event to prove — nobody exercised anything
+   * against them — and receipting it cost a durable audit append, an fsync and
+   * a WAL page on every read. Every read by anyone ELSE, every reveal and
+   * every denial still leaves one, in the same chain.
+   */
+  receiptId?: string;
   /** Set only when the window cut rows off (#922 0a); absent means it did not. */
   truncated?: boolean;
   /** The window `rows` was produced under, so a surface can name the number. */
@@ -169,7 +197,8 @@ export interface ReadResult {
  */
 export interface SearchResult {
   rows: Record<string, unknown>[];
-  receiptId: string;
+  /** Absent on an owner-direct search — see `ReadResult.receiptId`. */
+  receiptId?: string;
 }
 
 /**
@@ -178,7 +207,6 @@ export interface SearchResult {
  */
 export interface ChangesRequest {
   entities: string[];
-  purpose?: string;
   cursor: string | null;
   limit?: number;
 }
@@ -195,7 +223,8 @@ export interface ChangeEntry {
 export interface ChangesResult {
   changes: ChangeEntry[];
   cursor: string;
-  receiptId: string;
+  /** Absent on an owner-direct read — see `ReadResult.receiptId`. */
+  receiptId?: string;
 }
 
 export type InvokeOutcome =
@@ -296,7 +325,8 @@ export interface HandlerBlobs {
 
 /** `grantId` names the standing answer the entry is ABOUT (#883). */
 export interface HandlerReceipt {
-  grantId: string | null;
+  /** The `share_authority` row that answered; NULL for owner-direct (#928). */
+  authorityId: string | null;
   action: string;
   objectType: string;
   objectId: string | null;
@@ -314,8 +344,6 @@ export interface HandlerCtx {
    */
   invocationId: string;
   input: Record<string, unknown>;
-  /** Handlers making further consent checks must reuse THIS purpose. */
-  purpose: string;
   now: string;
   newId: () => string;
   wrote: (entityType: string, entityId: string) => void;
@@ -407,7 +435,6 @@ export interface RevealRequest {
   context?: { kind: "fill"; origin: string };
   /** Memory-only presence proof, consumed once and NEVER journaled. */
   authentication?: { sessionToken?: string; itemToken?: string };
-  purpose?: string;
 }
 
 export interface RevealResult {

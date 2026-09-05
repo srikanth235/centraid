@@ -16,7 +16,6 @@ export function snapshot(): ReplicaSnapshot {
       {
         shapeId: "shape-agenda",
         appId: "agenda",
-        purpose: "dpv:ServiceProvision",
         entities: [
           {
             entity: "core.event",
@@ -66,7 +65,6 @@ export function searchableSnapshot(): ReplicaSnapshot {
       {
         shapeId: "shape-photos",
         appId: "photos",
-        purpose: "dpv:ServiceProvision",
         entities: [
           {
             entity: "core.content_item",

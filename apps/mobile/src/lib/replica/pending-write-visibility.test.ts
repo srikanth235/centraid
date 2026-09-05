@@ -48,7 +48,6 @@ function bootstrapPage(): Record<string, unknown> {
       {
         shapeId: SHAPE_ID,
         appId: "docs",
-        purpose: "dpv:ServiceProvision",
         entities: [
           {
             entity: "core.document",

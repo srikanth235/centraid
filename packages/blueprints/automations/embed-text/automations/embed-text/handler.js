@@ -1,24 +1,24 @@
 // Generated recognition automation. Source: packages/model-runtime/automation-handlers.
-import { existsSync as _v } from "node:fs";
-import { readFile as c } from "node:fs/promises";
+import { existsSync as Wv } from "node:fs";
+import { readFile as m } from "node:fs/promises";
 import w from "node:path";
 import G from "node:path";
-var o = G.resolve(import.meta.dirname, ".."),
-  i = "__centraidAutomationRuntimeDir";
-function t() {
-  let v = globalThis[i];
+var d = G.resolve(import.meta.dirname, ".."),
+  o = "__centraidAutomationRuntimeDir";
+function i() {
+  let v = globalThis[o];
   if (typeof v === "string" && v.length > 0) return G.resolve(v);
   if (process.env?.CENTRAID_AUTOMATION_RUNTIME_DIR)
     return G.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR);
-  return G.join(o, "runtime");
+  return G.join(d, "runtime");
 }
-var L = t(),
-  P = G.join(L, "models");
-import { existsSync as N, readFileSync as a, statSync as e } from "node:fs";
-import M from "node:path";
-import { pathToFileURL as vv } from "node:url";
+var O = i(),
+  L = G.join(O, "models");
+import { existsSync as N, readFileSync as a, statSync as t } from "node:fs";
+import u from "node:path";
+import { pathToFileURL as e } from "node:url";
 var U;
-class C extends Error {
+class M extends Error {
   constructor(v, B) {
     super(
       `Automation model runtime dependency "${v}" is not installed. ` +
@@ -29,50 +29,50 @@ class C extends Error {
     this.name = "RuntimeNotInstalledError";
   }
 }
-function S(v, B = L) {
-  let q = M.join(B, "node_modules");
-  if (!N(q)) throw new C(v);
-  let J = M.join(q, ...v.split("/"));
+function E(v, B = O) {
+  let q = u.join(B, "node_modules");
+  if (!N(q)) throw new M(v);
+  let J = u.join(q, ...v.split("/"));
   try {
-    let $ = b(J);
+    let $ = S(J);
     if ($ === null) throw Error(`no entry point in ${J}`);
     return $;
   } catch ($) {
-    throw new C(v, $);
+    throw new M(v, $);
   }
 }
-function b(v, B = 0) {
-  let q = M.join(v, "package.json"),
+function S(v, B = 0) {
+  let q = u.join(v, "package.json"),
     J = N(q) ? JSON.parse(a(q, "utf8")) : {},
     $ = [
-      ...y($v(J.exports)),
+      ...y(qv(J.exports)),
       ...(typeof J.main === "string" ? [J.main] : []),
       "index.js",
     ];
   for (let V of $) {
-    let W = qv(M.resolve(v, V), B);
+    let W = vv(u.resolve(v, V), B);
     if (W !== null) return W;
   }
   return null;
 }
-function qv(v, B) {
-  let q = E(v);
+function vv(v, B) {
+  let q = I(v);
   if (q?.isFile()) return v;
-  if (q?.isDirectory()) return B >= 4 ? null : b(v, B + 1);
+  if (q?.isDirectory()) return B >= 4 ? null : S(v, B + 1);
   for (let J of [".js", ".json", ".node"]) {
     let $ = `${v}${J}`;
-    if (E($)?.isFile()) return $;
+    if (I($)?.isFile()) return $;
   }
   return null;
 }
-function E(v) {
+function I(v) {
   try {
-    return e(v);
+    return t(v);
   } catch {
     return null;
   }
 }
-function $v(v) {
+function qv(v) {
   if (typeof v === "string") return v;
   if (v === null || typeof v !== "object") return;
   let B = v;
@@ -90,15 +90,15 @@ function y(v, B = 0) {
 }
 async function z() {
   if (U) return U;
-  let v = S("onnxruntime-node");
-  return ((U = await import(vv(v).href)), U);
+  let v = E("onnxruntime-node");
+  return ((U = await import(e(v).href)), U);
 }
 var A;
-async function x(v) {
+async function b(v) {
   A ??= new Map();
   let B = A.get(v);
   if (B) return B;
-  if (!N(v)) throw new C(v);
+  if (!N(v)) throw new M(v);
   let q = z().then((J) => J.InferenceSession.create(v));
   A.set(v, q);
   try {
@@ -107,7 +107,7 @@ async function x(v) {
     throw (A.delete(v), J);
   }
 }
-function Bv() {
+function $v() {
   let v = [];
   for (let $ = "!".codePointAt(0); $ <= "~".codePointAt(0); $++) v.push($);
   for (let $ = "¡".codePointAt(0); $ <= "¬".codePointAt(0); $++) v.push($);
@@ -120,7 +120,7 @@ function Bv() {
   for (let $ = 0; $ < v.length; $++) J.set(v[$], String.fromCodePoint(B[$]));
   return J;
 }
-function Jv(v) {
+function Bv(v) {
   let B = new Map();
   return (
     v.forEach(([q, J], $) => {
@@ -129,7 +129,7 @@ function Jv(v) {
     B
   );
 }
-function Qv(v, B) {
+function Jv(v, B) {
   if (v.length === 0) return [];
   if (v.length === 1) return [`${v}</w>`];
   let q = [...v.slice(0, -1), `${v.at(-1)}</w>`];
@@ -153,18 +153,18 @@ function Qv(v, B) {
   }
   return q;
 }
-var Yv =
+var Qv =
   /<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|\p{L}+|\p{N}|[^\s\p{L}\p{N}]+/gu;
-function Kv(v) {
+function Yv(v) {
   return v.trim().replace(/\s+/gu, " ").toLowerCase();
 }
-function Vv(v) {
-  return Kv(v).match(Yv) ?? [];
+function Kv(v) {
+  return Yv(v).match(Qv) ?? [];
 }
-var Wv = 77;
-function m(v) {
-  let B = Bv(),
-    q = Jv(v.merges),
+var Vv = 77;
+function x(v) {
+  let B = $v(),
+    q = Bv(v.merges),
     J = new Map(),
     $ = v.vocab.get("<|startoftext|>"),
     V = v.vocab.get("<|endoftext|>");
@@ -183,41 +183,41 @@ function m(v) {
   function Q(K) {
     let Y = J.get(K);
     if (Y) return Y;
-    let Z = Qv(K, q);
+    let Z = Jv(K, q);
     return (J.set(K, Z), Z);
   }
-  function X(K, Y = Wv) {
-    let Z = Vv(K),
+  function X(K, Y = Vv) {
+    let Z = Kv(K),
       H = [];
     for (let h of Z) {
-      let s = _(h);
-      for (let d of Q(s)) {
-        let I = v.vocab.get(d);
-        if (I !== void 0) H.push(I);
+      let r = _(h);
+      for (let s of Q(r)) {
+        let T = v.vocab.get(s);
+        if (T !== void 0) H.push(T);
       }
     }
-    let n = Y - 2,
-      r = H.slice(0, Math.max(0, n)),
-      f = [W, ...r, j];
+    let l = Y - 2,
+      n = H.slice(0, Math.max(0, l)),
+      f = [W, ...n, j];
     while (f.length < Y) f.push(0);
     return f;
   }
   return { encode: X };
 }
-var g = "clip-vit-b-32@1",
-  O = w.join(P, "clip"),
-  gv = w.join(O, "visual.onnx"),
-  jv = w.join(O, "textual.onnx"),
-  Xv = w.join(O, "vocab.json"),
-  Zv = w.join(O, "merges.txt");
-var wv = 77;
-function D(v = P) {
+var c = "clip-vit-b-32@1",
+  F = w.join(L, "clip"),
+  cv = w.join(F, "visual.onnx"),
+  _v = w.join(F, "textual.onnx"),
+  jv = w.join(F, "vocab.json"),
+  Xv = w.join(F, "merges.txt");
+var Zv = 77;
+function D(v = L) {
   let B = w.join(v, "clip");
   return ["visual.onnx", "textual.onnx", "vocab.json", "merges.txt"].every(
-    (q) => _v(w.join(B, q))
+    (q) => Wv(w.join(B, q))
   );
 }
-function uv(v) {
+function wv(v) {
   let B = [];
   for (let q of v.split(`
 `)) {
@@ -228,12 +228,12 @@ function uv(v) {
   }
   return B;
 }
-var F;
+var C;
 async function Gv() {
-  if (F) return F;
-  let [v, B] = await Promise.all([c(Xv, "utf8"), c(Zv, "utf8")]),
+  if (C) return C;
+  let [v, B] = await Promise.all([m(jv, "utf8"), m(Xv, "utf8")]),
     q = JSON.parse(v);
-  return ((F = m({ vocab: new Map(Object.entries(q)), merges: uv(B) })), F);
+  return ((C = x({ vocab: new Map(Object.entries(q)), merges: wv(B) })), C);
 }
 function Hv(v) {
   let B = 0;
@@ -249,11 +249,11 @@ function Uv(v, B) {
     throw Error("embed: expected a float32 tensor as the model's first output");
   return J.data;
 }
-async function R(v) {
+async function P(v) {
   try {
-    let q = (await Gv()).encode(v.text, wv),
+    let q = (await Gv()).encode(v.text, Zv),
       J = await z(),
-      $ = await x(jv),
+      $ = await b(_v),
       W = {
         [$.inputNames[0] ?? "input_ids"]: new J.Tensor(
           "int64",
@@ -268,31 +268,29 @@ async function R(v) {
     return { id: v.id, error: B instanceof Error ? B.message : String(B) };
   }
 }
-var k = 16,
-  u = "dpv:ServiceProvision",
-  T = R,
-  p = D;
-function nv(v) {
-  ((T = v?.infer ?? R), (p = v?.weightsPresent ?? D));
+var R = 16,
+  k = P,
+  g = D;
+function lv(v) {
+  ((k = v?.infer ?? P), (g = v?.weightsPresent ?? D));
 }
 function Av() {
-  return p() ? g : null;
+  return g() ? c : null;
 }
-function l(v, B, q) {
+function p(v, B, q) {
   let J =
     typeof v?.payload_json === "string"
       ? JSON.parse(v.payload_json).source_version
       : v?.source_version;
   return v?.model === B && J === q;
 }
-async function Mv(v, B) {
+async function uv(v, B) {
   let J = (
     await v.vault.read({
       entity: "core.content_derivative",
       where: [{ column: "variant", op: "in", value: ["text", "transcript"] }],
       orderBy: { column: "derivative_id", dir: "desc" },
       limit: 1,
-      purpose: u,
     })
   ).rows?.[0];
   if (!J) return "";
@@ -303,18 +301,17 @@ async function Mv(v, B) {
       { column: "variant", op: "eq", value: "embedding" },
     ],
     limit: 1,
-    purpose: u,
   });
-  return l($.rows?.[0], B, J.derivative_id) ? J.derivative_id : "";
+  return p($.rows?.[0], B, J.derivative_id) ? J.derivative_id : "";
 }
-async function Cv({ ctx: v, log: B }) {
+async function Mv({ ctx: v, log: B }) {
   let q = Av();
   if (!q)
     return { summary: "text embedding skipped — model assets unavailable" };
   if (typeof v.input?.query === "string") {
     let Q = v.input.query.trim();
     if (!Q) throw Error("text embedding query is empty");
-    let X = await T({ id: "query", text: Q });
+    let X = await k({ id: "query", text: Q });
     if (!X || X.error || !Array.isArray(X.vector))
       throw Error(X?.error ?? "text embedding returned no vector");
     return {
@@ -324,7 +321,7 @@ async function Cv({ ctx: v, log: B }) {
   }
   let J = await v.state.get("model");
   if (J !== q)
-    (await v.state.set("cursor", J === void 0 ? await Mv(v, q) : ""),
+    (await v.state.set("cursor", J === void 0 ? await uv(v, q) : ""),
       await v.state.set("model", q));
   let $ = (await v.state.get("cursor")) ?? "",
     V = await v.vault.read({
@@ -334,8 +331,7 @@ async function Cv({ ctx: v, log: B }) {
         { column: "variant", op: "in", value: ["text", "transcript"] },
       ],
       orderBy: { column: "derivative_id", dir: "asc" },
-      limit: k,
-      purpose: u,
+      limit: R,
     }),
     W = 0,
     j = 0;
@@ -347,9 +343,8 @@ async function Cv({ ctx: v, log: B }) {
         { column: "variant", op: "eq", value: "embedding" },
       ],
       limit: 1,
-      purpose: u,
     });
-    if (l(X.rows?.[0], q, Q.derivative_id)) {
+    if (p(X.rows?.[0], q, Q.derivative_id)) {
       j += 1;
       continue;
     }
@@ -357,11 +352,10 @@ async function Cv({ ctx: v, log: B }) {
       contentId: Q.content_id,
       variant: Q.variant,
       maxBytes: 1048576,
-      purpose: u,
     });
     if (K?.status !== "ok" || K.kind !== "text")
       throw Error(`content ${Q.content_id}: ${Q.variant} text is unavailable`);
-    let Y = await T({ id: Q.content_id, text: K.text });
+    let Y = await k({ id: Q.content_id, text: K.text });
     if (!Y || Y.error || !Array.isArray(Y.vector)) {
       ((j += 1), B.info(`content ${Q.content_id}: no text vector`));
       continue;
@@ -376,20 +370,19 @@ async function Cv({ ctx: v, log: B }) {
         capability: "embed-text",
         source_version: Q.derivative_id,
       },
-      purpose: u,
     }),
       (W += 1));
   }
   let _ = V.rows?.at(-1)?.derivative_id;
   if (_) await v.state.set("cursor", _);
   return {
-    summary: `embedded ${W} texts; skipped ${j}; bounded batch ${V.rows?.length ?? 0}/${k}`,
+    summary: `embedded ${W} texts; skipped ${j}; bounded batch ${V.rows?.length ?? 0}/${R}`,
     output: {
       derived: W,
       skipped: j,
       model: q,
-      rearm: (V.rows?.length ?? 0) === k,
+      rearm: (V.rows?.length ?? 0) === R,
     },
   };
 }
-export { nv as setEmbedTextRuntimeForTests, Cv as default };
+export { lv as setEmbedTextRuntimeForTests, Mv as default };

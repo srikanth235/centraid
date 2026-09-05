@@ -65,14 +65,17 @@ export {
 export {
   shareItemsToVault,
   unshareFromVault,
-  moveOutOfVault,
+  moveItemsOutOfVault,
+  placeItemsInVault,
   readShareOrigin,
   type ShareVaultRef,
   type ShareItemsToVaultInput,
   type ShareItemsToVaultResult,
   type UnshareFromVaultInput,
   type UnshareFromVaultResult,
-  type MoveOutOfVaultInput,
+  type MoveItemsOutOfVaultInput,
+  type PlaceItemsInVaultInput,
+  type PlaceItemsInVaultResult,
   type ShareOriginRecord,
 } from "./share/placement.js";
 // The two halves of a share (#726): `readShareClosure` is origin-side and
@@ -278,7 +281,8 @@ export {
 export {
   automationAnswers,
   automationSubjectsOf,
-  backfillAutomationAnswers,
+  hasAnsweredEver,
+  scopeForSubject,
   recordAutomationAnswers,
   revokeAutomationAnswers,
   AUTOMATION_ENTITY_SUBJECT,
@@ -289,6 +293,28 @@ export {
   type AutomationSubject,
   type AutomationVerb,
 } from "./grant/automation-authority.js";
+// Egress answers and companion attenuation, both rows of the one plane (#928).
+export {
+  EGRESS_SUBJECT_TYPE,
+  egressPrincipalKind,
+  isLiveEgressAuthority,
+  listEgressAuthorities,
+  liveEgressAuthorityId,
+  liveEgressAuthorityIdsFor,
+  recordEgressAuthority,
+  revokeAllEgressAuthorities,
+  revokeEgressAuthority,
+  type EgressAuthorityKey,
+  type EgressAuthorityRecord,
+  type EgressPrincipalKind,
+} from "./grant/egress-authority.js";
+export {
+  SURFACE_SUBJECT_TYPE,
+  SURFACE_VERB,
+  listCompanionSurfaces,
+  readCompanionSurfaces,
+  setCompanionSurfaces,
+} from "./grant/companion-surfaces.js";
 // The closed declaration of what the plane may be asked (#883).
 export {
   AUTHORITY_REGISTRY,
@@ -663,7 +689,7 @@ export {
 } from "./replica/parked.js";
 
 export { createGateway, Gateway } from "./gateway/gateway.js";
-export { GatewayError, DEFAULT_PURPOSE } from "./gateway/types.js";
+export { GatewayError } from "./gateway/types.js";
 export {
   bumpWorkCounter,
   gatewayWorkCounters,
@@ -777,9 +803,7 @@ export {
 export {
   bootstrapVault,
   enrollDevice,
-  enrollApp,
   enrollAgent,
-  createGrant,
   type BootstrapResult,
   type BootstrapVaultOptions,
   type ScopeSpec,
@@ -800,7 +824,6 @@ export {
   type VaultPresentation,
   lookupAppByName,
   ensureAppEnrolled,
-  listActiveGrants,
   listEnrolledApps,
   markAppRevoked,
   listInstalledApps,
@@ -808,23 +831,15 @@ export {
   type InstalledAppRow,
   lookupAgentByName,
   ensureAgentEnrolled,
-  listActiveAgentGrants,
   listEnrolledAgents,
   markAgentRevoked,
-  purposeConceptId,
   type HostBootstrap,
   type EnrolledApp,
   type EnrolledAgent,
-  type GrantSummary,
   type AppSummary,
   type AgentSummary,
 } from "./host.js";
 export {
-  writeScopeTombstones,
-  listScopeTombstones,
-  clearScopeTombstones,
-  clearAllScopeTombstones,
-  hasGrantHistory,
   openScopeRequest,
   closeObsoleteScopeRequest,
   listOpenScopeRequests,
@@ -832,7 +847,7 @@ export {
   markScopeRequestDecided,
   type ScopeTriple,
   type ScopeRequestSummary,
-} from "./install-memory.js";
+} from "./grant/authority-request.js";
 export { scopeCovers, type ScopeExtent } from "./scope-extent.js";
 
 export { registerScheduleCommands } from "./commands/schedule.js";

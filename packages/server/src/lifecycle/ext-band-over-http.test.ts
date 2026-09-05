@@ -178,7 +178,6 @@ describe("ext-band-over-http scenarios", () => {
       plane.invokeAsAssistant({
         command: "ext.gym.insert",
         input: { table: "workout", values: { notes: "live row" } },
-        purpose: "dpv:ServiceProvision",
       })
     );
     expect(live.status).toBe("executed");
@@ -206,7 +205,6 @@ describe("ext-band-over-http scenarios", () => {
           values: { notes: "draft only" },
           band: "draft",
         },
-        purpose: "dpv:ServiceProvision",
       })
     );
     expect(draftWrite.status).toBe("executed");
@@ -282,7 +280,6 @@ describe("ext-band-over-http scenarios", () => {
           plane.invokeAsAssistant({
             command: "ext.gym.insert",
             input: { table: "workout", values: { notes: "reclaim me" } },
-            purpose: "dpv:ServiceProvision",
           })
         )
       ).status

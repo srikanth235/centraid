@@ -125,7 +125,12 @@ describe("ordinary invoke is Commons-aware", () => {
 
     const inlineApp = enrollApp(audience, { name: "tally-inline" });
     const appWrite = memberGateway.invoke(
-      { kind: "app", ...inlineApp },
+      {
+        kind: "device",
+        deviceId: audienceBoot.deviceId,
+        deviceKey: audienceBoot.deviceKey,
+        surface: inlineApp.appId,
+      },
       {
         command: "tally.add_expense",
         input: commandInput,

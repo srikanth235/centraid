@@ -31,7 +31,6 @@
  */
 
 const BATCH = 6;
-const PURPOSE = "dpv:ServiceProvision";
 /** The prompt revision this handler's transcription prompt is at. */
 const PROMPT_REV = "doc-text-v1";
 /** `BUILT_IN_PROFILE` in packages/vault/src/enrich/derivation.ts, restated. */
@@ -99,7 +98,6 @@ export default async function handler({ ctx, log }) {
       { column: "lease_expires_at", op: "gt", value: now },
     ],
     limit: 100,
-    purpose: PURPOSE,
   });
   const deviceOwned = new Set(
     (leased.rows ?? []).map((request) => request.target_id)
@@ -112,7 +110,6 @@ export default async function handler({ ctx, log }) {
     ],
     orderBy: { column: "content_id", dir: "asc" },
     limit: BATCH,
-    purpose: PURPOSE,
   });
   const items = read.rows ?? [];
   // Originals and derivatives have independent clocks. Following only the
@@ -126,7 +123,6 @@ export default async function handler({ ctx, log }) {
     ],
     orderBy: { column: "derivative_id", dir: "asc" },
     limit: BATCH,
-    purpose: PURPOSE,
   });
   const late = (lateRead.rows ?? []).filter(
     (row) =>
@@ -152,7 +148,6 @@ export default async function handler({ ctx, log }) {
       entity: "core.content_derivative",
       where: [{ column: "content_id", op: "eq", value: item.content_id }],
       limit: 5,
-      purpose: PURPOSE,
     });
     const variants = (derivatives.rows ?? []).map((d) => d.variant);
     const hasText = variants.includes("text");
@@ -206,7 +201,6 @@ export default async function handler({ ctx, log }) {
                 }
               : {}),
           },
-          purpose: PURPOSE,
         });
         ocred += 1;
       } else {
@@ -226,7 +220,6 @@ export default async function handler({ ctx, log }) {
           },
         ],
         limit: 1,
-        purpose: PURPOSE,
       });
       if ((prior.rows ?? []).length > 0) return;
       // Summarize from the text variant — no bytes leave beyond the
@@ -288,7 +281,6 @@ export default async function handler({ ctx, log }) {
     await ctx.vault.invoke({
       command: "sync.stage_rows",
       input: { kind: "enrichment.doctext", label: "docs", rows: summaryRows },
-      purpose: PURPOSE,
     });
   }
   await ctx.state.set("cursor", lastSeen);

@@ -9,7 +9,6 @@
   ],
   "requires": {},
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Reads places that have coordinates and writes only the derived gazetteer record inside address_json, through the dedicated validated command. Never writes a place's name.",
     "scopes": [
       { "schema": "core", "verbs": "read" },

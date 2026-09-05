@@ -104,8 +104,8 @@ CREATE TABLE agent_command_invocation (
   -- outlives its subject by design, and a foreign key would either block the
   -- member's purge or quietly rewrite the evidence (#916).
   command_id    TEXT NOT NULL, -- → agent.command
-  caller_id     TEXT NOT NULL, -- → access.agent / access.app / access.device
-  grant_id      TEXT,          -- → access.grant; NULL for owner-direct
+  caller_id     TEXT NOT NULL, -- → access.agent / access.device
+  authority_id  TEXT,          -- → share.authority; NULL for owner-direct
   input_json    TEXT NOT NULL CHECK (json_valid(input_json)),
   status        TEXT NOT NULL CHECK (status IN ('proposed','checked','executed','failed','rolled_back')),
   requested_at  TEXT NOT NULL,
@@ -116,12 +116,16 @@ CREATE INDEX idx_command_invocation_receipt ON agent_command_invocation(receipt_
 
 CREATE TABLE access_receipt (
   receipt_id         TEXT PRIMARY KEY,
-  grant_id           TEXT, -- → access.grant; NULL for owner-direct
+  -- ONE ID SPACE (#928, AP-one-id-space). The receipt used to name four:
+  -- an app grant, an agent grant, a commons grant and a share authority, all
+  -- in one nullable \`grant_id\`, so "which plane answered" was a guess made
+  -- by whoever read it. Every answer is a \`share_authority\` row now, and
+  -- NULL means owner-direct — the one act that needs no answer.
+  authority_id       TEXT, -- → share.authority; NULL for owner-direct
   invocation_id      TEXT REFERENCES agent_command_invocation(invocation_id),
   action             TEXT NOT NULL,
   object_type        TEXT NOT NULL,
   object_id          TEXT,
-  purpose_concept_id TEXT, -- → core.concept
   decision           TEXT NOT NULL CHECK (decision IN ('allow','deny')),
   occurred_at        TEXT NOT NULL,
   hash               TEXT NOT NULL UNIQUE,
@@ -137,6 +141,9 @@ CREATE TABLE access_receipt (
   seq                INTEGER
 ) STRICT;
 CREATE INDEX idx_receipt_invocation ON access_receipt(invocation_id);
+-- Settings → Access reads "last used" per standing answer (#928): one keyed
+-- lookup per row on the dashboard, never a scan of the band.
+CREATE INDEX idx_receipt_authority ON access_receipt(authority_id, occurred_at);
 CREATE UNIQUE INDEX idx_receipt_seq ON access_receipt(seq) WHERE seq IS NOT NULL;
 
 CREATE TABLE agent_invocation_check (
@@ -268,7 +275,7 @@ END;
 -- settlement columns (status, executed_at, receipt_id) are the only ones a
 -- writer may move, and only forwards.
 CREATE TRIGGER agent_command_invocation_append_only_u
-BEFORE UPDATE OF invocation_id, command_id, caller_id, grant_id, input_json,
+BEFORE UPDATE OF invocation_id, command_id, caller_id, authority_id, input_json,
                  requested_at
 ON agent_command_invocation
 WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
