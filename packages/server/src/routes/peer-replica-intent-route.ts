@@ -21,9 +21,6 @@ import { admitAtOrigin } from "./peer-replica-route.js";
 import type { Admission, PeerReplicaDeps } from "./peer-replica-route.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
-/** One purpose for every member write, so the receipts are one band. */
-export const MEMBER_INTENT_PURPOSE = "dpv:ServiceProvision";
-
 function notFound(res: ServerResponse): true {
   return sendJson(res, 404, { state: "not_found" });
 }

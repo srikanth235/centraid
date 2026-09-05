@@ -1243,3 +1243,7 @@ The merge reconciliation completed the current placement surface in
 `packages/vault/src/share/placement-move.test.ts`. These paths are named here
 because this umbrella receipt is the branch's added receipt and the follow-up
 PR merge is the integration work that removed the obsolete edge/outbox rail.
+
+The final #972 gate cleanup also refreshed
+`packages/blueprints/src/pending-parent-probe.test.ts`; the current contract
+counts 104 child-write edges after the obsolete People edge was removed.

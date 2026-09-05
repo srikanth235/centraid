@@ -119,39 +119,39 @@ describe("pending-parent child writes", () => {
     // write that now lands on the row the member is looking at. Locker mints
     // nothing — an item is a secret-bearing write and never queues — so it
     // contributes no edge.
-    expect(edges.length).toMatchInlineSnapshot(`105`);
+    expect(edges.length).toMatchInlineSnapshot(`104`);
     expect([...byApp.entries()].sort(([a], [b]) => a.localeCompare(b)))
       .toMatchInlineSnapshot(`
-      [
         [
-          "agenda",
-          5,
-        ],
-        [
-          "docs",
-          17,
-        ],
-        [
-          "notes",
-          15,
-        ],
-        [
-          "people",
-          21,
-        ],
-        [
-          "photos",
-          7,
-        ],
-        [
-          "tally",
-          29,
-        ],
-        [
-          "tasks",
-          11,
-        ],
-      ]
-    `);
+          [
+            "agenda",
+            5,
+          ],
+          [
+            "docs",
+            17,
+          ],
+          [
+            "notes",
+            15,
+          ],
+          [
+            "people",
+            20,
+          ],
+          [
+            "photos",
+            7,
+          ],
+          [
+            "tally",
+            29,
+          ],
+          [
+            "tasks",
+            11,
+          ],
+        ]
+      `);
   });
 });
