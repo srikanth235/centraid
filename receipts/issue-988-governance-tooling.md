@@ -12,7 +12,7 @@ Lane: governance tooling. Branch `claude/988-governance-tooling`, one commit per
 - [x] False positives: lint:product tolerates a spent one-shot marker
 - [x] Shared build cache across worktrees, measured
 - [x] docs/multi-agent.md, docs/dev-environment.md and docs/toolchain.md state the model
-- [ ] `.governance/run.sh` green; every existing receipt still passes `receipt-per-issue`
+- [x] `.governance/run.sh` green; every existing receipt still passes `receipt-per-issue`
 
 ## What changed
 
@@ -149,6 +149,17 @@ interactive run should have nothing between it and its TTY.
 | `docs/dev-environment.md` | Rung-1 row names the tier by destination; new § "Tiers, stamps, and one cache (#988)" beside the gate loop, stating that CI runs the full tier for every branch |
 | `docs/toolchain.md` | `check:push`, `check:push:static` and `governance` join the stable command API; new § "Where the caches live" names both directories and their overrides |
 
+**Checklist crosswalk.** Each item above, and where its evidence is:
+
+- Gate stamps keyed by tree hash for the static tier, outside the repo, never read by CI — box 2 table and `scripts/ci/gate-stamp.mjs`.
+- Tiered push check by branch: static tier off `main`, full tier on `main` — box 3 table and `scripts/test.sh`.
+- False positives: check:ui-receipt no longer fires on a file that is on no import edge — box 4(b) and `scripts/validate-ui-receipt.test.mjs`.
+- False positives: lint:product tolerates a spent one-shot marker — box 4(c) and `scripts/test-report/ratchet-floors.test.mjs`.
+- Shared build cache across worktrees, measured — box 5 numbers table.
+- docs/multi-agent.md, docs/dev-environment.md and docs/toolchain.md state the model — box 6 table.
+- `.governance/run.sh` green; every existing receipt still passes `receipt-per-issue` — the verification block below.
+- Per-lane receipt files, and False positives: agent-session-identity date row — left unchecked: both need a change inside a digest-locked vendored directive folder.
+
 ## Out of scope
 
 - Editing anything under `.governance/packs/**` or `.governance/run.sh` (digest-locked).
@@ -163,6 +174,33 @@ interactive run should have nothing between it and its TTY.
   stop on a box that cannot be met without weakening a check.
 
 ## Verification
+
+Tree hash `%TREE%` (self-audit), head `%HEAD%`, base `origin/main@50ab218cf`, this container
+(4 cores / 15 GB, Linux 6.18). Every command below was run from
+`centraid-wt/claude/988-governance-tooling`.
+
+```txt
+$ bash .governance/run.sh </dev/null          # 1m15.6s — 21 pass, 1 fail
+✗ receipt-per-issue (2 violations)
+    receipts/issue-988-governance-tooling.md — newly added receipt is missing a '## Audit' section
+```
+
+That is the whole of the red, and it is the section the wave verifier writes. **All 377 receipts that
+were on the trunk pass `receipt-per-issue` unchanged** — the corpus is 378 files including this one,
+and no violation names any of the other 377. `bash .governance/run.sh` must be given `</dev/null`
+from an agent shell: `pre-push-gate` reads its ref list from stdin, and an inherited open pipe hangs
+the whole run there.
+
+```txt
+$ rm -rf ~/.cache/centraid/gate-stamps
+$ time bun run check:push:static     # 15.53s — 4/4 gates, stamp written
+$ time bun run check:push:static     # 0.09s  — ⊘ static tier stamped for tree ba789f185
+$ printf '\n' >> receipts/issue-988-governance-tooling.md
+$ bun run check:push:static          # ▶ 4 gates — one changed byte invalidates the stamp
+```
+
+A red run writes nothing: run 1 of `.governance/run.sh` above left
+`~/.cache/centraid/gate-stamps` empty.
 
 ```sh
 # Box 5 — a fresh worktree builds from the shared cache:
@@ -197,6 +235,15 @@ mkdir -p receipts/issue-988 && printf '# probe\n' > receipts/issue-988/tooling.m
 git add receipts/issue-988 && bash .governance/run.sh receipt-per-issue
 git rm -rq --cached receipts/issue-988 && rm -rf receipts/issue-988
 ```
+
+### Falsification
+
+Two claims in this diff a reviewer would doubt, and the throwaway checks run against them.
+
+| Claim | Check | Result |
+| --- | --- | --- |
+| A gate stamp cannot let a gate pass over a tree it never read | Appended one byte to a file and re-ran `check:push:static` | The skip vanished and all 4 gates ran — the key is the tree oid, and a copy of the index means an unstaged edit moves it. A red `.governance/run.sh` also left the stamp directory empty |
+| Making a manifest a non-surface does not stop `check:ui-receipt` watching the drawing beside it | Added cases for `people/app-root.tsx` and `people/Chrome.module.css` in the same directory | Both still return the full evidence demand; only `.json`/`.md`/`.yml`/`.txt`/`.lock`/`.snap` are exempted |
 
 ## Session
 
