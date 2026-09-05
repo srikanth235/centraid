@@ -110,6 +110,14 @@ export const ALLOW_LIST = {
     "creates the server-owned share-plane tables themselves",
   "packages/server/src/serve/share-access-receipts.ts":
     "owns share_access_receipts, the same-owner placement history",
+  "packages/server/src/routes/edges-routes.ts":
+    "serves the share edge control plane and its server-owned audit rows",
+  "packages/server/src/serve/share-edge-row.ts":
+    "reads the server-owned share edge control row",
+  "packages/server/src/serve/share-edge-store.ts":
+    "updates server-owned share edge state and records its effects",
+  "packages/server/src/serve/share-effects.ts":
+    "owns the server-owned share effect outbox",
   "packages/server/src/serve/grant-fulfillment.ts":
     "owns share_authority and share_fulfillment",
   "packages/server/src/serve/share-notices.ts":
