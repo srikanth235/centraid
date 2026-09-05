@@ -3,7 +3,6 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { nowIso, uuidv7 } from "../ids.js";
-import { createCommonsGrant } from "../share/commons.js";
 import { closeOpenVaults, household } from "../share/placement-fixture.js";
 import {
   routeShareGrantEdit,
@@ -25,19 +24,11 @@ function addParty(db: DatabaseSync, name: string, now: string): string {
 describe("grant/fulfillment-edit", () => {
   afterEach(closeOpenVaults);
 
-  test("an edit on a shared tally group routes back to the commons rail", () => {
+  test("an edit on a shared tally group routes to its container", () => {
     const { origin, originBoot } = household();
     const now = nowIso();
     const ravi = addParty(origin.vault, "Ravi", now);
     const groupId = uuidv7();
-    const commons = createCommonsGrant({
-      origin: origin.vault,
-      ownerPartyId: originBoot.ownerPartyId,
-      containerType: "tally.group",
-      containerId: groupId,
-      members: [{ partyId: ravi, capability: "read+write" }],
-      now,
-    });
     createShareGrant(origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "tally.group",
@@ -54,7 +45,6 @@ describe("grant/fulfillment-edit", () => {
     expect(route).toMatchObject({
       containerType: "tally.group",
       containerId: groupId,
-      commonsGrantId: commons.grantId,
       actable: true,
     });
     expect(route?.refusal).toBeUndefined();
@@ -67,17 +57,6 @@ describe("grant/fulfillment-edit", () => {
     const ravi = addParty(origin.vault, "Ravi", now);
     const asha = addParty(origin.vault, "Asha", now);
     const groupId = uuidv7();
-    createCommonsGrant({
-      origin: origin.vault,
-      ownerPartyId: originBoot.ownerPartyId,
-      containerType: "tally.group",
-      containerId: groupId,
-      members: [
-        { partyId: ravi, capability: "read+write" },
-        { partyId: asha, capability: "read" },
-      ],
-      now,
-    });
     for (const [party, capability] of [
       [ravi, "edit"],
       [asha, "view"],
@@ -132,14 +111,6 @@ describe("grant/fulfillment-edit", () => {
     const now = nowIso();
     const ravi = addParty(origin.vault, "Ravi", now);
     const groupId = uuidv7();
-    createCommonsGrant({
-      origin: origin.vault,
-      ownerPartyId: originBoot.ownerPartyId,
-      containerType: "tally.group",
-      containerId: groupId,
-      members: [{ partyId: ravi, capability: "read" }],
-      now,
-    });
     createShareGrant(origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "tally.group",
@@ -159,7 +130,7 @@ describe("grant/fulfillment-edit", () => {
     );
   });
 
-  test("a folder is shareable for view only, so every write into it refuses", () => {
+  test("a folder shared for view refuses every write into it", () => {
     const { origin, originBoot } = household();
     const now = nowIso();
     const ravi = addParty(origin.vault, "Ravi", now);
@@ -179,17 +150,6 @@ describe("grant/fulfillment-edit", () => {
          VALUES (?, ?, 'trip', 'Trip', NULL, NULL, NULL)`
       )
       .run(folderId, schemeId);
-    createCommonsGrant({
-      origin: origin.vault,
-      ownerPartyId: originBoot.ownerPartyId,
-      containerType: "docs.folder",
-      containerId: folderId,
-      members: [{ partyId: ravi, capability: "read+write" }],
-      now,
-    });
-    // `view`, because the registry offers a folder nothing else (#825, ruling
-    // G-edit): albums and folders are view-capable and their edit strategy is
-    // deferred, so an `edit` grant over one cannot be minted at all.
     createShareGrant(origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "docs.folder",
@@ -201,8 +161,7 @@ describe("grant/fulfillment-edit", () => {
 
     // Adding a document to someone else's shared folder, and editing one
     // already inside it, refuse for the SAME reason in v1: the folder is
-    // shared for view. The commons rail is live either way — it is the grant
-    // that stops short, not the routing.
+    // shared for view: it is the ANSWER that stops short, not the routing.
     expect(
       routeShareGrantEdit(origin.vault, {
         command: "core.add_document",
@@ -264,10 +223,33 @@ describe("grant/fulfillment-edit", () => {
           capability: "edit" as ShareGrantCapability,
         }))
       )
-    ).toBe("co-contribution to docs.folder is not offered in v1");
+      // Folders are offered for edit since #929, so the co-contribution
+      // refusal moved to the container that is still not: an album.
+    ).toBeUndefined();
+    expect(
+      shareGrantEditRefusal(
+        routeShareGrantEdit(origin.vault, {
+          command: "core.add_document",
+          commandInput: { folder_id: folderId },
+        })!,
+        (edit?.grants ?? []).map((grant) => ({
+          ...grant,
+          capability: "view" as ShareGrantCapability,
+        }))
+      )
+    ).toBe(
+      `core.add_document writes into docs.folder ${folderId}, which is shared for view only`
+    );
   });
 
-  test("an edit grant with no commons rail is refused, never applied privately", () => {
+  /**
+   * THE GRANT IS THE RAIL NOW (#929). A member's write is a signed replica
+   * intent the ORIGIN executes, so a container needs no second grant row to be
+   * writable: the `edit` answer in `share_authority` is the whole of the
+   * authorization, and the refusal that used to name a missing commons rail
+   * would refuse a write the origin can and should execute.
+   */
+  test("an edit grant needs no second rail row to be routable", () => {
     const { origin, originBoot } = household();
     const now = nowIso();
     const ravi = addParty(origin.vault, "Ravi", now);
@@ -286,9 +268,11 @@ describe("grant/fulfillment-edit", () => {
       command: "tally.add_expense",
       commandInput: { group_id: groupId },
     });
-    expect(route?.commonsGrantId).toBeUndefined();
-    expect(route?.refusal).toBe(
-      `tally.group ${groupId} has no commons rail to route tally.add_expense to`
-    );
+    expect(route).toMatchObject({
+      containerType: "tally.group",
+      containerId: groupId,
+      actable: true,
+    });
+    expect(route?.refusal).toBeUndefined();
   });
 });

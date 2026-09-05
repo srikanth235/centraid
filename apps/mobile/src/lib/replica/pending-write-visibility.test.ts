@@ -1,8 +1,8 @@
 /*
  * What a queued write looks like on the phone before the gateway answers
  * (#883). Two failures on `NativeReplicaSession.write`, and both show up as
- * SILENCE rather than as a wrong answer: a write into a vault the member does
- * not steward carries no `stewardLabel` and falls through to the shell's
+ * SILENCE rather than as a wrong answer: a write into a vault this phone does
+ * not know the ORIGIN of carries no label and falls through to the shell's
  * generic sentence, and a first-open write admitted before this vault ever
  * bootstrapped is durable with an EMPTY projection nothing goes back for.
  */
@@ -30,7 +30,7 @@ import {
   sequentialIds,
 } from "./native-session.test-fixtures";
 import { NodeSqliteDriver } from "./node-sqlite-driver";
-import { stewardDeviceLabel, UNNAMED_STEWARD_LABEL } from "./steward-label";
+import { UNNAMED_ORIGIN_LABEL, waitingOnLabel } from "./waiting-on";
 
 const VAULT_ID = "vault-family";
 const SHAPE_ID = "docs-default";
@@ -81,7 +81,7 @@ let readerSeq = 0;
 
 async function phone(options: {
   online: boolean;
-  steward?: { displayName?: string };
+  origin?: { displayName?: string };
   /** Reuse a previous phone's durable files: the relaunch case. */
   root?: string;
 }): Promise<Phone> {
@@ -103,7 +103,7 @@ async function phone(options: {
     isConnected: () => online,
     digest: nodeDigest,
     idFactory: sequentialIds(),
-    ...(options.steward ? { steward: options.steward } : {}),
+    ...(options.origin ? { origin: options.origin } : {}),
   });
   return {
     root,
@@ -138,24 +138,25 @@ async function documents(
   return result.rows.map((row) => ({ ...row, pending: result.pending ?? {} }));
 }
 
-describe("the steward a queued write is waiting for", () => {
-  // The gateway's own rule (`commonsStewardDeviceLabel`), which this mirrors.
+describe("the seat a queued write is waiting on", () => {
+  // The label the origin sends (`peer-replica-intent-route.ts` fills
+  // `waitingOn.label` from the link), which this mirrors before any reply.
   test.each([
     ["Priya", "Priya's device"],
     ["Priya  Menon\n", "Priya Menon's device"],
     ["Chris'", "Chris's device"],
     ["Ravi’s", "Ravi’s device"],
     ["Alex's", "Alex's device"],
-    ["   ", UNNAMED_STEWARD_LABEL],
-    [undefined, UNNAMED_STEWARD_LABEL],
+    ["   ", UNNAMED_ORIGIN_LABEL],
+    [undefined, UNNAMED_ORIGIN_LABEL],
   ])("%s reads as %s", (name, label) => {
-    expect(stewardDeviceLabel(name)).toBe(label);
+    expect(waitingOnLabel(name)).toBe(label);
   });
 
-  test("a queued write renders the steward label before the gateway answers", async () => {
+  test("a queued write renders the waiting-on label before the gateway answers", async () => {
     const { session, reader, setOnline } = await phone({
       online: true,
-      steward: { displayName: "Priya Menon" },
+      origin: { displayName: "Priya Menon" },
     });
     try {
       // Bootstrapped, then out of reach: admitted locally, gateway unasked.

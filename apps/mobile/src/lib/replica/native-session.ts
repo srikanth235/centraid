@@ -51,8 +51,8 @@ import { isReplicaStorageFullError } from "./replica-storage-error";
 import { noteResyncVerdict } from "./resync-notice";
 import { SqliteIntentStore } from "./sqlite-intent-store";
 import type { NativeIntentAttention } from "./sqlite-intent-store";
-import { stewardDeviceLabel } from "./steward-label";
-import type { MountedSteward } from "./steward-label";
+import { waitingOnLabel } from "./waiting-on";
+import type { MountedOrigin } from "./waiting-on";
 
 export type NativeReadRequest = Omit<ReplicaReadRequest, "shapeId"> & {
   shapeId?: string;
@@ -161,9 +161,10 @@ export interface CreateNativeReplicaSessionOptions {
   /**
    * Who a queued write into THIS vault may wait for. Set only where
    * `MountedReplicaScope.personal === false`; absent means the member's own
-   * vault, where a write waits for nobody and a steward label would be fiction.
+   * vault, where a write waits for nobody and naming an owner would be
+   * fiction.
    */
-  steward?: MountedSteward;
+  origin?: MountedOrigin;
 }
 
 /** Ceiling, not the usual wait: reconnect, foreground and writes all reset. */
@@ -206,7 +207,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #onBootstrapProgress:
     | CreateNativeReplicaSessionOptions["onBootstrapProgress"]
     | undefined;
-  readonly #stewardLabel: string | undefined;
+  readonly #waitingOnLabel: string | undefined;
   readonly #onGatewayOutcome: ((reachable: boolean) => void) | undefined;
   #previewReady:
     | { resolve: () => void; reject: (error: unknown) => void }
@@ -240,7 +241,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       | "progressiveBootstrap"
       | "onBootstrapProgress"
       | "onGatewayOutcome"
-      | "steward"
+      | "origin"
     > & { idFactory: ReplicaIdFactory }
   ) {
     this.#coordinator = coordinator;
@@ -270,8 +271,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#progressiveBootstrap = options.progressiveBootstrap ?? false;
     this.#onBootstrapProgress = options.onBootstrapProgress;
     this.#onGatewayOutcome = options.onGatewayOutcome;
-    this.#stewardLabel = options.steward
-      ? stewardDeviceLabel(options.steward.displayName)
+    this.#waitingOnLabel = options.origin
+      ? waitingOnLabel(options.origin.displayName)
       : undefined;
   }
 
@@ -406,12 +407,14 @@ export class NativeReplicaSession implements MobileReplicaSession {
     const deferred = this.#catalog.length === 0;
     const { optimistic, dependencies } = deferred
       ? { optimistic: [], dependencies: [] }
-      : prepareReplicaWrite(
-          appId,
-          input.optimistic ?? projected.optimistic,
-          this.#catalog,
-          this.resolveShapeId.bind(this),
-          false
+      : this.stamped(
+          prepareReplicaWrite(
+            appId,
+            input.optimistic ?? projected.optimistic,
+            this.#catalog,
+            this.resolveShapeId.bind(this),
+            false
+          )
         );
     const baseVersions =
       input.baseVersions ??
@@ -437,12 +440,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
       input: minted,
       optimistic,
       dependencies,
+      ...(this.#waitingOnLabel ? { stewardLabel: this.#waitingOnLabel } : {}),
       ...(baseVersions.length > 0 ? { baseVersions } : {}),
-      // The steward label is a fact about the MOUNT, so stamping it at
-      // admission lets the overlay name it before any round trip. It is a fact
-      // about the WRITE, not about a row, so it rides the intent record and
-      // reaches the member through the read's sidecar (#922 G3).
-      ...(this.#stewardLabel ? { stewardLabel: this.#stewardLabel } : {}),
     } satisfies EnqueueIntentInput);
     // Absent is never empty: a deferred act is durable yet draws nothing, so it
     // says so rather than borrowing the ordinary offline sentence.
@@ -464,6 +463,11 @@ export class NativeReplicaSession implements MobileReplicaSession {
     });
     void this.flushIntents();
     return admitted;
+  }
+
+  /** Keep the prepared write shape stable; the waiting steward is intent metadata. */
+  private stamped(prepared: PreparedReplicaWrite): PreparedReplicaWrite {
+    return prepared;
   }
 
   /** Say the durable act is unrendered, on the row itself, until it is not. */
@@ -496,12 +500,14 @@ export class NativeReplicaSession implements MobileReplicaSession {
       if (projected.optimistic.length === 0) continue;
       let prepared: PreparedReplicaWrite;
       try {
-        prepared = prepareReplicaWrite(
-          intent.appId,
-          projected.optimistic,
-          this.#catalog,
-          this.resolveShapeId.bind(this),
-          false
+        prepared = this.stamped(
+          prepareReplicaWrite(
+            intent.appId,
+            projected.optimistic,
+            this.#catalog,
+            this.resolveShapeId.bind(this),
+            false
+          )
         );
       } catch {
         // Still durable, still sends; a shape this grant lacks never draws.
@@ -1062,9 +1068,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     entity: string,
     requested?: string
   ): string {
-    // ONE APP, ONE SHAPE (#928 A1). A shape is composed from the app's own
-    // declared manifest, so there is nothing left for a caller-supplied
-    // purpose to select between: the app and the entity name it.
     const candidates = this.#catalog.filter(
       (shape) =>
         shape.appId === appId &&

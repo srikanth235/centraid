@@ -118,40 +118,41 @@ describe("pending-parent child writes", () => {
     // declares its minted id turns every action taking that id into a child
     // write that now lands on the row the member is looking at. Locker mints
     // nothing — an item is a secret-bearing write and never queues — so it
-    // contributes no edge.
+    // contributes no edge. 104 → 105 when People `add-person` again declares
+    // the seat-minted `party_id` the merge had dropped.
     expect(edges.length).toMatchInlineSnapshot(`105`);
     expect([...byApp.entries()].sort(([a], [b]) => a.localeCompare(b)))
       .toMatchInlineSnapshot(`
-      [
         [
-          "agenda",
-          5,
-        ],
-        [
-          "docs",
-          17,
-        ],
-        [
-          "notes",
-          15,
-        ],
-        [
-          "people",
-          21,
-        ],
-        [
-          "photos",
-          7,
-        ],
-        [
-          "tally",
-          29,
-        ],
-        [
-          "tasks",
-          11,
-        ],
-      ]
-    `);
+          [
+            "agenda",
+            5,
+          ],
+          [
+            "docs",
+            17,
+          ],
+          [
+            "notes",
+            15,
+          ],
+          [
+            "people",
+            21,
+          ],
+          [
+            "photos",
+            7,
+          ],
+          [
+            "tally",
+            29,
+          ],
+          [
+            "tasks",
+            11,
+          ],
+        ]
+      `);
   });
 });

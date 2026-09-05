@@ -12,15 +12,12 @@ import {
   casPath,
   closeOpenVaults,
   household,
+  placementAuthority,
   reclaimOrphans,
   seedPhoto,
-  placementAuthority,
+  unplaceProjection,
 } from "./placement-fixture.js";
-import {
-  readShareOrigin,
-  shareItemsToVault,
-  unshareFromVault,
-} from "./placement.js";
+import { shareItemsToVault } from "./placement.js";
 
 describe("placement-lifecycle suite", () => {
   afterEach(closeOpenVaults);
@@ -34,7 +31,9 @@ describe("placement-lifecycle suite", () => {
     const photo = seedPhoto(origin, originBoot, "f");
     const realPrepare = audience.vault.prepare.bind(audience.vault);
     audience.vault.prepare = ((sql: string) => {
-      if (sql.includes("core_share_origin"))
+      // Injected on the DERIVATIVE write, which lands after the content item:
+      // a failure at the first statement would prove nothing about rollback.
+      if (sql.includes("core_content_derivative"))
         throw new Error("injected mid-share failure");
       return realPrepare(sql);
     }) as typeof audience.vault.prepare;
@@ -78,16 +77,6 @@ describe("placement-lifecycle suite", () => {
     ).toStrictEqual({
       n: 0,
     });
-    expect(
-      plainSqliteRow(
-        audience.vault
-          .prepare("SELECT COUNT(*) AS n FROM core_share_origin")
-          .get()
-      )
-    ).toStrictEqual({
-      n: 0,
-    });
-
     // What IS left is the orphaned link, claimed by nothing in the model.
     expect(audience.blobs.hasSync(photo.sha256)).toBe(true);
     expect(liveBlobShas(audience.vault).has(photo.sha256)).toBe(false);
@@ -135,15 +124,15 @@ describe("placement-lifecycle suite", () => {
     });
     const originalIno = statSync(casPath(origin, photo.sha256)).ino;
 
-    const result = unshareFromVault({
+    const result = unplaceProjection(
       audience,
-      itemType: "media.asset",
-      itemId: shared.items[0]!.itemId,
-    });
+      "media.asset",
+      shared.items[0]!.itemId
+    );
 
     expect(result.removed).toBe(true);
-    expect(result.orphanedShas.sort()).toStrictEqual(
-      [photo.sha256, photo.thumbSha].sort()
+    expect(result.orphanedShas.toSorted()).toStrictEqual(
+      [photo.sha256, photo.thumbSha].toSorted()
     );
     expect(
       plainSqliteRow(
@@ -161,9 +150,6 @@ describe("placement-lifecycle suite", () => {
     ).toStrictEqual({
       n: 0,
     });
-    expect(
-      readShareOrigin(audience.vault, "media.asset", shared.items[0]!.itemId)
-    ).toBeUndefined();
     // The bytes are still linked here until the audience's GC runs — and the
     // origin is untouched either way.
     expect(
@@ -200,43 +186,20 @@ describe("placement-lifecycle suite", () => {
       });
 
     share();
-    unshareFromVault({
-      audience,
-      itemType: "media.asset",
-      itemId: photo.assetId,
-    });
+    unplaceProjection(audience, "media.asset", photo.assetId);
     reclaimOrphans(audience);
     const again = share();
 
     expect(again.items[0]!.deduped).toBe(false);
     expect(again.blobs.map((b) => b.mode)).toStrictEqual(["linked", "linked"]);
     expect(audience.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
-    expect(
-      readShareOrigin(audience.vault, "media.asset", again.items[0]!.itemId)
-        ?.sharedBy
-    ).toBe("member-sid");
   });
 
-  test("unshare refuses a row the audience authored itself — no provenance, no delete", () => {
-    const { origin, originBoot, audience, audienceBoot } = household();
-    seedPhoto(origin, originBoot, "i");
-    const own = seedPhoto(audience, audienceBoot, "own");
-
-    const result = unshareFromVault({
-      audience,
-      itemType: "media.asset",
-      itemId: own.assetId,
-    });
-
-    expect(result).toStrictEqual({ removed: false, orphanedShas: [] });
-    expect(
-      plainSqliteRow(
-        audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
-      )
-    ).toStrictEqual({
-      n: 1,
-    });
-  });
+  // DO NOT ADD "removal refuses a row the audience authored" HERE (#929).
+  // Provenance is shape-keyed, so `subscription-seat.ts`'s `releaseShapeRows`
+  // deletes only rows the shape CLAIMS and an authored row is untouched for a
+  // stronger reason than a refusal: nothing claims it. `subscription.test.ts`
+  // holds that property, over `purgeShareShape`.
 
   test("the origin's orphan sweep cannot delete bytes the audience still links", () => {
     const { origin, originBoot, audience } = household();
@@ -277,11 +240,7 @@ describe("placement-lifecycle suite", () => {
     expect(statSync(casPath(audience, photo.sha256)).nlink).toBe(1);
 
     // And only after the LAST vault unlinks does the content actually go.
-    unshareFromVault({
-      audience,
-      itemType: "media.asset",
-      itemId: photo.assetId,
-    });
+    unplaceProjection(audience, "media.asset", photo.assetId);
     reclaimOrphans(audience);
     expect(audience.blobs.hasSync(photo.sha256)).toBe(false);
     expect(audience.blobs.localPathSync(photo.sha256)).toBeNull();

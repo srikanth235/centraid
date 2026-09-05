@@ -362,12 +362,12 @@ export function ReplicaProvider({
               isRowSyncAllowed: nativeRowSyncAllowed,
               bootstrapWindow: MOBILE_REPLICA_BOOTSTRAP_WINDOW,
               progressiveBootstrap: true,
-              // A vault the member does not steward is one a queued write may
-              // have to wait for somebody at, so its pending rows carry a
-              // steward label from admission (`steward-label.ts`). `personal`
+              // A vault the member does not own is one a queued write may have
+              // to wait for somebody at, so its pending rows carry the
+              // waiting-on label from admission (`waiting-on.ts`). `personal`
               // is the founding marker; an older cache omits it and reads as
               // their own, which is the answer that promises nothing.
-              ...(scope.personal === false ? { steward: {} } : {}),
+              ...(scope.personal === false ? { origin: {} } : {}),
               onBootstrapProgress: (progress) =>
                 bootstrap.report(scope, progress),
               onGatewayOutcome: noteGatewayOutcome,

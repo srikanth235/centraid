@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   forgetReplicaPurgeSelector,
   listReplicaPurgeSelectors,
+  purgedShapeIds,
   rememberReplicaPurgeSelector,
   replicaPurgeSelectorMatches,
 } from "./purge-selector.js";
@@ -122,5 +123,56 @@ describe(replicaPurgeSelectorMatches, () => {
         id
       )
     ).toBe(false);
+  });
+});
+
+/**
+ * A REVOKED SHARE IS A SCOPED PURGE (#929). The three older selectors name a
+ * whole replica; this one names one grant-keyed shape inside it, because the
+ * member's own vault is not what stopped being shared.
+ */
+describe("the shape selector", () => {
+  const identity = { gatewayId: "gw", vaultId: "vlt" };
+  const shape: ReplicaPurgeSelector = {
+    kind: "shape",
+    gatewayId: "gw",
+    vaultId: "vlt",
+    shapeId: "@share:grant-1",
+  };
+
+  it("round-trips, matches only its own replica, and names its shapes", () => {
+    const storage = memoryStorage();
+    expect(rememberReplicaPurgeSelector(shape, storage)).toBe(true);
+    // Two shapes on one replica are two selectors, not one that overwrites.
+    expect(
+      rememberReplicaPurgeSelector(
+        { ...shape, shapeId: "@share:grant-2" },
+        storage
+      )
+    ).toBe(true);
+    const stored = listReplicaPurgeSelectors(storage);
+    expect(stored).toHaveLength(2);
+    expect(purgedShapeIds(stored, identity)).toStrictEqual([
+      "@share:grant-1",
+      "@share:grant-2",
+    ]);
+    expect(replicaPurgeSelectorMatches(shape, identity)).toBe(true);
+    expect(
+      replicaPurgeSelectorMatches(shape, { gatewayId: "gw", vaultId: "other" })
+    ).toBe(false);
+    expect(
+      purgedShapeIds(stored, { gatewayId: "gw", vaultId: "other" })
+    ).toStrictEqual([]);
+    expect(forgetReplicaPurgeSelector(shape, storage)).toBe(true);
+    expect(
+      purgedShapeIds(listReplicaPurgeSelectors(storage), identity)
+    ).toStrictEqual(["@share:grant-2"]);
+  });
+
+  it("refuses a shape selector that names no shape", () => {
+    const storage = memoryStorage(
+      JSON.stringify([{ kind: "shape", gatewayId: "gw", vaultId: "vlt" }])
+    );
+    expect(listReplicaPurgeSelectors(storage)).toStrictEqual([]);
   });
 });

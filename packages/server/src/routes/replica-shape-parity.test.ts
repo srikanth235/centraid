@@ -1,15 +1,10 @@
 /*
- * #928, acceptance box 2. A shape id that moves rebootstraps every device that
- * holds it, so composing a replica shape from an app's own manifest instead of
- * from its grant rows had to be a REFACTOR, not a reshape — and wave 2 kept
- * all eight ids byte-identical to the grant-derived builder on `origin/main`.
- *
- * WAVE 4 RE-PINS THEM, ONCE AND DELIBERATELY: `purpose` left the vault with
- * the DPV vocabulary (#928, AP-one-id-space), and it was part of the shape
- * digest, so every id moves by exactly that removal. The declared row filters
- * and field masks STAY in the shape — they are the app's own build-time
- * declaration, not a grant — so nothing a device mirrors widens. Every holder
- * re-bootstraps once on upgrade, which is the copy #883 wrote for exactly this.
+ * #928 wave 2, acceptance box 2. Composing a replica shape from an app's own
+ * manifest instead of from its grant rows must be a REFACTOR, not a reshape: a
+ * shape id that moves rebootstraps every device that holds it. The eight ids
+ * below were taken from the grant-derived builder on `origin/main` before it
+ * was replaced, so this file fails if the static composition drifts from what
+ * the evaluator answered.
  *
  * The ids are pinned rather than recomputed because a parity test that derives
  * both sides from the same code proves nothing. Re-pin ONLY when a shape is
@@ -37,13 +32,23 @@ const logger = {
   error: () => undefined,
 };
 
-/** The shipping shape ids, re-pinned by #928 wave 4 — see the header. */
+/**
+ * Grant-derived shape ids, captured on `origin/main` before wave 2.
+ *
+ * Wave 4 of #928 removed `purpose` from the digest, so all eight ids were
+ * re-pinned once when the current main branch retired the app grant evaluator.
+ * #929 then deliberately reshaped `docs` and `people` again: docs moved from
+ * the deleted commons tables to the subscription plane, while people dropped
+ * its deleted invitation-only scopes. Those devices rebootstrap once. The
+ * other six ids are unchanged by this PR, which is what this file is here to
+ * show.
+ */
 const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
   agenda: "agenda:16b6c558aa4f52ee7cebd0bb",
-  docs: "docs:cfe1477018e17dfe32bebee8",
+  docs: "docs:ad333598074be54babecc6b9",
   locker: "locker:53c326dc225e3d6f436255c1",
   notes: "notes:ff225f22383fa792b7d09117",
-  people: "people:68c1916a53e3c018b6faf958",
+  people: "people:eff4efd9c59248235a8580ad",
   photos: "photos:2a63ca460ee7dbf27beab4ed",
   tally: "tally:c9884ce02ea2c78b10b0e847",
   tasks: "tasks:01cbb634f9b8703989d97fea",

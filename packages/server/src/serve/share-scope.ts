@@ -1,5 +1,6 @@
-// Placement item ids are validated at the wire door (#750): malformed input
-// must throw rather than degrade into an empty set.
+// Parsed edge SCOPE, never inline casts (#750): scope_json backs durable
+// access receipts, so malformed input must throw rather than degrade into
+// an empty set. No live lending (#731) — snapshot only.
 
 export class ShareScopeError extends Error {
   constructor(message: string) {

@@ -16,14 +16,10 @@ import {
   casPath,
   closeOpenVaults,
   household,
-  seedPhoto,
   placementAuthority,
+  seedPhoto,
 } from "./placement-fixture.js";
-import {
-  moveItemsOutOfVault,
-  readShareOrigin,
-  shareItemsToVault,
-} from "./placement.js";
+import { moveItemsOutOfVault, shareItemsToVault } from "./placement.js";
 
 describe("placement suite", () => {
   afterEach(closeOpenVaults);
@@ -95,17 +91,15 @@ describe("placement suite", () => {
       photo.thumbBytes
     );
 
-    // Provenance: where it came from, and who placed it.
+    // A PLACEMENT CLAIMS NOTHING (#929): it is a move between the owner's own
+    // vaults, so no shape claims the row and the seat records no lineage.
     expect(
-      readShareOrigin(audience.vault, "media.asset", result.items[0]!.itemId)
-    ).toStrictEqual({
-      itemType: "media.asset",
-      itemId: result.items[0]!.itemId,
-      originVaultId: "vault-priya",
-      originItemId: photo.assetId,
-      sharedBy: "member-priya",
-      sharedAt: 1_700_000_000_000,
-    });
+      plainSqliteRow(
+        audience.vault
+          .prepare("SELECT COUNT(*) AS n FROM share_subscription_lineage")
+          .get()
+      )
+    ).toStrictEqual({ n: 0 });
 
     // The origin is byte-for-byte where it was — sharing only READS there.
     expect(
@@ -118,7 +112,7 @@ describe("placement suite", () => {
     expect(
       plainSqliteRow(
         origin.vault
-          .prepare("SELECT COUNT(*) AS n FROM core_share_origin")
+          .prepare("SELECT COUNT(*) AS n FROM share_subscription_lineage")
           .get()
       )
     ).toStrictEqual({
@@ -281,14 +275,6 @@ describe("placement suite", () => {
     ).toStrictEqual({
       n: 1,
     });
-    // The FIRST placement is the record — a later sharer does not rewrite it.
-    const provenance = readShareOrigin(
-      audience.vault,
-      "media.asset",
-      first.items[0]!.itemId
-    )!;
-    expect(provenance.sharedBy).toBe("member-priya");
-    expect(provenance.sharedAt).toBe(1_000);
     // Re-sharing never re-places bytes it already has.
     expect(bySid.blobs.map((b) => b.mode)).toStrictEqual([
       "present",

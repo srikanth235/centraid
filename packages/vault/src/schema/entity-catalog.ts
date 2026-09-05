@@ -147,17 +147,6 @@ export const VAULT_ENTITIES: EntityRegistry = {
       label: "Entity history",
       blurb: "Pre-mutation snapshots for version history and undo.",
     },
-    // Share-by-placement provenance (#599). Registered so a merged
-    // multi-scope app view can read the audience + who-placed-it badge for a
-    // projected row like any other table.
-    share_origin: {
-      lifecycle: "mutable",
-      // Its PRIMARY KEY *is* its pointer, so a provenance row cannot outlive
-      // the row it attributes; it names a target, it is not one (#916).
-      projectionOf: "core.entity",
-      label: "Shared with here",
-      blurb: "Where an item placed in this space came from, and who placed it.",
-    },
   },
   // `access`, not `consent` (#916, owner decision D4), and REGISTERS ONLY
   // since #928: an install register, an enrolment register, a device
@@ -536,22 +525,12 @@ export const VAULT_ENTITIES: EntityRegistry = {
   outbox: {
     item: { label: "Outbox items", lifecycle: "machinery" },
   },
-  // Commons control truth and local mechanics (#731). These must stay in the
-  // canonical walk: a portable restore without the grant/roster bindings,
-  // ordered op log, cursors, intent overlay, or pending invitations would
-  // silently turn shared content into an unrelated local copy.
+  // The sharing plane's control truth (#731, #929). These must stay in the
+  // canonical walk: a portable restore without the bindings, the standing
+  // answers, the delivery state or the subscription lineage would silently turn
+  // shared content into an unrelated local copy.
   share: {
     party_vault_binding: { label: "Vault bindings", lifecycle: "machinery" },
-    circle_grant: { label: "Circle grants", lifecycle: "machinery" },
-    commons_member_state: { label: "Member state", lifecycle: "machinery" },
-    commons_op: { label: "Commons operations", lifecycle: "machinery" },
-    commons_replay: { label: "Replayed operations", lifecycle: "machinery" },
-    commons_receipt: { label: "Commons receipts", lifecycle: "machinery" },
-    commons_cursor: { label: "Commons cursors", lifecycle: "machinery" },
-    commons_lineage: { label: "Commons lineage", lifecycle: "machinery" },
-    commons_retained: { label: "Retained commons", lifecycle: "machinery" },
-    commons_intent: { label: "Commons intents", lifecycle: "machinery" },
-    commons_invitation: { label: "Invitations", lifecycle: "machinery" },
     // The authority plane (#825, unified by #883). `authority` is EVERY
     // standing answer the member has given — to a person, a circle, a harness
     // or one of their own devices — `delivery_config` the per-grant
@@ -574,22 +553,17 @@ export const VAULT_ENTITIES: EntityRegistry = {
     authority_use: { label: "Answer last used", lifecycle: "machinery" },
     delivery_config: { label: "Delivery limits", lifecycle: "machinery" },
     fulfillment: { label: "Delivery state", lifecycle: "machinery" },
-    // #916, R8 / review 6.4: these four were in `LOCAL_TABLES` as "device
-    // observation", which contradicted the comment above — they are Commons
-    // CONTROL truth, and a restore without them hands back a seat that has
-    // forgotten which op hashes it verified, which recovery it is the
-    // successor of, and how far behind its steward it had fallen. Being
-    // unregistered also meant no replica change-log trigger, so none of it
-    // ever reached a second device. Machinery, like the rest of the band.
-    commons_verified: { label: "Verified checkpoints", lifecycle: "machinery" },
-    commons_supersession: {
-      label: "Commons recovery lineage",
+    // The subscription seat (#929): which grant-keyed shapes this vault holds
+    // rows for, how far it has ingested, and which rows each shape placed. A
+    // restore without them hands back a copy no revoke can reach.
+    subscription: { label: "Subscriptions", lifecycle: "machinery" },
+    subscription_lineage: {
+      label: "Subscription lineage",
       lifecycle: "machinery",
-    },
-    commons_device_reach: { label: "Device reach", lifecycle: "machinery" },
-    commons_steward_contact: {
-      label: "Steward contact",
-      lifecycle: "machinery",
+      // Its key CARRIES its pointer — `(shape_id, target_type, target_id)`,
+      // with a composite foreign key into the supertype — so a claim cannot
+      // outlive the row it names; it names a target, it is not one (#916).
+      projectionOf: "core.entity",
     },
   },
   notifications: { notice: { label: "Notices", lifecycle: "machinery" } },

@@ -1,20 +1,22 @@
 /*
- * EDIT fulfillment (#825). NOTHING HERE AUTHORIZES ANYTHING: routing only, over
- * the DECLARED table (commons-routing.ts) and never the command's name. Two v1
- * REFUSALS, never silent successes — co-contribution ships for `tally.group`
- * alone, and an edit grant with no commons rail is refused, because a write off
- * the rail is a local mutation the next compile reverts.
+ * EDIT routing (#825, #929). NOTHING HERE AUTHORIZES ANYTHING: routing only,
+ * over the DECLARED table (container-routing.ts) and never the command's name.
+ * The refusals are never silent successes — a write off the rail is a local
+ * mutation the origin's next pass reverts, so it is refused BY NAME instead.
+ *
+ * The rail is now the signed replica intent the ORIGIN executes, so a container
+ * needs no second grant row to be writable: the `edit` answer in
+ * `share_authority` is the whole of the authorization.
  */
 
 import type { DatabaseSync } from "node:sqlite";
 
 import type { ShareableItemType } from "../share/closure.js";
 import {
-  commonsRoutesForCommand,
-  isCommonsCommandActable,
-} from "../share/commons-routing.js";
-import type { CommonsCommandRoute } from "../share/commons-routing.js";
-import { commonsGrantForCommand } from "../share/commons.js";
+  containerRoutesForCommand,
+  isContainerCommandActable,
+} from "../share/container-routing.js";
+import type { ContainerCommandRoute } from "../share/container-routing.js";
 import type { ShareGrantRecord } from "./grant-store.js";
 import { listShareGrantsForSubject } from "./grant-store.js";
 import { SHARE_SUBJECT_REGISTRY } from "./subject-registry.js";
@@ -34,7 +36,7 @@ export const SHARE_GRANT_CO_CONTRIBUTION_COMMANDS: readonly string[] = [
  */
 export const SHARE_GRANT_CO_CONTRIBUTION_TYPES: readonly ShareableItemType[] =
   SHARE_SUBJECT_REGISTRY.filter(
-    (subject) => subject.fulfillment.edit === "commons-routing"
+    (subject) => subject.fulfillment.edit === "replica-intent"
   ).map((subject) => subject.subjectType);
 
 export interface ShareGrantEditRoute {
@@ -44,7 +46,6 @@ export interface ShareGrantEditRoute {
   containerId: string;
   /** Every live grant over it, view and edit alike. */
   grants: readonly ShareGrantRecord[];
-  commonsGrantId?: string;
   actable: boolean;
   /** Absent when the write will be accepted. */
   refusal?: string;
@@ -53,7 +54,7 @@ export interface ShareGrantEditRoute {
 /** NEAREST FIRST: the closest folder keeps a subtree one share. */
 function candidateContainers(
   db: DatabaseSync,
-  route: CommonsCommandRoute,
+  route: ContainerCommandRoute,
   value: string
 ): string[] {
   if (route.resolution === "container") return [value];
@@ -102,7 +103,6 @@ function refusalFor(input: {
   containerId: string;
   grants: readonly ShareGrantRecord[];
   actable: boolean;
-  commonsGrantId?: string;
 }): string | undefined {
   if (!input.grants.some((grant) => grant.capability === "edit"))
     return `${input.command} writes into ${input.containerType} ${input.containerId}, which is shared for view only`;
@@ -112,9 +112,7 @@ function refusalFor(input: {
     SHARE_GRANT_CO_CONTRIBUTION_COMMANDS.includes(input.command) &&
     !SHARE_GRANT_CO_CONTRIBUTION_TYPES.includes(input.containerType)
   )
-    return `co-contribution to ${input.containerType} is not offered in v1`;
-  if (input.commonsGrantId === undefined)
-    return `${input.containerType} ${input.containerId} has no commons rail to route ${input.command} to`;
+    return `co-contribution to ${input.containerType} is not offered`;
   return undefined;
 }
 
@@ -131,9 +129,6 @@ export function shareGrantEditRefusal(
     containerId: route.containerId,
     grants,
     actable: route.actable,
-    ...(route.commonsGrantId === undefined
-      ? {}
-      : { commonsGrantId: route.commonsGrantId }),
   });
 }
 
@@ -142,7 +137,7 @@ export function routeShareGrantEdit(
   db: DatabaseSync,
   input: { command: string; commandInput: Record<string, unknown> }
 ): ShareGrantEditRoute | undefined {
-  for (const route of commonsRoutesForCommand(input.command)) {
+  for (const route of containerRoutesForCommand(input.command)) {
     const value = input.commandInput[route.inputKey];
     if (typeof value !== "string" || !value) continue;
     for (const containerId of candidateContainers(db, route, value)) {
@@ -152,30 +147,22 @@ export function routeShareGrantEdit(
         containerId
       );
       if (grants.length === 0) continue;
-      const actable = isCommonsCommandActable(
+      const actable = isContainerCommandActable(
         route.containerType,
         input.command
       );
-      // The rail's own decision, never a copy of it.
-      const commonsGrantId = commonsGrantForCommand(
-        db,
-        input.command,
-        input.commandInput
-      )?.grantId;
       const refusal = refusalFor({
         command: input.command,
         containerType: route.containerType,
         containerId,
         grants,
         actable,
-        ...(commonsGrantId === undefined ? {} : { commonsGrantId }),
       });
       return {
         command: input.command,
         containerType: route.containerType,
         containerId,
         grants,
-        ...(commonsGrantId === undefined ? {} : { commonsGrantId }),
         actable,
         ...(refusal === undefined ? {} : { refusal }),
       };

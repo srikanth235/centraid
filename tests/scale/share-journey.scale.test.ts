@@ -1,5 +1,5 @@
 /*
- * THE SHARE JOURNEY'S BEFORE NUMBER (#927 wave 3, for #929 wave 1c).
+ * THE SHARE JOURNEY'S NUMBER (#927 wave 3; the AFTER is #929's).
  *
  * "Grant it to Ravi" to "Ravi's screen shows it" is one of the nine journeys and
  * had no number at all — the grant plane's tests prove the STATE is right and
@@ -7,13 +7,20 @@
  * two vaults side by side under one gateway root, which is what a household
  * runs and what `placement-fixture.household()` builds.
  *
+ * The delivery term is `startShareSubscription` since #929: a share is a
+ * replica subscription, so what is timed is composing the shape once for the
+ * grant and carrying it over the loopback transport. The KEY and the interval
+ * are unchanged, which is what makes the before and after comparable at all —
+ * `tests/journeys.json` holds both under one metric.
+ *
  * WHAT IS MEASURED. Three intervals, separately, because they have different
  * owners and a single total would hide which one moved:
  *
  *   grantMs      `createShareGrant` — writing the standing grant.
- *   fulfillMs    `fulfillShareGrant` — projecting the subject into the
- *                audience vault. This is the term that scales with the size of
- *                what was shared, and the one #929 is expected to move.
+ *   fulfillMs    `startShareSubscription` — composing the grant's shape and
+ *                carrying it into the audience vault. This is the term that
+ *                scales with the size of what was shared, and the one #929
+ *                moved.
  *   visibleMs    the audience vault's own read returning the shared rows —
  *                the grantee's screen, not the delivery's own success.
  *
@@ -30,7 +37,7 @@ import { describe, expect, onTestFinished, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
-import { fulfillShareGrant } from "../../packages/vault/src/grant/fulfillment.js";
+import { startShareSubscription } from "../../packages/vault/src/grant/fulfillment.js";
 import {
   addParty,
   addToAlbum,
@@ -47,6 +54,7 @@ import {
   household,
   seedPhoto,
 } from "../../packages/vault/src/share/placement-fixture.js";
+import { loopbackShareTransports } from "../../packages/vault/src/share/subscription-transport.js";
 import { journeyCeiling } from "../helpers/journeys.js";
 
 const OWNER = "tests/scale/share-journey.scale.test.ts";
@@ -72,6 +80,11 @@ describe("share-journey.scale", () => {
 
     const seatFor = (vaultId: string) =>
       vaultId === AUDIENCE_VAULT ? home.audience : undefined;
+    const transportFor = loopbackShareTransports({
+      origin: home.origin,
+      seatFor,
+      now: () => now,
+    });
 
     const grantStarted = performance.now();
     const grant = createShareGrant(home.origin.vault, {
@@ -85,11 +98,11 @@ describe("share-journey.scale", () => {
     const grantMs = performance.now() - grantStarted;
 
     const fulfillStarted = performance.now();
-    const delivered = fulfillShareGrant({
+    const delivered = startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor,
+      transportFor,
       now,
     });
     const fulfillMs = performance.now() - fulfillStarted;
@@ -102,8 +115,6 @@ describe("share-journey.scale", () => {
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
-      // The BEFORE number for #929: the entry is labelled so the AFTER lands
-      // beside it rather than replacing it.
       name: `Share a ${SHARED_ASSETS}-photo album, co-hosted`,
       status:
         totalMs < journeyCeiling(SHARE_KEY, "grantToVisible", "ceilingMs")

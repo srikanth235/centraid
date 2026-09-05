@@ -22,7 +22,10 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     const links = VaultLinksStore.open(db);
     let announced = 0;
     const sweep = createPeerPlaneSweep({
+      db,
       links,
+      vaultFor: () => undefined,
+      partyIdFor: () => undefined,
       dial: () => undefined,
       announceRoutes: async () => {
         announced += 1;
@@ -40,7 +43,10 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     const links = VaultLinksStore.open(db);
     const warnings: string[] = [];
     const sweep = createPeerPlaneSweep({
+      db,
       links,
+      vaultFor: () => undefined,
+      partyIdFor: () => undefined,
       dial: () => undefined,
       announceRoutes: () => {
         throw new Error("simulated announce failure");

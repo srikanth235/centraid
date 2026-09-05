@@ -43,6 +43,53 @@ export const NON_ENTITY_PRINCIPAL_KINDS: ReadonlySet<string> = new Set([
   "automation",
 ]);
 
+// Ask + last-used sidecars of the authority plane (#928). `CREATE TABLE IF NOT
+// EXISTS` so a file that already has them (rung 1, or a later climb) can take
+// the same text as a new rung without failing. Rung 5 re-runs this because
+// SHARE_AUTHORITY_DDL is composed into the baseline, and a file that has
+// climbed a rung never climbs it again.
+export const SHARE_AUTHORITY_ASK_DDL = `
+-- WHAT HAS NOT BEEN PUT TO THE MEMBER YET (#308 A4, re-homed by #928). An
+-- automation whose published manifest asks for more than the member ever
+-- answered parks here instead of auto-granting: automations author their own
+-- manifests, so "install was the answer" must not be bypassable by the actor
+-- the answer contains. Deliberately NOT a \`share_authority\` row — that table
+-- records what the member SAID, and a parked ask is not an answer.
+--
+-- One open ask per automation; a re-publish replaces its scope set; deciding
+-- it stamps \`decided_at\` and writes the real answer next door.
+CREATE TABLE IF NOT EXISTS share_authority_request (
+  request_id   TEXT PRIMARY KEY,
+  -- The automation's own id (its enrolment key), the same principal id
+  -- \`share_authority.principal_id\` carries for an 'automation' row.
+  principal_id TEXT NOT NULL,
+  scopes_json  TEXT NOT NULL CHECK (json_valid(scopes_json)),
+  requested_at TEXT NOT NULL,
+  decided_at   TEXT,
+  decision     TEXT CHECK (decision IN ('approved','denied'))
+) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS share_authority_request_open
+  ON share_authority_request(principal_id) WHERE decided_at IS NULL;
+
+-- WHEN AN ANSWER WAS LAST USED (#928). A row of its OWN, deliberately not a
+-- column on \`share_authority\`: that row is the member's answer and is
+-- immutable except for \`revoked_at\`, so stamping a timestamp on it on every
+-- use would rewrite the answer — and push a replica change — every time an
+-- automation read anything. One row per authority, upserted beside the receipt
+-- that cites it, so the cost is O(1) per receipt and there is no history to
+-- grow. Absent row = never used, which is what the Access dashboard draws.
+-- \`authority_id\` carries NO foreign key, for the same reason
+-- \`share_authority.receipt_id\` carries none: this row is derived from the
+-- AUDIT BAND, whose \`authority_id\` is a value rather than a key (#916), and
+-- the commons rail receipts acts under authority ids that are not rows of this
+-- table at all. A key here would turn "an act was receipted" into "the act is
+-- refused", which is the wrong direction for evidence.
+CREATE TABLE IF NOT EXISTS share_authority_use (
+  authority_id TEXT PRIMARY KEY,
+  last_used_at TEXT NOT NULL
+) STRICT;
+`;
+
 export const SHARE_AUTHORITY_DDL = `
 CREATE TABLE share_authority (
   authority_id   TEXT PRIMARY KEY,
@@ -122,45 +169,7 @@ CREATE INDEX IF NOT EXISTS share_authority_principal
 CREATE INDEX IF NOT EXISTS share_authority_granted_by
   ON share_authority(granted_by);
 
--- WHAT HAS NOT BEEN PUT TO THE MEMBER YET (#308 A4, re-homed by #928). An
--- automation whose published manifest asks for more than the member ever
--- answered parks here instead of auto-granting: automations author their own
--- manifests, so "install was the answer" must not be bypassable by the actor
--- the answer contains. Deliberately NOT a \`share_authority\` row — that table
--- records what the member SAID, and a parked ask is not an answer.
---
--- One open ask per automation; a re-publish replaces its scope set; deciding
--- it stamps \`decided_at\` and writes the real answer next door.
-CREATE TABLE IF NOT EXISTS share_authority_request (
-  request_id   TEXT PRIMARY KEY,
-  -- The automation's own id (its enrolment key), the same principal id
-  -- \`share_authority.principal_id\` carries for an 'automation' row.
-  principal_id TEXT NOT NULL,
-  scopes_json  TEXT NOT NULL CHECK (json_valid(scopes_json)),
-  requested_at TEXT NOT NULL,
-  decided_at   TEXT,
-  decision     TEXT CHECK (decision IN ('approved','denied'))
-) STRICT;
-CREATE UNIQUE INDEX IF NOT EXISTS share_authority_request_open
-  ON share_authority_request(principal_id) WHERE decided_at IS NULL;
-
--- WHEN AN ANSWER WAS LAST USED (#928). A row of its OWN, deliberately not a
--- column on \`share_authority\`: that row is the member's answer and is
--- immutable except for \`revoked_at\`, so stamping a timestamp on it on every
--- use would rewrite the answer — and push a replica change — every time an
--- automation read anything. One row per authority, upserted beside the receipt
--- that cites it, so the cost is O(1) per receipt and there is no history to
--- grow. Absent row = never used, which is what the Access dashboard draws.
--- \`authority_id\` carries NO foreign key, for the same reason
--- \`share_authority.receipt_id\` carries none: this row is derived from the
--- AUDIT BAND, whose \`authority_id\` is a value rather than a key (#916), and
--- the commons rail receipts acts under authority ids that are not rows of this
--- table at all. A key here would turn "an act was receipted" into "the act is
--- refused", which is the wrong direction for evidence.
-CREATE TABLE IF NOT EXISTS share_authority_use (
-  authority_id TEXT PRIMARY KEY,
-  last_used_at TEXT NOT NULL
-) STRICT;
+${SHARE_AUTHORITY_ASK_DDL}
 
 -- Per-grant DELIVERY-strategy configuration, keyed by the authority row it
 -- serves (ruling V-delivery: \`max_size_bytes\` belongs to delivery-strategy
@@ -201,4 +210,33 @@ CREATE TABLE share_fulfillment (
   PRIMARY KEY (grant_id, peer_vault_id)
 ) STRICT;
 ${touchUpdatedAt("share_fulfillment", ["grant_id", "peer_vault_id"])}
+`;
+
+/**
+ * `share_delivery_config` RE-CUT with the rail's second half (#929, rung three).
+ *
+ * A grant's delivery config now carries `departure_policy` beside its ceiling:
+ * what a departing audience leaves behind in the REMAINING audiences'
+ * projections — `remove-member-only` scrubs their rows, `retain-ledger-history`
+ * keeps them so an accounting group's balances stay computable (SECURITY.md
+ * § departure). It is the commons rail's own column, carried across by
+ * `migrateCommonsToSubscriptions` before the rail is dropped.
+ *
+ * A RE-CUT, not an `ALTER … ADD COLUMN`: SQLite appends an added column to the
+ * table's STORED text, so a migrated file would carry DDL no fresh build can
+ * produce, and `golden-vault.test.ts` compares exactly that. Rebuilding the
+ * table leaves one text for both.
+ */
+export const SHARE_DELIVERY_CONFIG_RECUT_DDL = `
+ALTER TABLE share_delivery_config RENAME TO share_delivery_config_pre929;
+CREATE TABLE share_delivery_config (
+  grant_id         TEXT PRIMARY KEY
+    REFERENCES share_authority(authority_id) ON DELETE CASCADE,
+  max_size_bytes   INTEGER CHECK (max_size_bytes IS NULL OR max_size_bytes >= 0),
+  departure_policy TEXT NOT NULL DEFAULT 'remove-member-only'
+    CHECK (departure_policy IN ('remove-member-only','retain-ledger-history'))
+) STRICT;
+INSERT INTO share_delivery_config (grant_id, max_size_bytes)
+  SELECT grant_id, max_size_bytes FROM share_delivery_config_pre929;
+DROP TABLE share_delivery_config_pre929;
 `;

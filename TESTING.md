@@ -766,7 +766,7 @@ Law 4 is asserted with **synthetic version integers**. A pinned N−1-client art
 | --- | --- | --: |
 | `blob-custody-properties` | vault custody-properties | **12** |
 | `vault-json-schema-properties` | vault json-schema-properties | **7** |
-| `commons-convergence-properties` | vault commons-convergence-properties | **3** |
+| `commons-convergence-properties` | vault subscription.test (origin-authoritative ingest; the commons rail is gone, #929) | **3** |
 | `replica-intent-properties` | client intent-idempotency-properties | **10** |
 | `replica-payload-hash-properties` | client payload-hash-properties | **7** |
 | `scheduler-no-backfill` | automation scheduler-ledger.contract | **19** |

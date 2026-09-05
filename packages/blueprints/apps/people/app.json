@@ -7,6 +7,7 @@
   "iconKey": "Users",
   "colorKey": "violet",
   "vault": {
+    "purpose": "dpv:ServiceProvision",
     "why": "Keeps light records on the people you care about and nudges you to stay in touch.",
     "scopes": [
       { "schema": "people", "verbs": "read+act" },
@@ -28,7 +29,6 @@
       { "schema": "share", "table": "authority", "verbs": "read" },
       { "schema": "share", "table": "authority_use", "verbs": "read" },
       { "schema": "share", "table": "authority_request", "verbs": "read" },
-      { "schema": "share", "table": "commons_invitation", "verbs": "read" },
       { "schema": "social", "table": "save_contact_channel", "verbs": "act" },
       {
         "schema": "social",
@@ -569,11 +569,6 @@
       "input": {
         "type": "object",
         "properties": { "name": { "type": "string", "minLength": 1 } },
-        "list_id": {
-          "type": "string",
-          "minLength": 1,
-          "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
-        },
         "required": ["name"],
         "additionalProperties": false
       },
@@ -794,7 +789,7 @@
     },
     {
       "name": "person",
-      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history — plus their sharing standing: the vault(s) they are linked to (`vaults`), the invitations still awaiting their answer (`pending_invites`), and what you have shared with them (`shared_with_them`). All three are null when the sharing reads are denied, which means unknown, not none.",
+      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history — plus their sharing standing: the vault(s) they are linked to (`vaults`) and what you have shared with them (`shared_with_them`). Both are null when the sharing reads are denied, which means unknown, not none. A share that has not reached them yet is said by the live grant plane, not by a second invitation list.",
       "input": {
         "type": "object",
         "properties": { "party_id": { "type": "string", "minLength": 1 } },

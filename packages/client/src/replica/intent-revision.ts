@@ -1,13 +1,16 @@
-/**
- * REVISING A PENDING INTENT (#922 G2).
+/*
+ * PENDING-INTENT REVISION (#922, #929). A queued write the member edits again
+ * before it lands is REPLACED, not duplicated: the successor carries the
+ * predecessor's marker, the pair is serialized per intent (and across PWA tabs
+ * through Web Locks), and what a screen renders over the row is the successor.
  *
- * A member who edits a write that has not left the device yet is revising an
- * intent, not making a second one. That transaction — take the lock, merge the
- * revision over the input, mark the successor, retire the predecessor — is the
- * whole of this module, and the durable successor marker it writes is the
- * recovery truth after a crash. The marker is engine-private: it rides the
- * stored mutation and never reaches a row a screen reads.
+ * Split out of `intents.ts` when that file passed the source cap: the queue is
+ * a state machine over durable rows, and this is the revision algebra it calls
+ * — one concern each, and no behaviour moved with the text.
  */
+
+import { decoratePendingMutation } from "@centraid/blueprints/apps/_shared/pending-overlay";
+
 import type {
   OptimisticMutation,
   ReplicaIntent,
@@ -169,4 +172,38 @@ export function supersededIntentIds(intent: ReplicaIntent): string[] {
       })
     ),
   ];
+}
+
+/**
+ * Convert a durable intent mutation into the schema-safe visible mutation.
+ * Browser and native reads must share this boundary: the recovery marker is
+ * engine-private, and the settled state (`intent-verdict.ts`) is what a seat
+ * renders — a conflict is presented as the conflict it is.
+ */
+export function presentPendingIntentMutation(
+  mutation: OptimisticMutation,
+  intent: ReplicaIntent
+): OptimisticMutation {
+  const visible: OptimisticMutation =
+    mutation.op === "upsert"
+      ? {
+          ...mutation,
+          values: Object.fromEntries(
+            Object.entries(mutation.values).flatMap(([key, value]) =>
+              key === PENDING_SUPERSEDES_FIELD
+                ? []
+                : [[key, cloneReplicaValue(value)]]
+            )
+          ),
+        }
+      : { ...mutation };
+  return decoratePendingMutation(visible, {
+    intentId: intent.intentId,
+    state: intent.state,
+    action: intent.action,
+    attempts: intent.attempts,
+    ...(intent.reason ? { reason: intent.reason } : {}),
+    ...(intent.conflict ? { conflict: intent.conflict } : {}),
+    ...(intent.enqueuedAt ? { enqueuedAt: intent.enqueuedAt } : {}),
+  }) as OptimisticMutation;
 }

@@ -5,7 +5,7 @@ import { stablePendingRowId } from "@centraid/blueprints/apps/_shared/pending-ov
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { MemoryIntentStore } from "./intent-store.js";
-import { IntentQueue } from "./intents.js";
+import { IntentQueue, SHAPE_REVOKED_REASON } from "./intents.js";
 import type { ReplicaValue } from "./types.js";
 
 describe(IntentQueue, () => {
@@ -1020,5 +1020,150 @@ describe(IntentQueue, () => {
     await expect(queue.discard("missing")).resolves.toBe(false);
     await queue.purge();
     expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  /**
+   * A REVOKED SHARE (#929). The shape's rows leave the device, so a write
+   * still queued over one of them can never land — and `expired` is the
+   * outbox's own word for that, not `failed`, because there is no retry that
+   * would work. A write over ANOTHER shape is untouched.
+   */
+  test("expires the queued writes of a revoked shape and no others", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: (() => {
+        let n = 0;
+        return () => `intent-shape-${(n += 1)}`;
+      })(),
+    });
+    await queue.enqueue({
+      appId: "tally",
+      action: "add-expense",
+      input: { amount: 1 },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "@share:grant-1",
+          entity: "tally.expense",
+          rowId: "expense-1",
+          values: { amount: 1 },
+        },
+      ],
+    });
+    await queue.enqueue({
+      appId: "tally",
+      action: "add-expense",
+      input: { amount: 2 },
+      dependencies: [{ shapeId: "@share:grant-1", entity: "tally.expense" }],
+    });
+    await queue.enqueue({
+      appId: "agenda",
+      action: "create",
+      input: { title: "mine" },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "agenda:own",
+          entity: "core.task",
+          rowId: "task-1",
+          values: { title: "mine" },
+        },
+      ],
+    });
+
+    const expired = await queue.expireShape("@share:grant-1");
+    expect(expired.map((intent) => intent.intentId)).toStrictEqual([
+      "intent-shape-1",
+      "intent-shape-2",
+    ]);
+    expect(expired.every((intent) => intent.state === "expired")).toBe(true);
+    expect(expired[0]?.reason).toBe(SHAPE_REVOKED_REASON);
+    expect(SHAPE_REVOKED_REASON).toBe("no longer shared with you");
+    // No pending row survives over a purged shape; the member's own write does.
+    const open = await queue.pending();
+    expect(
+      open
+        .filter((intent) => intent.state === "queued")
+        .map((intent) => intent.intentId)
+    ).toStrictEqual(["intent-shape-3"]);
+    // Idempotent: a second purge of the same shape settles nothing again.
+    await expect(queue.expireShape("@share:grant-1")).resolves.toStrictEqual(
+      []
+    );
+  });
+
+  /**
+   * G1 (#929): a member's pending row drops only when their replica HOLDS the
+   * origin's answered row versions. Clearing on the answer alone makes the
+   * badge go quiet one round trip before the row the member wrote arrives.
+   */
+  test("holds an executed answer until the replica carries its origin versions", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-g1",
+    });
+    await queue.enqueue({
+      appId: "tally",
+      action: "add-expense",
+      input: { amount: 1 },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "@share:grant-1",
+          entity: "tally.expense",
+          rowId: "pending:intent-g1:1",
+          values: { amount: 1 },
+        },
+      ],
+    });
+    await queue.claimNext();
+    const answered = {
+      intentId: "intent-g1",
+      status: "executed" as const,
+      answeredVersions: [
+        {
+          shapeId: "@share:grant-1",
+          entity: "tally.group",
+          rowId: "group-1",
+          version: 42,
+        },
+      ],
+    };
+
+    // The replica holds nothing yet: the answer is real, the row is not here.
+    const [waiting] = await queue.applyOutcomes([answered], () => false);
+    expect(waiting).toMatchObject({ state: "awaiting-change" });
+    expect(waiting?.answeredVersions).toStrictEqual(answered.answeredVersions);
+    await expect(queue.settleAnswered(() => false)).resolves.toStrictEqual([]);
+
+    // The shape's lineage now carries origin version 42, so it settles.
+    const settled = await queue.settleAnswered(
+      (version) => version.rowId === "group-1" && version.version >= 42
+    );
+    expect(settled.map((intent) => intent.state)).toStrictEqual(["executed"]);
+    const remaining = await queue.pending();
+    expect(remaining.some((intent) => intent.intentId === "intent-g1")).toBe(
+      false
+    );
+  });
+
+  test("a seat that cannot answer holds rather than clearing early", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-g1-noprobe",
+    });
+    await queue.enqueue({
+      appId: "tally",
+      action: "add-expense",
+      input: { amount: 2 },
+    });
+    await queue.claimNext();
+    const [held] = await queue.applyOutcomes([
+      {
+        intentId: "intent-g1-noprobe",
+        status: "executed",
+        answeredVersions: [
+          { entity: "tally.group", rowId: "group-2", version: 7 },
+        ],
+      },
+    ]);
+    expect(held).toMatchObject({ state: "awaiting-change" });
   });
 });

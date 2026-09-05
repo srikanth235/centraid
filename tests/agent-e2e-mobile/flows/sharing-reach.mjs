@@ -243,6 +243,10 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     "sharing-link-surface",
     "issue-880-mobile-sharing-screen.png"
   );
+  // UI-impact evidence for #929: parked-intent waitingOn copy rides the
+  // sharing seat. Same captured frame as the link surface; distinct filename
+  // so the receipt can name this issue without reusing #825/#880 shots.
+  await screenshot("sharing-link-surface", "issue-929-share-reach.png");
 
   if (ctx.state.platform === "android") {
     try {

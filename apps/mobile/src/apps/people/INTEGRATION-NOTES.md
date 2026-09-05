@@ -14,7 +14,7 @@ Not dispatched (handoff exclusions or withheld writes): `undo-person`, `undo-con
 
 The phone reads the local replica entity-by-entity (`usePeople.ts`) and re-states the web query emitters' joins in `people-model.ts` (each projection names the `queries/*.ts` file it mirrors):
 
-`people.profile` · `core.party` · `core.tag` (target_type core.party) · `core.concept` · `core.concept_scheme` · `people.important_date` · `knowledge.annotation` (core.party and core.activity targets) · `core.link` (core.activity → core.party) · `core.activity` · `social.contact_channel` · `share.party_vault_binding` · `social.circle_member` · `share.circle_grant` · `share.commons_member_state` · `share.commons_invitation`
+`people.profile` · `core.party` · `core.tag` (target_type core.party) · `core.concept` · `core.concept_scheme` · `people.important_date` · `knowledge.annotation` (core.party and core.activity targets) · `core.link` (core.activity → core.party) · `core.activity` · `social.contact_channel` · `share.party_vault_binding` · `social.circle_member`
 
 Every `share.*` (and `social.circle_member`) read is kept OUT of the combined query state: an error or in-flight read degrades the link facts to ABSENT (null → `links_available: false`), never to a false "not linked" — mirrors `queries/_shared.ts` and decisions.md #821 L-read.
 

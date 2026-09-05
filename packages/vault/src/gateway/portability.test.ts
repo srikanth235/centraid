@@ -10,12 +10,6 @@ import type { VaultDb } from "../db.js";
 import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { createShareGrant, setFulfillmentState } from "../grant/grant-store.js";
 import { sha256Hex, uuidv7 } from "../ids.js";
-import {
-  acknowledgeCommonsSeatCursor,
-  appendCommonsOperation,
-  createCommonsGrant,
-  queueCommonsIntent,
-} from "../share/commons.js";
 import type { Gateway } from "./gateway.js";
 import { createGateway } from "./gateway.js";
 import { canonicalJson, importVaultExport } from "./portability.js";
@@ -156,11 +150,15 @@ describe("portability", () => {
     restored.close();
   });
 
-  test("portable restore retains every Commons truth and mechanics table", () => {
+  /**
+   * THE SHARING PLANE'S CONTROL TRUTH still rides the walk (#929). The commons
+   * rail is gone, so what a restore must not lose is the binding that says
+   * where a person is reachable, the standing answer, the delivery state, and
+   * the subscription's shape-keyed lineage — a restore without them hands back
+   * a copy no revoke can reach.
+   */
+  test("portable restore retains every sharing-plane table", () => {
     const now = "2026-08-10T00:00:00.000Z";
-    // A REAL document to share (#916): a commons lineage row's
-    // `(target_type, target_id)` is a composite foreign key into the entity
-    // supertype, so a made-up container id is refused at the statement.
     const documentId = uuidv7();
     const contentId = uuidv7();
     db.vault
@@ -177,92 +175,6 @@ describe("portability", () => {
          VALUES (?, 'Portable plan', ?, ?, ?)`
       )
       .run(documentId, contentId, now, now);
-    const grant = createCommonsGrant({
-      origin: db.vault,
-      ownerPartyId: boot.ownerPartyId,
-      ownerVaultId: boot.vaultId,
-      ownerVault: db,
-      containerType: "core.document",
-      containerId: documentId,
-      members: [],
-      now,
-    });
-    appendCommonsOperation({
-      steward: db.vault,
-      grantId: grant.grantId,
-      actorPartyId: boot.ownerPartyId,
-      kind: "command",
-      command: "core.rename_document",
-      input: { document_id: grant.containerId },
-      outcome: "refused",
-      reason: "portable proof",
-      now,
-    });
-    db.vault
-      .prepare(
-        `INSERT INTO share_commons_replay
-           (grant_id, signing_vault_id, signature_nonce, sequence, outcome, reason)
-         VALUES (?, 'portable-member-vault', 'portable-nonce', 1,
-                 'refused', 'portable replay proof')`
-      )
-      .run(grant.grantId);
-    db.vault
-      .prepare(
-        `INSERT INTO share_commons_receipt
-           (grant_id, sequence, kind, actor_party_id, outcome, reason, created_at)
-         VALUES (?, 1, 'command', ?, 'refused',
-                 'portable receipt proof', ?)`
-      )
-      .run(grant.grantId, boot.ownerPartyId, now);
-    acknowledgeCommonsSeatCursor({
-      steward: db.vault,
-      grantId: grant.grantId,
-      memberVaultId: boot.vaultId,
-      sequence: 1,
-      now,
-    });
-    db.vault
-      .prepare(
-        `INSERT INTO share_commons_lineage
-           (grant_id, target_type, target_id, origin_item_id)
-         VALUES (?, 'core.document', ?, ?)`
-      )
-      .run(grant.grantId, grant.containerId, grant.containerId);
-    db.vault
-      .prepare(
-        `INSERT INTO share_commons_retained
-           (grant_id, target_type, target_id, retained_at)
-         VALUES (?, 'core.document', ?, ?)`
-      )
-      .run(grant.grantId, documentId, now);
-    queueCommonsIntent({
-      seat: db.vault,
-      intentId: "portable-intent",
-      grantId: grant.grantId,
-      actorPartyId: boot.ownerPartyId,
-      command: "core.rename_document",
-      commandInput: { document_id: grant.containerId },
-      stewardLabel: "Priya",
-      now,
-    });
-    db.vault
-      .prepare(
-        `INSERT INTO share_commons_invitation
-           (invitation_id, grant_id, steward_vault_id, member_vault_id,
-            member_party_id, capability, container_type, container_id,
-            container_label, current_size_bytes, max_size_bytes,
-            status, created_at, answered_at)
-         VALUES ('portable-invite', ?, ?, 'remote-vault', ?, 'read',
-                 'core.document', ?, 'Portable invite', 42, NULL,
-                 'pending', ?, NULL)`
-      )
-      .run(
-        grant.grantId,
-        boot.vaultId,
-        boot.ownerPartyId,
-        grant.containerId,
-        now
-      );
 
     // A BINDING IS ABOUT SOMEONE ELSE (#916, R9): a vault holds no row for
     // its own party at its own vault, so the peer is stated explicitly.
@@ -280,32 +192,54 @@ describe("portability", () => {
          VALUES (?, ?, 'remote-vault', NULL, ?, NULL)`
       )
       .run(uuidv7(), peerPartyId, now);
+    const grant = createShareGrant(db.vault, {
+      audience: { kind: "party", id: peerPartyId },
+      subjectType: "core.document",
+      subjectId: documentId,
+      capability: "view",
+      grantedAt: now,
+      grantedBy: boot.ownerPartyId,
+    });
+    setFulfillmentState(db.vault, {
+      grantId: grant.grantId,
+      peerVaultId: "remote-vault",
+      state: "delivered",
+      updatedAt: now,
+    });
+    const shapeId = `@share:${grant.grantId}`;
+    db.vault
+      .prepare(
+        `INSERT INTO share_subscription
+           (shape_id, audience_vault_id, grant_id, origin_vault_id,
+            subject_type, cursor_epoch, cursor_seq, structure_digest, state,
+            subscribed_at, removed_at, detail)
+         VALUES (?, 'remote-vault', ?, ?, 'core.document', 'epoch-1', 4,
+                 'digest', 'subscribed', ?, NULL, NULL)`
+      )
+      .run(shapeId, grant.grantId, boot.vaultId, now);
+    db.vault
+      .prepare(
+        `INSERT INTO share_subscription_lineage
+           (shape_id, target_type, target_id, origin_item_id, origin_row_version)
+         VALUES (?, 'core.document', ?, ?, 7)`
+      )
+      .run(shapeId, documentId, documentId);
 
     const { artifact } = gw.exportVault(owner);
-    const commonsEntities = [
+    const shareEntities = [
       "share.party_vault_binding",
-      "share.circle_grant",
-      "share.commons_member_state",
-      "share.commons_op",
-      "share.commons_replay",
-      "share.commons_receipt",
-      "share.commons_cursor",
-      "share.commons_lineage",
-      "share.commons_retained",
-      "share.commons_intent",
-      "share.commons_invitation",
+      "share.authority",
+      "share.fulfillment",
+      "share.subscription",
+      "share.subscription_lineage",
     ];
-    for (const entity of commonsEntities)
+    for (const entity of shareEntities)
       expect(artifact.tables[entity]?.length, entity).toBeGreaterThan(0);
 
     const restored = openVaultDb();
     importVaultExport(restored, artifact);
-    for (const entity of commonsEntities) {
+    for (const entity of shareEntities) {
       const physical = entity.replace(".", "_");
-      expect(
-        restored.vault.prepare(`SELECT COUNT(*) AS n FROM "${physical}"`).get(),
-        entity
-      ).toMatchObject({ n: expect.any(Number) });
       expect(
         (
           restored.vault

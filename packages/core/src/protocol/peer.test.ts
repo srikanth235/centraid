@@ -35,16 +35,25 @@ describe(judgePeerHandshake, () => {
   });
 
   /*
-   * The "peer is too old" arm is unreachable while the floor is 1 — there is
-   * no valid protocol number below it, so such a hello is malformed, not old.
-   * This asserts that reading, so raising the floor later makes the arm live
-   * without changing the shape of the answer.
+   * Zero is not a version: below the lowest VALID number a hello is malformed,
+   * not old. The "peer is too old" arm went live with the #929 floor, and the
+   * two answers stay distinguishable — a malformed hello names no side.
    */
   it("treats a hello below the lowest valid number as malformed", () => {
-    expect(PEER_MIN_PROTOCOL_VERSION).toBe(1);
     expect(judgePeerHandshake({ peerProtocolVersion: 0 }).state).toBe(
       "bad_request"
     );
+  });
+
+  it("walls off a peer speaking a retired peer protocol", () => {
+    expect(PEER_MIN_PROTOCOL_VERSION).toBeGreaterThan(1);
+    const verdict = judgePeerHandshake({
+      peerProtocolVersion: PEER_MIN_PROTOCOL_VERSION - 1,
+      minPeerProtocol: 1,
+    });
+    expect(verdict.state).toBe("protocol_refused");
+    if (verdict.state !== "protocol_refused") return;
+    expect(verdict.detail).toMatch(/update/u);
   });
 
   it("refuses a peer whose floor this gateway is below, as an update wall", () => {

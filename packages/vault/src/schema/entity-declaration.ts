@@ -123,8 +123,9 @@ export interface VaultEntityDeclaration {
    *
    * The value is the parent's logical name, or `core.entity` — the supertype
    * itself — for a projection whose parent is whatever its OWN pointer names.
-   * `core.share_origin` is the only one: its primary key IS a `(type, id)`
-   * pair, so its parent key is the composite one into `core_entity`.
+   * `share.subscription_lineage` is the only one: its key CARRIES a
+   * `(type, id)` pair, so its parent key is the composite one into
+   * `core_entity`.
    */
   projectionOf?: string;
   /**

@@ -44,8 +44,8 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "core.content_item",
     "social.circle",
     "social.circle_member",
-    "share.circle_grant",
-    "share.commons_member_state",
+    "share.authority",
+    "share.fulfillment",
     "core.party",
     "core.link",
     "core.tag",
@@ -53,8 +53,10 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "core.concept_scheme",
     "access.provenance",
     "blob.custody_state",
-    // The Shared shelf: where a document came from, and whose vault that was.
-    "core.share_origin",
+    // The Shared shelf: which shapes placed a row here, and whose vault served
+    // them (#929).
+    "share.subscription",
+    "share.subscription_lineage",
     "share.party_vault_binding",
   ],
   locker: [
@@ -112,7 +114,6 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     // asked for that the member has not decided — drawn on the same screen.
     "share.authority_request",
     "share.authority_use",
-    "share.commons_invitation",
     "core.entity_revision",
   ],
   photos: [

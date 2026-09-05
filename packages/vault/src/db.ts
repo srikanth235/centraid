@@ -44,6 +44,7 @@ import {
   identityKeyFileFor,
   loadOrCreateVaultIdentitySeed,
 } from "./schema/vault-identity.js";
+import { migrateCommonsToSubscriptions } from "./share/subscription-migration.js";
 import {
   applyVaultFootprint,
   assertVaultFootprint,
@@ -219,6 +220,25 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   migrateVault(vault);
   // Durable write choke (#406), after every fresh-schema open.
   initializeReplicaProtocol(vault);
+  // THE COMMONS RAIL BECOMES SUBSCRIPTIONS (#929), once per file. It is a DATA
+  // pass, not DDL, so it cannot be a ladder rung: it reads a roster and writes
+  // standing answers before dropping the tables it read. Here rather than in a
+  // host, so every seat that can open a vault — gateway, desktop, a drill —
+  // brings the file forward the same way. On a file that never had the rail it
+  // is one `sqlite_master` lookup. One transaction: a half-migrated roster is
+  // the single outcome a re-run cannot repair.
+  vault.exec("BEGIN");
+  try {
+    migrateCommonsToSubscriptions(vault, {
+      stewardVaultId: dir ?? "memory",
+      now: new Date().toISOString(),
+    });
+    vault.exec("COMMIT");
+  } catch (error) {
+    vault.exec("ROLLBACK");
+    vault.close();
+    throw error;
+  }
   // Unprovable marker fails CLOSED.
   try {
     repairReplicaInvocationCommits({ vault, audit: vault });

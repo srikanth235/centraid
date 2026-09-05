@@ -1,13 +1,8 @@
 import {
-  decoratePendingMutation,
   pendingOverlayFacts,
   projectPendingWrite,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
-import type {
-  PendingIntentPresentationInput,
-  PendingOverlayFacts,
-  PendingOverlaySidecar,
-} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { PendingOverlayFacts } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { pendingProjectionFor } from "@centraid/blueprints/apps/_shared/pending-projections";
 
 import { webCryptoDigest, webCryptoIdFactory } from "./digest.js";
@@ -15,10 +10,9 @@ import type { ReplicaDigest, ReplicaIdFactory } from "./digest.js";
 import { ReplicaProtocolError } from "./errors.js";
 import type { IntentRecordStore } from "./intent-record-store.js";
 import {
-  PENDING_SUPERSEDES_FIELD,
-  cloneReplicaValue,
   markSupersededIntent,
   namedRowIds,
+  presentPendingIntentMutation,
   revisedInput,
   supersededIntentIds,
   withReplacementLock,
@@ -45,12 +39,6 @@ import type {
   ReplicaValue,
 } from "./types.js";
 
-/** The overlay a read applies: projected rows, and the facts behind them. */
-export interface ReplicaOverlay {
-  mutations: OptimisticMutation[];
-  sidecar: PendingOverlaySidecar;
-}
-
 /**
  * Intent transitions share one durable queue; preserve outcome order instead
  * of racing state reads and writes for the same optimistic overlay.
@@ -74,55 +62,48 @@ export interface IntentQueueOptions {
 }
 
 /**
- * Convert a durable intent mutation into the schema-safe visible mutation.
- * Browser and native reads must share this boundary: the recovery marker is
- * engine-private, and a wire conflict is presented from its structured detail
- * even though the persisted state remains the existing `failed` value.
+ * "Does this replica already hold origin version V of that row?" Only the seat
+ * can answer; a seat that cannot is treated as holding nothing, so an answer
+ * without a probe waits rather than clearing early.
  */
-export function presentPendingIntentMutation(
-  mutation: OptimisticMutation,
-  intent: ReplicaIntent
-): OptimisticMutation {
-  const visible: OptimisticMutation =
-    mutation.op === "upsert"
-      ? {
-          ...mutation,
-          values: Object.fromEntries(
-            Object.entries(mutation.values).flatMap(([key, value]) =>
-              key === PENDING_SUPERSEDES_FIELD
-                ? []
-                : [[key, cloneReplicaValue(value)]]
-            )
-          ),
-        }
-      : { ...mutation };
-  return decoratePendingMutation(
-    visible,
-    pendingPresentation(intent)
-  ) as OptimisticMutation;
-}
+export type HeldVersionProbe = (version: ReplicaBaseVersion) => boolean;
 
-/** The presented facts of one intent, for the row's key and for the sidecar. */
-function pendingPresentation(
-  intent: ReplicaIntent
-): PendingIntentPresentationInput {
-  return {
-    intentId: intent.intentId,
-    state: intent.state,
-    action: intent.action,
-    attempts: intent.attempts,
-    ...(intent.reason ? { reason: intent.reason } : {}),
-    ...(intent.conflict ? { conflict: intent.conflict } : {}),
-    ...(intent.enqueuedAt ? { enqueuedAt: intent.enqueuedAt } : {}),
-    ...(intent.stewardLabel ? { stewardLabel: intent.stewardLabel } : {}),
-  };
-}
-
-/** What one intent tells a read's sidecar, or nothing once it has executed. */
 export function presentPendingIntentFacts(
   intent: ReplicaIntent
 ): PendingOverlayFacts | undefined {
-  return pendingOverlayFacts(pendingPresentation(intent));
+  return pendingOverlayFacts({
+    intentId: intent.intentId,
+    state: intent.state,
+    action: intent.action,
+    ...(intent.reason ? { reason: intent.reason } : {}),
+    ...(intent.stewardLabel ? { stewardLabel: intent.stewardLabel } : {}),
+    ...(intent.conflict ? { conflict: intent.conflict } : {}),
+    ...(intent.attempts === undefined ? {} : { attempts: intent.attempts }),
+    ...(intent.enqueuedAt ? { enqueuedAt: intent.enqueuedAt } : {}),
+  });
+}
+
+function heldEverywhere(
+  answered: readonly ReplicaBaseVersion[],
+  holdsVersion: HeldVersionProbe | undefined
+): boolean {
+  if (!holdsVersion) return false;
+  return answered.every((version) => holdsVersion(version));
+}
+
+/** What the member reads when a revoked share expires their queued write. */
+export const SHAPE_REVOKED_REASON = "no longer shared with you";
+
+/** An intent belongs to a shape if its optimistic rows or its declared read
+ *  dependencies name it — the two places a shape id is written down. */
+function touchesShape(intent: ReplicaIntent, shapeId: string): boolean {
+  return (
+    intent.optimistic.some((mutation) => mutation.shapeId === shapeId) ||
+    (intent.dependencies ?? []).some(
+      (dependency) => dependency.shapeId === shapeId
+    ) ||
+    (intent.baseVersions ?? []).some((version) => version.shapeId === shapeId)
+  );
 }
 
 export class IntentQueue {
@@ -157,8 +138,8 @@ export class IntentQueue {
       enqueuedAt: new Date().toISOString(),
       optimistic: input.optimistic ?? [],
       dependencies: input.dependencies ?? [],
-      ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
       ...(input.stewardLabel ? { stewardLabel: input.stewardLabel } : {}),
+      ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
     });
   }
 
@@ -187,11 +168,40 @@ export class IntentQueue {
     });
   }
 
-  async applyOutcomes(outcomes: IntentOutcome[]): Promise<ReplicaIntent[]> {
+  /**
+   * G1 (#929): an `executed` answer that names ORIGIN ROW VERSIONS settles the
+   * pending row only once this replica HOLDS them. Until then the intent stays
+   * `awaiting-change` — the state the outbox already has for "the gateway said
+   * yes, the row has not arrived" — so the badge clears when the member can
+   * actually see their own change, not one round trip earlier.
+   *
+   * `holdsVersion` is injected because only the seat can answer it: on an
+   * audience it reads the subscription's shape lineage, and a seat that cannot
+   * answer passes nothing and settles as before.
+   */
+  async applyOutcomes(
+    outcomes: IntentOutcome[],
+    holdsVersion?: HeldVersionProbe
+  ): Promise<ReplicaIntent[]> {
     const updated: ReplicaIntent[] = [];
     await applyInIntentOrder(outcomes, async (outcome) => {
       const existing = await this.store.get(outcome.intentId);
       if (!existing || !OVERLAY_STATES.has(existing.state)) return;
+      if (
+        outcome.status === "executed" &&
+        outcome.answeredVersions &&
+        outcome.answeredVersions.length > 0 &&
+        !heldEverywhere(outcome.answeredVersions, holdsVersion)
+      ) {
+        updated.push(
+          await this.store.transition(outcome.intentId, [...OVERLAY_STATES], {
+            state: "awaiting-change",
+            answeredVersions: outcome.answeredVersions,
+            reason: undefined,
+          })
+        );
+        return;
+      }
       // A conflict is a state of its own, and a conflict whose BASE ROW IS
       // GONE is a third one (#922 G5): the member's remedy differs, so the
       // verdict must too. The outbox `state` column is unconstrained TEXT, so
@@ -202,6 +212,7 @@ export class IntentQueue {
         reason: outcome.reason,
         output: outcome.output,
         ...(outcome.conflict ? { conflict: outcome.conflict } : {}),
+        ...(outcome.waitingOn ? { waitingOn: outcome.waitingOn } : {}),
       };
       // Executed is the only settled state: the unchanged outbox contract
       // journals it and scrubs its input. Attention outcomes remain ordinary
@@ -232,6 +243,57 @@ export class IntentQueue {
     return this.#mirror.pending([...OVERLAY_STATES]);
   }
 
+  /**
+   * Settle the answers this replica has now caught up to (G1). Called after a
+   * change batch applies: an `awaiting-change` intent whose answered versions
+   * have arrived is executed, and the outbox journals it as it always did.
+   */
+  async settleAnswered(
+    holdsVersion: HeldVersionProbe
+  ): Promise<ReplicaIntent[]> {
+    const waiting = await this.store.list(["awaiting-change"]);
+    const settled: ReplicaIntent[] = [];
+    await applyInIntentOrder(waiting, async (intent) => {
+      const answered = intent.answeredVersions ?? [];
+      if (answered.length === 0) return;
+      if (!heldEverywhere(answered, holdsVersion)) return;
+      settled.push(
+        await this.store.settle(intent.intentId, ["awaiting-change"], {
+          state: "executed",
+        })
+      );
+    });
+    return settled;
+  }
+
+  /**
+   * A SHARE WAS REVOKED (#929). The shape's rows leave this device, so every
+   * write still queued over one of them can never land: it settles `expired`,
+   * which is the outbox's own word for "this waited too long, decide again",
+   * with the reason the member actually needs to read.
+   *
+   * `expired` is not `failed`: nothing went wrong on the wire, and there is no
+   * retry that would work — the row is not this member's to write any more.
+   */
+  async expireShape(
+    shapeId: string,
+    reason = SHAPE_REVOKED_REASON
+  ): Promise<ReplicaIntent[]> {
+    const open = await this.store.list([...OVERLAY_STATES]);
+    const expired: ReplicaIntent[] = [];
+    await applyInIntentOrder(open, async (intent) => {
+      if (!touchesShape(intent, shapeId)) return;
+      if (intent.state === "expired") return;
+      expired.push(
+        await this.store.transition(intent.intentId, [intent.state], {
+          state: "expired",
+          reason,
+        })
+      );
+    });
+    return expired;
+  }
+
   /** A renderer crash can strand claimed work; replay it with the same id and hash. */
   async recoverSending(
     reason = "recovered after reload"
@@ -252,13 +314,29 @@ export class IntentQueue {
     return recovered;
   }
 
-  /**
-   * The overlay one read must apply: the mutations, and the sidecar that says
-   * what is happening to each write behind them. Built together because a row
-   * carrying an intent whose facts are missing is a badge with nothing behind
-   * it (#922 G3).
-   */
-  async overlay(shapeId?: string, entity?: string): Promise<ReplicaOverlay> {
+  async overlayMutations(
+    shapeId?: string,
+    entity?: string
+  ): Promise<OptimisticMutation[]> {
+    const intents = await this.pending();
+    const result: OptimisticMutation[] = [];
+    for (const intent of intents) {
+      for (const mutation of intent.optimistic) {
+        if (shapeId && mutation.shapeId !== shapeId) continue;
+        if (entity && mutation.entity !== entity) continue;
+        result.push(presentPendingIntentMutation(mutation, intent));
+      }
+    }
+    return result;
+  }
+
+  async overlay(
+    shapeId?: string,
+    entity?: string
+  ): Promise<{
+    mutations: OptimisticMutation[];
+    sidecar: Readonly<Record<string, PendingOverlayFacts>>;
+  }> {
     const intents = await this.pending();
     const mutations: OptimisticMutation[] = [];
     const sidecar: Record<string, PendingOverlayFacts> = {};
@@ -270,8 +348,7 @@ export class IntentQueue {
         mutations.push(presentPendingIntentMutation(mutation, intent));
         projected = true;
       }
-      if (!projected) continue;
-      const facts = presentPendingIntentFacts(intent);
+      const facts = projected ? presentPendingIntentFacts(intent) : undefined;
       if (facts) sidecar[intent.intentId] = facts;
     }
     return { mutations, sidecar };
@@ -511,3 +588,11 @@ export class IntentQueue {
     return this.store.destroy();
   }
 }
+
+// The revision algebra moved to `intent-revision.ts` when this file passed the
+// source cap; the queue is still where callers reach it.
+export {
+  presentPendingIntentMutation,
+  type PendingIntentReplacement,
+  type PendingIntentRevisionTarget,
+} from "./intent-revision.js";

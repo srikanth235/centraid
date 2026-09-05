@@ -649,17 +649,6 @@ cols:[
 ['invocation_id','TEXT','FK','agent_command_invocation', 'The command invocation that caused the revision (#916, review 5.2) → agent.command_invocation in the audit band. ON DELETE SET NULL: the archive pass retires old invocations and a revision outlives the record of it.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
 ]},
-{ n:'share_origin', std:'—', p:'The audience vault’s record of where a projected row came from (#599 decision 11). Sharing is placement, not filtering: the item is projected into the audience vault and its bytes hardlinked into that CAS. A vault-boundary sidecar, deliberately not a core.link.',
-cols:[
-['target_type','TEXT','PK FK NN','core_entity', 'Dotted logical entity of the projected row — <span class="k">target_*</span> is the one name a pointer pair wears in this vault (#916, ruling R10).'],
-['target_id','TEXT','PK FK NN','core_entity', 'Projected row id; (target_type,target_id) is the primary key AND a composite foreign key onto core.entity, so purging the row takes its provenance with it.'],
-['origin_vault_id','TEXT (uuidv7)','NN','', 'Vault the row was placed from; indexed.'],
-['origin_item_id','TEXT (uuidv7)','NN','', 'Row id in the origin vault — the same uuidv7 unless an idempotent re-share deduped onto a row already held.'],
-['shared_by','TEXT','NN','', 'Attribution of the placement — an owner id or peer:<vaultId>; renamed from shared_by_member (#726).'],
-['shared_at','INTEGER (epoch ms)','NN','', 'Epoch ms, not ISO text — boundary machinery on the blob_orphan clock. A re-share keeps the FIRST placement.'],
-['created_at','TEXT','NN','', 'UTC creation instant.'],
-['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
-]},
 ],
 },
 { id:'schedule', label:'schedule', desc:'Calendars, event behavior, attendance, tasks with their projects and sections, recurrence exceptions and the attendees an exception overrides. Time itself (core.event) is shared; this schema owns how time is negotiated and organized. The availability rule left with the domains that had no consumer (#916, ruling ONT-06).',
@@ -789,14 +778,14 @@ cols:[
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
 ]},
-{ n:'circle_member', std:'vCard MEMBER', p:'Membership join with history-friendly timestamps and the member’s commons capability.',
+{ n:'circle_member', std:'vCard MEMBER', p:'Membership join with history-friendly timestamps and the member’s sharing capability.',
 cols:[
 ['member_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Membership identity.'],
 ['circle_id','TEXT','FK NN','social.circle', 'Circle; UNIQUE(circle_id,party_id).'],
 ['party_id','TEXT','FK NN','core.party', 'Member as identity.'],
 ['added_at','TEXT (iso8601)','NN','', 'Join instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
-['capability','TEXT','NN CK','', 'CHECK in (\'read\',\'read+write\'); default read. What circle-backed commons sharing lets this member do (issue #731).'],
+['capability','TEXT','NN CK','', 'CHECK in (\'read\',\'read+write\'); default read. What circle-backed sharing offers this member when a circle is made an audience (issues #731, #929).'],
 ]},
 { n:'thread', std:'RFC 5322 threading · JMAP mailbox/thread · Nextcloud Talk rooms', p:'A message-thread container across channels — the same shape for SMS, email, DM, group.',
 cols:[
@@ -1293,7 +1282,7 @@ const MACHINERY = [
 {id:'outbox',label:'Outbox — external writes as inert artifacts the owner decides on',tables:['item']},
 {id:'notifications',label:'Notifications — durable notices',tables:['notice']},
 {id:'blob',label:'Blob custody — local-vs-replicated state, rebuilt on the sweep',tables:['custody_state','custody_rollup']},
-{id:'share',label:'Sharing — the authority plane, fulfillment, links, commons',tables:['party_vault_binding','circle_grant','commons_member_state','commons_op','commons_replay','commons_receipt','commons_cursor','commons_lineage','commons_retained','commons_intent','commons_invitation','authority','authority_request','authority_use','delivery_config','fulfillment','commons_verified','commons_supersession','commons_device_reach','commons_steward_contact']},
+{id:'share',label:'Sharing — the authority plane, fulfillment, links, subscriptions',tables:['party_vault_binding','authority','authority_request','authority_use','delivery_config','fulfillment','subscription','subscription_lineage']},
 ];
 
 /* ---------- §02 entity map data ---------- */
@@ -1392,7 +1381,7 @@ steps:[
 {sys:'Agenda',act:'Agenda’s day context reads the birthday: people.important_date is a MM-DD fact on Grandma’s canonical party, so the calendar renders it without owning it.',obj:'people.important_date d_88 (month_day 09-09 · label birthday) → core.party p_grandma',consent:'grant g_agent_ops · scope people:read · scope schedule:read',receipt:'receipt r_e301 · allow · read important_date'},
 {sys:'Photos',act:'Gather the album: assets whose confirmed face region names Grandma’s party, plus last year’s memory. media.create_album mints a core.collection — one curation mechanism, not an album table.',obj:'media.face_region ×23 (review_state=confirmed · party p_grandma) → core.collection col_bday26 (entries ×23)',consent:'grant g_agent_ops · scope media:read+act',receipt:'receipt r_e302 · allow · act media.create_album'},
 {sys:'Share plane',act:'Invoke share.grant for the linked person: a share_authority row, principal person × subject collection × verb=view, duration=standing. The share.* pack refuses if no live share_party_vault_binding names Grandma’s party (#903) — the People link ceremony is the only thing that writes one, and nothing is minted in the owner’s name to reach her.',obj:'share.authority au_9012 (p_grandma · view · standing) → subject core.collection col_bday26 · share.party_vault_binding b_17 (live)',consent:'grant g_agent_ops · risk high → owner confirmation 20:41 IST',receipt:'receipt r_e303 · allow · act share.grant'},
-{sys:'Fulfilment',act:'The fulfilment engine projects the subject’s closure into her vault on this gateway: content items, derivatives and blobs deduped on sha256, lineage in core.share_origin, one fulfilment row per peer vault; her vault then runs its own projection-ingest. Later additions to the collection re-project on the next pass — no new grant.',obj:'share.fulfillment f_204 (delivered) · audience vault v_grandma · core.share_origin ×23',consent:'the grant itself — fulfilment is transport, not a second consent',receipt:'receipt r_e304 · allow · read collection (closure)'},
+{sys:'Fulfilment',act:'The fulfilment engine projects the subject’s closure into her vault on this gateway: content items, derivatives and blobs deduped on sha256, shape-keyed lineage in share.subscription_lineage, one fulfilment row per peer vault; her vault then runs its own projection-ingest. Later additions to the collection re-project on the next pass — no new grant.',obj:'share.fulfillment f_204 (delivered) · audience vault v_grandma · share.subscription_lineage ×23',consent:'the grant itself — fulfilment is transport, not a second consent',receipt:'receipt r_e304 · allow · read collection (closure)'},
 {sys:'People',act:'Back on the person screen — the grant dashboard — the share is listed under Grandma with its verb and a revoke control. share.revoke stamps revoked_at and scrubs the projection; the answer itself is never UPDATEd.',obj:'share.authority au_9012 (live) · people.profile pr_grandma',consent:'grant g_agent_ops · scope people:read · scope share:read',receipt:'receipt r_e305 · allow · read authority'},
 ]},
 ];

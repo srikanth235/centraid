@@ -172,6 +172,15 @@ export interface InvokeRequest {
    * automation plane. Owner-device only.
    */
   demo?: { appId: string };
+  /**
+   * A MEMBER'S WRITE the ORIGIN is carrying (#929). The origin executes with
+   * its own credential — it is the single writer of a shared container — but
+   * the act is not the owner's own, so the owner's confirmation EXEMPTION must
+   * not apply to it: a gate the owner set over a command has to fire when
+   * someone else's write reaches it. Resolved by the peer door from the link
+   * pair and the member's vault signature, never caller-supplied prose.
+   */
+  onBehalfOfMember?: { vaultId: string; label?: string };
 }
 
 export interface ReadResult {

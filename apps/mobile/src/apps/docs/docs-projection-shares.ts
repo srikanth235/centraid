@@ -6,6 +6,11 @@
 // Same law as its parent: nothing is fabricated. Every field is a replica fact
 // or `null` where the replica cannot say — "unknown" is never "shared with
 // nobody" (#903).
+//
+// A SHARE IS A STANDING ANSWER AND A SUBSCRIPTION (#929): `share.authority`
+// says who may reach a document, `share.fulfillment` whether it has, and the
+// shape-keyed `share.subscription`/`share.subscription_lineage` pair says
+// which vault placed an inbound row here. No membership plane of its own.
 
 // `SharedFrom` is the BLUEPRINT's: two shapes for one fact is how seats drift.
 import type {
@@ -18,37 +23,47 @@ import {
   DOCUMENT_TARGET_TYPE,
   folderChain,
   FOLDER_CONTAINER_TYPE,
-  num,
   str,
 } from "./docs-projection-rows";
 import type { EntityRow } from "./docs-projection-rows";
 
-/** The three replica reads `originsByDocument` joins. */
+/** The four replica reads `originsByDocument` joins. */
 export interface OriginEntityRows {
-  origins: readonly EntityRow[];
+  subscriptions: readonly EntityRow[];
+  lineage: readonly EntityRow[];
   /** What turns an origin VAULT into a person. */
   bindings: readonly EntityRow[];
   parties: readonly EntityRow[];
 }
 
 export interface ShareEntityRows {
-  grants: readonly EntityRow[];
+  answers: readonly EntityRow[];
   circles: readonly EntityRow[];
   members: readonly EntityRow[];
-  states: readonly EntityRow[];
+  fulfillments: readonly EntityRow[];
+  bindings: readonly EntityRow[];
   parties: readonly EntityRow[];
 }
 
-function shareLabel(
-  implicit: boolean,
-  circleName: string | null,
-  memberLabels: readonly string[]
-): string {
-  if (!implicit && circleName) return circleName;
-  if (memberLabels.length === 0) return circleName ?? "a circle";
-  const shown = memberLabels.slice(0, 2).join(" and ");
-  const rest = memberLabels.length - 2;
-  return rest > 0 ? `${shown} +${rest}` : shown;
+/** The two verbs a share answer carries, in the words both seats print. */
+const CAPABILITY_OF_VERB: Readonly<Record<string, "read" | "read+write">> = {
+  view: "read",
+  edit: "read+write",
+};
+
+function nameByPartyOf(parties: readonly EntityRow[]): Map<string, string> {
+  return new Map(
+    parties.flatMap((party) => {
+      const partyId = str(party, "party_id");
+      const name = str(party, "display_name")?.trim();
+      return partyId && name ? [[partyId, name] as const] : [];
+    })
+  );
+}
+
+/** A revoked binding no longer says whose vault that is. */
+function liveBindings(bindings: readonly EntityRow[]): EntityRow[] {
+  return bindings.filter((binding) => str(binding, "revoked_at") === null);
 }
 
 /**
@@ -56,35 +71,37 @@ function shareLabel(
  *
  * The vault id is the durable fact; the NAME needs a live
  * `share_party_vault_binding`. No binding, no name — never a vault id worn as
- * one, and never a guess from `shared_by`, which is an owner id, not a party.
+ * one. SHAPE-KEYED: the subscription this vault holds is what names the sender
+ * and the moment, so two grants over one row cannot hide each other.
  */
 export function originsByDocument(
   rows: OriginEntityRows
 ): Map<string, SharedFrom> {
   const partyByVault = new Map(
-    rows.bindings.flatMap((binding) => {
+    liveBindings(rows.bindings).flatMap((binding) => {
       const vaultId = str(binding, "vault_id");
       const partyId = str(binding, "party_id");
-      // A revoked binding no longer says whose vault that is; the placement it
-      // once explained stays, unnamed.
-      return vaultId && partyId && str(binding, "revoked_at") === null
-        ? [[vaultId, partyId] as const]
+      return vaultId && partyId ? [[vaultId, partyId] as const] : [];
+    })
+  );
+  const nameByParty = nameByPartyOf(rows.parties);
+  const subscriptionByShape = new Map(
+    rows.subscriptions.flatMap((subscription) => {
+      const shapeId = str(subscription, "shape_id");
+      return shapeId && str(subscription, "state") === "subscribed"
+        ? [[shapeId, subscription] as const]
         : [];
     })
   );
-  const nameByParty = new Map(
-    rows.parties.flatMap((party) => {
-      const partyId = str(party, "party_id");
-      const name = str(party, "display_name")?.trim();
-      return partyId && name ? [[partyId, name] as const] : [];
-    })
-  );
   return new Map(
-    rows.origins.flatMap((origin) => {
-      if (str(origin, "target_type") !== DOCUMENT_TARGET_TYPE) return [];
-      const itemId = str(origin, "target_id");
-      const vaultId = str(origin, "origin_vault_id");
-      if (!itemId || !vaultId) return [];
+    rows.lineage.flatMap((claim) => {
+      if (str(claim, "target_type") !== DOCUMENT_TARGET_TYPE) return [];
+      const itemId = str(claim, "target_id");
+      const shapeId = str(claim, "shape_id");
+      const subscription = shapeId ? subscriptionByShape.get(shapeId) : null;
+      if (!itemId || !subscription) return [];
+      const vaultId = str(subscription, "origin_vault_id");
+      if (!vaultId) return [];
       const partyId = partyByVault.get(vaultId) ?? null;
       return [
         [
@@ -93,12 +110,33 @@ export function originsByDocument(
             vault_id: vaultId,
             party_id: partyId,
             name: partyId ? (nameByParty.get(partyId) ?? null) : null,
-            at: num(origin, "shared_at") ?? 0,
+            at: Date.parse(str(subscription, "subscribed_at") ?? "") || 0,
           },
         ] as const,
       ];
     })
   );
+}
+
+/**
+ * LIVE is granted AND not run out (#916): a time-boxed share that keeps
+ * answering yes is the same defect on the phone as it was in the resolver.
+ */
+function liveAnswers(
+  answers: readonly EntityRow[],
+  now: string
+): readonly EntityRow[] {
+  return answers.filter((answer) => {
+    const kind = str(answer, "principal_kind");
+    if (kind !== "person" && kind !== "circle") return false;
+    if (str(answer, "decision") !== "granted") return false;
+    if (str(answer, "revoked_at") !== null) return false;
+    const subject = str(answer, "subject_type");
+    if (subject !== DOCUMENT_TARGET_TYPE && subject !== FOLDER_CONTAINER_TYPE)
+      return false;
+    const expires = str(answer, "expires_at");
+    return expires === null || expires > now;
+  });
 }
 
 export function sharesByDocument(
@@ -107,10 +145,14 @@ export function sharesByDocument(
     documentIds,
     folderByDoc,
     folderConcepts,
+    /** The clock an `until-date` answer is read against; the caller's, so a
+     *  test can stand at a moment rather than at "whenever it ran". */
+    now = new Date().toISOString(),
   }: {
     documentIds: readonly string[];
     folderByDoc: ReadonlyMap<string, string>;
     folderConcepts: readonly EntityRow[];
+    now?: string;
   }
 ): Map<string, SharedWith[]> {
   const parentOf = new Map<string, string | null>(
@@ -125,14 +167,8 @@ export function sharesByDocument(
     )
   );
 
-  const grants = rows.grants.filter(
-    (grant) =>
-      str(grant, "plane") === "commons" &&
-      str(grant, "revoked_at") === null &&
-      (str(grant, "container_type") === DOCUMENT_TARGET_TYPE ||
-        str(grant, "container_type") === FOLDER_CONTAINER_TYPE)
-  );
-  if (grants.length === 0) return new Map();
+  const answers = liveAnswers(rows.answers, now);
+  if (answers.length === 0) return new Map();
 
   const circleById = new Map(
     rows.circles.flatMap((circle) => {
@@ -140,66 +176,76 @@ export function sharesByDocument(
       return id ? [[id, circle] as const] : [];
     })
   );
-  const membersByCircle = new Map<string, EntityRow[]>();
+  const membersByCircle = new Map<string, string[]>();
   for (const member of rows.members) {
     const circleId = str(member, "circle_id");
-    if (!circleId) continue;
+    const partyId = str(member, "party_id");
+    if (!circleId || !partyId) continue;
     const list = membersByCircle.get(circleId);
-    if (list) list.push(member);
-    else membersByCircle.set(circleId, [member]);
+    if (list) list.push(partyId);
+    else membersByCircle.set(circleId, [partyId]);
   }
-  const statusByGrantParty = new Map(
-    rows.states.flatMap((state) => {
-      const grantId = str(state, "grant_id");
-      const partyId = str(state, "party_id");
-      const status = str(state, "status");
-      return grantId && partyId && status
-        ? [[`${grantId} ${partyId}`, status] as const]
-        : [];
+  const rosterOf = (answer: EntityRow): string[] => {
+    const principalId = str(answer, "principal_id");
+    if (!principalId) return [];
+    return str(answer, "principal_kind") === "person"
+      ? [principalId]
+      : (membersByCircle.get(principalId) ?? []);
+  };
+  const nameByParty = nameByPartyOf(rows.parties);
+  const vaultByParty = new Map(
+    liveBindings(rows.bindings).flatMap((binding) => {
+      const partyId = str(binding, "party_id");
+      const vaultId = str(binding, "vault_id");
+      return partyId && vaultId ? [[partyId, vaultId] as const] : [];
     })
   );
-  const nameByParty = new Map(
-    rows.parties.flatMap((party) => {
-      const id = str(party, "party_id");
-      return id ? [[id, str(party, "display_name")] as const] : [];
+  // DELIVERED IS THE DURABLE FACT, NOT THE LIVE STATE (#846): an unreachable
+  // pass drops `delivered` back to `syncing`, and reading that as "invited"
+  // would tell the member a share they watched land had never arrived.
+  const deliveredTo = new Set(
+    rows.fulfillments.flatMap((row) => {
+      const grantId = str(row, "grant_id");
+      const peerVaultId = str(row, "peer_vault_id");
+      return grantId && peerVaultId && str(row, "delivered_at") !== null
+        ? [`${grantId} ${peerVaultId}`]
+        : [];
     })
   );
 
   const entryByGrant = new Map<string, SharedWith>();
-  for (const grant of grants) {
-    const grantId = str(grant, "grant_id");
-    const circleId = str(grant, "circle_id");
-    const containerId = str(grant, "container_id");
-    if (!grantId || !circleId || !containerId) continue;
-    const roster: SharedMember[] = (membersByCircle.get(circleId) ?? [])
-      .flatMap((member) => {
-        const partyId = str(member, "party_id");
-        if (!partyId) return [];
-        const status =
-          statusByGrantParty.get(`${grantId} ${partyId}`) ?? "invited";
-        if (status === "refused") return [];
-        const capability = str(member, "capability");
-        return [
-          {
-            party_id: partyId,
-            label: nameByParty.get(partyId) ?? "Someone",
-            capability: capability === "read+write" ? "read+write" : "read",
-            status: status === "current" ? "current" : "invited",
-          } satisfies SharedMember,
-        ];
+  for (const answer of answers) {
+    const grantId = str(answer, "authority_id");
+    const principalId = str(answer, "principal_id");
+    const containerId = str(answer, "subject_id");
+    if (!grantId || !principalId || !containerId) continue;
+    const capability = CAPABILITY_OF_VERB[str(answer, "verb") ?? ""] ?? "read";
+    const roster: SharedMember[] = rosterOf(answer)
+      .map((partyId) => {
+        const vaultId = vaultByParty.get(partyId);
+        return {
+          party_id: partyId,
+          label: nameByParty.get(partyId) ?? "Someone",
+          capability,
+          status:
+            vaultId !== undefined && deliveredTo.has(`${grantId} ${vaultId}`)
+              ? "current"
+              : "invited",
+        } satisfies SharedMember;
       })
       .sort((a, b) => a.label.localeCompare(b.label));
-    const circle = circleById.get(circleId);
+    const audience =
+      str(answer, "principal_kind") === "person" ? "person" : "circle";
     entryByGrant.set(grantId, {
       grant_id: grantId,
-      circle_id: circleId,
-      label: shareLabel(
-        Number(grant["implicit_circle"] ?? 0) === 1,
-        circle ? str(circle, "name") : null,
-        roster.map((member) => member.label)
-      ),
+      circle_id: audience === "circle" ? principalId : null,
+      audience,
+      label:
+        audience === "circle"
+          ? (str(circleById.get(principalId) ?? {}, "name") ?? "a circle")
+          : (roster[0]?.label ?? "Someone"),
       via:
-        str(grant, "container_type") === DOCUMENT_TARGET_TYPE
+        str(answer, "subject_type") === DOCUMENT_TARGET_TYPE
           ? "document"
           : "folder",
       container_id: containerId,
@@ -213,9 +259,9 @@ export function sharesByDocument(
   const byDocument = new Map<string, SharedWith[]>();
   for (const documentId of documentIds) {
     const chain = chainByDoc.get(documentId) ?? [];
-    const entries = grants
-      .flatMap((grant) => {
-        const grantId = str(grant, "grant_id");
+    const entries = answers
+      .flatMap((answer) => {
+        const grantId = str(answer, "authority_id");
         const entry = grantId ? entryByGrant.get(grantId) : undefined;
         if (!entry) return [];
         const reaches =

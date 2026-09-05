@@ -78,11 +78,6 @@ export const ENTITY_POINTERS: readonly EntityPointer[] = [
     note: "An attachment ON a purged target dangles (#441 A1). It was swept only for notes before this registry existed; now the engine does it for every target.",
   },
   {
-    table: "core_share_origin",
-    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
-    note: "Share-by-placement provenance (#599 decision 11): where a PROJECTED row came from. Its (type, id) IS its primary key, so the provenance row cannot outlive the row it attributes.",
-  },
-  {
     table: "knowledge_annotation",
     pairs: [{ typeCol: "target_type", idCol: "target_id" }],
     note: "A margin note on a purged target dangles (#441 A1) — previously swept only for notes, now for photos, documents and transactions too.",
@@ -118,14 +113,9 @@ export const ENTITY_POINTERS: readonly EntityPointer[] = [
     note: "Never cleaned before this registry (#441 A1): a stale map row makes the next import believe a purged entity is still known, so re-import SILENTLY skips it.",
   },
   {
-    table: "share_commons_lineage",
+    table: "share_subscription_lineage",
     pairs: [{ typeCol: "target_type", idCol: "target_id" }],
-    note: "Commons projection lineage names a RESIDENT row in this vault. Purge it and there is nothing left for revoke to scrub, while a retained marker could make a later row that reuses the id look shared.",
-  },
-  {
-    table: "share_commons_retained",
-    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
-    note: "Save-to-my-vault retention protects the current resident row from a later Commons revoke; if the owner purges that row its marker must leave too, or an id reused by a future row inherits retention.",
+    note: "A subscription's lineage names a RESIDENT row in this vault (#929). Purge it and there is nothing left for a revoke to scrub, while a stale claim would make a later row that reuses the id look shared.",
   },
 ];
 
@@ -164,18 +154,6 @@ export const ENTITY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   [
     "share_authority",
     "REVOKED BY TRIGGER, RETAINED AS HISTORY (#916, E2). A standing answer states what the owner decided about a subject; cascading it away on purge would delete the record that the authority once stood, which is the evidence a revocation exists to keep. So it is not a foreign key — but it is not a hand-swept pointer either: the BEFORE DELETE trigger on `core_entity` (`core_entity_revoke_on_purge`, schema/entity.ts) stamps `revoked_at` and `revoked_reason = 'subject-purged'` on every live answer about the subject, in the same statement as the purge. The plane's own subjects are not always rows — `enrich.scope` names a cascade level. The PRINCIPAL pair is a different question, accounted for in `party-pointers.ts`.",
-  ],
-  [
-    "share_circle_grant",
-    "REVOKED BY TRIGGER, RETAINED AS HISTORY (#916, E2), for the same reason as `share_authority`: the grant and its receipts must survive container removal for restore, reconciliation and audit, but they must not survive it STILL LIVE. `core_entity_revoke_on_purge` stamps `revoked_at` and `revoked_reason = 'container-purged'` as the supertype row goes.",
-  ],
-  [
-    "share_commons_invitation",
-    "Consent metadata may name a container that is not present in the receiving vault before acceptance, and it remains the historical accept/refuse record after unshare. The invitation lifecycle, not target-row purge, owns its status and retention.",
-  ],
-  [
-    "share_commons_supersession",
-    "Recovery lineage, not a live pointer: `container_type` names the KIND of the two containers a steward handover moved between, and its ids are `old_container_id`/`new_container_id` — grant containers, not canonical rows.",
   ],
   [
     "access_provenance",

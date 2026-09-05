@@ -64,19 +64,15 @@ export {
 // they sit outside the per-vault handler path by design.
 export {
   shareItemsToVault,
-  unshareFromVault,
   moveItemsOutOfVault,
   placeItemsInVault,
-  readShareOrigin,
   type ShareVaultRef,
   type ShareItemsToVaultInput,
   type ShareItemsToVaultResult,
-  type UnshareFromVaultInput,
   type UnshareFromVaultResult,
   type MoveItemsOutOfVaultInput,
   type PlaceItemsInVaultInput,
   type PlaceItemsInVaultResult,
-  type ShareOriginRecord,
 } from "./share/placement.js";
 // The two halves of a share (#726): `readShareClosure` is origin-side and
 // read-only, `projectShareClosure` audience-side and opens the single
@@ -106,142 +102,73 @@ export {
   type ProjectionIngestHook,
   type ProjectionIngestContext,
 } from "./share/projection-ingest.js";
+// A share is a subscription (#929): the origin composes a grant-keyed shape,
+// a transport carries it, and the audience seat ingests it through the same
+// door an authored row takes.
 export {
-  isCommonsCommandActable,
-  commonsRoutesForCommand,
-  COMMONS_COMMAND_ROUTES,
-  COMMONS_CONTAINER_KEYS,
-  type CommonsCommandRoute,
-  type CommonsContainerKey,
-  type CommonsRouteResolution,
-} from "./share/commons-routing.js";
+  composeShareShape,
+  shareShapeSizeBytes,
+  ShareShapeMaxSizeError,
+  SHARE_SHAPE_DEFAULT_MAX_SIZE_BYTES,
+  SHARE_SHAPE_FORMAT_VERSION,
+  type ComposeShareShapeInput,
+  type ShareShapeFrame,
+  type ShareShapeRowVersion,
+} from "./share/subscription-frame.js";
+export {
+  ingestShareShape,
+  purgeShareShape,
+  type IngestShareShapeResult,
+  type PurgeShareShapeResult,
+} from "./share/subscription-seat.js";
+export {
+  readSubscription,
+  readSubscriptionLineage,
+  recordSubscription,
+  type RecordSubscriptionInput,
+  type SubscriptionCursor,
+  type SubscriptionLineageRow,
+  type SubscriptionRecord,
+} from "./share/subscription-store.js";
+export {
+  judgeMemberIntent,
+  memberIntentBytes,
+  verifyMemberIntent,
+  type MemberIntentEnvelope,
+  type MemberIntentVerdict,
+} from "./share/subscription-intent.js";
+export {
+  planShareShapeIngest,
+  shareShapeStructureDigest,
+  type ShapeFieldUpdate,
+  type ShareShapePlan,
+} from "./share/subscription-delta.js";
+export {
+  isContainerCommandActable,
+  containerRoutesForCommand,
+  CONTAINER_COMMAND_ROUTES,
+  type ContainerCommandRoute,
+  type ContainerRouteResolution,
+} from "./share/container-routing.js";
+// A vault written before the subscription wave still carries the commons
+// rail; the one-shot pass turns it into standing answers and drops it (#929).
+export {
+  migrateCommonsToSubscriptions,
+  LEGACY_COMMONS_TABLES,
+  type CommonsMigrationReport,
+} from "./share/subscription-migration.js";
 export {
   bindPartyToVault,
+  ensureBoundParty,
+  partiesBoundToVault,
   revokePartyVaultBinding,
   type PartyVaultBindOutcome,
   type PartyVaultBindingRow,
   type PartyVaultRevokeOutcome,
 } from "./share/party-vault-binding.js";
-export {
-  createCommonsGrant,
-  ensureCommonsParty,
-  readCommonsGrant,
-  commonsClosure,
-  commonsClosureSizeBytes,
-  compactCommonsOperations,
-  acknowledgeCommonsSeatCursor,
-  assertCommonsWithinMax,
-  compileCommons,
-  appendCommonsOperation,
-  appendCommonsOperationInTransaction,
-  commonsGrantForCommand,
-  COMMONS_MEMBER_IDENTITY_CHANGED,
-  commonsMemberIdentityChangedReason,
-  executeCommonsCommand,
-  queueCommonsIntent,
-  settleCommonsIntent,
-  cancelCommonsIntent,
-  expireParkedCommonsIntents,
-  readCommonsIntentBasedOnSequence,
-  COMMONS_INTENT_PARK_HORIZON_MS,
-  STALE_CONTEXT_REASON_PREFIX,
-  retainCommonsItem,
-  removeCommonsFromSeat,
-  transferCommonsSteward,
-  commonsCurrentSize,
-  type CommonsCapability,
-  type CommonsDeparturePolicy,
-  type CommonsMemberInput,
-  type CommonsGrantRecord,
-  type CompiledCommonsSeat,
-  type CommonsCommandDecision,
-  type CommonsIntentStatus,
-  type ExecuteCommonsCommandInput,
-  type ExecuteCommonsCommandResult,
-} from "./share/commons.js";
-// The steward's per-intent answer (#872): approve re-enters the signed rail,
-// decline settles `denied` with the steward's own words. Neither is a second
-// write path — see the module header.
-export {
-  decideCommonsIntent,
-  type CommonsIntentDecisionResult,
-  type DecideCommonsIntentInput,
-} from "./share/commons-decide.js";
-export {
-  listCommonsGrants,
-  findCommonsGrantForContainer,
-  ensureCommonsGrant,
-  upsertCommonsMember,
-  refuseCommonsMember,
-  removeCommonsMember,
-  revokeCommonsGrant,
-  commonsSeats,
-  recompileCommonsGrants,
-  scrubCommonsSeat,
-  type CommonsMemberRecord,
-  type CommonsGrantView,
-} from "./share/commons-lifecycle.js";
-export {
-  readCommonsCursor,
-  type CommonsCursor,
-} from "./share/commons-cursor.js";
-export {
-  CommonsHistoryError,
-  isCommonsHistoryError,
-  commonsGenesisHash,
-  commonsOpHash,
-  commonsOpChainFields,
-  commonsStateDigest,
-  readCommonsChainHead,
-  readCommonsVerified,
-  verifyCommonsCheckpoint,
-  type CommonsCheckpointAttestation,
-  type CommonsHistoryFaultTag,
-  type CommonsOpChainFields,
-  type CommonsVerifiedPoint,
-} from "./share/commons-chain.js";
-export {
-  commonsIntentBytes,
-  signCommonsIntent,
-  verifyCommonsIntent,
-  type CommonsMemberSignature,
-} from "./share/commons-signature.js";
-export {
-  exportCommonsBootstrap,
-  exportCommonsSyncFrame,
-  applyCommonsBootstrap,
-  applyCommonsIncrement,
-  applyCommonsTombstone,
-  isCommonsIncrementUnusable,
-  queueCommonsInvitation,
-  createCommonsClaimInvitation,
-  claimCommonsInvitation,
-  listCommonsInvitations,
-  answerCommonsInvitation,
-  type CommonsBootstrap,
-  type CommonsIncrement,
-  type CommonsTombstone,
-  type CommonsSyncFrame,
-  type CommonsInvitationRecord,
-} from "./share/commons-bootstrap.js";
-// Command-tail replay (#750 invariant 7): catch-up proportional to what
-// changed, because the steward ships the operations rather than the rows.
-export {
-  isCommonsReplayError,
-  replicaInvocationKey,
-  type CommonsReplicaExecutor,
-  type CommonsTailBlob,
-} from "./share/commons-replay.js";
-// Replica-export recovery: a member re-founds a group whose steward is gone
-// (#731). Deliberate ceremony — see the module header.
-export {
-  recoverCommonsFromReplica,
-  readCommonsRecoveryLineage,
-  type CommonsRecoveryLineage,
-  type CommonsRecoveryRefusal,
-  type CommonsRecoveryResult,
-  type RecoverCommonsFromReplicaInput,
-} from "./share/commons-recovery.js";
+// The party↔vault binding is the whole of "where is this person reachable"
+// (#929): the commons rail that used to sit here is gone, and a share is a
+// subscription over the answer plane instead.
 // The GRANT PLANE (#825): a share is a standing grant, fulfillment is
 // per-audience-vault delivery state, and the channel is the party↔vault
 // binding read as one state. Commons stays the edit-fulfillment strategy.
@@ -282,9 +209,9 @@ export {
   automationAnswers,
   automationSubjectsOf,
   hasAnsweredEver,
-  scopeForSubject,
   recordAutomationAnswers,
   revokeAutomationAnswers,
+  scopeForSubject,
   AUTOMATION_ENTITY_SUBJECT,
   AUTOMATION_PACK_SUBJECT,
   type AutomationAnswer,
@@ -293,28 +220,6 @@ export {
   type AutomationSubject,
   type AutomationVerb,
 } from "./grant/automation-authority.js";
-// Egress answers and companion attenuation, both rows of the one plane (#928).
-export {
-  EGRESS_SUBJECT_TYPE,
-  egressPrincipalKind,
-  isLiveEgressAuthority,
-  listEgressAuthorities,
-  liveEgressAuthorityId,
-  liveEgressAuthorityIdsFor,
-  recordEgressAuthority,
-  revokeAllEgressAuthorities,
-  revokeEgressAuthority,
-  type EgressAuthorityKey,
-  type EgressAuthorityRecord,
-  type EgressPrincipalKind,
-} from "./grant/egress-authority.js";
-export {
-  SURFACE_SUBJECT_TYPE,
-  SURFACE_VERB,
-  listCompanionSurfaces,
-  readCompanionSurfaces,
-  setCompanionSurfaces,
-} from "./grant/companion-surfaces.js";
 // The closed declaration of what the plane may be asked (#883).
 export {
   AUTHORITY_REGISTRY,
@@ -351,22 +256,62 @@ export {
   type ShareChannel,
   type ShareChannelState,
 } from "./grant/channel.js";
-// Fulfillment: the act of keeping a grant true. View re-projects the subject
-// over the closure transport, edit routes back through the commons rail, and
-// revoke propagates a removal instead of pretending it reached the peer.
+export {
+  EGRESS_SUBJECT_TYPE,
+  egressPrincipalKind,
+  isLiveEgressAuthority,
+  listEgressAuthorities,
+  liveEgressAuthorityId,
+  liveEgressAuthorityIdsFor,
+  recordEgressAuthority,
+  revokeAllEgressAuthorities,
+  revokeEgressAuthority,
+  type EgressAuthorityKey,
+  type EgressAuthorityRecord,
+} from "./grant/egress-authority.js";
+export {
+  listCompanionSurfaces,
+  readCompanionSurfaces,
+  setCompanionSurfaces,
+} from "./grant/companion-surfaces.js";
+export {
+  closeObsoleteScopeRequest,
+  getOpenScopeRequest,
+  listOpenScopeRequests,
+  markScopeRequestDecided,
+  openScopeRequest,
+  type ScopeRequestSummary,
+} from "./grant/authority-request.js";
+// Keeping a grant true is START and STOP over a subscription (#929): the
+// origin composes a grant-keyed shape and a transport carries it, so a
+// co-hosted audience and one on another gateway take the same delivery path.
 export {
   createGrantProjectionMemory,
-  fulfillShareGrant,
-  propagateShareGrantRevocation,
-  ShareGrantMaxSizeError,
+  shareGrantShapeId,
+  startShareSubscription,
+  stopShareSubscription,
+  NOTHING_DELIVERED_DETAIL,
   type GrantProjectionMemory,
-  type FulfillShareGrantInput,
-  type GrantFulfillmentResult,
-  type GrantFulfillmentStep,
-  type GrantRemovalResult,
-  type GrantRemovalStep,
-  type PropagateShareGrantRevocationInput,
+  type ShareDeliveryOutcome,
+  type ShareRemovalOutcome,
+  type ShareShapeTransport,
+  type ShareSubscriptionResult,
+  type ShareSubscriptionStep,
+  type ShareSubscriptionStopResult,
+  type ShareSubscriptionStopStep,
+  type ShareTransportRoute,
+  type StartShareSubscriptionInput,
+  type StopShareSubscriptionInput,
 } from "./grant/fulfillment.js";
+export {
+  listPendingShareDeliveries,
+  type PendingShareDelivery,
+} from "./grant/grant-fulfillment-rows.js";
+export {
+  loopbackShareTransport,
+  loopbackShareTransports,
+  type LoopbackShareTransportInput,
+} from "./share/subscription-transport.js";
 export {
   routeShareGrantEdit,
   SHARE_GRANT_CO_CONTRIBUTION_COMMANDS,
@@ -803,6 +748,7 @@ export {
 export {
   bootstrapVault,
   enrollDevice,
+  enrollApp,
   enrollAgent,
   type BootstrapResult,
   type BootstrapVaultOptions,
@@ -839,15 +785,6 @@ export {
   type AppSummary,
   type AgentSummary,
 } from "./host.js";
-export {
-  openScopeRequest,
-  closeObsoleteScopeRequest,
-  listOpenScopeRequests,
-  getOpenScopeRequest,
-  markScopeRequestDecided,
-  type ScopeTriple,
-  type ScopeRequestSummary,
-} from "./grant/authority-request.js";
 export { scopeCovers, type ScopeExtent } from "./scope-extent.js";
 
 export { registerScheduleCommands } from "./commands/schedule.js";

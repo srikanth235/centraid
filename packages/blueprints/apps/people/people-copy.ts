@@ -76,8 +76,6 @@ export const LINK = {
   linked: "Linked",
   vaultRow: "Linked vault",
   linkedWhen: (when: string) => `linked ${when.toLowerCase()}`,
-  inviteRow: "Invitation sent",
-  inviteWaiting: "waiting to be accepted",
   sharedSince: (capability: string, when: string) =>
     `${capability} · since ${when.toLowerCase()}`,
 } as const;

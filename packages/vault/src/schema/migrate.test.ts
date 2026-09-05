@@ -145,21 +145,22 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("ONE rung: a fresh vault is the baseline and stops at user_version 1", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(1);
+  test("FIVE rungs: the baseline plus #929's three and the #928 ask tables, and a fresh vault stops at user_version 5", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(5);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(1);
+    expect(version.user_version).toBe(5);
     for (const table of [
       "locker_auth_credential",
       "core_entity",
       "core_entity_revision",
       "social_contact_channel",
       "notifications_notice",
-      "share_circle_grant",
       "share_authority",
+      "share_authority_request",
+      "share_authority_use",
       "share_delivery_config",
       "share_fulfillment",
       "access_provenance",
@@ -180,6 +181,17 @@ describe("schema/migrate", () => {
     for (const gone of [
       "people_merge",
       "share_grant",
+      // The commons rail (#929): a fresh file never had it, and a file that
+      // did loses it to `migrateCommonsToSubscriptions`.
+      "share_circle_grant",
+      "share_commons_op",
+      "share_commons_member_state",
+      "share_commons_intent",
+      "share_commons_invitation",
+      // Row-keyed placement provenance (#929, rung four): shape-keyed
+      // `share_subscription_lineage` is the only answer to "which vault did
+      // this row come from" now.
+      "core_share_origin",
       "enrich_consent",
       "consent_app",
       "locker_item_history",
@@ -207,6 +219,31 @@ describe("schema/migrate", () => {
     expect(columnNames(db.vault, "media_asset")).not.toContain("favorite");
     expect(columnNames(db.vault, "core_vault")).toContain("self_party_id");
     db.close();
+  });
+
+  test("rung five lands the #928 ask tables on a file already at user_version 4", () => {
+    // The #929 golden froze at v2; files that have climbed past rung 1 never
+    // re-run SHARE_AUTHORITY_DDL, so the ask/use tables #928 composed into
+    // the baseline need their own rung. IF NOT EXISTS keeps a fresh file
+    // (which already created them) honest.
+    const raw = new DatabaseSync(":memory:");
+    raw.exec("PRAGMA user_version = 4");
+    migrate(raw, VAULT_MIGRATIONS);
+    const version = raw.prepare("PRAGMA user_version").get() as {
+      user_version: number;
+    };
+    expect(version.user_version).toBe(5);
+    for (const table of ["share_authority_request", "share_authority_use"]) {
+      expect(
+        raw
+          .prepare(
+            `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`
+          )
+          .get(table),
+        table
+      ).toBeTruthy();
+    }
+    raw.close();
   });
 
   test("the composed rung includes Locker authentication columns", () => {
@@ -445,7 +482,7 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("a fresh file on disk reopens with no second rung and no schema drift", () => {
+  test("a fresh file on disk reopens with no further rung and no schema drift", () => {
     // ONE BASELINE (#916): "reopen is a no-op" is the whole compatibility
     // story a v0 file has. On a REAL file — the replay above re-runs `migrate`
     // on a handle that never left the process.
@@ -465,10 +502,10 @@ describe("schema/migrate", () => {
     first.close();
 
     const vaultFile = path.join(dir, "vault.db");
-    expect(userVersionOf(vaultFile)).toBe(1);
+    expect(userVersionOf(vaultFile)).toBe(5);
 
     const second = openVaultDb({ dir });
-    expect(userVersionOf(vaultFile)).toBe(1);
+    expect(userVersionOf(vaultFile)).toBe(5);
     expect(shapeOf(second)).toBe(before);
     second.close();
   });

@@ -1033,11 +1033,6 @@
       "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
       "flow": "untrusted-render-properties"
     },
-    "commons-steward-ordered-convergence": {
-      "statement": "Each Commons grant has one independent monotonic steward sequence; cursor-gapped members converge to the same domain state, and capability downgrades govern commands from their exact stream position onward.",
-      "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
-      "flow": "commons-convergence-properties"
-    },
     "placement-registry-parity": {
       "statement": "Every placeable blueprint entity is enumerated once and Locker is structurally excluded.",
       "owner": "packages/blueprints/src/placement-registry.test.ts",
@@ -1390,62 +1385,29 @@
       "label": "Schedules replay from their seed",
       "kind": "simulation",
       "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "owner": "packages/vault/src/share/subscription-sim.test.ts",
       "testName": "the same seed produces the same program",
       "flow": "commons-grant-plane-simulation",
       "seats": ["origin", "custodian", "viewer"],
       "statement": "A seeded interleaving is a program: the same seed yields the same schedule, so a simulation failure is replayable rather than anecdotal."
     },
     {
-      "id": "sim-grant-plane-replay",
-      "label": "The grant plane replays too",
-      "kind": "simulation",
-      "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
-      "testName": "the grant plane replays from its seed too",
-      "flow": "commons-grant-plane-simulation",
-      "seats": ["origin", "custodian", "viewer"],
-      "statement": "The grant plane rides the same seeded schedule as the commons rail, and a run that proved nothing about grants is itself a failure."
-    },
-    {
       "id": "sim-seeded-convergence",
       "label": "Every seed converges",
       "kind": "simulation",
       "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "owner": "packages/vault/src/share/subscription-sim.test.ts",
       "testName": "seed %i converges and holds every golden invariant",
       "flow": "commons-grant-plane-simulation",
       "seats": ["origin", "custodian", "viewer"],
-      "statement": "Across the pinned seed set \u2014 including the regression seeds earlier runs found \u2014 cursor-gapped members converge and every golden invariant holds through pulls, crash-restarts and compaction."
-    },
-    {
-      "id": "sim-wide-overlap",
-      "label": "Five seats, three grants, heavy overlap",
-      "kind": "simulation",
-      "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
-      "testName": "a five-seat, three-grant world with heavy overlap also converges",
-      "flow": "commons-grant-plane-simulation",
-      "seats": ["origin", "custodian", "viewer"],
-      "statement": "Widening the world past the join lane's floor \u2014 five seats sharing three overlapping grants \u2014 does not break convergence."
-    },
-    {
-      "id": "sim-grant-commons-interleave",
-      "label": "Grant lifecycle interleaves with the rail",
-      "kind": "simulation",
-      "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
-      "testName": "seed 839001 interleaves the grant lifecycle with the commons rail",
-      "flow": "commons-grant-plane-simulation",
-      "seats": ["origin", "custodian", "viewer"],
-      "statement": "Grant create / fulfil / origin-edit operations interleaved with commons traffic on one seeded schedule still converge to one domain state."
+      "statement": "Across the pinned seed set \u2014 including the regression seeds earlier runs found \u2014 the subscription plane converges and every golden invariant holds through delivery, origin edits, audience tampers, channel churn, revocation and parked-payload settlement."
     },
     {
       "id": "sim-revocation-severance",
       "label": "Revocation severs a grant the host lost reach for",
       "kind": "simulation",
       "lane": "per-pr",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "owner": "packages/vault/src/share/subscription-sim.test.ts",
       "testName": "a revocation severs a grant the host lost reach for mid-life",
       "flow": "commons-grant-plane-simulation",
       "seats": ["origin", "custodian", "viewer"],
@@ -1545,10 +1507,10 @@
       "id": "scope-commons",
       "label": "Scope commons",
       "source": [
-        "packages/vault/src/share/commons-chain.ts",
+        "packages/vault/src/share/subscription-seat.ts",
         "packages/blueprints/apps/_shared/scope-merge.ts"
       ],
-      "propertyFlow": "commons-convergence-properties",
+      "propertyFlow": "commons-grant-plane-simulation",
       "mutationSeed": null,
       "appEngineColumn": false
     },
@@ -3378,21 +3340,22 @@
     },
     {
       "id": "commons-convergence-properties",
-      "name": "Commons sequencing and cursor-gapped convergence properties",
+      "name": "Subscription origin-authoritative ingest holds across the live grant plane",
       "surface": "vault-core",
       "dimension": "correctness",
       "tier": "unit",
-      "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
+      "owner": "packages/vault/src/share/subscription.test.ts",
       "minimumTests": 3
     },
     {
       "id": "commons-grant-plane-simulation",
-      "name": "Seeded commons+grant schedules converge and hold the grant-plane invariants",
+      "name": "Seeded subscription+grant schedules converge and hold the grant-plane invariants",
       "surface": "vault-core",
       "dimension": "correctness",
       "tier": "unit",
-      "owner": "packages/vault/src/share/commons-sim.test.ts",
-      "minimumTests": 6
+      "owner": "packages/vault/src/share/subscription-sim.test.ts",
+      "minimumTests": 3,
+      "approvedMinimumTestsDeviation": "#929 deleted the commons rail: the dropped cases (`the grant plane replays from its seed too`, `a five-seat, three-grant world with heavy overlap also converges`, `seed 839001 interleaves the grant lifecycle with the commons rail`) named compaction, the chain, and interleave with the op log, which left with the rail. Seed 839001's 320-action program already fires grant create / fulfil / origin-edit / revoke / propagate, so the interleave case is subsumed. The surviving three are the same-seed replay, the golden-invariant seed, and the D1 severance probe."
     },
     {
       "id": "backup-crypto-properties",

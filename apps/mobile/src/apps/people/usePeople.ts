@@ -358,17 +358,6 @@ export function usePerson(partyId: string): PersonData {
       []
     )
   );
-  const invitations = useReplicaQuery(
-    APP,
-    useMemo(
-      () => ({
-        limit: MOBILE_ENTITY_READ_WINDOW,
-        entity: "share.commons_invitation",
-      }),
-      []
-    )
-  );
-
   const queryState = combineReplicaQueryStates([
     channels,
     partyNotes,
@@ -382,15 +371,13 @@ export function usePerson(partyId: string): PersonData {
   const loading = people.loading || queryState.loading;
 
   const bindingRows = shareRows(bindings);
-  const invitationRows = shareRows(invitations);
   const shareLinks = useMemo(
     () =>
       projectShareLinks({
         partyId,
         bindings: bindingRows,
-        invitations: invitationRows,
       }),
-    [bindingRows, invitationRows, partyId]
+    [bindingRows, partyId]
   );
 
   const partyNames = useMemo(() => {

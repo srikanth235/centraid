@@ -2,10 +2,11 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { nowIso, uuidv7 } from "../ids.js";
 import { closeOpenVaults, household } from "../share/placement-fixture.js";
+import { ShareShapeMaxSizeError } from "../share/subscription-frame.js";
+import { loopbackShareTransports } from "../share/subscription-transport.js";
 import {
   createGrantProjectionMemory,
-  fulfillShareGrant,
-  ShareGrantMaxSizeError,
+  startShareSubscription,
 } from "./fulfillment.js";
 import {
   addParty,
@@ -59,12 +60,16 @@ describe("grant/fulfillment — roster and ceiling", () => {
       grantedBy: owner,
     });
 
-    const first = fulfillShareGrant({
+    const first = startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor: (vaultId) =>
-        vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+      transportFor: loopbackShareTransports({
+        origin: home.origin,
+        seatFor: (vaultId) =>
+          vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+        now: () => now,
+      }),
       now,
     });
     // The granter is in the roster and gets no step: a circle containing the
@@ -83,12 +88,16 @@ describe("grant/fulfillment — roster and ceiling", () => {
     const nila = addParty(home.origin.vault, "Nila", later);
     linkVault(home.origin.vault, nila, AUDIENCE_VAULT, later);
     addMember(nila);
-    const second = fulfillShareGrant({
+    const second = startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor: (vaultId) =>
-        vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+      transportFor: loopbackShareTransports({
+        origin: home.origin,
+        seatFor: (vaultId) =>
+          vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+        now: () => now,
+      }),
       now: later,
     });
     expect(second.steps.map((step) => step.partyId).sort()).toStrictEqual(
@@ -117,14 +126,14 @@ describe("grant/fulfillment — roster and ceiling", () => {
     // The unreachable-seat branch must not write `syncing` before the
     // ceiling is read: the size check precedes every state move.
     expect(() =>
-      fulfillShareGrant({
+      startShareSubscription({
         origin: home.origin,
         originVaultId: ORIGIN_VAULT,
         grantId: grant.grantId,
-        seatFor: () => undefined,
+        transportFor: () => undefined,
         now,
       })
-    ).toThrow(ShareGrantMaxSizeError);
+    ).toThrow(ShareShapeMaxSizeError);
     expect(
       readFulfillment(home.origin.vault, grant.grantId, "vault-elsewhere")
     ).toBeUndefined();
@@ -147,15 +156,19 @@ describe("grant/fulfillment — roster and ceiling", () => {
     });
 
     expect(() =>
-      fulfillShareGrant({
+      startShareSubscription({
         origin: home.origin,
         originVaultId: ORIGIN_VAULT,
         grantId: grant.grantId,
-        seatFor: (vaultId) =>
-          vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+        transportFor: loopbackShareTransports({
+          origin: home.origin,
+          seatFor: (vaultId) =>
+            vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+          now: () => now,
+        }),
         now,
       })
-    ).toThrow(ShareGrantMaxSizeError);
+    ).toThrow(ShareShapeMaxSizeError);
     expect(audienceTitles(home.audience.vault)).toStrictEqual([]);
     expect(
       readFulfillment(home.origin.vault, grant.grantId, AUDIENCE_VAULT)
@@ -190,11 +203,11 @@ describe("grant/fulfillment — roster and ceiling", () => {
       grantedBy: home.originBoot.ownerPartyId,
     });
 
-    const both = fulfillShareGrant({
+    const both = startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor: () => undefined,
+      transportFor: () => undefined,
       now,
     });
     expect(both.steps.map((step) => step.partyId).sort()).toStrictEqual(
@@ -210,11 +223,11 @@ describe("grant/fulfillment — roster and ceiling", () => {
       decidedAt: now,
       decidedBy: home.originBoot.ownerPartyId,
     });
-    const masked = fulfillShareGrant({
+    const masked = startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor: () => undefined,
+      transportFor: () => undefined,
       now,
     });
     expect(masked.steps.map((step) => step.partyId)).toStrictEqual([ravi]);
@@ -235,6 +248,12 @@ describe("grant/fulfillment — roster and ceiling", () => {
     const { albumId } = seedAlbum(home, now);
     const seatFor = (vaultId: string) =>
       vaultId === AUDIENCE_VAULT ? home.audience : undefined;
+
+    const transportFor = loopbackShareTransports({
+      origin: home.origin,
+      seatFor,
+      now: () => now,
+    });
     const memory = createGrantProjectionMemory();
     const grant = createShareGrant(home.origin.vault, {
       audience: { kind: "party", id: ravi },
@@ -245,11 +264,11 @@ describe("grant/fulfillment — roster and ceiling", () => {
       grantedBy: home.originBoot.ownerPartyId,
     });
     const pass = (at: string) =>
-      fulfillShareGrant({
+      startShareSubscription({
         origin: home.origin,
         originVaultId: ORIGIN_VAULT,
         grantId: grant.grantId,
-        seatFor,
+        transportFor,
         now: at,
         memory,
       });
@@ -261,7 +280,7 @@ describe("grant/fulfillment — roster and ceiling", () => {
     });
     const projectedId = (
       home.audience.vault
-        .prepare("SELECT target_id FROM core_share_origin LIMIT 1")
+        .prepare("SELECT target_id FROM share_subscription_lineage LIMIT 1")
         .get() as { target_id: string }
     ).target_id;
     const changesAfterFirst = (
@@ -278,7 +297,7 @@ describe("grant/fulfillment — roster and ceiling", () => {
     // Nothing moved: row identity, change stream, timestamp.
     expect(
       home.audience.vault
-        .prepare("SELECT target_id FROM core_share_origin LIMIT 1")
+        .prepare("SELECT target_id FROM share_subscription_lineage LIMIT 1")
         .get()
     ).toMatchObject({ target_id: projectedId });
     expect(

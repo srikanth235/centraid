@@ -31,9 +31,9 @@ export function starredStatus(count: number): string {
 // ─── Shared with you (the inbound half) ─────
 //
 // What this shelf can and cannot claim, stated once here so no surface has to
-// re-derive it. `core_share_origin` is written when a share is DELIVERED into
-// this vault, so its rows are the complete and only answer: a document with no
-// row simply did not arrive that way. What the shelf cannot always say is WHO
+// re-derive it. `share_subscription_lineage` claims a row for every SHAPE that
+// placed it, so its rows are the complete and only answer: a document no shape
+// claims did not arrive that way. What the shelf cannot always say is WHO
 // — naming the sender needs a live link binding for the origin vault, and
 // without one the vault stays unnamed rather than wearing a truncated id.
 

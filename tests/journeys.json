@@ -1313,9 +1313,9 @@
       "metrics": {
         "grantToVisible": {
           "status": "measured",
-          "probe": "tests/scale/share-journey.scale.test.ts — createShareGrant, fulfillShareGrant, then the AUDIENCE vault's own read",
+          "probe": "tests/scale/share-journey.scale.test.ts — createShareGrant, startShareSubscription, then the AUDIENCE vault's own read",
           "ceilingMs": 750,
-          "_beforeFor": "#929 wave 1(c). This is the BEFORE number against the sharing engine as it stands: two vaults CO-HOSTED under one gateway root, so no transport is inside the interval. #929 lands its AFTER beside this row rather than overwriting it, and a cross-gateway number belongs in a second entry, not folded into this one.",
+          "_beforeFor": "#929 wave 1(c). This is the BEFORE number against the sharing engine as it stood: two vaults CO-HOSTED under one gateway root, so no transport is inside the interval. #929's AFTER is _afterProvenance below, beside this row rather than over it, and a cross-gateway number is its own metric rather than folded into this one.",
           "_provenance": {
             "at": "2026-09-04",
             "host": "linux x64 development container, 4 cores / 15 GB",
@@ -1324,7 +1324,22 @@
             "breakdown": "grant written 1.9-4.0 ms, grant FULFILLED 130.8-240.0 ms, grantee's own read 0.3-0.4 ms",
             "note": "BEFORE number. Fulfillment is 98% of the interval and the only term that scales with the size of the share: writing the standing grant and the grantee's read are both under 4 ms at 200 photos. Ceiling is ~3x the slowest of three samples on a contended container, the same convention every single-host measurement here uses.",
             "headroom": "~3x slowest observed (three samples, single host)"
+          },
+          "_afterProvenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, shared with sibling agents (load average 4.1-5.6 across the three runs)",
+            "observedMs": 232.2,
+            "observedSpreadMs": "220.2 / 232.2 / 234.2 over three consecutive runs",
+            "breakdown": "grant written 1.7-4.2 ms, subscription STARTED 218.2-230.1 ms, grantee's own read 0.4 ms",
+            "note": "AFTER number (#929). The same rig, the same key, the same interval: only the delivery term changed, from projecting a fulfillment to composing the grant's shape once and carrying it over the loopback transport (startShareSubscription). Delivery is still 98% of the interval and still the only term that scales with the share. THE HOST IS SHARED, and the before number's own note says so: the same rig read 216-237 ms at load average 7.4 and 267-495 ms at 15-16 on the day it was taken, so the 212.1 -> 232.2 ms difference is SMALLER than the spread contention alone produces. Read it as a direction — a subscription pays for a shape (one size check, one structure digest, one lineage row per projected row) where fulfillment paid for a projection — not as a verdict. The ceiling is NOT re-seeded: tighten-only, and three samples on a contended host are not a distribution.",
+            "headroom": "unchanged at 750 ms, ~3.2x the slowest after-sample"
           }
+        },
+        "grantToVisibleCrossGateway": {
+          "status": "unmeasured",
+          "probe": "NONE TODAY — packages/server/src/serve/share-subscription-peer.test.ts proves the six subject types travel the peer plane, and times nothing",
+          "_intendedCeilingMs": null,
+          "_reason": "A cross-gateway share needs two gateway processes and a real tunnel. On this container the peer plane is a loopback dial inside one process, so a number taken here would measure the harness rather than the transport, and a fabricated one is worse than an admitted hole. The metric is declared so the gap is visible; the rig it needs is two data dirs and a tunnel."
         }
       }
     },

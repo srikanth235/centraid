@@ -15,7 +15,7 @@ Actions dispatched from this directory (`useDocsWrite` → `session.write("docs"
 
 The document-level slice landed `upload`, `edit` and `restore-version` (see its own section below). Still UNdispatched: `replace`, `tag`, `untag`.
 
-Queries: the phone dispatches NO named app queries. Reads are consent-shaped replica ENTITY reads (`useReplicaQuery("docs", { entity })`) over: `core.document`, `core.content_item`, `core.tag`, `core.concept`, `core.concept_scheme`, `blob.custody_state`, and (decoration, gracefully denied) `share.circle_grant`, `social.circle`, `social.circle_member`, `share.commons_member_state`, `core.party`. Title search runs through the replica's local FTS (`session.search("docs", { entity: "core.document" })`). The web `drive`/`search`/`history`/`activity` queries stay web-only; the `history`/`activity` reads have no phone-side source yet (see Withholdings).
+Queries: the phone dispatches NO named app queries. Reads are consent-shaped replica ENTITY reads (`useReplicaQuery("docs", { entity })`) over: `core.document`, `core.content_item`, `core.tag`, `core.concept`, `core.concept_scheme`, `blob.custody_state`, and (decoration, gracefully denied) `share.authority`, `social.circle`, `social.circle_member`, `share.fulfillment`, `share.party_vault_binding`, `share.subscription`, `share.subscription_lineage`, `core.party`. Title search runs through the replica's local FTS (`session.search("docs", { entity: "core.document" })`). The web `drive`/`search`/`history`/`activity` queries stay web-only; the `history`/`activity` reads have no phone-side source yet (see Withholdings).
 
 ## Withholdings — absences stated, never mocked
 

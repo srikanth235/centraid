@@ -8,10 +8,11 @@ import {
   household,
   seedPhoto,
 } from "../share/placement-fixture.js";
+import { loopbackShareTransports } from "../share/subscription-transport.js";
 import { channelForParty } from "./channel.js";
 import {
-  fulfillShareGrant,
-  propagateShareGrantRevocation,
+  startShareSubscription,
+  stopShareSubscription,
 } from "./fulfillment.js";
 import {
   addParty,
@@ -42,6 +43,12 @@ describe("grant/fulfillment", () => {
     const seatFor = (vaultId: string) =>
       vaultId === AUDIENCE_VAULT ? home.audience : undefined;
 
+    const transportFor = loopbackShareTransports({
+      origin: home.origin,
+      seatFor,
+      now: () => now,
+    });
+
     const grant = createShareGrant(home.origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "core.collection",
@@ -51,11 +58,11 @@ describe("grant/fulfillment", () => {
       grantedBy: home.originBoot.ownerPartyId,
     });
 
-    const delivered = fulfillShareGrant({
+    const delivered = startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor,
+      transportFor,
       now,
     });
     expect(delivered.steps).toHaveLength(1);
@@ -64,7 +71,10 @@ describe("grant/fulfillment", () => {
       state: "delivered",
       peerVaultId: AUDIENCE_VAULT,
     });
-    expect(delivered.steps[0]?.projected).toHaveLength(1);
+    expect(delivered.steps[0]).toMatchObject({
+      route: "loopback",
+      apply: "bootstrap",
+    });
     expect(
       readFulfillment(home.origin.vault, grant.grantId, AUDIENCE_VAULT)
       // `updated_at` is the touch trigger's since #916.
@@ -77,11 +87,11 @@ describe("grant/fulfillment", () => {
     home.origin.vault
       .prepare("UPDATE core_content_item SET title = ? WHERE content_id = ?")
       .run("Sunset at last", first.contentId);
-    fulfillShareGrant({
+    startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor,
+      transportFor,
       now: later,
     });
     expect(audienceTitles(home.audience.vault)).toStrictEqual([
@@ -96,15 +106,22 @@ describe("grant/fulfillment", () => {
         revokedAt,
       }).outcome
     ).toBe("revoked");
-    const removal = propagateShareGrantRevocation({
+    const removal = stopShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor,
+      transportFor,
       now: revokedAt,
     });
     expect(removal.steps).toStrictEqual([
-      { peerVaultId: AUDIENCE_VAULT, state: "removed", removed: true },
+      {
+        peerVaultId: AUDIENCE_VAULT,
+        state: "removed",
+        // The seat's own count of what it deleted, carried back as the
+        // acknowledgement `removed` is settled on.
+        removed: 1,
+        retained: 0,
+      },
     ]);
     expect(
       readFulfillment(home.origin.vault, grant.grantId, AUDIENCE_VAULT)
@@ -121,17 +138,17 @@ describe("grant/fulfillment", () => {
     ).toMatchObject({ n: 0 });
     expect(
       home.audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM core_share_origin")
+        .prepare("SELECT COUNT(*) AS n FROM share_subscription_lineage")
         .get()
     ).toMatchObject({ n: 0 });
 
     // A revoked grant is never fulfilled again.
     expect(() =>
-      fulfillShareGrant({
+      startShareSubscription({
         origin: home.origin,
         originVaultId: ORIGIN_VAULT,
         grantId: grant.grantId,
-        seatFor,
+        transportFor,
         now: revokedAt,
       })
     ).toThrow("is revoked");
@@ -146,6 +163,12 @@ describe("grant/fulfillment", () => {
     const seatFor = (vaultId: string) =>
       vaultId === AUDIENCE_VAULT ? home.audience : undefined;
 
+    const transportFor = loopbackShareTransports({
+      origin: home.origin,
+      seatFor,
+      now: () => now,
+    });
+
     const grant = createShareGrant(home.origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "core.collection",
@@ -154,11 +177,11 @@ describe("grant/fulfillment", () => {
       grantedAt: now,
       grantedBy: home.originBoot.ownerPartyId,
     });
-    fulfillShareGrant({
+    startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor,
+      transportFor,
       now,
     });
     expect(audienceTitles(home.audience.vault)).toStrictEqual(["Photo a"]);
@@ -168,11 +191,11 @@ describe("grant/fulfillment", () => {
     const later = "2026-08-19T12:00:00.000Z";
     const second = seedPhoto(home.origin, home.originBoot, "b");
     addToAlbum(home, albumId, second.assetId, 1, later);
-    fulfillShareGrant({
+    startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor,
+      transportFor,
       now: later,
     });
     expect(audienceTitles(home.audience.vault)).toStrictEqual([
@@ -200,11 +223,11 @@ describe("grant/fulfillment", () => {
     });
     expect(channelForParty(home.origin.vault, nila)).toBeNull();
 
-    const parked = fulfillShareGrant({
+    const parked = startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor: () => undefined,
+      transportFor: () => undefined,
       now,
     });
     expect(parked.steps[0]).toMatchObject({
@@ -222,17 +245,17 @@ describe("grant/fulfillment", () => {
     expect(
       home.origin.vault
         .prepare(
-          `SELECT COUNT(*) AS n FROM share_commons_invitation WHERE grant_id = ?`
+          "SELECT COUNT(*) AS n FROM share_party_vault_binding WHERE party_id = ?"
         )
-        .get(grant.grantId)
+        .get(nila)
     ).toMatchObject({ n: 0 });
 
     // The pass is idempotent: it parks again and still mints nothing.
-    const again = fulfillShareGrant({
+    const again = startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor: () => undefined,
+      transportFor: () => undefined,
       now,
     });
     expect(again.steps[0]).toMatchObject({ state: "awaiting_channel" });
@@ -242,12 +265,16 @@ describe("grant/fulfillment", () => {
     // delivery question rather than a reason to refuse the grant.
     const later = "2026-08-19T13:00:00.000Z";
     linkVault(home.origin.vault, nila, AUDIENCE_VAULT, later);
-    const delivered = fulfillShareGrant({
+    const delivered = startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor: (vaultId) =>
-        vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+      transportFor: loopbackShareTransports({
+        origin: home.origin,
+        seatFor: (vaultId) =>
+          vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+        now: () => now,
+      }),
       now: later,
     });
     expect(delivered.steps[0]).toMatchObject({
@@ -271,22 +298,26 @@ describe("grant/fulfillment", () => {
       grantedAt: now,
       grantedBy: home.originBoot.ownerPartyId,
     });
-    fulfillShareGrant({
+    startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor: (vaultId) =>
-        vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+      transportFor: loopbackShareTransports({
+        origin: home.origin,
+        seatFor: (vaultId) =>
+          vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+        now: () => now,
+      }),
       now,
     });
 
     const revokedAt = "2026-08-19T14:00:00.000Z";
     revokeShareGrant(home.origin.vault, { grantId: grant.grantId, revokedAt });
-    const removal = propagateShareGrantRevocation({
+    const removal = stopShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor: () => undefined,
+      transportFor: () => undefined,
       now: revokedAt,
     });
     expect(removal.steps[0]).toMatchObject({
@@ -324,11 +355,11 @@ describe("grant/fulfillment", () => {
       grantedAt: now,
       grantedBy: home.originBoot.ownerPartyId,
     });
-    const parked = fulfillShareGrant({
+    const parked = startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor: () => undefined,
+      transportFor: () => undefined,
       now,
     });
     expect(parked.steps[0]).toMatchObject({
@@ -343,12 +374,16 @@ describe("grant/fulfillment", () => {
     // The peer vault is mounted at revoke time — and it still must NOT be
     // told `removed` as if something had been taken back: nothing was ever
     // delivered, and the state says exactly that.
-    const removal = propagateShareGrantRevocation({
+    const removal = stopShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor: (vaultId) =>
-        vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+      transportFor: loopbackShareTransports({
+        origin: home.origin,
+        seatFor: (vaultId) =>
+          vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+        now: () => now,
+      }),
       now: revokedAt,
     });
     expect(removal.steps).toStrictEqual([
@@ -356,7 +391,7 @@ describe("grant/fulfillment", () => {
         peerVaultId: AUDIENCE_VAULT,
         state: "removed",
         detail: "nothing had been delivered; there was nothing to remove",
-        removed: false,
+        removed: 0,
       },
     ]);
     expect(audienceTitles(home.audience.vault)).toStrictEqual([]);
@@ -381,6 +416,12 @@ describe("grant/fulfillment", () => {
     const seatFor = (vaultId: string) =>
       vaultId === AUDIENCE_VAULT ? home.audience : undefined;
 
+    const transportFor = loopbackShareTransports({
+      origin: home.origin,
+      seatFor,
+      now: () => now,
+    });
+
     const grant = createShareGrant(home.origin.vault, {
       audience: { kind: "party", id: card },
       subjectType: "core.collection",
@@ -391,11 +432,11 @@ describe("grant/fulfillment", () => {
     });
     // Granted to the card, so there is no channel and nothing to deliver over.
     expect(
-      fulfillShareGrant({
+      startShareSubscription({
         origin: home.origin,
         originVaultId: ORIGIN_VAULT,
         grantId: grant.grantId,
-        seatFor,
+        transportFor,
         now,
       }).steps[0]
     ).toMatchObject({ partyId: card, state: "awaiting_channel" });
@@ -419,11 +460,11 @@ describe("grant/fulfillment", () => {
     // The same grant, re-fulfilled: it now names the party the link bound, so
     // the album lands in the peer vault without the owner granting anything a
     // second time.
-    const delivered = fulfillShareGrant({
+    const delivered = startShareSubscription({
       origin: home.origin,
       originVaultId: ORIGIN_VAULT,
       grantId: grant.grantId,
-      seatFor,
+      transportFor,
       now,
     });
     expect(delivered.steps[0]).toMatchObject({
