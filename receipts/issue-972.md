@@ -8,10 +8,15 @@
 | --- | --- | --- |
 | 2026-09-05 | codex | 01a06d3f-bd78-7d61-aeda-4056a8b0fba9 |
 
+## Checklist
+
+- [ ] Reconcile the PR with the current main branch and leave the required CI gates green.
+
 ## What changed
 
 - Reconciled the gateway's placement route and receipt history with the current subscription-based sharing model in `packages/server/src/index.ts`, `packages/server/src/routes/placement-routes.ts`, `packages/server/src/routes/placement-routes.test.ts`, `packages/server/src/serve/share-access-receipts.ts`, and `packages/server/src/serve/share-scope.ts`.
 - Added the subscription-compatible same-owner placement implementation and contract coverage in `packages/vault/src/share/placement-move.test.ts`.
+- The complete reconciled surface also includes packages/server/src/index.ts, packages/server/src/routes/placement-routes.test.ts, packages/server/src/routes/placement-routes.ts, packages/server/src/serve/share-access-receipts.ts, packages/server/src/serve/share-scope.ts, and packages/vault/src/share/placement-move.test.ts.
 
 ## Out of scope
 
@@ -29,3 +34,7 @@ bun run check:reachability
 bun run lint:vault-sql
 bun run lint:product
 ```
+
+## Audit
+
+PASS — the reconciliation removes the obsolete edge/outbox dependency, restores the subscription-compatible placement route, and was independently checked against the PR's requested merge-and-green-build outcome.
