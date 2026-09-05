@@ -1,3 +1,4 @@
+import type { PendingOverlayFacts } from "@centraid/blueprints/apps/_shared/pending-overlay";
 // governance: allow-repo-hygiene file-size-limit (#738) the mounted-reader transaction boundary keeps attach, schema, overlay, FTS, provenance, and cursor composition in one audited class
 import {
   applyOptimisticMutations,
@@ -6,6 +7,7 @@ import {
   assertReplicaTieCensus,
   OnlineOnlyError,
   planComposedReplicaRead,
+  presentPendingIntentFacts,
   presentPendingIntentMutation,
   replicaFtsMatchExpression,
   replicaPendingSearchMatch,
@@ -87,6 +89,13 @@ interface StoredEntitySchemaRow {
 
 interface ScopedEntitySchemaRow extends StoredEntitySchemaRow {
   scope_index: number;
+}
+
+/** One mounted read's overlay: the mutations per scope, and the one sidecar
+ *  the rows they project are explained by (#922 G3). */
+interface MountedOverlay {
+  byScope: Map<number, OptimisticMutation[]>;
+  sidecar: Record<string, PendingOverlayFacts>;
 }
 
 interface StoredIntentRow {
@@ -262,7 +271,7 @@ export class MultiVaultReplicaReader {
     const bindings = await this.overlayBindings(
       request.entity,
       schemas,
-      overlays
+      overlays.byScope
     );
     const schema = mergedSchema(request.entity, schemas);
     const planRequest: ReplicaReadRequest = {
@@ -334,6 +343,7 @@ export class MultiVaultReplicaReader {
     return {
       rows: rows.slice(0, requested),
       cursor: aggregate.cursor,
+      pending: overlays.sidecar,
       dependency: { shapeId: shapeId!, entity: request.entity },
       coverage: clamped ? "partial" : aggregate.coverage,
       ...(degraded.length > 0 ? { degraded } : {}),
@@ -446,7 +456,7 @@ export class MultiVaultReplicaReader {
     // whole outbox, and cap the page: a phone with ten thousand queued writes
     // keeps searching, because rows those writes address are pulled in by id
     // below instead of by inflating the ranked page.
-    const displacing = [...overlays.values()].reduce(
+    const displacing = [...overlays.byScope.values()].reduce(
       (count, mutations) =>
         count +
         mutations.filter((mutation) => displaces(mutation, indexed)).length,
@@ -510,7 +520,7 @@ export class MultiVaultReplicaReader {
           `replica shape does not expose indexed column(s) ${missing.join(", ")}`
         );
       const hitIds = new Set(scopeRows.map((row) => row.row_id));
-      const mutations = overlays.get(schema.scope_index) ?? [];
+      const mutations = overlays.byScope.get(schema.scope_index) ?? [];
       const indexedRowIds = new Set(
         mutations
           .filter(
@@ -590,6 +600,7 @@ export class MultiVaultReplicaReader {
     return {
       rows,
       cursor: aggregate.cursor,
+      pending: overlays.sidecar,
       dependency: {
         shapeId: request.shapeId ?? appId,
         entity: request.entity,
@@ -785,8 +796,9 @@ export class MultiVaultReplicaReader {
     appId: string,
     entity: string,
     schemas: readonly ScopedEntitySchemaRow[]
-  ): Promise<Map<number, OptimisticMutation[]>> {
+  ): Promise<MountedOverlay> {
     const result = new Map<number, OptimisticMutation[]>();
+    const sidecar: Record<string, PendingOverlayFacts> = {};
     await Promise.all(
       schemas.map(async (schema) => {
         const scope = this.#scopes[schema.scope_index]!;
@@ -810,18 +822,24 @@ export class MultiVaultReplicaReader {
         );
         const mutations = records.flatMap((row) => {
           const intent = JSON.parse(row.record_json) as ReplicaIntent;
-          return intent.optimistic
+          const projected = intent.optimistic
             .filter(
               (mutation) =>
                 mutation.entity === entity &&
                 mutation.shapeId === schema.shape_id
             )
             .map((mutation) => presentPendingIntentMutation(mutation, intent));
+          if (projected.length === 0) return projected;
+          // The rows carry the intent; the sidecar carries what is happening to
+          // it, once per read rather than once per row (#922 G3).
+          const facts = presentPendingIntentFacts(intent);
+          if (facts) sidecar[intent.intentId] = facts;
+          return projected;
         });
         if (mutations.length > 0) result.set(schema.scope_index, mutations);
       })
     );
-    return result;
+    return { byScope: result, sidecar };
   }
 
   /** Cacheable: shape metadata, stable until a scope is revoked. */

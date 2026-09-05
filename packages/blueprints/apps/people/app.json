@@ -78,6 +78,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "party_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "display_name": { "type": "string", "minLength": 1 },
           "role": { "type": "string" },
           "avatar_color": { "type": "string" },
@@ -564,6 +569,11 @@
       "input": {
         "type": "object",
         "properties": { "name": { "type": "string", "minLength": 1 } },
+        "list_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+        },
         "required": ["name"],
         "additionalProperties": false
       },

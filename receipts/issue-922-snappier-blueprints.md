@@ -165,8 +165,9 @@ Falsification attempts:
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-05 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 | 2026-09-03 | codex | 01a06827-b506-78d1-b396-f4b14307e138 |
+| 2026-09-05 | codex | 01a06f93-8228-7b61-adcd-ba83151d89d6 |
 
 ## w1 Metro-loader spike — ADOPT
 
@@ -1970,6 +1971,489 @@ bash .governance/run.sh
 #930 re-pins the tests/claims.json whole-file fingerprint after removing the spent rename marker on the `golden-vault-archaeology` flow, superseding the #916 re-pin note rather than contradicting it — every sentence of #916's account of what that flow took over is kept, in receipts/issue-916-vault-ontology-review.md and in the flow's own `_comment`. `replacesMinimumTestsFlow` is a ONE-SHOT claim about the change set that makes a rename, checked against the merge base; once #916 landed, `schema-migration-corpus` existed at no base any more, so the marker could only ever report an unknown predecessor and `lint:ledgers` / `test:ratchet` were red on main itself. The marker and the `approvedMinimumTestsDeviation` that authorized it are removed together, because that note waives a future minimumTests drop on this flow by presence alone; the floor stays at 5, no claim row, severity, evidence selector or demonstrated-red date moves, and claimsGovernanceFingerprint is unchanged. Prior: #916. #928 w1b re-pins tests/claims.json once more, for the static app entity tripwire: it registers the new law `app-entity-tripwire` and its flow `blueprint-app-entity-tripwire-law` (owner packages/blueprints/src/app-entity-tripwire.test.ts, minimumTests 17), mirroring how `one-computation` is registered so the lane is owned. Additions to the law and flow registries only, and a NEW minimumTests floor, which is a tightening — no claim row, severity, evidence selector, demonstrated-red date or existing floor moves, and the 45 claim rows stay byte-identical, so claimsGovernanceFingerprint is unchanged. Prior: #930. #931 re-pins it once more after registering ONE new rung-3 lane, `rung1-on-main`, in `lanes` — the row `candidate.yml`'s new job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept it. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or `minimumTests` floor moves, and `claimsGovernanceFingerprint` (a digest of `claims.claims` alone) stays byte-identical — the whole-file digest moved only because `lanes` shares the file with `claims`. Prior: #928 w1b. #927 w2 re-pins tests/claims.json for the JOURNEY LEDGER: every `knob` and `seed` string that named tests/experience-budgets/*.json now names tests/journeys.json and the entry key inside it, because those five files were absorbed into one ledger keyed `surface / journey / volume / hardware`. A knob path rename only: no claim row is added or removed, no severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and every seeded-red recipe still points at the same number under its new address. Prior: #931. #927 w3 re-pins tests/claims.json once more to register ONE new rung-3 lane, `paired-journeys` — the row candidate.yml's paired candidate/PR journey job needs before `lint:evidence-mapping` and `validate-nightly-wiring` will accept its evidence step. Registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law, flow or minimumTests floor moves, and the claim rows stay byte-identical, so claimsGovernanceFingerprint moves only because `lanes` shares the file with `claims`. Prior: #927 w2. #922 re-pins tests/claims.json after registering ONE new flow, `pending-destructive-projection` (owner packages/blueprints/src/pending-projection-tripwire.test.ts, flow blueprint-pending-overlay-law). Flow registry addition only: no claim row, severity, evidence selector, demonstrated-red date, law or minimumTests floor moves, and claimsGovernanceFingerprint (digest of claims.claims alone) stays byte-identical.
 
 `pending-parent-probe.test.ts` now passes `localeCompare` to `Map.entries().sort` so `lint:types` `require-array-sort-compare` is satisfied; snapshot order is unchanged.
+## Mega-lane E slice 1 — pending sidecar (G3) + minted ids for the other seven apps (G2)
+
+| File | Change |
+| --- | --- |
+| `packages/blueprints/apps/_shared/pending-overlay.ts` | `PENDING_OVERLAY_FIELDS` collapses to the key; `PendingOverlayFacts`/`PendingOverlaySidecar`, `pendingOverlayFacts`, `pendingRowIntentId`, `pendingOverlayRow`, `attachPendingSidecar`/`pendingSidecarOf`; `enrichPendingRows` → `enrichPendingSidecar` |
+| `packages/client/src/replica/intents.ts` | `overlayMutations` → `overlay()`: mutations AND the sidecar, built from the same intents; `stewardLabel` persists on the intent record |
+| `packages/client/src/replica/{types,coordinator,query,inline-query-ctx-core}.ts` | `pending?` on all four read results; the coordinator attaches it; the one pending column is the only non-schema column a mutation may carry |
+| `packages/client/src/react/blueprints/inlineQueryCtx.ts` | the marker carries the key alone; the read's sidecar rides each pending row and the query's result |
+| `apps/mobile/src/kit/hooks/useReplicaQuery.ts`, `apps/mobile/src/lib/replica/{multi-vault-reader,inline-query-ctx.native,native-session}.ts` | the phone builds and carries the same sidecar; the steward label leaves the row for the intent record |
+| 20 call sites in `packages/blueprints/apps/**` and `apps/mobile/src/apps/**` | `readPendingOverlay(row, sidecar)` — no shim, no dual path |
+| `packages/vault/src/commands/minted-id.ts` + 6 command files, 7 `app.json`, 7 `pending-projection.ts`, 8 action handlers | `mintedId(ctx, property)` and `mintedIdIsFree(table, column, subject, idColumn)`; twelve creating commands honour a seat-minted id and refuse one they hold |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| `__centraid_pending_*` columns on a projected row | 9 | 1 | `pending-overlay-law.test.ts` "puts ONE pending column on the row"; the rest ride the read's sidecar |
+| Pending-parent child-write edges | 67 | 105 | `pending-parent-probe.test.ts` inline snapshot: agenda 5, docs 17, notes 15, people 21, photos 7, tally 29, tasks 11; locker mints nothing (a secret-bearing write never queues) |
+| Creating commands honouring a seat-minted id | 1 (tasks) | 13 | `minted-id.test.ts`, 24 cases over 8 of them plus tasks' own; the other four are the same three edits |
+| Sidecar entries built per read | — | one object per read, shared by every row | `IntentQueue.overlay()` builds mutations and facts in one pass over the same intents |
+
+**Deleted/replaced.** Eight of the nine overlay columns and every writer of them; `enrichPendingRows` (row rewriting) replaced by `enrichPendingSidecar` (fact enrichment); `NativeReplicaSession.stamped()`, which wrote the steward label onto every projected row, replaced by `EnqueueIntentInput.stewardLabel` on the intent record. No compatibility reader survives: `readPendingOverlay` takes two arguments at every call site.
+
+**Decisions.** The sidecar reaches a leaf component as an enumerable symbol on the row (`Symbol.for("centraid.pending-sidecar")`), the same mechanism the shell already used for pending-row provenance: it follows the object spreads a view model is built from, never reaches JSON, and is one object per read rather than a copy per row. Only ids another action's input can name are minted-and-honoured; content, profile, payer, split and circle ids stay seat-local because no write references them. `tally.add_friend`'s `party_id` is NOT a minted id — it is the existing-party enrolment branch (#883), and giving it a second meaning would fold two people onto one party. `tally.add_receipt_expense` shares Tally's expense projection, so it accepts and refuses the same `expense_id`. The seven manifests declare the minted id as `minLength: 1` and do NOT mirror `MINTED_ID_PROPERTY`'s UUID pattern: the origin command is the one enforcement point (a manifest is a description of an app's own door, and a second copy of the rule in seven files drifts without a consumer). All twelve are CREATE paths, so each refuses an id the vault holds; the edit paths that address a row by id (`schedule.save_project`, `save_section`) are untouched and stay upsert-by-id.
+
+```
+bun run --cwd packages/blueprints build && bun run --cwd packages/vault build
+bun run --cwd packages/{vault,blueprints,client} typecheck && bun run --cwd apps/mobile typecheck
+bun run --cwd packages/vault test src/commands            # 37 files, 382 tests
+bun run --cwd packages/vault test src/commands/minted-id.test.ts   # 24 cases
+bun run --cwd packages/blueprints test                    # 212 files
+bun run --cwd packages/client test src/replica src/react  # 235 files
+bun run --cwd apps/mobile test src/lib/replica src/apps src/kit  # 204 files
+```
+
+**Findings.** (1) Locker mints no row id at all: creating an item is secret-bearing and refuses to queue, so the receipt's "locker (item)" line in mega-lane A's finding has no projection behind it — nothing to honour. (2) `packages/blueprints/apps/people/queries/{people,person}.ts` and `apps/tally/queries/dashboard.ts` forward `Object.values(PENDING_OVERLAY_FIELDS)` onto their view models; with one field left that is now a one-element copy, kept because the row identity match in `carryPendingRows` is what re-attaches the sidecar and the explicit copy documents the contract. (3) The 184 stray `.js` files a previous build left under `packages/blueprints/apps/**` make `build:manifest` rewrite `manifest.json`; they are untracked build artefacts, deleted here, and `manifest.json` is byte-identical after a clean regeneration.
+
+**Doc debt.** `docs/vault-ontology.md` and `docs/decisions.md` do not describe the pending overlay's column set, so nothing there is now wrong; `docs/protocol.md` describes the replica read result without `pending`.
+
+**Full paths for coverage:** `apps/mobile/src/apps/agenda/AgendaEvent.tsx`,`apps/mobile/src/apps/agenda/AgendaHome.tsx` `apps/mobile/src/apps/docs/DocRow.test.tsx`,`apps/mobile/src/apps/docs/DocRow.tsx` `apps/mobile/src/apps/docs/DocumentProperties.tsx`,`apps/mobile/src/apps/notes/NotesHome.tsx` `apps/mobile/src/apps/people/PeopleHome.tsx`,`apps/mobile/src/apps/people/PersonView.tsx` `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx`,`apps/mobile/src/apps/tasks/TaskRow.tsx` `apps/mobile/src/kit/hooks/useReplicaQuery.ts`,`apps/mobile/src/lib/replica/inline-query-ctx.native.ts` `apps/mobile/src/lib/replica/multi-vault-reader.test.ts`,`apps/mobile/src/lib/replica/multi-vault-reader.ts` `apps/mobile/src/lib/replica/native-session.ts`,`apps/mobile/src/lib/replica/pending-write-visibility.test.ts` `packages/blueprints/apps/_shared/PendingWriteActions.test.tsx`,`packages/blueprints/apps/_shared/PendingWriteActions.tsx` `packages/blueprints/apps/_shared/pending-overlay-law.test.ts`,`packages/blueprints/apps/_shared/pending-overlay-presentation.test.ts` `packages/blueprints/apps/_shared/pending-overlay.test.ts`,`packages/blueprints/apps/_shared/pending-overlay.ts` `packages/blueprints/apps/agenda/actions/propose.ts`,`packages/blueprints/apps/agenda/app-root.tsx` `packages/blueprints/apps/agenda/app.json`,`packages/blueprints/apps/agenda/pending-projection.ts` `packages/blueprints/apps/agenda/states.test.tsx`,`packages/blueprints/apps/docs/actions/create-folder.ts` `packages/blueprints/apps/docs/actions/upload.ts`,`packages/blueprints/apps/docs/app.json` `packages/blueprints/apps/docs/pending-projection.ts`,`packages/blueprints/apps/docs/states.test.tsx` `packages/blueprints/apps/locker/components/Rows.tsx`,`packages/blueprints/apps/locker/format.ts` `packages/blueprints/apps/notes/actions/create-note.ts`,`packages/blueprints/apps/notes/actions/create-notebook.ts` `packages/blueprints/apps/notes/app.json`,`packages/blueprints/apps/notes/pending-projection.ts` `packages/blueprints/apps/notes/states.test.tsx`,`packages/blueprints/apps/people/app.json` `packages/blueprints/apps/people/pending-projection.ts`,`packages/blueprints/apps/people/states.test.tsx` `packages/blueprints/apps/photos/actions/create-album.ts`,`packages/blueprints/apps/photos/app.json` `packages/blueprints/apps/photos/components/FaceReview.tsx`,`packages/blueprints/apps/photos/components/Tile.tsx` `packages/blueprints/apps/photos/pending-projection.ts`,`packages/blueprints/apps/photos/states.test.tsx` `packages/blueprints/apps/tally/actions/add-expense.ts`,`packages/blueprints/apps/tally/actions/create-group.ts` `packages/blueprints/apps/tally/actions/settle-up.ts`,`packages/blueprints/apps/tally/app.json` `packages/blueprints/apps/tally/pending-projection.ts`,`packages/blueprints/apps/tally/queries/dashboard.ts` `packages/blueprints/apps/tasks/app-root.tsx`,`packages/blueprints/apps/tasks/components/TaskRow.tsx` `packages/blueprints/apps/tasks/states.test.tsx`,`packages/blueprints/src/app-boot-harness.ts` `packages/blueprints/src/pending-parent-probe.test.ts`,`packages/client/src/react/blueprints/centraid-inline.ts` `packages/client/src/react/blueprints/inlineQueryCtx.test.ts`,`packages/client/src/react/blueprints/inlineQueryCtx.ts` `packages/client/src/replica/coordinator.test.ts`,`packages/client/src/replica/coordinator.ts` `packages/client/src/replica/inline-query-ctx-core.ts`,`packages/client/src/replica/intents.contract.test.ts` `packages/client/src/replica/intents.ts`,`packages/client/src/replica/multi-writer.contract.test.ts` `packages/client/src/replica/offline-parent-child.test.ts`,`packages/client/src/replica/outbox-mirror.test.ts` `packages/client/src/replica/query.ts`,`packages/client/src/replica/types.ts` `packages/vault/src/commands/documents.ts`,`packages/vault/src/commands/knowledge.ts` `packages/vault/src/commands/media.ts`,`packages/vault/src/commands/minted-id.ts` `packages/vault/src/commands/people.ts`,`packages/vault/src/commands/schedule.ts` `packages/vault/src/commands/tally.ts`,`packages/vault/src/commands/minted-id.test.ts`
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| A row loses its badge because the sidecar did not travel with it | rendered the pending chip through the real web path (`PendingWriteActions`, Tasks/Docs/Notes/Photos/Agenda/People `states.test.tsx`) and the real phone path (`DocRow.test.tsx`, `pending-write-visibility.test.ts` over the mounted reader, `PendingRestartJourney.test.tsx` across a restart) | held — every chip still draws; the one that went red (people's roster) was the test hand-writing the old columns, and it draws again through `attachPendingSidecar` |
+| A seat-minted id lets one device overwrite a row another device created | `minted-id.test.ts` replays the same id at eight creating commands and asserts the second call does not execute; then re-ran the whole `src/commands` suite for the commands' own preconditions | held — 24/24 and 382/382; every refusal comes from `<column>_is_free`, and the no-id case still mints |
+
+## User impact
+Nothing on screen changes shape: a queued, parked, conflicted or denied row still wears the same chip with the same sentence. What changed is underneath — the row a member sees now carries only its own columns plus the one intent that projected it, so a blueprint handler reading that row on the phone or in the browser sees the same schema-pure row the gateway would hand it. And a row created offline in seven more apps now keeps the id the member was shown: create a folder, a notebook, an album, a list, a group or a person with no signal, and the child writes filed against it on the same trip land pointing at that row rather than at an id the vault never minted.
+
+First-run: nothing new appears on a first run — a fresh vault has no queued writes and no offline-created parents.
+
+`check:ui-receipt` fires on this diff (surfaces under `packages/blueprints/apps/**`, `apps/mobile/src/apps/**` and `packages/client`) and asks for a screenshot from a changed e2e harness. This slice changes no e2e harness — the visible states are unchanged by construction, which is what the six `states.test.tsx` suites assert — so no screenshot is fabricated here; CI must run `bun run test:e2e` (web, `CENTRAID_E2E_CHROMIUM`) and the mobile evidence lane against this branch.
+
+## Mega-lane E slice 2 — mobile reads (E2/E3/E5/E4 + C4's counter)
+
+| File | Change |
+| --- | --- |
+| `apps/mobile/src/kit/hooks/useReplicaQuery.ts` | `mapReplicaRows` carries the envelope's `oversizedFields` and `replicaFieldUnavailable` turns one into a sentence; `readDependsOn` filters the mounted session's app-wide invalidations down to the reads that depend on them |
+| `apps/mobile/src/lib/replica/offline-budgets.ts` | `MOBILE_ENTITY_READ_WINDOW` (5,000) — the year-3 window a whole-entity screen read declares |
+| `apps/mobile/src/apps/{people/usePeople,agenda/useAgenda}.ts` | 22 reads move off `acceptTruncation` (the default 1,000) onto the declared window |
+| `apps/mobile/src/kit/hooks/useReplicaQuery.reads.test.tsx` | the counter: eight apps' real read sets, one write each, and the bootstrap burst |
+| `apps/mobile/src/kit/hooks/replica-read-windows.test.ts` | the census: every `useReplicaQuery` call site on the phone declares a window, inline or through a shared request module |
+| `tests/scale/mobile-screen-reads.scale.test.ts` | People and Agenda at 5,000 rows a vault over two mounted vaults |
+| `tests/perf/replica-sync-io.perf.test.ts` | follows `IntentQueue.overlayMutations` to `overlay()` — the rename slice 1 made, whose one remaining caller lived outside that slice's tree |
+
+| Number (screen re-reads per event) | Before | After | Provenance |
+| --- | --- | --- | --- |
+| One write on the app → screen re-reads, by app | agenda 11 · docs 4 · locker 2 · notes 6 · people 6 · photos 6 · tally 4 · tasks 3 | **1** each | `useReplicaQuery.reads.test.tsx`, demonstrated red below; container 4 cores / 15 GB |
+| Agenda's first paint + its bootstrap invalidation burst (11 batches) | 121 reads | 11 reads | same file, "a bootstrap burst costs one re-read per CHANGED entity"; Docs' equivalent is 16 → 4, so Agenda is now the same order as Docs rather than 7.5× it |
+| Photos: a `core.place` rename → reads | 6 (the whole library reparsed) | 1 (`core.place`) | same file, "a change to one entity does not reparse the rest of the library" |
+| A purge → reads | all | all | unchanged and asserted: a purge removes the plane every read stands on |
+| People/Agenda rows returned at 5,000 a vault | 1,000 (silently the default window) | 5,000, `truncated: true` | `tests/scale/mobile-screen-reads.scale.test.ts`, 10,000 rows over two mounted vaults |
+| Statements per screen read at 5,000 rows a vault | — | ≤ 12 (`2 scopes + k`, constant in library size) | same rig, counting driver over the production reader |
+| `useReplicaQuery` call sites declaring a window | 121 total, 33 through a shared module | 121, all declared | `replica-read-windows.test.ts` |
+
+**Demonstrated red.** With the dependency filter replaced by `if (invalidations.length > 0)` — the behaviour before this slice — nine of the counter's cases fail with exactly the before-numbers above (`expected [ 'core.event', …(10) ] to strictly equal [ 'core.event' ]`, and the burst at `…(120)`). Restored, all 14 pass.
+
+**Deleted/replaced.** `acceptTruncation: true` on People's and Agenda's 22 whole-entity reads, replaced by the declared year-3 window; the app-wide invalidation subscription in the hook, replaced by the read's own dependency.
+
+**Decisions.** The filter is on ENTITY, not shape or row: an invalidation carries a `rowId` only sometimes (`ReplicaDependency` says absent means the whole entity), and a read whose entity moved must re-run whatever row it was. A purge re-reads everything on purpose. The window is one constant for both screens rather than one per entity: 5,000 is the year-3 volume in `tests/scale`'s own table, and a per-entity window would be a second place to keep it.
+
+```
+bun run --cwd apps/mobile typecheck
+bun run --cwd apps/mobile test src/apps src/kit src/screens   # 203 files
+bun run test:scale tests/scale/mobile-screen-reads.scale.test.ts
+```
+
+**Findings.** (1) The eleven whole-entity reads Agenda holds are still eleven reads: the filter stops them re-running together, but a day view that reads every attendee, tag and concept in the vault to draw one day is a shape question this lane did not open. (2) `replicaFieldUnavailable` has no screen consumer yet — the notes/docs body paths still render an oversized column as empty text; the row now CARRIES the fact, so wiring it is a one-line change per surface, and it belongs with whoever owns those screens.
+
+**Doc debt.** `docs/mobile-offline.md` describes the phone's reads as accepting the default window; that sentence is now wrong for People and Agenda (fixed in slice 4, which owns that file's Tally rows).
+
+**Full paths for coverage:** `apps/mobile/src/apps/agenda/useAgenda.ts`, `apps/mobile/src/apps/people/usePeople.ts`, `apps/mobile/src/kit/hooks/useReplicaQuery.ts`, `apps/mobile/src/lib/replica/offline-budgets.ts`, `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`, `apps/mobile/src/kit/hooks/useReplicaQuery.reads.test.tsx`, `tests/scale/mobile-screen-reads.scale.test.ts`, `tests/perf/replica-sync-io.perf.test.ts`
+## Mega-lane E2 slice 1 — web kit reads (D1) and the scope's survival law (C6)
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/react/blueprints/inline-change-batch.ts` + `.test.ts` | one applied batch is one change event: the collapse, with the owner's settling intents kept one-per-intent |
+| `packages/client/src/react/blueprints/centraid-inline.ts` | the host door emits the collapsed batch instead of fanning the array out |
+| `packages/client/src/react/blueprints/inline-change-feed.test.ts` | the counter at the real seam: 40 invalidations in, one `window.centraid.onChange` call out |
+| `packages/client/src/replica/shell-session.ts` + `shell-session-lifecycle.test.ts` | `replicaScopeDisposition` plus the page-lifecycle listeners: warm for 30 s while visible, closed on `visibilitychange`→hidden and on `freeze` |
+| `apps/web/tests/e2e/perf-waterfall.spec.ts` | the warm tap→app-view attach probe and its ui-impact screenshot |
+| `tests/journeys.json` | `web/warm-switch/seeded-demo/ci-linux-x64-4c#tapToVisualResponse` promoted from `unmeasured` |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Change events an app is charged for one applied batch of 40 | 40 | 1 | `inline-change-feed.test.ts`, counted at `window.centraid.onChange`; demonstrated red at 40 by restoring the fan-out (log below) |
+| Web warm switch, tap → app view attached | not measured | 191 ms worst of 7 | `perf-waterfall.spec.ts -g "warm switch"`, seeded-demo volume, linux x64 4c/15 GB, headless_shell 1194; spread 99–191 ms, ceiling 600 ms |
+| Idle grace a hidden page pays before its replica handles come back | 30 s | 0 | `shell-session-lifecycle.test.ts` over `replicaScopeDisposition` |
+
+**Deleted/replaced.** `toChangeDetail` and its per-invalidation fan-out; `InlineChangeDetail` moved to the module that now builds it. The `unmeasured` `tapToVisualResponse` probe note is replaced by the probe that fills it.
+
+**Decisions.** A held scope is never closed under its screen — the lease hands the session object straight to the mounted app, so a close would fail the app's next read rather than reopen it; held scopes close when their last holder releases, which under hidden/frozen skips the grace. `freeze` is taken as this platform's memory-pressure signal: the browser fires it on a hidden page whose memory it is reclaiming, and there is no other shipped one. The collapse carries no timer, so the owner's own write still reaches the screen with nothing between it and the read.
+
+```
+# tree hash: quoted for both this lane's slices in its closing commit (self-audit
+# reads HEAD's tree, so a section cannot carry the hash of the commit it lands in)
+bun run --cwd packages/client typecheck && bun run --cwd apps/web typecheck
+bun run --cwd packages/client test src/react/blueprints src/replica   # 51 files, 424 tests
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- perf-waterfall.spec.ts -g "warm switch"   # 3/3 green
+```
+
+**Findings.** (1) **The web e2e app-open lane is RED ON `main` (84ef5404d) in this container, not only on this branch**: the replica re-bootstraps in a loop — `ReplicaRebootstrapRequiredError: … (cursor-gap)` from `Worker.onMessage`, `409` from the replica routes, and `opfs-sahpool: NoModificationAllowedError` because the previous store's OPFS access handles are still open when the next one opens the same file — so Tasks never leaves "Loading Tasks…" and `window.centraid` is never installed. `perf-waterfall.spec.ts -g "app-open waterfall"` and both `tasks.spec.ts` cases fail on both revisions. Not this lane's files (`coordinator.ts`, `store-core.ts` `changeMismatch`, `replica-routes.ts`); it is why the ledger number stops at attach. (2) D1's "the user's own overlay re-read has no debounce/coalesce window" is NOT met and is not reachable from this file set: `onDataChange` in `packages/design/src/elements/refresh.ts` delays every detail by `debounceMs = 200`, overlay and settlement included, so the owner's own write waits 200 ms for its re-read after this collapse as before it. (3) `bun run build` on `main` leaves 184 untracked `.js` files under `packages/blueprints/apps/**`; this branch's build does not.
+
+**Doc debt.** `docs/client-keying.md` and `docs/mobile-offline.md` describe the replica session's lifecycle without the hidden/frozen close (this slice).
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| The filter drops an invalidation a screen needed, so a row lands and the screen never shows it | ran the counter with a purge, with an overlay invalidation on the written entity, and with a canonical invalidation on each of Agenda's eleven entities in turn; then the whole mobile suite (203 files) including every screen test that asserts a change reaching a list | held — a purge still re-reads all eleven, every entity re-reads its own read, and nothing else moved |
+| The declared 5,000 window makes a phone read 5,000 rows where it used to read 1,000 and pay for it | measured the rig: the page is one statement over the union at any size, ≤ 12 statements per read at 10,000 rows across two vaults, and the whole eight-read pass runs in under a second on this container | held — the cost is proportional to the answer, and the answer is what the member asked to see |
+
+## User impact
+A roster of 5,000 people is a roster of 5,000 people: People and Agenda were reading the first 1,000 rows and saying so in one line most members never read, and they now ask for the whole year-3 window. And the phone stops re-reading a screen for changes that have nothing to do with it — renaming a place no longer re-reads the photo library, and an edited event no longer re-runs all eleven of Agenda's reads. On a busy sync that is the difference between a screen that stutters and one that does not.
+
+First-run: a fresh device shows the same empty states; the window only matters once a vault has more than a thousand rows of anything.
+
+`check:ui-receipt` fires on `apps/mobile/src/apps/**`; this slice changes no e2e harness (the visible states are unchanged — the same rows, drawn fewer times), so no screenshot is fabricated. CI must run the mobile evidence lane against this branch.
+
+## Mega-lane E slice 2 follow-up — the intent revision transaction gets its own module
+
+Rebasing this lane onto `main` put slice 1's overlay/sidecar work on top of the engine's own growth of `packages/client/src/replica/intents.ts`: 657 lines against `repo-hygiene`'s 625. Split rather than waived.
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/replica/intent-revision.ts` | new: the revise-a-pending-intent transaction — the per-intent lock, the engine-private successor marker, the identity-preserving input merge, and the predecessor's retirement |
+| `packages/client/src/replica/intents.ts` | 657 → 513 lines; `IntentQueue` imports the transaction rather than housing it |
+| `packages/client/src/replica/{index,native}.ts` | the new module joins both replica barrels, so no consumer's import moves |
+| `packages/client/src/replica/{coordinator,shell-session}.ts` | `PendingIntentReplacement`/`PendingIntentRevisionTarget` are imported from the module that owns them |
+
+Behaviour-preserving: no assertion was rewritten, and the whole `@centraid/client` suite (270 files, 2,459 tests) is green on the moved seam.
+
+```
+bun run --cwd packages/client typecheck && bun run --cwd packages/client test
+bash .governance/run.sh   # repo-hygiene green
+```
+
+| The collapse merges two settling intents into one event and one of them goes unnarrated | asserted intent-bearing invalidations stay one-per-intent with their `intentState`, then re-ran `inline-change-feed.test.ts` (which drives the real `installInlineCentraid` + `onDataChange` pair) and `inlineQueryCtx`/`centraid-inline` suites | held — 4/4 and the whole `src/react/blueprints` tree green; the fan-out restored puts the counter back to 40, so the test is not vacuous |
+| Closing a scope when the page hides breaks a screen that is still mounted | traced every `acquireReplicaShellSession` holder (`InlineAppRoute`) and the lease-less readers (`homeTileContent`, `paletteRecents`, `settingsAccessData`), then pinned `refs > 0 ⇒ hold` for all three page states | held for leased scopes; a lease-less reader that holds the session across an await and reads after the tab hides now sees `Replica session closed` where it used to wait out the grace — declared, not silent |
+
+## User impact
+Switching to an app and back is unchanged to look at; what changed is what a screen does while a batch of other people's edits arrives. Forty rows landing in one sync used to redraw the board forty times, so the list stuttered while it caught up; it now redraws once, and the member's own edit is still answered on its own event with nothing waiting on it. And a tab left in the background gives its replica's files back straight away instead of holding them for another half minute, so the browser has less reason to throw the whole page away while it is not being looked at.
+
+First-run: nothing new on a first run — a fresh vault has no batch to collapse and no second app to switch to.
+
+Screenshot from the changed harness: `artifacts/e2e/ui-impact/issue-922-web-warm-switch-app-view.png` (`apps/web/tests/e2e/perf-waterfall.spec.ts`, the warm tap→app-view attach probe).
+
+## Mega-lane E — paths the rebase onto `main` carried
+
+The lane's integration branch was replayed onto `main` after the #922 engine chain landed there, so the change set now spans mega-lane E2's landed commit as well. Two of its paths are named in its own section by brace expansion; spelled out here for the coverage crosswalk, which matches whole paths: `packages/client/src/react/blueprints/inline-change-batch.test.ts`, `packages/client/src/replica/shell-session-lifecycle.test.ts`.
+
+## Mega-lane E2 slice 2 — the order census is a seek (C3) and the change log compiles once (A3)
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/replica/read-plan-clauses.ts` | `censusClass` — one integer per stored value, and the ladder both the index and the probes spell |
+| `packages/client/src/replica/read-plan.ts` | the guards become census probes: each asks `class >= N ORDER BY class ASC LIMIT 1`, still one statement, same aliases, same escalations |
+| `packages/client/src/replica/store-core.ts` | `ensureCensusIndex` for the ordered column and its tie-break, under the same 64-index cap |
+| `packages/client/src/replica/order-census.test.ts` | the red-first suite: every census access must name `replica_row_cen_`, plus the masking and straddle cases |
+| `packages/vault/src/replica/change-log.ts` | the twelve fixed statements of the change path go through `prepared()` |
+| `packages/vault/src/replica/change-log-statement-cache.test.ts` | the counter: a warm change-log pass compiles nothing |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Ordered read after a write, 50k-row entity (the census is re-asked) | 37.9 ms | 1.03 ms | throwaway vitest over `ReplicaSqliteStore` on `node:sqlite`, 50 000 `knowledge.note` rows, 5 read/write cycles; before `[37.45, 37.04, 36.95, 37.15, 38.05]`, after `[1.30, 1.20, 1.08, 1.25, 1.31]`; container 4 cores / 15 GB |
+| Warm ordered read (census cached), same fixture | 0.40 ms | 0.44 ms | same run — the win is in the after-a-write column, and the warm path is unchanged |
+| One-row write batch, same fixture | 0.36 ms | 0.55 ms | same run; the extra b-tree per ordered column, paid once per write against 37 ms saved on the next ordered read |
+| Census statements per ordered read | 1 (a scan of the whole entity) | 1 (index seeks only) | `order-census.test.ts`: every `replica_row` step in the census plan names `replica_row_cen_`; RED today at `SEARCH replica_row USING INDEX replica_row_ord_… (shape_id=? AND entity=?)` |
+| Statements a warm change-log pass compiles | 12 | 0 | `change-log-statement-cache.test.ts`, spying `prepare` on the vault handle |
+
+**Deleted/replaced.** The `max(CASE WHEN … END)` census aggregate and the `census: string[]` select list it was built from. `orderGuards` no longer emits SQL; it emits the classes its guard asks about.
+
+**Decisions.** The class ladder is FIXED (0 oversized, 1 undisclosed, 2 unordered, 3 numeric, 4 text, 5 JSON null and anything later SQLite adds) and does not vary with the role or the schema, because the index and the probe must spell it identically or SQLite serves neither. Each guard asks its OWN question (`class >= N`, answer is N iff that class exists) rather than reading one minimum, so no class masks another and the guards keep the priority `assertReplicaOrder` already gave them — which a single `min(class)` would have broken for a schema with no unavailable fields. `plan.orderCensus` keeps its `{ sql, binds }` shape and its aliases, so the mounted reader on the phone runs the new probes without a line changing there.
+
+```
+# tree hash: quoted for both this lane's slices in its closing commit
+bun run --cwd packages/{client,vault} typecheck && bun run --cwd packages/{vault,client} build
+bun run --cwd packages/client test                 # 273 files, 2472 tests
+bun run --cwd packages/vault test src/replica      # 9 files
+bun run --cwd apps/mobile test src/lib/replica     # 33 files, 223 tests
+bun run --cwd packages/client test src/replica/order-census.test.ts   # red first, see below
+```
+
+**Findings.** (1) `tieCensus` — the `count(*) / count(DISTINCT …) / count(…)` aggregate that runs when the primary key is synthetic — is STILL one scan of the kept set per ordered read, and it is not cached at all, so it is now the largest remaining O(entity) term on that path. Same shape as the census this slice fixed; not in this brief's file set to re-plan. (2) Two vault suites are RED ON THE BASE (`ee434678e`), with `change-log.ts` reverted as well as with it: `gateway.contract.test.ts` (`propose_event` now records 5 pre-checks, the test expects 4) and `commons-routing.test.ts` (seven commands write a shareable container through a minted id and declare no commons route). Both are mega-lane E's minted-id landing, not this lane's files. (3) `packages/client/src/replica/intents.ts` is 657 lines against the 625-line `repo-hygiene` cap on the base; `bash .governance/run.sh` fails on it for any commit in this branch.
+
+**Full paths for coverage** (this lane's two slices, spelled out): `packages/client/src/react/blueprints/inline-change-batch.ts`, `packages/client/src/react/blueprints/inline-change-batch.test.ts`, `packages/client/src/react/blueprints/inline-change-feed.test.ts`, `packages/client/src/react/blueprints/centraid-inline.ts`, `packages/client/src/replica/shell-session.ts`, `packages/client/src/replica/shell-session-lifecycle.test.ts`, `packages/client/src/replica/read-plan.ts`, `packages/client/src/replica/read-plan-clauses.ts`, `packages/client/src/replica/store-core.ts`, `packages/client/src/replica/order-census.test.ts`, `packages/vault/src/replica/change-log.ts`, `packages/vault/src/replica/change-log-statement-cache.test.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `tests/journeys.json`.
+
+**Doc debt.** `docs/traps/` has no entry for the census index's spelling rule (the index expression and the probe expression must be byte-identical); `docs/mobile-offline.md` states the replica's per-write index cost without the census index (this slice).
+## Mega-lane E slice 4a — Tally on the phone (E7, the Metro ruling's tail)
+
+| File | Change |
+| --- | --- |
+| `apps/mobile/src/apps/tally/tally-reads.ts` | new: the seven `queries/*.ts` modules the web seat runs, run here against the mounted replica; the module-level read plane the frame attaches |
+| `apps/mobile/src/apps/tally/tally-gateway.ts` | **deleted** — seven gateway read RPCs |
+| `apps/mobile/src/apps/tally/tally-store.ts` | reads through `tally-reads.ts`; `STALE_AFTER_MS`, the staleness verdict and `lastReadAt` deleted; the tick now only turns the day over |
+| `apps/mobile/src/apps/tally/useTallyVault.ts` | the frame attaches the session, takes the spine read, and re-reads on the app's own invalidations (coalesced at 120 ms) |
+| `apps/mobile/src/apps/tally/{tally-view-model,TallyNotice,TallyHome}.tsx?` | the `stale` designed state leaves this seat with its clock |
+| `apps/mobile/src/lib/replica/inline-query-ctx.native.ts` | `withoutScopeProvenance` — precondition (b): `__centraid*` is stripped from the ENVELOPE before `guardedRow` wraps it, so no handler can emit this seat's bookkeeping |
+| `apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts` | new: the one seeded ledger both parity oracles read |
+| `apps/mobile/src/apps/tally/tally-airplane.test.ts` | new: `lib/gateway` replaced by a module that throws from every door; the dashboard still lands complete |
+| `tests/integration-mobile/tally-balance-parity.integration.test.ts` | new: phone vs web, same rows, strict equality of the whole payload |
+| `docs/mobile-offline.md` · `docs/decisions.md` | the Tally read carve-out and the SB-loader row said the opposite of the code; both rows corrected |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Tally reads that need a reachable gateway | 7 of 7 | **0 of 7** | `tally-reads.ts` holds no network door; `tally-airplane.test.ts` proves it with `lib/gateway` throwing |
+| Tally's dashboard, phone vs web, on the same 40-expense ledger | not comparable (RPC) | **identical payload** | `tally-balance-parity.integration.test.ts`, strict equality over the JSON projection plus per-friend nets |
+| `__centraid*` keys in a handler's payload on the phone | 6 on every spread row | **0** | same file, and `inline-query-ctx.native.test.ts` now asserts strict equality with no filtering |
+| Tally's stale clock | 10 min, re-examined every 30 s | **deleted** | `tally-store.ts`; the 30 s tick remains only to turn the day heading over |
+| Screen re-reads per Tally write | 1 refresh call per writer | 1 coalesced re-read per invalidation batch | `useTallyVault.ts` |
+
+**Deleted/replaced.** `tally-gateway.ts` whole (the seat's read fork), replaced by `tally-reads.ts` running the canonical query modules. `STALE_AFTER_MS` and the `stale` screen state on this seat, replaced by nothing: a read of this device's own replica is as current as the device is, and a replica behind the vault is `offline`/coverage on the frame, which already outranks. The spike test's row-array reference and its `withoutProvenance` filter, replaced by an unfiltered comparison plus a "no provenance anywhere" assertion.
+
+**Decisions.** (1) The read plane is attached module-level rather than threaded through fifteen screens, matching `tally-store.ts`'s own reason: the plane is process memory, and a provider would let a remount hand a subtree a session the member has navigated away from. (2) The phone does NOT copy the shell's payload-level pending sidecar: the shell attaches it to carry pending-row identity across a projection, the phone's rows carry it themselves. It is a symbol, so it crosses no JSON — the parity oracle compares what reaches a surface and says so. (3) The parity test loads `queries/dashboard.ts` and the shell's `inlineQueryCtx.ts` through a specifier tsc cannot follow. Both are resolvable at run time and neither is describable in `tests/tsconfig.json`; widening a type-checker config for one test was the alternative and is worse.
+
+```
+bun run --cwd apps/mobile typecheck && bunx tsc -p tests --noEmit
+bun run --cwd apps/mobile test                      # 280 files
+bun run test:integration:mobile tally-balance-parity
+```
+
+**Findings.** (1) **Locker's list cannot follow Tally without a ruling.** `packages/blueprints/apps/locker/queries/items.ts` gates on `ctx.vault.authenticate`, which the inline ctx rejects as online-only by construction, so the list query cannot run on a phone as it stands. `search.ts` and `trash.ts` use `ctx.vault.read` alone and can. The non-weakening shape is for the NATIVE ctx to answer `authenticate` with the same online `lockerAuth` call the seat makes today while `read` stays local — the gate unchanged and online, the rows local — but that is a security seam and it is the root's call, not this lane's. Slice 4b is blocked on it. (2) The two seats' post-processing differs (decision 2); nothing derived differs, but a future payload-level field on one seat would not be caught by a JSON comparison.
+
+**Doc debt.** None for this slice — both rows this change made actively wrong are corrected in it.
+
+**Full paths for coverage:** `apps/mobile/src/apps/tally/tally-reads.ts`, `apps/mobile/src/apps/tally/tally-gateway.ts`, `apps/mobile/src/apps/tally/tally-store.ts`, `apps/mobile/src/apps/tally/tally-store.test.ts`, `apps/mobile/src/apps/tally/useTallyVault.ts`, `apps/mobile/src/apps/tally/tally-view-model.ts`, `apps/mobile/src/apps/tally/tally-view-model.test.ts`, `apps/mobile/src/apps/tally/TallyNotice.tsx`, `apps/mobile/src/apps/tally/TallyHome.tsx`, `apps/mobile/src/apps/tally/BalancesView.test.tsx`, `apps/mobile/src/apps/tally/WaitingView.test.tsx`, `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx`, `apps/mobile/src/apps/tally/tally-airplane.test.ts`, `apps/mobile/src/lib/replica/inline-query-ctx.native.ts`, `apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts`, `apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts`, `tests/integration-mobile/tally-balance-parity.integration.test.ts`, `docs/mobile-offline.md`, `docs/decisions.md`
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| The probes disagree with the aggregate they replace on some value mix | 4 000 randomized entities (1–6 rows drawn from integers, reals, booleans, text, `{`-leading text, JSON null, objects, arrays, absent paths, oversized fields) compared the guard that the old aggregate raises against the guard the probes raise, through `assertReplicaOrder`'s own first-match priority | 0 mismatches in 4 000; the earlier ladder that folded JSON null into `text` produced 70, which is how class 5 exists |
+| The census index is created but not used, so the win is imaginary | `EXPLAIN QUERY PLAN` on the plan the store executes, asserted in the committed suite and read by hand on the 50k fixture | held — every `replica_row` step is `SEARCH … USING COVERING INDEX replica_row_cen_… (shape_id=? AND entity=? AND <expr>>?)`; reverting the three files puts it back to a full-range `replica_row_ord_` scan and the suite goes red |
+| Caching the change log's statements serves a stale shape after a migration | traced the DDL in `change-log.ts` (`refreshReplicaTriggers`, `ensureReplicaCommitColumns`, epoch bump) against what each cached statement reads, and ran the whole `packages/vault` replica suite plus the route suites | held — the cache is keyed by the connection, every cached statement is fixed text over `replica_meta`/`replica_change`, and SQLite re-prepares across a schema-version bump |
+
+## Mega-lane E2 — the trees the gates ran against
+
+Both slices' code is gated on ONE tree, because slice 1 was rebased onto main by mega-lane E after it landed and slice 2's gate run therefore covers both.
+
+| What | Head | Tree |
+| --- | --- | --- |
+| Slice 1 as first landed (superseded by the rebase) | `c7a8a6909` | `fee9a083efe753012053565920e253c69eaf478a` |
+| Slice 1 + slice 2 as landed | `efc169d68` | `16d8cd78ee6b41f0019607cd21c7290d46531d6b` |
+
+```
+bash $S/self-audit.sh 922            # SELF-AUDIT PASS on 16d8cd78…
+bash .governance/run.sh              # 22/22
+bun run --cwd packages/client test   # 273 files, 2472 tests
+bun run --cwd packages/vault test src/replica      # 8 files, 49 tests
+bun run --cwd apps/mobile test src/lib/replica     # 33 files, 223 tests
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- perf-waterfall.spec.ts -g "warm switch"   # 107 ms, ceiling 600
+```
+| "The phone derives the same balances as the web" is really "both sides ran the same empty ledger" | asserted the web side's own numbers before comparing — 40 expenses, 3 friends, non-zero totals — and asserted every friend's net individually, not just the totals | held; a seat that agreed on totals while disagreeing on who owes them would fail the second test |
+| The airplane-mode proof passes because the gateway was never reached rather than because it is unreachable | replaced `lib/gateway` with a proxy that throws from EVERY export, and added a case with no read plane attached at all | held — the four reads land with the gateway throwing, and the unattached case says "mounting" instead of drawing an empty ledger |
+
+## User impact
+Tally on a phone is a ledger you can read on a plane. Every net, share and total was a question for the gateway; the same balance engine now runs on the device, over its own copy of the vault, so opening Tally in a tunnel shows the whole thing instead of a spinner — and the ten-minute "your ledger may be behind" line is gone, because a read of this device's own data cannot be behind itself. Nothing on screen changes shape: the same figures, from the same one engine, arriving without a round trip.
+
+First-run: a device that has not finished mounting the vault says so — "This device has not finished mounting the vault yet." — rather than drawing an empty ledger that reads as settled.
+
+`check:ui-receipt` fires on `apps/mobile/src/apps/tally/**`. This slice changes no e2e harness — the rendered states are unchanged except that `stale` can no longer occur — so no screenshot is fabricated here; CI must run the mobile evidence lane against this branch.
+
+## Mega-lane E slice 4b — Locker on the phone: the sealed-column law, and why the reads did not follow Tally
+
+| File | Change |
+| --- | --- |
+| `packages/vault/src/replica/locker-sealed-columns.test.ts` | new: every sealed column of every sealed entity is structurally unavailable to the replica lane, asserted over the REGISTRY (so a sixth column tomorrow is covered) and over a real row carrying real secret material |
+
+**What holds.** `locker.item`'s replica row carries `title`, `username`, `url` — the browsable half Locker's whole premise rests on — and none of `password`, `otp_seed`, `card_number`, `cvv`, `content`, by NAME rather than blanked: a column present-but-empty would still say the row has a password. The single-row read a change frame takes agrees with the page. `ONLINE_ONLY_ACTIONS` is untouched by this lane, and its two existing exact-list assertions (`packages/blueprints/apps/locker/writes.test.ts`, `packages/blueprints/src/locker-online-only.test.ts`) still pin it.
+
+**What does NOT hold, and why the seat's reads stayed on the gateway.** Two of Locker's three secret-free queries cannot run on a local ctx at all, and this is structural, not an omission. `OnlineOnlyGuard` is sticky by design — "sticky even when query handler code catches the capability failure" — so a handler's own soft catch does not save the run:
+
+| Query | Verb it reaches for | On a local ctx |
+| --- | --- | --- |
+| `queries/items.ts` | `ctx.vault.authenticate` (the unlock gate) | **refused** — `authenticate is online-only` |
+| `queries/search.ts` | `ctx.vault.invoke` (`locker.watchtower`) | **refused** — `invoke is online-only` |
+| `queries/trash.ts` | `ctx.vault.read` only | runs |
+
+Measured by running each handler through `runNativeInlineQuery` over a stub read plane (throwaway probe, this container). One query of three is not a seam worth building.
+
+**The shape that would work, and the ruling it needs.** The seat could hand the native ctx the same ONLINE calls it already makes — `authenticate` → `lockerAuth`, and an allowlisted `invoke` for `locker.watchtower` / `locker.counts`, both derived inside the sealed boundary and unreachable locally by construction — while `read` stays local. Nothing about the gate would change: it would be the same gateway call, made from the same seat, and a device that cannot reach the gateway still could not unlock. The gain is bounded to "the row window stops crossing the wire while online"; Locker would remain unreadable offline, because unlocking is an online question. The alternative that WOULD give offline Locker is serving `authenticate` from the phone's own boundary (`locker-store.ts`'s session machine over the device's biometric credential), and that is a security ruling about what unlocks a locker, not a lane's call. **Blocked on the root; no code was written for either shape.**
+
+**Deleted/replaced.** Nothing.
+
+**Decisions.** The `onlineVerbs` seam described above was implemented and then reverted rather than landed: with only `trash` reachable it would have been a hole in the shared ctx with no consumer behind it, and "no dead seams" outranks a partial delivery.
+
+```
+bun run --cwd packages/vault test src/replica/locker-sealed-columns.test.ts
+bun run --cwd packages/vault test
+```
+
+**Findings.** (1) Locker's phone reads are blocked as above — the root's call. (2) `queries/search.ts` reaching for Watchtower means a search that cannot decorate cannot answer at all, on either seat; the shell hides it behind an online fallback, so the coupling has never been visible. Whether a search should fail because a decoration is unavailable is a product question this lane opened but did not own.
+
+**Doc debt.** `docs/mobile-offline.md`'s Locker paragraph still describes the seat correctly (its reads remain the gateway's); nothing is stale. If the root rules on the shape above, that paragraph and the SB-loader row's "app by app" list both need the Locker row.
+
+**Full paths for coverage:** `packages/vault/src/replica/locker-sealed-columns.test.ts`
+
+## Mega-lane E3 slice 1 — the web bootstrap loop, and the warm switch measured to a usable screen
+
+| File | Change |
+| --- | --- |
+| `packages/client/src/replica/store-core.ts` | a gap is a batch that starts AHEAD of the cursor; an overlapping batch applies, a spent one is a no-op that never moves the cursor back |
+| `packages/client/src/replica/shell-session.ts` | `openReplicaShellSession` closes the session it built when `start` throws, so a failed first bootstrap cannot leak the OPFS worker |
+| `packages/client/src/replica/windowed-bootstrap.ts` | `converge` drains to the head the gateway reports (`hasMore`) instead of waiting for the log to stop advancing |
+| `packages/client/src/replica/rebootstrap-loop.test.ts` | new, red-first: overlap, spent batch, a real gap that still wipes, and the worker closed on a failed open |
+| `packages/client/src/replica/windowed-bootstrap.test.ts` | the budget test says `hasMore: true` (what "one more commit" is on the wire); a sibling pins the one-pass drain |
+| `apps/web/tests/e2e/perf-waterfall.spec.ts` | the warm-switch probe is carried past attach to a TAKEABLE screen; `goHomeFromAttached` now proves the bridge went down |
+| `tests/journeys.json` | `web/warm-switch/…#tapToVisualResponse` re-stated at the usable interval, with the seven-run spread and both halves |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Web warm switch, tap → usable app screen | not measurable (loop) | 433 ms worst of 7 | `perf-waterfall.spec.ts -g "warm switch"`, seeded-demo, linux x64 4c/15 GB, headless_shell 1194; 433/394/396/408/408/397/413, ceiling 600 unchanged |
+| Same run, tap → app-view attach | 191 ms worst of 7 | 128 ms worst of 7 | same runs: 128/90/97/100/107/91/108 |
+| Re-bootstraps in a 30 s Tasks open (web e2e harness) | unbounded (≥ 4 observed, never settles) | 0 | `apps/web/tests/e2e` console/network probe; `409`s and `opfs-sahpool: NoModificationAllowedError` also 0 |
+| Convergence-replay round trips per bootstrap on a live vault | 1000 (the pass budget) | 1 | `windowed-bootstrap.test.ts` "stops as soon as the gateway reports itself drained"; on the harness, 682 checkpoint POSTs → 2 |
+| `tasks.spec.ts` cases green | 0 of 3 on `main` | 2 of 3 | third case is a separate finding below |
+
+**Deleted/replaced.** The "replay until the log stops advancing" rule and the two register lines that named the loop as the reason `tapToVisualResponse` stopped at attach.
+
+**Decisions.** `changeMismatch` is narrowed, not weakened: the fence exists to catch a replica that MISSED changes, and a batch whose `from` is at or behind the stored cursor cannot have missed anything — it overlaps, and every change in it is an idempotent upsert or delete under the same `server_version` guard. `from` ahead of the cursor still wipes and demands a snapshot, and the committed suite proves it. The 600 ms ceiling is left alone although the interval it fences grew: widening a ceiling is a ruling, not a lane's call.
+
+```
+# tree hash: quoted in this lane's closing section (self-audit reads HEAD's tree)
+bun run --cwd packages/client typecheck && bun run --cwd apps/web typecheck
+bun run --cwd packages/client test                  # 274 files, 2477 tests
+bun run --cwd apps/mobile test src/lib/replica      # 33 files, 223 tests
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- perf-waterfall.spec.ts   # 5/5
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- tasks.spec.ts            # 2/3, see findings
+bun run --cwd packages/client test src/replica/rebootstrap-loop.test.ts        # red first: 3 of 4 fail
+```
+
+**Findings.** (1) `tasks.spec.ts` "Tasks hides a queued delete and shows a minted pending add" fails for a reason that is NOT the bootstrap: the tasks it writes carry no `due_at`, so they file under **Anytime** while the board opens on **Today**, and the spec never leaves that view. Proved by reading the board through the app's own door right after the write — `window.centraid.read({query:"board",input:{limit:200}})` returns `"Queued delete target"` — so the write, the replica and the read are all correct and the assertion is looking at the wrong view. `packages/blueprints/apps/tasks` and this spec belong to the minted-id lane. (2) `requireBootstrap` fires `void this.bootstrapWhenReachable()`, whose rejection has no handler: every non-transient bootstrap failure reached the page as an unhandled rejection (`pageerror`). No longer raised by the fixed path, but the shape is still there. (3) The convergence replay and the feed's own catch-up both pull from the same cursor after commit; they now converge instead of destroying the store, but the duplicate round trip remains.
+
+**Doc debt.** `docs/mobile-offline.md` and `docs/client-keying.md` describe the replica's catch-up without the overlap rule (this slice).
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| "No sealed column reaches a locker replica row" is really "the row was empty" | inserted a row with a real password, OTP seed, card number and CVV, then asserted the browsable columns ARE present and searched the serialized values for the plaintexts | held — `title`/`username` present, no sealed column name, and neither plaintext appears under any key |
+| Locker's queries are only blocked because the probe's stub read plane returned nothing | the refusals name the VERB, not the rows: `authenticate is online-only` and `invoke is online-only`, raised before any row shape matters, and `trash` — same stub, same empty rows — ran to completion | held; the blocker is the verb surface, not the data |
+| Narrowing `changeMismatch` lets a replica silently skip changes | ran the whole `@centraid/client` suite (274 files) and the mobile replica suite (33 files) against the narrowed rule, then asserted in the committed suite that a batch starting ahead of the cursor still wipes and raises — and re-ran with the three files reverted, which puts 3 of the 4 new cases red | held — a gap ahead still wipes; only a batch at or behind the cursor is absorbed, and the spent case is proved not to move the cursor back |
+| The e2e is green because the probe got weaker, not because the loop is gone | carried the warm-switch probe PAST attach to a takeable screen (`window.centraid` installed, fallback gone) — a strictly stronger assertion than the one that passed before — and watched the network: the 409s, the `NoModificationAllowedError`s and the re-bootstraps are all at zero on a 30 s open that previously never settled | held — the number rose from 191 (attach) to 433 (usable) because it now fences more, under the same unchanged ceiling |
+
+## Mega-lane E3 slice 2 — the owner's echo skips the window, and the tie census is an index walk
+
+| File | Change |
+| --- | --- |
+| `packages/design/src/elements/refresh.ts` | `onDataChange` hands the seat's OWN overlay detail straight through; every other doorbell keeps the 200 ms window |
+| `packages/design/src/elements/refresh.test.ts` | both halves, red first: the echo fires with no timer, a doorbell mid-window still waits it out |
+| `packages/client/src/replica/read-plan.ts` | the tie census is `EXISTS (… GROUP BY <ordered> HAVING count(*) > 1)`; `ReplicaTieCensusRow` is the one column that answer needs |
+| `packages/client/src/replica/store-core.ts` | the tie census joins the order census in the write-invalidated cache (`orderCensuses` → `censuses`, `orderCensus` → `cachedCensus`) |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Warm ordered read, 50k-row synthetic-pk entity | 21.6 ms | 0.45 ms | throwaway vitest over `ReplicaSqliteStore` on `node:sqlite`, 50 000 `knowledge.note` rows, `orderBy updated_at desc limit 20`, 5 cycles; before `[20.04, 21.61, 21.05, 21.77, 21.59]`, after `[0.64, 0.48, 0.36, 0.40, 0.45]`; container 4 cores / 15 GB |
+| Ordered read after a write, same fixture | 21.6 ms | 8.3 ms | same run; before `[20.41, 22.20, 21.41, 22.09, 21.64]`, after `[7.44, 7.10, 8.79, 9.99, 8.22]` |
+| Tie-census statement alone, same fixture | 22.5 ms | 6.7 ms | same rig, statement timed directly; `EXPLAIN QUERY PLAN` before: `USE TEMP B-TREE FOR count(DISTINCT) \| SEARCH replica_row USING COVERING INDEX replica_row_ord_…`, after: the covering index with no b-tree |
+| Share of an ordered read the tie census was | 21.9 of 22.2 ms | — | same rig with the census suppressed: `[0.57, 0.31, 0.18, 0.20, 0.25]` |
+| Delay the owner's own write pays before its re-read | 200 ms | 0 | `refresh.test.ts`, counted on a fake clock; red first at 200 ms |
+| Untracked `.js` under `packages/blueprints/apps/**` after a clean root build | — | 0 of 184 | verified on this base, see decisions |
+
+**Deleted/replaced.** The `count(*) / count(DISTINCT …) / count(…)` tie aggregate and the three-column row it filled, replaced by the one boolean the rule actually reads. The per-read (uncached) execution of that census, replaced by the census cache the order guards already use.
+
+**Decisions.** The tie rule is UNCHANGED: `kept > distinct + (nulls ? 1 : 0)` is "some ordered value is carried by two kept rows", which is what `GROUP BY … HAVING count(*) > 1` asks, and SQLite groups NULLs together for free. The win is structural — the aggregate built a temp b-tree over every kept value, the grouped probe walks the ordering index that already exists. It does NOT stop at the first repeated value in practice (measured: a tie at row 2 of 50 000 still costs 7.1 ms), so no early-exit claim is made. **Slice 2(c) needed no change**: the ignore added by the precompiled-handlers lane already covers all 184 generated handlers, and `packages/blueprints/turbo.json` already declares `apps/*/{actions,queries}/*.js` as build outputs — proved by deleting all 184, running the root `bun run build` to a `@centraid/blueprints:build` CACHE HIT, and finding all 184 restored with `git status` clean.
+
+```
+# tree hash: quoted in this lane's closing section
+bun run --cwd packages/{client,design} typecheck
+bun run --cwd packages/client test                  # 274 files, 2477 tests
+bun run --cwd packages/design test                  # 32 files, 384 tests
+bun run --cwd apps/mobile test src/lib/replica      # 33 files, 223 tests
+bun run --cwd packages/design test src/elements/refresh.test.ts   # red first: 2 of 12 fail
+find packages/blueprints/apps -name '*.js' ! -name 'seed.js' -delete && bun run build   # cache hit, 184 back
+```
+
+**Findings.** (1) `apps/mobile/src/lib/replica/reader-statement-budget.test.ts`'s `bucket()` classifies a statement as the tie census by `sql.includes("count(DISTINCT")`, which this slice's statement no longer contains. No mobile assertion moves (33 files, 223 tests green — nothing in that suite exercises a synthetic-pk ordered read today), so the line is dead rather than wrong-answering, but it will silently mis-bucket the first test that does. Mobile is not this lane's tree. (2) `apps/mobile/src/lib/replica/multi-vault-reader.ts` runs both censuses UNCACHED on every mounted read, so the phone still pays the full statement per read where the shell pays it once per write. (3) `packages/blueprints` `handler-reachability.test.ts` "every mobile handler is dispatched or explicitly marked" is RED ON THE BASE (`claude/922-reads`) for `tally`'s `dashboard`/`activity`/`search` — reproduced with this slice's changes stashed.
+
+**Doc debt.** `docs/mobile-offline.md` states the replica's per-read census cost from the aggregate era (this slice).
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| The grouped probe disagrees with the aggregate it replaces — a tie it misses is an unstable page served as if it were canonical | forced a tie into the 50 000-row fixture (two rows given one `updated_at`) and re-read: the read raised `OnlineOnlyError` with the same message, from the same assertion; then ran the whole `@centraid/client` suite (274 files) and the mobile replica suite, which carry the existing tie cases | held — the tie still escalates, and NULL grouping is `GROUP BY`'s own semantics rather than a re-derivation |
+| The speedup is the cache, so the first read after every write is as slow as before | measured the after-a-write column separately, which is the cache-cold one: 21.6 ms → 8.3 ms with the cache doing nothing, and `EXPLAIN QUERY PLAN` shows the temp b-tree gone | held — the statement itself is 3.4x cheaper; the cache is what makes the warm read free |
+| Exempting the overlay detail drops a re-read some screen needed | asserted a canonical doorbell arriving mid-window still fires on the trailing edge and is not carried out early by the echo, then ran the whole `@centraid/design` suite and the `@centraid/blueprints` suite (212 files, 7024 tests) whose seven app roots are the real consumers | held — one exemption, one key, and the buffered detail is untouched |
+
+## Mega-lane E3 — the trees the gates ran against
+
+| What | Head | Tree |
+| --- | --- | --- |
+| Slice 1 — the web bootstrap loop | `2e1648218` | `fc8952f8f85b1bb7d744cf2ab012f3c52e8ba2e6` |
+| Slice 2 — the tie census and the owner's echo | `d3c91a83d` | `84592cada200edc7768f1e6e020b285953268e14` |
+
+```
+bash $S/self-audit.sh 922            # SELF-AUDIT PASS on both trees
+bash .governance/run.sh              # 22/22 on both
+bun run --cwd packages/client test   # 274 files, 2477 tests
+bun run --cwd packages/design test   # 32 files, 384 tests
+bun run --cwd apps/mobile test src/lib/replica   # 33 files, 223 tests
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- perf-waterfall.spec.ts tasks.spec.ts   # 7 of 8
+```
+
+The one red is `tasks.spec.ts` "hides a queued delete and shows a minted pending add", filed in slice 1's findings: its writes carry no `due_at`, so the rows land under Anytime while the board opens on Today, and the read through the app's own door returns them.
+
+
+| Closing evidence commit — receipt text only, code trees unchanged | `HEAD` | `0b7fb815e…` before this block was appended |
+
+```
+bash .governance/run.sh              # 22/22 on the final tree
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- tasks.spec.ts perf-waterfall.spec.ts   # 6 of 8, see below
+CENTRAID_E2E_CHROMIUM=… bun run --cwd apps/web e2e -- perf-waterfall.spec.ts -g "app-open waterfall"   # 1/1
+```
+
+`self-audit.sh` reports `FAIL receipt edits text above the appended section` on the final tree: `origin/main` moved to `0bf7cbee2` after this branch's merge-base `541f0720c`, so the trunk's copy of this receipt now carries a section (`## H1 — E6 …`) that the integration branch does not. Base lag, reproduced on `origin/claude/922-reads` itself with nothing of this lane applied; every other self-audit rung is `ok` on the same run (format:check, lint, file coverage, NUL, commit hygiene). `.governance/run.sh`, whose `doc-integrity` compares against the merge-base, is 22/22.
+
+Second red of the paired e2e run: `perf-waterfall.spec.ts` "app-open waterfall" — `cold app request count` 11 against `perfBudgets.appOpen.cold.maxRequests` 10. Green on the same tree in isolation (1/1) and in the earlier paired run; the budget has zero headroom and tips over under the load of a second spec in the same worker. Not widened — filed as a finding.
+
+## Mega-lane E slice 4c — Locker's list, shelves and search read the replica on the phone
+
+| File | Change |
+| --- | --- |
+| `packages/blueprints/apps/locker/queries/{items,search,trash}.ts` | the `ctx.vault.authenticate` gate **deleted** from `items.ts` (#928: the window is the app grant's); Watchtower and counts become `optional` invocations; `readWatchtower` answers `undefined` for "did not run"; `rethrowIfLocalReadRefused` hands an `ONLINE_ONLY` read back on all three instead of drawing an empty locker |
+| `packages/blueprints/src/handler-reachability.test.ts` | the gate learns the dispatch form this ruling introduced: a surface that IMPORTS `apps/<id>/queries/<name>` and runs it reaches the handler more directly than one that names it in a payload. Strengthened, not excepted — no `NATIVE_QUERY_UI` entry was added, and this also clears the red slice 4a left on Tally's three queries |
+| `packages/client/src/replica/inline-query-ctx-core.ts` · `packages/blueprints/types/centraid.d.ts` | `invoke` honours `optional: true` — settles `{status:"failed"}` without marking the run; every other effect refuses as before, and the gateway ignores the field |
+| `packages/blueprints/apps/locker/{review-model,route-copy,types}.ts` · `app-root.tsx` | `servedFields.strength`: absent `weak`/`reused` keys move the two strength checks into *cannot be checked*; `ItemsPayload` loses `authRequired`/`configured`, gains `archived`; the items read carries no `auth_session` and has no relock branch |
+| `apps/mobile/src/apps/locker/locker-reads.ts` (new) · `{locker-gateway,locker-store,useLockerVault,locker-view-model,LockerNotice,LockerHome,LockerItemsView,LockerReviewView}.tsx?` | the three `queries/*.ts` modules over the mounted replica behind the frame-attached read plane; the three read RPCs **deleted** from the gateway door (its secret half unchanged); the store reads locally and re-reads on the change stream (coalesced at 120 ms); `STALE_AFTER_MS`, `lastReadAt` and the `stale` designed state deleted |
+| `apps/mobile/src/{lib/replica/locker-vault.test-fixtures.ts,apps/locker/locker-airplane.test.ts}` · `tests/integration-mobile/locker-rows-parity.integration.test.ts` · `docs/mobile-offline.md` · `docs/decisions.md` | new: one seeded locker; the airplane proof with `lib/gateway` throwing from every door; phone vs web over four payloads. The Locker paragraph and the SB-loader row's app-by-app list get their Locker row |
+
+| Number | Before | After | Provenance |
+| --- | --- | --- | --- |
+| Locker reads needing a reachable gateway | 3 of 3 (list, shelves, search) | **0 of 3** | `locker-reads.ts` holds no network door; `locker-airplane.test.ts` proves it with `lib/gateway` throwing from every export |
+| Locker's four payloads, phone vs web, same 8-row locker | not comparable (RPC) | **identical** | `locker-rows-parity.integration.test.ts`, strict equality over `items`, the archived shelf, `search`, `trash` |
+| Of the three queries, those a local ctx refuses | 2 verbs (`authenticate`, `invoke`) | **0** | `queries.test.ts` `localSeat` ctx: `authenticate` throws, a non-optional `invoke` throws, all three still answer |
+| Locker's stale clock on this seat | 10 min, re-examined every second | **deleted** | `locker-store.ts`; the tick remains for the session window and the reveal countdowns |
+| Review checks reported as run on an undecorated payload | 3 of 3 (a false all-clear) | **1 of 3, two named as not run** | `review-model.test.ts`, `NAMES AN UNREACHED WATCHTOWER…` |
+
+**Deleted/replaced.** The three read RPCs and their window constants leave `locker-gateway.ts` for `locker-reads.ts` — the same queries, run locally. `ItemsPayload.authRequired`/`configured` and the web relock branch behind them: the list never authenticated, so it has no such answer to give; session expiry still reaches both seats through `item`, `access` and the idle/hidden paths. `STALE_AFTER_MS`, `lastReadAt` and the `stale` screen state, replaced by nothing — a read of this device's own replica is as current as the device is. **Decisions.** (1) The optionality is a per-CALL-SITE flag on the invoke request, not a per-seat capability probe: both seats run the same lines, and `queries/watchtower.ts` — the derivation itself — deliberately does not pass it, so a seat that cannot reach Watchtower has no review rather than an empty one. (2) `weak`/`reused` are ABSENT rather than false when the derivation did not run; `servedFields` already reads that difference off the rows, so the *cannot be checked* register fills with no surface change. (3) The seat still boots locked and withholds the window behind its lock: the ruling makes the list the grant's to READ, and the lock screen is a device-presence boundary this lane did not own.
+
+```
+bun run --cwd packages/{blueprints,client} typecheck && bun run --cwd apps/mobile typecheck
+bun run --cwd packages/blueprints test apps/locker      # 17 files, 348 tests
+bun run --cwd apps/mobile test src/apps/locker          # 16 files, 119 tests
+bun run test:integration:mobile locker-rows-parity      # 5 tests
+bun run --cwd packages/client test src/replica src/react/blueprints   # 52 files
+```
+
+**Findings.** (1) A locker still cannot be unlocked on a plane: the window behind the lock is local now, so the only thing between a member and their own rows is `authenticate`, online by ruling. Whether a device credential should unlock locally is the security ruling E flagged and this lane did not take. (2) `queries/autofill-{candidates,item}.ts` still `authenticate` and `invoke` non-optionally, so autofill stays gateway-only on both replica seats — correct today (it reveals), named because it is the last Locker read that cannot run locally. **Doc debt:** none — both rows this change made actively wrong are corrected in this commit.
+
+**Full paths for coverage:** `packages/blueprints/src/handler-reachability.test.ts`, `packages/blueprints/apps/locker/queries/items.ts`, `packages/blueprints/apps/locker/queries/search.ts`, `packages/blueprints/apps/locker/queries/trash.ts`, `packages/blueprints/apps/locker/queries.test.ts`, `packages/blueprints/apps/locker/queries.test-fixtures.ts`, `packages/blueprints/apps/locker/review-model.ts`, `packages/blueprints/apps/locker/review-model.test.ts`, `packages/blueprints/apps/locker/route-copy.ts`, `packages/blueprints/apps/locker/types.ts`, `packages/blueprints/apps/locker/app-root.tsx`, `packages/blueprints/types/centraid.d.ts`, `packages/client/src/replica/inline-query-ctx-core.ts`, `packages/client/src/react/blueprints/inlineQueryCtx.test.ts`, `apps/mobile/src/apps/locker/locker-reads.ts`, `apps/mobile/src/apps/locker/locker-gateway.ts`, `apps/mobile/src/apps/locker/locker-store.ts`, `apps/mobile/src/apps/locker/locker-store.test.ts`, `apps/mobile/src/apps/locker/locker-surfaces.test.ts`, `apps/mobile/src/apps/locker/locker-export.test.ts`, `apps/mobile/src/apps/locker/useLockerVault.ts`, `apps/mobile/src/apps/locker/locker-view-model.ts`, `apps/mobile/src/apps/locker/locker-view-model.test.ts`, `apps/mobile/src/apps/locker/LockerNotice.tsx`, `apps/mobile/src/apps/locker/LockerHome.tsx`, `apps/mobile/src/apps/locker/LockerHome.test.tsx`, `apps/mobile/src/apps/locker/LockerItemsView.tsx`, `apps/mobile/src/apps/locker/LockerItemsView.test.tsx`, `apps/mobile/src/apps/locker/LockerReviewView.tsx`, `apps/mobile/src/apps/locker/LockerReviewView.test.tsx`, `apps/mobile/src/apps/locker/locker-airplane.test.ts`, `apps/mobile/src/lib/replica/locker-vault.test-fixtures.ts`, `tests/integration-mobile/locker-rows-parity.integration.test.ts`, `docs/mobile-offline.md`, `docs/decisions.md`
+
+### Falsification
+| Claim at risk | Throwaway check | Result |
+| --- | --- | --- |
+| "The list runs offline" is really "the test never reached for a gateway" | replaced `lib/gateway` with a Proxy that throws from EVERY export, added a case with no read plane attached, and asserted the secret half through the same proxy | held — window, both shelves and three searches land complete; the unattached case says "mounting" rather than drawing an empty locker; `lockerItem` (the reveal's only door) throws `airplane mode` |
+| The undecorated payload silently reports an all-clear — the one lie Review exists to prevent | stripped `weak`/`reused` from the served fixture and asserted the register: both in *cannot be checked* with a reason, neither in `ran`, neither a zero-count verdict; and the payload's `watchtower` summary absent rather than zeroed | held — 1 of 3 strength-family checks runs (`compromised`, a stored column), the other two are named |
+| The reachability gate now passes because it was taught to ignore three handlers | broke one import specifier (`queries/search` → `queries/searchXX`) and re-ran the gate | held — it goes red naming `search` on locker; the detector reads the real specifier, not an allowlist |
+| `optional: true` weakens the online-only guard for everything else | asserted both halves on the shell's own builder — an optional invocation resolves `{status:"failed"}` with `guard.required === false`, a plain one rejects and marks the run — then ran the whole `packages/client` replica + kit suites | held — the flag is per call site, and the only two call sites are the two decorations |
+
+## User impact
+Locker on a phone is a list you can read on a plane — once you are through the lock. Every title, username, address, star and tag was a question for the gateway; the same query the web seat runs now runs on the device, over its own copy of the vault, so the window, the archived and trash shelves and the search land without a round trip. Nothing sealed can ride those rows: a password, a one-time seed, a card number and a CVV are absent by name from every replica row, and the reveal that fetches one is unchanged — online, permitted, receipted per item. Where the vault's sealed strength check cannot be reached, Review says *Weak* and *Reused* could not be checked rather than quietly reporting a clean bill of health, and the ten-minute "your list may be behind" line is gone, because a read of this device's own data cannot be behind itself.
+
+First-run: a device that has not finished mounting the vault says so — "This device has not finished mounting the vault yet." — rather than drawing an empty locker that reads as a vault with nothing in it.
+
+`check:ui-receipt` fires on `packages/blueprints/apps/locker/**` and `apps/mobile/src/apps/locker/**`. This slice changes no e2e harness — the rendered states are unchanged except that `stale` can no longer occur on this seat and Review names two more unrunnable checks — so no screenshot is fabricated here; CI must run the mobile evidence lane against this branch.
+
+Slice 4c's gates ran on tree `19eaa08330a76c8fb64a75dd781bf9f07fac7c15`, landed as `a8b9d1d75`. `self-audit.sh` reports only `FAIL receipt edits text above the appended section`: base lag, and `origin/claude/922-reads`'s own copy fails the same prefix test against `origin/main@d8502fc05` with nothing of this lane applied. `.governance/run.sh` is 22/22 on that tree.
 ## H1 — E6 one kit list primitive + E8 cold start
 
 | Path | Change |
@@ -2037,6 +2521,13 @@ bash .governance/run.sh                                 # 22/22
 
 The `mintLinkTicket` mock uses `as never`, matching the gateway mock in the same file, so `tsc --noEmit` accepts the factory.
 
+## CI-green — reconcile the PR with current main
+
+The merge onto `origin/main` carried three repository-gate repairs: the spent `same-owner-placement` flow-renaming marker was removed because its predecessor is already absent from main, the new `mobile-screen-reads` scale rig was registered in `tests/journeys.json`, and the eight product-grammar baselines were refreshed from the PR's intentional pending-write UI states. The minimum-test floor remains 4; no threshold or budget was lowered.
+
+#928 re-pins classification fingerprints after the authority-plane migration changed the governed manifest and claim statements, and after merging current main's ledger updates; thresholds and classifications are unchanged.
+
+The minted-id commands introduced by this PR are now represented in the Commons routing registry for every new addressable key, and the schedule contract expectation includes its minted-id precondition. `packages/vault/src/share/commons-routing.test.ts` and the affected gateway contract pass against the merged tree.
 ## B1 — what a gateway read costs in fsyncs, measured; and why the invocation-wide batch is a ruling
 
 B1 asks that a handler invocation's remaining reads commit once. Half of it is already landed and is

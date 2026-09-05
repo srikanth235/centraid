@@ -20,10 +20,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   PENDING_OVERLAY_FIELDS,
+  pendingOverlayFacts,
   decoratePendingMutation,
   definePendingProjection,
   pendingInputValues,
   pendingPatch,
+  pendingRowIntentId,
   pendingUpsert,
   projectPendingWrite,
   stablePendingRowId,
@@ -53,6 +55,18 @@ describe("a synthetic row id is derived, never invented twice", () => {
   it("is stable for the same intent — a re-read must not move the row", () => {
     expect(stablePendingRowId("intent-1", "task")).toBe(
       stablePendingRowId("intent-1", "task")
+    );
+  });
+
+  it("uses the canonical derived UUID for default and suffixed rows", () => {
+    expect(stablePendingRowId("intent-1")).toBe(
+      "7d0d71b7-d167-8479-8d56-09db54bdbf21"
+    );
+    expect(stablePendingRowId("intent-1", "split-0")).toBe(
+      "4f0df622-a8d9-86ba-80d0-883a2f795d62"
+    );
+    expect(stablePendingRowId("intent-2", "split-1")).toBe(
+      "6813b620-fbe9-8cc8-8cab-3d0cc048d4c4"
     );
   });
 });
@@ -108,6 +122,11 @@ describe("the projection builders", () => {
     expect(pendingPatch("schedule.task", "r1", { title: "New" })).toStrictEqual(
       [{ op: "upsert", entity: "schedule.task", rowId: "r1", values: {} }]
     );
+    expect(
+      pendingPatch("schedule.task", "r1", { "Stryker was here": "sentinel" })
+    ).toStrictEqual([
+      { op: "upsert", entity: "schedule.task", rowId: "r1", values: {} },
+    ]);
   });
 
   it("carries every JSON-shaped value and drops everything else", () => {
@@ -149,6 +168,17 @@ describe("the projection builders", () => {
       "text",
     ]);
     expect(values.list).toStrictEqual([1, "two", { deep: true }]);
+
+    expect(
+      pendingInputValues(
+        {
+          all: [1, { ok: true }],
+          mixed: [1, () => {}],
+          nested: { ok: true, bad: () => {} },
+        },
+        ["all", "mixed", "nested"]
+      )
+    ).toStrictEqual({ all: [1, { ok: true }] });
   });
 });
 
@@ -172,6 +202,10 @@ describe("projecting one write", () => {
         baseVersions: [{ entity: "schedule.task", rowId: "r1", version: 3 }],
       }),
       "add-unversioned": () => ({ optimistic: [] }),
+      "add-with-input": () => ({
+        optimistic: [],
+        input: { title: "Book train", priority: 2 },
+      }),
       "reveal-secret": {
         excluded: true,
         reason: "A revealed secret must never be written to a replica row.",
@@ -240,6 +274,33 @@ describe("projecting one write", () => {
     });
     expect("baseVersions" in result).toBe(false);
   });
+
+  it("carries only the projection's JSON-shaped input values", () => {
+    expect(
+      projectPendingWrite(declaration, {
+        ...context,
+        action: "add-with-input",
+      })
+    ).toStrictEqual({
+      optimistic: [],
+      input: { title: "Book train", priority: 2 },
+    });
+  });
+});
+
+describe("the pending key reader", () => {
+  it("returns only a non-empty string pending key", () => {
+    expect(
+      pendingRowIntentId({ [PENDING_OVERLAY_FIELDS.key]: "intent-1" })
+    ).toBe("intent-1");
+    expect(
+      pendingRowIntentId({ [PENDING_OVERLAY_FIELDS.key]: 7 })
+    ).toBeUndefined();
+    expect(
+      pendingRowIntentId({ [PENDING_OVERLAY_FIELDS.key]: undefined })
+    ).toBeUndefined();
+    expect(pendingRowIntentId(undefined)).toBeUndefined();
+  });
 });
 
 describe("decorating a mutation at read time", () => {
@@ -273,109 +334,107 @@ describe("decorating a mutation at read time", () => {
   });
 
   it("reads awaiting-change as SENDING, not as a state of its own", () => {
-    const decorated = decoratePendingMutation(upsert, {
+    const facts = pendingOverlayFacts({
       intentId: "i1",
       state: "awaiting-change",
       action: "add",
     });
-    expect(decorated.op).toBe("upsert");
-    if (decorated.op !== "upsert") return;
-    expect(decorated.values[PENDING_OVERLAY_FIELDS.status]).toBe("sending");
-    expect(decorated.values[PENDING_OVERLAY_FIELDS.reason]).toBe(
-      "Sending this change."
-    );
-  });
-
-  it("gives queued its own standing sentence", () => {
-    const decorated = decoratePendingMutation(upsert, {
-      intentId: "i1",
-      state: "queued",
-      action: "add",
+    expect(facts).toMatchObject({
+      status: "sending",
+      reason: "Sending this change.",
     });
-    if (decorated.op !== "upsert") throw new Error("expected an upsert");
-    expect(decorated.values[PENDING_OVERLAY_FIELDS.reason]).toBe(
-      "Waiting for a connection."
-    );
-    expect(decorated.values[PENDING_OVERLAY_FIELDS.key]).toBe("i1");
-    expect(decorated.values[PENDING_OVERLAY_FIELDS.action]).toBe("add");
   });
 
-  it("keeps the intent's own reason over the standing one", () => {
+  it("puts ONE pending column on the row and keeps the rest off it", () => {
     const decorated = decoratePendingMutation(upsert, {
       intentId: "i1",
-      state: "queued",
+      state: "conflict",
       action: "add",
-      reason: "Waiting for the kitchen tablet.",
-    });
-    if (decorated.op !== "upsert") throw new Error("expected an upsert");
-    expect(decorated.values[PENDING_OVERLAY_FIELDS.reason]).toBe(
-      "Waiting for the kitchen tablet."
-    );
-  });
-
-  it("carries the age and attempt count that separate slow from stuck", () => {
-    const decorated = decoratePendingMutation(upsert, {
-      intentId: "i1",
-      state: "queued",
-      action: "add",
+      reason: "The row changed.",
       attempts: 4,
       enqueuedAt: "2026-08-27T09:00:00.000Z",
+      conflict: { expectedVersion: 4, actualVersion: 7 },
     });
     if (decorated.op !== "upsert") throw new Error("expected an upsert");
-    expect(decorated.values[PENDING_OVERLAY_FIELDS.attempts]).toBe(4);
-    expect(decorated.values[PENDING_OVERLAY_FIELDS.enqueuedAt]).toBe(
-      "2026-08-27T09:00:00.000Z"
-    );
-  });
-
-  it("omits the age and attempt count when the rail reported neither", () => {
-    const decorated = decoratePendingMutation(upsert, {
-      intentId: "i1",
-      state: "queued",
-      action: "add",
-    });
-    if (decorated.op !== "upsert") throw new Error("expected an upsert");
-    expect(PENDING_OVERLAY_FIELDS.attempts in decorated.values).toBe(false);
-    expect(PENDING_OVERLAY_FIELDS.enqueuedAt in decorated.values).toBe(false);
-  });
-
-  it("carries NO reason for a terminal state that named none", () => {
-    const decorated = decoratePendingMutation(upsert, {
-      intentId: "i1",
-      state: "denied",
-      action: "add",
-    });
-    if (decorated.op !== "upsert") throw new Error("expected an upsert");
-    expect(PENDING_OVERLAY_FIELDS.reason in decorated.values).toBe(false);
-  });
-
-  it("keeps the projected values beside the overlay fields", () => {
-    const decorated = decoratePendingMutation(upsert, {
-      intentId: "i1",
-      state: "queued",
-      action: "add",
-    });
-    if (decorated.op !== "upsert") throw new Error("expected an upsert");
+    // A handler on either seat reads a schema-pure row (#922 G3).
+    expect(
+      Object.keys(decorated.values).filter((column) =>
+        column.startsWith("__centraid_pending")
+      )
+    ).toStrictEqual([PENDING_OVERLAY_FIELDS.key]);
+    expect(decorated.values[PENDING_OVERLAY_FIELDS.key]).toBe("i1");
     expect(decorated.values.title).toBe("Book train");
   });
 
-  it("writes both version numbers only when a conflict named them", () => {
-    const clean = decoratePendingMutation(upsert, {
-      intentId: "i1",
-      state: "conflict",
-      action: "add",
-    });
-    if (clean.op !== "upsert") throw new Error("expected an upsert");
-    expect(PENDING_OVERLAY_FIELDS.expectedVersion in clean.values).toBe(false);
+  it("gives queued its own standing sentence", () => {
+    expect(
+      pendingOverlayFacts({ intentId: "i1", state: "queued", action: "add" })
+    ).toMatchObject({ reason: "Waiting for a connection.", action: "add" });
+  });
 
-    const versioned = decoratePendingMutation(upsert, {
+  it("keeps the intent's own reason over the standing one", () => {
+    expect(
+      pendingOverlayFacts({
+        intentId: "i1",
+        state: "queued",
+        action: "add",
+        reason: "Waiting for the kitchen tablet.",
+      })?.reason
+    ).toBe("Waiting for the kitchen tablet.");
+  });
+
+  it("carries the age and attempt count that separate slow from stuck", () => {
+    expect(
+      pendingOverlayFacts({
+        intentId: "i1",
+        state: "queued",
+        action: "add",
+        attempts: 4,
+        enqueuedAt: "2026-08-27T09:00:00.000Z",
+      })
+    ).toMatchObject({ attempts: 4, enqueuedAt: "2026-08-27T09:00:00.000Z" });
+  });
+
+  it("omits the age and attempt count when the rail reported neither", () => {
+    const facts = pendingOverlayFacts({
+      intentId: "i1",
+      state: "queued",
+      action: "add",
+    })!;
+    expect("attempts" in facts).toBe(false);
+    expect("enqueuedAt" in facts).toBe(false);
+  });
+
+  it("carries NO reason for a terminal state that named none", () => {
+    const facts = pendingOverlayFacts({
+      intentId: "i1",
+      state: "denied",
+      action: "add",
+    })!;
+    expect("reason" in facts).toBe(false);
+  });
+
+  it("an executed intent has no sidecar entry at all", () => {
+    expect(
+      pendingOverlayFacts({ intentId: "i1", state: "executed", action: "add" })
+    ).toBeUndefined();
+  });
+
+  it("writes both version numbers only when a conflict named them", () => {
+    const clean = pendingOverlayFacts({
       intentId: "i1",
       state: "conflict",
       action: "add",
-      conflict: { expectedVersion: 4, actualVersion: 7 },
-    });
-    if (versioned.op !== "upsert") throw new Error("expected an upsert");
-    expect(versioned.values[PENDING_OVERLAY_FIELDS.expectedVersion]).toBe(4);
-    expect(versioned.values[PENDING_OVERLAY_FIELDS.actualVersion]).toBe(7);
+    })!;
+    expect("expectedVersion" in clean).toBe(false);
+
+    expect(
+      pendingOverlayFacts({
+        intentId: "i1",
+        state: "conflict",
+        action: "add",
+        conflict: { expectedVersion: 4, actualVersion: 7 },
+      })
+    ).toMatchObject({ expectedVersion: 4, actualVersion: 7 });
   });
 });

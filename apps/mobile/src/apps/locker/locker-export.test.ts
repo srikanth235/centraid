@@ -45,16 +45,24 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
 type Door = typeof import("./locker-gateway");
 vi.mock(import("./locker-gateway"), () => {
   const door = {
+    lockerAuth: vi.fn<Door["lockerAuth"]>(),
+    lockerItem: vi.fn<Door["lockerItem"]>(),
+  };
+  return door as unknown as Door;
+});
+
+type Reads = typeof import("./locker-reads");
+vi.mock(import("./locker-reads"), () => {
+  const reads = {
     ITEMS_WINDOW: 300,
     ITEMS_WINDOW_MAX: 2000,
     nextWindow: (current: number) => current,
-    lockerAuth: vi.fn<Door["lockerAuth"]>(),
-    lockerItem: vi.fn<Door["lockerItem"]>(),
-    lockerItems: vi.fn<Door["lockerItems"]>(),
-    lockerSearch: vi.fn<Door["lockerSearch"]>(),
-    lockerTrash: vi.fn<Door["lockerTrash"]>(),
+    attachLockerReadPlane: vi.fn<Reads["attachLockerReadPlane"]>(),
+    lockerItems: vi.fn<Reads["lockerItems"]>(),
+    lockerSearch: vi.fn<Reads["lockerSearch"]>(),
+    lockerTrash: vi.fn<Reads["lockerTrash"]>(),
   };
-  return door as unknown as Door;
+  return reads as unknown as Reads;
 });
 
 type Files = typeof import("./locker-files");

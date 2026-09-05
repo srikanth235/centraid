@@ -3,6 +3,14 @@
  * favorite/tag/subtitle/Watchtower. Secrets are SEALED columns (#293):
  * weak/reused + last4 come from `locker.watchtower`, derived INSIDE the
  * sealed boundary; secrets NEVER ride this payload.
+ *
+ * THE WINDOW IS AUTHORISED BY THE APP GRANT ALONE (#928). Listing an item is
+ * not unlocking it: authentication gates permits and `reveal`, and this query
+ * takes neither. So it reaches for no online verb it cannot do without, and a
+ * seat holding a replica runs it against its own rows — the phone included
+ * (`apps/mobile/src/apps/locker/locker-reads.ts`). The Watchtower and count
+ * decorations are marked `optional`, so a seat that cannot reach them answers
+ * undecorated rather than refusing the list.
  */
 
 import {
@@ -79,8 +87,13 @@ interface DecoratedItem {
   subtitle: string;
   favorite: boolean;
   tags: string[];
-  weak: boolean;
-  reused: boolean;
+  /**
+   * ABSENT, not false, when the Watchtower derivation did not run: "checked
+   * and found nothing" and "not asked" are different sentences, and
+   * `review-model.servedFields` reads exactly this difference off the row.
+   */
+  weak?: boolean;
+  reused?: boolean;
   compromised: boolean;
   severity: string;
   /**
@@ -125,22 +138,30 @@ function subtitleOf(it: RawItem, watch: WatchEntry | undefined): string {
 
 /**
  * Watchtower derivatives per item id: {weak, reused, last4?} (#293) —
- * passwords never leave the sealed boundary. Fail-soft: no grant → empty map.
+ * passwords never leave the sealed boundary. `undefined` means the derivation
+ * DID NOT RUN, which is not the same answer as an empty map: a caller that
+ * folded the two together would report an all-clear it never checked.
+ *
+ * `optional` is for the callers whose answer stands without the decoration —
+ * the list and the search (#928). The Review shelf is the derivation itself
+ * and must not pass it: a seat that cannot reach Watchtower has no review.
  */
 export async function readWatchtower(
-  ctx: HandlerCtx
-): Promise<Map<string, WatchEntry>> {
+  ctx: HandlerCtx,
+  options: { optional?: boolean } = {}
+): Promise<Map<string, WatchEntry> | undefined> {
   const map = new Map<string, WatchEntry>();
   try {
     const out = await ctx.vault.invoke({
       command: "locker.watchtower",
       input: {},
+      ...(options.optional ? { optional: true } : {}),
     });
-    if (out.status !== "executed") return map;
+    if (out.status !== "executed") return undefined;
     const entries = (out.output?.items ?? []) as WatchEntry[];
     for (const entry of entries) map.set(entry.item_id, entry);
   } catch {
-    /* fail soft */
+    return undefined;
   }
   return map;
 }
@@ -166,8 +187,8 @@ export function decorate(
       subtitle: subtitleOf(it, watch),
       favorite: starredIds.has(it.item_id),
       tags: tagsByItem.get(it.item_id) ?? [],
-      weak,
-      reused,
+      // The keys themselves say whether the derivation ran (`servedFields`).
+      ...(watchByItem === undefined ? {} : { weak, reused }),
       compromised,
       severity,
       url: it.url ?? null,
@@ -219,6 +240,7 @@ export async function readCounts(
     const out = await ctx.vault.invoke({
       command: "locker.counts",
       input: {},
+      optional: true,
     });
     if (out.status !== "executed") return null;
     return (out.output ?? null) as CountsPayload | null;
@@ -308,6 +330,17 @@ export async function readStarred(
   return starred;
 }
 
+/**
+ * A read this seat could not answer LOCALLY is not a refusal to answer. The
+ * replica raises `ONLINE_ONLY` when the shape does not carry what the query
+ * asked for; a `vaultDenied` payload built from it would draw an empty locker
+ * over rows the vault holds, and the caller would never fall back online. A
+ * consent denial is the opposite case and stays a screen.
+ */
+export function rethrowIfLocalReadRefused(error: unknown): void {
+  if ((error as { code?: string } | null)?.code === "ONLINE_ONLY") throw error;
+}
+
 export default async function itemsHandler({
   input,
   ctx,
@@ -317,17 +350,6 @@ export default async function itemsHandler({
 }) {
   const window = Math.min(Math.max(Number(input?.limit) || 300, 20), 2000);
   try {
-    const authentication = (await ctx.vault.authenticate({
-      operation: "status",
-      sessionToken: String(input?.auth_session ?? ""),
-    })) as { authenticated?: boolean; configured?: boolean };
-    if (!authentication.authenticated) {
-      return {
-        items: [],
-        authRequired: true,
-        configured: authentication.configured ?? false,
-      };
-    }
     // Archived is "keep forever, hide from lists" (GAPS §3.3 #9): it leaves
     // the default window without being deleted and without a purge date, so
     // the shelf is asked for explicitly rather than filtered client-side.
@@ -352,7 +374,7 @@ export default async function itemsHandler({
       await Promise.all([
         readTags(ctx, ids, vocab),
         readStarred(ctx, ids, vocab),
-        readWatchtower(ctx),
+        readWatchtower(ctx, { optional: true }),
         readAliases(ctx, ids),
         readCounts(ctx),
       ]);
@@ -366,16 +388,21 @@ export default async function itemsHandler({
     const affected = items.filter(
       (it) => it.compromised || it.weak || it.reused
     );
-    const watchtower = {
-      compromised: items.filter((it) => it.compromised).length,
-      weak: items.filter((it) => it.weak).length,
-      reused: items.filter((it) => it.reused).length,
-      items: affected,
-    };
+    // ABSENT when the derivation did not run. A zeroed summary would be this
+    // query telling the review screen that nothing is weak.
+    const watchtower =
+      watchByItem === undefined
+        ? undefined
+        : {
+            compromised: items.filter((it) => it.compromised).length,
+            weak: items.filter((it) => it.weak).length,
+            reused: items.filter((it) => it.reused).length,
+            items: affected,
+          };
     const total = archived ? counts?.archived : counts?.live;
     return {
       items,
-      watchtower,
+      ...(watchtower === undefined ? {} : { watchtower }),
       truncated: rows.length >= window,
       window,
       archived,
@@ -385,6 +412,7 @@ export default async function itemsHandler({
       ...(counts?.trashed == null ? {} : { trashedCount: counts.trashed }),
     };
   } catch (error) {
+    rethrowIfLocalReadRefused(error);
     const e = error as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }

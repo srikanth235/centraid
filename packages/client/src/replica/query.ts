@@ -241,9 +241,9 @@ export function validateOptimisticMutation(
     );
   }
   if (mutation.op === "delete") return;
-  const metadataFields = new Set<string>(Object.values(PENDING_OVERLAY_FIELDS));
   for (const column of Object.keys(mutation.values)) {
-    if (!metadataFields.has(column)) assertColumn(schema, column);
+    // The one pending column is the seat's, not the schema's (#922 G3).
+    if (column !== PENDING_OVERLAY_FIELDS.key) assertColumn(schema, column);
   }
   const predictedPrimaryKey = mutation.values[schema.primaryKey];
   if (

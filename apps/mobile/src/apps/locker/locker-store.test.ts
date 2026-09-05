@@ -59,25 +59,36 @@ type Gateway = typeof import("./locker-gateway");
 const wire = vi.hoisted(() => ({
   auth: vi.fn<Gateway["lockerAuth"]>(),
   item: vi.fn<Gateway["lockerItem"]>(),
-  items: vi.fn<Gateway["lockerItems"]>(),
-  search: vi.fn<Gateway["lockerSearch"]>(),
-  trash: vi.fn<Gateway["lockerTrash"]>(),
+}));
+type Reads = typeof import("./locker-reads");
+const reads = vi.hoisted(() => ({
+  items: vi.fn<Reads["lockerItems"]>(),
+  search: vi.fn<Reads["lockerSearch"]>(),
+  trash: vi.fn<Reads["lockerTrash"]>(),
 }));
 // The door is replaced WHOLE rather than spread over the real module: the
 // real one reaches `lib/gateway`, which pulls Expo's fetch shim into a node
 // run for no benefit — this test is about the boundary, not the transport.
 vi.mock(import("./locker-gateway"), () => {
   const door = {
+    lockerAuth: wire.auth,
+    lockerItem: wire.item,
+  };
+  return door as unknown as Gateway;
+});
+// The three window reads are the REPLICA's now (#928): the boundary asks its
+// own device, and this suite is about the boundary, not the read plane.
+vi.mock(import("./locker-reads"), () => {
+  const plane = {
     ITEMS_WINDOW: 300,
     ITEMS_WINDOW_MAX: 2000,
     nextWindow: (current: number) => Math.min(2000, current + 300),
-    lockerAuth: wire.auth,
-    lockerItem: wire.item,
-    lockerItems: wire.items,
-    lockerSearch: wire.search,
-    lockerTrash: wire.trash,
+    attachLockerReadPlane: vi.fn<Reads["attachLockerReadPlane"]>(),
+    lockerItems: reads.items,
+    lockerSearch: reads.search,
+    lockerTrash: reads.trash,
   };
-  return door as unknown as Gateway;
+  return plane as unknown as Reads;
 });
 
 const {
@@ -105,7 +116,7 @@ async function openSession(): Promise<void> {
     configured: true,
     sessionToken: "s1",
   });
-  wire.items.mockResolvedValue({ items: [ROW], truncated: false });
+  reads.items.mockResolvedValue({ items: [ROW], truncated: false });
   await unlockLocker("a-long-enough-passphrase");
 }
 
@@ -114,7 +125,7 @@ describe("the Locker boundary on this seat", () => {
     resetLockerVault();
     wire.auth.mockReset();
     wire.item.mockReset();
-    wire.items.mockReset();
+    reads.items.mockReset();
   });
 
   it("boots locked, whatever the status read says about a passphrase", async () => {
@@ -194,7 +205,7 @@ describe("the Locker boundary on this seat", () => {
 
   it("turns a vault refusal into a screen rather than an error", async () => {
     await openSession();
-    wire.items.mockResolvedValue({
+    reads.items.mockResolvedValue({
       vaultDenied: { code: "DENIED", message: "The grant was revoked." },
     });
     await loadLockerItems();
@@ -203,11 +214,15 @@ describe("the Locker boundary on this seat", () => {
     expect(readLockerVault().session.phase).toBe("open");
   });
 
-  it("relocks when the window read says the session is gone", async () => {
+  it("reads the window without a session token, and never behind the lock", async () => {
+    // The window is the app GRANT's (#928): the read carries no token. The
+    // LOCK is what withholds it, so a locked seat asks for nothing at all.
     await openSession();
-    wire.items.mockResolvedValue({ authRequired: true, configured: true });
+    expect(reads.items).toHaveBeenCalledWith(300);
+    lockNow();
+    reads.items.mockClear();
     await loadLockerItems();
-    expect(readLockerVault().session.phase).toBe("locked");
-    expect(readLockerVault().bag.sessionToken).toBeNull();
+    expect(reads.items).not.toHaveBeenCalled();
+    expect(readLockerVault().rows).toStrictEqual([]);
   });
 });

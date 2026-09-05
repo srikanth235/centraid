@@ -23,7 +23,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
 
-import { decoratePendingMutation } from "../_shared/pending-overlay.ts";
+import { pendingOverlayRow } from "../_shared/pending-overlay.ts";
 import type { InlineFrame } from "../inline-types.ts";
 import { Root } from "./app-root.tsx";
 import { NoteCard, NoteRow } from "./components/Library.tsx";
@@ -81,7 +81,7 @@ describe("conflict: both bodies kept, and nothing to choose", () => {
 describe("parked: the owner's approval, said in both library shapes", () => {
   /** A note whose edit the vault is holding for the owner, decorated by the one
    *  shared overlay engine every seat consumes. */
-  const PARKED = decoratePendingMutation(
+  const PARKED = pendingOverlayRow(
     {
       op: "upsert" as const,
       entity: "knowledge.note",
@@ -99,7 +99,7 @@ describe("parked: the owner's approval, said in both library shapes", () => {
       action: "edit-note",
       reason: "Waiting for the owner to approve this change.",
     }
-  ).values as unknown as Note;
+  ) as unknown as Note;
 
   const REASON = "Waiting for the owner to approve this change.";
 

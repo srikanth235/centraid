@@ -11,8 +11,14 @@
  * Read-only by construction: every write and gateway-only verb rejects inside
  * the core, so the `handler-contract` rule holds without trusting the handler.
  *
- * Nothing in the product imports this yet — product wiring is E7's.
+ * A handler never sees this seat's multi-vault provenance (#922 E7,
+ * precondition (b)). The mounted plane decorates every row with
+ * `__centraidScopeId` and its siblings; a handler that SPREADS a row — Tally's
+ * `recurring` does — would otherwise emit them into a payload the web seat's
+ * payload does not carry, and the two seats would answer differently for the
+ * same rows. `withoutScopeProvenance` is the one place that strip happens.
  */
+import { attachPendingSidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import {
   buildInlineCtxCore,
   guardedRow,
@@ -23,10 +29,49 @@ import {
 import type {
   InlineQueryRunnable,
   ReplicaReadWireResult,
+  ReplicaRowEnvelope,
   ReplicaSearchWireResult,
 } from "@centraid/client/replica/native";
 
+import {
+  REPLICA_CAN_WRITE,
+  REPLICA_SCOPE_ID,
+  REPLICA_SCOPE_IDS,
+  REPLICA_SCOPE_LABEL,
+  REPLICA_SCOPE_LABELS,
+  REPLICA_WRITABLE_SCOPE_IDS,
+} from "./multi-vault-provenance";
 import type { NativeReadRequest, NativeSearchRequest } from "./native-session";
+
+/** The keys the mounted plane adds and a handler must never receive. */
+const SCOPE_PROVENANCE: readonly string[] = [
+  REPLICA_CAN_WRITE,
+  REPLICA_SCOPE_ID,
+  REPLICA_SCOPE_IDS,
+  REPLICA_SCOPE_LABEL,
+  REPLICA_SCOPE_LABELS,
+  REPLICA_WRITABLE_SCOPE_IDS,
+];
+
+/**
+ * The envelope as the web seat's replica session hands it over. Which vault a
+ * row came from is this seat's fact about its own mounted plane, not a column
+ * of the entity, so it stops here — on the ENVELOPE, before `guardedRow` wraps
+ * the values, so the unavailable-field proxy is built over the stripped set
+ * and no key is read through it to strip one.
+ */
+export function withoutScopeProvenance(
+  envelope: ReplicaRowEnvelope
+): ReplicaRowEnvelope {
+  const values = envelope.values as Record<string, unknown>;
+  if (!SCOPE_PROVENANCE.some((key) => key in values)) return envelope;
+  return {
+    ...envelope,
+    values: Object.fromEntries(
+      Object.entries(values).filter(([key]) => !SCOPE_PROVENANCE.includes(key))
+    ) as typeof envelope.values,
+  };
+}
 
 /** What a handler needs from the phone: the mounted read plane, nothing else. */
 export interface NativeInlineQuerySession {
@@ -53,8 +98,14 @@ export function buildNativeInlineCtx(
   const { session, appId, signal } = options;
   return buildInlineCtxCore<NativeReadRequest, NativeSearchRequest>(
     {
-      reads: inlineReadsFor(session, appId, (envelope) =>
-        guardedRow(envelope, guard)
+      // Every row the handler sees carries the read's pending sidecar, so the
+      // phone answers `readPendingOverlay(row, pendingSidecarOf(row))` exactly
+      // as the shell does (#922 G3).
+      reads: inlineReadsFor(session, appId, (envelope, sidecar) =>
+        attachPendingSidecar(
+          guardedRow(withoutScopeProvenance(envelope), guard),
+          sidecar
+        )
       ),
       ...(signal ? { signal } : {}),
     },

@@ -7,11 +7,10 @@ import {
 } from "./errors.js";
 import { replicaIntentInvalidations } from "./intent-invalidations.js";
 import type {
-  IntentQueue,
-  IntentQueueOptions,
   PendingIntentReplacement,
   PendingIntentRevisionTarget,
-} from "./intents.js";
+} from "./intent-revision.js";
+import type { IntentQueue, IntentQueueOptions } from "./intents.js";
 import { LiveQueryRegistry } from "./live-query-registry.js";
 import { LiveQuery } from "./live-query.js";
 import type {
@@ -319,31 +318,25 @@ export class ReplicaCoordinator {
     request: ReplicaReadRequest,
     guard: OnlineOnlyGuard = new OnlineOnlyGuard()
   ): Promise<ReplicaReadResult> {
-    const optimistic = await this.intents.overlayMutations(
-      request.shapeId,
-      request.entity
-    );
-    return this.worker.read(request, optimistic, guard);
+    const overlay = await this.intents.overlay(request.shapeId, request.entity);
+    const result = await this.worker.read(request, overlay.mutations, guard);
+    return { ...result, pending: overlay.sidecar };
   }
 
   /** Clone-safe read used by the shell's MessagePort transport. */
   async readWire(request: ReplicaReadRequest): Promise<ReplicaReadWireResult> {
-    const optimistic = await this.intents.overlayMutations(
-      request.shapeId,
-      request.entity
-    );
-    return this.worker.readWire(request, optimistic);
+    const overlay = await this.intents.overlay(request.shapeId, request.entity);
+    const result = await this.worker.readWire(request, overlay.mutations);
+    return { ...result, pending: overlay.sidecar };
   }
 
   /** Clone-safe local search used by the shell's MessagePort transport. */
   async searchWire(
     request: ReplicaSearchRequest
   ): Promise<ReplicaSearchWireResult> {
-    const optimistic = await this.intents.overlayMutations(
-      request.shapeId,
-      request.entity
-    );
-    return this.worker.searchWire(request, optimistic);
+    const overlay = await this.intents.overlay(request.shapeId, request.entity);
+    const result = await this.worker.searchWire(request, overlay.mutations);
+    return { ...result, pending: overlay.sidecar };
   }
 
   liveRead(request: ReplicaReadRequest): LiveQuery<ReplicaReadResult> {

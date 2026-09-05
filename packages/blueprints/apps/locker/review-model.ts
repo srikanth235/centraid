@@ -59,6 +59,10 @@ export interface ServedFields {
   address: boolean;
   expiry: boolean;
   age: boolean;
+  /** The Watchtower derivation ran for these rows. It is derived INSIDE the
+   *  vault's sealed boundary, so a seat reading its own replica has no answer
+   *  and `decorate()` leaves the two keys off rather than writing `false`. */
+  strength: boolean;
 }
 
 export function servedFields(rows: readonly LockerRow[]): ServedFields {
@@ -66,6 +70,7 @@ export function servedFields(rows: readonly LockerRow[]): ServedFields {
     address: rows.some((row) => "url" in row),
     expiry: rows.some((row) => "expiry" in row),
     age: rows.some((row) => "password_set_at" in row),
+    strength: rows.some((row) => "weak" in row),
   };
 }
 
@@ -74,6 +79,7 @@ function answerable(key: CheckKey, served: ServedFields): boolean {
   if (key === "http") return served.address;
   if (key === "expiring") return served.expiry;
   if (key === "age") return served.age;
+  if (key === "weak" || key === "reused") return served.strength;
   return true;
 }
 

@@ -51,7 +51,7 @@ describe("the activity ledger as one list", () => {
         now="2026-09-04T18:00:00.000Z"
         window={20}
         loaded
-        notice={{ state: "ready", pending: 0, lastReadAt: null }}
+        notice={{ state: "ready", pending: 0 }}
         onShowMore={() => undefined}
       />
     ).container;

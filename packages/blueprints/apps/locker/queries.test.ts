@@ -95,6 +95,60 @@ describe("items: the window total and the alias read-back (#872)", () => {
     ]);
   });
 
+  it("does not ask whether the locker is unlocked", async () => {
+    // The window is authorised by the APP GRANT (#928); authentication gates
+    // permits and reveal. A ctx that cannot authenticate at all still answers.
+    const { default: items } = await import("./queries/items.ts");
+    const ctx = ctxOf({ "locker.item": [LIVE_ITEM] }, { localSeat: true });
+    const result = await items({ input: {}, ctx });
+    expect(result.items).toHaveLength(1);
+    expect(result.vaultDenied).toBeUndefined();
+  });
+
+  it("answers UNDECORATED rather than refusing when Watchtower is out of reach", async () => {
+    const { default: items } = await import("./queries/items.ts");
+    const ctx = ctxOf({ "locker.item": [LIVE_ITEM] }, { localSeat: true });
+    const result = await items({ input: {}, ctx });
+    // Absent, never false: the summary and the two row keys are the same
+    // sentence — "this was not checked" — and a zero would be the other one.
+    expect(result.watchtower).toBeUndefined();
+    expect("weak" in result.items[0]).toBe(false);
+    expect("reused" in result.items[0]).toBe(false);
+    expect(result.total).toBeUndefined();
+    // Both decorations asked for it; neither poisoned the run.
+    expect(
+      ctx.invoked.every(
+        (call: { optional?: boolean }) => call.optional === true
+      )
+    ).toBe(true);
+  });
+
+  it("search answers its rows though Watchtower is out of reach", async () => {
+    const { default: search } = await import("./queries/search.ts");
+    const ctx = ctxOf({ "locker.item": [LIVE_ITEM] }, { localSeat: true });
+    const result = await search({ input: { term: "email" }, ctx });
+    expect(
+      result.items.map((row: { title: string }) => row.title)
+    ).toStrictEqual(["Email"]);
+    expect(result.vaultDenied).toBeUndefined();
+  });
+
+  it("hands a local read's refusal back rather than drawing an empty locker", async () => {
+    const { default: items } = await import("./queries/items.ts");
+    const ctx = ctxOf({ "locker.item": [] });
+    ctx.vault.read = () =>
+      Promise.reject(
+        Object.assign(new Error("shape does not carry it"), {
+          code: "ONLINE_ONLY",
+        })
+      );
+    // A caller that could fall back online must SEE the refusal; a
+    // `vaultDenied` payload would be a locker drawn empty over rows it holds.
+    await expect(items({ input: {}, ctx })).rejects.toThrow(
+      /shape does not carry it/u
+    );
+  });
+
   it("never carries a secret column on a list row", async () => {
     const { default: items } = await import("./queries/items.ts");
     const ctx = ctxOf({

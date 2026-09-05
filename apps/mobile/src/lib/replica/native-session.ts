@@ -1,7 +1,4 @@
-import {
-  PENDING_OVERLAY_FIELDS,
-  projectPendingWrite,
-} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { pendingProjectionFor } from "@centraid/blueprints/apps/_shared/pending-projections";
 // governance: allow-repo-hygiene file-size-limit (#419) the native session is one cohesive coordinator wiring store, intent outbox, windowed bootstrap, SSE feed, and AppState drain across a single lifecycle
 import {
@@ -409,14 +406,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
     const deferred = this.#catalog.length === 0;
     const { optimistic, dependencies } = deferred
       ? { optimistic: [], dependencies: [] }
-      : this.stamped(
-          prepareReplicaWrite(
-            appId,
-            input.optimistic ?? projected.optimistic,
-            this.#catalog,
-            this.resolveShapeId.bind(this),
-            false
-          )
+      : prepareReplicaWrite(
+          appId,
+          input.optimistic ?? projected.optimistic,
+          this.#catalog,
+          this.resolveShapeId.bind(this),
+          false
         );
     const baseVersions =
       input.baseVersions ??
@@ -443,6 +438,11 @@ export class NativeReplicaSession implements MobileReplicaSession {
       optimistic,
       dependencies,
       ...(baseVersions.length > 0 ? { baseVersions } : {}),
+      // The steward label is a fact about the MOUNT, so stamping it at
+      // admission lets the overlay name it before any round trip. It is a fact
+      // about the WRITE, not about a row, so it rides the intent record and
+      // reaches the member through the read's sidecar (#922 G3).
+      ...(this.#stewardLabel ? { stewardLabel: this.#stewardLabel } : {}),
     } satisfies EnqueueIntentInput);
     // Absent is never empty: a deferred act is durable yet draws nothing, so it
     // says so rather than borrowing the ordinary offline sentence.
@@ -464,30 +464,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     });
     void this.flushIntents();
     return admitted;
-  }
-
-  /**
-   * The steward label is a fact about the MOUNT, so stamping it at admission
-   * lets the overlay name it before any round trip. Runs AFTER
-   * `validateOptimisticMutation`: `PENDING_OVERLAY_FIELDS` skip column checks.
-   */
-  private stamped(prepared: PreparedReplicaWrite): PreparedReplicaWrite {
-    const steward = this.#stewardLabel;
-    if (steward === undefined) return prepared;
-    return {
-      ...prepared,
-      optimistic: prepared.optimistic.map((mutation) =>
-        mutation.op === "upsert"
-          ? {
-              ...mutation,
-              values: {
-                ...mutation.values,
-                [PENDING_OVERLAY_FIELDS.steward]: steward,
-              },
-            }
-          : mutation
-      ),
-    };
   }
 
   /** Say the durable act is unrendered, on the row itself, until it is not. */
@@ -520,14 +496,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
       if (projected.optimistic.length === 0) continue;
       let prepared: PreparedReplicaWrite;
       try {
-        prepared = this.stamped(
-          prepareReplicaWrite(
-            intent.appId,
-            projected.optimistic,
-            this.#catalog,
-            this.resolveShapeId.bind(this),
-            false
-          )
+        prepared = prepareReplicaWrite(
+          intent.appId,
+          projected.optimistic,
+          this.#catalog,
+          this.resolveShapeId.bind(this),
+          false
         );
       } catch {
         // Still durable, still sends; a shape this grant lacks never draws.

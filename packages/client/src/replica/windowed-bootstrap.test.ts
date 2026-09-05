@@ -324,7 +324,8 @@ describe(runWindowedBootstrap, () => {
         complete: true,
       },
     });
-    // A log that always has one more commit: without a budget this never ends.
+    // A gateway that never reports itself drained: without a budget this
+    // never ends.
     let passes = 0;
     const pullChanges: RunWindowedBootstrapOptions["pullChanges"] = async (
       cursor
@@ -333,6 +334,7 @@ describe(runWindowedBootstrap, () => {
       return {
         ...emptyBatch(cursor),
         to: { epoch: cursor.epoch, seq: cursor.seq + 1 },
+        hasMore: true,
       };
     };
 
@@ -347,6 +349,44 @@ describe(runWindowedBootstrap, () => {
     expect(passes, "the budget, not the log, ends the replay").toBe(5);
     // Honest: the cursor reached is reported, and the feed continues from it.
     expect(cursor).toStrictEqual({ epoch: "replica-1", seq: 15 });
+  });
+
+  // THE REPLAY DRAINS, IT DOES NOT WAIT FOR QUIET (#922 E3). A vault that is
+  // still being written to never stops advancing, and the seat's first paint
+  // waits on this loop: keyed off "the log stopped advancing" it ran its whole
+  // pass budget on every open. `hasMore` is the gateway's own answer.
+  test("stops as soon as the gateway reports itself drained", async () => {
+    const target = createTarget();
+    const { fetcher } = createFetcher({
+      "": {
+        protocolVersion: 1,
+        vaultId: "vault-a",
+        schemaEpoch: "schema-1",
+        cursor: { epoch: "replica-1", seq: 10 },
+        shapes,
+        rows: [],
+        complete: true,
+      },
+    });
+    let passes = 0;
+    const cursor = await runWindowedBootstrap({
+      gatewayAuth,
+      target,
+      fetcher,
+      // Every pull lands new commits AND says there are no more waiting —
+      // a live vault answers exactly this.
+      pullChanges: async (from) => {
+        passes += 1;
+        return {
+          ...emptyBatch(from),
+          to: { epoch: from.epoch, seq: from.seq + 1 },
+        };
+      },
+      maxConvergePasses: 1000,
+    });
+
+    expect(passes, "one drain, not a thousand").toBe(1);
+    expect(cursor).toStrictEqual({ epoch: "replica-1", seq: 11 });
   });
 
   test("rejects a page that claims completeness and a continuation at once", async () => {

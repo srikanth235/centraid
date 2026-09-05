@@ -17,6 +17,7 @@ import { ScrollView, StyleSheet, View } from "react-native";
 
 import {
   pendingChangeLabel,
+  pendingSidecarOf,
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import {
@@ -303,7 +304,7 @@ function RosterRow({
   const sub = rosterSub(person);
   // Until #880 the roster had no pending marker, so an offline add read as a
   // failure while its row was durable (QUALITY.md).
-  const overlay = readPendingOverlay(person.raw);
+  const overlay = readPendingOverlay(person.raw, pendingSidecarOf(person.raw));
   const pending = overlay ? pendingChangeLabel(overlay) : "";
   return (
     <PersonRow
@@ -572,7 +573,7 @@ function SearchRow({
   // The snippet answers "why is this row here" better than the role the
   // member already knows.
   const sub = person.snippet ?? person.role;
-  const overlay = readPendingOverlay(person.raw);
+  const overlay = readPendingOverlay(person.raw, pendingSidecarOf(person.raw));
   const pending = overlay ? pendingChangeLabel(overlay) : "";
   return (
     <PersonRow

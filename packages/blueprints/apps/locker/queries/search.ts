@@ -5,9 +5,20 @@
  * so search can find a login by its username without that username ever
  * leaving the vault in a list. Trashed items never match. A consent denial is
  * a first-class outcome the UI renders as the access state.
+ *
+ * THE ROWS ARE THE ANSWER; WATCHTOWER IS A DECORATION (#928). Matching runs
+ * over the same rows a replica seat holds, so this query answers locally, and
+ * the weak/reused/last4 decoration is asked for as `optional` — a search whose
+ * Watchtower is out of reach returns its rows undecorated rather than nothing.
  */
 
-import { decorate, readTags, readStarred, readWatchtower } from "./items.ts";
+import {
+  decorate,
+  readTags,
+  readStarred,
+  readWatchtower,
+  rethrowIfLocalReadRefused,
+} from "./items.ts";
 import type { RawItem } from "./items.ts";
 
 export default async function searchHandler({
@@ -45,10 +56,11 @@ export default async function searchHandler({
     const [tagsByItem, starredIds, watchByItem] = await Promise.all([
       readTags(ctx, ids),
       readStarred(ctx, ids),
-      readWatchtower(ctx),
+      readWatchtower(ctx, { optional: true }),
     ]);
     return { items: decorate(matched, tagsByItem, starredIds, watchByItem) };
   } catch (error) {
+    rethrowIfLocalReadRefused(error);
     const e = error as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }

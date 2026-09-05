@@ -79,6 +79,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "event_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "summary": {
             "type": "string",
             "minLength": 1

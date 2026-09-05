@@ -252,6 +252,9 @@ export interface ItemsPayload {
   items?: LockerRow[];
   truncated?: boolean;
   window?: number;
+  /** Which window answered: the archived shelf is its own read, never a slice
+   *  of the default one. */
+  archived?: boolean;
   /** How many live items EXIST, counted inside the vault — the other half of
    *  "300 of 312". Absent when the count could not be read; the foot line then
    *  says nothing rather than guessing. */
@@ -267,8 +270,6 @@ export interface ItemsPayload {
     reused?: number;
     items?: LockerRow[];
   };
-  authRequired?: boolean;
-  configured?: boolean;
   vaultDenied?: { code?: string; message?: string } | null;
 }
 

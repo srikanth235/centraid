@@ -7,7 +7,7 @@ import {
 } from "./errors.js";
 import type { RebootstrapReason } from "./errors.js";
 import { applyOptimisticMutations } from "./query.js";
-import { jsonValue } from "./read-plan-clauses.js";
+import { censusClass, jsonValue } from "./read-plan-clauses.js";
 import {
   assertReplicaOrder,
   assertReplicaPage,
@@ -721,6 +721,18 @@ export class ReplicaSqliteStore {
       this.wipe();
       throw new ReplicaRebootstrapRequiredError(mismatch);
     }
+    // Spent: the whole batch is at or behind the stored cursor, so it carries
+    // nothing this replica has not applied. Re-applying would be harmless but
+    // moving the cursor BACK to `batch.to` would not — the checkpoint it posts
+    // must stay monotonic, and the next pull must not re-ask for changes this
+    // store already holds.
+    if (batch.to.seq <= meta.cursor_seq) {
+      return {
+        cursor: { epoch: meta.cursor_epoch, seq: meta.cursor_seq },
+        invalidations: [],
+        outcomes: batch.outcomes ?? [],
+      };
+    }
 
     const invalidations: ReplicaInvalidation[] = [];
     runTransaction(() => {
@@ -813,17 +825,14 @@ export class ReplicaSqliteStore {
     const probed = this.all<ReplicaPlannedRow>(plan.sql, plan.binds);
     assertReplicaPage(probed, plan);
     if (plan.orderCensus && probed.length > 0) {
-      assertReplicaOrder(this.orderCensus(plan.orderCensus), plan);
+      assertReplicaOrder(this.cachedCensus(plan.orderCensus), plan);
     }
     // The plan over-fetches by one row; that probe is dropped HERE and reported
     // as `truncated`, never swallowed (#922 0a).
     const page = trimReplicaPage(probed, plan);
     const planned = page.rows;
     if (plan.tieCensus) {
-      const census = this.one<ReplicaTieCensusRow>(
-        plan.tieCensus.sql,
-        plan.tieCensus.binds
-      );
+      const census = this.cachedCensus<ReplicaTieCensusRow>(plan.tieCensus);
       if (census) assertReplicaTieCensus(census);
     }
     // Confined only when a pk-eq read found its row; anything wider, or a miss,
@@ -1179,7 +1188,7 @@ export class ReplicaSqliteStore {
 
   private clear(): void {
     this.schemas.clear();
-    this.invalidateOrderCensus();
+    this.invalidateCensuses();
     this.driver.exec(`
       DELETE FROM replica_bootstrap_progress;
       DELETE FROM replica_search;
@@ -1369,35 +1378,58 @@ export class ReplicaSqliteStore {
   private readonly orderIndexes = new Set<string>();
 
   /**
-   * The order guards' verdict, cached until the next write (#922 C3).
+   * Both censuses' verdicts, cached until the next write (#922 C3, #922 E3).
    *
-   * The census asks a question about the STORED VALUES' TYPES — is any of them
-   * oversized, non-scalar, or straddling text and number? — so its answer
-   * changes only when rows change, never between two reads. Computing it per
-   * read made every ordered read O(entity) even with the ordering index doing
-   * the paging in O(limit). `invalidateOrderCensus` runs on every write path.
+   * A census asks a question about the STORED VALUES — is any of them
+   * oversized, non-scalar, straddling text and number, or carried by two rows
+   * at once? — so its answer changes only when rows change, never between two
+   * reads. Computing one per read made every ordered read O(entity) even with
+   * the ordering index doing the paging in O(limit). `invalidateCensuses` runs
+   * on every write path.
    */
-  private readonly orderCensuses = new Map<string, Record<string, number>>();
+  private readonly censuses = new Map<string, Record<string, number>>();
 
-  private orderCensus(census: {
+  private cachedCensus<Row extends Record<string, number>>(census: {
     sql: string;
     binds: ReplicaBindValue[];
-  }): Record<string, number> | undefined {
+  }): Row | undefined {
     const key = `${census.sql}\u0000${JSON.stringify(census.binds)}`;
-    const hit = this.orderCensuses.get(key);
-    if (hit) return hit;
-    const computed = this.one<Record<string, number>>(census.sql, census.binds);
-    if (computed) this.orderCensuses.set(key, computed);
+    const hit = this.censuses.get(key);
+    if (hit) return hit as Row;
+    const computed = this.one<Row>(census.sql, census.binds);
+    if (computed) this.censuses.set(key, computed);
     return computed;
   }
 
-  private invalidateOrderCensus(): void {
-    this.orderCensuses.clear();
+  private invalidateCensuses(): void {
+    this.censuses.clear();
+  }
+
+  /**
+   * The census index (#922 C3): one entry per row on `censusClass`, so each
+   * order guard is a seek instead of an aggregate over the entity. Spelled
+   * EXACTLY as `censusSql`'s probes spell it, or SQLite serves neither, and
+   * created for the ordered column AND its tie-break because both carry guards.
+   */
+  private readonly censusIndexes = new Set<string>();
+
+  private ensureCensusIndex(entity: string, column: string): void {
+    const key = `${entity}\u0000${column}`;
+    if (this.censusIndexes.has(key)) return;
+    this.censusIndexes.add(key);
+    if (this.censusIndexes.size > ORDER_INDEX_MAX) return;
+    this.driver.exec(
+      `CREATE INDEX IF NOT EXISTS replica_row_cen_${orderIndexSuffix(key)}
+         ON replica_row(shape_id, entity, ${censusClass(column)});`
+    );
   }
 
   private ensureOrderIndex(entity: string, plan: ReplicaReadPlan): void {
     const column = plan.orderColumn;
     if (column === undefined) return;
+    this.ensureCensusIndex(entity, column);
+    if (plan.orderTieBreak !== undefined)
+      this.ensureCensusIndex(entity, plan.orderTieBreak);
     const direction = plan.orderDirection === "desc" ? "DESC" : "ASC";
     const tieBreak = plan.orderTieBreak;
     const key = `${entity}\u0000${column}\u0000${direction}\u0000${tieBreak ?? ""}`;
@@ -1696,7 +1728,15 @@ export class ReplicaSqliteStore {
     ) {
       return "epoch-mismatch";
     }
-    if (batch.from.seq !== meta.cursor_seq || batch.to.seq < batch.from.seq)
+    // A GAP IS A BATCH THAT STARTS AHEAD OF US, AND ONLY THAT (#922 E3).
+    // Two catch-up paths legitimately hold the same cursor at once — the
+    // bootstrap's convergence replay and the change feed's own sync — so the
+    // slower one arrives with a `from` the faster one has already passed.
+    // That batch skipped nothing; it OVERLAPS, and every change in it is an
+    // idempotent upsert or delete under the same server-version guard. Calling
+    // it a gap wiped the store and demanded a re-bootstrap that raced exactly
+    // the same way, which is the loop this rule ends.
+    if (batch.from.seq > meta.cursor_seq || batch.to.seq < batch.from.seq)
       return "cursor-gap";
     return undefined;
   }
@@ -1718,7 +1758,7 @@ export class ReplicaSqliteStore {
   private run(sql: string, bind: readonly ReplicaBindValue[] = []): void {
     // EVERY write goes through here, which is why the census cache is dropped
     // here and not at each call site: a new write path cannot forget to.
-    this.invalidateOrderCensus();
+    this.invalidateCensuses();
     if (this.recording) {
       this.recording.push({ sql, bind: [...bind] });
       return;

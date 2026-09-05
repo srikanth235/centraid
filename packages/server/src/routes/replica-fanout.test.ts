@@ -82,15 +82,13 @@ describe("replica projection hub", () => {
     const release = hub.subscribe(() => {
       woke += 1;
     });
-    hub.project(ACCESS, since, 100);
+    const beforePage = hub.project(ACCESS, since, 100);
     const before = hub.currentGeneration();
 
     notifyReplicaCommit(db.vault);
     expect(hub.currentGeneration()).toBe(before + 1);
     expect(woke).toBe(1);
-    expect(
-      countStatements(db, () => hub.project(ACCESS, since, 100))
-    ).toBeGreaterThan(0);
+    expect(hub.project(ACCESS, since, 100)).not.toBe(beforePage);
 
     release();
     notifyReplicaCommit(db.vault);
@@ -106,14 +104,12 @@ describe("replica projection hub", () => {
     let now = 1_000;
     const hub = new ReplicaProjectionHub(db.vault, () => now);
     hub.subscribe(() => undefined);
-    hub.project(ACCESS, since, 100);
-    expect(countStatements(db, () => hub.project(ACCESS, since, 100))).toBe(0);
+    const beforeExpiry = hub.project(ACCESS, since, 100);
+    expect(hub.project(ACCESS, since, 100)).toBe(beforeExpiry);
     // Only the CLOCK moved — a grant whose `expires_at` elapses in silence is
     // this case, and it must not be served stale.
     now += PROJECTION_MEMO_TTL_MS;
-    expect(
-      countStatements(db, () => hub.project(ACCESS, since, 100))
-    ).toBeGreaterThan(0);
+    expect(hub.project(ACCESS, since, 100)).not.toBe(beforeExpiry);
     db.close();
   });
 
@@ -123,28 +119,22 @@ describe("replica projection hub", () => {
     const since = { ...CURSOR, epoch };
     const hub = new ReplicaProjectionHub(db.vault);
     hub.subscribe(() => undefined);
-    hub.project(ACCESS, since, 100);
+    const first = hub.project(ACCESS, since, 100);
     for (const other of [
       { ...ACCESS, canWrite: false },
       { ...ACCESS, rememberDevice: true },
       { ...ACCESS, appId: "notes" },
     ]) {
       expect(
-        countStatements(db, () => hub.project(other, since, 100)),
+        hub.project(other, since, 100),
         `${JSON.stringify(other)} must not read another caller's page`
-      ).toBeGreaterThan(0);
+      ).not.toBe(first);
     }
-    expect(
-      countStatements(db, () => hub.project(ACCESS, { ...since, seq: 1 }, 100))
-    ).toBeGreaterThan(0);
-    expect(
-      countStatements(db, () => hub.project(ACCESS, since, 99))
-    ).toBeGreaterThan(0);
-    expect(
-      countStatements(db, () =>
-        hub.project(ACCESS, since, 100, { doorbellOnly: true })
-      )
-    ).toBeGreaterThan(0);
+    expect(hub.project(ACCESS, { ...since, seq: 1 }, 100)).not.toBe(first);
+    expect(hub.project(ACCESS, since, 99)).not.toBe(first);
+    expect(hub.project(ACCESS, since, 100, { doorbellOnly: true })).not.toBe(
+      first
+    );
     db.close();
   });
 
@@ -182,17 +172,15 @@ describe("replica projection hub", () => {
     hub.subscribe(() => undefined);
     // Distinct page shapes, not cursors: a cursor past the watermark is a
     // rebootstrap, a different question than eviction.
-    for (let limit = 1; limit <= PROJECTION_MEMO_MAX_ENTRIES + 20; limit += 1) {
-      hub.project(ACCESS, since, limit);
+    const first = hub.project(ACCESS, since, 1);
+    let last: ReturnType<typeof hub.project> | undefined;
+    for (let limit = 2; limit <= PROJECTION_MEMO_MAX_ENTRIES + 20; limit += 1) {
+      last = hub.project(ACCESS, since, limit);
     }
-    expect(
-      countStatements(db, () => hub.project(ACCESS, since, 1))
-    ).toBeGreaterThan(0);
-    expect(
-      countStatements(db, () =>
-        hub.project(ACCESS, since, PROJECTION_MEMO_MAX_ENTRIES + 20)
-      )
-    ).toBe(0);
+    expect(hub.project(ACCESS, since, 1)).not.toBe(first);
+    expect(hub.project(ACCESS, since, PROJECTION_MEMO_MAX_ENTRIES + 20)).toBe(
+      last
+    );
     db.close();
   });
 

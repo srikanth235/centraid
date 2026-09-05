@@ -50,7 +50,12 @@ const expenseProjection = ({
   input: Readonly<Record<string, unknown>>;
   intentId: string;
 }) => {
-  const expenseId = stablePendingRowId(intentId, "expense");
+  // An id the write already carries is REUSED, never re-minted, so a revision
+  // keeps the row it already showed (#922 G2).
+  const expenseId =
+    typeof input.expense_id === "string" && input.expense_id.length > 0
+      ? input.expense_id
+      : stablePendingRowId(intentId, "expense");
   const mutations = [
     pendingUpsert("tally.expense", expenseId, {
       expense_id: expenseId,
@@ -99,7 +104,8 @@ const expenseProjection = ({
       );
     });
   }
-  return mutations;
+  // The id the projection minted rides the write (#922 G2).
+  return { input: { expense_id: expenseId }, optimistic: mutations };
 };
 
 export const tallyPendingProjection = definePendingProjection({
@@ -123,20 +129,30 @@ export const tallyPendingProjection = definePendingProjection({
     "restore-expense": ({ input }) =>
       pendingPatch("tally.expense", input.expense_id, input),
     "settle-up": ({ input, intentId }) => {
-      const settlementId = stablePendingRowId(intentId, "settlement");
-      return [
-        pendingUpsert("tally.settlement", settlementId, {
-          settlement_id: settlementId,
-          deleted_at: null,
-          ...pendingInputValues(input, [
-            "group_id",
-            "from_party",
-            "to_party",
-            "amount_minor",
-            "paid_on",
-          ]),
-        }),
-      ];
+      // An id the write already carries is REUSED, never re-minted, so a
+      // revision keeps the row it already showed (#922 G2).
+      const settlementId =
+        typeof input.settlement_id === "string" &&
+        input.settlement_id.length > 0
+          ? input.settlement_id
+          : stablePendingRowId(intentId, "settlement");
+      return {
+        // The id the projection minted rides the write (#922 G2).
+        input: { settlement_id: settlementId },
+        optimistic: [
+          pendingUpsert("tally.settlement", settlementId, {
+            settlement_id: settlementId,
+            deleted_at: null,
+            ...pendingInputValues(input, [
+              "group_id",
+              "from_party",
+              "to_party",
+              "amount_minor",
+              "paid_on",
+            ]),
+          }),
+        ],
+      };
     },
     "add-friend": ({ input, intentId }) => {
       const partyId = stablePendingRowId(intentId, "party");
@@ -154,19 +170,28 @@ export const tallyPendingProjection = definePendingProjection({
       ];
     },
     "create-group": ({ input, intentId }) => {
-      const groupId = stablePendingRowId(intentId, "group");
+      // An id the write already carries is REUSED, never re-minted, so a
+      // revision keeps the row it already showed (#922 G2).
+      const groupId =
+        typeof input.group_id === "string" && input.group_id.length > 0
+          ? input.group_id
+          : stablePendingRowId(intentId, "group");
       const circleId = stablePendingRowId(intentId, "circle");
-      return [
-        pendingUpsert("social.circle", circleId, {
-          circle_id: circleId,
-          name: typeof input.name === "string" ? input.name : "Pending group",
-        }),
-        pendingUpsert("tally.group", groupId, {
-          group_id: groupId,
-          circle_id: circleId,
-          ...pendingInputValues(input, ["icon", "color"]),
-        }),
-      ];
+      return {
+        // The id the projection minted rides the write (#922 G2).
+        input: { group_id: groupId },
+        optimistic: [
+          pendingUpsert("social.circle", circleId, {
+            circle_id: circleId,
+            name: typeof input.name === "string" ? input.name : "Pending group",
+          }),
+          pendingUpsert("tally.group", groupId, {
+            group_id: groupId,
+            circle_id: circleId,
+            ...pendingInputValues(input, ["icon", "color"]),
+          }),
+        ],
+      };
     },
     "rename-group": ({ input }) =>
       pendingPatch("tally.group", input.group_id, input),

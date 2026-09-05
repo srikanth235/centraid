@@ -61,12 +61,20 @@ const UNSERVED: LockerRow[] = SERVED.map(
   ({ url: _url, expiry: _expiry, password_set_at: _setAt, ...rest }) => rest
 );
 
+/** A read that could not reach the sealed boundary: `weak`/`reused` are not
+ *  false, they are ABSENT, and the register must say the two strength checks
+ *  did not run rather than clearing every password (#928). */
+const UNDECORATED: LockerRow[] = SERVED.map(
+  ({ weak: _weak, reused: _reused, ...rest }) => rest
+);
+
 describe("what the payload carries decides what can be checked", () => {
-  it("sees all three when the rows carry them", () => {
+  it("sees all four when the rows carry them", () => {
     expect(servedFields(SERVED)).toStrictEqual({
       address: true,
       expiry: true,
       age: true,
+      strength: true,
     });
   });
 
@@ -75,7 +83,24 @@ describe("what the payload carries decides what can be checked", () => {
       address: false,
       expiry: false,
       age: false,
+      strength: true,
     });
+  });
+
+  it("NAMES AN UNREACHED WATCHTOWER RATHER THAN CLEARING EVERY PASSWORD", () => {
+    expect(servedFields(UNDECORATED).strength).toBe(false);
+    const register = reviewRegister(UNDECORATED, NOW);
+    const unrunnable = register.unrunnable.map((check) => check.key);
+    expect(unrunnable).toContain("weak");
+    expect(unrunnable).toContain("reused");
+    expect(register.ran).not.toContain("weak");
+    expect(register.ran).not.toContain("reused");
+    // …and neither appears as a verdict with a count of nothing.
+    expect(register.attention.map((verdict) => verdict.key)).not.toContain(
+      "weak"
+    );
+    const why = register.unrunnable.find((check) => check.key === "weak")?.why;
+    expect(why).toContain("nothing was checked");
   });
 });
 
@@ -164,7 +189,14 @@ describe("Checked, and cannot be checked", () => {
 describe("ALL CLEAR is a state, not an absence", () => {
   it("holds when every check that ran found nothing", () => {
     const register = reviewRegister(
-      [row({ item_id: "x", url: "https://ok.example" })],
+      [
+        row({
+          item_id: "x",
+          url: "https://ok.example",
+          weak: false,
+          reused: false,
+        }),
+      ],
       NOW
     );
     expect(register.allClear).toBe(true);

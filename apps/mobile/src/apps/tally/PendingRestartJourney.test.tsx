@@ -31,7 +31,7 @@
 //     The row Waiting draws is an outbox row; the EXPENSE is an optimistic
 //     projection, and it is the mounted reader's overlay that carries it. The
 //     phone draws no surface over that read (Tally's reads are gateway RPCs —
-//     `tally-gateway.ts` says why), so the claim is asserted at the reader the
+//     `tally-reads.ts` says why), so the claim is asserted at the reader the
 //     app mounts rather than at a screen that does not exist.
 //
 // WHAT THIS FILE DELIBERATELY DOES NOT CLAIM: reconnect. The gateway is
@@ -159,17 +159,18 @@ vi.mock(
     }) as never
 );
 
-// The gateway door, replaced wholesale — the neighbouring read-plane suite's
-// own shape (`tally-store.test.ts`). Tally's reads are RPCs, so "the gateway
-// is unreachable" IS these handlers rejecting.
+// The read door, replaced wholesale — the neighbouring read-plane suite's own
+// shape (`tally-store.test.ts`). This journey is about the WRITE rail across a
+// restart, so the reads answer whatever the test hands them.
 const answers = vi.hoisted(() => ({
   dashboard: vi.fn<() => Promise<unknown>>(),
 }));
 vi.mock(
-  import("./tally-gateway"),
+  import("./tally-reads"),
   () =>
     ({
       EXPORT_WINDOW: 2000,
+      attachTallyReadPlane: () => undefined,
       tallyActivity: () => answers.dashboard(),
       tallyDashboard: () => answers.dashboard(),
       tallyExport: () => answers.dashboard(),
@@ -177,7 +178,7 @@ vi.mock(
       tallyGroup: () => answers.dashboard(),
       tallyHistory: () => answers.dashboard(),
       tallySearch: () => answers.dashboard(),
-    }) as unknown as typeof import("./tally-gateway")
+    }) as unknown as typeof import("./tally-reads")
 );
 
 const replica = vi.hoisted(() => ({
@@ -565,8 +566,12 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     expect(found.rows[0]?.values).toMatchObject({
       description: SPENT,
       amount_minor: 1234,
-      [PENDING_OVERLAY_FIELDS.status]: "queued",
       __centraidScopeId: VAULT,
+    });
+    const intentId = found.rows[0]?.values[PENDING_OVERLAY_FIELDS.key];
+    // Queued is a fact about the WRITE, so the read's sidecar says it (G3).
+    expect(found.pending?.[String(intentId)]).toMatchObject({
+      status: "queued",
     });
   });
 });

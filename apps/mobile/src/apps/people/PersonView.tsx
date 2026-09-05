@@ -22,6 +22,7 @@ import { ScrollView, StyleSheet, View } from "react-native";
 
 import {
   pendingOverlayCopy,
+  pendingSidecarOf,
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import {
@@ -160,7 +161,10 @@ export default function PersonView({
     const overdue = isOverdue(person);
     const writable = person.canWrite;
     const sources = person.scopeLabels.join(" · ");
-    const pending = readPendingOverlay(person.raw);
+    const pending = readPendingOverlay(
+      person.raw,
+      pendingSidecarOf(person.raw)
+    );
 
     const composerCommits = (
       <>

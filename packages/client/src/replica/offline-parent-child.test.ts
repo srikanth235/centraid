@@ -163,7 +163,7 @@ describe("an offline child write on an offline-created parent", () => {
     expect([...gateway.projects]).toStrictEqual([projectId]);
     expect([...gateway.tasks.values()][0]?.project_id).toBe(projectId);
     // Nothing is left wearing a badge.
-    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    expect((await queue.overlay()).mutations).toStrictEqual([]);
   });
 
   test("the origin refuses a row id it already holds rather than merging into it", () => {

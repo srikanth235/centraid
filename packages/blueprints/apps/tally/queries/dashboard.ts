@@ -27,6 +27,7 @@ import { DAY_MS } from "../../_shared/format-kit.ts";
 import {
   PENDING_OVERLAY_FIELDS,
   pendingOverlayCopy,
+  pendingSidecarOf,
   readPendingOverlay,
 } from "../../_shared/pending-overlay.ts";
 
@@ -558,7 +559,7 @@ export const groupNet = tallyGroupNet;
 
 /** A ledger row: the expense decorated with the owner's lent/borrowed stance. */
 export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {
-  const pending = readPendingOverlay(e);
+  const pending = readPendingOverlay(e, pendingSidecarOf(e));
   const me = data.me;
   const myShare = me == null ? undefined : e.splits[me];
   const yourShare = myShare ?? 0;

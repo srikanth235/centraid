@@ -23,7 +23,19 @@
  * it as a finding.
  */
 
-import type { ConditionSpec } from "../gateway/types.js";
+import type { ConditionSpec, HandlerCtx } from "../gateway/types.js";
+
+/**
+ * The id this write creates the row under: the seat's, when it minted one and
+ * sent it, and ours otherwise. Paired with `mintedIdIsFree`, which has already
+ * refused an id the vault holds by the time a handler runs.
+ */
+export function mintedId(ctx: HandlerCtx, property: string): string {
+  const supplied = (ctx.input as Record<string, unknown>)[property];
+  return typeof supplied === "string" && supplied.length > 0
+    ? supplied
+    : ctx.newId();
+}
 
 /**
  * A UUID, and nothing else. The seat mints v8 (derived from its intent id) and
@@ -51,13 +63,16 @@ export const MINTED_ID_PROPERTY = {
 export function mintedIdIsFree(
   table: string,
   column: string,
-  subject: string
+  subject: string,
+  /** The physical key, where the table names it differently from the input —
+   *  a folder is `core_concept.concept_id`, an album a `core_collection`. */
+  idColumn: string = column
 ): ConditionSpec {
   return {
     name: `${column}_is_free`,
     sql: `SELECT (:${column} IS NULL
                   OR NOT EXISTS (SELECT 1 FROM ${table}
-                                  WHERE ${column} = :${column})) AS n`,
+                                  WHERE ${idColumn} = :${column})) AS n`,
     column: "n",
     op: "eq",
     value: 1,

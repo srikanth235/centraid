@@ -185,6 +185,7 @@ const onLockerItem = (command: string): CommonsCommandRoute =>
 export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   // Tally — full declared write surface.
   tallyGroup("tally.add_expense", true),
+  tallyExpense("tally.add_expense", true),
   tallyGroup("tally.add_group_member", true),
   tallyGroup("tally.remove_group_member", true),
   tallyGroup("tally.rename_group", true),
@@ -195,6 +196,8 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   // Routable, NOT declared: these reach the rail so the steward refuses them
   // by name instead of writing privately into a shared group.
   tallyGroup("tally.add_receipt_expense"),
+  tallyExpense("tally.add_receipt_expense"),
+  tallyGroup("tally.create_group"),
   tallyGroup("tally.delete_group"),
   tallyGroup("tally.save_recurring_expense"),
   // Archiving hides the group from every member's lists and turning
@@ -218,7 +221,10 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
 
   // Documents/folders: enclosing shared folder first, then the document's own grant.
   onFolder("core.add_document", "folder_id", true),
+  inFolder("core.add_document", true),
+  onDocument("core.add_document"),
   onFolder("core.create_folder", "parent_folder_id", true),
+  onFolder("core.create_folder", "folder_id", true),
   onFolder("core.rename_folder", "folder_id", true),
   onFolder("core.delete_folder", "folder_id"),
   inFolder("core.rename_document", true),
@@ -246,6 +252,7 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   onContent("knowledge.restore_note_version", "knowledge"),
 
   // Albums/photos: no declared write surface — refused, never applied privately.
+  onAlbum("media.create_album"),
   onAlbum("media.add_to_album"),
   onAsset("media.add_to_album"),
   onAlbum("media.remove_from_album"),

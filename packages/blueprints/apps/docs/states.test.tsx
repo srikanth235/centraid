@@ -9,8 +9,8 @@
 // two ways (`ListRow`, `GridCard`), and a member who parks a rename in the grid
 // and finds no explanation there is in the same position as one whose row never
 // carried the mark at all. So both layouts are driven here, through the same
-// decorated `DriveDoc` the outbox produces — `decoratePendingMutation` is the
-// one law that stamps the overlay fields, and `enrichPendingRows` is the one
+// decorated `DriveDoc` the outbox produces — `pendingOverlayRow` is the one
+// law that pairs the row with its read's sidecar, and `enrichPendingSidecar` is the one
 // that later names the steward, so nothing below hand-writes an overlay field
 // the shell would not have written.
 //
@@ -24,8 +24,10 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
 
 import {
-  decoratePendingMutation,
-  enrichPendingRows,
+  attachPendingSidecar,
+  enrichPendingSidecar,
+  pendingOverlayRow,
+  pendingSidecarOf,
   pendingUpsert,
 } from "../_shared/pending-overlay.ts";
 import type {
@@ -64,14 +66,14 @@ const BASE: DriveDoc = {
 /** The row exactly as the outbox hands it to the drive: a projected upsert of
  *  the document, decorated with the intent's presentation fields. */
 function pendingDoc(intent: PendingIntentPresentationInput): DriveDoc {
-  return decoratePendingMutation(
+  return pendingOverlayRow(
     pendingUpsert(
       "document",
       BASE.document_id,
       BASE as unknown as Record<string, PendingProjectionValue>
     ),
     intent
-  ).values as unknown as DriveDoc;
+  ) as unknown as DriveDoc;
 }
 
 const PARKED = pendingDoc({
@@ -81,10 +83,12 @@ const PARKED = pendingDoc({
 });
 
 /** The same parked row after the shell learned WHO is holding it. */
-const PARKED_WITH_STEWARD = enrichPendingRows(
-  [PARKED as unknown as Record<string, unknown>],
-  [{ intentId: INTENT, status: "parked", stewardLabel: "Ravi" }]
-)[0] as unknown as DriveDoc;
+const PARKED_WITH_STEWARD = attachPendingSidecar(
+  { ...(PARKED as unknown as Record<string, unknown>) },
+  enrichPendingSidecar(pendingSidecarOf(PARKED), [
+    { intentId: INTENT, status: "parked", stewardLabel: "Ravi" },
+  ])
+) as unknown as DriveDoc;
 
 const CONFLICTED = pendingDoc({
   intentId: INTENT,

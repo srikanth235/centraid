@@ -37,19 +37,17 @@ describe("the outbox overlay mirror", () => {
     const { store, calls } = counted(new MemoryIntentStore());
     const queue = new IntentQueue(store, { idFactory: () => "intent-1" });
     // One read warms the mirror; every read after it is free.
-    await queue.overlayMutations();
+    await queue.overlay();
     const warm = calls.get("list") ?? 0;
     expect(warm).toBe(1);
-    await Promise.all(
-      Array.from({ length: 20 }, () => queue.overlayMutations())
-    );
+    await Promise.all(Array.from({ length: 20 }, () => queue.overlay()));
     expect(calls.get("list")).toBe(warm);
   });
 
   test("a non-empty outbox is one memory lookup, and a write invalidates it", async () => {
     const { store, calls } = counted(new MemoryIntentStore());
     const queue = new IntentQueue(store, { idFactory: () => "intent-1" });
-    await queue.overlayMutations();
+    await queue.overlay();
     await queue.enqueue({
       appId: "tasks",
       action: "edit",
@@ -58,13 +56,13 @@ describe("the outbox overlay mirror", () => {
     });
     const afterEnqueue = calls.get("list") ?? 0;
     // The enqueue invalidated the mirror, so the next read re-reads once…
-    await expect(queue.overlayMutations()).resolves.toHaveLength(1);
+    expect((await queue.overlay()).mutations).toHaveLength(1);
     expect(calls.get("list")).toBe(afterEnqueue + 1);
     // …and every read after that is memory again.
     const repeats = await Promise.all(
-      Array.from({ length: 20 }, () => queue.overlayMutations())
+      Array.from({ length: 20 }, () => queue.overlay())
     );
-    expect(repeats.every((each) => each.length === 1)).toBe(true);
+    expect(repeats.every((each) => each.mutations.length === 1)).toBe(true);
     expect(calls.get("list")).toBe(afterEnqueue + 1);
   });
 
@@ -78,10 +76,10 @@ describe("the outbox overlay mirror", () => {
       optimistic: [upsert],
     });
     await queue.claimNext();
-    await queue.overlayMutations();
+    await queue.overlay();
     const before = calls.get("list") ?? 0;
     await queue.applyOutcomes([{ intentId: "intent-1", status: "executed" }]);
-    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    expect((await queue.overlay()).mutations).toStrictEqual([]);
     expect(calls.get("list")).toBe(before + 1);
   });
 });

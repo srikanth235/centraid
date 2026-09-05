@@ -1,3 +1,5 @@
+import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
+
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
 export const REPLICA_SYNTHETIC_PRIMARY_KEY = "__centraid_row_id" as const;
 
@@ -216,6 +218,7 @@ export interface ReplicaTruncation {
 
 export interface ReplicaReadWireResult extends ReplicaTruncation {
   rows: ReplicaRowEnvelope[];
+  pending?: PendingOverlaySidecar;
   cursor: ReplicaCursor;
   dependency: ReplicaDependency;
   coverage?: ReplicaCoverage;
@@ -223,6 +226,7 @@ export interface ReplicaReadWireResult extends ReplicaTruncation {
 
 export interface ReplicaSearchWireResult extends ReplicaTruncation {
   rows: ReplicaRowEnvelope[];
+  pending?: PendingOverlaySidecar;
   cursor: ReplicaCursor;
   dependency: ReplicaDependency;
   coverage?: ReplicaCoverage;
@@ -230,6 +234,7 @@ export interface ReplicaSearchWireResult extends ReplicaTruncation {
 
 export interface ReplicaReadResult extends ReplicaTruncation {
   rows: ReplicaRow[];
+  pending?: PendingOverlaySidecar;
   /** No consent receipt locally; the cursor makes the origin inspectable. */
   receiptId: string;
   dependency: ReplicaDependency;
@@ -238,6 +243,7 @@ export interface ReplicaReadResult extends ReplicaTruncation {
 
 export interface ReplicaSearchResult extends ReplicaTruncation {
   rows: ReplicaRow[];
+  pending?: PendingOverlaySidecar;
   /** No consent receipt locally; the cursor makes the origin inspectable. */
   receiptId: string;
   dependency: ReplicaDependency;
@@ -342,6 +348,9 @@ export interface ReplicaIntent {
   /** Optional optimistic concurrency preconditions captured by the app. */
   baseVersions?: ReplicaBaseVersion[];
   conflict?: ReplicaConflict;
+  /** The mount this write waits on, stamped at admission where the member
+   *  does not steward the vault. A fact about the write, never a row column. */
+  stewardLabel?: string;
 }
 
 export interface ReplicaBaseVersion {
@@ -353,6 +362,7 @@ export interface ReplicaBaseVersion {
 
 export interface EnqueueIntentInput {
   intentId?: string;
+  stewardLabel?: string;
   appId: string;
   action: string;
   input: ReplicaValue;

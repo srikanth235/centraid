@@ -2,6 +2,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
+import { prepared } from "../grant/prepared.js";
 import { REPLICA_SCHEMA_EPOCH } from "../schema/replica.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
 import { formatReplicaCursor, parseReplicaCursor } from "./cursor.js";
@@ -270,14 +271,13 @@ export function refreshReplicaTriggers(vault: DatabaseSync): void {
 }
 
 function meta(vault: DatabaseSync): MetaRow {
-  const row = vault
-    .prepare(
-      `SELECT epoch, floor_seq, schema_epoch, trigger_schema_version,
+  const row = prepared(
+    vault,
+    `SELECT epoch, floor_seq, schema_epoch, trigger_schema_version,
               active_commit_id,
               epoch_reason, epoch_started_at
          FROM replica_meta WHERE singleton = 1`
-    )
-    .get() as MetaRow | undefined;
+  ).get() as MetaRow | undefined;
   if (!row) throw new Error("replica metadata is missing");
   return row;
 }
@@ -388,15 +388,17 @@ export interface ReplicaCommitHandle {
 
 /** Mark the caller's transaction so its triggers share one group id. */
 export function beginReplicaCommit(vault: DatabaseSync): ReplicaCommitHandle {
-  const current = vault
-    .prepare(`SELECT active_commit_id FROM replica_meta WHERE singleton = 1`)
-    .get() as { active_commit_id: string | null } | undefined;
+  const current = prepared(
+    vault,
+    `SELECT active_commit_id FROM replica_meta WHERE singleton = 1`
+  ).get() as { active_commit_id: string | null } | undefined;
   if (current?.active_commit_id)
     return { commitId: current.active_commit_id, owner: false };
   const commitId = randomUUID();
-  vault
-    .prepare(`UPDATE replica_meta SET active_commit_id = ? WHERE singleton = 1`)
-    .run(commitId);
+  prepared(
+    vault,
+    `UPDATE replica_meta SET active_commit_id = ? WHERE singleton = 1`
+  ).run(commitId);
   return { commitId, owner: true };
 }
 
@@ -405,11 +407,10 @@ export function endReplicaCommit(
   handle: ReplicaCommitHandle
 ): void {
   if (!handle.owner) return;
-  vault
-    .prepare(
-      `UPDATE replica_meta SET active_commit_id = NULL WHERE singleton = 1`
-    )
-    .run();
+  prepared(
+    vault,
+    `UPDATE replica_meta SET active_commit_id = NULL WHERE singleton = 1`
+  ).run();
 }
 
 function currentSchemaEpoch(vault: DatabaseSync): number {
@@ -421,9 +422,10 @@ function currentSchemaEpoch(vault: DatabaseSync): number {
 
 export function currentReplicaLogState(vault: DatabaseSync): ReplicaLogState {
   const row = meta(vault);
-  const latest = vault
-    .prepare(`SELECT MAX(seq) AS seq FROM replica_change WHERE epoch = ?`)
-    .get(row.epoch) as { seq: number | null };
+  const latest = prepared(
+    vault,
+    `SELECT MAX(seq) AS seq FROM replica_change WHERE epoch = ?`
+  ).get(row.epoch) as { seq: number | null };
   const watermarkSeq = Math.max(row.floor_seq, latest.seq ?? 0);
   return {
     epoch: row.epoch,
@@ -514,17 +516,17 @@ export function appendReplicaChange(
   input: AppendReplicaChangeInput
 ): ReplicaChangeEntry {
   const changedAt = input.changedAt ?? new Date().toISOString();
-  const result = vault
-    .prepare(
-      `INSERT INTO replica_change (epoch, commit_id, entity, row_id, op, old_values_json, changed_at)
+  const result = prepared(
+    vault,
+    `INSERT INTO replica_change (epoch, commit_id, entity, row_id, op, old_values_json, changed_at)
        SELECT epoch, COALESCE(active_commit_id, 'implicit:' || lower(hex(randomblob(16)))), ?, ?, ?, NULL, ? FROM replica_meta WHERE singleton = 1`
-    )
-    .run(input.entity, input.rowId, input.op, changedAt);
+  ).run(input.entity, input.rowId, input.op, changedAt);
   const seq = Number(result.lastInsertRowid);
   return changeEntry(
-    vault
-      .prepare(`SELECT ${CHANGE_COLUMNS} FROM replica_change WHERE seq = ?`)
-      .get(seq) as ChangeRow
+    prepared(
+      vault,
+      `SELECT ${CHANGE_COLUMNS} FROM replica_change WHERE seq = ?`
+    ).get(seq) as ChangeRow
   );
 }
 
@@ -556,42 +558,39 @@ export function readReplicaChanges(
       "replica change page limit must be an integer between 1 and 10000"
     );
   }
-  const rows = vault
-    .prepare(
-      `SELECT ${CHANGE_COLUMNS}
+  const rows = prepared(
+    vault,
+    `SELECT ${CHANGE_COLUMNS}
          FROM replica_change
         WHERE epoch = ? AND seq > ? AND seq <= ?
         ORDER BY seq
         LIMIT ?`
-    )
-    .all(state.epoch, since.seq, state.watermark.seq, limit + 1) as ChangeRow[];
+  ).all(state.epoch, since.seq, state.watermark.seq, limit + 1) as ChangeRow[];
   let pageRows = rows.length > limit ? rows.slice(0, limit) : rows;
   let last = pageRows.at(-1);
   if (last) {
-    const groupTail = vault
-      .prepare(
-        `SELECT ${CHANGE_COLUMNS}
+    const groupTail = prepared(
+      vault,
+      `SELECT ${CHANGE_COLUMNS}
            FROM replica_change
           WHERE epoch = ? AND commit_id = ? AND seq > ? AND seq <= ?
           ORDER BY seq`
-      )
-      .all(
-        state.epoch,
-        last.commit_id,
-        last.seq,
-        state.watermark.seq
-      ) as ChangeRow[];
+    ).all(
+      state.epoch,
+      last.commit_id,
+      last.seq,
+      state.watermark.seq
+    ) as ChangeRow[];
     if (groupTail.length > 0) pageRows = [...pageRows, ...groupTail];
     last = pageRows.at(-1);
   }
   const hasMore = Boolean(
     last &&
-    vault
-      .prepare(
-        `SELECT 1 AS present FROM replica_change
+    prepared(
+      vault,
+      `SELECT 1 AS present FROM replica_change
             WHERE epoch = ? AND seq > ? AND seq <= ? LIMIT 1`
-      )
-      .get(state.epoch, last.seq, state.watermark.seq)
+    ).get(state.epoch, last.seq, state.watermark.seq)
   );
   const changes = pageRows.map(changeEntry);
   const lastChange = changes.at(-1);
