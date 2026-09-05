@@ -1343,6 +1343,23 @@
         }
       }
     },
+    "mobile/share/shared-album/ci-ios-sim": {
+      "surface": "mobile",
+      "journey": "share",
+      "volume": "shared-album",
+      "hardware": "ci-ios-sim",
+      "spans": ["native.grant", "vault.grant.create", "vault.grant.fulfill"],
+      "consumers": ["tests/agent-e2e-mobile/flows/sharing-reach.mjs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "grantToVisible": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/sharing-reach.mjs \u2014 drives the share sheet on a simulator; the audience-side read it would time needs the shared-album seed of gateway/share/shared-album/ci-linux-x64-4c behind it",
+          "_intendedCeilingMs": null,
+          "_reason": "NO PHONE IN THIS CONTAINER, and the device rung is where this number lives: tests/agent-e2e-mobile drives an iOS simulator on a macOS runner. The gateway twin of this row (gateway/share/shared-album/ci-linux-x64-4c) is measured and carries the engine term; what is missing here is only the phone's own paint, which cannot be honestly estimated from a linux container. Declared so the hole is visible rather than absent."
+        }
+      }
+    },
     "gateway/first-bootstrap/year3-replica/ci-linux-x64-4c-standard": {
       "surface": "gateway",
       "journey": "first-bootstrap",

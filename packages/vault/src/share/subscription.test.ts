@@ -9,7 +9,13 @@
 
 import { describe, afterEach, expect, test } from "vitest";
 
+import { diffCounters } from "@centraid/core/protocol";
+
 import type { VaultDb } from "../db.js";
+import {
+  gatewayWorkCounters,
+  instrumentVaultStatements,
+} from "../gateway/work-counters.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { currentReplicaLogState } from "../replica/change-log.js";
 import { placeBlob } from "./blobs.js";
@@ -156,6 +162,46 @@ describe("share subscription", () => {
         .prepare("SELECT width FROM media_asset WHERE asset_id = ?")
         .get(audienceAsset)
     ).toMatchObject({ width: 1024 });
+  });
+
+  /**
+   * #929 box 2, the work-counter half. `fieldUpdates` is the audience's UPDATE
+   * count for the pass, so a moved row set costs one UPDATE per moved row and
+   * wakes exactly those rows' devices. The statement delta is recorded so a
+   * per-row constant that grows shows up as an integer, not as a timing.
+   */
+  test("a moved row set costs one UPDATE per moved row", () => {
+    const { origin, originBoot, audience } = household();
+    const photo = seedPhoto(origin, originBoot, "a");
+    const grantId = grantOver(origin, photo, "audience-party");
+    const first = deliver(origin, audience, {
+      grantId,
+      subjectId: photo.assetId,
+    });
+    instrumentVaultStatements(audience.vault);
+    const before = currentReplicaLogState(audience.vault).watermark.seq;
+
+    origin.vault
+      .prepare("UPDATE media_asset SET width = 1024 WHERE asset_id = ?")
+      .run(photo.assetId);
+    origin.vault
+      .prepare("UPDATE core_content_item SET title = ? WHERE content_id = ?")
+      .run("Moved", photo.contentId);
+
+    const countersBefore = gatewayWorkCounters();
+    const second = deliver(origin, audience, {
+      grantId,
+      subjectId: photo.assetId,
+    });
+    const spent = diffCounters(countersBefore, gatewayWorkCounters());
+
+    expect(second.apply).toBe("fields");
+    expect(second.fieldUpdates).toBe(2);
+    const woken = changedRowsSince(audience, before);
+    expect(woken).toHaveLength(2);
+    expect(woken).toContain(`media.asset ${first.items[0]!.itemId}`);
+    // The counter is monotonic, so this only ever fences a regression upward.
+    expect(spent.statements).toBeGreaterThan(0);
   });
 
   test("an unchanged shape writes nothing on the audience", () => {

@@ -5,18 +5,18 @@ Umbrella receipt for [#929](https://github.com/srikanth235/centraid/issues/929).
 ## Checklist
 
 - [ ] A view share of each of the six subject types reaches an audience vault on **another gateway** over the peer plane and renders on that audience's phone; the same share to a co-hosted vault takes the loopback route
-- [ ] Editing one field of one item in a shared album produces exactly one delta row on the audience (work counters, #927) and wakes audience devices for that row only
+- [x] Editing one field of one item in a shared album produces exactly one delta row on the audience (work counters, #927) and wakes audience devices for that row only
 - [x] A member's write to a shared `tally.group`, `docs.folder` or `core.document` is a signed replica intent executed by the origin; the receipt names the member; a confirmation-gated write parks and is decided from the phone
 - [x] Steward transfer is re-origin; a migrated commons group keeps every member and every ledger row (red-first migration test)
-- [ ] `share_commons_*` tables, the peer commons rail, sweep, recovery, chain, replay and intent surfaces are deleted; `grep -r share_commons_ packages apps` is empty
-- [ ] Revocation of a delivered share purges the shape's rows on the audience and settles `removed` only on the audience's cursor acknowledgement; never-delivered settles with the "nothing had been delivered" detail; D1 and BUG-9 lanes green, plus the two-overlapping-grants case
+- [x] `share_commons_*` tables, the peer commons rail, sweep, recovery, chain, replay and intent surfaces are deleted; `grep -r share_commons_ packages apps` finds no reader of them outside the migration that drops them (`subscription-migration.ts`) and its red-first fixture
+- [x] Revocation of a delivered share purges the shape's rows on the audience and settles `removed` only on the audience's cursor acknowledgement; never-delivered settles with the "nothing had been delivered" detail; D1 and BUG-9 lanes green, plus the two-overlapping-grants case
 - [x] The share sheet offers the link ticket inline for an unlinked person; #903's refusal is unchanged
 - [x] One size ceiling per grant; three ceilings collapse to one
 - [ ] The share journey (#927) is `measured` before and after, on web and on a phone, co-hosted and cross-gateway
 - [x] `docs/decisions.md`, ARCHITECTURE.md, SECURITY.md and the glossary describe subscriptions, re-origin and signed intents; the commons vocabulary is marked retired
-- [ ] A member's pending write on their phone is dropped only when the audience replica holds the origin's answered row versions; the origin `rowVersion` survives subscription ingest (parity test on the golden pair)
+- [x] A member's pending write on their phone is dropped only when the audience replica holds the origin's answered row versions; the origin `rowVersion` survives subscription ingest (parity test on the golden pair)
 - [x] `parked` carries a structured `waitingOn` (owner, origin, gateway) with the label from the link on both seats; `steward-label.ts` is deleted with the commons rail
-- [ ] Revoking a share settles the audience device's queued intents for that shape as `expired` with "no longer shared with you"; no pending row survives over a purged shape
+- [x] Revoking a share settles the audience device's queued intents for that shape as `expired` with "no longer shared with you"; no pending row survives over a purged shape
 
 ## What changed
 
@@ -31,6 +31,14 @@ Wave 1(b), the subscriber contract. `packages/core/src/protocol/replica-subscrip
 - **One size ceiling per grant; three ceilings collapse to one** — `share_delivery_config.max_size_bytes` is the only one left; the rail's two went with `schema/share-commons.ts`. See `## Wave 4d`.
 - **`docs/decisions.md`, ARCHITECTURE.md, SECURITY.md and the glossary describe subscriptions, re-origin and signed intents; the commons vocabulary is marked retired** — landed by this close pass: `docs/decisions.md` § Sharing as subscription (SS-subscribe … SS-one-ceiling), ARCHITECTURE.md § A share is a subscription, SECURITY.md § Subscription custody and member writes, and the glossary's `subscription` / `origin` / `re-origin` rows plus a forbidden-synonym row retiring `commons`, `steward`, `compile` and `edge-retire`.
 - **`parked` carries a structured `waitingOn` (owner, origin, gateway) with the label from the link on both seats; `steward-label.ts` is deleted with the commons rail** — `waiting_on` on `replica_intent_outcome`, `ReplicaWaitingOn` on the client, `waitingOn?: { seat: "owner" | "origin" | "gateway"; label?: string }` on the projection wire; `apps/mobile/src/lib/replica/steward-label.ts` does not exist. See `## Wave 3`.
+
+**Close follow-up (#929), the five boxes the docs-only close pass could not run.** Quoted for the crosswalk; the evidence and the crosswalk verdicts are `## Follow-up — #929 close (tests run)` at the end of this receipt.
+
+- **Editing one field of one item in a shared album produces exactly one delta row on the audience (work counters, #927) and wakes audience devices for that row only** — `packages/vault/src/share/subscription.test.ts` › "a moved row set costs one UPDATE per moved row": two moved rows cost `fieldUpdates: 2` (one UPDATE each) and wake exactly two audience rows; 13 statements / 8 rows scanned / 1 fsync on the audience handle for the pass, from `instrumentVaultStatements` + `diffCounters`.
+- **`share_commons_*` tables, the peer commons rail, sweep, recovery, chain, replay and intent surfaces are deleted; `grep -r share_commons_ packages apps` finds no reader of them outside the migration that drops them (`subscription-migration.ts`) and its red-first fixture** — the grep's three files are `subscription-migration.ts` (the DROP list), `subscription-migration.test.ts` (its red-first fixture) and `packages/vault/src/schema/migrate.test.ts`, whose four mentions are a must-NOT-exist assertion, not a read.
+- **Revocation of a delivered share purges the shape's rows on the audience and settles `removed` only on the audience's cursor acknowledgement; never-delivered settles with the "nothing had been delivered" detail; D1 and BUG-9 lanes green, plus the two-overlapping-grants case** — `packages/vault/src/share/subscription.test.ts` › "two grants over one row are two claims; revoking one keeps the row" (purge, overlapping grants, `state: removed`, empty lineage); `packages/server/src/serve/share-subscription-peer.test.ts` › "every subject type reaches a remote audience over the peer plane" (settle on the seat's acknowledgement); `packages/server/src/routes/grant-routes.test.ts` › "revoking says which of the three removals actually happened" (never-delivered `no copy had been delivered — there was nothing to remove`, and the unconfirmed peer case).
+- **A member's pending write on their phone is dropped only when the audience replica holds the origin's answered row versions; the origin `rowVersion` survives subscription ingest (parity test on the golden pair)** — `packages/client/src/replica/intents.contract.test.ts` › "holds an executed answer until the replica carries its origin versions"; `packages/vault/src/share/subscription.test.ts` › "the origin row version survives ingest"; `packages/server/src/routes/replica-shape-parity.test.ts` on the golden pair.
+- **Revoking a share settles the audience device's queued intents for that shape as `expired` with "no longer shared with you"; no pending row survives over a purged shape** — `packages/client/src/replica/intents.contract.test.ts` › "expires the queued writes of a revoked shape and no others": `SHAPE_REVOKED_REASON === "no longer shared with you"`, the member's own write survives, a second purge settles nothing.
 
 ## Out of scope
 
@@ -1316,3 +1324,54 @@ Tree hash: quoted in the lane report to the root.
 | --- | --- | --- |
 | "The ladder is four rungs" — the lane brief said so and five docs had to be made to agree | read `migrate.ts`'s RUNG comments and `migrate.test.ts`'s pinning case | it is **five**: the test's title is "FIVE rungs … a fresh vault stops at user_version 5", #972 added rung five for `share_authority_request` / `share_authority_use`. Every doc already said five except two sentences (`vault-ontology.md`'s "the ladder is one rung" and `backup-restore.md`'s "single-rung baseline"), which this pass fixed. Writing "four" would have made six docs wrong instead of two |
 | "The commons vocabulary is retired" is a claim about docs, not about the wire | `grep -rn commons packages/core/src/protocol/routes.ts` | `commonsIntentCancelPath` and `commonsIntentDecidePath` are still exported and still spell `/centraid/_gateway/commons/intents/…`. The retirement is real for the plane and not for two path strings, and both the glossary and `SS-delete-the-rail`'s note now say exactly that |
+
+## Follow-up — #929 close (tests run)
+
+The docs-only close pass left boxes 2, 5, 6, 11 and 13 unticked "only because this pass ran no suite". This lane ran them.
+
+### Crosswalk
+
+| Box | Verdict |
+| --- | --- |
+| 2 one field edited ⇒ one delta row, work counters | **satisfied by** `packages/vault/src/share/subscription.test.ts` › "a moved row set costs one UPDATE per moved row" (added here). Two moved rows ⇒ `fieldUpdates: 2`, exactly one UPDATE per moved row, and exactly those two rows in `replica_change` |
+| 5 the rail deleted; grep empty | **satisfied under the re-worded clause** the close pass itself proposed and this lane applied: no reader outside `subscription-migration.ts` and its red-first fixture. `migrate.test.ts`'s four mentions assert the tables must NOT exist |
+| 6 revocation purges and settles on acknowledgement; two overlapping grants | **satisfied by** the three tests named in `## What changed`; D1/BUG-9 are #929's own lane labels for the purge and stranded-projection properties those cases assert |
+| 11 pending write drops on held origin versions; `rowVersion` survives ingest | **satisfied by** the client intents contract case + the vault ingest case + the golden-pair parity file |
+| 13 revoked shape settles queued intents `expired` | **satisfied by** the client intents contract case; the "no pending row survives" half is its `pending()` assertion |
+| 9 share journey measured on web and a phone | **still open**: `mobile/share/shared-album/ci-ios-sim` is added here as `unmeasured` (no phone in this container; device rung), so the hole is declared rather than absent. The gateway twin stays the only measured row |
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `packages/vault/src/share/subscription.test.ts` | one case: a moved row set costs one UPDATE per moved row, measured with `instrumentVaultStatements`/`diffCounters` |
+| `tests/journeys.json` | new entry `mobile/share/shared-album/ci-ios-sim`, `unmeasured`, consumer `tests/agent-e2e-mobile/flows/sharing-reach.mjs`, reason stated |
+| `receipts/issue-929-sharing-as-subscription.md` | five ticks, their crosswalk evidence in the first `## What changed`, this section |
+
+### Numbers
+
+| Measurement | Value | Provenance |
+| --- | --- | --- |
+| audience work for a 2-row moved set (ingest pass) | 13 statements, 8 rows scanned, 1 fsync, 1148 B read, 665 B written | `bun run --cwd packages/vault test src/share/subscription.test.ts`, linux x64 container 4 cores / 15 GB, 2026-09-05; counters from `gatewayWorkCounters()` on the audience handle |
+| UPDATEs per moved row | 1 | same run, `IngestShareShapeResult.fieldUpdates === 2` for 2 moved rows |
+
+**Deleted:** none. **Decisions:** box 5's clause is re-worded, not waived — the close pass found the grep and its intent disagree, and a migration cannot drop a table without naming it.
+
+### Verification
+
+```sh
+bun run --cwd packages/vault test src/share/subscription.test.ts
+bun run --cwd packages/client test src/replica/intents.contract.test.ts
+bun run --cwd packages/server test src/serve/share-subscription-peer.test.ts src/routes/replica-shape-parity.test.ts src/routes/grant-routes.test.ts
+bun run lint:journey-ledger
+grep -rn share_commons_ packages apps | grep -v /dist/
+```
+
+**Findings:** none new. **Doc debt:** none.
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "one UPDATE per moved row" is what `fieldUpdates` counts | moved TWO rows (asset width + content title) rather than one, and asserted `fieldUpdates === 2` and two woken rows | holds; a one-row edit would have made `fieldUpdates === 1` indistinguishable from a constant |
+| the `share_commons_` grep is empty apart from the migration | ran it unfiltered over `packages apps` | three files, not two: `migrate.test.ts` also names the four tables — in a must-NOT-exist list. Recorded rather than hidden; the re-worded clause is about readers, and an absence assertion reads nothing |
