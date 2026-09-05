@@ -17,11 +17,11 @@ const OWNER = "tests/perf/desktop-launch.perf.test.ts";
  * this lane as `nightly-evidence-desktop`, exactly the way the PWA waterfall
  * report reaches `pwa-waterfall.perf.test.ts`.
  *
- * `tests/perf/desktop-cold.perf.test.ts` stays: it is a continuous,
- * CI-runnable floor on the desktop main module graph. It is NOT a launch, its
- * own comment says so, and its 3,000 ms ceiling must never be transplanted
- * here — the two numbers measure different things and the honest gap between
- * them is the point of this file.
+ * There is no longer a continuous floor under the desktop main module graph:
+ * the import-cost rig that carried one was deleted under #927 as citing no
+ * journey ledger entry, so an import regression surfaces here or nowhere. An
+ * import-cost ceiling must never be transplanted into this file — it measures a
+ * module graph, this measures a launch.
  *
  * NO ABSOLUTE CEILING BY DESIGN. A cold Electron launch on a shared CI runner
  * has no distribution yet; the gate is the paired candidate/PR run (#927),

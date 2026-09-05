@@ -1731,7 +1731,6 @@ jobs:
             fi
           done
           rm -rf .gh-pages-quality
-      - run: sudo apt-get update && sudo apt-get install -y strace
       - run: bun run build
       - id: perf
         continue-on-error: true
