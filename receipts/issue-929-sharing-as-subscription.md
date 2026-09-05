@@ -1231,3 +1231,15 @@ bash .governance/run.sh
 | --- | --- | --- |
 | a fresh vault really stamps 4, rather than the doc being wrong in the other direction | read `PRAGMA user_version` off `openVaultDb()` and counted `VAULT_MIGRATIONS` | held: 4 and 4, which is what `migrate.test.ts:148` asserts |
 | 137 base tables is the count, not 138 by subtracting `core_share_origin` from the old 139 | counted `sqlite_master` two ways — strict FTS-shadow suffixes and a prefix match — both give 137 | held; the old 139 was two tables stale, not one, so subtracting would have shipped a wrong number |
+
+### PR #972 merge reconciliation
+
+The merge reconciliation completed the current placement surface in
+`packages/server/src/index.ts`,
+`packages/server/src/routes/placement-routes.test.ts`,
+`packages/server/src/routes/placement-routes.ts`,
+`packages/server/src/serve/share-access-receipts.ts`,
+`packages/server/src/serve/share-scope.ts`, and
+`packages/vault/src/share/placement-move.test.ts`. These paths are named here
+because this umbrella receipt is the branch's added receipt and the follow-up
+PR merge is the integration work that removed the obsolete edge/outbox rail.
