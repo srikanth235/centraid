@@ -2830,3 +2830,5 @@ Diff coverage on the E.4 SeatList land was 78.6% (the two screens and the `journ
 Wake help is the product's own re-probe, not a weakened assertion: the capture still requires the new note as `notes-row-first`. Classifying Gateway asleep as infrastructure would have been the shape `failure-class.mjs` forbids.
 
 The SeatList/driver test mocks are typed to the module they replace so `tsc --noEmit` on `@centraid/mobile` stays green.
+
+NotesHistory.test.tsx mocks `useNoteVersions` rather than `useReplicaQuery`, so the stub-tier burn-in never loads expo-network (which needs `__DEV__`).
