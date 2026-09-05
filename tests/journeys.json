@@ -46,6 +46,7 @@
     "first-bootstrap": "A new device from pairing to a fully mirrored replica.",
     "app-weight": "Not a journey — shipped bytes. Kept here so one ledger holds every ceiling.",
     "core-route": "Not a journey — the per-route p95 of the gateway's own core routes.",
+    "backup": "Not a journey — the wall clock of taking one snapshot of the vault.",
     "restore": "Not a journey — backup restore wall clock.",
     "integrity-check": "Not a journey — post-restore FK/integrity verification.",
     "footprint": "Not a journey — host memory reserved per mounted vault.",
@@ -121,7 +122,9 @@
       "volume": "none",
       "hardware": "dev-darwin-arm64",
       "spans": ["client.frame"],
-      "consumers": [],
+      "consumers": ["tests/agent-e2e-mobile/flows/scroll-frames.mjs"],
+      "_folded_into": "mobile/scroll/device-fixture/ci-ios-sim",
+      "_folded_why": "The frame-drop ceiling has ONE owner: the phone. Chromium exposes no per-frame drop counter to Playwright without a CDP trace, so a desktop number would be the trace's, not the shell's. `mobile/scroll` carries the bound and `scroll-frames.mjs` is the probe that reads it; this row stays so the grid has no hole and names that probe as its reader rather than pretending to one of its own.",
       "tolerancePercent": 20,
       "metrics": {
         "maxDroppedFramePercent": {
@@ -136,7 +139,7 @@
       "volume": "none",
       "hardware": "dev-darwin-arm64",
       "spans": ["replica.resume", "replica.apply"],
-      "consumers": [],
+      "consumers": ["apps/desktop/tests/e2e/fixtures.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "reconnectToFresh": {
@@ -179,7 +182,7 @@
       "volume": "none",
       "hardware": "ci-ios-sim",
       "spans": ["client.interaction"],
-      "consumers": [],
+      "consumers": ["tests/agent-e2e-mobile/flows/home-loads.mjs"],
       "tolerancePercent": 20,
       "metrics": {
         "tapToVisualResponse": {
@@ -266,7 +269,7 @@
           "status": "measured",
           "probe": "scripts/perf/app-weight.mjs --surface mobile (weighs dist/mobile-bundle-smoke/ios and .../android, both produced by the existing `bun run --cwd apps/mobile ci:bundle` in the ci.yml mobile-smoke job)",
           "maxTotalBytes": 12582912,
-          "maxLargestChunkBytes": 8220000,
+          "maxLargestChunkBytes": 6863614,
           "_provenance": {
             "at": "2026-07-31",
             "host": "darwin arm64, `bun run --cwd apps/mobile ci:bundle` (expo export, both platforms) in this worktree",
@@ -275,7 +278,7 @@
             "observedLargestChunkBytes": 6355198,
             "observedLargestChunk": "_expo/static/js/<platform>/index-*.hbc (Hermes bytecode)",
             "note": "MEASURED. One ceiling covers both platforms because they differ by 7,750 B (0.07%). The Hermes bundle is 55% of the weight and the @expo/vector-icons font set is most of the rest — MaterialCommunityIcons.ttf alone is 1.31 MB and is the largest single asset. Ceilings are the larger observed value + ~8% headroom.",
-            "headroom": "observed + 8%"
+            "headroom": "observed + 8% \u2014 6,355,198 * 1.08 = 6,863,614 for the largest chunk (the ceiling read ~29% until #927's close pass tightened it to the rule this note states); 8.4% on the total, which is 12 MiB exactly"
           }
         }
       }
@@ -1053,7 +1056,7 @@
       "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.replica.apply"],
-      "consumers": [],
+      "consumers": ["apps/web/tests/e2e/offline-reconnect.spec.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1070,7 +1073,7 @@
       "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.grant"],
-      "consumers": [],
+      "consumers": ["apps/web/tests/e2e/docs-grant.spec.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1087,7 +1090,7 @@
       "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.search"],
-      "consumers": [],
+      "consumers": ["apps/web/tests/e2e/offline-search.spec.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1104,7 +1107,7 @@
       "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.frame"],
-      "consumers": [],
+      "consumers": ["apps/web/tests/e2e/perf-waterfall.spec.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1121,7 +1124,7 @@
       "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.replica.bootstrap"],
-      "consumers": [],
+      "consumers": ["apps/web/tests/e2e/pwa-offline-journey.spec.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1138,7 +1141,7 @@
       "volume": "year3",
       "hardware": "ci-linux-x64-4c",
       "spans": ["web.replica.resume"],
-      "consumers": [],
+      "consumers": ["apps/web/tests/e2e/offline-reconnect.spec.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1155,7 +1158,7 @@
       "volume": "mock-gateway",
       "hardware": "dev-darwin-arm64",
       "spans": ["desktop.replica.apply"],
-      "consumers": [],
+      "consumers": ["apps/desktop/tests/e2e/fixtures.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1172,7 +1175,7 @@
       "volume": "mock-gateway",
       "hardware": "dev-darwin-arm64",
       "spans": ["desktop.grant"],
-      "consumers": [],
+      "consumers": ["apps/desktop/tests/e2e/household.spec.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1189,7 +1192,7 @@
       "volume": "mock-gateway",
       "hardware": "dev-darwin-arm64",
       "spans": ["desktop.search"],
-      "consumers": [],
+      "consumers": ["apps/desktop/tests/e2e/fixtures.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1206,7 +1209,7 @@
       "volume": "mock-gateway",
       "hardware": "dev-darwin-arm64",
       "spans": ["desktop.replica.bootstrap"],
-      "consumers": [],
+      "consumers": ["apps/desktop/tests/e2e/onboarding-home.spec.ts"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1223,7 +1226,7 @@
       "volume": "device-fixture",
       "hardware": "ci-ios-sim",
       "spans": ["native.replica.apply"],
-      "consumers": [],
+      "consumers": ["tests/agent-e2e-mobile/flows/pairing-canary.mjs"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1240,7 +1243,9 @@
       "volume": "device-fixture",
       "hardware": "ci-ios-sim",
       "spans": ["native.grant"],
-      "consumers": [],
+      "consumers": ["tests/agent-e2e-mobile/flows/sharing-reach.mjs"],
+      "_folded_into": "mobile/share/shared-album/ci-ios-sim",
+      "_folded_why": "Superseded by `mobile/share/shared-album/ci-ios-sim`, which states the same journey at the volume its measured gateway twin uses. `device-fixture` is the generic phone seed and says nothing about how much is shared; both rows name the same probe.",
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1257,7 +1262,7 @@
       "volume": "device-fixture",
       "hardware": "ci-ios-sim",
       "spans": ["native.search"],
-      "consumers": [],
+      "consumers": ["tests/agent-e2e-mobile/flows/photos-search.mjs"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1274,7 +1279,7 @@
       "volume": "device-fixture",
       "hardware": "ci-ios-sim",
       "spans": ["native.replica.bootstrap"],
-      "consumers": [],
+      "consumers": ["tests/agent-e2e-mobile/flows/pairing-canary.mjs"],
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1291,7 +1296,9 @@
       "volume": "none",
       "hardware": "ci-linux-x64-4c",
       "spans": ["gateway.request"],
-      "consumers": [],
+      "consumers": ["tests/perf/gateway-request.perf.test.ts"],
+      "_folded_into": "gateway/warm-switch/year3/ci-linux-x64-4c",
+      "_folded_why": "Scrolling is a client journey; the gateway's only half of it is the paged read, and `gateway/warm-switch` already fences that with `requestToFirstByte` measured by the same rig named here. A second ceiling over the same statement would be two numbers for one fact.",
       "tolerancePercent": 20,
       "metrics": {
         "elapsed": {
@@ -1340,6 +1347,54 @@
           "probe": "NONE TODAY — packages/server/src/serve/share-subscription-peer.test.ts proves the six subject types travel the peer plane, and times nothing",
           "_intendedCeilingMs": null,
           "_reason": "A cross-gateway share needs two gateway processes and a real tunnel. On this container the peer plane is a loopback dial inside one process, so a number taken here would measure the harness rather than the transport, and a fabricated one is worse than an admitted hole. The metric is declared so the gap is visible; the rig it needs is two data dirs and a tunnel."
+        }
+      }
+    },
+    "gateway/backup/year3/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "backup",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["backup.snapshot"],
+      "consumers": ["tests/perf/backup-restore.perf.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "snapshotToDurable": {
+          "status": "measured",
+          "probe": "tests/perf/backup-restore.perf.test.ts \u2014 createSnapshot over the golden year-3 vault into a LocalBackupProvider",
+          "ceilingMs": 3200,
+          "_provenance": {
+            "at": "2026-09-05",
+            "host": "linux x64 development container, 4 cores / 15 GB, shared with sibling agents",
+            "observedMs": 1056.3,
+            "observedSpreadMs": "998.7 / 1050.2 / 1056.3 over three consecutive runs",
+            "note": "MEASURED. The golden year-3 vault is 105,603,072 B of vault.db (the ROW axis; tests/scale/restore-10gib.scale.test.ts keeps the 10 GiB BYTE axis under `year3-10gib`). Successor to four rigs the #927 rig diet deleted for citing no ledger entry. The work-counter delta over both calls is ZERO and that zero is the real gate \u2014 neither path opens the vault through the instrumented statement layer, so a backup that started reading rows to decide what to copy fails on the first run.",
+            "headroom": "~3x slowest observed (three samples, single contended host)"
+          }
+        }
+      }
+    },
+    "gateway/restore/year3/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "restore",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["backup.restore"],
+      "consumers": ["tests/perf/backup-restore.perf.test.ts"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "snapshotToUsableVault": {
+          "status": "measured",
+          "probe": "tests/perf/backup-restore.perf.test.ts \u2014 restoreSnapshot of that snapshot into a fresh directory, integrity pragmas included",
+          "ceilingMs": 5200,
+          "_provenance": {
+            "at": "2026-09-05",
+            "host": "linux x64 development container, 4 cores / 15 GB, shared with sibling agents",
+            "observedMs": 1712.3,
+            "observedSpreadMs": "1640.4 / 1678.7 / 1712.3 over three consecutive runs",
+            "note": "MEASURED, at the ROW axis. `gateway/restore/year3-10gib/dev-darwin-arm64` is the BYTE axis and is not superseded: the two fence different terms \u2014 that one the copy, this one the per-row integrity work a year-3 shaped file pays. Restore costs ~1.6x its own backup here.",
+            "headroom": "~3x slowest observed (three samples, single contended host)"
+          }
         }
       }
     },
