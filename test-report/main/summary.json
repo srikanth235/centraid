@@ -8,15 +8,15 @@
     "passed": 0,
     "failed": 0,
     "degraded": 0,
-    "noEvidence": 50,
+    "noEvidence": 54,
     "newRed": 0,
     "newGreen": 0,
     "previousVerdict": null
   },
   "parks": [],
   "candidate": null,
-  "generatedAt": "2026-09-04T10:17:52.814Z",
-  "label": "2026-09-04",
+  "generatedAt": "2026-09-05T03:17:21.367Z",
+  "label": "2026-09-05",
   "validationErrorCount": 0,
   "lanes": {
     "companion-static": {
@@ -204,6 +204,22 @@
       "durationMs": null
     },
     "backup-interop": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "device-rung-android": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "device-rung-gate": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "device-rung-gateway-pi": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "device-rung-ios": {
       "verdict": "no-evidence",
       "durationMs": null
     },
