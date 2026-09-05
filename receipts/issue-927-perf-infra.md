@@ -1531,3 +1531,33 @@ Tree hash: quoted in the lane report to the root (a tree hash cannot be written 
 | --- | --- | --- |
 | "§ Performance names the ledger as the gate" is now true of the tree, not of a plan | `grep -n "tests/journeys.json" docs/decisions.md` inside the § Performance paragraph, and re-read for any surviving "when it lands" | present tense, one link to `../tests/journeys.json`; no future tense left in the paragraph |
 | Box 6 is genuinely unmet — the receipt's own w2 section claims the perf cache was deleted | `grep -rn "actions/cache" .github/workflows/*.yml` and then `grep -rn "soak-weekly-" .github scripts` for a restore | one `save` at `soak-weekly.yml:138` over `artifacts/scale/`, zero restores anywhere — the box fails and the cache is dead |
+
+## Close pass — budget tightening (all four umbrellas)
+
+The close pass owes one tighten-only pass over [`tests/journeys.json`](../tests/journeys.json) per umbrella, where a landed win left a ceiling above what the tree now measures. **Nothing was tightened, and the reason is the same for all four**: every `measured` ceiling in the ledger was set by the wave that measured it and carries its own argued headroom in `_provenance.headroom`, so there is no entry sitting at a pre-win value. Tightening one further would mean either contradicting a rationale someone wrote beside the number, or inventing a number this pass did not measure — and this pass ran no rig.
+
+| Umbrella | Entries a landed win could have loosened | Outcome |
+| --- | --- | --- |
+| #927 | `client/first-paint-work/year3/any` (four screens) | already `headroom: "NONE, deliberately"` — observed IS the ceiling on all four; nothing to take |
+| #927 | `gateway/read-cost/year3/ci-linux-x64-4c` | `auditBandPerRead` observed + ~25% (the receipt size moves in steps when a purpose is renamed, not continuously); `walBytesPerRead` observed + ~41%, sized to one SQLite page cluster. Both headrooms are the argument, not slack |
+| #922 | `gateway/own-echo/seeded-demo/…-standard` and `…-constrained`, `gateway/first-bootstrap/year3-replica/…` | `~3x observed` and `~4.6x observed`, both stamped "single host". A single-host ceiling tightened toward its own observation is a CI flake, which is why the wave stated the multiple rather than the observation |
+| #922 | `web/cold-open/year3/ci-linux-x64-4c` LCP | ceiling 1,200 ms against observed 484 / 516 / 524 ms — the widest gap in the file, and deliberately carried across unchanged when #927 W4 re-keyed the entry from `seeded-demo` to `year3`. Tightening it needs a run of `apps/web/tests/e2e/perf-waterfall.spec.ts`, which this pass did not do |
+| #928 | none | no #928 win has a ledger entry; its numbers are work counters and statement counts |
+| #929 | `gateway/share/shared-album/ci-linux-x64-4c` | `grantToVisible` is the only measured metric and its cross-gateway sibling is still `unmeasured`; a ceiling tightened on the co-hosted half alone would fence the wrong journey |
+
+**Finding, for the root rather than for this commit.** `mobile/app-weight/build-artifact/any` states `headroom: "observed + 8%"`, and `maxTotalBytes` (12,582,912 against 11,604,148 observed) matches it — but `maxLargestChunkBytes` is **8,220,000 against 6,355,198 observed, ~29%**, where the sibling `web/app-weight` entry states "largest chunk + ~10%". Either the mobile chunk ceiling should come down to ~7.0 MB or its `headroom` string should say why the Hermes bundle needs three times the web seat's slack. Not taken here: the consumer is `scripts/perf/app-weight.mjs` over a release-configuration Expo export, which this container cannot produce, and a tightening nobody ran is exactly the change this section refuses on every other row.
+
+### Verification
+
+```sh
+bun run lint:journey-ledger    # ok — every entry names its volume, hardware, spans and consumers
+bun run test:ratchet           # ratchet-floors: ok (no decreases vs origin/main)
+node -e 'const j=require("./tests/journeys.json");for(const[k,v]of Object.entries(j.entries)){if(v&&v.metrics)for(const[m,x]of Object.entries(v.metrics))if(x._provenance&&x._provenance.headroom)console.log(k,m,x._provenance.headroom)}'
+```
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "Every measured ceiling already carries an argued headroom" — a claim about all 60 entries, made after reading a handful | enumerated `_provenance.headroom` across the whole file and read the ones that had none | every `measured` metric either states a headroom or states `NONE, deliberately`; the only mismatch between a stated headroom and its own numbers is the mobile largest-chunk row above, which is why it is a finding rather than a silent tightening |
+| `lint:journey-ledger` passing means every entry names a consumer, which would contradict this pass's #927 box-4 verdict | ran it, then re-read `scripts/lint-journey-ledger.mjs` against the 18 entries with `consumers: []` | the linter accepts an empty array as "named"; it fences the KEY and the retired-file references, not the readership. The box-4 verdict stands, and the gate is not the thing that would have caught it |
