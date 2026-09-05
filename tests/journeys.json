@@ -1790,6 +1790,11 @@
       "_noBudgetMs": "Deliberate. The rig measures the client-side resume interval against `reconnectToFresh.ceilingMs` in tests/experience-budgets/mobile.json; setup and fixture construction are not the user-facing interval, and the 30-sample/1.5x drift gate tracks that interval once nightly history exists.",
       "entries": ["mobile/converge/year3-replica/ci-linux-x64-4c"]
     },
+    "tests/scale/mobile-screen-reads.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: two mounted mobile vaults with 5,000 people and 5,000 agenda rows per vault, validating full-window screen reads and constant statement count",
+      "entries": []
+    },
     "tests/scale/replica-bootstrap.scale.test.ts": {
       "lane": "scale",
       "volume": "50,000 rows — client windowed bootstrap with an in-flight deletion, plus the gateway windowed-page walk resumed across a vault-plane restart (#750)",

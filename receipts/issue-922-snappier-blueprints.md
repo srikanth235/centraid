@@ -2520,3 +2520,11 @@ bash .governance/run.sh                                 # 22/22
 `apps/mobile/src/apps/tally/ActivityView.test.tsx` draws one expense and one settlement through `SeatList`, so the day-heading flatten and both row kinds are covered. `nativeLinkTicketDoor` in `grant-seat.test.ts` covers the mint / refuse / missing-vault branches the diff-coverage floor named.
 
 The `mintLinkTicket` mock uses `as never`, matching the gateway mock in the same file, so `tsc --noEmit` accepts the factory.
+
+## CI-green — reconcile the PR with current main
+
+The merge onto `origin/main` carried three repository-gate repairs: the spent `same-owner-placement` flow-renaming marker was removed because its predecessor is already absent from main, the new `mobile-screen-reads` scale rig was registered in `tests/journeys.json`, and the eight product-grammar baselines were refreshed from the PR's intentional pending-write UI states. The minimum-test floor remains 4; no threshold or budget was lowered.
+
+#928 re-pins classification fingerprints after the authority-plane migration changed the governed manifest and claim statements, and after merging current main's ledger updates; thresholds and classifications are unchanged.
+
+The minted-id commands introduced by this PR are now represented in the Commons routing registry for every new addressable key, and the schedule contract expectation includes its minted-id precondition. `packages/vault/src/share/commons-routing.test.ts` and the affected gateway contract pass against the merged tree.
