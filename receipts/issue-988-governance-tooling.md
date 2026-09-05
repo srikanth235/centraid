@@ -11,7 +11,7 @@ Lane: governance tooling. Branch `claude/988-governance-tooling`, one commit per
 - [x] False positives: check:ui-receipt no longer fires on a file that is on no import edge
 - [x] False positives: lint:product tolerates a spent one-shot marker
 - [x] Shared build cache across worktrees, measured
-- [ ] docs/multi-agent.md, docs/dev-environment.md and docs/toolchain.md state the model
+- [x] docs/multi-agent.md, docs/dev-environment.md and docs/toolchain.md state the model
 - [ ] `.governance/run.sh` green; every existing receipt still passes `receipt-per-issue`
 
 ## What changed
@@ -140,6 +140,14 @@ interactive run should have nothing between it and its TTY.
 | Same build in a **fresh worktree** with no `.turbo` of its own | **0.48 s** wall, 13/13 restored (turbo 381 ms, FULL TURBO) | same container, `git worktree add --detach /tmp/988-cache-probe HEAD && bun install --frozen-lockfile && time bun run build`; worktree deleted after |
 | Stamp key computation | 56 ms | same container, `stampKey()` over this tree |
 | `bun run governance`, cold | 1 m 12.3 s | same container, `time bun run governance </dev/null` |
+
+**Box 6 — docs.**
+
+| File | Change |
+| --- | --- |
+| `docs/multi-agent.md` | ONE new bullet at the end of § Root-agent orchestration, so the sibling lane on `claude/close-docs` merges cleanly. Nothing else in the file |
+| `docs/dev-environment.md` | Rung-1 row names the tier by destination; new § "Tiers, stamps, and one cache (#988)" beside the gate loop, stating that CI runs the full tier for every branch |
+| `docs/toolchain.md` | `check:push`, `check:push:static` and `governance` join the stable command API; new § "Where the caches live" names both directories and their overrides |
 
 ## Out of scope
 

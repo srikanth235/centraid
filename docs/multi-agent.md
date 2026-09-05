@@ -11,6 +11,7 @@ An umbrella issue is worked by one **root agent** that owns the plan; sub-agents
 - **Sub-agents get the slice contract, not the whole plan**: goal, in-scope/out-of-scope files, the invariants they must not break, and the verification evidence the receipt needs. They report results; they do not re-plan.
 - **The root integrates.** After each slice lands, the root re-checks the seams — cross-slice links, anchors, contracts, and tests spanning slices — before dispatching dependents. Correctness failures live at the seams, and only the root sees them.
 - The worker/verifier split, isolation defaults, and iteration caps below apply to every sub-agent.
+- **Gate stamps, tiered push check and per-lane receipt files: [#988](https://github.com/srikanth235/centraid/issues/988).** Parallel lanes re-pay the same tree-determined gates and the same cold build in every worktree. The static tier is stamped by (working tree, `origin/main`) and skipped when it matches, a push off `main` runs the static tier only, and every worktree shares one turbo cache — see [dev-environment.md](dev-environment.md#the-local-gate-loop). One receipt per issue still means one FILE per issue; the directory shape needs a change to a digest-locked vendored directive.
 
 ### A slice exits on its lanes' gates, not on its own files
 
