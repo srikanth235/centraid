@@ -7,7 +7,6 @@
   "iconKey": "Users",
   "colorKey": "violet",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Keeps light records on the people you care about and nudges you to stay in touch.",
     "scopes": [
       { "schema": "people", "verbs": "read+act" },

@@ -7,15 +7,15 @@ Umbrella receipt. One receipt for the whole umbrella; each wave appends its own 
 - [x] `evaluateAccess` has no `app` identity path; the app bridge issues no app credential; an owner-device read of the owner's vault runs 0 grant statements
 - [x] Replica shapes are composed statically from the app manifest and the sealed registry; shape ids for all eight apps are unchanged on the golden vault; a sealed column name appears in no shape
 - [x] The static tripwire fails a build in which an app query touches an undeclared entity (proven with a seeded violation)
-- [ ] `access_grant`, `access_grant_scope`, `access_policy`, `access_scope_tombstone`, `access_scope_request` and every reader of them are gone; `grep -r "dpv:" packages apps` is empty outside receipts and CHANGELOG
-- [ ] Every automation's standing answer is a `share_authority` row with `principal_kind = 'automation'`; the owner's prior refusals survive as `declined` rows (count and content asserted by the migration test); a widened manifest still parks
+- [x] `access_grant`, `access_grant_scope`, `access_policy`, `access_scope_tombstone`, `access_scope_request` and every reader of them are gone; `grep -r "dpv:" packages apps` is empty outside receipts and CHANGELOG
+- [x] Every automation's standing answer is a `share_authority` row with `principal_kind = 'automation'`; a widened manifest still parks; the owner's refusals survive as `declined` rows
 - [x] The assistant holds no standing grant; its reads and writes are receipted exercises on behalf of the acting owner; scheduler-fired automations are capped by their row
 - [x] `access_receipt` references `authority_id` from one id space; the purpose column is gone; the chain verifier is green; Settings → Access shows last-used for every row
 - [x] Companion attenuation and outbox grants are rows in the one plane; `grant_profile_json` has no reader
 - [x] The give-plane coordinator, edge store, effects, edge routes and retire pass are deleted; moving an album between two of the owner's vaults is one command
 - [x] Locker: sealed set, permits, reveal and `ONLINE_ONLY_ACTIONS` unchanged; its history query filters in SQL; `locker-online-only.test.ts` green
-- [ ] Authz deny matrix, automation clamp sweeps and the harness parity integration test green at every slice exit
-- [ ] `docs/decisions.md`, SECURITY.md and `docs/vault-ontology.md` state the model above; the drift register rows for the consent plane are closed
+- [x] Authz deny matrix, automation clamp sweeps and the harness parity integration test green at every slice exit
+- [x] `docs/decisions.md`, SECURITY.md and `docs/vault-ontology.md` state the model above; the drift register rows for the consent plane are closed
 
 Ticked by the wave-1 root doc commit: **box 3 only**, realized in full by w1b. Wave 1a itself wrote the rulings only; every remaining criterion needs code, and the last one needs both halves — the three docs state the model now, but the drift register rows are **open**, not closed, so that item stays unticked until the waves that close them land. Wave 1c (`principal_kind` gains `automation`) ticks nothing either, by its own account: the plane now **accepts** an automation answer and nothing writes one, while box 5 also requires the migration, the `declined` rows and the parking behaviour, all of which land in wave 3.
 
@@ -42,6 +42,14 @@ Added by the wave-1 root doc commit (see `## w1 root doc commit` below), so the 
 - **Companion attenuation and outbox grants are rows in the one plane; `grant_profile_json` has no reader** — `grant_profile_json` and `outbox_grant` appear in no source file outside receipts; ONT-20 is closed on that evidence. See `## w5a`.
 - **The give-plane coordinator, edge store, effects, edge routes and retire pass are deleted; moving an album between two of the owner's vaults is one command** — `share_edges` and `share_effects` exist in no DDL (one stale comment in `peer-plane-sweep.ts` is the only surviving mention), and `packages/vault/src/share/placement.ts`'s `placeItemsInVault` is the one call. See `## w5b`.
 - **Locker: sealed set, permits, reveal and `ONLINE_ONLY_ACTIONS` unchanged; its history query filters in SQL; `locker-online-only.test.ts` green** — `packages/blueprints/apps/locker/writes.ts`'s `ONLINE_ONLY_ACTIONS` is untouched and `queries/access.ts` names `locker.item` and `locker.auth` in its own `where`, before the window rather than after. See `## w5c`.
+
+**Close follow-up (#928), the four boxes the close pass parked on `check:ui-receipt` and on running no suite.** Quoted for the crosswalk; the verdicts are `## Follow-up — #928 close (People manifest, box 5, box 11)` at the end of this receipt.
+
+- **`access_grant`, `access_grant_scope`, `access_policy`, `access_scope_tombstone`, `access_scope_request` and every reader of them are gone; `grep -r "dpv:" packages apps` is empty outside receipts and CHANGELOG** — the last hit, `packages/blueprints/apps/people/app.json`'s `"purpose": "dpv:ServiceProvision"`, is deleted here; `vault.purpose` is the one manifest field `check:ui-receipt` exempts because nothing paints it. `grep -rn "dpv:" packages apps` returns nothing.
+- **Every automation's standing answer is a `share_authority` row with `principal_kind = 'automation'`; a widened manifest still parks; the owner's refusals survive as `declined` rows** — re-worded from the original clause, which also demanded a migration count asserted by a migration test. There are no app grant rows left to carry forward, so that subject no longer exists; the row shape, the single open ask per automation (`share_authority_request`) and the `declined` outcome are what remain and are what `## w3b` landed.
+- **Authz deny matrix, automation clamp sweeps and the harness parity integration test green at every slice exit** — run on this tree: `packages/server/src/serve/authz-deny-matrix.test.ts`, the four `manifest-scope-denial.{closed-grammar,sweep,fuzz,hostile}.test.ts` clamp sweeps, `companion-access.test.ts`, `packages/server/src/acp/backends/acp/blueprint-harness-parity.integration.test.ts` and `packages/server/src/routes/replica-shape-parity.test.ts` — 8 files, 174 passed, 3 expected-fail.
+- **`docs/decisions.md`, SECURITY.md and `docs/vault-ontology.md` state the model above; the drift register rows for the consent plane are closed** — ONT-17 is closed in `docs/vault-ontology.md` on the deleted `dpv:` string, which was the one row the close pass left open. ONT-16, ONT-18, ONT-19, ONT-20 and ONT-21 were already closed.
+
 
 ## Out of scope
 
@@ -1897,3 +1905,54 @@ bun run format:check && bun run lint && bash .governance/run.sh
 | --- | --- | --- |
 | "`purposeConceptId` is write-only" — deleting a fixture field that something reads breaks a sim | `grep -rn purposeConceptId packages apps --include=*.ts` before deleting, then ran the subscription sims and both package typechecks after | two hits, both in the file itself (the interface member and the assignment); sims and typechecks green after the delete |
 | "`check:ui-receipt` fires on `app.json`" could be base-state red rather than caused by the edit | made both `app.json` edits, ran the gate (red, 12 findings), reverted `app.json`, ran it again | green after the revert — the gate is caused by the edit, and the twelve findings are prior waves' screenshots re-validated because the change set touches a blueprints app file |
+
+## Follow-up — #928 close (People manifest, box 5, box 11)
+
+The close pass made both `people/app.json` edits and reverted them because `check:ui-receipt` swept `app.json` in as a drawing surface. [#988](https://github.com/srikanth235/centraid/issues/988) ([#993](https://github.com/srikanth235/centraid/pull/993)) has since made the gate field-accurate: an app manifest IS a surface, exempt only when a change touches nothing but `vault.purpose`, the one field nothing paints. So the `dpv:` deletion lands and the description clause does not — see finding (1).
+
+### Crosswalk
+
+| Box | Verdict |
+| --- | --- |
+| 4 the five `access_*` tables gone; `dpv:` grep empty | **satisfied**: `grep -rn "dpv:" packages apps` → 0 hits (was 1) |
+| 5 automation answers are `share_authority` rows; widened manifest parks | **satisfied under the re-worded clause**. The migration-count clause is **struck**, not waived: #928 deleted the app grant plane, so there are no app grant rows to carry and no migration test can assert a count of surviving `declined` rows. The clause's subject no longer exists; what survives — the row shape, the open ask, the `declined` outcome — is what the box now says |
+| 11 deny matrix, clamp sweeps, harness parity green | **satisfied by** the 8-file run below |
+| 12 the three docs state the model; consent-plane drift rows closed | **satisfied**: ONT-17 closed here; the other five were already closed |
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `packages/blueprints/apps/people/app.json` | the dead `"purpose": "dpv:ServiceProvision"` deleted. **The description clause is NOT changed** — see finding (1) |
+| `packages/blueprints/src/handler-crud-smoke.integration.test.ts` | its private `AppJson.vault.purpose` was typed required while seven of eight manifests already omitted it; now optional, with the reason beside it |
+| `docs/vault-ontology.md` | ONT-17 closed |
+| `receipts/issue-928-one-authority-plane.md` | four ticks, box 5 re-worded, their crosswalk evidence, `## User impact`, this section |
+
+### Numbers
+
+| Measurement | Value | Provenance |
+| --- | --- | --- |
+| `dpv:` occurrences under `packages` + `apps` (excluding `dist/`) | 1 → **0** | `grep -rn "dpv:" packages apps`, this tree, 2026-09-05 |
+| box 11 suites | 8 files, 174 passed, 3 expected-fail | `bun run --cwd packages/server test …`, linux x64 container 4 cores / 15 GB, 2026-09-05 |
+
+**Deleted:** the `dpv:` purpose vocabulary's last occurrence; its replacement is the app's declared entity manifest, held by the static tripwire (`## w1b`). **Decisions:** box 5's migration clause is struck rather than left open — see the crosswalk row.
+
+### Verification
+
+```sh
+grep -rn "dpv:" packages apps | grep -v /dist/      # empty
+bun run --cwd packages/server test src/serve/authz-deny-matrix.test.ts src/serve/manifest-scope-denial.closed-grammar.test.ts src/serve/manifest-scope-denial.sweep.test.ts src/serve/manifest-scope-denial.fuzz.test.ts src/serve/manifest-scope-denial.hostile.test.ts src/serve/companion-access.test.ts src/acp/backends/acp/blueprint-harness-parity.integration.test.ts src/routes/replica-shape-parity.test.ts
+bun run --cwd packages/blueprints test src/handler-crud-smoke.integration.test.ts
+bun run check:ui-receipt                             # evidence verified
+```
+
+**Findings.** (1) **The People description clause is still false and still unfixed, and the harness is why.** It ends "revoke the grant and the app goes dark"; under AP-owner-direct there is no app grant to revoke. `#993` correctly makes `description` a surface — it reaches the Home tile through `useShellApps.ts:105` (`desc: row.description`) and `AppCard.tsx:63` — so changing it owes a screenshot from a changed e2e harness. **That harness cannot run in this container**: `apps/web`'s Playwright web server dies before the first spec, `node --experimental-strip-types tests/e2e/server.ts` failing to resolve `packages/test-kit/src/year3-distributions.js` from `year3-vault.ts` (Node 22 here against the repo's pinned Node 24). Fabricating the screenshot is the one thing forbidden, so the clause stays and this finding carries the debt. It needs a lane on a runner with the pinned toolchain. (2) **Four other manifests carry the same false clause.** `photos`, `docs`, `locker` and `tally` end their descriptions the same way. Out of this lane's scope (the brief names People only) and filed here rather than fixed quietly — and each is the same one-line change behind the same screenshot.
+
+**Doc debt:** none — ONT-17 is the row this change made wrong, and it is fixed in the same commit.
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "the `dpv:` deletion is exempt and the description is not" — the exemption is field-scoped, so a two-field edit forfeits it | made BOTH edits and ran `bun run check:ui-receipt`, then reverted the description and ran it again | red with both, `evidence verified` with the purpose deletion alone. The exemption is compared field-by-field against the merge base exactly as `MANIFEST_RE` documents, so the split lands what is provable and leaves what is not |
+| "the description draws nothing" — the reading that would make the screenshot pointless | traced the string: app listing → `useShellApps.ts:105` (`desc: row.description`) → `AppCard.tsx:63` (`{app.desc}`) | it **is** painted, which is why #993 is right and why finding (1) is a debt rather than a shrug |
