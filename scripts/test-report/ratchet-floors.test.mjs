@@ -115,6 +115,66 @@ describe("diffMinimumTests", () => {
     expect(diffMinimumTests(base, head)).toEqual([]);
   });
 
+  // #988 — a marker that already landed is not a claim about THIS diff.
+  test("tolerates a spent rename marker carried on the base", () => {
+    const spentFlow = {
+      id: "new-name",
+      surface: "runtime",
+      dimension: "compat",
+      tier: "unit",
+      minimumTests: 10,
+      replacesMinimumTestsFlow: "old-name",
+      approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+    };
+    // `old-name` is gone from both sides: the rename landed several PRs ago.
+    expect(
+      diffMinimumTests({ flows: [spentFlow] }, { flows: [spentFlow] })
+    ).toEqual([]);
+  });
+
+  test("refuses a rename marker this diff introduces against an unknown predecessor", () => {
+    const base = { flows: [{ id: "new-name", minimumTests: 10 }] };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          minimumTests: 10,
+          replacesMinimumTestsFlow: "never-existed",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head).join("")).toMatch(
+      /names unknown predecessor "never-existed"/u
+    );
+  });
+
+  test("refuses re-spending a marker the base already carries", () => {
+    const spentFlow = {
+      id: "new-name",
+      surface: "runtime",
+      dimension: "compat",
+      tier: "unit",
+      minimumTests: 10,
+      replacesMinimumTestsFlow: "old-name",
+      approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+    };
+    const base = { flows: [spentFlow, { id: "other", minimumTests: 4 }] };
+    const head = {
+      flows: [
+        spentFlow,
+        // A second flow reaches for the same, already-spent predecessor.
+        {
+          id: "other",
+          minimumTests: 4,
+          replacesMinimumTestsFlow: "old-name",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head).join("\n")).toMatch(
+      /multiple replacements|unknown predecessor "old-name"/u
+    );
+  });
+
   test("allows an explicitly approved ID rename without lowering the cell floor", () => {
     const base = {
       flows: [

@@ -8,8 +8,8 @@ Lane: governance tooling. Branch `claude/988-governance-tooling`, one commit per
 - [x] Gate stamps keyed by tree hash for the static tier, outside the repo, never read by CI
 - [x] Tiered push check by branch: static tier off `main`, full tier on `main`
 - [ ] False positives: agent-session-identity date row
-- [ ] False positives: check:ui-receipt surface predicate keyed on imports
-- [ ] False positives: lint:product tolerates a spent one-shot marker
+- [x] False positives: check:ui-receipt no longer fires on a file that is on no import edge
+- [x] False positives: lint:product tolerates a spent one-shot marker
 - [ ] Shared build cache across worktrees, measured
 - [ ] docs/multi-agent.md, docs/dev-environment.md and docs/toolchain.md state the model
 - [ ] `.governance/run.sh` green; every existing receipt still passes `receipt-per-issue`
@@ -78,6 +78,46 @@ is the last moment before the trunk moves. `SKIP_CHECK_PR=1`, `SKIP_GOVERNANCE=1
 are untouched, and `CENTRAID_PUSH_TIER=full` only ever widens — there is no value that narrows the
 `main` tier.
 
+**Box 4 — false positives. (a) not done, (b) partly, (c) done.**
+
+| File | Change |
+| --- | --- |
+| `scripts/validate-ui-receipt.mjs` | `isSurface` exported; a changed file on no import edge (`.json`, `.md`, `.yml`, `.txt`, `.lock`, `.snap`) is not a surface |
+| `scripts/validate-ui-receipt.test.mjs` | `people/app.json`, a README and `packages/client/src/replica/ReplicaProvider.tsx` demand nothing; `app-root.tsx` and `Chrome.module.css` beside them still do |
+| `scripts/test-report/ratchet-floors.mjs` | A `replacesMinimumTestsFlow` the base already carries is SPENT; the shape checks run only over a marker the diff introduced or moved |
+| `scripts/test-report/ratchet-floors.test.mjs` | Spent marker tolerated; a newly introduced unknown predecessor and a re-spend both still refused |
+
+**(a) `agent-session-identity` writing a new dated row: NOT DONE.** `session_upsert` in
+`.governance/packs/governance-kit/audit/directives/agent-session-identity/lib/receipt.sh` replaces
+the row whose (harness, session) pair matches and rewrites only its date — which is exactly what
+breaks `doc-integrity`'s byte-prefix rule when the receipt is already on the trunk. The fix is one
+`awk` branch, and it is inside the same digest-locked pack as box 1. `SESSION_MAX_AGE_HOURS` is the
+directive's only tunable knob.
+
+**(b) the surface predicate: the manifest half landed, the import-keyed rewrite did not.** The live
+false positive is the one the close-docs lane hit: two strings in
+`packages/blueprints/apps/people/app.json` demanded `## User impact`, a `First-run:` note and a
+screenshot from a changed e2e harness, and then re-validated every screenshot every receipt in the
+change set named. A manifest is on no import edge and paints nothing, so it is no longer a surface.
+Deleting `CLIENT_NOT_A_SURFACE` in favour of a predicate that reads imports was measured and
+refused: `packages/client/src/{home-copy,icons,theme-vars,status-channel}.ts`,
+`replica/rebootstrap-copy.ts` and `gateway-client-edges.ts` are surfaces because of the member copy
+they DEFINE and they import nothing at all, so an import-keyed predicate drops all six unless they
+come back as a hand list — the allowlist the file's own header says is how a gate stops enforcing.
+And imports cannot separate the two files the current cases pin apart:
+`react/blueprints/centraid-inline.ts` (must demand) and `react/blueprints/inlineQueryCtx.ts` (must
+not) both import `truncatedListNotice` from `@centraid/blueprints/apps/_shared/shared-copy`. The
+brief's own example is already green: `packages/client/src/replica/ReplicaProvider.tsx` is excluded
+by the `replica/` pattern today, and the new case pins that it stays excluded.
+
+**(c) the spent one-shot marker.** `tests/claims.json` carries no `replacesMinimumTestsFlow` today —
+#930 removed the one #916 spent, and the note at `tests/claims.json:3865` records why. What was left
+was the trap that made removing it necessary: a marker still on `main` compares base-to-head with
+the predecessor absent from both sides, so `diffMinimumTests` reported `names unknown predecessor`
+on every later branch, red on a tree nobody had touched. A marker the base already carries verbatim
+is now spent and its shape checks are skipped; a marker introduced or moved in the diff, and a
+second flow re-spending one, are refused exactly as before.
+
 ## Out of scope
 
 - Editing anything under `.governance/packs/**` or `.governance/run.sh` (digest-locked).
@@ -92,6 +132,13 @@ are untouched, and `CENTRAID_PUSH_TIER=full` only ever widens — there is no va
   stop on a box that cannot be met without weakening a check.
 
 ## Verification
+
+```sh
+# Box 4 — the false positives, both directions:
+node --test scripts/validate-ui-receipt.test.mjs
+bun run test:ratchet:unit
+grep -c replacesMinimumTestsFlow tests/claims.json   # 0 — no spent marker remains
+```
 
 ```sh
 # Box 3 — the tier is chosen by the ref being pushed:
