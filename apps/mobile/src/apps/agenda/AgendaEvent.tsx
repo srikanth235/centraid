@@ -11,7 +11,10 @@
 import React, { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
-import { readPendingOverlay } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  pendingSidecarOf,
+  readPendingOverlay,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
@@ -89,8 +92,10 @@ export default function AgendaEvent({
 
   const writable = rowCanWrite(canonical);
 
+  const canonicalRow = (canonical ?? {}) as unknown as Record<string, unknown>;
   const pending = readPendingOverlay(
-    (canonical ?? {}) as unknown as Record<string, unknown>
+    canonicalRow,
+    pendingSidecarOf(canonicalRow)
   );
   const heldCancel =
     pending?.action === "cancel-event" &&

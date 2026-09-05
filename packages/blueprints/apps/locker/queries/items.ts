@@ -3,6 +3,14 @@
  * favorite/tag/subtitle/Watchtower. Secrets are SEALED columns (#293):
  * weak/reused + last4 come from `locker.watchtower`, derived INSIDE the
  * sealed boundary; secrets NEVER ride this payload.
+ *
+ * THE WINDOW IS AUTHORISED BY THE APP GRANT ALONE (#928). Listing an item is
+ * not unlocking it: authentication gates permits and `reveal`, and this query
+ * takes neither. So it reaches for no online verb it cannot do without, and a
+ * seat holding a replica runs it against its own rows — the phone included
+ * (`apps/mobile/src/apps/locker/locker-reads.ts`). The Watchtower and count
+ * decorations are marked `optional`, so a seat that cannot reach them answers
+ * undecorated rather than refusing the list.
  */
 
 import {
@@ -79,8 +87,13 @@ interface DecoratedItem {
   subtitle: string;
   favorite: boolean;
   tags: string[];
-  weak: boolean;
-  reused: boolean;
+  /**
+   * ABSENT, not false, when the Watchtower derivation did not run: "checked
+   * and found nothing" and "not asked" are different sentences, and
+   * `review-model.servedFields` reads exactly this difference off the row.
+   */
+  weak?: boolean;
+  reused?: boolean;
   compromised: boolean;
   severity: string;
   /**
@@ -125,24 +138,30 @@ function subtitleOf(it: RawItem, watch: WatchEntry | undefined): string {
 
 /**
  * Watchtower derivatives per item id: {weak, reused, last4?} (#293) —
- * passwords never leave the sealed boundary. Fail-soft: no grant → empty map.
+ * passwords never leave the sealed boundary. `undefined` means the derivation
+ * DID NOT RUN, which is not the same answer as an empty map: a caller that
+ * folded the two together would report an all-clear it never checked.
+ *
+ * `optional` is for the callers whose answer stands without the decoration —
+ * the list and the search (#928). The Review shelf is the derivation itself
+ * and must not pass it: a seat that cannot reach Watchtower has no review.
  */
 export async function readWatchtower(
   ctx: HandlerCtx,
-  purpose: string
-): Promise<Map<string, WatchEntry>> {
+  options: { optional?: boolean } = {}
+): Promise<Map<string, WatchEntry> | undefined> {
   const map = new Map<string, WatchEntry>();
   try {
     const out = await ctx.vault.invoke({
       command: "locker.watchtower",
       input: {},
-      purpose,
+      ...(options.optional ? { optional: true } : {}),
     });
-    if (out.status !== "executed") return map;
+    if (out.status !== "executed") return undefined;
     const entries = (out.output?.items ?? []) as WatchEntry[];
     for (const entry of entries) map.set(entry.item_id, entry);
   } catch {
-    /* fail soft */
+    return undefined;
   }
   return map;
 }
@@ -168,8 +187,8 @@ export function decorate(
       subtitle: subtitleOf(it, watch),
       favorite: starredIds.has(it.item_id),
       tags: tagsByItem.get(it.item_id) ?? [],
-      weak,
-      reused,
+      // The keys themselves say whether the derivation ran (`servedFields`).
+      ...(watchByItem === undefined ? {} : { weak, reused }),
       compromised,
       severity,
       url: it.url ?? null,
@@ -189,8 +208,7 @@ export function decorate(
  */
 export async function readAliases(
   ctx: HandlerCtx,
-  ids: string[],
-  purpose: string
+  ids: string[]
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   if (ids.length === 0) return map;
@@ -199,7 +217,6 @@ export async function readAliases(
       acceptTruncation: true,
       entity: "locker.item_alias",
       where: [{ column: "item_id", op: "in", value: ids }],
-      purpose,
     });
     for (const row of (result.rows ?? []) as unknown as AliasRow[])
       map.set(row.item_id, row.alias);
@@ -217,14 +234,13 @@ export async function readAliases(
  * Fail-soft: no counts means the foot line says nothing, never a wrong number.
  */
 export async function readCounts(
-  ctx: HandlerCtx,
-  purpose: string
+  ctx: HandlerCtx
 ): Promise<CountsPayload | null> {
   try {
     const out = await ctx.vault.invoke({
       command: "locker.counts",
       input: {},
-      purpose,
+      optional: true,
     });
     if (out.status !== "executed") return null;
     return (out.output ?? null) as CountsPayload | null;
@@ -235,15 +251,13 @@ export async function readCounts(
 
 /** Read the two SKOS vocabulary tables once, shared by readTags + readStarred (#404). */
 export async function readConceptTables(
-  ctx: HandlerCtx,
-  purpose: string
+  ctx: HandlerCtx
 ): Promise<ConceptTables> {
   const [concepts, schemes] = await Promise.all([
-    ctx.vault.read({ acceptTruncation: true, entity: "core.concept", purpose }),
+    ctx.vault.read({ acceptTruncation: true, entity: "core.concept" }),
     ctx.vault.read({
       acceptTruncation: true,
       entity: "core.concept_scheme",
-      purpose,
     }),
   ]);
   return {
@@ -256,12 +270,11 @@ export async function readConceptTables(
 export async function readTags(
   ctx: HandlerCtx,
   ids: string[],
-  purpose: string,
   tables?: ConceptTables
 ): Promise<Map<string, string[]>> {
   const map = new Map<string, string[]>();
   if (ids.length === 0) return map;
-  const vocab = tables ?? (await readConceptTables(ctx, purpose));
+  const vocab = tables ?? (await readConceptTables(ctx));
   const tags = await ctx.vault.read({
     acceptTruncation: true,
     entity: "core.tag",
@@ -269,7 +282,6 @@ export async function readTags(
       { column: "target_type", op: "eq", value: ITEM_TYPE },
       { column: "target_id", op: "in", value: ids },
     ],
-    purpose,
   });
   const tagScheme = findScheme(vocab.schemes, LOCKER_TAGS_SCHEME_URI);
   if (!tagScheme) return map;
@@ -292,12 +304,11 @@ export async function readTags(
 export async function readStarred(
   ctx: HandlerCtx,
   ids: string[],
-  purpose: string,
   tables?: ConceptTables
 ): Promise<Set<string>> {
   const starred = new Set<string>();
   if (ids.length === 0) return starred;
-  const vocab = tables ?? (await readConceptTables(ctx, purpose));
+  const vocab = tables ?? (await readConceptTables(ctx));
   const starredConcept = findSchemeConcept(
     vocab.schemes,
     vocab.concepts,
@@ -313,11 +324,21 @@ export async function readStarred(
       { column: "target_type", op: "eq", value: ITEM_TYPE },
       { column: "target_id", op: "in", value: ids },
     ],
-    purpose,
   });
   for (const t of (tags.rows ?? []) as unknown as TagRow[])
     starred.add(t.target_id);
   return starred;
+}
+
+/**
+ * A read this seat could not answer LOCALLY is not a refusal to answer. The
+ * replica raises `ONLINE_ONLY` when the shape does not carry what the query
+ * asked for; a `vaultDenied` payload built from it would draw an empty locker
+ * over rows the vault holds, and the caller would never fall back online. A
+ * consent denial is the opposite case and stays a screen.
+ */
+export function rethrowIfLocalReadRefused(error: unknown): void {
+  if ((error as { code?: string } | null)?.code === "ONLINE_ONLY") throw error;
 }
 
 export default async function itemsHandler({
@@ -327,20 +348,8 @@ export default async function itemsHandler({
   input?: Record<string, unknown>;
   ctx: HandlerCtx;
 }) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 300, 20), 2000);
   try {
-    const authentication = (await ctx.vault.authenticate({
-      operation: "status",
-      sessionToken: String(input?.auth_session ?? ""),
-    })) as { authenticated?: boolean; configured?: boolean };
-    if (!authentication.authenticated) {
-      return {
-        items: [],
-        authRequired: true,
-        configured: authentication.configured ?? false,
-      };
-    }
     // Archived is "keep forever, hide from lists" (GAPS §3.3 #9): it leaves
     // the default window without being deleted and without a purge date, so
     // the shelf is asked for explicitly rather than filtered client-side.
@@ -355,20 +364,19 @@ export default async function itemsHandler({
       ],
       orderBy: { column: "updated_at", dir: "desc" },
       limit: window,
-      purpose,
     });
     const rows = (res.rows ?? []) as unknown as RawItem[];
     const ids = rows.map((r) => r.item_id);
     // One shared vocabulary read + ONE watchtower unseal (#404) — not a
     // second full read and second receipted unseal.
-    const vocab = await readConceptTables(ctx, purpose);
+    const vocab = await readConceptTables(ctx);
     const [tagsByItem, starredIds, watchByItem, aliasByItem, counts] =
       await Promise.all([
-        readTags(ctx, ids, purpose, vocab),
-        readStarred(ctx, ids, purpose, vocab),
-        readWatchtower(ctx, purpose),
-        readAliases(ctx, ids, purpose),
-        readCounts(ctx, purpose),
+        readTags(ctx, ids, vocab),
+        readStarred(ctx, ids, vocab),
+        readWatchtower(ctx, { optional: true }),
+        readAliases(ctx, ids),
+        readCounts(ctx),
       ]);
     const items = decorate(
       rows,
@@ -380,16 +388,21 @@ export default async function itemsHandler({
     const affected = items.filter(
       (it) => it.compromised || it.weak || it.reused
     );
-    const watchtower = {
-      compromised: items.filter((it) => it.compromised).length,
-      weak: items.filter((it) => it.weak).length,
-      reused: items.filter((it) => it.reused).length,
-      items: affected,
-    };
+    // ABSENT when the derivation did not run. A zeroed summary would be this
+    // query telling the review screen that nothing is weak.
+    const watchtower =
+      watchByItem === undefined
+        ? undefined
+        : {
+            compromised: items.filter((it) => it.compromised).length,
+            weak: items.filter((it) => it.weak).length,
+            reused: items.filter((it) => it.reused).length,
+            items: affected,
+          };
     const total = archived ? counts?.archived : counts?.live;
     return {
       items,
-      watchtower,
+      ...(watchtower === undefined ? {} : { watchtower }),
       truncated: rows.length >= window,
       window,
       archived,
@@ -399,6 +412,7 @@ export default async function itemsHandler({
       ...(counts?.trashed == null ? {} : { trashedCount: counts.trashed }),
     };
   } catch (error) {
+    rethrowIfLocalReadRefused(error);
     const e = error as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }

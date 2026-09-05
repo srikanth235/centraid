@@ -11,6 +11,7 @@
 import type { ReactNode } from "react";
 
 import {
+  pendingSidecarOf,
   readPendingOverlay,
   pendingOverlayCopy,
 } from "../../_shared/pending-overlay.ts";
@@ -48,7 +49,8 @@ export interface ItemRowProps {
 
 export function ItemRow(props: ItemRowProps): ReactNode {
   const { position, row } = props;
-  const pending = readPendingOverlay(row as unknown as Record<string, unknown>);
+  const rowRecord = row as unknown as Record<string, unknown>;
+  const pending = readPendingOverlay(rowRecord, pendingSidecarOf(rowRecord));
   const verdict = props.status === undefined ? verdictOf(row) : props.status;
   const meta = [metaSentence(row), props.meta].filter(Boolean).join("  ·  ");
   const body = (

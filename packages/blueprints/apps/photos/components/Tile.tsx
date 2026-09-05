@@ -5,7 +5,10 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
-import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
+import {
+  pendingSidecarOf,
+  readPendingOverlay,
+} from "../../_shared/pending-overlay.ts";
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { scopeAttr } from "../../_shared/scope-kit.ts";
 import { assetKey } from "../asset-key.ts";
@@ -67,7 +70,7 @@ export function Tile({
   const kind = showsKindSlot(rung) ? kindLabel(asset) : null;
   const key = assetKey(asset);
   const name = asset.title ?? asset.kind ?? "Photograph";
-  const pending = readPendingOverlay(asset);
+  const pending = readPendingOverlay(asset, pendingSidecarOf(asset));
   return (
     <div
       className={cls(

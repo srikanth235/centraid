@@ -833,8 +833,18 @@
           }
         },
         "tapToVisualResponse": {
-          "status": "unmeasured",
-          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — the INP capture above is the closest proxy; a dedicated per-control probe does not exist"
+          "status": "measured",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — the warm tap\u2192usable-screen probe: the palette is already open, the click on the app row starts the clock, and the clock stops when the app is TAKEABLE — `inline-app-view` visible, the `Loading Tasks…` fallback gone, and `window.centraid` installed. Attach is reported beside it on the same run.",
+          "ceilingMs": 600,
+          "_provenance": {
+            "at": "2026-09-04",
+            "host": "linux x64 development container, 4 cores / 15 GB, Playwright headless_shell 1194",
+            "runs": 7,
+            "observedMs": 433,
+            "observedSpreadMs": "433 / 394 / 396 / 408 / 408 / 397 / 413 over seven consecutive runs; the ceiling is set off the worst of them. Attach alone, same runs: 128 / 90 / 97 / 100 / 107 / 91 / 108.",
+            "note": "CARRIED PAST ATTACH TO A USABLE SCREEN (#922 E3). The earlier entry stopped at attach and said why: the replica re-bootstrapped in a loop on `main` as well as on that branch, so the app’s host bridge and its first read could not be reached in this container. That loop is fixed — an overlapping change batch is no longer called a `cursor-gap`, a failed session open no longer leaks the OPFS worker it opened, and the bootstrap’s convergence replay drains to the head the gateway reports instead of waiting for a live vault to fall quiet — so this number now fences the whole interval a member feels: route mount and chunk, replica scope, first read, first paint. It remains the web seat’s half of the desktop `warm-switch` tapToVisualResponse, which is measured on dev-darwin-arm64 because Electron does not launch on a display-less runner.",
+            "headroom": "1.4x the worst observed. The ceiling is UNCHANGED at 600 ms while the interval it fences grew from attach-only to usable, so the headroom fell from ~3x; tightening it is a later ratchet, widening it needs a ruling."
+          }
         }
       }
     },
@@ -1794,6 +1804,11 @@
       "volume": "YEAR-3: 50,000 mobile replica rows read through the native SQLite session, with 25 missed changes replayed after a background/foreground transition",
       "_noBudgetMs": "Deliberate. The rig measures the client-side resume interval against `reconnectToFresh.ceilingMs` in tests/experience-budgets/mobile.json; setup and fixture construction are not the user-facing interval, and the 30-sample/1.5x drift gate tracks that interval once nightly history exists.",
       "entries": ["mobile/converge/year3-replica/ci-linux-x64-4c"]
+    },
+    "tests/scale/mobile-screen-reads.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: two mounted mobile vaults with 5,000 people and 5,000 agenda rows per vault, validating full-window screen reads and constant statement count",
+      "entries": []
     },
     "tests/scale/replica-bootstrap.scale.test.ts": {
       "lane": "scale",

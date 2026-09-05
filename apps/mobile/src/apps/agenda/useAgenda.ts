@@ -10,6 +10,7 @@ import {
 } from "../../kit/hooks/useReplicaQuery";
 import type { AgendaEventModel } from "../../kit/schedule/recurrence";
 import { expandEvent } from "../../kit/schedule/recurrence";
+import { MOBILE_ENTITY_READ_WINDOW } from "../../lib/replica/offline-budgets";
 import { starredParties } from "./day-context";
 
 const value = <T>(row: ReplicaRow, key: string): T | undefined =>
@@ -21,7 +22,7 @@ export type NativeAgendaEvent = AgendaEventModel & { raw: ReplicaRow };
 function useAgendaEntity(entity: string) {
   return useReplicaQuery(
     "agenda",
-    useMemo(() => ({ acceptTruncation: true, entity }), [entity])
+    useMemo(() => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity }), [entity])
   );
 }
 

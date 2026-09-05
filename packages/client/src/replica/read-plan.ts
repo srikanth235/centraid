@@ -9,18 +9,13 @@ import { fieldNotOnThisDevice } from "@centraid/blueprints/apps/_shared/shared-c
 import { OnlineOnlyError, ReplicaProtocolError } from "./errors.js";
 import {
   assertColumn,
+  censusClass,
   clauseBody,
   clauseGuards,
-  jsonType,
   jsonValue,
-  NUMERIC_TYPES,
   OVERSIZED,
-  oversized,
   PAYLOAD,
-  quoted,
-  TEXT_TYPES,
-  undisclosed,
-  UNORDERED_TYPES,
+  REPLICA_CENSUS_CLASSES,
 } from "./read-plan-clauses.js";
 import type { PlanBuilder, ReplicaEscalation } from "./read-plan-clauses.js";
 // Type-only: erases the `store-core.ts` cycle.
@@ -166,11 +161,8 @@ export function assertReplicaOrder(
   }
 }
 
-export interface ReplicaTieCensusRow {
-  kept: number;
-  distinct_values: number;
-  non_null: number;
-}
+/** 1 when some ordered value is carried by more than one kept row. */
+export type ReplicaTieCensusRow = { tied: number };
 
 function raise(escalation: ReplicaEscalation): never {
   throw escalation.kind === "online"
@@ -197,10 +189,9 @@ export function assertReplicaPage(
 }
 
 /** A tie under an opaque primary key makes `ORDER BY ... LIMIT` unstable.
- *  NULLs form ONE group. */
+ *  NULLs form ONE group, which `GROUP BY` gives for free. */
 export function assertReplicaTieCensus(row: ReplicaTieCensusRow): void {
-  const groups = row.distinct_values + (row.non_null < row.kept ? 1 : 0);
-  if (row.kept > groups) {
+  if (row.tied) {
     throw new OnlineOnlyError(
       "ORDER BY ties require an exposed scalar primary key or canonical SQLite ordering"
     );
@@ -208,68 +199,94 @@ export function assertReplicaTieCensus(row: ReplicaTieCensusRow): void {
 }
 
 /**
- * The guards ride their OWN statement, not the paging one (#922 C3).
+ * The guards ride their OWN statement, not the paging one (#922 C3), and that
+ * statement is now INDEX PROBES rather than a scan of the entity.
  *
  * As `max(...) OVER ()` window aggregates in the page's select list they made
  * every ordered read materialize and scan the WHOLE entity before it could
- * return the first row — `LIMIT 50` and an index on the ordered expression
- * were both powerless, because a window frame spans the result. Split out,
- * the paging statement is an indexed range scan of `limit` rows, and the
- * census is a separate aggregate that reads the index rather than the rows.
- * The guards themselves are unchanged: same tests, same escalations, still
- * spanning EVERY source of a composed read.
+ * return the first row. Split out, they were still one aggregate over every
+ * kept row — 20 ms on a 50 000-row library, paid again after every write,
+ * because the census cache is dropped on each one. Each guard is really the
+ * question "does any kept row hold a value of THIS class", so each is now one
+ * seek into the census index (`censusClass`), and the escalations, their
+ * priority and the tests over them are unchanged.
  */
+interface CensusProbe {
+  alias: string;
+  column: string;
+  /** `[n]` is "class n exists"; `[a, b]` is "both exist" — the straddle. */
+  classes: readonly number[];
+}
+
 function orderGuards(
   column: string,
   role: "order" | "key",
   schema: ReplicaEntitySchema,
-  select: string[]
+  census: CensusProbe[]
 ): ReplicaOrderGuard[] {
   const guards: ReplicaOrderGuard[] = [];
   const add = (
     name: string,
-    test: string,
+    classes: readonly number[],
     escalation: ReplicaEscalation
   ): void => {
     const alias = `${role}_${name}`;
-    select.push(`max(CASE WHEN ${test} THEN 1 ELSE 0 END) AS ${alias}`);
+    census.push({ alias, column, classes });
     guards.push({ column: alias, escalation });
   };
   if (role === "order") {
-    add("oversized", oversized(column), {
+    add("oversized", [REPLICA_CENSUS_CLASSES.oversized], {
       kind: "online",
       message: `${fieldNotOnThisDevice(column)} is required for ordering`,
     });
     if (schema.hasUnavailableFields) {
-      add("undisclosed", undisclosed(column), {
+      add("undisclosed", [REPLICA_CENSUS_CLASSES.undisclosed], {
         kind: "online",
         message: "undisclosed unavailable field is required for ordering",
       });
     }
   }
-  add("unordered", `${jsonType(column)} IN (${quoted(UNORDERED_TYPES)})`, {
+  add("unordered", [REPLICA_CENSUS_CLASSES.unordered], {
     kind: "protocol",
     message:
       role === "order"
         ? "orderBy requires scalar values"
         : "primary-key orderBy tie-break requires scalar values",
   });
-  // D3: either class ALONE is fine, hence the PRODUCT of two maxima.
-  const alias = `${role}_straddle`;
-  select.push(
-    `(max(CASE WHEN ${jsonType(column)} IN (${quoted(TEXT_TYPES)})` +
-      " THEN 1 ELSE 0 END)" +
-      ` * max(CASE WHEN ${jsonType(column)} IN (${quoted(NUMERIC_TYPES)})` +
-      ` THEN 1 ELSE 0 END)) AS ${alias}`
-  );
-  guards.push({
-    column: alias,
-    escalation: {
+  // D3: either class ALONE is fine, hence BOTH classes have to be present.
+  add(
+    "straddle",
+    [REPLICA_CENSUS_CLASSES.numeric, REPLICA_CENSUS_CLASSES.text],
+    {
       kind: "online",
       message: "mixed-type comparison requires canonical SQLite affinity",
-    },
-  });
+    }
+  );
   return guards;
+}
+
+/** One seek: the lowest class at or above `cls`, which IS `cls` iff it exists. */
+function censusProbeSql(scan: string, column: string, cls: number): string {
+  const expression = censusClass(column);
+  return `(SELECT ${expression} FROM (${scan})
+             WHERE verdict >= 0 AND ${expression} >= ${cls}
+             ORDER BY ${expression} ASC LIMIT 1)`;
+}
+
+function censusSql(
+  probes: readonly CensusProbe[],
+  scan: string,
+  scanBinds: readonly ReplicaBindValue[]
+): { sql: string; binds: ReplicaBindValue[] } {
+  const binds: ReplicaBindValue[] = [];
+  const columns = probes.map((probe) => {
+    const tests = probe.classes.map((cls) => {
+      binds.push(...scanBinds);
+      return `${censusProbeSql(scan, probe.column, cls)} = ${cls}`;
+    });
+    return `CASE WHEN ${tests.join(" AND ")} THEN 1 ELSE 0 END AS ${probe.alias}`;
+  });
+  return { sql: `SELECT ${columns.join(", ")}`, binds };
 }
 
 /** Local SQLite rows, not a network response; a ten-year library exceeds 10k. */
@@ -369,7 +386,7 @@ export function planComposedReplicaRead(
   const select = [SOURCE_COLUMNS, "verdict"];
   if (composed) select.push(REPLICA_PLAN_SOURCE_COLUMN);
   const guards: ReplicaOrderGuard[] = [];
-  const census: string[] = [];
+  const census: CensusProbe[] = [];
   const order: string[] = [];
   // Only when a clause can escalate: an unfiltered read keeps index order.
   if (builder.escalations.length > 0) order.push("(verdict = 0) ASC");
@@ -422,12 +439,7 @@ export function planComposedReplicaRead(
     escalations: builder.escalations,
     orderGuards: guards,
     ...(census.length > 0
-      ? {
-          orderCensus: {
-            sql: `SELECT ${census.join(", ")} FROM (${scan}) WHERE verdict >= 0`,
-            binds: [...scanBinds],
-          },
-        }
+      ? { orderCensus: censusSql(census, scan, scanBinds) }
       : {}),
     ...(request.orderBy
       ? {
@@ -444,12 +456,21 @@ export function planComposedReplicaRead(
   };
   if (request.orderBy && schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY) {
     const ordered = jsonValue(request.orderBy.column);
+    // THE TIE CENSUS ASKS ONE QUESTION (#922 E3): does any ordered value
+    // repeat? `count(*) / count(DISTINCT …)` answered it by building a temp
+    // b-tree over every kept value — 22 ms of a 22 ms ordered read at 50 000
+    // rows, the largest O(entity) term left on this path once the ORDER census
+    // became a seek. `GROUP BY` over the SAME expression the ordering index is
+    // built on walks that index in order instead, needs no b-tree, and stops
+    // at the FIRST repeated value, so the case that escalates costs almost
+    // nothing. `EXISTS` keeps the answer one row, and NULLs still form one
+    // group, so the rule is unchanged.
     plan.tieCensus = {
-      sql: `SELECT count(*) AS kept,
-                   count(DISTINCT ${ordered}) AS distinct_values,
-                   count(${ordered}) AS non_null
-              FROM (${scan})
-             WHERE verdict = 0`,
+      sql: `SELECT EXISTS (SELECT 1
+                             FROM (${scan})
+                            WHERE verdict = 0
+                            GROUP BY ${ordered}
+                           HAVING count(*) > 1) AS tied`,
       binds: scanBinds,
     };
   }

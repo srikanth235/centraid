@@ -15,17 +15,15 @@ interface RawParty {
 }
 
 export default async function partiesHandler({ ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   try {
     // The owner is the implicit `me` (same source Tally reads) — everyone
     // else in the directory is a peer who could be invited.
     const [vaultRes, partiesRes] = await Promise.all([
-      ctx.vault.read({ acceptTruncation: true, entity: "core.vault", purpose }),
+      ctx.vault.read({ acceptTruncation: true, entity: "core.vault" }),
       ctx.vault.read({
         acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "kind", op: "eq", value: "person" }],
-        purpose,
       }),
     ]);
     const me =

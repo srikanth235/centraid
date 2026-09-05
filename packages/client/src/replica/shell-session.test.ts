@@ -53,7 +53,6 @@ describe("shell-session", () => {
     {
       shapeId: "shape-todos",
       appId: "todos",
-      purpose: "dpv:ServiceProvision",
       entities: [
         {
           entity: "core.task",
@@ -65,7 +64,6 @@ describe("shell-session", () => {
     {
       shapeId: "shape-notes",
       appId: "notes",
-      purpose: "dpv:ServiceProvision",
       entities: [
         {
           entity: "core.note",
@@ -77,7 +75,6 @@ describe("shell-session", () => {
     {
       shapeId: "shape-tasks",
       appId: "tasks",
-      purpose: "dpv:ServiceProvision",
       entities: [
         {
           entity: "schedule.task",
@@ -89,7 +86,6 @@ describe("shell-session", () => {
     {
       shapeId: "shape-todos-billing",
       appId: "todos",
-      purpose: "dpv:Billing",
       entities: [
         {
           entity: "core.task",
@@ -441,21 +437,30 @@ describe("shell-session", () => {
         schemaEpoch: "schema",
       });
       expect(coordinator.bootstrap).toHaveBeenCalledTimes(0);
-      await session.read("todos", { entity: "core.task" });
+      await session.read("todos", {
+        entity: "core.task",
+        shapeId: "shape-todos",
+      });
       expect(coordinator.readWire).toHaveBeenCalledWith({
         shapeId: "shape-todos",
         entity: "core.task",
       });
+      // ONE APP, ONE SHAPE IS THE DEFAULT (#928 A1), but a catalog that holds
+      // two for one entity is still resolvable — by NAMING one. The retired
+      // `purpose` selector chose between them implicitly; the shape id says it.
       await session.read("todos", {
         entity: "core.task",
-        purpose: "dpv:Billing",
+        shapeId: "shape-todos-billing",
       });
       expect(coordinator.readWire).toHaveBeenLastCalledWith({
         shapeId: "shape-todos-billing",
         entity: "core.task",
-        purpose: "dpv:Billing",
       });
-      await session.search("todos", { entity: "core.task", query: "local" });
+      await session.search("todos", {
+        entity: "core.task",
+        query: "local",
+        shapeId: "shape-todos",
+      });
       expect(coordinator.searchWire).toHaveBeenCalledWith({
         shapeId: "shape-todos",
         entity: "core.task",
@@ -618,7 +623,7 @@ describe("shell-session", () => {
               entity: "core.task",
               rowId: "task-1",
               values: { cost: 42 },
-              purpose: "dpv:Billing",
+              shapeId: "shape-todos-billing",
             },
           ],
         })
@@ -927,6 +932,7 @@ describe("shell-session", () => {
             entity: "core.task",
             rowId: "task-1",
             values: { task_id: "task-1", title: "Offline edit" },
+            shapeId: "shape-todos",
           },
         ],
       });

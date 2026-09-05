@@ -1,4 +1,8 @@
-import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  pendingOverlayFacts,
+  projectPendingWrite,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { PendingOverlayFacts } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { pendingProjectionFor } from "@centraid/blueprints/apps/_shared/pending-projections";
 
 import { webCryptoDigest, webCryptoIdFactory } from "./digest.js";
@@ -63,6 +67,20 @@ export interface IntentQueueOptions {
  * without a probe waits rather than clearing early.
  */
 export type HeldVersionProbe = (version: ReplicaBaseVersion) => boolean;
+
+export function presentPendingIntentFacts(
+  intent: ReplicaIntent
+): PendingOverlayFacts | undefined {
+  return pendingOverlayFacts({
+    intentId: intent.intentId,
+    state: intent.state,
+    action: intent.action,
+    ...(intent.reason ? { reason: intent.reason } : {}),
+    ...(intent.conflict ? { conflict: intent.conflict } : {}),
+    ...(intent.attempts === undefined ? {} : { attempts: intent.attempts }),
+    ...(intent.enqueuedAt ? { enqueuedAt: intent.enqueuedAt } : {}),
+  });
+}
 
 function heldEverywhere(
   answered: readonly ReplicaBaseVersion[],
@@ -308,6 +326,30 @@ export class IntentQueue {
       }
     }
     return result;
+  }
+
+  async overlay(
+    shapeId?: string,
+    entity?: string
+  ): Promise<{
+    mutations: OptimisticMutation[];
+    sidecar: Readonly<Record<string, PendingOverlayFacts>>;
+  }> {
+    const intents = await this.pending();
+    const mutations: OptimisticMutation[] = [];
+    const sidecar: Record<string, PendingOverlayFacts> = {};
+    for (const intent of intents) {
+      let projected = false;
+      for (const mutation of intent.optimistic) {
+        if (shapeId && mutation.shapeId !== shapeId) continue;
+        if (entity && mutation.entity !== entity) continue;
+        mutations.push(presentPendingIntentMutation(mutation, intent));
+        projected = true;
+      }
+      const facts = projected ? presentPendingIntentFacts(intent) : undefined;
+      if (facts) sidecar[intent.intentId] = facts;
+    }
+    return { mutations, sidecar };
   }
 
   list(): Promise<ReplicaIntent[]> {

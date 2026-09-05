@@ -25,7 +25,6 @@ export default async function autofillItem({
   input?: Record<string, unknown>;
   ctx: HandlerCtx;
 }) {
-  const purpose = "dpv:ServiceProvision";
   const itemId = String(input?.item_id ?? "");
   const origin = pageOrigin(input?.page_origin);
   if (!itemId || !origin)
@@ -42,7 +41,6 @@ export default async function autofillItem({
         { column: "deleted_at", op: "is-null" },
       ],
       limit: 1,
-      purpose,
     });
     const row = ((response.rows ?? []) as unknown as LoginRow[])[0];
     if (!row) return { fill: null };
@@ -64,14 +62,12 @@ export default async function autofillItem({
       entityId: itemId,
       columns: ["password"],
       context: { kind: "fill", origin },
-      purpose,
     })) as { values?: { password?: string | null }; receiptId?: string };
     let totp: string | undefined;
     if (row.otp_seed != null) {
       const outcome = await ctx.vault.invoke({
         command: "locker.totp_code",
         input: { item_id: itemId },
-        purpose,
       });
       if (outcome.status === "executed") {
         const code = outcome.output?.code;

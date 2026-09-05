@@ -65,12 +65,12 @@ describe(IntentQueue, () => {
       attempts: 2,
     });
     await queue.awaitingChange("intent-1");
-    await expect(queue.overlayMutations()).resolves.toHaveLength(1);
+    expect((await queue.overlay()).mutations).toHaveLength(1);
 
     const [settled] = await queue.applyOutcomes([
       { intentId: "intent-1", status: "executed" },
     ]);
-    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    expect((await queue.overlay()).mutations).toStrictEqual([]);
     expect(settled).toMatchObject({
       intentId: "intent-1",
       state: "executed",
@@ -104,7 +104,7 @@ describe(IntentQueue, () => {
         reason: "confirmation required",
       },
     ]);
-    await expect(queue.overlayMutations()).resolves.toHaveLength(1);
+    expect((await queue.overlay()).mutations).toHaveLength(1);
     expect((await queue.pending())[0]).toMatchObject({
       state: "parked",
       reason: "confirmation required",
@@ -113,21 +113,19 @@ describe(IntentQueue, () => {
     const [denied] = await queue.applyOutcomes([
       { intentId: "intent-parked", status: "denied", reason: "owner denied" },
     ]);
-    await expect(queue.overlayMutations()).resolves.toMatchObject([
-      {
-        values: {
-          __centraid_pending_key: "intent-parked",
-          __centraid_pending_status: "denied",
-          __centraid_pending_reason: "owner denied",
-        },
-      },
+    const denialOverlay = await queue.overlay();
+    expect(denialOverlay.mutations).toMatchObject([
+      { values: { __centraid_pending_key: "intent-parked" } },
     ]);
+    expect(denialOverlay.sidecar).toMatchObject({
+      "intent-parked": { status: "denied", reason: "owner denied" },
+    });
     expect(denied).toMatchObject({ state: "denied", reason: "owner denied" });
     await expect(queue.list()).resolves.toMatchObject([
       { intentId: "intent-parked", state: "denied" },
     ]);
     await expect(queue.discard("intent-parked")).resolves.toBe(true);
-    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    expect((await queue.overlay()).mutations).toStrictEqual([]);
     await expect(queue.listSettled()).resolves.toMatchObject([
       {
         intentId: "intent-parked",
@@ -156,7 +154,7 @@ describe(IntentQueue, () => {
     await expect(queue.enqueue(write)).resolves.toMatchObject({
       enqueuedAt: "2026-08-27T09:00:00.000Z",
     });
-    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    expect((await queue.overlay()).mutations).toStrictEqual([]);
   });
 
   test("Commons expiry dismissal may remove a locally parked row without recording execution", async () => {
@@ -186,7 +184,7 @@ describe(IntentQueue, () => {
     ]);
 
     await expect(queue.discard("intent-expired-commons")).resolves.toBe(true);
-    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    expect((await queue.overlay()).mutations).toStrictEqual([]);
     await expect(queue.listSettled()).resolves.toMatchObject([
       {
         intentId: "intent-expired-commons",
@@ -290,15 +288,13 @@ describe(IntentQueue, () => {
     await expect(queue.list()).resolves.toMatchObject([
       { intentId: "intent-conflict", state: "conflict", conflict },
     ]);
-    await expect(queue.overlayMutations()).resolves.toMatchObject([
-      {
-        values: {
-          __centraid_pending_status: "conflict",
-          __centraid_pending_expected_version: 4,
-          __centraid_pending_actual_version: 5,
-        },
+    expect((await queue.overlay()).sidecar).toMatchObject({
+      "intent-conflict": {
+        status: "conflict",
+        expectedVersion: 4,
+        actualVersion: 5,
       },
-    ]);
+    });
     await expect(queue.listSettled()).resolves.toStrictEqual([]);
   });
 
@@ -439,7 +435,7 @@ describe(IntentQueue, () => {
         intentId: "intent-replacement",
       },
     ]);
-    await expect(queue.overlayMutations()).resolves.toMatchObject([
+    expect((await queue.overlay()).mutations).toMatchObject([
       {
         entity: "schedule.task",
         rowId: stablePendingRowId("intent-replacement", "task"),
@@ -499,7 +495,7 @@ describe(IntentQueue, () => {
     await expect(reopened.list()).resolves.toMatchObject([
       { intentId: "intent-replacement", state: "queued" },
     ]);
-    await expect(reopened.overlayMutations()).resolves.toMatchObject([
+    expect((await reopened.overlay()).mutations).toMatchObject([
       {
         rowId: stablePendingRowId("intent-replacement", "task"),
         values: { __centraid_pending_key: "intent-replacement" },
@@ -715,12 +711,13 @@ describe(IntentQueue, () => {
       ],
     });
 
-    await expect(queue.overlayMutations("shape-agenda")).resolves.toMatchObject(
-      [{ rowId: "task-1" }, { rowId: "note-1" }]
-    );
-    await expect(
-      queue.overlayMutations(undefined, "core.task")
-    ).resolves.toMatchObject([{ rowId: "task-1" }, { rowId: "task-2" }]);
+    expect((await queue.overlay("shape-agenda")).mutations).toMatchObject([
+      { rowId: "task-1" },
+      { rowId: "note-1" },
+    ]);
+    expect(
+      (await queue.overlay(undefined, "core.task")).mutations
+    ).toMatchObject([{ rowId: "task-1" }, { rowId: "task-2" }]);
   });
 
   test("delegates close to the durable store", () => {

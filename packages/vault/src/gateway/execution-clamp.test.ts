@@ -1,21 +1,24 @@
-// The execution clamp (#541): a host-owned, per-execution attenuation of
-// an automation's durable grant. It may only ever NARROW what the owner
-// granted — every declared restriction bites, none of them is dropped because
-// another scope happened to sort first.
+// The execution clamp (#541, re-based on the one plane by #928): a host-owned,
+// per-execution attenuation of an automation's STANDING ANSWER. The answer
+// decides whether the automation reaches an entity for a verb at all; the
+// clamp is the only thing that narrows WHICH rows and fields, and it may only
+// ever narrow — every declared restriction bites, none of them is dropped
+// because another scope happened to sort first, and no clamp buys a verb the
+// owner never answered for.
 
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
-import { bootstrapVault, createGrant, enrollAgent } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import type { AutomationScope } from "../grant/automation-authority.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { evaluateAccess } from "./access.js";
 import { GatewayError } from "./types.js";
 import type { ExecutionScopeSpec, Identity } from "./types.js";
-
-const PURPOSE = "dpv:ServiceProvision";
 
 let db: VaultDb;
 let boot: BootstrapResult;
@@ -33,20 +36,16 @@ describe("execution-clamp", () => {
     });
   });
 
-  /** The owner's durable grant — the upper bound every clamp is cut against. */
-  function grant(scopes: Parameters<typeof createGrant>[1]["scopes"]): void {
-    createGrant(db, {
-      granteePartyId: agent.partyId,
-      purposeConceptId: boot.concepts[PURPOSE] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes,
-    });
+  /** The owner's standing answer — what the clamp is cut against. */
+  function grant(scopes: readonly AutomationScope[]): void {
+    answerScopes(db, boot, "digest", scopes);
   }
 
   function caller(scopeClamp?: readonly ExecutionScopeSpec[]): Identity {
     return {
       kind: "agent",
       callerId: agent.agentId,
+      principalId: "digest",
       provAgentKind: "ai_agent",
       partyId: agent.partyId,
       mayAct: true,
@@ -55,14 +54,14 @@ describe("execution-clamp", () => {
   }
 
   const readTask = (identity: Identity) =>
-    evaluateAccess(db.vault, identity, "core", "core_task", "read", PURPOSE);
+    evaluateAccess(db.vault, identity, "core", "core_task", "read");
 
-  test("no clamp leaves the durable grant exactly as the owner wrote it", () => {
-    grant([{ schema: "core", verbs: "read", fieldMask: ["task_id", "title"] }]);
+  test("no clamp leaves the standing answer unnarrowed", () => {
+    grant([{ schema: "core", verbs: "read" }]);
     expect(readTask(caller())).toMatchObject({
       decision: "allow",
       rowFilter: [],
-      fieldMask: ["task_id", "title"],
+      fieldMask: null,
     });
   });
 
@@ -76,7 +75,7 @@ describe("execution-clamp", () => {
     const decision = readTask(
       caller([{ schema: "core", table: "core_note", verbs: "read" }])
     );
-    expect(decision).toMatchObject({ decision: "deny", grantId: null });
+    expect(decision).toMatchObject({ decision: "deny", authorityId: null });
     assert(decision.decision === "deny");
     expect(decision.failing).toContain("execution manifest");
   });
@@ -204,32 +203,19 @@ describe("execution-clamp", () => {
     });
   });
 
-  test("the clamp never widens: the grant stays the upper bound on rows and fields", () => {
-    grant([
-      {
-        schema: "core",
-        table: "core_task",
-        verbs: "read",
-        rowFilter: [{ column: "archived_at", op: "is-null" }],
-        fieldMask: ["task_id", "title"],
-      },
+  test("the clamp never widens: the standing answer stays the upper bound on VERBS", () => {
+    // The owner answered for reading and nothing else. A manifest that grades
+    // itself `read+act` buys no act: the clamp attenuates the answer, it never
+    // stands in for one.
+    grant([{ schema: "core", table: "core_task", verbs: "read" }]);
+    const identity = caller([
+      { schema: "core", table: "core_task", verbs: "read+act" },
     ]);
-    const decision = readTask(
-      caller([
-        {
-          schema: "core",
-          verbs: "read",
-          // The manifest asks for a field the owner never granted…
-          fieldMask: ["task_id", "title", "body"],
-        },
-      ])
-    );
-    expect(decision).toMatchObject({
-      decision: "allow",
-      // …the grant's own filter survives, and the mask is the intersection.
-      rowFilter: [{ column: "archived_at", op: "is-null" }],
-      fieldMask: ["task_id", "title"],
-    });
+    expect(readTask(identity)).toMatchObject({ decision: "allow" });
+    const act = evaluateAccess(db.vault, identity, "core", "core_task", "act");
+    expect(act).toMatchObject({ decision: "deny", authorityId: null });
+    assert(act.decision === "deny");
+    expect(act.failing).toContain("no standing answer");
   });
 
   test("a clamp scope only covers the verb it grades for", () => {
@@ -239,7 +225,7 @@ describe("execution-clamp", () => {
     ]);
     expect(readTask(identity)).toMatchObject({ decision: "allow" });
     expect(
-      evaluateAccess(db.vault, identity, "core", "core_task", "act", PURPOSE)
+      evaluateAccess(db.vault, identity, "core", "core_task", "act")
     ).toMatchObject({
       decision: "deny",
     });

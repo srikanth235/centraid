@@ -573,7 +573,7 @@ describe(ReplicaCoordinator, () => {
     });
     expect(pulledFrom).toStrictEqual([{ epoch: "epoch", seq: 0 }]);
     await expect(intents.list()).resolves.toStrictEqual([]);
-    await expect(intents.overlayMutations()).resolves.toStrictEqual([]);
+    expect((await intents.overlay()).mutations).toStrictEqual([]);
     expect(invalidations).toContainEqual({
       shapeId: "shape",
       entity: "core.task",
@@ -729,16 +729,14 @@ describe(ReplicaCoordinator, () => {
     await expect(intents.list()).resolves.toMatchObject([
       { intentId: "persisted", state: "denied", reason: "grant expired" },
     ]);
-    await expect(intents.overlayMutations()).resolves.toMatchObject([
-      {
-        rowId: "task-1",
-        values: {
-          __centraid_pending_key: "persisted",
-          __centraid_pending_status: "denied",
-          __centraid_pending_reason: "grant expired",
-        },
-      },
+    const overlay = await intents.overlay();
+    expect(overlay.mutations).toMatchObject([
+      { rowId: "task-1", values: { __centraid_pending_key: "persisted" } },
     ]);
+    // The verdict is a fact about the WRITE: it rides the sidecar (#922 G3).
+    expect(overlay.sidecar).toMatchObject({
+      persisted: { status: "denied", reason: "grant expired" },
+    });
     await replica.close();
   });
 
@@ -1306,7 +1304,6 @@ function windowedHeader(): ReplicaBootstrapHeader {
       {
         shapeId: "shape-agenda",
         appId: "agenda",
-        purpose: "dpv:ServiceProvision",
         entities: [
           { entity: "core.event", primaryKey: "id", columns: ["id", "title"] },
         ],

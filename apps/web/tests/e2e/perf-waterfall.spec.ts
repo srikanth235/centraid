@@ -1037,3 +1037,85 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
     );
   }
 });
+
+/**
+ * TAP TO A USABLE APP SCREEN, THE WARM SWITCH (#922 C6, #922 E3).
+ *
+ * The ledger's `desktop/warm-switch` entry measures "click an app tile → the
+ * app view attaches", and it is measured on a host this container has not got:
+ * Electron does not launch without a display. This is that interval on the
+ * seat that DOES run here, carried past attach to the screen the member can
+ * act on: the app's own loading fallback is gone and its host bridge is
+ * installed, so the replica scope, the first read and the app's first paint
+ * are all inside the number. Attach is still reported beside it, because it is
+ * the half the desktop entry's `desktop.appview.attach` span fences.
+ *
+ * WARM, not cold: the scope the first open left behind is still inside its
+ * grace, so this is the switch a member makes all day, and the number moves
+ * when that grace stops covering it.
+ */
+const TAP_EVIDENCE = path.resolve(
+  here,
+  "../../../../artifacts/e2e/ui-impact/issue-922-web-warm-switch-app-view.png"
+);
+
+/** Going home tears the bridge down as well as the view, so the warm switch
+ *  that follows really re-installs one rather than finding the old one up. */
+async function goHomeFromAttached(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Home", exact: true }).click();
+  await expect(page.getByTestId("inline-app-view")).toBeHidden();
+  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => Boolean(window.centraid)))
+    .toBe(false);
+}
+
+interface WarmSwitchSpan {
+  /** Click → the app view is in the tree. The desktop entry's half. */
+  attachMs: number;
+  /** Click → the app is drawn and takeable: no fallback, bridge installed. */
+  usableMs: number;
+}
+
+async function attachAppAndMeasure(page: Page): Promise<WarmSwitchSpan> {
+  await openPalette(page);
+  // Settle if the timeline will: this measures an INTERVAL, not bytes, so a
+  // timeline that never goes count-stable is noise to absorb rather than a
+  // failure.
+  await settleResourceTimeline(page, 5_000).catch(() => undefined);
+  const started = Date.now();
+  await pickAppFromPalette(page);
+  await expect(page.getByTestId("inline-app-view")).toBeVisible();
+  const attachMs = Date.now() - started;
+  await expect(
+    page.getByText(`Loading ${APP_NAME}…`, { exact: true })
+  ).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => Boolean(window.centraid)))
+    .toBe(true);
+  return { attachMs, usableMs: Date.now() - started };
+}
+
+test("warm switch — tap to a usable app screen", async ({ page }) => {
+  const KEY = "web/warm-switch/seeded-demo/ci-linux-x64-4c";
+  const ceilingMs = journeyCeiling(KEY, "tapToVisualResponse", "ceilingMs");
+
+  await page.goto("/");
+  await waitForShellBundle(page);
+  await establishSession(page);
+
+  await attachAppAndMeasure(page);
+  await goHomeFromAttached(page);
+  const warm = await attachAppAndMeasure(page);
+
+  await fs.mkdir(path.dirname(TAP_EVIDENCE), { recursive: true });
+  await page.screenshot({ path: TAP_EVIDENCE, timeout: 15_000 });
+
+  console.log(
+    `\nwarm switch tap→usable app screen: ${warm.usableMs} ms ` +
+      `(attach ${warm.attachMs} ms, ceiling ${ceilingMs} ms)\n`
+  );
+  expect(warm.usableMs, "tap to a usable app screen").toBeLessThanOrEqual(
+    ceilingMs
+  );
+});

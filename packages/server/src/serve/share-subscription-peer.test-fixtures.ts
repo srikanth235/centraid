@@ -10,9 +10,6 @@ import path from "node:path";
 
 import {
   createGateway,
-  createGrant,
-  ensureAppEnrolled,
-  purposeConceptId,
   createShareGrant,
   nowIso,
   registerDocumentCommands,
@@ -161,7 +158,6 @@ function seedTallyGroup(side: Side, memberPartyId: string): string {
   const created = gateway.invoke(credential, {
     command: "tally.create_group",
     input: { name: "Trip", icon: "🧳", member_ids: [memberPartyId] },
-    purpose: "dpv:ServiceProvision",
   });
   if (created.status !== "executed")
     throw new Error(`tally.create_group: ${JSON.stringify(created)}`);
@@ -311,20 +307,13 @@ export function appQueryCtx(
       ),
       "utf8"
     )
-  ) as { vault: { purpose: string; scopes: ScopeSpec[] } };
-  const app = ensureAppEnrolled(side.vault, appId);
-  const purpose = purposeConceptId(side.vault, manifest.vault.purpose);
-  if (!purpose) throw new Error(`unknown purpose ${manifest.vault.purpose}`);
-  createGrant(side.vault, {
-    appId: app.appId,
-    purposeConceptId: purpose,
-    grantedByPartyId: side.ownerPartyId,
-    scopes: manifest.vault.scopes,
-  });
+  ) as { vault: { scopes: ScopeSpec[] } };
   const credential: Credential = {
-    kind: "app",
-    appId: app.appId,
-    signingKey: app.signingKey,
+    kind: "device",
+    deviceId: side.ownerCredential.deviceId,
+    deviceKey: side.ownerCredential.deviceKey,
+    surface: appId,
+    scopeClamp: manifest.vault.scopes,
   };
   const read = async (request: Record<string, unknown>): Promise<unknown> =>
     side.gateway.read(credential, request as never);

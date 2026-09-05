@@ -216,9 +216,6 @@ describe("schema/migrate", () => {
     expect(columnNames(db.vault, "access_device")).not.toContain("trust");
     expect(columnNames(db.vault, "media_asset")).not.toContain("favorite");
     expect(columnNames(db.vault, "core_vault")).toContain("self_party_id");
-    expect(columnNames(db.vault, "access_policy")).not.toContain(
-      "residency_region"
-    );
     db.close();
   });
 

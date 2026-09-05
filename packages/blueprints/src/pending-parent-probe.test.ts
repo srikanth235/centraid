@@ -113,27 +113,39 @@ describe("pending-parent child writes", () => {
     for (const edge of edges)
       byApp.set(edge.appId, (byApp.get(edge.appId) ?? 0) + 1);
     // The number this probe exists to report. It moved 66 to 67 when Tasks'
-    // `add` began accepting the id its own projection mints (#922 G2) — a new
-    // action taking a minted id must move it, which is exactly the point.
-    expect(edges.length).toMatchInlineSnapshot(`67`);
+    // `add` began accepting the id its own projection mints, and 67 to 105
+    // when the other seven apps followed (#922 G2): a creating action that
+    // declares its minted id turns every action taking that id into a child
+    // write that now lands on the row the member is looking at. Locker mints
+    // nothing — an item is a secret-bearing write and never queues — so it
+    // contributes no edge.
+    expect(edges.length).toMatchInlineSnapshot(`105`);
     expect([...byApp.entries()].sort(([a], [b]) => a.localeCompare(b)))
       .toMatchInlineSnapshot(`
       [
         [
+          "agenda",
+          5,
+        ],
+        [
           "docs",
-          11,
+          17,
         ],
         [
           "notes",
-          9,
+          15,
         ],
         [
           "people",
-          16,
+          21,
+        ],
+        [
+          "photos",
+          7,
         ],
         [
           "tally",
-          20,
+          29,
         ],
         [
           "tasks",

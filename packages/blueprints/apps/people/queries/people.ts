@@ -93,7 +93,6 @@ interface Reminder {
 const ROSTER_MAX = 9_999;
 
 export default async function peopleHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(
     Math.max(Number(input?.limit) || ROSTER_MAX, 20),
     ROSTER_MAX
@@ -105,9 +104,8 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         where: [{ column: "deleted_at", op: "is-null" }],
         orderBy: { column: "created_at", dir: "desc" },
         limit: window + 1,
-        purpose,
       }),
-      ...conceptTaxonomyReads(ctx.vault, purpose),
+      ...conceptTaxonomyReads(ctx.vault),
     ]);
 
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
@@ -150,7 +148,6 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "party_id", op: "in", value: partyIds }],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -159,7 +156,6 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
           { column: "target_type", op: "eq", value: "core.party" },
           { column: "target_id", op: "in", value: partyIds },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -168,7 +164,6 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
           { column: "party_id", op: "in", value: partyIds },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       // One bounded read for the whole window; null means "denied", not "none".
       readLiveBindings(ctx.vault, partyIds),

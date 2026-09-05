@@ -60,7 +60,6 @@ interface RawScheme {
 }
 
 export default async function searchHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "").trim();
   if (!term) return { people: [] };
   try {
@@ -69,19 +68,16 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         entity: "core.party",
         query: term,
         limit: 50,
-        purpose,
       }),
       ctx.vault.search({
         entity: "people.profile",
         query: term,
         limit: 50,
-        purpose,
       }),
       ctx.vault.search({
         entity: "knowledge.annotation",
         query: term,
         limit: 50,
-        purpose,
       }),
     ]);
 
@@ -116,13 +112,11 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           { column: "party_id", op: "in", value: order },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "party_id", op: "in", value: order }],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -131,9 +125,8 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           { column: "target_type", op: "eq", value: "core.party" },
           { column: "target_id", op: "in", value: order },
         ],
-        purpose,
       }),
-      ...conceptTaxonomyReads(ctx.vault, purpose),
+      ...conceptTaxonomyReads(ctx.vault),
     ]);
 
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];

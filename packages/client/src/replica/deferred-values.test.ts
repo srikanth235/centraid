@@ -30,7 +30,6 @@ function snapshot(): ReplicaSnapshot {
       {
         shapeId: "shape-notes",
         appId: "notes",
-        purpose: "dpv:ServiceProvision",
         entities: [
           {
             entity: "core.content_item",

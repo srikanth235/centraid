@@ -7,6 +7,7 @@ import { canonicalizeRrule } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
 import { queueProviderWriteback } from "./provider-writeback.js";
 import { registerScheduleOrganizeCommands } from "./schedule-organize.js";
 
@@ -18,6 +19,7 @@ const PROPOSE_EVENT: CommandDefinition = {
     required: ["summary", "dtstart", "dtend", "calendar_id"],
     additionalProperties: false,
     properties: {
+      event_id: MINTED_ID_PROPERTY,
       summary: { type: "string", minLength: 1 },
       description: { type: "string" },
       dtstart: { type: "string", minLength: 1 },
@@ -56,6 +58,7 @@ const PROPOSE_EVENT: CommandDefinition = {
     },
   },
   preconditions: [
+    mintedIdIsFree("core_event", "event_id", "event", "event_id"),
     {
       name: "calendar_exists",
       sql: "SELECT count(*) AS n FROM schedule_calendar WHERE calendar_id = :calendar_id",
@@ -154,7 +157,7 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
     conferencing_uri?: string;
     reminders?: { minutes_before: number }[];
   };
-  const eventId = ctx.newId();
+  const eventId = mintedId(ctx, "event_id");
   ctx.db
     .prepare(
       `INSERT INTO core_event

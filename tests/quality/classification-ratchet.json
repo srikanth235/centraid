@@ -3,11 +3,11 @@
   "claimsGovernanceFingerprint": "8193ade4715e77add6e3c94c5395d2bee185ba3d9aca69b2cc3fac6cf4030cc9",
   "fingerprints": {
     "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "e7c3fcc3cbbafa3c0e5e36dd10a0e82aa088629fd9d790f00c276d8d630ce3ed",
-    "packages/server/src/automation/manifest/manifest.ts": "8fc6f1c7a782d309de4025d27a382c00d3dccff5726b54c5bfd2adf9d472171d",
+    "packages/server/src/automation/manifest/manifest.ts": "5d85649d305ee26e4b185de2ba9d70b5591fd749bb336c3bb4795a3bd943498e",
     "packages/server/src/routes/route-security.ts": "c2fd8dcb6a9687552e4550e3496085b28c1498034472eb6f1173027b4300d82c",
     "packages/server/src/serve/health-registry.ts": "14ad4979e4b0adda60f16478522b8edda3606e87caa26a71d389aeaa94b7d4e0",
     "packages/vault/src/schema/sealed.ts": "e1a8cc4118760d1de21cc5e8c1917d71bddf7cb4dbcc8d791d3d39e8f162fb75",
     "tests/quality/fault-points.ts": "2b667efd1354071ab91043ab33f5ebd29cd79a11fcc4716edbe00aeada60f4bd",
-    "tests/claims.json": "576b56d83f973e7d4b7de61b533c81432228643b42e797b6576e6c2eb818cbd2"
+    "tests/claims.json": "6e07296be5bc8236c352d3692e52a0f580d97af55d0019af4ff21cc2c98f7308"
   }
 }

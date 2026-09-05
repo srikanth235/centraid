@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import type { Gateway } from "../gateway/gateway.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { isSealedValue, sealAad, unsealValue } from "../schema/sealed.js";
 import { LOCKER_ITEM_TYPE, registerLockerCommands } from "./locker.js";
 import {
@@ -37,7 +38,6 @@ describe("locker", () => {
     return gw.invoke(owner, {
       command,
       input,
-      purpose: "dpv:ServiceProvision",
     });
   }
   function out<T = Record<string, unknown>>(o: ReturnType<typeof invoke>): T {
@@ -187,22 +187,20 @@ describe("locker", () => {
 
   test('purge parks for an app-kind caller — the manifest advertises "confirmation: required" and the gateway must actually enforce it', () => {
     const id = addLogin();
-    const app = enrollApp(db, { name: "locker" });
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: "locker", verbs: "read+act" }],
+    const app = enrollAgent(db, {
+      name: "locker",
+      modelRef: "test-automation",
     });
+    answerScopes(db, boot, "locker", [{ schema: "locker", verbs: "read+act" }]);
     const appCred: Credential = {
-      kind: "app",
-      appId: app.appId,
-      signingKey: app.signingKey,
+      kind: "agent",
+      agentId: app.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
     };
     const outcome: InvokeOutcome = gw.invoke(appCred, {
       command: "locker.purge_item",
       input: { item_id: id },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("parked");
     // Nothing executed — the row is untouched until the owner approves.

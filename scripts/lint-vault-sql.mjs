@@ -108,18 +108,8 @@ export const ALLOW_LIST = {
   // ── the share / commons plane: server-owned tables, not vault entities ──
   "packages/server/src/serve/gateway-schema.ts":
     "creates the server-owned share-plane tables themselves",
-  "packages/server/src/routes/edges-routes.ts":
-    "serves the share edges the share plane owns",
-  "packages/server/src/serve/share-edge-row.ts":
-    "is the row codec for share_edges",
-  "packages/server/src/serve/share-edge-store.ts":
-    "is the store for share_edges",
-  "packages/server/src/serve/share-effects.ts":
-    "owns share_effects, the audience-side projection table",
-  "packages/server/src/serve/share-effects-retire.ts":
-    "retires share_effects rows when an authority ends",
   "packages/server/src/serve/share-access-receipts.ts":
-    "owns share_access_receipts",
+    "owns share_access_receipts, the same-owner placement history",
   "packages/server/src/serve/grant-fulfillment.ts":
     "owns share_authority and share_fulfillment",
   "packages/server/src/serve/share-notices.ts":
@@ -164,6 +154,13 @@ export const ALLOW_LIST = {
     "is a peer-give suite's fixture builder",
   "packages/server/src/serve/vault-plane.test-fixtures.ts":
     "is a vault-plane suite's fixture builder",
+  "apps/mobile/src/lib/replica/locker-vault.test-fixtures.ts":
+    "is the Locker replica fixture builder; it seeds replica_row directly after bootstrap",
+  "apps/mobile/src/lib/replica/tally-ledger.test-fixtures.ts":
+    "is the Tally replica fixture builder; it seeds replica_row directly after bootstrap",
+  // ── measurement rigs that verify gateway-owned audit state ──
+  "scripts/measure-read-fsync.mjs":
+    "measures gateway receipt durability and re-hashes its audit chain",
   // ── this linter ──
   "scripts/lint-vault-sql.mjs":
     "its own fixtures name physical tables on purpose",

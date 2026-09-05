@@ -22,7 +22,10 @@ import { FlatList, Pressable, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
-import { readPendingOverlay } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  pendingSidecarOf,
+  readPendingOverlay,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
 
 import { useBandOwner } from "../../kit/band/band-owner";
 import Icon from "../../kit/components/Icon";
@@ -566,9 +569,8 @@ function AgendaEventCard({
   colors: ThemeColors;
   onOpen: (event: NativeAgendaEvent) => void;
 }): React.JSX.Element {
-  const pending = readPendingOverlay(
-    event.raw as unknown as Record<string, unknown>
-  );
+  const eventRow = event.raw as unknown as Record<string, unknown>;
+  const pending = readPendingOverlay(eventRow, pendingSidecarOf(eventRow));
   const heldCancel =
     pending?.action === "cancel-event" &&
     (pending.status === "queued" ||

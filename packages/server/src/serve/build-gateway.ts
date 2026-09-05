@@ -241,7 +241,7 @@ import type { AssistOAuthConfig } from "./assist-oauth.js";
 import { pollProviderEventSource } from "./automation-event-sources.js";
 import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
 import { createBrokerHealthProbe } from "./broker-health.js";
-import { companionRequestAllowed } from "./companion-access.js";
+import { companionAccess } from "./companion-access.js";
 import { ConnectionBroker } from "./connection-broker.js";
 import type { DataPlaneHttpOptions } from "./data-plane-handoff.js";
 import { defaultLogger } from "./default-logger.js";
@@ -1560,10 +1560,10 @@ export async function buildGateway(
       const raw = JSON.parse(
         await fs.readFile(path.join(dir, "app.json"), "utf8")
       ) as {
-        vault?: { purpose?: unknown; scopes?: unknown };
+        vault?: { scopes?: unknown };
       };
       const block = manifestScopeBlock(raw.vault);
-      if (block) plane.ensureAppInstallGrant(appId, block);
+      if (block) plane.recordAppInstall(appId, block);
     } catch (error) {
       logger.warn(
         `install-time grant for app "${appId}" failed: ` +
@@ -2950,7 +2950,6 @@ export async function buildGateway(
     }
     const common = {
       automationRef: input.automationRef,
-      purpose: row.manifest.vault.purpose,
       vault: vaultRegistry.agentBridgeFor(
         parsed.appId,
         executionScopeBlock(row.manifest.vault)
@@ -3853,7 +3852,6 @@ export async function buildGateway(
               plane.invoke(plane.ownerCredential, {
                 command,
                 input,
-                purpose: "dpv:ServiceProvision",
               }),
           };
         },
@@ -4363,22 +4361,31 @@ export async function buildGateway(
       });
     }
     const enrollment = enrollmentStore.get(deviceKey, vaultId);
-    if (enrollment?.grantProfile !== undefined) {
-      if (
-        !companionRequestAllowed(
-          req,
-          enrollment.grantProfile,
-          enrollment.enrollmentId
-        )
-      ) {
-        return sendJson(res, 403, {
-          error: "companion_profile",
-          message:
-            "this Companion device is not granted access to that gateway surface",
-        });
-      }
-      req.headers[COMPANION_GRANTS_HEADER] = enrollment.grantProfile.join(",");
-    }
+    const access = companionAccess({
+      attenuated: enrollment?.attenuated === true,
+      projected:
+        enrollment?.attenuated === true
+          ? enrollmentStore.projectedSurfaces(deviceKey, vaultId)
+          : undefined,
+      req,
+      enrollmentId: enrollment?.enrollmentId ?? "",
+    });
+    if (access.kind === "unreadable")
+      return sendJson(res, 403, {
+        error: "companion_attenuation_unavailable",
+        message:
+          "this Companion device's surface answer has not been read from the vault yet",
+      });
+    if (access.kind === "refused")
+      return sendJson(res, 403, {
+        error: "companion_profile",
+        message:
+          "this Companion device is not granted access to that gateway surface",
+      });
+    const companionSurfaces =
+      access.kind === "allowed" ? access.surfaces : undefined;
+    if (companionSurfaces !== undefined)
+      req.headers[COMPANION_GRANTS_HEADER] = companionSurfaces.join(",");
     return runWithVaultContext(
       {
         vaultId,
@@ -4389,9 +4396,7 @@ export async function buildGateway(
         ...(enrollment
           ? { ownerId: enrollment.ownerId, ownsVault: !enrollment.revoked }
           : {}),
-        ...(enrollment?.grantProfile === undefined
-          ? {}
-          : { grantProfile: enrollment.grantProfile }),
+        ...(companionSurfaces === undefined ? {} : { companionSurfaces }),
       },
       () => dispatchChain(req, res)
     );

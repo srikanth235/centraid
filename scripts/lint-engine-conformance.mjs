@@ -1042,12 +1042,7 @@ const ACTION_KIT_PATH = path.join(
   "_shared",
   "action-kit.ts"
 );
-const ACTION_KIT_VERBS = [
-  "ACTION_PURPOSE",
-  "actionInput",
-  "deniedResult",
-  "runVaultAction",
-];
+const ACTION_KIT_VERBS = ["actionInput", "deniedResult", "runVaultAction"];
 const ACTION_KIT_SPECIFIER = /_shared\/action-kit(?:\.tsx?)?["']/u;
 const BLUEPRINT_ACTION =
   /^packages[\\/]blueprints[\\/]apps[\\/][^\\/]+[\\/]actions[\\/][^\\/]+\.ts$/u;

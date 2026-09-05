@@ -5,16 +5,17 @@ import { beforeEach, describe, expect, test } from "vitest";
 
 import { seededRandom } from "@centraid/test-kit/random";
 
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerKnowledgeCommands } from "../commands/knowledge.js";
 import { registerPeopleCommands } from "../commands/people.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import type { Gateway } from "./gateway.js";
 import { createGateway } from "./gateway.js";
 import { ftsMatchExpression } from "./search.js";
-import type { Credential } from "./types.js";
+import type { Credential, ExecutionScopeSpec } from "./types.js";
 
 const rng = seededRandom(0x5ea_2c_41);
 
@@ -23,13 +24,10 @@ let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
-const PURPOSE = "dpv:ServiceProvision";
-
 function createNote(title: string, body: string): string {
   const outcome = gw.invoke(owner, {
     command: "knowledge.create_note",
     input: { title, body_text: body },
-    purpose: PURPOSE,
   });
   if (outcome.status !== "executed")
     throw new Error(`create_note ${outcome.status}`);
@@ -37,25 +35,40 @@ function createNote(title: string, body: string): string {
 }
 
 function execOut<T>(command: string, input: Record<string, unknown>): T {
-  const outcome = gw.invoke(owner, { command, input, purpose: PURPOSE });
+  const outcome = gw.invoke(owner, { command, input });
   if (outcome.status !== "executed")
     throw new Error(`${command} ${outcome.status}`);
   return outcome.output as T;
 }
 
+/**
+ * An automation the owner answered YES for, run under a per-execution clamp.
+ * The answer says WHETHER it reaches the entity; the clamp is the only thing
+ * that narrows which rows and which fields (#928).
+ */
 function appCred(
-  scopes: Parameters<typeof createGrant>[1]["scopes"]
+  scopes: readonly ExecutionScopeSpec[],
+  clamped = false
 ): Credential {
-  const app = enrollApp(db, {
-    name: `app-${rng.token(6)}`,
-  });
-  createGrant(db, {
-    appId: app.appId,
-    purposeConceptId: boot.concepts[PURPOSE] as string,
-    grantedByPartyId: boot.ownerPartyId,
-    scopes,
-  });
-  return { kind: "app", appId: app.appId, signingKey: app.signingKey };
+  const name = `app-${rng.token(6)}`;
+  const app = enrollAgent(db, { name, modelRef: "test-automation" });
+  answerScopes(
+    db,
+    boot,
+    name,
+    scopes.map((scope) => ({
+      schema: scope.schema,
+      ...(scope.table === undefined ? {} : { table: scope.table }),
+      verbs: scope.verbs,
+    }))
+  );
+  return {
+    kind: "agent",
+    agentId: app.agentId,
+    deviceId: boot.deviceId,
+    deviceKey: boot.deviceKey,
+    ...(clamped ? { scopeClamp: scopes } : {}),
+  };
 }
 
 describe("search", () => {
@@ -105,7 +118,6 @@ describe("search", () => {
           .search(owner, {
             entity: "core.content_item",
             query: "moon camp",
-            purpose: PURPOSE,
           })
           .rows.map((row) => row.content_id)
       ).toStrictEqual(["photo-caption"]);
@@ -118,7 +130,6 @@ describe("search", () => {
         gw.search(owner, {
           entity: "core.content_item",
           query: "moon",
-          purpose: PURPOSE,
         }).rows
       ).toHaveLength(0);
     });
@@ -148,7 +159,6 @@ describe("search", () => {
             entity: "core.content_item",
             query: "same",
             limit: 1,
-            purpose: PURPOSE,
           })
           .rows.map((row) => row.content_id)
       ).toStrictEqual(["photo-a"]);
@@ -172,7 +182,6 @@ describe("search", () => {
       const hits = gw.search(owner, {
         entity: "knowledge.annotation",
         query: "ladakh trek",
-        purpose: PURPOSE,
       }).rows;
       expect(hits.map((r) => r.target_id)).toContain(interaction_id);
     });
@@ -191,7 +200,6 @@ describe("search", () => {
           .search(owner, {
             entity: "schedule.task",
             query: "ceramic mug",
-            purpose: PURPOSE,
           })
           .rows.map((r) => r.task_id)
       ).toContain(gift_id);
@@ -209,7 +217,6 @@ describe("search", () => {
           .search(owner, {
             entity: "knowledge.note",
             query: "quiet morning",
-            purpose: PURPOSE,
           })
           .rows.map((r) => r.note_id)
       ).toContain(entry_id);
@@ -221,12 +228,13 @@ describe("search", () => {
       const result = gw.search(owner, {
         entity: "knowledge.note",
         query: "budget",
-        purpose: PURPOSE,
       });
       expect(result.rows).toHaveLength(1);
       expect(result.rows[0]?.title).toBe("Money things");
       expect(result.rows[0]?._snippet).toContain("⟦budget⟧");
-      expect(result.receiptId).toBeTruthy();
+      // Owner-direct: no receipt (#928); a non-owner search still leaves one,
+      // asserted in the automation cases below.
+      expect(result.receiptId).toBeUndefined();
     });
 
     test("prefix matching serves as-you-type search", () => {
@@ -234,7 +242,6 @@ describe("search", () => {
       const result = gw.search(owner, {
         entity: "knowledge.note",
         query: "budg",
-        purpose: PURPOSE,
       });
       expect(result.rows).toHaveLength(1);
     });
@@ -244,17 +251,14 @@ describe("search", () => {
       gw.invoke(owner, {
         command: "knowledge.edit_note",
         input: { note_id: noteId, body_text: "now all about pottery glaze" },
-        purpose: PURPOSE,
       });
       const q = (query: string) =>
-        gw.search(owner, { entity: "knowledge.note", query, purpose: PURPOSE })
-          .rows.length;
+        gw.search(owner, { entity: "knowledge.note", query }).rows.length;
       expect(q("budget")).toBe(0);
       expect(q("pottery")).toBe(1);
       gw.invoke(owner, {
         command: "knowledge.delete_note",
         input: { note_id: noteId },
-        purpose: PURPOSE,
       });
       expect(q("pottery")).toBe(0);
     });
@@ -265,13 +269,11 @@ describe("search", () => {
       gw.invoke(owner, {
         command: "knowledge.edit_note",
         input: { note_id: pinnedId, pinned: 1 },
-        purpose: PURPOSE,
       });
       const result = gw.search(owner, {
         entity: "knowledge.note",
         query: "budget",
         where: [{ column: "pinned", op: "eq", value: 1 }],
-        purpose: PURPOSE,
       });
       expect(result.rows.map((r) => r.note_id)).toStrictEqual([pinnedId]);
     });
@@ -281,7 +283,6 @@ describe("search", () => {
       const result = gw.search(owner, {
         entity: "knowledge.note",
         query: '"NEAR( AND',
-        purpose: PURPOSE,
       });
       expect(result.rows).toHaveLength(1);
     });
@@ -293,7 +294,6 @@ describe("search", () => {
         gw.search(owner, {
           entity: "media.asset",
           query: "x",
-          purpose: PURPOSE,
         })
       ).toThrow(/not text-searchable/u);
     });
@@ -303,7 +303,6 @@ describe("search", () => {
         gw.search(owner, {
           entity: "knowledge.note",
           query: "  ",
-          purpose: PURPOSE,
         })
       ).toThrow(/no searchable words/u);
     });
@@ -311,17 +310,20 @@ describe("search", () => {
 
   describe("consent clamps", () => {
     test("ungranted app is denied with a receipt", () => {
-      const app = enrollApp(db, { name: "nosy-app" });
+      const app = enrollAgent(db, {
+        name: "nosy-app",
+        modelRef: "test-automation",
+      });
       const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
+        kind: "agent",
+        agentId: app.agentId,
+        deviceId: boot.deviceId,
+        deviceKey: boot.deviceKey,
       };
       expect(() =>
         gw.search(cred, {
           entity: "knowledge.note",
           query: "budget",
-          purpose: PURPOSE,
         })
       ).toThrow(/deny/u);
       const deny = db.audit
@@ -339,7 +341,6 @@ describe("search", () => {
         gw.search(cred, {
           entity: "knowledge.note",
           query: "budget",
-          purpose: PURPOSE,
         })
       ).toThrow(/core\.content_item/u);
       const granted = appCred([
@@ -350,45 +351,48 @@ describe("search", () => {
         gw.search(granted, {
           entity: "knowledge.note",
           query: "budget",
-          purpose: PURPOSE,
         }).rows
       ).toHaveLength(1);
     });
 
-    test("grant row filters clamp matches", () => {
+    test("clamp row filters clamp matches", () => {
       createNote("Pinned budget", "budget A");
-      const cred = appCred([
-        {
-          schema: "knowledge",
-          verbs: "read",
-          rowFilter: [{ column: "pinned", op: "eq", value: 1 }],
-        },
-        { schema: "core", table: "content_item", verbs: "read" },
-      ]);
+      const cred = appCred(
+        [
+          {
+            schema: "knowledge",
+            verbs: "read",
+            rowFilter: [{ column: "pinned", op: "eq", value: 1 }],
+          },
+          { schema: "core", table: "content_item", verbs: "read" },
+        ],
+        true
+      );
       expect(
         gw.search(cred, {
           entity: "knowledge.note",
           query: "budget",
-          purpose: PURPOSE,
         }).rows
       ).toHaveLength(0);
     });
 
     test("a field mask hiding an indexed column fails the search closed", () => {
       createNote("Money things", "the quarterly budget plan");
-      const cred = appCred([
-        {
-          schema: "knowledge",
-          verbs: "read",
-          fieldMask: ["note_id", "body_content_id"],
-        },
-        { schema: "core", table: "content_item", verbs: "read" },
-      ]);
+      const cred = appCred(
+        [
+          {
+            schema: "knowledge",
+            verbs: "read",
+            fieldMask: ["note_id", "body_content_id"],
+          },
+          { schema: "core", table: "content_item", verbs: "read" },
+        ],
+        true
+      );
       expect(() =>
         gw.search(cred, {
           entity: "knowledge.note",
           query: "budget",
-          purpose: PURPOSE,
         })
       ).toThrow(/field mask hides indexed column/u);
     });
@@ -406,7 +410,6 @@ describe("search", () => {
         gw.search(owner, {
           entity: "knowledge.note",
           query: "archaeology",
-          purpose: PURPOSE,
         }).rows
       ).toHaveLength(0);
       db.vault.exec(
@@ -420,7 +423,6 @@ describe("search", () => {
         gw.search(owner, {
           entity: "knowledge.note",
           query: "archaeology",
-          purpose: PURPOSE,
         }).rows
       ).toHaveLength(1);
     });

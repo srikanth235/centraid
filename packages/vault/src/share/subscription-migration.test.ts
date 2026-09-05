@@ -184,7 +184,6 @@ describe("migrating a live commons", () => {
     const created = gateway.invoke(credential, {
       command: "tally.create_group",
       input: { name: "Trip", icon: "🧳", member_ids: [bob, carol, dev] },
-      purpose: "dpv:ServiceProvision",
     });
     if (created.status !== "executed")
       throw new Error(`group creation failed: ${JSON.stringify(created)}`);
@@ -204,7 +203,6 @@ describe("migrating a live commons", () => {
           { party_id: dev, share_minor: 1000 },
         ],
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(expense.status, JSON.stringify(expense)).toBe("executed");
     const circle = home.origin.vault

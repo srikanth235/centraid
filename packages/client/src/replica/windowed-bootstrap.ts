@@ -244,10 +244,17 @@ async function attemptWindowedBootstrap(
 }
 
 /**
- * Mandatory convergence: replay until the log stops advancing. Bounded, and
- * stopping early is safe rather than silent — the replica is already committed
- * and its stored cursor advanced with every applied batch, so the session's
- * ordinary feed catch-up continues from exactly where this returns.
+ * Mandatory convergence: replay the deltas the snapshot pages missed, and stop
+ * when the GATEWAY says there are none left. Stopping there is safe rather
+ * than silent — the replica is already committed and its stored cursor
+ * advanced with every applied batch, so the session's ordinary feed catch-up
+ * continues from exactly where this returns.
+ *
+ * `hasMore`, not "the log stopped advancing" (#922 E3): a vault that is being
+ * written to has no quiet moment, so the old rule made this loop run its whole
+ * pass budget on a live gateway — and `openReplicaShellSession` awaits it, so
+ * the seat sat on "Loading …" until the budget ran out. Draining to the head
+ * the gateway reports is the same rule the coordinator's own catch-up uses.
  */
 async function converge(
   options: RunWindowedBootstrapOptions,
@@ -264,6 +271,7 @@ async function converge(
     const applied = await options.target.applyChanges(batch);
     if (applied.epoch === at.epoch && applied.seq <= at.seq) return at;
     at = applied;
+    if (batch.hasMore !== true) return at;
   }
   return at;
 }

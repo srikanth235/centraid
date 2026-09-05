@@ -13,7 +13,6 @@
   ],
   "requires": {},
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Reads newly readable documents' text, extracts dated obligations, and stages tentative core.event rows for review (issue #299 phase 4 — 'your documents watch your deadlines').",
     "scopes": [
       { "schema": "core", "verbs": "read" },

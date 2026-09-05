@@ -317,7 +317,6 @@ describe("condition triggers", () => {
     prompt: "chase what is due",
     generated: { by: "test", at: "2026-07-03" },
     vault: {
-      purpose: "dpv:Billing",
       scopes: [{ schema: "schedule", verbs: "read" }],
     },
   };
@@ -413,7 +412,6 @@ describe("data triggers", () => {
     prompt: "match credits to invoices",
     generated: { by: "test", at: "2026-07-03" },
     vault: {
-      purpose: "dpv:Billing",
       scopes: [{ schema: "core", table: "transaction", verbs: "read" }],
     },
   };
@@ -551,7 +549,6 @@ describe("provider event triggers and cursor loop guard", () => {
     "rejects loop-sensitive condition/data cursor entity %s",
     (entity) => {
       const vault = {
-        purpose: "dpv:ServiceProvision",
         scopes: [{ schema: "core", table: "event", verbs: "read" }],
       };
       expect(() =>
@@ -584,7 +581,6 @@ describe("provider event triggers and cursor loop guard", () => {
     "accepts the user vault entity %s — the loop guard names runtime tables, not table words",
     (entity) => {
       const vault = {
-        purpose: "dpv:ServiceProvision",
         scopes: [{ schema: "core", table: "event", verbs: "read" }],
       };
       expect(

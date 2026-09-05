@@ -453,7 +453,6 @@ describe("grant/fulfillment", () => {
       {
         command: "core.merge_party",
         input: { survivor_party_id: linked, merged_party_id: card },
-        purpose: "dpv:ServiceProvision",
       }
     );
     expect(merged.status).toBe("executed");

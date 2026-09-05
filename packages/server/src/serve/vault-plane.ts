@@ -24,13 +24,15 @@ import type {
   VaultWorkspace,
 } from "@centraid/server/engine";
 import {
-  assertExtSchemaOwnership,
+  AUTOMATION_ENTITY_SUBJECT,
   automationAnswers,
   automationSubjectsOf,
-  backfillAutomationAnswers,
+  hasAnsweredEver,
+  scopeForSubject,
+  listEgressAuthorities,
+  liveEgressAuthorityIdsFor,
   buildAssistantContext,
   createGateway,
-  createGrant,
   nowIso,
   recordAutomationAnswers,
   revokeAutomationAnswers,
@@ -39,8 +41,6 @@ import {
   bootstrapVault,
   recoverVaultBootstrap,
   GatewayError,
-  listActiveAgentGrants,
-  listActiveGrants,
   listEnrolledAgents,
   listEnrolledApps,
   listInstalledApps,
@@ -50,19 +50,13 @@ import {
   markAgentRevoked,
   markAppRevoked,
   openVaultDb,
-  purposeConceptId,
-  clearAllScopeTombstones,
-  clearScopeTombstones,
   checkpointVault,
   deleteReplicaIntentOutcomesForDevice,
   closeObsoleteScopeRequest,
   getOpenScopeRequest,
-  hasGrantHistory,
   listOpenScopeRequests,
-  listScopeTombstones,
   markScopeRequestDecided,
   openScopeRequest,
-  writeScopeTombstones,
   renameVault,
   readVaultPresentation,
   readVaultPersonal,
@@ -93,7 +87,6 @@ import {
   blobCustodyProven,
   WalShipper,
   jitterDelayMs,
-  scopeCovers,
   sweepLocalOrphans,
   decideVaultMaintenance,
   runVaultMaintenance,
@@ -101,17 +94,16 @@ import {
 } from "@centraid/vault";
 import type {
   AutomationAnswer,
+  AutomationSubject,
   VaultFootprintBudget,
   InstalledAppRow,
   ScopeRequestSummary,
-  ScopeTriple,
   VaultPresentation,
   AgentSummary,
   AppSummary,
   ChangesRequest,
   Credential,
   Gateway as VaultGateway,
-  GrantSummary,
   HostBootstrap,
   InvokeOutcome,
   InvokeRequest,
@@ -139,7 +131,10 @@ import type {
 
 import { loadSqliteVec } from "../enrich/sqlite-vec.js";
 import { unrefTimer } from "../lib/unref-timer.js";
-import { recordDeclaredManifest } from "../routes/replica-declared-scopes.js";
+import {
+  declaredManifestFor,
+  recordDeclaredManifest,
+} from "../routes/replica-declared-scopes.js";
 import { GroupCommitQueue, groupCommitWindowMs } from "./group-commit-queue.js";
 import { decideJournalArchive } from "./journal-limit.js";
 import { NoticeStore } from "./notices.js";
@@ -247,16 +242,10 @@ export interface VaultPlaneOptions {
 }
 
 export interface GrantRequest {
-  purpose: string;
   scopes: ScopeSpec[];
-  expiresAt?: string;
 }
 
-/** What a manifest with no stated purpose is installed under (#306). */
-const DEFAULT_INSTALL_PURPOSE = "dpv:ServiceProvision";
-
 export interface InstallScopeBlock {
-  purpose?: string;
   scopes: readonly {
     schema: string;
     table?: string;
@@ -296,9 +285,9 @@ export interface ReviewEntry {
   actorId: string | null;
   actorKind: string | null;
   actor: string | null;
-  /** The STANDING grant that auto-allowed this receipt; distinct from
-   *  `access.grant` on the row (#552). */
-  grantId: string | null;
+  /** The standing answer that auto-allowed this receipt (#552, #928) — one
+   *  id space: every value here is a `share_authority.authority_id`. */
+  authorityId: string | null;
   context: { kind: "fill"; origin: string } | null;
 }
 
@@ -322,30 +311,32 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
 }
 
 /**
- * Tombstoned scopes are the owner's standing "no" (#308). `scopeCovers` is the
- * vault package's CANONICAL extent comparison, never a local copy: one
- * definition keeps consent memory and install-grant reconciliation in
- * lockstep (#541).
+ * The subjects a published manifest asks for that the owner has NOT answered
+ * either way (#928 A3). A `declined` row is an answer and is therefore not
+ * "missing" — re-asking on every mount is what #308 called the top-up steering
+ * itself, and the one plane keeps refusals as rows so it cannot.
  */
-function missingScopes(
-  grants: GrantSummary[],
-  declared: InstallScopeBlock["scopes"],
-  tombstoned: readonly ScopeTriple[] = []
-): ScopeSpec[] {
-  return declared
-    .filter(
-      (scope) =>
-        !grants.some((grant) =>
-          grant.scopes.some((existing) => scopeCovers(existing, scope))
-        ) && !tombstoned.some((existing) => scopeCovers(existing, scope))
+function unansweredSubjects(
+  held: readonly AutomationAnswer[],
+  declared: InstallScopeBlock["scopes"]
+): AutomationSubject[] {
+  const answered = new Set(
+    held.map(
+      (answer) => `${answer.subjectType} ${answer.subjectId} ${answer.verb}`
     )
-    .map((s) => ({
-      schema: s.schema,
-      ...(s.table === undefined ? {} : { table: s.table }),
-      verbs: s.verbs,
-      ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
-      ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
-    }));
+  );
+  return automationSubjectsOf(
+    declared.map((scope) => ({
+      schema: scope.schema,
+      ...(scope.table === undefined ? {} : { table: scope.table }),
+      verbs: scope.verbs,
+    }))
+  ).filter(
+    (subject) =>
+      !answered.has(
+        `${subject.subjectType} ${subject.subjectId} ${subject.verb}`
+      )
+  );
 }
 
 interface AgentContentRequest {
@@ -375,6 +366,9 @@ async function asVaultCallResultAsync(
     };
   }
 }
+
+/** The one agent that holds no standing answer at all (#928 A3). */
+const ASSISTANT_ENROLLMENT_KEY = "_assistant";
 
 const JOURNAL_ARCHIVAL_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -589,20 +583,6 @@ export class VaultPlane {
     this.walCaptureConfigured = options.walCaptureConfigured ?? (() => true);
     this.walShipperOptions = options.walShipper ?? {};
     this.walShipper = this.createWalShipperIfOwner();
-    // ONE-SHOT (#928 A3): an automation grant recorded before the plane moved
-    // becomes a standing answer, and an owner's refusal a `declined` row. Open
-    // at mount is the one path every vault takes, and the backfill returns at
-    // its first statement once any automation answer exists.
-    const backfilled = backfillAutomationAnswers(
-      this.db.vault,
-      this.boot.ownerPartyId,
-      nowIso()
-    );
-    if (backfilled.granted + backfilled.declined > 0) {
-      this.logger.info(
-        `vault plane: migrated automation authority (${backfilled.granted} granted, ${backfilled.declined} declined)`
-      );
-    }
   }
 
   private ownsWalLifecycle(): boolean {
@@ -757,223 +737,158 @@ export class VaultPlane {
    *  separate act. Model rows and receipts remain. */
   revokeApp(appId: string): { grantsRevoked: number } {
     const hadOpenScopeRequest = this.listScopeRequests().some(
-      (request) => request.appId === appId
+      (request) => request.principalId === appId
     );
     let revoked = 0;
     const app = lookupAppByName(this.db, appId);
     if (app) {
-      for (const grant of listActiveGrants(this.db, app.appId)) {
-        const result: RevocationResult = this.gateway.revokeGrant(
-          this.ownerCredential,
-          grant.grantId
-        );
-        revoked += 1;
+      // The band goes with the INSTALL now, not with a grant: a first-party
+      // app holds no standing answer to lose (#928 A1), so uninstall is the
+      // moment its own tables stop being live.
+      const { retained } = this.gateway.retainAppExt(
+        this.ownerCredential,
+        appId
+      );
+      if (retained.length > 0)
         this.logger.info(
-          `vault plane: revoked grant ${grant.grantId} for "${appId}" ` +
-            `(parked ${result.parkedDropped})`
+          `vault plane: retained ext tables for "${appId}" (${retained.join(", ")})`
         );
-      }
       markAppRevoked(this.db, app.appId);
     }
     const agent = lookupAgentByName(this.db, appId);
     if (agent) {
-      for (const grant of listActiveAgentGrants(this.db, agent.partyId)) {
-        this.gateway.revokeGrant(this.ownerCredential, grant.grantId);
+      for (const answer of automationAnswers(this.db.vault, appId)) {
+        this.gateway.revokeAuthority(this.ownerCredential, answer.authorityId);
         revoked += 1;
-        this.logger.info(
-          `vault plane: revoked agent grant ${grant.grantId} for "${appId}"`
-        );
       }
+      // Uninstall WIPES the memory (#306): the rows stay as evidence, stamped
+      // `principal-removed`, and a reinstall answers itself afresh.
+      revokeAutomationAnswers(this.db.vault, appId, nowIso());
       markAgentRevoked(this.db, agent.agentId);
+      this.logger.info(
+        `vault plane: withdrew ${revoked} standing answer(s) for "${appId}"`
+      );
     }
-    // Standing grants die WITH the actor (#306).
+    // Standing answers die WITH the actor (#306).
     const outboxRevocations: string[] = [];
     for (const actorId of [app?.appId, agent?.agentId]) {
       if (!actorId) continue;
-      const rules = this.db.vault
-        .prepare(
-          "SELECT grant_id FROM outbox_grant WHERE actor_id = ? AND revoked_at IS NULL"
-        )
-        .all(actorId) as { grant_id: string }[];
-      for (const rule of rules) {
-        outboxRevocations.push(rule.grant_id);
+      for (const authorityId of liveEgressAuthorityIdsFor(
+        this.db.vault,
+        actorId
+      )) {
+        outboxRevocations.push(authorityId);
       }
     }
     const revokeResults = this.gateway.invokeBatchSettled(
       outboxRevocations.map(
-        (grantId) => () =>
+        (authorityId) => () =>
           this.gateway.invoke(this.ownerCredential, {
             command: "outbox.revoke_grant",
-            input: { grant_id: grantId },
+            input: { authority_id: authorityId },
           })
       )
     );
     for (const [index, result] of revokeResults.entries()) {
       if (!result.ok) throw result.error;
-      const revokedGrantId = outboxRevocations[index]!;
+      const revokedAuthorityId = outboxRevocations[index]!;
       this.logger.info(
-        `vault plane: revoked standing outbox grant ${revokedGrantId} for "${appId}"`
+        `vault plane: revoked standing egress answer ${revokedAuthorityId} for "${appId}"`
       );
     }
-    // Uninstall WIPES the consent memory (#308): it is "no to the whole app",
-    // not "no to these scopes forever" — a reinstall is a fresh consent.
-    if (app) clearAllScopeTombstones(this.db, { appId: app.appId });
-    if (agent) {
-      clearAllScopeTombstones(this.db, { granteePartyId: agent.partyId });
-      revokeAutomationAnswers(this.db.vault, appId, nowIso());
-    }
-    closeObsoleteScopeRequest(this.db, "app", appId);
-    closeObsoleteScopeRequest(this.db, "agent", appId);
+    closeObsoleteScopeRequest(this.db, appId);
     if (hadOpenScopeRequest) this.ringNotificationsChanged(false);
     return { grantsRevoked: revoked };
   }
 
-  /** An app may request `ext.*` scopes only on its OWN band. */
-  approveGrant(appId: string, request: GrantRequest): string {
-    const app = ensureAppEnrolled(this.db, appId);
-    const purpose = purposeConceptId(this.db, request.purpose);
-    if (!purpose)
-      throw new Error(`unknown purpose notation "${request.purpose}"`);
-    if (request.scopes.length === 0)
-      throw new Error("a grant needs at least one scope");
-    for (const scope of request.scopes)
-      assertExtSchemaOwnership(appId, scope.schema);
-    clearScopeTombstones(this.db, { appId: app.appId }, request.scopes);
-    return createGrant(this.db, {
-      appId: app.appId,
-      purposeConceptId: purpose,
-      grantedByPartyId: this.boot.ownerPartyId,
-      scopes: request.scopes,
-      ...(request.expiresAt ? { expiresAt: request.expiresAt } : {}),
-    });
-  }
-
-  /** A grant can be the FIRST touch an agent gets, and without `displayName`
-   *  it is stuck with a bare `humanizeSlug(appId)` until a later reconcile. */
+  /**
+   * The owner's YES about an automation, in the one plane (#928 A3). This is
+   * the one path both the install-time approval and the owner's decision on a
+   * parked widening run through — a manifest that only PARKS reaches
+   * `openScopeRequest` instead and mints nothing, which is what keeps a
+   * widened manifest parked rather than silently answered.
+   *
+   * Without `displayName` a first-touch automation is stuck with a bare
+   * `humanizeSlug(appId)` until a later reconcile.
+   */
   approveAgentGrant(
     appId: string,
     request: GrantRequest,
     displayName?: string
-  ): string {
-    const agent = ensureAgentEnrolled(this.db, appId, {
+  ): number {
+    // THE ASSISTANT HOLDS NO STANDING ANSWER (#928 A3). It is the owner's own
+    // voice, so its reach is the acting owner's and is never a row — refused
+    // here rather than filtered later, so no path can mint one by accident.
+    if (appId === ASSISTANT_ENROLLMENT_KEY) return 0;
+    ensureAgentEnrolled(this.db, appId, {
       modelRef: "centraid-automation",
       ...(displayName ? { displayName } : {}),
     });
-    const purpose = purposeConceptId(this.db, request.purpose);
-    if (!purpose)
-      throw new Error(`unknown purpose notation "${request.purpose}"`);
     if (request.scopes.length === 0)
-      throw new Error("a grant needs at least one scope");
-    clearScopeTombstones(
-      this.db,
-      { granteePartyId: agent.partyId },
-      request.scopes
-    );
-    // The owner's YES, in the one plane (#928 A3). Minted here because this is
-    // the one path both the install-time approval and the owner's decision on
-    // a parked widening run through — a manifest that only PARKS reaches
-    // `openScopeRequest` instead and mints nothing, which is what keeps a
-    // widened manifest parked rather than silently answered.
-    recordAutomationAnswers(this.db.vault, {
+      throw new Error("an answer needs at least one scope");
+    return recordAutomationAnswers(this.db.vault, {
       principalId: appId,
       ownerPartyId: this.boot.ownerPartyId,
       subjects: automationSubjectsOf(request.scopes),
       decision: "granted",
       now: nowIso(),
     });
-    return createGrant(this.db, {
-      granteePartyId: agent.partyId,
-      purposeConceptId: purpose,
-      grantedByPartyId: this.boot.ownerPartyId,
-      scopes: request.scopes,
-      ...(request.expiresAt ? { expiresAt: request.expiresAt } : {}),
-    });
   }
 
-  /** Installing WAS the consent, for the scopes declared AT install. The
-   *  top-up NEVER widens on its own afterwards: agents author their own
-   *  manifests, so a re-publish would steer its own containment (#306). */
-  ensureAppInstallGrant(appId: string, block: InstallScopeBlock): void {
-    const app = ensureAppEnrolled(this.db, appId);
-    // The app's own build-time declaration, which is what a replica shape is
-    // composed from (#928, AP-apps-declare). Recorded here because this is the
-    // one path that reads an `app.json`, and recorded whether or not the block
-    // widens: a widening still parks as a GRANT below, while the declaration
-    // itself is the reviewable artefact the static tripwire holds.
+  /**
+   * INSTALLING IS NOT A GRANT (#928 A1). A first-party app is not a principal:
+   * what an install records is the app's own build-time declaration, which is
+   * what a replica shape is composed from and what the static entity tripwire
+   * holds it to. No grant is minted, nothing parks, and an owner-device read
+   * of the owner's vault runs no authority statement at all.
+   */
+  recordAppInstall(appId: string, block: InstallScopeBlock): void {
+    ensureAppEnrolled(this.db, appId);
     recordDeclaredManifest(this.db.vault, appId, {
-      purpose: block.purpose ?? DEFAULT_INSTALL_PURPOSE,
       scopes: block.scopes.map((scope) => ({
         schema: scope.schema,
         ...(scope.table === undefined ? {} : { table: scope.table }),
         verbs: scope.verbs,
+        // The declared row filter and field mask STAY (#928, deviating from
+        // A1's "minus filters and masks"): they are build-time properties of
+        // the app's own code, not grants, and they are what keeps a replica
+        // holding one entity type's revisions instead of every app's.
         ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
         ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
       })),
     });
-    this.ensureInstallGrant({
-      plane: "app",
-      appId,
-      block,
-      grantee: { appId: app.appId },
-      grants: listActiveGrants(this.db, app.appId),
-      approve: (request) => void this.approveGrant(appId, request),
-    });
   }
 
   ensureAgentInstallGrant(appId: string, block: InstallScopeBlock): void {
-    const agent = ensureAgentEnrolled(this.db, appId, {
-      modelRef: "centraid-automation",
-    });
-    this.ensureInstallGrant({
-      plane: "agent",
-      appId,
-      block,
-      grantee: { granteePartyId: agent.partyId },
-      grants: listActiveAgentGrants(this.db, agent.partyId),
-      approve: (request) => void this.approveAgentGrant(appId, request),
-    });
-  }
-
-  private ensureInstallGrant(input: {
-    plane: "app" | "agent";
-    appId: string;
-    block: InstallScopeBlock;
-    grantee: { appId?: string; granteePartyId?: string };
-    grants: GrantSummary[];
-    approve: (request: GrantRequest) => void;
-  }): void {
-    const purpose = input.block.purpose ?? DEFAULT_INSTALL_PURPOSE;
+    if (appId === ASSISTANT_ENROLLMENT_KEY) return;
+    ensureAgentEnrolled(this.db, appId, { modelRef: "centraid-automation" });
+    const held = automationAnswers(this.db.vault, appId);
     const existingRequest = this.listScopeRequests().find(
-      (request) =>
-        request.plane === input.plane && request.appId === input.appId
+      (request) => request.principalId === appId
     );
-    const tombstoned = listScopeTombstones(this.db, input.grantee);
-    const missing = missingScopes(input.grants, input.block.scopes, tombstoned);
+    const missing = unansweredSubjects(held, block.scopes);
     if (missing.length === 0) {
-      closeObsoleteScopeRequest(this.db, input.plane, input.appId);
+      closeObsoleteScopeRequest(this.db, appId);
       if (existingRequest) this.ringNotificationsChanged(false);
       return;
     }
-    if (!hasGrantHistory(this.db, input.grantee)) {
-      input.approve({ purpose, scopes: missing });
+    // Install WAS the answer, for what was declared AT install. Afterwards a
+    // widening PARKS, and so does a subject the owner WITHDREW: automations
+    // author their own manifests, so a re-publish must not steer its own
+    // containment, and a withdrawal must not be undone by the next mount
+    // (#306, #308 A4). "Never asked" is the only case that answers itself.
+    if (!hasAnsweredEver(this.db.vault, appId)) {
+      this.approveAgentGrant(appId, { scopes: [...block.scopes] });
       this.logger.info(
-        `vault plane: install-time grant for ${input.plane} "${input.appId}" (+${missing.length} scope(s))`
+        `vault plane: install-time answer for automation "${appId}" (+${missing.length} subject(s))`
       );
       return;
     }
-    const nextScopes = missing.map((s) => ({
-      schema: s.schema,
-      ...(s.table === undefined ? {} : { table: s.table }),
-      verbs: s.verbs,
-      ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
-      ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
-    }));
-    openScopeRequest(this.db, {
-      plane: input.plane,
-      appId: input.appId,
-      purpose,
-      scopes: nextScopes,
-    });
+    // The ask carries EXACTLY the unanswered subjects, never the whole
+    // manifest: deciding it must not re-answer what the owner already settled,
+    // and a "no" to a widening must not withdraw the yes it already gave.
+    const nextScopes = missing.map((subject) => scopeForSubject(subject));
+    openScopeRequest(this.db, { principalId: appId, scopes: nextScopes });
     if (
       !existingRequest ||
       JSON.stringify(existingRequest.scopes) !== JSON.stringify(nextScopes)
@@ -981,7 +896,7 @@ export class VaultPlane {
       this.ringNotificationsChanged(existingRequest === undefined);
     }
     this.logger.info(
-      `vault plane: ${input.plane} "${input.appId}" asks for ${missing.length} scope(s) beyond its last consent — parked for the owner`
+      `vault plane: automation "${appId}" asks for ${missing.length} subject(s) beyond its last answer — parked for the owner`
     );
   }
 
@@ -992,35 +907,33 @@ export class VaultPlane {
   decideScopeRequest(requestId: string, approve: boolean): ScopeRequestSummary {
     const request = getOpenScopeRequest(this.db, requestId);
     if (!request) throw new Error(`no open scope request ${requestId}`);
-    const grantee = this.granteeFor(request);
     if (approve) {
-      clearScopeTombstones(this.db, grantee, request.scopes);
-      const grantRequest: GrantRequest = {
-        purpose: request.purpose,
+      this.approveAgentGrant(request.principalId, {
         scopes: request.scopes.map((s) => ({
           schema: s.schema,
           ...(s.table === undefined ? {} : { table: s.table }),
           verbs: s.verbs,
-          ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
-          ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
         })),
-      };
-      if (request.plane === "app")
-        this.approveGrant(request.appId, grantRequest);
-      else this.approveAgentGrant(request.appId, grantRequest);
+      });
     } else {
-      writeScopeTombstones(this.db, grantee, request.scopes);
       // A refusal is an ANSWER (#883 V-table): without the row, the next
       // compile cannot tell "told no" from "never asked" and re-asks.
-      if (request.plane === "agent") {
-        recordAutomationAnswers(this.db.vault, {
-          principalId: request.appId,
-          ownerPartyId: this.boot.ownerPartyId,
-          subjects: automationSubjectsOf(request.scopes),
-          decision: "declined",
-          now: nowIso(),
-        });
-      }
+      ensureAgentEnrolled(this.db, request.principalId, {
+        modelRef: "centraid-automation",
+      });
+      recordAutomationAnswers(this.db.vault, {
+        principalId: request.principalId,
+        ownerPartyId: this.boot.ownerPartyId,
+        subjects: automationSubjectsOf(
+          request.scopes.map((s) => ({
+            schema: s.schema,
+            ...(s.table === undefined ? {} : { table: s.table }),
+            verbs: s.verbs,
+          }))
+        ),
+        decision: "declined",
+        now: nowIso(),
+      });
     }
     markScopeRequestDecided(
       this.db,
@@ -1029,7 +942,7 @@ export class VaultPlane {
     );
     this.ringNotificationsChanged(false);
     this.logger.info(
-      `vault plane: owner ${approve ? "approved" : "denied"} the ${request.plane} "${request.appId}" scope request (${request.scopes.length} scope(s))`
+      `vault plane: owner ${approve ? "approved" : "denied"} the automation "${request.principalId}" scope request (${request.scopes.length} scope(s))`
     );
     return request;
   }
@@ -1042,34 +955,23 @@ export class VaultPlane {
     }
   }
 
-  private granteeFor(request: ScopeRequestSummary): {
-    appId?: string;
-    granteePartyId?: string;
-  } {
-    if (request.plane === "app") {
-      const app = ensureAppEnrolled(this.db, request.appId);
-      return { appId: app.appId };
-    }
-    const agent = ensureAgentEnrolled(this.db, request.appId, {
-      modelRef: "centraid-automation",
-    });
-    return { granteePartyId: agent.partyId };
-  }
-
-  listApps(): Array<AppSummary & { grants: GrantSummary[] }> {
+  /**
+   * The install register, each row carrying the app's own DECLARED manifest
+   * (#928 A1) — what it reaches, which is not a grant and cannot be revoked.
+   * An app the mount pass has not declared for reaches nothing, and says so
+   * with an empty scope list rather than an absent field.
+   */
+  listApps(): Array<AppSummary & { scopes: ScopeSpec[] }> {
     return listEnrolledApps(this.db).map((app) => ({
       ...app,
-      grants: listActiveGrants(this.db, app.appId),
+      scopes: [...(declaredManifestFor(this.db.vault, app.name)?.scopes ?? [])],
     }));
   }
 
-  listAgents(): Array<
-    AgentSummary & { grants: GrantSummary[]; answers: AutomationAnswer[] }
-  > {
+  listAgents(): Array<AgentSummary & { answers: AutomationAnswer[] }> {
     const answers = automationAnswers(this.db.vault);
     return listEnrolledAgents(this.db).map((agent) => ({
       ...agent,
-      grants: listActiveAgentGrants(this.db, agent.partyId),
       // The standing answer the Approvals surfaces read (#928 A3), keyed by
       // the automation's own id rather than by its agent party.
       answers: answers.filter(
@@ -1078,8 +980,8 @@ export class VaultPlane {
     }));
   }
 
-  revokeGrant(grantId: string): RevocationResult {
-    return this.gateway.revokeGrant(this.ownerCredential, grantId);
+  revokeAuthority(authorityId: string): RevocationResult {
+    return this.gateway.revokeAuthority(this.ownerCredential, authorityId);
   }
 
   listParked(): ParkedSummary[] {
@@ -1117,7 +1019,6 @@ export class VaultPlane {
         relation: input.relation ?? "references",
         ...(input.selector ? { selector: input.selector } : {}),
       },
-      purpose: "dpv:ServiceProvision",
     });
   }
 
@@ -1125,7 +1026,6 @@ export class VaultPlane {
     return this.invoke(this.ownerCredential, {
       command: "core.unlink_entities",
       input: { link_id: linkId },
-      purpose: "dpv:ServiceProvision",
     });
   }
 
@@ -1136,7 +1036,6 @@ export class VaultPlane {
     return this.invoke(this.ownerCredential, {
       command: "core.anchor_link",
       input: { link_id: linkId, ...(selector ? { selector } : {}) },
-      purpose: "dpv:ServiceProvision",
     });
   }
 
@@ -1155,7 +1054,7 @@ export class VaultPlane {
     const rows = this.db.vault
       .prepare(
         `SELECT i.item_id, i.actor_id, i.actor_kind, i.verb, i.target, i.artifact_json,
-                i.status, i.grant_id, i.staged_at, i.decided_at, i.drained_at, i.result_json,
+                i.status, i.authority_id, i.staged_at, i.decided_at, i.drained_at, i.result_json,
                 i.note, c.kind, c.label
            FROM outbox_item i JOIN sync_connection c ON c.connection_id = i.connection_id
           ${filter ? `WHERE i.status IN (${filter.map(() => "?").join(", ")})` : ""}
@@ -1169,7 +1068,7 @@ export class VaultPlane {
       target: string;
       artifact_json: string;
       status: string;
-      grant_id: string | null;
+      authority_id: string | null;
       staged_at: string;
       decided_at: string | null;
       drained_at: string | null;
@@ -1188,7 +1087,7 @@ export class VaultPlane {
       target: r.target,
       artifact: JSON.parse(r.artifact_json) as Record<string, unknown>,
       status: r.status,
-      grantId: r.grant_id,
+      grantId: r.authority_id,
       stagedAt: r.staged_at,
       decidedAt: r.decided_at,
       drainedAt: r.drained_at,
@@ -1254,36 +1153,23 @@ export class VaultPlane {
     createdAt: string;
     revokedAt: string | null;
   }> {
-    const rows = this.db.vault
-      .prepare(
-        `SELECT grant_id, actor_id, verb, target, created_at, revoked_at
-           FROM outbox_grant ORDER BY revoked_at IS NOT NULL, created_at DESC`
-      )
-      .all() as {
-      grant_id: string;
-      actor_id: string;
-      verb: string;
-      target: string;
-      created_at: string;
-      revoked_at: string | null;
-    }[];
-    return rows.map((r) => ({
-      grantId: r.grant_id,
+    return listEgressAuthorities(this.db.vault).map((row) => ({
+      grantId: row.authorityId,
       actor:
-        this.actorName(r.actor_id, "ai_agent") ??
-        this.actorName(r.actor_id, "app"),
-      actorId: r.actor_id,
-      verb: r.verb,
-      target: r.target,
-      createdAt: r.created_at,
-      revokedAt: r.revoked_at,
+        this.actorName(row.actorId, "ai_agent") ??
+        this.actorName(row.actorId, "app"),
+      actorId: row.actorId,
+      verb: row.verb,
+      target: row.target,
+      createdAt: row.grantedAt,
+      revokedAt: row.revokedAt,
     }));
   }
 
-  revokeOutboxGrant(grantId: string): Promise<InvokeOutcome> {
+  revokeOutboxGrant(authorityId: string): Promise<InvokeOutcome> {
     return this.invoke(this.ownerCredential, {
       command: "outbox.revoke_grant",
-      input: { grant_id: grantId },
+      input: { authority_id: authorityId },
     });
   }
 
@@ -1371,8 +1257,8 @@ export class VaultPlane {
       caller_id: string | null;
     }[];
     const riskRank: Record<string, number> = { high: 2, medium: 1, low: 0 };
-    const outboxGrantLookup = this.db.vault.prepare(
-      "SELECT grant_id FROM outbox_item WHERE item_id = ?"
+    const outboxAuthorityLookup = this.db.vault.prepare(
+      "SELECT authority_id FROM outbox_item WHERE item_id = ?"
     );
     const entries = window.map((r) => {
       let risk: string | null = null;
@@ -1403,15 +1289,15 @@ export class VaultPlane {
             : null;
         if (
           output &&
-          typeof output.grant_id === "string" &&
-          output.grant_id.length > 0
+          typeof output.authority_id === "string" &&
+          output.authority_id.length > 0
         ) {
-          grantId = output.grant_id;
+          grantId = output.authority_id;
         } else if (output && typeof output.item_id === "string") {
-          const item = outboxGrantLookup.get(output.item_id) as
-            | { grant_id: string | null }
+          const item = outboxAuthorityLookup.get(output.item_id) as
+            | { authority_id: string | null }
             | undefined;
-          if (item?.grant_id) grantId = item.grant_id;
+          if (item?.authority_id) grantId = item.authority_id;
         } else if (Array.isArray(detail.writes)) {
           for (const write of detail.writes) {
             if (
@@ -1421,11 +1307,11 @@ export class VaultPlane {
                 "outbox.item" &&
               typeof (write as { entityId?: unknown }).entityId === "string"
             ) {
-              const item = outboxGrantLookup.get(
+              const item = outboxAuthorityLookup.get(
                 (write as { entityId: string }).entityId
-              ) as { grant_id: string | null } | undefined;
-              if (item?.grant_id) {
-                grantId = item.grant_id;
+              ) as { authority_id: string | null } | undefined;
+              if (item?.authority_id) {
+                grantId = item.authority_id;
                 break;
               }
             }
@@ -1451,7 +1337,7 @@ export class VaultPlane {
           actorId,
           actorKind,
           actor,
-          grantId,
+          authorityId: grantId,
           context,
         } satisfies ReviewEntry,
         salience: (riskRank[risk ?? ""] ?? 0) + (r.decision === "deny" ? 1 : 0),
@@ -1467,6 +1353,13 @@ export class VaultPlane {
       .map((e) => e.entry);
   }
 
+  /**
+   * What this app or automation reaches, and the loud commands that reach
+   * comes with. TWO DIFFERENT FACTS since #928: an app's reach is what it
+   * DECLARED at build time (its manifest, held by the install path), an
+   * automation's is what the owner ANSWERED (`share_authority` rows). Neither
+   * is a grant, and the surface says which it is.
+   */
   scopeSurface(appId: string): {
     scopes: Array<{
       plane: "app" | "agent";
@@ -1491,35 +1384,27 @@ export class VaultPlane {
       rowFilter?: ScopeSpec["rowFilter"];
       fieldMask?: ScopeSpec["fieldMask"];
     }> = [];
-    const app = lookupAppByName(this.db, appId);
-    if (app) {
-      for (const grant of listActiveGrants(this.db, app.appId)) {
-        for (const s of grant.scopes) {
-          scopes.push({
-            plane: "app",
-            schema: s.schema,
-            table: s.table,
-            verbs: s.verbs,
-            ...(s.rowFilter ? { rowFilter: s.rowFilter } : {}),
-            ...(s.fieldMask ? { fieldMask: s.fieldMask } : {}),
-          });
-        }
-      }
+    for (const scope of declaredManifestFor(this.db.vault, appId)?.scopes ??
+      []) {
+      scopes.push({
+        plane: "app",
+        schema: scope.schema,
+        table: scope.table ?? null,
+        verbs: scope.verbs,
+        ...(scope.rowFilter ? { rowFilter: scope.rowFilter } : {}),
+        ...(scope.fieldMask ? { fieldMask: scope.fieldMask } : {}),
+      });
     }
-    const agent = lookupAgentByName(this.db, appId);
-    if (agent) {
-      for (const grant of listActiveAgentGrants(this.db, agent.partyId)) {
-        for (const s of grant.scopes) {
-          scopes.push({
-            plane: "agent",
-            schema: s.schema,
-            table: s.table,
-            verbs: s.verbs,
-            ...(s.rowFilter ? { rowFilter: s.rowFilter } : {}),
-            ...(s.fieldMask ? { fieldMask: s.fieldMask } : {}),
-          });
-        }
-      }
+    for (const answer of automationAnswers(this.db.vault, appId)) {
+      if (answer.decision !== "granted") continue;
+      const dot = answer.subjectId.indexOf(".");
+      const entity = answer.subjectType === AUTOMATION_ENTITY_SUBJECT;
+      scopes.push({
+        plane: "agent",
+        schema: entity ? answer.subjectId.slice(0, dot) : answer.subjectId,
+        table: entity ? answer.subjectId.slice(dot + 1) : null,
+        verbs: answer.verb,
+      });
     }
     const actSchemas = [
       ...new Set(
@@ -1558,7 +1443,9 @@ export class VaultPlane {
     const row = this.db.vault
       .prepare("SELECT enrollment_key FROM access_agent WHERE agent_id = ?")
       .get(actorId) as { enrollment_key: string } | undefined;
-    return row?.enrollment_key === "_assistant" ? "assistant" : "agent";
+    return row?.enrollment_key === ASSISTANT_ENROLLMENT_KEY
+      ? "assistant"
+      : "agent";
   }
 
   private rawActorKind(actorId: string): string | null {
@@ -1599,7 +1486,7 @@ export class VaultPlane {
    * the call there is nothing to ride and the gateway refuses.
    */
   async invokeAsAssistant(request: InvokeRequest): Promise<InvokeOutcome> {
-    const agent = ensureAgentEnrolled(this.db, "_assistant", {
+    const agent = ensureAgentEnrolled(this.db, ASSISTANT_ENROLLMENT_KEY, {
       modelRef: "centraid-assistant",
       displayName: "Assistant",
     });
@@ -1646,7 +1533,6 @@ export class VaultPlane {
     return this.gateway.contentForAgent(this.ownerCredential, {
       contentId: call.contentId,
       variant: "text",
-      purpose: "owner-assistant",
     });
   }
 
@@ -1657,7 +1543,6 @@ export class VaultPlane {
   resolveAsOwner(refs: { type: string; id: string }[]): ResolveResult {
     return this.gateway.resolveRefs(this.ownerCredential, {
       refs,
-      purpose: "owner-assistant",
     });
   }
 
@@ -1766,25 +1651,23 @@ export class VaultPlane {
   }
 
   /**
-   * The host attaches WHEN the grant went: `access_grant.revoked_at`
-   * records it, but the app cannot read that table — losing the grant is what
-   * put it here. Absent when the refusal was never a revocation (a scope never
-   * granted, a purpose the policy forbids); no caller may invent one.
+   * The host attaches WHEN the app was retired: `access_app.status` going
+   * `revoked` is what put a call here, and the app cannot read that register.
+   * Absent while the app is still installed — a refusal that was never an
+   * uninstall carries no time, and no caller may invent one.
    */
   private withRevocationTime(
     appId: string,
     result: VaultCallResult
   ): VaultCallResult {
     if (result.ok || result.code !== "VAULT_ACCESS") return result;
-    const app = lookupAppByName(this.db, appId);
-    if (!app) return result;
     const row = this.db.vault
       .prepare(
-        `SELECT revoked_at FROM access_grant
-          WHERE app_id = ? AND revoked_at IS NOT NULL
+        `SELECT revoked_at FROM access_app
+          WHERE name = ? AND revoked_at IS NOT NULL
           ORDER BY revoked_at DESC LIMIT 1`
       )
-      .get(app.appId) as { revoked_at: string } | undefined;
+      .get(appId) as { revoked_at: string } | undefined;
     return row ? { ...result, revokedAt: row.revoked_at } : result;
   }
 
@@ -1806,10 +1689,23 @@ export class VaultPlane {
           error: `app "${appId}" is not enrolled in the vault`,
         };
       }
+      // ATTRIBUTION, NOT AUTHORITY (#928 A1): a first-party app is not a
+      // principal. It runs on the owner's own device against the owner's own
+      // vault and NAMES itself, so every receipt and provenance row still says
+      // which surface carried the call; its reach is fixed at build time by
+      // its declared entity manifest and the static tripwire over it.
+      const declared = declaredManifestFor(this.db.vault, appId);
       const cred: Credential = {
-        kind: "app",
-        appId: app.appId,
-        signingKey: app.signingKey,
+        kind: "device",
+        deviceId: this.boot.deviceId,
+        deviceKey: this.boot.deviceKey,
+        surface: app.appId,
+        // The app's own build-time manifest, enforced per call as an
+        // attenuation. It only ever narrows, it is what keeps this read and
+        // the app's replica rows the same rows with the same columns, and an
+        // app this vault has NO declaration for gets the empty clamp — which
+        // reaches nothing. Fail-closed: being enrolled is not being declared.
+        scopeClamp: declared?.scopes ?? [],
       };
       if (call.op === "content") {
         return asVaultCallResultAsync(() =>
@@ -2162,12 +2058,11 @@ export class VaultPlane {
     try {
       const result = this.sweep();
       const touched =
-        result.grantsExpired +
+        result.authorityRevoked +
         result.contentPurged +
         result.notesPurged +
         result.documentsPurged +
         result.domainRowsPurged +
-        result.retentionDeleted +
         result.blobsReclaimed +
         result.stagingExpired;
       // The operator log and the journal receipt must tell the SAME story: a
@@ -2178,10 +2073,9 @@ export class VaultPlane {
         result.contentBlockedByLineage.length;
       if (touched > 0 || blockedByLineage > 0) {
         this.logger.info(
-          `vault plane: sweep grantsExpired=${result.grantsExpired} ` +
+          `vault plane: sweep authorityRevoked=${result.authorityRevoked} ` +
             `contentPurged=${result.contentPurged} notesPurged=${result.notesPurged} ` +
             `documentsPurged=${result.documentsPurged} domainRowsPurged=${result.domainRowsPurged} ` +
-            `retentionDeleted=${result.retentionDeleted} ` +
             `blobsReclaimed=${result.blobsReclaimed} stagingExpired=${result.stagingExpired} ` +
             `assetsBlockedByLineage=${JSON.stringify(result.assetsBlockedByLineage)} ` +
             `contentBlockedByLineage=${JSON.stringify(result.contentBlockedByLineage)}`

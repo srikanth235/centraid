@@ -78,6 +78,48 @@ export function automationSubjectsOf(
   return [...seen.values()];
 }
 
+/**
+ * Has the owner EVER answered about this automation — yes, no, or since
+ * withdrawn? "Never asked" and "asked and answered, then withdrawn" are
+ * different facts (#308 A4): the first is what makes installing the answer,
+ * the second is what makes a re-published manifest PARK instead of quietly
+ * re-minting what the owner just took away.
+ */
+export function hasAnsweredEver(
+  db: DatabaseSync,
+  principalId: string
+): boolean {
+  // An answer ended by UNINSTALL is not memory of this automation: the
+  // principal was removed, and #306's "a reinstall is a fresh consent" says
+  // the next install answers itself again. The row stays as evidence.
+  return (
+    db
+      .prepare(
+        `SELECT 1 AS x FROM share_authority
+          WHERE principal_kind = 'automation' AND principal_id = ?
+            AND (revoked_reason IS NULL OR revoked_reason <> 'principal-removed')
+          LIMIT 1`
+      )
+      .get(principalId) !== undefined
+  );
+}
+
+/**
+ * A subject back to the manifest scope that asks for it — exactly what
+ * `automationSubjectsOf` maps forward, so an ask can be PARKED as the scopes
+ * the owner is shown and answered as the subjects they answered.
+ */
+export function scopeForSubject(subject: AutomationSubject): AutomationScope {
+  const dot = subject.subjectId.indexOf(".");
+  return subject.subjectType === AUTOMATION_ENTITY_SUBJECT && dot > 0
+    ? {
+        schema: subject.subjectId.slice(0, dot),
+        table: subject.subjectId.slice(dot + 1),
+        verbs: subject.verb,
+      }
+    : { schema: subject.subjectId, verbs: subject.verb };
+}
+
 export function automationAnswers(
   db: DatabaseSync,
   principalId?: string
@@ -149,13 +191,18 @@ export function recordAutomationAnswers(
   return written;
 }
 
-/** The automation is gone; its answers end with it (#306: standing answers die with the actor). */
+/**
+ * The automation is gone; its answers end with it (#306: standing answers die
+ * with the actor). Answers already withdrawn in this same act are RE-STAMPED
+ * with the reason, so uninstalling and revoking stay distinguishable: the
+ * first wipes the memory, the second is remembered and re-parks.
+ */
 export function revokeAutomationAnswers(
   db: DatabaseSync,
   principalId: string,
   now: string
 ): number {
-  return Number(
+  const ended = Number(
     db
       .prepare(
         `UPDATE share_authority
@@ -165,90 +212,10 @@ export function revokeAutomationAnswers(
       )
       .run(now, principalId).changes
   );
-}
-
-interface LegacyScopeRow {
-  principalId: string;
-  entity: string;
-  verbs: string;
-}
-
-function scopesByPrincipal(
-  rows: readonly LegacyScopeRow[]
-): Map<string, AutomationScope[]> {
-  const byPrincipal = new Map<string, AutomationScope[]>();
-  for (const row of rows) {
-    const dot = row.entity.indexOf(".");
-    const verbs = row.verbs as AutomationScope["verbs"];
-    const scope: AutomationScope =
-      dot > 0
-        ? {
-            schema: row.entity.slice(0, dot),
-            table: row.entity.slice(dot + 1),
-            verbs,
-          }
-        : { schema: row.entity, verbs };
-    byPrincipal.set(row.principalId, [
-      ...(byPrincipal.get(row.principalId) ?? []),
-      scope,
-    ]);
-  }
-  return byPrincipal;
-}
-
-/**
- * ONE-SHOT BACKFILL (#928 wave 3). Every live automation grant the app plane
- * holds becomes a `granted` answer and every scope tombstone a `declined` one,
- * so an owner's prior refusal survives the plane it was recorded in. Lossless
- * and idempotent: it reads the legacy rows and never deletes them (wave 4
- * does), and a vault that already carries automation answers is left alone.
- * Open scope requests are untouched, because the owner's pending decision is
- * what depends on them: a parked ask is not an answer, and answering it here
- * would settle a question the owner has not been shown.
- *
- * `_assistant` is excluded by name: the assistant holds no standing answer at
- * all (#928 A3), so minting one here would recreate the grant #928 deletes.
- */
-export function backfillAutomationAnswers(
-  db: DatabaseSync,
-  ownerPartyId: string,
-  now: string
-): { granted: number; declined: number } {
-  if (automationAnswers(db).length > 0) return { granted: 0, declined: 0 };
-  const granted = db
-    .prepare(
-      `SELECT a.enrollment_key AS principalId, s.entity, s.verbs
-         FROM access_agent a
-         JOIN access_grant g ON g.grantee_party_id = a.party_id
-         JOIN access_grant_scope s ON s.grant_id = g.grant_id
-        WHERE a.enrollment_key <> '_assistant'
-          AND g.status = 'active' AND g.revoked_at IS NULL
-        ORDER BY a.enrollment_key, s.rowid`
-    )
-    .all() as unknown as LegacyScopeRow[];
-  const declined = db
-    .prepare(
-      `SELECT a.enrollment_key AS principalId, t.entity, t.verbs
-         FROM access_agent a
-         JOIN access_scope_tombstone t ON t.grantee_party_id = a.party_id
-        WHERE a.enrollment_key <> '_assistant'
-        ORDER BY a.enrollment_key, t.rowid`
-    )
-    .all() as unknown as LegacyScopeRow[];
-  const counted = { granted: 0, declined: 0 };
-  for (const [rows, decision] of [
-    [granted, "granted"],
-    [declined, "declined"],
-  ] as const) {
-    for (const [principalId, scopes] of scopesByPrincipal(rows)) {
-      counted[decision] += recordAutomationAnswers(db, {
-        principalId,
-        ownerPartyId,
-        subjects: automationSubjectsOf(scopes),
-        decision,
-        now,
-      });
-    }
-  }
-  return counted;
+  db.prepare(
+    `UPDATE share_authority SET revoked_reason = 'principal-removed'
+      WHERE principal_kind = 'automation' AND principal_id = ?
+        AND revoked_at IS NOT NULL AND revoked_reason IS NULL`
+  ).run(principalId);
+  return ended;
 }

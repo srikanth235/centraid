@@ -42,7 +42,6 @@ export interface LabelEntry {
 
 interface LabelArgs {
   ctx: HandlerCtx;
-  purpose: string;
   documentIds: string[];
   schemes: SchemeRow[];
   concepts: ConceptRow[];
@@ -55,7 +54,6 @@ interface LabelArgs {
  */
 export async function readLabelsByDocument({
   ctx,
-  purpose,
   documentIds,
   schemes,
   concepts,
@@ -75,7 +73,6 @@ export async function readLabelsByDocument({
       { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
       { column: "target_id", op: "in", value: documentIds },
     ],
-    purpose,
   });
   for (const t of (labelTags.rows ?? []) as unknown as TagRow[]) {
     const label = labelConceptById.get(t.concept_id);
@@ -98,11 +95,9 @@ interface CustodyRow {
  */
 export async function readCustodyByContent({
   ctx,
-  purpose,
   contentIds,
 }: {
   ctx: HandlerCtx;
-  purpose: string;
   contentIds: string[];
 }): Promise<Map<string, string>> {
   if (contentIds.length === 0) return new Map();
@@ -110,7 +105,6 @@ export async function readCustodyByContent({
     acceptTruncation: true,
     entity: "blob.custody_state",
     where: [{ column: "content_id", op: "in", value: contentIds }],
-    purpose,
   });
   return new Map(
     ((custody.rows ?? []) as unknown as CustodyRow[]).map((c) => [
@@ -260,13 +254,11 @@ function liveAt(row: AuthorityRow, now: string): boolean {
  */
 export async function readSharesByDocument({
   ctx,
-  purpose,
   documentIds,
   folderByDoc,
   folderConcepts,
 }: {
   ctx: HandlerCtx;
-  purpose: string;
   documentIds: string[];
   folderByDoc: Map<string, string>;
   folderConcepts: ConceptRow[];
@@ -290,7 +282,6 @@ export async function readSharesByDocument({
         { column: "revoked_at", op: "is-null" as const },
       ],
       limit: shareLimit(ids.length),
-      purpose,
     });
     const [docAnswers, folderAnswers] = await Promise.all([
       ctx.vault.read(answerRead(DOCUMENT_TARGET_TYPE, documentIds)),
@@ -330,7 +321,6 @@ export async function readSharesByDocument({
             entity: "social.circle",
             where: [{ column: "circle_id", op: "in", value: circleIds }],
             limit: shareLimit(circleIds.length),
-            purpose,
           })
         : noRows,
       circleIds.length > 0
@@ -338,14 +328,12 @@ export async function readSharesByDocument({
             entity: "social.circle_member",
             where: [{ column: "circle_id", op: "in", value: circleIds }],
             limit: shareLimit(circleIds.length),
-            purpose,
           })
         : noRows,
       ctx.vault.read({
         entity: "share.fulfillment",
         where: [{ column: "grant_id", op: "in", value: grantIds }],
         limit: shareLimit(grantIds.length),
-        purpose,
       }),
     ]);
     const circleRows = (circles.rows ?? []) as unknown as CircleRow[];
@@ -373,7 +361,6 @@ export async function readSharesByDocument({
             entity: "core.party",
             where: [{ column: "party_id", op: "in", value: partyIds }],
             limit: shareLimit(partyIds.length),
-            purpose,
           })
         : noRows,
       partyIds.length > 0
@@ -385,7 +372,6 @@ export async function readSharesByDocument({
               { column: "revoked_at", op: "is-null" },
             ],
             limit: shareLimit(partyIds.length),
-            purpose,
           })
         : noRows,
     ]);
@@ -478,11 +464,9 @@ export async function readSharesByDocument({
  *  still belongs on the shelf. */
 async function readSenderNames({
   ctx,
-  purpose,
   vaultIds,
 }: {
   ctx: HandlerCtx;
-  purpose: string;
   vaultIds: string[];
 }): Promise<{
   partyByVault: Map<string, string>;
@@ -499,7 +483,6 @@ async function readSenderNames({
         { column: "revoked_at", op: "is-null" },
       ],
       limit: shareLimit(vaultIds.length),
-      purpose,
     });
     const partyByVault = new Map(
       ((bindings.rows ?? []) as unknown as BindingRow[]).map((b) => [
@@ -513,7 +496,6 @@ async function readSenderNames({
       entity: "core.party",
       where: [{ column: "party_id", op: "in", value: partyIds }],
       limit: shareLimit(partyIds.length),
-      purpose,
     });
     return {
       partyByVault,
@@ -539,11 +521,9 @@ async function readSenderNames({
  */
 export async function readOriginsByDocument({
   ctx,
-  purpose,
   limit,
 }: {
   ctx: HandlerCtx;
-  purpose: string;
   limit: number;
 }): Promise<Map<string, SharedFromEntry> | null> {
   try {
@@ -553,7 +533,6 @@ export async function readOriginsByDocument({
       where: [{ column: "state", op: "eq", value: "subscribed" }],
       orderBy: { column: "subscribed_at", dir: "desc" },
       limit,
-      purpose,
     });
     const subscriptionRows = (subscriptions.rows ??
       []) as unknown as SubscriptionRow[];
@@ -567,7 +546,6 @@ export async function readOriginsByDocument({
         { column: "shape_id", op: "in", value: shapeIds },
       ],
       limit,
-      purpose,
     });
     const lineageRows = (lineage.rows ?? []) as unknown as LineageRow[];
     if (lineageRows.length === 0) return new Map();
@@ -576,7 +554,6 @@ export async function readOriginsByDocument({
     // A LOST NAME IS NOT A LOST ARRIVAL: only a denied placement is unknown.
     const { partyByVault, nameByParty } = await readSenderNames({
       ctx,
-      purpose,
       vaultIds: [...new Set(subscriptionRows.map((s) => s.origin_vault_id))],
     });
 

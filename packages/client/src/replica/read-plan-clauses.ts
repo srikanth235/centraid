@@ -80,6 +80,38 @@ export function undisclosed(column: string): string {
   return `${jsonType(column)} IS NULL`;
 }
 
+/**
+ * THE CENSUS CLASS LADDER (#922 C3).
+ *
+ * One integer per stored value, ordered so that "does any kept row hold a value
+ * of class N" is an INDEX SEEK rather than a scan of the entity: the census
+ * index is built on this exact expression, and each question is asked as
+ * `... WHERE class >= N ORDER BY class ASC LIMIT 1`, whose answer is N exactly
+ * when a row of that class exists. Classes below N are excluded by the range,
+ * so one class never masks another and the guards keep their own priority.
+ *
+ * The ladder is FIXED — it does not vary with the role or the schema — because
+ * the index and the probe must spell it identically or SQLite serves neither.
+ */
+export const REPLICA_CENSUS_CLASSES = {
+  oversized: 0,
+  undisclosed: 1,
+  unordered: 2,
+  numeric: 3,
+  text: 4,
+} as const;
+
+/** `5` is JSON null and anything a future SQLite adds: ordered, not escalating. */
+export function censusClass(column: string): string {
+  return (
+    `CASE WHEN ${oversized(column)} THEN 0` +
+    ` WHEN ${jsonType(column)} IS NULL THEN 1` +
+    ` WHEN ${jsonType(column)} IN (${quoted(UNORDERED_TYPES)}) THEN 2` +
+    ` WHEN ${jsonType(column)} IN (${quoted(NUMERIC_TYPES)}) THEN 3` +
+    ` WHEN ${jsonType(column)} IN (${quoted(TEXT_TYPES)}) THEN 4 ELSE 5 END`
+  );
+}
+
 type Bucket = readonly string[];
 
 function bucketOf(value: ReplicaScalar): Bucket {

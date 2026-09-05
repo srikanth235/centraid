@@ -43,12 +43,11 @@ interface ContentRow {
 }
 
 export default async function driveHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
     // Owner-curated and small, so unbounded; they bound the rest.
     const [concepts, schemes] = await Promise.all(
-      conceptTaxonomyReads(ctx.vault, purpose)
+      conceptTaxonomyReads(ctx.vault)
     );
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
     const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
@@ -79,7 +78,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     // arrived, which is the exact claim this door exists to prevent.
     const originByDoc = await readOriginsByDocument({
       ctx,
-      purpose,
       limit: window,
     });
 
@@ -96,7 +94,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
             ],
             orderBy: { column: "tagged_at", dir: "desc" },
             limit: window,
-            purpose,
           });
     const tagRows = (tags.rows ?? []) as unknown as TagRow[];
 
@@ -131,7 +128,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
         acceptTruncation: true,
         entity: "core.document",
         where: [{ column: "document_id", op: "in", value: windowedIds }],
-        purpose,
       }),
       starredConcept
         ? ctx.vault.read({
@@ -146,19 +142,16 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
               { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
               { column: "target_id", op: "in", value: windowedIds },
             ],
-            purpose,
           })
         : { rows: [] as Record<string, unknown>[] },
       readLabelsByDocument({
         ctx,
-        purpose,
         documentIds: windowedIds,
         schemes: schemeRows,
         concepts: conceptRows,
       }),
       readSharesByDocument({
         ctx,
-        purpose,
         documentIds: windowedIds,
         folderByDoc,
         folderConcepts: schemeConcepts,
@@ -179,10 +172,9 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
             acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
-            purpose,
           })
         : { rows: [] as Record<string, unknown>[] },
-      readCustodyByContent({ ctx, purpose, contentIds }),
+      readCustodyByContent({ ctx, contentIds }),
     ]);
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [

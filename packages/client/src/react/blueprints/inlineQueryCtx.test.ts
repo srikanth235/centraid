@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { PENDING_OVERLAY_FIELDS } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  PENDING_OVERLAY_FIELDS,
+  pendingSidecarOf,
+  readPendingOverlay,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
 import boardQuery from "@centraid/blueprints/apps/tasks/queries/board";
 import { seededRandom } from "@centraid/test-kit/random";
 
@@ -112,6 +116,38 @@ describe("inlineQueryCtx", () => {
     expect(guard.required).toBe(false);
   });
 
+  it("settles an OPTIONAL invocation as failed and leaves the run local", async () => {
+    const guard = new OnlineOnlyGuard();
+    const ctx = buildInlineCtx(
+      { session: seededSession(), appId: "locker" },
+      guard
+    ) as {
+      vault: {
+        invoke: (request: {
+          command: string;
+          optional?: boolean;
+        }) => Promise<{ status: string }>;
+      };
+    };
+    // A DECORATION the answer stands without: the handler's own
+    // `status !== "executed"` branch is the offline branch (#928).
+    await expect(
+      ctx.vault.invoke({
+        command: "locker.watchtower",
+        optional: true,
+      })
+    ).resolves.toMatchObject({ status: "failed" });
+    expect(guard.required).toBe(false);
+    // An invocation that did NOT declare itself optional is an effect this
+    // seat cannot perform, and it still marks the run.
+    await expect(
+      ctx.vault.invoke({
+        command: "locker.watchtower",
+      })
+    ).rejects.toThrow(/online-only/u);
+    expect(guard.required).toBe(true);
+  });
+
   it("marks the online-only guard when a query reads an undisclosed field", async () => {
     const undisclosed = seededSession({
       async read(): Promise<ReplicaReadWireResult> {
@@ -148,9 +184,6 @@ describe("inlineQueryCtx", () => {
                 party_id: "party-pending",
                 display_name: "Asha",
                 [PENDING_OVERLAY_FIELDS.key]: "intent-person",
-                [PENDING_OVERLAY_FIELDS.status]: "conflict",
-                [PENDING_OVERLAY_FIELDS.action]: "edit-person",
-                [PENDING_OVERLAY_FIELDS.reason]: "The person changed.",
               },
               oversizedFields: [],
               hasUnavailableFields: false,
@@ -158,6 +191,13 @@ describe("inlineQueryCtx", () => {
           ],
           cursor,
           dependency,
+          pending: {
+            "intent-person": {
+              status: "conflict",
+              action: "edit-person",
+              reason: "The person changed.",
+            },
+          },
         };
       },
     });
@@ -191,13 +231,24 @@ describe("inlineQueryCtx", () => {
       }
     )) as { people: Record<string, unknown>[] };
 
-    expect(result.people[0]).toMatchObject({
+    const person = result.people[0]!;
+    expect(person).toMatchObject({
       party_id: "party-pending",
       name: "Asha",
       [PENDING_OVERLAY_FIELDS.key]: "intent-person",
-      [PENDING_OVERLAY_FIELDS.status]: "conflict",
       __centraidScopeId: "family-vault",
     });
+    // The facts ride the read's sidecar, carried with the row (#922 G3).
+    expect(readPendingOverlay(person, pendingSidecarOf(person))).toMatchObject({
+      key: "intent-person",
+      status: "conflict",
+      reason: "The person changed.",
+    });
+    expect(
+      Object.keys(person).filter((column) =>
+        column.startsWith("__centraid_pending")
+      )
+    ).toStrictEqual([PENDING_OVERLAY_FIELDS.key]);
   });
 
   it("does not let a pending foreign key overwrite a child row's controls", async () => {
@@ -217,8 +268,6 @@ describe("inlineQueryCtx", () => {
                   project_id: projectId,
                   name: "Pending project",
                   [PENDING_OVERLAY_FIELDS.key]: "intent-project",
-                  [PENDING_OVERLAY_FIELDS.status]: "queued",
-                  [PENDING_OVERLAY_FIELDS.action]: "save-project",
                 },
                 oversizedFields: [],
                 hasUnavailableFields: false,
@@ -230,13 +279,19 @@ describe("inlineQueryCtx", () => {
                   project_id: projectId,
                   title: "Child task",
                   [PENDING_OVERLAY_FIELDS.key]: "intent-task",
-                  [PENDING_OVERLAY_FIELDS.status]: "failed",
-                  [PENDING_OVERLAY_FIELDS.action]: "add",
                 },
                 oversizedFields: [],
                 hasUnavailableFields: false,
               };
-        return { rows: [row], cursor, dependency };
+        return {
+          rows: [row],
+          cursor,
+          dependency,
+          pending: {
+            "intent-project": { status: "queued", action: "save-project" },
+            "intent-task": { status: "failed", action: "add" },
+          },
+        };
       },
     });
 
@@ -281,13 +336,18 @@ describe("inlineQueryCtx", () => {
       task_id: taskId,
       project_id: projectId,
       [PENDING_OVERLAY_FIELDS.key]: "intent-task",
-      [PENDING_OVERLAY_FIELDS.action]: "add",
     });
+    expect(
+      readPendingOverlay(result.task, pendingSidecarOf(result.task))?.action
+    ).toBe("add");
     expect(result.task[PENDING_OVERLAY_FIELDS.key]).not.toBe("intent-project");
     expect(result.project).toMatchObject({
       project_id: projectId,
       [PENDING_OVERLAY_FIELDS.key]: "intent-project",
-      [PENDING_OVERLAY_FIELDS.action]: "save-project",
     });
+    expect(
+      readPendingOverlay(result.project, pendingSidecarOf(result.project))
+        ?.action
+    ).toBe("save-project");
   });
 });

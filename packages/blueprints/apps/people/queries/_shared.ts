@@ -3,8 +3,6 @@
  * GRACEFUL DENIAL: catch → `null` ("facts absent"), never a consent wall over the roster.
  */
 
-const PURPOSE = "dpv:ServiceProvision";
-
 export interface BindingRow {
   binding_id: string;
   party_id: string;
@@ -29,7 +27,6 @@ export async function readLiveBindings(
         { column: "revoked_at", op: "is-null" },
       ],
       limit: Math.min(partyIds.length * 2, 2000),
-      purpose: PURPOSE,
     });
     return (bindings.rows ?? []) as unknown as BindingRow[];
   } catch {
@@ -48,7 +45,6 @@ export async function readPersonShareLinks(
         { column: "party_id", op: "eq", value: partyId },
         { column: "revoked_at", op: "is-null" },
       ],
-      purpose: PURPOSE,
     });
     return {
       vaults: ((bindings.rows ?? []) as unknown as BindingRow[]).map((b) => ({

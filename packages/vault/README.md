@@ -52,7 +52,6 @@ const outcome = gw.invoke(owner, {
     dtend: "2026-07-03T09:15:00Z",
     calendar_id,
   },
-  purpose: "dpv:ServiceProvision",
 });
 ```
 

@@ -7,7 +7,6 @@
   "iconKey": "Book",
   "colorKey": "slate",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Shows and manages your notes and notebooks.",
     "scopes": [
       {
@@ -175,6 +174,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "title": {
             "type": "string",
             "minLength": 1
@@ -307,6 +311,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "notebook_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "name": {
             "type": "string",
             "minLength": 1

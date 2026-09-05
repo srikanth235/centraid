@@ -35,9 +35,16 @@ import { windowFootNoTotal } from "./tally-seat-copy";
 // ─── 1 · Which state a screen is in ─────────────────────────────────────────
 
 /**
- * The seven designed states plus the two of Tally's own that a LIST-bearing
- * surface can be in. `ready` is the tenth answer and the commonest: there is
- * nothing to say, so nothing is said.
+ * The designed states plus the two of Tally's own that a LIST-bearing surface
+ * can be in. `ready` is the last answer and the commonest: there is nothing to
+ * say, so nothing is said.
+ *
+ * `stale` is NOT among them (#922 E7). It was a verdict about how old a
+ * gateway RPC's answer was; every figure on this seat is now derived on this
+ * device from its own replica, so a landed read is exactly as current as the
+ * device is. A replica that is BEHIND THE VAULT is a different fact, said once
+ * by the frame — `offline` here, coverage on the status line — and it already
+ * outranks in the order below.
  *
  * `denied` and `dayone` are deliberately two values and not one emptiness:
  * denied is a revoked grant with a receipt behind it, day one is an invitation,
@@ -50,7 +57,6 @@ export type TallyScreenState =
   | "parked"
   | "offline"
   | "pending"
-  | "stale"
   | "dayone"
   | "settled"
   | "ready";
@@ -68,8 +74,6 @@ export interface TallyStateInput {
   parked: boolean;
   /** Rows in the window a landed read returned. */
   rows: number;
-  /** The replica is behind the vault. */
-  stale: boolean;
   /**
    * Every net this surface derives, where it derives any. `undefined` is a
    * surface with no balance on it (Activity, Trash, Search): they can never be
@@ -91,11 +95,10 @@ export function tallyScreenState(input: TallyStateInput): TallyScreenState {
   if (input.parked) return "parked";
   if (!input.online) return "offline";
   if (input.pending > 0) return "pending";
-  if (input.stale) return "stale";
   if (input.rows === 0) return "dayone";
   // ALL SETTLED IS NOT AN EMPTINESS. There are rows; every one of them is
   // level. It is stated, never celebrated (§6), and it comes last because a
-  // queued write or a stale read is a fact about the figures themselves.
+  // queued write is a fact about the figures themselves.
   if (
     input.nets !== undefined &&
     input.nets.length > 0 &&
@@ -166,14 +169,14 @@ export function tallyHasConflict(
 }
 
 /**
- * A wall clock for the stale sentence.
+ * A wall clock for a sentence that names a moment — the gate's revocation time.
  *
- * `view-copy.staleNotice` takes a time and puts it in a sentence; it does not
- * decide what a time LOOKS like, because that is a locale question and the web
- * seat answers it with the browser's own formatter. Hermes has `Intl`, but a
- * stale notice is the one place the answer must be stable across a render, so
- * the hour and minute are read off the stamp directly and an unreadable stamp
- * yields nothing rather than `Invalid Date`.
+ * The copy takes a time and puts it in a sentence; it does not decide what a
+ * time LOOKS like, because that is a locale question and the web seat answers
+ * it with the browser's own formatter. Hermes has `Intl`, but a notice is one
+ * place the answer must be stable across a render, so the hour and minute are
+ * read off the stamp directly and an unreadable stamp yields nothing rather
+ * than `Invalid Date`.
  */
 export function clockAt(iso: string): string | null {
   const stamp = Date.parse(iso);

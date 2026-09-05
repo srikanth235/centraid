@@ -7,7 +7,6 @@
   "iconKey": "Folder",
   "colorKey": "teal",
   "vault": {
-    "purpose": "dpv:ServiceProvision",
     "why": "Keeps your important documents filed, editable, downloadable and restorable — with a version history.",
     "scopes": [
       { "schema": "core", "table": "document", "verbs": "read" },
@@ -52,6 +51,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "document_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "data_uri": { "type": "string", "minLength": 6 },
           "staged_sha": { "type": "string", "minLength": 64, "maxLength": 64 },
           "title": { "type": "string", "minLength": 1 },
@@ -372,6 +376,11 @@
       "input": {
         "type": "object",
         "properties": {
+          "folder_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+          },
           "name": { "type": "string", "minLength": 1 },
           "parent_folder_id": { "type": "string", "minLength": 1 }
         },

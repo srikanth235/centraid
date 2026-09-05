@@ -69,8 +69,7 @@ describe("replica projection doorbell-only mode", () => {
     since: ReturnType<typeof currentReplicaLogState>["watermark"];
   }> {
     const vault = await plane();
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -217,8 +216,7 @@ describe("replica projection under retention compaction", () => {
       () => fs.rm(dir, { recursive: true, force: true }),
       () => vault.stop()
     );
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "schedule",
@@ -409,8 +407,7 @@ describe("replica projection of declared long text", () => {
       () => fs.rm(dir, { recursive: true, force: true }),
       () => vault.stop()
     );
-    vault.ensureAppInstallGrant("planner", {
-      purpose: "dpv:ServiceProvision",
+    vault.recordAppInstall("planner", {
       scopes: [
         {
           schema: "core",

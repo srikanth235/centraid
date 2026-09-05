@@ -122,7 +122,6 @@ interface ContactEntry {
 }
 
 export default async function personHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const partyId = String(input?.party_id ?? "");
   if (!partyId) return { person: null };
   try {
@@ -134,13 +133,11 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           { column: "party_id", op: "eq", value: partyId },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "party_id", op: "eq", value: partyId }],
-        purpose,
       }),
     ]);
     const profile = ((profiles.rows ?? []) as unknown as RawProfile[])[0];
@@ -167,7 +164,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       // rung that moved them onto channels.
       ctx.vault.read({
         entity: "social.contact_channel",
-        purpose,
         limit: 2000,
       }),
       ctx.vault.read({
@@ -178,7 +174,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           { column: "from_id", op: "eq", value: partyId },
           { column: "valid_to", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -188,7 +183,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           { column: "to_id", op: "eq", value: partyId },
           { column: "valid_to", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -197,7 +191,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           { column: "party_id", op: "eq", value: partyId },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -207,7 +200,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           { column: "target_id", op: "eq", value: partyId },
         ],
         orderBy: { column: "created_at", dir: "desc" },
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -216,7 +208,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           { column: "from_party", op: "eq", value: partyId },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -225,7 +216,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           { column: "to_party", op: "eq", value: partyId },
           { column: "deleted_at", op: "is-null" },
         ],
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -234,10 +224,9 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           { column: "target_type", op: "eq", value: "core.party" },
           { column: "target_id", op: "eq", value: partyId },
         ],
-        purpose,
       }),
-      ...conceptTaxonomyReads(ctx.vault, purpose),
-      ctx.vault.read({ acceptTruncation: true, entity: "core.vault", purpose }),
+      ...conceptTaxonomyReads(ctx.vault),
+      ctx.vault.read({ acceptTruncation: true, entity: "core.vault" }),
       // Null when the sharing plane is unreadable — never a thrown denial.
       readPersonShareLinks(ctx.vault, partyId),
     ]);
@@ -328,7 +317,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
                 value: relationLinks.map((l) => l.to_id),
               },
             ],
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
       duplicatePartyIds.length > 0
@@ -342,7 +330,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
                 value: duplicatePartyIds,
               },
             ],
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
       taskIds.length > 0
@@ -350,7 +337,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
             acceptTruncation: true,
             entity: "schedule.task",
             where: [{ column: "task_id", op: "in", value: taskIds }],
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
       activityIds.length > 0
@@ -359,7 +345,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
             entity: "core.activity",
             where: [{ column: "activity_id", op: "in", value: activityIds }],
             orderBy: { column: "started_at", dir: "desc" },
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
       activityIds.length > 0
@@ -370,7 +355,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
               { column: "target_type", op: "eq", value: "core.activity" },
               { column: "target_id", op: "in", value: activityIds },
             ],
-            purpose,
           })
         : Promise.resolve({ rows: [] }),
     ]);

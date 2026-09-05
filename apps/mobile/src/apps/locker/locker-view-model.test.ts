@@ -24,7 +24,6 @@ const settled: LockerStateInput = {
   pending: 0,
   reauth: false,
   rows: 3,
-  stale: false,
 };
 
 describe(lockerScreenState, () => {
@@ -57,7 +56,6 @@ describe(lockerScreenState, () => {
     expect(lockerScreenState({ ...settled, parked: true })).toBe("parked");
     expect(lockerScreenState({ ...settled, online: false })).toBe("offline");
     expect(lockerScreenState({ ...settled, pending: 2 })).toBe("pending");
-    expect(lockerScreenState({ ...settled, stale: true })).toBe("stale");
   });
 });
 

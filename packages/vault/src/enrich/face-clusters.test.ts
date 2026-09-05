@@ -79,7 +79,6 @@ describe("face grouping", () => {
     const outcome = gw.invoke(owner, {
       command: "media.add_asset",
       input: { data_uri: PIXELS[index] },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     return (outcome as { status: "executed"; output: { asset_id: string } })
@@ -121,7 +120,6 @@ describe("face grouping", () => {
     const outcome = gw.invoke(owner, {
       command: "core.add_party",
       input: { kind: "person", display_name: name },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     return (outcome as { status: "executed"; output: { party_id: string } })
@@ -132,7 +130,6 @@ describe("face grouping", () => {
     const outcome = gw.invoke(owner, {
       command: "media.answer_face_proposal",
       input: { region_id: regionId, answer: "confirm", party_id: partyId },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
   }
@@ -141,7 +138,6 @@ describe("face grouping", () => {
     const outcome = gw.invoke(owner, {
       command: "media.answer_face_proposal",
       input: { region_id: regionId, answer: kind },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
   }
@@ -342,7 +338,6 @@ describe("face grouping", () => {
     const trashed = gw.invoke(owner, {
       command: "media.delete_asset",
       input: { asset_id: assets[1] },
-      purpose: "dpv:ServiceProvision",
     });
     expect(trashed.status).toBe("executed");
 

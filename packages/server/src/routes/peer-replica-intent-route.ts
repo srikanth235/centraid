@@ -93,7 +93,6 @@ export async function handlePeerReplicaIntent(
   const result = gateway.invoke(credential, {
     command: envelope.action,
     input: (envelope.input ?? {}) as Record<string, unknown>,
-    purpose: MEMBER_INTENT_PURPOSE,
     intentId: envelope.intentId,
     // The origin is the single WRITER, not the AUTHOR: a confirmation the
     // owner set over this command must fire, and the parked payload has to
@@ -101,12 +100,11 @@ export async function handlePeerReplicaIntent(
     onBehalfOfMember: { vaultId: envelope.memberVaultId, label: memberLabel },
   });
   writeReceipt(admission.origin.audit, {
-    grantId: admission.grantId,
+    authorityId: admission.grantId,
     invocationId: null,
     action: `act ${envelope.action}`,
     objectType: verdict.route.containerType,
     objectId: verdict.route.containerId,
-    purpose: MEMBER_INTENT_PURPOSE,
     decision: result.status === "denied" ? "deny" : "allow",
     detail: {
       // THE MEMBER, not the credential that executed it.

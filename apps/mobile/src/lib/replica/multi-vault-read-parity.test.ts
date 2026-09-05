@@ -92,7 +92,6 @@ function seedVault(file: string, vaultId: string, rows: DocumentSeed[]): void {
       {
         shapeId: SHAPE_ID,
         appId: APP_ID,
-        purpose: "dpv:ServiceProvision",
         entities: [
           { entity: ENTITY, primaryKey: "document_id", columns: [...COLUMNS] },
         ],

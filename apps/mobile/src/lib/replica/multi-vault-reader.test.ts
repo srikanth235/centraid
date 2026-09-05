@@ -33,7 +33,6 @@ const SHAPES = [
   {
     shapeId: "docs-default",
     appId: "docs",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.document",
@@ -68,7 +67,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "tasks-default",
     appId: "tasks",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "schedule.task",
@@ -100,7 +98,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "tally-default",
     appId: "tally",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "tally.expense",
@@ -142,7 +139,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "agenda-default",
     appId: "agenda",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "core.event",
@@ -154,7 +150,6 @@ const JOURNEY_SHAPES = [
   {
     shapeId: "notes-default",
     appId: "notes",
-    purpose: "dpv:ServiceProvision",
     entities: [
       {
         entity: "knowledge.note",
@@ -724,14 +719,12 @@ describe(MultiVaultReplicaReader, () => {
         expect(expense.rows[0]?.values).toMatchObject({
           description: "Survives restart expense",
           [PENDING_OVERLAY_FIELDS.key]: "intent-2",
-          [PENDING_OVERLAY_FIELDS.status]: "queued",
           __centraidScopeId: "personal",
         });
         expect(task.rows[0]?.values).toMatchObject({
           project_id: "pending:intent-1:project",
           title: "Survives restart task",
           [PENDING_OVERLAY_FIELDS.key]: "intent-6",
-          [PENDING_OVERLAY_FIELDS.status]: "queued",
           __centraidScopeId: "personal",
         });
         expect(
@@ -740,21 +733,30 @@ describe(MultiVaultReplicaReader, () => {
         expect(taskSearch.rows[0]?.values).toMatchObject({
           title: "Survives restart task",
           [PENDING_OVERLAY_FIELDS.key]: "intent-6",
-          [PENDING_OVERLAY_FIELDS.status]: "queued",
           __centraidScopeId: "personal",
         });
         expect(agenda.rows[0]?.values).toMatchObject({
           summary: "Offline planning session",
           [PENDING_OVERLAY_FIELDS.key]: "intent-4",
-          [PENDING_OVERLAY_FIELDS.status]: "queued",
           __centraidScopeId: "personal",
         });
         expect(note.rows[0]?.values).toMatchObject({
           title: "Survives restart note",
           [PENDING_OVERLAY_FIELDS.key]: "intent-5",
-          [PENDING_OVERLAY_FIELDS.status]: "queued",
           __centraidScopeId: "personal",
         });
+        // The status left the row; the read's sidecar carries it (#922 G3).
+        for (const [result, intentId] of [
+          [expense, "intent-2"],
+          [task, "intent-6"],
+          [taskSearch, "intent-6"],
+          [agenda, "intent-4"],
+          [note, "intent-5"],
+        ] as const) {
+          expect(result.pending?.[intentId]).toMatchObject({
+            status: "queued",
+          });
+        }
       } finally {
         await session.close();
       }

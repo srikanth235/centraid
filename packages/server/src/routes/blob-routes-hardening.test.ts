@@ -87,7 +87,6 @@ describe("blob-routes-hardening", () => {
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: "core.add_document",
       input: { staged_sha: staged.sha256, title: filename },
-      purpose: "dpv:ServiceProvision",
     });
     return (outcome as { output: { content_id: string } }).output.content_id;
   }

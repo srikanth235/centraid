@@ -42,7 +42,6 @@ const READY: TallyStateInput = {
   parked: false,
   pending: 0,
   rows: 3,
-  stale: false,
 };
 
 describe("which state a Tally screen is in", () => {
@@ -58,14 +57,13 @@ describe("which state a Tally screen is in", () => {
     );
   });
 
-  it("orders conflict over parked over offline over pending over stale", () => {
+  it("orders conflict over parked over offline over pending", () => {
     const busy = {
       ...READY,
       conflicted: true,
       online: false,
       parked: true,
       pending: 2,
-      stale: true,
     };
     expect(tallyScreenState(busy)).toBe("conflict");
     expect(tallyScreenState({ ...busy, conflicted: false })).toBe("parked");
@@ -80,6 +78,9 @@ describe("which state a Tally screen is in", () => {
         parked: false,
       })
     ).toBe("pending");
+    // Nothing below `pending` is a delay: a read of this device's own replica
+    // is as current as the device is, so there is no stale verdict to reach
+    // (#922 E7).
     expect(
       tallyScreenState({
         ...busy,
@@ -88,7 +89,7 @@ describe("which state a Tally screen is in", () => {
         parked: false,
         pending: 0,
       })
-    ).toBe("stale");
+    ).toBe("ready");
   });
 
   it("offers day one only over a landed, empty read", () => {

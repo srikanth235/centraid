@@ -6,10 +6,16 @@
 // share_party_vault_binding WHERE vault_id = ?`: one party per slot keeps the
 // slots from answering for each other.
 
-import { createGrant, enrollAgent, enrollDevice } from "../bootstrap.js";
+import { enrollAgent, enrollDevice } from "../bootstrap.js";
 import type { Credential } from "../gateway/types.js";
+import {
+  automationAnswers,
+  automationSubjectsOf,
+  recordAutomationAnswers,
+} from "../grant/automation-authority.js";
 import type { ShareShapeTransport } from "../grant/fulfillment.js";
 import type { ShareFulfillmentState } from "../grant/grant-store.js";
+import { listEnrolledAgents } from "../host.js";
 import { uuidv7 } from "../ids.js";
 import {
   bindPartyToVault,
@@ -276,12 +282,30 @@ function agentCredential(seat: Seat, agentId: string): Credential {
 
 /** Called again after a revoke, so the program can keep parking. */
 export function freshConsentGrant(seat: Seat, agentPartyId: string): string {
-  return createGrant(seat.db, {
-    granteePartyId: agentPartyId,
-    purposeConceptId: seat.purposeConceptId,
-    grantedByPartyId: seat.partyId,
-    scopes: [{ schema: "tally", verbs: "read+act" }],
+  const agent = listEnrolledAgents(seat.db).find(
+    (entry) => entry.partyId === agentPartyId
+  );
+  if (!agent) throw new Error(`unknown simulation agent ${agentPartyId}`);
+  const subjects = automationSubjectsOf([
+    { schema: "tally", verbs: "read+act" },
+  ]);
+  const before = new Set(
+    automationAnswers(seat.db.vault, agent.enrollmentKey).map(
+      (answer) => answer.authorityId
+    )
+  );
+  recordAutomationAnswers(seat.db.vault, {
+    principalId: agent.enrollmentKey,
+    ownerPartyId: seat.partyId,
+    subjects,
+    decision: "granted",
+    now: NOW,
   });
+  const created = automationAnswers(seat.db.vault, agent.enrollmentKey).find(
+    (answer) => !before.has(answer.authorityId)
+  );
+  if (!created) throw new Error("simulation consent answer was not recorded");
+  return created.authorityId;
 }
 
 /** One slot per ordered steward pair per album. Every slot starts with a live

@@ -14,6 +14,7 @@ import {
   useReplicaQuery,
 } from "../../kit/hooks/useReplicaQuery";
 import type { ReplicaQueryState } from "../../kit/hooks/useReplicaQuery";
+import { MOBILE_ENTITY_READ_WINDOW } from "../../lib/replica/offline-budgets";
 import {
   projectDashboard,
   projectPersonDetail,
@@ -51,17 +52,23 @@ export interface PeopleData extends RosterProjection {
 export function usePeople(): PeopleData {
   const profiles = useReplicaQuery(
     APP,
-    useMemo(() => ({ acceptTruncation: true, entity: "people.profile" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "people.profile" }),
+      []
+    )
   );
   const parties = useReplicaQuery(
     APP,
-    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.party" }),
+      []
+    )
   );
   const tags = useReplicaQuery(
     APP,
     useMemo(
       () => ({
-        acceptTruncation: true,
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.party" },
@@ -72,19 +79,28 @@ export function usePeople(): PeopleData {
   );
   const concepts = useReplicaQuery(
     APP,
-    useMemo(() => ({ acceptTruncation: true, entity: "core.concept" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.concept" }),
+      []
+    )
   );
   const schemes = useReplicaQuery(
     APP,
     useMemo(
-      () => ({ acceptTruncation: true, entity: "core.concept_scheme" }),
+      () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
+        entity: "core.concept_scheme",
+      }),
       []
     )
   );
   const dates = useReplicaQuery(
     APP,
     useMemo(
-      () => ({ acceptTruncation: true, entity: "people.important_date" }),
+      () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
+        entity: "people.important_date",
+      }),
       []
     )
   );
@@ -92,7 +108,7 @@ export function usePeople(): PeopleData {
     APP,
     useMemo(
       () => ({
-        acceptTruncation: true,
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.party" },
@@ -105,7 +121,7 @@ export function usePeople(): PeopleData {
     APP,
     useMemo(
       () => ({
-        acceptTruncation: true,
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq" as const, value: "core.activity" },
@@ -117,13 +133,16 @@ export function usePeople(): PeopleData {
   );
   const activities = useReplicaQuery(
     APP,
-    useMemo(() => ({ acceptTruncation: true, entity: "core.activity" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.activity" }),
+      []
+    )
   );
   const activityNotes = useReplicaQuery(
     APP,
     useMemo(
       () => ({
-        acceptTruncation: true,
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.activity" },
@@ -136,7 +155,10 @@ export function usePeople(): PeopleData {
   const bindings = useReplicaQuery(
     APP,
     useMemo(
-      () => ({ acceptTruncation: true, entity: "share.party_vault_binding" }),
+      () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
+        entity: "share.party_vault_binding",
+      }),
       []
     )
   );
@@ -241,7 +263,10 @@ export function usePerson(partyId: string): PersonData {
   const channels = useReplicaQuery(
     APP,
     useMemo(
-      () => ({ acceptTruncation: true, entity: "social.contact_channel" }),
+      () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
+        entity: "social.contact_channel",
+      }),
       []
     )
   );
@@ -249,7 +274,7 @@ export function usePerson(partyId: string): PersonData {
     APP,
     useMemo(
       () => ({
-        acceptTruncation: true,
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.party" },
@@ -263,7 +288,7 @@ export function usePerson(partyId: string): PersonData {
     APP,
     useMemo(
       () => ({
-        acceptTruncation: true,
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq" as const, value: "core.activity" },
@@ -276,13 +301,16 @@ export function usePerson(partyId: string): PersonData {
   );
   const activities = useReplicaQuery(
     APP,
-    useMemo(() => ({ acceptTruncation: true, entity: "core.activity" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.activity" }),
+      []
+    )
   );
   const activityNotes = useReplicaQuery(
     APP,
     useMemo(
       () => ({
-        acceptTruncation: true,
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.activity" },
@@ -293,17 +321,23 @@ export function usePerson(partyId: string): PersonData {
   );
   const concepts = useReplicaQuery(
     APP,
-    useMemo(() => ({ acceptTruncation: true, entity: "core.concept" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.concept" }),
+      []
+    )
   );
   const parties = useReplicaQuery(
     APP,
-    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
+    useMemo(
+      () => ({ limit: MOBILE_ENTITY_READ_WINDOW, entity: "core.party" }),
+      []
+    )
   );
   const dates = useReplicaQuery(
     APP,
     useMemo(
       () => ({
-        acceptTruncation: true,
+        limit: MOBILE_ENTITY_READ_WINDOW,
         entity: "people.important_date",
         where: [{ column: "party_id", op: "eq" as const, value: partyId }],
       }),
@@ -317,7 +351,10 @@ export function usePerson(partyId: string): PersonData {
   const bindings = useReplicaQuery(
     APP,
     useMemo(
-      () => ({ acceptTruncation: true, entity: "share.party_vault_binding" }),
+      () => ({
+        limit: MOBILE_ENTITY_READ_WINDOW,
+        entity: "share.party_vault_binding",
+      }),
       []
     )
   );
@@ -335,7 +372,11 @@ export function usePerson(partyId: string): PersonData {
 
   const bindingRows = shareRows(bindings);
   const shareLinks = useMemo(
-    () => projectShareLinks({ partyId, bindings: bindingRows }),
+    () =>
+      projectShareLinks({
+        partyId,
+        bindings: bindingRows,
+      }),
     [bindingRows, partyId]
   );
 

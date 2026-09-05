@@ -43,7 +43,6 @@ interface ContentRow {
 }
 
 export default async function historyHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const documentId = String(input?.document_id ?? "");
   if (!documentId) return { versions: [] };
   try {
@@ -51,13 +50,12 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
       entity: "core.document",
       where: [{ column: "document_id", op: "eq", value: documentId }],
       limit: 1,
-      purpose,
     });
     const doc = ((docRes.rows ?? []) as unknown as DocumentRow[])[0];
     if (!doc) return { versions: [] };
 
     const [concepts, schemes] = await Promise.all(
-      conceptTaxonomyReads(ctx.vault, purpose)
+      conceptTaxonomyReads(ctx.vault)
     );
     const revisesConceptId = findSchemeConcept(
       (schemes.rows ?? []) as unknown as SchemeRow[],
@@ -87,7 +85,6 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
           ],
           orderBy: { column: "valid_from", dir: "desc" },
           limit: 5,
-          purpose,
         });
         const next = ((links.rows ?? []) as unknown as LinkRow[])[0];
         if (!next || seen.has(next.to_id)) return;
@@ -103,7 +100,6 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
       acceptTruncation: true,
       entity: "core.content_item",
       where: [{ column: "content_id", op: "in", value: chainIds }],
-      purpose,
     });
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [

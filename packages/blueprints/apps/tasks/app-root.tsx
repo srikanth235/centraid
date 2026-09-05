@@ -32,7 +32,7 @@ import {
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import { MoreSheet } from "../_shared/MoreSheet.tsx";
-import { readPendingOverlay } from "../_shared/pending-overlay.ts";
+import { pendingRowIntentId } from "../_shared/pending-overlay.ts";
 import {
   canWriteScope,
   mountedScopes,
@@ -321,8 +321,10 @@ export function Root({
     [data.projects]
   );
 
-  const pendingWriteCount = data.open.filter((task) =>
-    readPendingOverlay(task as unknown as Record<string, unknown>)
+  const pendingWriteCount = data.open.filter(
+    (task) =>
+      pendingRowIntentId(task as unknown as Record<string, unknown>) !==
+      undefined
   ).length;
 
   // A scope that could not be asked is a NAMED slice of the board that is

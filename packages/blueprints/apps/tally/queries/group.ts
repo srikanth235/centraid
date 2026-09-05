@@ -15,10 +15,9 @@ import {
 } from "./dashboard.ts";
 
 export default async function groupHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const groupId = String(input?.group_id ?? "");
   try {
-    const data = await loadTally(ctx, purpose);
+    const data = await loadTally(ctx);
     const g = data.groups.find((x) => x.group_id === groupId);
     if (!g)
       return {

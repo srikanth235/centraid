@@ -15,7 +15,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { ACCESS_DDL, ACCESS_INSTALL_MEMORY_DDL } from "./access.js";
+import { ACCESS_DDL } from "./access.js";
 import { AGENT_DDL } from "./agent.js";
 import { AUDIT_DDL } from "./audit.js";
 import {
@@ -113,7 +113,6 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     CORE_ENTITY_DDL,
     LINK_ANCHOR_DDL,
     ACCESS_DDL,
-    ACCESS_INSTALL_MEMORY_DDL,
     SEED_DDL,
     APP_EXT_DDL,
     AGENT_DDL,

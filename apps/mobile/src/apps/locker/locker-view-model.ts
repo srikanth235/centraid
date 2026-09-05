@@ -32,7 +32,6 @@ export type LockerScreenState =
   | "loading"
   | "denied"
   | "offline"
-  | "stale"
   | "pending"
   | "conflict"
   | "parked"
@@ -55,8 +54,6 @@ export interface LockerStateInput {
   reauth: boolean;
   /** Rows in the window a landed read returned. */
   rows: number;
-  /** The replica is behind the vault. */
-  stale: boolean;
 }
 
 /**
@@ -72,7 +69,6 @@ export function lockerScreenState(input: LockerStateInput): LockerScreenState {
   if (input.parked) return "parked";
   if (!input.online) return "offline";
   if (input.pending > 0) return "pending";
-  if (input.stale) return "stale";
   if (input.rows === 0) return "dayone";
   return "ready";
 }

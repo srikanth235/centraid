@@ -48,7 +48,10 @@ describe("replica-sync-io.perf", () => {
     await enqueueNext(0);
     const listed = await queue.list();
     const overlayStarted = performance.now();
-    const overlays = await queue.overlayMutations("shape-agenda", "core.task");
+    const { mutations: overlays } = await queue.overlay(
+      "shape-agenda",
+      "core.task"
+    );
     const overlayMs = performance.now() - overlayStarted;
     const durationMs = performance.now() - started;
     store.close();

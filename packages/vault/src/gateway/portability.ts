@@ -10,7 +10,7 @@ import {
   stampSealKeyFingerprint,
 } from "../schema/sealed.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
-import { writeReceipt } from "./evidence.js";
+import { writeAuthorityReceipt } from "./evidence.js";
 import { recreateExtTables } from "./ext.js";
 import { clearColumnCache, tableColumns } from "./filters.js";
 import { resealSealedCells } from "./reseal.js";
@@ -119,15 +119,14 @@ export function exportVault(
       | { vault_id: string }
       | undefined
   )?.vault_id;
-  const receiptId = writeReceipt(db.audit, {
-    grantId: null,
+  const receiptId = writeAuthorityReceipt(db, {
+    authorityId: null,
     invocationId: null,
     action: "act access.export_vault",
     // The object of an export is the VAULT itself (#916, ruling ONT-06); the
     // export's own id is minted here and lives in the receipt detail.
     objectType: "core.vault",
     objectId: vaultId ?? exportId,
-    purpose: null,
     decision: "allow",
     detail: {
       exportId,

@@ -97,7 +97,6 @@ describe("inline-body-guard", () => {
         title: "Huge",
         body_text: "z".repeat(INLINE_BODY_BUDGET_BYTES + 1),
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     expect((outcome as { reason: string }).reason).toMatch(
@@ -110,7 +109,6 @@ describe("inline-body-guard", () => {
     const outcome = gw.invoke(owner, {
       command: "knowledge.create_note",
       input: { title: "Fits", body_text: "z".repeat(INLINE_BODY_BUDGET_BYTES) },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
   });
@@ -131,7 +129,6 @@ describe("inline-body-guard", () => {
         recipient_party_id: other.party_id,
         body_text: "w".repeat(INLINE_BODY_BUDGET_BYTES + 1),
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     expect((outcome as { reason: string }).reason).toMatch(

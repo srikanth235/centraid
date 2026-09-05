@@ -4,7 +4,11 @@
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { enrichPendingRows } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  attachPendingSidecar,
+  enrichPendingSidecar,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { PendingOverlayFacts } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
 import { mountBlock, nodesOf } from "../../test/react-native-stub";
 import DocRow from "./DocRow";
@@ -34,6 +38,19 @@ function render(node: React.ReactNode): HTMLElement {
 }
 
 const noop = (): void => undefined;
+
+/** A row as a read hands it over: the ONE pending column plus that read's
+ *  sidecar, optionally moved on by what a later source knows (#922 G3). */
+function pendingRow(
+  intentId: string,
+  facts: PendingOverlayFacts,
+  enrichments: Parameters<typeof enrichPendingSidecar>[1] = []
+): Record<string, unknown> {
+  return attachPendingSidecar(
+    { __centraid_pending_key: intentId },
+    enrichPendingSidecar({ [intentId]: facts }, enrichments)
+  );
+}
 
 function doc(overrides: Partial<MobileDriveDoc> = {}): MobileDriveDoc {
   return {
@@ -145,19 +162,13 @@ describe(DocRow, () => {
   });
 
   it("names the connection a queued row is waiting for", () => {
-    const [queued] = enrichPendingRows(
-      [
-        {
-          __centraid_pending_key: "intent-1",
-          __centraid_pending_status: "queued",
-          __centraid_pending_action: "rename",
-        },
-      ],
-      []
-    );
+    const queued = pendingRow("intent-1", {
+      status: "queued",
+      action: "rename",
+    });
     const container = render(
       <DocRow
-        doc={doc({ raw: queued! })}
+        doc={doc({ raw: queued })}
         offline={false}
         onOpen={noop}
         onMenu={noop}
@@ -169,19 +180,14 @@ describe(DocRow, () => {
   });
 
   it("names the STEWARD a parked row is waiting for, not a generic hold", () => {
-    const [parked] = enrichPendingRows(
-      [
-        {
-          __centraid_pending_key: "intent-2",
-          __centraid_pending_status: "queued",
-          __centraid_pending_action: "trash",
-        },
-      ],
+    const parked = pendingRow(
+      "intent-2",
+      { status: "queued", action: "trash" },
       [{ intentId: "intent-2", status: "parked", stewardLabel: "Ravi" }]
     );
     const container = render(
       <DocRow
-        doc={doc({ raw: parked! })}
+        doc={doc({ raw: parked })}
         offline={false}
         onOpen={noop}
         onMenu={noop}

@@ -27,7 +27,6 @@ describe("Docs folder placement", () => {
       gateway.invoke(owner, {
         command,
         input,
-        purpose: "dpv:ServiceProvision",
       });
     const createFolder = (name: string, parent?: string): string => {
       const outcome = invoke("core.create_folder", {

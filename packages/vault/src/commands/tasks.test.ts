@@ -31,7 +31,6 @@ describe("tasks", () => {
     const outcome = gw.invoke(owner, {
       command: "schedule.add_task",
       input,
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     return (outcome as { output: { task_id: string } }).output.task_id;
@@ -69,7 +68,6 @@ describe("tasks", () => {
     const grandchild = gw.invoke(owner, {
       command: "schedule.add_task",
       input: { title: "Pick seats", parent_task_id: child },
-      purpose: "dpv:ServiceProvision",
     });
     expect(grandchild.status).toBe("failed");
     assert(grandchild.status === "failed");
@@ -80,19 +78,16 @@ describe("tasks", () => {
     const missing = gw.invoke(owner, {
       command: "schedule.add_task",
       input: { title: "Orphan", parent_task_id: "no-such-task" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(missing.status).toBe("failed");
     const parent = addTask({ title: "Done project" });
     gw.invoke(owner, {
       command: "schedule.set_task_status",
       input: { task_id: parent, status: "completed" },
-      purpose: "dpv:ServiceProvision",
     });
     const late = gw.invoke(owner, {
       command: "schedule.add_task",
       input: { title: "Too late", parent_task_id: parent },
-      purpose: "dpv:ServiceProvision",
     });
     expect(late.status).toBe("failed");
   });
@@ -102,7 +97,6 @@ describe("tasks", () => {
     const done = gw.invoke(owner, {
       command: "schedule.set_task_status",
       input: { task_id: taskId, status: "completed" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(done.status).toBe("executed");
     let row = db.vault
@@ -116,7 +110,6 @@ describe("tasks", () => {
     const reopened = gw.invoke(owner, {
       command: "schedule.set_task_status",
       input: { task_id: taskId, status: "needs-action" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(reopened.status).toBe("executed");
     row = db.vault
@@ -131,7 +124,6 @@ describe("tasks", () => {
     const outcome = gw.invoke(owner, {
       command: "schedule.set_task_status",
       input: { task_id: "ghost", status: "completed" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
@@ -142,7 +134,6 @@ describe("tasks", () => {
     const outcome = gw.invoke(owner, {
       command: "schedule.add_task",
       input: { title: "Water the plants", rrule: "FREQ=WEEKLY" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
@@ -159,7 +150,6 @@ describe("tasks", () => {
     const outcome = gw.invoke(owner, {
       command: "schedule.set_task_status",
       input: { task_id: taskId, status: "completed" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     const output = (
@@ -201,7 +191,6 @@ describe("tasks", () => {
     const outcome = gw.invoke(owner, {
       command: "schedule.set_task_status",
       input: { task_id: taskId, status: "completed" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     const output = (outcome as { output: { next_task_id?: string } }).output;
@@ -217,7 +206,6 @@ describe("tasks", () => {
     const outcome = gw.invoke(owner, {
       command: "schedule.set_task_status",
       input: { task_id: taskId, status: "completed" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     const output = (outcome as { output: { next_task_id?: string } }).output;
@@ -228,7 +216,6 @@ describe("tasks", () => {
     const outcome = gw.invoke(owner, {
       command: "schedule.add_task",
       input: { title: "Call the dentist", remind_before_min: 30 },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
@@ -243,7 +230,6 @@ describe("tasks", () => {
     const set = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: withDue, rrule: "FREQ=WEEKLY" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(set.status).toBe("executed");
     let row = db.vault
@@ -256,7 +242,6 @@ describe("tasks", () => {
     const cleared = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: withDue, clear_rrule: true },
-      purpose: "dpv:ServiceProvision",
     });
     expect(cleared.status).toBe("executed");
     row = db.vault
@@ -270,7 +255,6 @@ describe("tasks", () => {
     const refused = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: noDue, rrule: "FREQ=DAILY" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(refused.status).toBe("failed");
     assert(refused.status === "failed");
@@ -285,7 +269,6 @@ describe("tasks", () => {
     const set = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: taskId, remind_before_min: 15 },
-      purpose: "dpv:ServiceProvision",
     });
     expect(set.status).toBe("executed");
     let row = db.vault
@@ -296,14 +279,12 @@ describe("tasks", () => {
     const both = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: taskId, remind_before_min: 5, clear_remind: true },
-      purpose: "dpv:ServiceProvision",
     });
     expect(both.status).toBe("failed");
 
     const cleared = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: taskId, clear_remind: true },
-      purpose: "dpv:ServiceProvision",
     });
     expect(cleared.status).toBe("executed");
     row = db.vault
@@ -322,7 +303,6 @@ describe("tasks", () => {
     const outcome = gw.invoke(owner, {
       command: "schedule.set_task_status",
       input: { task_id: taskId, status: "completed" },
-      purpose: "dpv:ServiceProvision",
     });
     const nextId = (outcome as { output: { next_task_id?: string } }).output
       .next_task_id;
@@ -346,7 +326,6 @@ describe("tasks", () => {
         priority: 1,
         effort_min: 90,
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     const row = db.vault
@@ -365,7 +344,6 @@ describe("tasks", () => {
     const cleared = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: taskId, clear_due: true },
-      purpose: "dpv:ServiceProvision",
     });
     expect(cleared.status).toBe("executed");
     const row = db.vault
@@ -376,7 +354,6 @@ describe("tasks", () => {
     const both = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: taskId, due_at: "2026-08-02", clear_due: true },
-      purpose: "dpv:ServiceProvision",
     });
     expect(both.status).toBe("failed");
     assert(both.status === "failed");
@@ -396,14 +373,12 @@ describe("tasks", () => {
     const edited = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: taskId, description: "Aisle seat, actually" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(edited.status).toBe("executed");
 
     const titled = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: taskId, title: "Book flights to Goa" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(titled.status).toBe("executed");
     row = db.vault
@@ -416,7 +391,6 @@ describe("tasks", () => {
     const cleared = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: taskId, clear_description: true },
-      purpose: "dpv:ServiceProvision",
     });
     expect(cleared.status).toBe("executed");
     row = db.vault
@@ -429,7 +403,6 @@ describe("tasks", () => {
     const both = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: taskId, description: "x", clear_description: true },
-      purpose: "dpv:ServiceProvision",
     });
     expect(both.status).toBe("failed");
   });
@@ -440,7 +413,6 @@ describe("tasks", () => {
     const outcome = gw.invoke(owner, {
       command: "schedule.delete_task",
       input: { task_id: parent },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
     // Trashing is not cancelling: the status is untouched.
@@ -468,12 +440,10 @@ describe("tasks", () => {
     gw.invoke(owner, {
       command: "schedule.delete_task",
       input: { task_id: parent },
-      purpose: "dpv:ServiceProvision",
     });
     const restored = gw.invoke(owner, {
       command: "schedule.restore_task",
       input: { task_id: parent },
-      purpose: "dpv:ServiceProvision",
     });
     expect(restored.status).toBe("executed");
     expect(
@@ -491,12 +461,10 @@ describe("tasks", () => {
     gw.invoke(owner, {
       command: "schedule.delete_task",
       input: { task_id: taskId },
-      purpose: "dpv:ServiceProvision",
     });
     const outcome = gw.invoke(owner, {
       command: "schedule.set_task_status",
       input: { task_id: taskId, status: "completed" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
@@ -507,7 +475,6 @@ describe("tasks", () => {
     const outcome = gw.invoke(owner, {
       command: "schedule.delete_task",
       input: { task_id: "ghost" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
@@ -522,7 +489,6 @@ describe("tasks", () => {
     const again = gw.invoke(owner, {
       command: "schedule.add_task",
       input: { task_id: minted, title: "Grout again" },
-      purpose: "dpv:ServiceProvision",
     });
     expect(again.status).not.toBe("executed");
     // The refused write left the first row exactly as it was.
@@ -545,7 +511,6 @@ describe("tasks", () => {
       const outcome = gw.invoke(owner, {
         command: "schedule.add_task",
         input: { task_id: bad, title: "Shaped like nothing" },
-        purpose: "dpv:ServiceProvision",
       });
       expect(outcome.status, `${bad.slice(0, 24)} must be refused`).not.toBe(
         "executed"

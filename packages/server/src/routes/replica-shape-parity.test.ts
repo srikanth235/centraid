@@ -60,7 +60,7 @@ const APPS_ROOT = path.resolve(import.meta.dirname, "../../../blueprints/apps");
 
 interface ShippedManifest {
   name: string;
-  vault: { purpose: string; scopes: { schema: string; verbs: string }[] };
+  vault: { scopes: { schema: string; verbs: string }[] };
 }
 
 /** Read off disk, exactly like the gateway's install path does. */
@@ -106,10 +106,9 @@ describe("replica shape parity with the shipped manifests", () => {
     );
     for (const [appId, manifest] of await shippedManifests()) {
       opened.installApp(appId, manifest.name);
-      opened.ensureAppInstallGrant(appId, {
-        purpose: manifest.vault.purpose,
+      opened.recordAppInstall(appId, {
         scopes: manifest.vault.scopes as Parameters<
-          VaultPlane["ensureAppInstallGrant"]
+          VaultPlane["recordAppInstall"]
         >[1]["scopes"],
       });
     }

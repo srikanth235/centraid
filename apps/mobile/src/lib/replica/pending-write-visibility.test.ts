@@ -10,6 +10,7 @@ import path from "node:path";
 
 import { describe, expect, test, vi } from "vitest";
 
+import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import {
   pendingOverlayCopy,
   readPendingOverlay,
@@ -47,7 +48,6 @@ function bootstrapPage(): Record<string, unknown> {
       {
         shapeId: SHAPE_ID,
         appId: "docs",
-        purpose: "dpv:ServiceProvision",
         entities: [
           {
             entity: "core.document",
@@ -126,12 +126,16 @@ async function phone(options: {
   };
 }
 
-function documents(
+/** The rows a read returns, each paired with that read's pending sidecar —
+ *  which is how every surface consumes them (#922 G3). */
+async function documents(
   reader: MultiVaultReplicaReader
-): Promise<ReplicaRowEnvelope[]> {
-  return reader
-    .read("docs", { entity: "core.document", limit: 10 })
-    .then((result) => result.rows);
+): Promise<Array<ReplicaRowEnvelope & { pending: PendingOverlaySidecar }>> {
+  const result = await reader.read("docs", {
+    entity: "core.document",
+    limit: 10,
+  });
+  return result.rows.map((row) => ({ ...row, pending: result.pending ?? {} }));
 }
 
 describe("the seat a queued write is waiting on", () => {
@@ -164,7 +168,7 @@ describe("the seat a queued write is waiting on", () => {
       expect(queued.status).toBe("queued");
 
       const [row] = await documents(reader);
-      const pending = readPendingOverlay(row!.values);
+      const pending = readPendingOverlay(row!.values, row!.pending);
       expect(pending?.stewardLabel).toBe("Priya Menon's device");
       // Queued still says the true thing about a queued row.
       expect(pendingOverlayCopy(pending!)).toBe("Waiting for a connection.");
@@ -176,9 +180,9 @@ describe("the seat a queued write is waiting on", () => {
         reason: "waiting for Priya Menon's device",
       });
       const [parked] = await documents(reader);
-      expect(pendingOverlayCopy(readPendingOverlay(parked!.values)!)).toBe(
-        "Waiting for Priya Menon's device."
-      );
+      expect(
+        pendingOverlayCopy(readPendingOverlay(parked!.values, parked!.pending)!)
+      ).toBe("Waiting for Priya Menon's device.");
     } finally {
       reader.close();
       await session.close();
@@ -194,7 +198,9 @@ describe("the seat a queued write is waiting on", () => {
         input: { title: "Mine" },
       });
       const [row] = await documents(reader);
-      expect(readPendingOverlay(row!.values)?.stewardLabel).toBeUndefined();
+      expect(
+        readPendingOverlay(row!.values, row!.pending)?.stewardLabel
+      ).toBeUndefined();
     } finally {
       reader.close();
       await session.close();
@@ -228,7 +234,7 @@ describe("a write admitted before this vault ever synced", () => {
 
       const [row] = await documents(reader);
       expect(row!.values.title).toBe("First open");
-      const overlay = readPendingOverlay(row!.values);
+      const overlay = readPendingOverlay(row!.values, row!.pending);
       expect(overlay?.key).toBe(admitted.intentId);
       expect(overlay?.action).toBe("upload");
       // What is asserted is that the stand-in went, not that the row fell silent.
@@ -264,7 +270,9 @@ describe("a write admitted before this vault ever synced", () => {
       relaunched = await phone({ online: false, root: first.root });
       const [row] = await documents(relaunched.reader);
       expect(row?.values.title).toBe("Killed mid-first-open");
-      expect(readPendingOverlay(row!.values)?.key).toBe(admitted.intentId);
+      expect(readPendingOverlay(row!.values, row!.pending)?.key).toBe(
+        admitted.intentId
+      );
     } finally {
       relaunched?.reader.close();
       await relaunched?.session.close();

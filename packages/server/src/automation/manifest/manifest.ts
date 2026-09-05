@@ -168,13 +168,11 @@ export interface ManifestVaultScope {
 
 /**
  * The automation's requested vault access (duaility §12). Fires authenticate
- * as an enrolled `access.agent`; this block is a *request* the owner approves
- * into a grant on the agent's party — never a grant by itself. Until
- * approval every `ctx.vault` call is a receipted deny.
+ * as an enrolled `access.agent`; this block is a *request* the owner answers
+ * into `share_authority` rows — never an answer by itself. Until the owner
+ * answers, every `ctx.vault` call is a receipted deny.
  */
 export interface ManifestVault {
-  /** DPV purpose notation, e.g. `dpv:ServiceProvision`. */
-  readonly purpose: string;
   /** Owner-facing one-liner: why this automation needs the access. */
   readonly why?: string;
   readonly scopes: readonly ManifestVaultScope[];
@@ -1140,7 +1138,6 @@ function validateVault(raw: unknown): ManifestVault | undefined {
     );
   }
   const v = raw as Record<string, unknown>;
-  const purpose = requireString(v.purpose, "vault.purpose");
   let why: string | undefined;
   if (v.why !== undefined) {
     if (typeof v.why !== "string") {
@@ -1256,7 +1253,7 @@ function validateVault(raw: unknown): ManifestVault | undefined {
       ...(fieldMask ? { fieldMask } : {}),
     } satisfies ManifestVaultScope;
   });
-  return { purpose, ...(why === undefined ? {} : { why }), scopes };
+  return { ...(why === undefined ? {} : { why }), scopes };
 }
 
 /**

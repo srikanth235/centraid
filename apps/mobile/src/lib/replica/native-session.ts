@@ -1,12 +1,8 @@
-import {
-  PENDING_OVERLAY_FIELDS,
-  projectPendingWrite,
-} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { pendingProjectionFor } from "@centraid/blueprints/apps/_shared/pending-projections";
 // governance: allow-repo-hygiene file-size-limit (#419) the native session is one cohesive coordinator wiring store, intent outbox, windowed bootstrap, SSE feed, and AppState drain across a single lifecycle
 import {
   authHeaders,
-  DEFAULT_REPLICA_PURPOSE,
   fetchReplicaChanges,
   fetchReplicaIntentOutcomes,
   runWindowedBootstrap,
@@ -344,12 +340,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     request: NativeReadRequest
   ): Promise<ReplicaReadWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(
-      appId,
-      request.entity,
-      request.shapeId,
-      request.purpose
-    );
+    const shapeId = this.resolveShapeId(appId, request.entity, request.shapeId);
     return this.#coordinator.readWire({ ...request, shapeId });
   }
 
@@ -358,12 +349,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     request: NativeSearchRequest
   ): Promise<ReplicaSearchWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(
-      appId,
-      request.entity,
-      request.shapeId,
-      request.purpose
-    );
+    const shapeId = this.resolveShapeId(appId, request.entity, request.shapeId);
     return this.#coordinator.searchWire({ ...request, shapeId });
   }
 
@@ -454,6 +440,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       input: minted,
       optimistic,
       dependencies,
+      ...(this.#waitingOnLabel ? { stewardLabel: this.#waitingOnLabel } : {}),
       ...(baseVersions.length > 0 ? { baseVersions } : {}),
     } satisfies EnqueueIntentInput);
     // Absent is never empty: a deferred act is durable yet draws nothing, so it
@@ -478,28 +465,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return admitted;
   }
 
-  /**
-   * Who the write waits on is a fact about the MOUNT, so stamping it at
-   * admission lets the overlay name a person before any round trip. Runs AFTER
-   * `validateOptimisticMutation`: `PENDING_OVERLAY_FIELDS` skip column checks.
-   */
+  /** Keep the prepared write shape stable; the waiting steward is intent metadata. */
   private stamped(prepared: PreparedReplicaWrite): PreparedReplicaWrite {
-    const waitingOn = this.#waitingOnLabel;
-    if (waitingOn === undefined) return prepared;
-    return {
-      ...prepared,
-      optimistic: prepared.optimistic.map((mutation) =>
-        mutation.op === "upsert"
-          ? {
-              ...mutation,
-              values: {
-                ...mutation.values,
-                [PENDING_OVERLAY_FIELDS.steward]: waitingOn,
-              },
-            }
-          : mutation
-      ),
-    };
+    return prepared;
   }
 
   /** Say the durable act is unrendered, on the row itself, until it is not. */
@@ -1098,15 +1066,11 @@ export class NativeReplicaSession implements MobileReplicaSession {
   private resolveShapeId(
     appId: string,
     entity: string,
-    requested?: string,
-    purpose?: string
+    requested?: string
   ): string {
-    const resolvedPurpose =
-      purpose ?? (requested ? undefined : DEFAULT_REPLICA_PURPOSE);
     const candidates = this.#catalog.filter(
       (shape) =>
         shape.appId === appId &&
-        (resolvedPurpose === undefined || shape.purpose === resolvedPurpose) &&
         shape.entities.some((item) => item.entity === entity)
     );
     if (requested) {

@@ -148,24 +148,17 @@ export const VAULT_ENTITIES: EntityRegistry = {
       blurb: "Pre-mutation snapshots for version history and undo.",
     },
   },
-  // `access`, not `consent` (#916, owner decision D4). The plane decides
-  // ACCESS — who may read what, for how long, under which purpose — and had
-  // stopped being about consent: two thirds of it is an install register and
-  // an enrolment register. `consent.access_grant` became `access.grant`; the
-  // qualifier was only ever there because the plane was called something
-  // else. The plane's evidence stream moved with it: `access.provenance` and
-  // `access.receipt` are the audit band's, one plane with one name. The band
-  // is BAND-EXCLUDED from this registry — see `schema/audit.ts` and
-  // `schema/local-tables.ts`.
+  // `access`, not `consent` (#916, owner decision D4), and REGISTERS ONLY
+  // since #928: an install register, an enrolment register, a device
+  // register and the demo-seed register. What the plane decides — who may
+  // reach what — is a `share_authority` row, one plane for every principal.
+  // The plane's evidence stream is the audit band's `access.provenance` and
+  // `access.receipt`, BAND-EXCLUDED from this registry — see
+  // `schema/audit.ts` and `schema/local-tables.ts`.
   access: {
     app: { label: "Installed apps", lifecycle: "machinery" },
     agent: { label: "Agent registrations", lifecycle: "machinery" },
     app_ext: { label: "App tables", lifecycle: "machinery" },
-    grant: { label: "App grants", lifecycle: "machinery" },
-    grant_scope: { label: "Grant scopes", lifecycle: "machinery" },
-    scope_tombstone: { label: "Withdrawn scopes", lifecycle: "machinery" },
-    scope_request: { label: "Scope requests", lifecycle: "machinery" },
-    policy: { label: "Policies", lifecycle: "machinery" },
     device: { label: "Devices", lifecycle: "machinery" },
     seed_row: { label: "Seeded rows", lifecycle: "machinery" },
   },
@@ -531,7 +524,6 @@ export const VAULT_ENTITIES: EntityRegistry = {
   },
   outbox: {
     item: { label: "Outbox items", lifecycle: "machinery" },
-    grant: { label: "Outbox grants", lifecycle: "machinery" },
   },
   // The sharing plane's control truth (#731, #929). These must stay in the
   // canonical walk: a portable restore without the bindings, the standing
@@ -548,6 +540,17 @@ export const VAULT_ENTITIES: EntityRegistry = {
     // engines it agreed to, and which devices it trusts — and would re-deliver
     // everything it had already sent.
     authority: { label: "Access answers", lifecycle: "machinery" },
+    // What an automation has ASKED for and the member has not decided yet
+    // (#928). Registered, not local: a restore that forgot the open ask would
+    // silently drop a question the member was about to be shown, and the
+    // automation's next mount would park it again as if it were new.
+    authority_request: { label: "Pending asks", lifecycle: "machinery" },
+    // WHEN each answer was last exercised (#928) — what Settings → Access
+    // draws beside every row. Registered because "you granted this a year ago
+    // and nothing has used it since" is the fact that makes a stale answer
+    // visible, and a restore that forgot it would silently reset every row to
+    // "never used".
+    authority_use: { label: "Answer last used", lifecycle: "machinery" },
     delivery_config: { label: "Delivery limits", lifecycle: "machinery" },
     fulfillment: { label: "Delivery state", lifecycle: "machinery" },
     // The subscription seat (#929): which grant-keyed shapes this vault holds

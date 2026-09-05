@@ -2,11 +2,12 @@ import { assert, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
-import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import { bootstrapVault, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerScheduleCommands } from "../commands/schedule.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { answerScopes } from "../grant/automation-principal.test-fixtures.js";
 import { createShareGrant, setFulfillmentState } from "../grant/grant-store.js";
 import { sha256Hex, uuidv7 } from "../ids.js";
 import type { Gateway } from "./gateway.js";
@@ -52,7 +53,6 @@ describe("portability", () => {
         calendar_id: calendarId,
         attendee_party_ids: [boot.ownerPartyId],
       },
-      purpose: "dpv:ServiceProvision",
     });
     if (outcome.status !== "executed")
       throw new Error(`seed failed: ${JSON.stringify(outcome)}`);
@@ -63,15 +63,11 @@ describe("portability", () => {
         party_id: boot.ownerPartyId,
         partstat: "accepted",
       },
-      purpose: "dpv:ServiceProvision",
     });
-    const app = enrollApp(db, { name: "calendar-app", riskCeiling: "medium" });
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: "schedule", verbs: "read" }],
-    });
+    enrollApp(db, { name: "calendar-app", riskCeiling: "medium" });
+    answerScopes(db, boot, "calendar-app", [
+      { schema: "schedule", verbs: "read" },
+    ]);
   }
 
   test("respond_rsvp drives the RFC 5545 state machine", () => {
@@ -95,7 +91,6 @@ describe("portability", () => {
         party_id: uuidv7(),
         partstat: "declined",
       },
-      purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
@@ -145,7 +140,6 @@ describe("portability", () => {
     const gw2 = createGateway(restored);
     const events = gw2.read(owner, {
       entity: "core.event",
-      purpose: "dpv:ServiceProvision",
     });
     expect(events.rows).toHaveLength(1);
 

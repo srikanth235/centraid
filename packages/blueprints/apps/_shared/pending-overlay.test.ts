@@ -16,7 +16,8 @@ import {
   projectPendingWrite,
   readPendingOverlay,
   stablePendingRowId,
-  enrichPendingRows,
+  enrichPendingSidecar,
+  pendingOverlayFacts,
   settlePendingOverlay,
 } from "./pending-overlay.ts";
 import {
@@ -150,7 +151,15 @@ describe("pending-write overlay law", () => {
     });
     expect(conflict.op).toBe("upsert");
     if (conflict.op !== "upsert") return;
-    const pending = readPendingOverlay(conflict.values);
+    const pending = readPendingOverlay(conflict.values, {
+      "intent-conflict": pendingOverlayFacts({
+        intentId: "intent-conflict",
+        state: "conflict",
+        action: "add",
+        reason: "The task changed on another seat.",
+        conflict: { expectedVersion: 4, actualVersion: 7 },
+      })!,
+    });
 
     expect(pending).toMatchObject({
       key: "intent-conflict",
@@ -166,37 +175,46 @@ describe("pending-write overlay law", () => {
   });
 
   test("queued and parked rows use the shared quiet/reason grammar", () => {
-    const row = {
-      [PENDING_OVERLAY_FIELDS.key]: "intent-2",
-      [PENDING_OVERLAY_FIELDS.status]: "parked",
-      [PENDING_OVERLAY_FIELDS.action]: "rsvp",
-      [PENDING_OVERLAY_FIELDS.steward]: "Asha's phone",
-    };
-    expect(pendingOverlayCopy(readPendingOverlay(row)!)).toBe(
+    const row = { [PENDING_OVERLAY_FIELDS.key]: "intent-2" };
+    const sidecar = {
+      "intent-2": {
+        status: "parked",
+        action: "rsvp",
+        stewardLabel: "Asha's phone",
+      },
+    } as const;
+    expect(pendingOverlayCopy(readPendingOverlay(row, sidecar)!)).toBe(
       "Waiting for Asha's phone."
     );
   });
 
-  test("an empty Commons enrichment cannot wipe an outbox row", () => {
-    const rows = [
-      {
-        expense_id: stablePendingRowId("intent-solo", "expense"),
-        [PENDING_OVERLAY_FIELDS.key]: "intent-solo",
-        [PENDING_OVERLAY_FIELDS.status]: "queued",
-        [PENDING_OVERLAY_FIELDS.action]: "add-expense",
-      },
-    ];
+  test("a row whose intent the sidecar does not name is not pending", () => {
+    // The write settled between the read and the render: the canonical row
+    // stands on its own rather than wearing a badge with nothing behind it.
+    expect(
+      readPendingOverlay({ [PENDING_OVERLAY_FIELDS.key]: "intent-gone" }, {})
+    ).toBeUndefined();
+  });
 
-    expect(enrichPendingRows(rows, [])).toStrictEqual(rows);
+  test("an empty Commons enrichment cannot wipe an outbox row", () => {
+    const sidecar = {
+      "intent-solo": { status: "queued", action: "add-expense" },
+    } as const;
+
+    expect(enrichPendingSidecar(sidecar, [])).toStrictEqual(sidecar);
   });
 
   test("settlement and expiry are pure visible-row transitions", () => {
-    const parked = readPendingOverlay({
-      [PENDING_OVERLAY_FIELDS.key]: "intent-commons",
-      [PENDING_OVERLAY_FIELDS.status]: "parked",
-      [PENDING_OVERLAY_FIELDS.action]: "add-expense",
-      [PENDING_OVERLAY_FIELDS.steward]: "Asha's phone",
-    })!;
+    const parked = readPendingOverlay(
+      { [PENDING_OVERLAY_FIELDS.key]: "intent-commons" },
+      {
+        "intent-commons": {
+          status: "parked",
+          action: "add-expense",
+          stewardLabel: "Asha's phone",
+        },
+      }
+    )!;
 
     expect(
       settlePendingOverlay(parked, { status: "executed" })
@@ -227,26 +245,27 @@ describe("pending-write overlay law", () => {
     const row = {
       expense_id: stablePendingRowId("intent-expired", "expense"),
       [PENDING_OVERLAY_FIELDS.key]: "intent-expired",
-      [PENDING_OVERLAY_FIELDS.status]: "parked",
-      [PENDING_OVERLAY_FIELDS.action]: "add-expense",
     };
+    const sidecar = {
+      "intent-expired": { status: "parked", action: "add-expense" },
+    } as const;
 
-    const [expired] = enrichPendingRows(
-      [row],
-      [
-        {
-          intentId: "intent-expired",
-          status: "expired",
-          reason: "The review window ended.",
-        },
-      ]
-    );
-    expect(readPendingOverlay(expired)).toMatchObject({
+    const expired = enrichPendingSidecar(sidecar, [
+      {
+        intentId: "intent-expired",
+        status: "expired",
+        reason: "The review window ended.",
+      },
+    ]);
+    expect(readPendingOverlay(row, expired)).toMatchObject({
       key: "intent-expired",
       status: "expired",
       reason: "The review window ended.",
     });
-    expect(enrichPendingRows([row], [])).toHaveLength(1);
+    // The row never moves: enrichment says what happened to the WRITE.
+    expect(
+      readPendingOverlay(row, enrichPendingSidecar(sidecar, []))
+    ).toMatchObject({ status: "parked" });
   });
 
   test("[law:pending-overlay] all eight blueprints declare every action", () => {

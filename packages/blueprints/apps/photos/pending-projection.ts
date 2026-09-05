@@ -41,13 +41,23 @@ export const photosPendingProjection = definePendingProjection({
     restore: ({ input }) => asset(input),
     "purge-asset": ({ input }) => pendingDelete("media.asset", input.asset_id),
     "create-album": ({ input, intentId }) => {
-      const albumId = stablePendingRowId(intentId, "album");
-      return [
-        pendingUpsert("core.collection", albumId, {
-          collection_id: albumId,
-          name: typeof input.title === "string" ? input.title : "Pending album",
-        }),
-      ];
+      // An id the write already carries is REUSED, never re-minted, so a
+      // revision keeps the row it already showed (#922 G2).
+      const albumId =
+        typeof input.album_id === "string" && input.album_id.length > 0
+          ? input.album_id
+          : stablePendingRowId(intentId, "album");
+      return {
+        // The id the projection minted rides the write (#922 G2).
+        input: { album_id: albumId },
+        optimistic: [
+          pendingUpsert("core.collection", albumId, {
+            collection_id: albumId,
+            name:
+              typeof input.title === "string" ? input.title : "Pending album",
+          }),
+        ],
+      };
     },
     "rename-album": ({ input }) => album(input),
     "set-album-cover": ({ input }) => album(input),

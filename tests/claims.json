@@ -1410,7 +1410,7 @@
   ],
   "laws": {
     "consent-denial-monotone": {
-      "statement": "Deleting a grant, removing a grant_scope, narrowing a clamp verb, or adding an access_policy row can only turn an allow into a deny, never a deny into an allow.",
+      "statement": "Withdrawing a standing answer, replacing it with a declined row, or narrowing a clamp verb can only turn an allow into a deny, never a deny into an allow.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
@@ -1420,22 +1420,22 @@
       "flow": "consent-chain-properties"
     },
     "consent-clamp-only-narrows": {
-      "statement": "For every allow, the returned rowFilter is a superset of the grant scope's and the clamp's clauses, and the fieldMask is exactly grantMask ∩ clampMask (null only when both are null).",
+      "statement": "For every allow, the returned rowFilter is exactly the covering clamp scopes' clauses and the fieldMask exactly their intersection (null only when every covering scope leaves it null); a standing answer contributes no rows and no fields of its own.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "consent-reveal-never-rides": {
-      "statement": "Reveal is allowed only when both a grant_scope and a clamp scope carry the 'reveal' verb; a 'reveal' scope never satisfies a read or act request.",
+      "statement": "No standing answer ever confers reveal, so an automation is refused reveal whatever it holds; a clamp scope carrying only 'reveal' satisfies no read or act request.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
-    "consent-explicit-scope-unbypassable": {
-      "statement": "A table under a kind:'minimization' policy row is never allowed by a whole-schema (table_name IS NULL) grant scope; only a scope naming the table explicitly covers it.",
+    "consent-standing-answer-required": {
+      "statement": "No caller but the owner's own device reaches anything without a live granted share_authority row covering the entity for the verb, and naming a first-party surface confers nothing: a surface identity reaches exactly what the bare owner device reaches.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "consent-onbehalf-cap-precedes-grants": {
-      "statement": "When onBehalfOfOwner.mayAct is false, no grant set produces an allow for act or reveal, and the deny names the owner id, checked before any grant is consulted.",
+      "statement": "When onBehalfOfOwner.mayAct is false, no standing answer produces an allow for act or reveal, and the deny names the owner id, checked before any answer is consulted.",
       "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
@@ -4892,7 +4892,9 @@
       "dimension": "durability",
       "tier": "contract",
       "owner": "packages/server/src/serve/share-outbox-obligation.contract.test.ts",
-      "minimumTests": 4
+      "minimumTests": 4,
+      "replacesMinimumTestsFlow": "same-owner-placement",
+      "approvedMinimumTestsDeviation": "The newer subscription architecture removes same-owner placement routes and their dedicated contract flow; the surviving share-effect outbox contract owns the equivalent gateway durability boundary and retains the four required cases."
     },
     {
       "id": "gateway-experimental-gate-law",

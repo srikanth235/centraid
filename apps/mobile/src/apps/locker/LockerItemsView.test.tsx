@@ -73,7 +73,6 @@ function view(
   return (
     <LockerItemsView
       filter={{ kind: "all" }}
-      lastReadAt="2026-08-26T09:41:00.000Z"
       loaded
       offerDevice={false}
       onEnrolDevice={noop}

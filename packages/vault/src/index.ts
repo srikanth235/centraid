@@ -205,9 +205,10 @@ export {
 export {
   automationAnswers,
   automationSubjectsOf,
-  backfillAutomationAnswers,
+  hasAnsweredEver,
   recordAutomationAnswers,
   revokeAutomationAnswers,
+  scopeForSubject,
   AUTOMATION_ENTITY_SUBJECT,
   AUTOMATION_PACK_SUBJECT,
   type AutomationAnswer,
@@ -252,6 +253,32 @@ export {
   type ShareChannel,
   type ShareChannelState,
 } from "./grant/channel.js";
+export {
+  EGRESS_SUBJECT_TYPE,
+  egressPrincipalKind,
+  isLiveEgressAuthority,
+  listEgressAuthorities,
+  liveEgressAuthorityId,
+  liveEgressAuthorityIdsFor,
+  recordEgressAuthority,
+  revokeAllEgressAuthorities,
+  revokeEgressAuthority,
+  type EgressAuthorityKey,
+  type EgressAuthorityRecord,
+} from "./grant/egress-authority.js";
+export {
+  listCompanionSurfaces,
+  readCompanionSurfaces,
+  setCompanionSurfaces,
+} from "./grant/companion-surfaces.js";
+export {
+  closeObsoleteScopeRequest,
+  getOpenScopeRequest,
+  listOpenScopeRequests,
+  markScopeRequestDecided,
+  openScopeRequest,
+  type ScopeRequestSummary,
+} from "./grant/authority-request.js";
 // Keeping a grant true is START and STOP over a subscription (#929): the
 // origin composes a grant-keyed shape and a transport carries it, so a
 // co-hosted audience and one on another gateway take the same delivery path.
@@ -604,7 +631,7 @@ export {
 } from "./replica/parked.js";
 
 export { createGateway, Gateway } from "./gateway/gateway.js";
-export { GatewayError, DEFAULT_PURPOSE } from "./gateway/types.js";
+export { GatewayError } from "./gateway/types.js";
 export {
   bumpWorkCounter,
   gatewayWorkCounters,
@@ -720,7 +747,6 @@ export {
   enrollDevice,
   enrollApp,
   enrollAgent,
-  createGrant,
   type BootstrapResult,
   type BootstrapVaultOptions,
   type ScopeSpec,
@@ -741,7 +767,6 @@ export {
   type VaultPresentation,
   lookupAppByName,
   ensureAppEnrolled,
-  listActiveGrants,
   listEnrolledApps,
   markAppRevoked,
   listInstalledApps,
@@ -749,31 +774,14 @@ export {
   type InstalledAppRow,
   lookupAgentByName,
   ensureAgentEnrolled,
-  listActiveAgentGrants,
   listEnrolledAgents,
   markAgentRevoked,
-  purposeConceptId,
   type HostBootstrap,
   type EnrolledApp,
   type EnrolledAgent,
-  type GrantSummary,
   type AppSummary,
   type AgentSummary,
 } from "./host.js";
-export {
-  writeScopeTombstones,
-  listScopeTombstones,
-  clearScopeTombstones,
-  clearAllScopeTombstones,
-  hasGrantHistory,
-  openScopeRequest,
-  closeObsoleteScopeRequest,
-  listOpenScopeRequests,
-  getOpenScopeRequest,
-  markScopeRequestDecided,
-  type ScopeTriple,
-  type ScopeRequestSummary,
-} from "./install-memory.js";
 export { scopeCovers, type ScopeExtent } from "./scope-extent.js";
 
 export { registerScheduleCommands } from "./commands/schedule.js";

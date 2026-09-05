@@ -64,7 +64,6 @@ interface VaultReadRequest {
   where?: VaultWhere[];
   orderBy?: { column: string; dir?: "asc" | "desc" };
   limit?: number;
-  purpose: string;
   /**
    * "Give me the default window and tell me when it fills" (#922 0a). A read
    * declaring neither `limit` nor this is REFUSED at the inline seat's
@@ -90,7 +89,6 @@ interface VaultSearchRequest {
   query: string;
   where?: VaultWhere[];
   limit?: number;
-  purpose: string;
 }
 
 interface VaultSearchResult {
@@ -98,17 +96,23 @@ interface VaultSearchResult {
   receiptId?: string;
 }
 
-/** Typed-command invocation: `{command, input, purpose}` → `VaultOutcome`. */
+/** Typed-command invocation: `{command, input}` → `VaultOutcome`. */
 interface VaultInvokeRequest {
   command: string;
   input?: Record<string, unknown>;
-  purpose: string;
+  /**
+   * This invocation DECORATES the answer; the answer stands without it. A seat
+   * with no gateway behind it (a replica seat running the handler locally)
+   * settles it as `{status: "failed"}` instead of refusing the whole run, so
+   * the caller's existing `status !== "executed"` branch is the offline
+   * branch too. The gateway ignores the field and executes as always.
+   */
+  optional?: boolean;
 }
 
 /** The card resolver (#272): (type, id) refs → renderable cards. */
 interface VaultResolveRequest {
   refs: Array<{ type: string; id: string }>;
-  purpose: string;
 }
 
 interface VaultResolveResult {
@@ -125,8 +129,8 @@ interface VaultApi {
   read: (request: VaultReadRequest) => Promise<VaultReadResult>;
   search: (request: VaultSearchRequest) => Promise<VaultSearchResult>;
   invoke: (request: VaultInvokeRequest) => Promise<VaultOutcome>;
-  /** Query a registered app view, clamped to this app's grants. */
-  query: (view: string, purpose: string) => Promise<unknown>;
+  /** Query a registered app view, clamped to this app's declared manifest. */
+  query: (view: string) => Promise<unknown>;
   /** Commands discoverable by this app (name, schema, risk, confirmation). */
   describe: () => Promise<unknown>;
   /** This app's own invocations awaiting owner confirmation. */
@@ -585,14 +589,7 @@ interface CentraidClient {
     }) => Promise<unknown>;
     revoke: (grantId: string) => Promise<unknown>;
   };
-  /**
-   * Mint a ONE-TIME peer link ticket for this shell's own vault (#929 S6) —
-   * the same `peer_link_tickets` ceremony the People and Settings link rows
-   * use, reached from the share sheet so an unlinked person is not a dead end.
-   * The vault is the shell's, never the caller's: a blueprint app may not
-   * choose which vault mints. Answers the route's parsed body as `unknown`;
-   * `_shared/grant-plane.ts` owns the guard.
-   */
+  /** Mint a one-time peer link ticket for this shell's own vault (#929 S6). */
   linkTicket?: () => Promise<unknown>;
   describe?: () => Promise<unknown>;
   /** Subscribe to the change feed; returns the unsubscribe. */

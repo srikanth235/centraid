@@ -17,7 +17,7 @@ import type {
   ReplicaValue,
 } from "./types.js";
 
-const PENDING_SUPERSEDES_FIELD = "__centraid_pending_supersedes";
+export const PENDING_SUPERSEDES_FIELD = "__centraid_pending_supersedes";
 const replacementLocks = new Map<string, Promise<void>>();
 
 interface WebLockManager {
@@ -67,7 +67,7 @@ function isRowIdentityField(key: string): boolean {
  * the browser `structuredClone` global. Keep cloning inside the shared value
  * grammar so browser and native replacement paths have the same runtime.
  */
-function cloneReplicaValue(value: ReplicaValue): ReplicaValue {
+export function cloneReplicaValue(value: ReplicaValue): ReplicaValue {
   if (Array.isArray(value)) return value.map(cloneReplicaValue);
   if (value && typeof value === "object") {
     return Object.fromEntries(

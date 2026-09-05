@@ -137,7 +137,6 @@ function checkOf(body: unknown): { total: number; done: number } {
 }
 
 export default async function searchHandler({ input, ctx }: HandlerArgs) {
-  const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "").trim();
   if (!term) return { notes: [] };
   try {
@@ -148,9 +147,8 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         // Trashed notes (#308: delete is reversible) never match.
         where: [{ column: "deleted_at", op: "is-null" }],
         limit: 100,
-        purpose,
       }),
-      readJournalNoteIds(ctx.vault, purpose),
+      readJournalNoteIds(ctx.vault),
     ]);
     // Journal entries drop out of the ranked hits before anything is joined
     // to them (#834 R-journal), so no journal body is decoded or previewed.
@@ -167,13 +165,11 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           { column: "target_type", op: "eq", value: "knowledge.note" },
           { column: "target_id", op: "in", value: noteIds },
         ],
-        purpose,
       }),
       // Notebooks are collections (#274) — the one curation mechanism.
       ctx.vault.read({
         acceptTruncation: true,
         entity: "core.collection",
-        purpose,
       }),
       ctx.vault.read({
         acceptTruncation: true,
@@ -182,7 +178,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           { column: "target_type", op: "eq", value: "knowledge.note" },
           { column: "target_id", op: "in", value: noteIds },
         ],
-        purpose,
       }),
     ]);
     // One bounded pull covers both the note bodies and any attachment bytes.
@@ -198,7 +193,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       acceptTruncation: true,
       entity: "core.content_item",
       where: [{ column: "content_id", op: "in", value: contentIds }],
-      purpose,
     });
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [

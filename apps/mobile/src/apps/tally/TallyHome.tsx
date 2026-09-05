@@ -131,15 +131,10 @@ export default function TallyHome({
     parked: tallyHasParked(pending),
     pending: pendingCount,
     rows,
-    stale: vault.stale,
     ...(destination === "balances" || destination === "groups" ? { nets } : {}),
   });
 
-  const notice = {
-    lastReadAt: vault.lastReadAt,
-    pending: pendingCount,
-    state,
-  };
+  const notice = { pending: pendingCount, state };
 
   const write = useCallback(
     (built: Parameters<typeof issueTallyWrite>[1], executed: string) =>
