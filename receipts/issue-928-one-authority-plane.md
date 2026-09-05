@@ -1822,3 +1822,36 @@ Tree hash: quoted in the lane report to the root.
 | --- | --- | --- |
 | "Row filters and masks left the manifest" — `AP-apps-declare` says the manifest is the scopes block minus them, and I nearly wrote them off as dead text | parsed all eight `app.json` files for `rowFilter`/`fieldMask` on `vault.scopes`, then read `packages/blueprints/apps/locker/queries/access.ts`'s header and `packages/vault/src/scope-extent.ts` | four survive (Locker ×2, People, Tally) and they are **live**: the per-call execution clamp reads them and `scopeCovers` refuses a run whose row filter is not identical. Calling them dead would have been wrong, and `AP-clamp-vocabulary` exists because of this check |
 | ONT-16's "the tables are gone" is a claim about DDL, not about greppability | `grep -rn` for all five table names across `packages` and `apps`, excluding `dist/` | only two prose comments remain (`party-pointers.ts:48`, `access.ts:13`), both describing the deletion; no DDL, no query, no reader |
+
+## Close pass — orchestration doctrine (cross-umbrella)
+
+Anchored here because it belongs to no one umbrella: what running [#927](https://github.com/srikanth235/centraid/issues/927)–[#929](https://github.com/srikanth235/centraid/issues/929) as four parallel umbrellas taught, folded into the docs that govern the next one. Maintainer-dictated wording, landed verbatim.
+
+| File | Change |
+| --- | --- |
+| `docs/multi-agent.md` § Root-agent orchestration | six bullets: lanes not slices (dispatch by reading set); briefs carry the reading set, quote the acceptance text and hand over a doctrine digest instead of the issue body; crosswalk every acceptance box against the lane plan before wave 1; the root keeps an append-only plan file; the doc pass is per umbrella at close; worktrees are reused and landed ones deleted |
+| `docs/multi-agent.md` § A slice exits on its lanes' gates | the exit condition is now stated rung by rung — root `lint`, the package typecheck, every touched or importing test file, and one full package suite per lane on the final tree — with CI on the wave PR as the authoritative full run |
+| `docs/multi-agent.md` § Worker / verifier split | a standalone verifier runs only for red-first slices; every other lane ends its receipt section with `### Falsification`; a verifier trusts a gate run quoted by tree hash when the diff touches no gate, fixture, ratchet, claims or test-kit file, and messages the worker only on a REFUTED finding |
+| `docs/multi-agent.md` § Iteration caps | two rows: no tool-call budget (a completion requirement instead), and the integration-branch push hatch with what still enforces the rungs |
+| `AGENTS.md` | one sentence on the umbrella-orchestration bullet naming lanes, digests, red-first verification and the close-pass doc pass (`CLAUDE.md` is a symlink and is untouched) |
+
+**Decisions:** none — the wording is the maintainer's, landed as given.
+
+**Findings:** none.
+
+**Doc debt:** none.
+
+### Verification
+
+```sh
+bun run format:check && bun run lint
+bash .governance/run.sh          # internal-doc-links over the new #927/#929 links
+ls -l CLAUDE.md                  # still a symlink to AGENTS.md
+```
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| Editing `AGENTS.md` might have broken the `CLAUDE.md` symlink, which the fresh-clone note warns about | `ls -l CLAUDE.md` after the edit | still `CLAUDE.md -> AGENTS.md`; the edit went through the target, not through a tool that would have replaced the link with a copy |
+| The new `#927`–`#929` issue links could be malformed and pass unnoticed | `internal-doc-links` in `.governance/run.sh`, which resolves relative markdown links | green; the two new links are absolute GitHub URLs, which that directive does not police, so they were also read back by eye against the issue numbers in this receipt's own heading |
