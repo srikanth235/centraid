@@ -9,6 +9,8 @@
 import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { rigPaths } from "./journey-rigs.mjs";
+
 const root = path.resolve(import.meta.dirname, "../..");
 const e2ePath = path.join(root, ".github/workflows/e2e.yml");
 const removedPath = path.join(root, ".github/workflows/pairing-relay-e2e.yml");
@@ -468,7 +470,9 @@ const LANES = [
 const budgets = JSON.parse(
   await readFile(path.join(root, "tests/journeys.json"), "utf8")
 );
-const registered = new Set(Object.keys(budgets.rigs ?? {}));
+// A waiver is not a rig: `rigs.approvedDeviation` is the note `check-ledgers`
+// demands for a budget removal in this section, so it must not be stat-ed.
+const registered = new Set(rigPaths(budgets.rigs));
 
 // Read every lane directory and every rig source up front: the checks below are
 // pure over that snapshot, so no I/O sits inside a loop.

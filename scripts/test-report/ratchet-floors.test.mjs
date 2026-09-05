@@ -80,6 +80,88 @@ describe("diffMutationFloors", () => {
   });
 });
 
+describe("diffMinimumTests — approved outright retirement (#927)", () => {
+  const owner = "tests/perf/vault-write.perf.test.ts";
+  const base = { flows: [{ id: "a", owner, minimumTests: 2 }] };
+  const marker = {
+    owner,
+    reason:
+      "Approved by the maintainer 2026-09-05 as part of the #927 rig diet",
+    issue: "#927",
+  };
+
+  test("a marked deletion passes: the floor is gone, and named", () => {
+    const head = { flows: [], removedMinimumTestsFlows: { a: marker } };
+    expect(diffMinimumTests(base, head)).toEqual([]);
+  });
+
+  test("an UNMARKED deletion is still refused", () => {
+    expect(diffMinimumTests(base, { flows: [] })).toHaveLength(1);
+  });
+
+  test("a marker with no matching removed row is refused", () => {
+    const head = {
+      flows: [{ id: "a", owner, minimumTests: 2 }],
+      removedMinimumTestsFlows: { a: marker },
+    };
+    expect(diffMinimumTests(base, head)).toEqual([
+      expect.stringContaining("the head still declares"),
+    ]);
+  });
+
+  test("a marker naming a flow the base never declared is refused", () => {
+    const head = { flows: [], removedMinimumTestsFlows: { b: marker } };
+    // Two errors: the unknown marker, and "a" still deleted unauthorized.
+    expect(diffMinimumTests(base, head)).toEqual([
+      expect.stringContaining("which the base does not declare"),
+      expect.stringContaining('flow "a" removed'),
+    ]);
+  });
+
+  test("a marker missing its reason or issue authorizes nothing", () => {
+    for (const bad of [
+      { owner, issue: "#927" },
+      { owner, reason: "because", issue: "927" },
+      { reason: "because", issue: "#927" },
+    ]) {
+      const head = { flows: [], removedMinimumTestsFlows: { a: bad } };
+      const errors = diffMinimumTests(base, head);
+      expect(errors.length).toBeGreaterThan(1);
+      expect(errors.at(-1)).toContain('flow "a" removed');
+    }
+  });
+
+  test("a marker naming the wrong owner is refused", () => {
+    const head = {
+      flows: [],
+      removedMinimumTestsFlows: { a: { ...marker, owner: "tests/perf/x.ts" } },
+    };
+    expect(diffMinimumTests(base, head).at(0)).toContain("was owned by");
+  });
+
+  test("two markers may not retire the same owner", () => {
+    const twoFlows = {
+      flows: [
+        { id: "a", owner, minimumTests: 2 },
+        { id: "b", owner, minimumTests: 1 },
+      ],
+    };
+    const head = {
+      flows: [],
+      removedMinimumTestsFlows: { a: marker, b: marker },
+    };
+    expect(diffMinimumTests(twoFlows, head).at(0)).toContain(
+      "one marker per deleted rig"
+    );
+  });
+
+  test("a SPENT marker is inert: carried on both sides, it re-litigates nothing", () => {
+    // What main looks like after the retirement landed — no flow either side.
+    const landed = { flows: [], removedMinimumTestsFlows: { a: marker } };
+    expect(diffMinimumTests(landed, landed)).toEqual([]);
+  });
+});
+
 describe("diffMinimumTests", () => {
   test("flags a minimumTests decrease without waiver", () => {
     const base = { flows: [{ id: "a", minimumTests: 10 }] };

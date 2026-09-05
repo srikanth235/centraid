@@ -3588,6 +3588,114 @@
       }
     ]
   },
+  "removedMinimumTestsFlows": {
+    "_comment": "#927 RIG DIET. Each entry retires a flow whose owning rig was DELETED with maintainer approval on 2026-09-05 for citing no tests/journeys.json entry. A rig earns its wall clock by fencing an interval a vault owner can feel; these timed machine costs with nothing above them, so their floors have no successor to carry. ONE-SHOT: scripts/test-report/ratchet-floors.mjs validates a marker only while it is new against the base, so these rows are inert once landed and are dropped by the next change set that touches this file.",
+    "vault-write-budget": {
+      "owner": "tests/perf/vault-write.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "ontology-10k-query": {
+      "owner": "tests/scale/ontology.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "blob-egress-budget": {
+      "owner": "tests/perf/blob-egress.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "blob-gc-volume": {
+      "owner": "tests/scale/blob-gc.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "backup-big-vault": {
+      "owner": "tests/scale/backup-restore.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "replica-bootstrap-volume": {
+      "owner": "tests/scale/replica-bootstrap.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 mobile/first-bootstrap is the entry a successor would answer to. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "conversation-years": {
+      "owner": "tests/scale/conversation-ledger.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "pwa-waterfall-budget": {
+      "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "tunnel-throughput": {
+      "owner": "tests/perf/tunnel-throughput.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "backup-throughput-budget": {
+      "owner": "tests/perf/backup-throughput.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "app-engine-handler-budget": {
+      "owner": "tests/perf/app-engine-handler.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "automation-fire-budget": {
+      "owner": "tests/perf/automation-fire.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "harness-turn-budget": {
+      "owner": "tests/perf/harness-turn.perf.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "harness-sessions-volume": {
+      "owner": "tests/scale/harness-sessions.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "blueprint-clones-volume": {
+      "owner": "tests/scale/blueprint-clones.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "desktop-windows-volume": {
+      "owner": "tests/scale/desktop-windows.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "web-tabs-volume": {
+      "owner": "tests/scale/web-tabs.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "tunnel-pairs-volume": {
+      "owner": "tests/scale/tunnel-pairs.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "mobile-volume-proof": {
+      "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "photos.scale-50k": {
+      "owner": "tests/scale/photos-timeline.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 web|mobile/scroll at year3-photos is the entry a successor would answer to. No surviving rig's floor moves.",
+      "issue": "#927"
+    },
+    "photos.memories-scale-50k": {
+      "owner": "tests/scale/photos-memories.scale.test.ts",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 web|mobile/scroll at year3-photos is the entry a successor would answer to. No surviving rig's floor moves.",
+      "issue": "#927"
+    }
+  },
   "flows": [
     {
       "id": "consent-chain-properties",
