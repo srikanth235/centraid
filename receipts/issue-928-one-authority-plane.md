@@ -4,16 +4,16 @@ Umbrella receipt. One receipt for the whole umbrella; each wave appends its own 
 
 ## Checklist
 
-- [ ] `evaluateAccess` has no `app` identity path; the app bridge issues no app credential; an owner-device read of the owner's vault runs 0 grant statements
-- [ ] Replica shapes are composed statically from the app manifest and the sealed registry; shape ids for all eight apps are unchanged on the golden vault; a sealed column name appears in no shape
+- [x] `evaluateAccess` has no `app` identity path; the app bridge issues no app credential; an owner-device read of the owner's vault runs 0 grant statements
+- [x] Replica shapes are composed statically from the app manifest and the sealed registry; shape ids for all eight apps are unchanged on the golden vault; a sealed column name appears in no shape
 - [x] The static tripwire fails a build in which an app query touches an undeclared entity (proven with a seeded violation)
 - [ ] `access_grant`, `access_grant_scope`, `access_policy`, `access_scope_tombstone`, `access_scope_request` and every reader of them are gone; `grep -r "dpv:" packages apps` is empty outside receipts and CHANGELOG
 - [ ] Every automation's standing answer is a `share_authority` row with `principal_kind = 'automation'`; the owner's prior refusals survive as `declined` rows (count and content asserted by the migration test); a widened manifest still parks
-- [ ] The assistant holds no standing grant; its reads and writes are receipted exercises on behalf of the acting owner; scheduler-fired automations are capped by their row
-- [ ] `access_receipt` references `authority_id` from one id space; the purpose column is gone; the chain verifier is green; Settings → Access shows last-used for every row
-- [ ] Companion attenuation and outbox grants are rows in the one plane; `grant_profile_json` has no reader
-- [ ] The give-plane coordinator, edge store, effects, edge routes and retire pass are deleted; moving an album between two of the owner's vaults is one command
-- [ ] Locker: sealed set, permits, reveal and `ONLINE_ONLY_ACTIONS` unchanged; its history query filters in SQL; `locker-online-only.test.ts` green
+- [x] The assistant holds no standing grant; its reads and writes are receipted exercises on behalf of the acting owner; scheduler-fired automations are capped by their row
+- [x] `access_receipt` references `authority_id` from one id space; the purpose column is gone; the chain verifier is green; Settings → Access shows last-used for every row
+- [x] Companion attenuation and outbox grants are rows in the one plane; `grant_profile_json` has no reader
+- [x] The give-plane coordinator, edge store, effects, edge routes and retire pass are deleted; moving an album between two of the owner's vaults is one command
+- [x] Locker: sealed set, permits, reveal and `ONLINE_ONLY_ACTIONS` unchanged; its history query filters in SQL; `locker-online-only.test.ts` green
 - [ ] Authz deny matrix, automation clamp sweeps and the harness parity integration test green at every slice exit
 - [ ] `docs/decisions.md`, SECURITY.md and `docs/vault-ontology.md` state the model above; the drift register rows for the consent plane are closed
 
@@ -31,6 +31,17 @@ Wave 1a is docs-only. It records the rulings #928 makes as current state, so lat
 - **`receipts/issue-928-one-authority-plane.md`** — this file, created as the umbrella receipt.
 
 Added by the wave-1 root doc commit (see `## w1 root doc commit` below), so the one ticked box crosswalks to evidence in this section: **The static tripwire fails a build in which an app query touches an undeclared entity (proven with a seeded violation)** — realized by w1b in `packages/blueprints/src/app-entity-tripwire.ts` and `app-entity-tripwire.test.ts`, registered as a law and a flow in `tests/claims.json` / `tests/floors.json`, and demonstrated red on 2026-09-03 against the real tree on both halves (an undeclared read of `schedule.project` from `packages/blueprints/apps/tasks/queries/board.ts`, an undeclared `act` on `locker.purge_item` from `packages/blueprints/apps/locker/actions/purge-item.ts`), each restored immediately after, plus four further seeded violations that run on every build. The failure names the app, the file and the entity. Full evidence, numbers and three verifier passes are in `## w1b — the static app entity tripwire`.
+
+
+**Close pass (#928).** The seven boxes the close pass ticked, quoted so `receipt-per-issue`'s crosswalk reads them, with the landed evidence. Nothing above this paragraph is rewritten; the verdicts for the five still open are `## Close pass — checklist crosswalk` at the end.
+
+- **`evaluateAccess` has no `app` identity path; the app bridge issues no app credential; an owner-device read of the owner's vault runs 0 grant statements** — `packages/vault/src/gateway/access.ts` names three answers and no fourth (owner device direct, the assistant riding the acting owner, an automation's `share_authority` row); `AccessAllow.authorityId` is `null` for owner-direct; the only surviving `kind: "app"` in `packages/server` is the app-listing DTO's discriminant, not a credential. See `## w4a` and `## w4b`.
+- **Replica shapes are composed statically from the app manifest and the sealed registry; shape ids for all eight apps are unchanged on the golden vault; a sealed column name appears in no shape** — see `## w2`; `packages/vault/src/replica/locker-sealed-columns.test.ts` holds the sealed half.
+- **The assistant holds no standing grant; its reads and writes are receipted exercises on behalf of the acting owner; scheduler-fired automations are capped by their row** — see `## w3b`; `sqlAsOwner`, the raw-SQL door its purpose string decorated, exists nowhere in `packages` or `apps`.
+- **`access_receipt` references `authority_id` from one id space; the purpose column is gone; the chain verifier is green; Settings → Access shows last-used for every row** — `packages/vault/src/schema/audit.ts` carries `authority_id` (NULL = owner-direct) and no `purpose_concept_id`, indexed `idx_receipt_authority(authority_id, occurred_at)`; `packages/client/src/access-lens.ts` reads `last_used_at` and `SettingsAccessScreen.tsx` renders it or "never used". See `## w4c`.
+- **Companion attenuation and outbox grants are rows in the one plane; `grant_profile_json` has no reader** — `grant_profile_json` and `outbox_grant` appear in no source file outside receipts; ONT-20 is closed on that evidence. See `## w5a`.
+- **The give-plane coordinator, edge store, effects, edge routes and retire pass are deleted; moving an album between two of the owner's vaults is one command** — `share_edges` and `share_effects` exist in no DDL (one stale comment in `peer-plane-sweep.ts` is the only surviving mention), and `packages/vault/src/share/placement.ts`'s `placeItemsInVault` is the one call. See `## w5b`.
+- **Locker: sealed set, permits, reveal and `ONLINE_ONLY_ACTIONS` unchanged; its history query filters in SQL; `locker-online-only.test.ts` green** — `packages/blueprints/apps/locker/writes.ts`'s `ONLINE_ONLY_ACTIONS` is untouched and `queries/access.ts` names `locker.item` and `locker.auth` in its own `where`, before the window rather than after. See `## w5c`.
 
 ## Out of scope
 
@@ -75,7 +86,7 @@ Fresh-context verifier on `claude/928-w1a-rulings` at `8401083a`, wave 1a (rulin
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-04 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-05 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 | 2026-09-04 | codex | 01a06aae-4aeb-72f0-b2a6-97f24ffc02ed |
 | 2026-09-04 | codex | 01a06cb4-14e6-7ae3-a265-663bd6c39c1e |
 | 2026-09-05 | codex | 01a06fa9-1e83-7b20-9d87-f1595f52198e |
@@ -1757,3 +1768,57 @@ bun run format:check
 ### Audit
 
 Verdict: PASS. The follow-up removes only a stale flow-renaming marker, updates its required file digest, and records the narrowly scoped measurement-rig allowance; no product threshold or gateway policy is relaxed.
+
+## Close pass — checklist crosswalk
+
+Docs-only close pass over `origin/main` @ `50ab218cf`. Twelve boxes re-read against the tree; eight tick (box 3 was already ticked in wave 1b), four do not.
+
+| Box | Verdict |
+| --- | --- |
+| 1 no `app` identity path; no app credential; 0 grant statements owner-direct | **satisfied** (`## w4a`, `## w4b`) |
+| 2 static shape composition; shape ids unchanged; no sealed column in a shape | **satisfied** (`## w2`) |
+| 3 static tripwire fails a seeded violation | already ticked (`## w1b`) |
+| 4 the five `access_*` tables gone; `grep -r "dpv:" packages apps` empty | **NOT satisfied on the grep clause.** All five tables are gone from every DDL — only two prose comments in `party-pointers.ts` and `access.ts` still name them. But the grep returns **two** hits: `packages/blueprints/apps/people/app.json:10` still declares `"purpose": "dpv:ServiceProvision"` (seven of eight apps dropped it), and `packages/vault/src/share/subscription-sim-world.test-fixtures.ts` still mints a `purposeConceptId`. Nothing reads either. A two-line code change nobody has made. |
+| 5 every automation's answer is a `share_authority` row; prior refusals survive as `declined` rows asserted by the migration test; a widened manifest still parks | **NOT satisfied**: the row shape and the parking exist (`share_authority_request`, one open ask per automation), but the **migration is gone with the plane it read from** — there are no app grant rows left to carry forward, so no migration test asserts the count and content of surviving `declined` rows and none can. The box outlived its subject; it needs re-wording or striking, which is the owner's call. |
+| 6 assistant holds no standing grant; automations capped by their row | **satisfied** (`## w3b`) |
+| 7 one id space; purpose column gone; chain verifier green; last-used shown | **satisfied** (`## w4c`) |
+| 8 companion attenuation and outbox grants are rows; `grant_profile_json` has no reader | **satisfied** (`## w5a`) |
+| 9 give-plane residue deleted; placement is one command | **satisfied** (`## w5b`) |
+| 10 Locker unchanged; history filters in SQL; `locker-online-only.test.ts` green | **satisfied** (`## w5c`) |
+| 11 authz deny matrix, clamp sweeps and harness parity green at every slice exit | **NOT ticked here**: each slice's own verification block records its run, but this close pass ran no package suite, so it has no evidence of its own to tick on. CI on the wave PR is the authority. |
+| 12 the three docs state the model; the consent-plane drift rows are closed | **NOT satisfied**: `docs/decisions.md`, `SECURITY.md` and `docs/vault-ontology.md` state the model as of this pass, and ONT-16, ONT-18, ONT-19, ONT-20 and ONT-21 are closed with the PR that closed each — but **ONT-17 stays open** on box 4's two `dpv:` hits. Closing that one hit closes this box too. |
+
+### Files
+
+| File | Change |
+| --- | --- |
+| `docs/vault-ontology.md` | ONT-16 / ONT-18 / ONT-19 closed with the closing PR and the code that proves it; ONT-17 restated as mostly-closed with its exact residue; "Was the starting design right?" item 2 says what survives of the `access` plane (`access_app` as the install register, plus the audit band) instead of "the machinery beneath manifests" |
+| `SECURITY.md` | L4's scheduler-automation clause, the L2 four-principals paragraph and the agents bullet state the landed plane instead of a wave; `Identity.surface` named as attribution only |
+| `docs/glossary.md` | `authority_id` states the landed re-key and how "last used" is computed |
+| `docs/decisions.md` | `AP-owner-direct` and `AP-apps-declare` state landed state with their residue; new `AP-clamp-vocabulary` row; the `sqlAsOwner` open question closes as deleted; one table naming the parked-ask, last-used and placement mechanisms |
+| `receipts/issue-928-one-authority-plane.md` | seven ticks, the crosswalk paragraph in `## What changed`, this section |
+
+**Decisions:** one — `AP-clamp-vocabulary` is written as a ruling row rather than an amendment inside `AP-apps-declare`, because it decides where filters and masks LIVE, which `AP-apps-declare` had only said they leave.
+
+**Findings.** (1) Two `dpv:` hits keep box 4 and ONT-17 open; both are dead text. (2) Box 5's migration clause has no subject left — the plane it would migrate from is deleted. (3) `packages/blueprints/apps/people/app.json`'s description still ends "revoke the grant and the app goes dark", which is false under AP-owner-direct: there is no grant to revoke. (4) `packages/server/src/serve/peer-plane-sweep.ts:3` still names `share_effects` in a comment about a table that no longer exists. All four are code/manifest edits outside this lane's reading set.
+
+**Doc debt:** none.
+
+### Verification
+
+```sh
+bun run format:check && bun run lint
+bash .governance/run.sh
+grep -rn "dpv:" packages apps | grep -v /dist/          # 2 hits, both dead
+grep -rn "sqlAsOwner\|grant_profile_json\|outbox_grant" packages apps | grep -v /dist/   # empty
+grep -n "authority_id" packages/vault/src/schema/audit.ts
+```
+
+Tree hash: quoted in the lane report to the root.
+
+### Falsification
+
+| Claim | Throwaway check | Result |
+| --- | --- | --- |
+| "Row filters and masks left the manifest" — `AP-apps-declare` says the manifest is the scopes block minus them, and I nearly wrote them off as dead text | parsed all eight `app.json` files for `rowFilter`/`fieldMask` on `vault.scopes`, then read `packages/blueprints/apps/locker/queries/access.ts`'s header and `packages/vault/src/scope-extent.ts` | four survive (Locker ×2, People, Tally) and they are **live**: the per-call execution clamp reads them and `scopeCovers` refuses a run whose row filter is not identical. Calling them dead would have been wrong, and `AP-clamp-vocabulary` exists because of this check |
+| ONT-16's "the tables are gone" is a claim about DDL, not about greppability | `grep -rn` for all five table names across `packages` and `apps`, excluding `dist/` | only two prose comments remain (`party-pointers.ts:48`, `access.ts:13`), both describing the deletion; no DDL, no query, no reader |
