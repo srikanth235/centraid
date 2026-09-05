@@ -49,3 +49,4 @@ PASS — the reconciliation removes the obsolete edge/outbox dependency, restore
 - Re-froze `packages/vault/tests/golden/issue-929` at schema v5 after the ladder grew (DDL-equality after migrate); the freeze founds a current vault, it does not rewrite history.
 - Restored People's `share.authority_use` / `share.authority_request` reads so Settings → Access can date answers and draw pending asks; re-pinned the people replica shape id.
 - Restored `add-person`'s seat-minted `party_id` (#922 G2) so a mobile write made while the app is still trusted is not a schema denial.
+- Pinned People reads (`share.authority_request` / `share.authority_use`), pending-parent child-write count 105, and ledger-opener `user_version` 5.
