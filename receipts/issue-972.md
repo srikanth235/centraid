@@ -18,6 +18,7 @@
 - Added the subscription-compatible same-owner placement implementation and contract coverage in `packages/vault/src/share/placement-move.test.ts`.
 - Preserved shared waiting-on metadata through intent persistence and refreshed the pending-parent contract count in `packages/client/src/replica/intents.ts`, `packages/server/src/routes/peer-replica-intent-route.ts`, and `packages/blueprints/src/pending-parent-probe.test.ts`.
 - The complete reconciled surface also includes packages/server/src/index.ts, packages/server/src/routes/placement-routes.test.ts, packages/server/src/routes/placement-routes.ts, packages/server/src/serve/share-access-receipts.ts, packages/server/src/serve/share-scope.ts, and packages/vault/src/share/placement-move.test.ts.
+- Re-pinned `packages/server/src/routes/replica-shape-parity.test.ts` to the current main branch's purpose-free shape digest, plus the docs and people manifest changes carried by this PR; the parity suite now records the eight current shipped ids instead of the pre-merge grant-era ids.
 
 ## Out of scope
 
