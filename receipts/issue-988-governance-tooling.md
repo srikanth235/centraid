@@ -10,7 +10,7 @@ Lane: governance tooling. Branch `claude/988-governance-tooling`, one commit per
 - [ ] False positives: agent-session-identity date row
 - [x] False positives: check:ui-receipt no longer fires on a file that is on no import edge
 - [x] False positives: lint:product tolerates a spent one-shot marker
-- [ ] Shared build cache across worktrees, measured
+- [x] Shared build cache across worktrees, measured
 - [ ] docs/multi-agent.md, docs/dev-environment.md and docs/toolchain.md state the model
 - [ ] `.governance/run.sh` green; every existing receipt still passes `receipt-per-issue`
 
@@ -118,6 +118,29 @@ on every later branch, red on a tree nobody had touched. A marker the base alrea
 is now spent and its shape checks are skipped; a marker introduced or moved in the diff, and a
 second flow re-spending one, are refused exactly as before.
 
+**Box 5 — one turbo cache for every worktree.**
+
+| File | Change |
+| --- | --- |
+| `scripts/ci/turbo.mjs` | New. `turboCacheDir()` / `turboEnv()` and the launcher every root script now runs turbo through |
+| `scripts/ci/turbo.test.mjs` | New. The default and the two overrides; no root script (bar the persistent `dev:*`) may call turbo directly |
+| `scripts/ci/turbo-cache-report.mjs` | Spawns turbo with `turboEnv()` so `build:ci` shares the same cache |
+| `package.json` | `build`, `test`, `test:affected`, `test:affected:full`, `typecheck`, `typecheck:affected`, `turbo`, `turbo:lint`, `web:build`, `perf:gateway` route through the launcher; `scripts:test` runs the new test |
+
+Turbo's cache key is its own content hash, so entries are interchangeable across checkouts of the
+same repo by construction — only the DIRECTORY was per-checkout. `TURBO_CACHE_DIR` wins if set, then
+`CENTRAID_TURBO_CACHE_DIR`, then `${XDG_CACHE_HOME:-~/.cache}/centraid/turbo`; nothing is added
+inside the repo, and `.turbo/runs` stays per-checkout so `turbo-cache-report.mjs` still reads its own
+summaries. `dev:*` keeps the plain binary: those tasks are persistent, never cached, and an
+interactive run should have nothing between it and its TTY.
+
+| Measurement | Number | Provenance |
+| --- | --- | --- |
+| Cold `bun run build`, seeding the shared cache | 4 m 09.7 s, 13/13 tasks executed | this container (4 cores / 15 GB, Linux 6.18), `flock … bun run build` in `centraid-wt/claude/988-governance-tooling` at 70e78c91a |
+| Same build in a **fresh worktree** with no `.turbo` of its own | **0.48 s** wall, 13/13 restored (turbo 381 ms, FULL TURBO) | same container, `git worktree add --detach /tmp/988-cache-probe HEAD && bun install --frozen-lockfile && time bun run build`; worktree deleted after |
+| Stamp key computation | 56 ms | same container, `stampKey()` over this tree |
+| `bun run governance`, cold | 1 m 12.3 s | same container, `time bun run governance </dev/null` |
+
 ## Out of scope
 
 - Editing anything under `.governance/packs/**` or `.governance/run.sh` (digest-locked).
@@ -134,10 +157,16 @@ second flow re-spending one, are refused exactly as before.
 ## Verification
 
 ```sh
+# Box 5 — a fresh worktree builds from the shared cache:
+git worktree add /tmp/988-cache-probe claude/988-governance-tooling
+cd /tmp/988-cache-probe && bun install --frozen-lockfile && time bun run build
+```
+
+```sh
 # Box 4 — the false positives, both directions:
 node --test scripts/validate-ui-receipt.test.mjs
 bun run test:ratchet:unit
-grep -c replacesMinimumTestsFlow tests/claims.json   # 0 — no spent marker remains
+grep -c '"replacesMinimumTestsFlow"' tests/claims.json   # 0 — no spent marker remains
 ```
 
 ```sh
