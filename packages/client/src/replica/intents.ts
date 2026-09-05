@@ -76,6 +76,7 @@ export function presentPendingIntentFacts(
     state: intent.state,
     action: intent.action,
     ...(intent.reason ? { reason: intent.reason } : {}),
+    ...(intent.stewardLabel ? { stewardLabel: intent.stewardLabel } : {}),
     ...(intent.conflict ? { conflict: intent.conflict } : {}),
     ...(intent.attempts === undefined ? {} : { attempts: intent.attempts }),
     ...(intent.enqueuedAt ? { enqueuedAt: intent.enqueuedAt } : {}),
@@ -137,6 +138,7 @@ export class IntentQueue {
       enqueuedAt: new Date().toISOString(),
       optimistic: input.optimistic ?? [],
       dependencies: input.dependencies ?? [],
+      ...(input.stewardLabel ? { stewardLabel: input.stewardLabel } : {}),
       ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
     });
   }
