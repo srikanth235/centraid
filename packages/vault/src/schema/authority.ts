@@ -164,7 +164,7 @@ ${touchUpdatedAt("share_fulfillment", ["grant_id", "peer_vault_id"])}
 `;
 
 /**
- * `share_delivery_config` RE-CUT with the rail's second half (#929, rung two).
+ * `share_delivery_config` RE-CUT with the rail's second half (#929, rung three).
  *
  * A grant's delivery config now carries `departure_policy` beside its ceiling:
  * what a departing audience leaves behind in the REMAINING audiences'

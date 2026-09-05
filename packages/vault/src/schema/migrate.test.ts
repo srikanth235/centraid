@@ -186,7 +186,7 @@ describe("schema/migrate", () => {
       "share_commons_member_state",
       "share_commons_intent",
       "share_commons_invitation",
-      // Row-keyed placement provenance (#929, rung three): shape-keyed
+      // Row-keyed placement provenance (#929, rung four): shape-keyed
       // `share_subscription_lineage` is the only answer to "which vault did
       // this row come from" now.
       "core_share_origin",

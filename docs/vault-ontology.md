@@ -16,7 +16,7 @@ Vocabulary is [glossary.md](glossary.md); rulings are [decisions.md](decisions.m
 | What the design says | The published page: thesis, entity map, §03 schema, principles, layer stack, ownership matrix, gateway contract, the ten rules | [`ontology-body.html`](../scripts/docs-site/src/content/ontology-body.html) |
 | Whether the page and the DDL agree | A test compares §03 column by column with `PRAGMA table_info` of a freshly migrated vault, the machinery list with the band declarations, and the version label with `ONTOLOGY_VERSION` | [`ontology-doc.test.ts`](../packages/vault/src/schema/ontology-doc.test.ts) over [`ontology-doc.ts`](../packages/vault/src/schema/ontology-doc.ts) |
 | What the model looks like over real rows | Operations → Vault Atlas: Kinds (census), Relations (the reference graph centred on `core.party`), Browse (receipted editor) | `packages/client/src/react/screens/AtlasScreen.tsx` |
-| The version | `ONTOLOGY_VERSION` (**1.0**), stamped on `agent_command` contracts only; the gateway refuses a command contract on any other version. The file's own version is `PRAGMA user_version` (2), a different number. No row carries a version. | [`migrate.ts`](../packages/vault/src/schema/migrate.ts) |
+| The version | `ONTOLOGY_VERSION` (**1.0**), stamped on `agent_command` contracts only; the gateway refuses a command contract on any other version. The file's own version is `PRAGMA user_version` (4), a different number. No row carries a version. | [`migrate.ts`](../packages/vault/src/schema/migrate.ts) |
 
 ## One file, three bands
 
@@ -32,11 +32,11 @@ One file also collapsed the backup protocol. A snapshot manifest now carries **e
 
 ## The shape today
 
-A fresh vault at `PRAGMA user_version = 2`: **139 base tables** (plus 18 FTS indexes and their shadow tables), 384 indexes, 552 triggers, 1 view. **98 tables are registered entities**; the other 41 are declared local, band-declared, or FTS.
+A fresh vault at `PRAGMA user_version = 4`: **137 base tables** (plus 18 FTS indexes and their shadow tables), 382 indexes, 548 triggers, 1 view. **97 tables are registered entities**; the other 40 are declared local, band-declared, or FTS.
 
 | Schema | Kind | Tables | What it holds | Bundled consumer |
 | --- | --- | --- | --- | --- |
-| `core` | spine | 21 registered (+ `core_entity`, `core_entity_kind` local) | vault, party, identifier, place, event, account, transaction, content item, derivative, document, attachment, activity, link, anchor, concept scheme, concept, tag, collection, collection entry, entity revision, share origin | every app |
+| `core` | spine | 20 registered (+ `core_entity`, `core_entity_kind` local) | vault, party, identifier, place, event, account, transaction, content item, derivative, document, attachment, activity, link, anchor, concept scheme, concept, tag, collection, collection entry, entity revision | every app |
 | `schedule` | pack | 8 | calendar, event extension, attendee, task, project, section, recurrence exception, exception attendee | Agenda, Tasks |
 | `social` | pack | 6 | contact channel, circle, circle member, thread, participant, message | People (channels), Tally and sharing (circles); **threads and messages have no surface, but do have writers** |
 | `knowledge` | pack | 2 | note, annotation | Notes; annotations are the memo mechanism everywhere |

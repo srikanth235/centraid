@@ -1194,3 +1194,40 @@ finding-3 fix added rung three and mislabels itself "rung two" in its own DDL he
 `migrate.test.ts` "proves the fresh file lands on 2". Wave 4b edited exactly these
 files when it made rung two, so the same edit is owed here. Fix: six one-line
 corrections, no code.
+
+## Wave 4e — the ladder's docs catch up with the ladder
+
+Round-2 audit finding, text only. `VAULT_MIGRATIONS` holds four entries and
+`migrate.test.ts:148` pins a fresh vault at `user_version = 4`, while six places
+still described rung two and a fresh vault at 2. Wave 4b made exactly these
+edits when it created rung two; the same edit is owed for rungs three and four.
+
+| file | was | is |
+| --- | --- | --- |
+| `packages/vault/src/schema/migrate.ts` header | "lands on `user_version = 3`; a file frozen at 1 runs rungs two and three" | lands on 4; a file frozen at N runs the rungs above N |
+| `packages/vault/src/schema/authority.ts` | `SHARE_DELIVERY_CONFIG_RECUT_DDL` "(#929, rung two)" | rung three (`migrate.ts:173-176`) |
+| `packages/vault/src/schema/migrate.test.ts` | `core_share_origin`'s must-not-exist comment "(#929, rung three)" | rung four |
+| `packages/vault/README.md` | "rung two … stamps `user_version = 2`" | rungs two through four, named; stamps 4 |
+| `docs/recovery/backup-restore.md` | same, plus "`migrate.test.ts` proves the fresh file lands on 2" | rungs two through four; lands on 4 |
+| `docs/decisions.md` ONT-ladder | "added **rung two** … stamps `user_version = 2`" | rungs two through four, each named, and the reason a post-release shape change is its own rung |
+| `docs/vault-ontology.md` | `PRAGMA user_version` (2); "fresh vault at 2: 139 base tables, 384 indexes, 552 triggers, 98 registered"; `core` row "21 registered … share origin" | 4; 137 base tables, 382 indexes, 548 triggers, 1 view, 97 registered, other 40; `core` 20 registered, `share origin` dropped |
+
+The census is MEASURED, not arithmetic: a throwaway script opened a fresh vault
+through `openVaultDb` (so `refreshEntityTriggers` has run, which is what makes
+the trigger count 548 rather than the 254 a bare `migrateVault` leaves) and
+counted `sqlite_master` with the 18 FTS virtual tables and their shadows
+excluded, plus `VAULT_ENTITIES` band by band.
+
+```sh
+bunx vitest run src/schema/migrate.test.ts src/golden-vault.test.ts \
+  src/schema/ontology-doc.test.ts --root packages/vault
+bun run --cwd packages/vault typecheck
+bash .governance/run.sh
+```
+
+### Falsification
+
+| claim | throwaway check | result |
+| --- | --- | --- |
+| a fresh vault really stamps 4, rather than the doc being wrong in the other direction | read `PRAGMA user_version` off `openVaultDb()` and counted `VAULT_MIGRATIONS` | held: 4 and 4, which is what `migrate.test.ts:148` asserts |
+| 137 base tables is the count, not 138 by subtracting `core_share_origin` from the old 139 | counted `sqlite_master` two ways — strict FTS-shadow suffixes and a prefix match — both give 137 | held; the old 139 was two tables stale, not one, so subtracting would have shipped a wrong number |

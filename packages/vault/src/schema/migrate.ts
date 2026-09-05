@@ -5,8 +5,9 @@
 // walk forward from. It is HISTORY now and does not grow: #929 needed to reach
 // files that already exist, which is the moment migrate.ts always said the
 // baseline text freezes and rung two begins. A fresh file runs every rung and
-// lands on `PRAGMA user_version = 3`; a file frozen at 1 runs rungs two and
-// three, and one frozen at 2 runs only rung three.
+// lands on `PRAGMA user_version = 4`; a file frozen at N runs the rungs above
+// N and no others, which is why a shape change made after a release is a new
+// rung rather than an edit to one already climbed.
 //
 // That number stays load-bearing beyond this file: it is the downgrade guard
 // (`VaultSchemaAheadError`) and the "schema version this build understands"
