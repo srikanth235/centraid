@@ -117,15 +117,17 @@ if (queued.length > 0) {
 
 const failed = results.filter((r) => r.code !== 0);
 
-// The tier is stamped only when every one of its gates ran here and passed.
-// A partial run (a tier gate absent from this invocation) or any failure at all
-// leaves the previous stamp alone, so a stamp can never assert more than one
-// green pass over one tree.
+// The tier is stamped only when EVERY member of STATIC_TIER ran here and
+// passed — not merely every member this invocation happened to name. An
+// invocation that names a subset (`run-gates.mjs --stamp format:check`) stamps
+// nothing, because the stamp is read as a claim about the whole tier and the
+// next `check:push:static` would otherwise skip three gates nobody ran. Any
+// failure at all also leaves the previous stamp alone.
 if (
   stampedKey !== null &&
   !skipTier &&
   failed.length === 0 &&
-  tierGates.every((g) => results.some((r) => r.name === g && r.code === 0))
+  tierIsComplete(results)
 ) {
   record("static", stampedKey);
 }

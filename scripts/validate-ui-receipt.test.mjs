@@ -136,8 +136,9 @@ test("UI receipt evidence: a packages/client data-client change needs no screens
 // that had not moved, and re-validated every screenshot the change set named.
 test("UI receipt evidence: a file on no import edge needs no screenshot", () => {
   for (const file of [
-    "packages/blueprints/apps/people/app.json",
     "packages/blueprints/apps/locker/README.md",
+    "packages/client/src/react/CSS-CONVENTIONS.md",
+    "packages/blueprints/apps/locker/tsconfig.yml",
     // A provider under the replica store: it renders no pixels and reads no
     // stylesheet, so a change to it photographs nothing.
     "packages/client/src/replica/ReplicaProvider.tsx",
@@ -153,9 +154,14 @@ test("UI receipt evidence: a file on no import edge needs no screenshot", () => 
   }
 });
 
-// The manifest exemption must not reach the drawing beside it.
-test("UI receipt evidence: a blueprint app's drawing files are still surfaces", () => {
+// An app manifest is NOT exempt, whatever its extension says. `app.json`'s
+// `description` is copied into the generated packages/blueprints/manifest.json,
+// mapped to `desc` in react/shell/useShellApps.ts and `blurb` in
+// react/shell/routes/homeData.ts, and painted by react/ui/AppCard.tsx on the
+// Home tile — member copy that happens to live in JSON.
+test("UI receipt evidence: a blueprint app's manifest and drawing files are surfaces", () => {
   for (const file of [
+    "packages/blueprints/apps/people/app.json",
     "packages/blueprints/apps/people/app-root.tsx",
     "packages/blueprints/apps/people/Chrome.module.css",
   ]) {

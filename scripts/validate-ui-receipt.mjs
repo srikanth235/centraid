@@ -118,22 +118,31 @@ function isClientSurface(file) {
  * note and a fresh screenshot emitted by a changed e2e harness, and then
  * re-validated every screenshot every receipt in the change set already named.
  *
- * A manifest is data: no module imports it as code, it imports nothing itself,
- * and nothing in it is painted. The same holds for the docs, ledgers and lock
- * files that live beside a surface. Stylesheets, HTML documents and SVG are the
- * opposite case and stay surfaces — they ARE the drawing, which is why this is
- * keyed on the import graph rather than on "is it source".
+ * `app.json` IS NOT ON THIS LIST, and the first draft of this rule had it there
+ * wrongly. An app manifest's `description` is copied verbatim into the
+ * generated `packages/blueprints/manifest.json`, mapped to `desc` in
+ * `react/shell/useShellApps.ts` and to `blurb` in
+ * `react/shell/routes/homeData.ts`, and painted by `react/ui/AppCard.tsx` on
+ * the Home tile — it is member copy that happens to live in JSON. The list
+ * therefore holds only file kinds with no path to a screen at all: prose about
+ * the code, CI and tool configuration, lockfiles and snapshots. Stylesheets,
+ * HTML documents and SVG are the opposite case and stay surfaces — they ARE
+ * the drawing.
+ *
+ * Exempting a manifest's non-rendered fields (a `dpv:` purpose, an action
+ * schema) while still watching `name` and `description` needs the DIFF, which
+ * this gate never receives — it is handed paths and a reader. Until it is, the
+ * whole manifest stays watched: a false demand is never a hole.
  */
-const NOT_ON_AN_IMPORT_EDGE_RE = /\.(?:json|md|ya?ml|txt|lock|snap)$/iu;
+const NOT_ON_AN_IMPORT_EDGE_RE = /\.(?:md|ya?ml|txt|lock|snap)$/iu;
 
 /** Does this changed path draw something a member can see? */
 export function isSurface(file) {
-  if (TEST_FILE_RE.test(file) || NOT_ON_AN_IMPORT_EDGE_RE.test(file))
-    return false;
+  if (NOT_ON_AN_IMPORT_EDGE_RE.test(file)) return false;
   return (
     isClientSurface(file) ||
     /^apps\/[^/]+\/.*\.(?:tsx|css)$/u.test(file) ||
-    file.startsWith("packages/blueprints/apps/")
+    (file.startsWith("packages/blueprints/apps/") && !TEST_FILE_RE.test(file))
   );
 }
 

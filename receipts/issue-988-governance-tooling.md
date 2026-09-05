@@ -252,3 +252,48 @@ Two claims in this diff a reviewer would doubt, and the throwaway checks run aga
 | date | harness | session |
 | --- | --- | --- |
 | 2026-09-05 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+
+## Round 2 — verifier findings e8f9f140e, fixed after #992 merged
+
+This section is an append; the text above it is the trunk's copy and is unchanged. Two statements
+above are **superseded here**: box 2's "a tier is stamped only when every one of its gates ran and
+passed in that invocation", which described the intent rather than the code, and box 4(b)'s "a
+manifest is on no import edge and paints nothing", which is false for `app.json`.
+
+| Finding | Verdict | Fix |
+| --- | --- | --- |
+| The static stamp was recorded when every member the invocation NAMED passed, so `run-gates.mjs --stamp format:check` wrote a whole-tier stamp and the next `check:push:static` skipped four gates having run one | Confirmed; every non-main push is gated by that tier, so a stamp could assert three gates nobody ran | `tierIsComplete()` in `scripts/ci/gate-stamp.mjs` requires every `STATIC_TIER` member green in that one invocation; `scripts/ci/run-gates.mjs` calls it, so a subset run stamps nothing. Pinned by a pure unit case in `scripts/ci/gate-stamp.test.mjs` |
+| `.json` in `NOT_ON_AN_IMPORT_EDGE_RE` exempted a real surface | Confirmed | `.json` removed. An app manifest's `description` is copied into the generated `packages/blueprints/manifest.json`, mapped to `desc` in `packages/client/src/react/shell/useShellApps.ts` and to `blurb` in `packages/client/src/react/shell/routes/homeData.ts`, and painted by `packages/client/src/react/ui/AppCard.tsx` on the Home tile. `packages/blueprints/apps/people/app.json` is pinned as a surface in `scripts/validate-ui-receipt.test.mjs`, and the render path is named in the module comment so the next person cannot re-exempt it by inspection |
+| Hoisting `TEST_FILE_RE` ahead of the client and `apps/*` rules also dropped their test files from the gate | Confirmed, and out of scope | Reverted: `TEST_FILE_RE` is scoped back to the blueprints arm, exactly where #930 left it |
+
+The exemption is now `.md`, `.yml`/`.yaml`, `.txt`, `.lock`, `.snap` — file kinds with no path to a
+screen. Exempting a manifest's non-rendered fields (a `dpv:` purpose, an action schema) while still
+watching `name` and `description` needs the DIFF, which this gate never receives: it is handed paths
+and a reader. Until that changes the whole manifest stays watched — a false demand is never a hole.
+This means the close-docs lane's original complaint stands only for the `dpv:` half of its edit; the
+description sentence beside it is member copy and the gate was right to ask.
+
+Recorded, not fixed: the stamp key covers the working tree and `origin/main`, so gitignored derived
+state (`dist/**`, which `typecheck:affected` reads) can differ between the stamped run and the
+skipped one. Hashing `dist/**` would cost more than the skip saves and would move on every build;
+the honest bound is that a stamp asserts a tree, not a `node_modules` or a `dist`.
+
+### Verification
+
+```txt
+$ rm -rf /tmp/p2
+$ CENTRAID_GATE_STAMP_DIR=/tmp/p2 node scripts/ci/run-gates.mjs --stamp format:check
+$ ls /tmp/p2                                             # absent — a subset run stamps nothing
+$ CENTRAID_GATE_STAMP_DIR=/tmp/p2 bun run check:push:static
+▶ 4 gates, 2 at a time                                   # was: ⊘ static tier stamped … 0 gates
+$ node --test scripts/ci/gate-stamp.test.mjs scripts/ci/gate-classes.test.mjs \
+    scripts/validate-ui-receipt.test.mjs                 # 20 pass, 0 fail
+$ bun run check:ui-receipt                               # evidence verified
+```
+
+### Falsification
+
+| Claim | Check | Result |
+| --- | --- | --- |
+| The stamp fix is not merely a comment change | Re-ran the verifier's exact reproduction | The subset run leaves the stamp directory absent, and `check:push:static` runs 4 gates where it previously ran 0 |
+| Watching `app.json` again does not re-break what #988 fixed | Ran `bun run check:ui-receipt` over this diff and the cases for `README.md`, `CSS-CONVENTIONS.md` and `ReplicaProvider.tsx` | Prose and config files stay exempt; the manifest and the drawing files beside it both demand evidence |
