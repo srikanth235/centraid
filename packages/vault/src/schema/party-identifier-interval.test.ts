@@ -25,7 +25,14 @@ import { createGateway } from "../gateway/gateway.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
 
-const NOW = "2026-09-06T10:00:00.000Z";
+// THE SCENARIO CLOCK RUNS FORWARD TOO. `core.add_party` stamps `valid_from`
+// from the wall clock of the run, and R20(e)'s table CHECK refuses an interval
+// that runs backwards — so retiring a row "at NOW" only means anything when
+// NOW is an instant at or after the one the register minted. A fixed hour of a
+// fixed day was a time bomb: green while the suite ran before it, red for every
+// run after it. This is the same instant for every assertion in the file, so
+// liveness is still asked and answered at one point in time.
+const NOW = new Date(Date.now() + 60_000).toISOString();
 
 let db: VaultDb;
 let gw: Gateway;

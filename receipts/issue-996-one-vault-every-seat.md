@@ -505,3 +505,132 @@ The one red vault test — `party-identifier-interval.test.ts > an end-dated pri
 - **Photos search over a GENERATED caption now goes through `knowledge.annotation`, not `fts_core_content_item`.** The content item's index folds in the owning asset's AUTHORED title and its extracted text/transcript; a machine's caption is indexed under its own entity, which is where a derived row belongs. Named here rather than left as a quiet behaviour change; the Photos search handler is untouched and a caption is still findable.
 - **An attachment has no title, and `core.attach` lost its `title` input.** The option wrote `core_content_item.title`. An attachment is bytes pinned to a row — what a file is CALLED belongs to a wrapper, and an attachment is not one. The archive's filename now lands on `media_asset.title` for an imported photo (where it always did, via `promoteStagedBlob`'s `original_name` fallback) and nowhere else.
 - **`promoteStagedBlob` returns the staging band's reading, never the deduped row's.** Both it and `mintContentFromDataUri` used to read the media type back off the row they had just deduped against — which IS the ONT-28 defect, in the two functions every claiming command calls. They now answer with what THIS arrival declared, and the claiming command writes it onto its own representation.
+
+## Wave 0c prelude — the identifier-interval scenario's clock
+
+`packages/vault/src/schema/party-identifier-interval.test.ts > an end-dated primary does not block a new primary for the same scheme` was red on `d96172c40` and named pre-existing by the wave 0b sections above. Root-caused here before the lane opened.
+
+**It is not the index.** The hypothesis on the way in was that `e03345d6c`'s fold of `b22cc7188`'s migration rungs back into the baseline had lost the primary-preference partial index or the interval CHECK. Both survived intact — `sqlite_master` on a freshly bootstrapped vault reports `CREATE UNIQUE INDEX idx_party_identifier_primary ON core_party_identifier(party_id, scheme) WHERE is_primary = 1 AND valid_to IS NULL` and the table-level `CHECK (valid_to IS NULL OR valid_to >= valid_from)`, exactly as `packages/vault/src/schema/core.ts:103-110` writes them. No DDL changed in this commit, so the golden corpus is not re-frozen.
+
+**It is the scenario's clock.** The failing assertion was the retirement, not the replacement: `atlas.update_row` returned `failed` with `CHECK constraint failed: valid_to IS NULL OR valid_to >= valid_from`. `core.add_party` stamps `valid_from` from the gateway's wall clock (`packages/vault/src/commands/parties.ts:127-137`, `ctx.now`), while the file retired the row at a fixed `2026-09-06T10:00:00.000Z`. R20(e)'s own invariant — an interval runs forward — then refuses the update for every run that starts after 10:00Z on that day, which is why the file was green when `b22cc7188` was authored and red for every run since. A fixed hour of a fixed day is a time bomb, not a fixture. The scenario now retires at `Date.now() + 60_000`: one instant, shared by every assertion in the file, always at or after the one the register minted.
+
+### Verification
+
+```sh
+bun run --filter @centraid/vault test src/schema/party-identifier-interval.test.ts   # 4 passed
+bun run --filter @centraid/vault test                                                # 195 files, 1584 passed, 2 skipped, 0 failed
+```
+
+The vault suite has no red test left on this tree; the "1 pre-existing FAIL" line in the three wave 0b sections above is closed by this commit.
+
+### Files of d96172c40 not named above
+
+`d96172c40`'s wave 0b section lists its surface by directory glob; `receipt-per-issue`'s file-coverage rule matches paths, so these are named verbatim. Append-only, no claim beyond "this commit touched them":
+
+- `apps/mobile/src/apps/docs/docs-projection.test.ts`
+- `apps/mobile/src/apps/docs/docs-projection.ts`
+- `apps/mobile/src/apps/docs/useDocs.ts`
+- `packages/blueprints/apps/agenda/app.json`
+- `packages/blueprints/apps/agenda/queries/search.ts`
+- `packages/blueprints/apps/agenda/queries/upcoming.ts`
+- `packages/blueprints/apps/docs/queries/drive.ts`
+- `packages/blueprints/apps/docs/queries/search.ts`
+- `packages/blueprints/apps/locker/app.json`
+- `packages/blueprints/apps/locker/components/ItemSidecars.tsx`
+- `packages/blueprints/apps/locker/item-sections.test.tsx`
+- `packages/blueprints/apps/locker/queries/item-sidecars.ts`
+- `packages/blueprints/apps/locker/types.ts`
+- `packages/blueprints/apps/notes/queries/library.ts`
+- `packages/blueprints/apps/notes/queries/search.ts`
+- `packages/blueprints/apps/people/app.json`
+- `packages/blueprints/apps/photos/app.json`
+- `packages/blueprints/apps/photos/queries/duplicates.ts`
+- `packages/blueprints/apps/photos/queries/library.ts`
+- `packages/blueprints/apps/photos/queries/search.ts`
+- `packages/blueprints/apps/tally/app.json`
+- `packages/blueprints/apps/tally/queries/dashboard.ts`
+- `packages/blueprints/apps/tasks/app.json`
+- `packages/blueprints/apps/tasks/queries/board.ts`
+- `packages/blueprints/apps/tasks/queries/search.ts`
+- `packages/blueprints/src/app-entity-tripwire.test.ts`
+- `packages/blueprints/src/app-entity-tripwire.ts`
+- `packages/server/src/brief/daily-brief.test.ts`
+- `packages/server/src/lifecycle/automation-anchor-scopes.ts`
+- `packages/server/src/routes/device-work-routes.test.ts`
+- `packages/server/src/routes/grant-routes.test.ts`
+- `packages/server/src/routes/placement-routes.test.ts`
+- `packages/server/src/routes/replica-projection.test.ts`
+- `packages/server/src/routes/replica-shape-parity.test.ts`
+- `packages/server/src/routes/replica-shape.test.ts`
+- `packages/server/src/routes/storage-routes.test.ts`
+- `packages/server/src/serve/grant-fulfillment.test.ts`
+- `packages/server/src/serve/manifest-scope-denial.sweep.test.ts`
+- `packages/server/src/serve/peer-give.test-fixtures.ts`
+- `packages/server/src/serve/peer-transport-remote.test.ts`
+- `packages/server/src/serve/protocol-join-lane.test.ts`
+- `packages/server/src/serve/share-subscription-peer.test-fixtures.ts`
+- `packages/server/src/serve/vault-plane-blob-sweep.test.ts`
+- `packages/test-kit/src/year3-vault.ts`
+- `packages/vault/src/blob/cache-headroom.test.ts`
+- `packages/vault/src/blob/cache.test.ts`
+- `packages/vault/src/blob/custody-rollup.test.ts`
+- `packages/vault/src/blob/flow.test.ts`
+- `packages/vault/src/blob/mint.ts`
+- `packages/vault/src/blob/preflight.ts`
+- `packages/vault/src/blob/preview.test.ts`
+- `packages/vault/src/blob/preview.ts`
+- `packages/vault/src/blob/promote.ts`
+- `packages/vault/src/blob/read.test.ts`
+- `packages/vault/src/blob/store-routing.ts`
+- `packages/vault/src/commands/attachments.test.ts`
+- `packages/vault/src/commands/attachments.ts`
+- `packages/vault/src/commands/inline-body-guard.test.ts`
+- `packages/vault/src/commands/media.test.ts`
+- `packages/vault/src/commands/media.ts`
+- `packages/vault/src/commands/outbox.test.ts`
+- `packages/vault/src/commands/outbox.ts`
+- `packages/vault/src/commands/people.ts`
+- `packages/vault/src/commands/social.test.ts`
+- `packages/vault/src/commands/social.ts`
+- `packages/vault/src/commands/sync.test.ts`
+- `packages/vault/src/commands/tally.ts`
+- `packages/vault/src/enrich/clusters.test.ts`
+- `packages/vault/src/enrich/derivation.test.ts`
+- `packages/vault/src/enrich/enrich.test.ts`
+- `packages/vault/src/enrich/leases.test.ts`
+- `packages/vault/src/enrich/leases.ts`
+- `packages/vault/src/gateway/cards.ts`
+- `packages/vault/src/gateway/duties.test.ts`
+- `packages/vault/src/gateway/execution.ts`
+- `packages/vault/src/gateway/gateway.contract.test.ts`
+- `packages/vault/src/gateway/portability.test.ts`
+- `packages/vault/src/gateway/portable-adapters.ts`
+- `packages/vault/src/gateway/portable-export.test.ts`
+- `packages/vault/src/gateway/read-truncation.test.ts`
+- `packages/vault/src/gateway/search.test.ts`
+- `packages/vault/src/gateway/types.ts`
+- `packages/vault/src/grant/fulfillment-edit.test.ts`
+- `packages/vault/src/grant/fulfillment.test-fixtures.ts`
+- `packages/vault/src/grant/fulfillment.test.ts`
+- `packages/vault/src/index.ts`
+- `packages/vault/src/ingest/caption-target.ts`
+- `packages/vault/src/ingest/concept-writes.ts`
+- `packages/vault/src/ingest/content-item-publisher.ts`
+- `packages/vault/src/ingest/mbox-attachments.test.ts`
+- `packages/vault/src/ingest/staging.test.ts`
+- `packages/vault/src/ingest/takeout-photos.test.ts`
+- `packages/vault/src/replica/value-policy.test.ts`
+- `packages/vault/src/schema/blob.ts`
+- `packages/vault/src/share/closure-confinement.contract.test.ts`
+- `packages/vault/src/share/closure-split.test.ts`
+- `packages/vault/src/share/closure.ts`
+- `packages/vault/src/share/container-routing.ts`
+- `packages/vault/src/share/household.test.ts`
+- `packages/vault/src/share/placement-fixture.ts`
+- `packages/vault/src/share/placement.test.ts`
+- `packages/vault/src/share/project-closure.ts`
+- `packages/vault/src/share/read-closure.ts`
+- `packages/vault/src/share/subscription-delta.ts`
+- `packages/vault/src/share/subscription-sim-plane.test-fixtures.ts`
+- `packages/vault/src/share/subscription-sim.test-fixtures.ts`
+- `packages/vault/src/share/subscription.test.ts`
