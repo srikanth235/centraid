@@ -16,6 +16,14 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { contentText } from "./content-text.js";
+
+/**
+ * What produced the text in `core_content_text`, so a decoder change can
+ * rebuild exactly the rows it invalidates rather than the whole table.
+ */
+export const CONTENT_TEXT_DECODER = "data-uri/v1";
+
 /** The owner half of a representation's key. */
 export interface RepresentationOwner {
   /** Logical entity of the owner, e.g. `core.document`. */
@@ -109,6 +117,11 @@ export function setRepresentation(
   now: string,
   input: RepresentationInput
 ): string {
+  // BEFORE the representation row, not after. The representation's own FTS
+  // trigger is what puts the index back in step once the reading lands
+  // (`schema/blob.ts`), and it reads `core_content_text` — so the text has to
+  // be there when it fires.
+  indexContentText(db, input.contentId, input.mediaType, now);
   const existing = db
     .prepare(
       `SELECT representation_id FROM core_content_representation
@@ -148,6 +161,65 @@ export function setRepresentation(
     now
   );
   return representationId;
+}
+
+/**
+ * DECODE AT WRITE TIME (#996, rulings R4 and R8) — the retirement of the
+ * app-defined decode function.
+ *
+ * The FTS sync triggers used to decode a body by calling an
+ * APPLICATION-DEFINED SQL function over the media type and the data: URI,
+ * one only `openVaultDb` registered. That is exactly why "only the
+ * gateway holds connections" had to be true, and why the search index could
+ * not follow the vault onto a seat: expo-sqlite exposes no way to register a
+ * SQL function, and a trigger has to index a COLUMN.
+ *
+ * So the decode moves HERE, to the one writer of a representation. This is
+ * the right seam rather than a convenient one: a body's text is a function of
+ * the bytes AND of what this owner says the bytes ARE (R20(b)), so it cannot
+ * be derived from the content row alone and it changes exactly when the
+ * representation changes. `content_uri` is hash-addressed and immutable, so
+ * the row never goes stale except through a decoder change — which is what
+ * `decoder` is for.
+ *
+ * ABSENCE IS THE ANSWER FOR "COULD NOT DECODE". `core_content_text.body_text`
+ * is NOT NULL because a row exists when a decode SUCCEEDED; an empty string
+ * would read as an empty document, which is a different and wrong claim.
+ */
+export function indexContentText(
+  db: DatabaseSync,
+  contentId: string,
+  mediaType: string,
+  now: string
+): void {
+  const row = db
+    .prepare(`SELECT content_uri FROM core_content_item WHERE content_id = ?`)
+    .get(contentId) as { content_uri: string } | undefined;
+  const text = row ? contentText(mediaType, row.content_uri) : null;
+  if (text === null) {
+    // A representation re-typed from text to binary takes its text with it.
+    db.prepare(`DELETE FROM core_content_text WHERE content_id = ?`).run(
+      contentId
+    );
+    return;
+  }
+  db.prepare(
+    `INSERT INTO core_content_text
+       (content_id, body_text, decoder, byte_size, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (content_id) DO UPDATE SET
+       body_text = excluded.body_text,
+       decoder = excluded.decoder,
+       byte_size = excluded.byte_size,
+       updated_at = excluded.updated_at`
+  ).run(
+    contentId,
+    text,
+    CONTENT_TEXT_DECODER,
+    Buffer.byteLength(text, "utf8"),
+    now,
+    now
+  );
 }
 
 /** The representation id an owner reads its content through, if it has one. */

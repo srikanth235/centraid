@@ -221,6 +221,7 @@ import {
   makeScopesRouteHandler,
   SCOPES_PATH,
 } from "../routes/scopes-routes.js";
+import { makeSeatRouteHandler } from "../routes/seat-routes.js";
 import { makeStorageRouteHandler } from "../routes/storage-routes.js";
 import { makeTemplatesRouteHandler } from "../routes/templates-routes.js";
 import { makeVaultLinksRouteHandler } from "../routes/vault-links-routes.js";
@@ -3876,6 +3877,12 @@ export async function buildGateway(
           ),
         ]
       : []),
+    // THE SEAT DOORS (#996, R4/R5), ahead of the shaped route's prefixes so
+    // `/seat/*` is never swallowed by the generic `_vault` 404 below.
+    forRoutePrefixes(
+      ["/centraid/_vault/seat"],
+      makeSeatRouteHandler(vaultRegistry, { enrollments: enrollmentStore })
+    ),
     forRoutePrefixes(
       ["/centraid/_vault/replica", "/centraid/_vault/changes"],
       makeReplicaRouteHandler(vaultRegistry, {

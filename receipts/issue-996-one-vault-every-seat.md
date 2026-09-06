@@ -1279,3 +1279,87 @@ One list, so `receipt-per-issue` has the whole change set and a reader has one p
 - `tests/quality/first-paint-query-counts.test.ts`
 - `tests/quality/user-facing-qualities.test.ts`
 
+
+## Wave 1 — the doors, and the function-free index
+
+A seat needs exactly two things from the gateway and nothing else: **the file, once, and the log, forever after**. Both are now served. And the search index stops being something only the gateway can maintain.
+
+### The doors
+
+- **`packages/server/src/routes/seat-routes.ts`** (new), mounted at `/centraid/_vault/seat` ahead of the shaped route's prefixes (`packages/server/src/serve/build-gateway.ts:3878`). Identity is resolved by the **same** `resolveReplicaAccess` the shaped route uses: a seat is an enrolled device, and there is no narrower principal these doors could consult — the question they answer is "is this an enrolled seat", never "which rows may it see".
+- **The snapshot door is a static file, not an RPC.** At year-3 the artifact is ~64 MB, ~9 MB compressed, and the client is a phone on a train. An RPC would have to invent resumption, chunking and integrity; a file gets ranges, a strong ETag and conditional requests from the transport for free. The artifact is **immutable for its name** — it is a pure function of the log position it was taken at — so a second seat at the same seq gets the same bytes and the same ETag, and a resumed download survives a gateway restart rather than only a request. Built beside the destination and renamed in, so a reader arriving mid-build sees no artifact or a complete one, never a half file it will happily decompress.
+- **Compressed on disk, served as those bytes.** Not `Content-Encoding: gzip` over the raw file: a byte range has to be a range over *what the client is downloading*, and content-coding quietly makes that untrue.
+- **The log door serves whole commits.** `?since=&limit=`, bounded at 10,000, and the page carries the rest of its last commit whatever the limit says. A stale or ahead cursor is **409 `seat_rebootstrap_required`** naming the reason, the floor, the watermark and the snapshot route — start over said out loud, never a page that is silently short.
+- **The epoch gate runs on every row, not only on the cursor.** The cursor check is about the request; the row check is about the answer. A row from another epoch stands for a schema the seat cannot apply, and applying one is a silent no-op rather than a visible failure — so the gateway refuses to be the one that shipped it (500 `seat_log_epoch_mismatch`).
+- **The `K` door authenticates and then says it has nothing.** 404 `seat_locker_key_unavailable`, deliberately not the 404 an unrouted path gives: a seat has to tell "this gateway holds no locker key" from "this gateway is older than the door", and the two call for different answers on the phone. W6 fills it in.
+- **Capabilities follow the handlers, not the names**: `seatReplica` flips to `true` in this commit — the one that serves the doors — and `seatLockerKey` stays `false`.
+
+### `vault_content_text` is retired — 0 callers
+
+- **The decode moved to write time**, in `setRepresentation` (`packages/vault/src/schema/representation.ts`), which #996's own representation split had already made **the one writer**. That is the right seam rather than a convenient one: a body's text is a function of the bytes *and* of what this owner says the bytes ARE (R20(b)), so it cannot be derived from the content row alone, and it changes exactly when the representation changes.
+- **Before the representation row, not after.** The representation's own FTS trigger is what puts the index back in step once the reading lands, and it now reads `core_content_text` — so the text has to be there when it fires. Getting that order wrong is what the People-journal search case caught.
+- **Two new triggers on `core_content_text`** (`packages/vault/src/schema/blob.ts`) with a new `ftsRefreshByContent` helper (`packages/vault/src/schema/fts.ts`). **These are for the seat**: the applier writes a commit's rows in TABLE order, so the text can land after the note or document that reads it, and a seat runs no DDL and no refresh pass of its own. `ftsRefreshStatement` keys on the entity's own id; this one finds the owners *from* the content, and fans out — one content item can be the body of several rows.
+- **Every remaining caller followed the column**: `schema/blob.ts` (the document body expression), `commands/documents.ts:660` (the edit postcondition), `gateway/sql.ts` (a read connection now needs no application-defined function at all), `gateway/assistant-context.ts`, and three tests whose SQL is now the same plain SQL a seat runs.
+- The registration itself is gone from `db.ts`, `schema/baseline-fixture.ts` and `gateway/sql.ts`. `contentText` survives as the decoder; nothing calls `db.function` for it.
+- The last caller outside `packages/` was `tests/quality/backup-corpus-fixture.ts`, which registered the function on its own handle so the baseline's triggers would fire. It needs nothing now. The same file was carrying **two reds this umbrella had left there**, both fixed here rather than walked past: its seed still wrote `core_content_item.media_type` and `.title`, dropped by #996's representation split (R20(b)); and once it built again, the determinism case went red because `canonicalize` REWRITES clock-stamped rows and the freed pages keep the real wall-clock bytes as residue — identical rows, different files. A `VACUUM` before the checkpoint rebuilds the file so what is on disk is only what is in the tables. `bunx vitest run tests/quality/backup-archaeology.test.ts` — 3 passed.
+
+### The decode is a declared write now, so eleven manifests say so
+
+`declared-writes.conformance` caught it rather than a reviewer: an action that
+writes a representation now writes `core_content_text` too — an INSERT when the
+bytes decode, a DELETE when a re-typing takes the text away — and two notes
+actions were driving a table their manifest did not name. The honest fix is the
+declaration, never a looser gate, and it belongs to every action that reaches
+`setRepresentation`, not only the two the corpus happens to drive:
+
+- `packages/blueprints/apps/agenda/app.json` (`attach`)
+- `packages/blueprints/apps/docs/app.json` (`upload`, `edit`, `replace`)
+- `packages/blueprints/apps/notes/app.json` (`create-note`, `edit-note`, `attach`)
+- `packages/blueprints/apps/people/app.json` (`add-journal-entry`)
+- `packages/blueprints/apps/photos/app.json` (`upload`)
+- `packages/blueprints/apps/tally/app.json` (`add-receipt-expense`)
+- `packages/blueprints/apps/tasks/app.json` (`attach`)
+
+### Every file this commit touches
+
+- `packages/core/src/protocol/capabilities.ts` · `packages/core/src/protocol/capabilities.test.ts` — `seatReplica` flips true
+- `packages/server/src/routes/seat-routes.ts` (new) · `packages/server/src/routes/seat-routes.test.ts` (new) — the three doors and their scenarios
+- `packages/server/src/serve/build-gateway.ts` — mounted ahead of the shaped route's prefixes
+- `packages/server/src/routes/route-security.ts` — the new prefix registered in `ROUTE_SECURITY_REGISTRY`, so the security sweep covers it
+- `packages/vault/src/schema/representation.ts` — `indexContentText`, the write-time decode, and `CONTENT_TEXT_DECODER`
+- `packages/vault/src/schema/content-text.ts` (new) — `contentText` lifted out of `fts.ts`: the index reads a column now, so the decoder is no longer an FTS concern (and `fts.ts` was over the repo-hygiene line)
+- `packages/vault/src/schema/fts.ts` — `registerContentTextFn` deleted, `valueExpr` reads the column, `ftsRefreshByContent` added
+- `packages/vault/src/schema/blob.ts` — the document body expression, and the two `core_content_text` triggers a seat needs
+- `packages/vault/src/schema/core-side-tables.ts` — the table's comment now describes what shipped
+- `packages/vault/src/db.ts` · `packages/vault/src/schema/baseline-fixture.ts` · `packages/vault/src/gateway/sql.ts` — the registration removed from all three connection paths
+- `packages/vault/src/gateway/portable-adapters.ts` — follows the decoder to its new module
+- `packages/vault/src/commands/documents.ts` — the edit postcondition reads `core_content_text`
+- `packages/vault/src/gateway/assistant-context.ts` — the model is told to join the column, not call a function
+- `packages/vault/src/index.ts` — the replica commit handles the door tests open a commit with
+- `packages/vault/src/gateway/assistant-context.test.ts` · `packages/vault/src/gateway/search.test.ts` · `packages/vault/src/gateway/sql.test.ts` · `packages/vault/src/ingest/staging.test.ts` — SQL that is now the plain SQL a seat runs
+- `packages/vault/tests/golden/issue-929/vault.db.gz` · `manifest.json` — re-frozen: the FTS trigger DDL changed, and the golden gate compares the frozen schema against the baseline's
+- `tests/quality/backup-corpus-fixture.ts` — no function to register; the two reds above
+- the seven `packages/blueprints/apps/*/app.json` manifests listed above
+
+### Gates
+
+```
+cd packages/core       && bun run test        # 19 files, 302 passed
+cd packages/vault      && bun run test        # 205 files, 1708 passed, 2 skipped
+cd packages/blueprints && bun run test        # 213 files, 7083 passed
+cd packages/server     && bun run test        # 389 files, 3479 passed; 3 files red, all environmental
+bun run golden-vault:freeze -- --label issue-929   # 17 tables, 181 rows, schema v5
+bun run check:push:static                     # stamped on the committed tree
+```
+
+The three red server files are environmental and unrelated to this commit:
+`src/acp/backends/acp/launch.test.ts` (two cases, sandbox/root detection) and
+`src/serve/gateway-db-lock.integration.test.ts` (needs a real `sqlite3` binary).
+
+`seat-routes.test.ts` covers each door twice over: the fresh plane, and then **both corpora** — 0e's thirteen scenarios (`buildOntologyScenarios`) and the frozen golden `issue-929`, opened through the migration ladder the golden gate uses. On both, the log tail carries more than five distinct tables, the snapshot gunzips to a real SQLite file, `access_device_secret` is absent from its bytes, and **the snapshot's seq is exactly the log's watermark** — the identity that lets a seat bootstrap from the file and tail from the number beside it.
+
+### Decisions — wave 1, the doors
+
+- **A plane-shaped stand-in for the corpus tests.** Both corpora are BUILT vaults, and a `VaultPlane` bootstrap is exactly what would overwrite them. The doors read three things off a plane, so the test supplies those three — rather than teaching the fixture to accept a foreign vault, which would put a test seam in the plane.
+- **The mock response is a real `Writable`.** The first version was an object with a `write` method; `stream.pipeline` waits for `finish`, which such an object never emits, so the test hung for thirty seconds instead of failing. Extending `Writable` also puts the door's backpressure path under test.
+- **Single-range only.** Multipart ranges are legal HTTP, no seat needs them for a resumed download, and emitting them correctly is more surface than the feature is worth — so `parseByteRange` refuses them by name rather than answering one range and pretending.

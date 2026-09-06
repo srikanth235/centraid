@@ -657,7 +657,8 @@ const EDIT_DOCUMENT: CommandDefinition = {
               EXISTS(SELECT 1 FROM core_document d
                        JOIN core_content_item c ON c.content_id = d.current_content_id
                       WHERE d.document_id = :document_id
-                        AND vault_content_text(${mediaTypeSql("'core.document'", "d.document_id")}, c.content_uri) = :body_text)
+                        AND (SELECT ct.body_text FROM core_content_text ct
+                               WHERE ct.content_id = c.content_id) = :body_text)
               AND (SELECT CASE WHEN :title IS NULL THEN 1
                      ELSE EXISTS(SELECT 1 FROM core_document WHERE document_id = :document_id AND title = :title) END)
             ) AS n`,

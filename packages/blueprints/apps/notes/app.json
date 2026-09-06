@@ -227,6 +227,7 @@
         "core.collection_entry",
         "core.content_item",
         "core.content_representation",
+        "core.content_text",
         "knowledge.note"
       ]
     },
@@ -281,6 +282,7 @@
         "core.concept_scheme",
         "core.content_item",
         "core.content_representation",
+        "core.content_text",
         "core.link",
         "knowledge.note"
       ]
@@ -637,7 +639,8 @@
       "writes": [
         "core.attachment",
         "core.content_item",
-        "core.content_representation"
+        "core.content_representation",
+        "core.content_text"
       ]
     },
     {

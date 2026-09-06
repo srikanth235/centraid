@@ -23,7 +23,6 @@ import { DatabaseSync } from "node:sqlite";
 import { VAULT_MIGRATIONS, migrate } from "@centraid/vault";
 
 import { refreshEntityTriggers } from "../../packages/vault/src/schema/entity.js";
-import { registerContentTextFn } from "../../packages/vault/src/schema/fts.js";
 
 /** Production vaults open at 8192 (`packages/vault/src/db.ts#openFile`); mirror it. */
 const PAGE_SIZE = 8192;
@@ -64,10 +63,9 @@ function openVaultHandle(file: string): DatabaseSync {
   db.exec(`PRAGMA page_size = ${PAGE_SIZE}`);
   db.exec("PRAGMA foreign_keys = ON");
   db.exec("PRAGMA journal_mode = WAL");
-  // The FTS triggers the baseline installs call this app-defined function; a
-  // handle that composes the schema must carry it or the very first statement
-  // fails.
-  registerContentTextFn(db);
+  // NO APPLICATION-DEFINED FUNCTION TO REGISTER since #996 (R4/R8): the FTS
+  // triggers read `core_content_text.body_text`, a column written at
+  // representation time, so a bare handle composes the schema fine.
   return db;
 }
 
@@ -80,8 +78,12 @@ function seed(db: DatabaseSync): void {
   for (let i = 0; i < EXPECTED_CENSUS.party; i += 1) {
     party.run(`corpus-party-${i}`, `Corpus person ${i}`, FIXED_TS, FIXED_TS);
   }
+  // No `media_type` and no `title` on the byte row (#996, R20(b)): what the
+  // bytes ARE is the owner's reading of them, on
+  // `core_content_representation`. This corpus is about what a BACKUP carries,
+  // so it seeds the bytes and their owner and stops there.
   const content = db.prepare(
-    "INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, title, created_at) VALUES (?, 'image/jpeg', ?, ?, 4096, ?, ?)"
+    "INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at) VALUES (?, ?, ?, 4096, ?)"
   );
   const media = db.prepare(
     "INSERT INTO media_asset (asset_id, content_id, kind, captured_at) VALUES (?, ?, 'photo', ?)"
@@ -92,7 +94,6 @@ function seed(db: DatabaseSync): void {
       contentId,
       `file:///corpus/photo-${i}.jpg`,
       digest(contentId),
-      `Corpus photo ${i}`,
       FIXED_TS
     );
     media.run(`corpus-media-${i}`, contentId, FIXED_TS);
@@ -226,6 +227,12 @@ export function buildCorpusVault(dir: string): CorpusPaths {
     refreshEntityTriggers(db);
     seed(db);
     canonicalize(db);
+    // VACUUM before the checkpoint: `canonicalize` REWRITES clock-stamped
+    // rows, and the pages it frees keep the real wall-clock bytes as residue
+    // in unallocated space. The rows are identical across two builds and the
+    // FILES are not, which is exactly the thing this corpus promises. Rebuild
+    // the file so what is on disk is only what is in the tables.
+    db.exec("VACUUM");
     db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
   } finally {
     db.close();

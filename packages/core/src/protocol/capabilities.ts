@@ -45,9 +45,11 @@ export const DEFAULT_GATEWAY_CAPABILITIES: GatewayCapabilities = Object.freeze({
   // Experimental features default OFF on a fresh gateway (v0).
   automations: false,
   connectors: false,
-  // The seat doors are declared but not yet served (#996, W1); the flag turns
-  // on in the commit that serves them, not in the one that names them.
-  seatReplica: false,
+  // The snapshot and log-tail doors are SERVED (#996, W1). The locker key is
+  // not: the route authenticates and answers `seat_locker_key_unavailable`
+  // until W6 lands the key plane, and a seat has to be able to tell that from
+  // a gateway too old to have the door at all.
+  seatReplica: true,
   seatLockerKey: false,
 });
 

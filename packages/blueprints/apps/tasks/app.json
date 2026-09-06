@@ -463,7 +463,8 @@
       "writes": [
         "core.attachment",
         "core.content_item",
-        "core.content_representation"
+        "core.content_representation",
+        "core.content_text"
       ]
     },
     {

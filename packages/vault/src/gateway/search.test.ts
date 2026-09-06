@@ -421,13 +421,13 @@ describe("search", () => {
         }).rows
       ).toHaveLength(0);
       db.vault.exec(
+        // The backfill is now the same PLAIN SQL the trigger runs (#996,
+        // R4/R8): a column read, with no application-defined function, so a
+        // seat can rebuild its own index with this exact statement.
         `INSERT INTO fts_knowledge_note(rowid, note_id, title, body)
        SELECT b.rowid, b."note_id", b."title",
-              (SELECT vault_content_text(
-                        (SELECT r.media_type FROM core_content_representation r
-                          WHERE r.owner_type = 'knowledge.note' AND r.owner_id = b."note_id"),
-                        content_uri)
-                 FROM core_content_item WHERE content_id = b."body_content_id")
+              (SELECT ct.body_text FROM core_content_text ct
+                WHERE ct.content_id = b."body_content_id")
          FROM knowledge_note b`
       );
       expect(

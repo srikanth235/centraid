@@ -388,6 +388,7 @@
         "core.content_derivative",
         "core.content_item",
         "core.content_representation",
+        "core.content_text",
         "tally.expense",
         "tally.expense_line_allocation",
         "tally.expense_line_item",

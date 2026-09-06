@@ -19,7 +19,7 @@
 // A match inside a PDF must surface the DOCUMENT (#352: core_document,
 // not the raw content item), so extracted text feeds the OWNING document's
 // FTS row rather than a shadow row. The v2 triggers rebuilt the row from
-// `vault_content_text` alone — any title rename would clobber derivative
+// the decoded body alone — any title rename would clobber derivative
 // text — so this recreates them with the derivative-aware body expression,
 // and mirrors it from the derivative side. A content item can be the
 // current body of more than one document (sha256 dedup, or two documents
@@ -34,24 +34,25 @@ import type { DatabaseSync } from "node:sqlite";
 
 import {
   OWNED_TITLE_SQL,
+  ftsRefreshByContent,
   ftsRefreshStatement,
   truncateForIndex,
 } from "./fts.js";
-import { mediaTypeSql } from "./representation.js";
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 /** Body of a document's FTS row: extracted text, transcript, inline text.
- *  The raw decode asks THIS DOCUMENT's representation what the bytes are —
- *  the byte row stopped carrying a media type in #996 (ruling R20(b)), so two
- *  documents over one sha index under their own readings of it. */
+ *  The inline branch reads `core_content_text`, written at representation
+ *  time (#996, R4/R8) — the owner's reading of the bytes still decides the
+ *  text, it just decided it earlier, and the trigger is plain SQL that runs
+ *  unchanged on a seat. */
 const DOCUMENT_BODY = (ref: string) =>
   truncateForIndex(`COALESCE(
     (SELECT dv.text_content FROM core_content_derivative dv
       WHERE dv.content_id = ${ref}."current_content_id" AND dv.variant = 'text'),
     (SELECT dv.text_content FROM core_content_derivative dv
       WHERE dv.content_id = ${ref}."current_content_id" AND dv.variant = 'transcript'),
-    (SELECT vault_content_text(${mediaTypeSql("'core.document'", `${ref}."document_id"`)}, ci."content_uri") FROM core_content_item ci
-      WHERE ci.content_id = ${ref}."current_content_id"))`);
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = ${ref}."current_content_id"))`);
 
 /**
  * Core content search text: the owner's title plus whichever spoken/visible
@@ -254,6 +255,18 @@ BEGIN${REFRESH_DOCUMENT_FTS_FOR("NEW.owner_id", "NEW.owner_type = 'core.document
 END;
 CREATE TRIGGER IF NOT EXISTS trg_fts_representation_au AFTER UPDATE ON core_content_representation
 BEGIN${REFRESH_DOCUMENT_FTS_FOR("NEW.owner_id", "NEW.owner_type = 'core.document'")}${ftsRefreshStatement("knowledge.note", "NEW.owner_id", "NEW.owner_type = 'knowledge.note'")}${ftsRefreshStatement("social.message", "NEW.owner_id", "NEW.owner_type = 'social.message'")}
+END;
+
+-- AND ON A SEAT, THE TEXT ARRIVES SEPARATELY (#996, R4/R5). The applier
+-- writes a commit's rows in TABLE order, so \`core_content_text\` can land
+-- after the note or document that reads it, and a seat runs no DDL and no
+-- refresh pass of its own — these are what put the index in step there,
+-- from the same trigger text the gateway runs.
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_text_ai AFTER INSERT ON core_content_text
+BEGIN${REFRESH_DOCUMENT_FTS("NEW.content_id")}${ftsRefreshByContent("knowledge.note", "NEW.content_id")}${ftsRefreshByContent("social.message", "NEW.content_id")}
+END;
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_text_au AFTER UPDATE ON core_content_text
+BEGIN${REFRESH_DOCUMENT_FTS("NEW.content_id")}${ftsRefreshByContent("knowledge.note", "NEW.content_id")}${ftsRefreshByContent("social.message", "NEW.content_id")}
 END;
 
 -- Extracted text can arrive AFTER the document already exists (async OCR/

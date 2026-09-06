@@ -31,7 +31,6 @@ import { registerCosineFn, registerHammingFn } from "./enrich/similarity.js";
 import { asVaultDiskFullError } from "./errors.js";
 import { initializeReplicaProtocol } from "./replica/change-log.js";
 import { repairReplicaInvocationCommits } from "./replica/invocation-commits.js";
-import { registerContentTextFn } from "./schema/fts.js";
 import type { KeyStore } from "./schema/key-store.js";
 import { migrateVault } from "./schema/migrate.js";
 import {
@@ -214,7 +213,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     local = options.blobStore ?? new FsBlobStore(path.join(dir, "blobs"));
   }
   // Must exist before migrations (FTS triggers).
-  registerContentTextFn(vault);
   registerHammingFn(vault);
   registerCosineFn(vault);
   migrateVault(vault);

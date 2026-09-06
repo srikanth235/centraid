@@ -7,7 +7,7 @@
 import type { VaultDb } from "../db.js";
 import { serializeMarkdownNote } from "../ingest/markdown.js";
 import type { ZipEntry } from "../ingest/zip.js";
-import { contentText } from "../schema/fts.js";
+import { contentText } from "../schema/content-text.js";
 import { mediaTypeSql } from "../schema/representation.js";
 
 function escapeIcs(value: string): string {

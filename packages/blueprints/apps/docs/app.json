@@ -85,6 +85,7 @@
         "core.content_derivative",
         "core.content_item",
         "core.content_representation",
+        "core.content_text",
         "core.document",
         "core.tag"
       ]
@@ -310,6 +311,7 @@
         "core.concept_scheme",
         "core.content_item",
         "core.content_representation",
+        "core.content_text",
         "core.document",
         "core.link"
       ]
@@ -342,6 +344,7 @@
         "core.concept_scheme",
         "core.content_item",
         "core.content_representation",
+        "core.content_text",
         "core.document",
         "core.link"
       ]

@@ -114,6 +114,7 @@
         "core.content_derivative",
         "core.content_item",
         "core.content_representation",
+        "core.content_text",
         "core.place",
         "media.asset",
         "media.asset_phash"

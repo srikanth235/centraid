@@ -4,7 +4,6 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import type { VaultDb } from "../db.js";
-import { registerContentTextFn } from "../schema/fts.js";
 import { isSealedValue, SEALED_PLACEHOLDER } from "../schema/sealed.js";
 import { GatewayError } from "./types.js";
 
@@ -73,11 +72,10 @@ export function runReadOnlySql(
     ? new DatabaseSync(path.join(db.dir, "vault.db"))
     : db.vault;
   try {
-    if (dedicated) {
-      conn.exec("PRAGMA query_only = ON");
-      // Fresh connection: FTS / canonical bodies call vault_content_text().
-      registerContentTextFn(conn);
-    }
+    // A read connection needs NO application-defined function since #996
+    // (R4/R8): decoded body text is a column, so this connection reads the
+    // same SQL a seat runs.
+    if (dedicated) conn.exec("PRAGMA query_only = ON");
     const started = Date.now();
     // Cap in SQLite's plan, not after `.all()` — slicing in JS still pays unbounded memory. One look-ahead row keeps `truncated` honest.
     const executable = /^\s*EXPLAIN\b/iu.test(sql)

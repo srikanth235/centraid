@@ -671,6 +671,7 @@
         "core.concept_scheme",
         "core.content_item",
         "core.content_representation",
+        "core.content_text",
         "core.tag",
         "knowledge.note"
       ]

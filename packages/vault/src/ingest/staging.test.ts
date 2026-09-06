@@ -368,11 +368,9 @@ describe("staging", () => {
     expect(
       db.vault
         .prepare(
-          `SELECT n.title, vault_content_text(r.media_type, c.content_uri) AS body
+          `SELECT n.title, ct.body_text AS body
              FROM knowledge_note n
-             JOIN core_content_item c ON c.content_id = n.body_content_id
-             JOIN core_content_representation r
-               ON r.owner_type = 'knowledge.note' AND r.owner_id = n.note_id
+             JOIN core_content_text ct ON ct.content_id = n.body_content_id
             ORDER BY n.title`
         )
         .all()

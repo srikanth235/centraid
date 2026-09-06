@@ -32,15 +32,14 @@ ${touchUpdatedAt("core_link_anchor", "anchor_id")}
 
 /**
  * `core_content_text` — DECODED BODY TEXT AS A COLUMN (#996, rulings R4 / R8).
- * Schema only in wave 0b: the function-free FTS triggers that read it, and the
- * retirement of `vault_content_text`, land in wave 1 with the seat store.
  *
- * The FTS sync triggers call `vault_content_text(media_type, content_uri)`, an
- * APPLICATION-DEFINED SQL function only `openVaultDb` registers — which is
- * exactly why "only the gateway holds connections" was true, and why the search
- * index cannot follow the vault onto a seat: expo-sqlite 57 exposes no way to
- * register a SQL function, and a trigger has to index a COLUMN. So the decode
- * moves to write time on the gateway and lands here.
+ * The FTS sync triggers used to decode a body by calling an
+ * APPLICATION-DEFINED SQL function that only `openVaultDb` registered — which
+ * is exactly why "only the gateway holds connections" was true, and why the
+ * search index could not follow the vault onto a seat: expo-sqlite exposes no
+ * way to register a SQL function, and a trigger has to index a COLUMN. The
+ * decode moved to write time (`schema/representation.ts`), the triggers read
+ * this column, and the same trigger text now runs on every seat.
  *
  * A 1:1 side table, not a column on `core_content_item` (R8): a decoded body is
  * the widest value in the model, and a wide column on a hot table makes every

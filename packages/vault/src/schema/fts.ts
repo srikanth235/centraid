@@ -6,14 +6,15 @@
 //
 // Canonical note/message bodies are not prose columns — they are data: URIs
 // on the referenced core.content_item (rent the bytes, own the reference).
-// Triggers therefore decode through `vault_content_text`, an app-defined
-// function `openVaultDb` registers on every vault connection before
-// migrations run. Only the gateway holds connections (§10), so the function
-// is always present when a trigger fires.
+// Triggers used to decode them through an app-defined SQL function every
+// vault connection registered — which is precisely what
+// pinned the index to the gateway, because expo-sqlite cannot register one
+// and a trigger must index a COLUMN. Since #996 (R4/R8) the decode happens at
+// write time in `setRepresentation` and the trigger reads
+// `core_content_text.body_text`: PLAIN SQL, byte-identical on every seat.
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { mediaTypeSql } from "./representation.js";
 import { sealedColumnsOf } from "./sealed.js";
 import { resolveEntity } from "./tables.js";
 
@@ -26,33 +27,6 @@ import { resolveEntity } from "./tables.js";
  */
 export const OWNED_TITLE_SQL = (prefix: string): string =>
   `(SELECT a."title" FROM media_asset a WHERE a.content_id = ${prefix}."content_id")`;
-
-/** Decoded text of a canonical body, or null for anything non-text. */
-export function contentText(
-  mediaType: unknown,
-  contentUri: unknown
-): string | null {
-  if (typeof mediaType !== "string" || !mediaType.startsWith("text/"))
-    return null;
-  if (typeof contentUri !== "string" || !contentUri.startsWith("data:"))
-    return null;
-  const comma = contentUri.indexOf(",");
-  if (comma < 0) return null;
-  const meta = contentUri.slice(0, comma);
-  const payload = contentUri.slice(comma + 1);
-  try {
-    return meta.includes(";base64")
-      ? Buffer.from(payload, "base64").toString("utf8")
-      : decodeURIComponent(payload);
-  } catch {
-    return null;
-  }
-}
-
-/** Register `vault_content_text` on a vault connection (triggers call it). */
-export function registerContentTextFn(db: DatabaseSync): void {
-  db.function("vault_content_text", { deterministic: true }, contentText);
-}
 
 type FtsColumn =
   /** A text column of the base table itself. */
@@ -398,24 +372,26 @@ export function truncateForIndex(
 /**
  * Value expression for one indexed column, `prefix` = `new` or a base alias.
  *
- * A body's media type is no longer on the byte row (#996, R20(b)), so the
- * decode asks THIS OWNER's representation what the bytes are — which is what
- * makes the same sha indexable as HTML under one note and as plain text under
- * another. `vault_content_text` itself is untouched; wave 1 retires it for
- * `core_content_text`.
+ * FUNCTION-FREE SINCE #996 (rulings R4 / R8). A body used to be decoded here
+ * by calling an application-defined SQL function over the media type and the
+ * data: URI, one only `openVaultDb` registered. That is what
+ * pinned the search index to the gateway: expo-sqlite cannot register a SQL
+ * function, and a trigger must index a COLUMN. The decode now happens at
+ * write time, in `setRepresentation`, and this reads the column it wrote — so
+ * the very same trigger text runs on the phone.
+ *
+ * The owner's reading of the bytes is still what decides the text (R20(b));
+ * it decided it earlier, which is why the same sha can be indexed as HTML
+ * under one note and as plain text under another.
  */
 function valueExpr(
   column: FtsColumn,
   prefix: string,
-  spec: FtsEntitySpec
+  _spec: FtsEntitySpec
 ): string {
   if (column.kind === "column") return `${prefix}."${column.name}"`;
   if (column.kind === "expr") return truncateForIndex(column.sql(prefix));
-  const owned = mediaTypeSql(
-    `'${spec.entity}'`,
-    `${prefix}."${spec.idColumn}"`
-  );
-  return truncateForIndex(`(SELECT vault_content_text(${owned}, content_uri) FROM core_content_item
+  return truncateForIndex(`(SELECT body_text FROM core_content_text
             WHERE content_id = ${prefix}."${column.fk}")`);
 }
 
@@ -494,6 +470,37 @@ export function ftsRefreshStatement(
   INSERT INTO ${fts}(${insertColumnsOf(spec)})
   SELECT ${valuesOf(spec, "b")} FROM ${base} b
    WHERE b."${spec.idColumn}" = ${idExpr} AND ${extraPredicate}${live};`;
+}
+
+/**
+ * Re-index every row of `entity` whose BODY is `contentExpr` (#996, R4/R5).
+ *
+ * `ftsRefreshStatement` above keys on the entity's own id, which is the right
+ * shape when the owner changed. This one is for when the decoded TEXT
+ * changed and the owners have to be found from it — one content item can be
+ * the body of several rows (sha dedupe, or two notes deliberately sharing
+ * bytes), so the refresh fans out to all of them.
+ */
+export function ftsRefreshByContent(
+  entity: string,
+  contentExpr: string
+): string {
+  const spec = SPEC_BY_ENTITY.get(entity);
+  if (!spec) throw new Error(`not a searchable entity: ${entity}`);
+  const body = spec.columns.find((column) => column.kind === "content");
+  if (!body)
+    throw new Error(`${entity} has no content-backed column to refresh`);
+  const base = physical(spec.entity);
+  const fts = `fts_${base}`;
+  const live = spec.deletedColumn
+    ? ` AND b."${spec.deletedColumn}" IS NULL`
+    : "";
+  return `
+  DELETE FROM ${fts}
+   WHERE rowid IN (SELECT rowid FROM ${base} WHERE "${body.fk}" = ${contentExpr});
+  INSERT INTO ${fts}(${insertColumnsOf(spec)})
+  SELECT ${valuesOf(spec, "b")} FROM ${base} b
+   WHERE b."${body.fk}" = ${contentExpr}${live};`;
 }
 
 /**
