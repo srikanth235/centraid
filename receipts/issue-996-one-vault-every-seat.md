@@ -99,3 +99,97 @@ What each corrected sentence now says, against the tree that makes it true:
 bash .governance/run.sh                 # 23/23 directives; internal-doc-links and doc-integrity green
 bun run format:check                    # clean on the four files
 ```
+
+## Pre-wave checks
+
+#996's execution plan gates wave 1 behind five measurements. All five ran **2026-09-06** against the golden vault `packages/vault/tests/golden/issue-929/vault.db.gz` — gunzipped copy 106,233,856 B, 12,968 pages @ 8 KiB, 260 tables (108 `fts_*`), 590 triggers, 407 indexes, freelist 0; the original was never mutated and no repo file was edited by any probe. Runtime is Node 22.22.2 / `node:sqlite` except where P1 names Node 24.4.1. The probe scripts live in the root agent's scratchpad, not in the repo: `p1-node24.mjs` + `p1-extra.mjs` (P1), `p2-wire.mjs` + `p2-chunk.mjs` (P2), `p4-sanitise.mjs` + `p4-control.mjs` (P4), `p5-reconstruct.mjs` + `p5-e2.mjs` + `csparse.mjs` (P5); P3 is a read of the tree and cites `file:line` only.
+
+### P1 — the bundled SQLite and the session surface on the pinned Node
+
+The pin resolves to Node 24.4.1 everywhere (`.node-version:1`, `package.json:199-201`, the gate at `scripts/ci/node-version.mjs:21-46` registered at `scripts/ci/gate-classes.json:88`, CI install at `.github/actions/setup/action.yml:96-98`, release lane at `.github/workflows/lane-release-gateway-npm.yml:93-95`). The official 24.4.1 tarball was fetched to the scratchpad and probed beside the box's 22.22.2.
+
+| Row | Node 22.22.2 | Node 24.4.1 | Same? |
+| --- | --- | --- | --- |
+| `sqlite_version()` | 3.51.2 | **3.50.2** | **no — 24 is older** |
+| compile options (49 each) | `ENABLE_SESSION`, `ENABLE_PREUPDATE_HOOK`, `ENABLE_FTS5`, `THREADSAFE=1` | identical | yes |
+| module keys / `constants` (8 `SQLITE_CHANGESET_*`) | present | identical | yes |
+| `DatabaseSync` + session prototypes, `db.backup`, `patchset()` | present | identical | yes |
+| `createSession({filter})` | accepted, **silently ignored** (excluded row still shipped) | same | yes |
+| `applyChangeset({filter})` | honoured | honoured | yes |
+| `applyChangeset({onConflict})` | arity 1, arg is a plain integer | identical | yes |
+| `applyChangeset` flags / `invert` / `fkNoAction` / `noSavepoint` | accepted, **no effect** | identical | yes |
+| `changegroup` export | absent | absent | yes |
+| changeset bytes for one identical INSERT | 20 B | byte-identical | yes |
+| `packages/server` `src/serve/gateway-db.test.ts` (forks pool, `packages/test-kit/src/vitest.ts:34-37`) | 7 passed, 0 FAIL | 7 passed, 0 FAIL | yes |
+
+**Verdict: SQLite 3.50.2 on Node 24.4.1; no ruling changes.** The two probe logs differ in 2 lines, both banner. Every spike finding the rulings lean on reproduces: no flags argument, capture-side `filter` ignored (so R5/W1's one-session-per-replicated-table stays mandatory), integer-only `onConflict`, no `changegroup`. Open question 12 closes at **3.50.2**.
+
+### P2 — compressed wire size of a 10k-row commit (open question 3)
+
+Per commit: one session per table, decode to R5 JSON inside the capturing transaction, `replica_change` and `fts_*` excluded; each log was then parsed and applied to a second golden copy and every touched table came out byte-identical to the gateway (per-table `quote()` digest). "changeset (excl.)" is the like-for-like table-filtered changeset.
+
+| Commit | log rows | JSON raw | JSON gzip-6 | JSON brotli-5 | B/row gzip-6 | changeset (excl.) gzip-6 | decode | apply |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| a) 10k UPDATEs on `media_asset` | 10,000 | 6,949,101 | **184,753** | 126,238 | 18.5 | 108,434 | 404 ms | 233 ms |
+| b) 10k INSERTs into `core_content_item` | 20,000 | 5,957,791 | **209,282** | 141,584 | 10.5 | 197,763 | 489 ms | 212 ms |
+| c) 10k DELETEs from `schedule_task` | 20,000 | 1,220,001 | **56,387** | 40,700 | 2.8 | 182,709 | 269 ms | 98 ms |
+
+Readings: a 10k-row commit is 55–210 KB gzipped, so a threshold must be denominated in **compressed bytes, never rows** (6.6× spread). JSON is not a wire penalty against a filtered changeset (updates 1.7× worse, inserts within 6%, deletes 3.2× better); the spike's "5× win" compared JSON to the *unfiltered* changeset, of which `replica_change` alone is 81% / 29% / 67% of raw bytes. gzip-6 by default, brotli-5 where advertised (14–60 ms, 25–32% better); **never brotli-11 on the producer path** (2.2–19.5 s per commit for 12–36%). Keep column names as keys: positional arrays cut raw bytes 38–72% but only 4–11% of gzip-6. Statements ≠ log rows — the entity triggers produced 2 log rows per statement in b and c.
+
+**Proposed answers to open question 3, to be confirmed against a model-upgrade batch in W1** (not yet ruled): **defer band 512 KB – 2 MB compressed, recommended 1 MB** on one unattended cellular catch-up span (≈55,000 log rows worst case, ≈360,000 best); **producer bound N = 2,000 decoded log rows per commit** — ≤1.4 MB `rows_json`, ≈38 KB gzip-6, under 4% of the 1 MB budget so no single commit can straddle the threshold, and chunking to 2,000 costs only +0.7…+1.6% total gzip-6 versus one 10k commit (500 costs +2.2…+6.8%, 250 costs +7.9…+13%).
+
+### P3 — does any backup path already carry `keys/`?
+
+| Path | Entry point | What is copied | `keys/`? |
+| --- | --- | --- | --- |
+| Offsite snapshot engine (`backup run`) | `packages/server/src/backup/backup-sources.ts:128-177` | `vault.db` base clone, `blobs/sha256/**`, `apps.bundle` | **no** (file header `backup-sources.ts:1-4`) |
+| WAL shipping | `packages/vault/src/wal-shipper.ts`, `packages/backup/src/wal-format.ts:35` | `vault.db` base + WAL segments | **no** |
+| `backup kit --out` | `packages/server/src/backup/backup-recovery-kit.ts:9-40` | keyring + per target `<vaultId>.sealkey`, `<vaultId>.identity`, password-wrapped | **the only carrier** |
+| Portable bundle export | `packages/vault/src/gateway/portable-export.ts:209-306`, `portable-custody.ts:25-44` | rows, adapters, content; DEK only under a passphrase | **DEK only** |
+| `gateway.backup(cred, dest)` | `packages/vault/src/gateway/custody.ts:56-75` | `vault.backup.db` + blobs | **no** |
+
+`keys/` appears in **zero** `SourceEntry` producers; `backup-sources.ts` is the only assembler and lists three kinds (`db`, `blob`, `git-bundle`). The store itself is six file kinds under `<dataDir>/keys/` (`packages/server/src/cli/paths.ts:26-44`), each a `CENTRAID-KEY-V1` envelope wrapped by a protector held outside `dataDir` (`packages/vault/src/schema/key-store.ts:106-200`, `packages/server/src/cli/key-store.ts:108-130`). **Verdict: `keys/` is deliberately outside every backup; key material rides only in the password-wrapped recovery kit** (`SECURITY.md:37`). W6 must therefore extend the **kit only** — mint `K` as `<dataDir>/keys/<vaultId>.lockerkey` on the `sealKeyFileFor` / `identityKeyFileFor` pattern (`packages/vault/src/schema/sealed.ts:287-293`, `packages/vault/src/schema/vault-identity.ts:48-56`), add a **list** of locker key files to `RecoveryKitTarget` (`backup-recovery-kit.ts:9-23`) so rotation's `K` and `K′` both ride, import them back at `packages/server/src/backup/recover.ts:296-320`, refuse a restore of locker ciphertext without its key with a named reason mirroring `packages/server/src/backup/backup-service.ts:1246-1256` and extend `packages/vault/src/restore-check.ts` with a locker verdict, and rule explicitly whether `portable-custody.ts` carries locker keys or marks locker secrets ciphertext-only. **Finding for W6 (not fixed here):** the two erase paths disagree — `packages/server/src/routes/vault-routes.ts:261-267` destroys `.sealkey`, `.identity` and `.identity.pub`, while the crash-resume path `packages/server/src/serve/erase-recovery.ts:51` destroys **only** `.sealkey`, leaving the identity seed behind after a crashed erase.
+
+### P4 — snapshot sanitisation on the golden vault
+
+The private list measures **28 tables** — 5 credential/key, 15 gateway-job, 8 peer-link — plus `replica_change` (78,376 rows) **truncated**, `replica_meta` kept as the cursor. **Correction the probe forced:** `agent_command_invocation` was first classified private and cannot be — `access_receipt`, `agent_invocation_check`, `agent_evidence`, `agent_explanation` and `core_entity_revision` all FK into it. With it replicated, replicated→private FK references across the golden schema = **0** and `PRAGMA foreign_key_check` over the sanitised snapshot returns 0 violations in 75 ms. 28/28 private canaries planted and read back, plus one FTS canary in `locker_item.title`; all 29 are findable in the pre-sanitisation bytes. No private table is FTS-indexed today (all 18 `fts_*` sit over replicated tables), so that assertion is currently unreachable by construction and is kept for the next `fts_` over a private column.
+
+| # | Pipeline | private canaries in bytes | size (B) | freelist | integrity | drops | total ms |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A | DROP, `secure_delete=OFF`, final `VACUUM` | **0** | 64,495,616 | 0 | ok | 28 | 1,267 |
+| B | DROP, `secure_delete=ON`, final `VACUUM` | **0** | 64,495,616 | 0 | ok | 230 | 1,449 |
+| C | B + drop the 18 `fts_*` vtabs | **0** | 52,510,720 | 0 | ok | 349 | 1,440 |
+| D | `DELETE FROM` instead of DROP, `secure_delete=ON`, final `VACUUM` | **0** | 65,216,512 | 0 | ok | 225 | 1,391 |
+| E | DROP, `secure_delete=OFF`, **no final `VACUUM`** | **10 found** | 101,187,584 | 4,360 | — | — | — |
+| F | DROP, `secure_delete=ON`, **no final `VACUUM`** | **0** | 101,187,584 | 4,360 | — | — | — |
+
+E is the proof R4 asks for: ten credential/peer-link canaries survive in 4,360 freed pages while `sqlite_schema` already reads clean. A or F is individually sufficient; keep both (B) — `secure_delete` costs +202 ms in the drop step only, the final `VACUUM` reclaims 37 MB (−36%). D leaves all 28 private tables and 58 index objects in `sqlite_schema`, so the reason to keep DROP is **schema surface, not residue**. A/B/D retain exactly 57 triggers, all `fts_*` sync, and 0 trigger/view/index references a private table. C is **not free**: the 57 retained FTS triggers survive the vtab drop and then fail (`no such table: main.fts_locker_item` on the first `INSERT INTO locker_item`), so C needs seat-side FTS DDL + `'rebuild'` before the applier's first write, against a 12.0 MB saving. Writer blocking during `VACUUM INTO` (20 s of concurrent writes at ~2 ms each): **7,550 writes committed, 0 errors, 2 blocked >50 ms, max latency 179 ms**; the copy itself took 547 ms under load vs 476–557 ms idle. **Verdict: build W1's snapshot as variant B.**
+
+### P5 — reconstructing a full row image from an UPDATE changeset
+
+`node:sqlite` exposes no changeset iterator, so the v1 wire format was parsed directly (`csparse.mjs`, cross-checked against a known 3-statement changeset); each change's row was read by the changeset's own pk columns from the same connection, still inside the capturing transaction, then verified after `COMMIT`. **Post-commit verification: 12 ok, 0 fail, 3 cases emitted no change.**
+
+| Case | What the session emits | Decoder emits |
+| --- | --- | --- |
+| A single-column UPDATE, 13-col row | one `UPDATE`, 11 of 13 columns undefined | `update` + full image |
+| B two UPDATEs, same row | one collapsed `UPDATE` | one `update` + full image |
+| C UPDATE of a pk column | `DELETE`(old pk) + `INSERT`(new pk) | delete + insert |
+| D INSERT then UPDATE | one `INSERT` with the **final** values | `insert` + full image |
+| E UPDATE then DELETE | one `DELETE` with the pre-transaction row | `delete` |
+| F DELETE then INSERT, same pk | one `UPDATE` | `update` + full image |
+| F2 INSERT then DELETE, same pk | **0 B, no change** | nothing |
+| G AFTER UPDATE trigger writing the same row | one `UPDATE` carrying both columns | one `update` + full image |
+| H `ON DELETE CASCADE` into a child | `DELETE(indirect=1)` with the complete old row | `delete` for both |
+| I / I2 no-op UPDATE (`SET a=a`) | **0 B, nothing recorded** | nothing |
+| J composite pk, non-pk column | `UPDATE`, both pk columns in old | `update` + full image |
+| J2 composite pk, one pk component updated | `INSERT` + `DELETE` | insert + delete |
+
+Decoder rules W1 must implement: **one row per `(table, pk)` per commit** — collapse is the session's, and intra-commit statement order is unrecoverable (changes are grouped by table then pk, not by time); **a pk change is never an update on the wire** — `DELETE`(old) + `INSERT`(new), including for an `INTEGER PRIMARY KEY` rowid alias; **a no-op update and an insert-then-delete are not recorded at all**; carry the **indirect flag** through so trigger/cascade rows stay distinguishable; **reconstruct per session immediately after `session.changeset()`**, before any further statement in the transaction — with one session per included table and the read deferred to just before `COMMIT`, session 1's update reads NO ROW and the decoder would emit an update for a deleted row (a post-commit read is unsafe for the same reason); read the full row by the changeset's own pk flag bytes and never trust the change's own values; fail loudly if an insert/update read returns no row, and fail loudly on a table with no declared PRIMARY KEY, which is **silently not tracked** (the golden vault has 0 such tables and 0 `WITHOUT ROWID` user tables). Timing on a 10k-row UPDATE commit (all triggers dropped, changeset 917,817 B): statement 29.9 ms, `changeset()` 25.5 ms, **JS parse 379.8 ms**, per-pk reads 122.0 ms, batched `IN (…)` reads 92.2 ms — batching wins 1.33× but the parse, an artifact of the missing native iterator, is the bottleneck; reconstruction adds ~0.9–1.2 ms per 100 rows.
+
+### Consequences for the plan
+
+- **The version triple in the issue body is wrong.** It is **3.50.2** (gateway) / **3.51.3** (op-sqlite phone) / **3.53.0** (sqlite-wasm web); the gateway is the oldest, not the middle. W1's oracle and wire tests must read "3.50 and 3.53", and the wire-compat matrix must add the untested pairs **3.50.2 ↔ 3.51.3** and **3.50.2 ↔ 3.53.0** — the spike only ever exercised 3.51.2 ↔ 3.53.0. No ruling text carries the number, so nothing in `docs/decisions.md` changes.
+- **`agent_command_invocation` is replicated**, not private, and `docs/decisions.md:850` (R3) is already written with that clause.
+- **The `fts_*` drop is a separate decision for W1**, not part of R4's pipeline: it saves 12.0 MB but leaves 57 retained triggers pointing at tables that no longer exist, so it is only correct with a mandatory seat-side FTS DDL + rebuild bootstrap step before the first apply.
+- **The erase-path asymmetry is a finding for W6** (`packages/server/src/serve/erase-recovery.ts:51` versus `packages/server/src/routes/vault-routes.ts:261-267`), filed here, not fixed here.
+- **One report contradicts a landed ruling, flagged not fixed.** `docs/decisions.md:860` (R13) says "the recovery kit **and the backup** carry every live key file". P3 measures that no backup path copies `keys/`, and `SECURITY.md:37` states that exclusion as a deliberate security boundary. W6 must either amend R13's clause to the kit alone or rule the backup change against `SECURITY.md`; this slice records the conflict and changes neither.
