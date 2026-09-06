@@ -1149,3 +1149,133 @@ Stated plainly rather than left to be discovered:
 - **The server handlers for the two doors.** The route names and the capability flags are in the contract; `packages/server/src/routes/replica-routes.ts` does not serve them yet.
 - **`vault_content_text` is not retired.** The function-free FTS sync triggers over `core_content_text` need decoded text written at command time by ten `core_content_item` writers, and the decode cannot move into a trigger — the trigger would fire on a seat, where the function does not exist. Schema landed in 0b; the write path and the trigger change did not land here.
 - **Commit 4 — retention, the producer bound, dependency-aware execution and the outcome contract (R23–R25)** — did not land.
+
+## Wave 1 — retention and the producer bound
+
+Two numbers, both measured, and a floor that replaces compaction.
+
+### What changed
+
+- **Retention, and no compaction** — `packages/vault/src/replica/log.ts`, `pruneReplicaLog`. The old change log folded superseded entries because a change entry was a POINTER — "row X changed" — and several of them for one row said nothing the last one did not. A log row is a full image, so folding buys nothing a truncation does not, and it cost a `prior_op` / `prior_old_values_json` pair on every row plus a scan that had to reason about filtered membership. What replaces it is a floor, and **two things the floor may not cross**: a commit edge (a seat resuming at the floor would get half a transaction) and a live seat's cursor (**OQ-13** — pruning past a seat converts a cheap tail into a forced re-bootstrap, silently, on the gateway's schedule rather than the member's). `lowestSeatCursor` reads `access_device_secret.sync_cursor`, which is exactly the gateway's own record of how far it has served each device.
+- **The producer bound, confirmed at 2,000 rows** — `REPLICA_PRODUCER_MAX_ROWS`. P2's proposal stands: a 2,000-row commit is at most 1.4 MB of `row_json` and ≈38 KB gzip-6, under 4% of the threshold, so **a conforming producer cannot produce a deferrable commit by accident**. Chunking to 2,000 costs +0.7…+1.6% total compressed bytes against one 10,000-row commit; 500 costs +2.2…+6.8% and 250 costs +7.9…+13% — which is what makes 2,000 the knee rather than a round number.
+- **The defer threshold, in compressed bytes** — `REPLICA_DEFER_THRESHOLD_BYTES = 1_000_000`, the middle of P2's measured 512 KB – 2 MB band. Never in rows: the same 10,000-row commit measures 55 KB, 209 KB or 184 KB gzipped depending on whether it is deletes, inserts or updates, a **6.6× spread**, so a row-denominated threshold defers a cheap commit and admits an expensive one.
+- **The deferral flag on the log row** — `replica_log.deferred`, one verdict per commit carried on every row of it, because a commit is the unit a seat applies and therefore the unit a seat defers. **A conforming commit is never compressed to find out**: paying gzip on the write path to learn a number the bound already guarantees is the cost the bound exists to avoid, so the measurement runs only when a producer failed to chunk.
+- **Ledger row `gateway/log-apply/1000-commits`** — measured, with provenance.
+
+### The measurement
+
+| | 1,000 commits × 5 statements = 10,000 log rows |
+| --- | --- |
+| capture | **2,532.8 ms** — 2.5 ms/commit for the whole session set, reproducing the pre-wave spike's ~2 ms |
+| log read | **90.1 ms** |
+| apply | **3,878.6 ms** — 2,578 rows/s, **258 commits/s** |
+
+The rate is **transaction-bound, not row-bound**: 3.9 ms per commit against 0.39 ms per row, because R5 requires one transaction per commit with the cursor inside it and 1,000 commits is 1,000 durable boundaries. That is the price of the property — a seat that batches commits into one transaction is faster and cannot answer "which commits have I applied" after a crash. Five statements is a small commit; a bulk producer chunking to the 2,000-row bound pays the boundary once per 2,000 rows and lands far closer to the row rate.
+
+### Gates
+
+```
+cd packages/vault && bunx vitest run src/replica   # 12 files, 79 passed
+bunx vitest run --config vitest.quality.config.ts  # 60 tests, 4 failed — all four
+                                                   #   pre-existing (0b removed
+                                                   #   core_content_item.media_type;
+                                                   #   backup-corpus-fixture.ts:83
+                                                   #   still writes it). Identical
+                                                   #   before and after this wave.
+```
+
+### Decisions — wave 1, retention
+
+- **The floor keeps the commit it lands in, rather than trimming to it.** Both directions land on an edge; keeping the straddled commit means the floor moves less than asked, which errs toward serving a seat rather than toward reclaiming bytes. The opposite error is the expensive one.
+- **A seat's cursor is a hold, not a hint.** `pruneReplicaLog` takes `holdAtOrAbove` and defaults it to the lowest seat cursor rather than making the caller remember. A retention sweep that has to be TOLD not to strand a phone will eventually be called by something that forgot.
+- **`maxAgeMs` clamps at the epoch instead of throwing.** A caller passing a huge window means "never prune by age"; the first version produced `Invalid Date` and failed the sweep entirely, which is the wrong answer to a legible request.
+
+## Wave 1 — every file the wave touched
+
+One list, so `receipt-per-issue` has the whole change set and a reader has one place to see its shape. Fifty-nine files; the ten new ones are the plane itself.
+
+**The log plane (new)**
+
+- `packages/core/src/protocol/row-json.ts`
+- `packages/vault/src/replica/apply.ts`
+- `packages/vault/src/replica/changeset.ts`
+- `packages/vault/src/replica/log-retention.test.ts`
+- `packages/vault/src/replica/log.test.ts`
+- `packages/vault/src/replica/log.ts`
+- `packages/vault/src/replica/seat-snapshot.test.ts`
+- `packages/vault/src/replica/seat-snapshot.ts`
+- `packages/vault/src/schema/private-tables.test.ts`
+- `packages/vault/src/schema/private-tables.ts`
+
+**Schema — `row_version` on every touched table, and the DDL that carries it**
+
+- `packages/vault/src/schema/authority.ts`
+- `packages/vault/src/schema/blob-transfer.ts`
+- `packages/vault/src/schema/blob.ts`
+- `packages/vault/src/schema/core-side-tables.ts`
+- `packages/vault/src/schema/core.ts`
+- `packages/vault/src/schema/domains-locker.ts`
+- `packages/vault/src/schema/domains-people.ts`
+- `packages/vault/src/schema/domains-schedule.ts`
+- `packages/vault/src/schema/domains-social-knowledge-media.ts`
+- `packages/vault/src/schema/domains-tally.ts`
+- `packages/vault/src/schema/enrich.ts`
+- `packages/vault/src/schema/entity-revisions.ts`
+- `packages/vault/src/schema/ext.ts`
+- `packages/vault/src/schema/ontology-rules.test.ts`
+- `packages/vault/src/schema/ontology-shape.test.ts`
+- `packages/vault/src/schema/subscription.ts`
+- `packages/vault/src/schema/sync.ts`
+- `packages/vault/src/schema/time-organize.ts`
+
+**Schema — the split, the list, the log table, the trigger**
+
+- `packages/vault/src/schema/access.ts`
+- `packages/vault/src/schema/local-tables.ts`
+- `packages/vault/src/schema/replica.ts`
+- `packages/vault/src/schema/updated-at.ts`
+
+**Callers the split moved**
+
+- `packages/client/src/react/shell/routes/automationThreadData.ts`
+- `packages/server/src/serve/vault-plane.ts`
+- `packages/vault/src/blob/content-keys.ts`
+- `packages/vault/src/bootstrap.ts`
+- `packages/vault/src/gateway/gateway.ts`
+- `packages/vault/src/gateway/identity.ts`
+- `packages/vault/src/gateway/portability.ts`
+- `packages/vault/src/host.ts`
+- `packages/vault/src/replica/unavailable-columns.ts`
+
+**The commit pair, and the mechanism it still brackets**
+
+- `packages/vault/src/replica/change-log.test.ts`
+- `packages/vault/src/replica/change-log.ts`
+- `packages/vault/src/replica/intents.test.ts`
+
+**The protocol contract**
+
+- `packages/core/src/protocol/capabilities.test.ts`
+- `packages/core/src/protocol/capabilities.ts`
+- `packages/core/src/protocol/index.ts`
+- `packages/core/src/protocol/routes.ts`
+
+**Corpus, manifest and the ledger**
+
+- `packages/vault/src/golden-snapshot.ts`
+- `packages/vault/tests/golden/issue-929/manifest.json`
+- `packages/vault/tests/golden/issue-929/vault.db.gz`
+- `tests/journeys.json`
+
+**Tests and docs that follow the schema**
+
+- `packages/server/src/routes/replica-shape-parity.test.ts`
+- `packages/server/src/routes/replica-shape.test.ts`
+- `packages/vault/src/index.ts`
+- `packages/vault/src/schema/ontology-rules.test.ts`
+- `packages/vault/src/schema/ontology-shape.test.ts`
+- `scripts/docs-site/src/content/ontology-body.html`
+- `tests/perf/work-counters.perf.test.ts`
+- `tests/quality/first-paint-query-counts.test.ts`
+- `tests/quality/user-facing-qualities.test.ts`
+

@@ -138,6 +138,11 @@ CREATE TABLE IF NOT EXISTS replica_log (
   -- producer bound is denominated per producer, so this is how a bulk writer
   -- is recognised without guessing from row counts.
   producer        TEXT NOT NULL,
+  -- 1 when this commit's compressed size crossed the defer threshold, so a
+  -- metered seat may skip it and stay CONSISTENT BEHIND IT rather than
+  -- half-applied. Every row of one commit carries the same value: a commit is
+  -- the unit a seat applies, so it is the unit a seat defers.
+  deferred        INTEGER NOT NULL DEFAULT 0 CHECK (deferred IN (0,1)),
   committed_at    TEXT NOT NULL
 ) STRICT;
 -- Tail by seq: the log-tail door's only access path.

@@ -579,7 +579,13 @@ export {
   primaryKeyOf,
   readReplicaLog,
   replicaCaptureOpen,
+  lowestSeatCursor,
+  pruneReplicaLog,
   replicaLogState,
+  REPLICA_DEFER_THRESHOLD_BYTES,
+  REPLICA_LOG_RETENTION_DAYS,
+  REPLICA_LOG_RETENTION_MAX_ROWS,
+  REPLICA_PRODUCER_MAX_ROWS,
   ReplicaRebootstrapRequiredError as ReplicaLogRebootstrapRequiredError,
   type ReplicaCaptureResult,
   type ReplicaLogCursor,
@@ -588,6 +594,7 @@ export {
   type ReplicaLogRow,
   // `ReplicaLogState` is still taken by the mechanism this replaces; the
   // alias goes away with `replica_change`.
+  type ReplicaLogPruneResult,
   type ReplicaLogState as GatewayLogState,
 } from "./replica/log.js";
 export { applyReplicaLog, type ReplicaApplyResult } from "./replica/apply.js";

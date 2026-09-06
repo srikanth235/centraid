@@ -41,6 +41,7 @@
     "peer-echo": "A change made on one of the owner's devices to its visible effect on another.",
     "converge": "Reconnect after being away to the screen telling the truth again, with N pending intents.",
     "snapshot": "A seat's bootstrap: the gateway's file to a sanitised copy the seat can open.",
+    "log-apply": "Captured commits to rows durable on the seat, cursor advanced with them.",
     "share": "Granting or revoking a share to the grantee's view reflecting it.",
     "search": "Query submitted to results on screen.",
     "scroll": "Frames delivered while flinging a long list.",
@@ -280,6 +281,35 @@
             "observedLargestChunk": "_expo/static/js/<platform>/index-*.hbc (Hermes bytecode)",
             "note": "MEASURED on the CI artifact this consumer weighs. A 2026-07-31 darwin worktree export observed a 6,355,198 B chunk and the close pass tightened the ceiling to 6,355,198 \u00d7 1.08 = 6,863,614; CI's Hermes chunk is 8,147,138 B (iOS) / 8,168,314 B (Android), so that observation was not this job's artifact. The ceiling stays at the previous 8,220,000 B, which still clears 8,168,314. Tightening it to the CI observation + 8% would be 8,821,779 and is a widen vs the number already on main \u2014 not taken here.",
             "headroom": "8,220,000 against CI largest chunk 8,168,314 (0.6%); 12 MiB total against 8,313,794 shipped (51%)"
+          }
+        }
+      }
+    },
+    "gateway/log-apply/1000-commits/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "log-apply",
+      "volume": "1000-commits",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.seat.apply"],
+      "consumers": ["packages/vault/src/replica/apply.ts"],
+      "tolerancePercent": 30,
+      "metrics": {
+        "applyMs": {
+          "status": "measured",
+          "probe": "packages/vault/src/replica/apply.ts \u2014 `applyReplicaLog` over 1,000 captured commits (10,000 log rows: 5 statements per commit, each producing its own row plus the membership trigger's `core_entity` row). IN the span: one transaction per commit with the cursor inside it, the per-row upsert, and the FTS sync triggers the seat retains. OUT of it: capture, the log read and transfer, reported separately in provenance.",
+          "ceilingMs": 6000,
+          "_provenance": {
+            "at": "2026-09-06",
+            "host": "linux x64, 4 vCPU, shared dev container; node v22.22.2 / SQLite 3.51.2; in-memory vault",
+            "runs": 1,
+            "observedApplyMs": 3878.6,
+            "observedCaptureMs": 2532.8,
+            "observedLogReadMs": 90.1,
+            "logRows": 10000,
+            "rowsPerSecond": 2578,
+            "commitsPerSecond": 258,
+            "note": "MEASURED. The rate is TRANSACTION-BOUND, not row-bound: 3.9 ms per commit against 0.39 ms per row, because R5 requires one transaction per commit with the cursor in it and 1,000 commits is 1,000 durable boundaries. That is the cost of the property \u2014 a seat that batches commits into one transaction is faster and cannot answer 'which commits have I applied' after a crash. Capture is 2.5 ms per commit for the whole session set, which reproduces the pre-wave spike's ~2 ms and is what makes one-session-per-table affordable. THE HONEST CAVEAT: five statements per commit is a small commit; a bulk producer chunking to the 2,000-row bound pays the transaction cost once per 2,000 rows and lands far closer to the row rate.",
+            "headroom": "~1.5x the single observed run. One run on a shared container is thin evidence for a ceiling; it is here so a regression in the per-commit boundary has something to fail against, and it should be re-seeded from a quiet lane."
           }
         }
       }

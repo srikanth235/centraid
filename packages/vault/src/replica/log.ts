@@ -22,6 +22,7 @@
 // post-commit read is unsafe for exactly the same reason.
 
 import type { DatabaseSync, StatementSync } from "node:sqlite";
+import { gzipSync } from "node:zlib";
 
 import { encodeWireValue } from "@centraid/core/protocol";
 import type { WireValue } from "@centraid/core/protocol";
@@ -35,6 +36,36 @@ import { changesetValueToBindable, parseChangeset } from "./changeset.js";
 import type { ChangesetChange, ChangesetValue } from "./changeset.js";
 
 export type ReplicaLogOp = "insert" | "update" | "delete" | "ddl";
+
+/**
+ * THE PRODUCER BOUND (#996, R5; open question 3), in DECODED LOG ROWS.
+ *
+ * A bulk writer — an enrichment sweep, an import, a model upgrade re-deriving
+ * a library — chunks its work to at most this many rows per commit, so no
+ * single commit can straddle the defer threshold and a deferred span leaves
+ * the seat consistent behind it rather than half-applied.
+ *
+ * 2,000 is measured, not chosen. At year-3 volume a 2,000-row commit is at
+ * most 1.4 MB of `row_json` and about 38 KB gzip-6 — under 4% of the
+ * threshold below, so a conforming producer cannot produce a deferrable
+ * commit by accident. Chunking to 2,000 costs +0.7…+1.6% total compressed
+ * bytes against one 10,000-row commit; 500 costs +2.2…+6.8% and 250 costs
+ * +7.9…+13%, which is what makes 2,000 the knee rather than "a round number".
+ */
+export const REPLICA_PRODUCER_MAX_ROWS = 2_000;
+
+/**
+ * THE DEFER THRESHOLD, in COMPRESSED BYTES — never in rows.
+ *
+ * The same 10,000-row commit measures 55 KB, 209 KB or 184 KB gzipped
+ * depending on whether it is deletes, inserts or updates: a 6.6x spread. A
+ * row-denominated threshold would therefore defer a cheap commit and admit an
+ * expensive one, which is the opposite of what a metered connection needs.
+ *
+ * 1 MB is the middle of the measured 512 KB – 2 MB band: roughly 55,000 log
+ * rows worst case and 360,000 best on one unattended cellular catch-up.
+ */
+export const REPLICA_DEFER_THRESHOLD_BYTES = 1_000_000;
 
 export interface ReplicaLogRow {
   readonly seq: number;
@@ -50,6 +81,8 @@ export interface ReplicaLogRow {
   readonly row: Readonly<Record<string, WireValue>> | null;
   readonly indirect: boolean;
   readonly producer: string;
+  /** This commit crossed the defer threshold; a metered seat may skip it. */
+  readonly deferred: boolean;
   readonly committedAt: string;
 }
 
@@ -58,6 +91,10 @@ export interface ReplicaCaptureResult {
   readonly commitSeq: number;
   readonly rows: number;
   readonly tables: readonly string[];
+  /** Compressed size of this commit's row images. */
+  readonly compressedBytes: number;
+  /** True when this commit crossed {@link REPLICA_DEFER_THRESHOLD_BYTES}. */
+  readonly deferred: boolean;
 }
 
 interface OpenSession {
@@ -343,13 +380,26 @@ export function captureReplicaCommit(
     )
     .run(commitSeq, new Date().toISOString());
   const committedAt = options.committedAt ?? new Date().toISOString();
+  const images = decoded.map((row) =>
+    row.row === null ? null : JSON.stringify(row.row)
+  );
+  // A CONFORMING PRODUCER IS NEVER MEASURED. Within the bound a commit is
+  // ~38 KB gzipped against a 1 MB threshold, so compressing every commit to
+  // discover that would be paying the cost on the write path to learn a
+  // number the bound already guarantees. Over the bound, the producer failed
+  // to chunk and the seat needs the real answer.
+  const compressedBytes =
+    decoded.length > REPLICA_PRODUCER_MAX_ROWS
+      ? gzipSync(Buffer.from(images.join("\n"), "utf8"), { level: 6 }).length
+      : 0;
+  const deferred = compressedBytes > REPLICA_DEFER_THRESHOLD_BYTES;
   const insert = vault.prepare(
     `INSERT INTO replica_log
        (commit_seq, epoch, schema_epoch, ddl_version, "table", op,
-        pk_json, row_json, indirect, producer, committed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        pk_json, row_json, indirect, producer, deferred, committed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
-  for (const row of decoded) {
+  for (const [index, row] of decoded.entries()) {
     insert.run(
       commitSeq,
       current.epoch,
@@ -358,13 +408,20 @@ export function captureReplicaCommit(
       row.table,
       row.op,
       JSON.stringify(row.key),
-      row.row === null ? null : JSON.stringify(row.row),
+      images[index] ?? null,
       row.indirect ? 1 : 0,
       producer,
+      deferred ? 1 : 0,
       committedAt
     );
   }
-  return { commitSeq, rows: decoded.length, tables };
+  return {
+    commitSeq,
+    rows: decoded.length,
+    tables,
+    compressedBytes,
+    deferred,
+  };
 }
 
 export interface ReplicaLogCursor {
@@ -411,6 +468,7 @@ interface LogRowSql {
   row_json: string | null;
   indirect: number;
   producer: string;
+  deferred: number;
   committed_at: string;
 }
 
@@ -430,6 +488,7 @@ function logRow(row: LogRowSql): ReplicaLogRow {
         : (JSON.parse(row.row_json) as Record<string, WireValue>),
     indirect: row.indirect === 1,
     producer: row.producer,
+    deferred: row.deferred === 1,
     committedAt: row.committed_at,
   };
 }
@@ -488,7 +547,7 @@ export function readReplicaLog(
   const rows = vault
     .prepare(
       `SELECT seq, commit_seq, epoch, schema_epoch, ddl_version, "table",
-              op, pk_json, row_json, indirect, producer, committed_at
+              op, pk_json, row_json, indirect, producer, deferred, committed_at
          FROM replica_log
         WHERE epoch = ? AND seq > ? AND seq <= ?
         ORDER BY seq LIMIT ?`
@@ -505,7 +564,7 @@ export function readReplicaLog(
     const tail = vault
       .prepare(
         `SELECT seq, commit_seq, epoch, schema_epoch, ddl_version, "table",
-                op, pk_json, row_json, indirect, producer, committed_at
+                op, pk_json, row_json, indirect, producer, deferred, committed_at
            FROM replica_log
           WHERE epoch = ? AND commit_seq = ? AND seq > ? AND seq <= ?
           ORDER BY seq`
@@ -536,5 +595,176 @@ export function readReplicaLog(
     floor: state.floor,
     schemaEpoch: state.schemaEpoch,
     hasMore,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// RETENTION (#996, R5; open question 13).
+//
+// THERE IS NO COMPACTION. The old change log folded superseded entries so a
+// churn-heavy vault could keep a long cursor window without unbounded growth;
+// that machinery existed because a change entry was a POINTER — "row X
+// changed" — and several of them for one row said nothing more than the last.
+// A log row is a full image, so folding buys nothing a truncation does not,
+// and it cost a `prior_op` / `prior_old_values_json` pair on every row plus a
+// scan that had to reason about filtered membership.
+//
+// WHAT REPLACES IT IS A FLOOR. Below `floor_seq` the log is gone and a seat
+// that far behind re-bootstraps from a snapshot — which is a file copy, not a
+// replay, so "start over" is cheap in a way it never was when a bootstrap
+// meant walking the vault.
+//
+// TWO THINGS THE FLOOR MAY NOT CROSS:
+//   - A COMMIT EDGE. The floor lands on a commit boundary, never inside one,
+//     or a seat resuming at the floor gets half a transaction.
+//   - A DEVICE'S CURSOR. Pruning past a live seat's position converts a
+//     cheap tail into a forced re-bootstrap, silently, on the gateway's
+//     schedule rather than the member's.
+
+export const REPLICA_LOG_RETENTION_DAYS = 30;
+export const REPLICA_LOG_RETENTION_MAX_ROWS = 200_000;
+
+export interface PruneReplicaLogOptions {
+  now?: Date;
+  maxAgeMs?: number;
+  maxRows?: number;
+  /**
+   * The lowest seq any seat still needs. Nothing at or above it is pruned.
+   * Defaults to the lowest `access_device_secret.sync_cursor` — the gateway's
+   * own record of how far it has served each device (#996, R3).
+   */
+  holdAtOrAbove?: number;
+}
+
+export interface ReplicaLogPruneResult {
+  readonly pruned: number;
+  readonly retained: number;
+  readonly floor: ReplicaLogCursor;
+  /** The seat cursor that stopped the prune, when one did. */
+  readonly heldBySeat: number | undefined;
+}
+
+/** The lowest position any enrolled seat still needs served. */
+export function lowestSeatCursor(vault: DatabaseSync): number | undefined {
+  const row = vault
+    .prepare(
+      `SELECT MIN(CAST(sync_cursor AS INTEGER)) AS seq
+         FROM access_device_secret WHERE sync_cursor IS NOT NULL`
+    )
+    .get() as { seq: number | null } | undefined;
+  return row?.seq ?? undefined;
+}
+
+/** The highest seq that ends a whole commit at or below `through`. */
+function commitEdgeAtOrBelow(
+  vault: DatabaseSync,
+  epoch: string,
+  through: number
+): number {
+  if (through <= 0) return 0;
+  const commit = vault
+    .prepare(
+      `SELECT commit_seq FROM replica_log
+        WHERE epoch = ? AND seq <= ? ORDER BY seq DESC LIMIT 1`
+    )
+    .get(epoch, through) as { commit_seq: number } | undefined;
+  if (!commit) return 0;
+  // The commit the boundary lands in is kept WHOLE — the floor moves to the
+  // end of the previous one.
+  const previous = vault
+    .prepare(
+      `SELECT MAX(seq) AS seq FROM replica_log
+        WHERE epoch = ? AND commit_seq < ?`
+    )
+    .get(epoch, commit.commit_seq) as { seq: number | null };
+  return previous.seq ?? 0;
+}
+
+export function pruneReplicaLog(
+  vault: DatabaseSync,
+  options: PruneReplicaLogOptions = {}
+): ReplicaLogPruneResult {
+  const maxAgeMs =
+    options.maxAgeMs ?? REPLICA_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1_000;
+  const maxRows = options.maxRows ?? REPLICA_LOG_RETENTION_MAX_ROWS;
+  if (!Number.isSafeInteger(maxAgeMs) || maxAgeMs < 0)
+    throw new RangeError("replica retention maxAgeMs must be non-negative");
+  if (!Number.isSafeInteger(maxRows) || maxRows < 0)
+    throw new RangeError("replica retention maxRows must be non-negative");
+  const now = options.now ?? new Date();
+  // Clamped at the epoch, so a caller saying "never prune by age" with a huge
+  // window gets that answer rather than an Invalid Date.
+  const cutoff = new Date(Math.max(0, now.getTime() - maxAgeMs)).toISOString();
+  const epoch = meta(vault).epoch;
+  const heldBySeat = options.holdAtOrAbove ?? lowestSeatCursor(vault);
+
+  let pruned = 0;
+  vault.exec("BEGIN IMMEDIATE");
+  try {
+    // Another epoch's rows stand for a contract nothing can resume across.
+    pruned += Number(
+      vault.prepare(`DELETE FROM replica_log WHERE epoch <> ?`).run(epoch)
+        .changes
+    );
+
+    const byAge = (
+      vault
+        .prepare(
+          `SELECT MAX(seq) AS seq FROM replica_log
+            WHERE epoch = ? AND committed_at < ?`
+        )
+        .get(epoch, cutoff) as { seq: number | null }
+    ).seq;
+    const total = (
+      vault
+        .prepare(`SELECT COUNT(*) AS n FROM replica_log WHERE epoch = ?`)
+        .get(epoch) as { n: number }
+    ).n;
+    const byCount =
+      total > maxRows
+        ? ((
+            vault
+              .prepare(
+                `SELECT seq FROM replica_log WHERE epoch = ?
+                  ORDER BY seq LIMIT 1 OFFSET ?`
+              )
+              .get(epoch, total - maxRows - 1) as { seq: number } | undefined
+          )?.seq ?? 0)
+        : 0;
+
+    let through = Math.max(byAge ?? 0, byCount);
+    // A seat that is behind holds the floor where it is. Its own cursor is
+    // the last position it HAS, so the row at that seq may go and the next
+    // may not.
+    if (heldBySeat !== undefined) through = Math.min(through, heldBySeat);
+    through = commitEdgeAtOrBelow(vault, epoch, through);
+    if (through > 0) {
+      pruned += Number(
+        vault
+          .prepare(`DELETE FROM replica_log WHERE epoch = ? AND seq <= ?`)
+          .run(epoch, through).changes
+      );
+      vault
+        .prepare(
+          `UPDATE replica_meta SET floor_seq = MAX(floor_seq, ?), updated_at = ?
+            WHERE singleton = 1`
+        )
+        .run(through, now.toISOString());
+    }
+    vault.exec("COMMIT");
+  } catch (error) {
+    vault.exec("ROLLBACK");
+    throw error;
+  }
+  const state = replicaLogState(vault);
+  return {
+    pruned,
+    retained: (
+      vault
+        .prepare(`SELECT COUNT(*) AS n FROM replica_log WHERE epoch = ?`)
+        .get(epoch) as { n: number }
+    ).n,
+    floor: state.floor,
+    heldBySeat,
   };
 }

@@ -142,13 +142,9 @@ describe("change-log", () => {
                'tier:fast', '1', ?, 'active')`
       )
       .run(now);
-    // The key material is a TABLE away since #996 R3, not a column exclusion.
-    vault
-      .prepare(
-        `INSERT INTO access_agent_secret (agent_id, enrollment_key)
-       VALUES ('credential-agent', 'host-never-log')`
-      )
-      .run();
+    // Key material is a TABLE away since #996 R3, not a column exclusion.
+    vault.exec(`INSERT INTO access_agent_secret (agent_id, enrollment_key)
+       VALUES ('credential-agent', 'host-never-log')`);
     vault
       .prepare(
         `INSERT INTO access_device
@@ -156,12 +152,8 @@ describe("change-log", () => {
        VALUES ('credential-device', 'credential-party', 'Before device', ?)`
       )
       .run(now);
-    vault
-      .prepare(
-        `INSERT INTO access_device_secret (device_id, public_key)
-       VALUES ('credential-device', 'public-never-log')`
-      )
-      .run();
+    vault.exec(`INSERT INTO access_device_secret (device_id, public_key)
+       VALUES ('credential-device', 'public-never-log')`);
     const since = currentReplicaLogState(vault).watermark;
 
     vault
