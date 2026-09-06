@@ -1107,3 +1107,45 @@ bun run check:push:static            # 4/4 gates
 - **`core_entity` replicates now, and `core_entity_kind` with it.** Both were declared local in #916 because a replica re-derived them through the membership triggers. A seat runs **no triggers except FTS sync** (R4), so "re-derived on the seat" has no mechanism left — the rows have to travel. This is the first place where R1's *every seat holds the vault whole* actually overrides a #916 exclusion, and it is why the replicated set is computed as "the file's tables minus the private list" rather than read off `LOCAL_TABLES`.
 - **The `beginReplicaCommit` / `endReplicaCommit` pair is now a contract, not a convenience.** `node:sqlite` exposes no commit hook, so there is no way to capture a transaction the pair does not bracket. Every canonical write path already brackets — twenty call sites — which is what made session capture possible at all. A write outside the pair is captured by the NEXT pair's sessions: it converges, but it lands with a later commit position and a producer that did not write it, so the pair is documented as required rather than left as an implicit habit.
 - **The applier ships in wave 1 rather than wave 2.** It is seat code and W2 owns the seat, but a convergence gate without an applier is a test of the test. Splitting it would have meant writing the replay twice and gating on the copy that is not shipped.
+
+## Wave 1 — snapshot, doors, capability
+
+A seat bootstraps by being handed the file. What makes that safe is not what the copy contains but what has been physically removed from it — and the test for that reads the **bytes**, not the catalog.
+
+### What changed
+
+- **The sanitised snapshot builder** — `packages/vault/src/replica/seat-snapshot.ts` (new), P4 variant B: `VACUUM INTO` → `PRAGMA secure_delete = ON` on the copy → drop every trigger except FTS sync → drop every index and view naming a private table → drop the private tables → truncate the log leaving `floor_seq` as the seat's resume cursor → final `VACUUM`. The gateway's own file is only read: the whole sanitisation runs on the copy, so a failure part-way leaves a discardable artifact and nothing else.
+- **`namesPrivateTable` strips SQL comments first.** The first run dropped `share_subscription`'s index because the table's DDL *explains* its relationship to a private neighbour in prose. Matching raw object text finds a private table in the commentary of an object that never reads it.
+- **The canary test** — `packages/vault/src/replica/seat-snapshot.test.ts` (new), four cases. The private canary is planted in `access_device_secret` (a private table with a replicated parent — the split this list exists for), asserted **present** in an unsanitised `VACUUM INTO` copy first, then absent from the snapshot's bytes. `fileContains` deliberately does not open the file as a database, and carries a needle-length tail across chunk boundaries. The seat file is opened **raw** with `DatabaseSync` — no migration ladder, no app-defined SQL function, no trigger regeneration; a snapshot that needed any of those would not be a snapshot.
+- **`golden-snapshot.ts`'s FTS exclusion, fixed** — `packages/vault/src/golden-snapshot.ts:58-70`. The pattern was `name NOT LIKE '%_fts%'`, where `_` is LIKE's **one-character wildcard**: it matches a name with a character *before* "fts", which no shadow table has. So the exclusion excluded nothing. The frozen manifest carried **51 FTS tables against 17 real ones** — 75% of the corpus manifest was index bytes. Now `NOT LIKE 'fts\_%' ESCAPE '\'`, and the re-frozen manifest is 17 tables.
+- **The two seat doors and the key door** — `packages/core/src/protocol/routes.ts`: `vaultSeatSnapshot`, `vaultSeatLog`, `vaultSeatLockerKey` (contract only; W6 lands the key plane). The snapshot door is a **static file**, not an RPC: the artifact is hundreds of megabytes at year-3 scale and the phone will be interrupted, so range requests and an ETag are the transport's ordinary behaviour rather than a protocol feature.
+- **The capability map** — `packages/core/src/protocol/capabilities.ts`: `seatReplica` and `seatLockerKey`, both optional, both defaulting **off**. They are two flags rather than one because a gateway can serve the whole file and hold no locker key, and a seat that conflates them tells a member "unreadable secret" where the truthful answer is "this vault has no locker". Both stay `false` until the commit that serves the doors — a capability that lies is worse than one that is absent.
+- **Ledger row `gateway/snapshot/year3/ci-linux-x64-4c`** — `tests/journeys.json`, measured, with provenance. **Review F5**: the `gateway/converge` probe's span no longer says "shape rebuild"; what that named is the gateway reading `replica_log` from the seat's seq, and there is no per-app shape to rebuild.
+
+### The measurement
+
+| | year-3 corpus (106 MB, 12,968 pages @ 8 KiB, 260 tables, 590 triggers) |
+| --- | --- |
+| source | 106,233,856 B |
+| snapshot | **64,569,344 B** (60.8%) |
+| snapshot, gzip-6 | **9,145,212 B** (8.6% of source) |
+| build | **2,261 / 2,326 ms** (2 runs) |
+| private tables dropped | 25 |
+| triggers + indexes + views dropped | 554 |
+
+Cross-checks P4's variant B (64,495,616 B) to within 73,728 B — the size of the added `replica_log` table. The first run, taken before the log truncation landed, produced 99,549,184 B raw and 15,062,429 B gzipped: **the two log truncations are 33% of the file**, because the corpus carries 78,376 `replica_change` rows a seat has no reader for.
+
+### Decisions — wave 1, snapshot and doors
+
+- **The snapshot truncates BOTH logs.** `replica_change` is on its way out, but a file frozen before it goes still carries it, and on the year-3 corpus that is a third of the snapshot. The builder checks for the table rather than assuming it.
+- **The FTS shadow tables stay.** Dropping them saves 12.0 MB and is not free: the 57 retained FTS sync triggers survive the drop and then fail on the seat's first write with `no such table: main.fts_…`. That trade needs a mandatory seat-side FTS DDL + `'rebuild'` bootstrap step before the first apply, and it is a decision with a mechanism attached — not a line in this pipeline.
+- **The capability flags ship `false`.** They name doors the routes declare and the server does not yet serve (below). A seat gates on the flag, so shipping it `true` ahead of the handler would turn a clean "this gateway does not serve seats" into a 404 the seat has no vocabulary for.
+
+### Not landed in this wave, and why
+
+Stated plainly rather than left to be discovered:
+
+- **`replica_change` and its 288 triggers are still in the tree**, and the old projector still reads them. The replacement is real — capture, decoder, applier and the convergence gate all land here — but re-pointing `packages/server/src/routes/replica-projection.ts` at `replica_log` is a change across ~50 files in three packages whose filtered-membership semantics (`old_values_json`, `prior_op`, the compaction-held entities, the shape-control verdict) do not map one-to-one onto full row images. Landing that half-done would have left the shaped route wrong in ways the current tests do not cover. **The two mechanisms coexisting is not a design and should not be read as one.**
+- **The server handlers for the two doors.** The route names and the capability flags are in the contract; `packages/server/src/routes/replica-routes.ts` does not serve them yet.
+- **`vault_content_text` is not retired.** The function-free FTS sync triggers over `core_content_text` need decoded text written at command time by ten `core_content_item` writers, and the decode cannot move into a trigger — the trigger would fire on a seat, where the function does not exist. Schema landed in 0b; the write path and the trigger change did not land here.
+- **Commit 4 — retention, the producer bound, dependency-aware execution and the outcome contract (R23–R25)** — did not land.

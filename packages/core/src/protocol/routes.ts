@@ -27,6 +27,24 @@ export const ROUTES = {
   vaultNotificationsEvents: `${VAULT_PLANE_PREFIX}/notifications/events`,
   vaultBlobs: `${VAULT_PLANE_PREFIX}/blobs`,
   vaultReplicaBootstrap: `${VAULT_PLANE_PREFIX}/replica/bootstrap`,
+  // THE TWO SEAT DOORS (#996, rulings R4 and R5). They sit BESIDE today's
+  // shaped route rather than replacing it: the shape transport is not deleted
+  // before its replacement serves every live subscription (#996 invariant).
+  //
+  // `vaultSeatSnapshot` is a STATIC FILE, not an RPC. A seat bootstraps by
+  // copying `vault.db`, the file is hundreds of megabytes at year-3 scale, and
+  // the phone will be interrupted — so it is served with byte ranges and an
+  // ETag, one cached artifact per log position, and resuming is the transport's
+  // ordinary behaviour rather than a protocol feature.
+  vaultSeatSnapshot: `${VAULT_PLANE_PREFIX}/seat/snapshot`,
+  /** The log tail by seq: `?since=<seq>&limit=<n>`, never half a commit. */
+  vaultSeatLog: `${VAULT_PLANE_PREFIX}/seat/log`,
+  // THE LOCKER KEY (#996, ruling R13). Contract only in this wave — W6 lands
+  // the key plane behind it. Named here now because the capability map is what
+  // a seat gates on, and a seat that cannot tell "this gateway has no locker
+  // key door" from "this gateway is old" cannot decide whether an unreadable
+  // secret is a bug or a boundary.
+  vaultSeatLockerKey: `${VAULT_PLANE_PREFIX}/seat/locker-key`,
   vaultReplicaChanges: `${VAULT_PLANE_PREFIX}/changes`,
   vaultReplicaIntents: `${VAULT_PLANE_PREFIX}/replica/intents`,
   vaultScopes: `${VAULT_PLANE_PREFIX}/scopes`,

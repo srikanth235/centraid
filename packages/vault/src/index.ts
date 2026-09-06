@@ -592,6 +592,13 @@ export {
 } from "./replica/log.js";
 export { applyReplicaLog, type ReplicaApplyResult } from "./replica/apply.js";
 export {
+  buildSeatSnapshot,
+  fileContains,
+  namesPrivateTable,
+  withoutSqlComments,
+  type SeatSnapshotResult,
+} from "./replica/seat-snapshot.js";
+export {
   parseChangeset,
   type ChangesetChange,
   type ChangesetOp,

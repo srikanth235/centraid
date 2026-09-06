@@ -40,6 +40,7 @@
     "own-echo": "The owner's own input to its first visible effect on the device that made it.",
     "peer-echo": "A change made on one of the owner's devices to its visible effect on another.",
     "converge": "Reconnect after being away to the screen telling the truth again, with N pending intents.",
+    "snapshot": "A seat's bootstrap: the gateway's file to a sanitised copy the seat can open.",
     "share": "Granting or revoking a share to the grantee's view reflecting it.",
     "search": "Query submitted to results on screen.",
     "scroll": "Frames delivered while flinging a long list.",
@@ -283,6 +284,35 @@
         }
       }
     },
+    "gateway/snapshot/year3/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "snapshot",
+      "volume": "year3",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["gateway.seat.snapshot"],
+      "consumers": ["packages/vault/src/replica/seat-snapshot.ts"],
+      "tolerancePercent": 25,
+      "metrics": {
+        "buildMs": {
+          "status": "measured",
+          "probe": "packages/vault/src/replica/seat-snapshot.ts — `buildSeatSnapshot` end to end over the year-3 corpus. IN the span: `VACUUM INTO`, `secure_delete=ON`, the trigger / index / view drops, the private-table drops, both log truncations and the final `VACUUM`. OUT of it: compression and transfer, which the static file server owns, and the seat's own open.",
+          "ceilingMs": 4000,
+          "_provenance": {
+            "at": "2026-09-06",
+            "host": "linux x64, 4 vCPU, shared dev container; node v22.22.2 / SQLite 3.51.2",
+            "runs": 2,
+            "observedBuildMs": [2261, 2326],
+            "sourceBytes": 106233856,
+            "snapshotBytes": 64569344,
+            "snapshotGzip6Bytes": 9145212,
+            "droppedPrivateTables": 25,
+            "droppedObjects": 554,
+            "note": "MEASURED on the 106 MB year-3 corpus (12,968 pages @ 8 KiB, 260 tables, 590 triggers). The copy is 60.8% of the source and 8.6% of it gzipped: the private tables account for a little of that and the two log truncations for most — the corpus carries 78,376 `replica_change` rows a seat has no reader for. The first run, taken before the log truncation landed, produced 99,549,184 B raw and 15,062,429 B gzipped, which is the same measurement with the mechanism still in the file. Cross-checks the pre-wave P4 probe's variant B (64,495,616 B) to within 73,728 B — the size of the added `replica_log` table.",
+            "headroom": "~1.7x the worst observed (2,326 ms), on a shared container under other agents' suites. Tighten-only; re-seed downward once a quiet lane has a distribution."
+          }
+        }
+      }
+    },
     "gateway/converge/year3-replica/ci-linux-x64-4c": {
       "surface": "gateway",
       "journey": "converge",
@@ -294,7 +324,7 @@
       "metrics": {
         "reconnectToFresh": {
           "status": "measured",
-          "probe": "tests/scale/replica-reconnect.scale.test.ts — times the reconnect REQUEST to the frame that carries every missed change. IN the span: connection setup, cursor parse, shape rebuild, and the projection of the missed delta. OUT of it: how long the owner was away, which is unbounded and is not the gateway's to own. Page ONE's watermark is used as the resume cursor because that is what the bootstrap continuation token pins the client's later delta to.",
+          "probe": "tests/scale/replica-reconnect.scale.test.ts — times the reconnect REQUEST to the frame that carries every missed change. IN the span: connection setup, cursor parse, and the log tail from the resume cursor to the watermark (#996, W1 review F5 \u2014 what this used to call a \"shape rebuild\" is the gateway reading `replica_log` from the seat's seq; there is no per-app shape to rebuild). OUT of it: how long the owner was away, which is unbounded and is not the gateway's to own. Page ONE's watermark is used as the resume cursor because that is what the bootstrap continuation token pins the client's later delta to.",
           "ceilingMs": 250,
           "_provenance": {
             "at": "2026-08-28",

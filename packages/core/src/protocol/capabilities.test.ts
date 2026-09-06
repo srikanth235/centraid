@@ -21,6 +21,10 @@ describe("the default gateway capabilities", () => {
       crossVaultPlacements: true,
       automations: false,
       connectors: false,
+      // Declared, not yet served (#996, W1): the flag turns on in the commit
+      // that serves the doors.
+      seatReplica: false,
+      seatLockerKey: false,
     });
   });
 });
