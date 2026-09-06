@@ -33,6 +33,12 @@
       "types": "./dist/time/index.d.ts",
       "import": "./dist/time/index.js",
       "default": "./dist/time/index.js"
+    },
+    "./money": {
+      "react-native": "./src/money/index.ts",
+      "types": "./dist/money/index.d.ts",
+      "import": "./dist/money/index.js",
+      "default": "./dist/money/index.js"
     }
   },
   "publishConfig": {

@@ -124,7 +124,10 @@ export function Route(props: RouteProps): ReactNode {
             partyId: friend.party_id,
             name: friend.name,
             groupId: null,
-            asOfMinor: friend.net_minor,
+            // A reminder is about ONE balance; the surface picks the first
+            // currency the friend is in, which is the only one there is
+            // unless the position spans several (#996, R22).
+            asOfMinor: friend.balances[0]?.amount_minor ?? 0,
           })
         }
       />

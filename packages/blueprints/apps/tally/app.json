@@ -1600,7 +1600,7 @@
   "queries": [
     {
       "name": "dashboard",
-      "description": "The home view: the owner party id (`me`), the base currency, per-friend net balances (positive = they owe you), the you-owe / you-are-owed totals, each live group's net for the owner with its simplification opt-in, archived groups in their own list, the expense and settlement counts the hero states its arithmetic from, rate suggestions quoted from this vault's own earlier expenses, and the reminders you prepared (none of which was sent). All balances are derived from expenses, payers and settlements — never stored.",
+      "description": "The home view: the owner party id (`me`), the base currency, per-friend balances keyed `(party, currency)` (positive = they owe you), the you-owe / you-are-owed positions as explicit valuations (a single figure only where one currency, or a rate, makes one true — otherwise `unavailable` with the amounts per currency), each live group's net for the owner with its simplification opt-in, archived groups in their own list, the expense and settlement counts the hero states its arithmetic from, rate suggestions quoted from this vault's own earlier expenses, and the reminders you prepared (none of which was sent). All balances are derived from expenses, payers and settlements — never stored.",
       "input": {
         "type": "object",
         "properties": {},
@@ -1627,11 +1627,11 @@
           "recurring": {
             "type": "array"
           },
-          "owe_total_minor": {
-            "type": "integer"
+          "owe": {
+            "type": "object"
           },
-          "owed_total_minor": {
-            "type": "integer"
+          "owed": {
+            "type": "object"
           },
           "vaultDenied": {
             "type": "object"

@@ -11,6 +11,8 @@
 // Minor units end to end. `format.ts` is the only place a number becomes a
 // string.
 
+import type { Money, Valuation } from "@centraid/core/money";
+
 /** One person, as every query decorates a row with them. */
 export interface Person {
   party_id: string;
@@ -145,29 +147,38 @@ export interface HistoryData {
   vaultDenied?: VaultDenied | null;
 }
 
-/** One friend on the dashboard: positive is owed TO you. */
+/**
+ * One friend on the dashboard: positive is owed TO you.
+ *
+ * BALANCES ARE KEYED `(party, currency)` (#996, ruling R22; drift ONT-23).
+ * This was one `net_minor` per friend, folded across every group they are in
+ * and labelled with the vault's base currency — so a EUR 100 debt and a USD
+ * 100 debt read as one 200, a number true in neither. A friend you owe in two
+ * currencies has two balances, and the type says so.
+ */
 export interface FriendSummary extends Person {
-  net_minor: number;
-  /** Where the net came from — one part per group, plus what is outside every
-   *  group. The parts sum to the net, which is the only claim made about them. */
+  balances: Money[];
+  /** Where the balances came from — one part per group, plus what is outside
+   *  every group. The parts sum, per currency, to the balances. */
   parts?: NetPart[];
 }
 
 export interface NetPart {
   group_id: string | null;
   group_name: string;
-  net_minor: number;
+  /** In the group's own currency — a group is one ledger, in one money. */
+  net: Money;
 }
 
-/** One group on the dashboard. `owner_net_minor` is the owner's own position
- *  in it, on the app's one sign convention. */
+/** One group on the dashboard. `owner_net` is the owner's own position in it,
+ *  on the app's one sign convention and in the GROUP's currency (#996, R22). */
 export interface GroupSummary {
   group_id: string;
   name: string;
   icon?: string;
   color?: string;
   member_count: number;
-  owner_net_minor: number;
+  owner_net: Money;
   /** Has this group turned simplification on? Off by default, always. */
   simplify_opt_in?: boolean;
   /** When it left the lists, or `null` while it is still in them. */
@@ -255,8 +266,15 @@ export interface DashboardData {
   archived_groups?: GroupSummary[];
   trash: TrashEntry[];
   recurring: RecurringTemplate[];
-  owe_total_minor: number;
-  owed_total_minor: number;
+  /**
+   * The two hero figures, as EXPLICIT VALUATIONS (#996, ruling R22). A single
+   * number over a position held in several currencies is a claim that a rate
+   * exists; there is no rate plane in the product yet, so the honest answer is
+   * `unavailable` with the components, and the type makes it impossible to
+   * render a sum that was never computed.
+   */
+  owe: Valuation;
+  owed: Valuation;
   /** What the Balances hero states its arithmetic FROM. */
   expense_count?: number;
   settlement_count?: number;
@@ -268,7 +286,9 @@ export interface DashboardData {
 /** One member of a group, with the net the group engine derived and, where
  *  they have left the circle but stayed on the ledger, the departed mark. */
 export interface GroupMember extends Person {
-  net_minor: number;
+  /** In the group's currency (#996, R22) — a group is one ledger, in one
+   *  money, so a member's position needs no bag. */
+  net: Money;
   departed?: boolean;
 }
 
@@ -277,7 +297,7 @@ export interface GroupMember extends Person {
 export interface Transfer {
   from: string;
   to: string;
-  amount_minor: number;
+  amount: Money;
 }
 
 export interface Simplification {

@@ -280,7 +280,9 @@ export function FieldRow({
 export interface HeroProps {
   /** The display-rung figure, already rendered by `format`. */
   figure: string;
-  netMinor: number;
+  /** The tone the figure is painted in. A hero over several currencies has no
+   *  single net to derive it from (#996, R22), so the caller states it. */
+  tone: FigureTone;
   label: string;
   /** The sentence that says where the figure came from. */
   sub: string;
@@ -289,14 +291,13 @@ export interface HeroProps {
 
 export function Hero({
   figure,
-  netMinor,
+  tone,
   label,
   sub,
   acts,
 }: HeroProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const tone = figureTone(netMinor);
   return (
     <View style={styles.hero}>
       <Text style={[styles.heroFigure, { color: toneColor(tone, colors) }]}>

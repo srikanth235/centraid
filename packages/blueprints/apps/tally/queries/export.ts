@@ -6,7 +6,12 @@
  * partial export is never read as a whole one.
  */
 
-import { deniedPayload, loadTally } from "./dashboard.ts";
+import {
+  deniedPayload,
+  expenseCurrency,
+  groupCurrency,
+  loadTally,
+} from "./dashboard.ts";
 
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 2000;
@@ -107,14 +112,19 @@ export default async function exportHandler({ input, ctx }: HandlerArgs) {
           name: nameOf(partyId),
         })),
       },
-      currency: data.currency,
+      // AN EXPORT IS IN THE GROUP'S MONEY (#996, ruling R22; drift ONT-23).
+      // This shipped the vault's BASE currency on a group's own ledger, so a
+      // EUR group exported as if its rows were in the base — the same
+      // mislabelling `pairwise` was doing, on a file that outlives the app.
+      // The currency comes from the same helpers every balance uses.
+      currency: groupCurrency(data, groupId),
       expenses: expenses.map((e) => ({
         expense_id: e.expense_id,
         description: e.description,
         amount_minor: e.amount_minor,
         original_amount_minor: e.original_amount_minor ?? e.amount_minor,
-        original_currency: e.original_currency ?? data.currency,
-        settlement_currency: e.settlement_currency ?? data.currency,
+        original_currency: e.original_currency ?? expenseCurrency(data, e),
+        settlement_currency: expenseCurrency(data, e),
         rate_scaled: e.rate_scaled ?? null,
         rate_scale: e.rate_scale ?? null,
         rate_source: e.rate_source ?? null,
@@ -154,6 +164,9 @@ export default async function exportHandler({ input, ctx }: HandlerArgs) {
         to_party: s.to_party,
         to_name: nameOf(s.to_party),
         amount_minor: s.amount_minor,
+        // What was PAID, in the money it was paid in — a settlement's own
+        // currency, never the reader's base (#996, R22).
+        currency: s.currency ?? groupCurrency(data, groupId),
         paid_on: s.paid_on,
       })),
       revisions,

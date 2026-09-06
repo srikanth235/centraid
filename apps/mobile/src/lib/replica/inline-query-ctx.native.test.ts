@@ -1,3 +1,8 @@
+import path from "node:path";
+
+import { afterEach, describe, expect, test } from "vitest";
+
+import type { ReplicaRow } from "@centraid/client/replica/native";
 /**
  * SPIKE PROOF (#922 wave 1, ruling (i)): the balance-parity oracle E7 wants
  * either way.
@@ -20,11 +25,7 @@
  * (`tally-ledger.test-fixtures.ts`), so they are answering about the same
  * rows.
  */
-import path from "node:path";
-
-import { afterEach, describe, expect, test } from "vitest";
-
-import type { ReplicaRow } from "@centraid/client/replica/native";
+import type { Money, Valuation } from "@centraid/core/money";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 // The one module under test, imported exactly as the web seat imports it.
@@ -116,13 +117,13 @@ function mountedReader(): MultiVaultReplicaReader {
 interface DashboardOutput {
   me: string | null;
   currency: string;
-  friends: Array<{ party_id: string; net_minor: number }>;
+  friends: Array<{ party_id: string; balances: Money[] }>;
   groups: unknown[];
   archived_groups: unknown[];
   trash: unknown[];
   recurring: unknown[];
-  owe_total_minor: number;
-  owed_total_minor: number;
+  owe: Valuation;
+  owed: Valuation;
   expense_count: number;
   settlement_count: number;
   vaultDenied?: unknown;
@@ -152,7 +153,11 @@ describe("Metro-loadable queries/*.ts spike (#922 wave 1 ruling (i))", () => {
     expect(output.expense_count).toBe(40);
     expect(output.settlement_count).toBe(1);
     expect(output.friends).toHaveLength(3);
-    expect(output.owe_total_minor + output.owed_total_minor).toBeGreaterThan(0);
+    // The two positions carry amounts; neither is summed into the other
+    // (#996, ruling R22).
+    expect(
+      output.owe.components.length + output.owed.components.length
+    ).toBeGreaterThan(0);
     // The trashed expense is out of the balances and in the trash list.
     expect(output.trash).toHaveLength(1);
     expect(output.groups).toHaveLength(1);
@@ -185,7 +190,7 @@ describe("Metro-loadable queries/*.ts spike (#922 wave 1 ruling (i))", () => {
     // payload the web seat's version of the same payload does not carry.
     expect(native).toStrictEqual(reference);
     expect(provenanceKeys(native)).toStrictEqual([]);
-    expect(native.owed_total_minor).toBe(reference.owed_total_minor);
-    expect(native.owe_total_minor).toBe(reference.owe_total_minor);
+    expect(native.owed).toStrictEqual(reference.owed);
+    expect(native.owe).toStrictEqual(reference.owe);
   });
 });

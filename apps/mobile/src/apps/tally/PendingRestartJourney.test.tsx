@@ -38,7 +38,6 @@
 // unreachable from the first render to the last, so settlement-on-reconnect
 // stays where `tests/quality/offline-reconnect.integration.test.ts` owns it.
 
-// @vitest-environment jsdom
 import path from "node:path";
 
 import React, { act } from "react";
@@ -53,6 +52,8 @@ import {
 } from "@centraid/blueprints/apps/tally/compose-copy";
 import { OFFLINE_NOTICE } from "@centraid/blueprints/apps/tally/view-copy";
 import { ReplicaSqliteStore } from "@centraid/client/replica/native";
+// @vitest-environment jsdom
+import { EMPTY_BAG, valuate } from "@centraid/core/money";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
@@ -259,11 +260,11 @@ const TALLY_SHAPE = {
  *  lands one before the gateway goes away. */
 const DASHBOARD = {
   currency: "USD",
-  friends: [{ party_id: "ana", name: "Ana", initials: "AN", net_minor: 0 }],
+  friends: [{ party_id: "ana", name: "Ana", initials: "AN", balances: [] }],
   groups: [],
   me: "owner",
-  owe_total_minor: 0,
-  owed_total_minor: 0,
+  owe: valuate(EMPTY_BAG, "USD"),
+  owed: valuate(EMPTY_BAG, "USD"),
   recurring: [],
   trash: [],
 };

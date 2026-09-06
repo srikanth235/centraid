@@ -14,7 +14,11 @@ import React, { useEffect } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 
 import { entryFacts } from "@centraid/blueprints/apps/tally/entry-facts";
-import { figureTone, netFigure } from "@centraid/blueprints/apps/tally/format";
+import {
+  bagFigure,
+  bagTone,
+  moneyNetFigure,
+} from "@centraid/blueprints/apps/tally/format";
 import { FRIEND } from "@centraid/blueprints/apps/tally/shelves";
 import {
   EMPTY,
@@ -61,14 +65,15 @@ export default function TallyFriendScreen({
 
   const body = ((): React.JSX.Element | null => {
     if (!data?.friend) return null;
-    const net = data.friend.net_minor;
-    const tone = figureTone(net);
+    // A friend's position is a bag (#996, R22): one amount per currency.
+    const net = data.friend.balances;
+    const tone = bagTone(net);
     const parts = data.friend.parts ?? [];
     return (
       <ScrollView contentContainerStyle={styles.page}>
         <Hero
-          figure={netFigure(net, data.currency, "Settled")}
-          netMinor={net}
+          figure={bagFigure(net, "Settled")}
+          tone={tone}
           label={
             tone === "settled"
               ? FRIEND_HERO_LEVEL
@@ -91,9 +96,9 @@ export default function TallyFriendScreen({
               key={part.group_id ?? "no-group"}
               title={part.group_name}
               figure={{
-                netMinor: part.net_minor,
-                text: netFigure(part.net_minor, data.currency),
-                sub: partSubLabel(part.net_minor),
+                netMinor: part.net.amount_minor,
+                text: moneyNetFigure(part.net),
+                sub: partSubLabel(part.net.amount_minor),
               }}
               {...(part.group_id
                 ? {

@@ -15,7 +15,7 @@ import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
 
 import {
-  netFigure,
+  moneyNetFigure,
   groupSubLabel,
 } from "@centraid/blueprints/apps/tally/format";
 import type { DashboardData } from "@centraid/blueprints/apps/tally/types";
@@ -64,9 +64,9 @@ export default function GroupsView(props: GroupsViewProps): React.JSX.Element {
             title={group.name}
             meta={memberCount(group.member_count)}
             figure={{
-              netMinor: group.owner_net_minor,
-              text: netFigure(group.owner_net_minor, data.currency),
-              sub: groupSubLabel(group.owner_net_minor),
+              netMinor: group.owner_net.amount_minor,
+              text: moneyNetFigure(group.owner_net),
+              sub: groupSubLabel(group.owner_net.amount_minor),
             }}
             // ONE quiet verb on touch (§5). Leave is the one that changes what
             // a member owes; archive is on the group's own ledger, beside its
@@ -93,9 +93,9 @@ export default function GroupsView(props: GroupsViewProps): React.JSX.Element {
               title={group.name}
               meta={ARCHIVED_META}
               figure={{
-                netMinor: group.owner_net_minor,
-                text: netFigure(group.owner_net_minor, data.currency),
-                sub: groupSubLabel(group.owner_net_minor),
+                netMinor: group.owner_net.amount_minor,
+                text: moneyNetFigure(group.owner_net),
+                sub: groupSubLabel(group.owner_net.amount_minor),
               }}
               act={{
                 label: VERBS.unarchive,

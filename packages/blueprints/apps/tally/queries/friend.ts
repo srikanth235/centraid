@@ -3,9 +3,14 @@
  * expenses you both took part in, newest first, decorated like a group ledger.
  */
 
+import { EMPTY_BAG, money } from "@centraid/core/money";
+import type { Money } from "@centraid/core/money";
+
 import { attributeExpense } from "../../../src/tally-balance.ts";
 import {
   deniedPayload,
+  expenseCurrency,
+  groupCurrency,
   ledgerRow,
   loadTally,
   pairwise,
@@ -21,33 +26,58 @@ import {
 function netParts(
   data: Awaited<ReturnType<typeof loadTally>>,
   friendId: string
-): Array<{ group_id: string | null; group_name: string; net_minor: number }> {
+): Array<{ group_id: string | null; group_name: string; net: Money }> {
   const me = data.me;
   if (me == null) return [];
+  // EACH PART IS IN ITS GROUP'S MONEY (#996, ruling R22). The parts used to be
+  // bare minor units and the hero rendered them under the vault's base
+  // currency, so a part from a EUR group and a part from a USD group appeared
+  // to be the same kind of number.
   const byGroup = new Map<string | null, number>();
   const add = (groupId: string | null, amount: number): void => {
     byGroup.set(groupId, (byGroup.get(groupId) ?? 0) + amount);
   };
+  const outsideCurrency = new Map<string | null, string>();
+  const noteCurrency = (groupId: string | null, currency: string): void => {
+    if (!outsideCurrency.has(groupId)) outsideCurrency.set(groupId, currency);
+  };
   for (const expense of data.expenses)
     for (const { from, to, amount_minor } of attributeExpense(expense)) {
       if (from === to) continue;
-      if (to === me && from === friendId) add(expense.group_id, amount_minor);
-      else if (from === me && to === friendId)
+      if (to === me && from === friendId) {
+        add(expense.group_id, amount_minor);
+        noteCurrency(expense.group_id, expenseCurrency(data, expense));
+      } else if (from === me && to === friendId) {
         add(expense.group_id, -amount_minor);
+        noteCurrency(expense.group_id, expenseCurrency(data, expense));
+      }
     }
   for (const settlement of data.settlements) {
     const groupId = (settlement.group_id as string | undefined) ?? null;
-    if (settlement.from_party === me && settlement.to_party === friendId)
+    const currency = settlement.currency ?? groupCurrency(data, groupId);
+    if (settlement.from_party === me && settlement.to_party === friendId) {
       add(groupId, settlement.amount_minor);
-    else if (settlement.to_party === me && settlement.from_party === friendId)
+      noteCurrency(groupId, currency);
+    } else if (
+      settlement.to_party === me &&
+      settlement.from_party === friendId
+    ) {
       add(groupId, -settlement.amount_minor);
+      noteCurrency(groupId, currency);
+    }
   }
   for (const obligation of data.obligations) {
     // A standing IOU is never group-scoped, so it lands outside any group.
-    if (obligation.from_party === me && obligation.to_party === friendId)
+    if (obligation.from_party === me && obligation.to_party === friendId) {
       add(null, -obligation.amount_minor);
-    else if (obligation.to_party === me && obligation.from_party === friendId)
+      noteCurrency(null, obligation.currency);
+    } else if (
+      obligation.to_party === me &&
+      obligation.from_party === friendId
+    ) {
       add(null, obligation.amount_minor);
+      noteCurrency(null, obligation.currency);
+    }
   }
   const groupName = new Map(
     data.groups.map((group) => [group.group_id, group.name])
@@ -60,7 +90,10 @@ function netParts(
         groupId === null
           ? "Outside any group"
           : (groupName.get(groupId) ?? "Group"),
-      net_minor: net,
+      net: money(
+        net,
+        outsideCurrency.get(groupId) ?? groupCurrency(data, groupId)
+      ),
     }))
     .sort((a, b) => a.group_name.localeCompare(b.group_name));
 }
@@ -73,7 +106,7 @@ export default async function friendHandler({ input, ctx }: HandlerArgs) {
       return { me: data.me, currency: data.currency, friend: null, ledger: [] };
     }
     const p = personOf(data, pid);
-    const net = pairwise(data).get(pid) || 0;
+    const net = pairwise(data).get(pid) ?? EMPTY_BAG;
     const me = data.me;
     const ledger = data.expenses
       .filter(
@@ -92,7 +125,7 @@ export default async function friendHandler({ input, ctx }: HandlerArgs) {
         name: p.name,
         color: p.color,
         initials: p.initials,
-        net_minor: net,
+        balances: [...net],
         parts: netParts(data, pid),
       },
       ledger,

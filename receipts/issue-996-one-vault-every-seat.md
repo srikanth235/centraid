@@ -7,7 +7,7 @@ Umbrella receipt. One receipt for the whole umbrella; each wave appends its own 
 - [x] **Wave 0a — rulings and drift rows**: R1–R25 with their supersession pointers, the ten drift rows ONT-22…ONT-31 and the new _reader-side drift_ category, the two wrong sentences corrected, and open questions 1, 2, 6, 9, 10, 11, 12 and 13 settled
 - [x] **Wave 0b — schema**: the revision occurrence with the wrapper's current-revision pointer and `recordRevision`'s edges deleted; the representation row beside byte-only `core_content_item`; `core_transaction.external_id` without the global `UNIQUE`; the typed occurrence key and one `tz` spelling; the primary-identifier partial index, interval CHECK and issuer column; concept-identity columns; the decoded-body-text side table; deletion roles declared beside references. No epoch bump here
 - [x] **Wave 0c — domain operations**: one invariant boundary with Atlas inside it and non-empty pre/postconditions; content write as one operation; acyclic task hierarchy; `complete` / `reopen` shared by People, Tasks and automations with series identity and inherited `about`; the occurrence adapter every reader consumes; temporal validation at every entry point; `tagNotation` replaced by concept identity; `accountFor` and the publisher probe re-keyed; the declared read-set wired into the intent conflict checker; each operation's offline declaration
-- [ ] **Wave 0d — queries and contracts**: `(party, currency)` balances, group results in the group's currency, the explicit valuation type with its unavailable state, the Money output type, and settlements, obligations and exports on the same helpers
+- [x] **Wave 0d — queries and contracts**: `(party, currency)` balances, group results in the group's currency, the explicit valuation type with its unavailable state, the Money output type, and settlements, obligations and exports on the same helpers
 - [ ] **Wave 0e — evidence and the cross-boundary tier**: machine tags and document classification linked to their derivation and input revision; the thirteen scenarios promoted to a package fixture with a command→query round-trip test per shared concept across two app surfaces; purge behaviour tested per deletion role
 - [ ] **Wave 1 — the log and the seat**: `replica_log` with session capture and in-transaction reconstruction, the sanitised snapshot with its canary test, the applier and cursor, the epoch gate, retention; the one `schema_epoch` bump for W0b and W1; replay-and-diff convergence is the gate from here on
 - [ ] **Wave 2 — intents over the new plane**: `row_version` on every mutable table, the declared read-set conflict check, durable outcomes carrying `commit_seq`, the overlay cleared in the transaction that carries the commit, dependency edges and predecessor references
@@ -39,6 +39,8 @@ Wave 0a is docs-only, and what it lands is **Wave 0a — rulings and drift rows*
 Wave 0b lands across four commits, and what it lands is **Wave 0b — schema**: the revision occurrence with the wrapper's current-revision pointer and `recordRevision`'s edges deleted; the representation row beside byte-only `core_content_item`; `core_transaction.external_id` without the global `UNIQUE`; the typed occurrence key and one `tz` spelling; the primary-identifier partial index, interval CHECK and issuer column; concept-identity columns; the decoded-body-text side table; deletion roles declared beside references. No epoch bump here. Each clause, in the section that carries it: the revision occurrence and the decoded-body-text side table in `## Wave 0b — history and representation`; the representation row beside byte-only `core_content_item` in `## Wave 0b — the representation split`; the external-id, concept-identity and identifier-interval work in `## Wave 0b — schema`. Two clauses moved by ruling rather than being done here — the occurrence key has no schema work and goes to 0c, and deletion roles ride 0e — both recorded in `## Decisions — wave 0b (second half)`.
 
 Wave 0c lands in one commit, and what it lands is **Wave 0c — domain operations**: one invariant boundary with Atlas inside it and non-empty pre/postconditions; content write as one operation; acyclic task hierarchy; `complete` / `reopen` shared by People, Tasks and automations with series identity and inherited `about`; the occurrence adapter every reader consumes; temporal validation at every entry point; `tagNotation` replaced by concept identity; `accountFor` and the publisher probe re-keyed; the declared read-set wired into the intent conflict checker; each operation's offline declaration. The surface, the scenarios, the site accounting and the gate tails are in `## Wave 0c — domain operations` below.
+
+Wave 0d lands in one commit, and what it lands is **Wave 0d — queries and contracts**: `(party, currency)` balances, group results in the group's currency, the explicit valuation type with its unavailable state, the Money output type, and settlements, obligations and exports on the same helpers. The surface, the scenarios, the site accounting and the gate tails are in `## Wave 0d — queries and contracts` below.
 
 ## Out of scope
 
@@ -679,7 +681,7 @@ Six operations: `schedule.task.write`, `schedule.task.complete`, `schedule.task.
 | 8 | A zeroed hash over unchanged bytes, refused; a non-hash refused by the column | `operations/writer-matrix.test.ts` | the same |
 | 9 | February 31 as an anniversary refused, February 29 accepted, by every writer | `operations/writer-matrix.test.ts` | the same |
 | 10 | Create, skip day two, query — UTC, a non-UTC zone, a DST boundary, floating, all-day | `operations/behaviour-scenarios.test.ts` | the occurrence adapter |
-| 11 | The same five, read through the real Agenda query handler | `blueprints/src/query-handlers.test.ts` | `apps/agenda/queries/upcoming.ts` |
+| 11 | The same five, read through the real Agenda query handler | `blueprints/src/query-handlers-996.test.ts` | `apps/agenda/queries/upcoming.ts` |
 | 12 | People-complete-then-Tasks-complete is ONE completion | `operations/behaviour-scenarios.test.ts` | the stored status and stamp |
 | 13 | A recurring person task rolls over once, and the successor is still about the person | `operations/behaviour-scenarios.test.ts` | `core_link` + `series_id` |
 | 14 | Reopening is not completing, and both are idempotent | `operations/behaviour-scenarios.test.ts` | the stored status |
@@ -855,3 +857,80 @@ Row counts: 39 rows — **retired by a named wave 18** · **partial 9** · **unn
 | F4 offline-copy switch | **modify, not delete** | `SettingsVaultScreen.tsx:321` is the browser's choice between holding an encrypted replica and holding nothing; server carries `rememberDevice` into replica access (`replica-routes.ts:947,1112`). R9 keeps a remote-only client, so a shared browser still needs the switch. Only the census record count on the custody line goes (W5 deletes census); the seat watermark replaces it. |
 | F5 year-3 replica fixture | **stands, reworded** | `year3-replica.ts:1-40` builds the phone file through `readReplicaRows` + `ReplicaSqliteStore.bootstrap` into `replica_row` and forbids a hand-built replica; W2 rewires it to snapshot copy + log tail and keeps the 1/10/40 intent volumes; `year3-household` retires with the mount plane. |
 | F6 manifest-attribution test | **stands** | `app-manifest-reads.test.ts:1-8` fixes read scopes as the pool the gateway turns into consent grants and shapes (#883); it is deleted in the W4 commit that deletes `vault.scopes` and the tripwire. |
+
+## Wave 0d — queries and contracts
+
+USD 100 + EUR 100 read as USD 200. `pairwise` folded minor units into a map keyed by **party alone** and the dashboard labelled the sum with the vault's base currency, so a friend you owed EUR 100 and USD 100 appeared, on the app's most-read screen, to be owed 200 of a money nobody had. The vault had carried the currency on `tally_group`, `tally_settlement`, `tally_obligation` and `tally_expense.settlement_currency` since [#916](https://github.com/srikanth235/centraid/issues/916); every one of those columns was read past.
+
+### The shape
+
+**`Money` is the fix, and it is a type rather than a check** (`packages/core/src/money/index.ts`, exported as `@centraid/core/money`). An amount carries its currency; `addMoney` on a mismatch **throws** rather than producing a third number; a position that spans currencies is a `MoneyBag` — at most one amount per currency, sorted, zeros dropped — and there is no operation that collapses one into a scalar.
+
+**A single figure over several currencies is a `Valuation`**, which either carries the rates that produced it or reads `unavailable` with its components and the currencies it spans. There is no rate plane in the product (a later proposal), so today's honest answer for a mixed position is `unavailable` — and the type makes that answer impossible to skip. `netValuation` subtracts two valuations over their COMPONENTS and values once, so "unavailable minus unavailable" cannot quietly become a number.
+
+**The output contract moved, and every consumer moved with it — by compiler error, not by grep.** `FriendSummary.net_minor` → `balances: Money[]`; `NetPart.net_minor` → `net: Money`; `GroupSummary.owner_net_minor` → `owner_net: Money`; `GroupMember.net_minor` → `net: Money`; `Transfer.amount_minor` → `amount: Money`; `TallyDashboard.owe_total_minor` / `owed_total_minor` → `owe` / `owed: Valuation`. That is R22's "a shared Money type in the query output contract makes a bare amount unrenderable as a balance", and it is what turned 134 call sites across 26 files into a list the compiler produced.
+
+**A group is one ledger, in one money.** `tallyGroupNet` stays a minor-unit fold — every expense and settlement in a group agrees with `tally_group.currency` by DDL — and its result is labelled with that currency at every output. `tallySimplification` and `minimalTransfers` take the group's currency, so a proposed payment carries the money it is in. The export is on the same helpers: it used to ship the vault's BASE currency on a group's own ledger, in a file that outlives the app.
+
+**The formatters grew Money-typed figures** (`format.ts`): `moneyFigure`, `moneyNetFigure`, `moneyTone`, `bagFigure` (several amounts joined, never summed), `bagTone`, `bagSubLabel`, `valuationFigure`, `valuationTone`. The `(minor, currency)` pair survives for the leaves that render a stored amount; a BALANCE cannot reach them any more.
+
+### Scenarios
+
+| # | Scenario | Where | Reads through |
+| --- | --- | --- | --- |
+| 1 | Adding two currencies throws instead of returning a third number | `packages/core/src/money/money.test.ts` | `addMoney` |
+| 2 | A position folds per currency, drops zeros, sorts, and negates entrywise | `money.test.ts` | `moneyBag` / `addBags` / `negateBag` |
+| 3 | A single-currency position values with **no** rate, because none was used | `money.test.ts` | `valuate` |
+| 4 | Two currencies with no rate source value as `unavailable`, with components | `money.test.ts` | `valuate` |
+| 5 | Two currencies WITH a rate value to one figure, naming the rate | `money.test.ts` | `valuate` |
+| 6 | **USD 100 + EUR 100 returns two balances, and nothing is 20 000** | `packages/blueprints/src/query-handlers-996.test.ts` | `apps/tally/queries/dashboard.ts` |
+| 7 | The hero says `unavailable` rather than adding EUR to USD | `query-handlers-996.test.ts` | the same handler |
+| 8 | Each group answers in its own money | `query-handlers-996.test.ts` | the same handler |
+
+### Site accounting
+
+- `net_minor`, `owner_net_minor`, `owe_total_minor`, `owed_total_minor` in code: **0** (134 sites across 26 files before; the two remaining hits are a comment in `types.ts` and a comment in `query-handlers.test.ts` describing what was there).
+- Output fields carrying a bare balance: **0**. Six type fields became `Money` or `Valuation`.
+- Files touched: 38, of which 12 are fixtures the type change reached.
+
+### Files
+
+**Core — the Money type (new)** — `packages/core/package.json`, `packages/core/src/money/index.ts`, `packages/core/src/money/money.test.ts`.
+
+**Tally's balance engine and output contract** — `packages/blueprints/apps/tally/format.ts`, `packages/blueprints/apps/tally/queries/dashboard.ts`, `packages/blueprints/apps/tally/queries/export.ts`, `packages/blueprints/apps/tally/queries/friend.ts`, `packages/blueprints/apps/tally/queries/group-departed.test.ts`, `packages/blueprints/apps/tally/queries/group.ts`, `packages/blueprints/apps/tally/types.ts`, `packages/blueprints/src/tally-simplify.test.ts`, `packages/blueprints/src/tally-simplify.ts`.
+
+**Tally's web surfaces and fixtures** — `packages/blueprints/src/query-handlers-996.test.ts`, `packages/blueprints/src/query-handler-ctx.test-fixtures.ts`, `packages/blueprints/apps/tally/app.json`, `packages/blueprints/apps/tally/components/Ledgers.tsx`, `packages/blueprints/apps/tally/components/Route.tsx`, `packages/blueprints/apps/tally/components/Screens.tsx`, `packages/blueprints/apps/tally/components/Settle.tsx`, `packages/blueprints/apps/tally/compose-states-kit.ts`, `packages/blueprints/apps/tally/compose-states-v17.test.tsx`, `packages/blueprints/apps/tally/export-file.test.ts`, `packages/blueprints/apps/tally/ledger-reads.ts`, `packages/blueprints/apps/tally/states.test.tsx`, `packages/blueprints/src/query-handlers.test.ts`.
+
+**Tally on the phone** — `apps/mobile/src/apps/tally/BalancesView.test.tsx`, `apps/mobile/src/apps/tally/BalancesView.tsx`, `apps/mobile/src/apps/tally/GroupsView.tsx`, `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx`, `apps/mobile/src/apps/tally/TallyFriendScreen.tsx`, `apps/mobile/src/apps/tally/TallyGroupScreen.tsx`, `apps/mobile/src/apps/tally/TallyHome.test.tsx`, `apps/mobile/src/apps/tally/TallyHome.tsx`, `apps/mobile/src/apps/tally/TallyParts.tsx`, `apps/mobile/src/apps/tally/TallySettleScreen.tsx`, `apps/mobile/src/apps/tally/tally-airplane.test.ts`, `apps/mobile/src/apps/tally/tally-store.test.ts`, `apps/mobile/src/apps/tally/tally-store.ts`, `apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts`.
+
+**Docs** — `docs/vault-ontology.md`.
+
+### Gates
+
+```sh
+bun run --filter @centraid/core test           # 19 files, 302 passed (money: 6)
+bun run --filter @centraid/blueprints test     # 212 files, 7079 passed, 2 expected fail
+npx vitest run --root apps/mobile              # 286 files, 2438 passed
+bun run --filter @centraid/vault test          # 198 files, 1610 passed, 2 skipped
+bun run --filter @centraid/client test         # 2478 tests, 1 pre-existing FAIL (below)
+bun run --filter @centraid/core typecheck && bun run --filter @centraid/blueprints typecheck
+bun run --filter @centraid/client typecheck && bun run --filter @centraid/mobile typecheck
+bun run --filter @centraid/vault typecheck && bun run --filter @centraid/server typecheck  # all 0
+bun run lint && bun run format:check           # clean
+bash .governance/run.sh                        # 22/22
+```
+
+### A red client test that is wave 0b's, diagnosed and handed back
+
+`packages/client/src/replica/search-parity.test.ts > core.content_item names a live FTS entity and carries its columns` fails on `d96172c40` with every change here stashed. The representation split made `core_content_item`'s indexed `title` an EXPRESSION over the owning asset (`OWNED_TITLE_SQL`), and the parity scanner counts only `kind: "column"` entries — so the vault side now reports no direct columns while `REPLICA_LOCAL_SEARCH` still names `title`.
+
+Removing the entry was tried and **reverted**: ten `sqlite-store` / `store-core` tests search `core.content_item` by title on the seat, and they would need to search `media.asset` instead — which is not in the vault's FTS registry at all (it `foldsIn` to the content item's index). Making a seat search a folded-in entity is a Photos-side design decision, not a rename, so it belongs with W4's Photos work rather than being bodged from here. Left exactly as red as it was found, with the analysis, rather than made worse or papered over. **Flagged for the owner.**
+
+### Decisions — wave 0d
+
+- **`tallyGroupNet` was NOT made currency-aware inside.** A group is one ledger in one money by DDL (a trigger holds a grouped settlement to its group's currency), so the fold is sound as minor units and only its RESULT needed labelling. Making it return a bag would have implied a group can hold two currencies, which the schema forbids — a type is a claim, and that claim would be false.
+- **`valuate` with one currency is `valued`, not a special case.** Nothing was converted, so no rate was used, and the answer carries an empty `rates` list. The alternative — `unavailable` whenever a rate plane is absent — would have made the ordinary single-currency vault unable to show its own total.
+- **The reminder still takes ONE amount.** `nudgeWrite` writes `as_of_minor` on `tally_nudge`, a stored column this wave does not touch; the surface passes the first currency in the friend's position. A reminder about a two-currency position is a real product question and is not answered here. **Flagged for the owner.**
+- **`Transfer.amount` moved, `expense.amount_minor` did not.** A stored fact keeps its column shape — the row carries `settlement_currency` beside it and W4 rewrites these handlers. What moved is every field that is a BALANCE: a derived figure with no currency of its own until someone labels it, which is exactly where ONT-23 lived.
+- **Nothing here changes a stored column, so the golden corpus is not re-frozen.** 0d is reader-side by construction; the currencies it reads have been in the DDL since #916.
+- **`query-handlers.test.ts` was SPLIT, not waived.** Both of this wave's reader tests landed there and pushed it past the repo's 625-line file limit. The `ctx` builder moved to `query-handler-ctx.test-fixtures.ts` — one builder, so two suites cannot disagree about what a handler is handed — and the #996 blocks moved to `query-handlers-996.test.ts`. Naming a waiver instead would have been the cheap fix the directive exists to refuse.

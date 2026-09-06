@@ -22,14 +22,14 @@ function data(
 /** Apply the proposal to the positions and check everyone lands level. */
 function settleAll(net: Map<string, number>): Map<string, number> {
   const after = new Map(net);
-  for (const transfer of minimalTransfers(net)) {
+  for (const transfer of minimalTransfers(net, "USD")) {
     after.set(
       transfer.from,
-      (after.get(transfer.from) ?? 0) + transfer.amount_minor
+      (after.get(transfer.from) ?? 0) + transfer.amount.amount_minor
     );
     after.set(
       transfer.to,
-      (after.get(transfer.to) ?? 0) - transfer.amount_minor
+      (after.get(transfer.to) ?? 0) - transfer.amount.amount_minor
     );
   }
   return after;
@@ -55,21 +55,22 @@ describe("the minimal payment set", () => {
     const net = new Map(
       Object.entries({ ana: 700, ben: 300, cy: -400, dee: -600 })
     );
-    const transfers = minimalTransfers(net);
+    const transfers = minimalTransfers(net, "USD");
     expect(transfers.length).toBeLessThanOrEqual(3);
     for (const transfer of transfers)
-      expect(transfer.amount_minor).toBeGreaterThan(0);
+      expect(transfer.amount.amount_minor).toBeGreaterThan(0);
   });
 
   test("a level group is proposed nothing", () => {
-    expect(minimalTransfers(new Map([["ana", 0]]))).toStrictEqual([]);
+    expect(minimalTransfers(new Map([["ana", 0]]), "USD")).toStrictEqual([]);
   });
 
   test("the same positions always propose the same payments", () => {
     const positions = { ana: 500, ben: 500, cy: -400, dee: -600 };
-    const once = minimalTransfers(new Map(Object.entries(positions)));
+    const once = minimalTransfers(new Map(Object.entries(positions)), "USD");
     const again = minimalTransfers(
-      new Map(Object.entries(positions).toReversed())
+      new Map(Object.entries(positions).toReversed()),
+      "USD"
     );
     expect(again).toStrictEqual(once);
   });
@@ -96,7 +97,7 @@ describe("the group proposal", () => {
   ]);
 
   test("a group that has not opted in is proposed nothing, and says so", () => {
-    const result = tallySimplification(ledger, GROUP, false);
+    const result = tallySimplification(ledger, GROUP, false, "USD");
     expect(result.opted_in).toBe(false);
     expect(result.transfers).toStrictEqual([]);
     // With no proposal, "after" is what stands today — never a smaller number
@@ -105,7 +106,7 @@ describe("the group proposal", () => {
   });
 
   test("an opted-in group is told what the proposal rewired", () => {
-    const result = tallySimplification(ledger, GROUP, true);
+    const result = tallySimplification(ledger, GROUP, true, "USD");
     expect(result.opted_in).toBe(true);
     expect(result.debts_before).toBe(3);
     expect(result.payments_after).toBe(result.transfers.length);
@@ -115,11 +116,11 @@ describe("the group proposal", () => {
     for (const transfer of result.transfers) {
       after.set(
         transfer.from,
-        (after.get(transfer.from) ?? 0) + transfer.amount_minor
+        (after.get(transfer.from) ?? 0) + transfer.amount.amount_minor
       );
       after.set(
         transfer.to,
-        (after.get(transfer.to) ?? 0) - transfer.amount_minor
+        (after.get(transfer.to) ?? 0) - transfer.amount.amount_minor
       );
     }
     for (const value of after.values()) expect(value).toBe(0);
@@ -135,16 +136,16 @@ describe("the group proposal", () => {
         payers: { ana: 700, cy: 301 },
       },
     ]);
-    const result = tallySimplification(multi, GROUP, true);
+    const result = tallySimplification(multi, GROUP, true, "USD");
     const after = new Map(tallyGroupNet(multi, GROUP));
     for (const transfer of result.transfers) {
       after.set(
         transfer.from,
-        (after.get(transfer.from) ?? 0) + transfer.amount_minor
+        (after.get(transfer.from) ?? 0) + transfer.amount.amount_minor
       );
       after.set(
         transfer.to,
-        (after.get(transfer.to) ?? 0) - transfer.amount_minor
+        (after.get(transfer.to) ?? 0) - transfer.amount.amount_minor
       );
     }
     for (const value of after.values()) expect(value).toBe(0);

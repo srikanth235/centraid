@@ -16,12 +16,14 @@ import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import {
-  allSettled,
-  figureTone,
-  money,
-  netFigure,
+  bagFigure,
+  bagSubLabel,
+  bagTone,
   groupSubLabel,
-  personSubLabel,
+  moneyNetFigure,
+  moneyTone,
+  valuationFigure,
+  valuationTone,
 } from "@centraid/blueprints/apps/tally/format";
 import type { DashboardData } from "@centraid/blueprints/apps/tally/types";
 import {
@@ -40,6 +42,8 @@ import {
   balancesHeroSub,
   memberCount,
 } from "@centraid/blueprints/apps/tally/view-copy";
+import { netValuation } from "@centraid/core/money";
+import type { Money } from "@centraid/core/money";
 import { identityInitials } from "@centraid/design";
 
 import { Text } from "../../kit/components/NativeText";
@@ -64,7 +68,7 @@ export interface BalancesViewProps {
   onRemind: (friend: {
     party_id: string;
     name: string;
-    net_minor: number;
+    balances: Money[];
   }) => void;
 }
 
@@ -74,11 +78,14 @@ export default function BalancesView(
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data } = props;
-  const net = data.owed_total_minor - data.owe_total_minor;
-  const tone = figureTone(net);
+  // TWO VALUATIONS DO NOT SUBTRACT AS NUMBERS (#996, ruling R22; drift
+  // ONT-23): the difference is taken over the positions and valued once, and
+  // a position spanning currencies with no rate shows its amounts instead.
+  const net = netValuation(data.owed, data.owe, data.currency);
+  const tone = valuationTone(net);
   const level =
-    allSettled(data.friends.map((friend) => friend.net_minor)) &&
-    allSettled(data.groups.map((group) => group.owner_net_minor));
+    data.friends.every((friend) => bagTone(friend.balances) === "settled") &&
+    data.groups.every((group) => moneyTone(group.owner_net) === "settled");
   const dayOne =
     props.state === "dayone" ||
     (data.friends.length === 0 && data.groups.length === 0);
@@ -102,8 +109,8 @@ export default function BalancesView(
       ) : (
         <>
           <Hero
-            figure={netFigure(net, data.currency, "Settled")}
-            netMinor={net}
+            figure={valuationFigure(net, "Settled")}
+            tone={tone}
             label={
               tone === "settled"
                 ? HERO_LEVEL
@@ -115,8 +122,8 @@ export default function BalancesView(
               level
                 ? HERO_SETTLED_SUB
                 : balancesHeroSub(
-                    money(data.owed_total_minor, data.currency),
-                    money(data.owe_total_minor, data.currency),
+                    valuationFigure(data.owed),
+                    valuationFigure(data.owe),
                     data.expense_count ?? 0,
                     data.settlement_count ?? 0
                   )
@@ -140,15 +147,16 @@ export default function BalancesView(
             initials={friend.initials || identityInitials(friend.name)}
             title={friend.name}
             figure={{
-              netMinor: friend.net_minor,
-              text: netFigure(friend.net_minor, data.currency),
-              sub: personSubLabel(friend.net_minor),
+              netMinor: friend.balances[0]?.amount_minor ?? 0,
+              tone: bagTone(friend.balances),
+              text: bagFigure(friend.balances),
+              sub: bagSubLabel(friend.balances),
             }}
             {
               // ONLY WHERE THERE IS SOMETHING TO REMIND ABOUT. A level
               // balance has nothing owed, and a row that owes YOU money is the
               // one a reminder is for. It parks — it is never sent from here.
-              ...(friend.net_minor > 0
+              ...(bagTone(friend.balances) === "owed"
                 ? {
                     act: {
                       label: VERBS.remind,
@@ -175,9 +183,9 @@ export default function BalancesView(
             title={group.name}
             meta={memberCount(group.member_count)}
             figure={{
-              netMinor: group.owner_net_minor,
-              text: netFigure(group.owner_net_minor, data.currency),
-              sub: groupSubLabel(group.owner_net_minor),
+              netMinor: group.owner_net.amount_minor,
+              text: moneyNetFigure(group.owner_net),
+              sub: groupSubLabel(group.owner_net.amount_minor),
             }}
             onPress={() => props.onOpenGroup(group.group_id, group.name)}
           />

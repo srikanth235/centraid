@@ -52,8 +52,8 @@ describe("the file, assembled on the device", () => {
   it("carries no balance, and says the exclusion out loud", () => {
     const json = JSON.parse(exportFile(DATA, "json").text) as ExportData;
     expect(json.balances_excluded).toBe(true);
-    expect(json).not.toHaveProperty("owe_total_minor");
-    expect(json).not.toHaveProperty("owed_total_minor");
+    expect(json).not.toHaveProperty("owe");
+    expect(json).not.toHaveProperty("owed");
   });
 
   it("falls back to a nameable file where the group has no name", () => {

@@ -12,7 +12,6 @@
 //  - the sign convention is one convention: `--net` is you-owe, ink is
 //    owed-to-you, and neither is ever a green
 
-// @vitest-environment jsdom
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -27,6 +26,8 @@ import {
   VERBS,
   balancesHeroSub,
 } from "@centraid/blueprints/apps/tally/view-copy";
+// @vitest-environment jsdom
+import { EMPTY_BAG, money, moneyBag, valuate } from "@centraid/core/money";
 
 import {
   mountBlock,
@@ -58,10 +59,15 @@ const OWED = {
   color: "#5b8def",
   initials: "AN",
   name: "Ana",
-  net_minor: 8100,
+  balances: [money(8100, "GBP")],
   party_id: "ana",
 };
-const OWING = { ...OWED, net_minor: -4200, party_id: "tom", name: "Tom" };
+const OWING = {
+  ...OWED,
+  balances: [money(-4200, "GBP")],
+  party_id: "tom",
+  name: "Tom",
+};
 
 function dashboard(over: Partial<DashboardData> = {}): DashboardData {
   return {
@@ -70,8 +76,8 @@ function dashboard(over: Partial<DashboardData> = {}): DashboardData {
     friends: [OWED],
     groups: [],
     me: "owner",
-    owe_total_minor: 10_960,
-    owed_total_minor: 8100,
+    owe: valuate(moneyBag(money(10_960, "GBP")), "GBP"),
+    owed: valuate(moneyBag(money(8100, "GBP")), "GBP"),
     recurring: [],
     settlement_count: 22,
     trash: [],
@@ -112,9 +118,9 @@ describe("the Balances hero", () => {
   it("states a level ledger, and never celebrates it", () => {
     const { container, unmount } = view(
       dashboard({
-        friends: [{ ...OWED, net_minor: 0 }],
-        owe_total_minor: 0,
-        owed_total_minor: 0,
+        friends: [{ ...OWED, balances: [] }],
+        owe: valuate(EMPTY_BAG, "GBP"),
+        owed: valuate(EMPTY_BAG, "GBP"),
       })
     );
     expect(container.textContent).toContain(ALL_SETTLED);
@@ -151,7 +157,7 @@ describe("the person rows", () => {
     expect(owing.container.textContent).not.toContain(VERBS.remind);
     owing.unmount();
 
-    const level = view(dashboard({ friends: [{ ...OWED, net_minor: 0 }] }));
+    const level = view(dashboard({ friends: [{ ...OWED, balances: [] }] }));
     expect(level.container.textContent).not.toContain(VERBS.remind);
     level.unmount();
   });
@@ -184,7 +190,10 @@ describe("the person rows", () => {
 describe("the sign convention", () => {
   it("paints a you-owe figure in `--net` and an owed-to-you figure in ink", () => {
     const { container, unmount } = view(
-      dashboard({ friends: [OWED, OWING], owe_total_minor: 4200 })
+      dashboard({
+        friends: [OWED, OWING],
+        owe: valuate(moneyBag(money(4200, "GBP")), "GBP"),
+      })
     );
     const figures = nodesOf(container, "span").filter(
       (node) => node.textContent === "£42.00" || node.textContent === "£81.00"

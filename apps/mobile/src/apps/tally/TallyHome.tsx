@@ -60,6 +60,7 @@ import {
   leaveGroupWrite,
   nudgeWrite,
 } from "@centraid/blueprints/apps/tally/writes";
+import type { Money } from "@centraid/core/money";
 
 import { postStatus } from "../../kit/components/status-line";
 import { usePendingChanges } from "../../kit/replica/pending-changes";
@@ -111,8 +112,12 @@ export default function TallyHome({
   const pendingCount = tallyPendingCount(pending);
   const nets = useMemo(
     () => [
-      ...vault.dashboard.friends.map((friend) => friend.net_minor),
-      ...vault.dashboard.groups.map((group) => group.owner_net_minor),
+      // Every amount, per currency — `allSettled` asks only whether each is
+      // level, which is a question a bag answers without being summed.
+      ...vault.dashboard.friends.flatMap((friend) =>
+        friend.balances.map((amount) => amount.amount_minor)
+      ),
+      ...vault.dashboard.groups.map((group) => group.owner_net.amount_minor),
     ],
     [vault.dashboard]
   );
@@ -248,7 +253,7 @@ export default function TallyHome({
   const askRemind = (friend: {
     party_id: string;
     name: string;
-    net_minor: number;
+    balances: Money[];
   }): void =>
     setAsk({
       body: [NUDGE_BODY],
@@ -258,7 +263,9 @@ export default function TallyHome({
       onConfirm: () =>
         write(
           nudgeWrite({
-            asOfMinor: friend.net_minor,
+            // A reminder is about ONE balance; the first currency is the only
+            // one unless the position spans several (#996, R22).
+            asOfMinor: friend.balances[0]?.amount_minor ?? 0,
             partyId: friend.party_id,
           }),
           COMPOSE_OUTCOMES.added

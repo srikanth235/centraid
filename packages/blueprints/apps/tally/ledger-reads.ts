@@ -1,3 +1,5 @@
+import { useCallback, useMemo, useState } from "react";
+
 // THE ROOM'S DATA PLANE: the five reads, the one write door, and the three
 // facts a screen is allowed to state about how fresh it is.
 //
@@ -9,7 +11,7 @@
 // NOTHING HERE FOLDS A FIGURE. Every net, share and total arrives derived from
 // `queries/dashboard.ts`'s one balance engine; this module moves payloads and
 // records when they landed.
-import { useCallback, useMemo, useState } from "react";
+import { EMPTY_BAG, valuate } from "@centraid/core/money";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import type { InlineFrame } from "../inline-types.ts";
@@ -86,8 +88,8 @@ const EMPTY_DASHBOARD: DashboardData = {
   groups: [],
   trash: [],
   recurring: [],
-  owe_total_minor: 0,
-  owed_total_minor: 0,
+  owe: valuate(EMPTY_BAG, "USD"),
+  owed: valuate(EMPTY_BAG, "USD"),
 };
 
 export interface LedgerReads {

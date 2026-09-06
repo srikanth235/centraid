@@ -10,6 +10,7 @@
 // NOTHING HERE DERIVES A BALANCE. Every `*_minor` argument arrives already
 // folded by `queries/dashboard.ts`; these functions choose a word, an absolute
 // value and a tone. Summing shares here would be a second engine.
+import type { Money, MoneyBag, Valuation } from "@centraid/core/money";
 import { fmtMoney, partyHueKey } from "@centraid/design";
 
 import type { Role } from "./types.ts";
@@ -105,4 +106,87 @@ export function metaSentence(
 export function proportion(value: number, largest: number): number {
   if (largest <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((value / largest) * 100)));
+}
+
+// ── Money-typed figures (#996, ruling R22; drift ONT-23) ───────────────────
+//
+// The `(minor, currency)` pair above is how this file was called when the two
+// travelled separately and a caller could pass either one of somebody else's.
+// A balance is a `Money` now, so the currency arrives WITH the amount and the
+// pairing cannot be got wrong; a position spanning currencies is several
+// figures, joined, and never a sum.
+
+/** The absolute amount of one `Money`, in its own currency. */
+export function moneyFigure(value: Money): string {
+  return money(value.amount_minor, value.currency);
+}
+
+export function moneyTone(value: Money): FigureTone {
+  return figureTone(value.amount_minor);
+}
+
+/** One balance: its amount, or the word for a level one. */
+export function moneyNetFigure(value: Money, settledWord = "settled"): string {
+  return netFigure(value.amount_minor, value.currency, settledWord);
+}
+
+/**
+ * A position across currencies, as SEVERAL figures. An empty bag is level; two
+ * currencies read "€100.00  ·  $100.00", which is the whole of ONT-23's fix on
+ * a surface: the two amounts are both true, and their sum is not.
+ */
+export function bagFigure(bag: MoneyBag, settledWord = "settled"): string {
+  const live = bag.filter((amount) => Math.abs(amount.amount_minor) >= 1);
+  if (live.length === 0) return settledWord;
+  return live.map(moneyFigure).join("  ·  ");
+}
+
+/** The bag's tone: level when every amount is, `--net` when any is owed by the
+ *  owner, plain ink otherwise. A mixed position leads with what is owed. */
+export function bagTone(bag: MoneyBag): FigureTone {
+  const live = bag.filter((amount) => Math.abs(amount.amount_minor) >= 1);
+  if (live.length === 0) return "settled";
+  return live.some((amount) => amount.amount_minor < 0) ? "net" : "owed";
+}
+
+/**
+ * A hero figure. A `valued` valuation renders its total; an `unavailable` one
+ * renders its components, because the several amounts are what is true when no
+ * rate exists — never a sum nobody computed.
+ */
+export function valuationFigure(
+  valuation: Valuation,
+  settledWord = "settled"
+): string {
+  return valuation.state === "valued"
+    ? moneyNetFigure(valuation.total, settledWord)
+    : bagFigure(valuation.components, settledWord);
+}
+
+/** Whether a valuation could be one number at all — the sentence a surface
+ *  needs before it puts a single figure under a single word. */
+export function valuationIsOneFigure(valuation: Valuation): boolean {
+  return valuation.state === "valued";
+}
+
+/** The absolute size of a valuation, for "is this level" questions only. */
+export function valuationIsSettled(valuation: Valuation): boolean {
+  return valuation.state === "valued"
+    ? Math.abs(valuation.total.amount_minor) < 1
+    : valuation.components.every((amount) => Math.abs(amount.amount_minor) < 1);
+}
+
+/** A hero's tone: the total's when there is one, the position's otherwise. */
+export function valuationTone(valuation: Valuation): FigureTone {
+  return valuation.state === "valued"
+    ? moneyTone(valuation.total)
+    : bagTone(valuation.components);
+}
+
+/** The sub-label under a friend's position, which may span currencies. A
+ *  mixed position leads with what the owner owes, matching `bagTone`. */
+export function bagSubLabel(bag: MoneyBag): string {
+  const tone = bagTone(bag);
+  if (tone === "settled") return "";
+  return tone === "net" ? "you owe" : "owes you";
 }

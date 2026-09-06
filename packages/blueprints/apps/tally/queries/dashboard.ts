@@ -12,6 +12,14 @@
  */
 
 import {
+  addToBag,
+  EMPTY_BAG,
+  money,
+  negateMoney,
+  valuate,
+} from "@centraid/core/money";
+import type { Money, MoneyBag } from "@centraid/core/money";
+import {
   BRAND,
   identityInitials,
   partyHueKey,
@@ -55,6 +63,9 @@ interface GroupRow {
   color?: string;
   simplify_opt_in?: number;
   archived_at?: string | null;
+  /** THE GROUP'S CURRENCY (#916, R1) — a group is one ledger, in one money,
+   *  and every expense and settlement in it agrees. Read since #996 R22. */
+  currency?: string;
   [k: string]: unknown;
 }
 type DecoratedGroup = GroupRow & { name: string };
@@ -121,6 +132,8 @@ interface SettlementRow {
   from_party: string;
   to_party: string;
   amount_minor: number;
+  /** What was PAID, in the money it was paid in (#916, R1). */
+  currency?: string;
   group_id?: string;
   [k: string]: unknown;
 }
@@ -531,40 +544,69 @@ export function personOf(data: TallyData, pid: string): ServerPerson {
   );
 }
 
-/** Net per friend vs the owner, in minor units. Positive = they owe me. */
-export function pairwise(data: TallyData): Map<string, number> {
+/** A group's own money, or the vault's base when the row is group-less. */
+export function groupCurrency(
+  data: TallyData,
+  groupId?: string | null
+): string {
+  if (groupId == null) return data.currency;
+  const group = data.groups.find((candidate) => candidate.group_id === groupId);
+  return group?.currency ?? data.currency;
+}
+
+/** The money an expense settles in: its own, else its group's, else the base. */
+export function expenseCurrency(
+  data: TallyData,
+  expense: { group_id: string | null; settlement_currency?: string | null }
+): string {
+  return expense.settlement_currency ?? groupCurrency(data, expense.group_id);
+}
+
+/**
+ * BALANCES ARE KEYED `(party, currency)` (#996, ruling R22; drift ONT-23).
+ *
+ * This folded minor units into a map keyed by PARTY ALONE and the dashboard
+ * labelled the sum with the vault's base currency — so a friend you owe EUR
+ * 100 and USD 100 read as one 200, a figure that is not true in either money.
+ * A friend's position is now a `MoneyBag`: one amount per currency, and no
+ * addition across two of them is even expressible.
+ *
+ * Positive = they owe me, per currency.
+ */
+export function pairwise(data: TallyData): Map<string, MoneyBag> {
   const me = data.me;
-  const b = new Map<string, number>();
-  for (const f of data.friends) b.set(f.party_id, 0);
+  const b = new Map<string, MoneyBag>();
+  for (const f of data.friends) b.set(f.party_id, EMPTY_BAG);
+  const add = (partyId: string, amount: Money): void => {
+    b.set(partyId, addToBag(b.get(partyId) ?? EMPTY_BAG, amount));
+  };
   for (const e of data.expenses) {
+    const currency = expenseCurrency(data, e);
     // With several payers a share is owed to each of them for the part they
     // actually put down, so the owner's position is their own slice of it —
     // never the whole share to whoever happened to be named `paid_by`.
     for (const { from, to, amount_minor } of attributeExpense(e)) {
       if (from === to) continue;
-      if (to === me && from !== me)
-        b.set(from, (b.get(from) || 0) + amount_minor);
+      if (to === me && from !== me) add(from, money(amount_minor, currency));
       else if (from === me && to !== me)
-        b.set(to, (b.get(to) || 0) - amount_minor);
+        add(to, money(-amount_minor, currency));
     }
   }
   for (const s of data.settlements) {
+    const currency = s.currency ?? groupCurrency(data, s.group_id ?? null);
     if (s.from_party === me && s.to_party !== me)
-      b.set(s.to_party, (b.get(s.to_party) || 0) + s.amount_minor);
+      add(s.to_party, money(s.amount_minor, currency));
     else if (s.to_party === me && s.from_party !== me)
-      b.set(s.from_party, (b.get(s.from_party) || 0) - s.amount_minor);
+      add(s.from_party, money(-s.amount_minor, currency));
   }
   for (const obligation of data.obligations) {
+    // An obligation carries its own currency in the vault; it is not scoped to
+    // a group, so there is nothing else it could inherit.
+    const currency = obligation.currency;
     if (obligation.from_party === me && obligation.to_party !== me) {
-      b.set(
-        obligation.to_party,
-        (b.get(obligation.to_party) || 0) - obligation.amount_minor
-      );
+      add(obligation.to_party, money(-obligation.amount_minor, currency));
     } else if (obligation.to_party === me && obligation.from_party !== me) {
-      b.set(
-        obligation.from_party,
-        (b.get(obligation.from_party) || 0) + obligation.amount_minor
-      );
+      add(obligation.from_party, money(obligation.amount_minor, currency));
     }
   }
   return b;
@@ -737,7 +779,8 @@ export function rateSuggestions(data: TallyData): RateSuggestion[] {
   );
 }
 
-/** A group row for the lists, archived or not. */
+/** A group row for the lists, archived or not. The owner's position is in the
+ *  GROUP's money (#996, R22) — a group is one ledger, in one currency. */
 function groupCard(data: TallyData, g: TallyData["groups"][number]) {
   const net = groupNet(data, g.group_id);
   return {
@@ -746,7 +789,10 @@ function groupCard(data: TallyData, g: TallyData["groups"][number]) {
     icon: g.icon,
     color: g.color,
     member_count: (data.membersByGroup.get(g.group_id) ?? []).length,
-    owner_net_minor: net.get(data.me as string) || 0,
+    owner_net: money(
+      net.get(data.me as string) || 0,
+      groupCurrency(data, g.group_id)
+    ),
     simplify_opt_in: g.simplify_opt_in === 1,
     archived_at: g.archived_at ?? null,
   };
@@ -787,15 +833,24 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
         name: p.name,
         color: p.color,
         initials: p.initials,
-        net_minor: bal.get(f.party_id) || 0,
+        balances: [...(bal.get(f.party_id) ?? EMPTY_BAG)],
       };
     });
-    let owe = 0;
-    let owed = 0;
-    for (const v of bal.values()) {
-      if (v > 0) owed += v;
-      else if (v < 0) owe += -v;
+    // THE TWO HERO FIGURES ARE VALUATIONS (#996, ruling R22). Each side is a
+    // position per currency; turning it into ONE number is a claim that a rate
+    // exists, and the vault has no rate plane, so `valuate` answers
+    // `unavailable` with the components rather than adding EUR to USD.
+    let oweBag: MoneyBag = EMPTY_BAG;
+    let owedBag: MoneyBag = EMPTY_BAG;
+    for (const position of bal.values()) {
+      for (const amount of position) {
+        if (amount.amount_minor > 0) owedBag = addToBag(owedBag, amount);
+        else if (amount.amount_minor < 0)
+          oweBag = addToBag(oweBag, negateMoney(amount));
+      }
     }
+    const owe = valuate(oweBag, data.currency);
+    const owed = valuate(owedBag, data.currency);
     // Archived groups leave the default lists and keep everything, so they
     // travel in their own array rather than being filtered into silence.
     const groups = data.groups
@@ -862,8 +917,8 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       archived_groups: archivedGroups,
       trash,
       recurring,
-      owe_total_minor: owe,
-      owed_total_minor: owed,
+      owe,
+      owed,
       // The two counts the Balances hero states its arithmetic from
       // ("derived from 194 expenses and 22 settlements"), over the same
       // bounded window every figure on this screen came from.
@@ -889,8 +944,8 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       archived_groups: [],
       trash: [],
       recurring: [],
-      owe_total_minor: 0,
-      owed_total_minor: 0,
+      owe: valuate(EMPTY_BAG, "USD"),
+      owed: valuate(EMPTY_BAG, "USD"),
       expense_count: 0,
       settlement_count: 0,
       rate_suggestions: [],

@@ -1,3 +1,7 @@
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
 /**
  * TALLY IN AIRPLANE MODE (#922 E7).
  *
@@ -14,10 +18,7 @@
  * seeded with the ledger fixture, opened through the same mounted reader the
  * provider builds on a device.
  */
-import path from "node:path";
-
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-
+import type { Valuation } from "@centraid/core/money";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
@@ -48,6 +49,17 @@ vi.mock(import("../../lib/gateway"), () => {
 });
 
 let reader: MultiVaultReplicaReader | undefined;
+
+/** The absolute size of a valuation, for "is there anything here" assertions —
+ *  never a figure a surface would render (#996, ruling R22). */
+function valuationTotalMinor(valuation: Valuation): number {
+  return valuation.state === "valued"
+    ? Math.abs(valuation.total.amount_minor)
+    : valuation.components.reduce(
+        (total, amount) => total + Math.abs(amount.amount_minor),
+        0
+      );
+}
 
 describe("Tally on a plane", () => {
   beforeEach(() => {
@@ -86,10 +98,13 @@ describe("Tally on a plane", () => {
       state.dashboard.friends.map((friend) => friend.party_id).sort()
     ).toStrictEqual([...FRIENDS].sort());
     expect(
-      state.dashboard.friends.every((friend) => friend.net_minor !== 0)
+      state.dashboard.friends.every((friend) => friend.balances.length > 0)
     ).toBe(true);
+    // Two positions, each valued on its own — never one number over both
+    // (#996, ruling R22).
     expect(
-      state.dashboard.owe_total_minor + state.dashboard.owed_total_minor
+      valuationTotalMinor(state.dashboard.owe) +
+        valuationTotalMinor(state.dashboard.owed)
     ).toBeGreaterThan(0);
     expect(state.dashboard.groups).toHaveLength(1);
     expect(state.dashboard.recurring).toHaveLength(1);
@@ -109,7 +124,9 @@ describe("Tally on a plane", () => {
         parked: false,
         pending: 0,
         rows: state.dashboard.friends.length,
-        nets: state.dashboard.friends.map((friend) => friend.net_minor),
+        nets: state.dashboard.friends.flatMap((friend) =>
+          friend.balances.map((amount) => amount.amount_minor)
+        ),
       })
     ).toBe("ready");
   });

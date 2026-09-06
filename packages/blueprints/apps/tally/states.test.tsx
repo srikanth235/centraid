@@ -1,3 +1,10 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+import { act, createElement, useMemo, useReducer } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, describe, expect, test } from "vitest";
+
 // @vitest-environment jsdom
 // TALLY'S HONEST STATES ON BALANCES (STATES.md's Tally matrix, umbrella #872).
 //
@@ -9,12 +16,7 @@
 // shows absence with a receipt and the scope to re-grant. A net you owe takes
 // `--net`; one you are owed stays ink. Each pair is asserted against the OTHER
 // member of the pair, because "it rendered something" is not the claim.
-import { readFileSync } from "node:fs";
-import path from "node:path";
-
-import { act, createElement, useMemo, useReducer } from "react";
-import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, test } from "vitest";
+import { EMPTY_BAG, money, moneyBag, valuate } from "@centraid/core/money";
 
 import type { InlineFrame } from "../inline-types.ts";
 import { Root } from "./app-root.tsx";
@@ -60,23 +62,29 @@ const DASHBOARD: DashboardData = {
       name: "Ana",
       color: "",
       initials: "A",
-      net_minor: -4560,
+      balances: [money(-4560, "GBP")],
     },
-    { party_id: "tom", name: "Tom", color: "", initials: "T", net_minor: 8100 },
+    {
+      party_id: "tom",
+      name: "Tom",
+      color: "",
+      initials: "T",
+      balances: [money(8100, "GBP")],
+    },
   ],
   groups: [
     {
       group_id: "flat",
       name: "14 Sitwell Road",
       member_count: 3,
-      owner_net_minor: 6240,
+      owner_net: money(6240, "GBP"),
     },
   ],
   archived_groups: [],
   trash: [],
   recurring: [],
-  owe_total_minor: 10_960,
-  owed_total_minor: 8100,
+  owe: valuate(moneyBag(money(10_960, "GBP")), "GBP"),
+  owed: valuate(moneyBag(money(8100, "GBP")), "GBP"),
   expense_count: 194,
   settlement_count: 22,
   rate_suggestions: [],
@@ -85,18 +93,21 @@ const DASHBOARD: DashboardData = {
 
 const LEVEL: DashboardData = {
   ...DASHBOARD,
-  friends: DASHBOARD.friends.map((friend) => ({ ...friend, net_minor: 0 })),
-  groups: DASHBOARD.groups.map((group) => ({ ...group, owner_net_minor: 0 })),
-  owe_total_minor: 0,
-  owed_total_minor: 0,
+  friends: DASHBOARD.friends.map((friend) => ({ ...friend, balances: [] })),
+  groups: DASHBOARD.groups.map((group) => ({
+    ...group,
+    owner_net: money(0, "GBP"),
+  })),
+  owe: valuate(EMPTY_BAG, "GBP"),
+  owed: valuate(EMPTY_BAG, "GBP"),
 };
 
 const BARE: DashboardData = {
   ...DASHBOARD,
   friends: [],
   groups: [],
-  owe_total_minor: 0,
-  owed_total_minor: 0,
+  owe: valuate(EMPTY_BAG, "GBP"),
+  owed: valuate(EMPTY_BAG, "GBP"),
 };
 
 let reactRoot: ReturnType<typeof createRoot> | undefined;

@@ -20,18 +20,23 @@
 // confirm says so before the press.
 import type { ReactNode } from "react";
 
+import { netValuation } from "@centraid/core/money";
+import type { Money } from "@centraid/core/money";
 import { identityInitials } from "@centraid/design";
 
 import { dayBuckets, windowOf } from "../activity-model.ts";
 import { feedFacts } from "../entry-facts.ts";
 import {
-  allSettled,
-  figureTone,
+  bagFigure,
+  bagSubLabel,
+  bagTone,
   groupSubLabel,
   metaSentence,
   money,
-  netFigure,
-  personSubLabel,
+  moneyNetFigure,
+  moneyTone,
+  valuationFigure,
+  valuationTone,
 } from "../format.ts";
 import type { ActivityData, DashboardData } from "../types.ts";
 import {
@@ -69,7 +74,7 @@ export interface BalancesProps {
   onRemind: (friend: {
     party_id: string;
     name: string;
-    net_minor: number;
+    balances: Money[];
   }) => void;
 }
 
@@ -79,16 +84,21 @@ export function Balances(props: BalancesProps): ReactNode {
   // not a third sum over the rows below it. `owed - owe` is the same
   // subtraction the sub-line states in words, and it is the only arithmetic on
   // this screen.
-  const net = data.owed_total_minor - data.owe_total_minor;
+  // TWO VALUATIONS DO NOT SUBTRACT AS NUMBERS (#996, ruling R22; drift
+  // ONT-23). Each side is a position first and a figure second, so the
+  // difference is taken over the components and valued once — and when the
+  // position spans currencies with no rate to read it by, the hero shows the
+  // several amounts that are true rather than a sum that is not.
+  const net = netValuation(data.owed, data.owe, data.currency);
   const level =
-    allSettled(data.friends.map((friend) => friend.net_minor)) &&
-    allSettled(data.groups.map((group) => group.owner_net_minor));
-  const tone = figureTone(net);
+    data.friends.every((friend) => bagTone(friend.balances) === "settled") &&
+    data.groups.every((group) => moneyTone(group.owner_net) === "settled");
+  const tone = valuationTone(net);
 
   return (
     <div className={styles.list}>
       <Hero
-        figure={netFigure(net, data.currency, "Settled")}
+        figure={valuationFigure(net, "Settled")}
         tone={tone}
         label={
           tone === "settled"
@@ -101,8 +111,8 @@ export function Balances(props: BalancesProps): ReactNode {
           level
             ? HERO_SETTLED_SUB
             : balancesHeroSub(
-                money(data.owed_total_minor, data.currency),
-                money(data.owe_total_minor, data.currency),
+                valuationFigure(data.owed),
+                valuationFigure(data.owe),
                 data.expense_count ?? 0,
                 data.settlement_count ?? 0
               )
@@ -133,15 +143,15 @@ export function Balances(props: BalancesProps): ReactNode {
               }}
               title={friend.name}
               figure={{
-                text: netFigure(friend.net_minor, data.currency),
-                tone: figureTone(friend.net_minor),
-                sub: personSubLabel(friend.net_minor),
+                text: bagFigure(friend.balances),
+                tone: bagTone(friend.balances),
+                sub: bagSubLabel(friend.balances),
               }}
               acts={
                 // ONLY WHERE THERE IS SOMETHING TO REMIND ABOUT. A level
                 // balance has nothing owed, and a row that owes YOU money is
                 // the one a reminder is for.
-                friend.net_minor > 0
+                bagTone(friend.balances) === "owed"
                   ? [
                       {
                         label: VERBS.remind,
@@ -172,9 +182,9 @@ export function Balances(props: BalancesProps): ReactNode {
               title={group.name}
               meta={memberCount(group.member_count)}
               figure={{
-                text: netFigure(group.owner_net_minor, data.currency),
-                tone: figureTone(group.owner_net_minor),
-                sub: groupSubLabel(group.owner_net_minor),
+                text: moneyNetFigure(group.owner_net),
+                tone: moneyTone(group.owner_net),
+                sub: groupSubLabel(group.owner_net.amount_minor),
               }}
               narrow={props.narrow}
               onOpen={() => props.onOpenGroup(group.group_id)}
@@ -294,9 +304,9 @@ export function Groups(props: GroupsProps): ReactNode {
               title={group.name}
               meta={memberCount(group.member_count)}
               figure={{
-                text: netFigure(group.owner_net_minor, data.currency),
-                tone: figureTone(group.owner_net_minor),
-                sub: groupSubLabel(group.owner_net_minor),
+                text: moneyNetFigure(group.owner_net),
+                tone: moneyTone(group.owner_net),
+                sub: groupSubLabel(group.owner_net.amount_minor),
               }}
               acts={[
                 {
@@ -333,9 +343,9 @@ export function Groups(props: GroupsProps): ReactNode {
                 title={group.name}
                 meta={ARCHIVED_META}
                 figure={{
-                  text: netFigure(group.owner_net_minor, data.currency),
-                  tone: figureTone(group.owner_net_minor),
-                  sub: groupSubLabel(group.owner_net_minor),
+                  text: moneyNetFigure(group.owner_net),
+                  tone: moneyTone(group.owner_net),
+                  sub: groupSubLabel(group.owner_net.amount_minor),
                 }}
                 acts={[
                   {

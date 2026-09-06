@@ -74,7 +74,7 @@ describe("Tally group departed participants", () => {
       expect.objectContaining({
         party_id: "party-departed",
         name: "Priya",
-        net_minor: 450,
+        net: { amount_minor: 450, currency: "USD" },
         departed: true,
       })
     );
