@@ -100,6 +100,17 @@ export {
 } from "./replica-subscription.js";
 
 export {
+  applyRowSql,
+  decodeWireRow,
+  decodeWireValue,
+  deleteRowSql,
+  encodeWireRow,
+  encodeWireValue,
+  type WireRowImage,
+  type WireValue,
+} from "./row-json.js";
+
+export {
   judgePeerHandshake,
   peerHello,
   peerProtocolsCompatible,

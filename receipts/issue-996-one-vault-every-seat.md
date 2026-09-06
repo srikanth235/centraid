@@ -1069,3 +1069,41 @@ bun run golden-vault:freeze -- --label issue-929   # 68 tables, 290 rows, schema
 - **The split's foreign key points from the private sibling to the replicated parent.** The other direction would have been the more obvious modelling — a device's identity row pointing at its key — and it is exactly the shape R3 forbids: a replicated table keying into a private one is what makes a seat's copy fail its own constraints.
 - **The touch trigger bumps both, in one trigger.** A second trigger per table would be a second chance to forget one, and a `row_version` that is true for some writers and not others is worse than none: the conflict check would pass on a stale base rather than fail loudly.
 - **`row_version` is on the private tables too.** It costs one column on rows no seat ever sees, and the alternative is a per-table exception list that a future split would have to remember — the rule "every table with `updated_at` has `row_version`" is checkable; "every table with `updated_at` except these" is not.
+
+## Wave 1 — capture and decoder
+
+The log has a producer. A commit is no longer something the schema reports through 288 triggers it has to keep regenerating; it is something SQLite already knows and the gateway now asks it for.
+
+### What changed
+
+- **The JSON type contract** — `packages/core/src/protocol/row-json.ts` (new, exported from `packages/core/src/protocol/index.ts`). BLOBs as base64, integers past 2^53 as decimal strings, SQL `NULL` as `null` and an absent column as an absent key. Base64 is written out by hand rather than borrowed: this package is dependency-free and the code runs on all three seats, where `Buffer` is Node's and `btoa` takes a binary string. `applyRowSql` and `deleteRowSql` live here too, so the statement a seat runs is stated once, beside the encoding it binds.
+- **The changeset parser** — `packages/vault/src/replica/changeset.ts` (new). `node:sqlite` exposes `changeset()` and `applyChangeset()` and nothing between them — no `sqlite3changeset_start` — so the v1 wire format is parsed directly. Integers are read as `bigint`, not `Number`: the spike's parser used `Number(v)` and would have corrupted a rowid past 2^53 without saying so.
+- **The capture and the decoder** — `packages/vault/src/replica/log.ts` (new). One session per replicated table, opened in `beginReplicaCommit` and decoded in `endReplicaCommit`, both **inside the caller's transaction**. One session per table is mandatory rather than tidy: P1 measured `createSession({ filter })` accepted and **silently ignored** on 3.50.2 and 3.51.2, so a single filtered session would carry the private tables it was told to skip.
+- **The applier** — `packages/vault/src/replica/apply.ts` (new). It is here, in wave 1, because the convergence gate is not a claim anyone can check without one: replaying the rows with bespoke test SQL would prove nothing about the code a phone runs. `INSERT … ON CONFLICT DO UPDATE`, one transaction per commit with the cursor inside it, an epoch gate that refuses rather than skips, table order with foreign keys off.
+- **The commit pair carries a producer** — `beginReplicaCommit(vault, { producer })`, `endReplicaCommit` returns what it captured, and `abandonReplicaCommit` drops the sessions on a rollback path. A rolled-back transaction's changes are undone in the file but not in the session watching them, so the drop is not optional.
+- **`replicatedTablesOf` is cached on `PRAGMA schema_version`** — `packages/vault/src/schema/private-tables.ts`. The statement-cache gate (`change-log-statement-cache.test.ts`) caught the uncached version compiling a catalog scan on every warm pass; keying the cache on SQLite's own schema counter means an ext band's mid-session DDL invalidates it without a second notion of "the schema changed" that could disagree.
+- **Three more private tables** — `blob_access`, `blob_orphan`, `blob_replica`: what THIS host has cached, first saw orphaned, and proved is also remote. Twenty-seven declarations now.
+
+### Gates
+
+```
+cd packages/core   && bun run test   # 19 files, 302 passed
+cd packages/vault  && bun run test   # 203 files, 1697 passed, 2 skipped
+cd packages/server && bun run test   # 388 files, 3464 passed, 3 expected fail;
+                                     #   3 failed: acp/launch x2 + gateway-db-lock (environmental here)
+bun run check:push:static            # 4/4 gates
+```
+
+`log.test.ts` is the wave's gate, in three parts:
+
+| Battery | Cases | What would be missed without it |
+| --- | --- | --- |
+| capture and decode | 6 | full image on an omitted-column update; a no-op update and an insert-then-delete recorded as changes; a delete without its old image; a cascade not carried as its own row; a pk change recorded as an update; a private table in the log |
+| oracle | 5 | a decoder that is self-consistently wrong — every case applies the same commit as JSON rows through the real applier AND as the native changeset through `applyChangeset`, and requires the two copies equal, plus equal to the origin |
+| convergence and atomicity | 6 | drift in a table the test did not name (the assertion is over **every** replicated table); FTS query parity; duplicate delivery; a crash mid-batch; a row from another epoch applied silently; a page ending mid-commit |
+
+### Decisions — wave 1, capture and decoder
+
+- **`core_entity` replicates now, and `core_entity_kind` with it.** Both were declared local in #916 because a replica re-derived them through the membership triggers. A seat runs **no triggers except FTS sync** (R4), so "re-derived on the seat" has no mechanism left — the rows have to travel. This is the first place where R1's *every seat holds the vault whole* actually overrides a #916 exclusion, and it is why the replicated set is computed as "the file's tables minus the private list" rather than read off `LOCAL_TABLES`.
+- **The `beginReplicaCommit` / `endReplicaCommit` pair is now a contract, not a convenience.** `node:sqlite` exposes no commit hook, so there is no way to capture a transaction the pair does not bracket. Every canonical write path already brackets — twenty call sites — which is what made session capture possible at all. A write outside the pair is captured by the NEXT pair's sessions: it converges, but it lands with a later commit position and a producer that did not write it, so the pair is documented as required rather than left as an implicit habit.
+- **The applier ships in wave 1 rather than wave 2.** It is seat code and W2 owns the seat, but a convergence gate without an applier is a test of the test. Splitting it would have meant writing the replay twice and gating on the copy that is not shipped.

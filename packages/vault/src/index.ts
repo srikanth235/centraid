@@ -571,6 +571,41 @@ export {
   type ReplicaPruneResult,
   type ReplicaRebootstrapReason,
 } from "./replica/change-log.js";
+
+export {
+  captureReplicaCommit,
+  closeReplicaCapture,
+  openReplicaCapture,
+  primaryKeyOf,
+  readReplicaLog,
+  replicaCaptureOpen,
+  replicaLogState,
+  ReplicaRebootstrapRequiredError as ReplicaLogRebootstrapRequiredError,
+  type ReplicaCaptureResult,
+  type ReplicaLogCursor,
+  type ReplicaLogOp,
+  type ReplicaLogPage,
+  type ReplicaLogRow,
+  // `ReplicaLogState` is still taken by the mechanism this replaces; the
+  // alias goes away with `replica_change`.
+  type ReplicaLogState as GatewayLogState,
+} from "./replica/log.js";
+export { applyReplicaLog, type ReplicaApplyResult } from "./replica/apply.js";
+export {
+  parseChangeset,
+  type ChangesetChange,
+  type ChangesetOp,
+} from "./replica/changeset.js";
+export {
+  isPrivateTable,
+  PRIVATE_TABLES,
+  PRIVATE_TABLE_NAMES,
+  replicatedReferencesToPrivate,
+  replicatedTablesOf,
+  type PrivateTableDeclaration,
+  type PrivateTableKind,
+} from "./schema/private-tables.js";
+export { SEAT_SQLITE_FLOOR, REPLICA_DDL_VERSION } from "./schema/replica.js";
 export { REPLICA_SCHEMA_EPOCH } from "./schema/replica.js";
 // The engine-computed cascade every purge runs, exported so the
 // declared-writes gate unions it rather than have a manifest restate it.

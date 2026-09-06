@@ -24,6 +24,8 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { prepared } from "../grant/prepared.js";
+
 export type PrivateTableKind = "credential" | "gateway-job" | "peer-link";
 
 export interface PrivateTableDeclaration {
@@ -76,6 +78,11 @@ export const PRIVATE_TABLES: readonly PrivateTableDeclaration[] = [
   },
   // ---- the gateway's own job machinery -----------------------------------
   {
+    table: "blob_access",
+    kind: "gateway-job",
+    reason: "last-touch bookkeeping for THIS host's cache eviction",
+  },
+  {
     table: "blob_ingress_probe",
     kind: "gateway-job",
     reason: "head/tail bytes of an upload still in flight",
@@ -94,6 +101,16 @@ export const PRIVATE_TABLES: readonly PrivateTableDeclaration[] = [
     table: "blob_staging",
     kind: "gateway-job",
     reason: "bytes staged for a command that has not committed yet",
+  },
+  {
+    table: "blob_orphan",
+    kind: "gateway-job",
+    reason: "when THIS host first saw bytes with no live reference",
+  },
+  {
+    table: "blob_replica",
+    kind: "gateway-job",
+    reason: "which objects THIS host has proven are also remote",
   },
   {
     table: "conversation_harness_sessions",
@@ -178,27 +195,48 @@ function isShadowTable(name: string): boolean {
     name.startsWith("fts_") ||
     name.startsWith("sqlite_") ||
     name === "replica_log" ||
-    name === "replica_meta"
+    name === "replica_meta" ||
+    // The mechanism #996 replaces. Still in the file, and a log of the log is
+    // a loop; it leaves with the last of its triggers.
+    name === "replica_change"
   );
 }
 
+// The answer changes only when the SCHEMA does, and `PRAGMA schema_version`
+// is SQLite's own counter for exactly that — bumped by every table, index and
+// trigger change, including one an ext band installs mid-session. Caching on
+// it keeps the capture path off a catalog scan per commit without inventing a
+// second notion of "the schema changed" that could disagree with SQLite's.
+const REPLICATED = new WeakMap<
+  DatabaseSync,
+  { schemaVersion: number; tables: string[] }
+>();
+
 /**
  * Every physical table a seat's copy holds: the file's tables, minus the FTS
- * shadow tables (an index is not data — R1), minus the log plane's own two
+ * shadow tables (an index is not data — R1), minus the log plane's own
  * tables, minus this list.
  */
 export function replicatedTablesOf(vault: DatabaseSync): string[] {
-  return (
-    vault
-      .prepare(
-        `SELECT name FROM sqlite_schema
+  const schemaVersion = (
+    prepared(vault, "PRAGMA schema_version").get() as {
+      schema_version: number;
+    }
+  ).schema_version;
+  const cached = REPLICATED.get(vault);
+  if (cached && cached.schemaVersion === schemaVersion) return cached.tables;
+  const tables = (
+    prepared(
+      vault,
+      `SELECT name FROM sqlite_schema
           WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
           ORDER BY name`
-      )
-      .all() as { name: string }[]
+    ).all() as { name: string }[]
   )
     .map((row) => row.name)
     .filter((name) => !isShadowTable(name) && !isPrivateTable(name));
+  REPLICATED.set(vault, { schemaVersion, tables });
+  return tables;
 }
 
 export interface PrivateReferenceViolation {
