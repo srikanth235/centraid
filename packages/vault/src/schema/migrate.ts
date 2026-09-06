@@ -25,13 +25,7 @@ import {
 } from "./authority.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
 import { BLOB_DDL } from "./blob.js";
-import {
-  CONTENT_TEXT_DDL,
-  CORE_CONCEPT_IDENTITY_DDL,
-  CORE_PARTY_IDENTIFIER_RECUT_DDL,
-  CORE_TRANSACTION_RECUT_DDL,
-} from "./core-rungs.js";
-import { CORE_DDL, LINK_ANCHOR_DDL } from "./core.js";
+import { CONTENT_TEXT_DDL, CORE_DDL, LINK_ANCHOR_DDL } from "./core.js";
 import {
   LOCKER_ADDRESS_DDL,
   LOCKER_ALIAS_DDL,
@@ -114,14 +108,14 @@ export const ONTOLOGY_VERSION = "1.0";
 //     SOCIAL_DDL above) and so must run after the domains;
 //   - the LEDGER band last of the machinery: it is engine-owned store code
 //     over vault-owned tables and nothing in the ontology references it.
-export const VAULT_MIGRATIONS: readonly VaultMigration[] = [
+export const VAULT_MIGRATIONS: readonly string[] = [
   [
     CORE_DDL,
     CORE_ENTITY_DDL,
-    // The decoded-body-text side table (#996, R4 / R8). Stated in the baseline
-    // so a FRESH file's shape tests see it, and re-stated by rung eight —
-    // `IF NOT EXISTS` — so it reaches a file frozen below that rung. The same
-    // two-place shape rung five uses for the #928 ask tables.
+    // The decoded-body-text side table (#996, rulings R4 / R8). Stated in the
+    // baseline like every other shape: pre-1.0, with no release since the
+    // corpus froze, a baseline change is made in place and the corpus is
+    // re-frozen in the same slice (ONT-ladder).
     CONTENT_TEXT_DDL,
     LINK_ANCHOR_DDL,
     ACCESS_DDL,
@@ -205,34 +199,6 @@ export const VAULT_MIGRATIONS: readonly VaultMigration[] = [
   // own rung or it reaches nothing. `CREATE TABLE IF NOT EXISTS` because a
   // fresh file already created them on rung 1.
   SHARE_AUTHORITY_ASK_DDL,
-  // RUNG SIX (#996 wave 0b, the ontology bridge). IDENTITY IS NEVER TAKEN FROM
-  // A VALUE — two of ruling R20's five instances, both pure schema.
-  //
-  // R20(e), current preference is not history: the primary-preference index
-  // becomes partial on the live rows like the value index beside it, the
-  // interval gains its forward-running CHECK, and the register gains the
-  // issuer a short handle needs in order to mean one person. A re-cut rather
-  // than an ALTER, because a CHECK cannot be added to an existing table and
-  // the two files must end with the same stored DDL text.
-  //
-  // R20(d), a concept's label is not its identity: the stable id, the
-  // Unicode-preserving normalised key and the label's language tag. An ALTER
-  // rather than a re-cut, because nine tables key into `core_concept`.
-  CORE_PARTY_IDENTIFIER_RECUT_DDL + CORE_CONCEPT_IDENTITY_DDL,
-  // RUNG SEVEN (#996 wave 0b). R20(c), a provider-local id is scoped to its
-  // source: the global `UNIQUE` on `core_transaction.external_id` goes, and
-  // `sync_external_entity (connection_id, external_id)` — the key that was
-  // always the authoritative one — is left as the only claim about provider
-  // ids. Its own rung, and a `recut` one, because removing a column-level
-  // UNIQUE is SQLite's twelve-step rebuild and that needs foreign keys off:
-  // see `VaultMigration`.
-  { recut: CORE_TRANSACTION_RECUT_DDL },
-  // RUNG EIGHT (#996 wave 0b). The decoded-body-text side table (rulings R4 /
-  // R8). Schema only here: the function-free FTS triggers that read it, and
-  // the retirement of the `vault_content_text` application-defined function,
-  // land in wave 1 with the seat store — a trigger written now would index a
-  // table nothing writes yet.
-  CONTENT_TEXT_DDL,
 ];
 
 /**
@@ -280,88 +246,23 @@ export class VaultSchemaAheadError extends Error {
   }
 }
 
-/**
- * One rung. A plain string is DDL run inside the ladder's transaction with the
- * connection's pragmas untouched — which is every rung that adds a table, an
- * index or a column.
- *
- * `{ recut }` is the other kind: SQLite's own twelve-step table rebuild, the
- * only way to REMOVE a constraint (dropping a column-level `UNIQUE` means
- * dropping an implicit index no `DROP INDEX` can name). It needs two pragmas
- * the plain form must never have:
- *
- *   - `foreign_keys = OFF`, because renaming a referenced table leaves every
- *     child's key dangling for the length of the rebuild, and `PRAGMA
- *     foreign_keys` is a NO-OP inside a transaction — so it is set outside,
- *     which is why a re-cut rung owns its own pragma frame;
- *   - `legacy_alter_table = ON`, so the RENAME does not rewrite the child
- *     tables' `REFERENCES` clauses to the temporary name. Without it the
- *     children permanently name a table that is about to be dropped, and
- *     `golden-vault.test.ts` sees a migrated file whose child DDL no fresh
- *     build can produce.
- *
- * The rung is not trusted to be correct: `PRAGMA foreign_key_check` runs
- * before the COMMIT, inside the same transaction, and a non-empty result
- * rolls the rebuild back.
- */
-export type VaultMigration = string | { readonly recut: string };
-
-/** One rung, in its own transaction, stamping `user_version` with it. */
-function applyRung(
-  db: DatabaseSync,
-  migration: VaultMigration,
-  version: number
-): void {
-  const recut = typeof migration !== "string";
-  db.exec("BEGIN");
-  try {
-    if (recut) db.exec("PRAGMA legacy_alter_table = ON");
-    db.exec(typeof migration === "string" ? migration : migration.recut);
-    if (recut) {
-      db.exec("PRAGMA legacy_alter_table = OFF");
-      // The rung is not trusted: a rebuild that left a child pointing at
-      // nothing rolls back here rather than reaching a file.
-      const violations = db.prepare("PRAGMA foreign_key_check").all();
-      if (violations.length > 0) {
-        throw new Error(
-          `rung ${version + 1} left ${violations.length} foreign key violation(s): ${JSON.stringify(violations)}`
-        );
-      }
-    }
-    db.exec(`PRAGMA user_version = ${version + 1}`);
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  } finally {
-    if (recut) db.exec("PRAGMA legacy_alter_table = OFF");
-  }
-}
-
 /** Apply every migration past user_version, each in its own transaction. */
-export function migrate(
-  db: DatabaseSync,
-  migrations: readonly VaultMigration[]
-): void {
+export function migrate(db: DatabaseSync, migrations: readonly string[]): void {
   let version = currentVersion(db);
   if (version > migrations.length) {
     throw new VaultSchemaAheadError(version, migrations.length);
   }
   while (version < migrations.length) {
-    const migration = migrations[version];
-    if (migration === undefined) break;
-    // `PRAGMA foreign_keys` is a NO-OP inside a transaction, so a re-cut rung's
-    // frame is set here, outside it. The restore is unconditional: a failed
-    // rebuild must not leave the connection with its integrity switched off.
-    if (typeof migration === "string") {
-      applyRung(db, migration, version);
-    } else {
-      db.exec("PRAGMA foreign_keys = OFF");
-      try {
-        applyRung(db, migration, version);
-      } finally {
-        db.exec("PRAGMA foreign_keys = ON");
-      }
+    const ddl = migrations[version];
+    if (ddl === undefined) break;
+    db.exec("BEGIN");
+    try {
+      db.exec(ddl);
+      db.exec(`PRAGMA user_version = ${version + 1}`);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
     }
     version += 1;
   }

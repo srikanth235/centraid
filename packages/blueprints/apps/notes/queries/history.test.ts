@@ -1,17 +1,15 @@
 /**
- * THE TAXONOMY PAIR ARRIVES IN ITS DECLARED ORDER (#922 0a) — the Notes half
- * of the same probe as `docs/queries/history.test.ts`.
+ * THE CHAIN IS THE NOTE'S OWN OCCURRENCES (#996, R20(a)) — the Notes half of
+ * the same probe as `docs/queries/history.test.ts`.
  *
- * `conceptTaxonomyReads` returns `[concepts, schemes]`, and this handler read
- * them the other way round before the shared helper replaced its copied pair.
- * A swap is invisible to a typecheck (both are row arrays) and to any
- * assertion about a note that HAS no prior version: `findSchemeConcept` simply
- * fails to resolve `revises`, the walk never starts, and the answer is a
- * one-version history that reads as a note nobody has ever edited.
+ * History used to be a `revises` link chain resolved through the shared
+ * taxonomy pair, and a swapped destructuring silently answered "a note nobody
+ * has ever edited". There is no concept to resolve any more; what is left to
+ * prove is that the walk is over the note's own occurrences and that a note
+ * without one still answers honestly.
  */
 import { describe, expect, test } from "vitest";
 
-import { RELATIONS_SCHEME_URI } from "../../_shared/concept-scheme-kit.ts";
 import noteHistory from "./history.ts";
 
 interface ReadCall {
@@ -39,19 +37,30 @@ const body = (text: string): string =>
 
 const ROWS = {
   "knowledge.note": [
-    { body_content_id: "content-new", created_at: "2026-01-01T00:00:00Z" },
-  ],
-  "core.concept_scheme": [
-    { scheme_id: "scheme-relations", uri: RELATIONS_SCHEME_URI },
-  ],
-  "core.concept": [
     {
-      concept_id: "concept-revises",
-      scheme_id: "scheme-relations",
-      notation: "revises",
+      body_content_id: "content-new",
+      current_revision_id: "rev-2",
+      created_at: "2026-01-01T00:00:00Z",
     },
   ],
-  "core.link": [{ to_id: "content-old", valid_from: "2026-02-01T00:00:00Z" }],
+  "core.entity_revision": [
+    {
+      revision_id: "rev-2",
+      entity_type: "knowledge.note",
+      entity_id: "note-1",
+      content_id: "content-new",
+      parent_revision_id: "rev-1",
+      recorded_at: "2026-02-01T00:00:00Z",
+    },
+    {
+      revision_id: "rev-1",
+      entity_type: "knowledge.note",
+      entity_id: "note-1",
+      content_id: "content-old",
+      parent_revision_id: null,
+      recorded_at: "2026-01-01T00:00:00Z",
+    },
+  ],
   "core.content_item": [
     {
       content_id: "content-new",
@@ -66,8 +75,8 @@ const ROWS = {
   ],
 };
 
-describe("notes history over the shared taxonomy reads", () => {
-  test("resolves `revises` and walks the chain to the prior version", async () => {
+describe("notes history over revision occurrences", () => {
+  test("walks the occurrence chain to the prior version", async () => {
     const result = (await noteHistory({
       input: { note_id: "note-1" },
       ctx: ctxOf(ROWS),
@@ -79,11 +88,12 @@ describe("notes history over the shared taxonomy reads", () => {
     expect(result.versions[1]?.body).toBe("first draft");
   });
 
-  test("the same rows with no relations scheme yield only the current version", async () => {
-    // Anti-vacuity, and the exact failure a swapped destructuring produces.
+  test("a note with no occurrence yet still has its current version", async () => {
+    // Anti-vacuity, and the honest answer for a note minted before the wrapper
+    // carried a pointer.
     const result = (await noteHistory({
       input: { note_id: "note-1" },
-      ctx: ctxOf({ ...ROWS, "core.concept_scheme": [] }),
+      ctx: ctxOf({ ...ROWS, "core.entity_revision": [] }),
     } as never)) as { versions: unknown[] };
     expect(result.versions).toHaveLength(1);
   });

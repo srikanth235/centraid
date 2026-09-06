@@ -20,6 +20,11 @@
       },
       {
         "schema": "core",
+        "table": "entity_revision",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "attachment",
         "verbs": "read"
       },

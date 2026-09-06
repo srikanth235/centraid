@@ -6,7 +6,7 @@
 // Reading view: real text at the reading measure (`t("reading")`, capped at
 // 34em), kind eyebrow, display title, ruled byline. Its status is
 // `Version N · edited two hours ago` with the REAL chain count off the
-// replica's `core.link` walk; the sample's "only you have opened this" is
+// replica's revision-occurrence walk; the sample's "only you have opened this" is
 // withheld — nothing records an opening.
 //
 // Facts panel: "a kind is a fact about the bytes; whether Docs can set it is
@@ -296,7 +296,7 @@ function FactsView({
  * belong.
  *
  * The version count is REAL or the row is silent: the chain comes off the
- * replica's `core.link` walk, and a row that guessed "7 versions" while the
+ * replica's revision-occurrence walk, and a row that guessed "7 versions" while the
  * walk was still running would be inventing a history.
  */
 function ThisDocument({

@@ -42,6 +42,9 @@ const READS: Readonly<Record<string, readonly string[]>> = {
   docs: [
     "core.document",
     "core.content_item",
+    // The document's own history (#996, R20(a)); it was `core.link` plus the
+    // taxonomy pair behind it.
+    "core.entity_revision",
     "social.circle",
     "social.circle_member",
     "share.authority",
@@ -77,6 +80,8 @@ const READS: Readonly<Record<string, readonly string[]>> = {
   ],
   notes: [
     "core.content_item",
+    // The note's own body history (#996, R20(a)).
+    "core.entity_revision",
     "core.attachment",
     "core.link",
     "core.link_anchor",

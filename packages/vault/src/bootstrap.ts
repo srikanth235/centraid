@@ -56,9 +56,11 @@ const SEED_CONCEPTS: SeedConcept[] = [
   // step.
   { scheme: "relations", notation: "references", label: "References" },
   { scheme: "relations", notation: "attachment-of", label: "Attachment of" },
-  // Version lineage (#352): newer content revises older, asserted by the
-  // document and note edit commands.
-  { scheme: "relations", notation: "revises", label: "Revises" },
+  // No `revises` relation (#996, ruling R20(a)). Version lineage was a
+  // content→content link asserted by the document and note edit commands —
+  // a SECOND history mechanism beside `core_entity_revision`, which [#916]
+  // ruled the only one. A version is now an occurrence, and the concept that
+  // named the edge has no writer; seeding it would be dormant DDL (ONT-06).
   { scheme: "activity-kinds", notation: "meeting", label: "Meeting" },
   { scheme: "activity-kinds", notation: "run", label: "Run" },
   { scheme: "activity-kinds", notation: "sleep", label: "Sleep" },

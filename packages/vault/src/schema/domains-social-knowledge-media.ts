@@ -97,6 +97,12 @@ CREATE TABLE knowledge_note (
   author_party_id TEXT NOT NULL REFERENCES core_party(party_id),
   title           TEXT NOT NULL,
   body_content_id TEXT NOT NULL REFERENCES core_content_item(content_id),
+  -- THE NEWEST REVISION OCCURRENCE (#996, ruling R20(a)), exactly as
+  -- \`core_document\` carries it: a note's body history is the chain of
+  -- \`core_entity_revision\` rows walked from here through
+  -- \`parent_revision_id\`. ON DELETE SET NULL — a pointer into history never
+  -- wedges a delete.
+  current_revision_id TEXT REFERENCES core_entity_revision(revision_id) ON DELETE SET NULL,
   format          TEXT NOT NULL CHECK (format IN ('markdown','html','plain')),
   pinned          INTEGER NOT NULL CHECK (pinned IN (0,1)),
   created_at      TEXT NOT NULL,
@@ -114,6 +120,7 @@ CREATE INDEX IF NOT EXISTS knowledge_note_purge_idx
   ON knowledge_note(purge_at) WHERE purge_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_note_author_party ON knowledge_note(author_party_id);
 CREATE INDEX IF NOT EXISTS idx_note_body_content ON knowledge_note(body_content_id);
+CREATE INDEX IF NOT EXISTS idx_note_current_revision ON knowledge_note(current_revision_id);
 
 CREATE TABLE knowledge_annotation (
   annotation_id   TEXT PRIMARY KEY,

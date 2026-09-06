@@ -1,24 +1,19 @@
-// The version chain over replica rows (#821, spec §10) — the same walk the
-// gateway's history query performs, asserted here over plain rows: NEW → OLD
-// along live revises edges, dates from the edges' own assertion times, a
-// cycle guard for restored versions, and the honest one-entry history for a
-// vault where nothing was ever revised.
+// The version chain over replica rows (#821, spec §10, re-cut by #996 R20(a)) —
+// the same walk the gateway's history query performs, asserted here over plain
+// rows: the document's own OCCURRENCES from `current_revision_id` through
+// `parent_revision_id`, dates from each occurrence's `recorded_at`, a cycle
+// guard for a malformed chain, and the honest one-entry history for a document
+// nothing was ever done to.
 
 import { describe, expect, it } from "vitest";
 
 import type { EntityRow } from "./docs-projection";
 import { projectVersionChain } from "./docs-versions";
 
-const SCHEMES: EntityRow[] = [
-  { scheme_id: "s-rel", uri: "urn:duaility:relations" },
-];
-const CONCEPTS: EntityRow[] = [
-  { concept_id: "c-revises", scheme_id: "s-rel", notation: "revises" },
-];
-
-const doc = (current: string): EntityRow => ({
+const doc = (current: string, revision: string | null): EntityRow => ({
   document_id: "d1",
   current_content_id: current,
+  ...(revision === null ? {} : { current_revision_id: revision }),
   created_at: "2026-08-08T20:12:00Z",
 });
 
@@ -29,96 +24,112 @@ const content = (id: string, size: number): EntityRow => ({
   created_at: "2026-08-08T20:12:00Z",
 });
 
-const edge = (
-  from: string,
-  to: string,
-  validFrom: string,
-  validTo: string | null = null
+const occurrence = (
+  id: string,
+  contentId: string,
+  parent: string | null,
+  recordedAt: string
 ): EntityRow => ({
-  from_type: "core.content_item",
-  from_id: from,
-  to_type: "core.content_item",
-  to_id: to,
-  relation_concept_id: "c-revises",
-  valid_from: validFrom,
-  valid_to: validTo,
+  revision_id: id,
+  entity_type: "core.document",
+  entity_id: "d1",
+  content_id: contentId,
+  parent_revision_id: parent,
+  recorded_at: recordedAt,
 });
 
 describe(projectVersionChain, () => {
   it("walks NEW → OLD and numbers versions with the current one highest", () => {
     const chain = projectVersionChain({
-      document: doc("v3"),
+      document: doc("v3", "r3"),
+      revisions: [
+        occurrence("r3", "v3", "r2", "2026-08-10T10:00:00Z"),
+        occurrence("r2", "v2", "r1", "2026-08-09T10:00:00Z"),
+        occurrence("r1", "v1", null, "2026-08-08T20:12:00Z"),
+      ],
       contents: [content("v1", 10), content("v2", 20), content("v3", 30)],
-      links: [
-        edge("v3", "v2", "2026-08-11T18:44:00Z"),
-        edge("v2", "v1", "2026-08-09T09:20:00Z"),
-      ],
-      concepts: CONCEPTS,
-      schemes: SCHEMES,
     });
-    expect(chain).not.toBeNull();
-    expect(chain?.versionCount).toBe(3);
+    expect(chain?.entries.map((entry) => entry.content_id)).toStrictEqual([
+      "v3",
+      "v2",
+      "v1",
+    ]);
     expect(chain?.entries.map((entry) => entry.n)).toStrictEqual([3, 2, 1]);
-    expect(chain?.entries[0]).toMatchObject({
-      content_id: "v3",
-      current: true,
-      // The newest entry dates from the edge that made it current.
-      asserted_at: "2026-08-11T18:44:00Z",
-    });
-    // The never-revised original dates from its own mint.
-    expect(chain?.entries[2]?.asserted_at).toBe("2026-08-08T20:12:00Z");
+    expect(chain?.entries[0]?.current).toBe(true);
+    expect(chain?.versionCount).toBe(3);
+    expect(chain?.entries[0]?.asserted_at).toBe("2026-08-10T10:00:00Z");
   });
 
-  it("a document never revised is its own one-entry history — no revises concept, no fabrication", () => {
+  it("shows a restored version twice, because an occurrence is a moment", () => {
+    // The property a content-keyed walk could not express (#996, R20(a)).
     const chain = projectVersionChain({
-      document: doc("v1"),
-      contents: [content("v1", 10)],
-      links: [],
-      concepts: [],
-      schemes: [],
-    });
-    expect(chain?.versionCount).toBe(1);
-    expect(chain?.entries[0]).toMatchObject({ n: 1, current: true });
-  });
-
-  it("ignores retracted edges (valid_to set)", () => {
-    const chain = projectVersionChain({
-      document: doc("v2"),
-      contents: [content("v1", 10), content("v2", 20)],
-      links: [edge("v2", "v1", "2026-08-09T09:20:00Z", "2026-08-10T00:00:00Z")],
-      concepts: CONCEPTS,
-      schemes: SCHEMES,
-    });
-    expect(chain?.versionCount).toBe(1);
-  });
-
-  it("terminates on a restore cycle instead of walking forever", () => {
-    // v1 was restored after v2 superseded it: v1 → v2 → v1 in the edge graph.
-    const chain = projectVersionChain({
-      document: doc("v1"),
-      contents: [content("v1", 10), content("v2", 20)],
-      links: [
-        edge("v1", "v2", "2026-08-12T10:00:00Z"),
-        edge("v2", "v1", "2026-08-09T09:20:00Z"),
+      document: doc("v1", "r3"),
+      revisions: [
+        occurrence("r3", "v1", "r2", "2026-08-10T10:00:00Z"),
+        occurrence("r2", "v2", "r1", "2026-08-09T10:00:00Z"),
+        occurrence("r1", "v1", null, "2026-08-08T20:12:00Z"),
       ],
-      concepts: CONCEPTS,
-      schemes: SCHEMES,
+      contents: [content("v1", 10), content("v2", 20)],
     });
-    expect(chain?.versionCount).toBe(2);
     expect(chain?.entries.map((entry) => entry.content_id)).toStrictEqual([
       "v1",
       "v2",
+      "v1",
+    ]);
+    expect(chain?.versionCount).toBe(3);
+  });
+
+  it("ignores another document's occurrences", () => {
+    const chain = projectVersionChain({
+      document: doc("v1", "r1"),
+      revisions: [
+        occurrence("r1", "v1", null, "2026-08-08T20:12:00Z"),
+        {
+          ...occurrence("r9", "vX", null, "2026-08-09T10:00:00Z"),
+          entity_id: "d2",
+        },
+      ],
+      contents: [content("v1", 10)],
+    });
+    expect(chain?.entries.map((entry) => entry.content_id)).toStrictEqual([
+      "v1",
     ]);
   });
 
-  it("returns null for a document the replica does not hold", () => {
+  it("terminates on a cycle rather than walking it", () => {
+    const chain = projectVersionChain({
+      document: doc("v2", "r2"),
+      revisions: [
+        occurrence("r2", "v2", "r1", "2026-08-09T10:00:00Z"),
+        occurrence("r1", "v1", "r2", "2026-08-08T20:12:00Z"),
+      ],
+      contents: [content("v1", 10), content("v2", 20)],
+    });
+    expect(chain?.entries.map((entry) => entry.content_id)).toStrictEqual([
+      "v2",
+      "v1",
+    ]);
+  });
+
+  it("answers one honest version for a document with no occurrence", () => {
+    const chain = projectVersionChain({
+      document: doc("v1", null),
+      revisions: [],
+      contents: [content("v1", 10)],
+    });
+    expect(chain?.entries.map((entry) => entry.content_id)).toStrictEqual([
+      "v1",
+    ]);
+    expect(chain?.versionCount).toBe(1);
+    expect(chain?.entries[0]?.current).toBe(true);
+  });
+
+  it("is null without a document row", () => {
     expect(
       projectVersionChain({
         document: undefined,
+        revisions: [],
         contents: [],
-        links: [],
-        concepts: CONCEPTS,
-        schemes: SCHEMES,
       })
     ).toBeNull();
   });

@@ -152,42 +152,43 @@ describe("knowledge", () => {
     expect(media.media_type).toBe("text/markdown"); // inherits the note's format
   });
 
-  test("edit_note records a revises link when the body actually changes (issue #352)", () => {
+  test("edit_note records an occurrence when the body actually changes (issue #352, #996 R20(a))", () => {
     const { note_id, body_content_id: v1 } = createNote({
       title: "Draft",
       body_text: "v1",
     });
-    const revisesLinkCount = () =>
-      (
-        db.vault
-          .prepare(
-            `SELECT count(*) AS n FROM core_link l
-             JOIN core_concept c ON c.concept_id = l.relation_concept_id
-            WHERE l.from_type = 'core.content_item' AND l.to_type = 'core.content_item'
-              AND c.notation = 'revises' AND l.valid_to IS NULL`
-          )
-          .get() as { n: number }
-      ).n;
-    expect(revisesLinkCount()).toBe(0);
+    const occurrences = () =>
+      db.vault
+        .prepare(
+          `SELECT content_id FROM core_entity_revision
+            WHERE entity_type = 'knowledge.note' AND entity_id = ?
+              AND content_id IS NOT NULL
+            ORDER BY recorded_at ASC, revision_id ASC`
+        )
+        .all(note_id)
+        .map((row) => (row as { content_id: string }).content_id);
+    // The note's ORIGINAL body is already an occurrence: a version is a
+    // moment, and creation is one.
+    expect(occurrences()).toStrictEqual([v1]);
     const edited = invoke("knowledge.edit_note", { note_id, body_text: "v2" });
     expect(edited.status).toBe("executed");
     const v2 = (edited as { output: { body_content_id: string } }).output
       .body_content_id;
     expect(v2).not.toBe(v1);
-    expect(revisesLinkCount()).toBe(1);
-    const link = db.vault
-      .prepare(
-        `SELECT from_id, to_id FROM core_link l
-         JOIN core_concept c ON c.concept_id = l.relation_concept_id
-        WHERE c.notation = 'revises'`
-      )
-      .get() as { from_id: string; to_id: string };
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
-    expect({ ...link }).toStrictEqual({ from_id: v2, to_id: v1 });
-    // A no-op edit (same words, dedup lands back on v2) records no new link.
+    expect(occurrences()).toStrictEqual([v1, v2]);
+    // A no-op edit (same words, dedup lands back on v2) records nothing.
     invoke("knowledge.edit_note", { note_id, body_text: "v2" });
-    expect(revisesLinkCount()).toBe(1);
+    expect(occurrences()).toStrictEqual([v1, v2]);
+    // And the second history mechanism is gone: no `revises` link anywhere.
+    expect(
+      db.vault
+        .prepare(
+          `SELECT count(*) AS n FROM core_link l
+             JOIN core_concept c ON c.concept_id = l.relation_concept_id
+            WHERE c.notation = 'revises'`
+        )
+        .get() as { n: number }
+    ).toMatchObject({ n: 0 });
   });
 
   test("restore_note_version accepts only this note's history and appends instead of rewriting", () => {
@@ -212,18 +213,18 @@ describe("knowledge", () => {
       .prepare("SELECT body_content_id FROM knowledge_note WHERE note_id = ?")
       .get(note_id) as { body_content_id: string };
     expect(current.body_content_id).toBe(v1);
-    const links = db.vault
+    // Nothing before the restore is rewritten; the restore APPENDS a third
+    // occurrence naming v1 again (#996, R20(a)).
+    const chain = db.vault
       .prepare(
-        `SELECT from_id, to_id FROM core_link l
-         JOIN core_concept c ON c.concept_id = l.relation_concept_id
-        WHERE c.notation = 'revises'
-        ORDER BY l.valid_from, l.link_id`
+        `SELECT content_id FROM core_entity_revision
+          WHERE entity_type = 'knowledge.note' AND entity_id = ?
+            AND content_id IS NOT NULL
+          ORDER BY recorded_at ASC, revision_id ASC`
       )
-      .all() as Array<{ from_id: string; to_id: string }>;
-    expect(links.map((row) => ({ ...row }))).toStrictEqual([
-      { from_id: v2, to_id: v1 },
-      { from_id: v1, to_id: v2 },
-    ]);
+      .all(note_id)
+      .map((row) => (row as { content_id: string }).content_id);
+    expect(chain).toStrictEqual([v1, v2, v1]);
 
     const outsider = createNote({ title: "Other", body_text: "outside" });
     expect(

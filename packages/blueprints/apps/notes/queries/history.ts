@@ -1,24 +1,21 @@
-// Body history is the append-only `revises` content-item chain, walked for the
-// selected note only. No command fabricates history.
+// Body history is the note's own REVISION OCCURRENCES (#996, R20(a)), walked
+// from `current_revision_id` through `parent_revision_id` for the selected note
+// only. No command fabricates history.
+//
+// It was a `revises` content-item chain — a second history mechanism beside the
+// table [#916] ruled the only one, keyed by content, so two notes with
+// identical bodies shared one history and a restore could not be told from the
+// edit it undid.
 
-import {
-  RELATIONS_SCHEME_URI,
-  findSchemeConcept,
-} from "../../_shared/concept-scheme-kit.ts";
-import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { decodeNoteBody } from "../note-body.ts";
+import { noteVersionChain } from "../version-chain.ts";
 
-const REVISES_NOTATION = "revises";
 const MAX_CHAIN_STEPS = 500;
 
 interface NoteRow {
   body_content_id: string;
+  current_revision_id?: string | null;
   created_at: string;
-}
-
-interface LinkRow {
-  to_id: string;
-  valid_from: string;
 }
 
 interface ContentRow {
@@ -40,50 +37,24 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
     const note = ((notes.rows ?? []) as unknown as NoteRow[])[0];
     if (!note) return { versions: [] };
 
-    const [concepts, schemes] = await Promise.all(
-      conceptTaxonomyReads(ctx.vault)
-    );
-    const relationId = findSchemeConcept(
-      schemes.rows as Array<{ scheme_id: string; uri: string }>,
-      concepts.rows as Array<{
-        concept_id: string;
-        scheme_id: string;
-        notation: string;
-      }>,
-      RELATIONS_SCHEME_URI,
-      REVISES_NOTATION
-    )?.concept_id;
-
-    const chain = [note.body_content_id];
-    const assertedAt = new Map<string, string>();
-    if (relationId) {
-      const seen = new Set(chain);
-      const followChain = async (
-        current: string,
-        step: number
-      ): Promise<void> => {
-        if (step >= MAX_CHAIN_STEPS) return;
-        const links = await ctx.vault.read({
-          entity: "core.link",
-          where: [
-            { column: "from_type", op: "eq", value: "core.content_item" },
-            { column: "from_id", op: "eq", value: current },
-            { column: "to_type", op: "eq", value: "core.content_item" },
-            { column: "relation_concept_id", op: "eq", value: relationId },
-            { column: "valid_to", op: "is-null" },
-          ],
-          orderBy: { column: "valid_from", dir: "desc" },
-          limit: 1,
-        });
-        const next = ((links.rows ?? []) as unknown as LinkRow[])[0];
-        if (!next || seen.has(next.to_id)) return;
-        assertedAt.set(current, next.valid_from);
-        seen.add(next.to_id);
-        chain.push(next.to_id);
-        await followChain(next.to_id, step + 1);
-      };
-      await followChain(note.body_content_id, 0);
-    }
+    const revisions = await ctx.vault.read({
+      entity: "core.entity_revision",
+      where: [
+        { column: "entity_type", op: "eq", value: "knowledge.note" },
+        { column: "entity_id", op: "eq", value: noteId },
+      ],
+      orderBy: { column: "recorded_at", dir: "desc" },
+      limit: MAX_CHAIN_STEPS,
+    });
+    // One spelling of the walk, shared with the phone (`version-chain.ts`).
+    const walked = noteVersionChain({
+      headContentId: note.body_content_id,
+      currentRevisionId: note.current_revision_id ?? null,
+      revisions: (revisions.rows ?? []) as never,
+      noteId,
+    });
+    const chain = [...walked.contentIds];
+    const assertedAt = walked.assertedAt;
 
     const contents = await ctx.vault.read({
       acceptTruncation: true,

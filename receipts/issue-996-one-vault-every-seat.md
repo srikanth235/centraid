@@ -288,3 +288,124 @@ bash .governance/run.sh                  # 22/22
 ## Wave 0b — R13 corrected
 
 `docs/decisions.md` R13 said "the recovery kit **and the backup** carry every live key file". The tree keeps long-lived key material out of every snapshot by construction (`packages/server/src/backup/backup-sources.ts:1-4` — "Long-lived keys never enter a snapshot"), and `SECURITY.md:37` names the on-disk `keys/` directory as being *outside* backup. The clause now says what holds: the passphrase-wrapped **recovery kit** carries every live key file — `K`, and `K′` while a rotation is in flight — and the backup snapshot never does. One sentence changed; the rest of R13 is untouched.
+
+## Wave 0b — history and representation
+
+The second half of the ontology bridge's schema wave, under the owner ruling recorded below: **pre-1.0, legacy carries no weight** — the baseline is edited in place and the golden corpus is re-frozen in the same slice, with no rungs, no re-cut machinery and no carry-forward. **Item 1 (the revision occurrence) lands whole. Item 2 (the representation split) does not** — see `## Decisions — wave 0b (second half)`. The 0b checklist box therefore stays unticked.
+
+### The ladder is one baseline again
+
+`b22cc7188` added rungs six to eight, a `VaultMigration = string | { recut }` extension to `migrate.ts`, and `schema/core-rungs.ts`. All of it is folded back here: `packages/vault/src/schema/migrate.ts` is its pre-`b22cc7188` shape plus one line (`CONTENT_TEXT_DDL` in the composed baseline), `core-rungs.ts` is deleted, `baseline-fixture.ts` and `migrate.test.ts` are reverted, and every #996 shape now lives in the module that owns the table:
+
+| Table | Shape, now stated in the baseline | Module |
+| --- | --- | --- |
+| `core_party_identifier` | `issuer`, the forward-running interval CHECK, the live value index keyed `(scheme, COALESCE(issuer,''), value)`, the primary index partial on `is_primary = 1 AND valid_to IS NULL` | `schema/core.ts` |
+| `core_concept` | `stable_id`, `normalized_key`, `pref_label_lang` and their two partial UNIQUE indexes | `schema/core.ts` |
+| `core_transaction` | no global `UNIQUE` on `external_id`; a partial index on it instead | `schema/core.ts` |
+| `core_content_text` | the decoded-body-text side table | `schema/core.ts` |
+| `core_entity_revision` | `content_id`, `parent_revision_id`, both `ON DELETE SET NULL`, and their two partial indexes | `schema/entity-revisions.ts` |
+| `core_document` | `current_revision_id` + its index | `schema/core.ts` |
+| `knowledge_note` | `current_revision_id` + its index | `schema/domains-social-knowledge-media.ts` |
+
+`VAULT_MIGRATIONS` is five rungs again and a fresh vault stamps `PRAGMA user_version = 5`, which `schema/migrate.test.ts` asserts unchanged from before `b22cc7188`. The corpus at `packages/vault/tests/golden/issue-929` is re-frozen with `bun run golden-vault:freeze -- --label issue-929` — 67 tables, 273 rows, schema v5, ontology 1.0 — and `golden-vault.test.ts` is green on it across all four cases.
+
+### Item 1 — a revision is an occurrence, not a content id (ONT-22, R20(a))
+
+`core_entity_revision` is the one history, and the second graph is gone. An **occurrence** is a row there whose `operation` is `'revise'`: it names the content that became current at that moment and the occurrence before it; the wrapper points at the newest. Every other row is the engine's pre-mutation capture snapshot, bounded by the entity's declared retention — an occurrence is not (**OQ-11**), which `gateway/revision-capture.ts` now enforces by pruning only `operation <> 'revise'`.
+
+`commands/revisions.ts` is rewritten: `recordRevision` and the `revises` concept lookup are gone; `recordBodyRevision`, `currentRevisionOf`, `revisionChainOf` and the typed `ForeignRevisionError` replace them. `bootstrap.ts` no longer seeds the `revises` relation at all — nothing writes the edge it named, and dormant DDL is a finding (#916, ONT-06).
+
+All five write sites and every reader moved in this slice; none keeps the link graph alive:
+
+| Site | Was | Is |
+| --- | --- | --- |
+| `commands/documents.ts` — `add_document`, `edit_document`, `replace_document_content`, `restore_document_version` | `recordRevision(new, old)`; a recursive `core_link` CTE in `target_in_chain`; a postcondition asserting the `revises` link | an occurrence per body change including the first; a recursive walk over `parent_revision_id`; a postcondition on the wrapper's own newest occurrence |
+| `commands/knowledge.ts` — `add_note`, `edit_note`, `restore_note_version` | the same three | the same three, over `knowledge_note.current_revision_id` |
+| `gateway/duties.ts` — the purge sweep | a BFS over live `revises` edges, plus `ownedByAnotherLiveDocument` walking the shared graph | one recursive CTE per document's own chain; the "is this page another live document's" question is now asked of that document's occurrences, which is the point — two documents with identical bytes no longer purge each other's pages |
+| `blob/read.ts` — the serve door | a recursive walk from the requested page toward newer edges | one indexed lookup on `core_entity_revision.content_id` |
+| `blueprints/apps/docs/queries/history.ts` | resolve the `revises` concept out of `core.concept` + `core.concept_scheme`, then one `core.link` read PER STEP | one `core.entity_revision` read, walked in memory |
+| `blueprints/apps/notes/queries/history.ts` | the same, per step | the shared `noteVersionChain` walk |
+| `packages/blueprints/apps/notes/version-chain.ts` (and `version-chain.test.ts`, deleted with the shape it tested) | a link-edge index keyed by content | the occurrence walk, now shared by the web query AND the phone so both seats read one spelling |
+| `apps/mobile/src/apps/docs/{docs-versions,useVersionChain}.ts` | `core.link` + `core.concept` + `core.concept_scheme` replica reads and a concept resolution | one `core.entity_revision` read |
+| `apps/mobile/src/apps/notes/{useNotes,useNoteVersions,NotesHistory,notes-model}.ts` | `chainRows: { links, concepts, schemes }` | `chainRows: { revisions }`, and the note projection carries `currentRevisionId` |
+| `gateway/assistant-context.ts` | told the assistant history was a `revises` chain | tells it what is true |
+
+Both manifests declare the entity they now read — `packages/blueprints/apps/docs/app.json` and `packages/blueprints/apps/notes/app.json` gain a `core.entity_revision` read scope, and `packages/blueprints/src/app-manifest-reads.test.ts`'s matrix names it. The static tripwire is what caught the omission, twice.
+
+### Scenarios (`packages/vault/src/commands/revision-occurrence.test.ts`, red-first)
+
+| Scenario | Before | After |
+| --- | --- | --- |
+| Two documents with identical bytes keep separate histories | one shared chain — the bytes dedupe, and the edge out of them was in both | A's edit is A's; B still reads one version |
+| A→B→A→B is four occurrences, in order | three, and the fourth edge was refused by `core_link_live_edge_idx` | `[a, b, a, b]`, two content ids and four versions |
+| Restoring another document's revision is refused | accepted — "is this content in the chain" was asked of a shared graph | refused; the document's own earlier version still restores |
+| No `revises` link, and no `revises` concept, survives an edit | the edge and the seeded concept | zero of each |
+
+`documents.test.ts` and `knowledge.test.ts` keep their older assertions, re-cut onto occurrences — including the one that used to document the finding out loud ("a content-id walk can only show one node once, so the convenience chain collapses"), which is now the assertion that it does not.
+
+### Every file this commit touches
+
+- `apps/mobile/src/apps/docs/DocumentRead.tsx`
+- `apps/mobile/src/apps/docs/DocumentVersions.tsx`
+- `apps/mobile/src/apps/docs/docs-versions.test.ts`
+- `apps/mobile/src/apps/docs/docs-versions.ts`
+- `apps/mobile/src/apps/docs/useVersionChain.ts`
+- `apps/mobile/src/apps/notes/NotesHistory.test.tsx`
+- `apps/mobile/src/apps/notes/NotesHistory.tsx`
+- `apps/mobile/src/apps/notes/notes-model.ts`
+- `apps/mobile/src/apps/notes/useNoteVersions.ts`
+- `apps/mobile/src/apps/notes/useNotes.ts`
+- `packages/blueprints/apps/docs/app.json`
+- `packages/blueprints/apps/docs/queries/history.test.ts`
+- `packages/blueprints/apps/docs/queries/history.ts`
+- `packages/blueprints/apps/notes/app.json`
+- `packages/blueprints/apps/notes/queries/history.test.ts`
+- `packages/blueprints/apps/notes/queries/history.ts`
+- `packages/blueprints/apps/notes/version-chain.test.ts`
+- `packages/blueprints/apps/notes/version-chain.ts`
+- `packages/blueprints/src/app-manifest-reads.test.ts`
+- `packages/vault/src/blob/read.ts`
+- `packages/vault/src/bootstrap.ts`
+- `packages/vault/src/commands/documents.test.ts`
+- `packages/vault/src/commands/documents.ts`
+- `packages/vault/src/commands/knowledge.test.ts`
+- `packages/vault/src/commands/knowledge.ts`
+- `packages/vault/src/commands/revision-occurrence.test.ts`
+- `packages/vault/src/commands/revisions.ts`
+- `packages/vault/src/gateway/assistant-context.ts`
+- `packages/vault/src/gateway/duties.ts`
+- `packages/vault/src/gateway/revision-capture.ts`
+- `packages/vault/src/schema/baseline-fixture.ts`
+- `packages/vault/src/schema/core-rungs.ts`
+- `packages/vault/src/schema/core.ts`
+- `packages/vault/src/schema/domains-social-knowledge-media.ts`
+- `packages/vault/src/schema/entity-revisions.ts`
+- `packages/vault/src/schema/migrate.test.ts`
+- `packages/vault/src/schema/migrate.ts`
+- `packages/vault/tests/golden/issue-929/manifest.json`
+- `packages/vault/tests/golden/issue-929/vault.db.gz`
+- `scripts/docs-site/src/content/ontology-body.html`
+
+`schema/migrate.ts`, `schema/migrate.test.ts` and `schema/baseline-fixture.ts` are reverted to their pre-`b22cc7188` shape (plus one baseline line for `CONTENT_TEXT_DDL`); `schema/core-rungs.ts` and `apps/notes/version-chain.test.ts` are deleted; `commands/revision-occurrence.test.ts` is new; the two golden files are re-frozen; `ontology-body.html` re-orders §03 for `core.document`, `core.concept`, `core.entity_revision` and `knowledge.note` to the baseline's own column order.
+
+### Gates
+
+```sh
+bun run --cwd packages/vault test        # 194 files, 1580 passed, 2 skipped, 0 FAIL
+bun run --cwd packages/blueprints test   # 0 FAIL
+bun run --cwd apps/mobile test -- src/apps/docs src/apps/notes   # 19 files, 148 passed
+bun run --cwd packages/{vault,blueprints,core,server,client} typecheck && bun run --cwd apps/mobile typecheck
+bun run lint && bun run format:check
+bash .governance/run.sh
+bun run golden-vault:freeze -- --label issue-929   # 67 tables, 273 rows, schema v5
+```
+
+## Decisions — wave 0b (second half)
+
+- **The owner's ruling, recorded: pre-1.0, legacy carries no weight.** Baseline DDL changes in place and the corpus is re-frozen in the same slice; no migration rungs, no re-cut machinery, no data carry-forward, no compatibility paths. This is the repo's own **ONT-ladder** rule for this era ([vault-ontology.md](../docs/vault-ontology.md) — "Pre-1.0, no release since the freeze"), and it retires the rung/re-cut machinery `b22cc7188` added, in this commit.
+- **The ONT-ladder rule's pre-proof could not be performed, and that is a property of the change, not a skipped step.** The rule asks that the OLD corpus first be shown to open, migrate forward, keep every row and be doctor-clean, with only the DDL-equality case red. It does not open: `core_content_text` is a NEW TABLE in the baseline, `refreshReplicaTriggers` is generated from the entity registry, and it fails with `no such table: main.core_content_text` before any assertion runs. A frozen file cannot receive a new baseline table without a rung — which is exactly the machinery the ruling removes. Recorded rather than worked around; the corpus is re-frozen and the gate is green on the corpus this slice froze.
+- **Item 2, the representation split, is NOT in this commit.** It is the third time it has been scoped and the second time it has not fitted; the measured reason has not changed and the no-legacy ruling does not shrink it. `core_content_item.media_type` is read at **53 non-test sites across 29 files**, and the removal is not mechanical at three of them: the FTS specs for `core.content_item`, `knowledge.note` and `core.document` call `vault_content_text(c.media_type, c.content_uri)` inside GENERATED triggers, so dropping the column re-cuts the search index for three entities in the same change that moves the caption surface off `core_content_item.title` — and W1 is already scheduled to retire `vault_content_text` for `core_content_text`. Doing both at once is the right sequencing and it is a wave, not the tail of one. What a follow-up slice needs, in order: (a) `core_content_representation(representation_id, content_id, owner_type, owner_id, media_type, charset, interpretation)` with `UNIQUE(owner_type, owner_id)`; (b) `media_asset.title` for the authored title the caption was overwriting; (c) one resolver in `packages/vault` every query calls, so the change is one spelling; (d) writers `blob/{mint,promote,preflight,preview}.ts`, `commands/{documents,media,attachments}.ts`, `ingest/{publishers,enrich-publishers,stage-file}.ts`; (e) the three FTS specs and `schema/blob.ts`'s document override; (f) the wire-type sites, which keep `media_type` on the row and are populated at the query boundary — `blueprints/apps/docs/{filters,format,print}.ts`, its six components, `apps/mobile/src/apps/docs/{docs-projection,document-read-model,docs-export,DocumentViewer,DocumentRead,DocumentProperties}.tsx`.
+- **Deletion roles ride 0e** (root ruling, accepted), with the deletion-by-role purge scenarios.
+- **Item 4, the occurrence key, has no schema work** (root ruling, accepted): the columns and the `tz` spelling are already right on `main`, `ontology-rules.test.ts:182,197` already asserts it, and ONT-25's 47 sites are all reader-side. It goes to 0c.
+- **An occurrence at CREATION, not only at edit.** R20(a) says a revision is an occurrence; a document's original body is a version, so `add_document` and `add_note` write the first one. Without it the oldest version would have had to be inferred from the absence of a parent, and "A→B→A→B is four occurrences" would have been three.
+- **The three new foreign keys are `ON DELETE SET NULL`, and the first one had to be.** `core_entity_revision.content_id` was written `RESTRICT` first and the purge sweep went red: a foreign key from history refused to let an owner reclaim their own document's bytes. An occurrence survives its content as the record that there WAS a version there.

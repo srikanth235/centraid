@@ -75,12 +75,23 @@ CREATE TABLE core_party_identifier (
   -- person at is a \`social.contact_channel\`, not an identity register entry.
   scheme        TEXT NOT NULL CHECK (scheme IN ('url','did','handle','iban','other')),
   value         TEXT NOT NULL,
+  -- THE NAMESPACE THE VALUE IS UNIQUE WITHIN (#996, ruling R20(e)). A short
+  -- handle is not globally unique: \`@alice\` on two services is two people,
+  -- and an account number means nothing without the institution that issued
+  -- it. NULL means "globally unique by construction" — a DID, an IBAN, a URL —
+  -- and the live index below folds NULL to the empty string so those keep the
+  -- one namespace they always had.
+  issuer        TEXT,
   label         TEXT,
   is_primary    INTEGER NOT NULL CHECK (is_primary IN (0,1)),
   verified_at   TEXT,
   valid_from    TEXT NOT NULL,
   valid_to      TEXT,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  -- AN INTERVAL RUNS FORWARD (#996, R20(e)). \`valid_to < valid_from\` was
+  -- representable, and an inverted interval makes every "was this live then"
+  -- question unanswerable. Table-level because it names two columns.
+  CHECK (valid_to IS NULL OR valid_to >= valid_from),
   FOREIGN KEY (identifier_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
   -- No UNIQUE (scheme, value) (#916, R3 / review 2.3). The constraint covered
   -- HISTORICAL rows too, so an address one person stopped using could never be
@@ -90,9 +101,13 @@ CREATE TABLE core_party_identifier (
   -- rows and nothing else.
 ) STRICT;
 CREATE UNIQUE INDEX IF NOT EXISTS core_party_identifier_live_idx
-  ON core_party_identifier(scheme, value) WHERE valid_to IS NULL;
+  ON core_party_identifier(scheme, COALESCE(issuer, ''), value) WHERE valid_to IS NULL;
+-- CURRENT PREFERENCE IS NOT HISTORY (#996, ruling R20(e)). The value index has
+-- been partial on the LIVE rows since #916; this one was not, so an end-dated
+-- primary — the row that says "this WAS my main handle" — went on blocking a
+-- new one forever. Both indexes now ask the same question of the same rows.
 CREATE UNIQUE INDEX idx_party_identifier_primary
-  ON core_party_identifier(party_id, scheme) WHERE is_primary = 1;
+  ON core_party_identifier(party_id, scheme) WHERE is_primary = 1 AND valid_to IS NULL;
 
 CREATE TABLE core_place (
   place_id        TEXT PRIMARY KEY,
@@ -185,13 +200,16 @@ CREATE TABLE core_transaction (
   counterparty_party_id TEXT REFERENCES core_party(party_id),
   description           TEXT,
   category_concept_id   TEXT REFERENCES core_concept(concept_id),
-  -- GLOBAL uniqueness, deliberately (#916, R2 / review 2.3). The right key is
-  -- (connection_id, external_id) — two connectors may legitimately mint the
-  -- same provider id — but \`core_transaction\` carries no connection column:
-  -- the connector that imported a row is recorded in \`sync_external_entity\`,
-  -- not on the row. Narrowing the key would mean adding a column no writer
-  -- fills, so the key stays global until a transaction knows its connection.
-  external_id           TEXT UNIQUE,
+  -- NO GLOBAL UNIQUE (#996, ruling R20(c)). A provider-local id is scoped to
+  -- its SOURCE: the authoritative key is \`sync_external_entity
+  -- (connection_id, external_id)\`, which \`stageCandidates\` consults before
+  -- any publisher probe. The comment this replaces admitted the right key and
+  -- kept the global one anyway, so two institutions' \`ref-1\` were one
+  -- transaction — the second bank's statement line silently merged into the
+  -- first's, and the money was gone from the ledger. Two sources may both mint
+  -- \`ref-1\`; a cross-source match is explicit reviewable evidence, never an
+  -- equal reference string.
+  external_id           TEXT,
   created_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   FOREIGN KEY (txn_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
@@ -199,6 +217,10 @@ CREATE TABLE core_transaction (
 CREATE INDEX IF NOT EXISTS idx_transaction_account ON core_transaction(account_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_counterparty_party ON core_transaction(counterparty_party_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_category_concept ON core_transaction(category_concept_id);
+-- The pair the sync map keys on, asked of the transaction side: "which rows
+-- did this provider id produce" is a real question once it is no longer unique.
+CREATE INDEX IF NOT EXISTS core_transaction_external_idx
+  ON core_transaction(external_id) WHERE external_id IS NOT NULL;
 
 CREATE TABLE core_content_item (
   content_id       TEXT PRIMARY KEY,
@@ -225,12 +247,20 @@ CREATE INDEX IF NOT EXISTS core_content_item_purge_idx
 -- wrapper is the row apps and links address; current_content_id repoints on
 -- edit exactly like knowledge_note.body_content_id. NOT UNIQUE — two
 -- documents may legitimately share identical bytes (a template re-used
--- twice). Version lineage is a 'revises' core.link between content items,
--- never a column here — content_item is the version, core.link is history.
+-- twice). Version lineage is the chain of core_entity_revision OCCURRENCES
+-- walked from current_revision_id (#996, R20(a)) — a revision is a MOMENT, not
+-- a content id, which is why two documents made of the same bytes have
+-- independent histories.
 CREATE TABLE core_document (
   document_id         TEXT PRIMARY KEY,
   title               TEXT NOT NULL,
   current_content_id  TEXT NOT NULL REFERENCES core_content_item(content_id),
+  -- THE NEWEST REVISION OCCURRENCE (#996, ruling R20(a)). History is the chain
+  -- of \`core_entity_revision\` rows walked from here through
+  -- \`parent_revision_id\`, each naming the content that became current at that
+  -- moment. ON DELETE SET NULL: a pointer into history must never be the thing
+  -- that wedges a delete.
+  current_revision_id TEXT REFERENCES core_entity_revision(revision_id) ON DELETE SET NULL,
   created_at          TEXT NOT NULL,
   updated_at          TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   deleted_at          TEXT,
@@ -238,6 +268,7 @@ CREATE TABLE core_document (
   FOREIGN KEY (document_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_document_current_content ON core_document(current_content_id);
+CREATE INDEX IF NOT EXISTS idx_document_current_revision ON core_document(current_revision_id);
 CREATE INDEX IF NOT EXISTS core_document_purge_idx
   ON core_document(purge_at) WHERE purge_at IS NOT NULL;
 
@@ -323,12 +354,35 @@ CREATE TABLE core_concept (
   alt_labels_json    TEXT CHECK (alt_labels_json IS NULL OR json_valid(alt_labels_json)),
   broader_concept_id TEXT REFERENCES core_concept(concept_id),
   definition         TEXT,
+  -- CONCEPT IDENTITY (#996, ruling R20(d)). A concept's LABEL was its identity:
+  -- \`tagNotation\` lowercased a label and stripped everything outside
+  -- \`[a-z0-9]\`, so \`猫\`, \`犬\`, \`कुत्ता\` and \`बिल्ली\` all normalised to
+  -- \`untitled\` and selected ONE concept — four animals filed as one idea, on
+  -- every vault that does not write in Latin script. Three columns separate the
+  -- three jobs the notation was doing at once:
+  --   \`stable_id\` — the source vocabulary's OWN concept id where it has one;
+  --   \`normalized_key\` — a UNICODE-PRESERVING key (NFKC, collapsed
+  --     whitespace, case-folded) for schemes where only labels exist, which is
+  --     what \`ensureConcept\` selects on;
+  --   \`pref_label_lang\` — the label's language tag, so "the label" is
+  --     answerable in the language it was written in.
+  -- \`notation\` goes back to being the 64-character ASCII SLUG it always
+  -- looked like, with collision cases given a suffix rather than a shared row.
+  stable_id          TEXT,
+  normalized_key     TEXT,
+  pref_label_lang    TEXT,
   created_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   UNIQUE (scheme_id, notation),
   FOREIGN KEY (concept_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_concept_broader_concept ON core_concept(broader_concept_id);
+-- Both partial: a row that carries no stable id, or no key yet, constrains
+-- nothing.
+CREATE UNIQUE INDEX IF NOT EXISTS core_concept_stable_idx
+  ON core_concept(scheme_id, stable_id) WHERE stable_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS core_concept_key_idx
+  ON core_concept(scheme_id, normalized_key) WHERE normalized_key IS NOT NULL;
 
 CREATE TABLE core_tag (
   tag_id             TEXT PRIMARY KEY,
@@ -416,4 +470,44 @@ CREATE TABLE core_link_anchor (
   FOREIGN KEY (anchor_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 ${touchUpdatedAt("core_link_anchor", "anchor_id")}
+`;
+
+/**
+ * `core_content_text` — DECODED BODY TEXT AS A COLUMN (#996, rulings R4 / R8).
+ * Schema only in wave 0b: the function-free FTS triggers that read it, and the
+ * retirement of `vault_content_text`, land in wave 1 with the seat store.
+ *
+ * The FTS sync triggers call `vault_content_text(media_type, content_uri)`, an
+ * APPLICATION-DEFINED SQL function only `openVaultDb` registers — which is
+ * exactly why "only the gateway holds connections" was true, and why the search
+ * index cannot follow the vault onto a seat: expo-sqlite 57 exposes no way to
+ * register a SQL function, and a trigger has to index a COLUMN. So the decode
+ * moves to write time on the gateway and lands here.
+ *
+ * A 1:1 side table, not a column on `core_content_item` (R8): a decoded body is
+ * the widest value in the model, and a wide column on a hot table makes every
+ * `SELECT *` over it pay for text nobody asked for.
+ *
+ * `ON DELETE CASCADE` because this is DERIVED, REBUILDABLE data owned by the
+ * content row — the "owned child" deletion role (R22): it has no meaning, and
+ * no life, apart from the bytes it decodes.
+ */
+export const CONTENT_TEXT_DDL = `
+CREATE TABLE core_content_text (
+  content_id  TEXT PRIMARY KEY
+    REFERENCES core_content_item(content_id) ON DELETE CASCADE,
+  -- The decoded text itself. NOT NULL: a row exists because a decode
+  -- SUCCEEDED, and "we could not decode these bytes" is the ABSENCE of a row,
+  -- never an empty string that reads as an empty document.
+  body_text   TEXT NOT NULL,
+  -- What produced it, so a decoder change can rebuild exactly the rows it
+  -- invalidates rather than the whole table.
+  decoder     TEXT NOT NULL,
+  -- The bytes this text was decoded FROM. Content is hash-addressed and
+  -- immutable, so this is a staleness check against the decoder, not the row.
+  byte_size   INTEGER NOT NULL CHECK (byte_size >= 0),
+  created_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+) STRICT;
+${touchUpdatedAt("core_content_text", "content_id")}
 `;

@@ -110,6 +110,19 @@ export function useNotes() {
       []
     )
   );
+  // A note's history is its own occurrences (#996, R20(a)) — one entity read
+  // where the `revises` walk needed links, concepts and schemes.
+  const revisions = useReplicaQuery(
+    "notes",
+    useMemo(
+      () => ({
+        acceptTruncation: true,
+        entity: "core.entity_revision",
+        where: [{ column: "entity_type", op: "eq", value: "knowledge.note" }],
+      }),
+      []
+    )
+  );
   const built = useMemo(
     () => buildNotes(notes.rows, contents.rows, links.rows, anchors.rows),
     [anchors.rows, contents.rows, links.rows, notes.rows]
@@ -147,19 +160,13 @@ export function useNotes() {
         }),
       [concepts.rows, tags.rows, visible]
     ),
-    chainRows: useMemo(
-      () => ({
-        links: links.rows,
-        concepts: concepts.rows,
-        schemes: schemes.rows,
-      }),
-      [concepts.rows, links.rows, schemes.rows]
-    ),
+    chainRows: useMemo(() => ({ revisions: revisions.rows }), [revisions.rows]),
     ...combineReplicaQueryStates([
       notes,
       contents,
       links,
       anchors,
+      revisions,
       schemes,
       concepts,
       tags,

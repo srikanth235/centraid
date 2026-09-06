@@ -1,20 +1,19 @@
 /**
- * THE TAXONOMY PAIR ARRIVES IN ITS DECLARED ORDER (#922 0a).
+ * THE CHAIN IS THE DOCUMENT'S OWN OCCURRENCES (#996, R20(a)).
  *
- * `conceptTaxonomyReads` returns `[concepts, schemes]`, and this handler used
- * to read them the other way round — its destructuring was flipped when the
- * shared helper replaced the copied pair. Nothing about the chain's SHAPE
- * catches that: `findSchemeConcept` handed two arrays in the wrong order finds
- * no `revises` concept, the handler quietly skips the walk, and the answer is
- * a one-version history that looks like a document nobody has ever revised.
+ * History used to be a `revises` link chain resolved through the shared
+ * taxonomy pair, and the probe here was that the pair arrived in its declared
+ * order — a swapped destructuring found no `revises` concept, skipped the walk
+ * silently, and answered "a document nobody has ever revised".
  *
- * So the probe is exactly that: a document with one prior version. Wired
- * correctly it is a 2-version chain; with the two arguments swapped it drops
- * to 1, which is what a typecheck can never see because both are row arrays.
+ * The occurrence chain removes that whole class of failure: there is no
+ * concept to resolve and no relation to look up. What is left to prove is the
+ * property the occurrence exists for — a document that returns to bytes it
+ * already held reads as MORE versions, not fewer, where a content-keyed walk
+ * could only ever show a node once.
  */
 import { describe, expect, test } from "vitest";
 
-import { RELATIONS_SCHEME_URI } from "../../_shared/concept-scheme-kit.ts";
 import historyHandler from "./history.ts";
 
 interface ReadCall {
@@ -23,7 +22,7 @@ interface ReadCall {
 }
 
 /** Fixtures keyed by entity; `where` is deliberately not applied, so a handler
- *  that trusted the read instead of resolving the relation itself fails here. */
+ *  that trusted the read instead of walking the chain itself fails here. */
 function ctxOf(rowsByEntity: Record<string, unknown[]>) {
   return {
     vault: {
@@ -42,28 +41,36 @@ const ROWS = {
     {
       document_id: "doc-1",
       current_content_id: "content-new",
+      current_revision_id: "rev-2",
       created_at: "2026-01-01T00:00:00Z",
     },
   ],
-  "core.concept_scheme": [
-    { scheme_id: "scheme-relations", uri: RELATIONS_SCHEME_URI },
-  ],
-  "core.concept": [
+  "core.entity_revision": [
     {
-      concept_id: "concept-revises",
-      scheme_id: "scheme-relations",
-      notation: "revises",
+      revision_id: "rev-2",
+      entity_type: "core.document",
+      entity_id: "doc-1",
+      content_id: "content-new",
+      parent_revision_id: "rev-1",
+      recorded_at: "2026-02-01T00:00:00Z",
+    },
+    {
+      revision_id: "rev-1",
+      entity_type: "core.document",
+      entity_id: "doc-1",
+      content_id: "content-old",
+      parent_revision_id: null,
+      recorded_at: "2026-01-01T00:00:00Z",
     },
   ],
-  "core.link": [{ to_id: "content-old", valid_from: "2026-02-01T00:00:00Z" }],
   "core.content_item": [
     { content_id: "content-new", media_type: "application/pdf" },
     { content_id: "content-old", media_type: "application/pdf" },
   ],
 };
 
-describe("docs history over the shared taxonomy reads", () => {
-  test("resolves `revises` and walks the chain to the prior version", async () => {
+describe("docs history over revision occurrences", () => {
+  test("walks the occurrence chain to the prior version", async () => {
     const result = (await historyHandler({
       input: { document_id: "doc-1" },
       ctx: ctxOf(ROWS),
@@ -77,12 +84,64 @@ describe("docs history over the shared taxonomy reads", () => {
     expect(result.versions[0]?.current).toBe(true);
   });
 
-  test("the same rows with no relations scheme yield only the current version", async () => {
-    // Anti-vacuity, and the exact failure a swapped destructuring produces:
-    // the `revises` concept is unresolvable, so the walk never starts.
+  test("a document restored to bytes it already held reads as four versions", async () => {
+    // The property a content-keyed walk could not express: v1 appears at two
+    // points in true history, and the chain says so.
+    const rows = {
+      ...ROWS,
+      "core.document": [
+        {
+          document_id: "doc-1",
+          current_content_id: "content-old",
+          current_revision_id: "rev-4",
+          created_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+      "core.entity_revision": [
+        {
+          revision_id: "rev-4",
+          content_id: "content-old",
+          parent_revision_id: "rev-3",
+          recorded_at: "2026-04-01T00:00:00Z",
+        },
+        {
+          revision_id: "rev-3",
+          content_id: "content-new",
+          parent_revision_id: "rev-2",
+          recorded_at: "2026-03-01T00:00:00Z",
+        },
+        {
+          revision_id: "rev-2",
+          content_id: "content-old",
+          parent_revision_id: "rev-1",
+          recorded_at: "2026-02-01T00:00:00Z",
+        },
+        {
+          revision_id: "rev-1",
+          content_id: "content-new",
+          parent_revision_id: null,
+          recorded_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+    };
     const result = (await historyHandler({
       input: { document_id: "doc-1" },
-      ctx: ctxOf({ ...ROWS, "core.concept_scheme": [] }),
+      ctx: ctxOf(rows),
+    } as never)) as { versions: Array<{ content_id: string }> };
+    expect(result.versions.map((v) => v.content_id)).toStrictEqual([
+      "content-old",
+      "content-new",
+      "content-old",
+      "content-new",
+    ]);
+  });
+
+  test("a document with no occurrence yet still has its current version", async () => {
+    // Anti-vacuity, and the honest answer for a row minted before the wrapper
+    // carried a pointer: one version, the bytes it is currently made of.
+    const result = (await historyHandler({
+      input: { document_id: "doc-1" },
+      ctx: ctxOf({ ...ROWS, "core.entity_revision": [] }),
     } as never)) as { versions: unknown[] };
     expect(result.versions).toHaveLength(1);
   });

@@ -15,10 +15,11 @@ import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 
 export interface NoteVersionsInput {
   headContentId: string;
+  /** The note's newest occurrence; null before it has one (#996, R20(a)). */
+  currentRevisionId: string | null;
+  noteId: string;
   createdAt: string;
-  links: readonly VaultRow[];
-  concepts: readonly VaultRow[];
-  schemes: readonly VaultRow[];
+  revisions: readonly VaultRow[];
 }
 
 export function useNoteVersions(note: NoteVersionsInput): NoteVersion[] {
@@ -26,11 +27,11 @@ export function useNoteVersions(note: NoteVersionsInput): NoteVersion[] {
     () =>
       noteVersionChain({
         headContentId: note.headContentId,
-        links: note.links,
-        concepts: note.concepts,
-        schemes: note.schemes,
+        currentRevisionId: note.currentRevisionId,
+        revisions: note.revisions,
+        noteId: note.noteId,
       }),
-    [note.concepts, note.headContentId, note.links, note.schemes]
+    [note.currentRevisionId, note.headContentId, note.noteId, note.revisions]
   );
   const bodies = useReplicaQuery(
     "notes",

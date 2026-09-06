@@ -1,10 +1,12 @@
-// The version chain, read live off this device's replica (#821).
+// The version chain, read live off this device's replica (#821, #996 R20(a)).
 //
-// The ONE entity read behind it is `core.link` (the scope is granted and
-// replicates — INTEGRATION-NOTES.md). The walk
-// itself is `docs-versions.ts`, pure; this hook only feeds it rows and
-// carries the honesty state so the screen can tell "no versions" apart from
-// "could not read the links".
+// The ONE entity read behind it is `core.entity_revision` — the occurrences a
+// document's `current_revision_id` chain walks. It used to be `core.link` plus
+// `core.concept` plus `core.concept_scheme`, because the chain had to resolve a
+// `revises` concept before it could follow an edge. The walk itself is
+// `docs-versions.ts`, pure; this hook only feeds it rows and carries the
+// honesty state so the screen can tell "no versions" apart from "could not read
+// the history".
 
 import { useMemo } from "react";
 
@@ -31,57 +33,32 @@ export function useVersionChain(documentId: string): UseVersionChainResult {
     APP_ID,
     useMemo(() => ({ acceptTruncation: true, entity: "core.content_item" }), [])
   );
-  const links = useReplicaQuery(
-    APP_ID,
-    useMemo(() => ({ acceptTruncation: true, entity: "core.link" }), [])
-  );
-  const concepts = useReplicaQuery(
-    APP_ID,
-    useMemo(() => ({ acceptTruncation: true, entity: "core.concept" }), [])
-  );
-  const schemes = useReplicaQuery(
+  const revisions = useReplicaQuery(
     APP_ID,
     useMemo(
-      () => ({ acceptTruncation: true, entity: "core.concept_scheme" }),
+      () => ({ acceptTruncation: true, entity: "core.entity_revision" }),
       []
     )
   );
 
   const linksDenied =
-    links.error !== undefined || links.connection === "unavailable";
-  const loading =
-    documents.loading ||
-    contents.loading ||
-    links.loading ||
-    concepts.loading ||
-    schemes.loading;
+    revisions.error !== undefined || revisions.connection === "unavailable";
+  const loading = documents.loading || contents.loading || revisions.loading;
 
   const chain = useMemo(() => {
     if (linksDenied) return null;
     return projectVersionChain({
       document: documents.rows.find((row) => row["document_id"] === documentId),
-      links: links.rows,
+      revisions: revisions.rows,
       contents: contents.rows,
-      concepts: concepts.rows,
-      schemes: schemes.rows,
     });
-  }, [
-    documentId,
-    linksDenied,
-    documents.rows,
-    links.rows,
-    contents.rows,
-    concepts.rows,
-    schemes.rows,
-  ]);
+  }, [documentId, linksDenied, documents.rows, revisions.rows, contents.rows]);
 
   const refresh = async (): Promise<void> => {
     await Promise.all([
       documents.refresh(),
       contents.refresh(),
-      links.refresh(),
-      concepts.refresh(),
-      schemes.refresh(),
+      revisions.refresh(),
     ]);
   };
 

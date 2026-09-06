@@ -14,29 +14,22 @@ import type { BinaryDerivativeVariant } from "./derivatives.js";
 import { shaOfBlobUri } from "./store.js";
 
 // A literal: blob/ stays free of command-layer imports.
-const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 
 /** The ONE content-reference list without its live-rows-only clamp: trash
  *  renders until it purges (#352). A superseded page serves while some live
- *  document's history names it — walked FROM THE REQUESTED PAGE toward newer
- *  `revises` edges, since seeding from every head costs the whole closure. */
+ *  document's history NAMES it — one indexed lookup on
+ *  `core_entity_revision.content_id` since #996 (R20(a)), where it used to be a
+ *  recursive walk from the requested page toward newer `revises` edges. */
 const SERVE_REFERENCES: string[] = [
   ...contentReferenceExists({
     idExpression: "i.content_id",
     live: false,
     includeDocumentHead: true,
   }),
-  `WITH RECURSIVE chain(content_id) AS (
-     SELECT i.content_id
-     UNION
-     SELECT l.from_id FROM core_link l JOIN chain ON l.to_id = chain.content_id
-      WHERE l.from_type = 'core.content_item' AND l.to_type = 'core.content_item' AND l.valid_to IS NULL
-        AND l.relation_concept_id = (SELECT c.concept_id FROM core_concept c
-             JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-            WHERE s.uri = '${RELATIONS_SCHEME_URI}' AND c.notation = 'revises')
-   )
-   SELECT 1 FROM chain
-     JOIN core_document d ON d.current_content_id = chain.content_id`,
+  `SELECT 1 FROM core_entity_revision r
+     JOIN core_document d ON d.document_id = r.entity_id
+    WHERE r.entity_type = 'core.document' AND r.content_id = i.content_id
+      AND d.deleted_at IS NULL`,
 ];
 
 export interface ServableBlob {
