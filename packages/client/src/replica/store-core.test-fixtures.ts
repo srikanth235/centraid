@@ -66,10 +66,20 @@ export function searchableSnapshot(): ReplicaSnapshot {
         shapeId: "shape-photos",
         appId: "photos",
         entities: [
+          // A Photos seat ranks its CAPTIONS offline (#996, R20(b)): the
+          // caption is a `knowledge.annotation` on the photo's
+          // representation, and its `body_text` is the eager column the
+          // local index holds — the byte row has no title of its own.
           {
-            entity: "core.content_item",
-            primaryKey: "content_id",
-            columns: ["content_id", "title", "deleted_at", "created_at"],
+            entity: "knowledge.annotation",
+            primaryKey: "annotation_id",
+            columns: [
+              "annotation_id",
+              "target_type",
+              "target_id",
+              "body_text",
+              "created_at",
+            ],
           },
         ],
       },
@@ -77,23 +87,25 @@ export function searchableSnapshot(): ReplicaSnapshot {
     rows: [
       {
         shapeId: "shape-photos",
-        entity: "core.content_item",
-        rowId: "photo-new",
+        entity: "knowledge.annotation",
+        rowId: "caption-new",
         values: {
-          content_id: "photo-new",
-          title: "Today at the park",
-          deleted_at: null,
+          annotation_id: "caption-new",
+          target_type: "core.content_representation",
+          target_id: "rep-new",
+          body_text: "Today at the park",
           created_at: "2026-07-15T10:00:00.000Z",
         },
       },
       {
         shapeId: "shape-photos",
-        entity: "core.content_item",
-        rowId: "photo-off-window",
+        entity: "knowledge.annotation",
+        rowId: "caption-off-window",
         values: {
-          content_id: "photo-off-window",
-          title: "Moonlit campsite in Ladakh",
-          deleted_at: null,
+          annotation_id: "caption-off-window",
+          target_type: "core.content_representation",
+          target_id: "rep-off-window",
+          body_text: "Moonlit campsite in Ladakh",
           created_at: "2024-01-01T10:00:00.000Z",
         },
       },
@@ -108,12 +120,15 @@ export function bulkSnapshot(rows: number): ReplicaSnapshot {
     ...base,
     rows: Array.from({ length: rows }, (_, index) => ({
       shapeId: "shape-photos",
-      entity: "core.content_item",
-      rowId: `photo-${index}`,
+      entity: "knowledge.annotation",
+      rowId: `caption-${index}`,
       values: {
-        content_id: `photo-${index}`,
-        title: `Kodaikanal terrace garden in the monsoon ${index}`.repeat(4),
-        deleted_at: null,
+        annotation_id: `caption-${index}`,
+        target_type: "core.content_representation",
+        target_id: `rep-${index}`,
+        body_text: `Kodaikanal terrace garden in the monsoon ${index}`.repeat(
+          4
+        ),
         created_at: "2026-07-15T10:00:00.000Z",
       },
     })),

@@ -475,15 +475,52 @@ CREATE TABLE core_tag (
   concept_id         TEXT NOT NULL REFERENCES core_concept(concept_id),
   tagged_by_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
   confidence         REAL CHECK (confidence BETWEEN 0 AND 1),
+  -- A MACHINE ASSERTION LINKS TO ITS EVIDENCE (#996, ruling R22). A tag with
+  -- no asserting party is a machine's claim, and until now it carried a
+  -- confidence and nothing else: no way to ask which model said it, from what
+  -- input, or what a second model said instead. \`derivation_id\` names the
+  -- \`enrich_derivation\` row that produced it — which carries the profile, the
+  -- model and the payload — and \`input_revision_id\` names the revision of the
+  -- target the claim was made ABOUT, so a claim about superseded content can
+  -- be told from one about what is there now.
+  --
+  -- ON DELETE SET NULL on both: losing the evidence must never be the thing
+  -- that deletes the claim, and a claim whose evidence is gone reads as an
+  -- unattributed machine tag, which is what it is.
+  derivation_id      TEXT REFERENCES enrich_derivation(derivation_id) ON DELETE SET NULL,
+  input_revision_id  TEXT REFERENCES core_entity_revision(revision_id) ON DELETE SET NULL,
   tagged_at          TEXT NOT NULL,
   updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  UNIQUE (target_type, target_id, concept_id),
+  -- Evidence belongs to a MACHINE assertion. An owner does not cite a model.
+  CHECK (tagged_by_party_id IS NULL
+         OR (derivation_id IS NULL AND input_revision_id IS NULL)),
   FOREIGN KEY (tag_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
   FOREIGN KEY (target_type, target_id)
     REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
+  -- NO TABLE-LEVEL \`UNIQUE (target_type, target_id, concept_id)\` (#996, R22).
+  -- It made COMPETING CONFIDENCES unrepresentable: two engine profiles could
+  -- not both say "beach" about one photo with different confidence, so the
+  -- second write silently replaced the first and the disagreement — the thing
+  -- a member would want to see — could not exist. The two partial indexes
+  -- below keep every uniqueness that is still true.
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_tag_concept ON core_tag(concept_id);
 CREATE INDEX IF NOT EXISTS idx_tag_tagged_by_party ON core_tag(tagged_by_party_id);
+CREATE INDEX IF NOT EXISTS idx_tag_derivation ON core_tag(derivation_id);
+CREATE INDEX IF NOT EXISTS idx_tag_input_revision ON core_tag(input_revision_id);
+-- ONE OWNER ASSERTION per (target, concept). The member does not say a thing
+-- twice, and an owner-asserted tag is terminal for the enrichment publishers.
+CREATE UNIQUE INDEX IF NOT EXISTS core_tag_owner_assertion_idx
+  ON core_tag(target_type, target_id, concept_id)
+  WHERE tagged_by_party_id IS NOT NULL;
+-- ONE MACHINE ASSERTION PER DERIVATION. Two profiles are two rows — that is
+-- the competing confidence — and a re-run of the SAME derivation replaces its
+-- own row rather than growing a second. \`COALESCE\` folds the unstamped
+-- machine tags (those written before the evidence link) to one row each, which
+-- is exactly the uniqueness they had.
+CREATE UNIQUE INDEX IF NOT EXISTS core_tag_machine_assertion_idx
+  ON core_tag(target_type, target_id, concept_id, COALESCE(derivation_id, ''))
+  WHERE tagged_by_party_id IS NULL;
 
 -- One curation mechanism (issue #274): an owner-curated, ordered, typed
 -- container. Albums and notebooks are surface views over this one table —
@@ -535,64 +572,4 @@ ${touchUpdatedAt("core_link", "link_id")}
 ${touchUpdatedAt("core_concept", "concept_id")}
 ${touchUpdatedAt("core_tag", "tag_id")}
 ${touchUpdatedAt("core_collection", "collection_id")}
-`;
-
-// Standoff anchor for inline references (#282). An anchor is a LOCATOR
-// for an existing core.link judgment, not a second judgment (rule 10): it
-// points into the from-endpoint's plain body text with a W3C-style selector
-// {exact, prefix, suffix, start} so the read view can render the edge as an
-// inline chip. Bodies stay canonical deduped bytes — the anchor lives outside
-// them. One anchor per link (an inline mention IS one edge); no independent
-// lifecycle: resolution only considers live links, so anchors of ended links
-// are simply never resolved, and the dangling-link sweep needs no extension.
-export const LINK_ANCHOR_DDL = `
-CREATE TABLE core_link_anchor (
-  anchor_id     TEXT PRIMARY KEY,
-  link_id       TEXT NOT NULL UNIQUE REFERENCES core_link(link_id),
-  selector_json TEXT NOT NULL CHECK (json_valid(selector_json)),
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  FOREIGN KEY (anchor_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-${touchUpdatedAt("core_link_anchor", "anchor_id")}
-`;
-
-/**
- * `core_content_text` — DECODED BODY TEXT AS A COLUMN (#996, rulings R4 / R8).
- * Schema only in wave 0b: the function-free FTS triggers that read it, and the
- * retirement of `vault_content_text`, land in wave 1 with the seat store.
- *
- * The FTS sync triggers call `vault_content_text(media_type, content_uri)`, an
- * APPLICATION-DEFINED SQL function only `openVaultDb` registers — which is
- * exactly why "only the gateway holds connections" was true, and why the search
- * index cannot follow the vault onto a seat: expo-sqlite 57 exposes no way to
- * register a SQL function, and a trigger has to index a COLUMN. So the decode
- * moves to write time on the gateway and lands here.
- *
- * A 1:1 side table, not a column on `core_content_item` (R8): a decoded body is
- * the widest value in the model, and a wide column on a hot table makes every
- * `SELECT *` over it pay for text nobody asked for.
- *
- * `ON DELETE CASCADE` because this is DERIVED, REBUILDABLE data owned by the
- * content row — the "owned child" deletion role (R22): it has no meaning, and
- * no life, apart from the bytes it decodes.
- */
-export const CONTENT_TEXT_DDL = `
-CREATE TABLE core_content_text (
-  content_id  TEXT PRIMARY KEY
-    REFERENCES core_content_item(content_id) ON DELETE CASCADE,
-  -- The decoded text itself. NOT NULL: a row exists because a decode
-  -- SUCCEEDED, and "we could not decode these bytes" is the ABSENCE of a row,
-  -- never an empty string that reads as an empty document.
-  body_text   TEXT NOT NULL,
-  -- What produced it, so a decoder change can rebuild exactly the rows it
-  -- invalidates rather than the whole table.
-  decoder     TEXT NOT NULL,
-  -- The bytes this text was decoded FROM. Content is hash-addressed and
-  -- immutable, so this is a staleness check against the decoder, not the row.
-  byte_size   INTEGER NOT NULL CHECK (byte_size >= 0),
-  created_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
-) STRICT;
-${touchUpdatedAt("core_content_text", "content_id")}
 `;

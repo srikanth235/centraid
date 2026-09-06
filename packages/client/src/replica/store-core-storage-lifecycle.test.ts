@@ -81,7 +81,7 @@ describe("store-core", () => {
         expect(
           store.search({
             shapeId: "shape-photos",
-            entity: "core.content_item",
+            entity: "knowledge.annotation",
             query: "monsoon",
           }).rows.length
         ).toBeGreaterThan(0);
@@ -151,8 +151,8 @@ describe("store-core", () => {
             {
               op: "delete",
               shapeId: "shape-photos",
-              entity: "core.content_item",
-              rowId: "photo-3",
+              entity: "knowledge.annotation",
+              rowId: "caption-3",
             },
           ],
         });
@@ -188,8 +188,8 @@ describe("store-core", () => {
             .join(" ");
         const rowidPlan = plan(searchDeletes[0]!, [
           "shape-photos",
-          "core.content_item",
-          "photo-3",
+          "knowledge.annotation",
+          "caption-3",
         ]);
         expect(rowidPlan).toMatch(/VIRTUAL TABLE INDEX \d+:=/u);
         expect(rowidPlan).toMatch(/SEARCH replica_row USING COVERING INDEX/u);
@@ -197,7 +197,7 @@ describe("store-core", () => {
           plan(
             `DELETE FROM replica_search
               WHERE shape_id = ? AND entity = ? AND row_id = ?`,
-            ["shape-photos", "core.content_item", "photo-3"]
+            ["shape-photos", "knowledge.annotation", "caption-3"]
           )
         ).not.toMatch(/VIRTUAL TABLE INDEX \d+:=/u);
       } finally {
@@ -220,7 +220,7 @@ describe("store-core", () => {
           PRIMARY KEY (shape_id, entity, row_id)
         );
         INSERT INTO replica_row(shape_id, entity, row_id, payload_json, oversized_json)
-          VALUES ('shape-photos', 'core.content_item', 'stale', '{}', '[]');
+          VALUES ('shape-photos', 'knowledge.annotation', 'stale', '{}', '[]');
         PRAGMA user_version = 7;
       `);
       const store = new ReplicaSqliteStore(driver, "vault-a");
@@ -241,11 +241,11 @@ describe("store-core", () => {
           store
             .search({
               shapeId: "shape-photos",
-              entity: "core.content_item",
+              entity: "knowledge.annotation",
               query: "moon",
             })
             .rows.map((row) => row.rowId)
-        ).toStrictEqual(["photo-off-window"]);
+        ).toStrictEqual(["caption-off-window"]);
       } finally {
         store.close();
       }

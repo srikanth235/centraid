@@ -95,6 +95,15 @@ export interface TagPayload {
   scheme_uri?: string;
   label: string;
   confidence: number;
+  /**
+   * THE EVIDENCE THIS CLAIM RESTS ON (#996, ruling R22). The
+   * `enrich_derivation` row that produced it — which carries the profile, the
+   * model and the payload — and the revision of the target it was made about.
+   * Absent for a claim written before the enrichment run stamped one, which
+   * reads as an unattributed machine tag, because that is what it is.
+   */
+  derivation_id?: string | null;
+  input_revision_id?: string | null;
 }
 
 const tagPublisher: Publisher = {
@@ -108,13 +117,23 @@ const tagPublisher: Publisher = {
            JOIN core_concept c ON c.concept_id = t.concept_id
            JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
           WHERE t.target_type = ? AND t.target_id = ? AND s.uri = ?
-            AND c.normalized_key = ?`
+            AND c.normalized_key = ?
+            AND (t.tagged_by_party_id IS NOT NULL
+                 OR COALESCE(t.derivation_id, '') = COALESCE(?, ''))
+        ORDER BY CASE WHEN t.tagged_by_party_id IS NOT NULL THEN 0 ELSE 1 END
+        LIMIT 1`
       )
       .get(
         p.target_type,
         p.target_id,
         p.scheme_uri ?? VISION_SCHEME_URI,
-        conceptKey(p.label)
+        conceptKey(p.label),
+        // COMPETING CONFIDENCES ARE ROWS (#996, R22): this profile's own claim
+        // is what a re-run refreshes. Another profile's claim about the same
+        // concept is a different row, and finding it here would have made the
+        // second engine overwrite the first — the collapse the table's old
+        // `UNIQUE (target, concept)` enforced.
+        p.derivation_id ?? null
       ) as { tag_id: string; tagged_by_party_id: string | null } | undefined;
     if (!row) return null;
     // Owner-asserted tag (has a party) is terminal; machine tag refreshes confidence.
@@ -138,20 +157,41 @@ const tagPublisher: Publisher = {
     const tagId = uuidv7();
     vault
       .prepare(
-        `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
-         VALUES (?, ?, ?, ?, NULL, ?, ?)`
+        `INSERT INTO core_tag
+           (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+            confidence, derivation_id, input_revision_id, tagged_at)
+         VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)`
       )
-      .run(tagId, p.target_type, p.target_id, conceptId, p.confidence, now);
+      .run(
+        tagId,
+        p.target_type,
+        p.target_id,
+        conceptId,
+        p.confidence,
+        p.derivation_id ?? null,
+        p.input_revision_id ?? null,
+        now
+      );
     return { entityId: tagId, wrote: [] };
   },
   update(vault, entityId, payload, now) {
     const p = assertPayload<TagPayload>("TagPayload", payload);
     vault
       .prepare(
-        `UPDATE core_tag SET confidence = ?, tagged_at = ?
+        `UPDATE core_tag
+            SET confidence = ?,
+                derivation_id = COALESCE(?, derivation_id),
+                input_revision_id = COALESCE(?, input_revision_id),
+                tagged_at = ?
           WHERE tag_id = ? AND tagged_by_party_id IS NULL`
       )
-      .run(p.confidence, now, entityId);
+      .run(
+        p.confidence,
+        p.derivation_id ?? null,
+        p.input_revision_id ?? null,
+        now,
+        entityId
+      );
     return { wrote: [] };
   },
 };

@@ -31,6 +31,14 @@ function snapshot(hasUnavailableFields = true): ReplicaSnapshot {
             ],
             ...(hasUnavailableFields ? { hasUnavailableFields: true } : {}),
           },
+          // The caption a Photos seat ranks offline is a `knowledge.annotation`
+          // on the representation (#996, R20(b)) — the byte row carries no
+          // searchable text of its own.
+          {
+            entity: "knowledge.annotation",
+            primaryKey: "annotation_id",
+            columns: ["annotation_id", "target_type", "target_id", "body_text"],
+          },
         ],
       },
     ],
@@ -46,6 +54,17 @@ function snapshot(hasUnavailableFields = true): ReplicaSnapshot {
           created_at: "2026-07-15T10:00:00.000Z",
         },
         oversizedFields: ["caption"],
+      },
+      {
+        shapeId: "shape-photos",
+        entity: "knowledge.annotation",
+        rowId: "caption-1",
+        values: {
+          annotation_id: "caption-1",
+          target_type: "core.content_representation",
+          target_id: "rep-1",
+          body_text: "Moonlit campsite",
+        },
       },
     ],
   };
@@ -128,10 +147,10 @@ describe(NativeReplicaStore, () => {
       await store.bootstrap(snapshot(false));
       const result = await store.searchWire({
         shapeId: "shape-photos",
-        entity: "core.content_item",
+        entity: "knowledge.annotation",
         query: "moon",
       });
-      expect(result.rows.map((row) => row.rowId)).toStrictEqual(["photo-1"]);
+      expect(result.rows.map((row) => row.rowId)).toStrictEqual(["caption-1"]);
     } finally {
       await store.close();
     }

@@ -8,7 +8,7 @@ Umbrella receipt. One receipt for the whole umbrella; each wave appends its own 
 - [x] **Wave 0b — schema**: the revision occurrence with the wrapper's current-revision pointer and `recordRevision`'s edges deleted; the representation row beside byte-only `core_content_item`; `core_transaction.external_id` without the global `UNIQUE`; the typed occurrence key and one `tz` spelling; the primary-identifier partial index, interval CHECK and issuer column; concept-identity columns; the decoded-body-text side table; deletion roles declared beside references. No epoch bump here
 - [x] **Wave 0c — domain operations**: one invariant boundary with Atlas inside it and non-empty pre/postconditions; content write as one operation; acyclic task hierarchy; `complete` / `reopen` shared by People, Tasks and automations with series identity and inherited `about`; the occurrence adapter every reader consumes; temporal validation at every entry point; `tagNotation` replaced by concept identity; `accountFor` and the publisher probe re-keyed; the declared read-set wired into the intent conflict checker; each operation's offline declaration
 - [x] **Wave 0d — queries and contracts**: `(party, currency)` balances, group results in the group's currency, the explicit valuation type with its unavailable state, the Money output type, and settlements, obligations and exports on the same helpers
-- [ ] **Wave 0e — evidence and the cross-boundary tier**: machine tags and document classification linked to their derivation and input revision; the thirteen scenarios promoted to a package fixture with a command→query round-trip test per shared concept across two app surfaces; purge behaviour tested per deletion role
+- [x] **Wave 0e — evidence and the cross-boundary tier**: machine tags and document classification linked to their derivation and input revision; the thirteen scenarios promoted to a package fixture with a command→query round-trip test per shared concept across two app surfaces; purge behaviour tested per deletion role
 - [ ] **Wave 1 — the log and the seat**: `replica_log` with session capture and in-transaction reconstruction, the sanitised snapshot with its canary test, the applier and cursor, the epoch gate, retention; the one `schema_epoch` bump for W0b and W1; replay-and-diff convergence is the gate from here on
 - [ ] **Wave 2 — intents over the new plane**: `row_version` on every mutable table, the declared read-set conflict check, durable outcomes carrying `commit_seq`, the overlay cleared in the transaction that carries the commit, dependency edges and predecessor references
 - [ ] **Wave 3 — the phone**: expo-sqlite replaces op-sqlite with sessions, SQLCipher and FTS; the measured device rows exist before any irreversible deletion
@@ -41,6 +41,8 @@ Wave 0b lands across four commits, and what it lands is **Wave 0b — schema**: 
 Wave 0c lands in one commit, and what it lands is **Wave 0c — domain operations**: one invariant boundary with Atlas inside it and non-empty pre/postconditions; content write as one operation; acyclic task hierarchy; `complete` / `reopen` shared by People, Tasks and automations with series identity and inherited `about`; the occurrence adapter every reader consumes; temporal validation at every entry point; `tagNotation` replaced by concept identity; `accountFor` and the publisher probe re-keyed; the declared read-set wired into the intent conflict checker; each operation's offline declaration. The surface, the scenarios, the site accounting and the gate tails are in `## Wave 0c — domain operations` below.
 
 Wave 0d lands in one commit, and what it lands is **Wave 0d — queries and contracts**: `(party, currency)` balances, group results in the group's currency, the explicit valuation type with its unavailable state, the Money output type, and settlements, obligations and exports on the same helpers. The surface, the scenarios, the site accounting and the gate tails are in `## Wave 0d — queries and contracts` below.
+
+Wave 0e lands in one commit, and what it lands is **Wave 0e — evidence and the cross-boundary tier**: machine tags and document classification linked to their derivation and input revision; the thirteen scenarios promoted to a package fixture with a command→query round-trip test per shared concept across two app surfaces; purge behaviour tested per deletion role. The surface, the scenarios, the files, the gate tails and one carried-in fix are in `## Wave 0e — evidence and the fixture` below.
 
 ## Out of scope
 
@@ -934,3 +936,89 @@ Removing the entry was tried and **reverted**: ten `sqlite-store` / `store-core`
 - **`Transfer.amount` moved, `expense.amount_minor` did not.** A stored fact keeps its column shape — the row carries `settlement_currency` beside it and W4 rewrites these handlers. What moved is every field that is a BALANCE: a derived figure with no currency of its own until someone labels it, which is exactly where ONT-23 lived.
 - **Nothing here changes a stored column, so the golden corpus is not re-frozen.** 0d is reader-side by construction; the currencies it reads have been in the DDL since #916.
 - **`query-handlers.test.ts` was SPLIT, not waived.** Both of this wave's reader tests landed there and pushed it past the repo's 625-line file limit. The `ctx` builder moved to `query-handler-ctx.test-fixtures.ts` — one builder, so two suites cannot disagree about what a handler is handed — and the #996 blocks moved to `query-handlers-996.test.ts`. Naming a waiver instead would have been the cheap fix the directive exists to refuse.
+
+## Wave 0e — evidence and the fixture
+
+One commit. Machine claims gain their evidence and stop overwriting each other, deletion gains a role beside every reference onto a person or a content item, and the thirteen scenarios stop being thirteen tests and become a **scripted fixture** another package can replay.
+
+### The shape
+
+- **A claim carries its evidence.** `core_tag` gains `derivation_id` → `enrich_derivation` and `input_revision_id` → `core_entity_revision`, both `ON DELETE SET NULL`, with a table CHECK that an owner-asserted tag cites neither: a member's tag is not a model's output and may not borrow one's provenance.
+- **Competing claims are representable.** The table-level `UNIQUE (target_type, target_id, concept_id)` is gone — it made two engine profiles disagreeing *unrepresentable*, because the second claim silently replaced the first. In its place, two partial unique indexes that keep every uniqueness still true: `core_tag_owner_assertion_idx` (one OWNER assertion per target and concept) and `core_tag_machine_assertion_idx` on `COALESCE(derivation_id, '')` (one machine assertion per DERIVATION, so a re-run replaces its own row and nobody else's).
+- **The preferred claim is derived, never stored.** `packages/vault/src/enrich/assertions.ts` computes it the way `preferredDerivation` computes its own: the owner first, then the profile the caller's policy points at, then the built-in engines, then a stable tie-break on profile name and id. Confidence does **not** order the list — a higher number from a profile the member did not choose is a different engine's opinion, not a better answer. No column anywhere says "this is the one".
+- **The publisher writes the link and probes narrowly.** `enrich-publishers.ts`'s tag payload carries `derivation_id` / `input_revision_id`, the update path `COALESCE`s them, and the probe narrows on `COALESCE(t.derivation_id, '') = COALESCE(?, '')`, so a second profile's claim is a create rather than an update.
+- **Deletion is declared by relationship role.** `packages/vault/src/schema/deletion-roles.ts` declares **56** references onto `core_party` and `core_content_item` as one of five roles — owned child (4), derived (3), attribution (6), participation (22), durable record (21) — each with its reason in prose and its `ON DELETE` rule fixed by the role (`ROLE_ON_DELETE`). A declaration may name the SWEEP rather than the key as what carries it out, and says so; that is the one case where the key's own rule is free. `derived` exists to tell rebuildable output apart from an owned child: both cascade, and only one of them can be regenerated.
+- **The thirteen scenarios are a fixture.** `packages/vault/tests/fixtures/ontology-scenarios/` is a builder that runs the real commands and the real import path against a fresh vault and hands back every claim **already read through the path a surface reads it through**. It is exported as `@centraid/vault/tests/ontology-scenarios`, so W1's convergence run replays it from another package without importing anything of the vault's internals.
+
+### Scenarios
+
+Thirteen, all against ONE vault in this order, each naming the drift row it reproduces and the two app surfaces its command→query round trip crosses. The full table with the surfaces is `packages/vault/tests/fixtures/ontology-scenarios/README.md`.
+
+| # | Scenario | Reproduces | Wave |
+| --- | --- | --- | --- |
+| 1 | An end-dated primary does not block its replacement | ONT-30 | 0b |
+| 2 | The same short handle in two issuers is two identities | ONT-30 | 0b |
+| 3 | 猫, 犬, कुत्ता and बिल्ली are four concepts | ONT-29 | 0b |
+| 4 | Bank A and Bank B may both import `ref-1` | ONT-24 | 0b |
+| 5 | Two documents with identical bytes keep separate histories | ONT-22 | 0b |
+| 6 | One byte row, two documents, two readings | ONT-28 | 0b |
+| 7 | Create, skip day two, query — under five readings of one wall clock | ONT-25 | 0c |
+| 8 | Completing from People and then from Tasks is one completion | ONT-27 | 0c |
+| 9 | A recurring person task rolls over once, and keeps its links | ONT-27 | 0c |
+| 10 | The same impossible task, refused by the command and by the row editor | ONT-26 | 0c |
+| 11 | USD 100 + EUR 100 is two balances, and nothing is 200 | ONT-23 | 0d |
+| 12 | Competing machine claims, and the owner's assertion above them | R22 | 0e |
+| 13 | One purge, and each role behaves as its declaration says | R22 | 0e |
+
+The count is thirteen. Beside them, this wave's own suites: `deletion-roles.test.ts` (4 census cases + 4 behavioural purges, one per role) and `assertions.test.ts` (6, all written through the real publisher and read through `competingAssertions` / `preferredAssertion`).
+
+### Site accounting
+
+- `DELETION_ROLES`: **56** declarations; every live FK onto a roled parent is declared and every declaration names a live key, both held by the census tests rather than by a comment.
+- `UNIQUE (target_type, target_id, concept_id)` on `core_tag` in code: **0** (the one remaining hit is the comment recording that it is gone).
+- The scripted fixture: **13** scenarios, **52** assertions in the vault suite, one replay comparison.
+
+### Files
+
+- `packages/vault/src/schema/core.ts` — `core_tag`'s two evidence columns, the owner-vs-machine CHECK, and the two partial unique indexes replacing the table-level `UNIQUE`.
+- `packages/vault/src/schema/core-side-tables.ts` and `packages/vault/src/schema/migrate.ts` — `core.ts` passed the repo's 625-line limit with the `core_tag` change, so its two 1:1 SIDE TABLES (`core_link_anchor`, `core_content_text`) moved out whole, comments included, and `migrate.ts` imports them from there. Split rather than waived; no DDL text changed, which the golden corpus proves.
+- `packages/vault/src/schema/deletion-roles.ts`, `packages/vault/src/schema/deletion-roles.test.ts` — the role census and its two halves (mechanical, behavioural).
+- `packages/vault/src/enrich/assertions.ts`, `packages/vault/src/enrich/assertions.test.ts` — the derived preferred assertion.
+- `packages/vault/src/ingest/enrich-publishers.ts` — the evidence link on write, and the per-derivation probe.
+- `packages/vault/src/gateway/gateway.ts` — `invoke` accepts the deterministic id seed the execution stage has always supported and nothing reached.
+- The fixture, all under `packages/vault/tests/fixtures/ontology-scenarios/`: `packages/vault/tests/fixtures/ontology-scenarios/README.md`, `packages/vault/tests/fixtures/ontology-scenarios/build.ts`, `packages/vault/tests/fixtures/ontology-scenarios/clock.ts`, `packages/vault/tests/fixtures/ontology-scenarios/types.ts`, `packages/vault/tests/fixtures/ontology-scenarios/identity.ts`, `packages/vault/tests/fixtures/ontology-scenarios/behaviour.ts`, `packages/vault/tests/fixtures/ontology-scenarios/money.ts`, `packages/vault/tests/fixtures/ontology-scenarios/evidence.ts`, `packages/vault/tests/fixtures/ontology-scenarios/index.ts`, `packages/vault/tests/fixtures/ontology-scenarios/ontology-scenarios.test.ts`.
+- `packages/vault/package.json` — the `exports` map, adding `./tests/ontology-scenarios` beside `.` (the package had none; `.` keeps exactly the resolution it had).
+- `packages/vault/vitest.config.ts`, `packages/vault/tsconfig.test.json` — `tests/**` joins the package's own `test` and `typecheck` scripts.
+- `packages/vault/tests/golden/issue-929/manifest.json` and `packages/vault/tests/golden/issue-929/vault.db.gz` — re-frozen for the `core_tag` DDL change, per **ONT-ladder** (the old corpus opens, migrates, keeps every row and is doctor-clean first).
+- `docs/vault-ontology.md` — three rows added to `## Commitments the code enforces`: the role census, the evidence link with its derived preference, and the reader-test rule with the fixture as its mechanism.
+- `scripts/docs-site/src/content/ontology-body.html` — core.tag's two new columns on the published page.
+- `packages/client/src/replica/search.ts`, `packages/client/src/replica/store-core.test-fixtures.ts`, `packages/client/src/replica/store-core.test.ts`, `packages/client/src/replica/sqlite-store.test.ts`, `packages/client/src/replica/store-core-storage-lifecycle.test.ts`, `apps/mobile/src/lib/replica/native-replica-store.test.ts` — the carried-in FTS fix below.
+
+### The client FTS fix carried in this commit
+
+`search-parity.test.ts` was red on the tree this wave started from: wave 0b's representation split made `fts.ts:115` index a content item's title as an expression over `media_asset`, and no replica shape ships that, while `REPLICA_LOCAL_SEARCH["core.content_item"]` still claimed `title` as an eager column. The entry is dropped and the photo FTS fixtures move to `knowledge.annotation.body_text`. It is a finished fix for a red this wave's own suite would otherwise carry, so it lands here rather than being left for W1.
+
+### Gates
+
+```sh
+cd packages/vault && bunx vitest run       # 201 files, 1678 tests, 1675 passed, 2 skipped, 1 failed → golden DDL only
+bun run golden-vault:freeze -- --label issue-929   # 67 tables, 289 rows, schema v5
+cd packages/vault && bunx vitest run src/golden-vault.test.ts   # 5 passed
+cd packages/client && bunx vitest run      # 273 files, 2478 passed
+cd packages/blueprints && bunx vitest run  # 213 files, 7083 passed, 2 expected fail
+cd packages/core && bunx vitest run        # 19 files, 302 passed
+cd apps/mobile && bunx vitest run          # 286 files, 2438 passed
+bun run lint && bun run format:check
+bash .governance/run.sh
+```
+
+The one vault failure above is `golden-vault.test.ts`'s DDL-equality case, red between the `core_tag` change and the re-freeze; green after it, which is the second command's whole purpose. Every package's `typecheck` is green.
+
+### Decisions — wave 0e
+
+- **Offline photo TITLE search is unavailable on the old device store until W2.** The carried-in fix drops `core.content_item.title` from the replica's eager search columns because the vault indexes it as an expression over `media_asset` and no shape ships it. Accepted as a v0 interim rather than papered over: W2's seat builds the vault's own FTS from `fts.ts` over the whole file, and that is where the title comes back. Not fixed in the old store.
+- **The fixture holds the global clock rather than gaining a seam.** The execution stage stamps every instant from `nowIso()`, and there is no clock dependency to inject. `installFixtureClock` proxies `Date` for the length of the build and restores it in a `finally`. The alternative — threading a clock through the gateway for a fixture's benefit — would have put a test seam in the write path.
+- **Ids are reproducible; the bootstrap's are not.** `Gateway.invoke` now forwards the `deterministicIdSeed` the execution stage has supported since it was written and no caller could reach. Bootstrap ids stay UUIDv7 off the clock, so `fixture.digest` canonicalises identifiers to the order they first appear — the property a convergence test wants (same rows, same order, related the same way) rather than the stronger one nothing needs.
+- **One vault for all thirteen, not thirteen vaults.** A scenario that only holds in a vault containing nothing else is not telling the truth about the product. The cost is two rules a new scenario must respect, both written in the README: each series takes its own week (`schedule.propose_event` refuses a busy overlap across calendars), and every read narrows to the rows its own scenario wrote. Three scenarios were wrong on exactly that when first written and were corrected, not loosened.
+- **`derived` is a fifth role, beside R22's four.** R22 names owned child, attribution, participation and durable record, and also asks that "a parent-owned projection is told apart from rebuildable derived data" — which the four cannot express, since decoded text and a representation both cascade. `derived` is that distinction, declared rather than inferred.
+- **The package gains an `exports` map.** `@centraid/vault` had none, so every subpath resolved by file path. Adding one to expose `./tests/ontology-scenarios` also closes the package's surface to everything else; `.` keeps exactly the resolution it had, and no consumer imports a subpath today.

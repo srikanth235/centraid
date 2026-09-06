@@ -230,14 +230,14 @@ describe("store-core", () => {
         store.bootstrap(searchableSnapshot());
         const result = store.search({
           shapeId: "shape-photos",
-          entity: "core.content_item",
+          entity: "knowledge.annotation",
           query: "moon camp",
           limit: 10,
         });
         expect(result.rows).toHaveLength(1);
         expect(result.rows[0]?.values).toMatchObject({
-          content_id: "photo-off-window",
-          title: "Moonlit campsite in Ladakh",
+          annotation_id: "caption-off-window",
+          body_text: "Moonlit campsite in Ladakh",
         });
         expect(result.rows[0]?.values._snippet).toContain("⟦Moonlit⟧");
       } finally {
@@ -262,7 +262,7 @@ describe("store-core", () => {
         expect(() =>
           store.search({
             shapeId: "shape-photos",
-            entity: "core.content_item",
+            entity: "knowledge.annotation",
             query: "moon",
           })
         ).toThrow(ReplicaSearchRefusedError);
@@ -284,12 +284,13 @@ describe("store-core", () => {
             {
               op: "upsert",
               shapeId: "shape-photos",
-              entity: "core.content_item",
-              rowId: "photo-off-window",
+              entity: "knowledge.annotation",
+              rowId: "caption-off-window",
               values: {
-                content_id: "photo-off-window",
-                title: "Sunny afternoon",
-                deleted_at: null,
+                annotation_id: "caption-off-window",
+                target_type: "core.content_representation",
+                target_id: "rep-off-window",
+                body_text: "Sunny afternoon",
                 created_at: "2024-01-01T10:00:00.000Z",
               },
             },
@@ -298,14 +299,14 @@ describe("store-core", () => {
         expect(
           store.search({
             shapeId: "shape-photos",
-            entity: "core.content_item",
+            entity: "knowledge.annotation",
             query: "moon",
           }).rows
         ).toHaveLength(0);
         expect(
           store.search({
             shapeId: "shape-photos",
-            entity: "core.content_item",
+            entity: "knowledge.annotation",
             query: "sunny",
           }).rows
         ).toHaveLength(1);
@@ -327,34 +328,37 @@ describe("store-core", () => {
         const base = searchableSnapshot();
         const renamed = {
           shapeId: "shape-photos",
-          entity: "core.content_item",
-          rowId: "photo-off-window",
+          entity: "knowledge.annotation",
+          rowId: "caption-off-window",
           values: {
-            content_id: "photo-off-window",
-            title: "Moonlit terrace garden in Ladakh",
-            deleted_at: null,
+            annotation_id: "caption-off-window",
+            target_type: "core.content_representation",
+            target_id: "rep-off-window",
+            body_text: "Moonlit terrace garden in Ladakh",
             created_at: "2024-01-01T10:00:00.000Z",
           },
         };
         const added = {
           shapeId: "shape-photos",
-          entity: "core.content_item",
-          rowId: "photo-added",
+          entity: "knowledge.annotation",
+          rowId: "caption-added",
           values: {
-            content_id: "photo-added",
-            title: "Terrace garden after the rain",
-            deleted_at: null,
+            annotation_id: "caption-added",
+            target_type: "core.content_representation",
+            target_id: "rep-added",
+            body_text: "Terrace garden after the rain",
             created_at: "2026-08-01T10:00:00.000Z",
           },
         };
         const kept = {
           shapeId: "shape-photos",
-          entity: "core.content_item",
-          rowId: "photo-kept",
+          entity: "knowledge.annotation",
+          rowId: "caption-kept",
           values: {
-            content_id: "photo-kept",
-            title: "Garden gate",
-            deleted_at: null,
+            annotation_id: "caption-kept",
+            target_type: "core.content_representation",
+            target_id: "rep-kept",
+            body_text: "Garden gate",
             created_at: "2026-08-02T10:00:00.000Z",
           },
         };
@@ -370,15 +374,18 @@ describe("store-core", () => {
             {
               op: "delete",
               shapeId: "shape-photos",
-              entity: "core.content_item",
-              rowId: "photo-new",
+              entity: "knowledge.annotation",
+              rowId: "caption-new",
             },
             { op: "upsert", ...added },
           ],
         });
         clean.bootstrap({ ...base, rows: [renamed, added, kept] });
 
-        const query = { shapeId: "shape-photos", entity: "core.content_item" };
+        const query = {
+          shapeId: "shape-photos",
+          entity: "knowledge.annotation",
+        };
         for (const text of ["garden", "terrace garden", "moon", "gate"]) {
           expect(churned.search({ ...query, query: text }).rows).toStrictEqual(
             clean.search({ ...query, query: text }).rows
@@ -390,7 +397,11 @@ describe("store-core", () => {
             .search({ ...query, query: "garden" })
             .rows.map((row) => row.rowId)
             .sort()
-        ).toStrictEqual(["photo-added", "photo-kept", "photo-off-window"]);
+        ).toStrictEqual([
+          "caption-added",
+          "caption-kept",
+          "caption-off-window",
+        ]);
         expect(churned.search({ ...query, query: "park" }).rows).toStrictEqual(
           []
         );

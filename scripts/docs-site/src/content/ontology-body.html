@@ -637,6 +637,8 @@ cols:[
 ['concept_id','TEXT','FK NN','core.concept', 'Which concept applies.'],
 ['tagged_by_party_id','TEXT','FK','core.party', 'Owner or agent identity that applied it.'],
 ['confidence','REAL','CK','', 'CHECK(confidence BETWEEN 0 AND 1); 1.0 for human assertions.'],
+['derivation_id','TEXT','FK','enrich.derivation', 'A MACHINE ASSERTION LINKS TO ITS EVIDENCE (#996, ruling R22): which enrich_derivation produced this claim, and therefore which profile, model and payload. NULL on an owner’s own tag, which cites no model. ON DELETE SET NULL — losing the evidence must never delete the claim.'],
+['input_revision_id','TEXT','FK','core.entity_revision', 'Which revision of the target the claim was made ABOUT (#996, R22), so a claim about superseded content is told apart from one about what is there now. NULL on an owner’s own tag.'],
 ['tagged_at','TEXT (iso8601)','NN','', 'When applied.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
 ]},

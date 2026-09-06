@@ -25,7 +25,8 @@ import {
 } from "./authority.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
 import { BLOB_DDL } from "./blob.js";
-import { CONTENT_TEXT_DDL, CORE_DDL, LINK_ANCHOR_DDL } from "./core.js";
+import { CONTENT_TEXT_DDL, LINK_ANCHOR_DDL } from "./core-side-tables.js";
+import { CORE_DDL } from "./core.js";
 import {
   LOCKER_ADDRESS_DDL,
   LOCKER_ALIAS_DDL,

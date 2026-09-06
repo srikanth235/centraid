@@ -84,10 +84,19 @@ describe("sqlite-store", () => {
           shapeId: "shape-photos",
           appId: "photos",
           entities: [
+            // Photo CAPTIONS, not the byte row (#996, R20(b)): a caption is
+            // a `knowledge.annotation` on the photo's representation, and its
+            // `body_text` is what the local index holds.
             {
-              entity: "core.content_item",
-              primaryKey: "content_id",
-              columns: ["content_id", "title", "deleted_at", "created_at"],
+              entity: "knowledge.annotation",
+              primaryKey: "annotation_id",
+              columns: [
+                "annotation_id",
+                "target_type",
+                "target_id",
+                "body_text",
+                "created_at",
+              ],
             },
           ],
         },
@@ -113,23 +122,25 @@ describe("sqlite-store", () => {
       rows: [
         {
           shapeId: "shape-photos",
-          entity: "core.content_item",
-          rowId: "photo-new",
+          entity: "knowledge.annotation",
+          rowId: "caption-new",
           values: {
-            content_id: "photo-new",
-            title: "Today at the park",
-            deleted_at: null,
+            annotation_id: "caption-new",
+            target_type: "core.content_representation",
+            target_id: "rep-new",
+            body_text: "Today at the park",
             created_at: "2026-07-15T10:00:00.000Z",
           },
         },
         {
           shapeId: "shape-photos",
-          entity: "core.content_item",
-          rowId: "photo-off-window",
+          entity: "knowledge.annotation",
+          rowId: "caption-off-window",
           values: {
-            content_id: "photo-off-window",
-            title: "Moonlit campsite in Ladakh",
-            deleted_at: null,
+            annotation_id: "caption-off-window",
+            target_type: "core.content_representation",
+            target_id: "rep-off-window",
+            body_text: "Moonlit campsite in Ladakh",
             created_at: "2024-01-01T10:00:00.000Z",
           },
         },
@@ -427,21 +438,21 @@ describe("sqlite-store", () => {
         expect(
           store.read({
             shapeId: "shape-photos",
-            entity: "core.content_item",
+            entity: "knowledge.annotation",
             orderBy: { column: "created_at", dir: "desc" },
             limit: 1,
           }).rows[0]?.rowId
-        ).toBe("photo-new");
+        ).toBe("caption-new");
         const result = store.search({
           shapeId: "shape-photos",
-          entity: "core.content_item",
+          entity: "knowledge.annotation",
           query: "moon camp",
           limit: 10,
         });
         expect(result.rows).toHaveLength(1);
         expect(result.rows[0]?.values).toMatchObject({
-          content_id: "photo-off-window",
-          title: "Moonlit campsite in Ladakh",
+          annotation_id: "caption-off-window",
+          body_text: "Moonlit campsite in Ladakh",
         });
         expect(result.rows[0]?.values._snippet).toContain("⟦Moonlit⟧");
       } finally {
@@ -550,18 +561,18 @@ describe("sqlite-store", () => {
       const { store } = openStore();
       try {
         const exposed = searchableSnapshot();
-        exposed.rows[0]!.values.title = "Same caption";
-        exposed.rows[1]!.values.title = "Same caption";
+        exposed.rows[0]!.values.body_text = "Same caption";
+        exposed.rows[1]!.values.body_text = "Same caption";
         exposed.rows.reverse();
         store.bootstrap(exposed);
         expect(
           store.search({
             shapeId: "shape-photos",
-            entity: "core.content_item",
+            entity: "knowledge.annotation",
             query: "same",
             limit: 1,
           }).rows[0]?.rowId
-        ).toBe("photo-new");
+        ).toBe("caption-new");
 
         const opaque = searchableSnapshot();
         const schema = opaque.shapes[0]!.entities[0]!;
@@ -570,14 +581,14 @@ describe("sqlite-store", () => {
         for (const row of opaque.rows.filter(
           (candidate) => candidate.shapeId === "shape-photos"
         )) {
-          row.values.title = "Same caption";
+          row.values.body_text = "Same caption";
           row.values[REPLICA_SYNTHETIC_PRIMARY_KEY] = row.rowId;
         }
         store.bootstrap(opaque);
         expect(() =>
           store.search({
             shapeId: "shape-photos",
-            entity: "core.content_item",
+            entity: "knowledge.annotation",
             query: "same",
             limit: 1,
           })

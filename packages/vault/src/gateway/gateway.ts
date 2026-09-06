@@ -1058,8 +1058,21 @@ export class Gateway {
     return { reason, containerId: route.containerId, actorPartyId };
   }
 
-  /** The only write path (rule R04). */
-  invoke(cred: Credential, rawRequest: InvokeRequest): InvokeOutcome {
+  /**
+   * The only write path (rule R04).
+   *
+   * `deterministicIdSeed` makes the ids a handler mints reproducible: they are
+   * derived from the seed and the mint ORDER rather than from the clock, which
+   * is what lets a scripted fixture (#996's ontology scenarios) be replayed and
+   * compared row for row. It is a FIXTURE seam — the seed must differ per
+   * invocation, since the mint order restarts inside each one — and ordinary
+   * callers pass nothing and get UUIDv7.
+   */
+  invoke(
+    cred: Credential,
+    rawRequest: InvokeRequest,
+    deterministicIdSeed?: string
+  ): InvokeOutcome {
     const identity = this.identify(cred);
     // BEFORE the commons rail: a refusal here is about the STANDING GRANT,
     // not something the rail should carry to the steward.
@@ -1079,7 +1092,7 @@ export class Gateway {
       });
       return { status: "denied", receiptId, reason: refused.reason };
     }
-    return this.invokeCore(identity, rawRequest);
+    return this.invokeCore(identity, rawRequest, deterministicIdSeed);
   }
 
   private invokeCore(

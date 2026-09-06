@@ -13,7 +13,13 @@ export interface ReplicaLocalSearchSpec {
 export const REPLICA_LOCAL_SEARCH: Readonly<
   Record<string, ReplicaLocalSearchSpec>
 > = {
-  "core.content_item": { columns: ["title"], deletedColumn: "deleted_at" },
+  // NO `core.content_item` (#996, R20(b)). The byte row lost its `title`: an
+  // authored title is `media_asset.title` and a generated caption is a
+  // `knowledge.annotation` on the representation, so the vault indexes the
+  // content item's title as an EXPRESSION over the owning asset, not as a
+  // column of the row. No replica shape carries that value, so nothing here
+  // could hold it eagerly — a Photos seat ranks its captions under
+  // `knowledge.annotation` below, and a title search goes online.
   "core.document": { columns: ["title"], deletedColumn: "deleted_at" },
   "social.thread": { columns: ["subject"] },
   "core.party": { columns: ["display_name", "sort_name"] },
