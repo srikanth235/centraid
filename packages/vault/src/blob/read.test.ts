@@ -5,6 +5,8 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { fixtureSha } from "@centraid/test-kit/fixture-sha";
+
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
@@ -42,13 +44,7 @@ describe("read", () => {
            (derivative_id, content_id, variant, sha256, media_type, byte_size, created_at)
          VALUES (?, ?, ?, ?, 'image/jpeg', 20, ?)`
         )
-        .run(
-          uuidv7(),
-          contentId,
-          variant,
-          `d${shaLocal}`.slice(0, 64).padEnd(64, "0"),
-          nowIso()
-        );
+        .run(uuidv7(), contentId, variant, fixtureSha(shaLocal), nowIso());
     }
   }
 

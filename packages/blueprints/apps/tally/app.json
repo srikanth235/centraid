@@ -645,7 +645,7 @@
             "type": "string",
             "minLength": 1
           },
-          "time_zone": {
+          "tz": {
             "type": "string",
             "minLength": 1
           },
@@ -682,7 +682,7 @@
           "splits",
           "rrule",
           "anchor_start",
-          "time_zone"
+          "tz"
         ],
         "additionalProperties": false
       },
@@ -713,12 +713,12 @@
             "type": "string",
             "minLength": 1
           },
-          "original_start": {
+          "original_start_local": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["template_id", "original_start"],
+        "required": ["template_id", "original_start_local"],
         "additionalProperties": false
       },
       "output": {
@@ -753,7 +753,7 @@
             "type": "string",
             "minLength": 1
           },
-          "original_start": {
+          "original_start_local": {
             "type": "string",
             "minLength": 1
           },
@@ -769,7 +769,7 @@
             "type": "object"
           }
         },
-        "required": ["template_id", "original_start", "scope", "action"],
+        "required": ["template_id", "original_start_local", "scope", "action"],
         "additionalProperties": false
       },
       "output": {

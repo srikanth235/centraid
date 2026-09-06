@@ -106,7 +106,7 @@ export function RecurringScreen(props: RecurringScreenProps): ReactNode {
                 title={template.description}
                 meta={metaSentence([
                   sentence ?? UNSUMMARISABLE,
-                  template.time_zone,
+                  template.tz,
                   names.get(template.group_id),
                 ])}
                 {...(chip

@@ -3,6 +3,8 @@
 
 import { describe, expect, test } from "vitest";
 
+import { fixtureSha } from "@centraid/test-kit/fixture-sha";
+
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import {
@@ -28,7 +30,7 @@ function seedAsset(db: VaultDb, assetId: string): void {
          (content_id, content_uri, sha256, byte_size, created_at)
        VALUES (?, 'file:///x', ?, 1, '2026-01-01T00:00:00.000Z')`
     )
-    .run(contentId, `sha-${assetId}`.padEnd(64, "0"));
+    .run(contentId, fixtureSha(assetId));
   db.vault
     .prepare(
       `INSERT OR IGNORE INTO media_asset (asset_id, content_id, kind, captured_at)

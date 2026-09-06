@@ -39,19 +39,26 @@ const logger = {
  * re-pinned once when the current main branch retired the app grant evaluator.
  * #929 then deliberately reshaped `docs` and `people` again: docs moved from
  * the deleted commons tables to the subscription plane, while people dropped
- * its deleted invitation-only scopes. Those devices rebootstrap once. The
- * other six ids are unchanged by this PR, which is what this file is here to
- * show.
+ * its deleted invitation-only scopes. Those devices rebootstrap once.
+ *
+ * #996 wave 0c reshapes FOUR — agenda, notes, people and tasks — and says so
+ * here rather than anywhere else. The reshape is a column set, not a scope:
+ * `schedule_task` gained `series_id` (a recurring task's stable series
+ * identity, ruling R21 / drift ONT-27) and `core_event` gained `rrule_support`
+ * (an imported rule outside the expander's subset is retained with an explicit
+ * support state, ONT-31), and every app whose shape spans those two tables
+ * moves with them. `docs`, `locker`, `photos` and `tally` are untouched, which
+ * is what this file is here to show.
  */
 const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
-  agenda: "agenda:63dc551516f999257c0751d6",
+  agenda: "agenda:d624eec4e808bbc488f1ea68",
   docs: "docs:f7fec11a5cbc4bdc45830b7e",
   locker: "locker:68a09533e26a51272e1baad2",
-  notes: "notes:87a96480df608575c2c823cb",
-  people: "people:f056df671a7163d85f381ef5",
+  notes: "notes:8d9a6bfb88d7d635c8620b54",
+  people: "people:4c9a8f4e64f1d5c1c8bdade8",
   photos: "photos:a568f72b0549dc90afeb7e17",
   tally: "tally:6b8ba1c6a43d071d10001f53",
-  tasks: "tasks:237bbe3dfccc7fd90feb2061",
+  tasks: "tasks:4534db95436c46a6957690f9",
 };
 
 const APPS_ROOT = path.resolve(import.meta.dirname, "../../../blueprints/apps");

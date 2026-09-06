@@ -82,11 +82,20 @@ export function seedYear3Distributions(
   //    Mirrors what `knowledge.create_note` writes: the body is a data: URI on
   //    a `core_content_item` (rent the bytes, own the reference — schema/fts.ts)
   //    and the note row points at it.
+  // BYTES, AND A READING OWNED BY THE NOTE (#996, ruling R20(b)). The media
+  // type and the title used to sit on the content row; the byte row is bytes
+  // now, the note carries its own title, and `core_content_representation`
+  // carries the note's reading of them.
   const insertContent = target.vault.prepare(
     `INSERT INTO core_content_item
-       (content_id, media_type, content_uri, sha256, byte_size, title,
-        created_at)
-     VALUES (?, 'text/markdown', ?, ?, ?, ?, ?)`
+       (content_id, content_uri, sha256, byte_size, created_at)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  const insertNoteRepresentation = target.vault.prepare(
+    `INSERT INTO core_content_representation
+       (representation_id, content_id, owner_type, owner_id, media_type,
+        charset, interpretation, created_at)
+     VALUES (?, ?, 'knowledge.note', ?, 'text/markdown', 'utf-8', 'original', ?)`
   );
   const insertNote = target.vault.prepare(
     `INSERT INTO knowledge_note
@@ -121,16 +130,22 @@ export function seedYear3Distributions(
       `data:text/markdown;base64,${Buffer.from(withNeedle, "utf8").toString("base64")}`,
       digest(contentId),
       Buffer.byteLength(withNeedle),
-      `Year 3 note ${index}`,
       timestamp
     );
+    const noteId = id("year3-note", index);
     insertNote.run(
-      id("year3-note", index),
+      noteId,
       ownerPartyId,
       `Year 3 note ${index}`,
       contentId,
       index % 50 === 0 ? 1 : 0,
       timestamp,
+      timestamp
+    );
+    insertNoteRepresentation.run(
+      id("year3-note-representation", index),
+      contentId,
+      noteId,
       timestamp
     );
   }

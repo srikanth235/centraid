@@ -15,6 +15,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { formatCurrencyMinor } from "@centraid/client/capture";
 import type { ReplicaRow } from "@centraid/client/replica/native";
+import { occurrenceExceptionsOf } from "@centraid/core/time";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -286,13 +287,12 @@ function expandOccurrences(
       now,
       to,
       64,
-      exceptions
-        .filter((exception) => exception.target_id === id)
-        .map((exception) => ({
-          originalStart: str(exception.original_start),
-          action: exception.action === "override" ? "override" : "skip",
-          scope: exception.scope === "future" ? "future" : "occurrence",
-        }))
+      // The home tile reads its skips through the one adapter too (#996,
+      // ruling R21; drift ONT-25) — it had the same wrong column name.
+      occurrenceExceptionsOf(
+        exceptions as unknown as Record<string, unknown>[],
+        { seriesType: "core.event", seriesId: id }
+      )
     ).map((occurrence) => ({
       instanceKey: occurrence.instanceKey,
       summary: occurrence.summary,

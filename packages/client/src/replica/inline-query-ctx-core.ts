@@ -27,6 +27,9 @@ import {
   collapseMissedOccurrences,
   describeRecurrence,
   expandRecurrence,
+  occurrenceExceptionsOf,
+  overrideAt,
+  recurrenceExceptionsOf,
   shiftTemporal,
 } from "@centraid/core/time";
 
@@ -201,6 +204,12 @@ const INLINE_CTX_TIME = {
   collapseMissedOccurrences,
   describeRecurrence,
   expandRecurrence,
+  // The occurrence-key adapter (#996, ruling R21; drift ONT-25): a seat's
+  // handlers read a stored exception through the same one adapter the gateway
+  // worker's do, so the column is named in one place for both.
+  occurrenceExceptionsOf,
+  overrideAt,
+  recurrenceExceptionsOf,
   shiftTemporal,
 } as const;
 

@@ -3,6 +3,7 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { fixtureSha } from "@centraid/test-kit/fixture-sha";
 import { seededRandom } from "@centraid/test-kit/random";
 
 import { bootstrapVault, enrollAgent } from "../bootstrap.js";
@@ -111,7 +112,7 @@ describe("search", () => {
       .run(
         contentId,
         `data:image/jpeg;base64,${Buffer.from(contentId).toString("base64")}`,
-        `hash-${contentId}`
+        fixtureSha(contentId)
       );
     db.vault
       .prepare(

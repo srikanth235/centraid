@@ -32,7 +32,7 @@ const TEMPLATE: RecurringTemplate = {
   original_amount_minor: 145_000,
   original_currency: "GBP",
   settlement_currency: "GBP",
-  time_zone: "Europe/London",
+  tz: "Europe/London",
   status: "active",
   preview: "the 1st of every month",
   next_start: "2099-09-01T09:00:00.000Z",

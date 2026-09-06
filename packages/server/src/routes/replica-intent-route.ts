@@ -12,6 +12,7 @@ import type { VaultPlane } from "../serve/vault-plane.js";
 import {
   currentConflict,
   expectedPayloadHash,
+  missingReadSetVersions,
   hasCanonicalCommit,
   parseBaseVersions,
 } from "./replica-intent-shape.js";
@@ -146,6 +147,27 @@ export async function handleReplicaIntent(
   }
   if (context.access.appId && context.access.appId !== appId) {
     return sendJson(res, 400, { error: "replica_app_scope_mismatch" });
+  }
+  // THE DECLARED READ-SET IS PART OF THE ADMISSION (#996, rulings R6/R21/R23).
+  // An intent that names the domain operation it runs must reference every row
+  // that operation reads to decide; a set short of it would settle against a
+  // version nobody observed, which is the conflict check answering a question
+  // it was never asked.
+  const operation =
+    typeof body.operation === "string" && body.operation.length > 0
+      ? body.operation
+      : undefined;
+  const readSetGaps = missingReadSetVersions(
+    operation,
+    body.input,
+    baseVersions
+  );
+  if (readSetGaps.length > 0) {
+    return sendJson(res, 400, {
+      error: "replica_intent_read_set_incomplete",
+      message: `${operation} reads rows this intent did not reference`,
+      missing: readSetGaps,
+    });
   }
   let computed: string;
   try {

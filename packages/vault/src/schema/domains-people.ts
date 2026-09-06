@@ -79,7 +79,15 @@ CREATE TABLE people_important_date (
   party_id    TEXT NOT NULL REFERENCES core_party(party_id),
   label       TEXT NOT NULL,
   -- Recurs annually: stored as MM-DD, the year is meaningless to a birthday.
-  month_day   TEXT NOT NULL CHECK (length(month_day) = 5),
+  -- A REAL DAY, FOR EVERY WRITER (#996, ruling R21; drift ONT-26).
+  -- \`people.add_important_date\` refused February 31 in its input schema and
+  -- \`atlas.insert_row\` wrote it, because the only CHECK here was the length.
+  -- 2000 is a leap year, so 02-29 — a real anniversary — passes, and the
+  -- round-trip is what catches 02-31: \`date()\` normalises rather than refuses.
+  month_day   TEXT NOT NULL CHECK (
+    length(month_day) = 5
+    AND date('2000-' || month_day) = '2000-' || month_day
+  ),
   reminder_on INTEGER NOT NULL CHECK (reminder_on IN (0,1)),
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},

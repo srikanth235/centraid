@@ -147,7 +147,7 @@ describe("inline-body-guard", () => {
       .prepare(
         `INSERT INTO core_content_item
          (content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, ?, 'deadbeef', ?, NULL, NULL, NULL, NULL, NULL, ?)`
+       VALUES (?, ?, 'de' || substr(hex(zeroblob(31)), 1, 62), ?, NULL, NULL, NULL, NULL, NULL, ?)`
       )
       .run(
         contentId,

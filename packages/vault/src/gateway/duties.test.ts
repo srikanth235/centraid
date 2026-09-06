@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
 
+import { fixtureSha } from "@centraid/test-kit/fixture-sha";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
@@ -152,7 +153,7 @@ describe("duties", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
-       VALUES ('body-1', 'data:text/plain,x', 'sha-note-body', 1, ?, ?, ?)`
+       VALUES ('body-1', 'data:text/plain,x', '2f31e24d463dad821ce01cefe838b8f30c56b82a6fc633ef4d5c92770da98bbb', 1, ?, ?, ?)`
       )
       .run(past, past, past);
     db.vault
@@ -165,7 +166,7 @@ describe("duties", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
-       VALUES ('body-2', 'data:text/plain,y', 'sha-note-body-2', 1, ?)`
+       VALUES ('body-2', 'data:text/plain,y', '0949a8c69335aa05fbf83169c1d466a8c5b5f27d255e8acbcb843380085c4553', 1, ?)`
       )
       .run(now);
     db.vault
@@ -224,7 +225,7 @@ describe("duties", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
-         VALUES ('doc-body', 'data:text/plain,z', 'sha-doc-body', 1, ?)`
+         VALUES ('doc-body', 'data:text/plain,z', '122e88e2ed607771fdb8f4f64d27f55db0172d4be203b3ca53262dbd37c0e307', 1, ?)`
       )
       .run(past);
     db.vault
@@ -312,7 +313,7 @@ describe("duties", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
-         VALUES ('until-body', 'data:text/plain,z', 'sha-until-body', 1, ?)`
+         VALUES ('until-body', 'data:text/plain,z', '39c6c52b97c970a56ad728f8bcce73246f537d265a36ffefa7ed33a402da788e', 1, ?)`
       )
       .run(past);
     db.vault
@@ -372,7 +373,7 @@ describe("duties", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
-       VALUES ('doc-body-1', 'data:text/plain,x', 'sha-doc-body', 1, ?)`
+       VALUES ('doc-body-1', 'data:text/plain,x', '122e88e2ed607771fdb8f4f64d27f55db0172d4be203b3ca53262dbd37c0e307', 1, ?)`
       )
       .run(past);
     db.vault
@@ -385,7 +386,7 @@ describe("duties", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
-       VALUES ('doc-body-2', 'data:text/plain,y', 'sha-doc-body-2', 1, ?)`
+       VALUES ('doc-body-2', 'data:text/plain,y', '27374d66b490b2cbce7e30874cd94ccd61371f8a7a2684c489ef460c2c48c1fc', 1, ?)`
       )
       .run(now);
     db.vault
@@ -470,7 +471,7 @@ describe("duties", () => {
         `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
        VALUES (?, 'data:text/plain,att', ?, 1, ?)`
       )
-      .run(attachBytes, `sha-att-${attachBytes}`, now);
+      .run(attachBytes, fixtureSha(attachBytes), now);
     const attachmentId = uuidv7();
     db.vault
       .prepare(
@@ -525,7 +526,7 @@ describe("duties", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
-       VALUES ('poly-c', 'data:text/plain,x', 'sha-poly-c', 1, ?, ?, ?)`
+       VALUES ('poly-c', 'data:text/plain,x', '4edc645663f463d46f87aa1132f73263194d3c0a7f12053147544298ccb4483f', 1, ?, ?, ?)`
       )
       .run(past, past, past);
     const deps = seedPolyDependents("core.content_item", "poly-c");
@@ -621,7 +622,7 @@ describe("duties", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
-       VALUES ('poly-asset-body', 'data:image/jpeg,x', 'sha-poly-asset', 1, ?)`
+       VALUES ('poly-asset-body', 'data:image/jpeg,x', '9ab5a1af2b2512d51e3017e51f72d1b74cc0227128cd42c9fd5e02d5b24a79ac', 1, ?)`
       )
       .run(now);
     db.vault
@@ -656,7 +657,7 @@ describe("duties", () => {
       .run(
         id,
         `data:image/jpeg,${id}`,
-        `sha-${id}`,
+        fixtureSha(id),
         PAST,
         lapsed ? PAST : null,
         lapsed ? PAST : null

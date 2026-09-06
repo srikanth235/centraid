@@ -91,7 +91,7 @@ interface RecurringRow {
   rate_date?: string | null;
   rrule: string;
   anchor_start: string;
-  time_zone: string;
+  tz: string;
   status: "active" | "paused" | "ended";
 }
 type ExpenseFact = ExpenseRowRaw & {
@@ -827,28 +827,24 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
         start: template.anchor_start,
         rangeFrom,
         rangeTo,
-        timeZone: template.time_zone,
+        timeZone: template.tz,
         maxInstances: 8,
       });
-      const exceptions = exceptionRows
-        .filter((row) => row.target_id === template.template_id)
-        .map((row) => ({
-          originalStart: String(row.original_start),
-          action: String(row.action) as "skip" | "override",
-          scope: String(row.scope) as "occurrence" | "future",
-          ...(row.override_json
-            ? {
-                start: String(
-                  (
-                    JSON.parse(String(row.override_json)) as {
-                      start?: string;
-                    }
-                  ).start ?? ""
-                ),
-              }
-            : {}),
-        }));
-      const next = ctx.time.applyRecurrenceExceptions(instances, exceptions)[0];
+      // THROUGH THE ONE ADAPTER (#996, ruling R21; drift ONT-25). This block
+      // read `row.original_start` and the zone above read `template.time_zone`
+      // — neither is a column of the tables they came from, so every skip on a
+      // template was silently ignored and every expansion ran in UTC.
+      const exceptions = ctx.time.occurrenceExceptionsOf<{ start?: string }>(
+        exceptionRows as unknown as Record<string, unknown>[],
+        {
+          seriesType: "tally.recurring_expense",
+          seriesId: template.template_id,
+        }
+      );
+      const next = ctx.time.applyRecurrenceExceptions(
+        instances,
+        ctx.time.recurrenceExceptionsOf(exceptions)
+      )[0];
       return {
         ...template,
         // A rule the summariser cannot phrase drops its preview entirely.

@@ -1393,7 +1393,7 @@ describe("gateway", () => {
       db.vault
         .prepare(
           `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, deleted_at, purge_at, created_at)
-         VALUES ('c-old', 'file:///x', 'h1', 1, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z', '2019-12-31T00:00:00Z')`
+         VALUES ('c-old', 'file:///x', '33112ee14ee469c3eb52fe90322ec81dd404a0093d565a6d71ce77cbc8124e3b', 1, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z', '2019-12-31T00:00:00Z')`
         )
         .run();
       // Tags on the doomed row (its folder filing, its star) purge with it —
@@ -1427,7 +1427,7 @@ describe("gateway", () => {
       db.vault
         .prepare(
           `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
-         VALUES ('c-live', 'data:image/png;base64,xx', 'h2', 2, '2019-12-31T00:00:00Z')`
+         VALUES ('c-live', 'data:image/png;base64,xx', 'f998fe06afa0cfbe73e0449dc2b1698309e1b5714960f027b2858312b152c275', 2, '2019-12-31T00:00:00Z')`
         )
         .run();
       db.vault

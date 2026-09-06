@@ -9,12 +9,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { uuidv7 } from "../ids.js";
 import { VISION_SCHEME_URI } from "../schema/enrich.js";
 import { captionTarget } from "./caption-target.js";
-import {
-  conceptKey,
-  ensureConcept,
-  ensureScheme,
-  tagNotation,
-} from "./concept-writes.js";
+import { conceptKey, ensureConcept, ensureScheme } from "./concept-writes.js";
 import { contentItemPublisher } from "./content-item-publisher.js";
 import { assertPayload } from "./payload-schemas.js";
 import type { Publisher, PublishedWrite } from "./staging.js";
@@ -113,15 +108,13 @@ const tagPublisher: Publisher = {
            JOIN core_concept c ON c.concept_id = t.concept_id
            JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
           WHERE t.target_type = ? AND t.target_id = ? AND s.uri = ?
-            AND (c.normalized_key = ?
-                 OR (c.normalized_key IS NULL AND c.notation = ?))`
+            AND c.normalized_key = ?`
       )
       .get(
         p.target_type,
         p.target_id,
         p.scheme_uri ?? VISION_SCHEME_URI,
-        conceptKey(p.label),
-        tagNotation(p.label)
+        conceptKey(p.label)
       ) as { tag_id: string; tagged_by_party_id: string | null } | undefined;
     if (!row) return null;
     // Owner-asserted tag (has a party) is terminal; machine tag refreshes confidence.

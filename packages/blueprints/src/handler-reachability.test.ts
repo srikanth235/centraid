@@ -111,10 +111,15 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
     rationale:
       "Tasks about a person are excluded here because Tasks is its own app; the assistant files them without People growing a second board.",
   },
-  "people.action.toggle-task": {
+  "people.action.complete-task": {
     kind: "agent-only",
     rationale:
       "Same excluded tasks section: People draws no checkbox to tick, and the assistant completes the task the member names.",
+  },
+  "people.action.reopen-task": {
+    kind: "agent-only",
+    rationale:
+      "The other half of the completion operation (#996, ONT-27) — the toggle it replaced had the same excluded-section reason.",
   },
   "people.action.add-gift": {
     kind: "agent-only",

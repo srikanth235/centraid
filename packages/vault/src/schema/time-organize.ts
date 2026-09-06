@@ -46,6 +46,18 @@ ALTER TABLE schedule_task ADD COLUMN recurrence_anchor TEXT NOT NULL DEFAULT 'sc
 -- table with ONE zone calls it \`tz\`; \`core_event\` keeps a pair because two
 -- zones are a real thing an event can have.
 ALTER TABLE schedule_task ADD COLUMN tz TEXT;
+-- A RECURRING TASK HAS A STABLE SERIES IDENTITY (#996, ruling R21; drift
+-- ONT-27). Tasks' recurrence copied the completed row's columns into a fresh
+-- row with nothing tying the two together, so "call Mum" every week was a
+-- stream of unrelated tasks: no reader could ask what the series was, and the
+-- successor inherited neither the series' relationships nor its history. The
+-- head of a series carries its own id here; every later occurrence carries the
+-- head's. An occurrence keeps its own \`task_id\` — the series is what it
+-- belongs to, the task id is which occurrence it is.
+ALTER TABLE schedule_task ADD COLUMN series_id TEXT
+  REFERENCES schedule_task(task_id) ON DELETE SET NULL;
+CREATE INDEX schedule_task_series_idx
+  ON schedule_task(series_id, due_at) WHERE series_id IS NOT NULL;
 
 CREATE INDEX schedule_project_owner_idx
   ON schedule_project(owner_party_id, archived_at, sort_order);
@@ -210,6 +222,51 @@ ALTER TABLE tally_expense ADD COLUMN recurring_template_id TEXT
 CREATE UNIQUE INDEX tally_expense_recurring_instance_idx
   ON tally_expense(recurring_template_id, spent_on)
   WHERE recurring_template_id IS NOT NULL;
+
+-- A SECTION AGREES WITH ITS TASK'S PROJECT (#996, ruling R21; drift ONT-26).
+-- A section belongs to exactly one project, so a task filed in a section of
+-- ANOTHER project is in two places at once — a state no board can render and
+-- every writer could create, because nothing anywhere compared the two
+-- columns. \`IS NOT\` rather than \`<>\` so a missing section (NULL subquery)
+-- is left to the foreign key to refuse, with its own message.
+CREATE TRIGGER schedule_task_section_agrees_with_project_ai
+BEFORE INSERT ON schedule_task
+WHEN NEW.section_id IS NOT NULL
+ AND (SELECT project_id FROM schedule_section WHERE section_id = NEW.section_id)
+     IS NOT NEW.project_id
+BEGIN
+  SELECT RAISE(ABORT, 'schedule.task: that section belongs to a different project (issue #996, ruling R21)');
+END;
+CREATE TRIGGER schedule_task_section_agrees_with_project_au
+BEFORE UPDATE ON schedule_task
+WHEN NEW.section_id IS NOT NULL
+ AND (SELECT project_id FROM schedule_section WHERE section_id = NEW.section_id)
+     IS NOT NEW.project_id
+BEGIN
+  SELECT RAISE(ABORT, 'schedule.task: that section belongs to a different project (issue #996, ruling R21)');
+END;
+
+-- THE HIERARCHY IS ACYCLIC (#996, ruling R21; drift ONT-26). The one-line
+-- self-parent case is a CHECK on the column; a loop of two or more needs the
+-- walk, so it is here. Only UPDATE can close a loop: an inserted row has an
+-- id nothing points at yet.
+CREATE TRIGGER schedule_task_hierarchy_is_acyclic
+BEFORE UPDATE OF parent_task_id ON schedule_task
+WHEN NEW.parent_task_id IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT, 'schedule.task: that parent is already below this task — a task hierarchy has no loops (issue #996, ruling R21)')
+   WHERE EXISTS (
+     WITH RECURSIVE ancestors(task_id) AS (
+       SELECT NEW.parent_task_id
+       UNION
+       SELECT parent.parent_task_id
+         FROM schedule_task parent
+         JOIN ancestors ON parent.task_id = ancestors.task_id
+        WHERE parent.parent_task_id IS NOT NULL
+     )
+     SELECT 1 FROM ancestors WHERE task_id = NEW.task_id
+   );
+END;
 
 ${touchUpdatedAt("schedule_project", "project_id")}
 ${touchUpdatedAt("schedule_section", "section_id")}

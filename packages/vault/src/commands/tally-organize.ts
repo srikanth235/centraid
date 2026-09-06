@@ -3,7 +3,11 @@
 // recurring materialization is deterministic and idempotent, so two offline
 // devices may enqueue one occurrence without duplicates.
 
-import { describeRecurrence, expandRecurrence } from "@centraid/core/time";
+import {
+  describeRecurrence,
+  expandRecurrence,
+  occurrenceSearchWindow,
+} from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -342,9 +346,9 @@ const MATERIALIZE: CommandDefinition = {
   ownerSchema: "tally",
   inputSchema: {
     type: "object",
-    required: ["template_id", "original_start"],
+    required: ["template_id", "original_start_local"],
     additionalProperties: false,
-    properties: { template_id: STRING, original_start: STRING },
+    properties: { template_id: STRING, original_start_local: STRING },
   },
   outputSchema: {
     type: "object",
@@ -361,22 +365,27 @@ const MATERIALIZE: CommandDefinition = {
   handler: (ctx) => {
     const input = ctx.input as {
       template_id: string;
-      original_start: string;
+      original_start_local: string;
     };
     const template = templateById(ctx, input.template_id);
     if (template.status !== "active")
       throw new Error("recurring expense is not active");
-    const occurrence = expandRecurrence({
-      rrule: template.rrule,
-      start: template.anchor_start,
-      rangeFrom: input.original_start,
-      rangeTo: new Date(
-        Date.parse(input.original_start) + 86_400_000
-      ).toISOString(),
-      timeZone: template.tz,
-      semantics: "zoned",
-      maxInstances: 2,
-    }).find((item) => item.originalStart === input.original_start);
+    // The input is the series-local WALL CLOCK (#996, R21 / ONT-25), which is
+    // what the exception rows are keyed on; reading it as an instant is what
+    // made the two halves of this command disagree outside UTC.
+    const window = occurrenceSearchWindow(input.original_start_local);
+    const occurrence =
+      window === null
+        ? undefined
+        : expandRecurrence({
+            rrule: template.rrule,
+            start: template.anchor_start,
+            rangeFrom: window.from,
+            rangeTo: window.to,
+            timeZone: template.tz,
+            semantics: "zoned",
+            maxInstances: 16,
+          }).find((item) => item.wallStart === input.original_start_local);
     if (!occurrence)
       throw new Error("start is not an occurrence in this series");
     const exception = exceptionFor(
@@ -477,7 +486,7 @@ const MATERIALIZE: CommandDefinition = {
         `UPDATE tally_recurring_expense
           SET last_materialized_start = ?, updated_at = ? WHERE template_id = ?`
       )
-      .run(input.original_start, ctx.now, template.template_id);
+      .run(input.original_start_local, ctx.now, template.template_id);
     ctx.wrote("tally.expense", expenseId);
     ctx.wrote("tally.recurring_expense", template.template_id);
     return { status: "materialized", expense_id: expenseId };
@@ -489,11 +498,11 @@ const EDIT_OCCURRENCE: CommandDefinition = {
   ownerSchema: "tally",
   inputSchema: {
     type: "object",
-    required: ["template_id", "original_start", "scope", "action"],
+    required: ["template_id", "original_start_local", "scope", "action"],
     additionalProperties: false,
     properties: {
       template_id: STRING,
-      original_start: STRING,
+      original_start_local: STRING,
       scope: { type: "string", enum: ["occurrence", "future", "series"] },
       action: { type: "string", enum: ["skip", "override"] },
       override: { type: "object" },
@@ -511,7 +520,7 @@ const EDIT_OCCURRENCE: CommandDefinition = {
   handler: (ctx) => {
     const input = ctx.input as {
       template_id: string;
-      original_start: string;
+      original_start_local: string;
       scope: "occurrence" | "future" | "series";
       action: "skip" | "override";
       override?: Record<string, unknown>;
@@ -567,7 +576,10 @@ const EDIT_OCCURRENCE: CommandDefinition = {
       // THE OCCURRENCE HAS TO EXIST (#916, adversarial BUG-3): an exception
       // for a date the series never lands on was accepted and simply never
       // matched anything.
-      const wallStart = occurrenceWallStart(template, input.original_start);
+      const wallStart = occurrenceWallStart(
+        template,
+        input.original_start_local
+      );
       if (wallStart === null)
         throw new Error("start is not an occurrence in this series");
       const exceptionId = ctx.newId();
@@ -606,22 +618,24 @@ const EDIT_OCCURRENCE: CommandDefinition = {
  * The series-local wall clock of the occurrence starting at `instant`, or
  * `null` when the series has no occurrence there.
  */
+/** The occurrence a series-local wall clock names (#996, R21 / ONT-25) — the
+ *  window comes from the shared adapter, because the key is not an instant. */
 function occurrenceWallStart(
   template: TemplateRow,
-  instant: string
+  localStart: string
 ): string | null {
-  const at = Date.parse(instant);
-  if (Number.isNaN(at)) return null;
+  const window = occurrenceSearchWindow(localStart);
+  if (window === null) return null;
   return (
     expandRecurrence({
       rrule: template.rrule,
       start: template.anchor_start,
-      rangeFrom: instant,
-      rangeTo: new Date(at + 86_400_000).toISOString(),
+      rangeFrom: window.from,
+      rangeTo: window.to,
       timeZone: template.tz,
       semantics: "zoned",
-      maxInstances: 2,
-    }).find((item) => item.originalStart === instant)?.wallStart ?? null
+      maxInstances: 16,
+    }).find((item) => item.wallStart === localStart)?.wallStart ?? null
   );
 }
 

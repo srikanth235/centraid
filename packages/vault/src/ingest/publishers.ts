@@ -4,6 +4,8 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { inspectRrule } from "@centraid/core/time";
+
 import { promoteStagedBlob } from "../blob/promote.js";
 import {
   bindContactReach,
@@ -39,6 +41,13 @@ export interface EventPayload {
   status: string;
 }
 
+/** `'supported'` when the engine can expand the rule, `'unsupported'` when it
+ *  is kept as a record of what the provider sent (#996, R21 / ONT-31). */
+function rruleSupport(rrule: string | null): "supported" | "unsupported" {
+  if (rrule === null) return "supported";
+  return inspectRrule(rrule).ok ? "supported" : "unsupported";
+}
+
 const eventPublisher: Publisher = {
   entityType: "core.event",
   probe(vault, payload) {
@@ -61,10 +70,11 @@ const eventPublisher: Publisher = {
     vault
       .prepare(
         `INSERT INTO core_event
-           (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule, status,
+           (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule,
+            rrule_support, status,
             location_place_id, organizer_party_id, sequence, created_at, updated_at,
             recurrence_semantics)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?, ?)`
       )
       .run(
         eventId,
@@ -75,6 +85,12 @@ const eventPublisher: Publisher = {
         p.dtend,
         p.startTz,
         p.rrule,
+        // AN UNSUPPORTED RULE IS RETAINED AND SAID SO (#996, R21 / ONT-31).
+        // A calendar's `FREQ=MONTHLY;BYSETPOS=-1` expands to the wrong dates
+        // under this engine and to nothing under the summariser; keeping the
+        // provider's text while marking it unsupported is the only answer that
+        // neither lies about the series nor throws it away.
+        rruleSupport(p.rrule),
         p.status,
         now,
         now,
@@ -89,7 +105,7 @@ const eventPublisher: Publisher = {
     vault
       .prepare(
         `UPDATE core_event SET summary = ?, description = ?, dtstart = ?, dtend = ?, start_tz = ?,
-            rrule = ?, status = ?, sequence = sequence + 1, updated_at = ?
+            rrule = ?, rrule_support = ?, status = ?, sequence = sequence + 1, updated_at = ?
           WHERE event_id = ?`
       )
       .run(
@@ -99,6 +115,7 @@ const eventPublisher: Publisher = {
         p.dtend,
         p.startTz,
         p.rrule,
+        rruleSupport(p.rrule),
         p.status,
         now,
         entityId
@@ -501,28 +518,44 @@ export interface TransactionPayload {
   amountMinor: number;
   currency: string;
   direction: "debit" | "credit";
+  /** What the member SEES. Never what selects the account. */
   accountName: string;
+  /** The source-scoped identifier that selects it (#996, R20(c)). */
+  accountRef: string;
 }
 
+/**
+ * AN ACCOUNT IS NOT SELECTED BY ITS LABEL (#996, ruling R20(c); drift ONT-24).
+ *
+ * This matched on `(owner_party_id, name)`, so two accounts sharing a display
+ * label — "Savings" at two banks, "Current" in two years of statements — were
+ * one account, and every transaction from the second landed on the first. The
+ * key is now `external_ref`: an identifier scoped to where the rows came from,
+ * which the importer states and never infers from a string two sources happen
+ * to share. Merging two source-scoped accounts that turn out to be the same
+ * account is a cross-source MATCH — explicit, reviewable evidence the owner
+ * accepts (OQ-12) — and is deliberately not done here.
+ */
 function accountFor(
   vault: DatabaseSync,
   ownerPartyId: string,
+  ref: string,
   name: string,
   currency: string
 ): { accountId: string; created: boolean } {
   const existing = vault
     .prepare(
-      "SELECT account_id FROM core_account WHERE owner_party_id = ? AND name = ?"
+      "SELECT account_id FROM core_account WHERE owner_party_id = ? AND external_ref = ?"
     )
-    .get(ownerPartyId, name) as { account_id: string } | undefined;
+    .get(ownerPartyId, ref) as { account_id: string } | undefined;
   if (existing) return { accountId: existing.account_id, created: false };
   const accountId = uuidv7();
   vault
     .prepare(
       `INSERT INTO core_account (account_id, owner_party_id, name, kind, currency, institution_party_id, external_ref, is_asset, opened_at, closed_at)
-       VALUES (?, ?, ?, 'depository', ?, NULL, NULL, 1, NULL, NULL)`
+       VALUES (?, ?, ?, 'depository', ?, NULL, ?, 1, NULL, NULL)`
     )
-    .run(accountId, ownerPartyId, name, currency);
+    .run(accountId, ownerPartyId, name, currency, ref);
   return { accountId, created: true };
 }
 
@@ -545,7 +578,13 @@ const transactionPublisher: Publisher = {
   create(vault, ownerPartyId, payload) {
     const p = assertPayload<TransactionPayload>("TransactionPayload", payload);
     const wrote: PublishedWrite[] = [];
-    const account = accountFor(vault, ownerPartyId, p.accountName, p.currency);
+    const account = accountFor(
+      vault,
+      ownerPartyId,
+      p.accountRef,
+      p.accountName,
+      p.currency
+    );
     if (account.created)
       wrote.push({ type: "core.account", id: account.accountId });
     const txnId = uuidv7();

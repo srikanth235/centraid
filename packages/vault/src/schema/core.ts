@@ -145,6 +145,16 @@ CREATE TABLE core_event (
   recurrence_semantics TEXT NOT NULL DEFAULT 'zoned'
     CHECK (recurrence_semantics IN ('zoned','floating','all-day')),
   rrule              TEXT,
+  -- AN UNSUPPORTED RULE IS RETAINED, NOT EXECUTED (#996, ruling R21; drift
+  -- ONT-31). A rule outside the expander's subset — \`BYSETPOS\`, \`BYMONTHDAY\`,
+  -- an hourly frequency, or plain nonsense — used to be stored as if it were
+  -- executable and then expanded to nothing, which reads at every surface
+  -- exactly like "this event does not repeat". A COMMAND refuses such a rule
+  -- outright; an IMPORT keeps the provider's text and says so here, because
+  -- discarding what the calendar sent would lose the only record of what the
+  -- series actually is.
+  rrule_support      TEXT NOT NULL DEFAULT 'supported'
+    CHECK (rrule_support IN ('supported','unsupported')),
   status             TEXT NOT NULL CHECK (status IN ('confirmed','tentative','cancelled')),
   location_place_id  TEXT REFERENCES core_place(place_id),
   -- ATTRIBUTION, not authority: who convened the event. The event survives the
@@ -234,7 +244,13 @@ CREATE INDEX IF NOT EXISTS core_transaction_external_idx
 CREATE TABLE core_content_item (
   content_id       TEXT PRIMARY KEY,
   content_uri      TEXT NOT NULL,
-  sha256           TEXT NOT NULL UNIQUE,
+  -- A HASH IS SIXTY-FOUR HEX CHARACTERS (#996, ruling R21; drift ONT-26).
+  -- Nothing held the shape, so a writer could put anything in the column that
+  -- IS the dedupe key for every owner of those bytes. The "unchanged bytes"
+  -- half is the \`core_content_item_hash_follows_bytes\` trigger below: a
+  -- summary cannot change while what it summarises stays where it is.
+  sha256           TEXT NOT NULL UNIQUE
+    CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
   byte_size        INTEGER NOT NULL CHECK (byte_size >= 0),
   language         TEXT,
   creator_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
@@ -249,6 +265,20 @@ CREATE INDEX IF NOT EXISTS idx_content_item_creator_party ON core_content_item(c
 CREATE INDEX IF NOT EXISTS idx_content_item_origin_device ON core_content_item(origin_device_id);
 CREATE INDEX IF NOT EXISTS core_content_item_purge_idx
   ON core_content_item(purge_at) WHERE purge_at IS NOT NULL;
+-- CONTENT WRITE IS ONE OPERATION OVER HASH, SIZE AND BYTES (#996, ruling R21;
+-- drift ONT-26). Atlas could set \`sha256\` to sixty-four zeroes while
+-- \`content_uri\` and \`byte_size\` stayed exactly where they were — a hash of
+-- nothing, over bytes that had not moved, silently re-pointing every dedupe
+-- decision the vault would ever make. Re-pointing an owner at DIFFERENT bytes
+-- is a real write and still passes: the uri or the size moves with the hash.
+CREATE TRIGGER core_content_item_hash_follows_bytes
+BEFORE UPDATE OF sha256 ON core_content_item
+WHEN NEW.sha256 <> OLD.sha256
+ AND NEW.content_uri = OLD.content_uri
+ AND NEW.byte_size = OLD.byte_size
+BEGIN
+  SELECT RAISE(ABORT, 'core.content_item: the hash of a content item is the identity of its bytes — it cannot change while the bytes stay where they are (issue #996, ruling R21)');
+END;
 
 -- THE INTERPRETATION, OWNED (#996, ruling R20(b)). One row per (owner, bytes):
 -- the document, note, asset, attachment or message that is USING this content
@@ -409,7 +439,7 @@ CREATE TABLE core_concept (
   broader_concept_id TEXT REFERENCES core_concept(concept_id),
   definition         TEXT,
   -- CONCEPT IDENTITY (#996, ruling R20(d)). A concept's LABEL was its identity:
-  -- \`tagNotation\` lowercased a label and stripped everything outside
+  -- The ASCII slug lowercased a label and stripped everything outside
   -- \`[a-z0-9]\`, so \`猫\`, \`犬\`, \`कुत्ता\` and \`बिल्ली\` all normalised to
   -- \`untitled\` and selected ONE concept — four animals filed as one idea, on
   -- every vault that does not write in Latin script. Three columns separate the

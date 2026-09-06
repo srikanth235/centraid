@@ -194,6 +194,45 @@ interface TimeApi {
   }) => { missed: number; nextDue: string | null };
   /** Shift a wall-clock or zoned instant without host-TZ conversion. */
   shiftTemporal: (value: string, deltaMs: number) => string;
+  /**
+   * THE OCCURRENCE-KEY ADAPTER (#996, ruling R21; drift ONT-25). A recurrence
+   * exception is stored keyed on the series-local wall clock; three readers
+   * spelled that column `original_start` and read `undefined`, so a skipped
+   * occurrence came back. A handler hands the stored rows to `occurrence-
+   * ExceptionsOf` and never names a column of its own.
+   */
+  occurrenceExceptionsOf: <Override = Record<string, unknown>>(
+    rows: readonly Record<string, unknown>[],
+    series: { seriesType: OccurrenceSeriesType; seriesId: string }
+  ) => OccurrenceException<Override>[];
+  /** The exceptions in the shape `applyRecurrenceExceptions` takes. */
+  recurrenceExceptionsOf: (
+    exceptions: readonly OccurrenceException<{ start?: string }>[]
+  ) => RecurrenceException[];
+  /** The override in force at a series-local wall clock, occurrence scope
+   *  first and the latest `future` scope at or before it otherwise. */
+  overrideAt: <Override>(
+    exceptions: readonly OccurrenceException<Override>[],
+    localStart: string
+  ) => Override | null;
+}
+
+type OccurrenceSeriesType = "core.event" | "tally.recurring_expense";
+
+/** Series identity plus recurrence-local identity plus semantics, as one
+ *  value — the whole occurrence key (#996, ruling R21). */
+interface OccurrenceKey {
+  readonly seriesType: OccurrenceSeriesType;
+  readonly seriesId: string;
+  readonly localStart: string;
+  readonly semantics: RecurrenceSemantics;
+}
+
+interface OccurrenceException<Override = Record<string, unknown>> {
+  readonly key: OccurrenceKey;
+  readonly action: "skip" | "override";
+  readonly scope: "occurrence" | "future";
+  readonly override: Override | null;
 }
 
 /** Per-handler `ctx` (see worker/runner.ts): fetch, abort, vault, and time. */

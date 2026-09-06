@@ -446,6 +446,8 @@ export class Gateway {
     }
     this.commands.set(def.name, {
       handler: def.handler,
+      preconditions: def.preconditions,
+      postconditions: def.postconditions,
       sealedInput: def.sealedInput ?? [],
       unseals: def.unseals ?? [],
       transcriptSensitive: def.transcriptSensitive ?? false,

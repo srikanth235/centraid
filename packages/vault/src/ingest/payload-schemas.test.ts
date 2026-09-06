@@ -72,6 +72,7 @@ describe("payload-schemas", () => {
         currency: "INR",
         direction: "debit",
         accountName: "HDFC Savings",
+        accountRef: "owner:HDFC Savings",
       },
     });
     expect(result.failed).toStrictEqual([]);
@@ -133,6 +134,7 @@ describe("payload-schemas", () => {
         currency: "INR",
         direction: "debit",
         accountName: "HDFC Savings",
+        accountRef: "owner:HDFC Savings",
       },
     });
     expect(result.created).toBe(0);

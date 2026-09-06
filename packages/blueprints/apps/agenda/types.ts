@@ -51,7 +51,7 @@ export interface AgEvent {
   snippet?: string;
   instance_key?: string;
   is_recurrence_instance?: boolean;
-  original_start?: string;
+  original_start_local?: string;
   recurrence_overlap?: boolean;
 }
 
@@ -76,7 +76,7 @@ export interface EventEditPayload {
 
 export interface OccurrenceEditPayload {
   event_id: string;
-  original_start: string;
+  original_start_local: string;
   scope: "occurrence" | "future" | "series";
   action: "skip" | "override";
   dtstart?: string;

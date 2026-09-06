@@ -183,7 +183,7 @@ describe("social", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
-       VALUES (?, 'file:///m1', 'aa11', 5, ?)`
+       VALUES (?, 'file:///m1', 'aa' || substr(hex(zeroblob(31)), 1, 62), 5, ?)`
       )
       .run(contentId, now);
     db.vault

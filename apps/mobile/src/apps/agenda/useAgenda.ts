@@ -3,13 +3,17 @@
 import { useMemo } from "react";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
+import { occurrenceExceptionsOf } from "@centraid/core/time";
 
 import {
   combineReplicaQueryStates,
   useReplicaQuery,
 } from "../../kit/hooks/useReplicaQuery";
-import type { AgendaEventModel } from "../../kit/schedule/recurrence";
 import { expandEvent } from "../../kit/schedule/recurrence";
+import type {
+  AgendaEventModel,
+  NativeOverride,
+} from "../../kit/schedule/recurrence";
 import { MOBILE_ENTITY_READ_WINDOW } from "../../lib/replica/offline-budgets";
 import { starredParties } from "./day-context";
 
@@ -85,40 +89,13 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
             rangeStart,
             rangeEnd,
             200,
-            exceptions.rows
-              .filter((exception) => value(exception, "target_id") === id)
-              .map((exception) => {
-                const raw = value<string>(exception, "override_json");
-                let override: {
-                  scope?: "occurrence" | "future";
-                  start?: string;
-                  end?: string;
-                  summary?: string;
-                  description?: string;
-                  recurrence_semantics?: "zoned" | "floating" | "all-day";
-                  calendar_id?: string;
-                } = {};
-                if (raw) {
-                  try {
-                    const parsed = JSON.parse(raw) as unknown;
-                    if (parsed && typeof parsed === "object")
-                      override = parsed as typeof override;
-                  } catch {
-                    // One bad replicated override must not blank the Agenda.
-                  }
-                }
-                return {
-                  originalStart:
-                    value<string>(exception, "original_start") ?? "",
-                  action:
-                    value<"skip" | "override">(exception, "action") ?? "skip",
-                  scope:
-                    value<"occurrence" | "future">(exception, "scope") ??
-                    override.scope ??
-                    "occurrence",
-                  ...override,
-                };
-              })
+            // THROUGH THE ONE ADAPTER (#996, ruling R21; drift ONT-25). This
+            // read `original_start`, which is not the column — so every skip
+            // matched nothing and a skipped occurrence stayed on the phone.
+            occurrenceExceptionsOf<NativeOverride>(
+              exceptions.rows as unknown as Record<string, unknown>[],
+              { seriesType: "core.event", seriesId: id }
+            )
           ).map((event): NativeAgendaEvent => ({ ...event, raw: row }));
         })
         .sort((a, b) => a.start.localeCompare(b.start)),

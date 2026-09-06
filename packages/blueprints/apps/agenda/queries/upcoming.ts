@@ -66,13 +66,14 @@ interface DecoratedAttendee {
   role?: string;
   is_you: boolean;
 }
-interface StoredRecurrenceException {
-  target_id: string;
-  original_start: string;
-  scope?: "occurrence" | "future";
-  action: "skip" | "override";
-  override_json?: string | null;
-}
+/**
+ * The stored rows, UNREAD by this file (#996, ruling R21; drift ONT-25). They
+ * used to be picked apart here under a name that is not what the column is
+ * called — so every lookup missed and a skipped occurrence
+ * came back onto the agenda. `ctx.time.occurrenceExceptionsOf` is the one
+ * adapter that knows the spelling.
+ */
+type StoredRecurrenceException = Record<string, unknown>;
 interface RecurrenceOverride {
   scope?: "occurrence" | "future";
   start?: string;
@@ -258,22 +259,11 @@ function expandRecurringEvents(
     // Unsupported FREQ keeps the anchor: a free-text RRULE mistake must not
     // erase the event from the agenda.
     const durationMs = eventDurationMs(ev);
-    const eventExceptions = exceptions.filter(
-      (exception) => exception.target_id === ev.event_id
+    const eventExceptions = time.occurrenceExceptionsOf<RecurrenceOverride>(
+      exceptions,
+      { seriesType: "core.event", seriesId: ev.event_id }
     );
-    const overrides = new Map<string, RecurrenceOverride>();
-    const recurrenceExceptions = eventExceptions.map((exception) => {
-      const override = exception.override_json
-        ? (JSON.parse(exception.override_json) as RecurrenceOverride)
-        : {};
-      overrides.set(exception.original_start, override);
-      return {
-        originalStart: exception.original_start,
-        action: exception.action,
-        scope: exception.scope ?? override.scope ?? "occurrence",
-        ...(override.start === undefined ? {} : { start: override.start }),
-      };
-    });
+    const recurrenceExceptions = time.recurrenceExceptionsOf(eventExceptions);
     const expanded = cachedInstances(ev, fromDate, toDate, time);
     const instances = time.applyRecurrenceExceptions(
       expanded.length > 0
@@ -292,22 +282,13 @@ function expandRecurringEvents(
     for (const instance of instances) {
       if (out.length >= MAX_TOTAL_INSTANCES) return out;
       const startIso = instance.start;
-      const isAnchor = instance.originalStart === ev.dtstart;
-      const occurrenceOverride = overrides.get(instance.originalStart);
-      const futureOverride = eventExceptions
-        .filter((exception) => {
-          if (exception.original_start > instance.originalStart) return false;
-          const override = overrides.get(exception.original_start);
-          return override?.scope === "future";
-        })
-        .toSorted((left, right) =>
-          right.original_start.localeCompare(left.original_start)
-        )[0];
+      // The occurrence key is the SERIES-LOCAL WALL CLOCK (#996, R21 /
+      // ONT-25) — `originalStart` is the resolved instant for a zoned series,
+      // and keying on it is what made a stored skip match nothing.
+      const occurrenceKey = instance.wallStart;
+      const isAnchor = instance.start === ev.dtstart;
       const override =
-        occurrenceOverride ??
-        (futureOverride
-          ? overrides.get(futureOverride.original_start)
-          : undefined);
+        time.overrideAt(eventExceptions, occurrenceKey) ?? undefined;
       out.push({
         ...ev,
         ...(override?.summary === undefined
@@ -353,8 +334,8 @@ function expandRecurringEvents(
             ? time.shiftTemporal(startIso, durationMs)
             : ev.dtend),
         is_recurrence_instance: !isAnchor,
-        instance_key: `${ev.event_id}:${instance.originalStart}`,
-        original_start: instance.originalStart,
+        instance_key: `${ev.event_id}:${occurrenceKey}`,
+        original_start_local: occurrenceKey,
         recurrence_overlap: instance.overlap,
       });
     }

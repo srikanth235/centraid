@@ -284,6 +284,42 @@ export interface ParkedSummary {
   input: Record<string, unknown>;
 }
 
+/**
+ * A DOMAIN-OPERATION CONDITION (#996, ruling R21).
+ *
+ * A `ConditionSpec` is one SQL string, so it can only state what SQL over the
+ * command's input can state. The invariants ONT-26 filed cannot be written
+ * that way: `atlas.insert_row` names its table at request time, and "this
+ * parent is already below this task" is a walk, not a SELECT. An operation
+ * condition is the same contract stage — evaluated by the gateway, recorded as
+ * an `agent.invocation_check` row, refused with the author's sentence — with a
+ * predicate that can read the proposed row image.
+ *
+ * `assert` returns `null` when the condition holds and the owner-facing
+ * sentence when it does not. It is dropped by `JSON.stringify`, so the command
+ * registry keeps the declaration (name, operation, message) and the live
+ * predicate comes from the registered definition.
+ */
+export interface OperationConditionSpec {
+  name: string;
+  /** The domain operation this condition belongs to, e.g. `schedule.task.write`. */
+  operation: string;
+  assert: (
+    vault: DatabaseSync,
+    input: Readonly<Record<string, unknown>>
+  ) => string | null;
+  /** Fallback sentence when `assert` supplies none. */
+  message?: string;
+}
+
+export type CommandCondition = ConditionSpec | OperationConditionSpec;
+
+export function isOperationCondition(
+  condition: CommandCondition
+): condition is OperationConditionSpec {
+  return "assert" in condition;
+}
+
 export interface ConditionSpec {
   name: string;
   /** SELECT returning ONE row; named params bind from command input. */
@@ -394,8 +430,8 @@ export interface CommandDefinition {
   ownerSchema: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
-  preconditions: ConditionSpec[];
-  postconditions: ConditionSpec[];
+  preconditions: CommandCondition[];
+  postconditions: CommandCondition[];
   idempotency: "idempotent" | "once" | "retry-safe";
   /** Salience only (#306 decision 2) — NOT an approval trigger; see `confirm`. */
   risk: Risk;

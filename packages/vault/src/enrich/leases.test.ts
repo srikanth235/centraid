@@ -4,6 +4,8 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { fixtureSha } from "@centraid/test-kit/fixture-sha";
+
 import { promoteStagedBlob } from "../blob/promote.js";
 import { stageBlobBytes } from "../blob/staging.js";
 import { openVaultDb } from "../db.js";
@@ -58,7 +60,7 @@ describe("leases", () => {
            (content_id, content_uri, sha256, byte_size, created_at)
          VALUES (?, 'file:///x', ?, 1, ?)`
       )
-      .run(contentId, `sha-${contentId}`.padEnd(64, "0"), T0);
+      .run(contentId, fixtureSha(contentId), T0);
   };
 
   beforeEach(() => {

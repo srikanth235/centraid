@@ -11,7 +11,7 @@
 import crypto from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
-import { currentReplicaLogState } from "@centraid/vault";
+import { currentReplicaLogState, operationReadSet } from "@centraid/vault";
 
 import {
   buildReplicaShapes,
@@ -115,6 +115,47 @@ export function parseBaseVersions(value: unknown): ReplicaIntentBaseVersion[] {
       `${right.entity}\u0000${right.rowId}\u0000${right.shapeId ?? ""}`
     )
   );
+}
+
+/** A row the operation declared it read that the intent never referenced. */
+export interface ReplicaIntentReadSetGap {
+  operation: string;
+  entity: string;
+  rowId: string;
+}
+
+/**
+ * THE DECLARED READ-SET IS PART OF THE CONFLICT CHECK (#996, rulings R6/R21/
+ * R23). `baseVersions` used to be whatever the seat felt like sending: an
+ * intent could reference the one row it edited, say nothing about the section
+ * it was being filed into or the parent it was being nested under, and settle
+ * against versions nobody had looked at. The operation declares what it reads;
+ * an intent naming that operation must reference every one of those rows, and
+ * a set short of it is refused rather than executed on a guess.
+ *
+ * An intent that names no operation is unchanged — the seat begins naming one
+ * in W2, and this is the gate that will already be here when it does.
+ */
+export function missingReadSetVersions(
+  operation: string | undefined,
+  input: unknown,
+  baseVersions: readonly ReplicaIntentBaseVersion[]
+): ReplicaIntentReadSetGap[] {
+  if (operation === undefined) return [];
+  if (!input || typeof input !== "object" || Array.isArray(input)) return [];
+  const referenced = new Set(
+    baseVersions.map((base) => `${base.entity}\u0000${base.rowId}`)
+  );
+  return operationReadSet(operation, input as Record<string, unknown>)
+    .filter(
+      (entry) =>
+        entry.id !== null && !referenced.has(`${entry.entity}\u0000${entry.id}`)
+    )
+    .map((entry) => ({
+      operation,
+      entity: entry.entity,
+      rowId: entry.id as string,
+    }));
 }
 
 /**

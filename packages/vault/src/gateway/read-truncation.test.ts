@@ -24,7 +24,7 @@ function seedNotes(count: number): void {
     .prepare(
       `INSERT INTO core_content_item
          (content_id, content_uri, sha256, byte_size, created_at)
-       VALUES (?, 'centraid:body', 'sha-truncation', 0, ?)`
+       VALUES (?, 'centraid:body', 'd304916559649040ce498ecab03a3293d9898fba44ae397ebdaaca5f30fa1efb', 0, ?)`
     )
     .run("content-truncation", "2026-01-01T00:00:00Z");
   const insert = vault.db.vault.prepare(

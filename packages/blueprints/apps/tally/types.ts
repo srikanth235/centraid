@@ -194,7 +194,7 @@ export interface RecurringTemplate {
   original_amount_minor: number;
   original_currency: string;
   settlement_currency: string;
-  time_zone: string;
+  tz: string;
   status: "active" | "paused" | "ended";
   preview?: string | null;
   next_start?: string | null;

@@ -26,7 +26,7 @@ const WHOLE: RecurringTemplate = {
   original_amount_minor: 145_000,
   original_currency: "GBP",
   settlement_currency: "GBP",
-  time_zone: "Europe/London",
+  tz: "Europe/London",
   status: "active",
   preview: "the 1st of every month",
   next_start: "2026-09-01T09:00:00.000Z",
@@ -91,7 +91,7 @@ describe("what a save would carry", () => {
       category: "rent",
       rrule: "FREQ=MONTHLY;BYMONTHDAY=1",
       anchor_start: "2024-03-01T09:00:00.000Z",
-      time_zone: "Europe/London",
+      tz: "Europe/London",
     });
     expect(base?.splits).toStrictEqual([
       { party_id: "me", weight: 2 },

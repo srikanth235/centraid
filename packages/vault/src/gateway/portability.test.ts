@@ -1,5 +1,6 @@
 import { assert, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { fixtureSha } from "@centraid/test-kit/fixture-sha";
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
 import { bootstrapVault, enrollApp } from "../bootstrap.js";
@@ -167,7 +168,7 @@ describe("portability", () => {
            (content_id, content_uri, sha256, byte_size, created_at)
          VALUES (?, 'data:text/plain,x', ?, 1, ?)`
       )
-      .run(contentId, `sha-${contentId}`.padEnd(64, "0"), now);
+      .run(contentId, fixtureSha(contentId), now);
     db.vault
       .prepare(
         `INSERT INTO core_document

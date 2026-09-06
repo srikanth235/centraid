@@ -35,7 +35,7 @@ const RECURRING_FIELDS = [
   "category",
   "rrule",
   "anchor_start",
-  "time_zone",
+  "tz",
   "rate_scaled",
   "rate_scale",
   "rate_source",

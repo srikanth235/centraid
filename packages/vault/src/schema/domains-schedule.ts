@@ -93,10 +93,28 @@ CREATE TABLE schedule_task (
   description    TEXT,
   status         TEXT NOT NULL CHECK (status IN ('needs-action','in-process','completed','cancelled')),
   priority       INTEGER NOT NULL CHECK (priority BETWEEN 0 AND 9),
-  due_at         TEXT,
+  -- TEMPORAL MEANING IS CHECKED WHERE IT IS STORED (#996, ruling R21; drift
+  -- ONT-31). \`due_at: "banana"\` used to store, and completion then had
+  -- nothing to advance — an unreadable due date is indistinguishable from no
+  -- due date at read time, so a repeating task simply stopped and nothing said
+  -- why. The round-trip on the date part is what refuses February 31:
+  -- \`date()\` NORMALISES a bad day rather than rejecting it, so
+  -- \`date('2026-02-31')\` is \`'2026-03-02'\` and only the comparison notices.
+  -- A CHECK because it is a simple invariant (R21) and therefore true for
+  -- every writer, Atlas and the seat's local apply included.
+  due_at         TEXT CHECK (
+    due_at IS NULL
+    OR (datetime(due_at) IS NOT NULL
+        AND date(substr(due_at, 1, 10)) = substr(due_at, 1, 10))
+  ),
   completed_at   TEXT,
   effort_min     INTEGER CHECK (effort_min > 0),
-  parent_task_id TEXT REFERENCES schedule_task(task_id),
+  -- A TASK IS NOT ITS OWN PARENT (#996, R21; drift ONT-26). Atlas accepted it;
+  -- the domain command never checked it. Longer loops are the
+  -- \`schedule_task_hierarchy_is_acyclic\` trigger in \`time-organize.ts\`,
+  -- which needs the recursive walk this CHECK cannot do.
+  parent_task_id TEXT REFERENCES schedule_task(task_id)
+    CHECK (parent_task_id IS NULL OR parent_task_id <> task_id),
   rrule          TEXT,
   remind_before_min INTEGER CHECK (remind_before_min >= 0),
   -- The trash pair (#883, ruling O-trash): a task the member deleted leaves

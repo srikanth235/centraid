@@ -5,11 +5,24 @@
 // (needs-action → in-process → completed | cancelled), priority 0 means
 // unset and 1 is highest (RFC 5545 §3.8.1.9).
 
-import { nextOccurrence } from "@centraid/core/time";
-
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import {
+  completeTask,
+  cancelTask,
+  reopenTask,
+  taskWriteConditions,
+} from "../operations/index.js";
 import { MINTED_ID_PROPERTY, mintedIdIsFree } from "./minted-id.js";
+
+/** Optional string input, in the operation draft's vocabulary. */
+function stated(
+  input: Readonly<Record<string, unknown>>,
+  key: string
+): string | null {
+  const value = input[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
 
 const ADD_TASK: CommandDefinition = {
   name: "schedule.add_task",
@@ -37,6 +50,22 @@ const ADD_TASK: CommandDefinition = {
     properties: { task_id: { type: "string" } },
   },
   preconditions: [
+    // THE SAME MODEL EVERY OTHER WRITER MEETS, ASKED FIRST (#996, ruling
+    // R21). The conditions below are this command's own contract; these are
+    // the vault's, and Atlas, an import and People's task commands run exactly
+    // them. First, because when both have something to say the member should
+    // read the model's sentence — "a task cannot be its own parent" — not this
+    // command's narrower "that parent is not open and top-level".
+    ...taskWriteConditions((input) => ({
+      // The seat's minted id when it sent one (#922 G2), so a task naming
+      // ITSELF as its parent meets the operation here rather than the column
+      // CHECK — same refusal, same words, whichever writer asks.
+      taskId: stated(input, "task_id"),
+      parentTaskId: stated(input, "parent_task_id"),
+      dueAt: stated(input, "due_at"),
+      rrule: stated(input, "rrule"),
+      status: "needs-action",
+    })),
     {
       // One level of nesting: a subtask's parent must exist, be open, and be
       // top-level. Optional inputs bind as NULL, so a top-level add passes.
@@ -148,6 +177,9 @@ const SET_TASK_STATUS: CommandDefinition = {
     properties: {
       task_id: { type: "string" },
       status: { type: "string" },
+      /** The series this occurrence belongs to (#996, ONT-27); null when the
+       *  task does not repeat. */
+      series_id: { type: ["string", "null"] },
       // Only when completing a task whose rrule has a next hit.
       next_task_id: { type: "string" },
       next_due_at: { type: "string" },
@@ -176,6 +208,33 @@ const SET_TASK_STATUS: CommandDefinition = {
       value: 1,
     },
     {
+      // ONT-27: an occurrence belongs to the series it came from, and the
+      // successor of a recurring "call Mum" is still about Mum.
+      name: "successor_inherits_the_series",
+      sql: `SELECT (CASE WHEN :next_task_id IS NULL THEN 1
+                    ELSE EXISTS(SELECT 1 FROM schedule_task next
+                                  JOIN schedule_task done ON done.task_id = :task_id
+                                 WHERE next.task_id = :next_task_id
+                                   AND next.series_id IS NOT NULL
+                                   AND next.series_id = done.series_id) END) AS n`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+    {
+      name: "successor_inherits_the_series_links",
+      sql: `SELECT (CASE WHEN :next_task_id IS NULL THEN 1
+                    ELSE ((SELECT count(*) FROM core_link
+                            WHERE from_type = 'schedule.task' AND from_id = :next_task_id
+                              AND valid_to IS NULL)
+                          >= (SELECT count(*) FROM core_link
+                               WHERE from_type = 'schedule.task' AND from_id = :task_id
+                                 AND valid_to IS NULL)) END) AS n`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+    {
       // Not asked for passes trivially; asked for means the sibling exists,
       // open, due exactly where the rule put it.
       name: "next_occurrence_spawned_open",
@@ -194,107 +253,35 @@ const SET_TASK_STATUS: CommandDefinition = {
   handler: setTaskStatus,
 };
 
+/**
+ * ONE OPERATION, NOT A TOGGLE (#996, ruling R21; drift ONT-27). This used to
+ * be the only place a task's recurrence rolled over, with People flipping the
+ * same column through a `CASE` expression of its own — so which app the member
+ * happened to be looking at decided whether a repeating task got its next
+ * occurrence, and the successor lost the `about` link that made it a task
+ * about a person. The status move is now `complete` / `reopen` / `cancel` in
+ * `operations/task-lifecycle.ts`, shared by People, Tasks and automations.
+ */
 function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { task_id: string; status: string };
-  const previous = ctx.db
-    .prepare(
-      `SELECT status, owner_party_id, title, description, priority, due_at,
-              effort_min, parent_task_id, rrule, remind_before_min, project_id,
-              section_id, sort_order, recurrence_anchor, tz
-         FROM schedule_task WHERE task_id = ?`
-    )
-    .get(input.task_id) as
-    | {
-        status: string;
-        owner_party_id: string;
-        title: string;
-        description: string | null;
-        priority: number;
-        due_at: string | null;
-        effort_min: number | null;
-        parent_task_id: string | null;
-        rrule: string | null;
-        remind_before_min: number | null;
-        project_id: string | null;
-        section_id: string | null;
-        sort_order: number;
-        recurrence_anchor: "scheduled" | "completion";
-        tz: string | null;
-      }
-    | undefined;
-  if (!previous) throw new Error("task vanished between check and execute");
-  ctx.db
-    .prepare(
-      "UPDATE schedule_task SET status = ?, completed_at = ? WHERE task_id = ?"
-    )
-    .run(
-      input.status,
-      input.status === "completed" ? ctx.now : null,
-      input.task_id
-    );
-  ctx.wrote("schedule.task", input.task_id);
-  ctx.cite({
-    claim: `task moved ${previous.status} → ${input.status}`,
-    entityType: "schedule.task",
-    entityId: input.task_id,
-  });
-  const output: Record<string, unknown> = {
-    task_id: input.task_id,
-    status: input.status,
+  const operation = {
+    db: ctx.db,
+    now: ctx.now,
+    newId: ctx.newId,
+    wrote: ctx.wrote,
+    cite: ctx.cite,
   };
-  // Completing a repeating task spawns its next occurrence in the same
-  // motion — Things/Todoist behavior: the series never needs a second
-  // "add" from the owner. A non-completion move (reopen, cancel) never
-  // spawns; only the completed→next edge does.
-  if (input.status === "completed" && previous.rrule && previous.due_at) {
-    const nextDue = nextOccurrence({
-      rrule: previous.rrule,
-      scheduledStart: previous.due_at,
-      after:
-        previous.recurrence_anchor === "completion" ? ctx.now : previous.due_at,
-      timeZone: previous.tz ?? "Etc/UTC",
-      anchor: previous.recurrence_anchor,
-    });
-    if (nextDue) {
-      const nextTaskId = ctx.newId();
-      ctx.db
-        .prepare(
-          `INSERT INTO schedule_task
-             (task_id, owner_party_id, title, description, status, priority,
-              due_at, completed_at, effort_min, parent_task_id, rrule,
-              remind_before_min, project_id, section_id, sort_order,
-              recurrence_anchor, tz)
-           VALUES (?, ?, ?, ?, 'needs-action', ?, ?, NULL, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?)`
-        )
-        .run(
-          nextTaskId,
-          previous.owner_party_id,
-          previous.title,
-          previous.description,
-          previous.priority,
-          nextDue,
-          previous.effort_min,
-          previous.parent_task_id,
-          previous.rrule,
-          previous.remind_before_min,
-          previous.project_id,
-          previous.section_id,
-          previous.sort_order,
-          previous.recurrence_anchor,
-          previous.tz
-        );
-      ctx.wrote("schedule.task", nextTaskId);
-      ctx.cite({
-        claim: `next occurrence of "${previous.title}" spawned at ${nextDue} (${previous.rrule})`,
-        entityType: "schedule.task",
-        entityId: nextTaskId,
-      });
-      output.next_task_id = nextTaskId;
-      output.next_due_at = nextDue;
-    }
-  }
-  return output;
+  if (input.status === "completed")
+    return { ...completeTask(operation, input.task_id) };
+  if (input.status === "cancelled")
+    return { ...cancelTask(operation, input.task_id) };
+  return {
+    ...reopenTask(
+      operation,
+      input.task_id,
+      input.status as "needs-action" | "in-process"
+    ),
+  };
 }
 
 const EDIT_TASK: CommandDefinition = {
@@ -379,6 +366,19 @@ const EDIT_TASK: CommandDefinition = {
       value: 1,
       message: "A repeating task needs a due date to repeat from.",
     },
+    ...taskWriteConditions((input) => ({
+      taskId: stated(input, "task_id"),
+      ...(input["clear_due"] === true
+        ? { dueAt: null }
+        : Object.hasOwn(input, "due_at")
+          ? { dueAt: stated(input, "due_at") }
+          : {}),
+      ...(input["clear_rrule"] === true
+        ? { rrule: null }
+        : Object.hasOwn(input, "rrule")
+          ? { rrule: stated(input, "rrule") }
+          : {}),
+    })),
   ],
   postconditions: [
     {

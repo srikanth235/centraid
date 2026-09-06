@@ -186,7 +186,7 @@ describe("editing", () => {
     const one = harness();
     await one.logic.editOccurrence({
       event_id: "e1",
-      original_start: "2026-08-21T09:00:00Z",
+      original_start_local: "2026-08-21T09:00:00Z",
     } as never);
     expect(one.sent[0]?.action).toBe("edit-occurrence");
     expect(one.status()).toStrictEqual({

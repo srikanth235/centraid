@@ -1,4 +1,4 @@
-// Enrichment publisher unit tests (#545) — tagNotation + ATTRIBUTED contract.
+// Enrichment publisher unit tests (#545) — concept notation + ATTRIBUTED contract.
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
@@ -7,7 +7,7 @@ import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { uuidv7 } from "../ids.js";
-import { conceptKey, tagNotation } from "./concept-writes.js";
+import { conceptKey, conceptNotation } from "./concept-writes.js";
 import { ENRICH_PUBLISHERS } from "./enrich-publishers.js";
 
 let db: VaultDb;
@@ -23,11 +23,13 @@ describe("enrich-publishers", () => {
     db.close();
   });
 
-  test("tagNotation lowercases, slugifies, and caps length", () => {
-    expect(tagNotation("Beach Sunset")).toBe("beach-sunset");
-    expect(tagNotation("  Hello___World!! ")).toBe("hello-world");
-    expect(tagNotation("!!!")).toBe("untitled");
-    expect(tagNotation("a".repeat(100))).toHaveLength(64);
+  // The slug is DISPLAY NOTATION (#996, R20(d)); `conceptKey` is what selects
+  // a concept, and the test below proves the two are no longer the same thing.
+  test("conceptNotation lowercases, slugifies, and caps length", () => {
+    expect(conceptNotation("Beach Sunset")).toBe("beach-sunset");
+    expect(conceptNotation("  Hello___World!! ")).toBe("hello-world");
+    expect(conceptNotation("!!!")).toBe("untitled");
+    expect(conceptNotation("a".repeat(100))).toHaveLength(64);
   });
 
   test("ENRICH_PUBLISHERS covers the five derived-data entity types", () => {
@@ -141,7 +143,7 @@ describe("enrich-publishers", () => {
   });
 
   // A CONCEPT'S LABEL IS NOT ITS IDENTITY (#996 wave 0b, ruling R20(d)).
-  // `tagNotation` strips everything outside [a-z0-9], so every one of these
+  // The slug strips everything outside [a-z0-9], so every one of these
   // four labels slugged to `untitled` and selected the SAME concept: four
   // animals filed as one idea, on every vault that does not write in Latin
   // script. Driven through the real tag publisher, read through the real

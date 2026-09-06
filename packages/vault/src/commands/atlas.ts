@@ -10,6 +10,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { operationConditions } from "../operations/index.js";
 import { browseDependents } from "../schema/atlas-browse-refs.js";
 import {
   primaryKeyColumns,
@@ -133,11 +134,21 @@ export class AtlasDeleteBlockedError extends Error {
   }
 }
 
+// NOT EMPTY ANY MORE (#996, ruling R21; drift ONT-26). Atlas's shared
+// pre/postconditions were `[]`, so its guards were structural only — unknown
+// columns, primary keys, sealed columns, append-only bands — and the model's
+// semantics were somebody else's job. They are now the DOMAIN OPERATIONS':
+// `atlas.row.write` dispatches on the table the request names and runs the
+// same conditions `schedule.add_task`, `people.add_important_date` and the
+// importers run, so a task that is its own parent, a content hash of sixty-
+// four zeroes over unchanged bytes and February 31 are refused here with the
+// same words. A SQL `ConditionSpec` could not have said any of it: the table
+// is an input, so there is no one statement to write.
 const SHARED = {
   ownerSchema: ATLAS_OWNER_SCHEMA,
   outputSchema: { type: "object" } as Record<string, unknown>,
-  preconditions: [],
-  postconditions: [],
+  preconditions: operationConditions("atlas.row.write", "pre"),
+  postconditions: operationConditions("atlas.row.write", "post"),
   idempotency: "retry-safe" as const,
   risk: "medium" as const,
 };

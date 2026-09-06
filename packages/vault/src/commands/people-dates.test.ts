@@ -44,9 +44,16 @@ describe("people important-date month_day", () => {
     return (outcome.output as { party_id: string }).party_id;
   }
 
-  test("month_day validation refuses impossible days", () => {
+  // SHAPE IS THE SCHEMA'S, THE CALENDAR IS THE OPERATION'S (#996, ruling R21;
+  // drift ONT-26). This command's input pattern used to spell out the length
+  // of every month — its own private copy of the calendar, which is exactly
+  // why `atlas.insert_row` could write February 31 while this command refused
+  // it. A month or a day outside 01-12 / 01-31 is still a malformed input; a
+  // day that does not exist is now `people.important_date.write`'s answer, and
+  // every writer gets that same sentence.
+  test("month_day validation refuses a malformed field", () => {
     const partyId = addPerson();
-    for (const monthDay of ["02-30", "04-31", "13-01", "00-10", "06-00"]) {
+    for (const monthDay of ["13-01", "00-10", "06-00"]) {
       const outcome = invoke("people.add_important_date", {
         party_id: partyId,
         label: "Anniversary",
@@ -55,6 +62,20 @@ describe("people important-date month_day", () => {
       expect(outcome.status, monthDay).toBe("failed");
       assert(outcome.status === "failed");
       expect(outcome.reason).toBe("input schema violation");
+    }
+  });
+
+  test("month_day validation refuses a day that does not exist", () => {
+    const partyId = addPerson();
+    for (const monthDay of ["02-30", "04-31"]) {
+      const outcome = invoke("people.add_important_date", {
+        party_id: partyId,
+        label: "Anniversary",
+        month_day: monthDay,
+      });
+      expect(outcome.status, monthDay).toBe("failed");
+      assert(outcome.status === "failed");
+      expect(outcome.reason).toContain("is not a day of the year");
     }
   });
 

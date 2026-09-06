@@ -926,7 +926,6 @@ export {
   type PhotoRankOptions,
 } from "./enrich/photo-search.js";
 export { ENRICH_PUBLISHERS } from "./ingest/enrich-publishers.js";
-export { tagNotation } from "./ingest/concept-writes.js";
 export { VISION_SCHEME_URI, DOCTYPE_SCHEME_URI } from "./schema/enrich.js";
 
 export { parseIcs, type IcsEvent } from "./ingest/ics.js";
@@ -1161,3 +1160,23 @@ export {
   type BatchedRewrite,
   type BatchedMigrationResult,
 } from "./schema/migrate.js";
+
+// THE DOMAIN OPERATION LAYER (#996, wave 0c; rulings R21, R23, R25). One
+// invariant boundary for every writer, each operation carrying the read-set it
+// decided on and the offline contract it promises.
+export {
+  assertCanonicalWrite,
+  cancelTask,
+  completeTask,
+  domainOperation,
+  DOMAIN_OPERATIONS,
+  operationReadSet,
+  OPERATION_OF_TABLE,
+  reopenTask,
+  OperationRefusalError,
+  type CanonicalRefusal,
+  type CanonicalWrite,
+  type DomainOperation,
+  type OfflineDeclaration,
+  type ReadSetEntry,
+} from "./operations/index.js";

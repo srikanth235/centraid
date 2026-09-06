@@ -79,7 +79,10 @@ describe("destructive pending projections", () => {
       },
       {
         appId: "people",
-        actions: 28,
+        // 29 since #996 wave 0c: `toggle-task` became `complete-task` and
+        // `reopen-task` — one operation each, never a state-dependent toggle
+        // (ONT-27).
+        actions: 29,
         destructive: 3,
         delete: 1,
         tombstone: 0,

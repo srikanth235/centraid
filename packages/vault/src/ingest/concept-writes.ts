@@ -30,7 +30,7 @@ export function ensureScheme(
  * A CONCEPT'S LABEL IS NOT ITS IDENTITY (#996, ruling R20(d)).
  *
  * The key a label-only scheme selects on: NFKC-normalised, whitespace
- * collapsed, case-folded, and everything else PRESERVED. `tagNotation` below
+ * collapsed, case-folded, and everything else PRESERVED. The ASCII slug below
  * stripped every character outside `[a-z0-9]`, so `猫`, `犬`, `कुत्ता` and
  * `बिल्ली` all became `untitled` and selected one concept — four animals filed
  * as one idea, on every vault that does not write in Latin script.
@@ -46,13 +46,15 @@ export function conceptKey(label: string): string {
 /**
  * Resolve (or mint) the concept a label names in `schemeId`.
  *
- * Selection is on `normalized_key`, never on the slug. Rows minted before
- * [#996] carry no key, so a miss falls back to the slug ONCE and backfills the
- * key from the label it finds — migration on touch, because NFKC is not a
- * SQLite function and rung six must not guess a value it cannot compute.
+ * SELECTION IS ON `normalized_key`, AND ONLY ON IT (#996, ruling R20(d); drift
+ * ONT-29 closed by wave 0c). Wave 0b added the key and left a fallback onto
+ * the ASCII slug for rows minted before it; wave 0c removes the fallback,
+ * because a slug that maps 猫, 犬, कुत्ता and बिल्ली all to `untitled` cannot be
+ * consulted at all without reopening the collapse it was added to end. The
+ * slug is display notation now, nothing more.
  *
- * The slug keeps `UNIQUE (scheme_id, notation)`, so two labels that flatten to
- * the same ASCII get a SUFFIX rather than a shared row.
+ * It keeps `UNIQUE (scheme_id, notation)`, so two labels that flatten to the
+ * same ASCII get a SUFFIX rather than a shared row.
  */
 export function ensureConcept(
   vault: DatabaseSync,
@@ -76,24 +78,6 @@ export function ensureConcept(
     )
     .get(schemeId, key) as { concept_id: string } | undefined;
   if (byKey) return byKey.concept_id;
-  // Pre-#996 rows: the slug was the identity, so one lookup on it keeps a
-  // migrated vault from minting a duplicate for a concept it already holds.
-  const legacy = vault
-    .prepare(
-      `SELECT concept_id, pref_label FROM core_concept
-        WHERE scheme_id = ? AND notation = ? AND normalized_key IS NULL`
-    )
-    .get(schemeId, tagNotation(label)) as
-    | { concept_id: string; pref_label: string }
-    | undefined;
-  if (legacy && conceptKey(legacy.pref_label) === key) {
-    vault
-      .prepare(
-        "UPDATE core_concept SET normalized_key = ? WHERE concept_id = ?"
-      )
-      .run(key, legacy.concept_id);
-    return legacy.concept_id;
-  }
   const conceptId = uuidv7();
   vault
     .prepare(
@@ -103,7 +87,7 @@ export function ensureConcept(
     .run(
       conceptId,
       schemeId,
-      freeNotation(vault, schemeId, tagNotation(label)),
+      freeNotation(vault, schemeId, conceptNotation(label)),
       label,
       stableId,
       key,
@@ -131,12 +115,14 @@ function freeNotation(
 }
 
 /**
- * The 64-character ASCII slug. NO LONGER AN IDENTITY (#996, R20(d)) — it is
- * the display notation, and `conceptKey` is what selects a concept. Kept
- * exported while [#996] wave 0c moves its remaining callers onto the domain
- * operation.
+ * The 64-character ASCII slug — DISPLAY NOTATION, never identity (#996,
+ * R20(d), ONT-29). It was `tagNotation`, it was what selected a concept, and
+ * it lowercased a label and stripped everything outside `[a-z0-9]`: 猫, 犬,
+ * कुत्ता and बिल्ली all became `untitled` and shared one row. Nothing selects on
+ * it now — `conceptKey` does — and `freeNotation` gives colliding slugs a
+ * suffix, so two ideas that flatten to the same ASCII stay two ideas.
  */
-export function tagNotation(label: string): string {
+export function conceptNotation(label: string): string {
   return (
     label
       .toLowerCase()

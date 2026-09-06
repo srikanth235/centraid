@@ -220,6 +220,9 @@ function execute(req: WorkerRequest): void {
             collapseMissedOccurrences: (...args: unknown[]) => unknown;
             describeRecurrence: (...args: unknown[]) => unknown;
             expandRecurrence: (...args: unknown[]) => unknown;
+            occurrenceExceptionsOf: (...args: unknown[]) => unknown;
+            overrideAt: (...args: unknown[]) => unknown;
+            recurrenceExceptionsOf: (...args: unknown[]) => unknown;
             shiftTemporal: (...args: unknown[]) => unknown;
           })
         : {
@@ -227,6 +230,9 @@ function execute(req: WorkerRequest): void {
             collapseMissedOccurrences: unavailableTime,
             describeRecurrence: unavailableTime,
             expandRecurrence: unavailableTime,
+            occurrenceExceptionsOf: unavailableTime,
+            overrideAt: unavailableTime,
+            recurrenceExceptionsOf: unavailableTime,
             shiftTemporal: unavailableTime,
           };
       const time = Object.freeze({
@@ -234,6 +240,12 @@ function execute(req: WorkerRequest): void {
         collapseMissedOccurrences: timeModule.collapseMissedOccurrences,
         describeRecurrence: timeModule.describeRecurrence,
         expandRecurrence: timeModule.expandRecurrence,
+        // THE OCCURRENCE-KEY ADAPTER (#996, ruling R21; drift ONT-25). A
+        // handler never names the stored column again: it hands the rows to
+        // the adapter and gets keys back.
+        occurrenceExceptionsOf: timeModule.occurrenceExceptionsOf,
+        overrideAt: timeModule.overrideAt,
+        recurrenceExceptionsOf: timeModule.recurrenceExceptionsOf,
         shiftTemporal: timeModule.shiftTemporal,
       });
       if (/\.tsx?$/u.test(req.handlerFile)) ensureTsLoader();

@@ -28,7 +28,7 @@ import {
   polymorphicDenial,
 } from "./execution.js";
 import type { RegisteredCommand } from "./execution.js";
-import type { Identity } from "./types.js";
+import type { CommandCondition, Identity } from "./types.js";
 import { GatewayError } from "./types.js";
 
 let db: VaultDb;
@@ -331,6 +331,8 @@ describe("execution", () => {
             handlerRan = true;
             return {};
           },
+          preconditions: [],
+          postconditions: [],
           sealedInput: [],
           unseals: [],
           transcriptSensitive: false,
@@ -402,6 +404,14 @@ describe("execution", () => {
             handlerRan = true;
             return {};
           },
+          // The LIVE declaration is what runs (#996, ruling R21): a domain-
+          // operation condition carries a predicate, which `preconditions_json`
+          // cannot hold, so the registry row is the record and this is the
+          // contract. Same specs, both places.
+          preconditions: JSON.parse(
+            cmd.preconditions_json
+          ) as CommandCondition[],
+          postconditions: [],
           sealedInput: [],
           unseals: [],
           transcriptSensitive: false,
@@ -492,6 +502,10 @@ describe("execution", () => {
             ctx.wrote("core.tag", tagId);
             return { tag_id: tagId };
           },
+          preconditions: [],
+          postconditions: JSON.parse(
+            cmd.postconditions_json
+          ) as CommandCondition[],
           sealedInput: [],
           unseals: [],
           transcriptSensitive: false,
@@ -577,6 +591,8 @@ describe("execution", () => {
             ctx.wrote("core.tag", tagId);
             return { tag_id: tagId };
           },
+          preconditions: [],
+          postconditions: [],
           sealedInput: [],
           unseals: [],
           transcriptSensitive: false,

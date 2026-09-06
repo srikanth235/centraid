@@ -3,7 +3,31 @@ export {
   type CollapseMissedInput,
   type CollapsedOccurrence,
 } from "./recurrence-collapse.js";
+export {
+  occurrenceExceptionsOf,
+  occurrenceKey,
+  occurrenceKeysEqual,
+  occurrenceKeyToken,
+  occurrenceSearchWindow,
+  overrideAt,
+  readOccurrenceException,
+  recurrenceExceptionsOf,
+  OCCURRENCE_LOCAL_START_COLUMN,
+  OCCURRENCE_LOCAL_START_KEY,
+  type OccurrenceAction,
+  type OccurrenceException,
+  type OccurrenceKey,
+  type OccurrenceScope,
+  type OccurrenceSeriesType,
+  type StoredOccurrenceExceptionRow,
+} from "./occurrence.js";
 export { describeRecurrence } from "./recurrence-summary.js";
+export {
+  classifyTemporal,
+  isTemporal,
+  temporalRefusal,
+  type TemporalKind,
+} from "./temporal.js";
 export {
   applyRecurrenceExceptions,
   expandRecurrence,

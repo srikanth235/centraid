@@ -55,7 +55,6 @@ import {
 import type {
   Citation,
   CommandDefinition,
-  ConditionSpec,
   HandlerCtx,
   HandlerReceipt,
   Identity,
@@ -67,6 +66,10 @@ import { GatewayError } from "./types.js";
 /** `sealedInput` drives journal redaction, `unseals` gates `ctx.unseal` (#293). */
 export interface RegisteredCommand {
   handler: CommandDefinition["handler"];
+  /** The live pre/postconditions, including the domain-operation ones whose
+   *  predicates cannot be serialised into the registry row (#996, R21). */
+  preconditions: CommandDefinition["preconditions"];
+  postconditions: CommandDefinition["postconditions"];
   sealedInput: readonly string[];
   unseals: readonly string[];
   transcriptSensitive: boolean;
@@ -476,8 +479,18 @@ export function runContractAndExecute(
       errors: schemaErrors,
     });
   }
-  const preSpecs = JSON.parse(command.preconditions_json) as ConditionSpec[];
-  const preResults = evaluateConditions(db.vault, preSpecs, request.input);
+  // THE LIVE DECLARATION, NOT THE RECORD (#996, ruling R21). A domain-operation
+  // condition carries a predicate, and a predicate does not survive
+  // `JSON.stringify` — `preconditions_json` is the registry's record of WHICH
+  // conditions a command declares, and the registered definition is what runs
+  // them. A command with no live registration is refused below either way.
+  const declared = commands.get(command.name);
+  if (!declared) return denyContract("handler missing", { stage: "execution" });
+  const preResults = evaluateConditions(
+    db.vault,
+    declared.preconditions,
+    request.input
+  );
   for (const result of preResults) {
     writeCheck(
       db.audit,
@@ -503,9 +516,7 @@ export function runContractAndExecute(
   const citations: Citation[] = [];
   // Queued, flushed after the canonical COMMIT.
   const handlerReceipts: HandlerReceipt[] = [];
-  const registered = commands.get(command.name);
-  if (!registered)
-    return denyContract("handler missing", { stage: "execution" });
+  const registered = declared;
   const handler = registered.handler;
   // Receipted as column names, never values.
   const unsealed = new Set<string>();
@@ -619,10 +630,7 @@ export function runContractAndExecute(
     closeRevisionCapture(db.vault);
     // Same transaction, so no committed row ever holds a clear secret (#293).
     sealWrites(db, writes);
-    const postSpecs = JSON.parse(
-      command.postconditions_json
-    ) as ConditionSpec[];
-    postResults = evaluateConditions(db.vault, postSpecs, {
+    postResults = evaluateConditions(db.vault, registered.postconditions, {
       ...request.input,
       ...output,
     });

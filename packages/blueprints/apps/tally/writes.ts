@@ -141,7 +141,7 @@ export function editOccurrenceWrite(input: {
     action: "edit-recurring-expense-occurrence",
     input: {
       template_id: input.templateId,
-      original_start: input.originalStart,
+      original_start_local: input.originalStart,
       scope: input.scope,
       action: input.action,
     },
@@ -235,6 +235,6 @@ export function materializeWrite(
 ): TallyWrite {
   return {
     action: "materialize-recurring-expense",
-    input: { template_id: templateId, original_start: originalStart },
+    input: { template_id: templateId, original_start_local: originalStart },
   };
 }

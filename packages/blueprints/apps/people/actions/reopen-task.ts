@@ -1,8 +1,8 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-export default async function toggleTask({ body, ctx }: HandlerArgs) {
+export default async function reopenTask({ body, ctx }: HandlerArgs) {
   return runVaultAction(ctx, {
-    command: "people.toggle_task",
+    command: "people.reopen_task",
     input: actionInput(body),
   });
 }
