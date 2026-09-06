@@ -193,3 +193,94 @@ Decoder rules W1 must implement: **one row per `(table, pk)` per commit** — co
 - **The `fts_*` drop is a separate decision for W1**, not part of R4's pipeline: it saves 12.0 MB but leaves 57 retained triggers pointing at tables that no longer exist, so it is only correct with a mandatory seat-side FTS DDL + rebuild bootstrap step before the first apply.
 - **The erase-path asymmetry is a finding for W6** (`packages/server/src/serve/erase-recovery.ts:51` versus `packages/server/src/routes/vault-routes.ts:261-267`), filed here, not fixed here.
 - **One report contradicts a landed ruling, flagged not fixed.** `docs/decisions.md:860` (R13) says "the recovery kit **and the backup** carry every live key file". P3 measures that no backup path copies `keys/`, and `SECURITY.md:37` states that exclusion as a deliberate security boundary. W6 must either amend R13's clause to the kit alone or rule the backup change against `SECURITY.md`; this slice records the conflict and changes neither.
+
+## Wave 0b — schema
+
+The ontology bridge's schema half. Three of the six schema items land whole, red-first, plus the decoded-body-text side table and the migration machinery a re-cut needs. **The 0b checklist box above stays unticked**: it names eight clauses and four of them are not in this diff (see `## Decisions — wave 0b`), and a ticked box whose clauses are not realized is exactly what the crosswalk exists to prevent.
+
+### What landed
+
+| # | Item | Shape | Rung |
+| --- | --- | --- | --- |
+| 5 | **Identifier interval** (R20(e)) | `core_party_identifier` re-cut: `issuer` column, table CHECK `valid_to >= valid_from`, `idx_party_identifier_primary` narrowed to `is_primary = 1 AND valid_to IS NULL`, live value index keyed `(scheme, COALESCE(issuer,''), value)` | six |
+| 6 | **Concept identity** (R20(d)) | `core_concept` gains `stable_id`, `normalized_key`, `pref_label_lang` with two partial UNIQUE indexes; `ensureConcept` selects on the Unicode-preserving key and the slug gets a collision suffix | six |
+| 3 | **Source-scoped external ids** (R20(c)) | `core_transaction` re-cut without the global `UNIQUE` on `external_id`, plus a partial index on it; the transaction publisher's global probe is deleted | seven |
+| — | **Decoded body text** (R4 / R8) | `core_content_text`, a 1:1 replicated projection of `core.content_item` — schema only, no triggers (wave 1 owns those) | eight, and the baseline |
+
+Files, by path:
+
+| File | What |
+| --- | --- |
+| `packages/vault/src/schema/core-rungs.ts` | **new** — the three re-cut/ALTER DDL exports and `CONTENT_TEXT_DDL`. `packages/vault/src/schema/core.ts` is rung one and is **not** touched: it stays the shape v0 shipped |
+| `packages/vault/src/schema/migrate.ts` | the `VaultMigration` type, `applyRung`, and rungs six–eight; `CONTENT_TEXT_DDL` added to the composed baseline |
+| `packages/vault/src/schema/migrate.test.ts` | eight rungs and `user_version` 8; `core_content_text` in the fresh-file table list; the rung-five test sliced at rung five so it does not run a re-cut against an empty file; two hard-coded `5`s replaced by `VAULT_MIGRATIONS.length` |
+| `packages/vault/src/schema/baseline-fixture.ts` | rung one is always a plain DDL string, now that a rung need not be |
+| `packages/vault/src/schema/entity-catalog.ts` | `core.content_text` registered as a projection of `core.content_item`, with its label and blurb |
+| `packages/vault/src/schema/fts.ts` | `ftsSyncTriggersFor(entity)`, and `entityDdl` refactored onto it so the trigger text has one source |
+| `packages/vault/src/ingest/enrich-publishers.ts` | `conceptKey`, `ensureConcept` re-keyed with its migrate-on-touch fallback, `freeNotation`, the tag probe |
+| `packages/vault/src/ingest/enrich-publishers.test.ts` | the two concept-identity scenarios |
+| `packages/vault/src/ingest/publishers.ts` | the transaction publisher's global `external_id` probe deleted |
+| `packages/vault/src/schema/party-identifier-interval.test.ts` | **new** — four identifier scenarios |
+| `packages/vault/src/ingest/source-scoped-external-id.test.ts` | **new** — the Bank A / Bank B pair |
+| `scripts/docs-site/src/content/ontology-body.html` | §03 for `core.party_identifier`, `core.concept`, `core.transaction` and the new `core.content_text`, plus the two gateway-duty sentences that still said `external_id` was unique |
+| `receipts/issue-996-one-vault-every-seat.md` | this section |
+
+**No `schema_epoch` bump.** `REPLICA_SCHEMA_EPOCH` is untouched; W1 takes the one bump for 0b and itself. `PRAGMA user_version` goes 5 → 8 (three rungs), which is the file's shape ladder and a different number.
+
+### How a shape change reaches an existing file, since this is the first wave to need all three forms
+
+`golden-vault.test.ts` compares a migrated golden's `sqlite_master` text with a **freshly built** vault's, object by object. That is what decides the form:
+
+- **A new column** is `ALTER TABLE … ADD COLUMN` **in the rung and NOT in the baseline**. SQLite appends the column to the stored text, so a fresh file and a migrated one end byte-identical *because both get it from the rung*. Adding it to the baseline as well is what would break the comparison.
+- **A new table** is stated in the baseline **and** re-stated by the rung with `IF NOT EXISTS` — the same two-place shape rung five uses for the #928 ask tables — because the baseline is what the shape tests (`ontology-shape.test.ts`, `baseline-fixture.ts`) read.
+- **A removed constraint** is SQLite's twelve-step re-cut, and needs two pragmas the ladder did not have. `migrate.ts` gains `VaultMigration = string | { recut: string }`: a `recut` rung runs with `foreign_keys = OFF` (set outside the transaction, because that pragma is a **no-op inside one**) and `legacy_alter_table = ON` (so the RENAME does not rewrite the child tables' `REFERENCES` clauses to the temporary name), and `PRAGMA foreign_key_check` runs inside the transaction before the COMMIT — a rebuild that leaves a child pointing at nothing rolls back instead of reaching a file. Measured on a scratch db first: without `legacy_alter_table` the child's stored DDL becomes `REFERENCES "parent_old"(id)` and `foreign_key_check` reports the violation; with it, the child's text is untouched and the check is empty.
+
+A re-cut also takes the base table's triggers down with it while the fts5 shadow and its rows survive, so `fts.ts` gains `ftsSyncTriggersFor(entity)` — the three sync triggers and nothing else, emitted by the **same generator** `entityDdl` uses, because a hand-typed copy would be a second spelling of one contract. `entityDdl` now calls it, so there is one source for the trigger text.
+
+### Scenarios, each red before the change
+
+| Scenario | Where | Red without | Green with |
+| --- | --- | --- | --- |
+| An end-dated primary does not block a new primary | `party-identifier-interval.test.ts` | UNIQUE violation on `idx_party_identifier_primary` | ✓ |
+| Two live primaries for one (party, scheme) still refused | same | (guard — passes both ways) | ✓ |
+| An inverted interval is refused | same | stored happily | ✓ |
+| The same short handle in two issuers is two identities | same | column does not exist | ✓ |
+| 猫, 犬, कुत्ता and बिल्ली are four concepts | `enrich-publishers.test.ts` | all four slug to `untitled`, one concept | ✓ |
+| The same label still selects one concept | same | (guard) | ✓ |
+| Bank A and Bank B may both import `ref-1` | `source-scoped-external-id.test.ts` | second import merges into the first | ✓ |
+| Re-importing the same source is idempotent | same | (guard — the sync map, unchanged) | ✓ |
+
+Red-first evidence: with rung six commented out, `party-identifier-interval.test.ts` is **3 failed / 1 passed**; with `publishers.ts` and `migrate.ts` stashed, `source-scoped-external-id.test.ts` is **1 failed / 1 passed**. Both restored immediately.
+
+### Gates
+
+```sh
+bun run --cwd packages/vault test        # 193 files, 1576 passed, 2 skipped, 0 FAIL
+bun run --cwd packages/vault typecheck   # clean
+bun run --cwd packages/blueprints typecheck && bun run --cwd packages/core typecheck
+bun run --cwd packages/server typecheck  && bun run --cwd packages/client typecheck
+bun run lint                             # 0 findings
+bun run format:check                     # all matched files formatted
+bash .governance/run.sh                  # 22/22
+```
+
+`golden-vault.test.ts` is green on `packages/vault/tests/golden/issue-929/vault.db.gz` **without re-freezing it**: every frozen row survives all three rungs, the migrated file's schema text equals a fresh build's object for object, `vault doctor` is clean, and `PRAGMA foreign_key_check` over the re-cut file is empty.
+
+### Seams handed to wave 0c (`file:line` lists in the root agent's scratchpad, `w0b-seams.txt`)
+
+- **Document history over `core_link`** — 28 non-test sites in 7 files: `packages/vault/src/commands/revisions.ts` (whole file), `documents.ts:33,675,804,927`, `knowledge.ts:20,266,846`, `gateway/duties.ts:148,779`, `packages/blueprints/apps/docs/queries/history.ts:15,60,64,69,82`, `apps/notes/version-chain.ts:33,56`, `apps/mobile/src/apps/docs/docs-versions.ts:8,60,65,72,76`. Plus the `restore_document_version` **postcondition** at `documents.ts:894-910`, which asserts the `revises` link exists — a reader of the second graph inside the command that writes it.
+- **`external_id` read without a connection scope** — after this wave, none in the ontology: the only remaining unscoped reads are `packages/server/src/automation/worker/runner.ts:369` and `routes/import-routes.ts:320`, both over `outbox_item` / staging rows rather than `core_transaction`. `accountFor`'s display-name match (`packages/vault/src/ingest/publishers.ts:490-497`) is **0c's**, per the issue's own wave split.
+- **`original_start` / `time_zone`** — 47 non-test sites; the schema is already correct (see Decisions), so every one is a reader or a command input name: `packages/vault/src/commands/tally-organize.ts` ×11, `schedule-organize.ts` ×5, `packages/blueprints/apps/agenda/{edits,types}.ts` ×5, `agenda/queries/upcoming.ts:65,256,258,286,287,291,296,344`, `apps/tally/{types,schedule-model,writes,pending-projection,compose-states-kit}.ts` ×7, `tally/queries/dashboard.ts:90,814,820`, `tally/components/Recurring.tsx:109`, `apps/mobile/src/apps/agenda/{AgendaEventEditor.tsx:145,188,useAgenda.ts:112}`, `apps/tally/TallyRecurringScreen.tsx:88`, `screens/home/useSpringboardTiles.ts:292`.
+- **`core_content_item.title` and `media_type`** — 10 non-test sites name the title column directly; `media_type` has **251 non-test sites** and `core_content_item` is named by **117 files**. The FTS spec for `core.content_item` indexes `title` (`packages/vault/src/schema/fts.ts:76-83`), which is the caption surface the representation split moves.
+
+## Decisions — wave 0b
+
+- **The 0b box is left unticked, and four of its eight clauses are not in this diff.** What landed is listed above. What did not, and why, measured rather than asserted:
+  - **The revision occurrence (item 1).** Bounded but large: 28 non-test call sites across 7 files spanning `packages/vault`, `packages/blueprints` and `apps/mobile`, plus the `restore_document_version` postcondition and the Notes and Docs history readers on two surfaces. The schema half is cheap — `ALTER TABLE … ADD COLUMN` for `core_entity_revision.content_id` / `parent_revision_id` and the wrapper pointers — and the writer/reader half is a slice of its own. Landing the schema without the readers would leave TWO history mechanisms rather than one, which is the finding ONT-22 already files. Recommend re-slicing as **0b-2**, schema and all seven files in one commit.
+  - **The representation split (item 2).** Out of reach for one commit and not close: `media_type` has 251 non-test sites, `core_content_item` is named by 117 files, and the column the split removes from that table (`title`) is indexed by its own FTS spec, so the change lands in the search index, the replica shapes, eight app manifests and both mobile seats at once. Recommend **0b-3** as its own wave with its own gate, ordered before wave 4 rewrites the handlers.
+  - **Deletion roles beside references (R22).** Not attempted: it is a declaration over every FK in the model, and its shape (a column annotation, a registry map, or a census) is not settled by R22's sentence. Recommend it rides 0e, where the purge-behaviour-per-role tests live.
+- **Item 4 (the occurrence key and the `tz` spelling) has NO schema work left, and the brief's premise is contradicted by the tree.** The brief asks for "the typed occurrence key column set … and one `tz` column name across `time-organize.ts`". Both already hold on `main`: the exception is keyed `(target_type, target_id, original_start_local, scope)` and carries `recurrence_semantics` (`packages/vault/src/schema/time-organize.ts:72-104`), `tally_recurring_expense` spells its zone `tz` (`time-organize.ts:168-169`), and `ontology-rules.test.ts:182,197` already asserts that `time_zone` and `original_start` are absent from the schema. ONT-25 is therefore **entirely reader-side** — 47 sites, listed above, every one of them a query or a command input name reading a column that does not exist — which is exactly what the *reader-side drift* category wave 0a introduced was for. Written as found; not resolved here.
+- **"The publisher probes the pair" is realized by DELETING the probe, not by adding a lookup.** `stageCandidates` already consults `sync_external_entity (connection_id, external_id)` — the authoritative key — **before** any publisher probe (`packages/vault/src/ingest/staging.ts:170-210`), and the publisher's probe ran only on a miss. A miss on the pair means this connection has not imported this id, so the honest disposition is `create`; a second lookup inside the publisher would be a duplicate spelling of the check that already happened. The global probe is gone and idempotency is unchanged, which the second scenario holds.
+- **"The migration carrying existing mappings forward from the sync map" was a no-op, and that is the right answer.** `sync_external_entity` already holds every `(connection_id, external_id) → row` mapping and is untouched by the re-cut; `core_transaction.external_id` keeps its values. There is nothing to carry forward, so rung seven carries nothing.
+- **The live identifier index changed shape, deliberately.** `core_party_identifier_live_idx` becomes `(scheme, COALESCE(issuer,''), value)`. Folding NULL to the empty string is what keeps the pre-#996 property exact — two rows with the same scheme and value and no issuer still collide — while letting two issuers hold the same short handle. A bare `(scheme, issuer, value)` would not: SQLite treats NULLs as distinct in a UNIQUE index, so every existing identity fork would have become legal.
+- **`ensureConcept` backfills `normalized_key` on touch, and rung six does not.** NFKC is not a SQLite function, so a rung cannot compute the key for rows minted before this wave. The rung leaves them NULL (both new indexes are partial) and `ensureConcept` falls back to the slug ONCE, verifies the label agrees, and stamps the key. A rung that guessed the value would be worse than one that admits it cannot.

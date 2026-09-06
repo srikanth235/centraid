@@ -145,15 +145,16 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("FIVE rungs: the baseline plus #929's three and the #928 ask tables, and a fresh vault stops at user_version 5", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(5);
+  test("EIGHT rungs: the baseline, #929's three, the #928 ask tables and #996's three, and a fresh vault stops at user_version 8", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(8);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(5);
+    expect(version.user_version).toBe(8);
     for (const table of [
       "locker_auth_credential",
+      "core_content_text",
       "core_entity",
       "core_entity_revision",
       "social_contact_channel",
@@ -228,7 +229,10 @@ describe("schema/migrate", () => {
     // (which already created them) honest.
     const raw = new DatabaseSync(":memory:");
     raw.exec("PRAGMA user_version = 4");
-    migrate(raw, VAULT_MIGRATIONS);
+    // The ladder is sliced at rung five deliberately: this file has no tables
+    // at all, and rung six re-cuts one. What is under test is that rung five
+    // reaches a file that has already climbed past rung one.
+    migrate(raw, VAULT_MIGRATIONS.slice(0, 5));
     const version = raw.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
@@ -502,10 +506,10 @@ describe("schema/migrate", () => {
     first.close();
 
     const vaultFile = path.join(dir, "vault.db");
-    expect(userVersionOf(vaultFile)).toBe(5);
+    expect(userVersionOf(vaultFile)).toBe(VAULT_MIGRATIONS.length);
 
     const second = openVaultDb({ dir });
-    expect(userVersionOf(vaultFile)).toBe(5);
+    expect(userVersionOf(vaultFile)).toBe(VAULT_MIGRATIONS.length);
     expect(shapeOf(second)).toBe(before);
     second.close();
   });

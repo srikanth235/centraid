@@ -510,18 +510,19 @@ function accountFor(
 
 const transactionPublisher: Publisher = {
   entityType: "core.transaction",
-  probe(vault, payload) {
-    const p = payload as unknown as TransactionPayload;
-    const existing = vault
-      .prepare("SELECT txn_id FROM core_transaction WHERE external_id = ?")
-      .get(p.externalId) as { txn_id: string } | undefined;
-    return existing
-      ? {
-          entityId: existing.txn_id,
-          disposition: "skip",
-          note: "transaction already imported",
-        }
-      : null;
+  // NO PROBE (#996, ruling R20(c)). This used to select on
+  // `core_transaction.external_id` alone, which is the GLOBAL column the same
+  // ruling removed the `UNIQUE` from: a provider-local id is scoped to its
+  // source, and Bank A's `ref-1` is not Bank B's. The probe only ever ran when
+  // the sync map MISSED, and a miss on `(connection_id, external_id)` — the
+  // authoritative key, checked first by `stageCandidates` — means this
+  // connection has not imported this id, so the honest disposition is
+  // `create`. Matching two sources' equal reference strings is a cross-source
+  // MATCH: explicit, reviewable evidence the owner accepts, never an inference
+  // (#996, OQ-12). Idempotency of a re-import is unchanged and comes from the
+  // sync map, which is where it always came from.
+  probe() {
+    return null;
   },
   create(vault, ownerPartyId, payload) {
     const p = assertPayload<TransactionPayload>("TransactionPayload", payload);

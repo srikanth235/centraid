@@ -420,6 +420,40 @@ function backfillStatement(spec: FtsEntitySpec): string {
 SELECT ${valuesOf(spec, "b")} FROM ${base} b${liveGuardOf(spec, "b")};`;
 }
 
+/**
+ * The three sync triggers for one entity, and nothing else — no shadow table,
+ * no backfill.
+ *
+ * A table RE-CUT (SQLite's twelve-step rebuild, the only way to drop a
+ * constraint) takes the base table's triggers down with it while the fts5
+ * shadow and its rows survive, so the rung that rebuilds a searchable table
+ * has to put them back. It emits them from the same generator `entityDdl`
+ * uses, because the text is what `golden-vault.test.ts` compares: a hand-typed
+ * copy would be a second spelling of one contract, drifting the first time a
+ * spec changes.
+ */
+export function ftsSyncTriggersFor(entity: string): string {
+  const spec = SPEC_BY_ENTITY.get(entity);
+  if (!spec) throw new Error(`not a searchable entity: ${entity}`);
+  return triggerDdl(spec);
+}
+
+function triggerDdl(spec: FtsEntitySpec): string {
+  const base = physical(spec.entity);
+  const fts = `fts_${base}`;
+  const insertRow = `INSERT INTO ${fts}(${insertColumnsOf(spec)}) SELECT ${valuesOf(spec, "new")}${liveGuardOf(spec, "new")};`;
+  return `CREATE TRIGGER ${fts}_ai AFTER INSERT ON ${base} BEGIN
+  ${insertRow}
+END;
+CREATE TRIGGER ${fts}_au AFTER UPDATE ON ${base} BEGIN
+  DELETE FROM ${fts} WHERE rowid = old.rowid;
+  ${insertRow}
+END;
+CREATE TRIGGER ${fts}_ad AFTER DELETE ON ${base} BEGIN
+  DELETE FROM ${fts} WHERE rowid = old.rowid;
+END;`;
+}
+
 function entityDdl(spec: FtsEntitySpec): string {
   assertNoSealedFtsColumns(spec);
   const base = physical(spec.entity);
@@ -428,8 +462,6 @@ function entityDdl(spec: FtsEntitySpec): string {
     `${spec.idColumn} UNINDEXED`,
     ...spec.columns.map((c) => c.name),
   ];
-  const insertColumns = insertColumnsOf(spec);
-  const insertRow = `INSERT INTO ${fts}(${insertColumns}) SELECT ${valuesOf(spec, "new")}${liveGuardOf(spec, "new")};`;
   // detail= tuning (#367): left at the FTS5 default, detail=full.
   // detail=column/none shrink the index by dropping per-term POSITION data,
   // but snippet()/highlight() degrade to whole-column matches without it —
@@ -446,16 +478,7 @@ CREATE VIRTUAL TABLE ${fts} USING fts5(
   ${ftsColumns.join(", ")},
   tokenize = "unicode61 remove_diacritics 2"
 );
-CREATE TRIGGER ${fts}_ai AFTER INSERT ON ${base} BEGIN
-  ${insertRow}
-END;
-CREATE TRIGGER ${fts}_au AFTER UPDATE ON ${base} BEGIN
-  DELETE FROM ${fts} WHERE rowid = old.rowid;
-  ${insertRow}
-END;
-CREATE TRIGGER ${fts}_ad AFTER DELETE ON ${base} BEGIN
-  DELETE FROM ${fts} WHERE rowid = old.rowid;
-END;
+${triggerDdl(spec)}
 ${backfillStatement(spec)}
 `;
 }

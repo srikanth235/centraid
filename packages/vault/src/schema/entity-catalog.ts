@@ -78,6 +78,18 @@ export const VAULT_ENTITIES: EntityRegistry = {
       // path, and both clients name the absence.
       replicaValues: { textCeilingBytes: 1_024 * 1_024 },
     },
+    // DECODED BODY TEXT (#996, rulings R4 / R8). A 1:1 projection of the
+    // content row it decodes: it has no identity of its own, and a wide
+    // column on `core_content_item` would make every read of that hot table
+    // pay for text nobody asked for. It replicates, because from wave 1 the
+    // FTS sync triggers index THIS column on every seat instead of calling an
+    // application-defined SQL function no phone binding can register.
+    content_text: {
+      lifecycle: "mutable",
+      projectionOf: "core.content_item",
+      label: "Body text",
+      blurb: "The searchable text of a file, decoded once when it is saved.",
+    },
     content_derivative: {
       lifecycle: "mutable",
       label: "Derivatives",

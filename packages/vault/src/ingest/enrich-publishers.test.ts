@@ -7,7 +7,11 @@ import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { uuidv7 } from "../ids.js";
-import { ENRICH_PUBLISHERS, tagNotation } from "./enrich-publishers.js";
+import {
+  conceptKey,
+  ENRICH_PUBLISHERS,
+  tagNotation,
+} from "./enrich-publishers.js";
 
 let db: VaultDb;
 let boot: BootstrapResult;
@@ -137,5 +141,108 @@ describe("enrich-publishers", () => {
       .get(tag.concept_id) as { notation: string; pref_label: string };
     expect(concept.notation).toBe("beach-sunset");
     expect(concept.pref_label).toBe("Beach Sunset");
+  });
+
+  // A CONCEPT'S LABEL IS NOT ITS IDENTITY (#996 wave 0b, ruling R20(d)).
+  // `tagNotation` strips everything outside [a-z0-9], so every one of these
+  // four labels slugged to `untitled` and selected the SAME concept: four
+  // animals filed as one idea, on every vault that does not write in Latin
+  // script. Driven through the real tag publisher, read through the real
+  // concept rows the tag points at.
+  test("猫, 犬, कुत्ता and बिल्ली are four concepts, not one", () => {
+    const publisher = ENRICH_PUBLISHERS.find(
+      (p) => p.entityType === "core.tag"
+    )!;
+    const now = new Date().toISOString();
+    const labels = ["猫", "犬", "कुत्ता", "बिल्ली"];
+    const conceptIds = labels.map((label, index) => {
+      const created = publisher.create(
+        db.vault,
+        boot.ownerPartyId,
+        {
+          target_type: "core.party",
+          target_id: boot.ownerPartyId,
+          label,
+          confidence: 0.5 + index / 100,
+        },
+        now
+      );
+      // One tag per (target, concept) — a second tag for the SAME concept
+      // would be refused by `core_tag`'s UNIQUE, so four rows landing is
+      // itself the proof that four concepts exist.
+      const row = db.vault
+        .prepare("SELECT concept_id FROM core_tag WHERE tag_id = ?")
+        .get(created.entityId) as { concept_id: string };
+      return row.concept_id;
+    });
+    expect(new Set(conceptIds).size).toBe(4);
+
+    const concepts = db.vault
+      .prepare(
+        `SELECT pref_label, notation, normalized_key FROM core_concept
+          WHERE concept_id IN (${conceptIds.map(() => "?").join(", ")})
+          ORDER BY notation`
+      )
+      .all(...conceptIds) as {
+      pref_label: string;
+      notation: string;
+      normalized_key: string | null;
+    }[];
+    expect(concepts.map((c) => c.pref_label).toSorted()).toStrictEqual(
+      labels.toSorted()
+    );
+    // The KEY is the identity and preserves the script; the slug is a display
+    // notation and is allowed to collide, which is why it carries a suffix.
+    expect(concepts.map((c) => c.normalized_key).toSorted()).toStrictEqual(
+      labels.map((l) => conceptKey(l)).toSorted()
+    );
+    expect(concepts.map((c) => c.notation)).toStrictEqual([
+      "untitled",
+      "untitled-2",
+      "untitled-3",
+      "untitled-4",
+    ]);
+  });
+
+  test("the same label in the same scheme still selects one concept", () => {
+    // The key narrowed identity; it did not stop dedupe. Case and width fold,
+    // because NFKC and case-folding are what the key is.
+    const publisher = ENRICH_PUBLISHERS.find(
+      (p) => p.entityType === "core.tag"
+    )!;
+    const now = new Date().toISOString();
+    const first = publisher.create(
+      db.vault,
+      boot.ownerPartyId,
+      {
+        target_type: "core.party",
+        target_id: boot.ownerPartyId,
+        label: "Beach Sunset",
+        confidence: 0.9,
+      },
+      now
+    );
+    const firstConcept = (
+      db.vault
+        .prepare("SELECT concept_id FROM core_tag WHERE tag_id = ?")
+        .get(first.entityId) as { concept_id: string }
+    ).concept_id;
+    const probed = publisher.probe(db.vault, {
+      target_type: "core.party",
+      target_id: boot.ownerPartyId,
+      label: "  beach   sunset ",
+      confidence: 0.4,
+    });
+    expect(probed?.entityId).toBe(first.entityId);
+    expect(
+      (
+        db.vault
+          .prepare(
+            "SELECT count(*) AS n FROM core_concept WHERE normalized_key = ?"
+          )
+          .get(conceptKey("Beach Sunset")) as { n: number }
+      ).n
+    ).toBe(1);
+    expect(firstConcept).toBeTruthy();
   });
 });

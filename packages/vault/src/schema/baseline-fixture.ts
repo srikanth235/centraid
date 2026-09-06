@@ -29,7 +29,10 @@ export function baselineVault(): DatabaseSync {
   const db = new DatabaseSync(":memory:");
   registerContentTextFn(db);
   db.exec("PRAGMA foreign_keys = ON");
-  db.exec(VAULT_MIGRATIONS[0] ?? "");
+  // Rung one is always a plain DDL string — the composed baseline. A re-cut
+  // rung (SQLite's twelve-step rebuild) never is, and never could be rung one.
+  const baseline = VAULT_MIGRATIONS[0];
+  db.exec(typeof baseline === "string" ? baseline : (baseline?.recut ?? ""));
   refreshEntityTriggers(db);
   return db;
 }

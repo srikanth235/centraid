@@ -30,28 +30,116 @@ function ensureScheme(vault: DatabaseSync, uri: string, title: string): string {
   return schemeId;
 }
 
+/**
+ * A CONCEPT'S LABEL IS NOT ITS IDENTITY (#996, ruling R20(d)).
+ *
+ * The key a label-only scheme selects on: NFKC-normalised, whitespace
+ * collapsed, case-folded, and everything else PRESERVED. `tagNotation` below
+ * stripped every character outside `[a-z0-9]`, so `猫`, `犬`, `कुत्ता` and
+ * `बिल्ली` all became `untitled` and selected one concept — four animals filed
+ * as one idea, on every vault that does not write in Latin script.
+ */
+export function conceptKey(label: string): string {
+  return label
+    .normalize("NFKC")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .toLocaleLowerCase("en-US");
+}
+
+/**
+ * Resolve (or mint) the concept a label names in `schemeId`.
+ *
+ * Selection is on `normalized_key`, never on the slug. Rows minted before
+ * [#996] carry no key, so a miss falls back to the slug ONCE and backfills the
+ * key from the label it finds — migration on touch, because NFKC is not a
+ * SQLite function and rung six must not guess a value it cannot compute.
+ *
+ * The slug keeps `UNIQUE (scheme_id, notation)`, so two labels that flatten to
+ * the same ASCII get a SUFFIX rather than a shared row.
+ */
 function ensureConcept(
   vault: DatabaseSync,
   schemeId: string,
-  notation: string,
-  label: string
+  label: string,
+  options?: { lang?: string | null; stableId?: string | null }
 ): string {
-  const existing = vault
+  const key = conceptKey(label);
+  const stableId = options?.stableId ?? null;
+  if (stableId !== null) {
+    const byStable = vault
+      .prepare(
+        "SELECT concept_id FROM core_concept WHERE scheme_id = ? AND stable_id = ?"
+      )
+      .get(schemeId, stableId) as { concept_id: string } | undefined;
+    if (byStable) return byStable.concept_id;
+  }
+  const byKey = vault
     .prepare(
-      "SELECT concept_id FROM core_concept WHERE scheme_id = ? AND notation = ?"
+      "SELECT concept_id FROM core_concept WHERE scheme_id = ? AND normalized_key = ?"
     )
-    .get(schemeId, notation) as { concept_id: string } | undefined;
-  if (existing) return existing.concept_id;
+    .get(schemeId, key) as { concept_id: string } | undefined;
+  if (byKey) return byKey.concept_id;
+  // Pre-#996 rows: the slug was the identity, so one lookup on it keeps a
+  // migrated vault from minting a duplicate for a concept it already holds.
+  const legacy = vault
+    .prepare(
+      `SELECT concept_id, pref_label FROM core_concept
+        WHERE scheme_id = ? AND notation = ? AND normalized_key IS NULL`
+    )
+    .get(schemeId, tagNotation(label)) as
+    | { concept_id: string; pref_label: string }
+    | undefined;
+  if (legacy && conceptKey(legacy.pref_label) === key) {
+    vault
+      .prepare(
+        "UPDATE core_concept SET normalized_key = ? WHERE concept_id = ?"
+      )
+      .run(key, legacy.concept_id);
+    return legacy.concept_id;
+  }
   const conceptId = uuidv7();
   vault
     .prepare(
-      `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
-       VALUES (?, ?, ?, ?, NULL, NULL, NULL)`
+      `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang)
+       VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`
     )
-    .run(conceptId, schemeId, notation, label);
+    .run(
+      conceptId,
+      schemeId,
+      freeNotation(vault, schemeId, tagNotation(label)),
+      label,
+      stableId,
+      key,
+      options?.lang ?? null
+    );
   return conceptId;
 }
 
+/** The first unused slug in `schemeId`: `dog`, then `dog-2`, `dog-3`, … */
+function freeNotation(
+  vault: DatabaseSync,
+  schemeId: string,
+  slug: string
+): string {
+  const taken = vault.prepare(
+    "SELECT 1 AS x FROM core_concept WHERE scheme_id = ? AND notation = ?"
+  );
+  if (!taken.get(schemeId, slug)) return slug;
+  for (let n = 2; n < 1000; n += 1) {
+    const candidate = `${slug.slice(0, 60)}-${n}`;
+    if (!taken.get(schemeId, candidate)) return candidate;
+  }
+  // A thousand labels flattening to one slug is a broken caller, not a name.
+  throw new Error(`core.concept: no free notation for "${slug}"`);
+}
+
+/**
+ * The 64-character ASCII slug. NO LONGER AN IDENTITY (#996, R20(d)) — it is
+ * the display notation, and `conceptKey` is what selects a concept. Kept
+ * exported while [#996] wave 0c moves its remaining callers onto the domain
+ * operation.
+ */
 export function tagNotation(label: string): string {
   return (
     label
@@ -153,12 +241,15 @@ const tagPublisher: Publisher = {
         `SELECT t.tag_id, t.tagged_by_party_id FROM core_tag t
            JOIN core_concept c ON c.concept_id = t.concept_id
            JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-          WHERE t.target_type = ? AND t.target_id = ? AND s.uri = ? AND c.notation = ?`
+          WHERE t.target_type = ? AND t.target_id = ? AND s.uri = ?
+            AND (c.normalized_key = ?
+                 OR (c.normalized_key IS NULL AND c.notation = ?))`
       )
       .get(
         p.target_type,
         p.target_id,
         p.scheme_uri ?? VISION_SCHEME_URI,
+        conceptKey(p.label),
         tagNotation(p.label)
       ) as { tag_id: string; tagged_by_party_id: string | null } | undefined;
     if (!row) return null;
@@ -179,12 +270,7 @@ const tagPublisher: Publisher = {
     const p = assertPayload<TagPayload>("TagPayload", payload);
     const uri = p.scheme_uri ?? VISION_SCHEME_URI;
     const schemeId = ensureScheme(vault, uri, "Machine tags");
-    const conceptId = ensureConcept(
-      vault,
-      schemeId,
-      tagNotation(p.label),
-      p.label
-    );
+    const conceptId = ensureConcept(vault, schemeId, p.label);
     const tagId = uuidv7();
     vault
       .prepare(
@@ -476,8 +562,7 @@ const contentItemPublisher: Publisher = {
         )
         .get(schemeId, p.folder) as { concept_id: string } | undefined;
       const conceptId =
-        byLabel?.concept_id ??
-        ensureConcept(vault, schemeId, tagNotation(p.folder), p.folder);
+        byLabel?.concept_id ?? ensureConcept(vault, schemeId, p.folder);
       vault
         .prepare(
           `DELETE FROM core_tag
