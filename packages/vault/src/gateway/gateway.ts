@@ -51,6 +51,7 @@ import type { PublishResult } from "../ingest/staging.js";
 import { archivedSegmentShas } from "../journal-archive.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { notifyReplicaCommit } from "../replica/doorbell.js";
+import { stampReplicaOutcomeCommitsInTransaction } from "../replica/intent-chain.js";
 import { transitionReplicaIntentOutcomeInTransaction } from "../replica/intents.js";
 import {
   reclaimProvenOrdinaryInvocationCommitsInTransaction,
@@ -366,7 +367,17 @@ export class Gateway {
           invocationId
         );
       }
-      endReplicaCommit(this.db.vault, replicaCommit);
+      const captured = endReplicaCommit(this.db.vault, replicaCommit);
+      // THE OUTCOME LEARNS WHERE IT LANDED (#996, R24). The BATCH owns the
+      // transaction, so this is the only place the log position and the
+      // produced rows exist — and it is still inside it, so the stamp can
+      // never name a commit that rolled back or one a later write moved past.
+      if (captured)
+        stampReplicaOutcomeCommitsInTransaction(
+          this.db.vault,
+          invocationIds,
+          captured
+        );
       this.db.vault.exec("COMMIT");
       // Publish only runs now durable.
       notifyReplicaCommit(this.db.vault);

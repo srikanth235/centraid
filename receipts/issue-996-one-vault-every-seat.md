@@ -9,7 +9,7 @@ Umbrella receipt. One receipt for the whole umbrella; each wave appends its own 
 - [x] **Wave 0c — domain operations**: one invariant boundary with Atlas inside it and non-empty pre/postconditions; content write as one operation; acyclic task hierarchy; `complete` / `reopen` shared by People, Tasks and automations with series identity and inherited `about`; the occurrence adapter every reader consumes; temporal validation at every entry point; `tagNotation` replaced by concept identity; `accountFor` and the publisher probe re-keyed; the declared read-set wired into the intent conflict checker; each operation's offline declaration
 - [x] **Wave 0d — queries and contracts**: `(party, currency)` balances, group results in the group's currency, the explicit valuation type with its unavailable state, the Money output type, and settlements, obligations and exports on the same helpers
 - [x] **Wave 0e — evidence and the cross-boundary tier**: machine tags and document classification linked to their derivation and input revision; the thirteen scenarios promoted to a package fixture with a command→query round-trip test per shared concept across two app surfaces; purge behaviour tested per deletion role
-- [ ] **Wave 1 — the log and the seat**: `replica_log` with session capture and in-transaction reconstruction, the sanitised snapshot with its canary test, the applier and cursor, the epoch gate, retention; the one `schema_epoch` bump for W0b and W1; replay-and-diff convergence is the gate from here on
+- [x] **Wave 1 — the log and the seat**: `replica_log` with session capture and in-transaction reconstruction, the sanitised snapshot with its canary test, the applier and cursor, the epoch gate, retention; the one `schema_epoch` bump for W0b and W1; replay-and-diff convergence is the gate from here on
 - [ ] **Wave 2 — intents over the new plane**: `row_version` on every mutable table, the declared read-set conflict check, durable outcomes carrying `commit_seq`, the overlay cleared in the transaction that carries the commit, dependency edges and predecessor references
 - [ ] **Wave 3 — the phone**: expo-sqlite replaces op-sqlite with sessions, SQLCipher and FTS; the measured device rows exist before any irreversible deletion
 - [ ] **Wave 4 — one handler, plain SQL, paged**: keyset pagination and runtime `LIMIT` for all eight apps, wide-column side tables, plan snapshots as review diffs, work-counter gates
@@ -43,6 +43,8 @@ Wave 0c lands in one commit, and what it lands is **Wave 0c — domain operation
 Wave 0d lands in one commit, and what it lands is **Wave 0d — queries and contracts**: `(party, currency)` balances, group results in the group's currency, the explicit valuation type with its unavailable state, the Money output type, and settlements, obligations and exports on the same helpers. The surface, the scenarios, the site accounting and the gate tails are in `## Wave 0d — queries and contracts` below.
 
 Wave 0e lands in one commit, and what it lands is **Wave 0e — evidence and the cross-boundary tier**: machine tags and document classification linked to their derivation and input revision; the thirteen scenarios promoted to a package fixture with a command→query round-trip test per shared concept across two app surfaces; purge behaviour tested per deletion role. The surface, the scenarios, the files, the gate tails and one carried-in fix are in `## Wave 0e — evidence and the fixture` below.
+
+Wave 1 lands across six commits, and what it lands is **Wave 1 — the log and the seat**: `replica_log` with session capture and in-transaction reconstruction, the sanitised snapshot with its canary test, the applier and cursor, the epoch gate, retention; the one `schema_epoch` bump for W0b and W1; replay-and-diff convergence is the gate from here on. Each clause, in the section that carries it: the schema plane and the single epoch bump in `## Wave 1 — schema and epoch`; session capture, the decoder and the applier with its cursor and epoch gate in `## Wave 1 — capture and decoder`; the sanitised snapshot and its canary in `## Wave 1 — snapshot, doors, capability`; retention, the producer bound and the deferral flag in `## Wave 1 — retention and the producer bound`; the two doors that serve the file and the log, plus the retirement of `vault_content_text`, in `## Wave 1 — the doors, and the function-free index`; and the durable outcome contract in `## Wave 1 — the outcome contract (R23–R25)`. The wave's full file list is `## Wave 1 — every file the wave touched` plus the per-commit lists in the last two sections.
 
 ## Out of scope
 
@@ -1363,3 +1365,149 @@ The three red server files are environmental and unrelated to this commit:
 - **A plane-shaped stand-in for the corpus tests.** Both corpora are BUILT vaults, and a `VaultPlane` bootstrap is exactly what would overwrite them. The doors read three things off a plane, so the test supplies those three — rather than teaching the fixture to accept a foreign vault, which would put a test seam in the plane.
 - **The mock response is a real `Writable`.** The first version was an object with a `write` method; `stream.pipeline` waits for `finish`, which such an object never emits, so the test hung for thirty seconds instead of failing. Extending `Writable` also puts the door's backpressure path under test.
 - **Single-range only.** Multipart ranges are legal HTTP, no seat needs them for a resumed download, and emitting them correctly is more surface than the feature is worth — so `parseByteRange` refuses them by name rather than answering one range and pretending.
+
+## Wave 1 — the outcome contract (R23–R25)
+
+An intent used to be answered and forgotten. Five things it never told anyone
+are now durable: **where it landed**, **what it produced**, **what it was
+waiting for**, **how long its answer is good for**, and **what to do when that
+runs out**.
+
+### Where it landed, and what landed
+
+- **`commit_seq` and `produced` are stamped inside the canonical transaction**,
+  at the GROUP-COMMIT boundary (`packages/vault/src/gateway/gateway.ts:369`,
+  `stampReplicaOutcomeCommitsInTransaction`). That is the seam because the
+  gateway batches invocations into one transaction: the log position and the
+  produced set belong to the BATCH, and a stamp anywhere outside it could name
+  a commit that rolled back, or the wrong one because a later write moved the
+  watermark in between. `packages/vault/src/gateway/execution.ts:751` stamps
+  the same way for a path that owns its own commit handle.
+- **The set is read from the capture, never re-queried.** `produced` comes off
+  the decoded images in `captureReplicaCommit` (`replica/log.ts`) — a second
+  read against the tables could see a LATER commit's `row_version` and settle
+  the intent against work it did not do.
+- **Both doors, one stamp.** The device door and the member door both arrive as
+  `invoke({ intentId })`, so an outcome that carries the position on one path
+  and not the other cannot happen. The member door also now RECORDS an outcome
+  before invoking (`peer-replica-intent-route.ts`) — it previously answered
+  from the invoke result and kept nothing, so a lost acknowledgement had
+  nothing to replay against and a retry re-executed.
+
+### The conflict check is on the row's own column
+
+`currentConflict` compared `MAX(seq)` over `replica_change` — the position of
+the last projector entry that mentioned the row. That is a property of the
+TRANSPORT: it moves when the log is pruned or the epoch is bumped, it does not
+exist for a row the projector never covered, and **a seat holding `vault.db`
+whole cannot compute it at all**. It now reads `row_version`
+(`replica-intent-shape.ts`), which is on the row, bumped by the row's own touch
+trigger, and means the same thing on the gateway and on the phone. Zero is "not
+there, or never touched", and `row_version >= 1` by CHECK, so zero can never be
+a live row's answer. The projector remains the fallback for the append-only
+bands, which carry no such column and which no intent bases a write on.
+
+### The chain is causal, and the gateway is what makes it so
+
+- **`dependsOn` is part of the payload hash.** It decides WHEN an intent runs
+  and which rows its placeholders resolve to, so an intent whose predecessors
+  were rewritten in flight is a different intent. Omitted when empty, exactly
+  as `baseVersions` is.
+- **Three verdicts, not two** (`replicaDependencyVerdict`). *Waiting* releases
+  on its own when the predecessor lands; *abandoned* never will, and naming the
+  predecessor and its reason is the difference between a queue that drains and
+  one that quietly stops. Both park — the intent is retained, so a retry of the
+  predecessor releases it.
+- **A chain park is a wait, not a verdict.** Every other parked outcome is an
+  immutable dedupe hit because it waits on a PERSON; a dependency park waits on
+  another INTENT and must re-enter dispatch, or the queue behind a slow
+  predecessor never drains.
+- **The dependency gate runs BEFORE the conflict check**, on purpose: a
+  dependent's base versions describe rows its predecessor has not produced yet,
+  so checking them first would report a conflict where the honest answer is
+  "not yet".
+- **Predecessor references resolve by plain equality**, from `produced_json`,
+  never "the latest task". WHICH produced row is not guessed: a canonical
+  commit writes the entity's row AND the supertype mirror AND sometimes a
+  revision occurrence, so either the placeholder names its table
+  (`{"$intent": id, "table": "schedule_task"}`) or exactly one row survives
+  after the engine's own bookkeeping tables are set aside. Anything else is
+  left UNRESOLVED so the command's precondition refuses loudly — silently
+  substituting a guess is how a rename lands on the wrong row.
+
+### The window, and the far edge of it
+
+- `REPLICA_IDEMPOTENCY_WINDOW_DAYS = 30`, the same number as the log's
+  retention floor (OQ-13). Deliberately equal: an outcome that outlived the log
+  rows its `commit_seq` points into can no longer tell a seat where its own
+  effect landed.
+- **Never pruned while a seat is behind it.** `pruneReplicaIntentOutcomes`
+  holds any outcome whose `commit_seq` is at or above a live device cursor —
+  pruning it turns a pending badge that would have cleared into one that never
+  does.
+- **"I no longer know" is a real answer and the only safe one.** A retry past
+  the window gets 409 `replica_intent_outcome_expired` with
+  `recovery: "resubmit-as-new-intent"`; the same id with a DIFFERENT payload
+  gets 409 `replica_intent_payload_mismatch`. Neither re-executes. The mismatch
+  is a plain refusal rather than the non-oracle 202 the route gives a foreign
+  id, because `readReplicaIntentOutcome` is device-scoped: the device is asking
+  about its own intent, and there is no existence to leak.
+
+### Every file this commit touches
+
+- `packages/vault/src/schema/replica.ts` — `commit_seq`, `produced_json`, `depends_on`, `expires_at` on `replica_intent_outcome`
+- `packages/vault/src/replica/log.ts` — `produced` on the capture result
+- `packages/vault/src/replica/intents.ts` — the four columns on the outcome, the window's default, `seat: "intent"`
+- `packages/vault/src/replica/intent-chain.ts` (new) — the stamps, the dependency verdict, the predecessor resolver, the expiry answer and the pruner. Split out rather than piled onto `intents.ts`, which owns the outcome ROW (admit, transition, read, list, delete): the two are separate readings of one table, and together they are a god-file — `repo-hygiene` said so at 772 lines
+- `packages/vault/src/replica/intents.test.ts` — the window, the OQ-13 hold, the three verdicts
+- `packages/vault/src/gateway/gateway.ts` · `packages/vault/src/gateway/execution.ts` — the stamp at the commit boundary
+- `packages/vault/src/index.ts` — the new surface
+- `packages/server/src/routes/replica-intent-shape.ts` — `row_version`, `parseDependsOn`, `dependsOn` in the hash
+- `packages/server/src/routes/replica-intent-route.ts` — the gate, the substitution, the mismatch and expiry answers
+- `packages/server/src/routes/peer-replica-intent-route.ts` — the member door's durable outcome
+- `packages/server/src/routes/replica-projection.ts` — `commitSeq`, `produced`, `dependsOn` on the wire
+- `packages/server/src/routes/replica-intent-chain.test.ts` (new) — the chain
+- `packages/client/src/replica/types.ts` — the widened `waitingOn`
+- `packages/vault/tests/golden/issue-929/vault.db.gz` · `manifest.json` — re-frozen for the four columns
+
+### Gates
+
+```
+cd packages/vault  && bun run test    # 205 files, 1711 passed, 2 skipped
+cd packages/server && bun run test    # 390 files, 3486 passed; 2 files red, environmental
+cd packages/client && bun run test    # 273 files, 2478 passed
+bun run golden-vault:freeze -- --label issue-929
+bun run check:push:static
+```
+
+The red server files are the same two environmental ones named in the previous
+section: `src/acp/backends/acp/launch.test.ts` and
+`src/serve/gateway-db-lock.integration.test.ts`.
+
+`replica-intent-chain.test.ts` runs the chain against the REAL commands, not a
+stub — `commit_seq` and the produced set only exist inside a canonical
+transaction, and the whole question is whether the substituted row id addresses
+the row the create actually made. Six cases: the five-intent chain in order
+with five distinct ascending commit positions and one task carrying every
+final value; out-of-order arrival that parks and then releases; a denied create
+whose dependents park naming it with nothing executed; another device's edit
+between two dependents producing EXACTLY ONE conflict with the parked
+dependents behind it; the lost acknowledgement replaying the retained outcome
+with its `commitSeq` and refusing a changed payload; and an outcome past its
+window answering unknown-recover without a second execution.
+
+### Decisions — wave 1, the outcome contract
+
+- **The stamp is at the group commit, not in `execution.ts` alone.** The first
+  version stamped in `execution.ts` and silently did nothing: the batch owns
+  the replica commit handle, so `endReplicaCommit` there returns `undefined`
+  and there was no capture to read. Every outcome came back with no
+  `commit_seq` and the chain test found it.
+- **`waitingOn.seat` gains `"intent"`.** The existing seats are people and
+  places (`owner`, `origin`, `gateway`); a chain wait is neither, and the label
+  is the PREDECESSOR'S INTENT ID because that is the only name a seat can match
+  against its own outbox — there is no vault id yet for a row the create has
+  not made.
+- **A one-line SQL comment cost a build.** `expires_at`'s comment used
+  backticks inside a template literal; the schema is authored as a TS template,
+  so it terminated the literal.

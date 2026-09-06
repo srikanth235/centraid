@@ -111,7 +111,12 @@ export function conflictBaseIsMissing(conflict: ReplicaConflict): boolean {
  * person: `label` comes off the LINK, never a vault id nobody has a name for.
  */
 export interface ReplicaWaitingOn {
-  seat: "owner" | "origin" | "gateway";
+  /**
+   * `intent` is the offline chain's own wait (#996, R23): the label is the
+   * PREDECESSOR'S INTENT ID, the only name a seat can match against its own
+   * outbox — there is no vault id yet for a row the create has not made.
+   */
+  seat: "owner" | "origin" | "gateway" | "intent";
   label?: string;
 }
 

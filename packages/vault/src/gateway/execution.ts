@@ -12,6 +12,7 @@ import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { notifyReplicaCommit } from "../replica/doorbell.js";
+import { stampReplicaOutcomeCommitInTransaction } from "../replica/intent-chain.js";
 import {
   finalizeReplicaInvocationCommit,
   finalizeOrdinaryInvocationCommit,
@@ -748,7 +749,22 @@ export function runContractAndExecute(
       audit,
       committedAt: ctx.now,
     });
-    endReplicaCommit(db.vault, replicaCommit);
+    const captured = endReplicaCommit(db.vault, replicaCommit);
+    // THE OUTCOME LEARNS WHERE IT LANDED (#996, R24), here and only here.
+    // This is the one place both intent paths pass through — the device door
+    // (`replica-intent-route.ts`) and the member door
+    // (`peer-replica-intent-route.ts`) both arrive as `invoke({ intentId })`
+    // — so an outcome that carries the position on one path and not the other
+    // cannot happen. And it is INSIDE the transaction on purpose: the
+    // position and the produced rows are read from the capture that just ran,
+    // so the stamp can never name a commit that rolled back, and never the
+    // wrong one because a later write moved the watermark in between.
+    if (request.intentId && captured)
+      stampReplicaOutcomeCommitInTransaction(
+        db.vault,
+        request.intentId,
+        captured
+      );
     commitInvocationTransaction(db.vault, vaultTransaction);
     closeRevisionCapture(db.vault);
     if (!options.deferReplicaNotify) notifyReplicaCommit(db.vault);

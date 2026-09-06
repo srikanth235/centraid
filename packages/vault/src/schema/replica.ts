@@ -211,6 +211,26 @@ CREATE TABLE IF NOT EXISTS replica_intent_outcome (
   -- pending badge clear before the row it wrote arrives.
   answered_versions TEXT
     CHECK (answered_versions IS NULL OR json_valid(answered_versions)),
+  -- THE CANONICAL COMMIT POSITION THIS ANSWER STANDS FOR (#996, R24). Every
+  -- executed outcome carries it, on the device path as well as the peer path,
+  -- and a seat keeps its pending projection until its applied cursor reaches
+  -- it. Without the number the seat has to guess, and the guess is what makes
+  -- a pending badge clear before the row it wrote arrives.
+  commit_seq    INTEGER CHECK (commit_seq IS NULL OR commit_seq > 0),
+  -- The (table, pk, row_version) set this intent's commit produced, read from
+  -- the captured rows rather than re-queried: a second read could see a LATER
+  -- commit's value and settle the intent against work it did not do.
+  produced_json TEXT CHECK (produced_json IS NULL OR json_valid(produced_json)),
+  -- THE INTENTS THIS ONE WAITS ON (#996, R23). A JSON array of intent ids: an
+  -- offline chain is causal, so a rename cannot execute before the create it
+  -- renames, and the gateway is where that is enforced rather than in each
+  -- app's retry loop.
+  depends_on    TEXT CHECK (depends_on IS NULL OR json_valid(depends_on)),
+  -- THE END OF THE IDEMPOTENCY WINDOW (#996, R24 / OQ-13). A retry after this
+  -- gets an explicit 'expired' answer naming what to do, never a silent
+  -- re-execution: the retained outcome is what makes a retry safe, so when it
+  -- is gone the honest answer is "I no longer know", not "here, do it again".
+  expires_at    TEXT,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)

@@ -95,6 +95,24 @@ export interface ReplicaCaptureResult {
   readonly compressedBytes: number;
   /** True when this commit crossed {@link REPLICA_DEFER_THRESHOLD_BYTES}. */
   readonly deferred: boolean;
+  /**
+   * THE ROWS THIS COMMIT PRODUCED, with the version each landed at (#996,
+   * R24). An executed intent's outcome carries this set, so a seat can decide
+   * "my pending projection stands for THESE rows at THESE versions" instead of
+   * guessing from a cursor — which is what makes a pending badge clear at the
+   * right moment rather than one round trip early.
+   *
+   * Read from the decoded images, never re-queried: the image is what the
+   * commit actually wrote, and a second read could see a later commit's value.
+   */
+  readonly produced: readonly ReplicaProducedRow[];
+}
+
+export interface ReplicaProducedRow {
+  readonly table: string;
+  readonly primaryKey: readonly WireValue[];
+  /** Absent on a table with no `row_version` — a delete, or an append-only row. */
+  readonly rowVersion?: number;
 }
 
 interface OpenSession {
@@ -421,6 +439,14 @@ export function captureReplicaCommit(
     tables,
     compressedBytes,
     deferred,
+    produced: decoded.map((row) => {
+      const version = row.row?.["row_version"];
+      return {
+        table: row.table,
+        primaryKey: row.key,
+        ...(typeof version === "number" ? { rowVersion: version } : {}),
+      };
+    }),
   };
 }
 

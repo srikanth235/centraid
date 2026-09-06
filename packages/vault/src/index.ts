@@ -650,6 +650,7 @@ export {
 } from "./replica/snapshot.js";
 export { replicaUnavailableColumnsOf } from "./replica/unavailable-columns.js";
 export {
+  REPLICA_IDEMPOTENCY_WINDOW_DAYS,
   deleteReplicaIntentOutcomesForDevice,
   listReplicaIntentOutcomes,
   readReplicaIntentOutcome,
@@ -660,8 +661,19 @@ export {
   type RecordReplicaIntentOutcomeInput,
   type ReplicaIntentOutcome,
   type ReplicaIntentStatus,
+  type ReplicaProducedRowWire,
   type TransitionReplicaIntentOutcomeInput,
 } from "./replica/intents.js";
+export {
+  expiredOutcomeRecovery,
+  pruneReplicaIntentOutcomes,
+  replicaDependencyVerdict,
+  resolvePredecessorReferences,
+  stampReplicaOutcomeCommitInTransaction,
+  stampReplicaOutcomeCommitsInTransaction,
+  type ExpiredOutcomeRecovery,
+  type ReplicaDependencyVerdict,
+} from "./replica/intent-chain.js";
 export {
   DEFAULT_REPLICA_INVOCATION_REPAIR_BATCH_SIZE,
   ReplicaInvocationRepairError,
