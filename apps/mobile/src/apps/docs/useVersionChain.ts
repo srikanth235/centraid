@@ -40,6 +40,14 @@ export function useVersionChain(documentId: string): UseVersionChainResult {
       []
     )
   );
+  // What the document reads its bytes as (#996, ruling R20(b)).
+  const representations = useReplicaQuery(
+    APP_ID,
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "core.content_representation" }),
+      []
+    )
+  );
 
   const linksDenied =
     revisions.error !== undefined || revisions.connection === "unavailable";
@@ -51,14 +59,23 @@ export function useVersionChain(documentId: string): UseVersionChainResult {
       document: documents.rows.find((row) => row["document_id"] === documentId),
       revisions: revisions.rows,
       contents: contents.rows,
+      representations: representations.rows,
     });
-  }, [documentId, linksDenied, documents.rows, revisions.rows, contents.rows]);
+  }, [
+    documentId,
+    linksDenied,
+    documents.rows,
+    revisions.rows,
+    contents.rows,
+    representations.rows,
+  ]);
 
   const refresh = async (): Promise<void> => {
     await Promise.all([
       documents.refresh(),
       contents.refresh(),
       revisions.refresh(),
+      representations.refresh(),
     ]);
   };
 

@@ -650,6 +650,7 @@
         "core.concept",
         "core.concept_scheme",
         "core.content_item",
+        "core.content_representation",
         "core.tag",
         "knowledge.note"
       ]

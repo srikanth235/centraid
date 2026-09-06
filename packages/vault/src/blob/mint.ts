@@ -49,35 +49,39 @@ export interface MintedContent {
 /**
  * Dedupe-or-insert the canonical content item behind an inline payload.
  * Re-presenting known bytes restores them from trash (re-upload = restore,
- * media.add_asset's rule) and optionally retitles.
+ * media.add_asset's rule).
+ *
+ * THE MEDIA TYPE IS THIS CALL'S, NEVER THE STORED ROW'S (#996, ruling R20(b),
+ * drift ONT-28). It used to be read back off the deduped row, so the first
+ * import of a byte string decided what every later owner of those bytes was
+ * reading — the same HTML filed once as `text/html` was `text/html` forever.
+ * The caller writes it onto ITS OWN representation with
+ * `setRepresentation`; nothing about it is stored here.
  */
 export function mintContentFromDataUri(
   ctx: HandlerCtx,
-  uri: string,
-  options: { title?: string } = {}
+  uri: string
 ): MintedContent {
   const { mediaType, bytes } = decodeDataUri(uri);
   const sha = sha256OfBytes(bytes);
   const existing = ctx.db
     .prepare(
-      "SELECT content_id, media_type, deleted_at FROM core_content_item WHERE sha256 = ?"
+      "SELECT content_id, deleted_at FROM core_content_item WHERE sha256 = ?"
     )
-    .get(sha) as
-    | { content_id: string; media_type: string; deleted_at: string | null }
-    | undefined;
+    .get(sha) as { content_id: string; deleted_at: string | null } | undefined;
   if (existing) {
-    if (existing.deleted_at !== null || options.title) {
+    if (existing.deleted_at !== null) {
       ctx.db
         .prepare(
-          `UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL,
-                  title = COALESCE(?, title) WHERE content_id = ?`
+          `UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL
+            WHERE content_id = ?`
         )
-        .run(options.title ?? null, existing.content_id);
+        .run(existing.content_id);
       ctx.wrote("core.content_item", existing.content_id);
     }
     return {
       contentId: existing.content_id,
-      mediaType: existing.media_type,
+      mediaType,
       byteSize: bytes.length,
       sha256: sha,
       deduped: 1,
@@ -97,16 +101,14 @@ export function mintContentFromDataUri(
   ctx.db
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
+         (content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+       VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
     )
     .run(
       contentId,
-      mediaType,
       contentUri,
       sha,
       bytes.length,
-      options.title ?? null,
       ctx.identity.partyId,
       ctx.now
     );

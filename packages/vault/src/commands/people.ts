@@ -26,7 +26,7 @@ import {
   recordEntityRevision,
 } from "./entity-revisions.js";
 import { setStarred, starredExistsSql } from "./flags.js";
-import { contentItemFor } from "./knowledge.js";
+import { contentItemFor, setNoteRepresentation } from "./knowledge.js";
 import { RELATIONS_SCHEME_URI, RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
 import { registerPeopleOrganizeCommands } from "./people-organize.js";
@@ -1836,6 +1836,7 @@ const ADD_JOURNAL_ENTRY: CommandDefinition = {
         ctx.now
       );
     ctx.wrote("knowledge.note", entryId);
+    setNoteRepresentation(ctx, entryId, contentId, "plain");
     const marker = conceptId(
       ctx,
       JOURNAL_SCHEME_URI,

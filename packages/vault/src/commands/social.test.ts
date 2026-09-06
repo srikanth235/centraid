@@ -182,8 +182,8 @@ describe("social", () => {
     const contentId = uuidv7();
     db.vault
       .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES (?, 'text/plain', 'file:///m1', 'aa11', 5, ?)`
+        `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES (?, 'file:///m1', 'aa11', 5, ?)`
       )
       .run(contentId, now);
     db.vault

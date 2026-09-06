@@ -16,6 +16,10 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import {
   readCustodyByContent,
@@ -38,7 +42,6 @@ interface SearchHit {
 }
 interface ContentRow {
   content_id: string;
-  media_type?: string | null;
   byte_size?: number | null;
   content_uri?: string | null;
 }
@@ -110,23 +113,26 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
 
     // Bounded by the matched wrappers' current_content_id set, custody too.
     const contentIds = [...new Set(hits.map((d) => d.current_content_id))];
-    const [contents, custodyByContent, sharesByDoc] = await Promise.all([
-      contentIds.length > 0
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.content_item",
-            where: [{ column: "content_id", op: "in", value: contentIds }],
-          })
-        : { rows: [] as Record<string, unknown>[] },
-      readCustodyByContent({ ctx, contentIds }),
-      // Shares (#821) bounded by matched documents; same join drive.ts makes.
-      readSharesByDocument({
-        ctx,
-        documentIds: [...folderByDoc.keys()],
-        folderByDoc,
-        folderConcepts: schemeConcepts,
-      }),
-    ]);
+    const [contents, custodyByContent, sharesByDoc, representations] =
+      await Promise.all([
+        contentIds.length > 0
+          ? ctx.vault.read({
+              acceptTruncation: true,
+              entity: "core.content_item",
+              where: [{ column: "content_id", op: "in", value: contentIds }],
+            })
+          : { rows: [] as Record<string, unknown>[] },
+        readCustodyByContent({ ctx, contentIds }),
+        // Shares (#821) bounded by matched documents; same join drive.ts makes.
+        readSharesByDocument({
+          ctx,
+          documentIds: [...folderByDoc.keys()],
+          folderByDoc,
+          folderConcepts: schemeConcepts,
+        }),
+        // The byte row carries no media type since #996 (R20(b)).
+        readRepresentations({ ctx, contentIds }),
+      ]);
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
         c.content_id,
@@ -154,7 +160,10 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           document_id: d.document_id,
           content_id: d.current_content_id,
           title: d.title,
-          media_type: c?.media_type ?? null,
+          media_type:
+            representations.byOwner.get(
+              ownerKey(DOCUMENT_TARGET_TYPE, d.document_id)
+            ) ?? null,
           byte_size: c?.byte_size ?? null,
           content_uri: srcOf(c),
           poster_uri: posterOf(c),

@@ -213,6 +213,13 @@ export type IndirectEntry =
  * when a registered file's literals and its entry disagree.
  */
 export const INDIRECT_ENTITY_READS: Readonly<Record<string, IndirectEntry>> = {
+  // `entity: REPRESENTATION_ENTITY` — the ONE place an app asks what bytes ARE
+  // (#996, ruling R20(b)). Every app query fills its `media_type` wire field
+  // through this reader, so the entity is a module constant rather than a
+  // literal at each call site.
+  "packages/blueprints/apps/_shared/representation-reads.ts": {
+    entities: ["core.content_representation"],
+  },
   // `rowsOf(ctx, "locker.item_alias", …)` — the entity is a positional argument
   // to the shared sidecar reader, so no `entity:` literal exists to scan.
   "packages/blueprints/apps/locker/queries/item-sidecars.ts": {
@@ -280,6 +287,7 @@ export const INDIRECT_ENTITY_READS: Readonly<Record<string, IndirectEntry>> = {
       "core.concept",
       "core.concept_scheme",
       "core.content_item",
+      "core.content_representation",
       "core.document",
       "core.party",
       "core.tag",

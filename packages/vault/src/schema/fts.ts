@@ -13,8 +13,19 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { mediaTypeSql } from "./representation.js";
 import { sealedColumnsOf } from "./sealed.js";
 import { resolveEntity } from "./tables.js";
+
+/**
+ * The AUTHORED title of whatever owns these bytes (#996, R20(b)). Only
+ * `media.asset` has one that is not already indexed under its own entity —
+ * a document's title is `fts_core_document.title`, a note's is
+ * `fts_knowledge_note.title` — and `media_asset.content_id` is UNIQUE, so the
+ * join is one row. `schema/blob.ts` wraps this with the derivative text.
+ */
+export const OWNED_TITLE_SQL = (prefix: string): string =>
+  `(SELECT a."title" FROM media_asset a WHERE a.content_id = ${prefix}."content_id")`;
 
 /** Decoded text of a canonical body, or null for anything non-text. */
 export function contentText(
@@ -48,8 +59,22 @@ type FtsColumn =
   | { name: string; kind: "column" }
   /** Decoded body of the core.content_item the base row references via `fk`. */
   | { name: string; kind: "content"; fk: string }
-  /** core.content_item indexing its own uri (text media only). */
-  | { name: string; kind: "self-content" };
+  /**
+   * A value the base row does NOT carry as a column — a SQL expression over
+   * it. `reads` names whatever base columns the expression touches, so the
+   * sealed-column gate and a grant's field mask still have something to
+   * check; `sql` takes the row prefix (`new`, or a base alias).
+   *
+   * The one user is `core.content_item`'s title (#996, R20(b)): the byte row
+   * lost its `title` column, and what an owner calls those bytes now lives on
+   * the wrapper. `schema/blob.ts` supplies the expression.
+   */
+  | {
+      name: string;
+      kind: "expr";
+      reads: readonly string[];
+      sql: (prefix: string) => string;
+    };
 
 export interface FtsEntitySpec {
   /** Logical entity, e.g. `knowledge.note`. */
@@ -59,6 +84,11 @@ export interface FtsEntitySpec {
   columns: FtsColumn[];
   /** Column that, when non-null, keeps the row out of the index (soft delete). */
   deletedColumn?: string;
+  /**
+   * Entities beyond `core.content_item` whose text this index folds in, each
+   * needing its own read consent before a search runs.
+   */
+  foldsIn?: readonly string[];
 }
 
 // The baseline's spec list, in the order rung one composed it. Two entries
@@ -73,13 +103,18 @@ const RETIRED_ENTITIES: ReadonlySet<string> = new Set([
 
 const BASELINE_SPECS: readonly FtsEntitySpec[] = [
   {
-    // Photo captions are stored as the content item's title. Keeping this a
-    // direct-column surface makes the Photos grid search complete without
-    // indexing blob bytes; soft-deleted content leaves the index immediately.
+    // The content item's own search surface, complete without indexing blob
+    // bytes; soft-deleted content leaves the index immediately. Its `title`
+    // is no longer a column on the byte row (#996, R20(b)): a photo's
+    // AUTHORED title lives on `media_asset`, so the value is an expression
+    // over the owning asset — see `OWNED_TITLE_SQL`. A GENERATED caption is
+    // not folded in here at all: it is a `knowledge.annotation` on the
+    // representation (OQ-9), which carries its own index.
     entity: "core.content_item",
     idColumn: "content_id",
-    columns: [{ name: "title", kind: "column" }],
+    columns: [{ name: "title", kind: "expr", reads: [], sql: OWNED_TITLE_SQL }],
     deletedColumn: "deleted_at",
+    foldsIn: ["media.asset"],
   },
   {
     entity: "knowledge.note",
@@ -307,8 +342,12 @@ export function assertFtsSpecsRegistered(): void {
 }
 
 function maskColumnsOf(spec: FtsEntitySpec): string[] {
-  return spec.columns.map((c) =>
-    c.kind === "column" ? c.name : c.kind === "content" ? c.fk : "content_uri"
+  return spec.columns.flatMap((c) =>
+    c.kind === "column"
+      ? [c.name]
+      : c.kind === "content"
+        ? [c.fk]
+        : [...c.reads]
   );
 }
 
@@ -321,9 +360,12 @@ export const SEARCHABLE: Readonly<Record<string, SearchableEntity>> =
         fts: `fts_${physical(spec.entity)}`,
         idColumn: spec.idColumn,
         maskColumns: maskColumnsOf(spec),
-        alsoConsent: spec.columns.some((c) => c.kind === "content")
-          ? ["core.content_item"]
-          : [],
+        alsoConsent: [
+          ...(spec.columns.some((c) => c.kind === "content")
+            ? ["core.content_item"]
+            : []),
+          ...(spec.foldsIn ?? []),
+        ],
       },
     ])
   );
@@ -353,15 +395,27 @@ export function truncateForIndex(
                  ELSE ${expr} END)`;
 }
 
-/** Value expression for one indexed column, `prefix` = `new` or a base alias. */
-function valueExpr(column: FtsColumn, prefix: string): string {
+/**
+ * Value expression for one indexed column, `prefix` = `new` or a base alias.
+ *
+ * A body's media type is no longer on the byte row (#996, R20(b)), so the
+ * decode asks THIS OWNER's representation what the bytes are — which is what
+ * makes the same sha indexable as HTML under one note and as plain text under
+ * another. `vault_content_text` itself is untouched; wave 1 retires it for
+ * `core_content_text`.
+ */
+function valueExpr(
+  column: FtsColumn,
+  prefix: string,
+  spec: FtsEntitySpec
+): string {
   if (column.kind === "column") return `${prefix}."${column.name}"`;
-  if (column.kind === "self-content") {
-    return truncateForIndex(
-      `vault_content_text(${prefix}."media_type", ${prefix}."content_uri")`
-    );
-  }
-  return truncateForIndex(`(SELECT vault_content_text(media_type, content_uri) FROM core_content_item
+  if (column.kind === "expr") return truncateForIndex(column.sql(prefix));
+  const owned = mediaTypeSql(
+    `'${spec.entity}'`,
+    `${prefix}."${spec.idColumn}"`
+  );
+  return truncateForIndex(`(SELECT vault_content_text(${owned}, content_uri) FROM core_content_item
             WHERE content_id = ${prefix}."${column.fk}")`);
 }
 
@@ -374,13 +428,14 @@ export function assertNoSealedFtsColumns(spec: FtsEntitySpec): void {
   const sealed = sealedColumnsOf(spec.entity);
   if (sealed.length === 0) return;
   for (const col of spec.columns) {
-    const name =
+    const names =
       col.kind === "column"
-        ? col.name
+        ? [col.name]
         : col.kind === "content"
-          ? col.fk
-          : "content_uri";
-    if (sealed.includes(name)) {
+          ? [col.fk]
+          : col.reads;
+    for (const name of names) {
+      if (!sealed.includes(name)) continue;
       throw new Error(
         `fts spec for ${spec.entity} names sealed column "${name}" — sealed columns are never indexed (issue #293)`
       );
@@ -398,7 +453,7 @@ function valuesOf(spec: FtsEntitySpec, prefix: string): string {
   return [
     `${prefix}.rowid`,
     `${prefix}."${spec.idColumn}"`,
-    ...spec.columns.map((c) => valueExpr(c, prefix)),
+    ...spec.columns.map((c) => valueExpr(c, prefix, spec)),
   ].join(", ");
 }
 
@@ -407,6 +462,38 @@ function liveGuardOf(spec: FtsEntitySpec, prefix: string): string {
   return spec.deletedColumn
     ? ` WHERE ${prefix}."${spec.deletedColumn}" IS NULL`
     : "";
+}
+
+/**
+ * Re-index ONE row of a searchable entity, from the SAME generator its own
+ * triggers use.
+ *
+ * A body's media type moved off the byte row in #996 (R20(b)), so the decode
+ * now reads the owner's representation — and a representation is written
+ * AFTER the wrapper row, which is when its `_ai` trigger has already run with
+ * nothing to read. `schema/blob.ts` puts a trigger on
+ * `core_content_representation` that runs this, so the index sees the reading
+ * the moment it exists rather than one edit later.
+ */
+export function ftsRefreshStatement(
+  entity: string,
+  idExpr: string,
+  extraPredicate: string
+): string {
+  const spec = SPEC_BY_ENTITY.get(entity);
+  if (!spec) throw new Error(`not a searchable entity: ${entity}`);
+  const base = physical(spec.entity);
+  const fts = `fts_${base}`;
+  const live = spec.deletedColumn
+    ? ` AND b."${spec.deletedColumn}" IS NULL`
+    : "";
+  return `
+  DELETE FROM ${fts}
+   WHERE rowid IN (SELECT rowid FROM ${base} WHERE "${spec.idColumn}" = ${idExpr})
+     AND ${extraPredicate};
+  INSERT INTO ${fts}(${insertColumnsOf(spec)})
+  SELECT ${valuesOf(spec, "b")} FROM ${base} b
+   WHERE b."${spec.idColumn}" = ${idExpr} AND ${extraPredicate}${live};`;
 }
 
 /**

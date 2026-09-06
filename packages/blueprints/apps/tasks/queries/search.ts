@@ -1,3 +1,7 @@
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 /**
  * Task search as a vault projection: the FTS5 index inside the vault does
  * the matching (title + description), so the app never pulls the whole
@@ -37,7 +41,8 @@ interface DecoratedAttachment {
   role?: string;
   is_primary?: number;
   media_type: string;
-  title: string | null;
+  /** Bytes have no title of their own since #996 (R20(b)); an attachment is
+   *  not a wrapper, so there is nothing here to carry one. */
   content_uri: string;
   byte_size: number;
 }
@@ -75,6 +80,9 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
             where: [{ column: "content_id", op: "in", value: contentIds }],
           })
         : { rows: [] };
+    // Bytes carry no media type since #996 (R20(b)) — the attachment's own
+    // representation says what it reads them as.
+    const representations = await readRepresentations({ ctx, contentIds });
     const contentRows = (contents.rows ?? []) as unknown as RawContent[];
     const contentById = new Map(contentRows.map((c) => [c.content_id, c]));
     // Blob-backed bytes serve as same-origin URLs (#296).
@@ -91,8 +99,13 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         content_id: a.content_id,
         role: a.role,
         is_primary: a.is_primary,
-        media_type: content?.media_type ?? "application/octet-stream",
-        title: content?.title ?? null,
+        // The ATTACHMENT's own reading of the bytes (#996, R20(b)).
+        media_type:
+          representations.byOwner.get(
+            ownerKey("core.attachment", a.attachment_id)
+          ) ??
+          representations.byContent.get(a.content_id) ??
+          "application/octet-stream",
         content_uri: srcOf(content) ?? "",
         byte_size: content?.byte_size ?? 0,
       });

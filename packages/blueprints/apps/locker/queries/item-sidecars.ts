@@ -1,3 +1,7 @@
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 /**
  * Sidecar reads for the item pane (#872) — a helper, not a query.
  *
@@ -54,8 +58,6 @@ interface AttachmentRow {
 
 interface ContentRow {
   content_id: string;
-  title?: string | null;
-  media_type?: string | null;
   byte_size?: number | null;
 }
 
@@ -311,6 +313,12 @@ export async function readAttachments(
   } catch {
     contents = [];
   }
+  // Bytes carry no media type since #996 (R20(b)); the attachment's own
+  // representation says what it reads them as, and bytes have no title.
+  const representations = await readRepresentations({
+    ctx,
+    contentIds: edges.map((edge) => edge.content_id),
+  });
   const byId = new Map(contents.map((row) => [row.content_id, row]));
   return edges.map((edge) => {
     const content = byId.get(edge.content_id);
@@ -318,8 +326,12 @@ export async function readAttachments(
       attachment_id: edge.attachment_id,
       content_id: edge.content_id,
       role: edge.role,
-      title: content?.title ?? null,
-      media_type: content?.media_type ?? null,
+      media_type:
+        representations.byOwner.get(
+          ownerKey("core.attachment", edge.attachment_id)
+        ) ??
+        representations.byContent.get(edge.content_id) ??
+        null,
       byte_size: content?.byte_size ?? null,
     };
   });

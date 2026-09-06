@@ -4,7 +4,9 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { VaultShareError } from "../errors.js";
+import { uuidv7 } from "../ids.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
+import { setRepresentation } from "../schema/representation.js";
 import { CLOSURE_FORMAT_VERSION, shareOriginEntityType } from "./closure.js";
 import type {
   ContentItemRow,
@@ -70,9 +72,9 @@ function projectContentItems(
   );
   const write = audience.prepare(
     `INSERT INTO core_content_item
-       (content_id, media_type, content_uri, sha256, byte_size, title, language,
+       (content_id, content_uri, sha256, byte_size, language,
         creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)`
   );
   for (const row of contentItems) {
     const existing = bySha.get(row.sha256) as
@@ -84,11 +86,9 @@ function projectContentItems(
     if (!existing) {
       write.run(
         contentId,
-        row.media_type,
         row.content_uri,
         row.sha256,
         row.byte_size,
-        row.title,
         row.language,
         row.deleted_at,
         row.purge_at,
@@ -140,7 +140,8 @@ function projectDerivatives(
 function projectMediaAssets(
   audience: DatabaseSync,
   assets: readonly MediaAssetRow[],
-  into: Projected
+  into: Projected,
+  mediaTypes: ReadonlyMap<string, string>
 ): void {
   // Do not project `source_asset_id` (#711): it names an origin asset.
   const byContent = audience.prepare(
@@ -148,10 +149,10 @@ function projectMediaAssets(
   );
   const write = audience.prepare(
     `INSERT INTO media_asset
-       (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id,
+       (asset_id, content_id, kind, title, captured_at, tz_offset_min, capture_group_id,
         place_id, camera_device_id, width, height, duration_s, exif_json,
         archived_at, deleted_at, purge_at)
-     VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`
   );
   for (const row of assets) {
     const contentId = contentOf(into, row.content_id);
@@ -171,6 +172,7 @@ function projectMediaAssets(
       assetId,
       contentId,
       row.kind,
+      row.title,
       row.captured_at,
       row.tz_offset_min,
       row.capture_group_id,
@@ -182,6 +184,14 @@ function projectMediaAssets(
       row.deleted_at,
       row.purge_at
     );
+    projectRepresentation(audience, {
+      contentId,
+      ownerType: "media.asset",
+      ownerId: assetId,
+      mediaType: mediaTypes.get(row.content_id),
+      interpretation: "original",
+      createdAt: row.captured_at,
+    });
     record(into, "media.asset", row.asset_id, {
       itemId: assetId,
       deduped: false,
@@ -190,10 +200,42 @@ function projectMediaAssets(
   }
 }
 
+/**
+ * The audience's own reading of projected bytes (#996, ruling R20(b)). A
+ * representation belongs to an OWNER, and the audience's owner is an audience
+ * row — so this writes a fresh one rather than projecting the origin's.
+ */
+function projectRepresentation(
+  audience: DatabaseSync,
+  input: {
+    contentId: string;
+    ownerType: string;
+    ownerId: string;
+    mediaType: string | undefined;
+    interpretation: string;
+    createdAt: string | null;
+  }
+): void {
+  if (!input.mediaType) return;
+  setRepresentation(
+    audience,
+    uuidv7,
+    input.createdAt ?? new Date(0).toISOString(),
+    {
+      contentId: input.contentId,
+      ownerType: input.ownerType,
+      ownerId: input.ownerId,
+      mediaType: input.mediaType,
+      interpretation: input.interpretation,
+    }
+  );
+}
+
 function projectDocuments(
   audience: DatabaseSync,
   documents: readonly DocumentRow[],
-  into: Projected
+  into: Projected,
+  mediaTypes: ReadonlyMap<string, string>
 ): void {
   for (const row of documents) {
     const contentId = contentOf(into, row.current_content_id);
@@ -237,6 +279,14 @@ function projectDocuments(
         row.deleted_at,
         row.purge_at
       );
+    projectRepresentation(audience, {
+      contentId,
+      ownerType: "core.document",
+      ownerId: documentId,
+      mediaType: mediaTypes.get(row.current_content_id),
+      interpretation: "body",
+      createdAt: row.created_at,
+    });
     record(into, "core.document", row.document_id, {
       itemId: documentId,
       deduped: false,
@@ -387,10 +437,16 @@ function projectRows(
   keys: { origin: Buffer; audience: Buffer } | undefined
 ): Projected {
   const into: Projected = new Map();
+  // The wire's media type, keyed by ORIGIN content id (#996, R20(b)): the
+  // audience writes it onto ITS OWN owners' representations below, because a
+  // reading belongs to an owner and the audience's owners are its own rows.
+  const mediaTypes = new Map(
+    closure.rows.contentItems.map((row) => [row.content_id, row.media_type])
+  );
   projectContentItems(audience, closure.rows.contentItems, into);
   projectDerivatives(audience, closure.rows.derivatives, into);
-  projectMediaAssets(audience, closure.rows.mediaAssets, into);
-  projectDocuments(audience, closure.rows.documents, into);
+  projectMediaAssets(audience, closure.rows.mediaAssets, into, mediaTypes);
+  projectDocuments(audience, closure.rows.documents, into, mediaTypes);
   projectDocsFolders(audience, closure.rows.docsFolders, into);
   for (const row of closure.rows.lockerItems) {
     if (!keys)

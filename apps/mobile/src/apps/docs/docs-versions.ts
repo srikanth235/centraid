@@ -45,6 +45,10 @@ export interface VersionChainRows {
   document: EntityRow | undefined;
   revisions: readonly EntityRow[];
   contents: readonly EntityRow[];
+  /** The document's reading of its bytes (#996, ruling R20(b)). A SUPERSEDED
+   *  version has no representation of its own — the document's moved with the
+   *  head — and an edit changes the words, never the format. */
+  representations: readonly EntityRow[];
 }
 
 export function projectVersionChain(
@@ -96,13 +100,27 @@ export function projectVersionChain(
     })
   );
 
+  const mediaTypeByContent = new Map<string, string>();
+  let documentMediaType: string | null = null;
+  for (const representation of rows.representations) {
+    const mediaType = str(representation, "media_type");
+    const contentId = str(representation, "content_id");
+    if (!mediaType) continue;
+    if (contentId) mediaTypeByContent.set(contentId, mediaType);
+    if (
+      str(representation, "owner_type") === "core.document" &&
+      str(representation, "owner_id") === documentId
+    )
+      documentMediaType = mediaType;
+  }
+
   const count = chainIds.length;
   const entries = chainIds.map((id, index): MobileVersionEntry => {
     const content = contentById.get(id);
     return {
       n: count - index,
       content_id: id,
-      media_type: content ? str(content, "media_type") : null,
+      media_type: mediaTypeByContent.get(id) ?? documentMediaType,
       byte_size: content ? num(content, "byte_size") : null,
       current: index === 0,
       asserted_at:

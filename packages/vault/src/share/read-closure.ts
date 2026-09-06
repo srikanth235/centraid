@@ -7,6 +7,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { mediaLocationPolicyForVault } from "../blob/staging.js";
 import { isBlobUri } from "../blob/store.js";
 import { VaultShareError } from "../errors.js";
+import { contentMediaTypeSql } from "../schema/representation.js";
 import type {
   BlobManifestEntry,
   ContentItemRow,
@@ -26,7 +27,12 @@ import { CLOSURE_FORMAT_VERSION } from "./closure.js";
 import { readTallyGroup } from "./read-tally.js";
 import { one } from "./sql.js";
 
-const CONTENT_ITEM_COLUMNS = `content_id, media_type, content_uri, sha256, byte_size, title,
+// `media_type` is READ OFF THE REPRESENTATION at the query boundary (#996,
+// ruling R20(b)) — the byte row has none — and `title` is not sent at all: a
+// caption belongs to a wrapper, and a GENERATED one is a derived row that
+// never projects (R10).
+const CONTENT_ITEM_COLUMNS = `content_id, ${contentMediaTypeSql("content_id")} AS media_type,
+       content_uri, sha256, byte_size,
        language, deleted_at, purge_at, created_at`;
 
 const DERIVATIVE_COLUMNS = `derivative_id, content_id, variant, sha256, media_type,
@@ -36,7 +42,7 @@ const DERIVATIVE_COLUMNS = `derivative_id, content_id, variant, sha256, media_ty
 // rode the closure like any other field; it is now one `starred` flags tag,
 // and a tag is the ORIGIN member's judgment about their own copy. An audience
 // receives the photograph, not the sender's opinion of it.
-const MEDIA_ASSET_COLUMNS = `asset_id, content_id, kind, captured_at, tz_offset_min,
+const MEDIA_ASSET_COLUMNS = `asset_id, content_id, kind, title, captured_at, tz_offset_min,
        capture_group_id, width, height, duration_s, exif_json,
        archived_at, deleted_at, purge_at`;
 

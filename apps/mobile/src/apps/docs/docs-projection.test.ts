@@ -17,11 +17,29 @@ const FOLDERS_URI = "https://centraid.dev/schemes/folders";
 const FLAGS_URI = "https://centraid.dev/schemes/flags";
 const TAGS_URI = "centraid:tags:v1";
 
+/** One document's reading of its bytes (#996, ruling R20(b)). */
+function reading(slug: string, mediaType: string): Record<string, unknown> {
+  return {
+    content_id: `content-${slug}`,
+    owner_type: "core.document",
+    owner_id: `doc-${slug}`,
+    media_type: mediaType,
+  };
+}
+
 function fixtureRows(
   overrides: Partial<DriveEntityRows> = {}
 ): DriveEntityRows {
   return {
     origins: null,
+    // What each DOCUMENT reads its bytes as (#996, ruling R20(b)) — the byte
+    // rows below carry no media type of their own.
+    representations: [
+      reading("lease", "application/pdf"),
+      reading("scan", "image/jpeg"),
+      reading("orphan", "application/octet-stream"),
+      reading("trashed", "application/pdf"),
+    ],
     schemes: [
       { scheme_id: "s-folders", uri: FOLDERS_URI },
       { scheme_id: "s-flags", uri: FLAGS_URI },
@@ -110,26 +128,10 @@ function fixtureRows(
       },
     ],
     contents: [
-      {
-        content_id: "content-lease",
-        media_type: "application/pdf",
-        byte_size: 120_000,
-      },
-      {
-        content_id: "content-scan",
-        media_type: "image/jpeg",
-        byte_size: 2_400_000,
-      },
-      {
-        content_id: "content-orphan",
-        media_type: "application/octet-stream",
-        byte_size: 880_000,
-      },
-      {
-        content_id: "content-trashed",
-        media_type: "application/pdf",
-        byte_size: 9_000,
-      },
+      { content_id: "content-lease", byte_size: 120_000 },
+      { content_id: "content-scan", byte_size: 2_400_000 },
+      { content_id: "content-orphan", byte_size: 880_000 },
+      { content_id: "content-trashed", byte_size: 9_000 },
     ],
     custody: [
       { content_id: "content-scan", custody_state: "local-only" },

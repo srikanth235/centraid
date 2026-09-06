@@ -6,149 +6,18 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import {
-  DOCUMENT_TARGET_TYPE,
-  FOLDER_SCHEME_URI,
-} from "../commands/documents.js";
-import { sha256Hex, uuidv7 } from "../ids.js";
+import { uuidv7 } from "../ids.js";
 import { VISION_SCHEME_URI } from "../schema/enrich.js";
+import { captionTarget } from "./caption-target.js";
+import {
+  conceptKey,
+  ensureConcept,
+  ensureScheme,
+  tagNotation,
+} from "./concept-writes.js";
+import { contentItemPublisher } from "./content-item-publisher.js";
 import { assertPayload } from "./payload-schemas.js";
 import type { Publisher, PublishedWrite } from "./staging.js";
-
-function ensureScheme(vault: DatabaseSync, uri: string, title: string): string {
-  const existing = vault
-    .prepare("SELECT scheme_id FROM core_concept_scheme WHERE uri = ?")
-    .get(uri) as { scheme_id: string } | undefined;
-  if (existing) return existing.scheme_id;
-  const schemeId = uuidv7();
-  vault
-    .prepare(
-      `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version)
-       VALUES (?, ?, ?, 'centraid', '1')`
-    )
-    .run(schemeId, uri, title);
-  return schemeId;
-}
-
-/**
- * A CONCEPT'S LABEL IS NOT ITS IDENTITY (#996, ruling R20(d)).
- *
- * The key a label-only scheme selects on: NFKC-normalised, whitespace
- * collapsed, case-folded, and everything else PRESERVED. `tagNotation` below
- * stripped every character outside `[a-z0-9]`, so `猫`, `犬`, `कुत्ता` and
- * `बिल्ली` all became `untitled` and selected one concept — four animals filed
- * as one idea, on every vault that does not write in Latin script.
- */
-export function conceptKey(label: string): string {
-  return label
-    .normalize("NFKC")
-    .replace(/\s+/gu, " ")
-    .trim()
-    .toLocaleLowerCase("en-US");
-}
-
-/**
- * Resolve (or mint) the concept a label names in `schemeId`.
- *
- * Selection is on `normalized_key`, never on the slug. Rows minted before
- * [#996] carry no key, so a miss falls back to the slug ONCE and backfills the
- * key from the label it finds — migration on touch, because NFKC is not a
- * SQLite function and rung six must not guess a value it cannot compute.
- *
- * The slug keeps `UNIQUE (scheme_id, notation)`, so two labels that flatten to
- * the same ASCII get a SUFFIX rather than a shared row.
- */
-function ensureConcept(
-  vault: DatabaseSync,
-  schemeId: string,
-  label: string,
-  options?: { lang?: string | null; stableId?: string | null }
-): string {
-  const key = conceptKey(label);
-  const stableId = options?.stableId ?? null;
-  if (stableId !== null) {
-    const byStable = vault
-      .prepare(
-        "SELECT concept_id FROM core_concept WHERE scheme_id = ? AND stable_id = ?"
-      )
-      .get(schemeId, stableId) as { concept_id: string } | undefined;
-    if (byStable) return byStable.concept_id;
-  }
-  const byKey = vault
-    .prepare(
-      "SELECT concept_id FROM core_concept WHERE scheme_id = ? AND normalized_key = ?"
-    )
-    .get(schemeId, key) as { concept_id: string } | undefined;
-  if (byKey) return byKey.concept_id;
-  // Pre-#996 rows: the slug was the identity, so one lookup on it keeps a
-  // migrated vault from minting a duplicate for a concept it already holds.
-  const legacy = vault
-    .prepare(
-      `SELECT concept_id, pref_label FROM core_concept
-        WHERE scheme_id = ? AND notation = ? AND normalized_key IS NULL`
-    )
-    .get(schemeId, tagNotation(label)) as
-    | { concept_id: string; pref_label: string }
-    | undefined;
-  if (legacy && conceptKey(legacy.pref_label) === key) {
-    vault
-      .prepare(
-        "UPDATE core_concept SET normalized_key = ? WHERE concept_id = ?"
-      )
-      .run(key, legacy.concept_id);
-    return legacy.concept_id;
-  }
-  const conceptId = uuidv7();
-  vault
-    .prepare(
-      `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang)
-       VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`
-    )
-    .run(
-      conceptId,
-      schemeId,
-      freeNotation(vault, schemeId, tagNotation(label)),
-      label,
-      stableId,
-      key,
-      options?.lang ?? null
-    );
-  return conceptId;
-}
-
-/** The first unused slug in `schemeId`: `dog`, then `dog-2`, `dog-3`, … */
-function freeNotation(
-  vault: DatabaseSync,
-  schemeId: string,
-  slug: string
-): string {
-  const taken = vault.prepare(
-    "SELECT 1 AS x FROM core_concept WHERE scheme_id = ? AND notation = ?"
-  );
-  if (!taken.get(schemeId, slug)) return slug;
-  for (let n = 2; n < 1000; n += 1) {
-    const candidate = `${slug.slice(0, 60)}-${n}`;
-    if (!taken.get(schemeId, candidate)) return candidate;
-  }
-  // A thousand labels flattening to one slug is a broken caller, not a name.
-  throw new Error(`core.concept: no free notation for "${slug}"`);
-}
-
-/**
- * The 64-character ASCII slug. NO LONGER AN IDENTITY (#996, R20(d)) — it is
- * the display notation, and `conceptKey` is what selects a concept. Kept
- * exported while [#996] wave 0c moves its remaining callers onto the domain
- * operation.
- */
-export function tagNotation(label: string): string {
-  return (
-    label
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/gu, "-")
-      .replace(/^-+|-+$/gu, "")
-      .slice(0, 64) || "untitled"
-  );
-}
 
 // ── knowledge.annotation (captions, summaries) ──────────────────────────
 
@@ -166,13 +35,14 @@ const annotationPublisher: Publisher = {
     // Read-only lookup — schema gate covers writes (#374); probe is a key lookup.
     const p = payload as unknown as AnnotationPayload;
     if (!p.author_party_id) return null;
+    const target = captionTarget(vault, p.target_type, p.target_id);
     // One caption per (author, target) — replaceMemo.
     const existing = vault
       .prepare(
         `SELECT annotation_id FROM knowledge_annotation
           WHERE target_type = ? AND target_id = ? AND author_party_id = ?`
       )
-      .get(p.target_type, p.target_id, p.author_party_id) as
+      .get(target.targetType, target.targetId, p.author_party_id) as
       | { annotation_id: string }
       | undefined;
     return existing
@@ -194,6 +64,7 @@ const annotationPublisher: Publisher = {
       );
     }
     const annotationId = uuidv7();
+    const target = captionTarget(vault, p.target_type, p.target_id);
     vault
       .prepare(
         `INSERT INTO knowledge_annotation (annotation_id, author_party_id, target_type, target_id, selector_json, body_text, created_at)
@@ -202,8 +73,8 @@ const annotationPublisher: Publisher = {
       .run(
         annotationId,
         p.author_party_id,
-        p.target_type,
-        p.target_id,
+        target.targetType,
+        target.targetId,
         p.body,
         now
       );
@@ -426,162 +297,6 @@ function addEntries(
   }
   return wrote;
 }
-
-// ── core.content_item (filing / rename proposals) ───────────────────────
-
-export interface FilingPayload {
-  content_id: string;
-  title?: string;
-  folder?: string;
-}
-
-export interface RemoteContentPayload {
-  sourceId: string;
-  title: string;
-  mediaType: string;
-  sourceUrl: string;
-  modifiedAt: string | null;
-  owner: string | null;
-  body?: string;
-}
-
-function isFilingPayload(
-  payload: Record<string, unknown>
-): payload is FilingPayload & Record<string, unknown> {
-  return typeof payload.content_id === "string";
-}
-
-function remoteContentSha(sourceId: string): string {
-  // Remote connectors do not download bytes; source id is the identity.
-  return sha256Hex(`remote-content\n${sourceId}`);
-}
-
-const contentItemPublisher: Publisher = {
-  entityType: "core.content_item",
-  probe(vault, payload) {
-    if (!isFilingPayload(payload)) {
-      const p = payload as unknown as RemoteContentPayload;
-      if (!p.sourceId) return null;
-      const existing = vault
-        .prepare(
-          "SELECT content_id FROM core_content_item WHERE sha256 = ? AND deleted_at IS NULL"
-        )
-        .get(remoteContentSha(p.sourceId)) as
-        | { content_id: string }
-        | undefined;
-      return existing
-        ? {
-            entityId: existing.content_id,
-            disposition: "update",
-            note: "remote content item",
-          }
-        : null;
-    }
-    const p = payload;
-    const existing = vault
-      .prepare(
-        "SELECT content_id FROM core_content_item WHERE content_id = ? AND deleted_at IS NULL"
-      )
-      .get(p.content_id ?? "") as { content_id: string } | undefined;
-    if (!existing) return null;
-    return {
-      entityId: existing.content_id,
-      disposition: "update",
-      note: "filing proposal",
-    };
-  },
-  create(vault, _owner, payload, now) {
-    if (isFilingPayload(payload)) {
-      // Filing never mints documents — missing content item fails per-row.
-      throw new Error(
-        "a filing proposal for a missing core.content_item cannot create it"
-      );
-    }
-    const p = assertPayload<RemoteContentPayload>(
-      "RemoteContentPayload",
-      payload
-    );
-    const contentId = uuidv7();
-    vault
-      .prepare(
-        `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, title, language,
-            creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-         VALUES (?, ?, ?, ?, 0, ?, NULL, NULL, NULL, NULL, NULL, ?)`
-      )
-      .run(
-        contentId,
-        p.mediaType,
-        p.sourceUrl,
-        remoteContentSha(p.sourceId),
-        p.title,
-        now
-      );
-    return { entityId: contentId, wrote: [] };
-  },
-  update(vault, entityId, payload, now) {
-    if (!isFilingPayload(payload)) {
-      const p = assertPayload<RemoteContentPayload>(
-        "RemoteContentPayload",
-        payload
-      );
-      vault
-        .prepare(
-          `UPDATE core_content_item
-              SET media_type = ?, content_uri = ?, title = ?
-            WHERE content_id = ?`
-        )
-        .run(p.mediaType, p.sourceUrl, p.title, entityId);
-      return { wrote: [] };
-    }
-    const p = assertPayload<FilingPayload>("FilingPayload", payload);
-    const wrote: PublishedWrite[] = [];
-    // Title/folder live on core_document (#352); content item is HEAD, not
-    // identity. Only the current head resolves; else tag/rename the item.
-    const doc = vault
-      .prepare(
-        "SELECT document_id FROM core_document WHERE current_content_id = ?"
-      )
-      .get(entityId) as { document_id: string } | undefined;
-    const targetType = doc ? DOCUMENT_TARGET_TYPE : "core.content_item";
-    const targetId = doc ? doc.document_id : entityId;
-    if (p.title) {
-      vault
-        .prepare(
-          doc
-            ? "UPDATE core_document SET title = ? WHERE document_id = ?"
-            : "UPDATE core_content_item SET title = ? WHERE content_id = ?"
-        )
-        .run(p.title, targetId);
-    }
-    if (p.folder) {
-      const schemeId = ensureScheme(vault, FOLDER_SCHEME_URI, "Folders");
-      const byLabel = vault
-        .prepare(
-          `SELECT concept_id FROM core_concept WHERE scheme_id = ? AND lower(pref_label) = lower(?)`
-        )
-        .get(schemeId, p.folder) as { concept_id: string } | undefined;
-      const conceptId =
-        byLabel?.concept_id ?? ensureConcept(vault, schemeId, p.folder);
-      vault
-        .prepare(
-          `DELETE FROM core_tag
-            WHERE target_type = ? AND target_id = ?
-              AND concept_id IN (SELECT c.concept_id FROM core_concept c WHERE c.scheme_id = ?)`
-        )
-        .run(targetType, targetId, schemeId);
-      const tagId = uuidv7();
-      vault
-        .prepare(
-          `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
-           VALUES (?, ?, ?, ?, NULL, NULL, ?)`
-        )
-        .run(tagId, targetType, targetId, conceptId, now);
-      wrote.push({ type: "core.tag", id: tagId });
-    }
-    return { wrote };
-  },
-};
 
 export const ENRICH_PUBLISHERS: readonly Publisher[] = [
   annotationPublisher,

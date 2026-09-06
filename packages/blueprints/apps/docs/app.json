@@ -11,6 +11,7 @@
     "scopes": [
       { "schema": "core", "table": "document", "verbs": "read" },
       { "schema": "core", "table": "content_item", "verbs": "read" },
+      { "schema": "core", "table": "content_representation", "verbs": "read" },
       { "schema": "core", "table": "entity_revision", "verbs": "read" },
       { "schema": "social", "table": "circle", "verbs": "read" },
       { "schema": "social", "table": "circle_member", "verbs": "read" },
@@ -83,6 +84,7 @@
         "core.concept_scheme",
         "core.content_derivative",
         "core.content_item",
+        "core.content_representation",
         "core.document",
         "core.tag"
       ]
@@ -307,6 +309,7 @@
         "core.concept",
         "core.concept_scheme",
         "core.content_item",
+        "core.content_representation",
         "core.document",
         "core.link"
       ]
@@ -338,6 +341,7 @@
         "core.concept",
         "core.concept_scheme",
         "core.content_item",
+        "core.content_representation",
         "core.document",
         "core.link"
       ]

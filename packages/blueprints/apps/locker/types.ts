@@ -213,7 +213,6 @@ export interface LockerDetail {
     attachment_id: string;
     content_id: string;
     role: string;
-    title?: string | null;
     media_type?: string | null;
     byte_size?: number | null;
   }[];

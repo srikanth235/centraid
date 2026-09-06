@@ -52,7 +52,7 @@ describe("placement suite", () => {
     const projected = audience.vault
       .prepare(
         `SELECT a.asset_id, a.kind, a.width, a.place_id, a.camera_device_id,
-              c.title, c.sha256, c.creator_party_id, c.origin_device_id
+              a.title, c.sha256, c.creator_party_id, c.origin_device_id
          FROM media_asset a JOIN core_content_item c ON c.content_id = a.content_id
         WHERE a.asset_id = ?`
       )

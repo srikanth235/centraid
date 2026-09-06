@@ -15,6 +15,10 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import {
   readCustodyByContent,
@@ -37,7 +41,6 @@ interface DocumentRow {
 }
 interface ContentRow {
   content_id: string;
-  media_type?: string | null;
   byte_size?: number | null;
   content_uri?: string | null;
 }
@@ -166,7 +169,7 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     const contentIds = [
       ...new Set(documentRows.map((d) => d.current_content_id)),
     ];
-    const [contents, custodyByContent] = await Promise.all([
+    const [contents, custodyByContent, representations] = await Promise.all([
       contentIds.length > 0
         ? ctx.vault.read({
             acceptTruncation: true,
@@ -175,6 +178,9 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
           })
         : { rows: [] as Record<string, unknown>[] },
       readCustodyByContent({ ctx, contentIds }),
+      // The byte row carries no media type since #996 (R20(b)) — THIS
+      // document's representation says what it reads those bytes as.
+      readRepresentations({ ctx, contentIds }),
     ]);
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
@@ -202,7 +208,10 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
           document_id: d.document_id,
           content_id: d.current_content_id,
           title: d.title,
-          media_type: c?.media_type ?? null,
+          media_type:
+            representations.byOwner.get(
+              ownerKey(DOCUMENT_TARGET_TYPE, d.document_id)
+            ) ?? null,
           byte_size: c?.byte_size ?? null,
           content_uri: srcOf(c),
           poster_uri: posterOf(c),

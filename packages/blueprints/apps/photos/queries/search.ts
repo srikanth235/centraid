@@ -7,6 +7,10 @@
  * render straight into the existing grid; album-name matching stays
  * client-side. Consent denial is a first-class outcome.
  */
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 import { readAssetJoins, readPlaces, srcOf } from "./_shared.ts";
 
 interface RawHit {
@@ -24,8 +28,6 @@ interface RawContent {
   content_id: string;
   content_uri?: unknown;
   byte_size?: number | null;
-  media_type?: string | null;
-  title?: string | null;
   created_at?: string | null;
   deleted_at?: string | null;
 }
@@ -71,27 +73,30 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     if (assetsRaw.length === 0) return { assets: [] };
 
     const assetIds = assetsRaw.map((a) => a.asset_id);
-    const [contents, entries, albums, places, joins] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.content_item",
-        where: [{ column: "content_id", op: "in", value: contentIds }],
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.collection_entry",
-        where: [
-          { column: "target_type", op: "eq", value: "media.asset" },
-          { column: "target_id", op: "in", value: assetIds },
-        ],
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.collection",
-      }),
-      readPlaces({ ctx }),
-      readAssetJoins({ ctx, assetIds, contentIds }),
-    ]);
+    const [contents, entries, albums, places, joins, representations] =
+      await Promise.all([
+        ctx.vault.read({
+          acceptTruncation: true,
+          entity: "core.content_item",
+          where: [{ column: "content_id", op: "in", value: contentIds }],
+        }),
+        ctx.vault.read({
+          acceptTruncation: true,
+          entity: "core.collection_entry",
+          where: [
+            { column: "target_type", op: "eq", value: "media.asset" },
+            { column: "target_id", op: "in", value: assetIds },
+          ],
+        }),
+        ctx.vault.read({
+          acceptTruncation: true,
+          entity: "core.collection",
+        }),
+        readPlaces({ ctx }),
+        readAssetJoins({ ctx, assetIds, contentIds }),
+        // Bytes carry no media type since #996 (R20(b)).
+        readRepresentations({ ctx, contentIds }),
+      ]);
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as RawContent[]).map(
         (c) => [c.content_id, c] as const
@@ -145,8 +150,10 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           preview_uri: preview,
           poster_uri: poster,
           byte_size: content?.byte_size ?? null,
-          media_type: content?.media_type ?? null,
-          title: content?.title ?? null,
+          media_type:
+            representations.byOwner.get(
+              ownerKey("media.asset", asset.asset_id)
+            ) ?? null,
           taken_at: asset.captured_at ?? content?.created_at ?? null,
           album_ids: albumIds,
           album_titles: albumIds

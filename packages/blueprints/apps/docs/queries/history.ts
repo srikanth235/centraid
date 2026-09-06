@@ -13,6 +13,11 @@
  * one history.
  */
 
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
+
 // Caps a malformed chain; a well-formed one terminates on a null parent.
 const MAX_CHAIN_STEPS = 500;
 
@@ -30,7 +35,6 @@ interface RevisionRow {
 }
 interface ContentRow {
   content_id: string;
-  media_type?: string | null;
   byte_size?: number | null;
   content_uri?: string | null;
   created_at?: string;
@@ -85,11 +89,21 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
     // version: the bytes it is currently made of. Honest absence, not a hole.
     if (chainIds.length === 0) chainIds.push(doc.current_content_id);
 
-    const contents = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.content_item",
-      where: [{ column: "content_id", op: "in", value: chainIds }],
-    });
+    const [contents, representations] = await Promise.all([
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.content_item",
+        where: [{ column: "content_id", op: "in", value: chainIds }],
+      }),
+      // Bytes carry no media type since #996 (R20(b)). A SUPERSEDED version
+      // has no representation of its own — the document's moved with the head
+      // — and an edit never changes the format, so the head's answer covers
+      // the whole chain.
+      readRepresentations({ ctx, contentIds: chainIds }),
+    ]);
+    const documentMediaType =
+      representations.byOwner.get(ownerKey("core.document", doc.document_id)) ??
+      null;
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
         c.content_id,
@@ -110,7 +124,7 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
       const c = contentById.get(id);
       return {
         content_id: id,
-        media_type: c?.media_type ?? null,
+        media_type: representations.byContent.get(id) ?? documentMediaType,
         byte_size: c?.byte_size ?? null,
         content_uri: srcOf(c),
         poster_uri: posterOf(c),

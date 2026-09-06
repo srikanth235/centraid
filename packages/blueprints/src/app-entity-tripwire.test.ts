@@ -208,6 +208,7 @@ describe("[law:app-entity-tripwire] static app entity tripwire (#928 A1)", () =>
       "apps/mobile/src/apps/photos/timeline-engine.ts",
       "apps/mobile/src/apps/tasks/useTasks.ts",
       "packages/blueprints/apps/_shared/pending-overlay.ts",
+      "packages/blueprints/apps/_shared/representation-reads.ts",
       "packages/blueprints/apps/locker/queries/item-sidecars.ts",
       "packages/blueprints/apps/locker/queries/item.ts",
       "packages/blueprints/apps/notes/link-targets-table.ts",

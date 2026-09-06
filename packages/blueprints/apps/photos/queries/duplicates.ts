@@ -15,6 +15,10 @@
  * This query does the read + group + join to content, nothing more — the
  * clustering itself already happened server-side.
  */
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 import { srcOf } from "./_shared.ts";
 
 interface RawPhash {
@@ -25,6 +29,7 @@ interface RawPhash {
 interface RawAsset {
   asset_id: string;
   content_id: string;
+  title?: string | null;
   kind?: string | null;
   width?: number | null;
   height?: number | null;
@@ -35,8 +40,6 @@ interface RawContent {
   content_id: string;
   content_uri?: unknown;
   byte_size?: number | null;
-  media_type?: string | null;
-  title?: string | null;
   created_at?: string | null;
   deleted_at?: string | null;
 }
@@ -94,6 +97,9 @@ export default async function duplicatesHandler({ ctx }: HandlerArgs) {
         (c) => [c.content_id, c] as const
       )
     );
+    // Bytes carry no media type since #996 (R20(b)); the asset's own title is
+    // on the asset row.
+    const representations = await readRepresentations({ ctx, contentIds });
 
     const rowFor = (assetId: string) => {
       const asset = assetById.get(assetId);
@@ -107,8 +113,11 @@ export default async function duplicatesHandler({ ctx }: HandlerArgs) {
         width: asset.width ?? null,
         height: asset.height ?? null,
         byte_size: content.byte_size ?? null,
-        media_type: content.media_type ?? null,
-        title: content.title ?? null,
+        media_type:
+          representations.byOwner.get(
+            ownerKey("media.asset", asset.asset_id)
+          ) ?? null,
+        title: asset.title ?? null,
         taken_at: asset.captured_at ?? content.created_at ?? null,
         content_uri: src,
         thumb_uri: thumb,

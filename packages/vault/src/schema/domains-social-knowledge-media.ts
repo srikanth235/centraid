@@ -147,6 +147,14 @@ CREATE TABLE media_asset (
   asset_id         TEXT PRIMARY KEY,
   content_id       TEXT NOT NULL UNIQUE REFERENCES core_content_item(content_id),
   kind             TEXT NOT NULL CHECK (kind IN ('photo','video','audio','scan')),
+  -- THE AUTHORED TITLE (#996, ruling R20(b), OQ-9). The owner's own caption
+  -- for this photo, moved off \`core_content_item.title\` where a generated
+  -- caption used to overwrite it and where two assets sharing a sha would
+  -- have shared one. NULL means the owner has not named it — never an empty
+  -- string, and never a machine's words: a GENERATED caption is a derived row
+  -- keyed to the representation, and the owner promotes one here with
+  -- \`media.promote_caption\`, which is an AUTHORED write.
+  title            TEXT,
   captured_at      TEXT,
   -- Capture-local UTC offset in minutes (issue #419): captured_at is a UTC
   -- instant, so a native client needs the offset to render the wall-clock time

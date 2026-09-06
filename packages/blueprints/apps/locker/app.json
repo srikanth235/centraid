@@ -142,6 +142,11 @@
         "verbs": "read"
       },
       {
+        "schema": "core",
+        "table": "content_representation",
+        "verbs": "read"
+      },
+      {
         "schema": "access",
         "table": "receipt",
         "verbs": "read",

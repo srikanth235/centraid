@@ -4,6 +4,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { contentMediaTypeSql, mediaTypeSql } from "../schema/representation.js";
 import { resolveEntity } from "../schema/tables.js";
 import { evaluateAccess } from "./access.js";
 import { skipsAllowReceipt, writeReceipt } from "./evidence.js";
@@ -33,6 +34,10 @@ export interface ResolveResult {
 /** Refs render in lists, not bulk exports. */
 const MAX_REFS = 100;
 
+/** What a content item IS, and what a document reads its bytes as (#996). */
+const CONTENT_MEDIA_TYPE = contentMediaTypeSql("core_content_item.content_id");
+const DOCUMENT_MEDIA_TYPE = mediaTypeSql("'core.document'", "d.document_id");
+
 /** One SELECT per carded entity; uncurated resolve existence + status only. */
 const CARD_SQL: Record<string, string> = {
   "core.party": `SELECT display_name AS title, kind AS subtitle, avatar_content_id AS thumb, 0 AS trashed
@@ -45,15 +50,21 @@ const CARD_SQL: Record<string, string> = {
                               printf('%s %.2f', currency, amount_minor / 100.0) AS subtitle,
                               NULL AS thumb, 0 AS trashed
                          FROM core_transaction WHERE txn_id = ?`,
-  "core.content_item": `SELECT coalesce(title, media_type) AS title, media_type AS subtitle,
-                               CASE WHEN media_type LIKE 'image/%' THEN content_id END AS thumb,
+  // Bytes have neither a title nor a media type of their own since #996
+  // (R20(b)): both come from whoever owns them — the wrapper's title, the
+  // representation's type.
+  "core.content_item": `SELECT coalesce(
+                                 (SELECT d.title FROM core_document d WHERE d.current_content_id = content_id LIMIT 1),
+                                 (SELECT a.title FROM media_asset a WHERE a.content_id = core_content_item.content_id LIMIT 1),
+                                 ${CONTENT_MEDIA_TYPE}) AS title,
+                               ${CONTENT_MEDIA_TYPE} AS subtitle,
+                               CASE WHEN ${CONTENT_MEDIA_TYPE} LIKE 'image/%' THEN content_id END AS thumb,
                                (deleted_at IS NOT NULL) AS trashed
                           FROM core_content_item WHERE content_id = ?`,
-  "core.document": `SELECT d.title AS title, c.media_type AS subtitle,
-                            CASE WHEN c.media_type LIKE 'image/%' THEN c.content_id END AS thumb,
+  "core.document": `SELECT d.title AS title, ${DOCUMENT_MEDIA_TYPE} AS subtitle,
+                            CASE WHEN ${DOCUMENT_MEDIA_TYPE} LIKE 'image/%' THEN d.current_content_id END AS thumb,
                             (d.deleted_at IS NOT NULL) AS trashed
-                       FROM core_document d JOIN core_content_item c ON c.content_id = d.current_content_id
-                      WHERE d.document_id = ?`,
+                       FROM core_document d WHERE d.document_id = ?`,
   "schedule.task": `SELECT title, status AS subtitle, NULL AS thumb, 0 AS trashed
                       FROM schedule_task WHERE task_id = ?`,
   "knowledge.note": `SELECT title, NULL AS subtitle, NULL AS thumb, 0 AS trashed
@@ -63,7 +74,7 @@ const CARD_SQL: Record<string, string> = {
   "social.thread": `SELECT coalesce(subject, channel) AS title, channel AS subtitle,
                            NULL AS thumb, 0 AS trashed
                       FROM social_thread WHERE thread_id = ?`,
-  "media.asset": `SELECT coalesce(ci.title, a.kind) AS title,
+  "media.asset": `SELECT coalesce(a.title, a.kind) AS title,
                                coalesce(a.captured_at, ci.created_at) AS subtitle,
                                a.content_id AS thumb, (a.deleted_at IS NOT NULL) AS trashed
                           FROM media_asset a

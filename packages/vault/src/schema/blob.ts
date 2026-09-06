@@ -32,17 +32,25 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { truncateForIndex } from "./fts.js";
+import {
+  OWNED_TITLE_SQL,
+  ftsRefreshStatement,
+  truncateForIndex,
+} from "./fts.js";
+import { mediaTypeSql } from "./representation.js";
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
-/** Body of a document's FTS row: extracted text, transcript, inline text. */
+/** Body of a document's FTS row: extracted text, transcript, inline text.
+ *  The raw decode asks THIS DOCUMENT's representation what the bytes are —
+ *  the byte row stopped carrying a media type in #996 (ruling R20(b)), so two
+ *  documents over one sha index under their own readings of it. */
 const DOCUMENT_BODY = (ref: string) =>
   truncateForIndex(`COALESCE(
     (SELECT dv.text_content FROM core_content_derivative dv
       WHERE dv.content_id = ${ref}."current_content_id" AND dv.variant = 'text'),
     (SELECT dv.text_content FROM core_content_derivative dv
       WHERE dv.content_id = ${ref}."current_content_id" AND dv.variant = 'transcript'),
-    (SELECT vault_content_text(ci."media_type", ci."content_uri") FROM core_content_item ci
+    (SELECT vault_content_text(${mediaTypeSql("'core.document'", `${ref}."document_id"`)}, ci."content_uri") FROM core_content_item ci
       WHERE ci.content_id = ${ref}."current_content_id"))`);
 
 /**
@@ -52,9 +60,14 @@ const DOCUMENT_BODY = (ref: string) =>
  * (a slide deck's extracted text layer alongside the speaker's transcript;
  * `derivatives.test.ts` covers exactly this), so folding in only the first
  * present would silently drop the other's words from the index (#724).
+ *
+ * The title half is now the OWNING ASSET's authored title (#996, R20(b)):
+ * `core_content_item.title` is gone, because a caption is not a property of
+ * bytes. `media_asset`'s own triggers below keep this row in step with a
+ * rename.
  */
 const CONTENT_ITEM_SEARCH_TEXT = (ref: string) =>
-  truncateForIndex(`trim(COALESCE(${ref}."title", '') || ' ' || COALESCE(
+  truncateForIndex(`trim(COALESCE(${OWNED_TITLE_SQL(ref)}, '') || ' ' || COALESCE(
     (SELECT dv.text_content FROM core_content_derivative dv
       WHERE dv.content_id = ${ref}."content_id" AND dv.variant = 'text'), '') || ' ' || COALESCE(
     (SELECT dv.text_content FROM core_content_derivative dv
@@ -67,6 +80,16 @@ const REFRESH_DOCUMENT_FTS = (contentIdRef: string) => `
   SELECT d.rowid, d."document_id", d."title", ${DOCUMENT_BODY("d")}
     FROM core_document d
    WHERE d.current_content_id = ${contentIdRef} AND d."deleted_at" IS NULL;`;
+
+/** One document's FTS row, addressed by ITS id rather than its bytes. */
+const REFRESH_DOCUMENT_FTS_FOR = (idRef: string, extra: string) => `
+  DELETE FROM fts_core_document
+   WHERE rowid IN (SELECT rowid FROM core_document WHERE document_id = ${idRef})
+     AND ${extra};
+  INSERT INTO fts_core_document (rowid, document_id, title, body)
+  SELECT d.rowid, d."document_id", d."title", ${DOCUMENT_BODY("d")}
+    FROM core_document d
+   WHERE d."document_id" = ${idRef} AND ${extra} AND d."deleted_at" IS NULL;`;
 
 const REFRESH_CONTENT_ITEM_FTS = (contentIdRef: string) => `
   DELETE FROM fts_core_content_item
@@ -205,6 +228,33 @@ CREATE TRIGGER IF NOT EXISTS fts_core_document_au AFTER UPDATE ON core_document 
 END;
 
 ${BLOB_CONTENT_ITEM_FTS_DDL}
+
+-- The content item's indexed title is its OWNING ASSET's authored title
+-- (#996, R20(b)) — a value on another table, so a rename there has to reach
+-- this index the way extracted text does. Insert as well as update: an asset
+-- is adopted onto content that already has its FTS row.
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_item_asset_ai AFTER INSERT ON media_asset
+BEGIN${REFRESH_CONTENT_ITEM_FTS("NEW.content_id")}
+END;
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_item_asset_au AFTER UPDATE OF title, content_id ON media_asset
+BEGIN${REFRESH_CONTENT_ITEM_FTS("OLD.content_id")}${REFRESH_CONTENT_ITEM_FTS("NEW.content_id")}
+END;
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_item_asset_ad AFTER DELETE ON media_asset
+BEGIN${REFRESH_CONTENT_ITEM_FTS("OLD.content_id")}
+END;
+
+-- A REPRESENTATION IS WRITTEN AFTER ITS OWNER (#996, ruling R20(b)): the
+-- wrapper row must exist before anything can own a reading of its bytes, so
+-- the wrapper's own \`_ai\` trigger has already run with no media type to
+-- decode by. These put the index back in step the moment the reading lands,
+-- and again if the owner is re-pointed or re-typed. Documents take the
+-- derivative-aware body above; notes and messages take the generated one.
+CREATE TRIGGER IF NOT EXISTS trg_fts_representation_ai AFTER INSERT ON core_content_representation
+BEGIN${REFRESH_DOCUMENT_FTS_FOR("NEW.owner_id", "NEW.owner_type = 'core.document'")}${ftsRefreshStatement("knowledge.note", "NEW.owner_id", "NEW.owner_type = 'knowledge.note'")}${ftsRefreshStatement("social.message", "NEW.owner_id", "NEW.owner_type = 'social.message'")}
+END;
+CREATE TRIGGER IF NOT EXISTS trg_fts_representation_au AFTER UPDATE ON core_content_representation
+BEGIN${REFRESH_DOCUMENT_FTS_FOR("NEW.owner_id", "NEW.owner_type = 'core.document'")}${ftsRefreshStatement("knowledge.note", "NEW.owner_id", "NEW.owner_type = 'knowledge.note'")}${ftsRefreshStatement("social.message", "NEW.owner_id", "NEW.owner_type = 'social.message'")}
+END;
 
 -- Extracted text can arrive AFTER the document already exists (async OCR/
 -- text-layer extraction) — refresh whichever document(s) are currently

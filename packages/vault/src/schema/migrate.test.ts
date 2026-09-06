@@ -375,8 +375,8 @@ describe("schema/migrate", () => {
     expect(() =>
       db.vault
         .prepare(
-          `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES ('c1', 'text/plain', 'file:///x', 'abc', -1, 't')`
+          `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES ('c1', 'file:///x', 'abc', -1, 't')`
         )
         .run()
     ).toThrow(/CHECK/u);

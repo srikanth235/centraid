@@ -31,6 +31,11 @@
       },
       {
         "schema": "core",
+        "table": "content_representation",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "attachment",
         "verbs": "read"
       },
@@ -455,7 +460,11 @@
           }
         }
       },
-      "writes": ["core.attachment", "core.content_item"]
+      "writes": [
+        "core.attachment",
+        "core.content_item",
+        "core.content_representation"
+      ]
     },
     {
       "name": "detach",

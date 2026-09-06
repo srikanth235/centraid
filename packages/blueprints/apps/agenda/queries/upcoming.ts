@@ -1,3 +1,8 @@
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
+import type { RepresentationIndex } from "../../_shared/representation-reads.ts";
 // governance: allow-repo-hygiene file-size-limit cohesive agenda projection query; the event/calendar/proposal SELECTs and their row shaping are one read path against the vault
 // Agenda projection: non-cancelled canonical events plus candidate calendars.
 // `{ from, to }` optional (default: today forward); events fetched from
@@ -48,7 +53,8 @@ interface DecoratedAttachment {
   role?: string;
   is_primary?: number;
   media_type: string;
-  title: string | null;
+  /** Bytes have no title of their own since #996 (R20(b)); an attachment is
+   *  not a wrapper, so there is nothing here to carry one. */
   content_uri: string;
   byte_size: number;
 }
@@ -93,7 +99,8 @@ interface EventRow extends RawEvent {
 function attachmentsBySubject(
   subjectType: string,
   attachments: RawAttachment[],
-  contentById: Map<string, RawContent>
+  contentById: Map<string, RawContent>,
+  representations: RepresentationIndex
 ): Map<string, DecoratedAttachment[]> {
   // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
@@ -110,8 +117,14 @@ function attachmentsBySubject(
       content_id: a.content_id,
       role: a.role,
       is_primary: a.is_primary,
-      media_type: content?.media_type ?? "application/octet-stream",
-      title: content?.title ?? null,
+      // The ATTACHMENT's own reading of the bytes (#996, R20(b)); bytes
+      // carry neither a media type nor a title of their own.
+      media_type:
+        representations.byOwner.get(
+          ownerKey("core.attachment", a.attachment_id)
+        ) ??
+        representations.byContent.get(a.content_id) ??
+        "application/octet-stream",
       content_uri: srcOf(content) ?? "",
       byte_size: content?.byte_size ?? 0,
     });
@@ -480,6 +493,9 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
             where: [{ column: "content_id", op: "in", value: contentIds }],
           })
         : { rows: [] };
+    // Bytes carry no media type since #996 (R20(b)) — the attachment's own
+    // representation says what it reads them as.
+    const representations = await readRepresentations({ ctx, contentIds });
     const contentById = new Map<string, RawContent>(
       ((contents.rows ?? []) as unknown as RawContent[]).map((c) => [
         c.content_id,
@@ -489,7 +505,8 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     const attByEvent = attachmentsBySubject(
       "core.event",
       attachmentRows,
-      contentById
+      contentById,
+      representations
     );
     const extByEvent = new Map<string, Record<string, unknown>>(
       (exts.rows ?? []).map((x) => [x.event_id as string, x])

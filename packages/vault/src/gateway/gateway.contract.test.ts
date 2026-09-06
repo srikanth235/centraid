@@ -1392,8 +1392,8 @@ describe("gateway", () => {
         .run(expiring!);
       db.vault
         .prepare(
-          `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, deleted_at, purge_at, created_at)
-         VALUES ('c-old', 'text/plain', 'file:///x', 'h1', 1, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z', '2019-12-31T00:00:00Z')`
+          `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, deleted_at, purge_at, created_at)
+         VALUES ('c-old', 'file:///x', 'h1', 1, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z', '2019-12-31T00:00:00Z')`
         )
         .run();
       // Tags on the doomed row (its folder filing, its star) purge with it —
@@ -1426,8 +1426,8 @@ describe("gateway", () => {
       // has passed: the asset row purges, the bytes stay (#274).
       db.vault
         .prepare(
-          `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES ('c-live', 'image/png', 'data:image/png;base64,xx', 'h2', 2, '2019-12-31T00:00:00Z')`
+          `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES ('c-live', 'data:image/png;base64,xx', 'h2', 2, '2019-12-31T00:00:00Z')`
         )
         .run();
       db.vault

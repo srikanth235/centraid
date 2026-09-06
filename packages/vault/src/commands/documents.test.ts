@@ -132,9 +132,13 @@ describe("documents", () => {
     });
     const content = db.vault
       .prepare(
-        "SELECT media_type, deleted_at FROM core_content_item WHERE content_id = ?"
+        `SELECT r.media_type, c.deleted_at
+           FROM core_content_item c
+           JOIN core_content_representation r
+             ON r.owner_type = 'core.document' AND r.owner_id = ?
+          WHERE c.content_id = ?`
       )
-      .get(contentId);
+      .get(documentId, contentId);
     expect(content).toMatchObject({
       media_type: "application/pdf",
       deleted_at: null,
@@ -220,7 +224,7 @@ describe("documents", () => {
   });
 
   test("rename_document updates the document title, not the raw content item", () => {
-    const { documentId, contentId } = addDocument({
+    const { documentId } = addDocument({
       data_uri: PDF,
       title: "Untitled.pdf",
     });
@@ -234,11 +238,14 @@ describe("documents", () => {
       .prepare("SELECT title FROM core_document WHERE document_id = ?")
       .get(documentId) as { title: string };
     expect(doc.title).toBe("Lease 2026.pdf");
-    // The underlying content item never carried the document's title.
-    const content = db.vault
-      .prepare("SELECT title FROM core_content_item WHERE content_id = ?")
-      .get(contentId) as { title: string | null };
-    expect(content.title).toBe("Untitled.pdf");
+    // The bytes never carried the document's title — and since #996
+    // (R20(b)) they carry no title at all.
+    expect(
+      db.vault
+        .prepare("PRAGMA table_info(core_content_item)")
+        .all()
+        .map((column) => (column as { name: string }).name)
+    ).not.toContain("title");
   });
 
   test("trash then restore round-trips; content is untouched while the document lives", () => {

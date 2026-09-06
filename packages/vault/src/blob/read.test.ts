@@ -31,8 +31,8 @@ describe("read", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES (?, 'image/jpeg', ?, ?, 10, ?)`
+         (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES (?, ?, ?, 10, ?)`
       )
       .run(contentId, `blob:sha256:${shaLocal}`, shaLocal, nowIso());
     if (variant) {
@@ -113,8 +113,8 @@ describe("read", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES (?, 'image/jpeg', ?, ?, 10, ?)`
+           (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES (?, ?, ?, 10, ?)`
       )
       .run(contentId, blobUriFor(shaLocal), shaLocal, nowIso());
   }

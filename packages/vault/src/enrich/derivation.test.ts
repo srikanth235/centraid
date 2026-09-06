@@ -25,8 +25,8 @@ function seedAsset(db: VaultDb, assetId: string): void {
   db.vault
     .prepare(
       `INSERT OR IGNORE INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES (?, 'image/jpeg', 'file:///x', ?, 1, '2026-01-01T00:00:00.000Z')`
+         (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES (?, 'file:///x', ?, 1, '2026-01-01T00:00:00.000Z')`
     )
     .run(contentId, `sha-${assetId}`.padEnd(64, "0"));
   db.vault

@@ -273,10 +273,9 @@ function editAction(world: World, rng: Rng, slot: ShareSlot): void {
     const title = `${slot.album.titles[index]}!${world.step}`;
     slot.origin.db.vault
       .prepare(
-        `UPDATE core_content_item SET title = ?
-          WHERE content_id IN (
-            SELECT a.content_id FROM core_collection_entry e
-              JOIN media_asset a ON a.asset_id = e.target_id
+        `UPDATE media_asset SET title = ?
+          WHERE asset_id IN (
+            SELECT e.target_id FROM core_collection_entry e
              WHERE e.collection_id = ? AND e.position = ?)`
       )
       .run(title, slot.album.albumId, index);

@@ -86,25 +86,38 @@ async function seedCorpus(db, nextId) {
     db.vault
       .prepare(
         `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, title, creator_party_id, created_at)
-         VALUES (?, 'text/markdown', ?, ?, ?, ?, ?, ?)`
+           (content_id, content_uri, sha256, byte_size, creator_party_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
       .run(
         contentId,
         `inline:golden-${label}-${index}`,
         createHash("sha256").update(`${label}:${index}`).digest("hex"),
         64,
-        `Golden ${label} ${index}`,
         bootstrap.ownerPartyId,
         FROZEN_NOW
       );
     return contentId;
   };
 
+  // The OWNER's reading of those bytes (#996, ruling R20(b)): the corpus
+  // carries the pair the product writes, so a migration over it means
+  // something about a member's vault.
+  const representationFor = (ownerType, ownerId, contentId) => {
+    db.vault
+      .prepare(
+        `INSERT INTO core_content_representation
+           (representation_id, content_id, owner_type, owner_id, media_type, charset, interpretation, created_at)
+         VALUES (?, ?, ?, ?, 'text/markdown', 'utf-8', 'body', ?)`
+      )
+      .run(nextId(), contentId, ownerType, ownerId, FROZEN_NOW);
+  };
+
   const documentIds = [];
   for (let index = 0; index < 3; index += 1) {
     const documentId = nextId();
     documentIds.push(documentId);
+    const contentId = contentFor("document", index);
     db.vault
       .prepare(
         `INSERT INTO core_document (document_id, title, current_content_id, created_at, updated_at)
@@ -113,16 +126,18 @@ async function seedCorpus(db, nextId) {
       .run(
         documentId,
         `Golden document ${index}`,
-        contentFor("document", index),
+        contentId,
         FROZEN_NOW,
         FROZEN_NOW
       );
+    representationFor("core.document", documentId, contentId);
   }
 
   const noteIds = [];
   for (let index = 0; index < 2; index += 1) {
     const noteId = nextId();
     noteIds.push(noteId);
+    const contentId = contentFor("note", index);
     db.vault
       .prepare(
         `INSERT INTO knowledge_note
@@ -133,10 +148,11 @@ async function seedCorpus(db, nextId) {
         noteId,
         bootstrap.ownerPartyId,
         `Golden note ${index}`,
-        contentFor("note", index),
+        contentId,
         FROZEN_NOW,
         FROZEN_NOW
       );
+    representationFor("knowledge.note", noteId, contentId);
   }
 
   // A polymorphic link between two corpus rows: the exact shape `vault doctor`

@@ -908,6 +908,7 @@ describe("replica-shape suite", () => {
       scopes: [
         { schema: "media", verbs: "read" },
         { schema: "core", table: "content_item", verbs: "read" },
+        { schema: "core", table: "content_representation", verbs: "read" },
         { schema: "core", table: "content_derivative", verbs: "read" },
         { schema: "core", table: "collection", verbs: "read" },
         { schema: "core", table: "collection_entry", verbs: "read" },
@@ -929,6 +930,7 @@ describe("replica-shape suite", () => {
     for (const entity of [
       "media.asset",
       "core.content_item",
+      "core.content_representation",
       "core.content_derivative",
       "core.collection",
       "core.collection_entry",
@@ -943,9 +945,15 @@ describe("replica-shape suite", () => {
     expect(asset.columns).toStrictEqual(
       expect.arrayContaining(["archived_at", "tz_offset_min", "captured_at"])
     );
+    // Bytes and nothing that interprets them (#996, ruling R20(b)): the
+    // media type is the ASSET's representation and the title is the asset's.
     const content = byEntity.get("core.content_item")!;
     expect(content.columns).toStrictEqual(
-      expect.arrayContaining(["sha256", "media_type", "byte_size", "title"])
+      expect.arrayContaining(["sha256", "byte_size", "content_uri"])
+    );
+    expect(asset.columns).toStrictEqual(expect.arrayContaining(["title"]));
+    expect(byEntity.get("core.content_representation")!.columns).toStrictEqual(
+      expect.arrayContaining(["owner_type", "owner_id", "media_type"])
     );
     // Derivatives carry the variant and its inline text or CAS sha.
     const derivative = byEntity.get("core.content_derivative")!;
@@ -960,6 +968,7 @@ describe("replica-shape suite", () => {
       scopes: [
         { schema: "core", table: "document", verbs: "read" },
         { schema: "core", table: "content_item", verbs: "read" },
+        { schema: "core", table: "content_representation", verbs: "read" },
         { schema: "core", table: "tag", verbs: "read" },
         { schema: "core", table: "concept", verbs: "read" },
         { schema: "core", table: "concept_scheme", verbs: "read" },
@@ -1020,7 +1029,13 @@ describe("replica-shape suite", () => {
       ])
     );
     expect(docsByEntity.get("core.content_item")!.columns).toStrictEqual(
-      expect.arrayContaining(["content_id", "media_type", "byte_size", "title"])
+      expect.arrayContaining(["content_id", "byte_size", "content_uri"])
+    );
+    // What THIS document reads its bytes as (#996, ruling R20(b)).
+    expect(
+      docsByEntity.get("core.content_representation")!.columns
+    ).toStrictEqual(
+      expect.arrayContaining(["owner_type", "owner_id", "media_type"])
     );
     expect(docsByEntity.get("core.concept")!.columns).toStrictEqual(
       expect.arrayContaining([

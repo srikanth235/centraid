@@ -15,6 +15,11 @@
  */
 
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
+import type { RepresentationIndex } from "../../_shared/representation-reads.ts";
 import { decodeNoteBody } from "../note-body.ts";
 
 interface NoteRow {
@@ -40,8 +45,6 @@ interface AttachmentRow {
 interface ContentRow {
   content_id: string;
   content_uri?: string;
-  media_type?: string;
-  title?: string;
   byte_size?: number;
 }
 
@@ -59,7 +62,8 @@ interface CollectionRow {
 function attachmentsBySubject(
   subjectType: string,
   attachments: AttachmentRow[],
-  contentById: Map<string, ContentRow>
+  contentById: Map<string, ContentRow>,
+  representations: RepresentationIndex
 ) {
   // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: ContentRow | undefined) =>
@@ -76,8 +80,13 @@ function attachmentsBySubject(
       content_id: a.content_id,
       role: a.role,
       is_primary: a.is_primary,
-      media_type: content?.media_type ?? "application/octet-stream",
-      title: content?.title ?? null,
+      // The ATTACHMENT's own reading of the bytes (#996, R20(b)).
+      media_type:
+        representations.byOwner.get(
+          ownerKey("core.attachment", a.attachment_id)
+        ) ??
+        representations.byContent.get(a.content_id) ??
+        "application/octet-stream",
       content_uri: srcOf(content) ?? "",
       byte_size: content?.byte_size ?? 0,
     });
@@ -200,10 +209,12 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         c,
       ])
     );
+    const representations = await readRepresentations({ ctx, contentIds });
     const attByNote = attachmentsBySubject(
       "knowledge.note",
       attachmentRows,
-      contentById
+      contentById,
+      representations
     );
     const nameByNotebook = new Map(
       ((notebooks.rows ?? []) as unknown as CollectionRow[]).map((nb) => [

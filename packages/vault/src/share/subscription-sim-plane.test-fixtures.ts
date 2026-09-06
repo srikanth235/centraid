@@ -122,17 +122,16 @@ function insertPhoto(seat: Seat, label: string): string {
   seat.db.vault
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title,
+         (content_id, content_uri, sha256, byte_size,
           language, creator_party_id, origin_device_id, deleted_at, purge_at,
           created_at)
-       VALUES (?, 'image/jpeg', ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?)`
+       VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?)`
     )
     .run(
       contentId,
       `blob:${original.sha256}`,
       original.sha256,
       original.byteSize,
-      label,
       NOW
     );
   seat.db.vault
@@ -147,13 +146,22 @@ function insertPhoto(seat: Seat, label: string): string {
   seat.db.vault
     .prepare(
       `INSERT INTO media_asset
-         (asset_id, content_id, kind, captured_at, tz_offset_min,
+         (asset_id, content_id, kind, title, captured_at, tz_offset_min,
           capture_group_id, place_id, camera_device_id, width, height,
           duration_s, exif_json, archived_at, deleted_at, purge_at)
-       VALUES (?, ?, 'photo', ?, NULL, NULL, NULL, NULL, 800, 600, NULL, NULL,
+       VALUES (?, ?, 'photo', ?, ?, NULL, NULL, NULL, NULL, 800, 600, NULL, NULL,
                NULL, NULL, NULL)`
     )
-    .run(assetId, contentId, NOW);
+    .run(assetId, contentId, label, NOW);
+  // The asset's own reading of the bytes (#996, ruling R20(b)).
+  seat.db.vault
+    .prepare(
+      `INSERT INTO core_content_representation
+         (representation_id, content_id, owner_type, owner_id, media_type,
+          charset, interpretation, created_at)
+       VALUES (?, ?, 'media.asset', ?, 'image/jpeg', NULL, 'original', ?)`
+    )
+    .run(uuidv7(), contentId, assetId, NOW);
   return assetId;
 }
 
@@ -184,11 +192,11 @@ function seedAlbum(seat: Seat, key: string): GrantAlbum {
   return { albumId, titles: [], minted: 0 };
 }
 
-const TITLE_QUERY = `SELECT c.title AS title
+const TITLE_QUERY = `SELECT a.title AS title
      FROM core_collection_entry e
      JOIN media_asset a ON a.asset_id = e.target_id
      JOIN core_content_item c ON c.content_id = a.content_id
-    WHERE e.collection_id = ? ORDER BY e.position, c.title`;
+    WHERE e.collection_id = ? ORDER BY e.position, a.title`;
 
 function titlesIn(ref: ShareVaultRef, collectionId: string): string[] {
   return (
@@ -244,10 +252,9 @@ export function tamperAudience(slot: ShareSlot, title: string): boolean {
   if (projected === undefined) return false;
   const changed = slot.audience.db.vault
     .prepare(
-      `UPDATE core_content_item SET title = ?
-        WHERE content_id IN (
-          SELECT a.content_id FROM core_collection_entry e
-            JOIN media_asset a ON a.asset_id = e.target_id
+      `UPDATE media_asset SET title = ?
+        WHERE asset_id IN (
+          SELECT e.target_id FROM core_collection_entry e
            WHERE e.collection_id = ?)`
     )
     .run(title, projected).changes;

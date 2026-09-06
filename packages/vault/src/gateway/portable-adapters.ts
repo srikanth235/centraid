@@ -8,6 +8,7 @@ import type { VaultDb } from "../db.js";
 import { serializeMarkdownNote } from "../ingest/markdown.js";
 import type { ZipEntry } from "../ingest/zip.js";
 import { contentText } from "../schema/fts.js";
+import { mediaTypeSql } from "../schema/representation.js";
 
 function escapeIcs(value: string): string {
   return value
@@ -225,7 +226,9 @@ export function exportMarkdownDirectory(db: VaultDb): ZipEntry[] {
   );
   const rows = db.vault
     .prepare(
-      `SELECT n.note_id, n.title, c.media_type, c.content_uri, e.collection_id
+      `SELECT n.note_id, n.title,
+              ${mediaTypeSql("'knowledge.note'", "n.note_id")} AS media_type,
+              c.content_uri, e.collection_id
          FROM knowledge_note n
          JOIN core_content_item c ON c.content_id = n.body_content_id
          LEFT JOIN core_collection_entry e
@@ -236,7 +239,7 @@ export function exportMarkdownDirectory(db: VaultDb): ZipEntry[] {
     .all() as {
     note_id: string;
     title: string;
-    media_type: string;
+    media_type: string | null;
     content_uri: string;
     collection_id: string | null;
   }[];

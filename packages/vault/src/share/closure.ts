@@ -62,11 +62,18 @@ export type WireRow = Record<string, WireValue>;
 
 export interface ContentItemRow {
   content_id: string;
+  /**
+   * A WIRE FIELD, not a column (#996, ruling R20(b)): `core_content_item` no
+   * longer carries a media type, so the closure reads it off the ORIGIN
+   * owner's representation at the query boundary and the projection writes it
+   * back onto the AUDIENCE owner's. `title` is gone from this row entirely —
+   * a caption is the wrapper's, and a generated one is a derived row that
+   * never projects (R10).
+   */
   media_type: string;
   content_uri: string;
   sha256: string;
   byte_size: number;
-  title: string | null;
   language: string | null;
   deleted_at: string | null;
   purge_at: string | null;
@@ -89,6 +96,8 @@ export interface MediaAssetRow {
   asset_id: string;
   content_id: string;
   kind: string;
+  /** The owner's AUTHORED title (#996, R20(b)) — never a generated caption. */
+  title: string | null;
   captured_at: string | null;
   tz_offset_min: number | null;
   capture_group_id: string | null;

@@ -19,6 +19,7 @@ import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
+import { setRepresentation } from "../schema/representation.js";
 import type { ShareableItemType } from "./closure.js";
 import { deleteProjectedClosure } from "./removal.js";
 
@@ -85,16 +86,15 @@ export function seedPhoto(
   db.vault
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language,
+         (content_id, content_uri, sha256, byte_size, language,
           creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, 'image/jpeg', ?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?)`
+       VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?)`
     )
     .run(
       contentId,
       blobUriFor(original.sha256),
       original.sha256,
       original.byteSize,
-      `Photo ${label}`,
       boot.ownerPartyId,
       boot.deviceId,
       now
@@ -110,12 +110,19 @@ export function seedPhoto(
   db.vault
     .prepare(
       `INSERT INTO media_asset
-         (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id,
+         (asset_id, content_id, kind, title, captured_at, tz_offset_min, capture_group_id,
           place_id, camera_device_id, width, height, duration_s, exif_json,
           archived_at, deleted_at, purge_at)
-       VALUES (?, ?, 'photo', ?, NULL, NULL, NULL, ?, 800, 600, NULL, NULL, NULL, NULL, NULL)`
+       VALUES (?, ?, 'photo', ?, ?, NULL, NULL, NULL, ?, 800, 600, NULL, NULL, NULL, NULL, NULL)`
     )
-    .run(assetId, contentId, now, boot.deviceId);
+    .run(assetId, contentId, `Photo ${label}`, now, boot.deviceId);
+  setRepresentation(db.vault, uuidv7, now, {
+    contentId,
+    ownerType: "media.asset",
+    ownerId: assetId,
+    mediaType: "image/jpeg",
+    interpretation: "original",
+  });
   return {
     assetId,
     contentId,

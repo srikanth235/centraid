@@ -7,6 +7,10 @@
 // identical bodies shared one history and a restore could not be told from the
 // edit it undid.
 
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 import { decodeNoteBody } from "../note-body.ts";
 import { noteVersionChain } from "../version-chain.ts";
 
@@ -21,7 +25,6 @@ interface NoteRow {
 interface ContentRow {
   content_id: string;
   content_uri?: string | null;
-  media_type?: string | null;
   created_at?: string;
 }
 
@@ -56,11 +59,19 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
     const chain = [...walked.contentIds];
     const assertedAt = walked.assertedAt;
 
-    const contents = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.content_item",
-      where: [{ column: "content_id", op: "in", value: chain }],
-    });
+    const [contents, representations] = await Promise.all([
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.content_item",
+        where: [{ column: "content_id", op: "in", value: chain }],
+      }),
+      // Bytes carry no media type since #996 (R20(b)). A superseded version
+      // has no representation of its own — the note's moved with the head —
+      // and an edit changes the words, never the format.
+      readRepresentations({ ctx, contentIds: chain }),
+    ]);
+    const noteMediaType =
+      representations.byOwner.get(ownerKey("knowledge.note", noteId)) ?? null;
     const byId = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((row) => [
         row.content_id,
@@ -73,7 +84,7 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
         return {
           content_id: contentId,
           body: decodeNoteBody(content?.content_uri),
-          media_type: content?.media_type ?? null,
+          media_type: representations.byContent.get(contentId) ?? noteMediaType,
           current: index === 0,
           asserted_at:
             assertedAt.get(contentId) ?? content?.created_at ?? note.created_at,

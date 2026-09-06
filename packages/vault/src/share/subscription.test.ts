@@ -184,9 +184,15 @@ describe("share subscription", () => {
     origin.vault
       .prepare("UPDATE media_asset SET width = 1024 WHERE asset_id = ?")
       .run(photo.assetId);
+    // A SECOND ROW, deliberately: since #996 (R20(b)) a photo's title lives on
+    // the asset, so retitling would move the same row width just moved and the
+    // claim under test — one UPDATE per moved row — would have one row to
+    // count. The byte row's own language is the second thing that moved.
     origin.vault
-      .prepare("UPDATE core_content_item SET title = ? WHERE content_id = ?")
-      .run("Moved", photo.contentId);
+      .prepare(
+        "UPDATE core_content_item SET language = 'en' WHERE content_id = ?"
+      )
+      .run(photo.contentId);
 
     const countersBefore = gatewayWorkCounters();
     const second = deliver(origin, audience, {

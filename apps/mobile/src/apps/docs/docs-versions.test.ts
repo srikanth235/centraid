@@ -48,6 +48,7 @@ describe(projectVersionChain, () => {
         occurrence("r1", "v1", null, "2026-08-08T20:12:00Z"),
       ],
       contents: [content("v1", 10), content("v2", 20), content("v3", 30)],
+      representations: [],
     });
     expect(chain?.entries.map((entry) => entry.content_id)).toStrictEqual([
       "v3",
@@ -70,6 +71,7 @@ describe(projectVersionChain, () => {
         occurrence("r1", "v1", null, "2026-08-08T20:12:00Z"),
       ],
       contents: [content("v1", 10), content("v2", 20)],
+      representations: [],
     });
     expect(chain?.entries.map((entry) => entry.content_id)).toStrictEqual([
       "v1",
@@ -90,6 +92,7 @@ describe(projectVersionChain, () => {
         },
       ],
       contents: [content("v1", 10)],
+      representations: [],
     });
     expect(chain?.entries.map((entry) => entry.content_id)).toStrictEqual([
       "v1",
@@ -104,6 +107,7 @@ describe(projectVersionChain, () => {
         occurrence("r1", "v1", "r2", "2026-08-08T20:12:00Z"),
       ],
       contents: [content("v1", 10), content("v2", 20)],
+      representations: [],
     });
     expect(chain?.entries.map((entry) => entry.content_id)).toStrictEqual([
       "v2",
@@ -116,6 +120,7 @@ describe(projectVersionChain, () => {
       document: doc("v1", null),
       revisions: [],
       contents: [content("v1", 10)],
+      representations: [],
     });
     expect(chain?.entries.map((entry) => entry.content_id)).toStrictEqual([
       "v1",
@@ -130,6 +135,7 @@ describe(projectVersionChain, () => {
         document: undefined,
         revisions: [],
         contents: [],
+        representations: [],
       })
     ).toBeNull();
   });

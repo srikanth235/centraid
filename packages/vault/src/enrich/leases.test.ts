@@ -8,6 +8,7 @@ import { promoteStagedBlob } from "../blob/promote.js";
 import { stageBlobBytes } from "../blob/staging.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { UNCLAIMED_OWNER_TYPE } from "../schema/representation.js";
 import {
   completeEnrichmentLease,
   enrichmentQueueDepth,
@@ -22,6 +23,30 @@ import type { EnrichmentCapability } from "./leases.js";
 let db: VaultDb;
 const T0 = "2026-07-15T00:00:00.000Z";
 
+/** The reading of unclaimed bytes (#996, ruling R20(b)): the content row owns
+ *  its own until a document, note or asset arrives to hold one. */
+function seedRepresentation(
+  vault: VaultDb,
+  contentId: string,
+  mediaType: string
+): void {
+  vault.vault
+    .prepare(
+      `INSERT INTO core_content_representation
+         (representation_id, content_id, owner_type, owner_id, media_type,
+          charset, interpretation, created_at)
+       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?)`
+    )
+    .run(
+      `rep-${contentId}`,
+      contentId,
+      UNCLAIMED_OWNER_TYPE,
+      contentId,
+      mediaType,
+      T0
+    );
+}
+
 describe("leases", () => {
   /** A REAL content item to request enrichment OF (#916): the request's
    *  `(entity_type, entity_id)` is a composite foreign key into the entity
@@ -30,8 +55,8 @@ describe("leases", () => {
     db.vault
       .prepare(
         `INSERT OR IGNORE INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES (?, 'application/octet-stream', 'file:///x', ?, 1, ?)`
+           (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES (?, 'file:///x', ?, 1, ?)`
       )
       .run(contentId, `sha-${contentId}`.padEnd(64, "0"), T0);
   };
@@ -186,10 +211,10 @@ describe("leases", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('doc-1', 'application/pdf', 'blob:doc', ?, 10, ?)
+         (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES ('doc-1', 'blob:doc', ?, 10, ?)
        ON CONFLICT(content_id) DO UPDATE SET
-         media_type = excluded.media_type, content_uri = excluded.content_uri,
+         content_uri = excluded.content_uri,
          sha256 = excluded.sha256, byte_size = excluded.byte_size`
       )
       .run("c".repeat(64), T0);
@@ -338,10 +363,13 @@ describe("leases", () => {
     vault.vault
       .prepare(
         `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('old-video', 'video/webm', ?, ?, 42, ?)`
+         (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES ('old-video', ?, ?, 42, ?)`
       )
       .run(`blob:sha256:${oldSha}`, oldSha, T0);
+    // Bytes no wrapper claims still say what they are (#996, ruling R20(b)):
+    // the content row owns its own reading until an owner arrives.
+    seedRepresentation(vault, "old-video", "video/mp4");
     let id = 0;
     const queued = queueMissingDeviceEnrichmentBacklog(vault.vault, {
       newId: () => `backfill-${++id}`,
@@ -374,8 +402,8 @@ describe("leases", () => {
     const vault = openVaultDb();
     const insertContent = vault.vault.prepare(
       `INSERT INTO core_content_item
-       (content_id, media_type, content_uri, sha256, byte_size, created_at)
-     VALUES (?, 'video/mp4', ?, ?, 42, ?)`
+       (content_id, content_uri, sha256, byte_size, created_at)
+     VALUES (?, ?, ?, 42, ?)`
     );
     insertContent.run(
       "a-satisfied",
@@ -389,6 +417,8 @@ describe("leases", () => {
       "b".repeat(64),
       T0
     );
+    seedRepresentation(vault, "a-satisfied", "video/mp4");
+    seedRepresentation(vault, "b-missing", "video/mp4");
     const derivative = vault.vault.prepare(
       `INSERT INTO core_content_derivative
        (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)

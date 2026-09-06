@@ -71,7 +71,11 @@ describe("knowledge", () => {
     });
     const content = db.vault
       .prepare(
-        "SELECT media_type, content_uri FROM core_content_item WHERE content_id = ?"
+        `SELECT r.media_type, c.content_uri
+           FROM core_content_item c
+           JOIN core_content_representation r
+             ON r.owner_type = 'knowledge.note' AND r.content_id = c.content_id
+          WHERE c.content_id = ?`
       )
       .get(body_content_id) as { media_type: string; content_uri: string };
     expect(content.media_type).toBe("text/plain");
@@ -147,8 +151,11 @@ describe("knowledge", () => {
     });
     expect(note.body_content_id).not.toBe(body_content_id);
     const media = db.vault
-      .prepare("SELECT media_type FROM core_content_item WHERE content_id = ?")
-      .get(note.body_content_id) as { media_type: string };
+      .prepare(
+        `SELECT media_type FROM core_content_representation
+          WHERE owner_type = 'knowledge.note' AND owner_id = ?`
+      )
+      .get(note_id) as { media_type: string };
     expect(media.media_type).toBe("text/markdown"); // inherits the note's format
   });
 

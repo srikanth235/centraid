@@ -9,6 +9,10 @@ import { DAY_MS } from "../../_shared/format-kit.ts";
  *
  * @type {import('@centraid/server/engine').QueryHandler}
  */
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 import { readAssetJoins, readPlaces, srcOf } from "./_shared.ts";
 
 interface RawAsset {
@@ -24,8 +28,6 @@ interface RawContent {
   content_id: string;
   content_uri?: unknown;
   byte_size?: number | null;
-  media_type?: string | null;
-  title?: string | null;
   created_at?: string | null;
   deleted_at?: string | null;
   purge_at?: string | null;
@@ -94,34 +96,38 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     );
     const memoryRows = (memories.rows ?? []) as unknown as RawMemory[];
     const memoryIds = memoryRows.map((memory) => memory.memory_id);
-    const [entries, contents, joins, memoryMembers] = await Promise.all([
-      assetIds.length > 0
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.collection_entry",
-            where: [
-              { column: "target_type", op: "eq", value: "media.asset" },
-              { column: "target_id", op: "in", value: assetIds },
-            ],
-          })
-        : { rows: [] },
-      contentIds.length > 0
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.content_item",
-            where: [{ column: "content_id", op: "in", value: contentIds }],
-          })
-        : { rows: [] },
-      readAssetJoins({ ctx, assetIds, contentIds }),
-      memoryIds.length > 0
-        ? ctx.vault.read({
-            entity: "media.memory_member",
-            where: [{ column: "memory_id", op: "in", value: memoryIds }],
-            orderBy: { column: "ordinal", dir: "asc" },
-            limit: 4000,
-          })
-        : { rows: [] },
-    ]);
+    const [entries, contents, joins, memoryMembers, representations] =
+      await Promise.all([
+        assetIds.length > 0
+          ? ctx.vault.read({
+              acceptTruncation: true,
+              entity: "core.collection_entry",
+              where: [
+                { column: "target_type", op: "eq", value: "media.asset" },
+                { column: "target_id", op: "in", value: assetIds },
+              ],
+            })
+          : { rows: [] },
+        contentIds.length > 0
+          ? ctx.vault.read({
+              acceptTruncation: true,
+              entity: "core.content_item",
+              where: [{ column: "content_id", op: "in", value: contentIds }],
+            })
+          : { rows: [] },
+        readAssetJoins({ ctx, assetIds, contentIds }),
+        memoryIds.length > 0
+          ? ctx.vault.read({
+              entity: "media.memory_member",
+              where: [{ column: "memory_id", op: "in", value: memoryIds }],
+              orderBy: { column: "ordinal", dir: "asc" },
+              limit: 4000,
+            })
+          : { rows: [] },
+        // Bytes carry no media type since #996 (R20(b)) — the ASSET's own
+        // representation says what they are, and its title is its own.
+        readRepresentations({ ctx, contentIds }),
+      ]);
 
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as RawContent[]).map(
@@ -173,8 +179,10 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         preview_uri: preview,
         poster_uri: poster,
         byte_size: content?.byte_size ?? null,
-        media_type: content?.media_type ?? null,
-        title: content?.title ?? null,
+        media_type:
+          representations.byOwner.get(
+            ownerKey("media.asset", asset.asset_id)
+          ) ?? null,
         taken_at: asset.captured_at ?? content?.created_at ?? null,
         album_ids: albumIds,
         album_titles: albumIds

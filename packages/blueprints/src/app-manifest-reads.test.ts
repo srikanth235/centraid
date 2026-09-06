@@ -34,6 +34,8 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "core.event",
     "core.party",
     "core.content_item",
+    // What each owner reads those bytes as (#996, ruling R20(b)).
+    "core.content_representation",
     "core.attachment",
     "core.tag",
     "core.concept",
@@ -42,6 +44,8 @@ const READS: Readonly<Record<string, readonly string[]>> = {
   docs: [
     "core.document",
     "core.content_item",
+    // What each owner reads those bytes as (#996, ruling R20(b)).
+    "core.content_representation",
     // The document's own history (#996, R20(a)); it was `core.link` plus the
     // taxonomy pair behind it.
     "core.entity_revision",
@@ -76,10 +80,14 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "core.entity_revision",
     "core.attachment",
     "core.content_item",
+    // What each owner reads those bytes as (#996, ruling R20(b)).
+    "core.content_representation",
     "access.receipt",
   ],
   notes: [
     "core.content_item",
+    // What each owner reads those bytes as (#996, ruling R20(b)).
+    "core.content_representation",
     // The note's own body history (#996, R20(a)).
     "core.entity_revision",
     "core.attachment",
@@ -103,6 +111,8 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "core.party_identifier",
     "core.activity",
     "core.link",
+    // People reads content items for the avatar; it never asks what the bytes
+    // ARE, so it declares no `core.content_representation` scope (#996).
     "core.content_item",
     "core.tag",
     "core.concept",
@@ -123,6 +133,8 @@ const READS: Readonly<Record<string, readonly string[]>> = {
   ],
   photos: [
     "core.content_item",
+    // What each owner reads those bytes as (#996, ruling R20(b)).
+    "core.content_representation",
     "core.content_derivative",
     "core.tag",
     "core.concept",
@@ -145,6 +157,8 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "core.vault",
     "core.party",
     "core.content_item",
+    // What each owner reads those bytes as (#996, ruling R20(b)).
+    "core.content_representation",
     "core.attachment",
     "tally.friend",
     "tally.group",
@@ -167,6 +181,8 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "schedule.project",
     "schedule.section",
     "core.content_item",
+    // What each owner reads those bytes as (#996, ruling R20(b)).
+    "core.content_representation",
     "core.attachment",
     "core.link",
     "core.link_anchor",

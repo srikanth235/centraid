@@ -30,6 +30,10 @@ import {
   pendingSidecarOf,
   readPendingOverlay,
 } from "../../_shared/pending-overlay.ts";
+import {
+  ownerKey,
+  readRepresentations,
+} from "../../_shared/representation-reads.ts";
 
 /** A resolved person (owner or friend) the ledgers decorate rows with. */
 export interface ServerPerson {
@@ -385,12 +389,17 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
           where: [{ column: "content_id", op: "in", value: receiptContentIds }],
         })
       : { rows: [] as Record<string, unknown>[] };
+  // Bytes carry no media type since #996 (R20(b)) — the receipt attachment's
+  // own representation says what it reads them as.
+  const receiptRepresentations = await readRepresentations({
+    ctx,
+    contentIds: receiptContentIds,
+  });
   const contentsById = new Map(
     (
       (receiptContents.rows ?? []) as unknown as Array<{
         content_id: string;
         content_uri?: string;
-        media_type?: string;
       }>
     ).map((row) => [row.content_id, row] as const)
   );
@@ -431,6 +440,11 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
   }
   for (const lines of linesByExpense.values())
     lines.sort((a, b) => a.sort_order - b.sort_order);
+  // The RECEIPT ATTACHMENT's own reading of the bytes (#996, R20(b)).
+  const mediaTypeOf = (receiptId: string, contentId: string) =>
+    receiptRepresentations.byOwner.get(
+      ownerKey("core.attachment", receiptId)
+    ) ?? receiptRepresentations.byContent.get(contentId);
   const receiptByExpense = new Map<string, ReceiptFact>();
   for (const receipt of receiptRows) {
     const content = contentsById.get(receipt.content_id);
@@ -444,7 +458,9 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
               : content.content_uri,
           }
         : {}),
-      ...(content?.media_type ? { media_type: content.media_type } : {}),
+      ...(mediaTypeOf(receipt.receipt_id, receipt.content_id)
+        ? { media_type: mediaTypeOf(receipt.receipt_id, receipt.content_id)! }
+        : {}),
       lines: linesByExpense.get(receipt.expense_id) ?? [],
     });
   }

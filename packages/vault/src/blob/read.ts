@@ -5,6 +5,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { contentReferenceExists } from "../schema/content-references.js";
+import { contentMediaTypeSql } from "../schema/representation.js";
 import {
   BINARY_DERIVATIVE_SQL,
   isBinaryDerivative,
@@ -55,12 +56,17 @@ export function resolveServableBlob(
 ): BlobResolveOutcome {
   const row = vault
     .prepare(
-      `SELECT i.content_id, i.content_uri, i.media_type, i.byte_size,
-              -- A document's title outranks the bare content item's — the
-              -- wrapper is what the owner renamed, current or superseded.
+      `SELECT i.content_id, i.content_uri, i.byte_size,
+              -- THE REPRESENTATION'S ANSWER (#996, ruling R20(b)): the door
+              -- addresses bytes by content id with no owner in hand, so it
+              -- serves the oldest owner's reading of them. A caller that
+              -- knows its owner reads the type off that representation.
+              ${contentMediaTypeSql("i.content_id")} AS media_type,
+              -- The title is a WRAPPER's — bytes have no name of their own
+              -- any more. A document's wins; else the owning asset's.
               COALESCE(
                 (SELECT d.title FROM core_document d WHERE d.current_content_id = i.content_id LIMIT 1),
-                i.title) AS title,
+                (SELECT a.title FROM media_asset a WHERE a.content_id = i.content_id LIMIT 1)) AS title,
               (${SERVE_REFERENCES.map((q) => `EXISTS(${q})`).join(" + ")}) AS refs
          FROM core_content_item i WHERE i.content_id = ?`
     )
@@ -68,7 +74,7 @@ export function resolveServableBlob(
     | {
         content_id: string;
         content_uri: string;
-        media_type: string;
+        media_type: string | null;
         byte_size: number;
         title: string | null;
         refs: number;
@@ -107,7 +113,7 @@ export function resolveServableBlob(
     blob: {
       contentId,
       sha256: sha,
-      mediaType: row.media_type,
+      mediaType: row.media_type ?? "application/octet-stream",
       byteSize: row.byte_size,
       title: row.title,
       variant: "original",

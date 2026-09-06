@@ -44,14 +44,14 @@ const logger = {
  * show.
  */
 const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
-  agenda: "agenda:16b6c558aa4f52ee7cebd0bb",
-  docs: "docs:ad333598074be54babecc6b9",
-  locker: "locker:53c326dc225e3d6f436255c1",
-  notes: "notes:ff225f22383fa792b7d09117",
-  people: "people:eff4efd9c59248235a8580ad",
-  photos: "photos:2a63ca460ee7dbf27beab4ed",
-  tally: "tally:c9884ce02ea2c78b10b0e847",
-  tasks: "tasks:01cbb634f9b8703989d97fea",
+  agenda: "agenda:63dc551516f999257c0751d6",
+  docs: "docs:f7fec11a5cbc4bdc45830b7e",
+  locker: "locker:68a09533e26a51272e1baad2",
+  notes: "notes:87a96480df608575c2c823cb",
+  people: "people:f056df671a7163d85f381ef5",
+  photos: "photos:a568f72b0549dc90afeb7e17",
+  tally: "tally:6b8ba1c6a43d071d10001f53",
+  tasks: "tasks:237bbe3dfccc7fd90feb2061",
 };
 
 const APPS_ROOT = path.resolve(import.meta.dirname, "../../../blueprints/apps");

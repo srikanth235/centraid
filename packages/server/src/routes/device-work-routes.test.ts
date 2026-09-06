@@ -85,10 +85,10 @@ describe("device-work-routes", () => {
     plane.db.vault
       .prepare(
         `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('content-1', ?, 'blob:source', ?, 10, '2026-07-15T00:00:00.000Z')`
+         (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES ('content-1', 'blob:source', ?, 10, '2026-07-15T00:00:00.000Z')`
       )
-      .run(sourceMediaType, sourceSha);
+      .run(sourceSha);
     queueDeviceEnrichmentRequest(plane.db.vault, {
       requestId: `${capability}-job`,
       entityType: "core.content_item",

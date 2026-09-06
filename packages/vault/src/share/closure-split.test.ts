@@ -325,9 +325,12 @@ describe("closure split", () => {
     // and that difference is the column doing its job — the claim under test
     // is that the wire path projects the same CONTENT as the in-process one.
     for (const sql of [
-      "SELECT content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at FROM core_content_item",
+      "SELECT content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at FROM core_content_item",
+      // The reading of the bytes travels as a WIRE FIELD and lands as the
+      // audience's OWN representation (#996, ruling R20(b)).
+      "SELECT content_id, owner_type, owner_id, media_type, charset, interpretation FROM core_content_representation ORDER BY owner_type, owner_id",
       "SELECT derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at FROM core_content_derivative",
-      "SELECT asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, place_id, camera_device_id, width, height, duration_s, exif_json, source_asset_id, archived_at, deleted_at, purge_at FROM media_asset",
+      "SELECT asset_id, content_id, kind, title, captured_at, tz_offset_min, capture_group_id, place_id, camera_device_id, width, height, duration_s, exif_json, source_asset_id, archived_at, deleted_at, purge_at FROM media_asset",
       `SELECT shape_id, target_type, target_id, origin_item_id, origin_row_version
          FROM share_subscription_lineage ORDER BY target_type, target_id`,
       `SELECT target_type, target_id, reason, contribution_variant, requested_at

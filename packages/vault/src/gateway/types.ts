@@ -317,12 +317,12 @@ export interface HandlerBlobs {
     originalName: string | null;
     meta: Record<string, unknown>;
   } | null;
-  claimStaged: (
-    sha256: string,
-    options?: { title?: string }
-  ) => {
+  /** The title option is gone with `core_content_item.title` (#996, R20(b)):
+   *  a claim mints bytes, and what they are CALLED is the wrapper's. */
+  claimStaged: (sha256: string) => {
     contentId: string;
     mediaType: string;
+    originalName: string | null;
     byteSize: number;
     meta: Record<string, unknown>;
     deduped: 0 | 1;

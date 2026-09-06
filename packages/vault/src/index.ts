@@ -925,7 +925,8 @@ export {
   type PhotoEmbeddingHit,
   type PhotoRankOptions,
 } from "./enrich/photo-search.js";
-export { ENRICH_PUBLISHERS, tagNotation } from "./ingest/enrich-publishers.js";
+export { ENRICH_PUBLISHERS } from "./ingest/enrich-publishers.js";
+export { tagNotation } from "./ingest/concept-writes.js";
 export { VISION_SCHEME_URI, DOCTYPE_SCHEME_URI } from "./schema/enrich.js";
 
 export { parseIcs, type IcsEvent } from "./ingest/ics.js";

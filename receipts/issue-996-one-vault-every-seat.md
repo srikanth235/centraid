@@ -5,7 +5,7 @@ Umbrella receipt. One receipt for the whole umbrella; each wave appends its own 
 ## Checklist
 
 - [x] **Wave 0a — rulings and drift rows**: R1–R25 with their supersession pointers, the ten drift rows ONT-22…ONT-31 and the new _reader-side drift_ category, the two wrong sentences corrected, and open questions 1, 2, 6, 9, 10, 11, 12 and 13 settled
-- [ ] **Wave 0b — schema**: the revision occurrence with the wrapper's current-revision pointer and `recordRevision`'s edges deleted; the representation row beside byte-only `core_content_item`; `core_transaction.external_id` without the global `UNIQUE`; the typed occurrence key and one `tz` spelling; the primary-identifier partial index, interval CHECK and issuer column; concept-identity columns; the decoded-body-text side table; deletion roles declared beside references. No epoch bump here
+- [x] **Wave 0b — schema**: the revision occurrence with the wrapper's current-revision pointer and `recordRevision`'s edges deleted; the representation row beside byte-only `core_content_item`; `core_transaction.external_id` without the global `UNIQUE`; the typed occurrence key and one `tz` spelling; the primary-identifier partial index, interval CHECK and issuer column; concept-identity columns; the decoded-body-text side table; deletion roles declared beside references. No epoch bump here
 - [ ] **Wave 0c — domain operations**: one invariant boundary with Atlas inside it and non-empty pre/postconditions; content write as one operation; acyclic task hierarchy; `complete` / `reopen` shared by People, Tasks and automations with series identity and inherited `about`; the occurrence adapter every reader consumes; temporal validation at every entry point; `tagNotation` replaced by concept identity; `accountFor` and the publisher probe re-keyed; the declared read-set wired into the intent conflict checker; each operation's offline declaration
 - [ ] **Wave 0d — queries and contracts**: `(party, currency)` balances, group results in the group's currency, the explicit valuation type with its unavailable state, the Money output type, and settlements, obligations and exports on the same helpers
 - [ ] **Wave 0e — evidence and the cross-boundary tier**: machine tags and document classification linked to their derivation and input revision; the thirteen scenarios promoted to a package fixture with a command→query round-trip test per shared concept across two app surfaces; purge behaviour tested per deletion role
@@ -35,6 +35,8 @@ Wave 0a is docs-only, and what it lands is **Wave 0a — rulings and drift rows*
 - **`docs/vault-ontology.md`** — a new register category, **reader-side drift against a landed ruling**, defined in one paragraph where the register's standings are defined: a ruling the storage layer enforces while a reader ignores it, reads a column the writer does not write, or aggregates away what the column was added to carry — it looks fixed from the DDL and from the schema tests, and a storage ruling is not enforced until a reader test holds it.
 - **`docs/vault-ontology.md`** — ten drift rows, one per finding of the ontology audit, all **open** and each naming the sub-wave that closes it: **ONT-22** the second document-history graph (0b, reader-side), **ONT-23** Tally's party-only balance map (0d, reader-side), **ONT-24** the globally unique `external_id` and the display-name account match (0b/0c), **ONT-25** `original_start_local` versus `original_start` and `tz` versus `time_zone` (0b/0c, reader-side), **ONT-26** Atlas's empty semantic pre/postconditions (0c), **ONT-27** two completions of one `schedule_task` row and a series with no identity (0c), **ONT-28** `media_type` on the hash-deduped content row, which is also where the generated-caption-in-`title` finding is fixed (0b), **ONT-29** `tagNotation` collapsing `猫` / `犬` / `कुत्ता` / `बिल्ली` to one concept (0b/0c), **ONT-30** the non-partial primary-identifier index (0b), **ONT-31** `due_at: "banana"` and `rrule: "garbage"` accepted (0c). Each row carries the audit's evidence as `file:line` and points at the R row that rules it.
 - **`receipts/issue-996-one-vault-every-seat.md`** — this file, created as the umbrella receipt with the wave list 0a–0e and 1–10 plus the close pass as its checklist.
+
+Wave 0b lands across four commits, and what it lands is **Wave 0b — schema**: the revision occurrence with the wrapper's current-revision pointer and `recordRevision`'s edges deleted; the representation row beside byte-only `core_content_item`; `core_transaction.external_id` without the global `UNIQUE`; the typed occurrence key and one `tz` spelling; the primary-identifier partial index, interval CHECK and issuer column; concept-identity columns; the decoded-body-text side table; deletion roles declared beside references. No epoch bump here. Each clause, in the section that carries it: the revision occurrence and the decoded-body-text side table in `## Wave 0b — history and representation`; the representation row beside byte-only `core_content_item` in `## Wave 0b — the representation split`; the external-id, concept-identity and identifier-interval work in `## Wave 0b — schema`. Two clauses moved by ruling rather than being done here — the occurrence key has no schema work and goes to 0c, and deletion roles ride 0e — both recorded in `## Decisions — wave 0b (second half)`.
 
 ## Out of scope
 
@@ -409,3 +411,97 @@ bun run golden-vault:freeze -- --label issue-929   # 67 tables, 273 rows, schema
 - **Item 4, the occurrence key, has no schema work** (root ruling, accepted): the columns and the `tz` spelling are already right on `main`, `ontology-rules.test.ts:182,197` already asserts it, and ONT-25's 47 sites are all reader-side. It goes to 0c.
 - **An occurrence at CREATION, not only at edit.** R20(a) says a revision is an occurrence; a document's original body is a version, so `add_document` and `add_note` write the first one. Without it the oldest version would have had to be inferred from the absence of a parent, and "A→B→A→B is four occurrences" would have been three.
 - **The three new foreign keys are `ON DELETE SET NULL`, and the first one had to be.** `core_entity_revision.content_id` was written `RESTRICT` first and the purge sweep went red: a foreign key from history refused to let an owner reclaim their own document's bytes. An occurrence survives its content as the record that there WAS a version there.
+
+## Wave 0b — the representation split
+
+The last item of the schema wave, and the one that had been scoped three times without fitting (`## Decisions — wave 0b (second half)`). It lands whole here, under the same owner ruling: **pre-1.0, legacy carries no weight** — the baseline DDL is edited in place, the golden corpus is re-frozen in the same slice, no rungs, no compatibility views, no carry-forward. `core_content_item.media_type` and `core_content_item.title` do not survive as columns.
+
+### The shape
+
+| Table | What changed |
+| --- | --- |
+| `core_content_item` | **Bytes alone**: `media_type` and `title` are gone. `content_uri`, `sha256` (UNIQUE), `byte_size`, `language`, creator, origin device, the trash pair and the timestamps stay. |
+| `core_content_representation` | **New entity** (`core.content_representation`): `representation_id` PK, `content_id` FK (`ON DELETE CASCADE`), the polymorphic owner `(owner_type, owner_id)` as a composite FK into `core_entity` (`ON DELETE CASCADE`) with `UNIQUE (owner_type, owner_id)`, `media_type NOT NULL`, `charset`, `interpretation`, `created_at`/`updated_at`. Deliberately **not** in `CONTENT_REFERENCES`: it dies with its owner and never keeps bytes alive on its own. |
+| `media_asset` | Gains `title` — the owner's **authored** title, which a generated caption used to overwrite on the shared byte row. |
+
+An **entity**, not a projection, because a generated caption is a derived row **keyed to the representation** (OQ-9) and `knowledge_annotation.target_*` is a composite FK into `core_entity`: a caption cannot point at something the supertype does not know.
+
+### The one resolver
+
+`packages/vault/src/schema/representation.ts` is the single spelling: `mediaTypeSql(ownerTypeExpr, ownerIdExpr)` and `contentMediaTypeSql(contentIdExpr)` for SQL, `mediaTypeOfOwner` / `mediaTypeForContent` / `representationIdOf` for TypeScript, and `setRepresentation` as the one writer (idempotent on `(owner_type, owner_id)`). `contentMediaTypeSql` is the answer for a caller with **no owner in hand** — the read door, the enrichment backlog, custody routing — and it is deterministic (oldest representation by `created_at`, then id), not arbitrary.
+
+`UNCLAIMED_OWNER_TYPE = "core.content_item"` is the sanctioned owner for bytes no wrapper claims yet. It is not ONT-28 returning: a document, note or asset that arrives later gets its **own** row and reads the bytes its own way.
+
+### FTS
+
+`vault_content_text` itself is untouched (W1 retires it for `core_content_text`). What changed is where its first argument comes from:
+
+- `valueExpr`'s `content` kind now decodes with `mediaTypeSql('<spec.entity>', new."<idColumn>")` — so `knowledge.note` and `social.message` decode by **their own** reading, and `schema/blob.ts`'s `DOCUMENT_BODY` does the same for `core.document`.
+- The `core.content_item` spec's `title` is a new `expr` column kind (`OWNED_TITLE_SQL`) over the **owning asset's** authored title, with `foldsIn: ["media.asset"]` so a grant must consent to that entity too. `media_asset`'s own AI/AU/AD triggers keep the content item's index in step with a rename.
+- The dead `self-content` kind — declared, used by no spec, and unimplementable once bytes lost their media type — is deleted.
+- **Ordering fix, found red**: a representation is written **after** its wrapper (the owner row must exist first), so the wrapper's `_ai` had already run with nothing to decode by, and a fresh note's body was unsearchable. `ftsRefreshStatement` (generated from the same spec) plus two triggers on `core_content_representation` put the index back in step the moment the reading lands.
+
+### Scenarios
+
+`packages/vault/src/schema/representation-split.test.ts` — four, all through real commands and read back the way a screen reads them:
+
+| Scenario | Claim held |
+| --- | --- |
+| One byte row, two documents | `add_document` twice over identical bytes as `text/html` then `text/plain`: **one** `core_content_item` row, `deduped: 1`, and two readings — `text/html` and `text/plain`. `core_content_item` has no `media_type` column at all. |
+| A note and a document over one sha | The note keeps `text/html`, the document `text/plain`, over the same `content_id`. This is `contentItemFor`'s old bug: the first writer's format won for everyone. |
+| Caption → derived row → promote | A staged `knowledge.annotation` caption lands on the **representation**, the owner's typed `media_asset.title` survives it, a re-caption replaces the derived row and still does not touch the title, and `media.promote_caption` (OQ-9's one tap) copies the caption into the authored title while the derived row stays. |
+| Mint → read door | `resolveServableBlob` serves `image/png` from the representation and the wrapper's title; re-typing the asset's reading changes what the door serves and leaves the bytes alone. |
+
+### Captions, and "derived rows never project"
+
+`ingest/enrich-publishers.ts`'s annotation publisher **redirects** a caption aimed at an asset, document, note or attachment onto that owner's representation (`captionTarget`), so the one-caption-per-(author, target) replace rule still holds and `knowledge.annotation`'s own FTS index still finds it. `media.promote_caption` is the only path from a caption to an authored title, and it is an owner action with the owner's name on it.
+
+The filing publisher's rename proposal now renames a **wrapper** — `core_document.title` where the content has a document, `media_asset.title` where it has an asset — because bytes have no title for it to reach past the wrapper into. A **remote content stub** (a connector listing a Drive file) now mints the `core.document` wrapper it always described, with its own representation; it used to be a bare content item carrying the source's title and media type on the byte row, which is exactly ONT-28's shape.
+
+### Site accounting
+
+The 53 non-test `media_type` sites, one of three ways:
+
+- **Moved to the resolver — 23 files** (`schema/representation.ts` is the 24th, the resolver itself): `blob/{mint,promote,preflight,preview,read,store-routing}.ts`, `commands/{attachments,documents,knowledge,media,outbox,social,tally}.ts`, `enrich/leases.ts`, `gateway/{cards,portable-adapters}.ts`, `ingest/{enrich-publishers,publishers}.ts`, `schema/{blob,fts}.ts`, `share/{placement-fixture,project-closure,read-closure}.ts`. `gateway/assistant-context.ts` is prose and says the new shape.
+- **Wire boundary — 17 files** keep a `media_type` FIELD, populated at the query boundary through one shared reader: `packages/blueprints/apps/_shared/representation-reads.ts` (`readRepresentations` → `byOwner` / `byContent`), used by `docs/queries/{drive,history,search}.ts`, `photos/queries/{library,search,duplicates}.ts`, `notes/queries/{library,search,history}.ts`, `agenda/queries/{upcoming,search}.ts`, `tasks/queries/{board,search}.ts`, `tally/queries/dashboard.ts`, `locker/queries/item-sidecars.ts`; and on the seat `apps/mobile/src/apps/docs/{docs-projection,docs-versions}.ts` with `useDocs.ts` / `useVersionChain.ts` reading the new replica entity.
+- **Listed, with a reason — 5 surfaces** that were never `core_content_item.media_type` and are untouched: `blob_staging.media_type` (what the upload said on arrival), `core_content_derivative.media_type` (the variant's own type), `blob_transfer.media_type` (transfer state), the ACP wire's `mimeType` (`server/src/acp/multimodal.ts`, `docs/harnesses.md` — ACP's field name, not ours), and the mobile upload outbox's own `media_type` column (`apps/mobile/src/lib/upload/store.ts`, a seat-local queue, not the vault).
+
+Downstream consequences worth naming: the closure's `ContentItemRow` keeps `media_type` as a **wire field** (read at the boundary, written back as the audience's own representation) and loses `title`, which moves to `MediaAssetRow`; `subscription-delta.ts` excludes `media_type` from the content item's field comparison because there is no column to compare against; and eight replica shape ids moved because seven app manifests gained a `core.content_representation` read scope (`replica-shape-parity.test.ts` re-frozen).
+
+### Files
+
+**Vault schema** — `schema/core.ts` (byte-only content item + `CONTENT_REPRESENTATION_DDL`), `schema/representation.ts` (new), `schema/domains-social-knowledge-media.ts` (`media_asset.title`), `schema/entity-catalog.ts`, `schema/fts.ts`, `schema/blob.ts`, `schema/representation-split.test.ts` (new).
+**Vault ingest, split out of `enrich-publishers.ts`** — `ingest/caption-target.ts` (where a generated caption hangs), `ingest/content-item-publisher.ts` (filing, renames and the remote listing), `ingest/concept-writes.ts` (the shared find-or-mint, extracted to break the import cycle the split would otherwise have made). All three are moves plus the change this commit makes, not new behaviour; `index.ts` re-points `tagNotation` at its new home.
+**Vault writers/readers** — `blob/{mint,promote,preflight,preview,read,store-routing}.ts`, `commands/{attachments,documents,knowledge,media,outbox,people,social,tally}.ts`, `enrich/leases.ts`, `gateway/{assistant-context,cards,execution,portable-adapters,types}.ts`, `ingest/{enrich-publishers,publishers}.ts`, `share/{closure,container-routing,placement-fixture,project-closure,read-closure,subscription-delta}.ts`.
+**Blueprints** — `apps/_shared/representation-reads.ts` (new), the sixteen query handlers above, `apps/locker/{types.ts,components/ItemSidecars.tsx}` (an attachment row is named by its role, since bytes have no title), seven `app.json` manifests (read scope + the `writes` arrays of the eleven actions that mint a representation), `src/app-entity-tripwire.ts`.
+**Mobile** — `apps/docs/{docs-projection,docs-versions,useDocs,useVersionChain}.ts`.
+**Server** — `src/lifecycle/automation-anchor-scopes.ts` (an anchor decodes by its source row's reading).
+**Docs and evidence** — `docs/vault-ontology.md` (ONT-28 **closed**), `scripts/docs-site/src/content/ontology-body.html`, `scripts/golden-vault/build.mjs`, and the re-frozen `packages/vault/tests/golden/issue-929/`. `packages/blueprints/manifest.json` carries one line that is not this commit's work: `e03345d6c` deleted `apps/notes/version-chain.test.ts` without re-running `build:manifest`, and the generated file still named it. Regenerated here rather than left stale, and named rather than folded in silently.
+
+### Gates
+
+```sh
+bun run --filter @centraid/vault test        # 195 files, 1583 passed, 2 skipped, 1 pre-existing FAIL
+bun run --filter @centraid/blueprints test   # 212 files, 7064 passed, 2 expected fail, 0 FAIL
+npx vitest run --root apps/mobile src/apps/docs src/apps/notes src/apps/photos  # 74 files, 761 passed
+bun run --filter @centraid/server test       # 387 files, 3452 passed, 3 pre-existing FAIL (sandbox/root and a missing sqlite3 binary)
+bun run --filter @centraid/vault typecheck && bun run --filter @centraid/blueprints typecheck
+bun run --filter @centraid/core typecheck && bun run --filter @centraid/server typecheck
+bun run --filter @centraid/client typecheck && bun run --filter @centraid/mobile typecheck   # all 0
+bun run lint && bun run format:check         # clean
+bash .governance/run.sh                      # 22/22
+bun run --filter @centraid/vault build && bun run golden-vault:freeze -- --label issue-929   # 67 tables, 289 rows, schema v5
+```
+
+The one red vault test — `party-identifier-interval.test.ts > an end-dated primary does not block a new primary for the same scheme` — is **pre-existing**: it fails identically on this tree with every change stashed. It is `b22cc7188`'s, not this commit's, and is left for the lane rather than fixed silently here.
+
+## Decisions — wave 0b (the representation split)
+
+- **A representation is an ENTITY, and it had to be.** The obvious cheap shape is a projection keyed by `(owner_type, owner_id)`, with no `core_entity` membership to maintain. It cannot work: OQ-9 says a generated caption is a derived row **keyed to the representation**, and `knowledge_annotation` targets `core_entity(entity_type, entity_id)`. A caption cannot point at a row the supertype does not know, so the representation carries its own id and its own membership.
+- **A representation is not a renter of the bytes.** It is deliberately absent from `CONTENT_REFERENCES`. Adding it would have made every reading keep a content item alive past its owner's delete — a lifetime the owned-child role (R22) already says belongs to the owner.
+- **Where an unwrapped byte row's reading lives, and why that is not ONT-28 returning.** `UNCLAIMED_OWNER_TYPE` lets a content row own its own reading until a wrapper arrives (a staged blob, a connector stub). The defect ONT-28 named was that a LATER owner inherited the FIRST import's answer; here a later document, note or asset gets its own row. The content-keyed resolver is used only where no owner is in hand, and it is deterministic rather than "whichever row SQLite returns".
+- **A remote connector listing now mints a document.** It had no wrapper, so under R20(b) it had nowhere to put the source's title — which is the same sentence as "it was storing an interpretation on bytes". Making it the `core.document` it already described is the smaller change, not the larger one: the sync map still keys on the content id, and `ENRICH_CLASS_OF` is untouched.
+- **A filing proposal renames a wrapper; it is still owner-reviewed.** `core.content_item` filing stays in the `filing` enrich class, which defaults to staged-for-review and only auto-publishes under standing consent (`sync.set_connection_trust`). The change is the TARGET, not the trust: `core_document.title` or `media_asset.title`, never a title on bytes.
+- **Photos search over a GENERATED caption now goes through `knowledge.annotation`, not `fts_core_content_item`.** The content item's index folds in the owning asset's AUTHORED title and its extracted text/transcript; a machine's caption is indexed under its own entity, which is where a derived row belongs. Named here rather than left as a quiet behaviour change; the Photos search handler is untouched and a caption is still findable.
+- **An attachment has no title, and `core.attach` lost its `title` input.** The option wrote `core_content_item.title`. An attachment is bytes pinned to a row — what a file is CALLED belongs to a wrapper, and an attachment is not one. The archive's filename now lands on `media_asset.title` for an imported photo (where it always did, via `promoteStagedBlob`'s `original_name` fallback) and nowhere else.
+- **`promoteStagedBlob` returns the staging band's reading, never the deduped row's.** Both it and `mintContentFromDataUri` used to read the media type back off the row they had just deduped against — which IS the ONT-28 defect, in the two functions every claiming command calls. They now answer with what THIS arrival declared, and the claiming command writes it onto its own representation.

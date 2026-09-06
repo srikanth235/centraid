@@ -27,6 +27,11 @@ import {
 } from "../blob/mint.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import {
+  mediaTypeOfOwner,
+  mediaTypeSql,
+  setRepresentation,
+} from "../schema/representation.js";
 import { writeExtractedText } from "./enrich.js";
 import { setStarred, starredExistsSql } from "./flags.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
@@ -242,8 +247,8 @@ function addDocument(ctx: HandlerCtx): Record<string, unknown> {
   if (input.data_uri !== undefined)
     assertInlineDataUriWithinBudget(input.data_uri);
   const minted = input.staged_sha
-    ? ctx.blobs.claimStaged(input.staged_sha, { title: input.title })
-    : mintContentFromDataUri(ctx, input.data_uri!, { title: input.title });
+    ? ctx.blobs.claimStaged(input.staged_sha)
+    : mintContentFromDataUri(ctx, input.data_uri!);
   const contentId = minted.contentId;
   ctx.wrote("core.content_item", contentId);
   const documentId = mintedId(ctx, "document_id");
@@ -254,6 +259,16 @@ function addDocument(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(documentId, input.title, contentId, ctx.now, ctx.now);
   ctx.wrote("core.document", documentId);
+  // THIS DOCUMENT'S READING OF THE BYTES (#996, R20(b)). The same sha filed
+  // twice as two documents now carries two readings, so a second filing can
+  // no longer inherit the first import's media type.
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId,
+    ownerType: DOCUMENT_TARGET_TYPE,
+    ownerId: documentId,
+    mediaType: minted.mediaType,
+    interpretation: "body",
+  });
   // The FIRST occurrence (#996, R20(a)). A document's original body is a
   // version like any other, so the chain starts here rather than being
   // inferred later from the absence of a parent edge.
@@ -628,8 +643,8 @@ const EDIT_DOCUMENT: CommandDefinition = {
       // a scanned PDF or image goes through replace_document_content.
       name: "current_content_is_text",
       sql: `SELECT count(*) AS n FROM core_document d
-              JOIN core_content_item c ON c.content_id = d.current_content_id
-             WHERE d.document_id = :document_id AND c.media_type LIKE 'text/%'`,
+             WHERE d.document_id = :document_id
+               AND ${mediaTypeSql("'core.document'", "d.document_id")} LIKE 'text/%'`,
       column: "n",
       op: "eq",
       value: 1,
@@ -642,7 +657,7 @@ const EDIT_DOCUMENT: CommandDefinition = {
               EXISTS(SELECT 1 FROM core_document d
                        JOIN core_content_item c ON c.content_id = d.current_content_id
                       WHERE d.document_id = :document_id
-                        AND vault_content_text(c.media_type, c.content_uri) = :body_text)
+                        AND vault_content_text(${mediaTypeSql("'core.document'", "d.document_id")}, c.content_uri) = :body_text)
               AND (SELECT CASE WHEN :title IS NULL THEN 1
                      ELSE EXISTS(SELECT 1 FROM core_document WHERE document_id = :document_id AND title = :title) END)
             ) AS n`,
@@ -684,20 +699,22 @@ function editDocument(ctx: HandlerCtx): Record<string, unknown> {
   };
   const doc = ctx.db
     .prepare(
-      `SELECT d.current_content_id AS content_id, c.media_type AS media_type
-         FROM core_document d JOIN core_content_item c ON c.content_id = d.current_content_id
-        WHERE d.document_id = ?`
+      `SELECT d.current_content_id AS content_id,
+              ${mediaTypeSql("'core.document'", "d.document_id")} AS media_type
+         FROM core_document d WHERE d.document_id = ?`
     )
     .get(input.document_id) as
-    | { content_id: string; media_type: string }
+    | { content_id: string; media_type: string | null }
     | undefined;
   if (!doc) throw new Error("document vanished between check and execute");
   // Same mint path add_document takes (#296): text stays inline, the
   // FTS triggers decode it in-transaction. The media type carries forward —
-  // an edit changes the words, never the format.
-  const dataUri = `data:${doc.media_type};charset=utf-8,${encodeURIComponent(input.body_text)}`;
+  // an edit changes the words, never the format — and it is read off THIS
+  // document's representation, not off bytes other documents also use (#996).
+  const mediaType = doc.media_type ?? "text/plain";
+  const dataUri = `data:${mediaType};charset=utf-8,${encodeURIComponent(input.body_text)}`;
   assertInlineDataUriWithinBudget(dataUri);
-  const minted = mintContentFromDataUri(ctx, dataUri, {});
+  const minted = mintContentFromDataUri(ctx, dataUri);
   const sets: string[] = ["updated_at = ?"];
   const values: string[] = [ctx.now];
   if (minted.contentId !== doc.content_id) {
@@ -712,6 +729,13 @@ function editDocument(ctx: HandlerCtx): Record<string, unknown> {
         previousContentId: doc.content_id,
       })
     );
+    setRepresentation(ctx.db, ctx.newId, ctx.now, {
+      contentId: minted.contentId,
+      ownerType: DOCUMENT_TARGET_TYPE,
+      ownerId: input.document_id,
+      mediaType,
+      interpretation: "body",
+    });
   }
   if (input.title !== undefined) {
     sets.push("title = ?");
@@ -831,10 +855,19 @@ function replaceDocumentContent(ctx: HandlerCtx): Record<string, unknown> {
   if (input.data_uri !== undefined)
     assertInlineDataUriWithinBudget(input.data_uri);
   const minted = input.staged_sha
-    ? ctx.blobs.claimStaged(input.staged_sha, {})
-    : mintContentFromDataUri(ctx, input.data_uri!, {});
+    ? ctx.blobs.claimStaged(input.staged_sha)
+    : mintContentFromDataUri(ctx, input.data_uri!);
   const contentId = minted.contentId;
   ctx.wrote("core.content_item", contentId);
+  // Replacing the bytes re-states what THIS document reads them as (#996):
+  // a scan replaced by a PDF is a new reading, not a new byte row's property.
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId,
+    ownerType: DOCUMENT_TARGET_TYPE,
+    ownerId: input.document_id,
+    mediaType: minted.mediaType,
+    interpretation: "body",
+  });
   const sets: string[] = ["updated_at = ?"];
   const values: string[] = [ctx.now];
   if (contentId !== doc.current_content_id) {
@@ -986,6 +1019,19 @@ function restoreDocumentVersion(ctx: HandlerCtx): Record<string, unknown> {
       "UPDATE core_document SET current_content_id = ?, current_revision_id = ?, updated_at = ? WHERE document_id = ?"
     )
     .run(input.content_id, revisionId, ctx.now, input.document_id);
+  // The representation follows the head (#996, R20(b)): a restore changes
+  // WHICH bytes this document reads, never HOW it reads them.
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId: input.content_id,
+    ownerType: DOCUMENT_TARGET_TYPE,
+    ownerId: input.document_id,
+    mediaType:
+      mediaTypeOfOwner(ctx.db, {
+        ownerType: DOCUMENT_TARGET_TYPE,
+        ownerId: input.document_id,
+      }) ?? "text/plain",
+    interpretation: "body",
+  });
   ctx.wrote("core.document", input.document_id);
   ctx.cite({
     claim: `document ${input.document_id} restored to prior version ${input.content_id}`,

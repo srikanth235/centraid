@@ -151,8 +151,8 @@ describe("duties", () => {
     const past = "2020-01-01T00:00:00Z";
     db.vault
       .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
-       VALUES ('body-1', 'text/plain', 'data:text/plain,x', 'sha-note-body', 1, ?, ?, ?)`
+        `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
+       VALUES ('body-1', 'data:text/plain,x', 'sha-note-body', 1, ?, ?, ?)`
       )
       .run(past, past, past);
     db.vault
@@ -164,8 +164,8 @@ describe("duties", () => {
     // A trashed note still inside its window survives the sweep.
     db.vault
       .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('body-2', 'text/plain', 'data:text/plain,y', 'sha-note-body-2', 1, ?)`
+        `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES ('body-2', 'data:text/plain,y', 'sha-note-body-2', 1, ?)`
       )
       .run(now);
     db.vault
@@ -223,8 +223,8 @@ describe("duties", () => {
       .run(ravi, past, past);
     db.vault
       .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES ('doc-body', 'text/plain', 'data:text/plain,z', 'sha-doc-body', 1, ?)`
+        `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES ('doc-body', 'data:text/plain,z', 'sha-doc-body', 1, ?)`
       )
       .run(past);
     db.vault
@@ -311,8 +311,8 @@ describe("duties", () => {
       .run(ravi, past, past);
     db.vault
       .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES ('until-body', 'text/plain', 'data:text/plain,z', 'sha-until-body', 1, ?)`
+        `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES ('until-body', 'data:text/plain,z', 'sha-until-body', 1, ?)`
       )
       .run(past);
     db.vault
@@ -371,8 +371,8 @@ describe("duties", () => {
     const past = "2020-01-01T00:00:00Z";
     db.vault
       .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('doc-body-1', 'text/plain', 'data:text/plain,x', 'sha-doc-body', 1, ?)`
+        `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES ('doc-body-1', 'data:text/plain,x', 'sha-doc-body', 1, ?)`
       )
       .run(past);
     db.vault
@@ -384,8 +384,8 @@ describe("duties", () => {
     // A trashed document still inside its window survives the sweep.
     db.vault
       .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('doc-body-2', 'text/plain', 'data:text/plain,y', 'sha-doc-body-2', 1, ?)`
+        `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES ('doc-body-2', 'data:text/plain,y', 'sha-doc-body-2', 1, ?)`
       )
       .run(now);
     db.vault
@@ -467,8 +467,8 @@ describe("duties", () => {
     const attachBytes = uuidv7();
     db.vault
       .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES (?, 'text/plain', 'data:text/plain,att', ?, 1, ?)`
+        `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES (?, 'data:text/plain,att', ?, 1, ?)`
       )
       .run(attachBytes, `sha-att-${attachBytes}`, now);
     const attachmentId = uuidv7();
@@ -524,8 +524,8 @@ describe("duties", () => {
     const past = "2020-01-01T00:00:00Z";
     db.vault
       .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
-       VALUES ('poly-c', 'text/plain', 'data:text/plain,x', 'sha-poly-c', 1, ?, ?, ?)`
+        `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
+       VALUES ('poly-c', 'data:text/plain,x', 'sha-poly-c', 1, ?, ?, ?)`
       )
       .run(past, past, past);
     const deps = seedPolyDependents("core.content_item", "poly-c");
@@ -549,8 +549,8 @@ describe("duties", () => {
     const liveOriginal = db.blobs.ingestSync(Buffer.from("purge-live-og"));
     const item = db.vault.prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
-       VALUES (?, 'image/jpeg', ?, ?, ?, ?, ?, ?)`
+         (content_id, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
     item.run(
       "purge-shared-a",
@@ -620,8 +620,8 @@ describe("duties", () => {
     // Asset meaning and byte custody have independent lifecycles.
     db.vault
       .prepare(
-        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('poly-asset-body', 'image/jpeg', 'data:image/jpeg,x', 'sha-poly-asset', 1, ?)`
+        `INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+       VALUES ('poly-asset-body', 'data:image/jpeg,x', 'sha-poly-asset', 1, ?)`
       )
       .run(now);
     db.vault
@@ -650,8 +650,8 @@ describe("duties", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
-         VALUES (?, 'image/jpeg', ?, ?, 1, ?, ?, ?)`
+           (content_id, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
+         VALUES (?, ?, ?, 1, ?, ?, ?)`
       )
       .run(
         id,

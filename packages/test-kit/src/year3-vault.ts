@@ -43,10 +43,16 @@ export function seedYear3Vault(
     "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES (?, 'person', ?, ?, ?)"
   );
   const content = target.vault.prepare(
-    "INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, title, created_at) VALUES (?, 'image/jpeg', ?, ?, 4096, ?, ?)"
+    "INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at) VALUES (?, ?, ?, 4096, ?)"
   );
   const photo = target.vault.prepare(
-    "INSERT INTO media_asset (asset_id, content_id, kind, captured_at) VALUES (?, ?, 'photo', ?)"
+    "INSERT INTO media_asset (asset_id, content_id, kind, title, captured_at) VALUES (?, ?, 'photo', ?, ?)"
+  );
+  // The reading of the bytes, on the owner (#996, ruling R20(b)).
+  const representation = target.vault.prepare(
+    `INSERT INTO core_content_representation
+       (representation_id, content_id, owner_type, owner_id, media_type, charset, interpretation, created_at)
+     VALUES (?, ?, 'media.asset', ?, 'image/jpeg', NULL, 'original', ?)`
   );
   // The star is a flags-scheme tag on the ASSET (#916) — `media_asset.favorite`
   // is gone. One in fifty photos carries it, so the fixture still exercises the
@@ -90,11 +96,16 @@ export function seedYear3Vault(
       contentId,
       `file:///year3/photo-${index}.jpg`,
       digest(contentId),
-      `Year 3 photo ${index}`,
       timestamp
     );
     const assetId = id("year3-photo", index);
-    photo.run(assetId, contentId, timestamp);
+    photo.run(assetId, contentId, `Year 3 photo ${index}`, timestamp);
+    representation.run(
+      id("year3-representation", index),
+      contentId,
+      assetId,
+      timestamp
+    );
     if (index % 50 === 0)
       star.run(id("year3-star", index), starredConceptId, assetId, timestamp);
   }

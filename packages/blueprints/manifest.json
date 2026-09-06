@@ -552,7 +552,6 @@
         "shelves.ts",
         "states.test.tsx",
         "types.ts",
-        "version-chain.test.ts",
         "version-chain.ts",
         "view-copy.test.ts",
         "view-copy.ts"

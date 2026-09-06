@@ -99,20 +99,42 @@ describe("search", () => {
     });
   });
 
-  describe("index-backed matching", () => {
-    test("matches photo captions on content items and excludes soft-deleted bytes", () => {
-      const insert = db.vault.prepare(
+  /** A photo and the title its owner gave it (#996, R20(b)): the asset holds
+   *  the authored title, and the content item's index reads it from there. */
+  function seedTitledPhoto(contentId: string, title: string): void {
+    db.vault
+      .prepare(
         `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, created_at)
-       VALUES (?, 'image/jpeg', ?, ?, 4, ?, ?)`
+           (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES (?, ?, ?, 4, '2026-07-15T00:00:00.000Z')`
+      )
+      .run(
+        contentId,
+        `data:image/jpeg;base64,${Buffer.from(contentId).toString("base64")}`,
+        `hash-${contentId}`
       );
-      insert.run(
-        "photo-caption",
-        "data:image/jpeg;base64,dGVzdA==",
-        "hash-photo-caption",
-        "Moonlit campsite in Ladakh",
-        "2026-07-15T00:00:00.000Z"
-      );
+    db.vault
+      .prepare(
+        `INSERT INTO media_asset (asset_id, content_id, kind, title, created_at, updated_at)
+         VALUES (?, ?, 'photo', ?, '2026-07-15T00:00:00.000Z', '2026-07-15T00:00:00.000Z')`
+      )
+      .run(`asset-${contentId}`, contentId, title);
+    db.vault
+      .prepare(
+        `INSERT INTO core_content_representation
+           (representation_id, content_id, owner_type, owner_id, media_type,
+            charset, interpretation, created_at)
+         VALUES (?, ?, 'media.asset', ?, 'image/jpeg', NULL, 'original', '2026-07-15T00:00:00.000Z')`
+      )
+      .run(`rep-${contentId}`, contentId, `asset-${contentId}`);
+  }
+
+  describe("index-backed matching", () => {
+    test("matches photo titles on content items and excludes soft-deleted bytes", () => {
+      // The indexed title is the OWNING ASSET's authored one since #996
+      // (R20(b)) — bytes have none — so the fixture is the pair the product
+      // writes.
+      seedTitledPhoto("photo-caption", "moon camp at dusk");
       expect(
         gw
           .search(owner, {
@@ -135,24 +157,9 @@ describe("search", () => {
     });
 
     test("breaks equal-rank search ties by the canonical primary key", () => {
-      const insert = db.vault.prepare(
-        `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, created_at)
-       VALUES (?, 'image/jpeg', ?, ?, 4, 'Same caption', ?)`
-      );
       // Reverse insertion order catches an implicit-order plan at LIMIT 1.
-      insert.run(
-        "photo-b",
-        "data:image/jpeg;base64,Yg==",
-        "hash-photo-b",
-        "2026-07-15T00:00:00.000Z"
-      );
-      insert.run(
-        "photo-a",
-        "data:image/jpeg;base64,YQ==",
-        "hash-photo-a",
-        "2026-07-15T00:00:01.000Z"
-      );
+      seedTitledPhoto("photo-b", "same caption");
+      seedTitledPhoto("photo-a", "same caption");
       expect(
         gw
           .search(owner, {
@@ -415,8 +422,11 @@ describe("search", () => {
       db.vault.exec(
         `INSERT INTO fts_knowledge_note(rowid, note_id, title, body)
        SELECT b.rowid, b."note_id", b."title",
-              (SELECT vault_content_text(media_type, content_uri) FROM core_content_item
-                WHERE content_id = b."body_content_id")
+              (SELECT vault_content_text(
+                        (SELECT r.media_type FROM core_content_representation r
+                          WHERE r.owner_type = 'knowledge.note' AND r.owner_id = b."note_id"),
+                        content_uri)
+                 FROM core_content_item WHERE content_id = b."body_content_id")
          FROM knowledge_note b`
       );
       expect(

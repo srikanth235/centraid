@@ -41,7 +41,16 @@ const FIELD_TABLES: ReadonlyMap<string, FieldTable> = new Map([
     {
       physical: "core_content_item",
       primaryKey: "content_id",
-      excluded: ["content_id", "sha256", "byte_size", "created_at"],
+      // `media_type` is a WIRE FIELD, not a column (#996, ruling R20(b)): it
+      // rides the closure so the audience can state its OWN representation,
+      // and there is nothing on this table to compare it against.
+      excluded: [
+        "content_id",
+        "media_type",
+        "sha256",
+        "byte_size",
+        "created_at",
+      ],
     },
   ],
   [

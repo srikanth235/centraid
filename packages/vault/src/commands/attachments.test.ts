@@ -52,7 +52,6 @@ describe("attachments", () => {
       subject_type: "schedule.task",
       subject_id: taskId,
       data_uri: PNG,
-      title: "preview.png",
     });
     expect(out.status).toBe("executed");
     const output = (
@@ -77,18 +76,22 @@ describe("attachments", () => {
       role: "photo", // derived from image/* media type
       is_primary: 1,
     });
+    // The reading of the bytes is the ATTACHMENT's (#996, ruling R20(b)), and
+    // the bytes themselves carry no title at all.
     const content = db.vault
       .prepare(
-        "SELECT media_type, byte_size, title, content_uri FROM core_content_item WHERE content_id = ?"
+        `SELECT r.media_type, c.byte_size, c.content_uri
+           FROM core_content_item c
+           JOIN core_content_representation r
+             ON r.owner_type = 'core.attachment' AND r.owner_id = ?
+          WHERE c.content_id = ?`
       )
-      .get(output.content_id) as {
+      .get(output.attachment_id, output.content_id) as {
       media_type: string;
       byte_size: number;
-      title: string;
       content_uri: string;
     };
     expect(content.media_type).toBe("image/png");
-    expect(content.title).toBe("preview.png");
     expect(content.byte_size).toBeGreaterThan(0);
     // Binary bytes spill to the CAS (#296): the row keeps the address,
     // custody keeps the bytes, and the sha is of the RAW bytes.

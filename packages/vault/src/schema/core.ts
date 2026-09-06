@@ -222,13 +222,20 @@ CREATE INDEX IF NOT EXISTS idx_transaction_category_concept ON core_transaction(
 CREATE INDEX IF NOT EXISTS core_transaction_external_idx
   ON core_transaction(external_id) WHERE external_id IS NOT NULL;
 
+-- BYTES, AND NOTHING THAT INTERPRETS THEM (#996, ruling R20(b), drift ONT-28).
+-- \`media_type\` and \`title\` used to live here, on the row the sha256 UNIQUE
+-- dedupes — so the first import of a byte string fixed its media type and its
+-- caption for every later owner of those bytes, and the same HTML filed twice
+-- was text/html forever. An interpretation belongs to whoever is doing the
+-- interpreting: it lives on \`core_content_representation\` below, one row per
+-- owner. The authored title lives on the wrapper (\`core_document.title\`,
+-- \`knowledge_note.title\`, \`media_asset.title\`) and a GENERATED caption is a
+-- derived row (\`knowledge.annotation\` on the representation, OQ-9).
 CREATE TABLE core_content_item (
   content_id       TEXT PRIMARY KEY,
-  media_type       TEXT NOT NULL,
   content_uri      TEXT NOT NULL,
   sha256           TEXT NOT NULL UNIQUE,
   byte_size        INTEGER NOT NULL CHECK (byte_size >= 0),
-  title            TEXT,
   language         TEXT,
   creator_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
   origin_device_id TEXT REFERENCES access_device(device_id),
@@ -242,6 +249,53 @@ CREATE INDEX IF NOT EXISTS idx_content_item_creator_party ON core_content_item(c
 CREATE INDEX IF NOT EXISTS idx_content_item_origin_device ON core_content_item(origin_device_id);
 CREATE INDEX IF NOT EXISTS core_content_item_purge_idx
   ON core_content_item(purge_at) WHERE purge_at IS NOT NULL;
+
+-- THE INTERPRETATION, OWNED (#996, ruling R20(b)). One row per (owner, bytes):
+-- the document, note, asset, attachment or message that is USING this content
+-- says what it takes the bytes to BE. Two owners of one sha may disagree —
+-- the same bytes are text/html to one document and text/plain to another —
+-- and byte dedupe is untouched, because the disagreement is no longer stored
+-- on the byte row.
+--
+-- \`UNIQUE (owner_type, owner_id)\`: an owner has exactly one reading of its
+-- content. Re-pointing an owner at different bytes UPDATEs this row.
+--
+-- It is an ENTITY, not a projection, because a generated caption is a derived
+-- row KEYED TO THE REPRESENTATION (OQ-9) and \`knowledge_annotation\` targets
+-- \`core_entity(entity_type, entity_id)\` — a caption cannot point at something
+-- that is not one.
+--
+-- Deletion: the owned-child role (R22). The representation has no life apart
+-- from the owner that holds it, so the owner's delete takes it; and it is not
+-- a RENTER of the bytes (it is deliberately absent from CONTENT_REFERENCES),
+-- so it never keeps a content item alive on its own.
+CREATE TABLE core_content_representation (
+  representation_id TEXT PRIMARY KEY,
+  content_id        TEXT NOT NULL
+    REFERENCES core_content_item(content_id) ON DELETE CASCADE,
+  -- The owner, polymorphic through the supertype: core.document,
+  -- knowledge.note, media.asset, core.attachment, social.message — or
+  -- core.content_item itself for bytes a connector staged with no wrapper yet.
+  owner_type        TEXT NOT NULL,
+  owner_id          TEXT NOT NULL,
+  -- RFC 6838. NOT NULL: a representation exists BECAUSE something is being
+  -- read as something, and "no interpretation" is the absence of the row.
+  media_type        TEXT NOT NULL,
+  -- The text encoding this owner reads the bytes in (RFC 2978), when the
+  -- media type does not already carry it.
+  charset           TEXT,
+  -- What the owner does with them beyond the type: 'body', 'original',
+  -- 'attachment', 'avatar', … NULL where the owner has only one use.
+  interpretation    TEXT,
+  created_at        TEXT NOT NULL,
+  updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  UNIQUE (owner_type, owner_id),
+  FOREIGN KEY (representation_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
+  FOREIGN KEY (owner_type, owner_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_content_representation_content
+  ON core_content_representation(content_id);
 
 -- A document's identity is separate from its bytes (issue #352): the
 -- wrapper is the row apps and links address; current_content_id repoints on
@@ -445,6 +499,7 @@ ${touchUpdatedAt("core_place", "place_id")}
 ${touchUpdatedAt("core_event", "event_id")}
 ${touchUpdatedAt("core_transaction", "txn_id")}
 ${touchUpdatedAt("core_content_item", "content_id")}
+${touchUpdatedAt("core_content_representation", "representation_id")}
 ${touchUpdatedAt("core_document", "document_id")}
 ${touchUpdatedAt("core_link", "link_id")}
 ${touchUpdatedAt("core_concept", "concept_id")}

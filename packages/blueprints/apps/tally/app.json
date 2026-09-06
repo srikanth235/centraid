@@ -26,6 +26,11 @@
       },
       {
         "schema": "core",
+        "table": "content_representation",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "attachment",
         "verbs": "read"
       },
@@ -382,6 +387,7 @@
         "core.attachment",
         "core.content_derivative",
         "core.content_item",
+        "core.content_representation",
         "tally.expense",
         "tally.expense_line_allocation",
         "tally.expense_line_item",

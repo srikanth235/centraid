@@ -85,7 +85,7 @@ describe("grant/fulfillment", () => {
     // state: the next pass re-projects and the audience replica follows.
     const later = "2026-08-19T10:00:00.000Z";
     home.origin.vault
-      .prepare("UPDATE core_content_item SET title = ? WHERE content_id = ?")
+      .prepare(`UPDATE media_asset SET title = ? WHERE content_id = ?`)
       .run("Sunset at last", first.contentId);
     startShareSubscription({
       origin: home.origin,

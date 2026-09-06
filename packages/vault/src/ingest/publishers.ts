@@ -21,6 +21,7 @@ import {
   insertMediaAssetTx,
 } from "../commands/media.js";
 import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
+import { setRepresentation } from "../schema/representation.js";
 import { ENRICH_PUBLISHERS } from "./enrich-publishers.js";
 import { assertPayload } from "./payload-schemas.js";
 import type { Publisher, PublishedWrite } from "./staging.js";
@@ -320,8 +321,8 @@ function textContentItem(
   vault
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, 'text/plain', ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?)`
+         (content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+       VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
     )
     .run(
       contentId,
@@ -433,6 +434,15 @@ const messagePublisher: Publisher = {
         body.contentId,
         p.messageId
       );
+    // THIS MESSAGE'S READING OF ITS BODY BYTES (#996, R20(b)).
+    setRepresentation(vault, uuidv7, now, {
+      contentId: body.contentId,
+      ownerType: "social.message",
+      ownerId: messageId,
+      mediaType: "text/plain",
+      charset: "utf-8",
+      interpretation: "body",
+    });
     for (const att of p.attachments ?? []) {
       const promoted = promoteStagedBlob(
         {
@@ -442,8 +452,7 @@ const messagePublisher: Publisher = {
           wrote: (type, id) => wrote.push({ type, id }),
           creatorPartyId: senderId,
         },
-        att.stagedSha,
-        { title: att.filename }
+        att.stagedSha
       );
       const isFirst = vault
         .prepare(
@@ -464,6 +473,15 @@ const messagePublisher: Publisher = {
           isFirst.n === 0 ? 1 : 0,
           now
         );
+      // THE ATTACHMENT'S READING OF ITS BYTES (#996, R20(b)) — the imported
+      // filename is the archive's word for them, not the byte row's.
+      setRepresentation(vault, uuidv7, now, {
+        contentId: promoted.contentId,
+        ownerType: "core.attachment",
+        ownerId: attachmentId,
+        mediaType: att.mediaType,
+        interpretation: "attachment",
+      });
       wrote.push({ type: "core.attachment", id: attachmentId });
     }
     return { entityId: messageId, wrote };
@@ -651,9 +669,9 @@ function noteContent(
   vault
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language,
+         (content_id, content_uri, sha256, byte_size, language,
           creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, 'text/markdown', ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?)`
+       VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
     )
     .run(
       id,
@@ -794,6 +812,14 @@ const notePublisher: Publisher = {
          VALUES (?, ?, ?, ?, 'markdown', 0, ?, ?, NULL, NULL)`
       )
       .run(noteId, ownerPartyId, p.title, content.id, now, now);
+    setRepresentation(vault, uuidv7, now, {
+      contentId: content.id,
+      ownerType: "knowledge.note",
+      ownerId: noteId,
+      mediaType: "text/markdown",
+      charset: "utf-8",
+      interpretation: "body",
+    });
     return {
       entityId: noteId,
       wrote: [
@@ -812,6 +838,14 @@ const notePublisher: Publisher = {
           WHERE note_id = ?`
       )
       .run(p.title, content.id, now, entityId);
+    setRepresentation(vault, uuidv7, now, {
+      contentId: content.id,
+      ownerType: "knowledge.note",
+      ownerId: entityId,
+      mediaType: "text/markdown",
+      charset: "utf-8",
+      interpretation: "body",
+    });
     return { wrote: content.wrote };
   },
 };
@@ -894,8 +928,7 @@ const mediaAssetPublisher: Publisher = {
     const deps = { vault, now, newId: uuidv7, wrote: collect };
     const promoted = promoteStagedBlob(
       { ...deps, creatorPartyId: ownerPartyId },
-      p.stagedSha,
-      p.caption === null ? {} : { title: p.caption }
+      p.stagedSha
     );
     // Same-bytes `(1)` duplicates in one archive: second adopts, not UNIQUE-hit.
     const adopted = adoptAssetForContentTx(
@@ -914,6 +947,11 @@ const mediaAssetPublisher: Publisher = {
         assetId,
         contentId: promoted.contentId,
         kind: assetKindFor(promoted.mediaType),
+        // The archive's caption is what the OWNER typed in the source app —
+        // authored, so it lands on the asset's own title (#996, R20(b)); with
+        // no caption the archive's filename is the name they gave the file,
+        // which is what `promoteStagedBlob` used to write onto the byte row.
+        title: p.caption ?? p.filename,
         capturedAt: p.capturedAt ?? meta.captured_at ?? null,
         // Neither Takeout UTC nor zoneless EXIF states an offset.
         tzOffsetMin: null,
@@ -929,6 +967,14 @@ const mediaAssetPublisher: Publisher = {
         exifJson: exifJsonForMeta(meta),
       });
     }
+    // THIS ASSET'S READING OF THE BYTES (#996, R20(b)).
+    setRepresentation(vault, uuidv7, now, {
+      contentId: promoted.contentId,
+      ownerType: "media.asset",
+      ownerId: assetId,
+      mediaType: p.mediaType,
+      interpretation: "original",
+    });
     applyImportedAssetFlags(deps, ownerPartyId, assetId, p);
     if (p.album !== null) {
       wrote.push(
@@ -954,11 +1000,10 @@ const mediaAssetPublisher: Publisher = {
       )
       .run(p.capturedAt, p.captureGroupId, entityId);
     if (p.caption !== null) {
+      // The owner's caption from the source archive is AUTHORED text, so it
+      // lands on the asset, not on bytes other assets may share (#996 R20(b)).
       vault
-        .prepare(
-          `UPDATE core_content_item SET title = ?
-            WHERE content_id = (SELECT content_id FROM media_asset WHERE asset_id = ?)`
-        )
+        .prepare(`UPDATE media_asset SET title = ? WHERE asset_id = ?`)
         .run(p.caption, entityId);
     }
     applyImportedAssetFlags(deps, ownerPartyId, entityId, p);

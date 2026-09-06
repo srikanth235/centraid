@@ -42,6 +42,7 @@ export interface UseDocsResult extends DriveProjection {
 export function useDocs(): UseDocsResult {
   const documents = useDocsEntity("core.document");
   const contents = useDocsEntity("core.content_item");
+  const representations = useDocsEntity("core.content_representation");
   const tags = useDocsEntity("core.tag");
   const concepts = useDocsEntity("core.concept");
   const schemes = useDocsEntity("core.concept_scheme");
@@ -62,6 +63,7 @@ export function useDocs(): UseDocsResult {
   const queryState = combineReplicaQueryStates([
     documents,
     contents,
+    representations,
     tags,
     concepts,
     schemes,
@@ -91,6 +93,7 @@ export function useDocs(): UseDocsResult {
       projectDrive({
         documents: documents.rows,
         contents: contents.rows,
+        representations: representations.rows,
         tags: tags.rows,
         concepts: concepts.rows,
         schemes: schemes.rows,
@@ -119,6 +122,7 @@ export function useDocs(): UseDocsResult {
     [
       documents.rows,
       contents.rows,
+      representations.rows,
       tags.rows,
       concepts.rows,
       schemes.rows,

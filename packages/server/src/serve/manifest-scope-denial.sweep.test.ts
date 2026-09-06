@@ -55,7 +55,7 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       // 277 → 279 (#928): People declares `share.authority_use` and
       // `share.authority_request` so Settings → Access can date every answer
       // and draw an automation's undecided ask on the same screen.
-      declaredScopes: 279,
+      declaredScopes: 288,
     });
   });
 

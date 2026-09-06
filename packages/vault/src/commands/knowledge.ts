@@ -13,6 +13,10 @@
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { sha256Hex } from "../ids.js";
+import {
+  mediaTypeOfOwner,
+  setRepresentation,
+} from "../schema/representation.js";
 import { assertTextBodyWithinBudget } from "./inline-body-guard.js";
 import { releaseContentIfUnreferenced } from "./media.js";
 import { MINTED_ID_PROPERTY, mintedId, mintedIdIsFree } from "./minted-id.js";
@@ -42,6 +46,28 @@ const MEDIA_TYPE: Record<string, string> = {
 };
 
 /** Dedupe-or-insert a text body as a canonical content item (P2). */
+/**
+ * THE NOTE'S OWN READING OF ITS BODY (#996, ruling R20(b), drift ONT-28).
+ * Two notes with identical bytes and different formats used to collide on the
+ * sha and take the FIRST note's media type — a markdown note filed after an
+ * identical plain one was markdown to nobody. The reading is the note's now.
+ */
+export function setNoteRepresentation(
+  ctx: HandlerCtx,
+  noteId: string,
+  contentId: string,
+  format: string
+): void {
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId,
+    ownerType: NOTE_TARGET_TYPE,
+    ownerId: noteId,
+    mediaType: MEDIA_TYPE[format] ?? "text/plain",
+    charset: "utf-8",
+    interpretation: "body",
+  });
+}
+
 export function contentItemFor(
   ctx: HandlerCtx,
   bodyText: string,
@@ -61,12 +87,11 @@ export function contentItemFor(
   ctx.db
     .prepare(
       `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?)`
+         (content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+       VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
     )
     .run(
       contentId,
-      mediaType,
       `data:${mediaType};charset=utf-8,${encodeURIComponent(bodyText)}`,
       sha,
       Buffer.from(bodyText, "utf8").length,
@@ -162,6 +187,7 @@ function createNote(ctx: HandlerCtx): Record<string, unknown> {
       ctx.now
     );
   ctx.wrote("knowledge.note", noteId);
+  setNoteRepresentation(ctx, noteId, contentId, format);
   // The FIRST occurrence (#996, R20(a)): a note's original body is a version
   // like any other, so the chain starts here.
   ctx.db
@@ -296,6 +322,12 @@ function editNote(ctx: HandlerCtx): Record<string, unknown> {
     }
     sets.push("body_content_id = ?");
     values.push(contentId);
+    setNoteRepresentation(
+      ctx,
+      input.note_id,
+      contentId,
+      input.format ?? current.format
+    );
   }
   if (input.title !== undefined) {
     sets.push("title = ?");
@@ -876,6 +908,20 @@ const RESTORE_NOTE_VERSION: CommandDefinition = {
         "UPDATE knowledge_note SET body_content_id = ?, current_revision_id = ?, updated_at = ? WHERE note_id = ?"
       )
       .run(input.content_id, revisionId, ctx.now, input.note_id);
+    // The representation follows the head (#996, R20(b)): a restore changes
+    // WHICH bytes the note reads, never HOW it reads them.
+    setRepresentation(ctx.db, ctx.newId, ctx.now, {
+      contentId: input.content_id,
+      ownerType: NOTE_TARGET_TYPE,
+      ownerId: input.note_id,
+      mediaType:
+        mediaTypeOfOwner(ctx.db, {
+          ownerType: NOTE_TARGET_TYPE,
+          ownerId: input.note_id,
+        }) ?? "text/plain",
+      charset: "utf-8",
+      interpretation: "body",
+    });
     ctx.wrote("knowledge.note", input.note_id);
     ctx.cite({
       claim: `note ${input.note_id} restored to prior version ${input.content_id}`,

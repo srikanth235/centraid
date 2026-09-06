@@ -78,6 +78,16 @@ export const VAULT_ENTITIES: EntityRegistry = {
       // path, and both clients name the absence.
       replicaValues: { textCeilingBytes: 1_024 * 1_024 },
     },
+    // THE INTERPRETATION, OWNED (#996, ruling R20(b), drift ONT-28). What one
+    // owner takes a content item's bytes to BE — media type, charset, use.
+    // An ENTITY, not a projection: a generated caption is a derived row keyed
+    // to the representation (OQ-9), and an annotation can only target a row
+    // the supertype knows.
+    content_representation: {
+      lifecycle: "mutable",
+      label: "Representations",
+      blurb: "How each owner reads the bytes it saved.",
+    },
     // DECODED BODY TEXT (#996, rulings R4 / R8). A 1:1 projection of the
     // content row it decodes: it has no identity of its own, and a wide
     // column on `core_content_item` would make every read of that hot table

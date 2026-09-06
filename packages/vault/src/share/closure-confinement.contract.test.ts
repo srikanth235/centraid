@@ -32,8 +32,9 @@ function shasOf(closure: WireClosure): string[] {
   return closure.blobs.map((blob) => blob.sha256).toSorted();
 }
 
+/** Titles ride on the OWNER now, not the byte row (#996, ruling R20(b)). */
 function contentTitles(closure: WireClosure): string[] {
-  return closure.rows.contentItems.map((row) => row.title ?? "").toSorted();
+  return closure.rows.mediaAssets.map((row) => row.title ?? "").toSorted();
 }
 
 describe("[law:share-closure-confinement] a closure carries the named items' reach and nothing else", () => {
@@ -166,8 +167,9 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
       "Train tickets",
     ]);
     // …and so must its body: one content item crossed, the salary slip's did
-    // not.
-    expect(contentTitles(closure)).toStrictEqual(["Train tickets"]);
+    // not. Bytes carry no title since #996 (R20(b)), so the claim is the
+    // COUNT — one body, and it is the shared document's.
+    expect(closure.rows.contentItems).toHaveLength(1);
   });
 
   test("[law:share-closure-confinement] one unknown id refuses the whole read — no partial closure escapes", () => {

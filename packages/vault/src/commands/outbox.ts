@@ -12,6 +12,7 @@ import {
   revokeEgressAuthority,
 } from "../grant/egress-authority.js";
 import { sha256Hex } from "../ids.js";
+import { setRepresentation } from "../schema/representation.js";
 import { resolveEntity } from "../schema/tables.js";
 import { partyForReach } from "./contact-reach.js";
 
@@ -483,15 +484,14 @@ function publishSentMessage(ctx: HandlerCtx, itemId: string): string | null {
     ctx.db
       .prepare(
         `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-         VALUES (?, 'text/plain', ?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
+           (content_id, content_uri, sha256, byte_size, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+         VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`
       )
       .run(
         contentId,
         `data:text/plain;charset=utf-8,${encodeURIComponent(bodyText)}`,
         sha,
         Buffer.byteLength(bodyText, "utf8"),
-        subject,
         owner,
         ctx.now
       );
@@ -537,6 +537,15 @@ function publishSentMessage(ctx: HandlerCtx, itemId: string): string | null {
     )
     .run(messageId, threadId, owner, ctx.now, contentId, `outbox:${itemId}`);
   ctx.wrote("social.message", messageId);
+  // THIS MESSAGE'S READING OF ITS BODY BYTES (#996, R20(b)).
+  setRepresentation(ctx.db, ctx.newId, ctx.now, {
+    contentId,
+    ownerType: "social.message",
+    ownerId: messageId,
+    mediaType: "text/plain",
+    charset: "utf-8",
+    interpretation: "body",
+  });
   return messageId;
 }
 

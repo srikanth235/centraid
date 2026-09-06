@@ -177,8 +177,8 @@ describe("grant/fulfillment-edit", () => {
     origin.vault
       .prepare(
         `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, created_at)
-         VALUES (?, 'text/plain', 'data:text/plain,x', ?, 1, ?)`
+           (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES (?, 'data:text/plain,x', ?, 1, ?)`
       )
       .run(documentContentId, `sha-${documentContentId}`.padEnd(64, "0"), now);
     origin.vault

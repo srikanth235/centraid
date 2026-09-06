@@ -7,11 +7,8 @@ import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { uuidv7 } from "../ids.js";
-import {
-  conceptKey,
-  ENRICH_PUBLISHERS,
-  tagNotation,
-} from "./enrich-publishers.js";
+import { conceptKey, tagNotation } from "./concept-writes.js";
+import { ENRICH_PUBLISHERS } from "./enrich-publishers.js";
 
 let db: VaultDb;
 let boot: BootstrapResult;
