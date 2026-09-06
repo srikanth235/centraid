@@ -13,7 +13,8 @@ interface AgentRow {
   agent_id: string;
   party_id: string;
   status: string;
-  enrollment_key: string;
+  /** NULL when the private sibling is absent — a seat's copy, never the gateway's. */
+  enrollment_key: string | null;
 }
 
 /** The assistant's enrolment key; the one agent with no standing answer (#928 A3). */
@@ -21,7 +22,8 @@ const ASSISTANT_ENROLLMENT_KEY = "_assistant";
 interface DeviceIdentityRow {
   device_id: string;
   owner_party_id: string;
-  public_key: string;
+  /** NULL when the private sibling is absent — a seat's copy, never the gateway's. */
+  public_key: string | null;
 }
 
 interface DeviceRow extends DeviceIdentityRow {
@@ -32,9 +34,13 @@ interface DeviceRow extends DeviceIdentityRow {
 // Two FACTS (#883) — key match and what the member let this device do —
 // read in ONE statement: this runs per invocation against a tighten-only
 // first-paint budget. `device-trust.ts` owns the mapping.
-const DEVICE_IDENTITY_SQL = `SELECT device_id, owner_party_id, public_key,
+const DEVICE_IDENTITY_SQL = `SELECT access_device.device_id AS device_id,
+    owner_party_id, access_device_secret.public_key AS public_key,
     ${deviceTrustScalarSql("access_device.device_id")} AS trust
-  FROM access_device WHERE device_id = ?`;
+  FROM access_device
+  LEFT JOIN access_device_secret
+    ON access_device_secret.device_id = access_device.device_id
+  WHERE access_device.device_id = ?`;
 
 function deviceRow(
   vault: DatabaseSync,
@@ -58,15 +64,23 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
     const device = deviceRow(vault, cred.deviceId, cred.deviceKey);
     const row = vault
       .prepare(
-        "SELECT agent_id, party_id, status, enrollment_key FROM access_agent WHERE agent_id = ?"
+        `SELECT access_agent.agent_id AS agent_id, party_id, status,
+                access_agent_secret.enrollment_key AS enrollment_key
+           FROM access_agent
+           LEFT JOIN access_agent_secret
+             ON access_agent_secret.agent_id = access_agent.agent_id
+          WHERE access_agent.agent_id = ?`
       )
       .get(cred.agentId) as AgentRow | undefined;
-    if (!row || row.status !== "active")
+    // No enrollment credential means this file is a seat's copy, not the
+    // gateway's: authentication is a gateway act (#996, R2/R3).
+    if (!row || row.status !== "active" || row.enrollment_key === null)
       throw new GatewayError("identity", "unknown caller");
+    const enrollmentKey = row.enrollment_key;
     return {
       kind: "agent",
       callerId: row.agent_id,
-      principalId: row.enrollment_key,
+      principalId: enrollmentKey,
       provAgentKind: "ai_agent",
       partyId: row.party_id,
       mayAct: device.trust === "full",
@@ -74,7 +88,7 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
       ...(cred.onBehalfOfOwner
         ? { onBehalfOfOwner: cred.onBehalfOfOwner }
         : {}),
-      ...(row.enrollment_key === ASSISTANT_ENROLLMENT_KEY
+      ...(enrollmentKey === ASSISTANT_ENROLLMENT_KEY
         ? { assistant: true as const }
         : {}),
     };

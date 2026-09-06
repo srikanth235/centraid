@@ -59,6 +59,7 @@ CREATE TABLE core_entity_revision (
   parent_revision_id TEXT
     REFERENCES core_entity_revision(revision_id) ON DELETE SET NULL,
   updated_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   FOREIGN KEY (revision_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 -- "Which versions named these bytes" is what the blob door and the purge sweep

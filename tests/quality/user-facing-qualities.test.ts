@@ -585,7 +585,7 @@ describe("issue #679 user-facing quality gates", () => {
       ).toMatchObject({ n: 1 });
       const automationAgent = plane.db.vault
         .prepare(
-          "SELECT agent_id FROM access_agent WHERE enrollment_key = 'quality'"
+          "SELECT agent_id FROM access_agent_secret WHERE enrollment_key = 'quality'"
         )
         .get() as { agent_id: string };
       const proposed = plane.db.audit
@@ -922,7 +922,7 @@ describe("issue #679 user-facing quality gates", () => {
       Object.keys(profile.sealedSentinels).toSorted(compareStrings)
     ).toStrictEqual(declared.toSorted(compareStrings));
     const device = db.vault
-      .prepare("SELECT device_id, public_key FROM access_device LIMIT 1")
+      .prepare("SELECT device_id, public_key FROM access_device_secret LIMIT 1")
       .get() as { device_id: string; public_key: string };
     const ownerParty = db.vault
       .prepare("SELECT self_party_id FROM core_vault LIMIT 1")

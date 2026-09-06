@@ -1448,7 +1448,9 @@ export class VaultPlane {
   private refineActorKind(actorId: string, actorKind: string): string {
     if (actorKind !== "ai_agent") return actorKind;
     const row = this.db.vault
-      .prepare("SELECT enrollment_key FROM access_agent WHERE agent_id = ?")
+      .prepare(
+        "SELECT enrollment_key FROM access_agent_secret WHERE agent_id = ?"
+      )
       .get(actorId) as { enrollment_key: string } | undefined;
     return row?.enrollment_key === ASSISTANT_ENROLLMENT_KEY
       ? "assistant"

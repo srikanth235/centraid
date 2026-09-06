@@ -137,19 +137,31 @@ describe("change-log", () => {
     vault
       .prepare(
         `INSERT INTO access_agent
-         (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
-       VALUES ('credential-agent', 'credential-party', 'host-never-log',
+         (agent_id, party_id, model_ref, version, enrolled_at, status)
+       VALUES ('credential-agent', 'credential-party',
                'tier:fast', '1', ?, 'active')`
+      )
+      .run(now);
+    // The key material is a TABLE away since #996 R3, not a column exclusion.
+    vault
+      .prepare(
+        `INSERT INTO access_agent_secret (agent_id, enrollment_key)
+       VALUES ('credential-agent', 'host-never-log')`
+      )
+      .run();
+    vault
+      .prepare(
+        `INSERT INTO access_device
+         (device_id, owner_party_id, name, enrolled_at)
+       VALUES ('credential-device', 'credential-party', 'Before device', ?)`
       )
       .run(now);
     vault
       .prepare(
-        `INSERT INTO access_device
-         (device_id, owner_party_id, name, public_key, enrolled_at)
-       VALUES ('credential-device', 'credential-party', 'Before device',
-               'public-never-log', ?)`
+        `INSERT INTO access_device_secret (device_id, public_key)
+       VALUES ('credential-device', 'public-never-log')`
       )
-      .run(now);
+      .run();
     const since = currentReplicaLogState(vault).watermark;
 
     vault
@@ -169,12 +181,16 @@ describe("change-log", () => {
       .run();
 
     const changes = readReplicaChanges(vault, { since }).changes;
-    const old = new Map(
-      changes.map((change) => [
+    // The touch trigger's own UPDATE is a second entry for the same row
+    // (#996, R6): the FIRST entry per entity carries the pre-write state.
+    const old = new Map<string, object>();
+    for (const change of changes) {
+      if (old.has(change.entity)) continue;
+      old.set(
         change.entity,
-        JSON.parse(change.oldValuesJson ?? "{}") as object,
-      ])
-    );
+        JSON.parse(change.oldValuesJson ?? "{}") as object
+      );
+    }
     expect(old.get("access.app")).toMatchObject({
       display_name: "Before app",
     });

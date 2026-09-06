@@ -203,6 +203,7 @@ CREATE TABLE share_fulfillment (
   state         TEXT NOT NULL CHECK (state IN
     ('awaiting_channel','syncing','delivered','remove_sent','removed')),
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   -- Latest note: a refusal reason, a transport error, why a removal stalled.
   detail        TEXT,
   -- When the subject first reached this peer. NULL = never delivered.

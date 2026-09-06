@@ -410,6 +410,7 @@ cols:[
 ['settings_json','TEXT (json1)','NN CK','', 'Owner preferences; CHECK(json_valid(settings_json)); never behavioral state.'],
 ['created_at','TEXT (iso8601)','NN','', 'Vault creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'party', std:'vCard 4.0 · FOAF · schema.org/Person+Organization', p:'Any actor: a person, organization, group, enrolled agent, or a pet. The single identity anchor for the whole model.',
 cols:[
@@ -421,6 +422,7 @@ cols:[
 ['avatar_content_id','TEXT','FK','core.content_item', 'Profile image lives as owned content, not an app upload.'],
 ['created_at','TEXT (iso8601)','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; touched by trigger (touchUpdatedAt).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['deleted_at','TEXT','','', 'Trash stamp (#916, ruling D1): a person is trashed and then purged like every other kind, rather than erased by a foreign-key walk.'],
 ['purge_at','TEXT','CK','', 'Grace-window end; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL). The purge is one DELETE — every remaining key onto core.party is what refuses it while the person is still referenced by money or authority.'],
 ]},
@@ -437,6 +439,7 @@ cols:[
 ['valid_from','TEXT (iso8601)','NN','', 'Keys are temporal — people change handles.'],
 ['valid_to','TEXT (iso8601)','','', 'NULL = current. Table CHECK: an interval runs forward (#996, R20(e)).'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'place', std:'schema.org/Place · ISO 6709 · IANA tz', p:'Somewhere things happen: home, gym, client office, “Grandma’s”. Referenced by events, activities, media.',
 cols:[
@@ -451,6 +454,7 @@ cols:[
 ['parent_place_id','TEXT','FK','core.place', 'Containment (room ⊂ home ⊂ city).'],
 ['created_at','TEXT (iso8601)','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'event', std:'iCalendar RFC 5545 · JSCalendar RFC 8984', p:'A scheduled block of time. Domains attach meaning (appointment, gig, maintenance window) via extension or link — never a second calendar table. Carries the model-wide trash pair.',
 cols:[
@@ -471,6 +475,7 @@ cols:[
 ['sequence','INTEGER','NN','', 'RFC 5545 SEQUENCE revision counter for reschedules.'],
 ['created_at','TEXT (iso8601)','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; touched by trigger (touchUpdatedAt).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live. Trash is a state, not a row loss.'],
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL).'],
 ]},
@@ -503,6 +508,7 @@ cols:[
 ['external_id','TEXT','','', 'OFX FITID / provider id. NOT globally unique (#996, ruling R20(c)): a provider-local id is scoped to its SOURCE, and the authoritative key is sync.external_entity(connection_id, external_id). Two banks may both mint ref-1.'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'content_item', std:'schema.org/CreativeWork', p:'The “rent the bytes” seam: one row of owned meaning pointing at replaceable storage. Notes, photos, message bodies, invoice PDFs all resolve here. BYTES, AND NOTHING THAT INTERPRETS THEM (#996, ruling R20(b)): media_type and title used to sit here, on the row sha256 dedupes, so the first import of a byte string fixed the interpretation and the caption for every later owner of those bytes. The interpretation is content_representation below; the authored title is the wrapper’s (document, note, media.asset) and a generated caption is a derived row.',
 cols:[
@@ -517,6 +523,7 @@ cols:[
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL). This deleted_at + purge_at pair is the model-wide trash convention.'],
 ['created_at','TEXT (iso8601)','NN','', 'Capture/creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'content_representation', std:'RFC 6838 media types · RFC 2978 charsets', p:'What ONE OWNER takes a content item’s bytes to be (#996, ruling R20(b), drift ONT-28): media type, charset, and what it does with them. One row per (owner_type, owner_id), so two owners of one sha may legitimately disagree — the same bytes are text/html to one document and text/plain to another — while byte dedupe is untouched, because the disagreement is no longer stored on the byte row. An ENTITY rather than a projection, because a generated caption is a derived row KEYED TO THE REPRESENTATION (OQ-9) and an annotation can only target something the supertype knows. Not a renter of the bytes: it dies with its owner and never keeps a content item alive on its own.',
 cols:[
@@ -529,6 +536,7 @@ cols:[
 ['interpretation','TEXT','','', 'What the owner does with the bytes beyond the type: body, original, attachment, receipt. NULL where the owner has only one use.'],
 ['created_at','TEXT (iso8601)','NN','', 'When this reading was first stated.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'content_text', std:'—', p:'The decoded body text of a content item, 1:1 with it. A PROJECTION, not an entity: it has no identity of its own and dies with the row it decodes. It exists so the search index can be a plain SQL trigger over a COLUMN on every seat — the FTS triggers used to call vault_content_text(), an application-defined SQL function only the gateway can register, and a phone binding cannot (#996, rulings R4 / R8). A wide column kept off core_content_item so every read of that hot table does not pay for text nobody asked for.',
 cols:[
@@ -538,6 +546,7 @@ cols:[
 ['byte_size','INTEGER','NN CK','', 'The size of the bytes decoded; CHECK(byte_size >= 0). Content is hash-addressed and immutable, so this is a staleness check against the DECODER, not the row.'],
 ['created_at','TEXT (iso8601)','NN','', 'When the decode landed.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'content_derivative', std:'—', p:'One derived variant of a content item: thumbnail, preview, poster, extracted text, transcript, embedding, perceptual hash. Binary variants live in the CAS under their own sha; semantic variants live inline in text_content so search can index them in-transaction (#296).',
 cols:[
@@ -550,6 +559,7 @@ cols:[
 ['text_content','TEXT','','', 'Inline payload of a semantic variant; CHECK: present exactly when variant is text/transcript/embedding/phash/thumbhash. Feeds FTS.'],
 ['created_at','TEXT (iso8601)','NN','', 'Derivation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'document', std:'schema.org/DigitalDocument · Google Docs/Notion revision model', p:'A document’s identity, separate from its bytes (issue #352) — the wrapper apps and links address; current_content_id repoints on edit like knowledge.note’s body_content_id. Version lineage is a revises core.link between content items, never a column here: content_item is the version, core.link is history.',
 cols:[
@@ -559,6 +569,7 @@ cols:[
 ['current_revision_id','TEXT','FK','core.entity_revision', 'The document’s newest OCCURRENCE (#996, ruling R20(a)); walk parent_revision_id from here for its history. ON DELETE SET NULL — a pointer into history never wedges a delete.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'Last edit; touched by trigger (touchUpdatedAt).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live.'],
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL).'],
 ]},
@@ -596,6 +607,7 @@ cols:[
 ['asserted_by','TEXT','NN CK','', 'CHECK in (\'owner\',\'app\',\'agent\',\'import\') — who claims this.'],
 ['provenance_id','TEXT','','', '→ access.provenance in the append-only audit band. A VALUE, not a key: the audit outlives its subject (#916).'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'link_anchor', std:'W3C Web Annotation selector (quote + position)', p:'A locator for an existing core.link, not a second judgment (#282): it points into the from-endpoint’s plain body text so the read view can render the edge as an inline chip. One anchor per link, no lifecycle of its own — ended links are simply never resolved.',
 cols:[
@@ -604,6 +616,7 @@ cols:[
 ['selector_json','TEXT (json1)','NN CK','', 'W3C-style selector {exact, prefix, suffix, start} into the body text; CHECK(json_valid(selector_json)).'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'concept_scheme', std:'W3C SKOS ConceptScheme', p:'A controlled vocabulary: spend categories, activity kinds, relation types, purposes. Schemes are versioned and importable.',
 cols:[
@@ -628,6 +641,7 @@ cols:[
 ['pref_label_lang','TEXT','','', 'BCP-47 language tag of pref_label, so “the label” is answerable in the language it was written in.'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'tag', std:'SKOS + schema.org about', p:'Applies a concept to any entity — the universal classification join. Owner flags ride here too: starred is one flags-scheme tag on the canonical entity, the same star in every surface that renders it, and since #916 there is no mirror column anywhere.',
 cols:[
@@ -641,6 +655,7 @@ cols:[
 ['input_revision_id','TEXT','FK','core.entity_revision', 'Which revision of the target the claim was made ABOUT (#996, R22), so a claim about superseded content is told apart from one about what is there now. NULL on an owner’s own tag.'],
 ['tagged_at','TEXT (iso8601)','NN','', 'When applied.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'collection', std:'Dublin Core Collection · IPTC collection practice', p:'The one owner-curation mechanism (issue #274): an ordered, optionally nested container whose members are typed refs. Albums and notebooks are surface views over this table — “Paris trip” may hold photos, the lease PDF and a packing note. Audiences (social.circle) and labels (tags) deliberately stay separate.',
 cols:[
@@ -652,6 +667,7 @@ cols:[
 ['sort_order','INTEGER','NN','', 'Manual ordering among siblings.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'collection_entry', std:'—', p:'Ordered, typed membership: one list per collection, across member types. Indexed collection-first and target-first (“which collections hold this photo?”).',
 cols:[
@@ -677,6 +693,7 @@ cols:[
 ['content_id','TEXT','FK','core.content_item', 'The content that BECAME current at this moment — set on an OCCURRENCE (operation “revise”), NULL on an engine capture snapshot (#996, ruling R20(a)). ON DELETE SET NULL, so a purge may reclaim the bytes and the record that there was a version survives.'],
 ['parent_revision_id','TEXT','FK','core.entity_revision', 'The occurrence before this one — the chain a wrapper walks from current_revision_id. ON DELETE SET NULL: a truncated chain is legible, a dangling one is not.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 ],
 },
@@ -704,6 +721,7 @@ cols:[
 ['travel_buffer_min','INTEGER','CK','', 'CHECK(travel_buffer_min >= 0); minutes of travel to hold before the event.'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'attendee', std:'RFC 5545 ATTENDEE (ROLE, PARTSTAT) · ORGANIZER', p:'Who is expected at an event and their RSVP state — a typed party×event relationship carrying the schedule state machine. A chair, when present, must be the event’s organizer (trigger, issue #450).',
 cols:[
@@ -715,6 +733,7 @@ cols:[
 ['responded_at','TEXT (iso8601)','','', 'RSVP instant.'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'task', std:'RFC 5545 VTODO · JSCalendar Task', p:'A to-do with VTODO status semantics, placed in a project and section and ordered by hand. Completing a repeating task spawns its next occurrence in the same motion; deletion is a recoverable trash state.',
 cols:[
@@ -734,6 +753,7 @@ cols:[
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion, ~30 days out; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL) — the model-wide soft-delete pair.'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['project_id','TEXT','FK','schedule.project', 'Project the task is placed in; NULL when unplaced.'],
 ['section_id','TEXT','FK','schedule.section', 'Section within that project; NULL when unsectioned.'],
 ['sort_order','INTEGER','NN','', 'Manual ordering among siblings (default 0).'],
@@ -752,6 +772,7 @@ cols:[
 ['archived_at','TEXT (iso8601)','','', 'Archive instant; NULL = active.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'section', std:'—', p:'An ordered section inside one project. Removing the project removes its sections (ON DELETE CASCADE); tasks keep their own row.',
 cols:[
@@ -761,6 +782,7 @@ cols:[
 ['sort_order','INTEGER','NN','', 'Manual ordering within the project (default 0).'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'recurrence_exception', std:'—', p:'One skipped or overridden occurrence of a recurring series, whatever domain owns the series — a calendar event or a Tally recurring expense. One exception table for every series in the vault.',
 cols:[
@@ -774,6 +796,7 @@ cols:[
 ['override_json','TEXT (json1)','CK','', 'Replacement fields for an override; CHECK forces NULL on skip and valid JSON on override.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'recurrence_exception_attendee', std:'RFC 5545 ATTENDEE', p:'The attendees an overriding occurrence carries, as ROWS (#916, ruling R6). They used to be a party-id array inside <span class="k">override_json</span>, where identity merge could not see them and the purge cascade could not reach them.',
 cols:[
@@ -781,6 +804,7 @@ cols:[
 ['party_id','TEXT','PK FK NN','core.party', 'The attending party — a real key, so a merged or purged person is followed here too.'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 ],
 },
@@ -798,6 +822,7 @@ cols:[
 ['provenance_json','TEXT (json1)','CK','', 'Where the channel came from; migrated identifiers record source, issue, was_primary, verified_at, valid_to. CHECK(json_valid(…)).'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant; a migrated identifier keeps its valid_from.'],
 ['updated_at','TEXT (iso8601)','NN','', 'Last write; kept by the touchUpdatedAt trigger (ruling O-updated).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'circle', std:'FOAF Group · vCard MEMBER', p:'A named grouping (Family, Clients, Book club). Circles are the audience grain for shares and grants — audience membership is not a core.collection (ruling O-containers).',
 cols:[
@@ -807,6 +832,7 @@ cols:[
 ['kind','TEXT','NN CK','', 'CHECK in (\'family\',\'friends\',\'work\',\'custom\').'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'circle_member', std:'vCard MEMBER', p:'Membership join with history-friendly timestamps and the member’s sharing capability.',
 cols:[
@@ -815,6 +841,7 @@ cols:[
 ['party_id','TEXT','FK NN','core.party', 'Member as identity.'],
 ['added_at','TEXT (iso8601)','NN','', 'Join instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['capability','TEXT','NN CK','', 'CHECK in (\'read\',\'read+write\'); default read. What circle-backed sharing offers this member when a circle is made an audience (issues #731, #929).'],
 ]},
 { n:'thread', std:'RFC 5322 threading · JMAP mailbox/thread · Nextcloud Talk rooms', p:'A message-thread container across channels — the same shape for SMS, email, DM, group.',
@@ -826,6 +853,7 @@ cols:[
 ['created_at','TEXT (iso8601)','NN','', 'First message instant.'],
 ['last_message_at','TEXT (iso8601)','','', 'Cache of MAX(message.sent_at) — the thread-list sort key. Healed wholesale by the standing sweep; never a source of truth (issue #441 A3).'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'thread_participant', std:'JMAP participants', p:'Who is in a thread — parties, not raw addresses, so “everything with Priya” is one query.',
 cols:[
@@ -837,6 +865,7 @@ cols:[
 ['muted','INTEGER (bool)','NN CK','', 'CHECK in (0,1); projection hint.'],
 ['last_read_at','TEXT (iso8601)','','', 'Instant this participant last read the thread; NULL = never.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'message', std:'RFC 5322 · JMAP Email', p:'One message. The body is core content (rented bytes, owned reference); sender is identity; replies are typed self-references.',
 cols:[
@@ -851,6 +880,7 @@ cols:[
 ['external_id','TEXT','UQ','', 'Provider Message-ID for idempotent import.'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 ],
 },
@@ -867,6 +897,7 @@ cols:[
 ['pinned','INTEGER (bool)','NN CK','', 'CHECK in (0,1).'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'Last edit, kept by the touchUpdatedAt trigger (ruling O-updated); every edit also writes provenance.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['deleted_at','TEXT (iso8601)','','', 'Trash (issue #308 A6): delete is reversible; the FTS deletedColumn guard keeps trashed notes out of the index.'],
 ['purge_at','TEXT (iso8601)','CK','', 'Lifecycle-sweep purge window; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL) makes purge-without-trash unrepresentable (issue #441 A4).'],
 ]},
@@ -880,6 +911,7 @@ cols:[
 ['body_text','TEXT','NN','', 'The annotation itself.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 ],
 },
@@ -906,6 +938,7 @@ cols:[
 ['purge_at','TEXT (iso8601)','CK','', 'Own grace window (the standard soft-delete pair); CHECK(purge_at IS NULL OR deleted_at IS NOT NULL).'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'face_region', std:'IPTC Image Region · MWG Regions', p:'A detected face box and the member’s answer to it. The enricher proposes; media.answer_face_proposal alone writes the review state, so a rejected face survives as state and is never proposed again (issue #712).',
 cols:[
@@ -918,6 +951,7 @@ cols:[
 ['review_state','TEXT','NN CK','', 'CHECK in (\'proposed\',\'confirmed\',\'rejected\',\'dismissed\'); default proposed. Written only by media.answer_face_proposal (issue #712).'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'asset_phash', std:'—', p:'The Tier-0 perceptual hash sidecar for an asset (issue #299), producer-agnostic like thumbs — the client canvas computes a dHash today. Keyed by asset_id because ADD COLUMN cannot be written re-runnably; near-duplicate detection is plain SQL over vault_hamming.',
 cols:[
@@ -926,6 +960,7 @@ cols:[
 ['cluster_id','TEXT','','', 'Rebuildable near-duplicate cluster projection (issue #352): the lowest asset_id among LIVE assets within hamming distance 6; NULL for singletons; recomputed every sweep.'],
 ['computed_at','TEXT (iso8601)','NN','', 'When the hash was computed.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'memory', std:'—', p:'A Memories v0 shelf entry (issue #724 W7): a rebuildable projection the standing sweep recomputes wholesale, derived and never authored. Three kinds share one table because a member browses them as one list; ids are deterministic, so drop-and-reinsert is byte-stable.',
 cols:[
@@ -951,6 +986,7 @@ cols:[
 ['cluster_id','TEXT','NN','', 'The group’s LOWEST region_id — deterministic, so unchanged membership never shuffles the id a shelf displays.'],
 ['computed_at','TEXT (iso8601)','NN','', 'When the sweep computed the grouping.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 ],
 },
@@ -968,6 +1004,7 @@ cols:[
 ['met','TEXT','','', 'How the owner met them; free text.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live. Hides the person from People while the canonical party and its links survive (#630).'],
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL). Once lapsed the sweep erases the party, tags and channels too (#864).'],
 ]},
@@ -980,6 +1017,7 @@ cols:[
 ['reminder_on','INTEGER (bool)','NN CK','', 'CHECK in (0,1); whether the owner wants reminding.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live.'],
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL) (#441 A4).'],
 ]},
@@ -1014,6 +1052,7 @@ cols:[
 ['password_set_at','TEXT (iso8601)','','', 'When the current password was set; stamped by the write path, never derived from updated_at. NULL honestly says unknown (#872).'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['archived_at','TEXT (iso8601)','','', 'Archive shelf: keep forever, hide from lists, no purge date. Exclusive with trash — CHECK(archived_at IS NULL OR deleted_at IS NULL) (#872).'],
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live. Keeps the row and its star so restore is lossless.'],
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion, ~30 days out like Docs; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL) (#441 A4).'],
@@ -1045,6 +1084,7 @@ cols:[
 ['position','INTEGER','NN','', 'Owner ordering within (item, section); ties break on label.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'item_passkey', std:'WebAuthn credential metadata (storage only)', p:'The passkey slot beside a login — storage only (#872): credential metadata plain and browsable, key material sealed. No WebAuthn ceremony lives here. One passkey per item; the PK is the item.',
 cols:[
@@ -1057,6 +1097,7 @@ cols:[
 ['private_key','TEXT','','', 'Key material. Sealed at rest (#293).'],
 ['created_at','TEXT (iso8601)','NN','', 'When the passkey was made.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 ],
 },
@@ -1068,6 +1109,7 @@ cols:[
 ['party_id','TEXT','FK UQ NN','core.party', 'The enrolled party, 1:1.'],
 ['created_at','TEXT (iso8601)','NN','', 'Enrolment instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'group', std:'—', p:'A thin decoration on a social.circle (#310): the emoji and colour the circle has no home for. Name and membership live on the circle, owner included. Structural, not content: delete is refused while expenses remain (trashed ones included), then cascades its circle.',
 cols:[
@@ -1080,6 +1122,7 @@ cols:[
 ['currency','TEXT','NN CK','', 'THE GROUP’S CURRENCY (#916, ruling R1): a group is the ledger everyone in it reads, so every expense and settlement in it agrees with this by trigger. CHECK(length(currency)=3).'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'expense', std:'ISO 4217 currency codes', p:'One shared cost. The vault stores the resolved shares (expense_split), who paid (expense_payer) and the division it was entered with; balances are never stored. May stand outside any group and may bind to a core.transaction.',
 cols:[
@@ -1096,6 +1139,7 @@ cols:[
 ['txn_id','TEXT','FK','core.transaction', 'Finance bridge (#310): the core.transaction this expense is bound to when the bank already knows — bind, don’t duplicate.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live. A trashed expense still blocks group deletion until it purges.'],
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL) (#441 A4). Purge cascades the splits.'],
 ['original_amount_minor','INTEGER (minor units)','CK','', 'Amount in the currency it was entered in; CHECK(NULL or > 0).'],
@@ -1114,6 +1158,7 @@ cols:[
 ['share_minor','INTEGER (minor units)','NN CK','', 'Resolved share; CHECK(share_minor >= 0).'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'recurring_expense_split', std:'Splitwise recurring templates', p:'How a future occurrence of the template will be divided, as ROWS (#916, ruling D3). <span class="k">splits_json</span> put party ids where merge could not see them and no constraint could hold the shares to the template’s amount.',
 cols:[
@@ -1122,6 +1167,7 @@ cols:[
 ['share_minor','INTEGER','NN CK','', 'Share in minor units of the template’s settlement currency; CHECK(>= 0).'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'expense_payer', std:'—', p:'Who actually put money down on an expense, and how much. Written for every expense — the single-payer case as one degenerate row — so both balance folds read one shape.',
 cols:[
@@ -1130,6 +1176,7 @@ cols:[
 ['paid_minor','INTEGER (minor units)','NN CK','', 'What this payer put down; CHECK(paid_minor >= 0). The rows sum to the expense amount, re-validated server-side.'],
 ['created_at','TEXT','NN','', 'UTC creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'expense_line_item', std:'—', p:'A typed line (item, tax or tip) belonging to the expense, not to a photo. The receipt is a nullable decoration, so a “By line” division needs no capture (#883 O-attach).',
 cols:[
@@ -1142,6 +1189,7 @@ cols:[
 ['sort_order','INTEGER','NN CK','', 'Order on the receipt; CHECK(sort_order >= 0).'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'expense_line_allocation', std:'—', p:'Who each line is assigned to, and for how much. A line’s allocations must sum to that line, re-validated server-side.',
 cols:[
@@ -1150,6 +1198,7 @@ cols:[
 ['share_minor','INTEGER (minor units)','NN CK','', 'Share of this line; CHECK(share_minor >= 0).'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'recurring_expense', std:'RFC 5545 RRULE · IANA time zones · ISO 4217', p:'A template that materializes tally.expense instances on a schedule (#630). Materialization is deterministic and idempotent, so two offline devices may enqueue one occurrence without duplicates. A template names one payer.',
 cols:[
@@ -1172,6 +1221,7 @@ cols:[
 ['last_materialized_start','TEXT','','', 'Occurrence start most recently materialized; NULL until the first instance.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 { n:'settlement', std:'—', p:'A payment that settles up, from one party to another, inside or outside a group. settle_up emits a core.transaction when the owner’s money actually moved, or binds to one the bank already imported.',
 cols:[
@@ -1185,6 +1235,7 @@ cols:[
 ['txn_id','TEXT','FK','core.transaction', 'Finance bridge (#310): the core.transaction settle_up emitted when the owner is a party, or bound via tally.bind_txn.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live.'],
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL) (#441 A4).'],
 ]},
@@ -1200,6 +1251,7 @@ cols:[
 ['settled_at','TEXT (iso8601)','','', 'When settled; NULL while outstanding. Settling end-dates the row rather than deleting it.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live.'],
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL).'],
 ]},
@@ -1213,6 +1265,7 @@ cols:[
 ['prepared_at','TEXT (iso8601)','NN','', 'When the owner prepared it.'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
 ],
 },
@@ -1233,11 +1286,10 @@ cols:[
 ['installed_at','TEXT (iso8601)','NN','', 'Trust lifecycle start.'],
 ['revoked_at','TEXT (iso8601)','','', 'When the install ENDED (#928). A first-party app is not a principal, so there is no grant whose revocation it could be told about — the register records it, and that is what an uninstalled app is handed back. A CHECK ties it to status = \'revoked\'.'],
 ]},
-{ n:'agent', std:'MCP client identity · W3C PROV SoftwareAgent', p:'An enrolled autonomous principal. Agents are parties (kind=agent) so links, grants and receipts treat them like any other actor; the owner’s display label stays on core.party.',
+{ n:'agent', std:'MCP client identity · W3C PROV SoftwareAgent', p:'An enrolled autonomous principal. Agents are parties (kind=agent) so links, grants and receipts treat them like any other actor; the owner’s display label stays on core.party. Its host-side enrollment key is not here: replicated rows point at this row, so the identity projection travels to every seat and the credential stays on the gateway in access_agent_secret (#996, ruling R3).',
 cols:[
 ['agent_id','TEXT (uuidv7)','PK NN','', 'Immutable agent identity.'],
 ['party_id','TEXT','FK UQ NN','core.party', 'Its identity row (kind=agent) — one party per agent.'],
-['enrollment_key','TEXT','UQ NN','', 'Stable host-side enrollment identity (Centraid app id, or _assistant); relabeling the party never mints a new principal.'],
 ['model_ref','TEXT','NN','', 'Model/provider fingerprint for audit.'],
 ['version','TEXT','NN','', 'Agent software version.'],
 ['enrolled_at','TEXT (iso8601)','NN','', 'Trust lifecycle start.'],
@@ -1253,17 +1305,16 @@ cols:[
 ['status','TEXT','NN CK','', 'CHECK in (\'active\',\'retained\') — retained survives uninstall (data kept, app access gone) until the owner purges.'],
 ['created_at','TEXT (iso8601)','NN','', 'First apply instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'Last spec apply instant.'],
+['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
-{ n:'device', std:'FIDO2/WebAuthn attestation · Solid pod devices', p:'Enrolled hardware: phones, laptops, the NAS replica. Devices sign what they write and carry sync state. Identity only — a device’s reach over its vault is a device-principal row of share.authority since #883.',
+{ n:'device', std:'FIDO2/WebAuthn attestation · Solid pod devices', p:'Enrolled hardware: phones, laptops, the NAS replica. Devices sign what they write and carry sync state. Identity only — a device’s reach over its vault is a device-principal row of share.authority since #883. Its attestation key and the gateway’s sync cursor for it are not here: core.content_item.origin_device_id and media.asset.camera_device_id point at this row, so the identity projection travels to every seat and the key material stays on the gateway in access_device_secret (#996, ruling R3).',
 cols:[
 ['device_id','TEXT (uuidv7)','PK NN','', 'Immutable device identity.'],
 ['owner_party_id','TEXT','FK NN','core.party', 'Whose device.'],
 ['name','TEXT','NN','', 'Owner-facing label.'],
 ['platform','TEXT','','', 'OS/build for capability decisions.'],
-['public_key','TEXT','UQ NN','', 'WebAuthn-style attestation key; signs provenance.'],
 ['enrolled_at','TEXT (iso8601)','NN','', 'Enrollment instant.'],
 ['last_seen_at','TEXT (iso8601)','','', 'Liveness for sync health.'],
-['sync_cursor','TEXT','','', 'Replication position (CRDT/oplog cursor).'],
 ]},
 { n:'seed_row', std:'—', p:'The scenario-seed registry (#290): one row per demo-seeded entity. Demo data is real vault data written through the normal command pipeline, but stays separable forever — purgeable in one act and invisible to the automation plane, which cannot join the audit band’s seed.demo provenance.',
 cols:[

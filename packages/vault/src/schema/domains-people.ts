@@ -62,6 +62,7 @@ const PEOPLE_PROFILE_COLUMNS = `
   met               TEXT,
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   -- Trash (#630 P5): trashing the profile hides the person from the People
   -- projection while the canonical party, its links and its Tally
   -- participation stay, so restore is lossless until the sweep purges.
@@ -91,6 +92,7 @@ CREATE TABLE people_important_date (
   reminder_on INTEGER NOT NULL CHECK (reminder_on IN (0,1)),
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   -- Trash pair + guard (issue #441 A4).
   deleted_at  TEXT,
   purge_at    TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),

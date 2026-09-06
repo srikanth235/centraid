@@ -2032,7 +2032,9 @@ export class Gateway {
     if (identity.surface !== undefined) return "app";
     if (identity.kind !== "agent") return identity.kind;
     const row = this.db.vault
-      .prepare("SELECT enrollment_key FROM access_agent WHERE agent_id = ?")
+      .prepare(
+        "SELECT enrollment_key FROM access_agent_secret WHERE agent_id = ?"
+      )
       .get(identity.callerId) as { enrollment_key: string } | undefined;
     return row?.enrollment_key === "_assistant" ? "assistant" : "agent";
   }

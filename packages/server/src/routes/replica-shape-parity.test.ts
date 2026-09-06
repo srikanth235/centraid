@@ -50,15 +50,18 @@ const logger = {
  * moves with them. `docs`, `locker`, `photos` and `tally` are untouched, which
  * is what this file is here to show.
  */
+// Re-taken with #996 R6's `row_version`: a shape id is a digest over the
+// composed COLUMNS, and every mutable table gained one. The ids move whenever
+// the replicated column set does — which is exactly what this gate is for.
 const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
-  agenda: "agenda:d624eec4e808bbc488f1ea68",
-  docs: "docs:f7fec11a5cbc4bdc45830b7e",
-  locker: "locker:68a09533e26a51272e1baad2",
-  notes: "notes:8d9a6bfb88d7d635c8620b54",
-  people: "people:4c9a8f4e64f1d5c1c8bdade8",
-  photos: "photos:a568f72b0549dc90afeb7e17",
-  tally: "tally:6b8ba1c6a43d071d10001f53",
-  tasks: "tasks:4534db95436c46a6957690f9",
+  agenda: "agenda:e279df85d90abec66a555fd4",
+  docs: "docs:b03f08a0dfb4cc65e8fc41bf",
+  locker: "locker:df498eda12016162dc1e9dd6",
+  notes: "notes:f969445530d0b54a5999f95e",
+  people: "people:20e089695fca9f55a59937c7",
+  photos: "photos:ec39825c59933ed5cbe9b925",
+  tally: "tally:ac08d11530e533bcbb220ab6",
+  tasks: "tasks:c7ee5f1f79eabe0574ece317",
 };
 
 const APPS_ROOT = path.resolve(import.meta.dirname, "../../../blueprints/apps");

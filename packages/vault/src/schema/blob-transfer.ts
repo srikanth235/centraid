@@ -19,7 +19,11 @@ CREATE TABLE IF NOT EXISTS blob_outbox (
   next_retry_at   TEXT,
   last_error      TEXT,
   created_at      TEXT NOT NULL,
-  updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  -- THE CONFLICT COMPARATOR (#996, R6). Bumped by this table's
+  -- touch trigger on every update, so an intent's expected version is
+  -- compared against a COLUMN rather than against a log position.
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_blob_outbox_retry
   ON blob_outbox(state, next_retry_at, created_at);
@@ -46,6 +50,7 @@ CREATE TABLE IF NOT EXISTS blob_ingress_session (
   device_id        TEXT,
   created_at       TEXT NOT NULL,
   updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   expires_at       TEXT NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_blob_ingress_expiry
@@ -63,7 +68,8 @@ CREATE TABLE IF NOT EXISTS blob_content_key (
   wrap_nonce   BLOB NOT NULL CHECK (length(wrap_nonce) = 12),
   key_epoch    INTEGER NOT NULL DEFAULT 1 CHECK (key_epoch > 0),
   created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS blob_device_content_key (
@@ -82,7 +88,8 @@ CREATE TABLE IF NOT EXISTS blob_device_wrap_key (
   device_id    TEXT PRIMARY KEY REFERENCES access_device(device_id) ON DELETE CASCADE,
   key_epoch    INTEGER NOT NULL DEFAULT 1 CHECK (key_epoch > 0),
   salt         BLOB NOT NULL CHECK (length(salt) = 32),
-  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
 ) STRICT;
 ${touchUpdatedAt("blob_outbox", "sha256")}
 ${touchUpdatedAt("blob_ingress_session", "session_id")}

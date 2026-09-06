@@ -35,6 +35,7 @@ CREATE TABLE core_vault (
   settings_json   TEXT NOT NULL CHECK (json_valid(settings_json)),
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   FOREIGN KEY (vault_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_vault_self_party ON core_vault(self_party_id);
@@ -48,6 +49,7 @@ CREATE TABLE core_party (
   avatar_content_id TEXT REFERENCES core_content_item(content_id),
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   -- No \`ontology_version\` (#916, ruling ONT-04): the ontology version is a
   -- property of the FILE (\`PRAGMA user_version\`) and of the CONTRACT
   -- (\`agent_command.ontology_version\`), never of a row.
@@ -88,6 +90,7 @@ CREATE TABLE core_party_identifier (
   valid_from    TEXT NOT NULL,
   valid_to      TEXT,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   -- AN INTERVAL RUNS FORWARD (#996, R20(e)). \`valid_to < valid_from\` was
   -- representable, and an inverted interval makes every "was this live then"
   -- question unanswerable. Table-level because it names two columns.
@@ -121,6 +124,7 @@ CREATE TABLE core_place (
   parent_place_id TEXT REFERENCES core_place(place_id),
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   FOREIGN KEY (place_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_place_parent_place ON core_place(parent_place_id);
@@ -163,6 +167,7 @@ CREATE TABLE core_event (
   sequence           INTEGER NOT NULL,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   -- WHAT dtstart MEANS SWITCHES ON recurrence_semantics (#916, R2 / review
   -- 3.3), and until now nothing said so in the file. 'zoned' means dtstart is
   -- a real INSTANT expanded in start_tz, so both halves must be there: a zone
@@ -222,6 +227,7 @@ CREATE TABLE core_transaction (
   external_id           TEXT,
   created_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   FOREIGN KEY (txn_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_transaction_account ON core_transaction(account_id);
@@ -259,6 +265,7 @@ CREATE TABLE core_content_item (
   purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   created_at       TEXT NOT NULL,
   updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   FOREIGN KEY (content_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_content_item_creator_party ON core_content_item(creator_party_id);
@@ -319,6 +326,7 @@ CREATE TABLE core_content_representation (
   interpretation    TEXT,
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   UNIQUE (owner_type, owner_id),
   FOREIGN KEY (representation_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
   FOREIGN KEY (owner_type, owner_id)
@@ -347,6 +355,7 @@ CREATE TABLE core_document (
   current_revision_id TEXT REFERENCES core_entity_revision(revision_id) ON DELETE SET NULL,
   created_at          TEXT NOT NULL,
   updated_at          TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   deleted_at          TEXT,
   purge_at            TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   FOREIGN KEY (document_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
@@ -401,6 +410,7 @@ CREATE TABLE core_link (
   -- the audit outlives its subject (#916).
   provenance_id       TEXT,
   updated_at          TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   FOREIGN KEY (link_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
   FOREIGN KEY (from_type, from_id)
     REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE,
@@ -457,6 +467,7 @@ CREATE TABLE core_concept (
   pref_label_lang    TEXT,
   created_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   UNIQUE (scheme_id, notation),
   FOREIGN KEY (concept_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
@@ -491,6 +502,7 @@ CREATE TABLE core_tag (
   input_revision_id  TEXT REFERENCES core_entity_revision(revision_id) ON DELETE SET NULL,
   tagged_at          TEXT NOT NULL,
   updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   -- Evidence belongs to a MACHINE assertion. An owner does not cite a model.
   CHECK (tagged_by_party_id IS NULL
          OR (derivation_id IS NULL AND input_revision_id IS NULL)),
@@ -536,6 +548,7 @@ CREATE TABLE core_collection (
   sort_order           INTEGER NOT NULL,
   created_at           TEXT NOT NULL,
   updated_at           TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   FOREIGN KEY (collection_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_collection_owner_party ON core_collection(owner_party_id);

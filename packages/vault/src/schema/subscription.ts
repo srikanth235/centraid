@@ -39,6 +39,7 @@ CREATE TABLE share_subscription (
   removed_at        TEXT,
   detail            TEXT,
   updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   PRIMARY KEY (shape_id, audience_vault_id)
 ) STRICT;
 CREATE INDEX share_subscription_grant ON share_subscription(grant_id);

@@ -35,6 +35,26 @@ export interface VaultExport {
   skippedTables?: { entity: string; error: string }[];
 }
 
+/**
+ * THE PRIVATE SIBLINGS OF A SPLIT REGISTER (#996, R3), as [logical, physical].
+ *
+ * These travel in a PORTABLE EXPORT and never in a seat's snapshot, and the
+ * two are different questions. "Private" names what must not reach a SEAT — a
+ * mirror that authenticates nobody and syncs nothing. A portable export is the
+ * owner moving their own vault to their own next machine: drop the device key
+ * out of it and the bundle no longer identifies the devices its own rows
+ * reference, which is the loss §11's round-trip gate exists to catch.
+ *
+ * They are named here rather than discovered because the list is the ruling:
+ * a new split sibling that is not added here is a lossy export, and a private
+ * table that is NOT a split sibling (a job queue, a peer link) must not appear
+ * here at all.
+ */
+const SPLIT_SIBLING_TABLES: readonly [string, string][] = [
+  ["access.device_secret", "access_device_secret"],
+  ["access.agent_secret", "access_agent_secret"],
+];
+
 /** Deterministic JSON: keys sorted at every level. */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -98,6 +118,12 @@ export function exportVault(
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+  for (const [logical, physical] of SPLIT_SIBLING_TABLES) {
+    const pk = primaryKeyColumn(db, physical);
+    tables[logical] = db.vault
+      .prepare(`SELECT * FROM "${physical}" ORDER BY "${pk}"`)
+      .all() as Record<string, unknown>[];
   }
   // Hash over `tables` as assembled; skipped tables never counted.
   const verifyHash = sha256Hex(canonicalJson(tables));
@@ -282,6 +308,12 @@ export function importVaultExport(
       );
       for (const table of [...physical].toReversed())
         db.vault.exec(`DELETE FROM "${table}"`);
+      // A split register's private sibling goes with its parent (#996, R3):
+      // the declared ON DELETE CASCADE cannot fire here because the wipe runs
+      // with foreign keys off, and a key for a device this file no longer has
+      // is what `PRAGMA foreign_key_check` refuses below.
+      for (const [, sibling] of SPLIT_SIBLING_TABLES)
+        db.vault.exec(`DELETE FROM "${sibling}"`);
     }
     const load = (logical: string): number => {
       const rows = artifact.tables[logical];
@@ -310,6 +342,20 @@ export function importVaultExport(
     recreateExtTables(db);
     for (const logical of listVaultEntities(db.vault)) {
       if (logical.startsWith("ext.")) imported += load(logical);
+    }
+    for (const [logical, physical] of SPLIT_SIBLING_TABLES) {
+      const rows = artifact.tables[logical] ?? [];
+      const cols = tableColumns(db.vault, physical);
+      for (const row of rows) {
+        const names = Object.keys(row).filter((column) => cols.has(column));
+        db.vault
+          .prepare(
+            `INSERT INTO "${physical}" (${names.map((c) => `"${c}"`).join(", ")})
+             VALUES (${names.map(() => "?").join(", ")})`
+          )
+          .run(...names.map((c) => row[c] as string | number | null));
+        imported += 1;
+      }
     }
     clearImportedSealKeyStamp(db.vault);
     if (sealedTotal > 0 && sourceSealKey) {

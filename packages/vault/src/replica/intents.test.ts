@@ -83,6 +83,11 @@ describe("intents", () => {
       }))
     ).toStrictEqual([
       { entity: "replica.intent", rowId: "intent-1", op: "insert" },
+      // TWO entries for the one status change: the write itself, then the
+      // touch trigger's own UPDATE bumping `row_version` (#996, R6). A reader
+      // takes the LAST entry's row state, which is why the projector coalesces
+      // by (entity, row) rather than counting entries.
+      { entity: "replica.intent", rowId: "intent-1", op: "update" },
       { entity: "replica.intent", rowId: "intent-1", op: "update" },
     ]);
   });

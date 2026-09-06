@@ -85,6 +85,7 @@ CREATE TABLE sync_connection_cursor (
   key           TEXT NOT NULL,
   value_json    TEXT NOT NULL CHECK (json_valid(value_json)),
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   UNIQUE (connection_id, key)
 ) STRICT;
 
@@ -139,13 +140,15 @@ CREATE TABLE sync_connection_credential (
   -- The exchange-minted HMAC capability an Assist refresh token is redeemable
   -- at the OAuth Worker with (#865). Sealed, re-persisted on every rotation.
   refresh_capability TEXT,
-  updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
 ) STRICT;
 
 CREATE TABLE sync_connection_health (
   connection_id TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
   auth_note     TEXT,
-  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
 ) STRICT;
 ${touchUpdatedAt("sync_connection_credential", "connection_id")}
 ${touchUpdatedAt("sync_connection_health", "connection_id")}

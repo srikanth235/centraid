@@ -178,10 +178,17 @@ export function enrollDevice(
   // is, `share_authority` what the member let it do (#883).
   db.vault
     .prepare(
-      `INSERT INTO access_device (device_id, owner_party_id, name, platform, public_key, enrolled_at, last_seen_at, sync_cursor)
-       VALUES (?, ?, ?, NULL, ?, ?, NULL, NULL)`
+      `INSERT INTO access_device (device_id, owner_party_id, name, platform, enrolled_at, last_seen_at)
+       VALUES (?, ?, ?, NULL, ?, NULL)`
     )
-    .run(deviceId, ownerPartyId, name, deviceKey, now);
+    .run(deviceId, ownerPartyId, name, now);
+  // The key material rides in the private sibling (#996, R3).
+  db.vault
+    .prepare(
+      `INSERT INTO access_device_secret (device_id, public_key, sync_cursor)
+       VALUES (?, ?, NULL)`
+    )
+    .run(deviceId, deviceKey);
   setDeviceTrust(db.vault, { deviceId, ownerPartyId, trust, now });
   return { deviceId, deviceKey };
 }
@@ -235,17 +242,16 @@ export function enrollAgent(
   const agentId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO access_agent (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'active')`
+      `INSERT INTO access_agent (agent_id, party_id, model_ref, version, enrolled_at, status)
+       VALUES (?, ?, ?, ?, ?, 'active')`
     )
-    .run(
-      agentId,
-      partyId,
-      options.name,
-      options.modelRef,
-      options.version ?? "0",
-      now
-    );
+    .run(agentId, partyId, options.modelRef, options.version ?? "0", now);
+  // The enrollment credential rides in the private sibling (#996, R3).
+  db.vault
+    .prepare(
+      `INSERT INTO access_agent_secret (agent_id, enrollment_key) VALUES (?, ?)`
+    )
+    .run(agentId, options.name);
   return { agentId, partyId };
 }
 

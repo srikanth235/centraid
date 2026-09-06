@@ -24,6 +24,7 @@ CREATE TABLE core_link_anchor (
   selector_json TEXT NOT NULL CHECK (json_valid(selector_json)),
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   FOREIGN KEY (anchor_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 ${touchUpdatedAt("core_link_anchor", "anchor_id")}
@@ -64,7 +65,8 @@ CREATE TABLE core_content_text (
   -- immutable, so this is a staleness check against the decoder, not the row.
   byte_size   INTEGER NOT NULL CHECK (byte_size >= 0),
   created_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
 ) STRICT;
 ${touchUpdatedAt("core_content_text", "content_id")}
 `;
