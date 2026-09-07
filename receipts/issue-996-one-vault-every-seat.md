@@ -2954,3 +2954,168 @@ bun run check:push:static              # 4/4, stamped on the committed tree
   invented checksum is worse than one that is honestly out of date, and
   `pod install` rewrites the whole file anyway. The gap is stated above rather
   than papered over.
+
+## CI — iOS lock job
+
+Wave 3 left `apps/mobile/ios/Podfile.lock` naming `op-sqlite` and carrying no
+`ExpoSQLite`, and stated the gap rather than papering over it. Two things close
+it here, and neither is a hand-edit of the lock.
+
+**`.github/workflows/mobile-ios-lock.yml`** — `workflow_dispatch` only, one
+`macos-26` job (the label `mobile-ios-smoke` already pins), `permissions:
+contents: write`, concurrency per branch with `cancel-in-progress: false`. It
+resolves `inputs.branch || github.ref_name` (a dispatch input default must be a
+literal), checks that branch out at depth 1 with the default `GITHUB_TOKEN`,
+runs `./.github/actions/setup` for Bun/Node 24.4.1/`bun install
+--frozen-lockfile`, selects Xcode ≥ 26.4 and asserts the floor with
+`ci:xcode` — both copied from candidate.yml — asserts CocoaPods is on the image
+(no lane in this repo installs a gem), then `pod install --repo-update` in
+`apps/mobile/ios`. `apps/mobile/ios` is committed, so there is no `expo
+prebuild` step: prebuilding would regenerate a project this repo maintains by
+hand. It then runs `ci:native-state --write`, commits `Podfile.lock` **and**
+`native-fingerprints.json` by explicit path, and pushes to the resolved branch.
+The ratchet travels with the lock because `pod install` moves the
+@expo/fingerprint inputs — pushing the lock alone would trade a red L1 for a red
+L4 — and `--write` is fail-closed on L1–L3, so the refresh can only land on a
+lock the recipe checks already accept. The lock and the ratchet are uploaded as
+`mobile-ios-podfile-lock` on every outcome, so a run that cannot push still
+hands back the file.
+
+**The validator gap.** `validatePodLock` compares five versions (Expo,
+React-Core, React-Core-prebuilt, ReactNativeDependencies, the Hermes tag) and
+neither half of this drift is a version, which is why the gate was green on a
+lock that cannot link. `validateLockedNodeModulePods`
+(`apps/mobile/scripts/verify-native-state-lib.mjs:193`) is the mechanical form
+of both halves, read from the lock's own EXTERNAL SOURCES `:path:` entries: a
+pod sourced from `node_modules/<pkg>` that `bun.lock` no longer resolves is red
+(the op-sqlite half), and a dependency of `apps/mobile` whose installed package
+declares `"apple"` or `"ios"` in `expo-module.config.json` but appears nowhere
+in the pod lock is red (the ExpoSQLite half).
+`discoverNodeModulePodPackages` (`apps/mobile/scripts/verify-native-state.mjs:158`)
+supplies both sides.
+
+Two things it does NOT do, and both were found by running it. It does not ask
+`node_modules/` whether a package is present: `bun install --frozen-lockfile`
+leaves `node_modules/@op-engineering/op-sqlite` behind as an unpruned leftover,
+so a presence check over the directory tree is green on exactly the tree this
+exists to red — `bun.lock` is the oracle instead. And it matches `"apple"` as
+well as `"ios"` in the module config, because expo-sqlite 57.0.2 declares
+`platforms: ["apple", "android", "devtools"]` and an `"ios"`-only match sees
+nothing. It reads presence from the lockfile rather than package.json because
+the pod lock legitimately sources transitive Expo packages nobody declares — 59
+locked node_modules packages against 53 declared dependencies. Both errors carry
+the existing `MACOS_POD_INSTALL` remediation, which now names a lane that can
+act on it.
+
+**This branch is red until the lane runs.** On the tree as committed,
+`ci:native-state` L1 reports exactly two errors — op-sqlite locked and
+unresolved, expo-sqlite autolinked and unlocked — so `check:mobile-native-state`
+fails until `mobile-ios-lock` is dispatched on the branch and its commit lands.
+That is the gap becoming a gate, and it is deliberate: the alternative is a
+green gate over a lock no iOS build can link.
+
+```
+bunx vitest run --root apps/mobile scripts/verify-native-state.test.mjs
+                                       # 1 file, 19 tests, green
+bun run lint:workflow-pins             # 24 workflows clean
+bun run lint:ci-egress                 # ok
+bun run lint:path-filters              # ok
+bun run format:check                   # clean
+bun run --cwd apps/mobile typecheck    # clean
+node apps/mobile/scripts/verify-native-state.mjs --status
+                                       # L1 red x2 (the gate above), L2-L4 ok
+bun run check:push:static              # stamped on the committed tree
+```
+
+### iOS sqlite-vec is built, not punted
+
+The owner extended this slice: iOS gets sqlite-vec too. The facts, verified in
+the installed tree — expo-sqlite 57.0.2 ships `android/vec/<abi>/vec.so` for
+four ABIs and no `vec.xcframework`; `ios/ExpoSQLite.podspec:85-86` vendors
+`vec.xcframework` and `:61-62` compiles Swift with `-DWITH_SQLITE_VEC`, both
+gated on `expo.sqlite.withSQLiteVecExtension`; `ios/SQLiteModule.swift:32-40`
+resolves the extension as
+`Bundle(identifier: "sqlite-vec")?.path(forResource: "vec", ofType: "")` with
+entry point `sqlite3_vec_init`. So the podspec already knows what to do with a
+framework; the tarball simply has none. Wave 3 read that as "iOS has no
+sqlite-vec"; it is really "iOS has no sqlite-vec *artifact*", and an artifact is
+something a build makes.
+
+- **`apps/mobile/scripts/build-sqlite-vec-ios.sh`** clones `asg017/sqlite-vec`
+  at `v0.1.7-alpha.2` with submodules (the vendored `sqlite3ext.h`), compiles
+  `sqlite-vec.c` with clang as a DYNAMIC library — the extension is dlopened by
+  `sqlite3_load_extension`, so a static slice would be unloadable — for
+  `iphoneos` arm64 and `iphonesimulator` arm64 + x86_64 against the
+  `ios.deploymentTarget` the pods use (17.5, read from
+  `ios/Podfile.properties.json`), lipos each platform's slices into a flat
+  `vec.framework` whose binary is `vec` and whose `CFBundleIdentifier` is
+  `sqlite-vec` (that pair is what makes the Swift lookup above resolve to
+  `…/vec.framework/vec`), asserts `nm -gU` exports `_sqlite3_vec_init`, and
+  packages both with `xcodebuild -create-xcframework` into
+  `node_modules/expo-sqlite/ios/vec.xcframework`. macOS-only guard, every
+  missing tool named, `.centraid-sqlite-vec-tag` makes it idempotent and
+  `SQLITE_VEC_FORCE=1` overrides. The framework builders are called plainly
+  rather than in a command substitution, so a failing slice exits the script
+  instead of a subshell.
+- **The tag is pinned to Expo's.** `scripts/sqlite-vec-version.test.mjs` reads
+  the `TAG=` line out of the shell script and the version string out of
+  `android/vec/arm64-v8a/vec.so` (the only place the tarball states what it
+  bundled) and requires them equal — so an expo-sqlite bump that moves the
+  Android `.so` reds a node test instead of silently giving two phones two
+  different sqlite-vec versions.
+- **`.github/workflows/mobile-ios-lock.yml`** builds the framework before
+  `pod install`, then runs an unsigned Debug `iphonesimulator` `xcodebuild` over
+  `Centraid.xcworkspace` — a lock is a resolution claim, and only a build proves
+  the vendored slices link and `-DWITH_SQLITE_VEC` compiles — and uploads
+  `vec.xcframework` beside the lock. The binary is never committed.
+- **`apps/mobile/package.json`** gains `eas-build-post-install`, guarded on
+  `EAS_BUILD_PLATFORM = ios`. **Deliberately `post-install`, not
+  `pre-install`**: the script writes into `node_modules/expo-sqlite/ios/`, which
+  does not exist before the install step, so a pre-install hook would fail loudly
+  on every EAS iOS build. `post-install` runs after dependencies and before
+  `pod install`, which is exactly the window the framework has to exist in.
+- **`apps/mobile/app.config.ts`** now sets `withSQLiteVecExtension: true` at the
+  top level, with the comment naming the script and why the framework is built
+  rather than shipped.
+  `apps/mobile/src/lib/replica/replica-sqlite-vec-error.ts` and
+  `expo-sqlite-driver.ts`'s `probeSqliteVec` comment lose the "iOS has none"
+  claim; the probe stays, because a shell built before the script ran opens fine
+  and still has no `vec0`. `docs/photos/derived-ledger.md` says the same.
+
+**A finding the owner should route.** The expo-sqlite plugin block never reaches
+either committed native project. `apps/mobile/ios` and `apps/mobile/android` are
+committed and nothing in this repo runs `expo prebuild` (`expo run:ios` skips it
+when `ios/` exists, and `android-emulator-install.sh:118` says `assemble*` needs
+no prebuild), so the plugin's properties are only written when someone
+prebuilds. `ios/Podfile.properties.json` carried no `expo.sqlite.*` key at all
+and `android/gradle.properties` still carries none — meaning wave 3's
+`useSQLCipher: true` was inert on both platforms, and the phone would have
+opened a plaintext file where the driver issues `PRAGMA key`. This commit writes
+the three iOS keys (`enableFTS`, `useSQLCipher`, `withSQLiteVecExtension`) into
+`ios/Podfile.properties.json`, because without them this slice's own `pod
+install` would vendor nothing. **The Android half is left alone and reported**:
+it needs `assembleRelease` to verify and belongs beside the Android lanes, not
+inside an iOS-lock commit.
+
+**Every file these two changes touch**
+
+- `.github/workflows/mobile-ios-lock.yml` (new) — the dispatchable macOS lane
+- `apps/mobile/scripts/build-sqlite-vec-ios.sh` (new) — the framework build
+- `apps/mobile/scripts/sqlite-vec-version.test.mjs` (new) — the tag ↔ `.so` pin
+- `apps/mobile/scripts/verify-native-state-lib.mjs` · `apps/mobile/scripts/verify-native-state.mjs` · `apps/mobile/scripts/verify-native-state.test.mjs` — `validateLockedNodeModulePods`, its discovery, and the fixture pair that reds the stale lock and greens the one `pod install` writes
+- `apps/mobile/app.config.ts` — `withSQLiteVecExtension` for both platforms
+- `apps/mobile/ios/Podfile.properties.json` — the three `expo.sqlite.*` keys the plugin would have written, without which this lane's `pod install` vendors nothing
+- `apps/mobile/package.json` — the `eas-build-post-install` hook
+- `apps/mobile/src/lib/replica/replica-sqlite-vec-error.ts` · `apps/mobile/src/lib/replica/expo-sqlite-driver.ts` — the remedy text and the probe comment lose "iOS has none"
+- `docs/photos/derived-ledger.md` — the mobile vector-support section
+
+```
+bunx vitest run --root apps/mobile scripts/           # green
+bun run lint:workflow-pins                            # 24 workflows clean
+bash -n apps/mobile/scripts/build-sqlite-vec-ios.sh   # syntax ok
+bun run check:push:static                             # stamped on the committed tree
+```
+
+Not verifiable on this machine, and stated as such: the framework build, the
+xcframework packaging and the simulator link all need macOS. The first dispatch
+of `mobile-ios-lock` is what turns them from a plan into evidence.
