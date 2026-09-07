@@ -29,8 +29,19 @@ import type { Year3VaultProfile } from "./year3-shape.js";
  * built. A directory cached under an earlier version is a different artifact
  * and is not reusable; `year3FixtureCacheKey` carries the version, so the bump
  * alone invalidates every cached directory.
+ *
+ * 4 — #996's wave 0b/1 rewrote the BASELINE (the representation split, the
+ * split identity tables, `row_version` everywhere, the log replacing
+ * `replica_change`) without adding a migration rung, because a pre-1.0 vault
+ * is created from the baseline rather than laddered up to it. `schemaVersion`
+ * below is `VAULT_MIGRATIONS.length`, so it did not move — and a directory
+ * built before the rewrite was handed to code that could no longer open it
+ * (`core.content_representation is an entity with a composite primary key`).
+ * THE LEDGER FOR THAT IS THIS NUMBER: the ladder length distinguishes
+ * artifacts across RUNGS, and this version distinguishes them across every
+ * other schema change. A baseline edit belongs here.
  */
-export const YEAR3_FIXTURE_VERSION = 3;
+export const YEAR3_FIXTURE_VERSION = 4;
 
 /**
  * Stand-in for a caller that names no schema. Distinct from any real ladder
@@ -66,6 +77,11 @@ export function year3FixtureCacheRoot(): string {
  * a table a later rung added. Callers pass `VAULT_MIGRATIONS.length`;
  * `test-kit` deliberately does not depend on `@centraid/vault`, so the number
  * arrives as an argument rather than an import.
+ *
+ * IT DOES NOT COVER A BASELINE EDIT. A pre-1.0 vault is CREATED from the
+ * baseline, so a change there leaves the ladder length untouched while
+ * changing the artifact completely; {@link YEAR3_FIXTURE_VERSION} is the
+ * number that moves for those, and #996 is the case that proved it has to.
  */
 export function year3FixtureCacheKey(
   profile: Year3VaultProfile,

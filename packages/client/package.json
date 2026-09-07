@@ -9,6 +9,7 @@
     "./boot": "./src/react/boot.tsx",
     "./replica": "./src/replica/index.ts",
     "./replica/native": "./src/replica/native.ts",
+    "./replica/seat": "./src/replica/seat/index.ts",
     "./replica/intent-invalidations": "./src/replica/intent-invalidations.ts",
     "./capture": "./src/capture.ts",
     "./home-copy": "./src/home-copy.ts",

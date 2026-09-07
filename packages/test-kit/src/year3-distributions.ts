@@ -91,6 +91,18 @@ export function seedYear3Distributions(
        (content_id, content_uri, sha256, byte_size, created_at)
      VALUES (?, ?, ?, ?, ?)`
   );
+  // THE DECODED BODY, AS A COLUMN (#996, ruling R4). The FTS sync triggers
+  // stopped calling an application-defined decode function in wave 1 and now
+  // read `core_content_text`, so a seeder that writes the bytes and skips the
+  // text produces a corpus whose notes are simply not searchable — which is
+  // exactly what the needle assertion in `year3-vault.test.ts` catches. The
+  // seeder mirrors what `setRepresentation` writes on the gateway; it cannot
+  // CALL it, because `test-kit` deliberately does not depend on the vault.
+  const insertContentText = target.vault.prepare(
+    `INSERT INTO core_content_text
+       (content_id, body_text, decoder, byte_size, created_at, updated_at)
+     VALUES (?, ?, 'data-uri/v1', ?, ?, ?)`
+  );
   const insertNoteRepresentation = target.vault.prepare(
     `INSERT INTO core_content_representation
        (representation_id, content_id, owner_type, owner_id, media_type,
@@ -130,6 +142,15 @@ export function seedYear3Distributions(
       `data:text/markdown;base64,${Buffer.from(withNeedle, "utf8").toString("base64")}`,
       digest(contentId),
       Buffer.byteLength(withNeedle),
+      timestamp
+    );
+    // Before the note and its representation, not after: the representation's
+    // own FTS trigger is what puts the index in step, and it reads this row.
+    insertContentText.run(
+      contentId,
+      withNeedle,
+      Buffer.byteLength(withNeedle),
+      timestamp,
       timestamp
     );
     const noteId = id("year3-note", index);

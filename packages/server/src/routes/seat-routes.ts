@@ -36,7 +36,18 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { gzipSync } from "node:zlib";
 
-import { ROUTES } from "@centraid/core/protocol";
+import {
+  ROUTES,
+  SEAT_LOG_MAX_PAGE,
+  SEAT_SNAPSHOT_EPOCH_HEADER,
+  SEAT_SNAPSHOT_SCHEMA_EPOCH_HEADER,
+  SEAT_SNAPSHOT_SEQ_HEADER,
+} from "@centraid/core/protocol";
+import type {
+  SeatLogPageWire,
+  SeatLogRowWire,
+  SeatRebootstrapRequiredWire,
+} from "@centraid/core/protocol";
 import {
   buildSeatSnapshot,
   readReplicaLog,
@@ -58,7 +69,7 @@ export const SEAT_LOCKER_KEY_PATH = ROUTES.vaultSeatLockerKey;
 
 /** Bounds one log page. A seat asks for more by asking again. */
 const DEFAULT_LOG_PAGE = 1_000;
-const MAX_LOG_PAGE = 10_000;
+const MAX_LOG_PAGE = SEAT_LOG_MAX_PAGE;
 /** How many built snapshots to keep. One per seq, newest first. */
 const DEFAULT_SNAPSHOT_CACHE = 2;
 
@@ -179,7 +190,7 @@ export function parseByteRange(
   return { start, end: Math.min(end, size - 1) };
 }
 
-function logRowWire(row: ReplicaLogRow): Record<string, unknown> {
+function logRowWire(row: ReplicaLogRow): SeatLogRowWire {
   return {
     seq: row.seq,
     commitSeq: row.commitSeq,
@@ -270,7 +281,7 @@ export function makeSeatRouteHandler(
         if (error instanceof ReplicaLogRebootstrapRequiredError) {
           // START OVER, SAID OUT LOUD. The alternative — serving what is left
           // — hands the seat a file that is silently missing the middle.
-          return sendJson(res, 409, {
+          const answer: SeatRebootstrapRequiredWire = {
             error: "seat_rebootstrap_required",
             reason: error.reason,
             epoch: error.state.epoch,
@@ -278,7 +289,8 @@ export function makeSeatRouteHandler(
             watermark: error.state.watermark.seq,
             schemaEpoch: error.state.schemaEpoch,
             snapshot: SEAT_SNAPSHOT_PATH,
-          });
+          };
+          return sendJson(res, 409, answer);
         }
         throw error;
       }
@@ -294,7 +306,7 @@ export function makeSeatRouteHandler(
           message: `log row ${foreign.seq} carries epoch ${foreign.epoch}, this vault is ${state.epoch}`,
         });
       }
-      return sendJson(res, 200, {
+      const body: SeatLogPageWire = {
         vaultId,
         epoch: state.epoch,
         schemaEpoch: state.schemaEpoch,
@@ -304,7 +316,8 @@ export function makeSeatRouteHandler(
         next: page.next.seq,
         hasMore: page.hasMore,
         rows: page.rows.map(logRowWire),
-      });
+      };
+      return sendJson(res, 200, body);
     }
 
     const dir =
@@ -323,9 +336,12 @@ export function makeSeatRouteHandler(
     res.setHeader("Cache-Control", "private, max-age=0, must-revalidate");
     // The two numbers a seat needs before it opens the file: where it sits in
     // the log, and which contract it is under.
-    res.setHeader("X-Centraid-Seat-Seq", String(artifact.seq));
-    res.setHeader("X-Centraid-Seat-Epoch", artifact.epoch);
-    res.setHeader("X-Centraid-Schema-Epoch", String(artifact.schemaEpoch));
+    res.setHeader(SEAT_SNAPSHOT_SEQ_HEADER, String(artifact.seq));
+    res.setHeader(SEAT_SNAPSHOT_EPOCH_HEADER, artifact.epoch);
+    res.setHeader(
+      SEAT_SNAPSHOT_SCHEMA_EPOCH_HEADER,
+      String(artifact.schemaEpoch)
+    );
     const inm = req.headers["if-none-match"];
     if (
       typeof inm === "string" &&

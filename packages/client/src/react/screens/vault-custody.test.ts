@@ -45,17 +45,21 @@ describe("vault custody", () => {
         device({ endpointId: "e6" }),
       ];
       expect(custodyCounts(roster)).toStrictEqual({ devices: 6, replicas: 2 });
-      expect(custodyLine(custodyCounts(roster), 41_208)).toBe(
-        "41,208 records · 2 machines hold a full copy · 6 devices enrolled"
+      expect(custodyLine(custodyCounts(roster), "up to date")).toBe(
+        "up to date · 2 machines hold a full copy · 6 devices enrolled"
+      );
+      expect(custodyLine(custodyCounts(roster), "1,204 changes behind")).toBe(
+        "1,204 changes behind · 2 machines hold a full copy · 6 devices enrolled"
       );
     });
 
-    it("omits the record clause rather than guessing when the census cannot say", () => {
-      const line = custodyLine({ devices: 1, replicas: 1 }, null);
-      // An old gateway that cannot report a census must not cost the page the
-      // two numbers it does know.
+    it("omits the currency clause rather than guessing when no seat has reported", () => {
+      const line = custodyLine({ devices: 1, replicas: 1 }, undefined);
+      // A seat that has not answered must not cost the page the two numbers
+      // the roster does know.
       expect(line).toBe("1 machine holds a full copy · 1 device enrolled");
       expect(line).not.toContain("records");
+      expect(line).not.toContain("behind");
     });
 
     it("quotes ONE replica string on the row, the drill-in and the line", () => {

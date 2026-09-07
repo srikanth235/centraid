@@ -100,6 +100,19 @@ export {
 } from "./replica-subscription.js";
 
 export {
+  SEAT_LOG_MAX_PAGE,
+  SEAT_SNAPSHOT_EPOCH_HEADER,
+  SEAT_SNAPSHOT_SCHEMA_EPOCH_HEADER,
+  SEAT_SNAPSHOT_SEQ_HEADER,
+  type SeatLogOp,
+  type SeatLogPageWire,
+  type SeatLogRowWire,
+  type SeatRebootstrapReason,
+  type SeatRebootstrapRequiredWire,
+  type SeatSnapshotHead,
+} from "./seat-log.js";
+
+export {
   applyRowSql,
   decodeWireRow,
   decodeWireValue,
