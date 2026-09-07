@@ -3119,3 +3119,34 @@ bun run check:push:static                             # stamped on the committed
 Not verifiable on this machine, and stated as such: the framework build, the
 xcframework packaging and the simulator link all need macOS. The first dispatch
 of `mobile-ios-lock` is what turns them from a plan into evidence.
+
+### The lock lane also runs on branch pushes
+
+`workflow_dispatch` cannot reach a workflow that is not on the default branch —
+GitHub answers 404 — so `mobile-ios-lock` could not be dispatched from the very
+branch it exists to unblock. `.github/workflows/mobile-ios-lock.yml` now also
+listens on `push` with `branches-ignore: [main]`, filtered to the inputs a lock
+is a function of: `apps/mobile/ios/**`, `apps/mobile/package.json`,
+`apps/mobile/app.config.ts`, `apps/mobile/scripts/build-sqlite-vec-ios.sh`,
+`bun.lock` and the workflow file. Not `pull_request`: ci.yml is the only
+workflow allowed on open-PR events (#557, `lint:workflow-pins` rule 5).
+`workflow_dispatch` stays for the case where someone wants a rebuild without a
+push.
+
+`Podfile.lock` is under `apps/mobile/ios/**`, so the job's own commit-back
+matches the filter. `if: github.actor != 'github-actions[bot]'` refuses it. The
+idempotence downstream would already terminate the loop — the second run finds
+nothing staged and skips the commit — but it would spend a macOS hour proving a
+fixed point. Concurrency flips to `cancel-in-progress: true` for the same
+reason a push trigger exists: several pushes can queue on one branch and only
+the newest tree is worth resolving a lock against; the push is the last thing
+the job does, and the artifact upload is `if: always()`, so a cancelled run
+leaves the branch as it found it and still hands back what it built.
+
+```
+bun run lint:workflow-pins   # 24 workflows clean
+bun run lint:ci-egress       # ok
+bun run lint:path-filters    # ok
+bun run format:check         # clean
+bash .governance/run.sh      # 22/22
+```

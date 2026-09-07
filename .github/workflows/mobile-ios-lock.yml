@@ -37,9 +37,31 @@ name: mobile-ios-lock
 # `--write` is fail-closed on L1–L3, so the refresh can only happen on a lock
 # the recipe checks already accept.
 #
-# `workflow_dispatch:` only — ci.yml is the one workflow allowed to listen on
-# `pull_request` (#557, enforced by lint:workflow-pins rule 5).
+# TWO TRIGGERS, AND THE SECOND IS NOT CONVENIENCE. `workflow_dispatch` cannot
+# reach a workflow that does not exist on the DEFAULT branch — GitHub answers
+# 404 — so the lane that exists to unblock this branch could not be run from
+# this branch, which is every branch that ever needs it: the one that changed
+# the native dependency set. The `push` trigger is how the job runs before the
+# workflow has ever been on `main`. It is deliberately NOT `pull_request` —
+# ci.yml is the one workflow allowed to listen on open-PR events (#557,
+# enforced by lint:workflow-pins rule 5) — and `branches-ignore: [main]` keeps
+# it off the default branch, where a lock is repaired by merging a branch that
+# already carries the fix.
+#
+# The paths are the inputs a lock is a function of: the iOS project itself, the
+# dependency set (`apps/mobile/package.json`, `bun.lock`), the plugin config
+# that decides what the podspec vendors, the script that builds the framework it
+# vendors, and this file. Anything else cannot change what `pod install` writes.
 on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - apps/mobile/ios/**
+      - apps/mobile/package.json
+      - apps/mobile/app.config.ts
+      - apps/mobile/scripts/build-sqlite-vec-ios.sh
+      - bun.lock
+      - .github/workflows/mobile-ios-lock.yml
   workflow_dispatch:
     inputs:
       branch:
@@ -49,11 +71,14 @@ on:
         default: ""
 
 concurrency:
-  # Per branch, and NOT cancel-in-progress: a run cancelled between `git commit`
-  # and `git push` leaves the regenerated lock only in the artifact, which is
-  # the one outcome that looks like success and is not.
+  # Per branch. `cancel-in-progress` is now TRUE, because a push trigger means
+  # several runs can queue on one branch and only the newest tree is the one a
+  # lock should be resolved against. The commit-back is safe to interrupt: the
+  # push is the last thing the job does, and a cancelled run leaves the branch
+  # exactly as it found it (the artifact upload is `if: always()`, so a
+  # cancelled-before-push run still hands back what it built).
   group: mobile-ios-lock-${{ inputs.branch || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 # The point of the lane: it writes the file back to the branch it read.
 permissions:
@@ -61,6 +86,14 @@ permissions:
 
 jobs:
   podfile-lock:
+    # THE LOOP GUARD. This job pushes a commit that touches
+    # `apps/mobile/ios/Podfile.lock`, which is inside the `paths` filter above,
+    # so its own commit-back would retrigger it. The second run would find the
+    # lock already current and skip the commit — the `git diff --cached --quiet`
+    # branch below — so it would terminate, but it would still spend a macOS
+    # hour proving a fixed point. Refusing the bot's own pushes says that
+    # outright instead of relying on the idempotence downstream.
+    if: github.actor != 'github-actions[bot]'
     # Same label as candidate.yml's `mobile-ios-smoke`, for the same reason it
     # pins one: the lock records what CocoaPods resolved against a toolchain,
     # and resolving it on a different image than the lane that builds with it
