@@ -22,7 +22,7 @@ import type { ViewerActionId } from "./viewer-model";
 interface PhotoLightboxToolbarProps {
   asset: PhotoAsset;
   onInfo: () => void;
-  onPlacement: (kind: "add" | "move") => void;
+  /** Present only for a commons item this member has not kept yet. */
   onSaveToMyVault?: () => void;
   onEdit?: () => void;
   onWrite: (
@@ -34,7 +34,6 @@ interface PhotoLightboxToolbarProps {
 export function PhotoLightboxToolbar({
   asset,
   onInfo,
-  onPlacement,
   onSaveToMyVault,
   onEdit,
   onWrite,
@@ -46,17 +45,17 @@ export function PhotoLightboxToolbar({
   // Crop/rotate are raster on a still; do not pretend a video has a non-destructive editor.
   const editable = asset.kind === "photo" || asset.kind === "scan";
   const enabled: Record<ViewerActionId, boolean> = {
-    copy: Boolean(onSaveToMyVault ?? (asset.assetId && asset.scopeIds?.length)),
+    // "Copy" is now ONLY "keep this shared photo in my vault" (#996 wave 3).
+    // The cross-vault placement it also used to offer went with the plane that
+    // carried it, so an item with no commons offer has nothing to copy INTO.
+    copy: Boolean(onSaveToMyVault),
     edit: writable && editable && onEdit !== undefined,
     favorite: writable,
     info: true,
     trash: writable,
   };
   const reason: Partial<Record<ViewerActionId, string>> = {
-    copy:
-      onSaveToMyVault || asset.scopeIds?.length
-        ? undefined
-        : "No other vault to copy this into",
+    copy: onSaveToMyVault ? undefined : "This photograph is already yours",
     edit: writable
       ? editable
         ? undefined
@@ -66,7 +65,7 @@ export function PhotoLightboxToolbar({
     trash: writable ? undefined : READ_ONLY_VAULT_REASON,
   };
   const run: Record<ViewerActionId, () => void> = {
-    copy: () => (onSaveToMyVault ? onSaveToMyVault() : onPlacement("add")),
+    copy: () => onSaveToMyVault?.(),
     edit: () => onEdit?.(),
     favorite: () => {
       void Haptics.selectionAsync();

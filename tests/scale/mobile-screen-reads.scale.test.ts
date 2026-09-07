@@ -11,14 +11,13 @@
  * So the reads declare `MOBILE_ENTITY_READ_WINDOW` (5,000) and this rig is the
  * proof that the declaration is survivable: the whole page comes back, and the
  * cost of the read is proportional to the ANSWER, not to the library — the
- * statement count is the same at 5,000 rows as the mounted-reader budget
- * measures at 520 (`apps/mobile/src/lib/replica/reader-statement-budget.test.ts`).
+ * statement count is the same at 5,000 rows as it is at 520.
  *
- * VOLUME TABLE (year-3, two mounted vaults — a member and one household):
- *   core.party              5,000 per vault
- *   people.profile          5,000 per vault
- *   core.event              5,000 per vault
- *   schedule.attendee       5,000 per vault
+ * VOLUME TABLE (year-3, the one open vault):
+ *   core.party              10,000
+ *   people.profile          10,000
+ *   core.event              10,000
+ *   schedule.attendee       10,000
  *
  * Assertions are catastrophe bounds. The load-bearing claims are the ROW COUNT
  * (the window is honoured) and the STATEMENT COUNT (constant in library size);
@@ -37,12 +36,19 @@ import type {
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { MultiVaultReplicaReader } from "../../apps/mobile/src/lib/replica/multi-vault-reader";
+import { NativeReplicaStore } from "../../apps/mobile/src/lib/replica/native-replica-store";
 import { NodeSqliteDriver } from "../../apps/mobile/src/lib/replica/node-sqlite-driver";
 import { MOBILE_ENTITY_READ_WINDOW } from "../../apps/mobile/src/lib/replica/offline-budgets";
+import { VaultReadPlane } from "../../apps/mobile/src/lib/replica/vault-read-plane";
 
-const ROWS = 5_000;
-const SCOPES = ["personal", "family"] as const;
+/**
+ * TEN THOUSAND IN ONE FILE (#996 wave 3). The rig used to seed 5,000 per vault
+ * across two mounted vaults, and the window is 5,000 — so the page that filled
+ * it drew from a library twice its size. A seat opens ONE file, so the same
+ * claim needs the same library in one place: a filled window that says it is
+ * truncated proves nothing if the set happens to END at the window.
+ */
+const ROWS = 10_000;
 
 class CountingDriver extends NodeSqliteDriver {
   readonly statements: string[] = [];
@@ -170,21 +176,23 @@ function seed(databaseName: string, vaultId: string): void {
 
 function household(): {
   driver: CountingDriver;
-  reader: MultiVaultReplicaReader;
+  reader: VaultReadPlane;
 } {
   const root = tempDirSync("centraid-mobile-screen-reads-");
-  const scopes = SCOPES.map((vaultId) => ({
-    vaultId,
-    label: vaultId,
-    canWrite: vaultId === "personal",
-    databaseName: path.join(root, `${vaultId}.db`),
-  }));
-  for (const scope of scopes) seed(scope.databaseName, scope.vaultId);
-  const driver = new CountingDriver(path.join(root, "mounted.db"));
-  return { driver, reader: new MultiVaultReplicaReader(driver, scopes) };
+  const databaseName = path.join(root, "personal.db");
+  seed(databaseName, "personal");
+  const driver = new CountingDriver(databaseName);
+  return {
+    driver,
+    reader: new VaultReadPlane(NativeReplicaStore.create(driver, "personal"), {
+      vaultId: "personal",
+      label: "Personal",
+      canWrite: true,
+    }),
+  };
 }
 
-describe("People and Agenda at 5,000 rows a vault", () => {
+describe("People and Agenda at 10,000 rows in the open vault", () => {
   test("every screen read returns its declared window, not the default 1,000", async () => {
     const { driver, reader } = household();
     try {
@@ -204,10 +212,9 @@ describe("People and Agenda at 5,000 rows a vault", () => {
         });
         const ms = performance.now() - started;
         results.push({ entity: seeded.entity, rows: page.rows.length, ms });
-        // Constant in library size: the mounted reader's own budget is
-        // `2 scopes + k`, and 10,000 rows do not add a statement to it.
+        // Constant in library size: 10,000 rows do not add a statement.
         expect(driver.statements.length - before).toBeLessThanOrEqual(12);
-        // The window is honoured, and 10,000 rows across two vaults fill it.
+        // The window is honoured, and 10,000 rows fill it.
         expect(page.rows).toHaveLength(MOBILE_ENTITY_READ_WINDOW);
         // A page that filled says so rather than reading as the whole set.
         expect(page.truncated).toBe(true);

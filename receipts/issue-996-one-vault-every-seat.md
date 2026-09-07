@@ -2784,6 +2784,46 @@ apps/web e2e (chromium, flag ON vs OFF)  # 30 passed / 20 failed, identical sets
   with the flag on and off", which is a claim this container CAN establish and
   which is the one the exit criterion is really about.
 
+## Wave 6 — the key plane (R13)
+
+Locker v0 begins where its boundary does. Until this commit a Locker secret was plaintext the **gateway** could produce: ciphertext at rest under the vault DEK, opened by the gateway on a permit the gateway itself minted after checking a verifier it also held. That is a boundary the holder of the process walks through. The key plane replaces it: one random `K` per vault, minted at **founding** into the gateway's `keys/` directory, secrets stored as `lk1:<base64(nonce‖ct‖tag)>` under AES-256-GCM with AAD `<rowId>‖<keyId>`, and `key_id` on the row saying which key opens it. The gateway holds `K` so it can serve it to an enrolled seat and rotate it — never so it can decrypt on a caller's behalf.
+
+Four decisions this commit makes, each because the alternative was worse:
+
+- **`locker_key` is private and `key_id` carries no foreign key.** The first draft registered `locker.key` as an ontology entity so the reference would be a real FK. That was wrong twice: a registered entity is a `core_entity` supertype member, which would have mutated the FROZEN rung-one baseline text (`core_entity_kind`'s generated INSERT list) and left every existing file without the new kind row; and an FK from replicated `locker_item` into it would have broken the one property `private-tables.ts` exists to keep. Which key a host holds is host custody — the `credential` class — and a seat never asks the file which key is live. It holds `K` and its id from the key door, and "may I open this row" is `row.key_id === my key id`.
+- **The nonce rides inside the value's envelope, the key id is a row column.** `locker_item` has five secret columns; one nonce column could serve one of them. The key id is per ROW because rotation rewrites a row's secrets together, and it is stored as a column **as well as** bound into the AAD — so a ciphertext cannot be replayed under a key it was not sealed with, which a bare blob column would have permitted.
+- **Founding, not first need.** #298 spent a ruling on what the seal key's lazy mint cost: a window in which "is this the right key" had no answer. The plane has no such window — `liveLockerKeyId` is non-null for the life of the vault, and a missing file is unambiguously custody loss rather than possibly a fresh vault.
+- **Retire before insert, inside one transaction.** `locker_key_live_idx` is a partial unique index over the PREDICATE `retired_at IS NULL`, not over the column — SQLite treats NULLs as distinct, so indexing the column would have permitted any number of live rows. It is checked per statement, which is what forced the order and is why "two live keys" is unrepresentable rather than merely unlikely. The test that found this is the stale-`key_id` one.
+
+### Rotation, and the crash between two stores
+
+`keys/` and `vault.db` cannot commit together, so the ORDER is the guarantee: write `K′`; one transaction (retire, insert, re-encrypt every secret, bump every `key_id`); delete the old file. `locker-key-plane.test.ts` interrupts the first window with a fault-injection seam and reopens the vault: the database is untouched, the live key still opens every secret, and the sweep removes the orphan `K′` no row named. The second window is reproduced by putting the retired file back: the database is the sole authority, and the sweep needs no memory of where the crash happened. Ciphertext is never under two keys in either.
+
+### The kit carries the keys; the snapshot never does
+
+`recoveryKitTarget.lockerKeys` is a **list**, not a key. A rotation writes `K′` to disk before the vault names it, so a kit written in that window carrying only the live id restores ciphertext that stops opening the moment the rotation completes — the placebo restore in its sharpest form. `recover()` refuses a target with no Locker key file, with the reason, **before** adopting. Membership of that list is part of `recoveryKitFingerprint`; order is not.
+
+### Files
+
+- `packages/vault/src/gateway/locker-key-plane.ts` — the plane: founding, the wire form and AAD, `assertLiveLockerKeyId`, rotation, the sweep, the kit's key set
+- `packages/vault/src/gateway/locker-key-plane.test.ts` — 10 tests, including both crash windows
+- `packages/vault/src/schema/domains-locker.ts` — `LOCKER_KEY_DDL` (rung six)
+- `packages/vault/src/schema/migrate.ts` · `migrate.test.ts` — rung six; `user_version` 5 → 6
+- `packages/vault/src/schema/private-tables.ts` · `local-tables.ts` — `locker_key` declared, twice, for its two different readers
+- `packages/vault/src/db.ts` — `lockerKey()` / `lockerCustody()` on `VaultDb`: founded on first ask, swept beside it, and re-resolved after a rotation
+- `packages/vault/src/bootstrap.ts` — founding, where the vault is founded
+- `packages/vault/src/index.ts` — the plane's exports
+- `packages/server/src/routes/vault-routes.ts` · `packages/server/src/serve/erase-recovery.ts` — erase destroys `K` with the DEK, on both the direct and the crash-resumed path
+- `packages/server/src/routes/replica-shape-parity.test.ts` — `locker`'s shape id, re-taken for `key_id`
+- `packages/server/src/engine/stores/gateway-db.test.ts` — the ledger band's rung count
+- `packages/server/src/backup/backup.integration.test.ts` — an adopt carries the Locker key files with the DEK
+- `packages/backup/src/engine.ts` — `lockerKeys` on `RecoveryKitTarget`
+- `packages/backup/src/recovery-kit.ts` — the reader validates every entry, and membership of the set enters `recoveryKitFingerprint`
+- `packages/backup/src/recovery-kit.test.ts` — the set round-trips, order is not a capability difference, a half-carried set is
+- `packages/server/src/backup/backup-recovery-kit.ts` — the kit fills it from custody
+- `packages/server/src/backup/recover.ts` — restore refuses without a key file
+- `docs/recovery/backup-restore.md` — the key `K` section, rung six, and the two new invariant rows
+- `scripts/docs-site/src/content/ontology-body.html` — `key_id` on the three Locker tables
 ## Wave 3 — the driver swap: expo-sqlite, SQLCipher, and a floor of 3.49.1
 
 op-sqlite is gone. The phone's SQLite is now expo-sqlite built against
@@ -2924,6 +2964,42 @@ ReactNativeDependencies and the Hermes tag, and nothing else.
 ### Gates
 
 ```
+bunx vitest run packages/vault/src     # 208 files, 1685 passed, 2 skipped
+bunx vitest run packages/backup/src    # 229 files, 2025 passed, 28 skipped (with vault)
+bunx vitest run packages/server/src    # 381 files passed; 7 failed, all environmental
+bun run check:push:static              # stamped on the committed tree
+```
+
+The seven: `IS_SANDBOX=yes` in this container where `acp/launch.test.ts` expects `1` (2); no `sqlite3` binary for `gateway-db-lock.integration.test.ts` (1); and a host disk at 98% (822 MB free), which `VaultBlobBackpressureError` and `ENOSPC` report in `recover.integration.test.ts`, `vault-plane-maintenance.test.ts` and `vault-registry-footprint.test.ts` (4). None touches the key plane; all seven fail the same way on the tree this commit was cut from.
+
+### A decision the tests made, not the design
+
+`K` is named for the vault's own id (`core_vault.vault_id`), never for `path.basename(vaultDir)`. The first draft used the directory name — the spelling `sealKeyFileFor` uses — and three suites said why that is wrong: `vault-registry.test.ts` copies a vault directory under a new name and expects the DUPLICATE-ID error, `backup.integration.test.ts` adopts a restored directory, and `seal-custody.test.ts` renames one. The DEK survives all three only because a vault that has never sealed may mint a fresh key; `K` has no such escape, so the name has to follow the vault. That in turn is why founding happens in `bootstrapVault` rather than at the top of `openVaultDb`: the id is not in the file until the vault exists.
+
+## Wave 6 — enrollment hands `K`; the door serves it
+
+Wave 1 declared `/_vault/seat/locker-key` and had it authenticate and then refuse, so a seat could tell "this gateway has no key plane" from "this gateway is older than the door". It serves now, and the shape of what it serves is the ruling.
+
+**The principal is the device row.** `resolveReplicaAccess` — the same resolution the snapshot and log doors use — has already refused an unenrolled or revoked device by the time the handler runs, and that is the whole authorization question here: an enrolment covers the vault, and `K` opens the vault's Locker. There is no narrower principal to consult and no per-row question to ask.
+
+**The pairing ticket does not carry `K`, and this is why.** The ticket is a base64url payload a camera reads off a screen. It is seen by whatever is pointed at that screen, it survives the glance in a photo roll, and it is validated **before any device exists to be the principal** — there is nothing yet to name, nothing to check a revocation tombstone against, nothing to refuse. A vault key handed out that way is handed to the room, and revoking the device afterwards reaches none of the copies. Fetching it afterwards costs one authenticated request and buys a principal the gateway can name. `seat-routes.test.ts` pins both halves: a revoked device is refused, and the ticket codec's payload is asserted key-shaped by its exact field set, so adding `K` to it would fail a test rather than pass a review.
+
+**`Cache-Control: no-store`.** A proxy or a service worker holding `K` is a second copy of the key in a place nothing revokes.
+
+**The seat's half keeps nothing.** `fetchLockerVaultKey` returns bytes and holds no module-level cache — a cache there would be a fourth copy of the key that no lock covers, and a test asserts two asks are two requests. It refuses an algorithm it does not implement rather than guessing, because decrypting under the wrong construction is silent where refusing is loud, and it refuses a key that is not 32 bytes. What the caller does with the bytes is the unlock boundary, and that is the next commit's subject, not this module's.
+
+**The foreign-device receipt stamp.** A reveal receipt is a device intent the gateway stamps, and with the seat decrypting locally the receipt is the only record of who looked. So `replica-intent-route.ts` takes the device from `context.access.deviceId` and a body-supplied `deviceId` reaches nothing: the outcome row is the session's principal's, and the forged name resolves to no outcome at all. If the payload could name the device, "which seat revealed this secret" would be a claim rather than evidence — forgeable by the one party the trail exists to hold to account.
+
+### Files
+
+- `packages/core/src/protocol/seat-log.ts` · `packages/core/src/protocol/index.ts` — `SeatLockerKeyWire`; `keyId` is as load-bearing as `key`
+- `packages/core/src/protocol/routes.ts` — the door's comment, now that it serves
+- `packages/server/src/routes/seat-routes.ts` — the key door
+- `packages/server/src/routes/seat-routes.test.ts` — served to the enrolled row, refused to the revoked one, and the ticket's field set
+- `packages/client/src/locker/locker-key-door.ts` — the seat's half: fetch, refuse, keep nothing
+- `packages/client/src/locker/locker-key-door.test.ts` — the refusals, and that two asks are two requests
+- `packages/client/src/index.ts` — its export
+- `packages/server/src/routes/replica-intent-attribution.test.ts` — the foreign-device stamp
 bunx vitest run --root apps/mobile src/lib/replica src/kit/replica src/lib/upload
                                        # 56 files, 449 passed
 bun run --cwd apps/mobile test         # 287 files, 2448 tests; 1 red
@@ -2955,6 +3031,277 @@ bun run check:push:static              # 4/4, stamped on the committed tree
   `pod install` rewrites the whole file anyway. The gap is stated above rather
   than papered over.
 
+## Wave 3 — the mount plane goes, and the outbox is the surface
+
+A seat opens ONE file (R12). Everything below follows from that sentence, and
+most of it is deletion: 5,583 lines of a plane that existed to answer a
+question one open file cannot ask.
+
+### What the reader actually was, and why commit 4 folded into this one
+
+`MultiVaultReplicaReader` and `MultiVaultReplicaSession` were not only the read
+plane. They also owned the **pending overlay** (`PendingChangeStatus`,
+`pendingChanges`, `dismissPendingChange`), `share`, `pullScopes` / `status()` /
+`revokeScope`, and the whole cross-vault **placement** outbox. Deleting the read
+plane therefore deletes the machinery the sync-and-conflict surface stands on —
+which was scheduled for this wave's LAST commit. Landing a stopgap outbox here
+and replacing it two commits later would have meant writing that surface twice,
+so the coordinator folded it: this commit publishes `NativeReplicaSession`
+directly and reads the pending surface off wave 2's shared chain
+(`offline-chain.ts` + `seat-intent-store.ts`).
+
+### One open file, and the switcher over the rest
+
+`ReplicaProvider.tsx` keys the mount on the `(gateway, vault)` PAIR. Switching
+vaults IS the remount: the key moves, `built` no longer matches, and consumers
+read `ready: false` before any read can land on a closing session — the
+retraction the old code did by hand with a nonce and a one-attempt anti-spin
+guard. `vaultScopes` (was `mountedScopes`) returns every vault the gateway
+granted, UNSLICED, because what a member may switch to is bounded by the grant
+and not by how many databases a reader could attach.
+
+Revocation gets simpler in the same move: a vault this seat is not holding open
+has no handle, so reclaiming it is a file deletion and nothing else.
+
+### The row still says which vault, because eighteen screens ask
+
+`lib/replica/vault-source.ts` keeps three of the six provenance columns —
+`__centraidScopeId`, `__centraidScopeLabel`, `__centraidCanWrite` — and drops
+the three ARRAY badges with the question they answered. `NativeReplicaSession`
+stamps them on every row it returns, so `row-provenance.ts` and its eighteen
+callers are unchanged. Moving "may I write here" to a context flag would have
+made every one of those screens reach for a hook to answer a question about
+data it already holds. The rowId is no longer prefixed with the vault: two
+files could hand back the same row id, one cannot, and a prefixed id is one the
+write path then has to strip back off.
+
+### The pending surface, over one outbox
+
+- `PendingChangeStatus` is `IntentState` and nothing more. It used to be that
+  union PLUS the placement outbox's own `in-flight`, because the phone had two
+  outboxes.
+- `PendingChangeActions` lost `vaultId` and `kind` from all four verbs: the
+  intent id alone addresses the row.
+- `pendingChanges()` carries `heldBadge` — `chainHolds` + `chainBadgeCopy` from
+  wave 2, computed ON THE SEAT because the badge has to be right in airplane
+  mode, where the gateway's verdict does not exist and will not for hours. A
+  held dependent draws "Waiting on an earlier change" instead of "waiting to
+  send": nothing is wrong with it, and it releases when the change in front of
+  it lands.
+- `retained` replaces the `attempts !== undefined` tell for which rows may be
+  retried or discarded; an attention remnant keeps only Dismiss.
+- `pendingProjection()` exposes `reconstructPendingProjection` for the restart
+  case commit 4's journey exercises.
+
+### Placements go; a share is an HTTP call
+
+`crossVaultPlacements` is deleted, so the placement plane goes with it: the
+placement half of `placement-transport.ts`, the lightbox's Copy/Move-to-another-
+vault sheet, `placementLine`'s six sentences and their test. What survives is
+`commons-transport.ts` — three gateway calls with no outbox behind them — and
+`ShareSheet` calls `postCommons` directly. A share is a predicate the gateway
+compiles (wave 7), not something this phone queues, and it was never a session
+verb for any reason other than the facade being where the code sat.
+
+The lightbox's "Copy" is now only "keep this shared photo in my vault"; an item
+with no commons offer has nothing to copy INTO, and says so.
+
+### The wall gates on the doors it needs
+
+`supportsMobileOfflineGateway` reads `seatReplica` instead of two words
+describing a deleted mechanism (F1). The key is OPTIONAL on the wire, which is
+exactly right: absence is what a gateway older than the doors says, and it
+reads as off — the update wall, not a phone that mounts and then finds no file
+to fetch.
+
+### The protocol bump, and the one number that survives the cap
+
+`GATEWAY_PROTOCOL_VERSION` / `GATEWAY_MIN_PROTOCOL_VERSION` → 4. Dropping two
+REQUIRED keys from a structural capability map is a wire change either end
+would otherwise read as malformed; the honest answer to a peer on the other
+side is the update wall, not a shim that pretends a deleted mechanism is there.
+
+`MAX_MULTIPLEX_REPLICA_SCOPES` → `MAX_REPLICA_FEED_MOUNTS`. It was one
+agreement covering two budgets — the mounts a radio carries and the files the
+phone attaches into one reader — and only the first still exists. It is kept
+rather than dropped because an unbounded mount list is a subscription the
+CALLER sizes and the gateway pays for.
+
+### The tests that were about the plane, and what replaced them
+
+`VaultReadPlane` (`lib/replica/vault-read-plane.ts`) is the seam the deleted
+reader was for the lanes that hold a store and no session — the airplane-mode
+journeys and the read-parity oracles. It adds two things to
+`ReplicaSqliteStore`: the appId → shapeId resolution and the vault stamp.
+
+- `home-tile-reads.test.ts` pinned "one composed statement whose UNION ALL arms
+  are the attached vaults". One arm now, so what it pins is the claim that
+  always mattered: the tile does not pay for the entity to draw its newest N.
+  The fixture seeds 700 days into one file rather than 500 into each of four,
+  because a page that ends where the window ends would otherwise pass for a
+  page that filled it. The recording driver moved from `allAsync` to `all`: the
+  seat's store is synchronous by construction.
+- `mobile-screen-reads.scale.test.ts` seeds 10,000 rows in one file for the
+  same reason — the window is 5,000, and two vaults of 5,000 used to be what
+  made a filled page provable.
+- `PendingRestartJourney.test.tsx` mounts what the provider now mounts, which
+  is the session and nothing over it.
+- `VaultsSwitcher.test.tsx`'s cap disclosure is gone with the cap.
+- `pending-write-visibility.test.ts` needed a longer `waitFor`: the mounted
+  reader projected a catalog-less intent AT READ TIME, so its row appeared the
+  instant the catalog did. The seat draws its stored projection instead, which
+  `backfillDeferredProjections` writes once page one lands — a durable
+  transition on the outbox the drain is also working, so it can lose a race and
+  be retried. The claim is that it arrives, not that it arrives first.
+### The flags were inert on Android, and nothing here runs `expo prebuild`
+
+`app.config.ts`'s plugin block is what a prebuild would READ; the committed
+`android/` and `ios/` projects are what gets compiled, and no lane in this repo
+regenerates them. `apps/mobile/android/gradle.properties` carried no
+`expo.sqlite.*` key at all — so `useSQLCipher`, `enableFTS` and
+`withSQLiteVecExtension` did nothing, and Android would have shipped the
+vendored 3.50.3 with no SQLCipher and no fts5. The phone would have quietly
+stopped being the 3.49.1 seat the whole floor is cut to fit, and commit 1's
+`seat-sqlite-floor.test.ts` would still have passed, because it reads the
+plugin block.
+
+The three keys are in `gradle.properties` now, spelled exactly as
+`withSQLite.js`'s `updateAndroidBuildPropertyIfNeeded` spells them, and
+`seat-native-build-config.test.ts` holds them equal to the plugin block so they
+cannot go inert again. It covers ANDROID only: `ios/Podfile.properties.json` is
+the same three keys on the other side and belongs to the macOS CI slice, which
+is the lane that can run `pod install` and prove the link — asserting a file
+another branch is writing would fail on this one. **The iOS half is not covered
+by any test on this branch.** The Android emulator gate's `assembleRelease` is
+what proves SQLCipher actually links.
+
+### One red this branch was carrying
+
+`DocsHome.test.tsx`'s Shared-shelf fixture still wrote `shape_id` on the
+`share.subscription` and `share.subscription_lineage` rows. Wave 7 re-keyed
+both tables to `authority_id` (R10 — `share_subscription`'s primary key is
+`(authority_id, audience_vault_id)` now), and `docs-projection-shares.ts:90`
+reads `authority_id`, so every arrival read as unowned and the shelf drew
+nothing. Commit 1's report called this pre-existing on the base tree; it is —
+the base tree is this branch, and the merge of wave 7 is where it came in. The
+fixture is fixed; the assertion is untouched.
+
+### Every file this commit touches
+
+The full list, one path per line, grouped by what happened to it.
+
+**Deleted — the mount plane, the placement plane, and the tests that were about them:**
+
+- `apps/mobile/src/apps/photos/placement-status-copy.test.ts`
+- `apps/mobile/src/lib/replica/mounted-read-plan.pushdown.test.ts`
+- `apps/mobile/src/lib/replica/mounted-read-plan.test.ts`
+- `apps/mobile/src/lib/replica/mounted-read-scoping.ts`
+- `apps/mobile/src/lib/replica/multi-vault-provenance.ts`
+- `apps/mobile/src/lib/replica/multi-vault-read-parity.test.ts`
+- `apps/mobile/src/lib/replica/multi-vault-reader.test.ts`
+- `apps/mobile/src/lib/replica/multi-vault-reader.ts`
+- `apps/mobile/src/lib/replica/multi-vault-session.test.ts`
+- `apps/mobile/src/lib/replica/multi-vault-session.ts`
+- `apps/mobile/src/lib/replica/placement-transport.test.ts`
+- `apps/mobile/src/lib/replica/placement-transport.ts`
+- `apps/mobile/src/lib/replica/reader-statement-budget.test.ts`
+- `tests/quality/replica-scope-cap-parity.test.ts`
+
+**New:**
+
+- `apps/mobile/src/lib/replica/commons-transport.ts`
+- `apps/mobile/src/lib/replica/seat-native-build-config.test.ts`
+- `apps/mobile/src/lib/replica/vault-read-plane.ts`
+- `apps/mobile/src/lib/replica/vault-source.ts`
+
+**Changed:**
+
+- `apps/desktop/tests/e2e/fixtures.ts`
+- `apps/mobile/android/gradle.properties`
+- `apps/mobile/native-fingerprints.json`
+- `apps/mobile/src/apps/docs/DocsHome.test.tsx`
+- `apps/mobile/src/apps/docs/docs-copy.ts`
+- `apps/mobile/src/apps/docs/docs-projection.test.ts`
+- `apps/mobile/src/apps/locker/locker-airplane.test.ts`
+- `apps/mobile/src/apps/notes/NotesHome.tsx`
+- `apps/mobile/src/apps/people/people-model.test.ts`
+- `apps/mobile/src/apps/photos/AlbumDetail.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightbox.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightboxToolbar.tsx`
+- `apps/mobile/src/apps/photos/photos-pending.test.ts`
+- `apps/mobile/src/apps/photos/photos-vaults.ts`
+- `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx`
+- `apps/mobile/src/apps/tally/TallyHome.tsx`
+- `apps/mobile/src/apps/tally/tally-airplane.test.ts`
+- `apps/mobile/src/apps/tasks/TasksHome.test.tsx`
+- `apps/mobile/src/apps/tasks/useTasks.ts`
+- `apps/mobile/src/kit/replica/PendingChangesSheet.tsx`
+- `apps/mobile/src/kit/replica/ReplicaProvider.test.tsx`
+- `apps/mobile/src/kit/replica/ReplicaProvider.tsx`
+- `apps/mobile/src/kit/replica/ReplicaStatusBar.test.tsx`
+- `apps/mobile/src/kit/replica/pending-changes.ts`
+- `apps/mobile/src/kit/replica/pending-copy.ts`
+- `apps/mobile/src/kit/replica/replica-context.ts`
+- `apps/mobile/src/kit/replica/replica-mount.test.ts`
+- `apps/mobile/src/kit/replica/replica-mount.ts`
+- `apps/mobile/src/kit/replica/row-provenance.test.ts`
+- `apps/mobile/src/kit/replica/row-provenance.ts`
+- `apps/mobile/src/kit/share/ShareSheet.test.tsx`
+- `apps/mobile/src/kit/share/ShareSheet.tsx`
+- `apps/mobile/src/lib/replica/background-scopes.ts`
+- `apps/mobile/src/lib/replica/background-sync.test.ts`
+- `apps/mobile/src/lib/replica/background-sync.ts`
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts`
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.ts`
+- `apps/mobile/src/lib/replica/mobile-gateway-compatibility-core.ts`
+- `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts`
+- `apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts`
+- `apps/mobile/src/lib/replica/mobile-gateway-skew.test.ts`
+- `apps/mobile/src/lib/replica/native-session.ts`
+- `apps/mobile/src/lib/replica/offline-budgets.ts`
+- `apps/mobile/src/lib/replica/pending-write-visibility.test.ts`
+- `apps/mobile/src/lib/upload/followup.test.ts`
+- `apps/mobile/src/lib/upload/followup.ts`
+- `apps/mobile/src/screens/home/VaultsSwitcher.test.tsx`
+- `apps/mobile/src/screens/home/VaultsSwitcher.tsx`
+- `apps/mobile/src/screens/home/home-tile-reads.test.ts`
+- `docs/mobile-offline.md`
+- `docs/protocol.md`
+- `packages/cli/src/cli.contract.test.ts`
+- `packages/client/src/gateway-client-contract-fixtures.ts`
+- `packages/client/src/react/shell/routes/AutomationViewRoute.test.tsx`
+- `packages/client/src/replica/native.ts`
+- `packages/core/src/protocol/capabilities.test.ts`
+- `packages/core/src/protocol/capabilities.ts`
+- `packages/core/src/protocol/handshake.test.ts`
+- `packages/core/src/protocol/index.ts`
+- `packages/core/src/protocol/routes.ts`
+- `packages/core/src/protocol/version.ts`
+- `packages/server/src/routes/multiplex-replica-routes.ts`
+- `packages/server/src/serve/build-gateway.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+- `scripts/fuzz/corpus/protocol-handshake/accepted.json`
+- `scripts/fuzz/corpus/protocol-handshake/minimal.json`
+- `scripts/fuzz/corpus/protocol-handshake/skewed.json`
+- `tests/integration-mobile/locker-rows-parity.integration.test.ts`
+- `tests/integration-mobile/tally-balance-parity.integration.test.ts`
+- `tests/scale/mobile-screen-reads.scale.test.ts`
+
+### Decisions — wave 3, the mount plane
+
+- **Commit 4's outbox surface folded into commit 2, and the reason is the
+  find.** The reader OWNED the pending overlay, so the plane could not be
+  deleted without taking the sync-and-conflict surface with it. The choice was
+  a stopgap that gets thrown away or one commit; the coordinator ruled one.
+- **The row keeps its source stamp.** The alternative — `canWrite` as a context
+  flag — is fewer moving parts in the abstract and eighteen screens reaching
+  for a hook in practice.
+- **`MAX_REPLICA_FEED_MOUNTS` is a rename, not a survival of the cap.** The cap
+  bounded ATTACHed databases; this bounds one SSE subscription's mounts.
+  Deleting it outright would have left the route sized by its caller.
+- **A share routes through the ordinary HTTP call, not the session.** Wave 7
+  made a share a predicate; it was a session verb only because the facade was
+  where the code happened to sit.
 ## CI — iOS lock job
 
 Wave 3 left `apps/mobile/ios/Podfile.lock` naming `op-sqlite` and carrying no
@@ -3368,6 +3715,10 @@ after:  added 31663  duplicated 449 (1.4%)
 ### Gates
 
 ```
+bunx vitest run packages/server/src/routes/seat-routes.test.ts                    # 11 passed
+bunx vitest run packages/server/src/routes/replica-intent-attribution.test.ts     # 5 passed
+bunx vitest run packages/client/src/locker                                        # 5 passed
+bun run check:push:static                                                         # stamped on the committed tree
 bunx vitest run …                     # vault schema/replica/operations/commands, client seat, server seat-routes
 bunx vitest run -c vitest.quality.config.ts tests/quality/seat-replay-parity.test.ts
 bun run --filter @centraid/vault build
@@ -3482,3 +3833,128 @@ The other four `verify` failures in this lane — `work-counters.ts`'s
 `core_content_item.media_type`, the `host-sync-bytes-per-pass` ledger row, the
 three U4 copy strings, and a `recover.integration` ECONNRESET — are NOT in this
 commit: they were moved to the end-of-PR CI pass.
+## Wave 6 — the unlock boundary on each seat
+
+R13 says the sentence this commit is built around: **storage is not authorization**. A non-extractable WebCrypto key stops export, not use by app code running on the page. Electron's `safeStorage` encrypts at rest and prompts for nothing. IndexedDB is readable by the origin that wrote it. Each of those makes `K` harder to carry away and none of them makes a person prove they are present — so shipping one as if it were a boundary is how the gateway's permit gets deleted in exchange for nothing.
+
+**The phone already had the boundary; it was guarding the wrong thing.** `locker-device-auth.ts` held a device secret whose only job was to buy a permit, after which the gateway decrypted and sent back plaintext. The same store, under the same `requireAuthentication` / `WHEN_PASSCODE_SET_THIS_DEVICE_ONLY` options, now holds `K` — and the reveal happens on the device. The keychain will not return the item without Face ID, Touch ID or the passcode; the item does not exist on a device with no passcode and does not travel in a backup. Session cache with the gate's own five minutes, because a prompt per field is a prompt nobody reads, and `lockLocker()` rides `clearSecureCache()` so one gesture drops every decrypted credential the app holds rather than this one and whatever else remembered to listen.
+
+**Desktop and PWA get one boundary, not two.** Per R-A3, Touch ID is deferred — `promptTouchID` needs a signed, entitled macOS build — so both seats get the `KNOWS` half: one local passphrase, PBKDF2-SHA-256 (600k rounds) over it, AES-GCM around `K`, and the wrapped blob is all that is ever at rest. `LockerSession` is shared; only the store differs — IndexedDB on the PWA, `safeStorage`-backed main-process storage on the desktop. The desktop bridge deliberately has no `getLockerVaultKey()`: the renderer unwraps, main never holds `K`, and a test asserts the interface's exact method set so adding one fails rather than passes review.
+
+**The clock is checked, not scheduled.** A `setTimeout` in a backgrounded tab, a suspended Electron window or a React Native app in the background may fire minutes late or never, and a session that expires only when a timer says so is a session that does not expire. `unlocked` compares the clock on every ask; `key()` locks as a side effect of finding itself expired, so a caller cannot ask twice and get two answers.
+
+**Nothing at rest is an oracle.** The wrapped blob carries no verifier: the only way to test a guess is to do the derivation, and salt and nonce are per wrap, so two enrolments of one vault are not comparable at rest either. A test asserts the blob's exact field set and that neither the passphrase nor the key appears in it.
+
+**The two envelopes are held equal by test, not by care.** `locker-secret.ts` is a second implementation of `locker-key-plane.ts`'s wire form, which is the shape that drifts. So `locker-secret.test.ts` encrypts with the gateway's node:crypto and decrypts with the seat's WebCrypto, and then the other way, over the same AAD — including a non-ASCII secret, which is where a `TextEncoder`/`Buffer` mismatch would show.
+
+**A stale `key_id` is refused with the message.** On the seat, before the intent is posted, where the plaintext is still in hand and "re-enter this secret" is an answer the owner can act on. `assertLiveLockerKeyId` in the vault is the gateway's own copy of the check, exported and tested; **its call site on the Locker write path is not wired yet** and lands with commit 4's rewrite of those commands.
+
+### Files
+
+- `packages/client/src/locker/locker-unlock.ts` — the passphrase wrap, `LockerSession`, the numbers carried over from the gate
+- `packages/client/src/locker/locker-unlock.test.ts` — nothing at rest is an oracle; the clock is checked, not scheduled
+- `packages/client/src/locker/locker-secret.ts` — local reveal, the AAD, the stale-`key_id` refusal
+- `packages/client/src/locker/locker-secret.test.ts` — encrypt on one implementation, decrypt on the other, both ways
+- `packages/client/src/locker/wrapped-key-store.ts` — IndexedDB for the PWA, the desktop bridge, a memory store for tests
+- `packages/client/src/locker/wrapped-key-store.test.ts` — the bridge carries ciphertext, and has no way to ask main for `K`
+- `packages/client/src/index.ts` — their exports
+- `apps/mobile/src/apps/locker/locker-device-auth.ts` — `K` behind the OS prompt, the session cache, `lockLocker()`
+- `apps/mobile/src/apps/locker/locker-device-auth.test.ts` — one prompt per session, another after the timeout, one gesture to drop it all
+- `apps/desktop/src/main/gateway-secrets.ts` — `lockerWrappedKeys` beside `gatewayWrappingKeys`; the wrapped blob only, and no way to ask main for `K`
+
+### Gates
+
+```
+bunx vitest run packages/client/src/locker                                  # 4 files, 23 passed
+cd apps/mobile && bunx vitest run src/apps/locker/locker-device-auth.test.ts  # 9 passed
+bunx tsc -p apps/desktop --noEmit                                           # clean
+bun run check:push:static                                                   # stamped on the committed tree
+```
+
+### What this commit does NOT do
+
+The Locker blueprint's screens still drive the gateway's permit flow: `app-root.tsx`, `session.ts`, `route-acts.ts` and `PermitGate.tsx` are unchanged, and `Lock.tsx` is not yet wired to `LockerSession`. The boundary is built, tested and demonstrated on each seat's code path — which is what the wave's ordering requires before the deletions — but the screens adopt it in commit 4, together with the permit's removal. Naming this here rather than letting the file list imply otherwise.
+
+### Decisions — wave 6, what the gate deletion covers
+
+| Id | Current decision |
+| --- | --- |
+| **W6-D1** | **`schema/sealed.ts` STAYS. R13 supersedes the Locker _gate_, not the §293 sealed-column class.** The wave's scope line reads "the sealed registry is deleted", and taken literally that would have deleted the column class with it. It must not: the gate had exactly one consumer and the class has three that the key plane does not touch. What goes is what `K` replaced — permits, the `authenticate` op, `locker-auth.ts`, `PermitGate.tsx`, `AuthPayload` and the permit screens — because no consumer of the gate survives a seat that decrypts locally. What stays is `SEALED_COLUMNS` and the machinery around it, because `sync.connection_credential`'s five broker-token columns, the ext band's per-app declared `sealed` lists, and the journal redaction / error-text scrub (`redactCommandInput`, `scrubSealedText`, `sealedHashToken`) each depend on it and none of them is a Locker reveal. Deleting the class to satisfy a scope line would have turned a gateway that must inject OAuth tokens into a gateway that stores them in the clear. The Locker entries in the registry stay too, for the redaction half: `key_id` and the `lk1:` ciphertext must still be hash-not-value in the append-only journal. Ruled by the coordinator on the finding raised at the close of wave 6 commit 3. |
+
+### The lock lane's commit-back, and what it may write
+
+The lane works: run 34100134506 on 39a0bfcf3 pushed bcf17bd3f, and
+`apps/mobile/ios/Podfile.lock` now carries `ExpoSQLite (57.0.2)` and no
+op-sqlite. Two consequences of a job that pushes.
+
+**The root fetches before every push.** `.github/workflows/mobile-ios-lock.yml`
+commits back to the branch it read on every push that touches a native input, so
+`claude/checkout-remote-main-70f7lb` can move under the root at any moment with
+no local action. A push that did not fetch first is a non-fast-forward at best
+and a lost lock at worst.
+
+**The bot may not write `apps/mobile/native-fingerprints.json`.** CI rejected the
+value it wrote — mobile-smoke on bcf17bd3f reported `ios native fingerprint
+mismatch: committed be5176356574d46073d103d8d731aeb6914565bf, current
+4cdab9719d86b91f5ffbc2267efd1523d38e9326`. The ios hash is platform-dependent,
+proved rather than assumed: creating
+`node_modules/expo-sqlite/ios/vec.xcframework` and recomputing moves it
+(`4cdab9719d…` → `b20d5b4378…`). The macOS lane necessarily has that directory,
+because it builds it, plus the `sqlite3.c`/`sqlite3.h` that
+`ExpoSQLite.podspec`'s `vendor_sqlite_src!` copies into the same module during
+`pod install`. A fingerprint computed after those exist can never equal one an
+ubuntu checker reproduces. So the lane keeps running `ci:native-state --write` —
+that is the fail-closed L1–L3 gate over what `pod install` just produced — and
+`git add`s only `apps/mobile/ios/Podfile.lock`, leaving the refreshed
+fingerprints on the runner's disk. The fingerprint belongs to whoever changes
+native inputs, regenerated on Linux, which is how this merge resolved it:
+`bun run --cwd apps/mobile ci:native-state --write` against the merged tree
+produced ios `4cdab9719d…` / android `df5d7e6f6c…`, the exact value CI computed.
+
+`bun run --cwd apps/mobile ci:versions` is not part of this: ci.yml:972-987 runs
+it `continue-on-error: true` and `exit 0`, writing the Expo pin-skew list to the
+step summary. It is advisory by construction and cannot fail `mobile-smoke`.
+
+```
+bun run --cwd apps/mobile ci:native-state --write   # regenerated on the merged tree
+bun run --cwd apps/mobile ci:native-state           # green: lock, paths, both fingerprints
+```
+
+### The bot's commit is made governance-compliant
+
+CI `governance` (run 34103181691) rejected bcf17bd3f:
+`commit-issue-receipt-match — commit touches no receipts/issue-*.md`. Every
+future commit-back would fail identically, so
+`.github/workflows/mobile-ios-lock.yml`'s commit step now writes a body line
+`governance: allow-commit-issue-receipt-match bot-regenerated lockfile; …`,
+which is the escape the directive itself documents
+(`.governance/packs/governance-kit/audit/directives/commit-issue-receipt-match/check.sh:29-33`,
+reason required — a bare token does not waive). The alternative, having the bot
+append prose to `receipts/issue-996-one-vault-every-seat.md`, is worse: a bot
+writing into an append-only audit artifact is exactly what that artifact exists
+to prevent. The directive itself is untouched.
+
+The other body-reading directives were checked rather than assumed.
+`commit-message-format` wants Conventional Commits plus an issue suffix, which
+the subject `chore(mobile): regenerate ios/Podfile.lock for expo-sqlite (#996)`
+already satisfies. `agent-session-identity` keys on a detected agent runtime and
+skips a plain `git commit` on a runner. `toolchain-config-protection` reads the
+body too, but only for commits touching protected paths, and this one touches
+`apps/mobile/ios/Podfile.lock` alone.
+
+**Proved, not reasoned.** A commit shaped exactly like the bot's — same subject,
+same waiver body, no receipt in its diff — was made locally and
+`bash .governance/run.sh` walked it: it raises no violation. The single
+violation the run reports is bcf17bd3f itself, the already-pushed commit this
+change prevents recurring; its body cannot be edited now that it is merged, so
+it stays red on this branch's history until the branch is squashed or rewritten.
+That is a call for whoever owns the branch, not something a lane commit should
+paper over.
+
+```
+git commit --allow-empty -m "chore(mobile): regenerate ios/Podfile.lock for expo-sqlite (#996)" \
+  -m "governance: allow-commit-issue-receipt-match bot-regenerated lockfile; …"
+bash .governance/run.sh    # the simulated commit passes; only bcf17bd3f is flagged
+bun run lint:workflow-pins # 24 workflows clean
+bun run format:check       # clean
+```

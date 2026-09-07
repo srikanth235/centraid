@@ -18,8 +18,7 @@ import type {
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { formatRelativeTime } from "@centraid/design";
 
-import type { PendingChangeStatus } from "../../lib/replica/multi-vault-session";
-import type { PendingChange } from "./pending-changes";
+import type { PendingChange, PendingChangeStatus } from "./pending-changes";
 
 /**
  * Every outbox state in a member's words. Exhaustive over the union with no
@@ -31,7 +30,6 @@ export function humanStatus(status: PendingChangeStatus): string {
     case "queued":
       return "waiting to send";
     case "sending":
-    case "in-flight":
     case "awaiting-change":
       return "being applied";
     case "parked":
@@ -57,7 +55,6 @@ const OVERLAY_STATUS: Readonly<
 > = {
   queued: "queued",
   sending: "sending",
-  "in-flight": "sending",
   "awaiting-change": "sending",
   parked: "parked",
   denied: "denied",
@@ -132,15 +129,10 @@ export interface PendingChangeVerbs {
 
 export function pendingChangeVerbs(change: PendingChange): PendingChangeVerbs {
   const overlay = pendingOverlayOf(change);
-  // Retry and Discard are the intent outbox's own verbs. A placement's outbox
-  // has neither (multi-vault-reader.ts), so those rows keep Cancel and Dismiss
-  // — and neither does an attention remnant, the last trace of a write the
-  // outbox no longer holds. `attempts` is the tell: only a retained intent
-  // carries one (native-session.ts `pendingChanges`).
-  const outbox =
-    change.kind === "replica" &&
-    overlay !== undefined &&
-    change.attempts !== undefined;
+  // Retry and Discard are the intent outbox's own verbs, and an attention
+  // remnant — the last trace of a write the outbox no longer holds — has
+  // neither, so those rows keep Cancel and Dismiss.
+  const outbox = change.retained && overlay !== undefined;
   const retry = outbox && pendingOverlayCanRetry(overlay);
   const discard = outbox && pendingOverlayCanDiscard(overlay);
   const settled =
@@ -170,7 +162,6 @@ const STUCK_AFTER_MS = 60 * 60 * 1_000;
 const UNSETTLED = new Set<PendingChangeStatus>([
   "queued",
   "sending",
-  "in-flight",
   "awaiting-change",
 ]);
 

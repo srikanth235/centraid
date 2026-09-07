@@ -137,7 +137,7 @@ Product skew (desktop 0.6 talking to gateway labeled 0.4) is **allowed** when pr
 
 Constants live in `@centraid/core/protocol` (`GATEWAY_VERSION`, `GATEWAY_PROTOCOL_VERSION`, `GATEWAY_MIN_PROTOCOL_VERSION`).
 
-`GATEWAY_PROTOCOL_VERSION` and `GATEWAY_MIN_PROTOCOL_VERSION` both moved to `3` for the member→owner wire rename (#726 P0 — ownership replaces roles) — a hard floor bump, no COMPAT window; an old client sees the update wall. See [decisions.md](decisions.md).
+`GATEWAY_PROTOCOL_VERSION` and `GATEWAY_MIN_PROTOCOL_VERSION` both moved to `4` for [#996](https://github.com/srikanth235/centraid/issues/996) wave 3, which removes the required `multiVaultReplica` and `crossVaultPlacements` keys from `GatewayCapabilities` along with the mount plane they described — dropping required keys from a structural contract is a wire change either end would otherwise read as malformed. They moved to `3` before that for the member→owner wire rename (#726 P0 — ownership replaces roles). Each was a hard floor bump, no COMPAT window; an old client sees the update wall. See [decisions.md](decisions.md).
 
 `COMPAT(name)` cleanup floors should cite **protocol** (or capability name), not product semver, when possible.
 
@@ -197,7 +197,7 @@ The `/centraid/_tool/centraid_*` shim these replaced was deleted outright — v0
 
 ### Blueprint-readiness feature contracts (#630)
 
-Mobile judges the normal gateway handshake before mounting a replica. The mutual protocol window and the required `multiVaultReplica` / `crossVaultPlacements` capabilities are evaluated once in `mobile-gateway-compatibility-core.ts`; incompatibility produces exactly one “update gateway” or “update app” wall. Feature code does not retry older route shapes or silently fall back to an online-only client.
+Mobile judges the normal gateway handshake before mounting a replica. The mutual protocol window and the required `seatReplica` capability — the snapshot and log-tail doors ([#996](https://github.com/srikanth235/centraid/issues/996)) — are evaluated once in `mobile-gateway-compatibility-core.ts`; incompatibility produces exactly one “update gateway” or “update app” wall. Feature code does not retry older route shapes or silently fall back to an online-only client.
 
 Household placement uses the gateway control plane because one request names an origin and an audience vault. It is **same-owner only** since #825: `POST /centraid/_gateway/edges` refuses a cross-owner pair with `cross_owner_give_retired` and names the grant plane in its message, because giving another person a copy is no longer a verb this product has (ruling G-copy). `gatewayPlacements` is the durable, link-token-idempotent client outbox ingress — the only route left on this plane since #726 P0 deleted the dead `/share` routes (`gatewayShare`, `gatewayShareRemove`, `gatewayShareReceipts` had no client caller; placement's own `share_access_receipts` recording stays). The gateway resolves both vault handles and confirms ownership — not a role — before entering either single-vault context.
 

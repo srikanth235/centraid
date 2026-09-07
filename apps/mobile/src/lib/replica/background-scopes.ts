@@ -1,4 +1,4 @@
-import { MAX_MOUNTED_NATIVE_SCOPES } from "./offline-budgets";
+import { MAX_BACKGROUND_FEED_MOUNTS } from "./offline-budgets";
 
 export interface CachedBackgroundScope {
   vaultId: string;
@@ -6,7 +6,7 @@ export interface CachedBackgroundScope {
   canWrite?: boolean;
 }
 
-/** The focused write target always survives the four-scope background cap. */
+/** The focused write target always survives the background feed cap. */
 export function selectBackgroundScopes(
   scopes: readonly CachedBackgroundScope[],
   activeVaultId: string
@@ -17,5 +17,5 @@ export function selectBackgroundScopes(
   ];
   if (!ordered.some((scope) => scope.vaultId === activeVaultId))
     ordered.unshift({ vaultId: activeVaultId });
-  return ordered.slice(0, MAX_MOUNTED_NATIVE_SCOPES);
+  return ordered.slice(0, MAX_BACKGROUND_FEED_MOUNTS);
 }

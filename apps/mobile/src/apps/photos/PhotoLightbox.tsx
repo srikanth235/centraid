@@ -40,7 +40,6 @@ import {
 
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
-import OptionSheet from "../../kit/components/OptionSheet";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -50,11 +49,10 @@ import {
 } from "../../kit/replica/write-outcome";
 import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
-import type { PlacementRecord } from "../../lib/replica/multi-vault-reader";
 import {
   listCommonsResidents,
   retainCommonsItem,
-} from "../../lib/replica/placement-transport";
+} from "../../lib/replica/commons-transport";
 import type { PhotosScreenProps } from "../../navigation";
 import { buildDismissGesture } from "./lightbox-gestures";
 import { MediaPage } from "./MediaPage";
@@ -95,37 +93,6 @@ import {
 
 // Gesture construction lives in lightbox-gestures.ts — see the comment there
 // for why the builder chains must stay outside component render bodies.
-
-/**
- * SIX ANSWERS, SIX SENTENCES (#880). `place()` settles at any of the placement
- * statuses, and only two of them are "waiting for the network": `denied` and
- * `failed` reach that answer with the gateway right there, so announcing them
- * as queued tells the member to wait for something that already finished, and
- * hides a permission change behind an outage. The words are the Pending-changes
- * sheet's own (`kit/replica/ReplicaStatusBar.tsx` `humanStatus`), because one
- * act may not carry two names across two surfaces.
- */
-function placementLine(
-  status: PlacementRecord["status"],
-  kind: "add" | "move"
-): string {
-  switch (status) {
-    case "executed":
-      return kind === "move"
-        ? "Placement complete — the target copy committed before the source was removed."
-        : "Placement complete — the photo is now available in both vaults.";
-    case "denied":
-      return "Placement denied — permission changed before it could be applied.";
-    case "failed":
-      return "Placement could not be applied — Pending changes has the reason.";
-    case "parked":
-      return "Placement needs attention — answer it in Pending changes.";
-    case "in-flight":
-      return "Placement is being applied right now.";
-    case "queued":
-      return "Placement queued — it will resume when the gateway is reachable.";
-  }
-}
 
 export default function PhotoLightbox({
   route,
@@ -183,7 +150,6 @@ export default function PhotoLightbox({
     setFullQualityUnlocked(false);
     setZoomScale(1);
   }
-  const [placementKind, setPlacementKind] = useState<"add" | "move">();
   const list = useRef<FlatList<PhotoAsset>>(null);
   const index = assets.findIndex((asset) => asset.id === currentId);
   const current = index >= 0 ? assets[index] : undefined;
@@ -355,10 +321,9 @@ export default function PhotoLightbox({
     const sourceVaultId = current.sourceVaultId;
     if (!sourceVaultId) return "This photograph is not in a vault yet.";
     try {
-      const result = await session.writeTo(sourceVaultId, "photos", {
-        action,
-        input,
-      });
+      // One open vault, so one write target (#996 wave 3). `canWrite` above
+      // is still the gate — it is the row's own answer.
+      const result = await session.write("photos", { action, input });
       // `false` is exactly the set the member must read about (parked or
       // rejected). Queued and in-flight are not refusals.
       const proceed = surfaceWriteOutcome(result, {
@@ -374,21 +339,6 @@ export default function PhotoLightbox({
       surfaceWriteFailure(error, "Photo change not saved");
       return error instanceof Error ? error.message : "The write did not land.";
     }
-  };
-
-  const place = async (targetVaultId: string): Promise<void> => {
-    const kind = placementKind;
-    setPlacementKind(undefined);
-    const sourceVaultId = current?.sourceVaultId;
-    if (!session || !kind || !current?.assetId || !sourceVaultId) return;
-    const result = await session.place({
-      kind,
-      itemType: "media.asset",
-      itemId: current.assetId,
-      sourceVaultId,
-      targetVaultId,
-    });
-    postStatus(placementLine(result.status, kind));
   };
 
   const saveToMyVault = async (): Promise<void> => {
@@ -724,7 +674,6 @@ export default function PhotoLightbox({
                 asset={current}
                 onEdit={() => setEditing(true)}
                 onInfo={openInfo}
-                onPlacement={setPlacementKind}
                 {...(commonsResident
                   ? { onSaveToMyVault: () => void saveToMyVault() }
                   : {})}
@@ -809,26 +758,6 @@ export default function PhotoLightbox({
             onSlideshow: () => setSlideshow(true),
           })}
           onClose={() => setOverflowOpen(false)}
-        />
-
-        <OptionSheet
-          visible={placementKind !== undefined}
-          title={`${placementKind === "move" ? "Move" : "Copy"} to…`}
-          options={scopes
-            .filter(
-              (scope) =>
-                scope.canWrite && !current.scopeIds?.includes(scope.vaultId)
-            )
-            .map((scope) => ({
-              id: scope.vaultId,
-              label: scope.label,
-              detail:
-                placementKind === "move"
-                  ? "Target commits before source removal"
-                  : "Keep in both vaults",
-            }))}
-          onSelect={(vaultId) => void place(vaultId)}
-          onClose={() => setPlacementKind(undefined)}
         />
 
         {/* Asked once per share, BEFORE any bytes leave. */}

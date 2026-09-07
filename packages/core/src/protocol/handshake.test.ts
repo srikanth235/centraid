@@ -14,9 +14,12 @@ import {
 describe("handshake scenarios", () => {
   test("version constants: product string + protocol ints", () => {
     expect(GATEWAY_VERSION).toBe("0.1.0");
-    // v3 (#726): ownership replaces roles — hard floor, no COMPAT shims.
-    expect(GATEWAY_PROTOCOL_VERSION).toBe(3);
-    expect(GATEWAY_MIN_PROTOCOL_VERSION).toBe(3);
+    // v4 (#996 wave 3): `multiVaultReplica` and `crossVaultPlacements` leave
+    // `GatewayCapabilities` with the mount plane they described, and dropping
+    // required keys from a structural contract is a wire change. Hard floor,
+    // no COMPAT shims — as v3 (#726, ownership replaces roles) was before it.
+    expect(GATEWAY_PROTOCOL_VERSION).toBe(4);
+    expect(GATEWAY_MIN_PROTOCOL_VERSION).toBe(4);
   });
 
   test("protocolsCompatible enforces mutual support window", () => {

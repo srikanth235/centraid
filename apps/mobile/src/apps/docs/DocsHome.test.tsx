@@ -217,14 +217,14 @@ describe("Docs, on the real React Native host tree", () => {
     replicaRows.byEntity.set("share.subscription", [
       {
         __rowId: "s1",
-        shape_id: "shape-alice",
+        authority_id: "authority-alice",
         origin_vault_id: "vault-alice",
         state: "subscribed",
         subscribed_at: "2026-08-31T13:42:06.358Z",
       },
       {
         __rowId: "s2",
-        shape_id: "shape-stranger",
+        authority_id: "authority-stranger",
         origin_vault_id: "vault-stranger",
         state: "subscribed",
         subscribed_at: "2026-08-02T09:00:00.000Z",
@@ -233,7 +233,7 @@ describe("Docs, on the real React Native host tree", () => {
     replicaRows.byEntity.set("share.subscription_lineage", [
       {
         __rowId: "o1",
-        shape_id: "shape-alice",
+        authority_id: "authority-alice",
         target_type: "core.document",
         target_id: "d1",
         origin_item_id: "far-away-1",
@@ -241,7 +241,7 @@ describe("Docs, on the real React Native host tree", () => {
       },
       {
         __rowId: "o2",
-        shape_id: "shape-stranger",
+        authority_id: "authority-stranger",
         target_type: "core.document",
         target_id: "d2",
         origin_item_id: "far-away-2",

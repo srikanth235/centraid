@@ -8,7 +8,6 @@ import { Platform } from "react-native";
 import type { ReplicaFetcher } from "@centraid/client/replica/native";
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
-import { deleteReplicaDatabaseFamily } from "../../kit/replica/replica-mount";
 import { authHeader, resolveGatewayBase } from "../gateway";
 import { syncDueNotifications, syncNotifications } from "../notifications-core";
 import { drainUploadQueueInBackground } from "../upload/boot";
@@ -16,21 +15,13 @@ import { nativeSyncAllowed } from "../upload/native-policy";
 import { getActiveVaultLink, hydrateVaultLinks } from "../vault-links";
 import { selectBackgroundScopes } from "./background-scopes";
 import type { CachedBackgroundScope } from "./background-scopes";
-import {
-  nativeReplicaDatabasePath,
-  openMountedReplicaReaderDriver,
-  openNativeReplicaDriver,
-} from "./expo-sqlite-driver";
+import { openNativeReplicaDriver } from "./expo-sqlite-driver";
 import { requireMobileOfflineGateway } from "./mobile-gateway-compatibility";
-import { MultiVaultReplicaReader } from "./multi-vault-reader";
-import type { MountedReplicaScope } from "./multi-vault-reader";
-import { MultiVaultReplicaSession } from "./multi-vault-session";
 import { NativeVaultChangeFeed } from "./native-change-feed";
-import { nativeReplicaDigest, nativeReplicaIdFactory } from "./native-hash";
+import { nativeReplicaDigest } from "./native-hash";
 import { createNativeReplicaSession } from "./native-session";
 import { flushNativeTraces } from "./native-trace";
 import { MOBILE_REPLICA_BOOTSTRAP_WINDOW } from "./offline-budgets";
-import { postPlacement } from "./placement-transport";
 
 const REPLICA_BACKGROUND_TASK = "centraid-replica-background-sync";
 const REPLICA_PUSH_TASK = "centraid-replica-push-wake";
@@ -178,8 +169,6 @@ export async function runBackgroundReplicaSync(
   // scope's file cannot be deleted while its handle is open, and `purge()`
   // deliberately leaves that handle alive.
   const scopeDrivers = new Map<string, { close: () => void }>();
-  let facade: MultiVaultReplicaSession | undefined;
-  let looseReader: { close: () => void } | undefined;
   try {
     // Per-scope isolation, not `Promise.all` (#880): one vault whose bootstrap
     // or pull throws used to reject the whole pass, so placements and uploads
@@ -250,79 +239,22 @@ export async function runBackgroundReplicaSync(
         }
       })
     );
-    // Only scopes whose session opened are mountable; a failed one has no
-    // database this pass may attach.
-    const mounted = await Promise.all(
-      selectedScopes
-        .filter((scope) => sessions.has(scope.vaultId))
-        .map(
-          async (scope): Promise<MountedReplicaScope> => ({
-            vaultId: scope.vaultId,
-            label: scope.label ?? "Vault",
-            // Absent means the gateway predates the ownership wire — fail
-            // closed, exactly as the role-era default read as read-only.
-            canWrite: scope.canWrite ?? false,
-            databaseName: await nativeReplicaDatabasePath(
-              { gatewayId: active.gatewayId, vaultId: scope.vaultId },
-              nativeReplicaDigest,
-              storageLocation
-            ),
-          })
-        )
-    );
-    if (mounted.length === 0) return outcome;
+    // NO MOUNT AT ALL (#996 wave 3). This pass used to attach every synced
+    // scope into one reader and build the facade over it, for two callers:
+    // the placement outbox, which is deleted, and the upload drain, which
+    // writes into ONE vault — the active one — and never read across the
+    // others. So the drain takes that vault's own session, and the pass keeps
+    // the per-scope isolation it already had.
+    if (sessions.size === 0) return outcome;
     connected = await deviceOnline();
-    const readerDriver = await openMountedReplicaReaderDriver(
-      active.gatewayId,
-      nativeReplicaDigest,
-      storageLocation
-    );
-    looseReader = readerDriver;
-    facade = new MultiVaultReplicaSession({
-      reader: new MultiVaultReplicaReader(readerDriver, mounted),
-      sessions,
-      scopes: mounted,
-      focusedVaultId: () => active.vaultId,
-      createId: nativeReplicaIdFactory,
-      isConnected: () => connected,
-      isNetworkWorkAllowed: nativeSyncAllowed,
-      sendPlacement: (input) => postPlacement(baseUrl, input),
-      // Parity with the foreground mount (ReplicaProvider): a revoked frame
-      // arriving mid-pass purges the scope's rows and leaves a full-size file
-      // behind unless the handle is closed and the family deleted. Headless,
-      // the driver map IS the handle registry, so reclaiming is those two
-      // steps and nothing more.
-      reclaimRevokedReplica: (scope) => {
-        try {
-          scopeDrivers.get(scope.vaultId)?.close();
-        } catch {
-          // A handle the purge already tore down is one less thing to close.
-        }
-        scopeDrivers.delete(scope.vaultId);
-        deleteReplicaDatabaseFamily(scope.databaseName);
-      },
-    });
-    looseReader = undefined;
-    // The device outboxes drain even when a scope above failed: their rows are
-    // durable and target their own vault.
     if (deadline.expired()) {
       outcome.timedOut = true;
       return outcome;
     }
-    await facade.flushPlacements();
-    if (deadline.expired()) {
-      outcome.timedOut = true;
-      return outcome;
-    }
-    await drainUploadQueueInBackground(facade);
+    await drainUploadQueueInBackground(sessions.get(active.vaultId));
     return outcome;
   } finally {
-    if (facade) await facade.close();
-    else
-      await Promise.all(
-        [...sessions.values()].map((session) => session.close())
-      );
-    looseReader?.close();
+    await Promise.all([...sessions.values()].map((session) => session.close()));
     for (const feed of feeds) feed.setActive(false);
     // #927 OQ1: the phone buffers spans in memory and writes them HERE — the
     // background pass is the one moment disk I/O costs the owner nothing. In

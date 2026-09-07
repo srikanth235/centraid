@@ -29,6 +29,7 @@ import {
   browseRefSearch,
   browseDependents,
   BrowseError,
+  destroyLockerKeys,
   BROWSE_MAX_LIMIT,
   listVaultEntities,
   mediaLocationPolicy,
@@ -265,6 +266,10 @@ export function makeVaultRouteHandler(
         // leftover makes a re-created vault of the same id unopenable.
         options.keys.destroy(`${vaultId}.identity`);
         options.keys.destroy(`${vaultId}.identity.pub`);
+        // And the Locker keys (#996, R13). An erase that destroyed the DEK and
+        // left `K` behind would leave the one key that still opens this
+        // vault's secrets sitting beside the rubble.
+        destroyLockerKeys({ store: options.keys, vaultId });
         options.gatewayDatabase.transaction(() => {
           options
             .gatewayDatabase!.db.prepare(
@@ -1367,6 +1372,9 @@ async function handleVaultsRoute(
       } catch (error) {
         vaults.delete(created.vaultId);
         options.keys?.destroy(`${created.vaultId}.sealkey`);
+        if (options.keys) {
+          destroyLockerKeys({ store: options.keys, vaultId: created.vaultId });
+        }
         throw error;
       }
       return sendJson(res, 201, created);

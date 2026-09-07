@@ -970,4 +970,15 @@ export interface RecoveryKitTarget {
   sealKey?: string;
   /** Ed25519 identity seed, base64 (#726). Wrapped owner-held kits only. */
   identitySeed?: string;
+  /**
+   * EVERY LIVE LOCKER KEY FILE, base64 by key id (#996, R13 as corrected).
+   *
+   * The backup snapshot never carries key material — long-lived keys stay out
+   * of every snapshot by construction — so Locker key custody rides the one
+   * passphrase-wrapped artefact the owner exports deliberately. A LIST, not a
+   * single key, because a rotation writes `K′` before the vault names it: a
+   * kit written in that window and carrying one key restores ciphertext it
+   * cannot open the moment the rotation completes.
+   */
+  lockerKeys?: { keyId: string; key: string }[];
 }

@@ -11,8 +11,6 @@ export interface GatewayCapabilities {
   backupWal: boolean;
   assistOAuth: boolean;
   automationTurns: boolean;
-  multiVaultReplica: boolean;
-  crossVaultPlacements: boolean;
   /** Experimental (v0). Optional + absent-tolerant; off hides surface only. */
   automations?: boolean;
   connectors?: boolean;
@@ -22,6 +20,12 @@ export interface GatewayCapabilities {
    * routes, because a 404 cannot distinguish "this gateway does not serve
    * seats" from "this gateway is older than the doors" — and the two call for
    * different answers on the phone.
+   *
+   * It is also what the phone's compatibility wall gates on since #996 wave 3.
+   * The two words it used to gate on — `multiVaultReplica` and
+   * `crossVaultPlacements` — described the mount plane, and a wall that names a
+   * deleted mechanism tells a member to update a gateway for a feature neither
+   * end has.
    */
   seatReplica?: boolean;
   /**
@@ -40,8 +44,6 @@ export const DEFAULT_GATEWAY_CAPABILITIES: GatewayCapabilities = Object.freeze({
   backupWal: true,
   assistOAuth: false,
   automationTurns: true,
-  multiVaultReplica: true,
-  crossVaultPlacements: true,
   // Experimental features default OFF on a fresh gateway (v0).
   automations: false,
   connectors: false,
@@ -73,8 +75,6 @@ export function isGatewayCapabilities(
     typeof c.backupWal === "boolean" &&
     typeof c.assistOAuth === "boolean" &&
     typeof c.automationTurns === "boolean" &&
-    typeof c.multiVaultReplica === "boolean" &&
-    typeof c.crossVaultPlacements === "boolean" &&
     // Optional flags: absent (old gateway) reads as off; a present
     // non-boolean is still a malformed map.
     (c.automations === undefined || typeof c.automations === "boolean") &&

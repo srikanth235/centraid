@@ -39,11 +39,15 @@ export const ROUTES = {
   vaultSeatSnapshot: `${VAULT_PLANE_PREFIX}/seat/snapshot`,
   /** The log tail by seq: `?since=<seq>&limit=<n>`, never half a commit. */
   vaultSeatLog: `${VAULT_PLANE_PREFIX}/seat/log`,
-  // THE LOCKER KEY (#996, ruling R13). Contract only in this wave — W6 lands
-  // the key plane behind it. Named here now because the capability map is what
-  // a seat gates on, and a seat that cannot tell "this gateway has no locker
-  // key door" from "this gateway is old" cannot decide whether an unreadable
-  // secret is a bug or a boundary.
+  // THE LOCKER KEY (#996, ruling R13). SERVED now: an enrolled device row asks
+  // this door for `K` after it has paired, and never before. The QR pairing
+  // ticket carries no key and is not allowed to — it is read off a screen by a
+  // camera, survives in a photo roll, and is validated before any device exists
+  // to be the principal, so a key that rode it would be a key no revocation
+  // reaches. A named door rather than a bare 404 for the older reason too: a
+  // seat that cannot tell "this gateway has no locker key door" from "this
+  // gateway is old" cannot decide whether an unreadable secret is a bug or a
+  // boundary.
   vaultSeatLockerKey: `${VAULT_PLANE_PREFIX}/seat/locker-key`,
   vaultReplicaChanges: `${VAULT_PLANE_PREFIX}/changes`,
   vaultReplicaIntents: `${VAULT_PLANE_PREFIX}/replica/intents`,
@@ -64,9 +68,17 @@ export const ROUTES = {
 
 export type RouteName = keyof typeof ROUTES;
 
-/** Mounts one `gatewayReplicaChanges` subscription accepts (#880). The phone
- *  attaches the same N — one wire agreement, not two budgets. */
-export const MAX_MULTIPLEX_REPLICA_SCOPES = 4;
+/**
+ * Mounts one `gatewayReplicaChanges` subscription accepts (#880).
+ *
+ * It was `MAX_MULTIPLEX_REPLICA_SCOPES` and it was ONE agreement covering two
+ * budgets: the mounts a radio carried and the replica files the phone attached
+ * into a single reader. #996 wave 3 deleted the second — a seat opens ONE file
+ * — so the number now bounds only what it is named for. It is kept rather than
+ * dropped because an unbounded mount list is a subscription a caller sizes,
+ * and the fan-out behind it is the gateway's to pay for.
+ */
+export const MAX_REPLICA_FEED_MOUNTS = 4;
 
 export function vaultConnectionPath(encodedConnectionId: string): string {
   return `${ROUTES.vaultConnections}/${encodedConnectionId}`;

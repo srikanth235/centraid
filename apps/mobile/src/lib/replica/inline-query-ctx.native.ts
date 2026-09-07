@@ -33,30 +33,24 @@ import type {
   ReplicaSearchWireResult,
 } from "@centraid/client/replica/native";
 
+import type { NativeReadRequest, NativeSearchRequest } from "./native-session";
 import {
   REPLICA_CAN_WRITE,
   REPLICA_SCOPE_ID,
-  REPLICA_SCOPE_IDS,
   REPLICA_SCOPE_LABEL,
-  REPLICA_SCOPE_LABELS,
-  REPLICA_WRITABLE_SCOPE_IDS,
-} from "./multi-vault-provenance";
-import type { NativeReadRequest, NativeSearchRequest } from "./native-session";
+} from "./vault-source";
 
-/** The keys the mounted plane adds and a handler must never receive. */
+/** The keys the session stamps and a handler must never receive. */
 const SCOPE_PROVENANCE: readonly string[] = [
   REPLICA_CAN_WRITE,
   REPLICA_SCOPE_ID,
-  REPLICA_SCOPE_IDS,
   REPLICA_SCOPE_LABEL,
-  REPLICA_SCOPE_LABELS,
-  REPLICA_WRITABLE_SCOPE_IDS,
 ];
 
 /**
- * The envelope as the web seat's replica session hands it over. Which vault a
- * row came from is this seat's fact about its own mounted plane, not a column
- * of the entity, so it stops here — on the ENVELOPE, before `guardedRow` wraps
+ * The envelope as the seat's replica session hands it over. Which vault a row
+ * came from is this seat's fact about its own open file, not a column of the
+ * entity, so it stops here — on the ENVELOPE, before `guardedRow` wraps
  * the values, so the unavailable-field proxy is built over the stripped set
  * and no key is read through it to strip one.
  */

@@ -573,7 +573,7 @@ describe("helpers", () => {
   });
 });
 
-describe("mounted-source provenance on the drive row", () => {
+describe("the row's own source stamp on the drive row", () => {
   const stamped = (extra: Record<string, unknown>): DriveEntityRows =>
     fixtureRows({
       documents: [
@@ -590,15 +590,15 @@ describe("mounted-source provenance on the drive row", () => {
       ],
     });
 
-  it("carries the document row's own canWrite and every source label", () => {
+  it("carries the document row's own canWrite and its source label", () => {
     const { documents } = projectDrive(
       stamped({
         __centraidCanWrite: false,
-        __centraidScopeLabels: ["Studio", "Home"],
+        __centraidScopeLabel: "Studio",
       })
     );
     expect(documents[0]?.canWrite).toBe(false);
-    expect(documents[0]?.scopeLabels).toStrictEqual(["Studio", "Home"]);
+    expect(documents[0]?.scopeLabels).toStrictEqual(["Studio"]);
   });
 
   it("reads an unstamped drive as the member's own", () => {

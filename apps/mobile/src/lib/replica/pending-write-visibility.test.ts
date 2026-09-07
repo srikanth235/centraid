@@ -18,7 +18,6 @@ import {
 import type { ReplicaRowEnvelope } from "@centraid/client/replica/native";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { MultiVaultReplicaReader } from "./multi-vault-reader";
 import type { NativeReplicaSession } from "./native-session";
 import { createNativeReplicaSession, NOT_YET_SYNCED } from "./native-session";
 import {
@@ -73,11 +72,8 @@ function bootstrapPage(): Record<string, unknown> {
 interface Phone {
   root: string;
   session: NativeReplicaSession;
-  reader: MultiVaultReplicaReader;
   setOnline: (next: boolean) => void;
 }
-
-let readerSeq = 0;
 
 async function phone(options: {
   online: boolean;
@@ -104,22 +100,11 @@ async function phone(options: {
     digest: nodeDigest,
     idFactory: sequentialIds(),
     ...(options.origin ? { origin: options.origin } : {}),
+    scope: { vaultId: VAULT_ID, label: "Family", canWrite: true },
   });
   return {
     root,
     session,
-    reader: new MultiVaultReplicaReader(
-      new NodeSqliteDriver(path.join(root, `mounted-${++readerSeq}.db`)),
-      [
-        {
-          vaultId: VAULT_ID,
-          label: "Family",
-          canWrite: true,
-          databaseName: file,
-          personal: false,
-        },
-      ]
-    ),
     setOnline: (next) => {
       online = next;
     },
@@ -129,7 +114,7 @@ async function phone(options: {
 /** The rows a read returns, each paired with that read's pending sidecar —
  *  which is how every surface consumes them (#922 G3). */
 async function documents(
-  reader: MultiVaultReplicaReader
+  reader: NativeReplicaSession
 ): Promise<Array<ReplicaRowEnvelope & { pending: PendingOverlaySidecar }>> {
   const result = await reader.read("docs", {
     entity: "core.document",
@@ -154,7 +139,7 @@ describe("the seat a queued write is waiting on", () => {
   });
 
   test("a queued write renders the waiting-on label before the gateway answers", async () => {
-    const { session, reader, setOnline } = await phone({
+    const { session, setOnline } = await phone({
       online: true,
       origin: { displayName: "Priya Menon" },
     });
@@ -167,7 +152,7 @@ describe("the seat a queued write is waiting on", () => {
       });
       expect(queued.status).toBe("queued");
 
-      const [row] = await documents(reader);
+      const [row] = await documents(session);
       const pending = readPendingOverlay(row!.values, row!.pending);
       expect(pending?.stewardLabel).toBe("Priya Menon's device");
       // Queued still says the true thing about a queued row.
@@ -179,30 +164,28 @@ describe("the seat a queued write is waiting on", () => {
         status: "parked",
         reason: "waiting for Priya Menon's device",
       });
-      const [parked] = await documents(reader);
+      const [parked] = await documents(session);
       expect(
         pendingOverlayCopy(readPendingOverlay(parked!.values, parked!.pending)!)
       ).toBe("Waiting for Priya Menon's device.");
     } finally {
-      reader.close();
       await session.close();
     }
   });
 
   test("a write into the member's own vault names nobody", async () => {
-    const { session, reader, setOnline } = await phone({ online: true });
+    const { session, setOnline } = await phone({ online: true });
     try {
       setOnline(false);
       await session.write("docs", {
         action: "upload",
         input: { title: "Mine" },
       });
-      const [row] = await documents(reader);
+      const [row] = await documents(session);
       expect(
         readPendingOverlay(row!.values, row!.pending)?.stewardLabel
       ).toBeUndefined();
     } finally {
-      reader.close();
       await session.close();
     }
   });
@@ -210,7 +193,7 @@ describe("the seat a queued write is waiting on", () => {
 
 describe("a write admitted before this vault ever synced", () => {
   test("says it is not yet synced, then backfills its own projection", async () => {
-    const { session, reader, setOnline } = await phone({ online: false });
+    const { session, setOnline } = await phone({ online: false });
     try {
       expect(session.catalog()).toHaveLength(0);
       const admitted = await session.write("docs", {
@@ -222,17 +205,34 @@ describe("a write admitted before this vault ever synced", () => {
       expect("reason" in admitted && admitted.reason).toBe(NOT_YET_SYNCED);
       const [pending] = await session.pendingChanges();
       expect(pending?.reason).toBe(NOT_YET_SYNCED);
-      // Durable, and drawing nothing — which is exactly what it said.
-      await expect(documents(reader)).resolves.toHaveLength(0);
+      // Durable, and drawing nothing — which is exactly what it said. The
+      // seat REFUSES the read by name rather than answering an empty page: a
+      // vault with no catalog has no shape for `core.document`, and "no rows"
+      // would be indistinguishable from a library that is genuinely empty
+      // (#996 wave 3 — the mounted reader used to answer from the schema table
+      // it had just read, and a seat asks its own catalog).
+      await expect(documents(session)).rejects.toThrow(
+        /No offline shape for docs\/core.document/u
+      );
 
       setOnline(true);
       session.notifyReachable();
-      await vi.waitFor(async () => {
-        expect(session.catalog().length).toBeGreaterThan(0);
-        await expect(documents(reader)).resolves.toHaveLength(1);
-      });
+      // A LONGER WINDOW THAN THE DEFAULT SECOND, on purpose (#996 wave 3).
+      // The mounted reader used to project this row AT READ TIME from the
+      // outbox, so it appeared the instant the catalog did. The seat draws its
+      // own stored projection instead, which `backfillDeferredProjections`
+      // writes once page one lands — durable, and a transition on the same
+      // outbox the drain is working, so it can lose a race and be retried.
+      // The claim is that it arrives, not that it arrives first.
+      await vi.waitFor(
+        async () => {
+          expect(session.catalog().length).toBeGreaterThan(0);
+          await expect(documents(session)).resolves.toHaveLength(1);
+        },
+        { timeout: 8_000 }
+      );
 
-      const [row] = await documents(reader);
+      const [row] = await documents(session);
       expect(row!.values.title).toBe("First open");
       const overlay = readPendingOverlay(row!.values, row!.pending);
       expect(overlay?.key).toBe(admitted.intentId);
@@ -242,7 +242,6 @@ describe("a write admitted before this vault ever synced", () => {
       expect(settled?.intentId).toBe(admitted.intentId);
       expect(settled?.reason).not.toBe(NOT_YET_SYNCED);
     } finally {
-      reader.close();
       await session.close();
     }
   });
@@ -255,7 +254,9 @@ describe("a write admitted before this vault ever synced", () => {
         action: "upload",
         input: { title: "Killed mid-first-open" },
       });
-      await expect(documents(first.reader)).resolves.toHaveLength(0);
+      await expect(documents(first.session)).rejects.toThrow(
+        /No offline shape for docs\/core.document/u
+      );
 
       // The catalog lands, and the process dies before anything redraws.
       first.setOnline(true);
@@ -263,18 +264,18 @@ describe("a write admitted before this vault ever synced", () => {
       await vi.waitFor(() => {
         expect(first.session.catalog().length).toBeGreaterThan(0);
       });
-      first.reader.close();
+      first.session.close();
       await first.session.close();
 
       // New process, no bootstrap: `start()` finishes from the catalog on disk.
       relaunched = await phone({ online: false, root: first.root });
-      const [row] = await documents(relaunched.reader);
+      const [row] = await documents(relaunched.session);
       expect(row?.values.title).toBe("Killed mid-first-open");
       expect(readPendingOverlay(row!.values, row!.pending)?.key).toBe(
         admitted.intentId
       );
     } finally {
-      relaunched?.reader.close();
+      relaunched?.session.close();
       await relaunched?.session.close();
     }
   });

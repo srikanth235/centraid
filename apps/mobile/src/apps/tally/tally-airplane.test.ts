@@ -15,13 +15,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
  * on this seat goes through — is replaced by one that THROWS from every door,
  * so a read that reached for the network would fail loudly rather than quietly
  * succeeding against a test double. The read plane is a real replica database
- * seeded with the ledger fixture, opened through the same mounted reader the
+ * seeded with the ledger fixture, opened through the same read seam the
  * provider builds on a device.
  */
 import type { Valuation } from "@centraid/core/money";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
+import { NativeReplicaStore } from "../../lib/replica/native-replica-store";
 import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
 import {
   FRIENDS,
@@ -29,6 +29,7 @@ import {
   VAULT_ID,
   seedScope,
 } from "../../lib/replica/tally-ledger.test-fixtures";
+import { VaultReadPlane } from "../../lib/replica/vault-read-plane";
 import { attachTallyReadPlane } from "./tally-reads";
 import {
   loadTallyActivity,
@@ -48,7 +49,7 @@ vi.mock(import("../../lib/gateway"), () => {
   return new Proxy({} as never, { get: () => refuse });
 });
 
-let reader: MultiVaultReplicaReader | undefined;
+let reader: VaultReadPlane | undefined;
 
 /** The absolute size of a valuation, for "is there anything here" assertions —
  *  never a figure a surface would render (#996, ruling R22). */
@@ -66,9 +67,9 @@ describe("Tally on a plane", () => {
     const root = tempDirSync("centraid-tally-airplane-");
     const databaseName = path.join(root, "personal.db");
     seedScope(databaseName);
-    reader = new MultiVaultReplicaReader(
-      new NodeSqliteDriver(path.join(root, "mounted.db")),
-      [{ vaultId: VAULT_ID, label: "Personal", canWrite: true, databaseName }]
+    reader = new VaultReadPlane(
+      NativeReplicaStore.create(new NodeSqliteDriver(databaseName), VAULT_ID),
+      { vaultId: VAULT_ID, label: "Personal", canWrite: true }
     );
     attachTallyReadPlane({
       read: reader.read.bind(reader),
