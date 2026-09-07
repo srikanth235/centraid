@@ -22,7 +22,6 @@ declare global {
      * shipped build is. The e2e lane sets it so a whole run exercises the
      * flag ON.
      */
-    readonly VITE_CENTRAID_SEAT_STORE?: string;
   }
 
   interface ImportMeta {

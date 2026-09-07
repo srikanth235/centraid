@@ -1,11 +1,14 @@
-// THE SHELL READS THE SEAT (#996, wave 2, behind the flag).
+// THE SHELL READS THE SEAT (#996; wave 2, unconditional since wave 4/W4-D1).
 //
 // One hook, one fact: how current this browser's copy of the vault is. It is
-// the whole of what the shell takes from the new store in wave 2, and that is
-// deliberate — the READ path (apps' queries over real tables, paged) is wave
-// 4's, and the old store is not deleted until wave 5. What the flag switches
-// on here is the FILE and the number that describes it, not where a screen
-// gets its rows.
+// the whole of what the shell takes from the new store so far; the READ path
+// (apps' queries over real tables, paged) is wave 4's, and the old store's own
+// files are deleted in wave 5.
+//
+// THERE IS NO FLAG (W4-D1). `seat/flag.ts`, `?seatStore=1` and the remembered
+// preference are gone: the owner opened W5 — the old store's deletion — while
+// wave 4 was in flight, so a switch between two stores is a switch one of whose
+// positions is being removed. A seat opens whenever there is a vault to copy.
 //
 // WHY THE CUSTODY LINE IS THE FIRST PLACE IT SHOWS. It is where the old
 // census record count was, and that number had stopped meaning anything under
@@ -21,16 +24,13 @@
 import { useEffect, useState } from "react";
 
 import { replicaStorageKey } from "../../replica/key.js";
-import { browserSeatStoreFlag } from "../../replica/seat/flag.js";
 import type { SeatWatermark } from "../../replica/seat/watermark.js";
 import { WebSeat } from "../../replica/seat/web-seat.js";
 import type { WebSeatOptions } from "../../replica/seat/web-seat.js";
 
 export interface SeatWatermarkOptions {
-  /** Everything but the flag; absent while the shell has no gateway yet. */
+  /** Absent while the shell has no gateway yet — and then nothing opens. */
   readonly seat?: WebSeatOptions | undefined;
-  /** Overrides the flag. Tests and hosts that have already decided. */
-  readonly enabled?: boolean | undefined;
   /** Injected so a suite can drive the whole hook without a worker. */
   readonly open?: (options: WebSeatOptions) => Promise<{
     sync: () => Promise<SeatWatermark | undefined>;
@@ -43,11 +43,10 @@ export function useSeatWatermark(
 ): SeatWatermark | undefined {
   const [watermark, setWatermark] = useState<SeatWatermark | undefined>();
   const seat = options.seat;
-  const enabled = browserSeatStoreFlag(options.enabled);
   const open = options.open ?? ((given) => WebSeat.open(given));
 
   useEffect(() => {
-    if (!enabled || !seat) return undefined;
+    if (!seat) return undefined;
     let live = true;
     let held: { close: () => Promise<void> } | undefined;
     void (async () => {
@@ -69,7 +68,7 @@ export function useSeatWatermark(
     // `open` is a stable injection in practice; re-running on identity would
     // re-bootstrap a seat on every render.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, seat]);
+  }, [seat]);
 
   return watermark;
 }
@@ -81,7 +80,8 @@ export function useSeatWatermark(
  * something, and there is nothing to copy before the browser is paired.
  * The database name is namespaced by (gateway, vault) exactly as the old
  * store's is — two vaults in two tabs must not share a file — with `seat` in
- * the stem so the two stores cannot collide during the flag's lifetime.
+ * the stem so the two stores cannot collide while both exist (wave 5 deletes
+ * the old one).
  */
 export async function seatOptionsFromHost(): Promise<
   WebSeatOptions | undefined

@@ -15,7 +15,6 @@ export * from "./carry-over.js";
 export * from "./driver.js";
 export * from "./http-snapshot-transport.js";
 export * from "./seat-bootstrap-no-room-error.js";
-export * from "./flag.js";
 export * from "./seat-drift-error.js";
 export * from "./seat-rebootstrap-required-error.js";
 export * from "./seat-worker-client.js";

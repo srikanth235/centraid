@@ -58,7 +58,6 @@ export * from "./seat/bootstrap.js";
 export * from "./seat/byte-policy.js";
 export * from "./seat/carry-over.js";
 export * from "./seat/driver.js";
-export * from "./seat/flag.js";
 export * from "./seat/http-snapshot-transport.js";
 export * from "./seat/outbox.js";
 export * from "./seat/seat-bootstrap-no-room-error.js";

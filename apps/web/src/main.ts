@@ -1,4 +1,3 @@
-import { SEAT_STORE_FLAG } from "@centraid/client/replica/seat";
 import * as tokens from "@centraid/design";
 
 import "@centraid/client/styles.css";
@@ -41,19 +40,6 @@ window.CentraidTokens = {
 // __APP_VERSION__ from package.json. Object.assign so v8 coverage remap
 // (Rolldown) can parse this uncovered entry as a script.
 Object.assign(window, { __CENTRAID_VERSION__: __APP_VERSION__ });
-
-// THE SEAT STORE'S FLAG (#996, wave 2). The new store lands beside the old
-// one, off by default; this is the one build-time lever that turns it on for a
-// whole run, which is how the e2e lane exercises the flag ON without every
-// spec having to carry a query string. A member turns it on with
-// `?seatStore=1`; nothing here overrides that either way.
-if (import.meta.env.VITE_CENTRAID_SEAT_STORE === "1") {
-  try {
-    window.localStorage.setItem(SEAT_STORE_FLAG, "1");
-  } catch {
-    // A browser with site data blocked keeps the old store. Not an error.
-  }
-}
 
 installWebHost();
 installWebChrome();

@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { seatStoreEnabled, SEAT_STORE_FLAG } from "./flag.js";
 import { NodeSeatDriver } from "./node-seat-driver.js";
 import { nodeSeatStaging } from "./node-staging.js";
 import { seatArtifact } from "./seat-artifact.test-fixtures.js";
@@ -169,47 +168,6 @@ function seatOver(
     fetch: door.fetch,
   });
 }
-
-describe("the seat-store flag", () => {
-  it("defaults off, and an explicit answer beats every other source", () => {
-    expect(seatStoreEnabled()).toBe(false);
-    expect(
-      seatStoreEnabled({
-        explicit: false,
-        search: "?seatStore=1",
-        storage: { getItem: () => "1" },
-      })
-    ).toBe(false);
-    expect(seatStoreEnabled({ search: "?seatStore=1" })).toBe(true);
-    expect(
-      seatStoreEnabled({
-        search: "?other=1",
-        storage: {
-          getItem: (key) => (key === SEAT_STORE_FLAG ? "true" : null),
-        },
-      })
-    ).toBe(true);
-    // A query string beats what the browser remembered.
-    expect(
-      seatStoreEnabled({
-        search: "?seatStore=0",
-        storage: { getItem: () => "1" },
-      })
-    ).toBe(false);
-  });
-
-  it("treats a browser that refuses site data as a no, not a crash", () => {
-    expect(
-      seatStoreEnabled({
-        storage: {
-          getItem: () => {
-            throw new Error("site data is blocked");
-          },
-        },
-      })
-    ).toBe(false);
-  });
-});
 
 describe("the web seat's sync loop", () => {
   it("bootstraps when it holds nothing, then tails until it is caught up", async () => {

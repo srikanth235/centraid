@@ -5468,3 +5468,83 @@ The rest of R17's diet is untouched and is a wave of its own — every item stil
 ```
 bunx vitest run packages/vault/src/gateway/evidence.test.ts   # 4 passed
 ```
+
+## Wave 4 — the flag had one position left (#996)
+
+### The ruling, recorded (W4-D1, root, 2026-09-07)
+
+There is no flag-OFF path to keep. Pre-1.0, the owner opened W5 — the old
+store's deletion — while wave 4 was in flight, so a server-side paged host for a
+store that is deleted in the next wave is throwaway work, and a switch between
+two stores is a switch one of whose positions is being removed. `seatStoreEnabled`
+becomes true unconditionally on web and desktop; the shell's read path moves onto
+`SeatWorkerClient.query`; every app converts; the old store's own files
+(`sqlite-store.ts`, `store-core.ts`, `read-plan.ts`, the census, the masking half,
+`buildReplicaShapes`) stay for W5 and may become unreachable in the meantime.
+Recorded in `docs/decisions.md` under `## One vault, every seat (#996)`.
+
+### What this commit does with it
+
+The flag is deleted, not defaulted-on. A constant `true` behind a
+`seatStoreEnabled()` call is the same switch with the other position painted
+over: the sources, the query parameter, the remembered preference and the
+build-time lever all still exist and all still have to be reasoned about at
+every call site.
+
+- `packages/client/src/replica/seat/flag.ts` — deleted, with its two exports
+  from `seat/index.ts` and `replica/native.ts`.
+- `apps/web/src/main.ts` — the `VITE_CENTRAID_SEAT_STORE` lever that wrote the
+  localStorage key for a whole e2e run is gone, and the env declaration with it
+  (`apps/web/src/client-globals.d.ts`). There was no separate "behind the flag"
+  e2e job to remove: that lever WAS the variant.
+- `useSeatWatermark` loses `enabled` as well as the flag. The hook's one
+  remaining reason not to open a seat is the honest one — there is no vault to
+  copy yet, because the browser is not paired — and its test now says that
+  instead of "while the flag is off".
+- The flag's two tests in `web-seat.test.ts` are deleted rather than adapted;
+  they tested the source precedence, which no longer has anything to order.
+
+### Gates
+
+- `bunx vitest run packages/client/src/react/shell/useSeatWatermark.test.tsx packages/client/src/replica/seat/web-seat.test.ts` — 8 passed.
+- `bun run --cwd packages/client test` — 290 files, 2,622 passed.
+- `bun run --cwd apps/web test` — 11 files, 65 passed.
+- `bun run check:push:static` — 4/4.
+- `bun run knip` — one orphan, `DEVICE_OFFER` in
+  `apps/mobile/src/apps/locker/locker-seat-copy.ts:30`, which arrived with the
+  locker lane's merge and is not this wave's.
+
+**`bun run --cwd apps/web e2e` could NOT be run here and is NOT claimed green.**
+Its web server dies before any spec loads, on a resolution error that has
+nothing to do with this change: `packages/test-kit/src/year3-vault.ts` imports
+`./year3-distributions.js` and the runner is Node 22.22.2 resolving a `.ts`
+tree, while the repo pins Node 24.4.1 in `engines`. Nothing was skipped,
+loosened or stubbed to get past it; the seat-store e2e exit condition is
+**owed**, and the root should run it on a pinned-Node lane.
+
+### Every file this commit touches
+
+**Deleted:**
+
+- `packages/client/src/replica/seat/flag.ts`
+
+**Changed:**
+
+- `packages/client/src/replica/seat/index.ts`
+- `packages/client/src/replica/native.ts`
+- `packages/client/src/replica/seat/web-seat.test.ts`
+- `packages/client/src/react/shell/useSeatWatermark.ts`
+- `packages/client/src/react/shell/useSeatWatermark.test.tsx`
+- `apps/web/src/main.ts`
+- `apps/web/src/client-globals.d.ts`
+- `docs/decisions.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the flag
+
+- **A deleted flag and a flag pinned to `true` are not the same change.** The
+  second leaves every source, every call site and every reader still asking a
+  question that has one answer.
+- **The e2e exit condition is reported owed, not approximated.** A gate that
+  cannot run in this environment is not evidence, and making it pass here would
+  have meant changing something that is not broken.

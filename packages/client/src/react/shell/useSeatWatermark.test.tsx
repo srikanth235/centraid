@@ -35,7 +35,7 @@ function unmountHeld(): void {
 }
 
 async function render(
-  enabled: boolean | undefined,
+  seat: WebSeatOptions | undefined,
   open: (options: WebSeatOptions) => Promise<{
     sync: () => Promise<SeatWatermark | undefined>;
     close: () => Promise<void>;
@@ -43,8 +43,7 @@ async function render(
 ): Promise<HTMLElement> {
   function Probe(): JSX.Element {
     const watermark = useSeatWatermark({
-      seat: SEAT,
-      ...(enabled === undefined ? {} : { enabled }),
+      ...(seat === undefined ? {} : { seat }),
       open,
     });
     return (
@@ -70,22 +69,24 @@ async function render(
 describe(useSeatWatermark, () => {
   afterEach(unmountHeld);
 
-  it("does nothing at all while the flag is off", async () => {
+  it("does nothing until there is a vault to copy", async () => {
+    // There is no flag any more (W4-D1); the only reason nothing opens is that
+    // the browser is not paired yet. NOT "opens and discards": a seat with
+    // nothing to copy must not download a file.
     const opened: WebSeatOptions[] = [];
-    const host = await render(false, (options) => {
+    const host = await render(undefined, (options) => {
       opened.push(options);
       return Promise.resolve({
         sync: () => Promise.resolve(CURRENT),
         close: () => Promise.resolve(),
       });
     });
-    // NOT "opens and discards": a seat that is off must not download a file.
     expect(opened).toStrictEqual([]);
     expect(host.textContent).toBe("none");
   });
 
   it("reports the seat's distance once the file has caught up", async () => {
-    const host = await render(true, () =>
+    const host = await render(SEAT, () =>
       Promise.resolve({
         sync: () => Promise.resolve(CURRENT),
         close: () => Promise.resolve(),
@@ -95,7 +96,7 @@ describe(useSeatWatermark, () => {
   });
 
   it("stays quiet when the seat cannot open — an older copy is not an error", async () => {
-    const host = await render(true, () =>
+    const host = await render(SEAT, () =>
       Promise.reject(new Error("this browser has no OPFS"))
     );
     expect(host.textContent).toBe("none");
@@ -103,7 +104,7 @@ describe(useSeatWatermark, () => {
 
   it("closes the seat it opened when the route goes away", async () => {
     let closed = 0;
-    await render(true, () =>
+    await render(SEAT, () =>
       Promise.resolve({
         sync: () => Promise.resolve(CURRENT),
         close: () => {
