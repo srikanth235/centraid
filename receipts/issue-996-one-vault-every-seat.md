@@ -5036,3 +5036,125 @@ stays exported because it appears in `taskWriteConditions`'s own signature.
   golden corpora compare DDL text, so the substitution is provable rather than
   argued; without that gate this would have been a rewrite of eighteen frozen
   files on faith.
+
+## Wave 4 — the page, and the host that runs every handler (#996)
+
+R8's first sentence is that a page has no unpaged variant. This commit is that
+sentence as a type and the host that enforces it; the app handlers follow.
+
+### The page (`packages/core/src/page/index.ts`)
+
+`PageRequest.limit` is REQUIRED. That is the whole enforcement mechanism, and it
+is why the declarative vocabulary is deleted rather than converted: with
+`acceptTruncation` a caller could decline to name a window and be handed
+whatever the reader's default happened to be, so the unbounded read was the
+cheapest thing to write — which is how there came to be roughly two hundred of
+them. A handler that wants everything now does not compile.
+
+`next` is a cursor, not a flag. `truncated` could only tell a caller that the
+answer had been cut; a cursor tells it where to carry on. The cursor is
+`(sortKey, pk)` — the sort key with the primary key as tiebreak, because a
+timestamp is not unique and a page boundary that falls between two rows sharing
+one either repeats a row or drops one, silently, depending on which way the
+comparison was written.
+
+`MAX_PAGE_ROWS = 500` is the host's safety net and it CLAMPS. A member who
+scrolled fast is not doing anything wrong, and a dark screen is a worse answer
+than a shorter page followed by another; the clamp is visible in the work
+counters, where it can be acted on, not in the member's way.
+
+`probeLimit` asks for the window plus one. That extra row is the only thing that
+distinguishes "the window filled" from "the rows ended here" — the position the
+old reader was in when it had to announce a truncation it could not be sure of —
+and it never reaches a caller.
+
+### The host (`packages/client/src/replica/seat/paged-handler.ts`)
+
+`seatPage` owns the keyset predicate, the ORDER BY, the probe, the ceiling and
+the counters; a handler contributes which rows, which columns and its own key
+function. Three consequences, and the third is the point:
+
+- the keyset is emitted as a ROW VALUE, `(sort, pk) < (?, ?)`, which SQLite
+  turns into a seek; the equivalent `sort < ? OR (sort = ? AND pk < ?)` is what
+  an optimiser has to be talked into, and the difference is an index walked from
+  the top on every page;
+- the first page carries NO predicate rather than a tautological one;
+- **the work is counted by the host, so a handler cannot forget to.** R8's gate
+  is measured work per handler at year-3 scale, and a gate a handler opts into
+  is a gate the one handler that regresses will have skipped.
+
+### The first handler on it (`apps/mobile/src/apps/photos/timeline-page.ts`)
+
+The Photos timeline was already keyset-paged with its own cursor type and its
+own probe arithmetic (wave 3, commit 3b). It now declares a `SeatPageQuery` and
+keeps only what is the timeline's: the capture-local day expression, the two
+partial indexes, and the section slicer. `TimelineCursor` and `nextCursor` are
+gone; the result IS `Page<TimelineRow>` with the day boundaries added.
+
+Its year-3 work-counter row, asserted in the test rather than described:
+**`photos.timeline` → page 40 → 1 statement, 41 rows visited**, over a 19,710-row
+seat file. The 41st is the probe.
+
+### The bundle door
+
+`paged-handler.js` is NOT re-exported from `replica/native.ts`. That barrel is
+in the phone's Hermes bundle, and a re-export puts every module behind it into
+the bundle whether or not a screen reaches it; the first measurement after
+adding it was **+2,155 B ios / +1,572 B android** on a ceiling that is already
+over and is not being raised. A dedicated subpath
+(`@centraid/client/replica/seat/paged-handler`, the pattern
+`./replica/intent-invalidations` already uses) costs nothing until a screen
+imports it. The web seat keeps the barrel (`replica/seat/index.ts`), which is
+not weight-gated.
+
+### Gates
+
+- `bunx vitest run packages/core/src/page/page.test.ts` — 8 passed.
+- `bunx vitest run packages/client/src/replica/seat/paged-handler.test.ts` — 5 passed (red first: the module did not exist).
+- `bunx vitest run apps/mobile/src/apps/photos/timeline-page.test.ts` — 11 passed.
+- `bun run --cwd packages/core test` — 20 files, 310 passed.
+- `bun run --cwd packages/client test` — 289 files, 2,618 passed.
+- `bun run --cwd apps/mobile test` — 287 files, 2,431 passed; `typecheck` clean.
+- `bun run check:push:static` — 4/4.
+
+### App weight (`--surface mobile`)
+
+| tree | ios largest chunk | android largest chunk |
+| --- | --- | --- |
+| before this commit | 8,265,658 B | 8,286,400 B |
+| with the barrel re-export | 8,267,813 B | 8,287,972 B |
+| **as committed (subpath)** | **8,265,659 B** | **8,286,400 B** |
+
++1 B ios, +0 B android. The 8,220,000 B ceiling is over and was NOT raised.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/core/src/page/index.ts`
+- `packages/core/src/page/page.test.ts`
+- `packages/client/src/replica/seat/paged-handler.ts`
+- `packages/client/src/replica/seat/paged-handler.test.ts`
+
+**Changed:**
+
+- `packages/core/package.json`
+- `packages/client/package.json`
+- `packages/client/src/replica/seat/index.ts`
+- `apps/mobile/src/apps/photos/timeline-page.ts`
+- `apps/mobile/src/apps/photos/timeline-page.test.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the page
+
+- **The required `limit` is the enforcement, not the tripwire.** The tripwire
+  the brief asks for greps for the old flags; this makes the old shape
+  unwritable in the first place.
+- **A cursor replaces a flag because they answer different questions.**
+  `truncated` says an answer was cut; `next` says where to carry on. Only one of
+  those is actionable at a call site.
+- **The ceiling clamps and counts; it never refuses.** A refusal shown to a
+  member for scrolling is the wrong end of the mechanism.
+- **A barrel re-export is a bundle decision, not a tidiness one.** On a surface
+  that is over its weight ceiling, the door a module is reached through is
+  product code.

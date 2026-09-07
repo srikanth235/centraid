@@ -19,6 +19,8 @@ import { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, it } from "vitest";
 
+import { clientWorkCounters } from "@centraid/client/replica/native";
+
 import {
   SEAT_TIMELINE_INDEX_SQL,
   timelineBuckets,
@@ -106,9 +108,9 @@ describe("the photo timeline, paged in SQLite", () => {
       let cursor = undefined;
       for (let page = 0; page < 5; page += 1) {
         const result = timelinePage(driver, { limit: 40, after: cursor });
-        expect(result.assets).toHaveLength(40);
-        seen.push(...result.assets.map((asset) => asset.assetId));
-        cursor = result.nextCursor;
+        expect(result.rows).toHaveLength(40);
+        seen.push(...result.rows.map((asset) => asset.assetId));
+        cursor = result.next;
         expect(cursor).toBeDefined();
       }
       // Newest first, no duplicate, no gap: five pages of forty is the newest
@@ -134,6 +136,22 @@ describe("the photo timeline, paged in SQLite", () => {
       for (const read of driver.reads)
         expect(read.rows).toBeLessThanOrEqual(41);
       expect(driver.reads.every((read) => read.rows > 0)).toBe(true);
+    } finally {
+      driver.close();
+    }
+  });
+
+  it("records the work it did at year-3 scale, as the R8 gate", () => {
+    // The measured row R8 puts on every handler, for this one: 19,710 assets
+    // in the file, ONE statement, 41 rows visited to draw forty. The host does
+    // the counting, so a handler cannot regress this by forgetting to.
+    const driver = seatFixture();
+    try {
+      const before = clientWorkCounters();
+      timelinePage(driver, { limit: 40 });
+      const after = clientWorkCounters();
+      expect(after.statements - before.statements).toBe(1);
+      expect(after.rowsScanned - before.rowsScanned).toBe(41);
     } finally {
       driver.close();
     }
@@ -171,13 +189,10 @@ describe("the photo timeline, paged in SQLite", () => {
     try {
       const result = timelinePage(driver, {
         limit: 40,
-        after: {
-          capturedAt: "2023-01-01T00:00:00.000Z",
-          assetId: "a-0000-00",
-        },
+        after: { sortKey: "2023-01-01T00:00:00.000Z", pk: "a-0000-00" },
       });
-      expect(result.assets).toStrictEqual([]);
-      expect(result.nextCursor).toBeUndefined();
+      expect(result.rows).toStrictEqual([]);
+      expect(result.next).toBeUndefined();
     } finally {
       driver.close();
     }
@@ -196,14 +211,14 @@ describe("the photo timeline, paged in SQLite", () => {
           ...(page === 0
             ? {
                 after: {
-                  capturedAt: "2024-06-01T14:00:00.000Z",
-                  assetId: "a-9999-99",
+                  sortKey: "2024-06-01T14:00:00.000Z",
+                  pk: "a-9999-99",
                 },
               }
             : {}),
         });
-        for (const asset of result.assets) ids.add(asset.assetId);
-        cursor = result.nextCursor;
+        for (const asset of result.rows) ids.add(asset.assetId);
+        cursor = result.next;
       }
       expect(ids.has("gone")).toBe(false);
       expect(ids.has("bin")).toBe(false);
@@ -224,13 +239,10 @@ describe("the photo timeline, paged in SQLite", () => {
       );
       const page = timelinePage(driver, {
         limit: 4,
-        after: {
-          capturedAt: "2025-03-02T00:00:00.000Z",
-          assetId: "zzz",
-        },
+        after: { sortKey: "2025-03-02T00:00:00.000Z", pk: "zzz" },
       });
       const byId = new Map(
-        page.assets.map((asset) => [asset.assetId, asset.localDay])
+        page.rows.map((asset) => [asset.assetId, asset.localDay])
       );
       expect(byId.get("tokyo")).toBe("2025-03-02");
       expect(byId.get("london")).toBe("2025-03-01");
@@ -258,7 +270,7 @@ describe("the photo timeline, paged in SQLite", () => {
       // Every asset in the page belongs to exactly one section, in order.
       expect(
         page.sections.flatMap((section) => section.assetIds)
-      ).toStrictEqual(page.assets.map((asset) => asset.assetId));
+      ).toStrictEqual(page.rows.map((asset) => asset.assetId));
     } finally {
       driver.close();
     }
@@ -281,9 +293,9 @@ describe("the photo timeline, paged in SQLite", () => {
       );
       const page = timelinePage(driver, {
         limit: 3,
-        after: { capturedAt: "2025-06-10T23:00:00.000Z", assetId: "zzz" },
+        after: { sortKey: "2025-06-10T23:00:00.000Z", pk: "zzz" },
       });
-      expect(page.assets.map((asset) => asset.localDay)).toStrictEqual([
+      expect(page.rows.map((asset) => asset.localDay)).toStrictEqual([
         "2025-06-11",
         "2025-06-10",
         "2025-06-11",
@@ -308,13 +320,13 @@ describe("the photo timeline, paged in SQLite", () => {
       const at = (
         day: number,
         hour: number
-      ): { capturedAt: string; assetId: string } => ({
-        capturedAt: new Date(
+      ): { sortKey: string; pk: string } => ({
+        sortKey: new Date(
           Date.UTC(2023, 0, 1 + day) + hour * 3_600_000
         ).toISOString(),
-        assetId: `a-${String(day).padStart(4, "0")}-${String(hour).padStart(2, "0")}`,
+        pk: `a-${String(day).padStart(4, "0")}-${String(hour).padStart(2, "0")}`,
       });
-      const cost = (after: { capturedAt: string; assetId: string }): number => {
+      const cost = (after: { sortKey: string; pk: string }): number => {
         const started = performance.now();
         for (let n = 0; n < 40; n += 1)
           timelinePage(driver, { limit: 40, after });

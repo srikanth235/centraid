@@ -44,10 +44,13 @@
 // days to the people who took them, and a timeline that groups by the UTC date
 // tells one of them their evening happened tomorrow.
 
-import type {
-  SeatBindValue,
-  SeatSqliteDriver,
-} from "@centraid/client/replica/native";
+import type { SeatSqliteDriver } from "@centraid/client/replica/native";
+// The host by its OWN subpath, not through `replica/native`: the phone's
+// bundle is over its weight ceiling, and a barrel re-export puts every module
+// behind it into the Hermes bundle whether or not a screen reaches it.
+import { seatPage } from "@centraid/client/replica/seat/paged-handler";
+import type { SeatPageQuery } from "@centraid/client/replica/seat/paged-handler";
+import type { Page, PageRequest } from "@centraid/core/page";
 
 /**
  * The capture-local day, as SQL.
@@ -83,12 +86,6 @@ CREATE INDEX IF NOT EXISTS seat_media_local_day_idx
   WHERE archived_at IS NULL AND deleted_at IS NULL AND captured_at IS NOT NULL;
 `;
 
-/** Where the last page stopped. Opaque to callers; it is the sort key. */
-export interface TimelineCursor {
-  capturedAt: string;
-  assetId: string;
-}
-
 export interface TimelineRow {
   assetId: string;
   contentId: string;
@@ -106,16 +103,16 @@ export interface TimelineSectionSlice {
   assetIds: string[];
 }
 
-export interface TimelinePageResult {
-  assets: TimelineRow[];
+/**
+ * The timeline's page: `@centraid/core/page`'s shape plus the day boundaries
+ * this page happens to cross.
+ *
+ * The sections are an ADDITION to the page, not a second page: they are folded
+ * out of the rows the page already holds, so a caller that ignores them pays
+ * nothing and a caller that draws headers makes no second read.
+ */
+export interface TimelinePageResult extends Page<TimelineRow> {
   sections: TimelineSectionSlice[];
-  /** Absent when the library ended: the walk stops, it does not wrap. */
-  nextCursor?: TimelineCursor;
-}
-
-export interface TimelinePageRequest {
-  limit: number;
-  after?: TimelineCursor;
 }
 
 interface PageRow {
@@ -128,48 +125,37 @@ interface PageRow {
 }
 
 /**
- * One page of the timeline, newest first.
+ * The timeline's statement, minus the parts the handler host owns.
  *
- * ONE STATEMENT, `limit + 1` ROWS. The extra row is the probe that separates
- * "the window filled" from "the library ends here" (#922 0a) and is dropped
- * before the caller sees it — the same rule the read plan uses, for the same
- * reason.
+ * The keyset predicate, the ORDER BY, the probe row, the ceiling and the work
+ * counters all come from `seatPage` — this module contributes what is actually
+ * the timeline's: which rows, which columns, and which day they belong to.
  */
-export function timelinePage(
-  driver: SeatSqliteDriver,
-  request: TimelinePageRequest
-): TimelinePageResult {
-  const bind: SeatBindValue[] = [];
-  // The keyset, as a row value over the index's own columns: one seek down the
-  // index, not a scan with a discarded prefix and a sort on the end.
-  const keyset = request.after ? "AND (captured_at, asset_id) < (?, ?)" : "";
-  if (request.after) bind.push(request.after.capturedAt, request.after.assetId);
-  bind.push(request.limit + 1);
-  const rows = driver.all<PageRow>(
-    `SELECT asset_id, content_id, kind, captured_at, tz_offset_min,
+const TIMELINE_QUERY: SeatPageQuery<PageRow> = {
+  name: "photos.timeline",
+  sql: (
+    keyset
+  ) => `SELECT asset_id, content_id, kind, captured_at, tz_offset_min,
             ${LOCAL_DAY_SQL} AS local_day
        FROM media_asset
       WHERE archived_at IS NULL AND deleted_at IS NULL AND captured_at IS NOT NULL
-        ${keyset}
-      ORDER BY captured_at DESC, asset_id DESC
-      LIMIT ?`,
-    bind
-  );
-  const filled = rows.length > request.limit;
-  const page = (filled ? rows.slice(0, request.limit) : rows).map(toRow);
-  const last = page.at(-1);
-  return {
-    assets: page,
-    sections: sliceSections(page),
-    ...(filled && last
-      ? {
-          nextCursor: {
-            capturedAt: last.capturedAt,
-            assetId: last.assetId,
-          },
-        }
-      : {}),
-  };
+        ${keyset}`,
+  order: {
+    sortColumn: "captured_at",
+    pkColumn: "asset_id",
+    descending: true,
+  },
+  keyOf: (row) => ({ sortKey: row.captured_at, pk: row.asset_id }),
+};
+
+/** One page of the timeline, newest first, with the days it crosses. */
+export function timelinePage(
+  driver: SeatSqliteDriver,
+  request: PageRequest
+): TimelinePageResult {
+  const page = seatPage<PageRow>(driver, TIMELINE_QUERY, request);
+  const rows = page.rows.map(toRow);
+  return { ...page, rows, sections: sliceSections(rows) };
 }
 
 function toRow(row: PageRow): TimelineRow {
