@@ -26,7 +26,8 @@ import { gzipSync } from "node:zlib";
 import { afterAll, describe, expect, test } from "vitest";
 
 import { encodeWireValue } from "@centraid/core/protocol";
-import type { SeatLogPageWire, SeatLogRowWire } from "@centraid/core/protocol";
+import type { SeatLogPageWire } from "@centraid/core/protocol";
+import { staticSeatSnapshotTransport } from "@centraid/test-kit/seat-snapshot-transport";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import {
   beginReplicaCommit,
@@ -35,6 +36,7 @@ import {
   openVaultDb,
   readReplicaLog,
   replicaLogState,
+  seatLogRowWire,
 } from "@centraid/vault";
 import { buildOntologyScenarios } from "@centraid/vault/tests/ontology-scenarios";
 
@@ -95,36 +97,6 @@ function rowsOf(read: (sql: string) => object[], table: string): string[] {
     .sort();
 }
 
-function logRowWire(row: {
-  seq: number;
-  commitSeq: number;
-  schemaEpoch: number;
-  ddlVersion: number;
-  table: string;
-  op: string;
-  primaryKey: readonly unknown[];
-  row: Readonly<Record<string, unknown>> | null;
-  indirect: boolean;
-  deferred: boolean;
-  producer: string;
-  committedAt: string;
-}): SeatLogRowWire {
-  return {
-    seq: row.seq,
-    commitSeq: row.commitSeq,
-    schemaEpoch: row.schemaEpoch,
-    ddlVersion: row.ddlVersion,
-    table: row.table,
-    op: row.op as SeatLogRowWire["op"],
-    pk: row.primaryKey as SeatLogRowWire["pk"],
-    ...(row.row === null ? {} : { row: row.row as SeatLogRowWire["row"] }),
-    ...(row.indirect ? { indirect: true as const } : {}),
-    ...(row.deferred ? { deferred: true as const } : {}),
-    producer: row.producer,
-    committedAt: row.committedAt,
-  };
-}
-
 /**
  * The gateway's file, through the whole seat pipeline: sanitised snapshot,
  * gzipped as the door serves it, staged, resumed, installed, opened.
@@ -141,27 +113,11 @@ async function seatOf(
   const drivers: NodeSeatDriver[] = [];
   const started = performance.now();
   const result = await bootstrapSeatFile({
-    transport: {
-      head: () =>
-        Promise.resolve({
-          etag: `"${snapshot.epoch}-${snapshot.seq}"`,
-          bytes: compressed.byteLength,
-          seq: snapshot.seq,
-          epoch: snapshot.epoch,
-          schemaEpoch: snapshot.schemaEpoch,
-        }),
-      range: (start: number) => ({
-        async *[Symbol.asyncIterator]() {
-          // Chunked, so the parity run also exercises the append path rather
-          // than a single write that happens to work.
-          for (let at = start; at < compressed.byteLength; at += 1 << 16)
-            yield compressed.subarray(
-              at,
-              Math.min(at + (1 << 16), compressed.byteLength)
-            );
-        },
-      }),
-    },
+    // Chunked, so the parity run also exercises the append path rather than a
+    // single write that happens to work.
+    transport: staticSeatSnapshotTransport(compressed, snapshot, {
+      chunkBytes: 1 << 16,
+    }),
     staging: nodeSeatStaging({
       directory: path.join(root, "staging"),
       databasePath: path.join(root, "seat.db"),
@@ -259,7 +215,7 @@ describe("a seat converges with the gateway it copied", () => {
       watermark: tail.watermark.seq,
       next: tail.next.seq,
       hasMore: tail.hasMore,
-      rows: tail.rows.map(logRowWire),
+      rows: tail.rows.map(seatLogRowWire),
     };
     expect(page.rows.length).toBeGreaterThan(0);
     const applied = applySeatLogPage(seat.driver, page);

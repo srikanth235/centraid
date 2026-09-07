@@ -23,6 +23,7 @@ import {
   completeTask,
   operationConditions,
   reopenTask,
+  SUCCESSOR_INHERITS_SERIES_LINKS_SQL,
 } from "../operations/index.js";
 import { annotate } from "./annotations.js";
 import {
@@ -1063,6 +1064,25 @@ const PERSON_TASK_EXISTS_SQL = `SELECT count(*) AS n FROM schedule_task t
              JOIN people_profile p ON p.party_id = l.to_id
             WHERE t.task_id = :task_id AND l.to_type = 'core.party' AND l.valid_to IS NULL`;
 
+/** Both task commands are named by a task and nothing else. */
+const TASK_ID_ONLY_INPUT = {
+  type: "object",
+  required: ["task_id"],
+  additionalProperties: false,
+  properties: { task_id: { type: "string", minLength: 1 } },
+} as const;
+
+/** What either of them answers with; completion adds the successor's two. */
+const TASK_STATUS_OUTPUT = {
+  type: "object",
+  required: ["task_id", "status"],
+  properties: {
+    task_id: { type: "string" },
+    status: { type: "string" },
+    series_id: { type: ["string", "null"] },
+  },
+} as const;
+
 /**
  * COMPLETION IS ONE OPERATION, AND IT IS NOT PEOPLE'S (#996, ruling R21; drift
  * ONT-27). `people.toggle_task` flipped the status with its own `CASE`
@@ -1076,19 +1096,11 @@ const PERSON_TASK_EXISTS_SQL = `SELECT count(*) AS n FROM schedule_task t
 const COMPLETE_TASK: CommandDefinition = {
   name: "people.complete_task",
   ownerSchema: "people",
-  inputSchema: {
-    type: "object",
-    required: ["task_id"],
-    additionalProperties: false,
-    properties: { task_id: { type: "string", minLength: 1 } },
-  },
+  inputSchema: TASK_ID_ONLY_INPUT,
   outputSchema: {
-    type: "object",
-    required: ["task_id", "status"],
+    ...TASK_STATUS_OUTPUT,
     properties: {
-      task_id: { type: "string" },
-      status: { type: "string" },
-      series_id: { type: ["string", "null"] },
+      ...TASK_STATUS_OUTPUT.properties,
       next_task_id: { type: "string" },
       next_due_at: { type: "string" },
     },
@@ -1115,13 +1127,7 @@ const COMPLETE_TASK: CommandDefinition = {
     {
       // The successor of a recurring "call Mum" is still about Mum (ONT-27).
       name: "successor_inherits_the_series_links",
-      sql: `SELECT (CASE WHEN :next_task_id IS NULL THEN 1
-                    ELSE ((SELECT count(*) FROM core_link
-                            WHERE from_type = 'schedule.task' AND from_id = :next_task_id
-                              AND valid_to IS NULL)
-                          >= (SELECT count(*) FROM core_link
-                               WHERE from_type = 'schedule.task' AND from_id = :task_id
-                                 AND valid_to IS NULL)) END) AS n`,
+      sql: SUCCESSOR_INHERITS_SERIES_LINKS_SQL,
       column: "n",
       op: "eq",
       value: 1,
@@ -1149,21 +1155,8 @@ const COMPLETE_TASK: CommandDefinition = {
 const REOPEN_TASK: CommandDefinition = {
   name: "people.reopen_task",
   ownerSchema: "people",
-  inputSchema: {
-    type: "object",
-    required: ["task_id"],
-    additionalProperties: false,
-    properties: { task_id: { type: "string", minLength: 1 } },
-  },
-  outputSchema: {
-    type: "object",
-    required: ["task_id", "status"],
-    properties: {
-      task_id: { type: "string" },
-      status: { type: "string" },
-      series_id: { type: ["string", "null"] },
-    },
-  },
+  inputSchema: TASK_ID_ONLY_INPUT,
+  outputSchema: TASK_STATUS_OUTPUT,
   preconditions: [
     {
       name: "task_exists",

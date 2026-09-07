@@ -16,6 +16,7 @@
     "./temp-dir": "./src/temp-dir.ts",
     "./vault": "./src/vault.ts",
     "./volume-fixture": "./src/volume-fixture.ts",
+    "./seat-snapshot-transport": "./src/seat-snapshot-transport.ts",
     "./year3-vault": "./src/year3-vault.ts",
     "./year3-replica": "./src/year3-replica.ts",
     "./fast-check": "./src/fast-check.ts",

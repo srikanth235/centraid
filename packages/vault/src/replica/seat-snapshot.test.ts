@@ -18,6 +18,7 @@ import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { PRIVATE_TABLE_NAMES } from "../schema/private-tables.js";
 import { beginReplicaCommit, endReplicaCommit } from "./change-log.js";
+import { insertOwnerAndDevice } from "./replica-log.test-fixtures.js";
 import {
   buildSeatSnapshot,
   fileContains,
@@ -41,19 +42,7 @@ function seeded(): VaultDb {
   const db = openVaultDb();
   db.vault.exec("BEGIN");
   const handle = beginReplicaCommit(db.vault, { producer: "test" });
-  db.vault
-    .prepare(
-      `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
-       VALUES ('p1', 'person', 'Owner', '2026-01-01T00:00:00.000Z',
-               '2026-01-01T00:00:00.000Z')`
-    )
-    .run();
-  db.vault
-    .prepare(
-      `INSERT INTO access_device (device_id, owner_party_id, name, enrolled_at)
-       VALUES ('d1', 'p1', 'Phone', '2026-01-01T00:00:00.000Z')`
-    )
-    .run();
+  insertOwnerAndDevice(db.vault, "Phone");
   // The canary lives in a PRIVATE table with a replicated parent — the split
   // this whole list exists to make possible.
   db.vault
@@ -84,6 +73,20 @@ function seeded(): VaultDb {
   return db;
 }
 
+/**
+ * The sanitised snapshot of `db`, OPENED RAW the way a seat opens it: no
+ * migration ladder, no app-defined SQL function, no trigger regeneration. If
+ * the snapshot needed any of those it would not be a snapshot.
+ */
+function snapshotOpenedRaw(db: VaultDb): {
+  readonly seat: DatabaseSync;
+  readonly result: ReturnType<typeof buildSeatSnapshot>;
+} {
+  const destination = scratch();
+  const result = buildSeatSnapshot(db.vault, destination);
+  return { seat: new DatabaseSync(destination), result };
+}
+
 describe("the sanitised seat snapshot", () => {
   test("the private canary is absent from the file's BYTES", () => {
     const db = seeded();
@@ -106,12 +109,7 @@ describe("the sanitised seat snapshot", () => {
   test("no private table, and no trigger except FTS sync, survives", () => {
     const db = seeded();
     try {
-      const destination = scratch();
-      buildSeatSnapshot(db.vault, destination);
-      // Opened RAW, the way a seat opens it: no migration ladder, no
-      // app-defined SQL function, no trigger regeneration. If the snapshot
-      // needed any of those it would not be a snapshot.
-      const seat = new DatabaseSync(destination);
+      const { seat } = snapshotOpenedRaw(db);
       try {
         const tables = (
           seat
@@ -149,13 +147,8 @@ describe("the sanitised seat snapshot", () => {
   test("the log is truncated and its cursor kept", () => {
     const db = seeded();
     try {
-      const destination = scratch();
-      const result = buildSeatSnapshot(db.vault, destination);
+      const { seat, result } = snapshotOpenedRaw(db);
       expect(result.seq).toBeGreaterThan(0);
-      // Opened RAW, the way a seat opens it: no migration ladder, no
-      // app-defined SQL function, no trigger regeneration. If the snapshot
-      // needed any of those it would not be a snapshot.
-      const seat = new DatabaseSync(destination);
       try {
         expect(
           (
@@ -186,12 +179,7 @@ describe("the sanitised seat snapshot", () => {
   test("retained FTS content still answers, and carries no private text", () => {
     const db = seeded();
     try {
-      const destination = scratch();
-      buildSeatSnapshot(db.vault, destination);
-      // Opened RAW, the way a seat opens it: no migration ladder, no
-      // app-defined SQL function, no trigger regeneration. If the snapshot
-      // needed any of those it would not be a snapshot.
-      const seat = new DatabaseSync(destination);
+      const { seat } = snapshotOpenedRaw(db);
       try {
         // The index came across whole: the seat searches without rebuilding.
         expect(

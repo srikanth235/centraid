@@ -76,512 +76,234 @@ export const ROLED_PARENTS: readonly string[] = [
   "core_content_item",
 ];
 
-export const DELETION_ROLES: readonly ReferenceDeletionRole[] = [
+/**
+ * The census, DECLARED BY GROUP (#996, ruling R22).
+ *
+ * A role is a property of the RELATIONSHIP, not of each row that stands in it,
+ * so the parent, the role, its delete rule and who carries it out are stated
+ * once per group and the references under them carry only what is their own:
+ * which key it is, and the one line that says why. Written per reference, the
+ * same five lines were repeated fifty-six times, and a group whose rule
+ * changed had to be found by reading every one of them.
+ */
+interface DeletionRoleGroup {
+  readonly parent: string;
+  readonly role: DeletionRole;
+  readonly onDelete: ReferenceDeletionRole["onDelete"];
+  readonly enforcedBy: ReferenceDeletionRole["enforcedBy"];
+  /** `table.column` of the referencing key, to the reason it stands here. */
+  readonly references: Readonly<Record<string, string>>;
+}
+
+const DELETION_ROLE_GROUPS: readonly DeletionRoleGroup[] = [
   {
-    table: "access_agent",
-    column: "party_id",
     parent: "core_party",
     role: "durable-record",
     onDelete: "NO ACTION",
     enforcedBy: "fk",
-    why: "An automation's principal row is authority history: the agent's answers and receipts name this party, and history does not lose its subject because the subject was purged.",
+    references: {
+      "access_agent.party_id":
+        "An automation's principal row is authority history: the agent's answers and receipts name this party, and history does not lose its subject because the subject was purged.",
+      "access_device.owner_party_id":
+        "An enrolment is authority history for the same reason; a device belongs to a person, and the enrolment is the record that it did.",
+      "core_account.institution_party_id":
+        "An account names the institution that issued it; money keeps its counterparties.",
+      "core_account.owner_party_id":
+        "An account is money, and money refuses the purge of the person it belongs to until the member closes it.",
+      "core_activity.actor_party_id":
+        "The activity band is history; who did a thing is part of what happened.",
+      "core_transaction.counterparty_party_id":
+        "A transaction is money: who it was with is part of the record.",
+      "core_vault.self_party_id":
+        "The vault's own owner. `purgePartyRow` refuses this party before the key gets a chance to.",
+      "outbox_item.recipient_party_id":
+        "An egress record names who it was for; a sent thing does not un-send.",
+      "share_authority.granted_by":
+        "Who granted an authority is consent history, and history keeps its subject.",
+      "social_message.sender_party_id":
+        "Who sent a message is part of what the message IS.",
+      "tally_expense.paid_by":
+        "Who paid is money: an expense keeps the person who fronted it.",
+      "tally_expense_line_allocation.party_id":
+        "A share of a line is money owed, down to the item.",
+      "tally_expense_payer.party_id":
+        "What someone put down is money, and money keeps the hand that put it down.",
+      "tally_expense_split.party_id":
+        "A share is money owed; it refuses the purge until the member settles or removes it (#916, D1).",
+      "tally_nudge.party_id":
+        "A prepared reminder names who it is about, and was never sent.",
+      "tally_obligation.from_party":
+        "A standing IOU is money, and it names both ends.",
+      "tally_obligation.to_party":
+        "A standing IOU is money, and it names both ends.",
+      "tally_recurring_expense.paid_by":
+        "Who pays a recurring template is money, the same as an expense.",
+      "tally_recurring_expense_split.party_id":
+        "A recurring template's share is money owed, the same as an expense's.",
+      "tally_settlement.from_party":
+        "A payment is money, and it names who paid and who was paid.",
+      "tally_settlement.to_party":
+        "A payment is money, and it names who paid and who was paid.",
+    },
   },
   {
-    table: "access_device",
-    column: "owner_party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "An enrolment is authority history for the same reason; a device belongs to a person, and the enrolment is the record that it did.",
-  },
-  {
-    table: "core_account",
-    column: "institution_party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "An account names the institution that issued it; money keeps its counterparties.",
-  },
-  {
-    table: "core_account",
-    column: "owner_party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "An account is money, and money refuses the purge of the person it belongs to until the member closes it.",
-  },
-  {
-    table: "core_activity",
-    column: "actor_party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "The activity band is history; who did a thing is part of what happened.",
-  },
-  {
-    table: "core_collection",
-    column: "owner_party_id",
     parent: "core_party",
     role: "participation",
     onDelete: "NO ACTION",
     enforcedBy: "fk",
-    why: "A collection is the member's own container; purging the person who owns one is refused until the container is dealt with.",
+    references: {
+      "core_collection.owner_party_id":
+        "A collection is the member's own container; purging the person who owns one is refused until the container is dealt with.",
+      "knowledge_annotation.author_party_id":
+        "An annotation is the member's own writing on someone's row.",
+      "knowledge_note.author_party_id":
+        "A note is the member's own writing, and belongs to whoever wrote it.",
+      "media_face_region.confirmed_by_party_id":
+        "Who confirmed the face — a member's own act on a photo.",
+      "people_profile.party_id":
+        "The People app's decoration on a party; the profile is trashed and purged on its own clock.",
+      "schedule_attendee.party_id":
+        "Being on a guest list is a live relationship; the member removes it before the person can go.",
+      "schedule_calendar.owner_party_id":
+        "A calendar belongs to whoever owns it, and is not somebody else's to lose.",
+      "schedule_project.owner_party_id":
+        "A project belongs to whoever owns it, and is not somebody else's to lose.",
+      "schedule_recurrence_exception_attendee.party_id":
+        "A shadow occurrence's guest list, same rule as the series'.",
+      "schedule_task.owner_party_id":
+        "A task belongs to whoever owns it, and is not somebody else's to lose.",
+      "share_party_vault_binding.party_id":
+        "Which vault a person is bound to — a live relationship the member ends first.",
+      "social_circle.owner_party_id":
+        "A circle belongs to whoever owns it, and is not somebody else's to lose.",
+      "social_circle_member.party_id":
+        "Membership of a circle is a live relationship the member ends first.",
+      "social_thread_participant.party_id":
+        "Being in a thread is a live relationship the member ends first.",
+      "tally_friend.party_id":
+        "Being on the Tally friend list is a live relationship the member ends first.",
+    },
   },
   {
-    table: "core_content_item",
-    column: "creator_party_id",
     parent: "core_party",
     role: "attribution",
     onDelete: "SET NULL",
     enforcedBy: "fk",
-    why: "Who captured the bytes. The bytes outlive the attribution — a photo does not disappear because the photographer was purged.",
+    references: {
+      "core_content_item.creator_party_id":
+        "Who captured the bytes. The bytes outlive the attribution — a photo does not disappear because the photographer was purged.",
+      "core_entity_revision.actor_party_id":
+        "Who made this revision. The revision is the history; the name on it is attribution and may go.",
+      "core_event.organizer_party_id":
+        "Who convened the event. The event survives unattributed rather than blocking a purge (#916, D1).",
+      "core_tag.tagged_by_party_id":
+        "Who asserted the tag. An owner-asserted tag that loses its asserter becomes a machine-shaped row, which the preferred-assertion reader already knows how to read.",
+      "media_face_region.party_id":
+        "WHO the face is. Forgetting a person leaves the region as an unnamed face rather than deleting the photo's geometry (#711).",
+    },
   },
   {
-    table: "core_entity_revision",
-    column: "actor_party_id",
-    parent: "core_party",
-    role: "attribution",
-    onDelete: "SET NULL",
-    enforcedBy: "fk",
-    why: "Who made this revision. The revision is the history; the name on it is attribution and may go.",
-  },
-  {
-    table: "core_event",
-    column: "organizer_party_id",
-    parent: "core_party",
-    role: "attribution",
-    onDelete: "SET NULL",
-    enforcedBy: "fk",
-    why: "Who convened the event. The event survives unattributed rather than blocking a purge (#916, D1).",
-  },
-  {
-    table: "core_party_identifier",
-    column: "party_id",
     parent: "core_party",
     role: "owned-child",
     onDelete: "NO ACTION",
     enforcedBy: "sweep",
-    why: "An identifier is a fact ABOUT this person and says nothing without them. The engine does not cascade it: `purgePartyRow` deletes it first, so the enforcement is the sweep's, not the key's.",
+    references: {
+      "core_party_identifier.party_id":
+        "An identifier is a fact ABOUT this person and says nothing without them. The engine does not cascade it: `purgePartyRow` deletes it first, so the enforcement is the sweep's, not the key's.",
+      "people_important_date.party_id":
+        "A birthday is a fact ABOUT this person. Enforced by the sweep, like the identifier above.",
+    },
   },
   {
-    table: "core_tag",
-    column: "tagged_by_party_id",
-    parent: "core_party",
-    role: "attribution",
-    onDelete: "SET NULL",
-    enforcedBy: "fk",
-    why: "Who asserted the tag. An owner-asserted tag that loses its asserter becomes a machine-shaped row, which the preferred-assertion reader already knows how to read.",
-  },
-  {
-    table: "core_transaction",
-    column: "counterparty_party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A transaction is money: who it was with is part of the record.",
-  },
-  {
-    table: "core_vault",
-    column: "self_party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "The vault's own owner. `purgePartyRow` refuses this party before the key gets a chance to.",
-  },
-  {
-    table: "knowledge_annotation",
-    column: "author_party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "An annotation is the member's own writing on someone's row.",
-  },
-  {
-    table: "knowledge_note",
-    column: "author_party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A note is the member's own writing, and belongs to whoever wrote it.",
-  },
-  {
-    table: "media_face_region",
-    column: "confirmed_by_party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "Who confirmed the face — a member's own act on a photo.",
-  },
-  {
-    table: "media_face_region",
-    column: "party_id",
-    parent: "core_party",
-    role: "attribution",
-    onDelete: "SET NULL",
-    enforcedBy: "fk",
-    why: "WHO the face is. Forgetting a person leaves the region as an unnamed face rather than deleting the photo's geometry (#711).",
-  },
-  {
-    table: "outbox_item",
-    column: "recipient_party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "An egress record names who it was for; a sent thing does not un-send.",
-  },
-  {
-    table: "people_important_date",
-    column: "party_id",
-    parent: "core_party",
-    role: "owned-child",
-    onDelete: "NO ACTION",
-    enforcedBy: "sweep",
-    why: "A birthday is a fact ABOUT this person. Enforced by the sweep, like the identifier above.",
-  },
-  {
-    table: "people_profile",
-    column: "party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "The People app's decoration on a party; the profile is trashed and purged on its own clock.",
-  },
-  {
-    table: "schedule_attendee",
-    column: "party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "Being on a guest list is a live relationship; the member removes it before the person can go.",
-  },
-  {
-    table: "schedule_calendar",
-    column: "owner_party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A calendar belongs to whoever owns it, and is not somebody else's to lose.",
-  },
-  {
-    table: "schedule_project",
-    column: "owner_party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A project belongs to whoever owns it, and is not somebody else's to lose.",
-  },
-  {
-    table: "schedule_recurrence_exception_attendee",
-    column: "party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A shadow occurrence's guest list, same rule as the series'.",
-  },
-  {
-    table: "schedule_task",
-    column: "owner_party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A task belongs to whoever owns it, and is not somebody else's to lose.",
-  },
-  {
-    table: "share_authority",
-    column: "granted_by",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "Who granted an authority is consent history, and history keeps its subject.",
-  },
-  {
-    table: "share_party_vault_binding",
-    column: "party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "Which vault a person is bound to — a live relationship the member ends first.",
-  },
-  {
-    table: "social_circle",
-    column: "owner_party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A circle belongs to whoever owns it, and is not somebody else's to lose.",
-  },
-  {
-    table: "social_circle_member",
-    column: "party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "Membership of a circle is a live relationship the member ends first.",
-  },
-  {
-    table: "social_contact_channel",
-    column: "party_id",
     parent: "core_party",
     role: "owned-child",
     onDelete: "CASCADE",
     enforcedBy: "fk",
-    why: "A way to REACH someone is a fact about them and goes with them — the one party reference the engine cascades.",
+    references: {
+      "social_contact_channel.party_id":
+        "A way to REACH someone is a fact about them and goes with them — the one party reference the engine cascades.",
+    },
   },
   {
-    table: "social_message",
-    column: "sender_party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "Who sent a message is part of what the message IS.",
-  },
-  {
-    table: "social_thread_participant",
-    column: "party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "Being in a thread is a live relationship the member ends first.",
-  },
-  {
-    table: "tally_expense",
-    column: "paid_by",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "Who paid is money: an expense keeps the person who fronted it.",
-  },
-  {
-    table: "tally_expense_line_allocation",
-    column: "party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A share of a line is money owed, down to the item.",
-  },
-  {
-    table: "tally_expense_payer",
-    column: "party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "What someone put down is money, and money keeps the hand that put it down.",
-  },
-  {
-    table: "tally_expense_split",
-    column: "party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A share is money owed; it refuses the purge until the member settles or removes it (#916, D1).",
-  },
-  {
-    table: "tally_friend",
-    column: "party_id",
-    parent: "core_party",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "Being on the Tally friend list is a live relationship the member ends first.",
-  },
-  {
-    table: "tally_nudge",
-    column: "party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A prepared reminder names who it is about, and was never sent.",
-  },
-  {
-    table: "tally_obligation",
-    column: "from_party",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A standing IOU is money, and it names both ends.",
-  },
-  {
-    table: "tally_obligation",
-    column: "to_party",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A standing IOU is money, and it names both ends.",
-  },
-  {
-    table: "tally_recurring_expense",
-    column: "paid_by",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "Who pays a recurring template is money, the same as an expense.",
-  },
-  {
-    table: "tally_recurring_expense_split",
-    column: "party_id",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A recurring template's share is money owed, the same as an expense's.",
-  },
-  {
-    table: "tally_settlement",
-    column: "from_party",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A payment is money, and it names who paid and who was paid.",
-  },
-  {
-    table: "tally_settlement",
-    column: "to_party",
-    parent: "core_party",
-    role: "durable-record",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A payment is money, and it names who paid and who was paid.",
-  },
-  {
-    table: "blob_custody_state",
-    column: "content_id",
     parent: "core_content_item",
     role: "derived",
     onDelete: "CASCADE",
     enforcedBy: "fk",
-    why: "Where the bytes are kept is observation about them, recomputable from the stores.",
+    references: {
+      "blob_custody_state.content_id":
+        "Where the bytes are kept is observation about them, recomputable from the stores.",
+      "core_content_derivative.content_id":
+        "A thumbnail, preview or extracted text is recomputable from the original.",
+      "core_content_text.content_id":
+        "Decoded body text, recomputable from the bytes.",
+    },
   },
   {
-    table: "core_attachment",
-    column: "content_id",
     parent: "core_content_item",
     role: "participation",
     onDelete: "NO ACTION",
     enforcedBy: "fk",
-    why: "An attachment RENTS the bytes; the rental holds them alive.",
+    references: {
+      "core_attachment.content_id":
+        "An attachment RENTS the bytes; the rental holds them alive.",
+      "core_collection.cover_content_id":
+        "A collection's cover rents the bytes it shows.",
+      "core_party.avatar_content_id":
+        "An avatar rents the bytes it is a picture of.",
+      "knowledge_note.body_content_id":
+        "A note's body rents the bytes it decodes from.",
+      "media_asset.content_id": "A photo rents the bytes it is a picture of.",
+      "social_message.body_content_id":
+        "A message body rents the bytes it decodes from.",
+    },
   },
   {
-    table: "core_collection",
-    column: "cover_content_id",
-    parent: "core_content_item",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A collection's cover rents the bytes it shows.",
-  },
-  {
-    table: "core_content_derivative",
-    column: "content_id",
-    parent: "core_content_item",
-    role: "derived",
-    onDelete: "CASCADE",
-    enforcedBy: "fk",
-    why: "A thumbnail, preview or extracted text is recomputable from the original.",
-  },
-  {
-    table: "core_content_representation",
-    column: "content_id",
     parent: "core_content_item",
     role: "owned-child",
     onDelete: "CASCADE",
     enforcedBy: "fk",
-    why: "An owner's READING of the bytes has no meaning once the bytes are gone (#996, R20(b)).",
+    references: {
+      "core_content_representation.content_id":
+        "An owner's READING of the bytes has no meaning once the bytes are gone (#996, R20(b)).",
+    },
   },
   {
-    table: "core_content_text",
-    column: "content_id",
-    parent: "core_content_item",
-    role: "derived",
-    onDelete: "CASCADE",
-    enforcedBy: "fk",
-    why: "Decoded body text, recomputable from the bytes.",
-  },
-  {
-    table: "core_document",
-    column: "current_content_id",
     parent: "core_content_item",
     role: "participation",
     onDelete: "NO ACTION",
     enforcedBy: "sweep",
-    why: "A document's head rents the bytes it currently is; the sweep walks past the head deliberately (#352).",
+    references: {
+      "core_document.current_content_id":
+        "A document's head rents the bytes it currently is; the sweep walks past the head deliberately (#352).",
+    },
   },
   {
-    table: "core_entity_revision",
-    column: "content_id",
     parent: "core_content_item",
     role: "attribution",
     onDelete: "SET NULL",
     enforcedBy: "fk",
-    why: "A revision names the content that became current at that moment. History survives the bytes it named.",
-  },
-  {
-    table: "core_party",
-    column: "avatar_content_id",
-    parent: "core_content_item",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "An avatar rents the bytes it is a picture of.",
-  },
-  {
-    table: "knowledge_note",
-    column: "body_content_id",
-    parent: "core_content_item",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A note's body rents the bytes it decodes from.",
-  },
-  {
-    table: "media_asset",
-    column: "content_id",
-    parent: "core_content_item",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A photo rents the bytes it is a picture of.",
-  },
-  {
-    table: "social_message",
-    column: "body_content_id",
-    parent: "core_content_item",
-    role: "participation",
-    onDelete: "NO ACTION",
-    enforcedBy: "fk",
-    why: "A message body rents the bytes it decodes from.",
+    references: {
+      "core_entity_revision.content_id":
+        "A revision names the content that became current at that moment. History survives the bytes it named.",
+    },
   },
 ];
+
+export const DELETION_ROLES: readonly ReferenceDeletionRole[] =
+  DELETION_ROLE_GROUPS.flatMap((group) =>
+    Object.entries(group.references).map(([reference, why]) => {
+      const [table, column] = reference.split(".");
+      return {
+        table: table!,
+        column: column!,
+        parent: group.parent,
+        role: group.role,
+        onDelete: group.onDelete,
+        enforcedBy: group.enforcedBy,
+        why,
+      };
+    })
+  );
 
 export function deletionRoleOf(
   table: string,

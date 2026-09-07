@@ -20,8 +20,12 @@
 // verbatim rather than re-assigned: intents drain in the order they were made
 // (R23), and a re-bootstrap that re-numbers them re-orders the member's work.
 
-import { createSeatBlobPresence } from "./blob-presence.js";
-import type { SeatBlobRow } from "./blob-presence.js";
+import {
+  createSeatBlobPresence,
+  SEAT_BLOB_COLUMNS,
+  seatBlobRow,
+} from "./blob-presence.js";
+import type { SeatBlobRow, SeatBlobSqlRow } from "./blob-presence.js";
 import type { SeatSqliteDriver } from "./driver.js";
 import {
   addSeatOutboxIntent,
@@ -65,32 +69,10 @@ export function readSeatCarryOver(driver: SeatSqliteDriver): SeatCarryOver {
     : [];
   const blobs = tablePresent(driver, "seat_blob_presence")
     ? driver
-        .all<{
-          sha: string;
-          kind: "preview" | "original";
-          byte_size: number;
-          captured_here: number;
-          pinned: number;
-          last_used_at: string;
-          claim_intent_id: string | null;
-          purge_seq: number | null;
-          purge_ack_intent_id: string | null;
-        }>(
-          `SELECT sha, kind, byte_size, captured_here, pinned, last_used_at,
-                  claim_intent_id, purge_seq, purge_ack_intent_id
-             FROM seat_blob_presence ORDER BY sha`
+        .all<SeatBlobSqlRow>(
+          `SELECT ${SEAT_BLOB_COLUMNS} FROM seat_blob_presence ORDER BY sha`
         )
-        .map((row) => ({
-          sha: row.sha,
-          kind: row.kind,
-          byteSize: row.byte_size,
-          capturedHere: row.captured_here === 1,
-          pinned: row.pinned === 1,
-          lastUsedAt: row.last_used_at,
-          claimIntentId: row.claim_intent_id ?? undefined,
-          purgeSeq: row.purge_seq ?? undefined,
-          purgeAckIntentId: row.purge_ack_intent_id ?? undefined,
-        }))
+        .map(seatBlobRow)
     : [];
   const contents = tablePresent(driver, "seat_state")
     ? (driver.all<{ contents: SeatContents }>(

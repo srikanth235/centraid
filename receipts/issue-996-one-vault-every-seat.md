@@ -3232,4 +3232,192 @@ produces the `media_asset` leave and drops the member while the keeper stays.
 
 ```
 bun run check:reachability        # ok (292 capabilities across 19 module globs)
+### Why the vec build step failed, and what it does now
+
+Run 34092275488 (job 101648094884, `macos-26`) reached `Build vec.xcframework`
+and died in one second on `v0.1.7-alpha.2 vendored no sqlite3ext.h — the
+submodule did not clone`. Everything before it — setup, Xcode 26.4 select, the
+React Native / ExpoModulesJSI assert, the CocoaPods assert — passed, and the
+guard did its job: it named the missing file rather than letting clang fail
+later with something less legible.
+
+The guard was right and the assumption behind it was wrong, in two ways.
+`asg017/sqlite-vec` has **no `vendor/` directory and no submodules at all** —
+its `scripts/vendor.sh` downloads a SQLite amalgamation into one at build time,
+so `--recurse-submodules` had nothing to fetch. And `sqlite-vec.h` is
+**generated** from `sqlite-vec.h.tmpl` by upstream's Makefile through
+`envsubst`, which macOS runners do not carry; a clone alone cannot compile.
+
+`build-sqlite-vec-ios.sh` now does both jobs itself. It renders the header with
+six `sed` substitutions — `VERSION` from the tag's own `VERSION` file, `DATE`
+and `SOURCE` from the cloned commit, so one tag always renders one header — and
+asserts the result carries `v0.1.7-alpha.2`. For `sqlite3ext.h` it prefers the
+platform SDKs' own copy (no network, and a header inside the sysroot is already
+on the quoted-include path), falling back to the same pinned amalgamation
+upstream's `vendor.sh` uses, with `SQLITE_EXTENSION_INIT1` asserted in whatever
+it unzips. The log says which source it took.
+
+**`node_modules/expo-sqlite/vendor/*/sqlite3.h` is deliberately not that
+source**, though it sits right there and would need no network at all: Expo
+renames the entire public API to `exsqlite3_*` in it, and stock extension source
+does not compile against a renamed header (`unknown type name 'sqlite3_vtab';
+did you mean 'exsqlite3_vtab'?`). The rename is invisible to a loadable
+extension, which reaches SQLite through the `sqlite3_api_routines` pointer it is
+handed rather than by linking symbols — so stock headers are both correct and
+the only ones that work. Expo's Android `vec.so` is built from stock source the
+same way.
+
+Verified here as far as a Linux container can: the script's source-preparation
+block was run verbatim against a real clone of the tag, and the `sqlite-vec.c`
+it produced compiles clean and exports `sqlite3_vec_init`.
+
+```
+bash -n apps/mobile/scripts/build-sqlite-vec-ios.sh   # syntax ok
+bunx vitest run --root apps/mobile scripts/sqlite-vec-version.test.mjs
+cc -fPIC -shared -O2 -o vec.so <clone>/sqlite-vec.c   # 0 errors, exports sqlite3_vec_init
+bun run lint:workflow-pins && bun run format:check
+bash .governance/run.sh
+```
+
+The arch flags, the xcframework packaging and the simulator link still need
+macOS; the next dispatch is what turns them into evidence.
+
+## CI fix — duplication
+
+SonarCloud's "Duplication on New Code" gate (≤ 3%) read 3.5% on the wave's PR.
+The owner's per-file breakdown named two files as essentially the whole of it —
+`packages/vault/src/schema/deletion-roles.ts` (504 duplicated lines, 82.2%) and
+`packages/vault/src/schema/private-tables.ts` (137, 50.9%). Neither has a stale
+twin anywhere in the tree: they are duplicates of THEMSELVES. Both were written
+as one object literal per row, so fifty-six and twenty-eight times over the same
+five lines said the same thing with a different string in them.
+
+**A role is a property of the relationship, not of each row that stands in it.**
+Both lists are now declared BY GROUP: the parent, the role, its `ON DELETE` rule
+and who carries it out are stated once, and the references under them carry only
+what is their own — which key it is, and the one line that says why. Same fifty-
+six declarations, same census, same tests; `DELETION_ROLES` and `PRIVATE_TABLES`
+are built from the groups so every consumer and both suites are untouched.
+612 → 279 lines and 268 → 183 lines, and a group whose rule changes is now one
+edit instead of a read of every row under it.
+
+The rest was the waves writing the same block three times:
+
+- **The snapshot door, served from memory** — `packages/test-kit/src/seat-snapshot-transport.ts`
+  (new). The golden replica, the test-kit's own seat fixture and the parity run
+  each spelled out the same `head`/`range` stub; `chunkBytes` is the one thing
+  that differed, so it is the one thing a caller passes. Used by
+  `tests/helpers/factories.ts`, `packages/test-kit/src/year3-replica.test.ts` and
+  `tests/quality/seat-replay-parity.test.ts`.
+- **The log row as the door serves it** — `seatLogRowWire` now lives beside the
+  row in `packages/vault/src/replica/log.ts` and is exported from
+  `packages/vault/src/index.ts`; `packages/server/src/routes/seat-routes.ts`,
+  `tests/helpers/factories.ts` and `tests/quality/seat-replay-parity.test.ts`
+  had a copy each.
+- **One statement cache, two wasm drivers** —
+  `packages/client/src/replica/wasm-statement-cache.ts` (new) is the bind/step/
+  reset/keep-it loop both browser drivers were;
+  `packages/client/src/replica/wasm-sqlite-driver.ts` and
+  `packages/client/src/replica/seat/wasm-seat-driver.ts` now say only how large
+  their handful of statements is.
+- **One seat artifact for the seat suites** —
+  `packages/client/src/replica/seat/seat-artifact.test-fixtures.ts` (new), used
+  by `carry-over.test.ts`, `worker-core.test.ts` and `web-seat.test.ts`;
+  `bootstrap.test.ts` gains an `opener` for the four copies of its `open` seam.
+- **One spelling of a captured commit** —
+  `packages/vault/src/replica/replica-log.test-fixtures.ts` (new): `capturedCommit`,
+  `insertScheme`, `insertOwnerAndDevice`, `tableDigest`, used by
+  `packages/vault/src/replica/log.test.ts`, `log-retention.test.ts`,
+  `change-log.test.ts` and `seat-snapshot.test.ts`.
+- **The presence row is shaped once** — `SEAT_BLOB_COLUMNS`, `SeatBlobSqlRow` and
+  `seatBlobRow` are exported from `packages/client/src/replica/seat/blob-presence.ts`
+  and read by `packages/client/src/replica/seat/carry-over.ts`, which had
+  re-spelled the columns, the row type and the mapping.
+- **Repeated blocks inside one file** —
+  `packages/vault/src/operations/registry.ts` (`ref` and `taskCompletion` for the
+  four read-sets and three postconditions),
+  `packages/vault/src/schema/representation-split.test.ts` (`titledAsset`, and the
+  caption rows built once),
+  `packages/vault/src/commands/people.ts` (`TASK_ID_ONLY_INPUT`,
+  `TASK_STATUS_OUTPUT`), and the successor-links postcondition People and Tasks
+  both assert, now `SUCCESSOR_INHERITS_SERIES_LINKS_SQL` in
+  `packages/vault/src/operations/task-lifecycle.ts` (exported through
+  `packages/vault/src/operations/index.ts`, used by
+  `packages/vault/src/commands/tasks.ts`).
+
+No test and no assertion was removed to reduce lines, and the Sonar
+configuration and its exclusions are untouched.
+
+**`lint:types`** was red for one diagnostic unrelated to the above:
+`packages/vault/src/ingest/enrich-publishers.test.ts` sorted a
+`(string | null)[]` with a bare `toSorted()` (`require-array-sort-compare`).
+Both sides of that comparison now sort by code unit through one explicit
+comparator — a locale collation would order the two lists differently, and the
+keys deliberately preserve their script.
+
+### Numbers
+
+Local estimator (8-line normalised windows over the diff's added lines against
+every tracked file), `6a1b16715..worktree`:
+
+```
+before: added 32398  duplicated 892 (2.8%)
+after:  added 31663  duplicated 449 (1.4%)
+```
+
+### Gates
+
+```
+bunx vitest run …                     # vault schema/replica/operations/commands, client seat, server seat-routes
+bunx vitest run -c vitest.quality.config.ts tests/quality/seat-replay-parity.test.ts
+bun run --filter @centraid/vault build
+bun run lint && bun run format:check && bun run lint:types
+bash .governance/run.sh
+bun run check:push:static
+```
+
+### The header the extension is compiled against is the whole extension
+
+Supersedes the SDK-header paragraph in "Why the vec build step failed" above:
+that fallback ordering was wrong and run 34099041334 (job 101669007050) proved
+it. The script took the "using the SDK's own sqlite3ext.h" branch and the arm64
+link died with `Undefined symbols for architecture arm64` — `_sqlite3_bind_int`,
+`_sqlite3_value_text`, `_sqlite3_vtab_in`, `_sqlite3_vtab_in_first`,
+`_sqlite3_value_nochange`, `_sqlite3_vmprintf` and the rest.
+
+`sqlite3ext.h` is not a declarations header. Under `SQLITE_EXTENSION_INIT1` it
+`#define`s every `sqlite3_*` name to `sqlite3_api->…`, so a loadable extension
+reaches the host through the routine struct the host hands it at init. Compiled
+against a header where that block is not in effect, `sqlite-vec.c` calls the
+symbols directly. That does not link — and linking would have been the worse
+outcome: expo-sqlite loads this through `exsqlite3_load_extension`
+(`node_modules/expo-sqlite/ios/SQLiteModule.swift:569-573`) against a SQLCipher
+build whose entire API is renamed `exsqlite3_*`, so a direct `sqlite3_bind_int`
+would bind against some other SQLite or nothing at all. Upstream's own release
+workflow compiles with `-Ivendor/` for precisely this reason.
+
+- `apps/mobile/scripts/build-sqlite-vec-ios.sh` — the SDK branch is deleted.
+  There is one header source, always vendored, and the sanity check that it
+  carries `SQLITE_EXTENSION_INIT1` stays.
+- **The pin moves to 3.49.1** (`https://www.sqlite.org/2025/sqlite-amalgamation-3490100.zip`),
+  which is `SEAT_SQLITE_FLOOR` in `packages/vault/src/schema/replica.ts:58` —
+  the SQLCipher build the phone actually runs. The `sqlite3_api_routines` layout
+  is defined by the host that fills it in, so an extension compiled at or below
+  the host's version reads fields the host really wrote; above it, it would
+  expect entries the host never filled. Upstream's 3.45.3 would also be safe;
+  this pin says which host it is safe against.
+- **A new guard makes this class of error self-naming.** After the export check,
+  `nm -u` on each slice must show no `_sqlite3_` entry: every call must have been
+  rewritten to `sqlite3_api->…`, and an undefined one means the header did not
+  do it. Verified discriminating on Linux against the same clone — the correctly
+  compiled shared object has 0 undefined `sqlite3_` symbols and one built with
+  the redirect suppressed has 74, `sqlite3_bind_int` among them, which is the
+  first symbol the runner named.
+
+```
+bash -n apps/mobile/scripts/build-sqlite-vec-ios.sh
+nm -u good.so | grep -c sqlite3_    # 0
+nm -u bad.so  | grep -c sqlite3_    # 74
+bun run lint:workflow-pins && bun run format:check
+bash .governance/run.sh
 ```

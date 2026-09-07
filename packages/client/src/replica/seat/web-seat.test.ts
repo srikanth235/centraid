@@ -1,7 +1,4 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { gzipSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
@@ -10,6 +7,7 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { seatStoreEnabled, SEAT_STORE_FLAG } from "./flag.js";
 import { NodeSeatDriver } from "./node-seat-driver.js";
 import { nodeSeatStaging } from "./node-staging.js";
+import { seatArtifact } from "./seat-artifact.test-fixtures.js";
 import type { SeatWorkerLike } from "./seat-worker-client.js";
 import { WebSeat } from "./web-seat.js";
 import { SeatWorkerCore } from "./worker-core.js";
@@ -87,16 +85,9 @@ function inlineWorker(
 function artifactBytes(root: string): Uint8Array {
   const cached = artifacts.get(root);
   if (cached) return cached;
-  const source = path.join(root, "source.db");
-  const db = new DatabaseSync(source);
-  db.exec(`
-    CREATE TABLE note (note_id TEXT PRIMARY KEY, title TEXT NOT NULL) STRICT;
-    INSERT INTO note VALUES ('n1', 'from the gateway');
-  `);
-  db.close();
   // ONE artifact per workspace: the door serves the same bytes to every
   // request, and rebuilding it would make a resumed download splice two files.
-  const bytes = gzipSync(readFileSync(source));
+  const bytes = seatArtifact(root);
   artifacts.set(root, bytes);
   return bytes;
 }
