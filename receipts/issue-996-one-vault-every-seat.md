@@ -3564,13 +3564,9 @@ Removed: the function and its comment (`packages/vault/src/share/closure-members
 replaced by a note saying why there is no reverse answerer) and its barrel
 re-export (`packages/vault/src/index.ts`).
 
-**Left standing, and named as a finding:** `share_subscription_member_row`
-(`packages/vault/src/schema/subscription.ts`) existed for that one reader and
-now has none. It is NOT dropped here. The frozen corpus already carries it —
-`golden-vault.test.ts`'s schema gate proves it — so removing it is a migration
-RUNG and a bump of `PRAGMA user_version`, which a reachability CI fix has no
-business spending. The DDL says so in place; the next schema rung should drop
-it.
+`share_subscription_member_row` (`packages/vault/src/schema/subscription.ts`)
+existed for that one reader and now has none. It is dropped in the follow-up
+commit below, not here.
 
 Evidence for the deletion: `closure-outputs.test.ts`, "a purged shared row
 leaves for EVERY grant whose member set held it" — two grants over one album,
@@ -4186,7 +4182,286 @@ git commit --allow-empty -m "chore(mobile): regenerate ios/Podfile.lock for expo
 bash .governance/run.sh    # the simulated commit passes; only bcf17bd3f is flagged
 bun run lint:workflow-pins # 24 workflows clean
 bun run format:check       # clean
+
+## CI fix — the phone's own note, before and after the echo
+
+The emulator gate found it: a note saved on the phone never appeared in the
+phone's Notes list on the new (seat) store. Two independent halves, both of
+them capabilities that shipped with no production caller.
+
+**The overlay was never cleared.** `packages/client/src/replica/seat/applier.ts`
+has an `onCommitInTransaction` hook, and `seatOverlayClearingHook` /
+`clearSeatOverlaysAtCommit` (`packages/client/src/replica/seat/seat-intent-store.ts`)
+were written to be handed to it — but the only caller was
+`packages/client/src/replica/seat/carry-over.test.ts`.
+`SeatWorkerCore.apply` passed no hook, so an executed intent parked on its
+`commit_seq` (R24) and nothing on the device ever reached it. Now
+`packages/client/src/replica/seat/worker-core.ts` passes it, and the sink gains
+`onOverlaysCleared` — a changed table is a re-read, a cleared intent is a badge
+that goes, and the shell does different things with the two.
+
+**The read did not compose the overlay at all.** The old store overlays every
+read (`packages/client/src/replica/store-core.ts#overlay`); the seat's read was
+raw SQL over the file, and the file is the GATEWAY's rows — so a write between
+the save and the echo appeared nowhere, which is the visible half of the
+symptom. New `packages/client/src/replica/seat/read-overlay.ts`:
+`seatPendingMutations` reads the pending rows out of `seat_outbox` in the same
+handle, `overlaySeatRows` draws them over the answer, and
+`SeatWorkerQuery.overlay` (`packages/client/src/replica/seat/worker-protocol.ts`)
+names the entity and the row-id column. Bounded by the MUTATIONS, not the
+table, exactly as the old store is. A row that exists only in the outbox is
+APPENDED rather than sorted into place: it is not in the file, so the SQL that
+produced the answer never saw it, and it takes its place when the echo lands.
+Absent `overlay` is the canonical read, and a count or a parity check must stay
+that way.
+
+Two supporting changes fall out: `SeatWorkerCore` creates `seat_outbox` when it
+adopts a handle (`#adopt`) — a bootstrapped file is a copy of the gateway's and
+has never heard of it, and every read now composes the outbox — and
+`SeatWorkerCore.outbox()` hands back the queue's store over the same handle,
+which is the sharing R24 rests on.
+
+Red-first: `packages/client/src/replica/seat/worker-core.test.ts`, "shows the
+member's own note before the echo, and the canonical row after it" — the note
+is in the list before any page carries it, a page carrying a DIFFERENT commit
+leaves the overlay standing, and the page carrying its `commit_seq` clears the
+overlay and returns the file's own row. It fails on the tree before this commit.
+
 ```
+bunx vitest run packages/client/src/replica/seat/worker-core.test.ts   # 8 passed
+```
+
+## Wave 3 — the timeline is a page, not a fold
+
+A phone holding a year-3 vault cannot fold its media table in memory to draw
+one screen. `sectionPhotoAssets` did exactly that: read `media.asset` whole,
+group by local day in JavaScript, hand back every section. At the volume this
+wave is cut to that is tens of thousands of rows to draw twenty, every time,
+and no memoisation above it changes what SQLite was asked for.
+
+`apps/mobile/src/apps/photos/timeline-page.ts` is the replacement, written
+red-first against a seat-shaped fixture of 19,712 assets over three years.
+
+### Keyset, and the measurement that changed the design
+
+`LIMIT n OFFSET k` makes SQLite walk and discard `k` rows, so page 100 costs a
+hundred pages. The key is `(captured_at, asset_id)` as a ROW VALUE —
+`(a, b) < (?, ?)` — which SQLite turns into an index seek rather than the
+`a < ? OR (a = ? AND b < ?)` an optimiser has to be talked into. Row values are
+3.15, twenty releases under the floor.
+
+**The first draft keyed on the local-day EXPRESSION** so that one index could
+serve both the page and the month aggregate. `EXPLAIN QUERY PLAN` answered
+`SCAN media_asset USING INDEX …`, not `SEARCH`: SQLite will not turn a
+row-value range over an expression index into a seek, so every page walked the
+index from the top. Measured on 60,000 rows
+(`…/scratchpad/keyset-depth.mjs`): **33 µs at the newest page, 4,324 µs at the
+oldest** — the offset cost this module exists to delete, wearing a
+returned-row count that looked perfectly cheap. On plain columns the same query
+is `SEARCH media_asset USING INDEX seat_media_timeline_idx (captured_at>? AND
+(captured_at,asset_id)<(?,?))` and flat with depth: 59 µs / 15 µs / 60 µs at
+depths 0, 30,000 and 60,000.
+
+So there are TWO indexes, both the seat's own and both partial on the
+timeline's exact predicate: the page seeks `seat_media_timeline_idx`, the
+scrubber aggregates `seat_media_local_day_idx`, and neither pretends to be the
+other. A returned-row assertion alone could not have seen this, which is why
+the test asserts the PLAN as well.
+
+### Buckets are a GROUP BY over an indexed expression, never a second table
+
+`timelineBuckets` returns one row per month — 36 rows for three years, not
+19,712 — because the aggregate walks the day index. A `timeline_day` rollup
+table would be the other way to get that number and would be a second truth
+about the same rows, kept in step by triggers the seat does not have and would
+have to invent: the seat's only surviving triggers are FTS sync. **A seat may
+add an INDEX to its own copy. It may not add a table.**
+
+### The day is the capture-local one, and a page can split it
+
+`captured_at` is a UTC instant and `tz_offset_min` is the zone the shutter
+fired in (#419). A photo taken at 23:30 in Tokyo and one taken at the same
+instant in London are different days to the people who took them. The day is
+computed in SQL — `substr(datetime(captured_at, (coalesce(tz_offset_min,0) ||
+' minutes')), 1, 10)`, `||` rather than `concat()` because `concat()` is 3.44
+and the floor is 3.49.1 — so a section header cannot disagree with its rows.
+
+Ordering by `captured_at` means two rows of one local day can be separated by a
+row from another when the offsets differ: a flight, or a zone change. The
+slicer folds those back together rather than emitting a second header for a day
+already on screen, and there is a test for exactly that shape.
+
+### What is still to come, and why it is not here
+
+The Photos SCREENS still read `timeline-engine.ts`. That is deliberate rather
+than unfinished: `timelinePage` takes a `SeatSqliteDriver`, and the phone does
+not open a seat file until W4/W5 wires the seat store onto it. Pointing the
+screen at this module now would mean pointing it at a store the phone has not
+got. The mechanism, its indexes and its cost are proven here; the swap lands
+with the store.
+
+### One regression fixed beside it: the web seat's Tally totals
+
+CI burn-in flagged `tally-balance-parity.integration.test.ts` failing 3/3:
+`web.owe_total_minor + web.owed_total_minor` was `NaN` while `expense_count`
+was 40 and `friends` had length 3.
+
+**The read was right and the test's local type was three waves stale.** R22
+removed `owe_total_minor` / `owed_total_minor` and `friends[].net_minor` from
+the dashboard — a bare minor-unit integer cannot be rendered as a balance,
+because a bag of USD 100 and EUR 100 has no single number — and the handler
+returns `Valuation`s and per-currency `Money` bags. The test's own `Dashboard`
+interface still declared the old fields, so the guard read
+`undefined + undefined`.
+
+It failed loudly only because `NaN > 0` is false. Written `>= 0` the same guard
+would have passed over an empty payload indefinitely — the guard existed to
+stop the comparison being vacuous and had itself become vacuous.
+
+**And the second test in the file was worse, because it was green.** "Every
+friend's net agrees" compared `friend.net_minor`, which the same ruling
+removed: both seats returned `undefined`, `toStrictEqual` agreed about it, and
+its own non-vacuity guard passed on `undefined !== 0`. It was agreement about
+nothing, in the test whose whole job is to prove the two seats agree about
+something — and only fixing the interface made the compiler say so. It compares
+the per-currency `Money` bags now, and its guard asks for a non-zero amount
+inside one. The interface
+now matches what the query returns, the guard reads the `Valuation` the same
+way `tally-airplane.test.ts` reads it, and the case the burn-in asked for is
+pinned directly: `phone.owe`/`phone.owed` and the per-friend balance bags
+compared to the web seat's by SHAPE, not by a total that a dropped currency
+component or a bigint-versus-number driver difference would survive.
+
+### Bundle weight
+
+`bun run perf:app-weight -- --surface mobile` on this tree: **ios largest chunk
+8,259,045 B, android 8,279,799 B** against the 8,220,000 B ceiling — already
+over at `6654a6901` (8,257,168 / 8,278,154) and NOT raised here. This wave's
+delta is +1,877 B ios / +1,645 B android, all of it commit 3's product code:
+`custodyDurability` and `notifyUploadQueueChanged` are both in the Hermes
+bundle. `seat_media_timeline_idx` is NOT — `timeline-page.ts` has no product
+importer yet, so Metro drops it and this commit adds nothing.
+
+Checked while in the import graph, as asked: **`apps/mobile` does not reach the
+browser wasm driver through a client barrel.** Its only replica subpath is
+`@centraid/client/replica/native`, and `native.ts` exports neither
+`seat-worker.js` nor `sqlite-store.js` — the two paths to `wasm-seat-driver` /
+`wasm-statement-cache`. There is no import to cut.
+
+### Every file this commit touches
+
+- `apps/mobile/src/apps/photos/timeline-page.ts` (new)
+- `apps/mobile/src/apps/photos/timeline-page.test.ts` (new)
+- `tests/integration-mobile/tally-balance-parity.integration.test.ts`
+
+### Decisions — wave 3, the timeline page
+
+- **Two indexes, not one.** One index led by the day expression would serve
+  both queries and serve the page badly; the measurement above is the whole
+  argument, and it is in the module's own comment so the next reader does not
+  re-derive it.
+- **The plan is asserted, not just the row count.** The failure that got
+  through the row-count assertion was a full ordered index walk returning 41
+  rows. A test that cannot see that is not holding the claim it says it is.
+- **The screen is not switched over in this commit.** The seat store is not on
+  the phone's read path until W4/W5; wiring a screen to a driver the phone does
+  not open would be a third path beside the two that exist.
+
+## Wave 3 — one OpenSSL, because SQLCipher is an OpenSSL consumer
+
+Enabling `expo.sqlite.useSQLCipher` on Android (commit 3) broke the release
+build: `:app:mergeReleaseNativeLibs` died on "2 files found with path
+lib/x86_64/libcrypto.so". It built at `bcf17bd3f` and not after, and the cause
+is mine.
+
+### What actually collided
+
+Both modules link OpenSSL from the SAME Maven artifact at DIFFERENT versions:
+
+| module | declaration |
+| --- | --- |
+| `react-native-quick-crypto` | `implementation 'io.github.ronickg:openssl:3.6.2-1'` |
+| `expo-sqlite` (only under `useSQLCipher`) | `compileOnly 'io.github.ronickg:openssl:3.3.2-1'` |
+
+SQLCipher IS an OpenSSL consumer — expo-sqlite's Android build adds
+`-DSQLCIPHER_CRYPTO_OPENSSL` when the flag is on — so turning encryption on
+made it the second one in this app. Unforced, both resolve and both are
+packaged.
+
+### Option (1) was checked first and does not hold
+
+Deleting `react-native-quick-crypto` would take its OpenSSL with it, and it is
+the better answer where it is available. It is not available here, for two
+reasons that are both about capability rather than taste:
+
+- **Streaming SHA-256 over camera assets.** `native-digest.ts` builds an
+  incremental hash (`createHash("sha256")`, `update`, `digestHex`) because the
+  upload queue addresses multi-gigabyte videos by content. `expo-crypto` offers
+  one-shot `digest`/`digestStringAsync` only; the equivalent is loading the
+  whole asset into memory to hash it.
+- **WebCrypto `subtle`.** `installQuickCrypto()` in `apps/mobile/index.ts`
+  supplies Hermes with AES-GCM and HMAC. W6's unlock boundary is AES-256-GCM +
+  PBKDF2 and `webCryptoUploadCrypto()` wants the same surface; Hermes has no
+  WebCrypto and `expo-crypto` does not provide `subtle`.
+
+So this is option (2): both consumers link ONE OpenSSL.
+
+### The fix, and why it is not a `pickFirst`
+
+`apps/mobile/android/build.gradle` forces
+`io.github.ronickg:openssl:3.6.2-1` for every configuration. A `pickFirst` on
+`libcrypto.so` would keep TWO OpenSSL builds in the tree and bind SQLCipher to
+whichever the merger happened to reach first — and a SQLCipher linked against
+an OpenSSL it was not compiled against is a silent data-corruption path, not a
+packaging warning. Forcing resolves it before anything is packaged: one
+library, and every consumer compiled against the headers of the one it gets.
+
+**Newest wins, and the direction is the argument.** OpenSSL 3.x is ABI-stable
+within its major line, so code compiled against 3.3 headers runs against the
+3.6 library; the reverse is not guaranteed. The forced version is therefore the
+newest any consumer asks for, and the test holds it to that rather than to a
+literal.
+
+### Red first, and it stays red for the next arrival
+
+`seat-native-build-config.test.ts` grows three cases that read the real
+dependency graph — every `node_modules/*/android/build.gradle` that names the
+OpenSSL artifact:
+
+- more than one consumer still exists, so the force is load-bearing rather than
+  dead weight (if it ever drops to one, the test says to remove it);
+- the app's `build.gradle` forces exactly one version, and it is the newest any
+  consumer asks for — a third module wanting something newer fails here;
+- neither gradle file answers this with a `pickFirst` on `libcrypto.so`.
+
+The middle case was written first and failed on the missing force, which is how
+the fix was arrived at rather than guessed.
+
+### Not verified locally, and what would verify it
+
+`./gradlew :app:mergeReleaseNativeLibs` cannot run in this container: there is
+no Android SDK and Gradle cannot resolve its own plugins offline
+(`org.gradle.toolchains.foojay-resolver-convention` is unresolvable). **The
+proof is the emulator gate on the next push.** What IS established here is the
+collision's cause, both declarations by file and version, and that one
+resolution now covers both.
+
+### Every file this commit touches
+
+- `apps/mobile/android/build.gradle`
+- `apps/mobile/src/lib/replica/seat-native-build-config.test.ts`
+- `apps/mobile/native-fingerprints.json` — refreshed after the gradle change: android `df5d7e6f…` → `6a0bd966…`
+
+### Decisions — wave 3, the OpenSSL collision
+
+- **Force, not exclude, and not `pickFirst`.** The two symptom fixes leave two
+  OpenSSLs in the artifact and make the pairing arbitrary. The failure mode
+  they hide is corruption of an encrypted vault file, which is the one class of
+  bug this wave can least afford to make quiet.
+- **quick-crypto stays, and the reason is written down.** It is the only
+  provider of a streaming hash and of WebCrypto `subtle` on Hermes. If either
+  gains a platform provider, deleting it is the better fix and the first test
+  case will point at it.
 
 ## Wave 6 — the wire golden catches up with a version bump it did not make
 
@@ -4251,6 +4526,20 @@ bunx vitest run packages/client/src/locker   # 5 files, 30 passed
 bunx tsc -p packages/client --noEmit          # clean
 bun run governance < /dev/null
 bun run check:push:static                     # stamped on the committed tree
+## The dead index goes, and the golden corpus is re-frozen with it
+
+The reachability commit left `share_subscription_member_row` standing and filed
+it as a finding, on the reading that the frozen corpus carries the index and
+removing it is therefore a migration rung. That reading is wrong under the
+owner's pre-1.0 rulings: **there are no rungs and no compatibility paths before
+1.0**, and a rung spent carrying a dead index forward is a rung spent making
+the wrong thing survive.
+
+So the index is deleted from the baseline DDL
+(`packages/vault/src/schema/subscription.ts`), where a comment now says why
+there is no index on `(table_name, pk)` at all, and the golden corpus is
+re-frozen in the same commit through the repo's own tooling:
+
 ```
 
 ## Wave 6 — the seats adopt the door; the permit goes
@@ -4310,3 +4599,80 @@ bunx tsc -p apps/mobile --noEmit                          # clean
 bun run governance < /dev/null
 bun run check:push:static                                 # stamped on the committed tree
 ```
+bun run golden-vault:freeze -- --label issue-929
+  # froze issue-929 — 18 table(s), 182 row(s), schema v6 (ontology 1.0)
+```
+
+`packages/vault/tests/golden/issue-929/vault.db.gz` and its `manifest.json` are
+the artefacts. `golden-vault.test.ts`'s schema gate now proves the CURRENT
+baseline: the frozen file and a vault founded by today's code agree, which is
+the whole point of that gate and what a corpus frozen before wave 7 could no
+longer do. The row-id and digest churn in the manifest is the deterministic
+seed re-running against the tree as it stands, not a rewrite of what the corpus
+holds — the row and table counts are unchanged.
+
+Recorded in [docs/decisions.md](../docs/decisions.md) under the #996 rulings,
+beside the v0 stance it follows from.
+
+```
+bunx vitest run packages/vault/src/golden-vault.test.ts \
+                packages/vault/src/schema/migrate.test.ts \
+                packages/vault/src/share/closure-outputs.test.ts   # 31 passed
+```
+
+## Wave 3 — the pending projections still wrote a title the schema had moved
+
+`bun run test:integration:mobile` was red on sixteen cases with
+`ReplicaProtocolError: Unknown column "title" on core.content_item`, thrown by
+`validateOptimisticMutation` before any write left the phone.
+
+R20(b) moved the AUTHORED title off `core_content_item` onto the owning row —
+`core.document.title`, `knowledge_note.title`, `media_asset.title` — because a
+content row is keyed by its bytes: two assets sharing a sha shared one caption,
+and a generated caption overwrote the owner's own words. The column is gone,
+and so is `media_type`. Two pending projections still wrote both.
+
+Both were writing it TWICE, which is what makes this the mirror the ruling
+deleted rather than a rename anyone missed: `docs` already set
+`core.document.title` two lines above, and `notes` already set the note's title
+through `NOTE_FIELDS`. What the `core.content_item` upsert is FOR is minting
+the row the document or note points at, so it exists in the overlay before the
+gateway answers — and `content_id` is all that takes.
+
+No compatibility path and no fallback: the column does not exist, and a
+projection that wrote to it optimistically would have drawn a title on a row
+that could never carry one.
+
+### Verification
+
+```
+bun run test:integration:mobile   # 16 failures → 12; every `Unknown column
+                                  # "title"` case green
+```
+
+### The twelve that remain are a different defect, and not this lane's
+
+`conflict.integration.test.ts` fails for all eight apps on
+`expect(actualVersion).toBeGreaterThan(expectedVersion)` with numbers two
+orders of magnitude apart — `expected 2 to be greater than 432`,
+`expected 3 to be greater than 447`. The two sides are not the same quantity.
+`packages/server/src/routes/replica-intent-shape.ts:278-279` answers
+`expectedVersion: base.version` beside `actualVersion: entityMax.seq ?? 0` — a
+row version against a log sequence. The umbrella's own acceptance row says
+"every mutable table has `row_version`, bumped by its touch trigger; **the
+gateway's conflict check compares the column**", so the sequence is the wrong
+side of that comparison. `locker`'s denied case (`conflict` where `denied` is
+owed) and three `parked` cases are the rest. All of it is the gateway's intent
+plane, not seats+apps, and it is reported rather than absorbed.
+
+### Every file this commit touches
+
+- `packages/blueprints/apps/docs/pending-projection.ts`
+- `packages/blueprints/apps/notes/pending-projection.ts`
+
+### Decisions — wave 3, the pending title
+
+- **The content row keeps only its id.** Reaching for another column to carry
+  the optimistic title — `content_uri`, a synthetic field — would rebuild the
+  mirror under a different name. The owning row has the title; the overlay
+  reads it there.

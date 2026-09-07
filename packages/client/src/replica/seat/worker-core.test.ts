@@ -112,6 +112,147 @@ describe("the seat worker core", () => {
     worker.close();
   });
 
+  /*
+   * THE PHONE'S OWN NOTE, BEFORE AND AFTER THE ECHO (#996, R24).
+   *
+   * Red-first against the emulator gate: a note saved on the phone never
+   * appeared in the Notes list. Two halves, and both are here — the seat's
+   * read was raw SQL over the GATEWAY's rows, so a write that had not made the
+   * round trip appeared nowhere; and nothing in production ever called
+   * `seatOverlayClearingHook`, so once the answer did arrive the overlay was
+   * parked on its `commit_seq` with nothing to clear it.
+   */
+  async function seated(root: string): Promise<{
+    worker: SeatWorkerCore;
+    cleared: string[][];
+  }> {
+    const cleared: string[][] = [];
+    const drivers: NodeSeatDriver[] = [];
+    const bytes = seatArtifact(root);
+    const worker = new SeatWorkerCore(
+      {
+        openDatabase: () => {
+          const driver = new NodeSeatDriver(path.join(root, "seat.db"));
+          drivers.push(driver);
+          return driver;
+        },
+        staging: () =>
+          nodeSeatStaging({
+            directory: path.join(root, "staging"),
+            databasePath: path.join(root, "seat.db"),
+          }),
+        transport: () => seatArtifactTransport(bytes, 7),
+      },
+      { onOverlaysCleared: (ids) => cleared.push([...ids]) }
+    );
+    await worker.open(OPEN);
+    await worker.bootstrap({ vaultId: "vault-1", snapshotUrl: "/snapshot" });
+    return { worker, cleared };
+  }
+
+  /** The list the phone's Notes screen reads. */
+  const NOTES = {
+    sql: `SELECT note_id, title FROM note ORDER BY note_id`,
+    overlay: { entity: "knowledge.note", rowIdColumn: "note_id" },
+  } as const;
+
+  /** The intent behind "save", answered `executed` at commit 9. */
+  async function savedNote(worker: SeatWorkerCore): Promise<void> {
+    const store = worker.outbox();
+    await store.add({
+      intentId: "intent-note",
+      appId: "knowledge",
+      action: "create_note",
+      input: { title: "written on the train" },
+      payloadHash: "n".repeat(64),
+      state: "awaiting-change",
+      attempts: 0,
+      commitSeq: 9,
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "shape-notes",
+          entity: "knowledge.note",
+          rowId: "n2",
+          values: { note_id: "n2", title: "written on the train" },
+        },
+      ],
+      dependencies: [],
+    });
+  }
+
+  it("shows the member's own note before the echo, and the canonical row after it", async () => {
+    const root = workspace();
+    const { worker, cleared } = await seated(root);
+    await savedNote(worker);
+
+    // BEFORE THE ECHO. The file holds only the gateway's row; the list the
+    // member reads holds theirs too, or the save looks like it was swallowed.
+    expect(worker.query(NOTES)).toStrictEqual([
+      { note_id: "n1", title: "from the gateway" },
+      { note_id: "n2", title: "written on the train" },
+    ]);
+    // The canonical read — the one that measures the file — still says one.
+    expect(
+      worker.query({ sql: `SELECT count(*) AS n FROM note` })
+    ).toStrictEqual([{ n: 1 }]);
+
+    // A page that does NOT carry commit 9 leaves the overlay standing.
+    worker.apply({
+      page: page([
+        {
+          seq: 8,
+          commitSeq: 8,
+          schemaEpoch: 2,
+          ddlVersion: 0,
+          table: "note",
+          op: "insert",
+          pk: ["n3"],
+          row: { note_id: "n3", title: "someone else's" },
+          producer: "test",
+          committedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ]),
+    });
+    expect(cleared).toStrictEqual([]);
+    // A row that exists only in the outbox cannot be placed by the read's own
+    // ORDER BY — it is not in the file — so it appends. The member sees it;
+    // where it sits settles when the echo lands.
+    expect(
+      worker.query(NOTES).map((row) => (row as { note_id: string }).note_id)
+    ).toStrictEqual(["n1", "n3", "n2"]);
+
+    // THE ECHO. The commit carrying the note arrives; the overlay clears in
+    // the same transaction, and the row the list returns is the canonical one.
+    worker.apply({
+      page: page([
+        {
+          seq: 9,
+          commitSeq: 9,
+          schemaEpoch: 2,
+          ddlVersion: 0,
+          table: "note",
+          op: "insert",
+          pk: ["n2"],
+          row: { note_id: "n2", title: "written on the train" },
+          producer: "test",
+          committedAt: "2026-01-01T00:00:01.000Z",
+        },
+      ]),
+    });
+    expect(cleared).toStrictEqual([["intent-note"]]);
+    expect(worker.query(NOTES)).toStrictEqual([
+      { note_id: "n1", title: "from the gateway" },
+      { note_id: "n2", title: "written on the train" },
+      { note_id: "n3", title: "someone else's" },
+    ]);
+    // …and it is the FILE's row now, not an overlay drawn over it.
+    expect(
+      worker.query({ sql: `SELECT count(*) AS n FROM note` })
+    ).toStrictEqual([{ n: 3 }]);
+    worker.close();
+  });
+
   it("refuses to bootstrap before it has been opened", async () => {
     const root = workspace();
     const { core: worker } = core(root, []);

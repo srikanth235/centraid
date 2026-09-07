@@ -37,17 +37,45 @@ import {
 } from "../../apps/mobile/src/lib/replica/tally-ledger.test-fixtures";
 import { VaultReadPlane } from "../../apps/mobile/src/lib/replica/vault-read-plane";
 import { ReplicaSqliteStore } from "../../packages/client/src/replica/store-core";
+import type { Money, Valuation } from "../../packages/core/src/money";
 import { tempDirSync } from "../../packages/test-kit/src/temp-dir";
 
+/**
+ * The dashboard as the query actually returns it (#996 R22).
+ *
+ * IT USED TO SAY `owe_total_minor` / `owed_total_minor` AND `net_minor`, and
+ * that shape is gone: a bare minor-unit integer cannot be rendered as a
+ * balance, because a bag of USD 100 and EUR 100 has no single number. The
+ * handler returns `Valuation`s and per-currency `Money` bags instead. This
+ * interface said otherwise, so the non-vacuity guard below was reading
+ * `undefined + undefined` and asserting `NaN > 0` — which failed loudly, but
+ * only because NaN fails every comparison. Had the guard been `>= 0` it would
+ * have passed over an empty payload for as long as anyone cared to look.
+ */
 interface Dashboard {
   me: string | null;
   currency: string;
-  friends: Array<{ party_id: string; net_minor: number }>;
-  owe_total_minor: number;
-  owed_total_minor: number;
+  friends: Array<{ party_id: string; balances: Money[] }>;
+  owe: Valuation;
+  owed: Valuation;
   expense_count: number;
   recurring: unknown[];
   vaultDenied?: unknown;
+}
+
+/**
+ * The absolute size of a valuation — "is there anything here", never a figure
+ * a surface would render (#996, R22). Spelled the same way
+ * `apps/mobile/src/apps/tally/tally-airplane.test.ts` spells it, so the two
+ * lanes cannot drift into two readings of one type.
+ */
+function valuationTotalMinor(valuation: Valuation): number {
+  return valuation.state === "valued"
+    ? Math.abs(valuation.total.amount_minor)
+    : valuation.components.reduce(
+        (total, amount) => total + Math.abs(amount.amount_minor),
+        0
+      );
 }
 
 /**
@@ -190,7 +218,20 @@ describe("Tally's balances, phone against web, over the same rows", () => {
     expect(web.vaultDenied).toBeUndefined();
     expect(web.expense_count).toBe(40);
     expect(web.friends).toHaveLength(3);
-    expect(web.owe_total_minor + web.owed_total_minor).toBeGreaterThan(0);
+    expect(
+      valuationTotalMinor(web.owe) + valuationTotalMinor(web.owed)
+    ).toBeGreaterThan(0);
+
+    // THE TWO FIELDS, ROW SHAPE AND ALL, not just their sum and not only
+    // through the whole-payload compare below. A driver that handed one seat a
+    // bigint where the other got a number, or dropped a component of a
+    // multi-currency bag, would survive a total and die here.
+    expect(phone.owe).toStrictEqual(web.owe);
+    expect(phone.owed).toStrictEqual(web.owed);
+    expect(phone.owe.state).toBe(web.owe.state);
+    expect(phone.friends.map((friend) => friend.balances)).toStrictEqual(
+      web.friends.map((friend) => friend.balances)
+    );
 
     expect(asData(phone)).toStrictEqual(asData(web));
     // The mounted plane's own bookkeeping stops at the ctx, so a handler that
@@ -221,13 +262,23 @@ describe("Tally's balances, phone against web, over the same rows", () => {
       }
     )) as Dashboard;
 
-    const nets = (data: Dashboard): Array<[string, number]> =>
+    // PER-CURRENCY BAGS, not a net integer (#996 R22). This read
+    // `friend.net_minor` — a field the same ruling removed — so both seats
+    // returned `undefined`, `toStrictEqual` agreed about it, and the
+    // non-vacuity guard passed on `undefined !== 0`. It was agreement about
+    // nothing, in the test whose whole job is to prove the two seats agree
+    // about something.
+    const bags = (data: Dashboard): Array<[string, Money[]]> =>
       data.friends
-        .map((friend): [string, number] => [friend.party_id, friend.net_minor])
+        .map((friend): [string, Money[]] => [friend.party_id, friend.balances])
         .sort(([left], [right]) => left.localeCompare(right));
 
-    expect(nets(phone)).toStrictEqual(nets(web));
+    expect(bags(phone)).toStrictEqual(bags(web));
     // Non-zero, so agreement is agreement about arithmetic rather than zeroes.
-    expect(nets(phone).some(([, net]) => net !== 0)).toBe(true);
+    expect(
+      bags(phone).some(([, balances]) =>
+        balances.some((amount) => amount.amount_minor !== 0)
+      )
+    ).toBe(true);
   });
 });

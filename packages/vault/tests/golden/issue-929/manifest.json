@@ -2,7 +2,7 @@
   "label": "issue-929",
   "frozenAt": "2026-01-01T00:00:00.000Z",
   "ontologyVersion": "1.0",
-  "userVersion": 5,
+  "userVersion": 6,
   "tables": {
     "access_device": {
       "columns": [
@@ -16,7 +16,7 @@
       "primaryKey": "device_id",
       "rows": 1,
       "digests": {
-        "01a079a4-b3de-77bd-8a52-0914e09a860e": "ed0fdfc0a6d2cefb"
+        "01a07b89-0df6-769b-b17f-5581f934f471": "3718be3990c3dd84"
       }
     },
     "access_device_secret": {
@@ -24,7 +24,7 @@
       "primaryKey": "device_id",
       "rows": 1,
       "digests": {
-        "01a079a4-b3de-77bd-8a52-0914e09a860e": "56d7b66c366b52ee"
+        "01a07b89-0df6-769b-b17f-5581f934f471": "6db0d64a573fd6f5"
       }
     },
     "core_concept": {
@@ -46,21 +46,21 @@
       "primaryKey": "concept_id",
       "rows": 15,
       "digests": {
-        "01a079a4-b3c7-731e-8621-a1401f870a4b": "696c783c1cfea010",
-        "01a079a4-b3c8-71b8-abec-9fcb8799f7e8": "c7c3bb3acc92ede8",
-        "01a079a4-b3c9-763a-9b94-73de2a4936f5": "618f85d75ee62b9f",
-        "01a079a4-b3ca-747d-8b91-af93ec868120": "b2d39f59f3a1db55",
-        "01a079a4-b3cb-7087-b51a-87688380d758": "b2f345704dcfb1cb",
-        "01a079a4-b3cd-726d-82e2-a22dd1837ca8": "dbd7867a9bb4282c",
-        "01a079a4-b3ce-74a8-895f-fa7595a82808": "a654391f220ab64c",
-        "01a079a4-b3cf-71cc-bdeb-15e2c0b87ebf": "3d98d231094db023",
-        "01a079a4-b3d1-712b-9c44-354c11937a28": "9ac3db5fb6a3c12b",
-        "01a079a4-b3d2-74df-b10c-bb7814aa1f21": "c98ff1348b4517bc",
-        "01a079a4-b3d3-71fe-860f-84980a0fc74d": "ab5e9ce5de4ff5ba",
-        "01a079a4-b3d4-710d-8712-5a25b621ece3": "4ac2db442756ec67",
-        "01a079a4-b3d5-743a-87d9-2e46bc640f10": "e770eb655dd5ce83",
-        "01a079a4-b3d6-757f-9f22-9e5bd66037fe": "ddab6903e0a5c5cb",
-        "01a079a4-b3d8-70aa-996a-a11e48cf7817": "b597dfceaff69654"
+        "01a07b89-0ddb-7578-b6be-0d46e3f1040e": "f6b93366b8f03296",
+        "01a07b89-0ddc-75fd-ae9f-65ac4442e533": "a12d4c953ae31abe",
+        "01a07b89-0dde-75be-b531-acffac8b36c6": "53591f767308436d",
+        "01a07b89-0ddf-72d0-8078-5ff94a1e4c1b": "6cf26351f46f54bf",
+        "01a07b89-0de1-7445-97af-f6412347e8f8": "f9d37e4f83673587",
+        "01a07b89-0de2-71fc-84f3-60dfd8e4f3ce": "ce435358f148b0cc",
+        "01a07b89-0de4-767d-9d27-228c9ef2b9ae": "cbf487c174bde1ec",
+        "01a07b89-0de5-7318-81ff-92450b623439": "c3c37c3e9919b04f",
+        "01a07b89-0de7-77d9-9edc-f9c1cc59ced5": "261be21c6f3ceb28",
+        "01a07b89-0de8-728d-88fb-75c966ff6a83": "57b3ce607d6e6fed",
+        "01a07b89-0de9-75de-919a-4ed2948a5eea": "ce51d728e6e689f4",
+        "01a07b89-0deb-7419-ad3c-83f1bac53067": "25d252b07a4ba72f",
+        "01a07b89-0dec-719a-a5c7-de97a23d8a84": "588490640093dd79",
+        "01a07b89-0ded-716b-ba09-23ce16f56019": "39381457ecc4a0b7",
+        "01a07b89-0dee-77df-9b0f-83c3378a73ac": "90658302cd8154a7"
       }
     },
     "core_concept_scheme": {
@@ -75,12 +75,12 @@
       "primaryKey": "scheme_id",
       "rows": 6,
       "digests": {
-        "01a079a4-b3bf-7099-8364-36d6b455aa1c": "7aabcd15b3cd43ee",
-        "01a079a4-b3c1-771c-a72f-f09300055f5f": "7ee3e85fef3d8ecd",
-        "01a079a4-b3c3-71ae-8c99-37b4cd2929dc": "e2402bfc013787a4",
-        "01a079a4-b3c4-77b1-ba7b-c838ba833157": "32baf4b81fb9008e",
-        "01a079a4-b3c5-75fb-8413-fc95eed74542": "8246cfe7432ffb15",
-        "01a079a4-b3c6-7248-82a6-a745ecfda842": "eae7ea1411be07c9"
+        "01a07b89-0dd0-70fc-9d24-6dde0e7f570e": "9dc87277d1fea437",
+        "01a07b89-0dd4-76f7-a8ad-413871862ce1": "3348fb57525c8256",
+        "01a07b89-0dd5-72bb-8401-dbd073b29cf4": "22be73992a319269",
+        "01a07b89-0dd7-705f-99ff-970bbd467ba6": "f158085abbb7ad3b",
+        "01a07b89-0dd8-737e-85ca-ee777ec959af": "9f85da2ef916b6b3",
+        "01a07b89-0dd9-72fc-be43-a08c0b2ac5b8": "6e1bf56febce3361"
       }
     },
     "core_content_item": {
@@ -101,11 +101,11 @@
       "primaryKey": "content_id",
       "rows": 5,
       "digests": {
-        "07ba6103-9196-7f85-8271-33489e323840": "5a166133059ab9bf",
-        "66a1972f-596d-7738-8a3c-63d1132f3df7": "fd92b89e6fdb9132",
-        "a210139b-b628-7592-82ec-d7aacf47468d": "9ca7baf7ae2c47d0",
-        "b1557230-c0e7-7255-84ce-a45ee7bf198e": "d77e888da40a381b",
-        "cb625ee7-d35e-7668-81ea-64aa001547c1": "e9e48b9f2decb10a"
+        "07ba6103-9196-7f85-8271-33489e323840": "2ef16530d067a11c",
+        "66a1972f-596d-7738-8a3c-63d1132f3df7": "7b38c4428a59df7d",
+        "a210139b-b628-7592-82ec-d7aacf47468d": "cf683762ba38c842",
+        "b1557230-c0e7-7255-84ce-a45ee7bf198e": "14aae897f43e8c28",
+        "cb625ee7-d35e-7668-81ea-64aa001547c1": "200a6734d98a401c"
       }
     },
     "core_content_representation": {
@@ -124,11 +124,11 @@
       "primaryKey": "representation_id",
       "rows": 5,
       "digests": {
-        "0289261d-f491-7460-8714-2b2651a726ef": "b7d78dbbbf58d218",
-        "2f9a358a-2807-7a16-8500-9e527f712450": "ac7c66cd0da62749",
-        "51b7f0b8-a5ed-76b1-8776-55311a9b2677": "0cf6e9c93d9ee035",
-        "c1bac236-83fc-724a-82bd-82a02933fa5b": "bdf0cae17b888138",
-        "e3d92af7-5e6f-7638-8825-0eb56e6b1bca": "68e587fcfcc075c4"
+        "0289261d-f491-7460-8714-2b2651a726ef": "bd26a9bc08b34c0b",
+        "2f9a358a-2807-7a16-8500-9e527f712450": "213d9ccb846616e8",
+        "51b7f0b8-a5ed-76b1-8776-55311a9b2677": "7e83022f77ddff64",
+        "c1bac236-83fc-724a-82bd-82a02933fa5b": "ae984395c8befac1",
+        "e3d92af7-5e6f-7638-8825-0eb56e6b1bca": "4e18748e990efd3d"
       }
     },
     "core_document": {
@@ -156,30 +156,30 @@
       "primaryKey": "entity_id",
       "rows": 40,
       "digests": {
-        "01a079a4-b3bf-7099-8364-36d6b455aa1c": "38f6c95924a82e1f",
-        "01a079a4-b3c1-771c-a72f-f09300055f5f": "21596fd53f785b8c",
-        "01a079a4-b3c3-71ae-8c99-37b4cd2929dc": "1ad6c122bdacacf4",
-        "01a079a4-b3c4-77b1-ba7b-c838ba833157": "12c50f217c5cfc0f",
-        "01a079a4-b3c5-75fb-8413-fc95eed74542": "923760b6a5ffdc08",
-        "01a079a4-b3c6-7248-82a6-a745ecfda842": "43569fbd99c6f706",
-        "01a079a4-b3c7-731e-8621-a1401f870a4b": "81a2c4c845e6d103",
-        "01a079a4-b3c8-71b8-abec-9fcb8799f7e8": "3000e62463bd064a",
-        "01a079a4-b3c9-763a-9b94-73de2a4936f5": "1dd8f140bf22a352",
-        "01a079a4-b3ca-747d-8b91-af93ec868120": "80b5ac33fd7a28c1",
-        "01a079a4-b3cb-7087-b51a-87688380d758": "a63f80349fa67d9f",
-        "01a079a4-b3cd-726d-82e2-a22dd1837ca8": "bbd1bf7ea0e4e14c",
-        "01a079a4-b3ce-74a8-895f-fa7595a82808": "4206033ba2aac52c",
-        "01a079a4-b3cf-71cc-bdeb-15e2c0b87ebf": "239a080fad486575",
-        "01a079a4-b3d1-712b-9c44-354c11937a28": "36d2eb68625b3c09",
-        "01a079a4-b3d2-74df-b10c-bb7814aa1f21": "10dc3d59f00edbd8",
-        "01a079a4-b3d3-71fe-860f-84980a0fc74d": "621a737abbbb27fe",
-        "01a079a4-b3d4-710d-8712-5a25b621ece3": "f36971a1f46e4848",
-        "01a079a4-b3d5-743a-87d9-2e46bc640f10": "9fdd8cb964d78328",
-        "01a079a4-b3d6-757f-9f22-9e5bd66037fe": "0d9eb7f5c10a9a09",
-        "01a079a4-b3d8-70aa-996a-a11e48cf7817": "63cf1fc9bf39514d",
-        "01a079a4-b3d9-7188-8652-f82476959f9a": "5e94e6dc961380ae",
-        "01a079a4-b3da-74f8-a94e-f7aa42f3b6d9": "6a7f50a4b0eb62ed",
-        "01a079a4-b3dd-764f-b1ec-325d7f4b7ada": "37878f05a19fac79",
+        "01a07b89-0dd0-70fc-9d24-6dde0e7f570e": "0591ce69356547b3",
+        "01a07b89-0dd4-76f7-a8ad-413871862ce1": "9cbf21b32bc85d21",
+        "01a07b89-0dd5-72bb-8401-dbd073b29cf4": "e29ea8f953435d28",
+        "01a07b89-0dd7-705f-99ff-970bbd467ba6": "32ac25fd80527806",
+        "01a07b89-0dd8-737e-85ca-ee777ec959af": "5d396053038c94b2",
+        "01a07b89-0dd9-72fc-be43-a08c0b2ac5b8": "4927a14c3e79c933",
+        "01a07b89-0ddb-7578-b6be-0d46e3f1040e": "3ce7bdc690e91c46",
+        "01a07b89-0ddc-75fd-ae9f-65ac4442e533": "6780eafe643f4115",
+        "01a07b89-0dde-75be-b531-acffac8b36c6": "489504bfd41e7097",
+        "01a07b89-0ddf-72d0-8078-5ff94a1e4c1b": "d349d39ac89e7522",
+        "01a07b89-0de1-7445-97af-f6412347e8f8": "137d1cfec71a1640",
+        "01a07b89-0de2-71fc-84f3-60dfd8e4f3ce": "a89d8f1c712acda7",
+        "01a07b89-0de4-767d-9d27-228c9ef2b9ae": "2eca9c357ccedede",
+        "01a07b89-0de5-7318-81ff-92450b623439": "65a239bd252200fa",
+        "01a07b89-0de7-77d9-9edc-f9c1cc59ced5": "b9d3b79fda1a9d5a",
+        "01a07b89-0de8-728d-88fb-75c966ff6a83": "340bfd29c69c6a41",
+        "01a07b89-0de9-75de-919a-4ed2948a5eea": "953ea01566be59f2",
+        "01a07b89-0deb-7419-ad3c-83f1bac53067": "8e45313064f6f670",
+        "01a07b89-0dec-719a-a5c7-de97a23d8a84": "17dbf2060f29b9df",
+        "01a07b89-0ded-716b-ba09-23ce16f56019": "573b53c7963baa61",
+        "01a07b89-0dee-77df-9b0f-83c3378a73ac": "098886e96c33253e",
+        "01a07b89-0def-718f-9864-f37868ceb952": "a0eea6922fa542e0",
+        "01a07b89-0df1-7258-8320-61b0fba43ae5": "291989ceb48ec4d5",
+        "01a07b89-0df4-767a-8165-3a72b6a78042": "17ab420c69e21347",
         "0289261d-f491-7460-8714-2b2651a726ef": "5de0cfab46718917",
         "07ba6103-9196-7f85-8271-33489e323840": "912a4878f07532bb",
         "2f9a358a-2807-7a16-8500-9e527f712450": "66385d36fe59d12d",
@@ -275,7 +275,7 @@
       "primaryKey": "link_id",
       "rows": 1,
       "digests": {
-        "5b818965-455e-7ef6-842f-243ef584c6a7": "e591ec57844437b0"
+        "5b818965-455e-7ef6-842f-243ef584c6a7": "39797457821625b7"
       }
     },
     "core_party": {
@@ -295,7 +295,7 @@
       "primaryKey": "party_id",
       "rows": 1,
       "digests": {
-        "01a079a4-b3d9-7188-8652-f82476959f9a": "0770eb75cf289ba3"
+        "01a07b89-0def-718f-9864-f37868ceb952": "30829d3f805c32a9"
       }
     },
     "core_vault": {
@@ -313,7 +313,7 @@
       "primaryKey": "vault_id",
       "rows": 1,
       "digests": {
-        "01a079a4-b3da-74f8-a94e-f7aa42f3b6d9": "9fb6f55543143a71"
+        "01a07b89-0df1-7258-8320-61b0fba43ae5": "58bc943702481463"
       }
     },
     "enrich_policy": {
@@ -321,8 +321,8 @@
       "primaryKey": "domain",
       "rows": 2,
       "digests": {
-        "docs": "5ba43caa22fde2d1",
-        "photos": "da778e17a359ab3a"
+        "docs": "53ed8c95b86fa9cf",
+        "photos": "61012c2046c5cd17"
       }
     },
     "knowledge_note": {
@@ -343,8 +343,16 @@
       "primaryKey": "note_id",
       "rows": 2,
       "digests": {
-        "6db8be44-8ae7-7d63-8703-6227abe1ec70": "333ab41a3540b9e1",
-        "c3dd9f89-daa9-755d-803e-4f8597d9e96d": "ecda2f5facd05c9c"
+        "6db8be44-8ae7-7d63-8703-6227abe1ec70": "761fda569872d416",
+        "c3dd9f89-daa9-755d-803e-4f8597d9e96d": "43d81493b23120f6"
+      }
+    },
+    "locker_key": {
+      "columns": ["created_at", "key_id", "retired_at"],
+      "primaryKey": "key_id",
+      "rows": 1,
+      "digests": {
+        "133ebbac-c409-4290-afd1-3bb2983129e3": "9061b025eacdd850"
       }
     },
     "replica_change": {
@@ -363,50 +371,50 @@
       "primaryKey": "seq",
       "rows": 44,
       "digests": {
-        "1": "b7560905743908f4",
-        "2": "94fe9590f630c655",
-        "3": "a3b7921832d886a6",
-        "4": "3be5e96c453c6c8f",
-        "5": "5b561723327d1450",
-        "6": "80f986cb4d23e5d3",
-        "7": "ced07af9e32cfc93",
-        "8": "dfaa11fd1a78f49e",
-        "9": "d1bab3a46ef542d2",
-        "10": "f48de8d5bdba04e6",
-        "11": "b65126434b569ec9",
-        "12": "6869c13544b78043",
-        "13": "a70e814c3541cd8a",
-        "14": "903a6de773d09a6c",
-        "15": "2273967bd2197c88",
-        "16": "07098eae097fd5cb",
-        "17": "a8d91845246ea6b0",
-        "18": "028e98bea8970beb",
-        "19": "978f2e9b5902c3d0",
-        "20": "53a0197c6fb882a9",
-        "21": "8c5de4ba67dfbd48",
-        "22": "591f6f93715e8dde",
-        "23": "11da79e6534f9ec6",
-        "24": "94bd71b50f563d5a",
-        "25": "476f35cee9396abb",
-        "26": "1c57cda028810a80",
-        "27": "80e5ebae3cd97ef7",
-        "28": "8dc6e9ee669a1161",
-        "29": "2ef1bd72105d7fbe",
-        "30": "7ece90dacc6cfabe",
-        "31": "326cb9dc27493402",
-        "32": "98c945e68d4ea42b",
-        "33": "f8c6c2f8a0a303b2",
-        "34": "b7ce8eccf4f73eef",
-        "35": "4d2c07e9993544d7",
-        "36": "444b6b096bb879c0",
-        "37": "f65d27f9e32688ab",
-        "38": "cde7e5f8cc7e3606",
-        "39": "a70795a2576f8d64",
-        "40": "7c00345857538ff8",
-        "41": "93d3165311e86873",
-        "42": "598a881f707c48a1",
-        "43": "6361392542921974",
-        "44": "6d43180607563188"
+        "1": "57b7b8060c3eeca1",
+        "2": "5abd21d2ee279a68",
+        "3": "bafe0d07b1df8399",
+        "4": "b8a0744092727433",
+        "5": "591db920dd72dfd2",
+        "6": "c209425840dd17da",
+        "7": "5f0acf8648e87438",
+        "8": "3a6422d9af6ab115",
+        "9": "5318b3289cbf1b3b",
+        "10": "634447924abc3864",
+        "11": "de34521a65a068b6",
+        "12": "09969573828a400f",
+        "13": "fe3d20eb8e46375b",
+        "14": "37b102b143c7a1a1",
+        "15": "b5171ad7c87f22cb",
+        "16": "e0bad52ccf5bb5be",
+        "17": "cded7f6617ffcea5",
+        "18": "be1c7d4970190779",
+        "19": "0b6704ea76f5ad33",
+        "20": "2c6c7bad5a940f83",
+        "21": "1568ff2766399714",
+        "22": "c12f3e23b06a76ef",
+        "23": "eba8c00ad894ee67",
+        "24": "6f18159971cbb1fc",
+        "25": "4ab4ca268a20617d",
+        "26": "185e37198c92f4a4",
+        "27": "0528d2970ca3cea0",
+        "28": "0859e9186f2f384c",
+        "29": "da821cbe33019a66",
+        "30": "61ad2ec7139f748e",
+        "31": "eed442ea391f50d1",
+        "32": "cb6c9d8b7d7bd200",
+        "33": "f62514a522fba082",
+        "34": "89c8a1bb2205e8ae",
+        "35": "f5345b215f4288c4",
+        "36": "e06f6a572630d00e",
+        "37": "18cccfbb2892bf77",
+        "38": "c0574fb3465dfc39",
+        "39": "2049b200e0fa004e",
+        "40": "fd5ae76ae7b5df1a",
+        "41": "1b583dc44b474310",
+        "42": "8fb1034a0150662a",
+        "43": "8455301d59cde7f2",
+        "44": "10845158169cc0d6"
       }
     },
     "schedule_calendar": {
@@ -423,7 +431,7 @@
       "primaryKey": "calendar_id",
       "rows": 1,
       "digests": {
-        "01a079a4-b3dd-764f-b1ec-325d7f4b7ada": "d4baf4bd0556fb07"
+        "01a07b89-0df4-767a-8165-3a72b6a78042": "1b73052772243a33"
       }
     },
     "share_authority": {
@@ -446,7 +454,7 @@
       "primaryKey": "authority_id",
       "rows": 1,
       "digests": {
-        "01a079a4-b3e0-7439-874e-b103d6cbdb7c": "38f672b3b1178f6a"
+        "01a07b89-0df8-71bb-ba94-30b57f4fbcf8": "1eb10e98ea97b0b5"
       }
     }
   }
