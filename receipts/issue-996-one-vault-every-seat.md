@@ -5139,3 +5139,41 @@ bunx vitest run packages/server/src/routes/peer-plane.test.ts \
   packages/server/src/serve/vault-plane-links.test.ts \
   packages/server/src/routes/vault-links-ticket-routes.test.ts   # 5 files, 63 passed
 ```
+
+## Wave 8 — open question 8: the use row stays, and the reason is not the one R17 expected
+
+### The index is as good as the receipt, for as long as the receipt is there
+
+R17 sends `share_authority_use` away "for an index over receipts unless `evidence.ts` names a property it cannot serve". Reading `evidence.ts`: `writeAuthorityReceipt` writes the receipt and upserts the use row **from the same input, in the same call**, and the receipt carries the same `authority_id`. `idx_receipt_authority(authority_id, occurred_at)` (`schema/audit.ts:146`) already exists and is exactly the index the ruling has in mind. So on content the two can never disagree — including the one arm that looked like it might, `search.ts`'s `skipsAllowReceipt` ternary, which skips the receipt and the stamp together because it skips the whole call. `evidence.ts` alone names **no** property the index cannot serve, and the earlier unverified answer of "delete" is what reading only that file gets you.
+
+**The property is the receipt's lifetime, and it lives in two other files.**
+
+- **Retention.** The audit band is `{ days: 365, duty: "journal-archive" }` (`schema/audit.ts:41`), and the duty is not an archive-in-place: `journal-archive.ts`'s `deleteByIds` **DELETEs** the sealed rows out of `access_receipt`, through the `audit_archive_pass` door the append-only triggers open for it. An authority whose acts ran under invocations has every one of its receipts sealed away at a year.
+- **Portability.** The audit band is band-excluded from the entity registry (`entity-catalog.ts:179`) and appears nowhere in the canonical walk (`portable-export.ts`), while `share.authority_use` is registered and rides it. A portable restore keeps the answers and, on the index, forgets that any of them was ever used.
+
+`share_authority_use` is one row per authority with no history: nothing to age, nothing to archive. And the case that breaks is the case the column exists for — **"you granted this a year ago and nothing has used it since"** is what makes a stale answer visible on Settings → Access, and it is exactly where an index over receipts answers "never used". The table **stays**. R17 is amended to that extent in `docs/decisions.md`; the rest of its diet is untouched.
+
+**The test pins rather than drives.** The answer is keep, so there is no behaviour to make red. `evidence.test.ts` now writes an authority receipt, checks the index and the use row agree while the receipt is live, runs a receipt deletion through the archive pass's own door, and asserts the divergence: `MAX(occurred_at)` goes `NULL` and the use row still knows. A future deletion of this table now fails a test that states why.
+
+### Every file this commit touches
+
+- `packages/vault/src/schema/authority.ts` — the verdict and its two files, in the comment above the table it keeps
+- `packages/vault/src/gateway/evidence.test.ts` — the pinning case
+- `docs/decisions.md` — OQ-7 and OQ-8 as dated rulings under `## One vault, every seat (#996)`; the "answered by the wave that makes them" sentence points at them
+- `receipts/issue-996-one-vault-every-seat.md` — this section
+
+### What wave 8 did NOT do, named so the next wave does not have to rediscover it
+
+The rest of R17's diet is untouched and is a wave of its own — every item still has live consumers, and each is a schema change plus a client change plus a golden re-freeze:
+
+- `device` out of `principal_kind` (`packages/vault/src/schema/authority.ts` CHECK, `packages/client/src/access-lens.ts`'s `PRINCIPAL_KINDS` and `deviceStandings`, `apps/mobile/src/screens/settings/AccessSection.tsx`, `packages/vault/src/schema/ontology-shape.test.ts`)
+- `packages/vault/src/grant/companion-surfaces.ts`, `packages/vault/src/grant/device-trust.ts`, `packages/server/src/serve/companion-access.ts` and `device_surface_projection`
+- `share_fulfillment` derived from the origin-side subscription row (`packages/vault/src/grant/fulfillment.ts`, `grant-fulfillment-rows.ts`, `packages/server/src/serve/grant-fulfillment.ts`)
+- `access_app` to prefs (`packages/vault/src/schema/access.ts`), `share_access_receipts` to the audit band or deleted (`packages/server/src/serve/share-access-receipts.ts`, `gateway-schema.ts`)
+- the exit gate itself: `packages/server/src/serve/authz-deny-matrix.test.ts` reduced to three kinds, and the automation clamp sweeps
+
+### Gates
+
+```
+bunx vitest run packages/vault/src/gateway/evidence.test.ts   # 4 passed
+```
