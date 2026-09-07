@@ -1693,3 +1693,182 @@ cd packages/core       && bun run typecheck   # clean
 cd apps/mobile         && bun run typecheck   # clean
 bun run golden-vault:freeze -- --label issue-929   # 17 tables, 181 rows, schema v5
 ```
+
+## Wave 7 — the tail door, the row applier, and what the sheet now says
+
+The predicate has a transport. An origin door serves the three outputs since an
+audience's cursor, the audience applies them AS ROWS re-keyed through lineage,
+and both stand **beside** `composeShareShape` rather than in place of it — the
+frame path goes in the next commit, once the convergence gate has passed
+through this one.
+
+### The origin's door
+
+`packages/vault/src/share/subscription-tail.ts` — `composeShareTail` returns a
+**pass**: the frame to send and the `settle` that makes the membership it
+stands for durable. They are separate on purpose. Settling before the audience
+has the rows would advance the origin's belief about what the audience holds
+and silently drop the retry; and `settle` closes over the member set THIS pass
+computed, so it can never record a set some later walk produced.
+
+`packages/server/src/routes/peer-replica-route.ts` mounts it at
+`/centraid/_peer/replica/tail` (`PEER_REPLICA_TAIL_PATH`, registered in
+`packages/core/src/protocol/replica-subscription.ts` and routed in
+`packages/server/src/routes/peer-plane.ts`), under the same link-pair admission
+as every other door on the plane.
+
+- **A cursor is a claim, not an acknowledgement.** The door compares the
+  audience's `since` against `share_subscription.cursor_seq` — the ORIGIN's own
+  record of what it last served that audience — and a mismatch answers a
+  **resend** of every member rather than a diff against a membership the
+  audience never received. That is the one failure a per-grant member set
+  cannot infer for itself, and `entered_seq` is what makes the resend an upsert
+  rather than a scrub.
+- **A grant this door cannot serve says so.** A Locker item's sealed columns
+  must be re-sealed under the AUDIENCE DEK, which needs both vault keys in one
+  process; no row on a wire carries that, so the door answers `snapshot` and
+  the subscriber takes the bootstrap door. Never answered wrongly.
+
+### The audience's applier
+
+`packages/vault/src/share/apply-outputs.ts` is the one place that knows how an
+origin row becomes an audience row. A per-table registry gives, for each of the
+23 tables a closure can carry: the logical entity, the columns that name
+another row, the polymorphic `(type, id)` pairs, the cross-vault columns
+written NULL, the columns re-pointed at the audience's own owner, and the
+natural key the audience dedupes on.
+
+- **Re-keyed through lineage.** The applier claims EVERY row it writes, not
+  only the named items, so an `update` or a `leave` finds the audience's row
+  even when the two ids differ. An id is decided in four steps and in this
+  order: lineage; the row's natural key (`sha256`, an asset's content, an
+  owner's one reading of its bytes); a row some live subscription ALREADY
+  claims under the same origin id — which is what lets a second grant over one
+  photograph land on the first grant's row; and only then the origin's id,
+  reused, with `freeId` minting on a genuine collision. The third step is what
+  keeps `freeId`'s peer-controlled-id warning honest: a local row of the
+  audience's own is never adopted, only one a subscription already claims.
+- **Local facts stay local.** `updated_at` and `row_version` are never copied
+  (#916, ONT-08); the audience's own touch trigger stamps them.
+- **Write order is a list, and `leave` is its exact reverse.** A referencing row
+  is written after the row it names and deleted before it, because the
+  audience's foreign keys are real.
+- **Projected rows are read-only.** `forwardProjectedEdit` answers where an
+  edit belongs — the origin vault, the ORIGIN's row id, and the version the
+  audience holds it at — instead of writing. It is a question, not a second
+  enforcement point: the audience holds no grant over the origin and the origin
+  is the single writer of its own rows. What it prevents is a seat quietly
+  writing a local edit the next `update` would erase without telling anyone.
+
+`ingestShareTail` (`subscription-seat.ts`) is the seat door: one transaction,
+one replica commit, the outputs applied, the cursor recorded. The seat can
+ingest EITHER shape this wave — a frame through `ingestShareShape`, a tail
+through here — which is the transport invariant written in code.
+
+`packages/server/src/serve/share-subscriber.ts` pulls the tail first and falls
+back to the bootstrap door when the origin says `snapshot`; `pullBlobs` now
+takes a manifest rather than a closure, so both paths share it.
+
+### What the share sheet says now
+
+Two sentences that were true all along and unsaid, in
+`packages/blueprints/apps/_shared/shared-copy.ts` and printed by the mobile
+sheet's general-access block (`apps/mobile/src/kit/share/ShareSheet.tsx`):
+
+- `SHARE_IS_A_COPY` — *"Ending a share removes their copy and stops updates.
+  Anything they exported first stays theirs."* Copy, not lease (R10), said
+  before the decision because it is the part a person cannot undo afterwards.
+  It does not claim more than the product can do: revoke reaches the copy this
+  product placed, and nothing else.
+- `SHARE_ENRICHMENT_IS_THEIRS` — *"Their vault makes its own thumbnails, text
+  and search for the copy, under their settings."* R18, so a sender does not
+  assume their own egress answers travelled.
+- `LEAVING_SHARED_VAULT` is added beside them for the two-owner case. **There is
+  no leave surface in the product yet**, so the sentence has no render site and
+  is not wired to one — writing UI for a mechanism that does not exist would be
+  worse than an unrendered constant with the rule stated once.
+
+### Decisions — wave 7, the transport
+
+- **Membership is per grant; the per-audience question is the cursor.** The
+  schema keys `share_subscription_member` by `authority_id` alone (a grant's
+  closure is one closure however many audiences it reaches), so a second
+  audience served against an already-settled membership would see an empty
+  `enter`. The origin-side `share_subscription.cursor_seq` closes that: an
+  audience whose cursor does not match what the origin last served it gets a
+  resend. No second table, and the acknowledgement it leans on is the meaning
+  `cursor_seq` already had.
+- **`entity-catalog.ts` split rather than waived, and spread IN PLACE.** It
+  reached 628 lines against the repo's 625 limit; the eight app-owned schemas
+  moved to `entity-catalog-domains.ts` and `VAULT_ENTITIES` spreads them, so
+  there is still exactly one place a table is added. Same seam earlier waves
+  used for `core-side-tables.ts` and `content-text.ts`. The spread sits exactly
+  where the declarations stood, because a replica shape id is a digest over the
+  composed columns IN REGISTRY ORDER: spreading at the top of the object moved
+  ALL EIGHT shipped shape ids, which `replica-shape-parity.test.ts` caught — a
+  file split that re-bootstraps every device is not a refactor.
+- **The tally table names in the predicate were wrong and are fixed.** Wave 7's
+  first commit named `tally_recurring_exception`, `tally_receipt`,
+  `tally_receipt_line` and `tally_receipt_line_allocation`; the read actually
+  uses `schedule_recurrence_exception`, `core_attachment` (the `role='receipt'`
+  row, #883), `tally_expense_line_item` and `tally_expense_line_allocation`.
+  The year-3 corpus seeds no receipts and no recurring templates, so the arrays
+  were empty and nothing threw — a grant over a real Tally group would have.
+  Caught by writing the applier's registry against the read.
+
+### Every file this commit touches
+
+- `packages/vault/src/share/subscription-tail.ts` (new) — the origin door and
+  its settle
+- `packages/vault/src/share/apply-outputs.ts` (new) — the row applier, the
+  registry, and `forwardProjectedEdit`
+- `packages/vault/src/share/subscription-tail.test.ts` (new) — the contract's
+  transition tests: album add and remove, a folder move, overlapping grants
+  with one revoked, purge of a shared member, reconnect after retention
+  expiry, and the read-only route
+- `packages/vault/src/share/subscription-seat.ts` — `ingestShareTail`
+- `packages/vault/src/share/closure-members.ts` — the four corrected table names
+- `packages/vault/src/share/year3-convergence.test.ts` — the third test is the
+  gate commit 3 waits on
+- `packages/vault/src/schema/entity-catalog.ts` ·
+  `packages/vault/src/schema/entity-catalog-domains.ts` (new) — the split
+- `packages/vault/src/index.ts` — the door, the applier and `ingestShareTail`
+  exported
+- `packages/core/src/protocol/replica-subscription.ts` ·
+  `packages/core/src/protocol/index.ts` — `PEER_REPLICA_TAIL_PATH`
+- `packages/server/src/routes/peer-replica-route.ts` — `handlePeerReplicaTail`,
+  `ingestPulledTail`, the `applied` outcome
+- `packages/server/src/routes/peer-plane.ts` — the door routed
+- `packages/server/src/serve/share-subscriber.ts` — `pullShareTail`, and
+  `pullBlobs` over a manifest
+- `packages/blueprints/apps/_shared/shared-copy.ts` ·
+  `apps/mobile/src/kit/share/ShareSheet.tsx` — the sheet's three sentences
+
+**Files of `14333bdd5` not named in its own section**, named here so the change
+set is fully accounted for: `packages/vault/src/schema/entity-refs.ts` (the
+lineage reference note re-keyed to `authority_id`),
+`packages/vault/src/share/placement-lifecycle.test.ts` (the injected-failure
+point moved off the deleted derivative write, and the thumb's bytes no longer
+crossing), `packages/vault/src/share/subscription-frame.ts` (derivatives out of
+`closureRowIds`), `packages/vault/src/share/subscription-seat.ts` (the
+`authority_id` rename through ingest and purge) and
+`packages/vault/src/share/subscription-transport.ts` (the loopback's removal
+takes the grant).
+
+### Gates
+
+```
+cd packages/vault  && bun run test      # 208 files, 1726 passed, 2 skipped
+cd packages/server && bun run test      # 390 files, 3486 passed; the same 3
+                                        #   environmental files (acp/launch x2,
+                                        #   gateway-db-lock needs a real sqlite3)
+cd packages/vault  && bun run typecheck # clean; server, core, client,
+                                        #   blueprints and apps/mobile likewise
+bash .governance/run.sh                 # 22/22 directives
+bun run check:push:static               # stamped on the committed tree
+```
+
+The two-gateway suites — `share-subscription-peer.test.ts` and
+`share-surface-queries.test.ts` — now run THROUGH the tail door: `pullShareShape`
+tries `pullShareTail` first and falls back only on `snapshot`, so every subject
+type they cover crosses as rows before it ever crosses as a frame.

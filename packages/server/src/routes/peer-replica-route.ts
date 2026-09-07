@@ -26,15 +26,20 @@ import {
 import {
   channelForParty,
   composeShareShape,
+  composeShareTail,
   ingestShareShape,
+  ingestShareTail,
   purgeShareShape,
   readShareGrant,
+  readSubscription,
+  recordSubscription,
   resolveGrantAudienceParties,
 } from "@centraid/vault";
 import type {
   Credential,
   Gateway as VaultGateway,
   ShareShapeFrame,
+  ShareTailFrame,
   VaultDb,
 } from "@centraid/vault";
 
@@ -45,6 +50,7 @@ export const PEER_REPLICA_BOOTSTRAP_PATH = "/centraid/_peer/replica/bootstrap";
 export const PEER_REPLICA_CHANGES_PATH = "/centraid/_peer/replica/changes";
 export const PEER_REPLICA_BLOB_PATH = "/centraid/_peer/replica/blob";
 export const PEER_REPLICA_INTENTS_PATH = "/centraid/_peer/replica/intents";
+export const PEER_REPLICA_TAIL_PATH = "/centraid/_peer/replica/tail";
 
 /** One chunk per request. The manifest names the total, so the puller loops. */
 export const PEER_REPLICA_BLOB_CHUNK_BYTES = 1024 * 1024;
@@ -70,6 +76,15 @@ export type PeerReplicaPullOutcome =
       state: "ingested";
       apply: "bootstrap" | "reproject" | "fields";
       fieldUpdates: number;
+      cursor: { epoch: string; seq: number };
+    }
+  | {
+      /** The predicate transport (#996, R10): what the three outputs did. */
+      state: "applied";
+      entered: number;
+      updated: number;
+      left: number;
+      retained: number;
       cursor: { epoch: string; seq: number };
     }
   | { state: "unreachable"; detail: string };
@@ -134,6 +149,71 @@ function frameFor(admission: Admission): ShareShapeFrame {
     subjectId: grant.subjectId,
     maxSizeBytes: grant.maxSizeBytes,
   });
+}
+
+/**
+ * ORIGIN door: THE THREE OUTPUTS since the audience's cursor (#996, R10).
+ *
+ * TWO THINGS THE ORIGIN CHECKS BEFORE IT TRUSTS A CURSOR. It is the audience's
+ * claim about what it holds, and a claim is not an acknowledgement — so the
+ * origin compares it against `share_subscription.cursor_seq`, ITS OWN record of
+ * what it last served this audience. A cursor that does not match means the
+ * previous pass was never applied (the audience crashed, the connection died),
+ * and the answer is a RESEND of every member rather than a diff against a
+ * membership the audience never received. That is the one thing a per-grant
+ * member set cannot infer on its own, and `entered_seq` is what makes the
+ * resend an upsert rather than a scrub.
+ *
+ * A grant this door cannot serve — today only a Locker item, whose sealed
+ * columns must be re-sealed under the audience DEK — answers `snapshot`, and
+ * the subscriber takes the bootstrap door. It is never answered wrongly.
+ */
+export function handlePeerReplicaTail(
+  res: ServerResponse,
+  peer: PeerIdentity,
+  params: URLSearchParams,
+  deps: PeerReplicaDeps
+): true {
+  const admission = admitAtOrigin(peer, params, deps);
+  if (!admission) return notFound(res);
+  const grant = readShareGrant(admission.origin.vault, admission.grantId);
+  if (!grant) return notFound(res);
+  const claimed = Number(params.get("seq") ?? "-1");
+  const epoch = params.get("epoch") ?? "";
+  const served = readSubscription(
+    admission.origin.vault,
+    admission.grantId,
+    admission.audienceVaultId
+  );
+  const acknowledged =
+    served !== undefined &&
+    served.cursor.epoch === epoch &&
+    served.cursor.seq === claimed &&
+    Number.isSafeInteger(claimed) &&
+    claimed >= 0;
+  const pass = composeShareTail({
+    origin: admission.origin.vault,
+    originVaultId: admission.originVaultId,
+    audienceVaultId: admission.audienceVaultId,
+    authorityId: admission.grantId,
+    subjectType: grant.subjectType,
+    subjectId: grant.subjectId,
+    ...(acknowledged ? { since: { epoch, seq: claimed } } : {}),
+  });
+  if (!pass) return sendJson(res, 200, { state: "snapshot" });
+  // Served, so recorded: the origin now believes this audience holds these
+  // rows, and the next request's cursor is what confirms or refutes it.
+  pass.settle();
+  recordSubscription(admission.origin.vault, {
+    authorityId: admission.grantId,
+    audienceVaultId: admission.audienceVaultId,
+    originVaultId: admission.originVaultId,
+    subjectType: grant.subjectType,
+    cursor: pass.frame.outputs.cursor,
+    state: "subscribed",
+    now: nowOf(deps),
+  });
+  return sendJson(res, 200, { state: "tail", frame: pass.frame });
 }
 
 /** ORIGIN door: the whole grant-keyed shape, composed on demand. */
@@ -253,7 +333,30 @@ export async function handlePeerReplicaChanges(
     shapeId: notice.shapeId,
     seat,
   });
-  return sendJson(res, outcome.state === "ingested" ? 200 : 503, outcome);
+  // Either transport is a delivery: `ingested` is the frame path's word and
+  // `applied` is the predicate transport's (#996, R10). Only `unreachable` is
+  // a failure, and only it answers 503.
+  return sendJson(res, outcome.state === "unreachable" ? 503 : 200, outcome);
+}
+
+/** Apply a TAIL the seat pulled — the three outputs, as rows (#996, R10). */
+export function ingestPulledTail(
+  seat: VaultDb,
+  frame: ShareTailFrame,
+  input: { audienceVaultId: string; now: string }
+): PeerReplicaPullOutcome {
+  const applied = ingestShareTail(seat.vault, frame, {
+    audienceVaultId: input.audienceVaultId,
+    now: input.now,
+  });
+  return {
+    state: "applied",
+    entered: applied.entered,
+    updated: applied.updated,
+    left: applied.left,
+    retained: applied.retained,
+    cursor: applied.cursor,
+  };
 }
 
 /** Apply a frame the seat pulled. Kept here so the pull half and the loopback

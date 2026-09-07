@@ -170,10 +170,13 @@ export function shareClosureMembers(
     many("tally_settlement", group.settlements);
     many("tally_recurring_expense", group.recurring);
     many("tally_recurring_expense_split", group.recurringSplits);
-    many("tally_recurring_exception", group.exceptions);
-    many("tally_receipt", group.receipts);
-    many("tally_receipt_line", group.lineItems);
-    many("tally_receipt_line_allocation", group.lineAllocations);
+    // The names the READ uses, not the ones a Tally group's sub-graph sounds
+    // like it should have: an exception is a `schedule_recurrence_exception`
+    // and a receipt is the `role='receipt'` row of `core_attachment` (#883).
+    many("schedule_recurrence_exception", group.exceptions);
+    many("core_attachment", group.receipts);
+    many("tally_expense_line_item", group.lineItems);
+    many("tally_expense_line_allocation", group.lineAllocations);
   }
   addRepresentations(members, origin, closure);
   return members;

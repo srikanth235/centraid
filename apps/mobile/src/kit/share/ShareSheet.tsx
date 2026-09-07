@@ -20,7 +20,9 @@ import type { View as RNView } from "react-native";
 import { manualShareSelection } from "@centraid/blueprints/apps/_shared/named-circle-selection";
 import type { PlaceableItemType } from "@centraid/blueprints/apps/_shared/placement-registry";
 import {
+  SHARE_ENRICHMENT_IS_THEIRS,
   SHARE_FAILED,
+  SHARE_IS_A_COPY,
   sharedWithOutcome,
 } from "@centraid/blueprints/apps/_shared/shared-copy";
 
@@ -60,9 +62,16 @@ const ROLE_LABEL: Record<ShareCapability, string> = {
 };
 const NO_ACCESS = "No access";
 
-/** What the receiving vault keeps, said once, where a reader looks for scope. */
-const GENERAL_ACCESS =
-  "Everyone you add gets the full shared item in their own vault and backup.";
+/**
+ * What the receiving vault keeps, said once, where a reader looks for scope —
+ * and, since #996, the two things that were true all along and unsaid: a share
+ * is a COPY (R10) and the copy is enriched under the RECIPIENT's answers (R18).
+ */
+const GENERAL_ACCESS = [
+  "Everyone you add gets the full shared item in their own vault and backup.",
+  SHARE_IS_A_COPY,
+  SHARE_ENRICHMENT_IS_THEIRS,
+].join(" ");
 
 /** Nobody linked is not an empty roster — it is a ceremony not yet performed,
  *  and the sentence says where to perform it. */

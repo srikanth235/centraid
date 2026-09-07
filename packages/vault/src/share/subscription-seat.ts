@@ -14,6 +14,8 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { VaultShareError } from "../errors.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
+import type { ApplyShareOutputsResult } from "./apply-outputs.js";
+import { applyShareOutputs } from "./apply-outputs.js";
 import type { ProjectedItem, ShareableItemType } from "./closure.js";
 import { shareableItemTypeOfEntity } from "./closure.js";
 import { projectShareClosure } from "./project-closure.js";
@@ -31,6 +33,8 @@ import {
   readSubscriptionLineage,
   recordSubscription,
 } from "./subscription-store.js";
+import type { ShareTailFrame } from "./subscription-tail.js";
+import { SHARE_TAIL_FORMAT_VERSION } from "./subscription-tail.js";
 
 export interface IngestShareShapeResult {
   authorityId: string;
@@ -252,6 +256,58 @@ export function purgeShareShape(
   } catch (error) {
     audience.exec(nested ? "ROLLBACK TO purge_share_shape" : "ROLLBACK");
     if (nested) audience.exec("RELEASE purge_share_shape");
+    throw error;
+  }
+}
+
+/**
+ * INGEST A TAIL (#996, R10) — the audience's half of the predicate transport.
+ *
+ * One transaction, one replica commit, and only the writes the change earns:
+ * the rows that entered, the rows that changed, the rows that left. No
+ * re-projection, no digest, and no scrub-then-reinsert — which is what used to
+ * wake every device that had ever seen the album for a one-field edit.
+ *
+ * The seat can ingest EITHER shape this wave: a frame through
+ * `ingestShareShape` above, a tail through here. That is the transport
+ * invariant in code — the replacement lands beside what it replaces, and the
+ * frame path goes in the commit the convergence gate passes through this one.
+ */
+export function ingestShareTail(
+  audience: DatabaseSync,
+  frame: ShareTailFrame,
+  options: { audienceVaultId: string; now: string }
+): ApplyShareOutputsResult & { cursor: { epoch: string; seq: number } } {
+  if (frame.formatVersion !== SHARE_TAIL_FORMAT_VERSION)
+    throw new VaultShareError(
+      `unsupported share tail format ${String(frame.formatVersion)}`
+    );
+  if (frame.audienceVaultId !== options.audienceVaultId)
+    throw new VaultShareError(
+      `share tail ${frame.authorityId} is addressed to ${frame.audienceVaultId}, not ${options.audienceVaultId}`
+    );
+  const nested = audience.isTransaction;
+  audience.exec(nested ? "SAVEPOINT ingest_share_tail" : "BEGIN IMMEDIATE");
+  try {
+    const replicaCommit = beginReplicaCommit(audience);
+    const applied = applyShareOutputs(audience, frame.outputs, {
+      originRowVersion: frame.originRowVersion,
+    });
+    recordSubscription(audience, {
+      authorityId: frame.authorityId,
+      audienceVaultId: options.audienceVaultId,
+      originVaultId: frame.originVaultId,
+      subjectType: frame.subjectType,
+      cursor: frame.outputs.cursor,
+      state: "subscribed",
+      now: options.now,
+    });
+    endReplicaCommit(audience, replicaCommit);
+    audience.exec(nested ? "RELEASE ingest_share_tail" : "COMMIT");
+    return { ...applied, cursor: frame.outputs.cursor };
+  } catch (error) {
+    audience.exec(nested ? "ROLLBACK TO ingest_share_tail" : "ROLLBACK");
+    if (nested) audience.exec("RELEASE ingest_share_tail");
     throw error;
   }
 }

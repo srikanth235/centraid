@@ -31,6 +31,7 @@ import {
 } from "@centraid/test-kit/year3-vault";
 
 import type { VaultDb } from "../db.js";
+import { nowIso } from "../ids.js";
 import { replicaLogState } from "../replica/log.js";
 import { sealAad, sealValue } from "../schema/sealed.js";
 import {
@@ -41,6 +42,9 @@ import { commitShareClosureDiff, diffShareClosure } from "./closure-outputs.js";
 import type { ShareableItemType } from "./closure.js";
 import { closeOpenVaults, household, inCommit } from "./placement-fixture.js";
 import { readShareClosure } from "./read-closure.js";
+import { ingestShareTail } from "./subscription-seat.js";
+import { readSubscription } from "./subscription-store.js";
+import { composeShareTail } from "./subscription-tail.js";
 
 /**
  * A year-3 vault at a size a unit test can afford. The distributions are
@@ -68,8 +72,12 @@ interface LiveGrant {
   subjectId: string;
 }
 
-function seeded(): { origin: VaultDb; grants: LiveGrant[] } {
-  const { origin } = household();
+function seeded(): {
+  origin: VaultDb;
+  audience: VaultDb;
+  grants: LiveGrant[];
+} {
+  const { origin, audience } = household();
   seedYear3Vault(
     {
       vault: origin.vault as unknown as DatabaseSync,
@@ -100,7 +108,7 @@ function seeded(): { origin: VaultDb; grants: LiveGrant[] } {
     subjectType: row.subject_type as ShareableItemType,
     subjectId: row.subject_id,
   }));
-  return { origin, grants };
+  return { origin, audience, grants };
 }
 
 function membersOf(origin: VaultDb, grant: LiveGrant) {
@@ -206,5 +214,69 @@ describe("wave 7 convergence", () => {
       )
     );
     expect(replicaLogState(origin.vault).watermark.seq).toBeGreaterThan(0);
+  });
+
+  /**
+   * THE GATE COMMIT 3 WAITS ON: every live subscription of the year-3 vault
+   * served THROUGH THE NEW DOOR, applied as rows by the audience, converging
+   * across all three outputs. When this is green the frame path has no claim
+   * left on the tree and `composeShareShape` goes.
+   */
+  test("every live subscription converges through the tail door and the row applier", () => {
+    const { origin, audience, grants } = seeded();
+    const AUDIENCE = "vault-family";
+    for (const grant of grants) {
+      const standing = readSubscription(
+        audience.vault,
+        grant.authorityId,
+        AUDIENCE
+      );
+      const pass = composeShareTail({
+        origin: origin.vault,
+        originVaultId: "vault-priya",
+        audienceVaultId: AUDIENCE,
+        authorityId: grant.authorityId,
+        subjectType: grant.subjectType,
+        subjectId: grant.subjectId,
+        ...(standing?.cursor.epoch == null
+          ? {}
+          : {
+              since: {
+                epoch: standing.cursor.epoch,
+                seq: standing.cursor.seq,
+              },
+            }),
+      });
+      expect(pass, grant.authorityId).toBeDefined();
+      const applied = ingestShareTail(audience.vault, pass!.frame, {
+        audienceVaultId: AUDIENCE,
+        now: nowIso(),
+      });
+      pass!.settle();
+      // Nothing was skipped: every row the outputs named found its place.
+      expect(applied.skipped, grant.authorityId).toBe(0);
+      expect(applied.entered, grant.authorityId).toBe(
+        pass!.frame.outputs.enter.length
+      );
+
+      // CONVERGED: a second pass over an unmoved vault asks for nothing.
+      const again = composeShareTail({
+        origin: origin.vault,
+        originVaultId: "vault-priya",
+        audienceVaultId: AUDIENCE,
+        authorityId: grant.authorityId,
+        subjectType: grant.subjectType,
+        subjectId: grant.subjectId,
+        since: pass!.frame.outputs.cursor,
+      })!;
+      expect(
+        [
+          again.frame.outputs.enter.length,
+          again.frame.outputs.update.length,
+          again.frame.outputs.leave.length,
+        ],
+        grant.authorityId
+      ).toStrictEqual([0, 0, 0]);
+    }
   });
 });

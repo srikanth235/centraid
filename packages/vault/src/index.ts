@@ -140,10 +140,27 @@ export {
 } from "./share/subscription-frame.js";
 export {
   ingestShareShape,
+  ingestShareTail,
   purgeShareShape,
   type IngestShareShapeResult,
   type PurgeShareShapeResult,
 } from "./share/subscription-seat.js";
+// The predicate transport's origin door, beside the frame composer for one
+// wave (#996, R10), and the audience's row applier.
+export {
+  composeShareTail,
+  SHARE_TAIL_FORMAT_VERSION,
+  type ComposeShareTailInput,
+  type ShareTailFrame,
+  type ShareTailPass,
+} from "./share/subscription-tail.js";
+export {
+  applyShareOutputs,
+  forwardProjectedEdit,
+  shareOutputsAreApplicable,
+  type ApplyShareOutputsResult,
+  type ProjectedEditRoute,
+} from "./share/apply-outputs.js";
 export {
   readSubscription,
   readSubscriptionLineage,

@@ -8,13 +8,16 @@
  * vault is what this vault asked for, over the link that authorizes it.
  */
 
-import { subscriberQuery } from "@centraid/core/protocol";
-import type { ShareShapeFrame, VaultDb } from "@centraid/vault";
+import { shareShapeGrantId, subscriberQuery } from "@centraid/core/protocol";
+import { readSubscription } from "@centraid/vault";
+import type { ShareShapeFrame, ShareTailFrame, VaultDb } from "@centraid/vault";
 
 import {
   ingestPulledShape,
+  ingestPulledTail,
   PEER_REPLICA_BLOB_PATH,
   PEER_REPLICA_BOOTSTRAP_PATH,
+  PEER_REPLICA_TAIL_PATH,
 } from "../routes/peer-replica-route.js";
 import type { PeerReplicaPullOutcome } from "../routes/peer-replica-route.js";
 import type { PeerDial, PeerDialRoute } from "./peer-link-client.js";
@@ -61,14 +64,14 @@ function frameOf(json: unknown): ShareShapeFrame | undefined {
  */
 async function pullBlobs(
   input: PullShareShapeInput,
-  frame: ShareShapeFrame
+  manifest: readonly { sha256: string }[]
 ): Promise<string | undefined> {
   const store = input.seat.blobs.local;
   const endpointTicket = input.dial.endpointTicketFor(
     input.route.endpointId,
     input.route.relayHints
   );
-  for (const blob of frame.closure.blobs) {
+  for (const blob of manifest) {
     if (store.hasSync(blob.sha256)) continue;
     const chunks: Buffer[] = [];
     let offset = 0;
@@ -107,11 +110,97 @@ async function pullBlobs(
   return undefined;
 }
 
+function tailOf(json: unknown): ShareTailFrame | undefined {
+  if (json === null || typeof json !== "object") return undefined;
+  const body = json as { state?: unknown; frame?: unknown };
+  if (body.state !== "tail") return undefined;
+  const frame = body.frame;
+  if (frame === null || typeof frame !== "object") return undefined;
+  const candidate = frame as Partial<ShareTailFrame>;
+  if (
+    typeof candidate.authorityId !== "string" ||
+    typeof candidate.originVaultId !== "string" ||
+    typeof candidate.audienceVaultId !== "string" ||
+    candidate.outputs === undefined ||
+    !Array.isArray(candidate.blobs)
+  )
+    return undefined;
+  return frame as ShareTailFrame;
+}
+
+/**
+ * THE PREDICATE PULL (#996, R10). The seat asks the origin what changed for
+ * this grant since the cursor IT holds, fetches the bytes the answer's
+ * manifest names, and applies the three outputs — enter, update, leave — as
+ * rows, re-keyed through lineage.
+ *
+ * `undefined` means "this grant is not servable as rows" — the origin said
+ * `snapshot`, and the caller falls back to the frame door. That fallback is
+ * the transport invariant, not a rung: for one wave the two doors stand side
+ * by side, and the frame door goes when the tail serves every subscription.
+ */
+export async function pullShareTail(
+  input: PullShareShapeInput
+): Promise<PeerReplicaPullOutcome | undefined> {
+  const authorityId = shareShapeGrantId(input.shapeId);
+  if (!authorityId) return undefined;
+  const standing = readSubscription(
+    input.seat.vault,
+    authorityId,
+    input.audienceVaultId
+  );
+  const endpointTicket = input.dial.endpointTicketFor(
+    input.route.endpointId,
+    input.route.relayHints
+  );
+  const query = subscriberQuery({
+    originVaultId: input.originVaultId,
+    audienceVaultId: input.audienceVaultId,
+    shapeId: input.shapeId,
+  });
+  const cursor =
+    standing?.cursor.epoch === null || standing === undefined
+      ? ""
+      : `&epoch=${encodeURIComponent(standing.cursor.epoch)}&seq=${standing.cursor.seq}`;
+  let response: { status: number; json: unknown };
+  try {
+    response = await input.dial.request({
+      endpointTicket,
+      method: "GET",
+      target: `${PEER_REPLICA_TAIL_PATH}?${query}${cursor}`,
+    });
+  } catch (error) {
+    return unreachable(
+      error instanceof Error ? error.message : "the origin could not be dialled"
+    );
+  }
+  if (response.status !== 200) return undefined;
+  const body = response.json as { state?: unknown };
+  // The origin says this grant needs the closure snapshot; take the other door.
+  if (body.state === "snapshot") return undefined;
+  const frame = tailOf(response.json);
+  if (!frame) return unreachable("the origin sent no usable tail");
+  if (
+    frame.authorityId !== authorityId ||
+    frame.originVaultId !== input.originVaultId ||
+    frame.audienceVaultId !== input.audienceVaultId
+  )
+    return unreachable("the origin sent a tail this seat did not ask for");
+  const blobFailure = await pullBlobs(input, frame.blobs);
+  if (blobFailure) return unreachable(blobFailure);
+  return ingestPulledTail(input.seat, frame, {
+    audienceVaultId: input.audienceVaultId,
+    now: input.now(),
+  });
+}
+
 /** Bootstrap or refresh one shape. `unreachable` never leaves a partial seat:
  *  the ingest is one transaction, and the bytes precede it. */
 export async function pullShareShape(
   input: PullShareShapeInput
 ): Promise<PeerReplicaPullOutcome> {
+  const tail = await pullShareTail(input);
+  if (tail !== undefined) return tail;
   const endpointTicket = input.dial.endpointTicketFor(
     input.route.endpointId,
     input.route.relayHints
@@ -143,7 +232,7 @@ export async function pullShareShape(
     frame.audienceVaultId !== input.audienceVaultId
   )
     return unreachable("the origin sent a shape this seat did not ask for");
-  const blobFailure = await pullBlobs(input, frame);
+  const blobFailure = await pullBlobs(input, frame.closure.blobs);
   if (blobFailure) return unreachable(blobFailure);
   return ingestPulledShape(input.seat, frame, {
     audienceVaultId: input.audienceVaultId,

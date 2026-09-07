@@ -34,11 +34,20 @@ export const PEER_REPLICA_BLOB_PATH = `${REPLICA_PREFIX}blob` as const;
 /** A member's signed write, executed by the origin as single writer (#929 w3). */
 export const PEER_REPLICA_INTENTS_PATH = `${REPLICA_PREFIX}intents` as const;
 
+/**
+ * THE PREDICATE TRANSPORT'S PULL (#996, R10): the three outputs for one grant
+ * since the audience's cursor — enter with a full image, update, leave. It
+ * stands BESIDE the bootstrap door for one wave: the shape composer is never
+ * deleted before its replacement serves every live subscription.
+ */
+export const PEER_REPLICA_TAIL_PATH = `${REPLICA_PREFIX}tail` as const;
+
 export const PEER_REPLICA_PATHS: readonly string[] = Object.freeze([
   PEER_REPLICA_BOOTSTRAP_PATH,
   PEER_REPLICA_CHANGES_PATH,
   PEER_REPLICA_BLOB_PATH,
   PEER_REPLICA_INTENTS_PATH,
+  PEER_REPLICA_TAIL_PATH,
 ]);
 
 /**
