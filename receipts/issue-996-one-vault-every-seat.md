@@ -3819,3 +3819,42 @@ The Locker blueprint's screens still drive the gateway's permit flow: `app-root.
 | Id | Current decision |
 | --- | --- |
 | **W6-D1** | **`schema/sealed.ts` STAYS. R13 supersedes the Locker _gate_, not the §293 sealed-column class.** The wave's scope line reads "the sealed registry is deleted", and taken literally that would have deleted the column class with it. It must not: the gate had exactly one consumer and the class has three that the key plane does not touch. What goes is what `K` replaced — permits, the `authenticate` op, `locker-auth.ts`, `PermitGate.tsx`, `AuthPayload` and the permit screens — because no consumer of the gate survives a seat that decrypts locally. What stays is `SEALED_COLUMNS` and the machinery around it, because `sync.connection_credential`'s five broker-token columns, the ext band's per-app declared `sealed` lists, and the journal redaction / error-text scrub (`redactCommandInput`, `scrubSealedText`, `sealedHashToken`) each depend on it and none of them is a Locker reveal. Deleting the class to satisfy a scope line would have turned a gateway that must inject OAuth tokens into a gateway that stores them in the clear. The Locker entries in the registry stay too, for the redaction half: `key_id` and the `lk1:` ciphertext must still be hash-not-value in the append-only journal. Ruled by the coordinator on the finding raised at the close of wave 6 commit 3. |
+
+### The lock lane's commit-back, and what it may write
+
+The lane works: run 34100134506 on 39a0bfcf3 pushed bcf17bd3f, and
+`apps/mobile/ios/Podfile.lock` now carries `ExpoSQLite (57.0.2)` and no
+op-sqlite. Two consequences of a job that pushes.
+
+**The root fetches before every push.** `.github/workflows/mobile-ios-lock.yml`
+commits back to the branch it read on every push that touches a native input, so
+`claude/checkout-remote-main-70f7lb` can move under the root at any moment with
+no local action. A push that did not fetch first is a non-fast-forward at best
+and a lost lock at worst.
+
+**The bot may not write `apps/mobile/native-fingerprints.json`.** CI rejected the
+value it wrote — mobile-smoke on bcf17bd3f reported `ios native fingerprint
+mismatch: committed be5176356574d46073d103d8d731aeb6914565bf, current
+4cdab9719d86b91f5ffbc2267efd1523d38e9326`. The ios hash is platform-dependent,
+proved rather than assumed: creating
+`node_modules/expo-sqlite/ios/vec.xcframework` and recomputing moves it
+(`4cdab9719d…` → `b20d5b4378…`). The macOS lane necessarily has that directory,
+because it builds it, plus the `sqlite3.c`/`sqlite3.h` that
+`ExpoSQLite.podspec`'s `vendor_sqlite_src!` copies into the same module during
+`pod install`. A fingerprint computed after those exist can never equal one an
+ubuntu checker reproduces. So the lane keeps running `ci:native-state --write` —
+that is the fail-closed L1–L3 gate over what `pod install` just produced — and
+`git add`s only `apps/mobile/ios/Podfile.lock`, leaving the refreshed
+fingerprints on the runner's disk. The fingerprint belongs to whoever changes
+native inputs, regenerated on Linux, which is how this merge resolved it:
+`bun run --cwd apps/mobile ci:native-state --write` against the merged tree
+produced ios `4cdab9719d…` / android `df5d7e6f6c…`, the exact value CI computed.
+
+`bun run --cwd apps/mobile ci:versions` is not part of this: ci.yml:972-987 runs
+it `continue-on-error: true` and `exit 0`, writing the Expo pin-skew list to the
+step summary. It is advisory by construction and cannot fail `mobile-smoke`.
+
+```
+bun run --cwd apps/mobile ci:native-state --write   # regenerated on the merged tree
+bun run --cwd apps/mobile ci:native-state           # green: lock, paths, both fingerprints
+```
