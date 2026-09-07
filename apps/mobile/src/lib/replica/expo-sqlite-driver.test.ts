@@ -33,8 +33,8 @@ vi.mock(
     }) as never
 );
 
-const { ExpoSqliteDriver, keyPragma, openMountedReplicaReaderDriver } =
-  await import("./expo-sqlite-driver");
+const driverModule = await import("./expo-sqlite-driver");
+const { ExpoSqliteDriver, keyPragma } = driverModule;
 
 describe("the phone replica driver", () => {
   it("declares WAL now that only the writer and the background task share the file", () => {
@@ -62,9 +62,24 @@ describe("the phone replica driver", () => {
     expect(keyPragma("it's")).toBe("PRAGMA key = 'it''s'");
   });
 
-  it("asks for its OWN connection on a second handle, which expo caches by name", async () => {
+  // The WAL declaration above is only safe because nothing else opens the
+  // same seat file. Keeping that structural rather than commented is the point:
+  // there is no exported way to open a second handle on one, so the pair
+  // "WAL + a second attached reader" cannot be assembled by accident.
+  it("exports no opener for a second handle on a seat file", () => {
+    expect(Object.keys(driverModule)).not.toContain(
+      "openMountedReplicaReaderDriver"
+    );
+    expect(
+      Object.keys(driverModule).filter((name) => name.startsWith("open"))
+    ).toStrictEqual(["openNativeReplicaDriver"]);
+  });
+
+  it("still asks for its own connection when one is explicitly requested", () => {
+    // expo caches by database NAME: without this, a second handle IS the
+    // first, and closing either closes both.
     openDatabaseSync.mockClear();
-    await openMountedReplicaReaderDriver("gateway-1");
+    ExpoSqliteDriver.open({ name: "replica.sqlite3", useNewConnection: true });
     expect(openDatabaseSync.mock.calls[0]?.[1]).toStrictEqual({
       useNewConnection: true,
     });

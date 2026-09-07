@@ -5,12 +5,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type * as Gateway from "../../lib/gateway";
-import { foldCustodyStatus, readCustodyStatus } from "./custody-status";
+import { foldCustodyStatus } from "./custody-durability";
 import type {
   CustodyBucket,
   CustodyStatusVault,
   CustodyTotals,
-} from "./custody-status";
+} from "./custody-durability";
+import { readCustodyStatus } from "./custody-status";
 
 // Mocked the way `lib/daily-brief.test.ts` mocks it, so the HTTP shape is
 // exercised without a real gateway — and without pulling react-native in.

@@ -12,10 +12,12 @@
 // `updateAndroidBuildPropertyIfNeeded`), and the values it writes are
 // `String(value)` — hence the string comparison.
 //
-// ANDROID ONLY, HERE. `ios/Podfile.properties.json` is the same three keys on
-// the iOS side, and it belongs to the macOS CI slice — the lane that can run
-// `pod install` and prove the link. This lane owns `apps/mobile/android/**`,
-// and asserting a file another branch is writing would fail on this one.
+// BOTH PROJECTS. `android/gradle.properties` and `ios/Podfile.properties.json`
+// carry the same three keys, written the two ways the plugin writes them
+// (`updateAndroidBuildPropertyIfNeeded` / `updateIOSBuildPropertyIfNeeded`) —
+// a gradle `k=v` line and a JSON string. Only the emulator gate's
+// `assembleRelease` and a macOS `pod install` prove they LINK; what this holds
+// is that they are asked for at all.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -38,6 +40,19 @@ function pluginBlockFlags(): Record<string, string> {
   for (const key of KEYS) {
     const found = new RegExp(`${key}:\\s*(true|false)`, "u").exec(block);
     if (found) flags[key] = found[1]!;
+  }
+  return flags;
+}
+
+/** What the committed iOS project will actually be compiled with. */
+function podfileFlags(): Record<string, string> {
+  const properties = JSON.parse(
+    readFileSync(path.join(mobileRoot, "ios/Podfile.properties.json"), "utf8")
+  ) as Record<string, string>;
+  const flags: Record<string, string> = {};
+  for (const key of KEYS) {
+    const value = properties[`expo.sqlite.${key}`];
+    if (value !== undefined) flags[key] = value;
   }
   return flags;
 }
@@ -69,6 +84,10 @@ describe("the seat's native SQLite build", () => {
 
   it("carries the same three into the committed Android project", () => {
     expect(gradleFlags()).toStrictEqual(pluginBlockFlags());
+  });
+
+  it("carries the same three into the committed iOS project", () => {
+    expect(podfileFlags()).toStrictEqual(pluginBlockFlags());
   });
 
   it("names them exactly as the plugin does, so a prebuild would not move them", () => {
