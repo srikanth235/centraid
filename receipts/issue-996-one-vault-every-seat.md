@@ -3858,3 +3858,42 @@ step summary. It is advisory by construction and cannot fail `mobile-smoke`.
 bun run --cwd apps/mobile ci:native-state --write   # regenerated on the merged tree
 bun run --cwd apps/mobile ci:native-state           # green: lock, paths, both fingerprints
 ```
+
+### The bot's commit is made governance-compliant
+
+CI `governance` (run 34103181691) rejected bcf17bd3f:
+`commit-issue-receipt-match — commit touches no receipts/issue-*.md`. Every
+future commit-back would fail identically, so
+`.github/workflows/mobile-ios-lock.yml`'s commit step now writes a body line
+`governance: allow-commit-issue-receipt-match bot-regenerated lockfile; …`,
+which is the escape the directive itself documents
+(`.governance/packs/governance-kit/audit/directives/commit-issue-receipt-match/check.sh:29-33`,
+reason required — a bare token does not waive). The alternative, having the bot
+append prose to `receipts/issue-996-one-vault-every-seat.md`, is worse: a bot
+writing into an append-only audit artifact is exactly what that artifact exists
+to prevent. The directive itself is untouched.
+
+The other body-reading directives were checked rather than assumed.
+`commit-message-format` wants Conventional Commits plus an issue suffix, which
+the subject `chore(mobile): regenerate ios/Podfile.lock for expo-sqlite (#996)`
+already satisfies. `agent-session-identity` keys on a detected agent runtime and
+skips a plain `git commit` on a runner. `toolchain-config-protection` reads the
+body too, but only for commits touching protected paths, and this one touches
+`apps/mobile/ios/Podfile.lock` alone.
+
+**Proved, not reasoned.** A commit shaped exactly like the bot's — same subject,
+same waiver body, no receipt in its diff — was made locally and
+`bash .governance/run.sh` walked it: it raises no violation. The single
+violation the run reports is bcf17bd3f itself, the already-pushed commit this
+change prevents recurring; its body cannot be edited now that it is merged, so
+it stays red on this branch's history until the branch is squashed or rewritten.
+That is a call for whoever owns the branch, not something a lane commit should
+paper over.
+
+```
+git commit --allow-empty -m "chore(mobile): regenerate ios/Podfile.lock for expo-sqlite (#996)" \
+  -m "governance: allow-commit-issue-receipt-match bot-regenerated lockfile; …"
+bash .governance/run.sh    # the simulated commit passes; only bcf17bd3f is flagged
+bun run lint:workflow-pins # 24 workflows clean
+bun run format:check       # clean
+```

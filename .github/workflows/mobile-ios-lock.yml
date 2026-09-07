@@ -31,11 +31,13 @@ name: mobile-ios-lock
 # `eas-build-post-install` hook — but it IS uploaded, so a human can inspect the
 # exact artifact a lock was resolved against.
 #
-# It regenerates the lock AND the identity ratchet in one commit, because
-# `pod install` moves the @expo/fingerprint inputs: shipping the lock alone
-# would push a tree whose L4 is red, i.e. trade one red gate for another.
-# `--write` is fail-closed on L1–L3, so the refresh can only happen on a lock
-# the recipe checks already accept.
+# It commits THE LOCK ALONE. It still runs `ci:native-state --write`, which is
+# the fail-closed L1–L3 gate over what `pod install` just produced, but the
+# refreshed `native-fingerprints.json` stays on the runner: the ios hash is
+# platform-dependent and this runner has files no Linux checker will ever see
+# (the vec.xcframework it built, the sqlite sources the podspec copies), so a
+# value written here is one CI must reject. See the commit step for the run that
+# proved it.
 #
 # TWO TRIGGERS, AND THE SECOND IS NOT CONVENIENCE. `workflow_dispatch` cannot
 # reach a workflow that does not exist on the DEFAULT branch — GitHub answers
@@ -220,10 +222,22 @@ jobs:
           BRANCH: ${{ steps.target.outputs.branch }}
         run: |
           set -euo pipefail
-          # Explicit paths rather than `commit -a`: `bun install` and
-          # `pod install` both touch other tracked files on some trees, and this
-          # commit must carry the lock and the ratchet it forced, nothing else.
-          git add apps/mobile/ios/Podfile.lock apps/mobile/native-fingerprints.json
+          # THE LOCK ONLY. `native-fingerprints.json` was in this list and CI
+          # rejected what the bot wrote: mobile-smoke on bcf17bd3f reported
+          # `committed be5176356574…, current 4cdab9719d…`. The ios hash is
+          # platform-dependent — creating
+          # `node_modules/expo-sqlite/ios/vec.xcframework` and recomputing moves
+          # it — and this runner necessarily has that directory (it builds it)
+          # plus the `sqlite3.c`/`sqlite3.h` the podspec copies into the same
+          # module during `pod install`. So a fingerprint written here can never
+          # equal the one the ubuntu checker reproduces. The `--write` above
+          # stays, because it is the fail-closed L1–L3 gate over what
+          # `pod install` just produced; its output simply stays on this
+          # runner's disk. Whoever changes native inputs refreshes the ratchet
+          # on Linux. Explicit paths rather than `commit -a` for the same reason
+          # they always were: `bun install` and `pod install` touch other
+          # tracked files on some trees.
+          git add apps/mobile/ios/Podfile.lock
           if git diff --cached --quiet; then
             echo "the lock is already what pod install produces — nothing to commit"
             echo "pushed=false" >> "$GITHUB_OUTPUT"
@@ -231,7 +245,17 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore(mobile): regenerate ios/Podfile.lock for expo-sqlite (#996)"
+          # The body's waiver is REQUIRED, not decoration: governance's
+          # `commit-issue-receipt-match` fails any commit that touches no
+          # `receipts/issue-*.md`, and it failed bcf17bd3f (run 34103181691)
+          # for exactly that. The directive names this line as the way out, and
+          # it is the right way out here — a bot appending prose to an
+          # append-only audit artifact would be worse than a declared
+          # exception. `commit-message-format` is satisfied by the subject's
+          # conventional prefix and `(#996)` suffix.
+          git commit \
+            -m "chore(mobile): regenerate ios/Podfile.lock for expo-sqlite (#996)" \
+            -m "governance: allow-commit-issue-receipt-match bot-regenerated lockfile; the receipt row for this lock lives in the commit that changed the native inputs, and this job must not write to an append-only audit artifact."
           git push origin "HEAD:${BRANCH}"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
       # Uploaded even when the push was skipped or a later step failed: the lock
