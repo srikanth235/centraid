@@ -2817,7 +2817,9 @@ Four decisions this commit makes, each because the alternative was worse:
 - `packages/server/src/routes/replica-shape-parity.test.ts` — `locker`'s shape id, re-taken for `key_id`
 - `packages/server/src/engine/stores/gateway-db.test.ts` — the ledger band's rung count
 - `packages/server/src/backup/backup.integration.test.ts` — an adopt carries the Locker key files with the DEK
-- `packages/backup/src/engine.ts` · `recovery-kit.ts` · `recovery-kit.test.ts` — `lockerKeys` on the target, validated and fingerprinted
+- `packages/backup/src/engine.ts` — `lockerKeys` on `RecoveryKitTarget`
+- `packages/backup/src/recovery-kit.ts` — the reader validates every entry, and membership of the set enters `recoveryKitFingerprint`
+- `packages/backup/src/recovery-kit.test.ts` — the set round-trips, order is not a capability difference, a half-carried set is
 - `packages/server/src/backup/backup-recovery-kit.ts` — the kit fills it from custody
 - `packages/server/src/backup/recover.ts` — restore refuses without a key file
 - `docs/recovery/backup-restore.md` — the key `K` section, rung six, and the two new invariant rows
@@ -2994,7 +2996,8 @@ Wave 1 declared `/_vault/seat/locker-key` and had it authenticate and then refus
 - `packages/core/src/protocol/routes.ts` — the door's comment, now that it serves
 - `packages/server/src/routes/seat-routes.ts` — the key door
 - `packages/server/src/routes/seat-routes.test.ts` — served to the enrolled row, refused to the revoked one, and the ticket's field set
-- `packages/client/src/locker/locker-key-door.ts` · `locker-key-door.test.ts` — the seat's half: fetch, refuse, keep nothing
+- `packages/client/src/locker/locker-key-door.ts` — the seat's half: fetch, refuse, keep nothing
+- `packages/client/src/locker/locker-key-door.test.ts` — the refusals, and that two asks are two requests
 - `packages/client/src/index.ts` — its export
 - `packages/server/src/routes/replica-intent-attribution.test.ts` — the foreign-device stamp
 bunx vitest run --root apps/mobile src/lib/replica src/kit/replica src/lib/upload
@@ -3787,11 +3790,15 @@ R13 says the sentence this commit is built around: **storage is not authorizatio
 
 ### Files
 
-- `packages/client/src/locker/locker-unlock.ts` · `locker-unlock.test.ts` — the PIN wrap, the session, the numbers carried over from the gate
-- `packages/client/src/locker/locker-secret.ts` · `locker-secret.test.ts` — local reveal, the AAD, the stale-key refusal, and the two implementations held equal
-- `packages/client/src/locker/wrapped-key-store.ts` · `wrapped-key-store.test.ts` — IndexedDB for the PWA, the desktop bridge, and a memory store for tests
+- `packages/client/src/locker/locker-unlock.ts` — the passphrase wrap, `LockerSession`, the numbers carried over from the gate
+- `packages/client/src/locker/locker-unlock.test.ts` — nothing at rest is an oracle; the clock is checked, not scheduled
+- `packages/client/src/locker/locker-secret.ts` — local reveal, the AAD, the stale-`key_id` refusal
+- `packages/client/src/locker/locker-secret.test.ts` — encrypt on one implementation, decrypt on the other, both ways
+- `packages/client/src/locker/wrapped-key-store.ts` — IndexedDB for the PWA, the desktop bridge, a memory store for tests
+- `packages/client/src/locker/wrapped-key-store.test.ts` — the bridge carries ciphertext, and has no way to ask main for `K`
 - `packages/client/src/index.ts` — their exports
-- `apps/mobile/src/apps/locker/locker-device-auth.ts` · `locker-device-auth.test.ts` — `K` behind the OS prompt, the session cache, `lockLocker()`
+- `apps/mobile/src/apps/locker/locker-device-auth.ts` — `K` behind the OS prompt, the session cache, `lockLocker()`
+- `apps/mobile/src/apps/locker/locker-device-auth.test.ts` — one prompt per session, another after the timeout, one gesture to drop it all
 - `apps/desktop/src/main/gateway-secrets.ts` — `lockerWrappedKeys` beside `gatewayWrappingKeys`; the wrapped blob only, and no way to ask main for `K`
 
 ### Gates
@@ -3806,3 +3813,9 @@ bun run check:push:static                                                   # st
 ### What this commit does NOT do
 
 The Locker blueprint's screens still drive the gateway's permit flow: `app-root.tsx`, `session.ts`, `route-acts.ts` and `PermitGate.tsx` are unchanged, and `Lock.tsx` is not yet wired to `LockerSession`. The boundary is built, tested and demonstrated on each seat's code path — which is what the wave's ordering requires before the deletions — but the screens adopt it in commit 4, together with the permit's removal. Naming this here rather than letting the file list imply otherwise.
+
+### Decisions — wave 6, what the gate deletion covers
+
+| Id | Current decision |
+| --- | --- |
+| **W6-D1** | **`schema/sealed.ts` STAYS. R13 supersedes the Locker _gate_, not the §293 sealed-column class.** The wave's scope line reads "the sealed registry is deleted", and taken literally that would have deleted the column class with it. It must not: the gate had exactly one consumer and the class has three that the key plane does not touch. What goes is what `K` replaced — permits, the `authenticate` op, `locker-auth.ts`, `PermitGate.tsx`, `AuthPayload` and the permit screens — because no consumer of the gate survives a seat that decrypts locally. What stays is `SEALED_COLUMNS` and the machinery around it, because `sync.connection_credential`'s five broker-token columns, the ext band's per-app declared `sealed` lists, and the journal redaction / error-text scrub (`redactCommandInput`, `scrubSealedText`, `sealedHashToken`) each depend on it and none of them is a Locker reveal. Deleting the class to satisfy a scope line would have turned a gateway that must inject OAuth tokens into a gateway that stores them in the clear. The Locker entries in the registry stay too, for the redaction half: `key_id` and the `lk1:` ciphertext must still be hash-not-value in the append-only journal. Ruled by the coordinator on the finding raised at the close of wave 6 commit 3. |
