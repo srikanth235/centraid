@@ -4234,3 +4234,235 @@ overlay and returns the file's own row. It fails on the tree before this commit.
 ```
 bunx vitest run packages/client/src/replica/seat/worker-core.test.ts   # 8 passed
 ```
+
+## Wave 3 — the timeline is a page, not a fold
+
+A phone holding a year-3 vault cannot fold its media table in memory to draw
+one screen. `sectionPhotoAssets` did exactly that: read `media.asset` whole,
+group by local day in JavaScript, hand back every section. At the volume this
+wave is cut to that is tens of thousands of rows to draw twenty, every time,
+and no memoisation above it changes what SQLite was asked for.
+
+`apps/mobile/src/apps/photos/timeline-page.ts` is the replacement, written
+red-first against a seat-shaped fixture of 19,712 assets over three years.
+
+### Keyset, and the measurement that changed the design
+
+`LIMIT n OFFSET k` makes SQLite walk and discard `k` rows, so page 100 costs a
+hundred pages. The key is `(captured_at, asset_id)` as a ROW VALUE —
+`(a, b) < (?, ?)` — which SQLite turns into an index seek rather than the
+`a < ? OR (a = ? AND b < ?)` an optimiser has to be talked into. Row values are
+3.15, twenty releases under the floor.
+
+**The first draft keyed on the local-day EXPRESSION** so that one index could
+serve both the page and the month aggregate. `EXPLAIN QUERY PLAN` answered
+`SCAN media_asset USING INDEX …`, not `SEARCH`: SQLite will not turn a
+row-value range over an expression index into a seek, so every page walked the
+index from the top. Measured on 60,000 rows
+(`…/scratchpad/keyset-depth.mjs`): **33 µs at the newest page, 4,324 µs at the
+oldest** — the offset cost this module exists to delete, wearing a
+returned-row count that looked perfectly cheap. On plain columns the same query
+is `SEARCH media_asset USING INDEX seat_media_timeline_idx (captured_at>? AND
+(captured_at,asset_id)<(?,?))` and flat with depth: 59 µs / 15 µs / 60 µs at
+depths 0, 30,000 and 60,000.
+
+So there are TWO indexes, both the seat's own and both partial on the
+timeline's exact predicate: the page seeks `seat_media_timeline_idx`, the
+scrubber aggregates `seat_media_local_day_idx`, and neither pretends to be the
+other. A returned-row assertion alone could not have seen this, which is why
+the test asserts the PLAN as well.
+
+### Buckets are a GROUP BY over an indexed expression, never a second table
+
+`timelineBuckets` returns one row per month — 36 rows for three years, not
+19,712 — because the aggregate walks the day index. A `timeline_day` rollup
+table would be the other way to get that number and would be a second truth
+about the same rows, kept in step by triggers the seat does not have and would
+have to invent: the seat's only surviving triggers are FTS sync. **A seat may
+add an INDEX to its own copy. It may not add a table.**
+
+### The day is the capture-local one, and a page can split it
+
+`captured_at` is a UTC instant and `tz_offset_min` is the zone the shutter
+fired in (#419). A photo taken at 23:30 in Tokyo and one taken at the same
+instant in London are different days to the people who took them. The day is
+computed in SQL — `substr(datetime(captured_at, (coalesce(tz_offset_min,0) ||
+' minutes')), 1, 10)`, `||` rather than `concat()` because `concat()` is 3.44
+and the floor is 3.49.1 — so a section header cannot disagree with its rows.
+
+Ordering by `captured_at` means two rows of one local day can be separated by a
+row from another when the offsets differ: a flight, or a zone change. The
+slicer folds those back together rather than emitting a second header for a day
+already on screen, and there is a test for exactly that shape.
+
+### What is still to come, and why it is not here
+
+The Photos SCREENS still read `timeline-engine.ts`. That is deliberate rather
+than unfinished: `timelinePage` takes a `SeatSqliteDriver`, and the phone does
+not open a seat file until W4/W5 wires the seat store onto it. Pointing the
+screen at this module now would mean pointing it at a store the phone has not
+got. The mechanism, its indexes and its cost are proven here; the swap lands
+with the store.
+
+### One regression fixed beside it: the web seat's Tally totals
+
+CI burn-in flagged `tally-balance-parity.integration.test.ts` failing 3/3:
+`web.owe_total_minor + web.owed_total_minor` was `NaN` while `expense_count`
+was 40 and `friends` had length 3.
+
+**The read was right and the test's local type was three waves stale.** R22
+removed `owe_total_minor` / `owed_total_minor` and `friends[].net_minor` from
+the dashboard — a bare minor-unit integer cannot be rendered as a balance,
+because a bag of USD 100 and EUR 100 has no single number — and the handler
+returns `Valuation`s and per-currency `Money` bags. The test's own `Dashboard`
+interface still declared the old fields, so the guard read
+`undefined + undefined`.
+
+It failed loudly only because `NaN > 0` is false. Written `>= 0` the same guard
+would have passed over an empty payload indefinitely — the guard existed to
+stop the comparison being vacuous and had itself become vacuous.
+
+**And the second test in the file was worse, because it was green.** "Every
+friend's net agrees" compared `friend.net_minor`, which the same ruling
+removed: both seats returned `undefined`, `toStrictEqual` agreed about it, and
+its own non-vacuity guard passed on `undefined !== 0`. It was agreement about
+nothing, in the test whose whole job is to prove the two seats agree about
+something — and only fixing the interface made the compiler say so. It compares
+the per-currency `Money` bags now, and its guard asks for a non-zero amount
+inside one. The interface
+now matches what the query returns, the guard reads the `Valuation` the same
+way `tally-airplane.test.ts` reads it, and the case the burn-in asked for is
+pinned directly: `phone.owe`/`phone.owed` and the per-friend balance bags
+compared to the web seat's by SHAPE, not by a total that a dropped currency
+component or a bigint-versus-number driver difference would survive.
+
+### Bundle weight
+
+`bun run perf:app-weight -- --surface mobile` on this tree: **ios largest chunk
+8,259,045 B, android 8,279,799 B** against the 8,220,000 B ceiling — already
+over at `6654a6901` (8,257,168 / 8,278,154) and NOT raised here. This wave's
+delta is +1,877 B ios / +1,645 B android, all of it commit 3's product code:
+`custodyDurability` and `notifyUploadQueueChanged` are both in the Hermes
+bundle. `seat_media_timeline_idx` is NOT — `timeline-page.ts` has no product
+importer yet, so Metro drops it and this commit adds nothing.
+
+Checked while in the import graph, as asked: **`apps/mobile` does not reach the
+browser wasm driver through a client barrel.** Its only replica subpath is
+`@centraid/client/replica/native`, and `native.ts` exports neither
+`seat-worker.js` nor `sqlite-store.js` — the two paths to `wasm-seat-driver` /
+`wasm-statement-cache`. There is no import to cut.
+
+### Every file this commit touches
+
+- `apps/mobile/src/apps/photos/timeline-page.ts` (new)
+- `apps/mobile/src/apps/photos/timeline-page.test.ts` (new)
+- `tests/integration-mobile/tally-balance-parity.integration.test.ts`
+
+### Decisions — wave 3, the timeline page
+
+- **Two indexes, not one.** One index led by the day expression would serve
+  both queries and serve the page badly; the measurement above is the whole
+  argument, and it is in the module's own comment so the next reader does not
+  re-derive it.
+- **The plan is asserted, not just the row count.** The failure that got
+  through the row-count assertion was a full ordered index walk returning 41
+  rows. A test that cannot see that is not holding the claim it says it is.
+- **The screen is not switched over in this commit.** The seat store is not on
+  the phone's read path until W4/W5; wiring a screen to a driver the phone does
+  not open would be a third path beside the two that exist.
+
+## Wave 3 — one OpenSSL, because SQLCipher is an OpenSSL consumer
+
+Enabling `expo.sqlite.useSQLCipher` on Android (commit 3) broke the release
+build: `:app:mergeReleaseNativeLibs` died on "2 files found with path
+lib/x86_64/libcrypto.so". It built at `bcf17bd3f` and not after, and the cause
+is mine.
+
+### What actually collided
+
+Both modules link OpenSSL from the SAME Maven artifact at DIFFERENT versions:
+
+| module | declaration |
+| --- | --- |
+| `react-native-quick-crypto` | `implementation 'io.github.ronickg:openssl:3.6.2-1'` |
+| `expo-sqlite` (only under `useSQLCipher`) | `compileOnly 'io.github.ronickg:openssl:3.3.2-1'` |
+
+SQLCipher IS an OpenSSL consumer — expo-sqlite's Android build adds
+`-DSQLCIPHER_CRYPTO_OPENSSL` when the flag is on — so turning encryption on
+made it the second one in this app. Unforced, both resolve and both are
+packaged.
+
+### Option (1) was checked first and does not hold
+
+Deleting `react-native-quick-crypto` would take its OpenSSL with it, and it is
+the better answer where it is available. It is not available here, for two
+reasons that are both about capability rather than taste:
+
+- **Streaming SHA-256 over camera assets.** `native-digest.ts` builds an
+  incremental hash (`createHash("sha256")`, `update`, `digestHex`) because the
+  upload queue addresses multi-gigabyte videos by content. `expo-crypto` offers
+  one-shot `digest`/`digestStringAsync` only; the equivalent is loading the
+  whole asset into memory to hash it.
+- **WebCrypto `subtle`.** `installQuickCrypto()` in `apps/mobile/index.ts`
+  supplies Hermes with AES-GCM and HMAC. W6's unlock boundary is AES-256-GCM +
+  PBKDF2 and `webCryptoUploadCrypto()` wants the same surface; Hermes has no
+  WebCrypto and `expo-crypto` does not provide `subtle`.
+
+So this is option (2): both consumers link ONE OpenSSL.
+
+### The fix, and why it is not a `pickFirst`
+
+`apps/mobile/android/build.gradle` forces
+`io.github.ronickg:openssl:3.6.2-1` for every configuration. A `pickFirst` on
+`libcrypto.so` would keep TWO OpenSSL builds in the tree and bind SQLCipher to
+whichever the merger happened to reach first — and a SQLCipher linked against
+an OpenSSL it was not compiled against is a silent data-corruption path, not a
+packaging warning. Forcing resolves it before anything is packaged: one
+library, and every consumer compiled against the headers of the one it gets.
+
+**Newest wins, and the direction is the argument.** OpenSSL 3.x is ABI-stable
+within its major line, so code compiled against 3.3 headers runs against the
+3.6 library; the reverse is not guaranteed. The forced version is therefore the
+newest any consumer asks for, and the test holds it to that rather than to a
+literal.
+
+### Red first, and it stays red for the next arrival
+
+`seat-native-build-config.test.ts` grows three cases that read the real
+dependency graph — every `node_modules/*/android/build.gradle` that names the
+OpenSSL artifact:
+
+- more than one consumer still exists, so the force is load-bearing rather than
+  dead weight (if it ever drops to one, the test says to remove it);
+- the app's `build.gradle` forces exactly one version, and it is the newest any
+  consumer asks for — a third module wanting something newer fails here;
+- neither gradle file answers this with a `pickFirst` on `libcrypto.so`.
+
+The middle case was written first and failed on the missing force, which is how
+the fix was arrived at rather than guessed.
+
+### Not verified locally, and what would verify it
+
+`./gradlew :app:mergeReleaseNativeLibs` cannot run in this container: there is
+no Android SDK and Gradle cannot resolve its own plugins offline
+(`org.gradle.toolchains.foojay-resolver-convention` is unresolvable). **The
+proof is the emulator gate on the next push.** What IS established here is the
+collision's cause, both declarations by file and version, and that one
+resolution now covers both.
+
+### Every file this commit touches
+
+- `apps/mobile/android/build.gradle`
+- `apps/mobile/src/lib/replica/seat-native-build-config.test.ts`
+- `apps/mobile/native-fingerprints.json` — refreshed after the gradle change: android `df5d7e6f…` → `6a0bd966…`
+
+### Decisions — wave 3, the OpenSSL collision
+
+- **Force, not exclude, and not `pickFirst`.** The two symptom fixes leave two
+  OpenSSLs in the artifact and make the pairing arbitrary. The failure mode
+  they hide is corruption of an encrypted vault file, which is the one class of
+  bug this wave can least afford to make quiet.
+- **quick-crypto stays, and the reason is written down.** It is the only
+  provider of a streaming hash and of WebCrypto `subtle` on Hermes. If either
+  gains a platform provider, deleting it is the better fix and the first test
+  case will point at it.
