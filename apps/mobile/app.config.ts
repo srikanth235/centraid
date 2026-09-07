@@ -158,17 +158,23 @@ export default function createExpoConfig({
       // only surviving triggers are its FTS sync triggers, so a build without
       // fts5 cannot open the file at all.
       //
-      // `withSQLiteVecExtension` is ANDROID-ONLY on purpose: 57.0.2 ships
-      // `android/vec/<abi>/vec.so` and NO `vec.xcframework`, so asking for it
-      // on iOS points `bundledExtensions["sqlite-vec"]` at a bundle that is not
-      // in the tarball. It is not auto-loaded on either platform either —
-      // `probeSqliteVec` stays the gate before a vector table is touched.
+      // `withSQLiteVecExtension` is now BOTH platforms. 57.0.2 pre-bundles
+      // sqlite-vec for Android only — `android/vec/<abi>/vec.so`, no
+      // `vec.xcframework` — so iOS builds the framework from the same upstream
+      // tag in `scripts/build-sqlite-vec-ios.sh`, which the macOS lock lane and
+      // the EAS `eas-build-pre-install` hook run before any pod work. The flag
+      // is what makes the podspec vendor it and compile the module with
+      // `-DWITH_SQLITE_VEC`; without the framework beside it the flag would
+      // point `bundledExtensions["sqlite-vec"]` at a bundle that is not there,
+      // which is why the two land together. It is not auto-loaded on either
+      // platform — `probeSqliteVec` stays the gate before a vector table is
+      // touched.
       [
         "expo-sqlite",
         {
           useSQLCipher: true,
           enableFTS: true,
-          android: { withSQLiteVecExtension: true },
+          withSQLiteVecExtension: true,
         },
       ],
       "expo-video",

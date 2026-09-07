@@ -11,6 +11,7 @@
     "ci:versions": "expo install --check",
     "ci:xcode": "node scripts/check-xcode-minimum.mjs",
     "dev": "expo start",
+    "eas-build-post-install": "if [ \"$EAS_BUILD_PLATFORM\" = ios ]; then bash scripts/build-sqlite-vec-ios.sh; else echo 'sqlite-vec: iOS-only build step, skipped'; fi",
     "eas:build:android": "eas build --platform android --profile preview --non-interactive",
     "eas:build:ios": "eas build --platform ios --profile preview --non-interactive",
     "eas:submit:android": "eas submit --platform android --profile preview --non-interactive --latest",

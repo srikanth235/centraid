@@ -3,9 +3,10 @@
  * vector search over photo embeddings). Mirrors
  * `ReplicaFts5UnavailableError` — same shape, same reason a build can be
  * missing the extension (`withSQLiteVecExtension` on the expo-sqlite plugin
- * block, which in 57.0.2 ships `vec.so` for Android and NOTHING for iOS —
- * there is no `vec.xcframework` in the tarball), same instinct to fail
- * loud with the exact fix rather than crashing opaquely mid-query.
+ * block; 57.0.2 pre-bundles `vec.so` for Android and no `vec.xcframework`, so
+ * iOS gets its framework from `scripts/build-sqlite-vec-ios.sh` at build
+ * time), same instinct to fail loud with the exact fix rather than crashing
+ * opaquely mid-query.
  *
  * UNLIKE `ReplicaFts5UnavailableError`, nothing throws this today. FTS5 gates
  * the replica store's own bootstrap (`ExpoSqliteDriver#assertCapabilities`)
@@ -20,9 +21,10 @@ export class ReplicaSqliteVecUnavailableError extends Error {
   constructor() {
     super(
       "expo-sqlite was built without sqlite-vec. Set " +
-        "`android: { withSQLiteVecExtension: true }` on the expo-sqlite plugin " +
-        "block in apps/mobile/app.config.ts and rebuild the native app (expo " +
-        "prebuild + run). iOS ships no sqlite-vec bundle at all in 57.0.2."
+        "`withSQLiteVecExtension: true` on the expo-sqlite plugin block in " +
+        "apps/mobile/app.config.ts and rebuild the native app. On iOS the " +
+        "framework itself is built by apps/mobile/scripts/build-sqlite-vec-ios.sh, " +
+        "which must run before `pod install`."
     );
     this.name = "ReplicaSqliteVecUnavailableError";
   }

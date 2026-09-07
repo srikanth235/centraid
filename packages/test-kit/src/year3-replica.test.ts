@@ -17,6 +17,7 @@ import { gzipSync } from "node:zlib";
 
 import { describe, expect, test } from "vitest";
 
+import { staticSeatSnapshotTransport } from "./seat-snapshot-transport.js";
 import { tempDir } from "./temp-dir.js";
 import {
   assertYear3SeatNotHandBuilt,
@@ -226,21 +227,7 @@ async function seamsOver(
     install: async (snapshot) => {
       const compressed = gzipSync(readFileSync(snapshot.path), { level: 6 });
       await seat.bootstrapSeatFile({
-        transport: {
-          head: () =>
-            Promise.resolve({
-              etag: `"${snapshot.epoch}-${snapshot.seq}"`,
-              bytes: compressed.byteLength,
-              seq: snapshot.seq,
-              epoch: snapshot.epoch,
-              schemaEpoch: snapshot.schemaEpoch,
-            }),
-          range: (start: number) => ({
-            async *[Symbol.asyncIterator]() {
-              yield compressed.subarray(start);
-            },
-          }),
-        },
+        transport: staticSeatSnapshotTransport(compressed, snapshot),
         staging: nodeSeatStaging({
           directory: path.join(target, "staging"),
           databasePath: seatFile,

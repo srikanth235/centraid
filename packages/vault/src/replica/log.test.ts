@@ -24,49 +24,19 @@ import { applyReplicaLog } from "./apply.js";
 import { beginReplicaCommit, endReplicaCommit } from "./change-log.js";
 import { parseChangeset } from "./changeset.js";
 import { readReplicaLog, replicaLogState } from "./log.js";
+import {
+  capturedCommit,
+  insertOwnerAndDevice,
+  insertScheme,
+  tableDigest,
+} from "./replica-log.test-fixtures.js";
+import type { Sqlite } from "./replica-log.test-fixtures.js";
 
-type Sqlite = VaultDb["vault"];
-
-/** Run `write` inside one captured commit, the way every canonical path does. */
-function commit(
-  db: VaultDb,
-  producer: string,
-  write: (vault: Sqlite) => void
-): void {
-  db.vault.exec("BEGIN");
-  const handle = beginReplicaCommit(db.vault, { producer });
-  try {
-    write(db.vault);
-    endReplicaCommit(db.vault, handle);
-    db.vault.exec("COMMIT");
-  } catch (error) {
-    db.vault.exec("ROLLBACK");
-    throw error;
-  }
-}
-
-function scheme(vault: Sqlite, id: string, title = id): void {
-  vault
-    .prepare(
-      `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
-       VALUES (?, ?, ?, '1')`
-    )
-    .run(id, `urn:${id}`, title);
-}
-
-/** Value-level digest of one table, order-independent - the comparator. */
-function tableDigest(vault: Sqlite, table: string): string {
-  const columns = (
-    vault.prepare(`PRAGMA table_info("${table}")`).all() as { name: string }[]
-  ).map((column) => column.name);
-  const quoted = columns.map((name) => `quote("${name}")`).join(" || '|' || ");
-  const rows = vault
-    .prepare(`SELECT ${quoted} AS row FROM "${table}"`)
-    .all() as { row: string }[];
-  return rows
-    .map((row) => row.row)
-    .sort()
-    .join("\n");
+/** The seat's schemes agree with the origin's, value for value. */
+function expectSchemesConverged(seat: VaultDb, origin: VaultDb): void {
+  expect(tableDigest(seat.vault, "core_concept_scheme")).toBe(
+    tableDigest(origin.vault, "core_concept_scheme")
+  );
 }
 
 describe("the gateway log - capture and decode", () => {
@@ -75,8 +45,8 @@ describe("the gateway log - capture and decode", () => {
     try {
       const before = replicaLogState(db.vault).watermark.seq;
       expect(() =>
-        commit(db, "test", (vault) => {
-          scheme(vault, "kept");
+        capturedCommit(db, "test", (vault) => {
+          insertScheme(vault, "kept");
           throw new Error("writer failed");
         })
       ).toThrow("writer failed");
@@ -91,7 +61,7 @@ describe("the gateway log - capture and decode", () => {
       ).toBe(0);
       expect(replicaLogState(db.vault).watermark.seq).toBe(before);
 
-      commit(db, "test", (vault) => scheme(vault, "landed"));
+      capturedCommit(db, "test", (vault) => insertScheme(vault, "landed"));
       const page = readReplicaLog(db.vault);
       expect(
         page.rows.some(
@@ -109,9 +79,9 @@ describe("the gateway log - capture and decode", () => {
   test("an update carries the FULL row image, not the columns it touched", () => {
     const db = openVaultDb();
     try {
-      commit(db, "test", (vault) => scheme(vault, "s", "Before"));
+      capturedCommit(db, "test", (vault) => insertScheme(vault, "s", "Before"));
       const from = replicaLogState(db.vault).watermark;
-      commit(db, "test", (vault) =>
+      capturedCommit(db, "test", (vault) =>
         vault
           .prepare(
             `UPDATE core_concept_scheme SET title = ? WHERE scheme_id = 's'`
@@ -146,17 +116,17 @@ describe("the gateway log - capture and decode", () => {
   test("a no-op update and an insert-then-delete are not recorded at all", () => {
     const db = openVaultDb();
     try {
-      commit(db, "test", (vault) => scheme(vault, "s", "Same"));
+      capturedCommit(db, "test", (vault) => insertScheme(vault, "s", "Same"));
       const from = replicaLogState(db.vault).watermark;
-      commit(db, "test", (vault) =>
+      capturedCommit(db, "test", (vault) =>
         vault
           .prepare(
             `UPDATE core_concept_scheme SET title = title WHERE scheme_id = 's'`
           )
           .run()
       );
-      commit(db, "test", (vault) => {
-        scheme(vault, "ephemeral");
+      capturedCommit(db, "test", (vault) => {
+        insertScheme(vault, "ephemeral");
         vault
           .prepare(
             `DELETE FROM core_concept_scheme WHERE scheme_id = 'ephemeral'`
@@ -175,9 +145,11 @@ describe("the gateway log - capture and decode", () => {
   test("a delete carries the OLD image, and a cascade is its own row", () => {
     const db = openVaultDb();
     try {
-      commit(db, "test", (vault) => scheme(vault, "s", "Gone soon"));
+      capturedCommit(db, "test", (vault) =>
+        insertScheme(vault, "s", "Gone soon")
+      );
       const from = replicaLogState(db.vault).watermark;
-      commit(db, "test", (vault) =>
+      capturedCommit(db, "test", (vault) =>
         vault
           .prepare(`DELETE FROM core_concept_scheme WHERE scheme_id = 's'`)
           .run()
@@ -201,9 +173,11 @@ describe("the gateway log - capture and decode", () => {
   test("a primary-key change is a delete and an insert, never an update", () => {
     const db = openVaultDb();
     try {
-      commit(db, "test", (vault) => scheme(vault, "old-id", "Renamed"));
+      capturedCommit(db, "test", (vault) =>
+        insertScheme(vault, "old-id", "Renamed")
+      );
       const from = replicaLogState(db.vault).watermark;
-      commit(db, "test", (vault) => {
+      capturedCommit(db, "test", (vault) => {
         // `foreign_keys` cannot be changed inside a transaction; deferring is
         // how a key is re-pointed and its parent moved in one commit.
         vault.exec("PRAGMA defer_foreign_keys = ON");
@@ -240,20 +214,8 @@ describe("the gateway log - capture and decode", () => {
     const db = openVaultDb();
     try {
       const salt = new Uint8Array(32).fill(7);
-      commit(db, "test", (vault) => {
-        vault
-          .prepare(
-            `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
-             VALUES ('p1', 'person', 'Owner', '2026-01-01T00:00:00.000Z',
-                     '2026-01-01T00:00:00.000Z')`
-          )
-          .run();
-        vault
-          .prepare(
-            `INSERT INTO access_device (device_id, owner_party_id, name, enrolled_at)
-             VALUES ('d1', 'p1', 'Device', '2026-01-01T00:00:00.000Z')`
-          )
-          .run();
+      capturedCommit(db, "test", (vault) => {
+        insertOwnerAndDevice(vault, "Device");
         vault
           .prepare(
             `INSERT INTO blob_device_wrap_key (device_id, key_epoch, salt, updated_at)
@@ -336,8 +298,8 @@ describe("the gateway log - the oracle", () => {
     expect(
       oracle(
         (vault) => {
-          scheme(vault, "a", "A");
-          scheme(vault, "b", "B");
+          insertScheme(vault, "a", "A");
+          insertScheme(vault, "b", "B");
         },
         ["core_concept_scheme"]
       )
@@ -348,7 +310,7 @@ describe("the gateway log - the oracle", () => {
     expect(
       oracle(
         (vault) => {
-          scheme(vault, "a", "A");
+          insertScheme(vault, "a", "A");
           vault
             .prepare(
               `UPDATE core_concept_scheme SET publisher = 'p' WHERE scheme_id = 'a'`
@@ -365,8 +327,8 @@ describe("the gateway log - the oracle", () => {
     expect(
       oracle(
         (vault) => {
-          scheme(vault, "a", "A");
-          scheme(vault, "b", "B");
+          insertScheme(vault, "a", "A");
+          insertScheme(vault, "b", "B");
           vault
             .prepare(`DELETE FROM core_concept_scheme WHERE scheme_id = 'a'`)
             .run();
@@ -383,8 +345,8 @@ describe("the gateway log - the oracle", () => {
     expect(
       oracle(
         (vault) => {
-          scheme(vault, "a", "A");
-          scheme(vault, "b", "B");
+          insertScheme(vault, "a", "A");
+          insertScheme(vault, "b", "B");
         },
         ["core_entity"]
       )
@@ -396,7 +358,7 @@ describe("the gateway log - the oracle", () => {
     try {
       db.vault.exec("BEGIN");
       const session = db.vault.createSession({ table: "core_concept_scheme" });
-      scheme(db.vault, "a", "A");
+      insertScheme(db.vault, "a", "A");
       db.vault
         .prepare(
           `UPDATE core_concept_scheme SET title = 'B' WHERE scheme_id = 'a'`
@@ -423,11 +385,11 @@ describe("the gateway log - convergence and atomicity", () => {
     const seat = openVaultDb();
     try {
       const from = replicaLogState(origin.vault).floor;
-      commit(origin, "seed", (vault) => {
-        scheme(vault, "one", "One");
-        scheme(vault, "two", "Two");
+      capturedCommit(origin, "seed", (vault) => {
+        insertScheme(vault, "one", "One");
+        insertScheme(vault, "two", "Two");
       });
-      commit(origin, "edit", (vault) => {
+      capturedCommit(origin, "edit", (vault) => {
         vault
           .prepare(
             `UPDATE core_concept_scheme SET title = 'One!' WHERE scheme_id = 'one'`
@@ -437,7 +399,9 @@ describe("the gateway log - convergence and atomicity", () => {
           .prepare(`DELETE FROM core_concept_scheme WHERE scheme_id = 'two'`)
           .run();
       });
-      commit(origin, "edit", (vault) => scheme(vault, "three", "Three"));
+      capturedCommit(origin, "edit", (vault) =>
+        insertScheme(vault, "three", "Three")
+      );
 
       const page = readReplicaLog(origin.vault, { since: from, limit: 10_000 });
       const result = applyReplicaLog(seat.vault, page.rows, {
@@ -466,7 +430,7 @@ describe("the gateway log - convergence and atomicity", () => {
     const seat = openVaultDb();
     try {
       const from = replicaLogState(origin.vault).floor;
-      commit(origin, "seed", (vault) => {
+      capturedCommit(origin, "seed", (vault) => {
         vault
           .prepare(
             `INSERT INTO core_content_item
@@ -510,7 +474,9 @@ describe("the gateway log - convergence and atomicity", () => {
     const seat = openVaultDb();
     try {
       const from = replicaLogState(origin.vault).floor;
-      commit(origin, "seed", (vault) => scheme(vault, "s", "Once"));
+      capturedCommit(origin, "seed", (vault) =>
+        insertScheme(vault, "s", "Once")
+      );
       const rows = readReplicaLog(origin.vault, {
         since: from,
         limit: 10_000,
@@ -520,9 +486,7 @@ describe("the gateway log - convergence and atomicity", () => {
       applyReplicaLog(seat.vault, rows, { expectedEpoch: rows[0]!.epoch });
       applyReplicaLog(seat.vault, rows, { expectedEpoch: rows[0]!.epoch });
       expect(tableDigest(seat.vault, "core_concept_scheme")).toBe(after);
-      expect(tableDigest(seat.vault, "core_concept_scheme")).toBe(
-        tableDigest(origin.vault, "core_concept_scheme")
-      );
+      expectSchemesConverged(seat, origin);
     } finally {
       origin.close();
       seat.close();
@@ -534,9 +498,9 @@ describe("the gateway log - convergence and atomicity", () => {
     const seat = openVaultDb();
     try {
       const from = replicaLogState(origin.vault).floor;
-      commit(origin, "seed", (vault) => scheme(vault, "a", "A"));
-      commit(origin, "seed", (vault) => scheme(vault, "b", "B"));
-      commit(origin, "seed", (vault) => scheme(vault, "c", "C"));
+      capturedCommit(origin, "seed", (vault) => insertScheme(vault, "a", "A"));
+      capturedCommit(origin, "seed", (vault) => insertScheme(vault, "b", "B"));
+      capturedCommit(origin, "seed", (vault) => insertScheme(vault, "c", "C"));
       const rows = readReplicaLog(origin.vault, {
         since: from,
         limit: 10_000,
@@ -553,9 +517,7 @@ describe("the gateway log - convergence and atomicity", () => {
       );
       // The next attempt re-sends from the last durable position and finishes.
       applyReplicaLog(seat.vault, rows, { expectedEpoch: epoch });
-      expect(tableDigest(seat.vault, "core_concept_scheme")).toBe(
-        tableDigest(origin.vault, "core_concept_scheme")
-      );
+      expectSchemesConverged(seat, origin);
     } finally {
       origin.close();
       seat.close();
@@ -566,7 +528,7 @@ describe("the gateway log - convergence and atomicity", () => {
     const origin = openVaultDb();
     const seat = openVaultDb();
     try {
-      commit(origin, "seed", (vault) => scheme(vault, "s", "S"));
+      capturedCommit(origin, "seed", (vault) => insertScheme(vault, "s", "S"));
       const rows = readReplicaLog(origin.vault, { limit: 10_000 }).rows;
       expect(() =>
         applyReplicaLog(seat.vault, rows, { expectedEpoch: "some-other-epoch" })
@@ -581,11 +543,13 @@ describe("the gateway log - convergence and atomicity", () => {
     const origin = openVaultDb();
     try {
       const from = replicaLogState(origin.vault).floor;
-      commit(origin, "bulk", (vault) => {
+      capturedCommit(origin, "bulk", (vault) => {
         for (let index = 0; index < 6; index += 1)
-          scheme(vault, `s${index}`, `S${index}`);
+          insertScheme(vault, `s${index}`, `S${index}`);
       });
-      commit(origin, "bulk", (vault) => scheme(vault, "later", "Later"));
+      capturedCommit(origin, "bulk", (vault) =>
+        insertScheme(vault, "later", "Later")
+      );
       const page = readReplicaLog(origin.vault, { since: from, limit: 3 });
       const last = page.rows.at(-1)!;
       const rest = readReplicaLog(origin.vault, {

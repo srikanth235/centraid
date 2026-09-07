@@ -29,6 +29,19 @@ import { nextOccurrence } from "@centraid/core/time";
 import { assertTaskWrite } from "./task-write.js";
 import { OperationRefusalError } from "./types.js";
 
+/**
+ * A successor carries at least as many live links as the occurrence it came
+ * from (#996, ONT-27) — the postcondition People and Tasks both assert after a
+ * completion, in one spelling so the two apps cannot check different things.
+ */
+export const SUCCESSOR_INHERITS_SERIES_LINKS_SQL = `SELECT (CASE WHEN :next_task_id IS NULL THEN 1
+                    ELSE ((SELECT count(*) FROM core_link
+                            WHERE from_type = 'schedule.task' AND from_id = :next_task_id
+                              AND valid_to IS NULL)
+                          >= (SELECT count(*) FROM core_link
+                               WHERE from_type = 'schedule.task' AND from_id = :task_id
+                                 AND valid_to IS NULL)) END) AS n`;
+
 export interface TaskLifecycleContext {
   readonly db: DatabaseSync;
   readonly now: string;

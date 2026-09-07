@@ -157,9 +157,12 @@ export class ExpoSqliteDriver implements ReplicaSqliteDriver {
   }
 
   /** NOT wired into `open()`/`assertCapabilities()`: a build without sqlite-vec
-   *  must still open. Probe right before needing a vector table (#721). On iOS
-   *  there is no bundled `vec.xcframework` at all, so this is the gate that
-   *  says so rather than a crash inside a vector query. */
+   *  must still open. Probe right before needing a vector table (#721). Both
+   *  platforms carry the extension now — iOS's `vec.xcframework` is built by
+   *  `scripts/build-sqlite-vec-ios.sh` rather than shipped by expo-sqlite —
+   *  which is exactly why the probe stays: a shell built before that script ran
+   *  opens fine and has no `vec0`, and this is the gate that says so rather
+   *  than a crash inside a vector query. */
   probeSqliteVec(): void {
     try {
       this.db.execSync(

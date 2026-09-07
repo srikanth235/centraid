@@ -3226,3 +3226,342 @@ The full list, one path per line, grouped by what happened to it.
 - **A share routes through the ordinary HTTP call, not the session.** Wave 7
   made a share a predicate; it was a session verb only because the facade was
   where the code happened to sit.
+## CI — iOS lock job
+
+Wave 3 left `apps/mobile/ios/Podfile.lock` naming `op-sqlite` and carrying no
+`ExpoSQLite`, and stated the gap rather than papering over it. Two things close
+it here, and neither is a hand-edit of the lock.
+
+**`.github/workflows/mobile-ios-lock.yml`** — `workflow_dispatch` only, one
+`macos-26` job (the label `mobile-ios-smoke` already pins), `permissions:
+contents: write`, concurrency per branch with `cancel-in-progress: false`. It
+resolves `inputs.branch || github.ref_name` (a dispatch input default must be a
+literal), checks that branch out at depth 1 with the default `GITHUB_TOKEN`,
+runs `./.github/actions/setup` for Bun/Node 24.4.1/`bun install
+--frozen-lockfile`, selects Xcode ≥ 26.4 and asserts the floor with
+`ci:xcode` — both copied from candidate.yml — asserts CocoaPods is on the image
+(no lane in this repo installs a gem), then `pod install --repo-update` in
+`apps/mobile/ios`. `apps/mobile/ios` is committed, so there is no `expo
+prebuild` step: prebuilding would regenerate a project this repo maintains by
+hand. It then runs `ci:native-state --write`, commits `Podfile.lock` **and**
+`native-fingerprints.json` by explicit path, and pushes to the resolved branch.
+The ratchet travels with the lock because `pod install` moves the
+@expo/fingerprint inputs — pushing the lock alone would trade a red L1 for a red
+L4 — and `--write` is fail-closed on L1–L3, so the refresh can only land on a
+lock the recipe checks already accept. The lock and the ratchet are uploaded as
+`mobile-ios-podfile-lock` on every outcome, so a run that cannot push still
+hands back the file.
+
+**The validator gap.** `validatePodLock` compares five versions (Expo,
+React-Core, React-Core-prebuilt, ReactNativeDependencies, the Hermes tag) and
+neither half of this drift is a version, which is why the gate was green on a
+lock that cannot link. `validateLockedNodeModulePods`
+(`apps/mobile/scripts/verify-native-state-lib.mjs:193`) is the mechanical form
+of both halves, read from the lock's own EXTERNAL SOURCES `:path:` entries: a
+pod sourced from `node_modules/<pkg>` that `bun.lock` no longer resolves is red
+(the op-sqlite half), and a dependency of `apps/mobile` whose installed package
+declares `"apple"` or `"ios"` in `expo-module.config.json` but appears nowhere
+in the pod lock is red (the ExpoSQLite half).
+`discoverNodeModulePodPackages` (`apps/mobile/scripts/verify-native-state.mjs:158`)
+supplies both sides.
+
+Two things it does NOT do, and both were found by running it. It does not ask
+`node_modules/` whether a package is present: `bun install --frozen-lockfile`
+leaves `node_modules/@op-engineering/op-sqlite` behind as an unpruned leftover,
+so a presence check over the directory tree is green on exactly the tree this
+exists to red — `bun.lock` is the oracle instead. And it matches `"apple"` as
+well as `"ios"` in the module config, because expo-sqlite 57.0.2 declares
+`platforms: ["apple", "android", "devtools"]` and an `"ios"`-only match sees
+nothing. It reads presence from the lockfile rather than package.json because
+the pod lock legitimately sources transitive Expo packages nobody declares — 59
+locked node_modules packages against 53 declared dependencies. Both errors carry
+the existing `MACOS_POD_INSTALL` remediation, which now names a lane that can
+act on it.
+
+**This branch is red until the lane runs.** On the tree as committed,
+`ci:native-state` L1 reports exactly two errors — op-sqlite locked and
+unresolved, expo-sqlite autolinked and unlocked — so `check:mobile-native-state`
+fails until `mobile-ios-lock` is dispatched on the branch and its commit lands.
+That is the gap becoming a gate, and it is deliberate: the alternative is a
+green gate over a lock no iOS build can link.
+
+```
+bunx vitest run --root apps/mobile scripts/verify-native-state.test.mjs
+                                       # 1 file, 19 tests, green
+bun run lint:workflow-pins             # 24 workflows clean
+bun run lint:ci-egress                 # ok
+bun run lint:path-filters              # ok
+bun run format:check                   # clean
+bun run --cwd apps/mobile typecheck    # clean
+node apps/mobile/scripts/verify-native-state.mjs --status
+                                       # L1 red x2 (the gate above), L2-L4 ok
+bun run check:push:static              # stamped on the committed tree
+```
+
+### iOS sqlite-vec is built, not punted
+
+The owner extended this slice: iOS gets sqlite-vec too. The facts, verified in
+the installed tree — expo-sqlite 57.0.2 ships `android/vec/<abi>/vec.so` for
+four ABIs and no `vec.xcframework`; `ios/ExpoSQLite.podspec:85-86` vendors
+`vec.xcframework` and `:61-62` compiles Swift with `-DWITH_SQLITE_VEC`, both
+gated on `expo.sqlite.withSQLiteVecExtension`; `ios/SQLiteModule.swift:32-40`
+resolves the extension as
+`Bundle(identifier: "sqlite-vec")?.path(forResource: "vec", ofType: "")` with
+entry point `sqlite3_vec_init`. So the podspec already knows what to do with a
+framework; the tarball simply has none. Wave 3 read that as "iOS has no
+sqlite-vec"; it is really "iOS has no sqlite-vec *artifact*", and an artifact is
+something a build makes.
+
+- **`apps/mobile/scripts/build-sqlite-vec-ios.sh`** clones `asg017/sqlite-vec`
+  at `v0.1.7-alpha.2` with submodules (the vendored `sqlite3ext.h`), compiles
+  `sqlite-vec.c` with clang as a DYNAMIC library — the extension is dlopened by
+  `sqlite3_load_extension`, so a static slice would be unloadable — for
+  `iphoneos` arm64 and `iphonesimulator` arm64 + x86_64 against the
+  `ios.deploymentTarget` the pods use (17.5, read from
+  `ios/Podfile.properties.json`), lipos each platform's slices into a flat
+  `vec.framework` whose binary is `vec` and whose `CFBundleIdentifier` is
+  `sqlite-vec` (that pair is what makes the Swift lookup above resolve to
+  `…/vec.framework/vec`), asserts `nm -gU` exports `_sqlite3_vec_init`, and
+  packages both with `xcodebuild -create-xcframework` into
+  `node_modules/expo-sqlite/ios/vec.xcframework`. macOS-only guard, every
+  missing tool named, `.centraid-sqlite-vec-tag` makes it idempotent and
+  `SQLITE_VEC_FORCE=1` overrides. The framework builders are called plainly
+  rather than in a command substitution, so a failing slice exits the script
+  instead of a subshell.
+- **The tag is pinned to Expo's.** `scripts/sqlite-vec-version.test.mjs` reads
+  the `TAG=` line out of the shell script and the version string out of
+  `android/vec/arm64-v8a/vec.so` (the only place the tarball states what it
+  bundled) and requires them equal — so an expo-sqlite bump that moves the
+  Android `.so` reds a node test instead of silently giving two phones two
+  different sqlite-vec versions.
+- **`.github/workflows/mobile-ios-lock.yml`** builds the framework before
+  `pod install`, then runs an unsigned Debug `iphonesimulator` `xcodebuild` over
+  `Centraid.xcworkspace` — a lock is a resolution claim, and only a build proves
+  the vendored slices link and `-DWITH_SQLITE_VEC` compiles — and uploads
+  `vec.xcframework` beside the lock. The binary is never committed.
+- **`apps/mobile/package.json`** gains `eas-build-post-install`, guarded on
+  `EAS_BUILD_PLATFORM = ios`. **Deliberately `post-install`, not
+  `pre-install`**: the script writes into `node_modules/expo-sqlite/ios/`, which
+  does not exist before the install step, so a pre-install hook would fail loudly
+  on every EAS iOS build. `post-install` runs after dependencies and before
+  `pod install`, which is exactly the window the framework has to exist in.
+- **`apps/mobile/app.config.ts`** now sets `withSQLiteVecExtension: true` at the
+  top level, with the comment naming the script and why the framework is built
+  rather than shipped.
+  `apps/mobile/src/lib/replica/replica-sqlite-vec-error.ts` and
+  `expo-sqlite-driver.ts`'s `probeSqliteVec` comment lose the "iOS has none"
+  claim; the probe stays, because a shell built before the script ran opens fine
+  and still has no `vec0`. `docs/photos/derived-ledger.md` says the same.
+
+**A finding the owner should route.** The expo-sqlite plugin block never reaches
+either committed native project. `apps/mobile/ios` and `apps/mobile/android` are
+committed and nothing in this repo runs `expo prebuild` (`expo run:ios` skips it
+when `ios/` exists, and `android-emulator-install.sh:118` says `assemble*` needs
+no prebuild), so the plugin's properties are only written when someone
+prebuilds. `ios/Podfile.properties.json` carried no `expo.sqlite.*` key at all
+and `android/gradle.properties` still carries none — meaning wave 3's
+`useSQLCipher: true` was inert on both platforms, and the phone would have
+opened a plaintext file where the driver issues `PRAGMA key`. This commit writes
+the three iOS keys (`enableFTS`, `useSQLCipher`, `withSQLiteVecExtension`) into
+`ios/Podfile.properties.json`, because without them this slice's own `pod
+install` would vendor nothing. **The Android half is left alone and reported**:
+it needs `assembleRelease` to verify and belongs beside the Android lanes, not
+inside an iOS-lock commit.
+
+**Every file these two changes touch**
+
+- `.github/workflows/mobile-ios-lock.yml` (new) — the dispatchable macOS lane
+- `apps/mobile/scripts/build-sqlite-vec-ios.sh` (new) — the framework build
+- `apps/mobile/scripts/sqlite-vec-version.test.mjs` (new) — the tag ↔ `.so` pin
+- `apps/mobile/scripts/verify-native-state-lib.mjs` · `apps/mobile/scripts/verify-native-state.mjs` · `apps/mobile/scripts/verify-native-state.test.mjs` — `validateLockedNodeModulePods`, its discovery, and the fixture pair that reds the stale lock and greens the one `pod install` writes
+- `apps/mobile/app.config.ts` — `withSQLiteVecExtension` for both platforms
+- `apps/mobile/ios/Podfile.properties.json` — the three `expo.sqlite.*` keys the plugin would have written, without which this lane's `pod install` vendors nothing
+- `apps/mobile/package.json` — the `eas-build-post-install` hook
+- `apps/mobile/src/lib/replica/replica-sqlite-vec-error.ts` · `apps/mobile/src/lib/replica/expo-sqlite-driver.ts` — the remedy text and the probe comment lose "iOS has none"
+- `docs/photos/derived-ledger.md` — the mobile vector-support section
+
+```
+bunx vitest run --root apps/mobile scripts/           # green
+bun run lint:workflow-pins                            # 24 workflows clean
+bash -n apps/mobile/scripts/build-sqlite-vec-ios.sh   # syntax ok
+bun run check:push:static                             # stamped on the committed tree
+```
+
+Not verifiable on this machine, and stated as such: the framework build, the
+xcframework packaging and the simulator link all need macOS. The first dispatch
+of `mobile-ios-lock` is what turns them from a plan into evidence.
+
+### The lock lane also runs on branch pushes
+
+`workflow_dispatch` cannot reach a workflow that is not on the default branch —
+GitHub answers 404 — so `mobile-ios-lock` could not be dispatched from the very
+branch it exists to unblock. `.github/workflows/mobile-ios-lock.yml` now also
+listens on `push` with `branches-ignore: [main]`, filtered to the inputs a lock
+is a function of: `apps/mobile/ios/**`, `apps/mobile/package.json`,
+`apps/mobile/app.config.ts`, `apps/mobile/scripts/build-sqlite-vec-ios.sh`,
+`bun.lock` and the workflow file. Not `pull_request`: ci.yml is the only
+workflow allowed on open-PR events (#557, `lint:workflow-pins` rule 5).
+`workflow_dispatch` stays for the case where someone wants a rebuild without a
+push.
+
+`Podfile.lock` is under `apps/mobile/ios/**`, so the job's own commit-back
+matches the filter. `if: github.actor != 'github-actions[bot]'` refuses it. The
+idempotence downstream would already terminate the loop — the second run finds
+nothing staged and skips the commit — but it would spend a macOS hour proving a
+fixed point. Concurrency flips to `cancel-in-progress: true` for the same
+reason a push trigger exists: several pushes can queue on one branch and only
+the newest tree is worth resolving a lock against; the push is the last thing
+the job does, and the artifact upload is `if: always()`, so a cancelled run
+leaves the branch as it found it and still hands back what it built.
+
+```
+bun run lint:workflow-pins   # 24 workflows clean
+bun run lint:ci-egress       # ok
+bun run lint:path-filters    # ok
+bun run format:check         # clean
+bash .governance/run.sh      # 22/22
+```
+
+### Why the vec build step failed, and what it does now
+
+Run 34092275488 (job 101648094884, `macos-26`) reached `Build vec.xcframework`
+and died in one second on `v0.1.7-alpha.2 vendored no sqlite3ext.h — the
+submodule did not clone`. Everything before it — setup, Xcode 26.4 select, the
+React Native / ExpoModulesJSI assert, the CocoaPods assert — passed, and the
+guard did its job: it named the missing file rather than letting clang fail
+later with something less legible.
+
+The guard was right and the assumption behind it was wrong, in two ways.
+`asg017/sqlite-vec` has **no `vendor/` directory and no submodules at all** —
+its `scripts/vendor.sh` downloads a SQLite amalgamation into one at build time,
+so `--recurse-submodules` had nothing to fetch. And `sqlite-vec.h` is
+**generated** from `sqlite-vec.h.tmpl` by upstream's Makefile through
+`envsubst`, which macOS runners do not carry; a clone alone cannot compile.
+
+`build-sqlite-vec-ios.sh` now does both jobs itself. It renders the header with
+six `sed` substitutions — `VERSION` from the tag's own `VERSION` file, `DATE`
+and `SOURCE` from the cloned commit, so one tag always renders one header — and
+asserts the result carries `v0.1.7-alpha.2`. For `sqlite3ext.h` it prefers the
+platform SDKs' own copy (no network, and a header inside the sysroot is already
+on the quoted-include path), falling back to the same pinned amalgamation
+upstream's `vendor.sh` uses, with `SQLITE_EXTENSION_INIT1` asserted in whatever
+it unzips. The log says which source it took.
+
+**`node_modules/expo-sqlite/vendor/*/sqlite3.h` is deliberately not that
+source**, though it sits right there and would need no network at all: Expo
+renames the entire public API to `exsqlite3_*` in it, and stock extension source
+does not compile against a renamed header (`unknown type name 'sqlite3_vtab';
+did you mean 'exsqlite3_vtab'?`). The rename is invisible to a loadable
+extension, which reaches SQLite through the `sqlite3_api_routines` pointer it is
+handed rather than by linking symbols — so stock headers are both correct and
+the only ones that work. Expo's Android `vec.so` is built from stock source the
+same way.
+
+Verified here as far as a Linux container can: the script's source-preparation
+block was run verbatim against a real clone of the tag, and the `sqlite-vec.c`
+it produced compiles clean and exports `sqlite3_vec_init`.
+
+```
+bash -n apps/mobile/scripts/build-sqlite-vec-ios.sh   # syntax ok
+bunx vitest run --root apps/mobile scripts/sqlite-vec-version.test.mjs
+cc -fPIC -shared -O2 -o vec.so <clone>/sqlite-vec.c   # 0 errors, exports sqlite3_vec_init
+bun run lint:workflow-pins && bun run format:check
+bash .governance/run.sh
+```
+
+The arch flags, the xcframework packaging and the simulator link still need
+macOS; the next dispatch is what turns them into evidence.
+
+## CI fix — duplication
+
+SonarCloud's "Duplication on New Code" gate (≤ 3%) read 3.5% on the wave's PR.
+The owner's per-file breakdown named two files as essentially the whole of it —
+`packages/vault/src/schema/deletion-roles.ts` (504 duplicated lines, 82.2%) and
+`packages/vault/src/schema/private-tables.ts` (137, 50.9%). Neither has a stale
+twin anywhere in the tree: they are duplicates of THEMSELVES. Both were written
+as one object literal per row, so fifty-six and twenty-eight times over the same
+five lines said the same thing with a different string in them.
+
+**A role is a property of the relationship, not of each row that stands in it.**
+Both lists are now declared BY GROUP: the parent, the role, its `ON DELETE` rule
+and who carries it out are stated once, and the references under them carry only
+what is their own — which key it is, and the one line that says why. Same fifty-
+six declarations, same census, same tests; `DELETION_ROLES` and `PRIVATE_TABLES`
+are built from the groups so every consumer and both suites are untouched.
+612 → 279 lines and 268 → 183 lines, and a group whose rule changes is now one
+edit instead of a read of every row under it.
+
+The rest was the waves writing the same block three times:
+
+- **The snapshot door, served from memory** — `packages/test-kit/src/seat-snapshot-transport.ts`
+  (new). The golden replica, the test-kit's own seat fixture and the parity run
+  each spelled out the same `head`/`range` stub; `chunkBytes` is the one thing
+  that differed, so it is the one thing a caller passes. Used by
+  `tests/helpers/factories.ts`, `packages/test-kit/src/year3-replica.test.ts` and
+  `tests/quality/seat-replay-parity.test.ts`.
+- **The log row as the door serves it** — `seatLogRowWire` now lives beside the
+  row in `packages/vault/src/replica/log.ts` and is exported from
+  `packages/vault/src/index.ts`; `packages/server/src/routes/seat-routes.ts`,
+  `tests/helpers/factories.ts` and `tests/quality/seat-replay-parity.test.ts`
+  had a copy each.
+- **One statement cache, two wasm drivers** —
+  `packages/client/src/replica/wasm-statement-cache.ts` (new) is the bind/step/
+  reset/keep-it loop both browser drivers were;
+  `packages/client/src/replica/wasm-sqlite-driver.ts` and
+  `packages/client/src/replica/seat/wasm-seat-driver.ts` now say only how large
+  their handful of statements is.
+- **One seat artifact for the seat suites** —
+  `packages/client/src/replica/seat/seat-artifact.test-fixtures.ts` (new), used
+  by `carry-over.test.ts`, `worker-core.test.ts` and `web-seat.test.ts`;
+  `bootstrap.test.ts` gains an `opener` for the four copies of its `open` seam.
+- **One spelling of a captured commit** —
+  `packages/vault/src/replica/replica-log.test-fixtures.ts` (new): `capturedCommit`,
+  `insertScheme`, `insertOwnerAndDevice`, `tableDigest`, used by
+  `packages/vault/src/replica/log.test.ts`, `log-retention.test.ts`,
+  `change-log.test.ts` and `seat-snapshot.test.ts`.
+- **The presence row is shaped once** — `SEAT_BLOB_COLUMNS`, `SeatBlobSqlRow` and
+  `seatBlobRow` are exported from `packages/client/src/replica/seat/blob-presence.ts`
+  and read by `packages/client/src/replica/seat/carry-over.ts`, which had
+  re-spelled the columns, the row type and the mapping.
+- **Repeated blocks inside one file** —
+  `packages/vault/src/operations/registry.ts` (`ref` and `taskCompletion` for the
+  four read-sets and three postconditions),
+  `packages/vault/src/schema/representation-split.test.ts` (`titledAsset`, and the
+  caption rows built once),
+  `packages/vault/src/commands/people.ts` (`TASK_ID_ONLY_INPUT`,
+  `TASK_STATUS_OUTPUT`), and the successor-links postcondition People and Tasks
+  both assert, now `SUCCESSOR_INHERITS_SERIES_LINKS_SQL` in
+  `packages/vault/src/operations/task-lifecycle.ts` (exported through
+  `packages/vault/src/operations/index.ts`, used by
+  `packages/vault/src/commands/tasks.ts`).
+
+No test and no assertion was removed to reduce lines, and the Sonar
+configuration and its exclusions are untouched.
+
+**`lint:types`** was red for one diagnostic unrelated to the above:
+`packages/vault/src/ingest/enrich-publishers.test.ts` sorted a
+`(string | null)[]` with a bare `toSorted()` (`require-array-sort-compare`).
+Both sides of that comparison now sort by code unit through one explicit
+comparator — a locale collation would order the two lists differently, and the
+keys deliberately preserve their script.
+
+### Numbers
+
+Local estimator (8-line normalised windows over the diff's added lines against
+every tracked file), `6a1b16715..worktree`:
+
+```
+before: added 32398  duplicated 892 (2.8%)
+after:  added 31663  duplicated 449 (1.4%)
+```
+
+### Gates
+
+```
+bunx vitest run …                     # vault schema/replica/operations/commands, client seat, server seat-routes
+bunx vitest run -c vitest.quality.config.ts tests/quality/seat-replay-parity.test.ts
+bun run --filter @centraid/vault build
+bun run lint && bun run format:check && bun run lint:types
+bash .governance/run.sh
+bun run check:push:static
+```

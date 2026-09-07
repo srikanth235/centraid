@@ -33,6 +33,7 @@ export {
   cancelTask,
   completeTask,
   reopenTask,
+  SUCCESSOR_INHERITS_SERIES_LINKS_SQL,
   type TaskLifecycleContext,
   type TaskLifecycleResult,
 } from "./task-lifecycle.js";

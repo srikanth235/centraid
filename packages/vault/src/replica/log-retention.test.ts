@@ -8,7 +8,6 @@ import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
-import { beginReplicaCommit, endReplicaCommit } from "./change-log.js";
 import {
   lowestSeatCursor,
   pruneReplicaLog,
@@ -18,38 +17,18 @@ import {
   REPLICA_DEFER_THRESHOLD_BYTES,
   REPLICA_PRODUCER_MAX_ROWS,
 } from "./log.js";
-
-type Sqlite = VaultDb["vault"];
-
-function commit(db: VaultDb, producer: string, write: (v: Sqlite) => void) {
-  db.vault.exec("BEGIN");
-  const handle = beginReplicaCommit(db.vault, { producer });
-  try {
-    write(db.vault);
-    const captured = endReplicaCommit(db.vault, handle);
-    db.vault.exec("COMMIT");
-    return captured;
-  } catch (error) {
-    db.vault.exec("ROLLBACK");
-    throw error;
-  }
-}
-
-function scheme(vault: Sqlite, id: string): void {
-  vault
-    .prepare(
-      `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
-       VALUES (?, ?, ?, '1')`
-    )
-    .run(id, `urn:${id}`, id);
-}
+import {
+  capturedCommit,
+  insertOwnerAndDevice,
+  insertScheme,
+} from "./replica-log.test-fixtures.js";
 
 /** Three commits of two rows each, so the floor has edges to land on. */
 function seeded(db: VaultDb): void {
   for (const label of ["a", "b", "c"]) {
-    commit(db, "seed", (vault) => {
-      scheme(vault, `${label}1`);
-      scheme(vault, `${label}2`);
+    capturedCommit(db, "seed", (vault) => {
+      insertScheme(vault, `${label}1`);
+      insertScheme(vault, `${label}2`);
     });
   }
 }
@@ -90,20 +69,8 @@ describe("the retention floor", () => {
   test("a seat that is behind holds the floor where it is (OQ-13)", () => {
     const db = openVaultDb();
     try {
-      commit(db, "seed", (vault) => {
-        vault
-          .prepare(
-            `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
-             VALUES ('p1', 'person', 'Owner', '2026-01-01T00:00:00.000Z',
-                     '2026-01-01T00:00:00.000Z')`
-          )
-          .run();
-        vault
-          .prepare(
-            `INSERT INTO access_device (device_id, owner_party_id, name, enrolled_at)
-             VALUES ('d1', 'p1', 'Phone', '2026-01-01T00:00:00.000Z')`
-          )
-          .run();
+      capturedCommit(db, "seed", (vault) => {
+        insertOwnerAndDevice(vault, "Phone");
       });
       seeded(db);
       const all = readReplicaLog(db.vault, { limit: 10_000 }).rows;
@@ -206,8 +173,9 @@ describe("the producer bound", () => {
   test("a conforming commit is never compressed, and never deferred", () => {
     const db = openVaultDb();
     try {
-      const captured = commit(db, "enrich", (vault) => {
-        for (let index = 0; index < 50; index += 1) scheme(vault, `s${index}`);
+      const captured = capturedCommit(db, "enrich", (vault) => {
+        for (let index = 0; index < 50; index += 1)
+          insertScheme(vault, `s${index}`);
       })!;
       expect(captured.rows).toBeLessThan(REPLICA_PRODUCER_MAX_ROWS);
       // Zero is "not measured", not "measured as empty": paying gzip on the
@@ -228,9 +196,9 @@ describe("the producer bound", () => {
   test("the flag rides on every row of the commit, not on the page", () => {
     const db = openVaultDb();
     try {
-      commit(db, "enrich", (vault) => {
-        scheme(vault, "a");
-        scheme(vault, "b");
+      capturedCommit(db, "enrich", (vault) => {
+        insertScheme(vault, "a");
+        insertScheme(vault, "b");
       });
       const rows = readReplicaLog(db.vault, { limit: 10_000 }).rows;
       const perCommit = new Map<number, Set<boolean>>();

@@ -165,6 +165,57 @@ export function validateIosModuleLockCompleteness({ localPodNames, lock }) {
 }
 
 /**
+ * Top-level node_modules packages the lock sources a pod from. EXTERNAL SOURCES
+ * `:path:` entries are relative paths autolinking wrote, so the package is what
+ * follows the last `node_modules/` segment; a scoped name keeps its `@scope/`.
+ */
+export function lockedNodeModulePackages(lock) {
+  const names = new Set();
+  for (const match of lockSectionBody(lock, "EXTERNAL SOURCES").matchAll(
+    /:path:\s*"?[^"\n]*node_modules\/(?<pkg>@[^/"\s]+\/[^/"\s]+|[^/"\s]+)/gu
+  )) {
+    names.add(match.groups?.pkg ?? "");
+  }
+  return [...names].sort();
+}
+
+/**
+ * L1 iOS dependency drift. A dependency swap rewrites package.json and the
+ * workspace lockfile but CANNOT rewrite the pod lock — only `pod install` on
+ * macOS can — so #996's op-sqlite → expo-sqlite left a lock pinning a pod
+ * nothing resolves and missing the pod the app now needs. Neither half is a
+ * version mismatch, so validatePodLock saw nothing.
+ *
+ * Presence is asked of `bun.lock` rather than of `node_modules/`: a removed
+ * package's directory survives an install as an unpruned leftover, and a check
+ * that reads it stays green on exactly the tree this exists to red.
+ */
+export function validateLockedNodeModulePods({
+  lock,
+  resolvedPackages,
+  iosAutolinkedPackages,
+}) {
+  const locked = new Set(lockedNodeModulePackages(lock));
+  const resolved = new Set(resolvedPackages);
+  const errors = [];
+  for (const pkg of [...locked].sort()) {
+    if (!resolved.has(pkg)) {
+      errors.push(
+        `L1 recipe stale: Podfile.lock sources a pod from node_modules/${pkg}, which bun.lock no longer resolves (${MACOS_POD_INSTALL}; ${FIX_RECIPE_HINT})`
+      );
+    }
+  }
+  for (const pkg of [...iosAutolinkedPackages].sort()) {
+    if (!locked.has(pkg)) {
+      errors.push(
+        `L1 recipe stale: dependency ${pkg} autolinks an iOS pod that Podfile.lock does not carry (${MACOS_POD_INSTALL}; ${FIX_RECIPE_HINT})`
+      );
+    }
+  }
+  return errors;
+}
+
+/**
  * L1 Android depth limit: each module's expo-module.config.json must declare
  * every platform its on-disk directories imply. No committed Android lock —
  * ci:android-native compilation is the real Android completeness gate.

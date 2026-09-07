@@ -611,6 +611,7 @@ export {
   lowestSeatCursor,
   pruneReplicaLog,
   replicaLogState,
+  seatLogRowWire,
   REPLICA_DEFER_THRESHOLD_BYTES,
   REPLICA_LOG_RETENTION_DAYS,
   REPLICA_LOG_RETENTION_MAX_ROWS,

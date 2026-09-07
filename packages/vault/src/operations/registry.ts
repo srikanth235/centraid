@@ -37,6 +37,32 @@ function entries(...rows: (ReadSetEntry | null)[]): ReadSetEntry[] {
   return rows.filter((row): row is ReadSetEntry => row !== null);
 }
 
+/** The row an input names by `key`, or nothing when it names none. */
+function ref(
+  entity: string,
+  input: Readonly<Record<string, unknown>>,
+  key: string
+): ReadSetEntry | null {
+  const id = text(input, key);
+  return id === null ? null : { entity, id };
+}
+
+/**
+ * The status and completion stamp of the task an input names: `null` when it
+ * names none, `undefined` when that task is not there. The three task
+ * postconditions below all decide on exactly this pair, so they read it here.
+ */
+function taskCompletion(
+  vault: DatabaseSync,
+  input: Readonly<Record<string, unknown>>
+): { status: string; completed_at: string | null } | null | undefined {
+  const taskId = text(input, "task_id");
+  if (taskId === null) return null;
+  return vault
+    .prepare("SELECT status, completed_at FROM schedule_task WHERE task_id = ?")
+    .get(taskId) as { status: string; completed_at: string | null } | undefined;
+}
+
 /** A local edit of the member's own rows: queue it, show it, settle it. */
 const LOCAL_EDIT: Omit<OfflineDeclaration, "conflictScope"> = {
   submission: "offline",
@@ -88,15 +114,7 @@ const TASK_WRITE: DomainOperation = {
     {
       name: "task_completion_stamp_agrees_with_status",
       assert: (vault, input) => {
-        const taskId = text(input, "task_id");
-        if (taskId === null) return null;
-        const row = vault
-          .prepare(
-            "SELECT status, completed_at FROM schedule_task WHERE task_id = ?"
-          )
-          .get(taskId) as
-          | { status: string; completed_at: string | null }
-          | undefined;
+        const row = taskCompletion(vault, input);
         if (!row) return null;
         return (row.status === "completed") === (row.completed_at !== null)
           ? null
@@ -106,15 +124,9 @@ const TASK_WRITE: DomainOperation = {
   ],
   readSet: (input) =>
     entries(
-      text(input, "task_id") === null
-        ? null
-        : { entity: "schedule.task", id: text(input, "task_id")! },
-      text(input, "parent_task_id") === null
-        ? null
-        : { entity: "schedule.task", id: text(input, "parent_task_id")! },
-      text(input, "section_id") === null
-        ? null
-        : { entity: "schedule.section", id: text(input, "section_id")! }
+      ref("schedule.task", input, "task_id"),
+      ref("schedule.task", input, "parent_task_id"),
+      ref("schedule.section", input, "section_id")
     ),
   offline: localEdit(["schedule.task", "schedule.section"]),
 };
@@ -143,15 +155,8 @@ const TASK_COMPLETE: DomainOperation = {
     {
       name: "task_is_completed_and_stamped",
       assert: (vault, input) => {
-        const taskId = text(input, "task_id");
-        if (taskId === null) return null;
-        const row = vault
-          .prepare(
-            "SELECT status, completed_at FROM schedule_task WHERE task_id = ?"
-          )
-          .get(taskId) as
-          | { status: string; completed_at: string | null }
-          | undefined;
+        const row = taskCompletion(vault, input);
+        if (row === null) return null;
         if (!row) return "The task vanished while it was being completed.";
         return row.status === "completed" && row.completed_at !== null
           ? null
@@ -185,12 +190,7 @@ const TASK_COMPLETE: DomainOperation = {
       },
     },
   ],
-  readSet: (input) =>
-    entries(
-      text(input, "task_id") === null
-        ? null
-        : { entity: "schedule.task", id: text(input, "task_id")! }
-    ),
+  readSet: (input) => entries(ref("schedule.task", input, "task_id")),
   offline: localEdit(["schedule.task"]),
 };
 
@@ -202,15 +202,8 @@ const TASK_REOPEN: DomainOperation = {
     {
       name: "task_is_open_and_unstamped",
       assert: (vault, input) => {
-        const taskId = text(input, "task_id");
-        if (taskId === null) return null;
-        const row = vault
-          .prepare(
-            "SELECT status, completed_at FROM schedule_task WHERE task_id = ?"
-          )
-          .get(taskId) as
-          | { status: string; completed_at: string | null }
-          | undefined;
+        const row = taskCompletion(vault, input);
+        if (row === null) return null;
         if (!row) return "The task vanished while it was being reopened.";
         return row.status !== "completed" && row.completed_at === null
           ? null
@@ -218,12 +211,7 @@ const TASK_REOPEN: DomainOperation = {
       },
     },
   ],
-  readSet: (input) =>
-    entries(
-      text(input, "task_id") === null
-        ? null
-        : { entity: "schedule.task", id: text(input, "task_id")! }
-    ),
+  readSet: (input) => entries(ref("schedule.task", input, "task_id")),
   offline: localEdit(["schedule.task"]),
 };
 
@@ -281,12 +269,7 @@ const CONTENT_WRITE: DomainOperation = {
       },
     },
   ],
-  readSet: (input) =>
-    entries(
-      text(input, "content_id") === null
-        ? null
-        : { entity: "core.content_item", id: text(input, "content_id")! }
-    ),
+  readSet: (input) => entries(ref("core.content_item", input, "content_id")),
   offline: {
     submission: "offline",
     pending: "optimistic",
@@ -333,12 +316,8 @@ const IMPORTANT_DATE_WRITE: DomainOperation = {
   ],
   readSet: (input) =>
     entries(
-      text(input, "party_id") === null
-        ? null
-        : { entity: "core.party", id: text(input, "party_id")! },
-      text(input, "date_id") === null
-        ? null
-        : { entity: "people.important_date", id: text(input, "date_id")! }
+      ref("core.party", input, "party_id"),
+      ref("people.important_date", input, "date_id")
     ),
   offline: localEdit(["people.important_date", "core.party"]),
 };
