@@ -50,6 +50,7 @@ export {
   lockerKeyFileName,
   lockerKeyRows,
   rotateLockerKey,
+  stampLockerKeyOnWrite,
   sweepRetiredLockerKeys,
   vaultIdOf,
   type LockerKeyCustody,

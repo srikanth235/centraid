@@ -547,3 +547,68 @@ export function vaultIdOf(vault: DatabaseSync): string {
   }
   return row.vault_id;
 }
+
+/**
+ * THE WRITE PATH NAMES ITS KEY (#996, ruling R13).
+ *
+ * Called from `sealWrites` — the one chokepoint every writer passes — so the
+ * rule is the engine's rather than each command's. Three cases, and the third
+ * is the one this exists for:
+ *
+ *   - a row with no `lk1:` ciphertext holds no secret under `K`; it joins the
+ *     live key so the next write has something to compare against;
+ *   - a row whose ciphertext is under the live key is stamped and stored;
+ *   - a row whose ciphertext is under any OTHER key — an offline seat's
+ *     intent that was queued before a rotation, or a `key_id` that names
+ *     nothing — is REFUSED with "re-enter this secret". The gateway cannot
+ *     repair it: it holds `K′` and the ciphertext is under `K`, and it will
+ *     not decrypt on a caller's behalf even when it could. The only repair is
+ *     the owner typing the secret again, so that is what the message says.
+ *
+ * The seat checks this too, before it posts, where the plaintext is still in
+ * hand. That check is a courtesy to the owner; this one is the rule.
+ */
+export function stampLockerKeyOnWrite(
+  vault: DatabaseSync,
+  physical: string,
+  rowId: string
+): void {
+  const spec = LOCKER_ENCRYPTED_COLUMNS[physical];
+  if (!spec) return;
+  const row = vault
+    .prepare(
+      `SELECT key_id, ${spec.columns.join(", ")} FROM ${physical} WHERE ${spec.pk} = ?`
+    )
+    .get(rowId) as Record<string, unknown> | undefined;
+  if (!row) return;
+  const carriesCiphertext = spec.columns.some((column) =>
+    isLockerCiphertext(row[column])
+  );
+  const live = liveLockerKeyId(vault);
+  if (live === null) {
+    if (!carriesCiphertext) return;
+    throw new LockerKeyError(
+      "not_founded",
+      "this vault has no Locker key plane — no secret can be stored until one is founded"
+    );
+  }
+  const declared = row["key_id"];
+  if (carriesCiphertext) {
+    // NULL is a refusal, not a default. Ciphertext whose key nothing names is
+    // ciphertext nobody can ever open, and stamping the live id over it would
+    // record a lie that only surfaces at the next reveal.
+    if (typeof declared !== "string" || declared.length === 0) {
+      throw new LockerKeyError(
+        "stale_key_id",
+        "this secret arrived as ciphertext naming no Locker key — re-enter this secret"
+      );
+    }
+    assertLiveLockerKeyId(vault, declared);
+    return;
+  }
+  if (declared !== live) {
+    vault
+      .prepare(`UPDATE ${physical} SET key_id = ? WHERE ${spec.pk} = ?`)
+      .run(live, rowId);
+  }
+}

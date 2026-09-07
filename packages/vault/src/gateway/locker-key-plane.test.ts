@@ -27,6 +27,7 @@ import {
   lockerKeyFileName,
   lockerKeyRows,
   rotateLockerKey,
+  stampLockerKeyOnWrite,
   sweepRetiredLockerKeys,
 } from "./locker-key-plane.js";
 import type { LockerKeyCustody } from "./locker-key-plane.js";
@@ -284,6 +285,71 @@ describe("locker-key-plane", () => {
         .map((f) => f.keyId)
         .sort()
     ).toStrictEqual([live.keyId, "in-flight"].sort());
+  });
+
+  test("the write path stamps the live key onto a row that holds no ciphertext", () => {
+    // A row with nothing under `K` still names the live key, so the NEXT
+    // write has something to compare against rather than a NULL to interpret.
+    db.vault
+      .prepare(
+        `INSERT INTO core_entity (entity_id, entity_type, created_at)
+         VALUES ('item-plain', 'locker.item', '2026-01-01T00:00:00.000Z')`
+      )
+      .run();
+    db.vault
+      .prepare(
+        `INSERT INTO locker_item (item_id, type, title, created_at)
+         VALUES ('item-plain', 'login', 'example.com', '2026-01-01T00:00:00.000Z')`
+      )
+      .run();
+    stampLockerKeyOnWrite(db.vault, "locker_item", "item-plain");
+    expect(
+      (
+        db.vault
+          .prepare(
+            `SELECT key_id FROM locker_item WHERE item_id = 'item-plain'`
+          )
+          .get() as { key_id: string }
+      ).key_id
+    ).toBe(db.lockerKey().keyId);
+  });
+
+  test("the write path refuses ciphertext under a key the vault moved past", () => {
+    seedItem("item-1", "hunter2");
+    const stale = db.lockerKey().keyId;
+    rotateLockerKey(db.vault, custody);
+    // An offline seat's intent, queued before the rotation and replayed after
+    // it: the ciphertext is under `K` and the vault holds `K′`. The gateway
+    // will not decrypt on the caller's behalf even though it still could, so
+    // the only repair is the owner typing the secret again.
+    db.vault
+      .prepare(`UPDATE locker_item SET key_id = ? WHERE item_id = 'item-1'`)
+      .run(stale);
+    expect(() =>
+      stampLockerKeyOnWrite(db.vault, "locker_item", "item-1")
+    ).toThrow(
+      expect.objectContaining({
+        code: "stale_key_id",
+        message: expect.stringContaining("re-enter this secret"),
+      })
+    );
+  });
+
+  test("the write path refuses ciphertext that names no key at all", () => {
+    seedItem("item-1", "hunter2");
+    // Stamping the live id over this would record a lie that only surfaces at
+    // the next reveal, so a NULL beside ciphertext is a refusal, not a default.
+    db.vault
+      .prepare(`UPDATE locker_item SET key_id = NULL WHERE item_id = 'item-1'`)
+      .run();
+    expect(() =>
+      stampLockerKeyOnWrite(db.vault, "locker_item", "item-1")
+    ).toThrow(
+      expect.objectContaining({
+        code: "stale_key_id",
+        message: expect.stringContaining("re-enter this secret"),
+      })
+    );
   });
 
   test("a missing key file is loud custody loss, never a re-mint", () => {
