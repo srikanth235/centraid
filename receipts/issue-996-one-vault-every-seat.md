@@ -5548,3 +5548,66 @@ loosened or stubbed to get past it; the seat-store e2e exit condition is
 - **The e2e exit condition is reported owed, not approximated.** A gate that
   cannot run in this environment is not evidence, and making it pass here would
   have meant changing something that is not broken.
+
+### App weight after the flag went (`--surface mobile`)
+
+| tree | ios largest chunk | android largest chunk |
+| --- | --- | --- |
+| `924f13497` (this branch after the locker lane merged in) | 8,288,248 B | 8,308,790 B |
+| **this commit** | **8,287,462 B** | **8,307,218 B** |
+
+**−786 B ios, −1,572 B android** — `flag.ts` was re-exported from
+`replica/native.ts`, which is in the phone's Hermes bundle, so deleting it takes
+its weight with it. The 8,220,000 B ceiling is over and was NOT raised. The
++21 KB against the pre-merge measurement earlier in this wave is the locker
+lane's, arriving with `a3956bd96`; it is not this wave's and is measured here
+only to keep the attribution honest.
+
+## Wave 4 — the shell wiring, surveyed before it is built (#996)
+
+W4-D1 makes the wiring unavoidable, so the seam was read end to end before
+writing any of it. One finding changes the shape of that commit and is recorded
+here rather than discovered halfway through it.
+
+### The seat would be opened twice
+
+`useSeatWatermark` opens its own `WebSeat` (`packages/client/src/react/shell/useSeatWatermark.ts:47`)
+— that is all the shell takes from the new store today, and it was correct while
+the seat's only job was a number. The read path cannot be wired by giving the
+coordinator a second `SeatWorkerClient`: that is a second worker, a second
+`OPFS` handle and a second applier on ONE file, with two independent bootstrap
+and re-bootstrap lifecycles over it. The applier's whole atomicity argument is
+"one commit, one transaction"; two writers make that argument false, and the
+failure mode is a corrupted seat rather than an error.
+
+So the wiring commit is not "add a seat to the coordinator". It is: **the shell
+session owns the one seat**, `useSeatWatermark` reads that seat's watermark
+instead of opening its own, and `coordinator.page` reaches it through the port
+`seat-page-reader.ts` already defines (`SeatQueryPort`). The order matters —
+moving ownership first, adding the read second — because the intermediate state
+where both exist is the corrupting one.
+
+### The door the apps will call
+
+`ctx.vault.page` joins `read`/`search` in `buildInlineCtxCore`
+(`packages/client/src/replica/inline-query-ctx-core.ts:249`), is supplied by
+`inlineReadsFor`'s sibling in `inlineQueryCtx.ts`, and lands on
+`ShellSession.page` → `coordinator.page` → `seatWorkerPage`. Two of the shell's
+existing contributions carry over unchanged and one does not:
+
+- pending-row provenance and the sidecar carry over — a page's rows are rows;
+- `assertBoundedReplicaRead` **goes**, and is not replaced. It exists to refuse
+  a read that declared no window; `PageRequest.limit` is required, so the case
+  it guards cannot be constructed;
+- `truncatedListNotice` **goes** with it. A page that filled its window is not
+  an incident to put on the status line — it is a cursor, and the surface's
+  answer is to fetch the next one rather than to tell the member something was
+  hidden.
+
+### Not done, and not started
+
+The wiring commit above and the eight app conversions are NOT in this branch.
+The four commits this worker landed are the page type, the host, the shared
+statement/overlay seam, and the flag's deletion; everything under "What is NOT
+done in this wave" earlier in this receipt still stands, minus the flag-OFF path,
+which W4-D1 removed as a requirement.
