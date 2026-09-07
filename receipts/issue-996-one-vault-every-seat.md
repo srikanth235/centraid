@@ -4618,3 +4618,52 @@ plane, not seats+apps, and it is reported rather than absorbed.
   the optimistic title — `content_uri`, a synthetic field — would rebuild the
   mirror under a different name. The owning row has the title; the overlay
   reads it there.
+## CI fix — the declared-writes gate reads the whole registry again
+
+`bun run lint:engine-conformance` was red in the `gates` lane:
+
+```
+packages/vault/src/schema/entity-catalog.ts: read 47 entity names —
+  the declared-writes gate is anchored on this registry and has gone vacuous
+```
+
+Wave 1's `3adb7ef6c` split the catalog for the file-size rule:
+`packages/vault/src/schema/entity-catalog.ts` now spreads
+`...VAULT_DOMAIN_ENTITIES` out of
+`packages/vault/src/schema/entity-catalog-domains.ts`. `vaultEntityNames` in
+`scripts/lint-engine-conformance.mjs` is a text scan of ONE file and cannot see
+through a spread, so it read 47 names where the registry holds 96 — the eight
+app schemas were simply invisible.
+
+The anti-vacuity floor (90) and the anchor (`core.content_item`) are what caught
+it, and neither moved. The SCANNER is what was wrong:
+
+- `vaultEntityNames` now delegates to `collectEntityNames`, which walks a
+  registry constant and, on a `...IDENT` at the level a schema key sits,
+  resolves `IDENT` through the file's own relative imports (`.js` → `.ts`) and
+  recurses with the same depth walk. `seen` breaks a cycle.
+- An unresolvable spread THROWS, and `checkDeclaredWrites` turns the throw into
+  a finding. Skipping one silently is precisely how a text scanner goes vacuous
+  behind its own guard: the count stays plausible, and every `writes:` naming a
+  domain table passes unchecked. This is the failure mode that produced the
+  bug, so it is now loud by construction rather than by a floor happening to
+  sit above the under-count.
+
+Three new cases, in a new suite —
+`scripts/lint-engine-conformance-registry.test.mjs`, which also takes the
+existing "read whole, not partially" case over the real tree (unchanged, and
+now seeing 96). Its own file because
+`scripts/lint-engine-conformance.test.mjs` holds the engine gate's cases while
+these are the scanner underneath one engine, and because the additions put that
+file over the 625-line hygiene limit — the limit is the right answer there, not
+a waiver. The three: a registry composed across two files is read whole
+(including a label containing braces, which the brace walk must not count as
+structure); a spread whose name has no import fails with the reason; and a
+spread naming a file that is not there fails the same way. `package.json`'s
+`scripts:test` names the new file — the list is explicit, so a suite it does
+not name never runs.
+
+```
+bun run lint:engine-conformance   # ok
+bun run scripts:test              # 678 tests, 678 pass
+```
