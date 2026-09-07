@@ -4574,21 +4574,48 @@ Every user-visible state the permit suites proved is proved through the new path
 - `packages/blueprints/apps/locker/app-root.tsx` — `reveal` through the door, `openItemDetail`, the lock subscription; `submitPassphrase` / `ask` / `confirmPermit` / `openWithPermit` gone
 - `packages/blueprints/apps/locker/session.ts` — `afterLockState` replaces `afterStatus` / `afterUnlock` / `refusalText`; no token, no `configured`, no `busy`
 - `packages/blueprints/apps/locker/session.test.ts` — the phases off the door, and that the state holds no credential in any of them
-- `packages/blueprints/apps/locker/reveal.ts` · `reveal.test.ts` — the surviving clock and the sidecar ADDRESS (replacing `permits.ts` · `permits.test.ts`)
+- `packages/blueprints/apps/locker/permits.ts` · `packages/blueprints/apps/locker/permits.test.ts` — deleted
+- `packages/blueprints/apps/locker/components/PermitGate.tsx` — deleted (its plain confirm lifted into `Confirm.tsx`)
+- `packages/blueprints/apps/locker/queries/auth.ts` — deleted, with its `auth` entry in `app.json`
+- `apps/mobile/src/apps/locker/LockerPermitGate.tsx` — deleted
+- `packages/blueprints/apps/locker/reveal.ts` — the surviving clock and the sidecar ADDRESS
+- `packages/blueprints/apps/locker/reveal.test.ts` — replacing `permits.test.ts`: the clock stays, the token arithmetic goes
 - `packages/blueprints/apps/locker/components/Lock.tsx` — a sentence, not a field; `locked` and `unavailable` are different facts
 - `packages/blueprints/apps/locker/components/Confirm.tsx` — the plain "are you sure" lifted out of `PermitGate.tsx`
-- `packages/blueprints/apps/locker/shelves.ts` · `routes.test.ts` — twelve routes; the `setup` gate goes
+- `packages/blueprints/apps/locker/shelves.ts` — twelve routes; the `setup` gate goes
+- `packages/blueprints/apps/locker/routes.test.ts` — twelve, and one gate that outranks nothing
 - `packages/blueprints/apps/locker/view-copy.ts` — `LOCK_UNAVAILABLE_BODY`, `REVEAL_NO_DOOR`, `CONFIRM_CANCEL`; the passphrase strings go
 - `packages/blueprints/apps/locker/queries/item.ts` — unseals nothing, for any caller
-- `packages/blueprints/apps/locker/queries/access.ts` · `autofill-candidates.ts` — no session check
+- `packages/blueprints/apps/locker/queries/access.ts` — no session check; the history is not behind the lock
+- `packages/blueprints/apps/locker/queries/autofill-candidates.ts` — no unlock gate; the seat holds the vault whole
 - `packages/blueprints/apps/locker/app.json` — the `auth` query and the permit inputs
-- `packages/blueprints/apps/locker/surface-acts.ts` · `field-model.ts` · `components/Fields.tsx` · `states.test.tsx` · `queries-reveal-access.test.ts` — the door's flow
-- `packages/blueprints/src/app-boot-harness.ts` · `query-handlers.test.ts` · `app-entity-tripwire.ts` · `app-entity-tripwire.test.ts` — the harness offers the door; the phone's three door files are registered
-- `packages/client/src/locker/index.ts` · `packages/client/src/index.ts` · `packages/client/package.json` — the `@centraid/client/locker` subpath the phone imports without the web shell
+- `packages/blueprints/apps/locker/surface-acts.ts` — the access read carries no token
+- `packages/blueprints/apps/locker/field-model.ts` · sidecar targets from `reveal.ts`
+- `packages/blueprints/apps/locker/components/Fields.tsx` — the reveal clock's new home
+- `packages/blueprints/apps/locker/app-inline.tsx` — the `auth` query leaves the inline registry
+- `packages/blueprints/apps/locker/states.test.tsx` — locked, and a host with no door
+- `packages/blueprints/apps/locker/queries-reveal-access.test.ts` — the query unseals nothing; the history is readable while locked
+- `packages/blueprints/src/app-boot-harness.ts` — the harness offers the door
+- `packages/blueprints/src/query-handlers.test.ts` — candidate enumeration asks no auth plane
+- `packages/blueprints/src/app-entity-tripwire.ts` · `packages/blueprints/src/app-entity-tripwire.test.ts` — the phone's three door files registered
+- `packages/client/src/locker/index.ts` — the subpath's barrel
+- `packages/client/src/index.ts` · `packages/client/package.json` — `@centraid/client/locker`, importable without the web shell
 - `apps/mobile/src/apps/locker/locker-door.ts` — the phone's door
-- `apps/mobile/src/apps/locker/locker-store.ts` · `locker-gateway.ts` · `locker-surfaces.ts` — the store reveals through it; `lockerAuth` goes, `lockerRevealReceipt` arrives
-- `apps/mobile/src/apps/locker/LockerWall.tsx` · `LockerScreen.tsx` · `LockerItemScreen.tsx` · `LockerItemsView.tsx` · `LockerHome.tsx` · `LockerFields.tsx` · `locker-seat-copy.ts` — no passphrase, no enrol offer, no permit overlay
-- `apps/mobile/src/apps/locker/locker-store.test.ts` · `locker-surfaces.test.ts` · `LockerWall.test.tsx` · `LockerFields.test.tsx` · `LockerItemsView.test.tsx` · `locker-airplane.test.ts` · `locker-export.test.ts` — rewritten to the door's flow
+- `apps/mobile/src/apps/locker/locker-store.ts` — reveals through the door; no token, no passphrase
+- `apps/mobile/src/apps/locker/locker-gateway.ts` — `lockerAuth` goes, `lockerRevealReceipt` arrives
+- `apps/mobile/src/apps/locker/locker-surfaces.ts` — the access read carries no token
+- `apps/mobile/src/apps/locker/LockerWall.tsx` — a verb, not a field; two walls, not three
+- `apps/mobile/src/apps/locker/LockerScreen.tsx` — one gate; the `setup` route goes
+- `apps/mobile/src/apps/locker/LockerItemScreen.tsx` — reveals through the store; the permit overlay goes
+- `apps/mobile/src/apps/locker/LockerItemsView.tsx` · `apps/mobile/src/apps/locker/LockerHome.tsx` — the enrol offer goes
+- `apps/mobile/src/apps/locker/LockerFields.tsx` — the reveal clock from `reveal.ts`
+- `apps/mobile/src/apps/locker/locker-seat-copy.ts` — `DEVICE_FORGET` replaces the credential words
+- `apps/mobile/src/apps/locker/locker-store.test.ts` — the door, the lock, the stale-key refusal
+- `apps/mobile/src/apps/locker/locker-surfaces.test.ts` — the history reads while locked
+- `apps/mobile/src/apps/locker/LockerWall.test.tsx` — the wall collects nothing
+- `apps/mobile/src/apps/locker/LockerFields.test.tsx` — reveal asks, it does not open
+- `apps/mobile/src/apps/locker/LockerItemsView.test.tsx` — no credential to enrol
+- `apps/mobile/src/apps/locker/locker-airplane.test.ts` · `apps/mobile/src/apps/locker/locker-export.test.ts` — the detail read still needs the radio; the reveal does not
 
 ### Gates
 
@@ -4707,17 +4734,20 @@ The second half of the W6-D2 deletions, and the last of the wave's ordering: the
 
 ### Files
 
-- `packages/vault/src/gateway/locker-auth.ts` · `locker-auth.test.ts` — deleted
+- `packages/vault/src/gateway/locker-auth.ts` — deleted
+- `packages/vault/src/gateway/locker-auth.test.ts` — deleted
 - `packages/vault/src/gateway/gateway.ts` — the locker arm of `reveal`; `authenticateLocker`, `authorizeLockerReveal`, `enforceLockerReveal`, `lockerOwningItemId`, `LOCKER_SIDECAR_ENTITIES`
 - `packages/vault/src/index.ts` — the plane's exports
-- `packages/vault/src/schema/domains-locker.ts` · `migrate.ts` · `migrate.test.ts` — `LOCKER_AUTH_DROP_DDL` as rung seven; `user_version` 6 → 7
-- `packages/vault/src/schema/private-tables.ts` · `local-tables.ts` · `migrate.test-helpers.ts` — the table leaves every register
+- `packages/vault/src/schema/domains-locker.ts` — `LOCKER_AUTH_DROP_DDL`
+- `packages/vault/src/schema/migrate.ts` · `packages/vault/src/schema/migrate.test.ts` — rung seven; `user_version` 6 → 7
+- `packages/vault/src/schema/private-tables.ts` · `packages/vault/src/schema/local-tables.ts` · `packages/vault/src/schema/migrate.test-helpers.ts` — the table leaves every register
 - `packages/vault/src/gateway/owner-vault.test-fixtures.ts` — `unsealCell`
-- `packages/vault/src/gateway/locker-sidecar-reveal.test.ts` · `sealed.test.ts` · `seal-custody.test.ts` · `portable-sealed-custody.test.ts` — rewritten to the refusal and to direct cell reads
-- `packages/server/src/serve/vault-plane.ts` · `engine/handlers/vault-bridge.ts` · `engine/worker/runner.ts` — the `authenticate` op and its arms
+- `packages/vault/src/gateway/locker-sidecar-reveal.test.ts` — the refusal, and the class W6-D1 keeps
+- `packages/vault/src/gateway/sealed.test.ts` · `packages/vault/src/gateway/seal-custody.test.ts` · `packages/vault/src/gateway/portable-sealed-custody.test.ts` — direct cell reads
+- `packages/server/src/serve/vault-plane.ts` · `packages/server/src/engine/handlers/vault-bridge.ts` · `packages/server/src/engine/worker/runner.ts` — the `authenticate` op and its arms
 - `packages/server/src/serve/vault-plane-app-bridge.test.ts` · `packages/server/src/backup/backup.integration.test.ts` · `packages/server/src/serve/vault-plane-wal.test.ts` · `packages/server/src/serve/outbox-executor.test.ts` · `packages/server/src/engine/stores/gateway-db.test.ts` — rewritten to the refusal, to direct cell reads, and to rung seven
 - `packages/client/src/replica/inline-query-ctx-core.ts` · `packages/blueprints/types/centraid.d.ts` — the op leaves the kit surface
-- `packages/blueprints/apps/locker/queries/autofill-item.ts` · `packages/blueprints/src/query-handlers.test.ts` — the Companion refusal, with its reason
+- `packages/blueprints/apps/locker/queries/autofill-item.ts` — the Companion refusal, with its reason and its match
 
 ### Gates
 
