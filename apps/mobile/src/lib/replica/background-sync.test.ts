@@ -172,7 +172,7 @@ vi.mock(import("./native-session") as Promise<unknown>, () => ({
   createNativeReplicaSession: (options: CreateSessionOptions) =>
     createNativeReplicaSession(options),
 }));
-vi.mock(import("./op-sqlite-driver") as Promise<unknown>, () => ({
+vi.mock(import("./expo-sqlite-driver") as Promise<unknown>, () => ({
   openNativeReplicaDriver: async () => ({ close: () => undefined }),
   openMountedReplicaReaderDriver: async () => ({ close: () => undefined }),
   nativeReplicaDatabasePath: async () => "/replica/db.sqlite3",

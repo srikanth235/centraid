@@ -2783,3 +2783,174 @@ apps/web e2e (chromium, flag ON vs OFF)  # 30 passed / 20 failed, identical sets
   is not "it passed" — it could not, here — but "the failure set is identical
   with the flag on and off", which is a claim this container CAN establish and
   which is the one the exit criterion is really about.
+
+## Wave 3 — the driver swap: expo-sqlite, SQLCipher, and a floor of 3.49.1
+
+op-sqlite is gone. The phone's SQLite is now expo-sqlite built against
+SQLCipher, which is the decision that sets `SEAT_SQLITE_FLOOR`: the same
+tarball vendors 3.50.3 and 3.49.1, and `useSQLCipher: true` picks the older
+one. So the phone is the oldest engine in the system on purpose, and every byte
+the gateway ships has to clear a floor that a build flag chose.
+
+### The plugin block, and what each flag buys
+
+`apps/mobile/app.config.ts`. `useSQLCipher: true` is the key decision above;
+`enableFTS: true` is not optional for a seat, because the sanitised snapshot's
+only surviving triggers are its FTS sync triggers and the bootstrap rebuilds
+the index before the member's first search. `withSQLiteVecExtension` is set
+**under `android:` only**: 57.0.2 ships `android/vec/<abi>/vec.so` and no
+`vec.xcframework` at all, so asking for it on iOS points
+`bundledExtensions["sqlite-vec"]` at a bundle that is not in the tarball. It is
+not auto-loaded on either platform, so `probeSqliteVec` stays the gate.
+
+The `"op-sqlite"` blocks leave both `package.json`s with the dependency, and
+`op-sqlite-build-config.test.ts` — a test whose whole subject was that those
+two blocks existed — goes with them.
+
+### The key is the first statement, because there is no key option
+
+`SQLiteOpenOptions` has no `encryptionKey`, and `grep -i "pragma key"` over the
+module's Swift and Kotlin is empty. So `ExpoSqliteDriver.open` issues
+`PRAGMA key = '…'` before anything else — before the store core's own PRAGMA
+block, which is a write, and a write on an unkeyed handle against an encrypted
+file is `SQLITE_NOTADB`. The passphrase is a single-quoted literal with the
+quote doubled, because `PRAGMA key` is parsed before the statement is prepared
+and takes no bound parameter. The key itself is the locker's (wave 6); absent,
+the handle opens a plaintext file, which is what every suite here has.
+
+### WAL, now that the two handles are not what they were
+
+`driver.journalMode` was typed `"DELETE"` and the phone was the one seat that
+had to say so — a per-vault writer and a gateway-scoped multi-ATTACH reader
+shared one file, and rollback-journal locking is what made the reader's SHARED
+lock and the writer's RESERVED lock interact the way the 5 s busy timeout
+assumed. That reader is deleted in this wave's next commit. What remains is the
+foreground writer and the background task, and WAL is the mode in which those
+two do not stall each other; the type is a union now rather than one word.
+
+expo caches connections BY DATABASE NAME, which is a sharper edge than
+op-sqlite's: a second `openDatabaseSync` with the same name hands back the
+SAME object, and `close()` on either closes both. Every second handle asks for
+`useNewConnection: true`.
+
+### `executeBatch` has no equivalent, and what survives that
+
+op-sqlite's `executeBatch` was one native round trip for a whole write batch,
+in one transaction, off the JS thread (#922 E1). expo has no such call, so
+`runBatchAsync` is N `runAsync` calls inside one `withTransactionAsync`. The
+property #922 E1 actually bought — the JS thread is free while the statements
+land, so a first-launch bootstrap page does not freeze the app — survives that.
+The constant does not, and `bootstrap-statement-budget.test.ts` is what keeps N
+honest.
+
+### The one thing expo-sqlite cannot do, and the rewrite for it
+
+`SQLiteBindValue` is `string | number | null | boolean | Uint8Array |
+ArrayBuffer`. Blobs cross the bridge; **a `bigint` does not cross it at all**,
+and a `number` arrives on the native side as a Double
+(`SQLiteModule.kt:401-405`, `SQLiteModule.swift:629-647`) — so even the number
+path could not carry an integer past 2^53, which is precisely the value
+`row-json.ts`'s `{i: "…"}` encoding exists to preserve. The seat's bind union
+has `bigint` in it because a seat holds `vault.db` whole.
+
+So `ExpoSeatDriver` binds the wide integer as its DECIMAL DIGITS and wraps the
+placeholder that takes it in `CAST(? AS INTEGER)`. The cast of a text integer
+is exact across the whole 64-bit range and is twenty releases older than the
+floor. It is confined to the ONE placeholder that needs it — wrapping every
+placeholder would change the affinity of every other column — which means the
+rewrite has to count placeholders correctly, and therefore has to know where a
+`?` is not one: inside a string literal, a doubled-quote literal, a quoted or
+bracketed identifier, a line comment or a block comment. All six appear in the
+seat's DDL and its FTS rebuild. A numbered parameter (`?1`) is REFUSED rather
+than guessed at; the seat emits none, and guessing is how the wrong column gets
+the wide integer.
+
+The READ side of that seam is not solved here: `getAllSync` still materialises
+an INTEGER column as a Double. Wave 4 owns the seat's read path and meets it
+there, exactly as wave 2's applier note predicted.
+
+### The 3.49.1 seat check (R-A2), and which half runs where
+
+`seat-sqlite-floor.test.ts` is the half that can run on node, and it asserts
+the DIALECT: `SEAT_STATE_DDL`, `SEAT_OPEN_PRAGMAS`, `applyRowSql` for a
+composite key and a single key, and the statements `rebuildSeatFtsIndexes`
+emits, each against a denylist of constructs that landed after 3.49 —
+`concat`/`concat_ws` (3.44), `octet_length` (3.43), `unhex` (3.41), the
+`jsonb_*` family and two-argument `json_valid` (3.45), `RIGHT`/`FULL JOIN`
+(3.39). Every one of those compiles on the gateway's 3.50.2 and the browser's
+3.53.0, which is why reading the SQL on this machine proves nothing without the
+list. It also asserts the two flags that CAUSE the floor, from `app.config.ts`
+itself, so the floor constant and the build that produces it cannot drift apart
+silently.
+
+The other half — that the sanitised snapshot's DDL actually OPENS, that a JSON
+page applies and that the FTS rebuild returns, on a SQLCipher build — cannot
+run in any node process. **It runs in CI's `mobile-device-gate`**, which
+compiles the Android tree under `assembleRelease` and RUNS the artifact under
+Maestro. `mobile-smoke` deliberately cannot answer it: that job compiles,
+bundles and ratchets, and never executes the app. It is named here because the
+brief named it, and re-judged: a citation is not a justification.
+
+**Version set (R-A2): 3.50.2 gateway / 3.49.1 phone / 3.53.0 wasm.**
+
+### iOS pods are NOT regenerated here, and that is a stated gap
+
+`apps/mobile/ios/Podfile.lock` still carries `op-sqlite (17.1.3)` at :394,
+:2778, :2989 and :3220 and has no `ExpoSQLite` pod. Regenerating it needs macOS
+and `pod install`; this container has neither (`which pod` is empty), and
+hand-writing a pod's spec checksum would be fabricating the one field the lock
+exists to hold. The lock is regenerated from the Podfile and autolinking, so
+`pod install` on macOS both drops op-sqlite and adds ExpoSQLite in one pass —
+but **an iOS build before that pass will not link**. `ci:native-state` does not
+catch this: `validatePodLock` checks Expo, React-Core, React-Core-prebuilt,
+ReactNativeDependencies and the Hermes tag, and nothing else.
+
+### Every file this commit touches
+
+- `apps/mobile/app.config.ts` — the expo-sqlite plugin block and its three flags
+- `apps/mobile/package.json` · `package.json` · `bun.lock` — `@op-engineering/op-sqlite` and both `"op-sqlite"` build blocks out, `expo-sqlite@~57.0.2` in
+- `apps/mobile/src/lib/replica/op-sqlite-driver.ts` (deleted) · `apps/mobile/src/lib/replica/op-sqlite-driver.test.ts` (deleted) · `apps/mobile/src/lib/replica/op-sqlite-build-config.test.ts` (deleted)
+- `apps/mobile/src/lib/replica/expo-sqlite-driver.ts` (new) · `apps/mobile/src/lib/replica/expo-sqlite-driver.test.ts` (new) — the old store's driver, `PRAGMA key` first, WAL, `useNewConnection`
+- `apps/mobile/src/lib/replica/expo-seat-driver.ts` (new) · `apps/mobile/src/lib/replica/expo-seat-driver.test.ts` (new) — wave 2's `SeatSqliteDriver` on expo-sqlite, and `bindWideIntegers`
+- `apps/mobile/src/lib/replica/seat-sqlite-floor.test.ts` (new) — the node half of the 3.49.1 check
+- `apps/mobile/src/lib/replica/replica-fts5-error.ts` · `apps/mobile/src/lib/replica/replica-sqlite-vec-error.ts` — the remedy they name is the plugin block now, not a package.json key
+- `apps/mobile/src/lib/replica/background-sync.ts` · `apps/mobile/src/lib/replica/background-sync.test.ts` · `apps/mobile/src/kit/replica/ReplicaProvider.tsx` · `apps/mobile/src/kit/replica/ReplicaProvider.test.tsx` · `apps/mobile/src/kit/replica/replica-mount.ts` · `apps/mobile/src/kit/replica/replica-mount.test.ts` · `apps/mobile/src/lib/upload/native-queue.ts` — the driver's new name and path
+- `docs/photos/derived-ledger.md` — the mobile vector-support section now describes the plugin flag and iOS's absent `vec.xcframework`, and no longer links a deleted test
+- `apps/mobile/src/test/native-device-seams.ts` — the RNTL tier's engine seam is `expo-sqlite`'s `openDatabaseSync` now
+- `apps/mobile/native-fingerprints.json` — refreshed with `--write` after L1–L3 green: ios `9c407bb9…` → `959e6210…`, android `26aef20c…` → `05e919ba…`
+- `packages/client/src/replica/store-core.ts` — `journalMode` widened to `"DELETE" | "WAL"`, and the comments that named op-sqlite
+- `packages/client/src/replica/native.ts` — the seat store minus its hosts, so the phone composes it without dragging `Worker`, `navigator.storage` or the DOM into a React Native typecheck
+
+### Gates
+
+```
+bunx vitest run --root apps/mobile src/lib/replica src/kit/replica src/lib/upload
+                                       # 56 files, 449 passed
+bun run --cwd apps/mobile test         # 287 files, 2448 tests; 1 red
+                                       #   (DocsHome.test.tsx, red on the base
+                                       #    tree too — verified by stash)
+bun run --cwd apps/mobile typecheck    # clean
+bun run --cwd packages/client typecheck # clean
+bun run check:mobile-native-state      # green after the --write refresh
+bun run check:mobile-suite-budgets     # ok, 11 suites, tighten-only
+bun run check:push:static              # 4/4, stamped on the committed tree
+```
+
+### Decisions — wave 3, the driver swap
+
+- **`CAST(? AS INTEGER)` over binding the digits alone.** Column affinity would
+  convert a text integer into an INTEGER column for free — but only where the
+  column HAS integer affinity, and the seat writes BLOB- and ANY-affinity
+  columns too, where the same bind would silently store text. The cast says
+  what is meant at the one placeholder that means it.
+- **The placeholder scan knows about literals and comments.** A simpler
+  `split("?")` would wrap the wrong placeholder in exactly the statements that
+  carry a `?` in a literal, and the failure mode is a wrong VALUE rather than
+  an error. Six token kinds, one function, seven tests.
+- **`withSQLiteVecExtension` under `android:` and not at the top level.** The
+  top-level form is not "both platforms"; on iOS in 57.0.2 it is "look for a
+  bundle that does not exist".
+- **The iOS lock is left stale rather than hand-edited.** A lock with an
+  invented checksum is worse than one that is honestly out of date, and
+  `pod install` rewrites the whole file anyway. The gap is stated above rather
+  than papered over.

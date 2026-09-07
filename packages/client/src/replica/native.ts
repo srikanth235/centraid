@@ -5,7 +5,7 @@
  * client, IndexedDB outbox, `window`-driven change feed and shell session — so
  * importing it drags DOM globals into a React Native typecheck and bundle.
  * Every re-export below must have a DOM-free transitive graph. Native code
- * composes them over an op-sqlite driver and an `expo/fetch` change feed.
+ * composes them over an expo-sqlite driver and an `expo/fetch` change feed.
  */
 /* oxlint-disable oxc/no-barrel-file -- (#419) intentional @centraid/client/replica/native public subpath; governance: allow-no-unjustified-suppressions stable cross-platform API boundary */
 export * from "./coordinator.js";
@@ -43,6 +43,29 @@ export {
   type GatewayAuth,
 } from "../gateway-auth.js";
 export * from "../vault-change-sse.js";
+// THE SEAT STORE, minus its hosts (#996 wave 3). The `replica/seat` barrel
+// re-exports the browser seat, its worker client and the OPFS storage probe,
+// which drag `Worker`, `navigator.storage` and the DOM into a React Native
+// typecheck; the phone supplies its own host — an expo-sqlite driver, the app's
+// document directory, and `expo/fetch` — over exactly the pieces below.
+export * from "./seat/applier.js";
+export * from "./seat/blob-presence.js";
+export * from "./seat/bootstrap.js";
+export * from "./seat/byte-policy.js";
+export * from "./seat/carry-over.js";
+export * from "./seat/driver.js";
+export * from "./seat/flag.js";
+export * from "./seat/http-snapshot-transport.js";
+export * from "./seat/outbox.js";
+export * from "./seat/seat-bootstrap-no-room-error.js";
+export * from "./seat/seat-drift-error.js";
+export * from "./seat/seat-intent-store.js";
+export * from "./seat/seat-rebootstrap-required-error.js";
+export * from "./seat/seat-snapshot-moved-error.js";
+export * from "./seat/state.js";
+export * from "./seat/watermark.js";
+export * from "./seat/worker-core.js";
+export * from "./seat/worker-protocol.js";
 export {
   isGatewayCapabilities,
   type GatewayCapabilities,

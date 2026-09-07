@@ -5,7 +5,7 @@
 // can exercise them.
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
-import { OpSqliteDriver } from "../replica/op-sqlite-driver";
+import { ExpoSqliteDriver } from "../replica/expo-sqlite-driver";
 import type { PendingUploadGroup } from "../replica/storage-accounting";
 import { webCryptoUploadCrypto } from "./crypto";
 import type { UploadCrypto } from "./crypto";
@@ -50,7 +50,7 @@ export class UploadQueue {
 
   static open(options: UploadQueueOptions): UploadQueue {
     const store = UploadQueueStore.create(
-      OpSqliteDriver.open({
+      ExpoSqliteDriver.open({
         name: UPLOAD_DB_NAME,
         ...(replicaStorageDirectory()
           ? { location: replicaStorageDirectory() }

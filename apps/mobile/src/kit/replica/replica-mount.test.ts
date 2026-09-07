@@ -88,7 +88,7 @@ vi.mock(import("../../lib/replica/native-hash") as Promise<unknown>, () => ({
 }));
 
 vi.mock(
-  import("../../lib/replica/op-sqlite-driver") as Promise<unknown>,
+  import("../../lib/replica/expo-sqlite-driver") as Promise<unknown>,
   () => ({ nativeReplicaDatabasePath: async () => "replica.sqlite3" })
 );
 

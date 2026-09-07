@@ -40,11 +40,11 @@ The vault open path exposes a `loadExtensions` hook ([`packages/vault/src/db.ts`
 
 The load is feature-detected and never fails the vault open. Semantic search uses `vec_distance_cosine` directly over the existing `enrich_embedding.vector` BLOBs — no `vec0` virtual table, so the extension stays strictly additive — and falls back to the brute-force cosine scan (`scanEmbeddings`) when the extension is unavailable; a parity test asserts both rankers agree.
 
-## Mobile op-sqlite vector support
+## Mobile expo-sqlite vector support
 
-The build flag rides the same `op-sqlite` config block as FTS5, and inherits its trap ([`apps/mobile/src/lib/replica/op-sqlite-build-config.test.ts`](../../apps/mobile/src/lib/replica/op-sqlite-build-config.test.ts)): the iOS podspec walks up to the **root** `package.json` (bun hoists op-sqlite) while Android's gradle reads **`apps/mobile/package.json`** — so `"op-sqlite": { "fts5": true, "sqliteVec": true }` must be declared in **both** files or one platform silently ships without vector search. The extended test pins both.
+The build flag rides the expo-sqlite plugin block in [`apps/mobile/app.config.ts`](../../apps/mobile/app.config.ts) alongside `enableFTS`, and it is declared **under `android:` only**: expo-sqlite 57.0.2 ships `android/vec/<abi>/vec.so` and no `vec.xcframework`, so `withSQLiteVecExtension` at the top level would point iOS's `bundledExtensions["sqlite-vec"]` at a bundle that is not in the tarball. iOS therefore has no sqlite-vec at all, and `ReplicaSqliteVecUnavailableError` is what says so.
 
-Nothing on device _uses_ vec yet: `probeSqliteVec()` is exported but deliberately not called at replica open (a build compiled before the native rebuild must still open for every non-vector feature). Offline semantic ranking over replicated vectors remains open; device-side model inference itself is dead by decision (E6, below), so any future offline ranking would score vectors the gateway already computed, never derive new ones on the phone.
+Nothing on device _uses_ vec yet: `probeSqliteVec()` is exported but deliberately not called at replica open (a build compiled before the native rebuild must still open for every non-vector feature), and the extension is not auto-loaded on either platform — JS must call `loadExtensionAsync` with the bundled path. Offline semantic ranking over replicated vectors remains open; device-side model inference itself is dead by decision (E6, below), so any future offline ranking would score vectors the gateway already computed, never derive new ones on the phone.
 
 ## The "derived data enriches, never gates" rule
 

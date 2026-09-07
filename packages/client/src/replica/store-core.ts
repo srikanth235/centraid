@@ -62,7 +62,7 @@ export type ReplicaBindValue = string | number | null;
 /**
  * The minimal synchronous SQLite surface the replica store is written over.
  * One adapter wraps `@sqlite.org/sqlite-wasm` (web worker); another wraps
- * `@op-engineering/op-sqlite` (React Native, in-process). Tests substitute a
+ * `expo-sqlite` (React Native, in-process). Tests substitute a
  * `node:sqlite` adapter to prove the store logic is driver-neutral.
  */
 export interface ReplicaSqliteDriver {
@@ -96,27 +96,30 @@ export interface ReplicaSqliteDriver {
    */
   synchronous?: "FULL" | "NORMAL";
   /**
-   * `DELETE`, and only from a seat that needs to SAY so (#922 B ruling).
+   * The journal mode this driver's locking assumptions need, from a seat that
+   * has one to state (#922 B ruling, widened in #996 wave 3).
    *
    * DELETE is SQLite's own default for an on-disk file, so asserting it costs
-   * a write at every open and buys nothing — except on the seat where two live
-   * handles share one file. That seat is the PHONE: `op-sqlite-driver.ts`
-   * opens a per-vault writer and a gateway-scoped multi-ATTACH reader over the
-   * same database, and rollback-journal locking is what makes the reader's
+   * a write at every open and buys nothing — except on a seat where more than
+   * one live handle shares one file. That seat is the PHONE. It said DELETE
+   * while a per-vault writer and a gateway-scoped multi-ATTACH reader shared a
+   * database, because rollback-journal locking is what made the reader's
    * SHARED lock and the writer's RESERVED lock interact the way its busy
-   * timeout assumes. WAL there would give the two handles different rules.
+   * timeout assumed. #996 wave 3 deleted that reader; what remains is the
+   * foreground writer and the background task, and WAL is the mode in which
+   * those two do not stall each other — hence a union rather than one word.
    *
    * ABSENT MEANS "take the file's default", which for every seat that has one
    * handle is DELETE already.
    */
-  journalMode?: "DELETE";
+  journalMode?: "DELETE" | "WAL";
   /**
    * Run a whole write batch OFF THE JS THREAD, in one transaction (#922 E1).
    *
    * A first-launch bootstrap page and a reconnect's edits are thousands of
    * statements; run synchronously they hold the JS thread for the whole
    * transaction and the app is frozen while they land. A driver that can hand
-   * the batch to its own thread (op-sqlite does) implements this, and the
+   * the batch to its own thread implements this, and the
    * store ships the page instead of executing it statement by statement.
    *
    * ABSENT MEANS SYNCHRONOUS. The store falls back to running the same
@@ -1116,7 +1119,7 @@ export class ReplicaSqliteStore {
 
   /**
    * Live SQLite footprint, for the Phone storage screen's per-vault database
-   * total. `dbstat` is a compile-time option op-sqlite does not ship, so this
+   * total. `dbstat` is a compile-time option the phone's build does not ship, so this
    * is the page arithmetic every build has: `freeBytes` is what a
    * {@link reclaimFreePages} pass would hand back to the filesystem.
    */
@@ -1255,9 +1258,9 @@ export class ReplicaSqliteStore {
    * that applies the mode rewrites an almost-empty file.
    *
    * Best effort by design. VACUUM needs an exclusive lock and this file is read
-   * through a second op-sqlite handle under `journal_mode=DELETE`; a busy
+   * through a second phone handle; a busy
    * database leaves the mode at NONE rather than failing to open. Journal mode
-   * is NOT touched here (see `op-sqlite-driver.ts`).
+   * is NOT touched here (see `expo-sqlite-driver.ts`).
    */
   private enableIncrementalVacuum(): void {
     try {
@@ -1272,7 +1275,7 @@ export class ReplicaSqliteStore {
    * Hand a large deletion's pages back after `clear()` or a scoped purge.
    *
    * `PRAGMA incremental_vacuum` yields ONE ROW PER FREED PAGE, so a driver that
-   * materializes rows (op-sqlite, node:sqlite) reclaims the whole freelist in
+   * materializes rows (expo-sqlite, node:sqlite) reclaims the whole freelist in
    * one call while sqlite-wasm's `exec` stops after the first. Hence the check
    * and the VACUUM fallback: it is portable, and right after a purge it rewrites
    * an almost-empty file. A database whose `auto_vacuum` flip never took has no

@@ -16,6 +16,11 @@ import { nativeSyncAllowed } from "../upload/native-policy";
 import { getActiveVaultLink, hydrateVaultLinks } from "../vault-links";
 import { selectBackgroundScopes } from "./background-scopes";
 import type { CachedBackgroundScope } from "./background-scopes";
+import {
+  nativeReplicaDatabasePath,
+  openMountedReplicaReaderDriver,
+  openNativeReplicaDriver,
+} from "./expo-sqlite-driver";
 import { requireMobileOfflineGateway } from "./mobile-gateway-compatibility";
 import { MultiVaultReplicaReader } from "./multi-vault-reader";
 import type { MountedReplicaScope } from "./multi-vault-reader";
@@ -25,11 +30,6 @@ import { nativeReplicaDigest, nativeReplicaIdFactory } from "./native-hash";
 import { createNativeReplicaSession } from "./native-session";
 import { flushNativeTraces } from "./native-trace";
 import { MOBILE_REPLICA_BOOTSTRAP_WINDOW } from "./offline-budgets";
-import {
-  nativeReplicaDatabasePath,
-  openMountedReplicaReaderDriver,
-  openNativeReplicaDriver,
-} from "./op-sqlite-driver";
 import { postPlacement } from "./placement-transport";
 
 const REPLICA_BACKGROUND_TASK = "centraid-replica-background-sync";

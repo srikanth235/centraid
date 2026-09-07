@@ -151,6 +151,26 @@ export default function createExpoConfig({
             "Centraid uses the camera to scan pairing QR codes, documents, cards, and receipts you choose to capture.",
         },
       ],
+      // The seat's engine (#996 wave 3). `useSQLCipher` is what makes the
+      // phone's SQLite 3.49.1 — `SEAT_SQLITE_FLOOR` — rather than the 3.50.3
+      // vendored beside it, and every byte the gateway ships has to clear that
+      // floor. `enableFTS` keeps fts5 compiled in: the sanitised snapshot's
+      // only surviving triggers are its FTS sync triggers, so a build without
+      // fts5 cannot open the file at all.
+      //
+      // `withSQLiteVecExtension` is ANDROID-ONLY on purpose: 57.0.2 ships
+      // `android/vec/<abi>/vec.so` and NO `vec.xcframework`, so asking for it
+      // on iOS points `bundledExtensions["sqlite-vec"]` at a bundle that is not
+      // in the tarball. It is not auto-loaded on either platform either —
+      // `probeSqliteVec` stays the gate before a vector table is touched.
+      [
+        "expo-sqlite",
+        {
+          useSQLCipher: true,
+          enableFTS: true,
+          android: { withSQLiteVecExtension: true },
+        },
+      ],
       "expo-video",
       // Photos' map (#816): MapKit iOS + MapLibre/OpenFreeMap Android; NO location permission.
       "expo-maps",

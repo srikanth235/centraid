@@ -12,13 +12,13 @@ import type {
 
 import { pathToFileUri } from "../../../modules/centraid-storage";
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
+import { nativeReplicaDatabasePath } from "../../lib/replica/expo-sqlite-driver";
 import { fetchWithinReplyDeadline } from "../../lib/replica/gateway-deadline";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import type { MobileGatewayFeatures } from "../../lib/replica/mobile-gateway-compatibility-core";
 import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
 import { MAX_MOUNTED_NATIVE_SCOPES } from "../../lib/replica/offline-budgets";
-import { nativeReplicaDatabasePath } from "../../lib/replica/op-sqlite-driver";
 import { LAST_BASE, noteActiveIdentity } from "../../lib/vault-links";
 import type { VaultLink } from "../../lib/vault-links";
 import { Store } from "../../storage";
