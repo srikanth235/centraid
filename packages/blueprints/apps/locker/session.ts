@@ -2,9 +2,21 @@
 // hiding"). Pure and DOM-free: every rule below was a rule a React component
 // used to hold inline, where it could not be read and could not be tested.
 //
+// THE SESSION IS THE SHELL'S NOW (#996, ruling W6-D2). It used to be a token
+// this app held, minted by a gateway that checked a passphrase this app
+// collected. Both halves were wrong once `K` moved to the seat: an app that
+// collects a passphrase is an app that can keep it, and a token that buys a
+// server-side decryption is a token that buys plaintext from a gateway that
+// should no longer be able to produce it. What is left here is the app's OWN
+// half — which phase to draw, and what to forget — read off
+// `window.centraid.locker.state()` and never from a credential.
+//
 // FIVE MINUTES, SLIDING, MEMORY ONLY. The app BOOTS LOCKED — `bootSession()`
 // has no branch that returns an open session — and a hidden window ends the
-// session at once rather than at the next timer tick.
+// session at once rather than at the next timer tick. The shell runs the same
+// clock over `K`; this one governs the PLAINTEXT THIS APP IS HOLDING, which is
+// a different thing in the same window and has to be dropped whether or not
+// the shell got there first.
 //
 // AND THE STRUCTURAL RULE THIS FILE EXISTS FOR: no secret value may reach a
 // durable store, a log line or a search structure on this seat. That is not a
@@ -17,9 +29,7 @@
 
 import { clearSecretClipboard } from "./clipboard.ts";
 import type { StagedRow } from "./import-model.ts";
-import type { Permit, PermitRequest } from "./permits.ts";
 import type {
-  AuthPayload,
   ItemDraftSeed,
   LockerAccessEntry,
   LockerDetail,
@@ -66,25 +76,23 @@ export const SESSION_IDLE_MS = 5 * 60 * 1000;
 /**
  * Where the member stands with respect to the boundary.
  *
- *   `unknown` — the status read has not answered; nothing is browsable and
- *               nothing claims to be, because "locked" and "we have not asked"
- *               are different facts and only one of them offers a passphrase
- *               field that will work.
- *   `setup`   — no passphrase exists yet. The first-run gate IS day one.
- *   `locked`  — a passphrase exists; no session does.
- *   `open`    — a live session, sliding.
+ *   `unknown` — the shell has not answered yet, or offers no Locker door at
+ *               all. Nothing is browsable and nothing claims to be: "locked"
+ *               and "we have not asked" are different facts, and only one of
+ *               them is fixed by unlocking.
+ *   `locked`  — the shell holds `K` and the member has not unlocked.
+ *   `open`    — the shell's session is live; a reveal will answer.
+ *
+ * `setup` is GONE. It meant "no passphrase exists yet", which was a question
+ * for the app while the app collected the passphrase. Enrolment is the
+ * shell's — it is what happens when a device receives `K` — and an app that
+ * still drew a first-run gate would be drawing a gate it cannot honour.
  */
-export type SessionPhase = "unknown" | "setup" | "locked" | "open";
+export type SessionPhase = "unknown" | "locked" | "open";
 
 export interface SessionState {
   phase: SessionPhase;
-  /** The host's memory-session token. Never persisted, never logged. */
-  token: string | null;
-  /** Has a passphrase been configured? `null` until the status read answers. */
-  configured: boolean | null;
-  /** An authentication request is in flight. */
-  busy: boolean;
-  /** The refusal, in the host's own words. Empty when there is none. */
+  /** The refusal to show, in the door's own words. Empty when there is none. */
   error: string;
   /** Wall clock of the last member activity, for the sliding window. */
   lastActivityAt: number;
@@ -92,85 +100,29 @@ export interface SessionState {
 
 /** Boots LOCKED, always. There is no argument that opens this. */
 export function bootSession(now: number = Date.now()): SessionState {
-  return {
-    phase: "unknown",
-    token: null,
-    configured: null,
-    busy: false,
-    error: "",
-    lastActivityAt: now,
-  };
-}
-
-/** The phase a `configured` answer implies when there is no live session. */
-function restingPhase(configured: boolean | null | undefined): SessionPhase {
-  if (configured === undefined || configured === null) return "unknown";
-  return configured ? "locked" : "setup";
+  return { phase: "unknown", error: "", lastActivityAt: now };
 }
 
 /**
- * Apply the boot-time `status` answer. A host MAY hand back an already
- * user-present in-memory session (the local app-boot harness exercises that
- * path); a persisted token can never do so, because the gateway forgets them
- * on restart.
+ * Apply the shell's lock state (`window.centraid.locker.state()`).
+ *
+ * `null` is not "locked": it is a host with no Locker door — an older shell,
+ * or a surface that cannot unseal locally — and the app must say so rather
+ * than offer an unlock that will never arrive.
  */
-export function afterStatus(
+export function afterLockState(
   state: SessionState,
-  payload: AuthPayload,
+  door: { status: "locked" | "unlocked" } | null,
   now: number = Date.now()
 ): SessionState {
-  const resumed = Boolean(payload.authenticated && payload.sessionToken);
+  if (!door) return { ...state, phase: "unknown", lastActivityAt: now };
   return {
     ...state,
-    phase: resumed ? "open" : restingPhase(payload.configured),
-    token: resumed ? (payload.sessionToken ?? null) : null,
-    configured: payload.configured ?? state.configured,
-    busy: false,
-    error: payload.ok === false ? (payload.message ?? "") : "",
+    phase: door.status === "unlocked" ? "open" : "locked",
+    // A lock is not a failure, so it clears the last refusal with it.
+    error: door.status === "unlocked" ? state.error : "",
     lastActivityAt: now,
   };
-}
-
-/** Apply an `unlock` or `configure` answer. */
-export function afterUnlock(
-  state: SessionState,
-  payload: AuthPayload,
-  now: number = Date.now()
-): SessionState {
-  const configured = payload.configured ?? state.configured;
-  if (!payload.ok || !payload.sessionToken) {
-    return {
-      ...state,
-      phase: restingPhase(configured),
-      token: null,
-      configured,
-      busy: false,
-      error: refusalText(payload),
-      lastActivityAt: now,
-    };
-  }
-  return {
-    ...state,
-    phase: "open",
-    token: payload.sessionToken,
-    // A successful unlock proves a passphrase exists, whatever the payload
-    // said: a `configure` answer that omitted the flag must not leave the app
-    // believing it is still at first run.
-    configured: true,
-    busy: false,
-    error: "",
-    lastActivityAt: now,
-  };
-}
-
-/** The words a refusal wears. The host's message wins; a rate limit falls back
- *  to its own backoff sentence; anything else states the plain fact. */
-export function refusalText(payload: AuthPayload): string {
-  if (payload.message) return payload.message;
-  if (payload.retryAfterMs) {
-    return `Try again in ${Math.ceil(payload.retryAfterMs / 1000)} seconds.`;
-  }
-  return "The passphrase was not accepted.";
 }
 
 /** Mark activity. Sliding, not extending: the window restarts from `now`. */
@@ -201,20 +153,20 @@ export function remainingIdleMs(
   return Math.max(0, SESSION_IDLE_MS - (now - state.lastActivityAt));
 }
 
-/** End the session. The phase falls back to what the passphrase facts imply,
- *  so locking never strands the member on a first-run gate they have passed. */
+/**
+ * End the app's session: forget the plaintext, and draw the lock.
+ *
+ * This does NOT lock the shell. The shell's session is the member's and is
+ * ended on the shell's own surface; what the app controls is the plaintext it
+ * is holding, and it drops that on its own clock as well as on the shell's —
+ * the two windows are the same length and neither is allowed to be the only
+ * one that runs.
+ */
 export function lock(
   state: SessionState,
   now: number = Date.now()
 ): SessionState {
-  return {
-    ...state,
-    phase: restingPhase(state.configured),
-    token: null,
-    busy: false,
-    error: "",
-    lastActivityAt: now,
-  };
+  return { ...state, phase: "locked", error: "", lastActivityAt: now };
 }
 
 /** A hidden window ends a session AT ONCE — not at the next timer tick. */
@@ -222,8 +174,8 @@ export function locksOnVisibility(visibility: string): boolean {
   return visibility === "hidden";
 }
 
-/** Is anything browsable? False at setup, while locked, and before the status
- *  read answers — the band, the rail and every list read this. */
+/** Is anything browsable? False while locked and before the door answers —
+ *  the band, the rail and every list read this. */
 export function isOpen(state: SessionState): boolean {
   return state.phase === "open";
 }
@@ -244,21 +196,15 @@ export function isOpen(state: SessionState): boolean {
  * leaving a list standing behind a lock screen.
  */
 export interface SecretBag {
-  /** The host's memory-session token. */
-  sessionToken: string | null;
   /** The one secret-bearing payload in this app — the open item's fields. */
   detail: LockerDetail | null;
-  /** Plaintext values a live permit revealed, by field. Since #873 a sealed
+  /** Plaintext the shell's door returned, by field. Since #873 a sealed
    *  SIDECAR row's plaintext lands here too, under the namespaced key
    *  `field-model` mints for it — one map, so one wipe still empties every
    *  revealed value on the screen whatever kind of row it came off. */
   revealed: Record<string, string>;
   /** When each of those landed, for the countdown. */
   revealedAt: Record<string, number>;
-  /** The live one-shot permit, if any. */
-  permit: Permit | null;
-  /** What the gate is standing open for. */
-  permitRequest: PermitRequest | null;
   /** The add / edit form's seed, which can hold a typed secret. */
   editSeed: ItemDraftSeed | null;
   /** The generator's current output — a secret nobody has saved yet. */
@@ -287,12 +233,9 @@ export type SecretBearingKey = keyof SecretBag;
  * `session.test.ts`, and a field added to one without the other fails there.
  */
 export const SECRET_BEARING_KEYS: readonly SecretBearingKey[] = [
-  "sessionToken",
   "detail",
   "revealed",
   "revealedAt",
-  "permit",
-  "permitRequest",
   "editSeed",
   "generated",
   "searchTerm",
@@ -306,12 +249,9 @@ export const SECRET_BEARING_KEYS: readonly SecretBearingKey[] = [
 /** What each secret-bearing field is when it holds nothing. */
 export function emptySecretBag(): SecretBag {
   return {
-    sessionToken: null,
     detail: null,
     revealed: {},
     revealedAt: {},
-    permit: null,
-    permitRequest: null,
     editSeed: null,
     generated: "",
     searchTerm: "",

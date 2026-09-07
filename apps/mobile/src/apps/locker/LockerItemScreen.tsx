@@ -63,11 +63,9 @@ import {
   UNSTAR_ITEM,
 } from "./locker-seat-copy";
 import {
-  askLockerPermit,
+  revealLockerField,
   closeLockerItem,
   concealLockerField,
-  confirmLockerPermit,
-  dismissLockerPermit,
 } from "./locker-store";
 import { lockerPendingLine } from "./locker-view-model";
 import { starLockerItem, trashLockerItem } from "./locker-writes";
@@ -77,7 +75,6 @@ import {
   LockerStrengthField,
   LockerTotpField,
 } from "./LockerFields";
-import LockerPermitGate from "./LockerPermitGate";
 import LockerScreen from "./LockerScreen";
 import { useLockerVault } from "./useLockerVault";
 
@@ -111,7 +108,7 @@ export default function LockerItemScreen({
   const row = vault.rows.find((candidate) => candidate.item_id === itemId);
 
   const ask = useCallback(
-    (field: string) => askLockerPermit({ itemId, field }),
+    (field: string) => void revealLockerField({ itemId, field }),
     [itemId]
   );
 
@@ -311,15 +308,6 @@ export default function LockerItemScreen({
         ) : null}
         {row ? null : <Text style={styles.body}>{OUTSIDE_WINDOW}</Text>}
       </ScrollView>
-
-      <LockerPermitGate
-        busy={vault.permitBusy}
-        error={vault.permitError}
-        field={vault.bag.permitRequest?.field ?? null}
-        itemTitle={displayText(title)}
-        onCancel={dismissLockerPermit}
-        onConfirm={(secret) => void confirmLockerPermit(secret)}
-      />
     </LockerScreen>
   );
 }

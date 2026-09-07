@@ -86,12 +86,6 @@ export const LOCAL_TABLES: ReadonlyMap<string, string> = new Map([
   // about a seat, never a fact the seat carries about itself.
   ["access_device_secret", "a device's key material and gateway sync cursor"],
   ["access_agent_secret", "an enrolled agent's host-side enrollment key"],
-  // By ruling (L-alias's neighbour, decisions.md): the locker's own unlock
-  // credential is how THIS installation is opened, not a secret it holds.
-  [
-    "locker_auth_credential",
-    "this installation's unlock credential, by ruling",
-  ],
   // The Locker key plane's id register (#996, R13). Which key `K` currently
   // is, and when this host retired the one before, is a fact about THIS
   // gateway's custody — the key material itself never touches the file, and a

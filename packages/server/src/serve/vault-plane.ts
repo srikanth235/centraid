@@ -107,7 +107,6 @@ import type {
   HostBootstrap,
   InvokeOutcome,
   InvokeRequest,
-  LockerAuthRequest,
   ParkedSummary,
   ReadRequest,
   RefRequest,
@@ -1638,7 +1637,6 @@ export class VaultPlane {
           case "changes":
           case "resolve":
           case "reveal":
-          case "authenticate":
           case "content":
             throw new GatewayError(
               "access",
@@ -1724,24 +1722,6 @@ export class VaultPlane {
           )
         );
       }
-      if (call.op === "authenticate") {
-        // MUST be awaited: `asVaultCallResult` takes `() => unknown`, so an
-        // unawaited promise typechecks and reaches the app as an empty object
-        // — a silent wrong answer on an AUTH path, with no compile error.
-        if (appId !== "locker") {
-          return asVaultCallResult(() => {
-            throw new GatewayError(
-              "identity",
-              "Locker authentication is available only to Locker"
-            );
-          });
-        }
-        return asVaultCallResultAsync(() =>
-          this.gateway.authenticateLocker(
-            call.payload as unknown as LockerAuthRequest
-          )
-        );
-      }
       if (call.op === "invoke") {
         return this.invokeQueued(cred, {
           ...withoutForgedIdentity(call.payload as unknown as InvokeRequest),
@@ -1791,8 +1771,6 @@ export class VaultPlane {
               cred,
               call.payload as unknown as RevealRequest
             );
-          case "authenticate":
-            throw new Error("authenticate is handled on the async path above");
           case "changes":
             throw new GatewayError(
               "access",
@@ -1911,11 +1889,6 @@ export class VaultPlane {
               return this.gateway.reveal(
                 cred,
                 call.payload as unknown as RevealRequest
-              );
-            case "authenticate":
-              throw new GatewayError(
-                "access",
-                "Locker authentication is an interactive app surface"
               );
             case "changes":
               return this.gateway.changes(

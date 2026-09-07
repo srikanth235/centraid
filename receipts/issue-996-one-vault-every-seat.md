@@ -4541,6 +4541,91 @@ there is no index on `(table_name, pk)` at all, and the golden corpus is
 re-frozen in the same commit through the repo's own tooling:
 
 ```
+
+## Wave 6 — the seats adopt the door; the permit goes
+
+The first half of the W6-D2 deletions: every screen on every seat now reveals through the shell's door, and the permit plane it replaced is gone. The gateway's `authenticate` op still exists after this commit and has no caller left — it is deleted next, which is the wave's own ordering: boundary first, gate last.
+
+### The permit was three things, and each ends differently
+
+- **The confirmation** is gone outright. `confirmPermit` / `confirmLockerPermit` collected a passphrase to buy a token; there is no token to buy, and an app collecting a passphrase is the thing W6-D2 exists to stop.
+- **The token** is gone with the read it bought. `openWithPermit` sent `auth_session` + `item_token` and took plaintext off the answer; `queries/item.ts` unseals nothing now, for any caller, and a stale client still sending those inputs gets metadata rather than plaintext or an error.
+- **The thirty seconds** stays. It moved to `reveal.ts` as `REVEAL_LIFE_MS`, because the reason for it was never the token's lifetime — it was the shoulder standing behind the member — and a value still takes itself off the screen whether or not anyone looked.
+
+### Opening an item is free now
+
+`openGate` opened a permit; it opens the item. The pane is metadata and ciphertext, so it paints while the Locker is locked, and every secret on it stays hidden until asked for by name. One fewer prompt, and the one that remains is about a value rather than about a screen — which is also why the first-run route and the `setup` gate are gone from `shelves.ts`: thirteen routes became twelve, and "no passphrase yet" is not a question an app that collects no passphrase can ask.
+
+### Two inversions, said out loud
+
+- **The access history is no longer behind the lock.** It used to refuse without a session. It carries no secret value, it is the record of who looked, and with the gateway no longer decrypting it is the ONLY evidence a reveal happened — so hiding it behind the boundary it audits would mean a member cannot ask "what was read on this device" without first unlocking the thing they are worried about.
+- **`autofill-candidates` no longer refuses while locked.** Its gate read "a paired device could otherwise map every login's item_id + url while locked", which was true of a device that had to ASK the gateway to enumerate. A seat holds `vault.db` whole (R1) and those columns are plaintext there by design — that is what lets a locked Locker list and search offline — so the enumeration it refused is a local read now and refusing it here refuses nothing. **Open question for the coordinator**: the Companion is a browser extension, holds no vault, and was the other caller. Its candidate list needs a gate on the Companion's own side; naming it rather than assuming the seat argument covers it.
+
+### The phone's door
+
+There is no bridge to cross on the phone — the RN app IS the shell — so `locker-door.ts` joins commit 3's two halves directly: `K` behind `requireAuthentication`, and `@centraid/client/locker`'s AES-GCM envelope. `unlockLockerDoor` is separate from `revealLockerRow` on purpose: a reveal writes a receipt, and unlocking opens no secret, so conflating them would put a row in the audit trail saying someone looked at something when nobody did. `LockerWall` lost its passphrase field and its first-run mode; a test asserts there is no `input` on that screen at all.
+
+### Suites rewritten, not stripped
+
+Every user-visible state the permit suites proved is proved through the new path: locked (the wall collects nothing, the door reads nothing and records nothing), revealed (the door's plaintext lands in the bag, one field, with its countdown), refused (`stale_key` shows "re-enter this secret" and does NOT lock — a rotation is not a lock), and the receipt (awaited before the plaintext, on both seats). `permits.test.ts` became `reveal.test.ts`, keeping the clock and dropping the token arithmetic that has nothing left to compute.
+
+### Files
+
+- `packages/blueprints/apps/locker/app-root.tsx` — `reveal` through the door, `openItemDetail`, the lock subscription; `submitPassphrase` / `ask` / `confirmPermit` / `openWithPermit` gone
+- `packages/blueprints/apps/locker/session.ts` — `afterLockState` replaces `afterStatus` / `afterUnlock` / `refusalText`; no token, no `configured`, no `busy`
+- `packages/blueprints/apps/locker/session.test.ts` — the phases off the door, and that the state holds no credential in any of them
+- `packages/blueprints/apps/locker/permits.ts` · `packages/blueprints/apps/locker/permits.test.ts` — deleted
+- `packages/blueprints/apps/locker/components/PermitGate.tsx` — deleted (its plain confirm lifted into `Confirm.tsx`)
+- `packages/blueprints/apps/locker/queries/auth.ts` — deleted, with its `auth` entry in `app.json`
+- `apps/mobile/src/apps/locker/LockerPermitGate.tsx` — deleted
+- `packages/blueprints/apps/locker/reveal.ts` — the surviving clock and the sidecar ADDRESS
+- `packages/blueprints/apps/locker/reveal.test.ts` — replacing `permits.test.ts`: the clock stays, the token arithmetic goes
+- `packages/blueprints/apps/locker/components/Lock.tsx` — a sentence, not a field; `locked` and `unavailable` are different facts
+- `packages/blueprints/apps/locker/components/Confirm.tsx` — the plain "are you sure" lifted out of `PermitGate.tsx`
+- `packages/blueprints/apps/locker/shelves.ts` — twelve routes; the `setup` gate goes
+- `packages/blueprints/apps/locker/routes.test.ts` — twelve, and one gate that outranks nothing
+- `packages/blueprints/apps/locker/view-copy.ts` — `LOCK_UNAVAILABLE_BODY`, `REVEAL_NO_DOOR`, `CONFIRM_CANCEL`; the passphrase strings go
+- `packages/blueprints/apps/locker/queries/item.ts` — unseals nothing, for any caller
+- `packages/blueprints/apps/locker/queries/access.ts` — no session check; the history is not behind the lock
+- `packages/blueprints/apps/locker/queries/autofill-candidates.ts` — no unlock gate; the seat holds the vault whole
+- `packages/blueprints/apps/locker/app.json` — the `auth` query and the permit inputs
+- `packages/blueprints/apps/locker/surface-acts.ts` — the access read carries no token
+- `packages/blueprints/apps/locker/field-model.ts` · sidecar targets from `reveal.ts`
+- `packages/blueprints/apps/locker/components/Fields.tsx` — the reveal clock's new home
+- `packages/blueprints/apps/locker/app-inline.tsx` — the `auth` query leaves the inline registry
+- `packages/blueprints/apps/locker/states.test.tsx` — locked, and a host with no door
+- `packages/blueprints/apps/locker/queries-reveal-access.test.ts` — the query unseals nothing; the history is readable while locked
+- `packages/blueprints/src/app-boot-harness.ts` — the harness offers the door
+- `packages/blueprints/src/query-handlers.test.ts` — candidate enumeration asks no auth plane
+- `packages/blueprints/src/app-entity-tripwire.ts` · `packages/blueprints/src/app-entity-tripwire.test.ts` — the phone's three door files registered
+- `packages/client/src/locker/index.ts` — the subpath's barrel
+- `packages/client/src/index.ts` · `packages/client/package.json` — `@centraid/client/locker`, importable without the web shell
+- `apps/mobile/src/apps/locker/locker-door.ts` — the phone's door
+- `apps/mobile/src/apps/locker/locker-store.ts` — reveals through the door; no token, no passphrase
+- `apps/mobile/src/apps/locker/locker-gateway.ts` — `lockerAuth` goes, `lockerRevealReceipt` arrives
+- `apps/mobile/src/apps/locker/locker-surfaces.ts` — the access read carries no token
+- `apps/mobile/src/apps/locker/LockerWall.tsx` — a verb, not a field; two walls, not three
+- `apps/mobile/src/apps/locker/LockerScreen.tsx` — one gate; the `setup` route goes
+- `apps/mobile/src/apps/locker/LockerItemScreen.tsx` — reveals through the store; the permit overlay goes
+- `apps/mobile/src/apps/locker/LockerItemsView.tsx` · `apps/mobile/src/apps/locker/LockerHome.tsx` — the enrol offer goes
+- `apps/mobile/src/apps/locker/LockerFields.tsx` — the reveal clock from `reveal.ts`
+- `apps/mobile/src/apps/locker/locker-seat-copy.ts` — `DEVICE_FORGET` replaces the credential words
+- `apps/mobile/src/apps/locker/locker-store.test.ts` — the door, the lock, the stale-key refusal
+- `apps/mobile/src/apps/locker/locker-surfaces.test.ts` — the history reads while locked
+- `apps/mobile/src/apps/locker/LockerWall.test.tsx` — the wall collects nothing
+- `apps/mobile/src/apps/locker/LockerFields.test.tsx` — reveal asks, it does not open
+- `apps/mobile/src/apps/locker/LockerItemsView.test.tsx` — no credential to enrol
+- `apps/mobile/src/apps/locker/locker-airplane.test.ts` · `apps/mobile/src/apps/locker/locker-export.test.ts` — the detail read still needs the radio; the reveal does not
+
+### Gates
+
+```
+bunx vitest run packages/blueprints packages/client/src   # 501 files, 9674 passed
+bunx vitest run src/apps/locker --root apps/mobile        # 16 files, 123 passed
+bunx tsc -p apps/mobile --noEmit                          # clean
+bun run governance < /dev/null
+bun run check:push:static                                 # stamped on the committed tree
+```
 bun run golden-vault:freeze -- --label issue-929
   # froze issue-929 — 18 table(s), 182 row(s), schema v6 (ontology 1.0)
 ```
@@ -4618,6 +4703,61 @@ plane, not seats+apps, and it is reported rather than absorbed.
   the optimistic title — `content_uri`, a synthetic field — would rebuild the
   mirror under a different name. The owning row has the title; the overlay
   reads it there.
+
+## Wave 6 — the gate goes
+
+The second half of the W6-D2 deletions, and the last of the wave's ordering: the boundary was demonstrated on each seat, the screens adopted it, and only now does the gate it replaced come out.
+
+### What went
+
+`locker-auth.ts` (604 lines: the scrypt-over-HMAC verifier, the memory sessions, the one-shot item permits), `LockerAuthentication` and its two gateway methods, the `authenticate` vault op and its four call sites (`vault-plane.ts`, `vault-bridge.ts`, `runner.ts`, `inline-query-ctx-core.ts`), the op's declaration on the kit surface, and `locker_auth_credential` as **rung seven**.
+
+**The table is a rung, not a JS pass**, and dropping it is not housekeeping: a scrypt verifier that nothing verifies against is not dormant, it is a standing offer to whoever finds the file. Nothing recoverable goes with it — the passphrase itself was never stored.
+
+### What did NOT go, and why
+
+**`gateway.reveal` stays; its LOCKER ARM does not.** The ruling's words are "the server never unseals a Locker ROW for a client again", and that is narrower than deleting the door — deliberately. Under [W6-D1](#decisions--wave-6-what-the-gate-deletion-covers) the §293 sealed-column class still carries `sync.connection_credential`'s five broker-token columns and the ext band's declared lists, and the broker must still be able to inject a token it is holding for the member. So `reveal` refuses the `locker` **schema**, before any row is read, for every principal including the owner on their own device. If the answer were "it depends", the boundary would be an authorization question again rather than a place the key is not.
+
+### The Companion, which this breaks, said plainly
+
+`autofill-item.ts` asked the gateway to unseal a password for an origin-matched login. It cannot any more, and it cannot decrypt locally either: the Companion is a browser extension, it holds no vault, and it must not be handed `K` — a surface that could read the key could exfiltrate it, with no receipt, because nothing was revealed. The handler now returns the MATCH and a stated reason rather than a blank answer, because "here is the login, the value needs a device that holds the key" and "this page does not match" are different facts.
+
+**Open question, blocking, for the coordinator**: browser fill needs a host that already holds `K` behind the member's unlock — the desktop shell is the obvious candidate — and wiring that is a product decision, not a mechanical deletion. The same question covers `autofill-candidates`, whose unlock gate went for the seat-side reason given in the previous section.
+
+### Suites: what each rewritten test still proves
+
+`locker-sidecar-reveal.test.ts` proved the permit's arithmetic — one shot, the owning item's token, a trashed item's sidecars, and no existence oracle. Every one was a rule about who may make the gateway produce plaintext, and the gateway does not produce it. The file now proves the property that replaces all of them (the owner is refused, a sidecar is refused identically, a missing row refuses identically so there is still no oracle, the refusal is receipted and carries no value) plus the half W6-D1 keeps: `sync.connection_credential` still reveals.
+
+`sealed.test.ts`, `seal-custody.test.ts` and `portable-sealed-custody.test.ts` used `gw.reveal` as a convenient way to look inside a sealed cell while proving something else — that a reseal rotated every cell, that an interrupted rotation heals, that a `«sealed»` round-trip did not overwrite the secret, that a staged CSV published ciphertext, that a portable import re-sealed under the TARGET's key. Those claims are about WHAT IS IN THE CELL, so they now read it with `unsealCell` (`owner-vault.test-fixtures.ts`) and survive the door's refusal instead of being deleted with it. The reseal test gained an assertion it was missing: the OLD key no longer opens the rotated cell.
+
+`vault-plane-app-bridge.test.ts` proved the permit's expiry, that an `authenticate` answer was settled rather than a promise, and that the op was Locker-only. One property replaces them: the bridge refuses the schema for the one caller that held the reveal scope, and the op is gone from the bridge entirely — asserted through the bridge rather than off the type, because a runtime arm left behind after a type was narrowed is exactly what a deletion misses.
+
+### Files
+
+- `packages/vault/src/gateway/locker-auth.ts` — deleted
+- `packages/vault/src/gateway/locker-auth.test.ts` — deleted
+- `packages/vault/src/gateway/gateway.ts` — the locker arm of `reveal`; `authenticateLocker`, `authorizeLockerReveal`, `enforceLockerReveal`, `lockerOwningItemId`, `LOCKER_SIDECAR_ENTITIES`
+- `packages/vault/src/index.ts` — the plane's exports
+- `packages/vault/src/schema/domains-locker.ts` — `LOCKER_AUTH_DROP_DDL`
+- `packages/vault/src/schema/migrate.ts` · `packages/vault/src/schema/migrate.test.ts` — rung seven; `user_version` 6 → 7
+- `packages/vault/src/schema/private-tables.ts` · `packages/vault/src/schema/local-tables.ts` · `packages/vault/src/schema/migrate.test-helpers.ts` — the table leaves every register
+- `packages/vault/src/gateway/owner-vault.test-fixtures.ts` — `unsealCell`
+- `packages/vault/src/gateway/locker-sidecar-reveal.test.ts` — the refusal, and the class W6-D1 keeps
+- `packages/vault/src/gateway/sealed.test.ts` · `packages/vault/src/gateway/seal-custody.test.ts` · `packages/vault/src/gateway/portable-sealed-custody.test.ts` — direct cell reads
+- `packages/server/src/serve/vault-plane.ts` · `packages/server/src/engine/handlers/vault-bridge.ts` · `packages/server/src/engine/worker/runner.ts` — the `authenticate` op and its arms
+- `packages/server/src/serve/vault-plane-app-bridge.test.ts` · `packages/server/src/backup/backup.integration.test.ts` · `packages/server/src/serve/vault-plane-wal.test.ts` · `packages/server/src/serve/outbox-executor.test.ts` · `packages/server/src/engine/stores/gateway-db.test.ts` — rewritten to the refusal, to direct cell reads, and to rung seven
+- `packages/client/src/replica/inline-query-ctx-core.ts` · `packages/blueprints/types/centraid.d.ts` — the op leaves the kit surface
+- `packages/blueprints/apps/locker/queries/autofill-item.ts` — the Companion refusal, with its reason and its match
+
+### Gates
+
+```
+bunx vitest run packages/vault/src        # 207 files, 1676 passed, 2 skipped
+bunx vitest run packages/blueprints       # 213 files, 7066 passed
+bunx vitest run packages/server/src       # 384 passed; environmental failures only
+bun run governance < /dev/null
+bun run check:push:static                 # stamped on the committed tree
+```
 ## CI fix — the declared-writes gate reads the whole registry again
 
 `bun run lint:engine-conformance` was red in the `gates` lane:
@@ -5251,3 +5391,80 @@ than what is above, and none of the following should be read as done:
   `tally_nudge.as_of_minor`, and the deletion of `acceptTruncation` /
   `UNBOUNDED_READ` / `truncated` / `appliedLimit` from `read-plan.ts`,
   `replica/types.ts`, `centraid.d.ts` and the protocol.
+## Wave 8 — open question 7: a link is a channel, so it stops carrying a bag
+
+### The answer to "what consumes `permissions`" is: nothing
+
+`vault_links.permissions_json` was read in exactly one place (`vault-link-row.ts:141`, `toLink`), and every reader downstream of it reached for one key — `commonsPartyIds`, a `vaultId → partyId` map. That is not a permission. It is **who each side of the link is**, which is link identity, and since [#903](https://github.com/srikanth235/centraid/issues/903) a link is a **channel** and not a permission slip (R17). So the column goes, and what it actually held gets a column that says so: `party_ids_json`, parsed to `Record<string, string>` by `parsePartyIds`, which is where the narrowing lives.
+
+**It was also writable by the far side, which is the part worth stating.** Both hello handlers — the server's `/link/redeem` and the client's `redeemLinkTicket` — spread the peer's inbound `permissions` object into this gateway's row verbatim. Nothing read the extra keys, and "nothing reads it yet" is the only reason that was not a hole; a column named `permissions` on a row a peer can write is an invitation for the next reader to find a permission there. The peer's hello now contributes exactly one fact — the party id for its own vault — and a value that is not a party id does not survive the parse.
+
+**The wire field went with the column, both directions.** An earlier draft kept `permissions` on the redeem *response* for peer compatibility. Pre-1.0 there are no compatibility paths, and the field was dead on arrival in any case: `redeemLinkTicket` never reads `body.permissions`, and the `redeem` handler never reads `body.partyIds` (it takes `ownerPartyId`). Both are deleted, and `RedeemLinkTicketDeps.partyIds` with them — no caller ever passed it.
+
+Red first: `peer-plane.test.ts` sends a hello carrying both spellings of the old bag plus `{ admin: true }` and a `commonsPartyIds` entry claiming a party id for the *local* vault, and asserts the stored row is `{ [PEER_VAULT]: "party_priya" }` and the reply has neither field. It failed on the reply's `permissions` before the deletion.
+
+### Ruling W6-D3 — the Companion fills through the shell's door, and never holds `K`
+
+Recorded here at the root's direction, closing the blocking question W6 left in *The Companion, which this breaks, said plainly*.
+
+The Companion browser extension is a **client of the desktop shell**. It never holds `K` and never holds a permit. Browser fill goes through the shell's locker door — `window.centraid.locker.reveal({ rowId })`, its receipt awaited, a typed `locked` refusal when the seat's unlock boundary has not been crossed — carried over the extension's existing local bridge, **one row's plaintext per fill**. `autofill-item.ts` keeps returning the match plus the stated reason on seats with no shell, which is what W6 left it doing, and `autofill-candidates` stays ungated.
+
+**The wiring is a named seam, not wave-8 work**, because the door does not exist yet: W6 deleted the gateway's locker reveal arm and put no `locker.reveal` on the kit surface in its place. Building it touches `packages/client/src/replica/inline-query-ctx-core.ts` and `packages/blueprints/types/centraid.d.ts` (the door on the kit surface), `packages/client/src/react/shell/` (the unlock boundary the door awaits), `apps/extension/src/companion-api.ts` and `apps/extension/src/worker-core.ts` (the bridge call and its `locked` arm), and `packages/server/src/serve/companion-access.ts` (which no longer serves plaintext). That is a wave of its own.
+
+### Every file this commit touches
+
+- `packages/server/src/serve/gateway-schema.ts` — `vault_links.permissions_json` **deleted**; `party_ids_json` in its place, with why
+- `packages/server/src/serve/vault-link-row.ts` — `VaultLink.permissions` / `LinkedPeer.permissions` / `PeerLinkInput.permissions` → `partyIds`; `VaultLinkRow.permissions_json` → `party_ids_json`; new `parsePartyIds`; `partyIdForLinkedVault` and `peerViewOf` read the map directly
+- `packages/server/src/serve/vault-links-store.ts` — the three writes and the `recordCommonsParties` upsert on the new column
+- `packages/server/src/serve/peer-link-client.ts` — `RedeemLinkTicketDeps.permissions` **deleted** (no caller); the `partyIds` hello field **deleted** (no reader); the far side's bag no longer spread into storage
+- `packages/server/src/routes/peer-plane.ts` — the inbound spread **deleted**; the `permissions` response field **deleted**
+- `packages/server/src/routes/peer-plane.test.ts` — the red-first case above
+- `receipts/issue-996-one-vault-every-seat.md` — this section
+
+### Gates
+
+```
+bunx vitest run packages/server/src/routes/peer-plane.test.ts \
+  packages/server/src/serve/peer-link-ceremony.test.ts \
+  packages/server/src/serve/vault-links-store.test.ts \
+  packages/server/src/serve/vault-plane-links.test.ts \
+  packages/server/src/routes/vault-links-ticket-routes.test.ts   # 5 files, 63 passed
+```
+
+## Wave 8 — open question 8: the use row stays, and the reason is not the one R17 expected
+
+### The index is as good as the receipt, for as long as the receipt is there
+
+R17 sends `share_authority_use` away "for an index over receipts unless `evidence.ts` names a property it cannot serve". Reading `evidence.ts`: `writeAuthorityReceipt` writes the receipt and upserts the use row **from the same input, in the same call**, and the receipt carries the same `authority_id`. `idx_receipt_authority(authority_id, occurred_at)` (`schema/audit.ts:146`) already exists and is exactly the index the ruling has in mind. So on content the two can never disagree — including the one arm that looked like it might, `search.ts`'s `skipsAllowReceipt` ternary, which skips the receipt and the stamp together because it skips the whole call. `evidence.ts` alone names **no** property the index cannot serve, and the earlier unverified answer of "delete" is what reading only that file gets you.
+
+**The property is the receipt's lifetime, and it lives in two other files.**
+
+- **Retention.** The audit band is `{ days: 365, duty: "journal-archive" }` (`schema/audit.ts:41`), and the duty is not an archive-in-place: `journal-archive.ts`'s `deleteByIds` **DELETEs** the sealed rows out of `access_receipt`, through the `audit_archive_pass` door the append-only triggers open for it. An authority whose acts ran under invocations has every one of its receipts sealed away at a year.
+- **Portability.** The audit band is band-excluded from the entity registry (`entity-catalog.ts:179`) and appears nowhere in the canonical walk (`portable-export.ts`), while `share.authority_use` is registered and rides it. A portable restore keeps the answers and, on the index, forgets that any of them was ever used.
+
+`share_authority_use` is one row per authority with no history: nothing to age, nothing to archive. And the case that breaks is the case the column exists for — **"you granted this a year ago and nothing has used it since"** is what makes a stale answer visible on Settings → Access, and it is exactly where an index over receipts answers "never used". The table **stays**. R17 is amended to that extent in `docs/decisions.md`; the rest of its diet is untouched.
+
+**The test pins rather than drives.** The answer is keep, so there is no behaviour to make red. `evidence.test.ts` now writes an authority receipt, checks the index and the use row agree while the receipt is live, runs a receipt deletion through the archive pass's own door, and asserts the divergence: `MAX(occurred_at)` goes `NULL` and the use row still knows. A future deletion of this table now fails a test that states why.
+
+### Every file this commit touches
+
+- `packages/vault/src/schema/authority.ts` — the verdict and its two files, in the comment above the table it keeps
+- `packages/vault/src/gateway/evidence.test.ts` — the pinning case
+- `docs/decisions.md` — OQ-7 and OQ-8 as dated rulings under `## One vault, every seat (#996)`; the "answered by the wave that makes them" sentence points at them
+- `receipts/issue-996-one-vault-every-seat.md` — this section
+
+### What wave 8 did NOT do, named so the next wave does not have to rediscover it
+
+The rest of R17's diet is untouched and is a wave of its own — every item still has live consumers, and each is a schema change plus a client change plus a golden re-freeze:
+
+- `device` out of `principal_kind` (`packages/vault/src/schema/authority.ts` CHECK, `packages/client/src/access-lens.ts`'s `PRINCIPAL_KINDS` and `deviceStandings`, `apps/mobile/src/screens/settings/AccessSection.tsx`, `packages/vault/src/schema/ontology-shape.test.ts`)
+- `packages/vault/src/grant/companion-surfaces.ts`, `packages/vault/src/grant/device-trust.ts`, `packages/server/src/serve/companion-access.ts` and `device_surface_projection`
+- `share_fulfillment` derived from the origin-side subscription row (`packages/vault/src/grant/fulfillment.ts`, `grant-fulfillment-rows.ts`, `packages/server/src/serve/grant-fulfillment.ts`)
+- `access_app` to prefs (`packages/vault/src/schema/access.ts`), `share_access_receipts` to the audit band or deleted (`packages/server/src/serve/share-access-receipts.ts`, `gateway-schema.ts`)
+- the exit gate itself: `packages/server/src/serve/authz-deny-matrix.test.ts` reduced to three kinds, and the automation clamp sweeps
+
+### Gates
+
+```
+bunx vitest run packages/vault/src/gateway/evidence.test.ts   # 4 passed
+```

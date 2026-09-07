@@ -62,17 +62,11 @@ export default async function accessHandler({
     MAX_WINDOW
   );
   try {
-    const authentication = (await ctx.vault.authenticate({
-      operation: "status",
-      sessionToken: String(input?.auth_session ?? ""),
-    })) as { authenticated?: boolean; configured?: boolean };
-    if (!authentication.authenticated) {
-      return {
-        entries: [],
-        authRequired: true,
-        configured: authentication.configured ?? false,
-      };
-    }
+    // NO SESSION CHECK (#996, W6-D2). The access history is the app GRANT's to
+    // read (#928) and it carries no secret value — it is the record of who
+    // looked, which is the one thing that must stay readable now that the
+    // gateway no longer decrypts. Gating it on an unlock session would have
+    // hidden the audit trail behind the boundary it audits.
     const itemId = String(input?.item_id ?? "");
     const result = await ctx.vault.read({
       entity: "access.receipt",

@@ -56,47 +56,6 @@ interface FullRow {
   updated_at?: string;
 }
 
-type SealedField = "password" | "otp_seed" | "card_number" | "cvv" | "content";
-const SEALED_FIELDS: SealedField[] = [
-  "password",
-  "otp_seed",
-  "card_number",
-  "cvv",
-  "content",
-];
-
-/** The sealed SIDECAR rows a permit may be spent on instead (#873). Named here
- *  rather than trusted from the input: an entity this query does not recognise
- *  is not a reveal it will attempt on the caller's word. */
-const SIDECAR_COLUMNS: Record<string, string> = {
-  "locker.item_field": "value_sealed",
-  "locker.item_passkey": "private_key",
-};
-// A REVISION IS NOT ONE OF THEM (#916, D2). `locker.item_history` was a second
-// revision mechanism with a sealed `password` cell of its own; the table is
-// gone, a previous value now rides a `core_entity_revision` snapshot, and the
-// gateway refuses the entity outright. There is nothing in a revision to spend
-// a permit on — the export is what unseals a rotated password now.
-
-interface SidecarAsk {
-  entity: string;
-  entityId: string;
-  column: string;
-}
-
-/** The `sidecar` input, once it has proved it names a row this query reveals. */
-function sidecarAsk(
-  input: Record<string, unknown> | undefined
-): SidecarAsk | null {
-  const raw = input?.sidecar as Partial<SidecarAsk> | undefined;
-  if (!raw) return null;
-  const entity = String(raw.entity ?? "");
-  const entityId = String(raw.entityId ?? "");
-  const column = SIDECAR_COLUMNS[entity];
-  if (!column || !entityId || raw.column !== column) return null;
-  return { entity, entityId, column };
-}
-
 export default async function itemHandler({
   input,
   ctx,
@@ -106,12 +65,6 @@ export default async function itemHandler({
 }) {
   const itemId = String(input?.item_id ?? "");
   if (!itemId) return { item: null };
-  const sidecar = sidecarAsk(input);
-  const authentication = {
-    sessionToken: String(input?.auth_session ?? ""),
-    itemToken: String(input?.item_token ?? ""),
-  };
-  let sidecarValue: string | null = null;
   try {
     const res = await ctx.vault.read({
       acceptTruncation: true,
@@ -120,37 +73,13 @@ export default async function itemHandler({
     });
     const row = ((res.rows ?? []) as unknown as FullRow[])[0];
     if (!row) return { item: null };
-    // The reveal (#293): swap the sealed placeholders for plaintext —
-    // consent-checked under the app's `reveal` scope, receipted per open.
-    // Skipped entirely when the permit is earmarked for a sidecar row, because
-    // it would consume the one token that reveal needs.
-    if (sidecar) {
-      const revealed = (await ctx.vault.reveal({
-        entity: sidecar.entity,
-        entityId: sidecar.entityId,
-        columns: [sidecar.column],
-        authentication,
-      })) as { values?: Record<string, string | null> };
-      sidecarValue = revealed.values?.[sidecar.column] ?? null;
-    } else {
-      try {
-        const revealed = (await ctx.vault.reveal({
-          entity: "locker.item",
-          entityId: itemId,
-          columns: SEALED_FIELDS,
-          authentication,
-        })) as { values?: Partial<Record<SealedField, string | null>> };
-        for (const field of SEALED_FIELDS)
-          row[field] = revealed.values?.[field] ?? null;
-      } catch (error) {
-        // A Locker UI reveal always supplies both proofs. Authentication
-        // failures must stay visible so the app relocks instead of rendering a
-        // placeholder as if the item had no secret. Legacy/Companion callers
-        // without those fields retain the consent-placeholder behavior.
-        if (input?.auth_session || input?.item_token) throw error;
-        // No reveal grant: the pane still renders, secrets stay placeholders.
-      }
-    }
+    // NO REVEAL HERE (#996, rulings R13 and W6-D2). This query used to hand
+    // the gateway a session token and an item token and take plaintext off the
+    // answer. The gateway no longer unseals a Locker row for a client at all —
+    // the shell does, with `K`, behind the member's unlock — so what comes back
+    // is the browsable half: titles, addresses, usernames, and the secret
+    // columns as the vault stores them. That is also why this pane paints
+    // while the Locker is locked, which the permit could never allow.
     const [
       tagsByItem,
       starredIds,
@@ -220,7 +149,7 @@ export default async function itemHandler({
     // sealed sidecar row's shape stays exactly what `item-sidecars.ts` returns,
     // so no payload of this query ever has a place to put a secret it was not
     // asked for.
-    return sidecar ? { item, sidecar: { value: sidecarValue } } : { item };
+    return { item };
   } catch (error) {
     const e = error as { code?: string; message?: string };
     return { item: null, vaultDenied: { code: e.code, message: e.message } };

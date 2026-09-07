@@ -1,8 +1,29 @@
-// Locker's sealed SIDECARS ride the same one-shot permit as the item (#873).
-// `locker_item_field.value_sealed`, the previous password in a revision, and
-// `locker_item_passkey.private_key` are secrets that hang off an item, so the
-// reveal gate is keyed on the locker SCHEMA, not on `locker.item` alone — and
-// the permit a sidecar reveal spends is the OWNING item's.
+// THE GATEWAY DOES NOT UNSEAL A LOCKER ROW (#996, rulings R13 and W6-D2).
+//
+// This file used to prove the permit: a sealed sidecar spent its OWNING item's
+// one-shot token, a second field could not reuse it, a trashed item's sidecars
+// stopped revealing, and a nonexistent row refused exactly as an existing one
+// without a permit so the sidecars were no existence oracle. Every one of
+// those was a rule about who may make the GATEWAY produce plaintext.
+//
+// The gateway does not produce it any more. `K` is on the seat, a seat
+// decrypts what it already holds behind its own unlock, and what reaches the
+// gateway is the reveal receipt rather than a request for a value — so the
+// permit's rules have nothing left to govern, and the property that replaces
+// all of them is the one below: the door refuses the whole `locker` SCHEMA,
+// with no argument that opens it.
+//
+// The reveal itself is proved where it happens now:
+// `packages/client/src/locker/locker-secret.test.ts` (the envelope, held equal
+// to `locker-key-plane.ts`'s by encrypting on one side and decrypting on the
+// other) and `locker-kit-door.test.ts` (the door's refusals, and the receipt
+// written before the plaintext).
+//
+// THE DOOR ITSELF STAYS, because it is not Locker's ([W6-D1]): the §293 sealed
+// column class still carries `sync.connection_credential`'s broker tokens and
+// the ext band's declared lists, and the broker must still inject a token it
+// holds for the member. What is refused is the schema, not the mechanism —
+// which is exactly what the last test here pins.
 
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -13,7 +34,6 @@ import type { BootstrapResult } from "../bootstrap.js";
 import { registerLockerCommands } from "../commands/locker.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
-import { nowIso } from "../ids.js";
 import { createGateway } from "./gateway.js";
 import type { Gateway } from "./gateway.js";
 import type { Credential } from "./types.js";
@@ -22,8 +42,6 @@ let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
-
-const SECRET = "correct horse battery staple";
 
 /** The failing reason, with the per-call receipt id stripped off. */
 function refusal(run: () => unknown): string {
@@ -35,7 +53,7 @@ function refusal(run: () => unknown): string {
   throw new Error("expected a refusal");
 }
 
-describe("locker sidecar reveal", () => {
+describe("the gateway does not unseal a Locker row", () => {
   beforeEach(() => {
     ({ db, boot } = bootstrappedVault(
       { openVaultDb, bootstrapVault },
@@ -80,284 +98,120 @@ describe("locker sidecar reveal", () => {
     return (out as { output: { field_id: string } }).output.field_id;
   }
 
-  async function configure(): Promise<string> {
-    const result = await gw.authenticateLocker({
-      operation: "configure",
-      secret: SECRET,
-    });
-    expect(result.ok).toBe(true);
-    return result.sessionToken as string;
-  }
-
-  async function permitFor(
-    sessionToken: string,
-    itemId: string
-  ): Promise<string> {
-    const result = await gw.authenticateLocker({
-      operation: "authorize-item",
-      sessionToken,
-      secret: SECRET,
-      itemId,
-    });
-    expect(result.ok).toBe(true);
-    return result.itemToken as string;
-  }
-
-  test("a sealed custom field reveals under the owning item's permit and receipts both ids", async () => {
+  test("the OWNER is refused — there is no credential that opens this door", () => {
+    // The owner on their own device, with every scope, is the strongest
+    // caller there is. If the answer were "it depends", the boundary would be
+    // an authorization question again rather than a place the key is not.
     const itemId = addLogin();
-    const fieldId = addSealedField(itemId, "recovery-c0de");
-    const sessionToken = await configure();
-    const itemToken = await permitFor(sessionToken, itemId);
-
-    const revealed = gw.reveal(owner, {
-      entity: "locker.item_field",
-      entityId: fieldId,
-      columns: ["value_sealed"],
-      authentication: { sessionToken, itemToken },
-    });
-    expect(revealed.values.value_sealed).toBe("recovery-c0de");
-
-    const receipt = db.audit
-      .prepare(
-        `SELECT object_type, object_id, decision, detail_json
-           FROM access_receipt WHERE receipt_id = ?`
+    expect(
+      refusal(() =>
+        gw.reveal(owner, {
+          entity: "locker.item",
+          entityId: itemId,
+          columns: ["password"],
+        })
       )
-      .get(revealed.receiptId) as {
-      object_type: string;
-      object_id: string;
-      decision: string;
-      detail_json: string;
-    };
-    expect(receipt.object_type).toBe("locker.item_field");
-    expect(receipt.object_id).toBe(fieldId);
-    expect(receipt.decision).toBe("allow");
-    expect(JSON.parse(receipt.detail_json)).toMatchObject({
-      columns: ["value_sealed"],
-      itemId,
-    });
-    expect(receipt.detail_json).not.toContain("recovery-c0de");
+    ).toContain("opened on the seat that holds the vault key");
   });
 
-  test("a sidecar reveal without a permit refuses", async () => {
+  test("a sealed sidecar is refused the same way as its item", () => {
+    // The gate used to be keyed on the SCHEMA rather than on `locker.item`
+    // alone, so that a sidecar could not slip past a rule written for the
+    // item. The refusal keeps that shape for the same reason.
     const itemId = addLogin();
-    const fieldId = addSealedField(itemId, "recovery-c0de");
-    await configure();
-
-    expect(() =>
-      gw.reveal(owner, {
+    const fieldId = addSealedField(itemId, "r3c0very-c0de");
+    for (const request of [
+      {
         entity: "locker.item_field",
         entityId: fieldId,
         columns: ["value_sealed"],
-      })
-    ).toThrow(/locked/u);
+      },
+      {
+        entity: "locker.item_passkey",
+        entityId: itemId,
+        columns: ["private_key"],
+      },
+    ]) {
+      expect(refusal(() => gw.reveal(owner, request))).toContain(
+        "does not unseal locker rows"
+      );
+    }
   });
 
-  test("a permit spent by a field reveal is spent for the whole item", async () => {
-    const itemId = addLogin("hunter2-Corr3ct");
-    const fieldId = addSealedField(itemId, "recovery-c0de");
-    const sessionToken = await configure();
-    const itemToken = await permitFor(sessionToken, itemId);
-
-    gw.reveal(owner, {
-      entity: "locker.item_field",
-      entityId: fieldId,
-      columns: ["value_sealed"],
-      authentication: { sessionToken, itemToken },
-    });
-    // One-shot: the same token no longer opens the item itself…
-    expect(() =>
+  test("a row that does not exist refuses identically — still no oracle", () => {
+    // The old gate refused a missing sidecar exactly as it refused an existing
+    // one without a permit, so the door could not be used to enumerate. The
+    // refusal is now schema-wide and arrives BEFORE any row is read, which is
+    // the same property with a shorter proof.
+    const itemId = addLogin();
+    const present = refusal(() =>
       gw.reveal(owner, {
         entity: "locker.item",
         entityId: itemId,
         columns: ["password"],
-        authentication: { sessionToken, itemToken },
-      })
-    ).toThrow(/authorization expired/u);
-    // …nor the field again.
-    expect(() =>
-      gw.reveal(owner, {
-        entity: "locker.item_field",
-        entityId: fieldId,
-        columns: ["value_sealed"],
-        authentication: { sessionToken, itemToken },
-      })
-    ).toThrow(/authorization expired/u);
-  });
-
-  test("another item's permit never opens this item's sidecar", async () => {
-    const itemId = addLogin();
-    const fieldId = addSealedField(itemId, "recovery-c0de");
-    const otherId = addLogin("other-p4ssword");
-    const sessionToken = await configure();
-    const otherToken = await permitFor(sessionToken, otherId);
-
-    expect(() =>
-      gw.reveal(owner, {
-        entity: "locker.item_field",
-        entityId: fieldId,
-        columns: ["value_sealed"],
-        authentication: { sessionToken, itemToken: otherToken },
-      })
-    ).toThrow(/authorization expired/u);
-  });
-
-  test("a nonexistent sidecar row refuses exactly as an existing one without a permit (no oracle)", async () => {
-    const itemId = addLogin();
-    const fieldId = addSealedField(itemId, "recovery-c0de");
-    await configure();
-
-    const missing = refusal(() =>
-      gw.reveal(owner, {
-        entity: "locker.item_field",
-        entityId: "no-such-field",
-        columns: ["value_sealed"],
       })
     );
-    const present = refusal(() =>
-      gw.reveal(owner, {
-        entity: "locker.item_field",
-        entityId: fieldId,
-        columns: ["value_sealed"],
-      })
-    );
-    expect(missing).toBe(present);
-  });
-
-  test("with no authentication configured a nonexistent sidecar row refuses like a missing item", () => {
-    const missingField = refusal(() =>
-      gw.reveal(owner, {
-        entity: "locker.item_field",
-        entityId: "no-such-field",
-        columns: ["value_sealed"],
-      })
-    );
-    const missingItem = refusal(() =>
+    const absent = refusal(() =>
       gw.reveal(owner, {
         entity: "locker.item",
-        entityId: "no-such-item",
+        entityId: "01890000-0000-7000-8000-000000000000",
         columns: ["password"],
       })
     );
-    expect(missingField).toBe(
-      "no revealable locker.item_field row no-such-field"
-    );
-    expect(missingItem).toBe("no revealable locker.item row no-such-item");
+    expect(absent).toBe(present);
   });
 
-  test("a trashed item's sidecars stop revealing, permit or not", async () => {
-    const itemId = addLogin();
-    const fieldId = addSealedField(itemId, "recovery-c0de");
-    const trashed = gw.invoke(owner, {
-      command: "locker.trash_item",
-      input: { item_id: itemId },
-    });
-    expect(trashed.status).toBe("executed");
-
-    expect(
-      refusal(() =>
-        gw.reveal(owner, {
-          entity: "locker.item_field",
-          entityId: fieldId,
-          columns: ["value_sealed"],
-        })
-      )
-    ).toBe(`no revealable locker.item_field row ${fieldId}`);
-
-    const sessionToken = await configure();
-    const itemToken = await permitFor(sessionToken, itemId);
-    expect(() =>
+  test("no plaintext reaches the caller, and the refusal is receipted", () => {
+    const itemId = addLogin("k7Q-vn2-Rme");
+    let thrown: Error | undefined;
+    try {
       gw.reveal(owner, {
-        entity: "locker.item_field",
-        entityId: fieldId,
-        columns: ["value_sealed"],
-        authentication: { sessionToken, itemToken },
-      })
-    ).toThrow(/authorization expired/u);
-  });
-
-  // HISTORY IS REVISIONS (#916, D2): `locker_item_history` was a second
-  // revision mechanism, so its `password` cell was a second sealed surface
-  // with its own reveal path. The previous password rides a
-  // `core_entity_revision` snapshot of the item row — ciphertext under the
-  // ITEM's additional data — and `locker.export` is what unseals it, under the
-  // export's own confirmation, rather than a per-row reveal.
-  test("the previous password survives a rotation as sealed ciphertext", () => {
-    const itemId = addLogin("first-p4ssword");
-    const edited = gw.invoke(owner, {
-      command: "locker.edit_item",
-      input: { item_id: itemId, password: "second-p4ssword" },
-    });
-    expect(edited.status).toBe("executed");
-    const revision = db.vault
+        entity: "locker.item",
+        entityId: itemId,
+        columns: ["password"],
+      });
+    } catch (error) {
+      thrown = error as Error;
+    }
+    expect(thrown?.message).not.toContain("k7Q-vn2-Rme");
+    // A refusal is receipted like an allowance — that was true of the permit
+    // gate and stays true of the door.
+    const receipt = db.audit
       .prepare(
-        `SELECT snapshot_json FROM core_entity_revision
-          WHERE entity_type = 'locker.item' AND entity_id = ?
-          ORDER BY recorded_at DESC LIMIT 1`
+        `SELECT decision, object_type FROM access_receipt
+          WHERE action = 'reveal' ORDER BY seq DESC LIMIT 1`
       )
-      .get(itemId) as { snapshot_json: string } | undefined;
-    expect(revision).toBeDefined();
-    const snapshot = JSON.parse(revision!.snapshot_json) as {
-      password?: string;
-    };
-    expect(snapshot.password).toBeTypeOf("string");
-    // Sealed at rest: the history of a secret is as much a secret as the
-    // current value.
-    expect(snapshot.password).not.toContain("first-p4ssword");
-  });
-
-  test("a passkey private key reveals under the item's own permit", async () => {
-    const itemId = addLogin();
-    const stored = gw.invoke(owner, {
-      command: "locker.set_passkey",
-      input: {
-        item_id: itemId,
-        rp_id: "example.com",
-        private_key: "pk-material-xyz",
-      },
-    });
-    expect(stored.status).toBe("executed");
-
-    const sessionToken = await configure();
-    const itemToken = await permitFor(sessionToken, itemId);
-    const revealed = gw.reveal(owner, {
-      entity: "locker.item_passkey",
-      entityId: itemId,
-      columns: ["private_key"],
-      authentication: { sessionToken, itemToken },
-    });
-    expect(revealed.values.private_key).toBe("pk-material-xyz");
-    // The passkey's PK IS the item, so no separate item id is receipted.
-    const detail = db.audit
-      .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
-      .get(revealed.receiptId) as { detail_json: string };
-    expect(JSON.parse(detail.detail_json)).toStrictEqual({
-      columns: ["private_key"],
+      .get() as { decision: string; object_type: string } | undefined;
+    expect(receipt).toMatchObject({
+      decision: "deny",
+      object_type: "locker.item",
     });
   });
 
-  test("entities outside the locker schema are untouched by the Locker gate", async () => {
+  test("entities OUTSIDE the locker schema still reveal (W6-D1)", () => {
+    // The door is not Locker's. `sync.connection_credential` carries the
+    // broker's tokens and the gateway must still be able to inject one, so
+    // what the last commit refused is a schema and not a mechanism.
+    const connectionId = "01890000-0000-7000-8000-00000000c001";
     db.vault
       .prepare(
-        `INSERT INTO sync_connection
-           (connection_id, kind, label, status, trust, created_at)
-         VALUES (?, 'imap', 'Mailbox', 'active', 'staged', ?)`
+        `INSERT INTO sync_connection (connection_id, kind, label, status, trust, created_at)
+         VALUES (?, 'demo', 'Demo', 'active', 'staged', '2026-01-01T00:00:00.000Z')`
       )
-      .run("conn-1", nowIso());
+      .run(connectionId);
     db.vault
       .prepare(
         `INSERT INTO sync_connection_credential
-           (connection_id, cred_kind, api_key, allowed_hosts, updated_at)
-         VALUES (?, 'api_key', ?, '[]', ?)`
+           (connection_id, cred_kind, access_token, allowed_hosts, updated_at)
+         VALUES (?, 'api_key', 'plain-token', '[]', '2026-01-01T00:00:00.000Z')`
       )
-      .run("conn-1", "ak-live-123", nowIso());
-    // Locker is configured and holds no permit: a locker.* reveal would refuse.
-    await configure();
+      .run(connectionId);
 
     const revealed = gw.reveal(owner, {
       entity: "sync.connection_credential",
-      entityId: "conn-1",
-      columns: ["api_key"],
+      entityId: connectionId,
+      columns: ["access_token"],
     });
-    expect(revealed.values.api_key).toBe("ak-live-123");
+    expect(revealed.values["access_token"]).toBe("plain-token");
   });
 });

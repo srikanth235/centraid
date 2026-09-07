@@ -204,6 +204,9 @@ describe("[law:app-entity-tripwire] static app entity tripwire (#928 A1)", () =>
     expect(Object.keys(INDIRECT_ENTITY_READS).toSorted()).toStrictEqual([
       "apps/mobile/src/apps/agenda/useAgenda.ts",
       "apps/mobile/src/apps/docs/useDocs.ts",
+      "apps/mobile/src/apps/locker/locker-door.ts",
+      "apps/mobile/src/apps/locker/locker-gateway.ts",
+      "apps/mobile/src/apps/locker/locker-store.ts",
       "apps/mobile/src/apps/notes/NotesPowerbox.tsx",
       "apps/mobile/src/apps/photos/timeline-engine.ts",
       "apps/mobile/src/apps/tasks/useTasks.ts",

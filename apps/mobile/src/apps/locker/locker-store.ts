@@ -8,7 +8,7 @@
 // nothing in it is ever handed a durable store.
 //
 // The rules themselves are NOT here. The session state machine is
-// `apps/locker/session.ts`, the permit arithmetic is `permits.ts`, and the
+// `apps/locker/session.ts`, the reveal's own clock is `reveal.ts`, and the
 // enumerated secret-bearing bag plus its wipe are `session.ts`'s
 // `SecretBag` / `wipeSecretState` — imported, never restated. This file is the
 // seat's adapter: it holds those values, calls this seat's gateway door
@@ -16,18 +16,10 @@
 // which the browser-shaped `clipboard.ts` cannot reach.
 
 import type { StagedBatch } from "@centraid/blueprints/apps/locker/import-model";
+import { isRevealExpired } from "@centraid/blueprints/apps/locker/reveal";
+import type { RevealRequest } from "@centraid/blueprints/apps/locker/reveal";
 import {
-  isRevealExpired,
-  permitFromAuth,
-  spend,
-} from "@centraid/blueprints/apps/locker/permits";
-import type {
-  Permit,
-  PermitRequest,
-} from "@centraid/blueprints/apps/locker/permits";
-import {
-  afterStatus,
-  afterUnlock,
+  afterLockState,
   bootSession,
   emptySecretBag,
   isExpired,
@@ -45,15 +37,15 @@ import type {
   LockerRow,
 } from "@centraid/blueprints/apps/locker/types";
 
+import { getActiveVaultId } from "../../lib/vault-links";
 import { clearLockerClipboard } from "./locker-clipboard";
 import {
-  lockerDeviceCredentialId,
-  newLockerDeviceSecret,
-  readLockerDeviceCredential,
-  removeLockerDeviceCredential,
-  storeLockerDeviceCredential,
+  lockLocker,
+  lockerUnlocked,
+  removeLockerVaultKey,
 } from "./locker-device-auth";
-import { lockerAuth, lockerItem } from "./locker-gateway";
+import { revealLockerRow, unlockLockerDoor } from "./locker-door";
+import { lockerRevealReceipt } from "./locker-gateway";
 import {
   ITEMS_WINDOW,
   lockerItems,
@@ -81,13 +73,12 @@ export interface LockerVaultState {
   loaded: boolean;
   reading: boolean;
   readError: string;
-  /** The permit gate is standing, and this is what it is refusing so far. */
-  permitError: string;
-  permitBusy: boolean;
-  /** A permit expired with nothing revealed (STATES.md, Locker / Re-auth). */
+  /** The door's refusal, in its own words, on the reveal that asked for it. */
+  revealError: string;
+  revealBusy: boolean;
+  /** A reveal took itself off the screen with nothing left (STATES.md). */
   reauth: boolean;
   masked: boolean;
-  credentialId: string | null;
   busy: boolean;
   /** `null` before one lands — an audit surface says nothing until it reads. */
   accessWindow: { window: number; truncated: boolean } | null;
@@ -129,11 +120,10 @@ function initialState(): LockerVaultState {
     loaded: false,
     reading: false,
     readError: "",
-    permitError: "",
-    permitBusy: false,
+    revealError: "",
+    revealBusy: false,
     reauth: false,
     masked: false,
-    credentialId: null,
     busy: false,
     accessWindow: null,
     accessError: "",
@@ -241,17 +231,16 @@ export function noteLockerActivity(): void {
 
 /**
  * End the session. The ONE door: the idle path, the hide path and the explicit
- * verb all come through here, so they cannot diverge. The gateway is told, but
- * a failed telling does not keep the local session alive.
+ * verb all come through here, so they cannot diverge.
+ *
+ * It drops `K` from the process too (#996, W6-D2) — `lockLocker()` empties the
+ * keychain session cache, so the next reveal costs an OS prompt. Nothing is
+ * told to a gateway, because the gateway holds no session to end: what a lock
+ * ends here is this device's access to its own vault key.
  */
 export function lockNow(): void {
   stopTicker();
-  const token = state.bag.sessionToken;
-  if (token) {
-    void lockerAuth({ operation: "lock", sessionToken: token }).catch(
-      () => undefined
-    );
-  }
+  lockLocker();
   wipeSecretState(state.bag);
   clearLockerClipboard();
   set({
@@ -262,7 +251,7 @@ export function lockNow(): void {
     limit: ITEMS_WINDOW,
     loaded: false,
     readError: "",
-    permitError: "",
+    revealError: "",
     reauth: false,
     ...lockedSurfaceState(),
   });
@@ -280,35 +269,48 @@ export function onLockerAppState(next: string): void {
 
 // ─── Opening ────────────────────────────────────────────────────────────────
 
-/** The boot-time status read. Answers "is there a passphrase at all". */
+/**
+ * Open the Locker. There is no status read and no passphrase (#996, W6-D2):
+ * the boundary is the OS prompt over `K`, so "is it open" is "does this
+ * process still hold the key", which the keychain session answers locally.
+ */
 export async function openLocker(): Promise<void> {
-  set({ credentialId: await lockerDeviceCredentialId() });
-  try {
-    const payload = await lockerAuth({ operation: "status" });
-    set({ session: afterStatus(state.session, payload), denied: null });
-    if (isOpen(state.session)) await loadLockerItems();
-  } catch (error) {
-    set({ readError: message(error) });
+  set({ session: afterLockState(state.session, lockState()), denied: null });
+  if (isOpen(state.session)) {
+    startTicker();
+    await loadLockerItems();
   }
 }
 
-/** Unlock, or create the passphrase where there is none yet. */
-export async function unlockLocker(
-  secret: string,
-  credentialId?: string
-): Promise<void> {
+/** What the shell's lock is, in the shape the shared state machine reads. */
+function lockState(): { status: "locked" | "unlocked" } {
+  return { status: lockerUnlocked() ? "unlocked" : "locked" };
+}
+
+/**
+ * Unlock by proving presence to the OS.
+ *
+ * The passphrase and the device-credential exchange are both GONE. They
+ * existed to buy a gateway session; the gateway has none to sell. What is left
+ * is the gesture the phone always had and R13 names as the real boundary:
+ * Face ID, Touch ID or the device passcode, enforced by the keychain, which
+ * `readLockerVaultKey` triggers on the first reveal of a session. This verb
+ * warms that session so the item screen opens unlocked rather than prompting
+ * under the member's first tap.
+ */
+export async function unlockLocker(): Promise<void> {
+  const vaultId = getActiveVaultId();
   set({ busy: true });
-  const configured = state.session.configured === true;
   try {
-    const payload = await lockerAuth({
-      operation: configured ? "unlock" : "configure",
-      secret,
-      ...(credentialId ? { credentialId } : {}),
+    const answer = await unlockLockerDoor(vaultId);
+    // The prompt IS the unlock, and a refusal is a lock rather than an error.
+    const session = afterLockState(state.session, lockState());
+    set({
+      session: answer.ok ? session : { ...session, error: answer.message },
+      busy: false,
+      revealError: "",
     });
-    const session = afterUnlock(state.session, payload);
-    state.bag.sessionToken = payload.sessionToken ?? null;
-    set({ session, bag: { ...state.bag }, busy: false });
-    if (isOpen(session)) {
+    if (isOpen(state.session)) {
       startTicker();
       await loadLockerItems();
     }
@@ -317,83 +319,13 @@ export async function unlockLocker(
   }
 }
 
-/** The device credential, exchanged for the same unlock. */
-export async function unlockLockerWithDevice(): Promise<void> {
+/** Forget `K` on this device — the revoke screen's local half (R13). */
+export async function forgetLockerVaultKey(): Promise<void> {
+  const vaultId = getActiveVaultId();
   set({ busy: true });
-  try {
-    const credential = await readLockerDeviceCredential();
-    if (!credential) {
-      await removeLockerDeviceCredential();
-      set({
-        busy: false,
-        credentialId: null,
-        session: {
-          ...state.session,
-          error: "The device credential changed · unlock with the passphrase.",
-        },
-      });
-      return;
-    }
-    set({ busy: false });
-    await unlockLocker(credential.secret, credential.credentialId);
-  } catch (error) {
-    set({
-      busy: false,
-      session: { ...state.session, error: message(error) },
-    });
-  }
-}
-
-/** Enrol this device's biometric credential against the open session. */
-export async function enrolLockerDevice(): Promise<void> {
-  const token = state.bag.sessionToken;
-  if (!token) return;
-  set({ busy: true });
-  let credentialId = "";
-  try {
-    const secret = await newLockerDeviceSecret();
-    const payload = await lockerAuth({
-      label: "This phone",
-      operation: "enroll-device",
-      secret,
-      sessionToken: token,
-    });
-    credentialId = payload.credentialId ?? "";
-    if (!payload.ok || !credentialId)
-      throw new Error(payload.message ?? "The enrolment was refused.");
-    await storeLockerDeviceCredential(credentialId, secret);
-    set({ busy: false, credentialId });
-  } catch (error) {
-    if (credentialId) {
-      void lockerAuth({
-        credentialId,
-        operation: "revoke-device",
-        sessionToken: token,
-      }).catch(() => undefined);
-    }
-    set({ busy: false, readError: message(error) });
-  }
-}
-
-/** Revoke it. The passphrase is the one way in that cannot be revoked; this
- *  one can, and the screen says so. */
-export async function revokeLockerDevice(): Promise<void> {
-  const token = state.bag.sessionToken;
-  const credentialId = state.credentialId;
-  if (!token || !credentialId) return;
-  set({ busy: true });
-  try {
-    await lockerAuth({
-      credentialId,
-      operation: "revoke-device",
-      sessionToken: token,
-    });
-  } catch {
-    // The local material goes either way: a credential this device cannot
-    // produce is not a credential, whatever the gateway still believes.
-  }
-  await removeLockerDeviceCredential();
-  set({ busy: false, credentialId: null });
+  await removeLockerVaultKey(vaultId);
+  lockNow();
+  set({ busy: false });
 }
 
 // ─── Reading ────────────────────────────────────────────────────────────────
@@ -475,92 +407,105 @@ export async function loadLockerTrash(): Promise<void> {
   }
 }
 
-// ─── The permit gate ────────────────────────────────────────────────────────
-
-/** Stand the gate open for ONE field of ONE item. Nothing is revealed by
- *  asking; the gate is what the member answers. */
-export function askLockerPermit(request: PermitRequest): void {
-  state.bag.permitRequest = request;
-  set({ bag: { ...state.bag }, permitError: "", reauth: false });
-}
-
-export function dismissLockerPermit(): void {
-  state.bag.permitRequest = null;
-  set({ bag: { ...state.bag }, permitError: "" });
-}
+// ─── The reveal ─────────────────────────────────────────────────────────────
 
 /**
- * Answer it. A fresh confirmation mints one permit, the permit buys one read,
- * and the permit is spent on the way out — a permit that survived its read
- * would be a session by another name.
+ * REVEAL ONE FIELD, THROUGH THIS SEAT'S DOOR (#996, ruling W6-D2).
+ *
+ * What used to be a gate the member answered with a passphrase, a permit the
+ * gateway minted, and a privileged read that carried plaintext back over the
+ * wire is now: the OS asks the member to prove they are present, `K` comes out
+ * of the keychain, and the value is decrypted here. It works in airplane mode.
+ *
+ * Nothing is revealed by ASKING — the prompt is the gesture, and a cancelled
+ * prompt is a lock, not an error.
  */
-export async function confirmLockerPermit(secret: string): Promise<void> {
-  const request = state.bag.permitRequest;
-  const token = state.bag.sessionToken;
-  if (!request || !token) return;
-  set({ permitBusy: true, permitError: "" });
+export async function revealLockerField(request: RevealRequest): Promise<void> {
+  const vaultId = getActiveVaultId();
+  const detail = state.bag.detail;
+  if (!detail) return;
+  set({ revealBusy: true, revealError: "", reauth: false });
+  const rowId = request.sidecar?.entityId ?? request.itemId;
+  const column = request.sidecar?.column ?? request.field;
+  const ciphertext = ciphertextOf(detail, request, column);
+  if (ciphertext === null) {
+    // A field this row does not carry is nothing to ask for, and asking would
+    // spend a receipt on a value that does not exist.
+    set({ revealBusy: false });
+    return;
+  }
+  let answer;
   try {
-    const payload = await lockerAuth({
-      itemId: request.itemId,
-      operation: "authorize-item",
-      secret,
-      sessionToken: token,
-      ...(state.credentialId ? { credentialId: state.credentialId } : {}),
+    answer = await revealLockerRow({
+      vaultId,
+      rowId,
+      ...(request.sidecar ? { entity: request.sidecar.entity } : {}),
+      ciphertext: { [column]: ciphertext },
+      keyId: keyIdOf(detail, request),
+      recordReveal: (input) => lockerRevealReceipt(input),
     });
-    const outcome = permitFromAuth(request, payload);
-    if (outcome.kind === "relock") {
+  } catch (error) {
+    set({ revealBusy: false, revealError: message(error) });
+    return;
+  }
+  if (!answer.ok) {
+    // A locked door is the seat's state, not a refusal to narrate: fall to the
+    // lock screen and let the member prove presence again.
+    if (answer.reason === "locked" || answer.reason === "not_enrolled") {
       lockNow();
       return;
     }
-    if (outcome.kind === "refused") {
-      set({ permitBusy: false, permitError: outcome.message });
-      return;
-    }
-    await spendLockerPermit(outcome.permit, request);
-  } catch (error) {
-    set({ permitBusy: false, permitError: message(error) });
-  }
-}
-
-async function spendLockerPermit(
-  permit: Permit,
-  request: PermitRequest
-): Promise<void> {
-  const token = state.bag.sessionToken;
-  if (!token) return;
-  const payload = await lockerItem(token, request.itemId, permit.token);
-  if (payload.vaultDenied) {
-    set({
-      permitBusy: false,
-      permitError: payload.vaultDenied.message ?? "The vault refused the read.",
-    });
+    set({ revealBusy: false, revealError: answer.message });
     return;
   }
-  const detail = payload.item ?? null;
-  if (!detail) {
-    set({ permitBusy: false, permitError: "This item no longer exists." });
-    return;
+  const value = answer.values[column];
+  if (typeof value === "string" && value.length > 0) {
+    state.bag.revealed = { ...state.bag.revealed, [request.field]: value };
+    state.bag.revealedAt = {
+      ...state.bag.revealedAt,
+      [request.field]: Date.now(),
+    };
   }
-  revealFrom(detail, request.field);
-  state.bag.permit = spend();
-  state.bag.permitRequest = null;
-  state.bag.detail = detail;
   state.session = touch(state.session);
   set({
     bag: { ...state.bag },
-    permitBusy: false,
-    permitError: "",
+    revealBusy: false,
+    revealError: "",
     reauth: false,
   });
 }
 
-/** Put the one field the permit was minted for on screen. An item whose type
- *  seals nothing reveals nothing — the read itself was what was authorised. */
-function revealFrom(detail: LockerDetail, field: string): void {
-  const value = (detail as unknown as Record<string, unknown>)[field];
-  if (typeof value !== "string" || value === "") return;
-  state.bag.revealed = { ...state.bag.revealed, [field]: value };
-  state.bag.revealedAt = { ...state.bag.revealedAt, [field]: Date.now() };
+/** The ciphertext this ask names, off the detail this screen already holds. */
+function ciphertextOf(
+  detail: LockerDetail,
+  request: RevealRequest,
+  column: string
+): string | null {
+  if (request.sidecar) {
+    const row = (detail as unknown as Record<string, unknown>)[
+      request.sidecar.entity === "locker.item_passkey" ? "passkey" : "fields"
+    ] as Record<string, unknown>[] | Record<string, unknown> | undefined;
+    const found = Array.isArray(row)
+      ? row.find((entry) => entry["field_id"] === request.sidecar?.entityId)
+      : row;
+    const value = found?.[column];
+    return typeof value === "string" && value.length > 0 ? value : null;
+  }
+  const value = (detail as unknown as Record<string, unknown>)[column];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/** Which Locker key that row's ciphertext is under, as the seat holds it. */
+function keyIdOf(detail: LockerDetail, request: RevealRequest): string | null {
+  const row = detail as unknown as Record<string, unknown>;
+  if (!request.sidecar) {
+    return typeof row["key_id"] === "string" ? row["key_id"] : null;
+  }
+  const fields = row["fields"] as Record<string, unknown>[] | undefined;
+  const found = fields?.find(
+    (entry) => entry["field_id"] === request.sidecar?.entityId
+  );
+  return typeof found?.["key_id"] === "string" ? found["key_id"] : null;
 }
 
 /** Put one revealed value away by hand, before its countdown runs out. */
@@ -579,9 +524,7 @@ export function closeLockerItem(): void {
   state.bag.detail = null;
   state.bag.revealed = {};
   state.bag.revealedAt = {};
-  state.bag.permit = null;
-  state.bag.permitRequest = null;
-  set({ bag: { ...state.bag }, permitError: "", reauth: false });
+  set({ bag: { ...state.bag }, revealError: "", reauth: false });
 }
 
 /** The generator's output — a secret nobody has saved, and one of the

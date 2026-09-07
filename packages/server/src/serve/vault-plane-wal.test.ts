@@ -12,6 +12,8 @@ import {
   KeyStore,
   aesGcmKeyProtector,
   ensureAppEnrolled,
+  sealAad,
+  unsealValue,
 } from "@centraid/vault";
 
 import {
@@ -74,13 +76,20 @@ describe("vault-plane WAL ownership + durability", () => {
       logger: silentLogger,
     });
     plane = registry.get(created.vaultId)!;
+    // Read the cell with the vault's own DEK (#996, W6-D2 — the door refuses a
+    // locker row). What this test is about is CUSTODY: the protector-backed
+    // KeyStore opened the key, so the sealed row opens; the copied data dir
+    // below has the ciphertext and not the wrapping key, and fails at mount.
+    const cell = plane.db.vault
+      .prepare(`SELECT password FROM locker_item WHERE item_id = ?`)
+      .get(itemId) as { password: string };
     expect(
-      plane.gateway.reveal(plane.ownerCredential, {
-        entity: "locker.item",
-        entityId: itemId,
-        columns: ["password"],
-      }).values
-    ).toStrictEqual({ password: "protector-backed-secret" });
+      unsealValue(
+        plane.db.sealKey,
+        sealAad("locker_item", "password", itemId),
+        cell.password
+      )
+    ).toBe("protector-backed-secret");
     registry.stop();
 
     const copied = await tempDir("copied-protected-vault-plane-");

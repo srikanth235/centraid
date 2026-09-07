@@ -33,11 +33,11 @@ import { WINDOW_MAX, WINDOW_STEP, makeBag } from "./bag.ts";
 import type { Bag } from "./bag.ts";
 import { Chrome } from "./Chrome.tsx";
 import { copyMetadata, copySecret } from "./clipboard.ts";
+import { Confirm } from "./components/Confirm.tsx";
 import { ItemScreen } from "./components/Item.tsx";
 import { Lenses } from "./components/Lenses.tsx";
 import { LockerList } from "./components/List.tsx";
 import { Lock } from "./components/Lock.tsx";
-import { Confirm, PermitGate } from "./components/PermitGate.tsx";
 import { Rail } from "./components/Rail.tsx";
 import { Screens, isRoutedScreen } from "./components/Screens.tsx";
 import { DeniedGate, Notices } from "./components/States.tsx";
@@ -54,8 +54,8 @@ import {
 } from "./format.ts";
 import { appBar, bandClaim } from "./frame.tsx";
 import { generate } from "./gen-model.ts";
-import { isRevealExpired, permitFromAuth, spend } from "./permits.ts";
-import type { PermitRequest, SidecarTarget } from "./permits.ts";
+import { isRevealExpired } from "./reveal.ts";
+import type { RevealRequest } from "./reveal.ts";
 import { useRouteActs } from "./route-acts.ts";
 import {
   EXPORT_CONFIRM_LABEL,
@@ -70,9 +70,8 @@ import {
 } from "./route-copy.ts";
 import {
   SESSION_IDLE_MS,
-  afterStatus,
+  afterLockState,
   emptySidecarDraft,
-  afterUnlock,
   bootSession,
   isOpen,
   lock,
@@ -99,15 +98,11 @@ import {
 } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
 import { importDoorPresent, useSurfaceActs } from "./surface-acts.ts";
-import type {
-  AuthPayload,
-  ItemsPayload,
-  LockerDetail,
-  LockerRow,
-} from "./types.ts";
+import type { ItemsPayload, LockerDetail, LockerRow } from "./types.ts";
 import {
   CONFLICT_COMPARE_BODY,
   EXPORT_LEDE,
+  REVEAL_NO_DOOR,
   FIELD_LABEL,
   ITEMS_STATUS,
   OFFLINE_WHY_BODY,
@@ -154,19 +149,16 @@ export function Root({
   const session = sessionRef.current;
 
   /**
-   * THE ONE DOOR through which the session changes. The token has two readers
-   * — the state machine, which needs it to describe itself, and the bag, whose
-   * enumerated wipe is what guarantees it is erased — so it is written to both
-   * here and nowhere else.
+   * THE ONE DOOR through which the session changes. There is no credential to
+   * keep in step any more — the shell holds `K` and this is a projection of
+   * its lock — but the single writer stays: a phase set from two places is a
+   * phase two effects can disagree about.
    */
   const applySession = useCallback((next: SessionState): void => {
     sessionRef.current = next;
-    bagRef.current.sessionToken = next.token;
   }, []);
 
-  /** A refusal, in the host's words, on the gate that asked for it. Goes
-   *  through the same door so the token and the session can never come apart
-   *  by way of a convenience setter. */
+  /** A refusal, in the door's words, on the reveal that asked for it. */
   const setSessionError = useCallback(
     (text: string): void => {
       applySession({ ...sessionRef.current, error: text });
@@ -174,49 +166,38 @@ export function Root({
     [applySession]
   );
 
-  const ask = useCallback(
-    (input: Record<string, unknown>): Promise<AuthPayload> =>
-      window.centraid.read<AuthPayload>({ query: "auth", input }),
-    []
-  );
+  /** The shell's Locker door, or `undefined` on a host that offers none. */
+  const door = window.centraid.locker;
 
   /**
-   * THE ONE DOOR OUT. Every path that ends a session runs through here — the
-   * idle timer, the hidden window and a `SESSION_EXPIRED` permit — so the
-   * client wipe and the HOST lock can never come apart. A client that forgot only its own copy would leave a live
-   * session on the gateway, which is the worst possible half of a lock.
+   * THE ONE DOOR OUT. Every path that ends this app's session runs through
+   * here — the idle timer, the hidden window, and the shell reporting its own
+   * lock — so the plaintext wipe cannot be reached by one path and missed by
+   * another.
    *
-   * `notifyHost` is false only where the host is the one telling US the session
-   * is gone; asking it to lock a session it has already dropped is noise.
+   * It does NOT lock the shell (#996, W6-D2). The shell's session belongs to
+   * the member and ends on the member's own surface; what this app owns is the
+   * plaintext it is holding, and it drops that on its own clock as well as on
+   * the shell's. Two windows of the same length, and neither is allowed to be
+   * the only one that runs.
    */
-  const relock = useCallback(
-    (notifyHost = true): void => {
-      const token = bagRef.current.sessionToken;
-      applySession(lock(sessionRef.current));
-      wipeSecretState(bagRef.current);
-      bagRef.current.items = [];
-      bagRef.current.truncated = false;
-      bagRef.current.openItemId = null;
-      bagRef.current.reauthExpired = false;
-      bagRef.current.lastMatchedAt = null;
-      // The search's own four-state scaffold goes back to resting with the
-      // term the wipe just took: a "no matches" panel standing over a query
-      // nobody can see any more is a claim about a search that is gone.
-      bagRef.current.searchStatus = "resting";
-      bagRef.current.editError = "";
-      setLoaded(false);
-      setShelf(null);
-      bump();
-      if (notifyHost && token) {
-        void ask({ operation: "lock", sessionToken: token }).catch(() => {
-          // The client copy is already gone, which is the half this seat
-          // controls. A host that could not be reached will expire the session
-          // on its own five-minute clock.
-        });
-      }
-    },
-    [applySession, ask]
-  );
+  const relock = useCallback((): void => {
+    applySession(lock(sessionRef.current));
+    wipeSecretState(bagRef.current);
+    bagRef.current.items = [];
+    bagRef.current.truncated = false;
+    bagRef.current.openItemId = null;
+    bagRef.current.reauthExpired = false;
+    bagRef.current.lastMatchedAt = null;
+    // The search's own four-state scaffold goes back to resting with the
+    // term the wipe just took: a "no matches" panel standing over a query
+    // nobody can see any more is a claim about a search that is gone.
+    bagRef.current.searchStatus = "resting";
+    bagRef.current.editError = "";
+    setLoaded(false);
+    setShelf(null);
+    bump();
+  }, [applySession]);
 
   // ---- the read -------------------------------------------------------------
 
@@ -328,151 +309,102 @@ export function Root({
 
   // ---- the boundary ---------------------------------------------------------
 
-  const submitPassphrase = useCallback(
-    async (secret: string): Promise<void> => {
+  /**
+   * REVEAL, THROUGH THE SHELL'S DOOR (#996, ruling W6-D2).
+   *
+   * What used to be three steps — mint a permit, spend it on a privileged
+   * read, take the plaintext off the response — is one call. The shell unseals
+   * with `K` behind its own unlock and writes the reveal receipt on the way;
+   * this app receives the plaintext of one row and never the key.
+   *
+   * BOTH `Reveal` AND `Copy` LAND HERE: copying a secret without seeing it is
+   * still taking it, and it costs the same receipt.
+   *
+   * A LOCKED DOOR IS AN ANSWER. The app does not prompt for a passphrase — it
+   * has none to check and collecting one would be collecting a credential it
+   * must never hold — so it draws the shell's lock and lets the member unlock
+   * there.
+   */
+  const reveal = useCallback(
+    async (request: RevealRequest): Promise<void> => {
+      if (!door) {
+        setSessionError(REVEAL_NO_DOOR);
+        bump();
+        return;
+      }
       setBusy(true);
-      const configuring = sessionRef.current.configured === false;
-      let payload: AuthPayload;
+      let answer: Awaited<ReturnType<typeof door.reveal>>;
       try {
-        payload = await ask({
-          operation: configuring ? "configure" : "unlock",
-          secret,
+        answer = await door.reveal({
+          rowId: request.sidecar?.entityId ?? request.itemId,
+          entity: request.sidecar?.entity ?? "locker.item",
+          columns: [request.sidecar?.column ?? request.field],
         });
-      } catch {
-        payload = { ok: false, message: "Unlocking needs the gateway." };
+      } catch (error) {
+        setBusy(false);
+        publishOutcome(frame, {
+          text: String((error as { message?: string })?.message ?? error),
+        });
+        return;
       }
       setBusy(false);
-      applySession(afterUnlock(sessionRef.current, payload));
-      bump();
-      if (isOpen(sessionRef.current)) {
-        setLoaded(false);
-        await refresh();
+      if (!answer.ok) {
+        // `locked` is the shell's state, not a refusal to narrate: fall to the
+        // lock screen and let the member unlock where the passphrase belongs.
+        if (answer.reason === "locked" || answer.reason === "not_enrolled") {
+          relock();
+          return;
+        }
+        setSessionError(answer.message);
+        bump();
+        return;
       }
-    },
-    [applySession, ask, refresh]
-  );
-
-  /** Open the permit gate. Both `Reveal` and `Copy` land here: copying a secret
-   *  without seeing it is still taking it, and costs the same permit. */
-  const askPermit = useCallback(
-    (request: PermitRequest): void => {
-      bagRef.current.permitRequest = request;
+      setShelf(ITEM);
+      // ONE FIELD, ONE RECEIPT. The map holds exactly what was asked for, so a
+      // wipe still empties every revealed value on the screen.
+      const value = Object.values(answer.values)[0];
+      if (typeof value === "string" && value.length > 0) {
+        bagRef.current.revealed = { [request.field]: value };
+        bagRef.current.revealedAt = { [request.field]: Date.now() };
+      }
+      bagRef.current.reauthExpired = false;
       setSessionError("");
+      setNow(Date.now());
       bump();
     },
-    [setSessionError]
+    [door, frame, relock, setSessionError]
   );
 
   /**
-   * Read the one item the permit authorises. The ONLY secret-bearing read in
-   * this app, and it spends the permit on its way in.
-   *
-   * ONE PERMIT, ONE REVEAL (#873). A `sidecar` target moves what the permit
-   * buys — the sealed row hanging off the item rather than the item's own
-   * columns — because the vault deletes the item token before plaintext leaves
-   * it, so the two cannot both be bought with one confirmation. The plaintext
-   * comes back as the return value and is never put on the detail.
+   * Open one item's browsable detail. NOT a secret-bearing read any more: the
+   * vault hands back metadata and ciphertext, and the plaintext comes from the
+   * door above. There is no token to spend and no gate to pass, which is what
+   * lets the pane paint while the Locker is still locked.
    */
-  const openWithPermit = useCallback(
-    async (
-      itemId: string,
-      itemToken: string,
-      sidecar?: SidecarTarget
-    ): Promise<string | null> => {
-      const token = bagRef.current.sessionToken;
-      if (!token) return null;
+  const openItemDetail = useCallback(
+    async (itemId: string): Promise<void> => {
       let payload: {
         item?: LockerDetail | null;
-        sidecar?: { value?: string | null } | null;
         vaultDenied?: { message?: string } | null;
       };
       try {
         payload = await window.centraid.read({
           query: "item",
-          input: {
-            item_id: itemId,
-            auth_session: token,
-            item_token: itemToken,
-            ...(sidecar ? { sidecar } : {}),
-          },
+          input: { item_id: itemId },
         });
       } catch {
-        publishOutcome(frame, { text: "The reveal did not go through." });
-        return null;
+        publishOutcome(frame, { text: "The item did not open." });
+        return;
       }
-      // A denial on the ONE secret-bearing read is the app's denied state, in
-      // the vault's own words — never a blank pane that reads as an item with
-      // nothing in it.
       if (payload?.vaultDenied) {
         setConsent({ message: payload.vaultDenied.message ?? "" });
-        return null;
+        return;
       }
       bagRef.current.detail = payload?.item ?? null;
       bagRef.current.openItemId = itemId;
       bump();
-      return payload?.sidecar?.value ?? null;
     },
     [frame]
-  );
-
-  const confirmPermit = useCallback(
-    async (secret: string): Promise<void> => {
-      const request = bagRef.current.permitRequest;
-      const token = bagRef.current.sessionToken;
-      if (!request || !token) return;
-      setBusy(true);
-      let payload: AuthPayload;
-      try {
-        payload = await ask({
-          operation: "authorize-item",
-          sessionToken: token,
-          secret,
-          itemId: request.itemId,
-        });
-      } catch {
-        payload = {
-          ok: false,
-          message: "Re-authentication needs the gateway.",
-        };
-      }
-      setBusy(false);
-      const outcome = permitFromAuth(request, payload);
-      if (outcome.kind === "relock") {
-        // SESSION_EXPIRED came from the host: it has already forgotten this
-        // session, so the client only has to catch up.
-        relock(false);
-        return;
-      }
-      if (outcome.kind === "refused") {
-        setSessionError(outcome.message);
-        bump();
-        return;
-      }
-      bagRef.current.permit = outcome.permit;
-      bagRef.current.permitRequest = null;
-      bagRef.current.reauthExpired = false;
-      setSessionError("");
-      setShelf(ITEM);
-      const fromSidecar = await openWithPermit(
-        request.itemId,
-        outcome.permit.token,
-        request.sidecar
-      );
-      // ONE SHOT. The token bought exactly the read above; nothing keeps it.
-      bagRef.current.permit = spend();
-      // The field the member asked for is the field that opens — and only it.
-      // A sidecar's plaintext came back BESIDE the item; an item column's came
-      // back on it. Either way exactly one key lands in the bag.
-      const detail = bagRef.current.detail as Record<string, unknown> | null;
-      const value = request.sidecar ? fromSidecar : detail?.[request.field];
-      if (typeof value === "string" && value.length > 0) {
-        bagRef.current.revealed = { [request.field]: value };
-        bagRef.current.revealedAt = { [request.field]: Date.now() };
-      }
-      setNow(Date.now());
-      bump();
-    },
-    [ask, openWithPermit, relock, setSessionError]
   );
 
   const conceal = useCallback((field: string): void => {
@@ -488,10 +420,10 @@ export function Root({
   /**
    * ASK FOR ONE SEALED ROW, wherever on the screen it sits. An item's own
    * column needs nothing but its name; a sealed SIDECAR row (#873) carries the
-   * vault row the permit will be spent on, resolved out of the detail this pane
-   * is already holding — an address, never a value. A key that names no
-   * revealable row mints nothing rather than opening a gate over a permit
-   * nobody could spend.
+   * vault row to unseal, resolved out of the detail this pane is already
+   * holding — an address, never a value. A key that names no revealable row
+   * asks for nothing rather than spending a receipt on a row that does not
+   * exist.
    */
   const askReveal = useCallback(
     (field: string): void => {
@@ -499,7 +431,7 @@ export function Root({
       if (!detail) return;
       const sidecar = sidecarAskOf(field, detail);
       if (sidecar) {
-        askPermit({
+        void reveal({
           itemId: detail.item_id,
           field,
           sidecar: sidecar.target,
@@ -508,13 +440,13 @@ export function Root({
         return;
       }
       // A namespaced key that resolved to nothing names a sidecar row this
-      // detail does not have. It opens no gate: a permit minted for it could
-      // buy nothing, and asking for a passphrase to buy nothing is worse than
-      // the control never having been pressed.
+      // detail does not have. It asks for nothing: a reveal aimed at it could
+      // return nothing, and writing a receipt for nothing is worse than the
+      // control never having been pressed.
       if (field.includes(":") || field === PASSKEY_KEY_FIELD) return;
-      askPermit({ itemId: detail.item_id, field });
+      void reveal({ itemId: detail.item_id, field });
     },
-    [askPermit]
+    [reveal]
   );
 
   const copyRevealed = useCallback(
@@ -558,31 +490,38 @@ export function Root({
 
   // ---- wiring: boot, doorbell, focus, width, the session's two clocks -------
 
+  // THE LOCK IS THE SHELL'S, SUBSCRIBED TO (#996, W6-D2). Not polled here and
+  // not asked once at boot: the shell's session ends on its own clock, and an
+  // app that only asked at mount would keep drawing an unlocked Locker over a
+  // locked one. A host with no door reports `unknown`, which draws the
+  // unavailable screen rather than an unlock nobody can complete.
   useEffect(() => {
     let live = true;
-    void ask({ operation: "status" })
-      .then((status) => {
-        if (!live) return;
-        applySession(afterStatus(sessionRef.current, status));
-        bump();
-        if (isOpen(sessionRef.current)) void refresh();
-      })
-      .catch(() => {
-        if (!live) return;
-        applySession({
-          ...sessionRef.current,
-          error: "Locker authentication needs the gateway.",
-        });
-        bump();
-      });
+    const apply = (state: { status: "locked" | "unlocked" } | null): void => {
+      if (!live) return;
+      const wasOpen = isOpen(sessionRef.current);
+      applySession(afterLockState(sessionRef.current, state));
+      const nowOpen = isOpen(sessionRef.current);
+      // The shell locked while this app held plaintext: the wipe is this app's
+      // half of that lock and nothing else performs it.
+      if (wasOpen && !nowOpen) {
+        relock();
+        return;
+      }
+      bump();
+      if (!wasOpen && nowOpen) void refresh();
+    };
+    const stopLock = door ? door.subscribeLock(apply) : undefined;
+    if (!door) apply(null);
     const stopDoorbell = onDataChange(CHANGE_TABLES, () => void refresh());
     const stopFocus = onFocusRefresh(() => void refresh());
     return () => {
       live = false;
+      stopLock?.();
       stopDoorbell();
       stopFocus();
     };
-  }, [applySession, ask, refresh]);
+  }, [applySession, door, refresh, relock]);
 
   useEffect(() => {
     const element = rootElRef.current;
@@ -666,7 +605,6 @@ export function Root({
     readFailed: readFailedState,
   });
   const gate = {
-    setup: session.phase === "setup",
     locked: session.phase === "locked" || session.phase === "unknown",
     denied: consent !== null,
     // The shell walls the viewer seat before this Root ever mounts
@@ -729,21 +667,23 @@ export function Root({
     bump();
   }, []);
 
-  /** OPENING AN ITEM, from wherever the row was found — the list, the search
-   *  results, or a verdict in Review. It opens the PERMIT GATE, never the
-   *  item: the gate is minted against the field THIS TYPE seals, so a card is
-   *  asked for its number, a note for its body, and an identity for the read
-   *  itself (a type that seals nothing still has a read to authorise). */
+  /**
+   * OPENING AN ITEM, from wherever the row was found — the list, the search
+   * results, or a verdict in Review.
+   *
+   * It opens THE ITEM now, not a gate (#996, W6-D2). Opening used to cost a
+   * confirmation and a permit because the pane could not be drawn without
+   * unsealing it; the pane is metadata and ciphertext, so it draws for free
+   * and every secret on it stays hidden until it is asked for by name. One
+   * fewer prompt, and the one that remains is about a value rather than
+   * about a screen.
+   */
   const openGate = useCallback(
     (itemId: string): void => {
-      const row = bagRef.current.items.find((item) => item.item_id === itemId);
-      const type =
-        row?.type ??
-        bagRef.current.searchResults?.find((item) => item.item_id === itemId)
-          ?.type;
-      askPermit({ itemId, field: primarySealedField(type ?? "login") });
+      setShelf(ITEM);
+      void openItemDetail(itemId);
     },
-    [askPermit]
+    [openItemDetail]
   );
 
   const acts = useRouteActs({
@@ -775,15 +715,12 @@ export function Root({
 
   const scroll = ((): ReactNode => {
     if (gate.denied) return <DeniedGate message={consent?.message ?? ""} />;
-    if (gate.setup || gate.locked) {
-      return (
-        <Lock
-          mode={gate.setup ? "setup" : "lock"}
-          busy={busy}
-          error={session.error}
-          onSubmit={(secret) => void submitPassphrase(secret)}
-        />
-      );
+    // THE SHELL'S LOCK, DRAWN BY THE SHELL (#996, W6-D2). This app renders
+    // the fact and not the field: a passphrase box here would be an app
+    // collecting a credential it must never hold, and there is nothing on this
+    // side to check it against.
+    if (gate.locked) {
+      return <Lock reason={door ? "locked" : "unavailable"} />;
     }
     if (current === ITEM && bag.detail) {
       return (
@@ -866,25 +803,6 @@ export function Root({
   })();
 
   const overlays = ((): ReactNode => {
-    if (bag.permitRequest) {
-      const request = bag.permitRequest;
-      return (
-        <PermitGate
-          itemTitle={
-            bag.items.find((row) => row.item_id === request.itemId)?.title ?? ""
-          }
-          fieldLabel={request.label ?? FIELD_LABEL[request.field] ?? "Value"}
-          busy={busy}
-          error={session.error}
-          onConfirm={(secret) => void confirmPermit(secret)}
-          onCancel={() => {
-            bagRef.current.permitRequest = null;
-            setSessionError("");
-            bump();
-          }}
-        />
-      );
-    }
     // THE EXPORT'S CONFIRM. It names the consequence — §6's lede, whole — and
     // it is destructive in the `--net` tone, because what it writes leaves the
     // vault's protection entirely.
@@ -996,7 +914,7 @@ export function Root({
               ...(quietField ? { quietField } : {}),
               onQuiet: () =>
                 openItem && quietField
-                  ? askPermit({ itemId: openItem.item_id, field: quietField })
+                  ? void reveal({ itemId: openItem.item_id, field: quietField })
                   : go(GEN),
             }),
       })
@@ -1010,7 +928,7 @@ export function Root({
     barIsBare,
     go,
     acts,
-    askPermit,
+    reveal,
     bag.detail,
     openItem,
     quietField,
@@ -1022,16 +940,14 @@ export function Root({
   // the instant the re-read came back.
   useEffect(() => {
     const key = shut
-      ? gate.setup
-        ? "setup"
-        : gate.denied
-          ? "items"
-          : "lock"
+      ? gate.denied
+        ? "items"
+        : "lock"
       : current === null
         ? "items"
         : String(current).replace("built-in:", "");
     frame.setStatus(ROUTE_STATUS[key] ?? ITEMS_STATUS);
-  }, [frame, current, shut, gate.setup, gate.denied]);
+  }, [frame, current, shut, gate.denied]);
 
   useEffect(() => {
     if (!handedOff || shut) {

@@ -31,6 +31,7 @@ import {
   LOCKER_ADDRESS_DDL,
   LOCKER_ALIAS_DDL,
   LOCKER_AUTH_DDL,
+  LOCKER_AUTH_DROP_DDL,
   LOCKER_DDL,
   LOCKER_FIELD_DDL,
   LOCKER_KEY_DDL,
@@ -210,6 +211,12 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // plane's job on open, not a rung's, because a rewrite over every secret is
   // exactly what the batched-rewrite primitive below exists for.
   LOCKER_KEY_DDL,
+  // RUNG SEVEN (#996, rulings R13 and W6-D2) — `locker_auth_credential` goes.
+  // The gateway-side unlock verifier it held has no reader left: the gateway
+  // no longer unseals a Locker row, so no permit is minted and nothing checks
+  // a passphrase here. See the DDL's own note for why a dormant verifier is
+  // worse than none.
+  LOCKER_AUTH_DROP_DDL,
 ];
 
 /**

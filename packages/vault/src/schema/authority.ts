@@ -88,6 +88,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS share_authority_request_open
 -- the commons rail receipts acts under authority ids that are not rows of this
 -- table at all. A key here would turn "an act was receipted" into "the act is
 -- refused", which is the wrong direction for evidence.
+--
+-- IT STAYS, AND THIS IS WHY (#996, R17 / open question 8). R17 sends this
+-- table away "for an index over receipts unless \`evidence.ts\` names a
+-- property it cannot serve". \`writeAuthorityReceipt\` stamps this row from
+-- the same input, in the same call, as a receipt carrying the same
+-- \`authority_id\`, and \`idx_receipt_authority(authority_id, occurred_at)\`
+-- already exists — so while the receipt is LIVE the index is exactly as good.
+-- The property is the receipt's LIFETIME: the audit band is retained 365 days
+-- and its \`journal-archive\` duty DELETES the rows it seals out of
+-- \`access_receipt\`, and that band rides no canonical portable walk. This row
+-- has no history to age and is a registered \`share.*\` entity, so it survives
+-- both. "Granted a year ago and nothing has used it since" is the fact that
+-- makes a stale answer visible, and it is exactly the case where an index over
+-- receipts answers "never used". Pinned by \`gateway/evidence.test.ts\`.
 CREATE TABLE IF NOT EXISTS share_authority_use (
   authority_id TEXT PRIMARY KEY,
   last_used_at TEXT NOT NULL

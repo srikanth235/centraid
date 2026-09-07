@@ -13,46 +13,77 @@ import { describe, expect, it } from "vitest";
 import { ctxOf, LIVE_ITEM } from "./queries.test-fixtures.ts";
 
 // ---------------------------------------------------------------------------
-// The sidecar reveal (#873)
+// The item query hands out no plaintext at all (#996, rulings R13 and W6-D2)
 // ---------------------------------------------------------------------------
 
 /*
- * ONE PERMIT BUYS ONE REVEAL. The gateway DELETES the item token before
- * plaintext leaves it (`locker-auth.consumeItemPermit`), so the item's own
- * sealed columns and a sealed sidecar row cannot both be bought with one
- * confirmation. That is the whole reason `sidecar` is a MODE: the assertions
- * below are about WHICH reveal the handler made, because a handler that
- * revealed the item first would burn the token and hand back a null.
+ * WHAT THESE USED TO PROVE, AND WHAT THEY PROVE NOW. This block held four
+ * tests about WHICH reveal the `item` handler made: the gateway deleted the
+ * item token before plaintext left it, so an item's own sealed columns and a
+ * sealed sidecar row could not both be bought with one confirmation, and
+ * `sidecar` was a MODE to keep them apart.
+ *
+ * There is no token to burn now. The gateway never unseals a Locker row for a
+ * client (W6-D2), so the question "which reveal did the handler make" has one
+ * answer — none — and that is the property worth pinning, because it is the
+ * one a regression would quietly undo. The reveal itself, sidecars included,
+ * is proved on the door: `packages/client/src/locker/locker-kit-door.test.ts`.
  */
-describe("item: a sealed sidecar row spends the item's permit (#873)", () => {
-  const sidecarCtx = (values: Record<string, string | null>) =>
-    ctxOf(
-      {
-        "locker.item": [LIVE_ITEM],
-        "locker.item_field": [
-          {
-            field_id: "field-1",
-            section: "Recovery",
-            label: "Recovery code",
-            kind: "sealed",
-            value_text: null,
-            value_sealed: "«sealed»",
-            position: 0,
-          },
-        ],
-      },
-      { revealValues: values }
-    );
+describe("item: the handler unseals nothing, for any caller (#996, W6-D2)", () => {
+  const ctxWithSidecar = () =>
+    ctxOf({
+      "locker.item": [LIVE_ITEM],
+      "locker.item_field": [
+        {
+          field_id: "field-1",
+          section: "Recovery",
+          label: "Recovery code",
+          kind: "sealed",
+          value_text: null,
+          value_sealed: "«sealed»",
+          position: 0,
+        },
+      ],
+    });
 
-  const auth = { auth_session: "sess", item_token: "tok" };
-
-  it("reveals the FIELD and never the item's own columns", async () => {
+  it("returns the item's secret columns as the vault stores them", async () => {
     const { default: item } = await import("./queries/item.ts");
-    const ctx = sidecarCtx({ value_sealed: "r3c0very-c0de" });
+    const ctx = ctxWithSidecar();
+    const result = await item({ input: { item_id: "item-1" }, ctx });
+    // The browsable half is here — that is what lets the pane paint while the
+    // Locker is locked, which the permit could never allow.
+    expect(result.item).toMatchObject({
+      item_id: "item-1",
+      title: LIVE_ITEM.title,
+    });
+    // And the secret half is not plaintext.
+    expect(result.item.password).not.toBe("k7Q-vn2-Rme");
+    expect(ctx.calls.some((call) => call.kind === "reveal")).toBe(false);
+  });
+
+  it("carries the sidecar row as metadata, never as a value", async () => {
+    const { default: item } = await import("./queries/item.ts");
+    const ctx = ctxWithSidecar();
+    const result = await item({ input: { item_id: "item-1" }, ctx });
+    const field = (result.item.fields ?? [])[0];
+    // The label and the section are how the pane knows there is something to
+    // ask for; the value is what the door returns, one receipt at a time.
+    expect(field).toMatchObject({ label: "Recovery code", kind: "sealed" });
+    expect(JSON.stringify(result)).not.toContain("r3c0very-c0de");
+    expect(ctx.calls.some((call) => call.kind === "reveal")).toBe(false);
+  });
+
+  it("ignores a caller that asks for a reveal the old way", async () => {
+    // A stale client sending `auth_session` / `item_token` / `sidecar` gets
+    // metadata, not plaintext and not an error: the inputs name a door that no
+    // longer exists, and honouring them would be the gateway unsealing again.
+    const { default: item } = await import("./queries/item.ts");
+    const ctx = ctxWithSidecar();
     const result = await item({
       input: {
         item_id: "item-1",
-        ...auth,
+        auth_session: "sess",
+        item_token: "tok",
         sidecar: {
           entity: "locker.item_field",
           entityId: "field-1",
@@ -61,107 +92,9 @@ describe("item: a sealed sidecar row spends the item's permit (#873)", () => {
       },
       ctx,
     });
-    expect(ctx.reveals).toHaveLength(1);
-    expect(ctx.reveals[0]).toMatchObject({
-      entity: "locker.item_field",
-      entityId: "field-1",
-      columns: ["value_sealed"],
-      authentication: { sessionToken: "sess", itemToken: "tok" },
-    });
-    expect(result.sidecar).toStrictEqual({ value: "r3c0very-c0de" });
-    // The row's own shape is untouched: presence, never the value.
-    expect(result.item.fields[0]).toMatchObject({ value: null, sealed: true });
-  });
-
-  it("reveals the passkey's key material", async () => {
-    const { default: item } = await import("./queries/item.ts");
-    const cases = [
-      ["locker.item_passkey", "item-1", "private_key", "MHcCAQEE-key"],
-    ] as const;
-    const runs = cases.map(async ([entity, entityId, column, value]) => {
-      const ctx = sidecarCtx({ [column]: value });
-      const result = await item({
-        input: {
-          item_id: "item-1",
-          ...auth,
-          sidecar: { entity, entityId, column },
-        },
-        ctx,
-      });
-      return { ctx, result };
-    });
-    const settled = await Promise.all(runs);
-    settled.forEach(({ ctx, result }, index) => {
-      const [entity, entityId, column, value] = cases[index];
-      expect(ctx.reveals[0]).toMatchObject({
-        entity,
-        entityId,
-        columns: [column],
-      });
-      expect(result.sidecar).toStrictEqual({ value });
-    });
-  });
-
-  it("refuses an entity or column it does not itself name", async () => {
-    const { default: item } = await import("./queries/item.ts");
-    const settled = await Promise.all(
-      [
-        { entity: "core.party", entityId: "p-1", column: "secret" },
-        // THE DEAD ENTITY IS ONE OF THEM (#916, D2). `locker.item_history` was
-        // a sealed sidecar until the table was dropped; the gateway refuses it
-        // now, so the handler must not carry a caller's word for it into a
-        // reveal. Naming it here is what fails if `SIDECAR_COLUMNS` ever grows
-        // the row back.
-        {
-          entity: "locker.item_history",
-          entityId: "rev-1",
-          column: "password",
-        },
-        {
-          entity: "locker.item_field",
-          entityId: "field-1",
-          column: "password",
-        },
-        { entity: "locker.item_field", entityId: "", column: "value_sealed" },
-      ].map(async (bad) => {
-        const ctx = sidecarCtx({});
-        const result = await item({
-          input: { item_id: "item-1", ...auth, sidecar: bad },
-          ctx,
-        });
-        return { ctx, result };
-      })
-    );
-    for (const { ctx, result } of settled) {
-      // It falls back to the item's OWN reveal rather than passing an
-      // unrecognised row to the vault on the caller's word.
-      expect(ctx.reveals[0].entity).toBe("locker.item");
-      expect(result.sidecar).toBeUndefined();
-    }
-  });
-
-  it("a denial on the sidecar reveal is the app's denied state, not a blank pane", async () => {
-    const { default: item } = await import("./queries/item.ts");
-    const ctx = sidecarCtx({});
-    ctx.vault.reveal = async () => {
-      throw Object.assign(new Error("deny (receipt r-9): no reveal consent"), {
-        code: "consent",
-      });
-    };
-    const result = await item({
-      input: {
-        item_id: "item-1",
-        ...auth,
-        sidecar: {
-          entity: "locker.item_field",
-          entityId: "field-1",
-          column: "value_sealed",
-        },
-      },
-      ctx,
-    });
-    expect(result.item).toBeNull();
-    expect(result.vaultDenied.message).toContain("no reveal consent");
+    expect(result.item).toMatchObject({ item_id: "item-1" });
+    expect(result.sidecar).toBeUndefined();
+    expect(ctx.calls.some((call) => call.kind === "reveal")).toBe(false);
   });
 });
 
@@ -240,11 +173,19 @@ describe("access: the history of every auth, reveal and fill (#872)", () => {
     ]);
   });
 
-  it("is behind the lock: a locked session gets no history", async () => {
+  it("is NOT behind the lock, on purpose (#996, W6-D2)", async () => {
+    // It used to be, and the inversion is the point. The history carries no
+    // secret VALUE — it is the record of who looked — and with the gateway no
+    // longer decrypting, that record is the only evidence a reveal happened.
+    // Hiding the audit trail behind the boundary it audits would mean a member
+    // could not answer "what was read on this device" without first unlocking
+    // the thing they are worried about.
     const { default: access } = await import("./queries/access.ts");
-    const ctx = ctxOf({ "access.receipt": receipts }, { authenticated: false });
+    const ctx = ctxOf({ "access.receipt": receipts });
     const result = await access({ input: {}, ctx });
-    expect(result).toMatchObject({ entries: [], authRequired: true });
-    expect(ctx.calls).toStrictEqual([]);
+    expect(result.entries).toHaveLength(receipts.length);
+    expect(result.authRequired).toBeUndefined();
+    // And it asks nothing of an authentication plane that is gone.
+    expect(ctx.calls.some((call) => call.kind === "authenticate")).toBe(false);
   });
 });

@@ -168,14 +168,10 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
       },
       peerLabel: readString(body, "label") ?? peerVaultId,
       localLabel: deps.localLabel(),
-      permissions: {
-        ...(typeof body.permissions === "object" && body.permissions !== null
-          ? (body.permissions as Record<string, unknown>)
-          : {}),
-        ...(peerOwnerPartyId
-          ? { commonsPartyIds: { [peerVaultId]: peerOwnerPartyId } }
-          : {}),
-      },
+      // As on the client side (#996, OQ-7): the peer's hello contributes the
+      // one fact this link needs from it — who that side is — and nothing else
+      // it sends is written down.
+      partyIds: peerOwnerPartyId ? { [peerVaultId]: peerOwnerPartyId } : {},
     });
     if (!link) return notFound(res);
     const publicKey = deps.vaultPublicKey(link.localVaultId);
@@ -201,7 +197,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
         : { endpointId: route.endpointId }),
       relayHints: route.relayHints,
       label: link.myLabel ?? link.localVaultId,
-      permissions: link.permissions,
     });
   };
 

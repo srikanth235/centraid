@@ -1,4 +1,4 @@
-// The field row and the permit gate, rendered (README-Locker §2, §5, §6).
+// The field row, rendered (README-Locker §2, §5, §6).
 //
 // The §6 sentences are VERBATIM here on purpose: this app's whole claim is
 // that it states its own boundary in words rather than implying it with a
@@ -8,9 +8,10 @@
 //    secret's, and offers Reveal and Copy
 //  - a revealed row offers Copy and Conceal, states the remaining time, and
 //    says the receipt is ALREADY written — the cost has been paid
-//  - the permit gate is a full-stop overlay that names the item, the field,
-//    the ~30-second life and the receipt, as four separate sentences
-//  - a refusal is shown, because a refusal is receipted too
+//  - REVEAL ASKS, IT DOES NOT OPEN. The overlay it used to raise is gone with
+//    the permit (#996, W6-D2): the ask goes to the shell's door, which prompts
+//    the OS if the session has lapsed and answers otherwise. What this still
+//    pins is that the row itself reveals nothing on its own.
 
 // @vitest-environment jsdom
 import React from "react";
@@ -20,11 +21,6 @@ import { SEALED_RUN } from "@centraid/blueprints/apps/locker/item-fields";
 import {
   CONCEAL,
   COPY,
-  PERMIT_CANCEL,
-  PERMIT_CONFIRM,
-  PERMIT_GATE_ASK,
-  PERMIT_GATE_LIFE,
-  PERMIT_GATE_RECEIPT,
   REVEAL,
   SEALED_NOTE,
   revealedNote,
@@ -32,7 +28,6 @@ import {
 
 import { mountBlock, nodesOf, press } from "../../test/react-native-stub";
 import { LockerSealedField } from "./LockerFields";
-import LockerPermitGate from "./LockerPermitGate";
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
@@ -77,7 +72,7 @@ describe("a sealed field", () => {
     unmount();
   });
 
-  it("asks for a permit rather than revealing on its own", () => {
+  it("asks the shell's door rather than revealing on its own", () => {
     const asked: string[] = [];
     const { container, unmount } = mountBlock(
       <LockerSealedField
@@ -116,79 +111,6 @@ describe("a sealed field", () => {
     expect(textOf(container)).toContain("the receipt is already written");
     const labels = nodesOf(container, "button").map((node) => node.textContent);
     expect(labels).toStrictEqual([COPY, CONCEAL]);
-    unmount();
-  });
-});
-
-describe("the permit gate", () => {
-  it("draws nothing until a field is being asked for", () => {
-    const { container, unmount } = mountBlock(
-      <LockerPermitGate
-        busy={false}
-        error=""
-        field={null}
-        itemTitle="Mail"
-        onCancel={noop}
-        onConfirm={noop}
-      />
-    );
-    expect(textOf(container)).toBe("");
-    unmount();
-  });
-
-  it("names the item, the field, the permit's life and the receipt", () => {
-    const { container, unmount } = mountBlock(
-      <LockerPermitGate
-        busy={false}
-        error=""
-        field="password"
-        itemTitle="Mail"
-        onCancel={noop}
-        onConfirm={noop}
-      />
-    );
-    expect(textOf(container)).toContain("Reveal the password?");
-    expect(textOf(container)).toContain("Mail");
-    expect(textOf(container)).toContain(PERMIT_GATE_ASK);
-    expect(textOf(container)).toContain(PERMIT_GATE_LIFE);
-    expect(textOf(container)).toContain(PERMIT_GATE_RECEIPT);
-    const labels = nodesOf(container, "button").map((node) => node.textContent);
-    expect(labels).toContain(PERMIT_CANCEL);
-    expect(labels).toContain(PERMIT_CONFIRM);
-    unmount();
-  });
-
-  it("asks to OPEN an item whose type seals no single field", () => {
-    const { container, unmount } = mountBlock(
-      <LockerPermitGate
-        busy={false}
-        error=""
-        field="item"
-        itemTitle="Passport"
-        onCancel={noop}
-        onConfirm={noop}
-      />
-    );
-    expect(textOf(container)).toContain("Open this item?");
-    unmount();
-  });
-
-  it("refuses at rest and shows the host's refusal — a refusal is receipted too", () => {
-    const { container, unmount } = mountBlock(
-      <LockerPermitGate
-        busy={false}
-        error="Try again in 12 seconds."
-        field="password"
-        itemTitle="Mail"
-        onCancel={noop}
-        onConfirm={noop}
-      />
-    );
-    expect(textOf(container)).toContain("Try again in 12 seconds.");
-    const confirm = nodesOf(container, "button").find(
-      (node) => node.textContent === PERMIT_CONFIRM
-    );
-    expect(confirm?.getAttribute("aria-disabled")).toBe("true");
     unmount();
   });
 });

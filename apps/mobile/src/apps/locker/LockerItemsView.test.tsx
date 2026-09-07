@@ -29,7 +29,6 @@ import {
 } from "@centraid/blueprints/apps/locker/view-copy";
 
 import { mountBlock, nodesOf } from "../../test/react-native-stub";
-import { DEVICE_OFFER } from "./locker-seat-copy";
 import LockerItemsView from "./LockerItemsView";
 
 vi.mock(import("react-native"), async () => {
@@ -74,8 +73,6 @@ function view(
     <LockerItemsView
       filter={{ kind: "all" }}
       loaded
-      offerDevice={false}
-      onEnrolDevice={noop}
       onFilter={noop}
       onImport={noop}
       onNew={noop}
@@ -174,14 +171,15 @@ describe("the item list", () => {
     truncated.unmount();
   });
 
-  it("offers a device credential only where this phone can hold one", () => {
-    const without = mountBlock(view());
-    expect(textOf(without.container)).not.toContain(DEVICE_OFFER);
-    without.unmount();
-
-    const offered = mountBlock(view({ offerDevice: true }));
-    expect(textOf(offered.container)).toContain(DEVICE_OFFER);
-    offered.unmount();
+  it("offers no credential to enrol — the key arrives with the device (#996)", () => {
+    // The offer went with the device credential it enrolled. This phone holds
+    // `K` because it was enrolled as a seat, not because a member opted into a
+    // second way in, so a list that invited them to create one would be
+    // offering a thing that no longer exists.
+    const { container, unmount } = mountBlock(view());
+    expect(textOf(container)).not.toContain("Enrol");
+    expect(textOf(container)).not.toContain("credential");
+    unmount();
   });
 
   it("draws each row's verdict from the shared derivation", () => {

@@ -23,15 +23,13 @@ import {
 import {
   SECRET_BEARING_KEYS,
   SESSION_IDLE_MS,
-  afterStatus,
-  afterUnlock,
+  afterLockState,
   bootSession,
   emptySecretBag,
   isExpired,
   isOpen,
   lock,
   locksOnVisibility,
-  refusalText,
   remainingIdleMs,
   touch,
   wipeSecretState,
@@ -44,64 +42,66 @@ describe("the session boots locked", () => {
   it("has no phase that opens without an answer", () => {
     const session = bootSession(T0);
     expect(session.phase).toBe("unknown");
-    expect(session.token).toBeNull();
     expect(isOpen(session)).toBe(false);
   });
 
-  it("resolves to first run when no passphrase exists", () => {
-    const session = afterStatus(bootSession(T0), { configured: false }, T0);
-    expect(session.phase).toBe("setup");
+  it("stays unknown on a host with no Locker door", () => {
+    // Not "locked" (#996, W6-D2): a host that cannot unseal locally is a
+    // different fact from a shell whose session has ended, and only one of
+    // the two is fixed by unlocking. Drawing an unlock the member cannot
+    // complete is the lie this distinction exists to prevent.
+    const session = afterLockState(bootSession(T0), null, T0);
+    expect(session.phase).toBe("unknown");
     expect(isOpen(session)).toBe(false);
   });
 
-  it("resolves to locked when a passphrase exists but no session does", () => {
-    const session = afterStatus(
-      bootSession(T0),
-      { ok: true, configured: true, authenticated: false },
-      T0
-    );
+  it("is locked while the shell's Locker is locked", () => {
+    const session = afterLockState(bootSession(T0), { status: "locked" }, T0);
     expect(session.phase).toBe("locked");
-    expect(session.token).toBeNull();
+    expect(isOpen(session)).toBe(false);
   });
 
-  it("resumes only a host session that arrives with its token", () => {
-    const resumed = afterStatus(
-      bootSession(T0),
-      { ok: true, configured: true, authenticated: true, sessionToken: "s1" },
-      T0
-    );
-    expect(resumed.phase).toBe("open");
-    expect(resumed.token).toBe("s1");
-
-    // Authenticated with no token is not a session — it is a claim.
-    const claimed = afterStatus(
-      bootSession(T0),
-      { ok: true, configured: true, authenticated: true },
-      T0
-    );
-    expect(claimed.phase).toBe("locked");
-    expect(claimed.token).toBeNull();
+  it("is open when the shell reports an unlocked session", () => {
+    const session = afterLockState(bootSession(T0), { status: "unlocked" }, T0);
+    expect(session.phase).toBe("open");
+    expect(isOpen(session)).toBe(true);
+    // And locking it lands on Lock — there is no first-run gate to fall back
+    // to, because enrolment is the shell's.
+    expect(lock(session, T0).phase).toBe("locked");
   });
 
-  it("keeps first run passed once a configure succeeds", () => {
-    const created = afterUnlock(
-      afterStatus(bootSession(T0), { configured: false }, T0),
-      { ok: true, sessionToken: "s1" },
-      T0
+  it("holds no credential of its own, in any phase", () => {
+    // The structural half of W6-D2: this app collects no passphrase and keeps
+    // no token, so there is nothing on the state for either to hide in.
+    for (const state of [
+      bootSession(T0),
+      afterLockState(bootSession(T0), { status: "locked" }, T0),
+      afterLockState(bootSession(T0), { status: "unlocked" }, T0),
+    ]) {
+      expect(Object.keys(state).toSorted()).toStrictEqual([
+        "error",
+        "lastActivityAt",
+        "phase",
+      ]);
+    }
+  });
+
+  it("clears the last refusal when the shell locks", () => {
+    const refused = {
+      ...bootSession(T0),
+      phase: "open" as const,
+      error: "No.",
+    };
+    expect(afterLockState(refused, { status: "locked" }, T0).error).toBe("");
+    // …but a live session keeps the words it was given.
+    expect(afterLockState(refused, { status: "unlocked" }, T0).error).toBe(
+      "No."
     );
-    expect(created.phase).toBe("open");
-    expect(created.configured).toBe(true);
-    // …and locking that session lands on Lock, never back on First run.
-    expect(lock(created, T0).phase).toBe("locked");
   });
 });
 
 describe("five minutes, sliding", () => {
-  const open = afterUnlock(
-    bootSession(T0),
-    { ok: true, sessionToken: "s1" },
-    T0
-  );
+  const open = afterLockState(bootSession(T0), { status: "unlocked" }, T0);
 
   it("expires exactly at the window, not before", () => {
     expect(isExpired(open, T0 + SESSION_IDLE_MS - 1)).toBe(false);
@@ -130,36 +130,12 @@ describe("hiding ends it", () => {
   });
 });
 
-describe("a refusal keeps its own words", () => {
-  it("prefers the host's message, then a backoff, then the plain fact", () => {
-    expect(refusalText({ message: "Device credential revoked." })).toBe(
-      "Device credential revoked."
-    );
-    expect(refusalText({ retryAfterMs: 30_000 })).toBe(
-      "Try again in 30 seconds."
-    );
-    expect(refusalText({})).toBe("The passphrase was not accepted.");
-  });
-
-  it("leaves a refused unlock locked, holding no token", () => {
-    const refused = afterUnlock(
-      afterStatus(bootSession(T0), { configured: true }, T0),
-      { ok: false, configured: true, message: "No." },
-      T0
-    );
-    expect(refused.phase).toBe("locked");
-    expect(refused.token).toBeNull();
-    expect(refused.error).toBe("No.");
-  });
-});
-
 describe("a lock takes every secret-bearing field with it", () => {
   /** A bag with EVERY declared secret-bearing field holding something. The
    *  first assertion below proves that claim against the key list itself, so a
    *  field added without a value here fails rather than going untested. */
   function loaded(): SecretBag {
     return {
-      sessionToken: "session-token",
       detail: {
         item_id: "l1",
         type: "login",
@@ -168,13 +144,6 @@ describe("a lock takes every secret-bearing field with it", () => {
       },
       revealed: { password: "k7Q-vn2-Rme" },
       revealedAt: { password: T0 },
-      permit: {
-        itemId: "l1",
-        field: "password",
-        token: "item-token",
-        expiresAt: T0 + 30_000,
-      },
-      permitRequest: { itemId: "l1", field: "password" },
       editSeed: {
         mode: "edit",
         type: "login",
@@ -247,7 +216,7 @@ describe("a lock takes every secret-bearing field with it", () => {
     const held = bag;
     wipeSecretState(bag);
     expect(held).toBe(bag);
-    expect(held.sessionToken).toBeNull();
+    expect(held.revealed).toStrictEqual({});
   });
 
   it("names every field the empty bag has, and no more", () => {

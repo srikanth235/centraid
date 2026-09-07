@@ -80,7 +80,6 @@ interface VaultCallMessage {
     | "changes"
     | "resolve"
     | "reveal"
-    | "authenticate"
     | "content";
   payload: unknown;
 }
@@ -188,9 +187,6 @@ const vault = {
   },
   reveal(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("reveal", request);
-  },
-  authenticate(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall("authenticate", request);
   },
   content(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("content", request);

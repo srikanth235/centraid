@@ -316,3 +316,24 @@ ALTER TABLE locker_item ADD COLUMN key_id TEXT;
 ALTER TABLE locker_item_field ADD COLUMN key_id TEXT;
 ALTER TABLE locker_item_passkey ADD COLUMN key_id TEXT;
 `;
+
+// THE UNLOCK CREDENTIAL GOES (#996, rulings R13 and W6-D2) — rung seven.
+//
+// `locker_auth_credential` held a scrypt-over-HMAC verifier for the passphrase
+// the gateway checked before it minted a permit. Every part of that sentence
+// is gone: the gateway does not unseal a Locker row, so there is nothing for a
+// permit to buy, and the seat proves presence to its own OS or its own
+// passphrase wrap. A verifier nothing verifies against is not dormant, it is a
+// standing offer to whoever finds the file — and the honest form of "this
+// installation has no gateway-side unlock credential" is no table.
+//
+// A RUNG, NOT A JS PASS: it must leave every EXISTING file, and nothing
+// survives it that a later restore would have to interpret. The passphrase
+// itself was never stored, so nothing recoverable is lost — a member who used
+// one unlocks with Face ID or their seat's passphrase now, and neither reads
+// this row.
+export const LOCKER_AUTH_DROP_DDL = `
+DROP TRIGGER IF EXISTS locker_auth_credential_touch_updated_at;
+DROP INDEX IF EXISTS locker_auth_credential_kind_idx;
+DROP TABLE IF EXISTS locker_auth_credential;
+`;

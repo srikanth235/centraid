@@ -24,7 +24,15 @@ export interface VaultLink {
   vaultB: string;
   approvedByA: string | null;
   approvedByB: string | null;
-  permissions: Record<string, unknown>;
+  /**
+   * `vaultId → partyId` for the two sides of this link (#996, R17 / OQ-7).
+   *
+   * Was `permissions`, an open bag. Nothing consumed a permission out of it —
+   * the only key ever read was `commonsPartyIds`, which is who each side IS.
+   * A link is a channel (#903), so the column now says the one thing it holds
+   * and a value that is not a party id does not survive the parse.
+   */
+  partyIds: Record<string, string>;
   revoked: boolean;
   createdAt: string;
 }
@@ -39,7 +47,7 @@ export interface LinkedPeer {
   peerLabel: string | null;
   myLabel: string | null;
   route: LinkRoute;
-  permissions: Record<string, unknown>;
+  partyIds: Record<string, string>;
 }
 
 export interface PeerLinkInput {
@@ -50,7 +58,7 @@ export interface PeerLinkInput {
   peerPublicKey: string;
   peerLabel: string;
   route: LinkRoute;
-  permissions?: Record<string, unknown>;
+  partyIds?: Record<string, string>;
 }
 
 export interface LinkRedemption extends Omit<
@@ -67,7 +75,7 @@ export interface VaultLinkRow {
   vault_b: string;
   approved_by_a: string | null;
   approved_by_b: string | null;
-  permissions_json: string;
+  party_ids_json: string;
   revoked: number;
   created_at: string;
 }
@@ -106,11 +114,7 @@ export function peerViewOf(
   const peer = lookups.directoryEntry(peerVaultId);
   if (!peer) return undefined;
   const mineEntry = lookups.directoryEntry(localVaultId);
-  const partyIds =
-    typeof link.permissions["commonsPartyIds"] === "object" &&
-    link.permissions["commonsPartyIds"] !== null
-      ? (link.permissions["commonsPartyIds"] as Record<string, unknown>)
-      : {};
+  const partyIds = link.partyIds;
   return {
     linkId: link.linkId,
     localVaultId,
@@ -125,7 +129,7 @@ export function peerViewOf(
     peerLabel: peer.label,
     myLabel: mineEntry?.label ?? null,
     route,
-    permissions: link.permissions,
+    partyIds: link.partyIds,
   };
 }
 
@@ -138,7 +142,7 @@ export function toLink(row: VaultLinkRow): VaultLink {
     vaultB: row.vault_b,
     approvedByA: row.approved_by_a,
     approvedByB: row.approved_by_b,
-    permissions: JSON.parse(row.permissions_json) as Record<string, unknown>,
+    partyIds: parsePartyIds(row.party_ids_json),
     revoked: row.revoked === 1,
     createdAt: row.created_at,
   };
@@ -160,10 +164,32 @@ export function partyIdForLinkedVault(
   link: VaultLink,
   vaultId: string
 ): string | undefined {
-  const ids = link.permissions["commonsPartyIds"];
-  if (!ids || typeof ids !== "object") return undefined;
-  const value = (ids as Record<string, unknown>)[vaultId];
+  const value = link.partyIds[vaultId];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
+ * `vaultId → partyId`, and nothing else.
+ *
+ * The parse is the narrowing (#996, OQ-7): the far side sends this map inside
+ * its hello, and the old code spread whatever arrived into storage verbatim.
+ * A non-string value, or a key that is not a vault id this link names, is not
+ * a party id — so it does not become one by being written down.
+ */
+export function parsePartyIds(raw: string): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (typeof parsed !== "object" || parsed === null) return {};
+  const out: Record<string, string> = {};
+  for (const [vaultId, partyId] of Object.entries(parsed)) {
+    if (typeof partyId === "string" && partyId.length > 0)
+      out[vaultId] = partyId;
+  }
+  return out;
 }
 
 /** Canonical pair order — smaller id first (the table's CHECK). */

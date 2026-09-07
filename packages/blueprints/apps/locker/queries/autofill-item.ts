@@ -57,30 +57,25 @@ export default async function autofillItem({
     if (!matchesOrigin({ url: row.url, url_match_policy: policy }, origin)) {
       return { fill: null, reason: "Page origin does not match this login." };
     }
-    const revealed = (await ctx.vault.reveal({
-      entity: "locker.item",
-      entityId: itemId,
-      columns: ["password"],
-      context: { kind: "fill", origin },
-    })) as { values?: { password?: string | null }; receiptId?: string };
-    let totp: string | undefined;
-    if (row.otp_seed != null) {
-      const outcome = await ctx.vault.invoke({
-        command: "locker.totp_code",
-        input: { item_id: itemId },
-      });
-      if (outcome.status === "executed") {
-        const code = outcome.output?.code;
-        if (typeof code === "string") totp = code;
-      }
-    }
+    // THE GATEWAY NO LONGER UNSEALS A LOCKER ROW (#996, rulings R13 and
+    // W6-D2), so this handler cannot produce a password and must not pretend
+    // otherwise. The origin match above still runs — the Companion is told
+    // WHICH login it would have filled and why the value is not here — because
+    // a blank answer and "the page does not match" are different facts.
+    //
+    // WHAT THIS COSTS, STATED RATHER THAN HIDDEN. The Companion is a browser
+    // extension: it holds no vault, so it cannot decrypt locally the way a
+    // seat does, and it must not be handed `K` (W6-D2 — a surface that could
+    // read the key could exfiltrate it). Filling therefore has to be served by
+    // a host that already holds `K` behind the member's unlock — the desktop
+    // shell — and wiring that is a product decision, not a mechanical
+    // deletion. Raised as an open question in the wave-6 receipt; refusing
+    // honestly is what this handler can do until it is answered.
     return {
-      fill: {
-        username: row.username ?? undefined,
-        password: revealed.values?.password ?? undefined,
-        ...(totp ? { totp } : {}),
-        receipt_id: revealed.receiptId,
-      },
+      fill: null,
+      reason:
+        "Filling from the browser needs a device that holds this vault's key — open the item in Centraid to copy it.",
+      match: { item_id: itemId, username: row.username ?? undefined },
     };
   } catch (caughtError) {
     const error = caughtError as { code?: string; message?: string };

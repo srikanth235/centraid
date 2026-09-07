@@ -98,7 +98,6 @@ export interface RedeemLinkTicketDeps {
   /** This side's dial route, so the peer can reach back. */
   localRoute: { endpointId: string; relayHints: string[] };
   localLabel: string;
-  permissions?: Record<string, unknown>;
 }
 
 /**
@@ -125,9 +124,6 @@ export async function redeemLinkTicket(
         endpointId: deps.localRoute.endpointId,
         relayHints: deps.localRoute.relayHints,
         label: deps.localLabel,
-        ...(deps.permissions === undefined
-          ? {}
-          : { permissions: deps.permissions }),
       },
     });
   } catch (error) {
@@ -192,19 +188,18 @@ export async function redeemLinkTicket(
       assertedAt: Date.now(),
     },
     peerLabel: typeof body.label === "string" ? body.label : peerVaultId,
-    permissions: {
-      ...(typeof body.permissions === "object" && body.permissions !== null
-        ? (body.permissions as Record<string, unknown>)
-        : {}),
-      ...(deps.localOwnerPartyId && typeof peerOwnerPartyId === "string"
+    // The far side's hello no longer writes into this gateway (#996, OQ-7).
+    // It used to be spread verbatim into a column called `permissions`, so a
+    // peer could persist arbitrary keys here; nothing read them, which is the
+    // only reason it was not a hole. What this link needs from the exchange is
+    // WHO each side is, and that is what is kept.
+    partyIds:
+      deps.localOwnerPartyId && typeof peerOwnerPartyId === "string"
         ? {
-            commonsPartyIds: {
-              [deps.localVault.vaultId]: deps.localOwnerPartyId,
-              [peerVaultId]: peerOwnerPartyId,
-            },
+            [deps.localVault.vaultId]: deps.localOwnerPartyId,
+            [peerVaultId]: peerOwnerPartyId,
           }
-        : {}),
-    },
+        : {},
   });
   if (!link)
     return { state: "bad_request", detail: "link could not be stored" };

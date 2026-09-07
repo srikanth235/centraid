@@ -151,8 +151,11 @@ describe("Locker on a plane", () => {
     await expect(lockerItems()).rejects.toThrow(/mounting/u);
   });
 
-  test("the secret half still refuses: a reveal needs the gateway", async () => {
+  test("the item's browsable detail still needs the gateway", async () => {
+    // The REVEAL does not any more (#996, W6-D2) — it is a local decryption
+    // behind the OS prompt, which is the whole point of airplane mode working.
+    // What still needs the radio is this: the detail read, which is metadata.
     const { lockerItem } = await import("./locker-gateway");
-    expect(() => lockerItem("s1", "item-2", "t1")).toThrow(/airplane mode/u);
+    expect(() => lockerItem("item-2")).toThrow(/airplane mode/u);
   });
 });
