@@ -27,10 +27,10 @@ interface NoteRow {
 
 const recent = {
   name: "notes.recent",
-  sql: (keyset: string) =>
-    `SELECT note_id, updated_at FROM note WHERE deleted_at IS NULL ${keyset}`,
+  select: "note_id, updated_at",
+  from: "note",
+  where: "deleted_at IS NULL",
   order: { sortColumn: "updated_at", pkColumn: "note_id", descending: true },
-  keyOf: (row: NoteRow) => ({ sortKey: row.updated_at, pk: row.note_id }),
 } as const;
 
 function fakeClient(rows: NoteRow[]): {

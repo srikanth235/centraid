@@ -25,7 +25,11 @@
 import { pageOf } from "@centraid/core/page";
 import type { Page, PageRequest } from "@centraid/core/page";
 
-import { countSeatPageWork, seatPageStatement } from "./paged-handler.js";
+import {
+  countSeatPageWork,
+  seatPageCursor,
+  seatPageStatement,
+} from "./paged-handler.js";
 import type { SeatPageQuery } from "./paged-handler.js";
 import type { SeatReadOverlay } from "./read-overlay.js";
 import type { SeatWorkerQuery } from "./worker-protocol.js";
@@ -55,5 +59,7 @@ export async function seatWorkerPage<Row extends object>(
     ...(overlay ? { overlay } : {}),
   });
   countSeatPageWork(rows.length);
-  return pageOf(rows, request, query.keyOf);
+  return pageOf(rows, request, (row) =>
+    seatPageCursor(row as Record<string, unknown>, query.order)
+  );
 }

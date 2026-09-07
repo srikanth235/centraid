@@ -5799,3 +5799,68 @@ needs only a runner with matching browsers.
 - **A screen does not close what it did not open.**
 - **A read path with no seat refuses; it does not go to the network.** Two
   sources for one list is how a cursor stops meaning anything.
+
+## Wave 4 — a handler's statement is data, not a closure (#996)
+
+Landed as its own commit because it changes the shape every app handler will be
+written against, and it was found by asking a question the first cut had not:
+what happens to `ctx.vault.page` on the served path?
+
+### Why the closure could not stay
+
+`SeatPageQuery.sql` was `(keyset: string) => string`. That works inline, where
+the handler and the host share a realm, and nowhere else. The same handler has
+to run:
+
+- inline in the shell — fine;
+- across the seat worker's `postMessage` seam — a function does not survive it;
+- on the gateway, through `VaultBridge`, which serialises every call — same.
+
+It is also unreviewable. R8's review artifact is `EXPLAIN QUERY PLAN` over each
+handler's statement, and a plan snapshot needs a statement that something other
+than the handler can hold.
+
+So the query is `{ name, select, from, where?, bind?, order }`. The host splices
+the keyset, and `where` is the single place a handler contributes a predicate.
+
+### `keyOf` is gone, not moved
+
+The cursor is now read off the row by the two columns the ORDER BY already
+names (`seatPageCursor`). A handler declared its ordering twice before — once as
+columns, once as a function — and the failure when those disagreed was a page
+boundary that skipped or repeated rows, which is invisible until someone counts.
+`select` must carry both columns; a `pk` that does not come back as a string
+throws where it happens rather than producing a cursor that seeks nothing.
+
+### Gates
+
+- `bunx vitest run packages/client/src/replica/seat/paged-handler.test.ts packages/client/src/replica/seat/seat-page-reader.test.ts` — 11 passed.
+- `bunx vitest run apps/mobile/src/apps/photos/timeline-page.test.ts` — 11 passed.
+- lint, format, `bun run --cwd packages/client typecheck`, `bun run --cwd packages/blueprints typecheck` — clean.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/client/src/replica/seat/paged-handler.ts`
+- `packages/client/src/replica/seat/paged-handler.test.ts`
+- `packages/client/src/replica/seat/seat-page-reader.ts`
+- `packages/client/src/replica/seat/seat-page-reader.test.ts`
+- `apps/mobile/src/apps/photos/timeline-page.ts`
+- `packages/blueprints/types/centraid.d.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### For the owner — one decision, named
+
+**May an app handler's SQL reach the GATEWAY?** On a seat it is unremarkable:
+R1 says the seat holds the whole vault and the member is its owner, so there is
+nothing for a field mask to withhold. On the gateway the same statement would
+run for principals that are not the owner — an automation, a shared audience —
+and raw SQL goes around `evaluateAccess`, the R17 field mask and the row filters
+the manifest declares. Two answers are coherent: the served app-query path keeps
+`ctx.vault.read` for the callers that are not seats, or the gateway grows a
+statement checker that is a second implementation of consent. The wave does not
+need it decided to proceed — after W4-D1 the seat is the web read path and the
+served route is only the online fallback — but **Locker's online-only reads are
+the one place it bites**, so Locker's conversion waits on this answer while the
+other seven proceed.

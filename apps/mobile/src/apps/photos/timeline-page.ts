@@ -133,19 +133,16 @@ interface PageRow {
  */
 const TIMELINE_QUERY: SeatPageQuery<PageRow> = {
   name: "photos.timeline",
-  sql: (
-    keyset
-  ) => `SELECT asset_id, content_id, kind, captured_at, tz_offset_min,
-            ${LOCAL_DAY_SQL} AS local_day
-       FROM media_asset
-      WHERE archived_at IS NULL AND deleted_at IS NULL AND captured_at IS NOT NULL
-        ${keyset}`,
+  select: `asset_id, content_id, kind, captured_at, tz_offset_min,
+           ${LOCAL_DAY_SQL} AS local_day`,
+  from: "media_asset",
+  where:
+    "archived_at IS NULL AND deleted_at IS NULL AND captured_at IS NOT NULL",
   order: {
     sortColumn: "captured_at",
     pkColumn: "asset_id",
     descending: true,
   },
-  keyOf: (row) => ({ sortKey: row.captured_at, pk: row.asset_id }),
 };
 
 /** One page of the timeline, newest first, with the days it crosses. */

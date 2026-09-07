@@ -42,24 +42,50 @@ export interface SeatPageOrder {
   descending: boolean;
 }
 
-/** One handler's statement, minus the parts the host owns. */
-export interface SeatPageQuery<Row extends object> {
+/**
+ * One handler's statement, minus the parts the host owns — AS DATA, never as a
+ * function.
+ *
+ * THREE REASONS IT IS DATA. It crosses boundaries: the same handler runs inline
+ * in the shell, across the seat worker's `postMessage` seam, and on the gateway
+ * through a bridge that serialises every call, and a closure survives none of
+ * those. It is inspectable: R8's review diff is `EXPLAIN QUERY PLAN` over the
+ * statement, which needs a statement something other than the handler can hold.
+ * And it is checkable: `where` is the only place a handler contributes a
+ * predicate, so the keyset is spliced by the host in exactly one way.
+ *
+ * There is NO `keyOf`. The cursor is read from the row by the same two columns
+ * the ORDER BY names — one declaration, so the walk and the cursor cannot
+ * disagree — which also means `select` MUST carry both of them.
+ */
+export interface SeatPageQuery<Row extends object = Record<string, unknown>> {
   /** Names the handler in the work-counter row and the plan snapshot. */
   name: string;
-  /**
-   * The statement, given the keyset predicate to splice into its WHERE.
-   *
-   * A function rather than a string with a token because the predicate is
-   * EMPTY on the first page: a handler that interpolates it into a live `WHERE`
-   * gets a valid statement either way, and one that receives `1=1` instead
-   * pays for a predicate that means nothing.
-   */
-  sql: (keyset: string) => string;
+  /** The projection. Must include the order's two columns. */
+  select: string;
+  /** The table, with any JOINs a page of it needs. */
+  from: string;
+  /** The handler's own predicate. Absent means every row of `from`. */
+  where?: string;
   /** Binds the statement's own placeholders take, before the keyset's. */
   bind?: readonly SeatBindValue[];
   order: SeatPageOrder;
-  /** The handler's ORDER BY restated as a value, so the two cannot drift. */
-  keyOf: (row: Row) => PageCursor;
+  /** Marker only; a handler's row type never reaches the SQL. */
+  readonly __row?: Row;
+}
+
+/** The cursor of one row, by the columns its handler orders on. */
+export function seatPageCursor(
+  row: Record<string, unknown>,
+  order: SeatPageOrder
+): PageCursor {
+  const sortKey = row[order.sortColumn];
+  const pk = row[order.pkColumn];
+  if (typeof pk !== "string")
+    throw new Error(
+      `page cursor: ${order.pkColumn} must be a string, got ${typeof pk}`
+    );
+  return { sortKey: sortKey === null ? "" : String(sortKey), pk };
 }
 
 /** A handler's statement, assembled: the text and the binds, in order. */
@@ -84,14 +110,19 @@ export function seatPageStatement<Row extends object>(
   const { sortColumn, pkColumn, descending } = query.order;
   const direction = descending ? "DESC" : "ASC";
   const comparison = descending ? "<" : ">";
+  // The first page carries NO predicate rather than a tautological one, and
+  // the handler's own `where` decides whether the keyset needs an `AND`.
   const keyset = request.after
-    ? `AND (${sortColumn}, ${pkColumn}) ${comparison} (?, ?)`
+    ? `(${sortColumn}, ${pkColumn}) ${comparison} (?, ?)`
     : "";
+  const predicates = [query.where, keyset].filter(Boolean);
   const bind: SeatBindValue[] = [...(query.bind ?? [])];
   if (request.after) bind.push(request.after.sortKey, request.after.pk);
   bind.push(probeLimit(request));
   return {
-    sql: `${query.sql(keyset)}
+    sql: `SELECT ${query.select}
+      FROM ${query.from}
+      ${predicates.length > 0 ? `WHERE ${predicates.join(" AND ")}` : ""}
       ORDER BY ${sortColumn} ${direction}, ${pkColumn} ${direction}
       LIMIT ?`,
     bind,
@@ -115,7 +146,9 @@ export function seatPage<Row extends object>(
   const statement = seatPageStatement(query, request);
   const rows = driver.all<Row>(statement.sql, statement.bind);
   countSeatPageWork(rows.length);
-  return pageOf(rows, request, query.keyOf);
+  return pageOf(rows, request, (row) =>
+    seatPageCursor(row as Record<string, unknown>, query.order)
+  );
 }
 
 /**

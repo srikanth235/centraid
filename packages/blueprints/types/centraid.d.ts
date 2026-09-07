@@ -134,13 +134,20 @@ interface VaultResolveResult {
  * only that the answer was cut.
  */
 interface VaultPageRequest {
-  /** The handler's statement, its ORDER BY columns, and its key function. */
+  /**
+   * The handler's statement, AS DATA. Not a closure: the same handler runs
+   * inline in the shell, across the seat worker's `postMessage` seam and on the
+   * gateway through a serialising bridge, and a function survives none of
+   * those. `select` must carry both of the order's columns — the cursor is
+   * read off the row by them, so there is no second place to get it wrong.
+   */
   query: {
     name: string;
-    sql: (keyset: string) => string;
+    select: string;
+    from: string;
+    where?: string;
     bind?: readonly (string | number | null)[];
     order: { sortColumn: string; pkColumn: string; descending: boolean };
-    keyOf: (row: never) => { sortKey: string; pk: string };
   };
   limit: number;
   after?: { sortKey: string; pk: string };
