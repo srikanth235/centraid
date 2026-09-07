@@ -47,14 +47,22 @@ export class ExpoSqliteDriver implements ReplicaSqliteDriver {
   private constructor(private readonly db: SQLiteDatabase) {}
 
   /**
-   * WAL, now that the mount plane is gone (#996 wave 3).
+   * WAL, AND IT DEPENDS ON THERE BEING NO SECOND READER ON THE FILE.
    *
    * The rollback journal was here because a per-vault writer and a
    * gateway-scoped multi-ATTACH reader shared one file and the reader's SHARED
    * lock had to interact with the writer's RESERVED lock the way the busy
-   * timeout below assumes. That reader is deleted; what remains is one writer
-   * and the background task, and WAL is the mode in which those two do not
-   * stall each other. The busy timeout stays: WAL still serialises writers.
+   * timeout below assumes. That reader is deleted (#996 wave 3): what remains
+   * is one writer and the background task, and WAL is the mode in which those
+   * two do not stall each other. The busy timeout stays — WAL still serialises
+   * writers.
+   *
+   * THE DEPENDENCY IS STRUCTURAL, NOT A COMMENT. This module no longer exports
+   * a way to open a second handle on a seat file at all; the one caller that
+   * did (`openMountedReplicaReaderDriver`) went with the plane. A driver that
+   * declares WAL while something else attaches the same database is the pair
+   * this declaration must never be half of, and the way to keep it out is to
+   * leave no opener for the other half.
    */
   readonly journalMode = "WAL" as const;
 
@@ -208,20 +216,4 @@ export async function nativeReplicaDatabasePath(
 ): Promise<string> {
   const name = await nativeReplicaDatabaseName(identity, digest);
   return location ? `${location.replace(/\/+$/u, "")}/${name}` : name;
-}
-
-export async function openMountedReplicaReaderDriver(
-  gatewayId: string,
-  digest?: ReplicaDigest,
-  location?: string
-): Promise<ExpoSqliteDriver> {
-  const name = await nativeReplicaDatabaseName(
-    { gatewayId, vaultId: "__mounted__" },
-    digest
-  );
-  return ExpoSqliteDriver.open({
-    name,
-    ...(location ? { location } : {}),
-    useNewConnection: true,
-  });
 }

@@ -64,7 +64,8 @@ function heldEverywhere(
 export async function applyIntentOutcomes(
   store: IntentRecordStore,
   outcomes: IntentOutcome[],
-  holdsVersion?: HeldVersionProbe
+  holdsVersion?: HeldVersionProbe,
+  settlesByCommitSeq = store.settlesByCommitSeq === true
 ): Promise<ReplicaIntent[]> {
   const updated: ReplicaIntent[] = [];
   await applyInIntentOrder(outcomes, async (outcome) => {
@@ -75,7 +76,20 @@ export async function applyIntentOutcomes(
     // compared against one number, and it supersedes the per-row version
     // question for a seat that holds the whole file — which is every seat
     // under R1. `settleAtCommitSeq` is the other half.
-    if (outcome.status === "executed" && outcome.commitSeq !== undefined) {
+    //
+    // ONLY WHERE A CURSOR WILL REACH IT. Every executed answer has carried
+    // `commit_seq` since wave 1, and the old store — still the shipped read
+    // path on today's web and phone — has nothing that ever calls
+    // `settleAtCommitSeq`, so parking on the number there is a pending badge
+    // that never clears. Such a queue falls through to the #929 signals below,
+    // unchanged. The flag is the QUEUE's, defaulted from the store, because
+    // whether the cursor is driven is a fact about the wiring: the offline
+    // chain's contract drives it by hand over all three outboxes.
+    if (
+      settlesByCommitSeq &&
+      outcome.status === "executed" &&
+      outcome.commitSeq !== undefined
+    ) {
       updated.push(
         await store.transition(outcome.intentId, [...OVERLAY_STATES], {
           state: "awaiting-change",
