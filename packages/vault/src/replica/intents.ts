@@ -89,6 +89,15 @@ export interface RecordReplicaIntentOutcomeInput {
   conflict?: ReplicaConflict;
   waitingOn?: ReplicaWaitingOn;
   answeredVersions?: readonly ReplicaAnsweredVersion[];
+  /**
+   * The canonical commit this answer stands for, when the commit happened
+   * SOMEWHERE ELSE (#996, R10/R24). A local execution never passes it —
+   * `gateway/execution.ts` stamps it inside the canonical transaction, which
+   * is the only place that knows it. A projected row's edit is executed by the
+   * ORIGIN, so the number that tells this seat when its pending write has
+   * landed is the origin's, carried back over the peer answer.
+   */
+  commitSeq?: number;
   /** The intents this one may not run before (#996, R23). */
   dependsOn?: readonly string[];
   /** End of the idempotency window; defaults to the retention window. */
@@ -252,6 +261,7 @@ export function recordReplicaIntentOutcomeInTransaction(
         `UPDATE replica_intent_outcome
             SET status = ?, invocation_id = ?, reason = ?, conflict_json = ?,
                 waiting_on = ?, answered_versions = ?,
+                commit_seq = COALESCE(?, commit_seq),
                 depends_on = COALESCE(?, depends_on),
                 expires_at = COALESCE(?, expires_at),
                 updated_at = ?
@@ -264,6 +274,7 @@ export function recordReplicaIntentOutcomeInTransaction(
         input.conflict ? JSON.stringify(input.conflict) : null,
         input.waitingOn ? JSON.stringify(input.waitingOn) : null,
         input.answeredVersions ? JSON.stringify(input.answeredVersions) : null,
+        input.commitSeq ?? null,
         input.dependsOn ? JSON.stringify(input.dependsOn) : null,
         input.expiresAt ?? null,
         now,
@@ -275,8 +286,8 @@ export function recordReplicaIntentOutcomeInTransaction(
         `INSERT INTO replica_intent_outcome (
            intent_id, device_id, app_id, action, payload_hash, status,
            invocation_id, reason, conflict_json, waiting_on, answered_versions,
-           depends_on, expires_at, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           commit_seq, depends_on, expires_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.intentId,
@@ -290,6 +301,7 @@ export function recordReplicaIntentOutcomeInTransaction(
         input.conflict ? JSON.stringify(input.conflict) : null,
         input.waitingOn ? JSON.stringify(input.waitingOn) : null,
         input.answeredVersions ? JSON.stringify(input.answeredVersions) : null,
+        input.commitSeq ?? null,
         input.dependsOn ? JSON.stringify(input.dependsOn) : null,
         input.expiresAt ?? defaultExpiry(now),
         now,

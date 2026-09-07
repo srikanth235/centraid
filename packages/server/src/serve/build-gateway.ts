@@ -293,6 +293,7 @@ import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
 import { announceLocalRoutes } from "./peer-route-announce.js";
 import { PowerContextMonitor } from "./power-context.js";
 import { PricingWarmer } from "./pricing-warmer.js";
+import { forwardOverPeer } from "./projected-edit.js";
 import { ResourceAccounting } from "./resource-accounting.js";
 import {
   formatEventLoopDetail,
@@ -3899,6 +3900,31 @@ export async function buildGateway(
               intentId: input.intentId,
             })
           ),
+        // A PROJECTED ROW'S EDIT GOES HOME (#996, R10). Which link reaches the
+        // origin is this host's fact, exactly as `pullShape` above; the route
+        // itself never learns an address. No dial or no link is a fact about
+        // REACH — the intent stays retryable rather than being written here.
+        forwardProjectedEdit: async (request) => {
+          const dial = options.peerPlane?.dial;
+          const link = vaultLinksStore.peerForVault(
+            request.route.originVaultId,
+            request.audienceVaultId
+          );
+          if (!dial || !link)
+            return {
+              status: "retryable" as const,
+              reason: `no link from ${request.audienceVaultId} to ${request.route.originVaultId}`,
+            };
+          return forwardOverPeer(
+            {
+              dial,
+              peerRoute: link.route,
+              signAsVault: (vaultId, bytes) =>
+                vaultRegistry.signAsVault(vaultId, bytes),
+            },
+            request
+          );
+        },
       })
     ),
     // The generic owner consent surface: it answers 404 for any `_vault`

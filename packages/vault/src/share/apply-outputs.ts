@@ -517,6 +517,8 @@ export function applyShareOutputs(
  */
 export interface ProjectedEditRoute {
   readonly authorityId: string;
+  /** The entity type the row is, as lineage keys it. */
+  readonly entity: string;
   readonly originVaultId: string;
   /** The row id to name in the intent — the ORIGIN's, not the audience's. */
   readonly originItemId: string;
@@ -548,6 +550,7 @@ export function forwardProjectedEdit(
     ? undefined
     : {
         authorityId: row.authority_id,
+        entity: target.entity,
         originVaultId: row.origin_vault_id,
         originItemId: row.origin_item_id,
         originRowVersion: row.origin_row_version,

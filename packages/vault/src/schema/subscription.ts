@@ -101,8 +101,14 @@ CREATE TABLE share_subscription_member (
   entered_seq  INTEGER NOT NULL CHECK (entered_seq >= 0),
   PRIMARY KEY (authority_id, table_name, pk)
 ) STRICT;
--- The REVERSE question — "which live grants claim this row" — asked by the
--- closure diff, the purge sweep and the leave output alike.
+-- THIS INDEX HAS NO READER (#996, R10), and it is recorded here rather than
+-- dropped quietly. It existed for the reverse question "which live grants
+-- claim this row", and that question turned out to be asked by nothing: every
+-- read of this table is one grant's (\`readShareMembers\`,
+-- \`writeShareMembers\`), and the leave a purged member owes each audience is
+-- that grant's own \`before ∖ after\`. The frozen corpus already carries the
+-- index, so removing it is a RUNG, not an edit here — a bump of the ladder
+-- this CI fix has no business spending. Drop it with the next schema rung.
 CREATE INDEX share_subscription_member_row
   ON share_subscription_member(table_name, pk);
 ${touchUpdatedAt("share_subscription", ["authority_id", "audience_vault_id"])}

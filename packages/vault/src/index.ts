@@ -138,7 +138,6 @@ export {
   memberPrimaryKey,
   readShareMembers,
   shareClosureMembers,
-  shareGrantsClaimingRow,
   writeShareMembers,
   SHARE_DERIVED_TABLES,
   type ShareMemberRow,

@@ -10,6 +10,8 @@ import {
 } from "@centraid/vault";
 import type { ReplicaIntentOutcome } from "@centraid/vault";
 
+import { projectedEditTarget } from "../serve/projected-edit.js";
+import type { ProjectedEditForwarder } from "../serve/projected-edit.js";
 import { runWithReplicaIntent } from "../serve/replica-intent-context.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import {
@@ -55,6 +57,13 @@ export interface ReplicaIntentRouteContext {
   plane: VaultPlane;
   access: ReplicaShapeAccess & { deviceId: string; ownerId?: string };
   dispatch: ReplicaIntentDispatcher;
+  /**
+   * How an edit of a PROJECTED row reaches the vault that owns it (#996, R10).
+   * Absent on a host with no peer plane: such an edit stays `sending` and is
+   * answered in-flight rather than written locally, because a local write of
+   * another vault's row is the one outcome that is wrong in every case.
+   */
+  forwardProjectedEdit?: ProjectedEditForwarder;
 }
 
 const NO_TRANSIENT_OUTPUT = Symbol("no transient replica output");
@@ -266,6 +275,73 @@ export async function handleReplicaIntent(
       return sendOutcome(res, denied);
     } catch {
       return concealIdentityConflict(res, intentId);
+    }
+  }
+
+  // A PROJECTED ROW IS THE ORIGIN'S (#996, R10). Before the chain and the
+  // conflict check on purpose: both are questions about THIS vault's rows, and
+  // a projected row's version here is the applier's local stamp rather than
+  // anything the member composed against — the origin re-asks both against the
+  // copy that counts.
+  const projected = projectedEditTarget(context.plane.db.vault, baseVersions);
+  if (projected) {
+    try {
+      recordReplicaIntentOutcome(context.plane.db.vault, {
+        intentId,
+        ...identity,
+        status: "sending",
+      });
+    } catch {
+      return concealIdentityConflict(res, intentId);
+    }
+    const answer = await (context.forwardProjectedEdit?.({
+      route: projected,
+      audienceVaultId: context.plane.boot.vaultId,
+      intentId,
+      appId,
+      action,
+      input: body.input,
+      baseVersions,
+    }) ??
+      Promise.resolve({
+        status: "retryable" as const,
+        reason: `this device's vault cannot reach ${projected.originVaultId}`,
+      }));
+    if (answer.status === "retryable") {
+      // The row stays `sending`, which is exactly what a retry consumes.
+      const pending = readReplicaIntentOutcome(
+        context.plane.db.vault,
+        intentId,
+        identity.deviceId
+      );
+      if (!pending)
+        return sendJson(res, 500, { error: "replica_intent_admission_lost" });
+      return sendOutcome(res, pending);
+    }
+    try {
+      return sendOutcome(
+        res,
+        recordReplicaIntentOutcome(context.plane.db.vault, {
+          intentId,
+          ...identity,
+          status: answer.status,
+          ...(answer.reason === undefined ? {} : { reason: answer.reason }),
+          // THE ORIGIN'S NUMBER (#996, R24). The seat drops its pending row
+          // when the share output carrying this commit lands here; a local seq
+          // would name a commit that never happened in the vault that owns it.
+          ...(answer.commitSeq === undefined
+            ? {}
+            : { commitSeq: answer.commitSeq }),
+          ...(answer.status === "parked"
+            ? { waitingOn: { seat: "origin" as const } }
+            : {}),
+        })
+      );
+    } catch (error) {
+      return sendJson(res, 500, {
+        error: "replica_intent_outcome_failed",
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

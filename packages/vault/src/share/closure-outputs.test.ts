@@ -22,6 +22,7 @@ import { nowIso, uuidv7 } from "../ids.js";
 import { replicaLogState } from "../replica/log.js";
 import {
   memberKey,
+  memberPrimaryKey,
   readShareMembers,
   shareClosureMembers,
   SHARE_DERIVED_TABLES,
@@ -55,14 +56,15 @@ function albumClosure(origin: VaultDb, collectionId: string) {
 function pass(
   origin: VaultDb,
   collectionId: string,
-  since?: { epoch: string; seq: number }
+  since?: { epoch: string; seq: number },
+  authorityId: string = AUTHORITY
 ): ShareClosureOutputs {
   const members = shareClosureMembers(
     origin.vault,
     albumClosure(origin, collectionId)
   );
   const outputs = diffShareClosure(origin.vault, {
-    authorityId: AUTHORITY,
+    authorityId,
     members,
     ...(since === undefined ? {} : { since }),
   });
@@ -283,6 +285,69 @@ describe("the three outputs", () => {
     expect(readShareMembers(origin.vault, AUTHORITY).size).toBe(
       shareClosureMembers(origin.vault, albumClosure(origin, album)).size
     );
+  });
+
+  /*
+   * PURGE REACHES EVERY CLAIMING GRANT THROUGH THE MEMBER-SET DIFF, and
+   * through nothing else (#996, R10). `core_entity_revoke_on_purge` keys on a
+   * grant's SUBJECT, so purging a shared MEMBER revokes nothing — two grants
+   * over the same album both keep delivering, and the only thing that scrubs
+   * the audience's copy is each grant's own `before ∖ after`. That is why the
+   * origin needs no reverse "which grants claim this row" index: the answer is
+   * per-grant by construction, and a second answerer could disagree with it.
+   */
+  test("a purged shared row leaves for EVERY grant whose member set held it", () => {
+    const SECOND = "authority-album-second";
+    const assetKey = (db: VaultDb, assetId: string): string =>
+      memberKey(
+        "media_asset",
+        memberPrimaryKey(db.vault, "media_asset", { asset_id: assetId })
+      );
+    const { origin, originBoot } = household();
+    const photo = seedPhoto(origin, originBoot, "purged");
+    const keeper = seedPhoto(origin, originBoot, "kept");
+    const album = inCommit(origin, () => {
+      const id = seedAlbum(origin, originBoot, "Album");
+      addToAlbum(origin, id, { type: "media.asset", id: photo.assetId });
+      addToAlbum(origin, id, { type: "media.asset", id: keeper.assetId }, 2);
+      return id;
+    });
+    pass(origin, album);
+    pass(origin, album, undefined, SECOND);
+    for (const authority of [AUTHORITY, SECOND])
+      expect(
+        readShareMembers(origin.vault, authority).has(
+          assetKey(origin, photo.assetId)
+        ),
+        authority
+      ).toBe(true);
+    const before = replicaLogState(origin.vault).watermark;
+
+    // A PURGE IS A DELETE OF THE SUPERTYPE ROW (`schema/entity.ts`).
+    inCommit(origin, () =>
+      origin.vault
+        .prepare("DELETE FROM core_entity WHERE entity_id = ?")
+        .run(photo.assetId)
+    );
+    // The grant is still live: the purge keyed on its subject, which is the
+    // album, and the album is still here.
+    for (const authority of [AUTHORITY, SECOND]) {
+      const outputs = pass(origin, album, before, authority);
+      expect(tablesOf(outputs.leave), authority).toContain("media_asset");
+      expect(
+        readShareMembers(origin.vault, authority).has(
+          assetKey(origin, photo.assetId)
+        ),
+        authority
+      ).toBe(false);
+      // The keeper is untouched for both.
+      expect(
+        readShareMembers(origin.vault, authority).has(
+          assetKey(origin, keeper.assetId)
+        ),
+        authority
+      ).toBe(true);
+    }
   });
 
   test("a member kept across a pass keeps its entered_seq; a re-entered one does not", () => {
