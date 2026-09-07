@@ -4618,3 +4618,93 @@ plane, not seats+apps, and it is reported rather than absorbed.
   the optimistic title — `content_uri`, a synthetic field — would rebuild the
   mirror under a different name. The owning row has the title; the overlay
   reads it there.
+
+## Wave 3 — the queue survives the repair, and the bytes it needs survive the cache
+
+Two rules that wave 2 wrote down and nothing enforced. Both were live defects
+on this branch, and the tests that name them were red before the code moved.
+
+### A seam nobody supplied answers `false`
+
+`planContentEviction` has refused to evict bytes a queued intent needs since
+wave 2, and `storedContentEntries` takes that answer as a callback so the byte
+store cannot guess it from its own filenames. Nothing ever passed one:
+`ensureOfflineContent` called the sweep as `enforceOfflineContentBudget(budget)`
+with no second argument, so every entry read `referencedByPendingIntent: false`
+and the LRU was free to delete the one copy of bytes the member's own queued
+write is waiting on. The rule was a comment.
+
+`kit/fetch-gate/protections.ts` is the registry the seam needed. A REGISTRY,
+not an import, because the session imports the fetch gate to hand bytes to a
+write and the reverse edge would close a cycle: the session registers when it
+opens and withdraws when it closes, and an unregistered store protects pins and
+nothing else — the behaviour before the policy landed, stated rather than
+stumbled into.
+
+`lib/replica/pending-content-refs.ts` is the supplier, and the outbox is its
+only source: an intent's input NAMES the rows it is about (`namedRowIds`, the
+same reading the chain derives its edges from), so the ids the unsettled outbox
+names are the content this queue is still working on. Nothing is inferred from
+a filename or the shape of a string, and an id stops being protected the moment
+its intent settles. The set is a SNAPSHOT because it has to be — the eviction
+sweep is synchronous and the outbox is not — so the seat pushes on every move
+of the queue and the sweep reads the last push. A stale snapshot over-keeps for
+one pass; it can never over-evict.
+
+`capturedHere` stays unsupplied and that is deliberate, not an oversight: what
+this phone captured lives in the upload queue's own staging (`localUri`, its
+own database), never in the downloaded-original cache this sweep walks, so a
+predicate here would answer a question about bytes that are not in the store.
+The capture's protection is the byte policy's `hold` verdict, which is where a
+capture's bytes actually are.
+
+### A repair that drained straight through itself
+
+`admissionDuringRebootstrap()` says the pair — admit, do not send — and
+`flushIntents` did neither half. It claimed and posted intents during a
+re-bootstrap, so an outcome could arrive to be reconciled against a copy about
+to be replaced; and an AWAITED `write()` during one had no answer at all, since
+its waiter was only ever settled by the drain that should not have run. The
+member watching a repair they did not ask for got a spinner.
+
+`#rebootstrapping` is set in `requireBootstrap` BEFORE the refetch is
+scheduled — the window this closes is the one between deciding to replace the
+copy and starting to — and cleared in the bootstrap's `finally`, which then
+flushes. `flushIntents` settles waiters as queued with
+`admissionDuringRebootstrap().reason` and returns. The write is saved, in as
+many words, and sends after.
+
+The outbox itself needed no change to survive the repair: it is its own table
+in the shared file and `wipe()` clears the replica tables in place. The suite
+pins that as an invariant rather than leaving it true by accident, over the
+acceptance row's own chain — create, rename twice, due date, complete — with
+`created_order` 1..5 and the five inputs verbatim. Renumbering a queue reorders
+the member's work.
+
+### Every file this commit touches
+
+**New:**
+
+- `apps/mobile/src/kit/fetch-gate/protections.ts`
+- `apps/mobile/src/kit/fetch-gate/protections.test.ts`
+- `apps/mobile/src/lib/replica/native-session-rebootstrap.test.ts`
+- `apps/mobile/src/lib/replica/pending-content-refs.ts`
+
+**Changed:**
+
+- `apps/mobile/src/kit/fetch-gate/download.ts`
+- `apps/mobile/src/lib/replica/native-session.ts`
+- `docs/mobile-offline.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the hold and the protection
+
+- **Admitted and held, never refused.** A repair the member did not ask for
+  must not make "saved" untrue. The only correct pair is admit + hold, and the
+  reason sentence is the module's, not a second wording on the phone.
+- **The registry, not an import.** The session already imports the fetch gate;
+  the supplier edge has to run the other way, and a session's answer must die
+  with the session or it pins bytes nothing needs, forever.
+- **`capturedHere` is left unsupplied on purpose.** Wiring a predicate over a
+  store that does not hold captures would be a protection that reads true and
+  guards nothing.

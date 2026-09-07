@@ -61,6 +61,14 @@ Ordinary writes stay in each replica's durable intent outbox. A first-open write
 
 Replay is idempotent. A crash can leave a completed target and pending source removal, but cannot delete the source before the target exists. Queued changes may be cancelled. Permission denial, terminal failure, and parked retries remain visible until dismissed.
 
+### A re-bootstrap keeps the queue, and holds it
+
+A re-bootstrap replaces what the gateway gave this seat. The queued intents, their order and the bytes they need are the three things the gateway has never heard of, so they survive it: the outbox is its own table in the shared file, `created_order` is carried verbatim (renumbering the queue would reorder the member's work), and the overlay is rebuilt from that outbox rather than from component state.
+
+While the repair runs, a write is **admitted and held** ([#996](https://github.com/srikanth235/centraid/issues/996) R23): refusing would make "saved" untrue during a repair nobody asked for and nobody can see, and sending would let an outcome be reconciled against a copy that is about to be replaced. The member is told the change is saved and will send after; the drain resumes from the outbox the moment the new copy is in place.
+
+Bytes a queued intent still needs are not evictable (R25). The seat publishes the content ids its unsettled outbox names to the offline byte store on every move of the queue, and the LRU sweep reads that answer alongside the pins — so the one copy of what a pending write is waiting on cannot be deleted to make room for a cache. A closed seat withdraws its answer; nothing is inferred from a filename.
+
 ### Shared-container writes and cursors
 
 A shared container is not mounted as a special borrowed scope. Its domain rows and blobs are real residents of each joined member vault, so the ordinary per-vault replica, backup, search, and attachment paths cover them. The phone still has exactly one physical replica cursor for that vault even when the vault subscribes to many shapes.
