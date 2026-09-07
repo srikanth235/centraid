@@ -48,6 +48,7 @@ import {
   writeAuthorityReceipt,
 } from "./evidence.js";
 import { validateJson } from "./json-schema.js";
+import { stampLockerKeyOnWrite } from "./locker-key-plane.js";
 import {
   closeRevisionCapture,
   drainRevisionCapture,
@@ -166,9 +167,16 @@ export function sealWrites(
 ): void {
   let sealedAny = false;
   for (const write of writes) {
+    const locker = resolveEntity(write.entityType, db.vault);
+    // THE LOCKER KEY, ON EVERY WRITE (#996, R13). Before the seal sweep, and
+    // for every Locker row whether or not it has a sealed column left: the
+    // question here is not "is this ciphertext at rest" but "which key is it
+    // under", and a row that answers wrongly must not commit.
+    if (locker)
+      stampLockerKeyOnWrite(db.vault, locker.physical, write.entityId);
     const cols = sealedColumnsOf(write.entityType, db.vault);
     if (cols.length === 0) continue;
-    const ref = resolveEntity(write.entityType, db.vault);
+    const ref = locker;
     if (!ref) continue;
     const pk = pkColumn(db.vault, ref.physical);
     const select = cols.map((c) => `"${c}"`).join(", ");

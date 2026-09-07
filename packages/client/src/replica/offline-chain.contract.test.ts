@@ -98,6 +98,10 @@ let counter = 0;
 function queueOver(store: IntentRecordStore): IntentQueue {
   counter = 0;
   return new IntentQueue(store, {
+    // THE CONTRACT DRIVES THE CURSOR ITSELF, over all three outboxes: the
+    // question here is whether the CHAIN behaves the same given one, not which
+    // hosts happen to have one wired (#996, R24 — see `intent-settlement.ts`).
+    settlesByCommitSeq: true,
     idFactory: () => `intent-${(counter += 1)}`,
     digest: (canonical) =>
       Promise.resolve(`digest:${canonical.length}:${canonical}`),

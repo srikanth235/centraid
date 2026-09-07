@@ -61,6 +61,14 @@ function clone<T>(value: T): T {
 }
 
 export class SeatIntentStore implements IntentRecordStore {
+  /**
+   * The seat has the cursor (#996, R24): `clearSeatOverlaysAtCommit` runs
+   * inside the applier's transaction, so an answer parked on its `commit_seq`
+   * settles the instant the rows it was drawn over arrive. No other store can
+   * say this, and none of them do.
+   */
+  readonly settlesByCommitSeq = true;
+
   private constructor(private readonly driver: SeatSqliteDriver) {}
 
   /** Create the tables if they are absent and open a store over them. */
