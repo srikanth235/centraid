@@ -4,8 +4,6 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import type { DeviceTrust } from "../grant/device-trust.js";
-import { deviceTrustScalarSql } from "../grant/device-trust.js";
 import type { Credential, Identity } from "./types.js";
 import { GatewayError } from "./types.js";
 
@@ -26,17 +24,17 @@ interface DeviceIdentityRow {
   public_key: string | null;
 }
 
-interface DeviceRow extends DeviceIdentityRow {
-  /** Undefined when the plane holds no answer about this device. */
-  trust: DeviceTrust | undefined;
-}
-
-// Two FACTS (#883) — key match and what the member let this device do —
-// read in ONE statement: this runs per invocation against a tighten-only
-// first-paint budget. `device-trust.ts` owns the mapping.
+/*
+ * ENROLLMENT IS FULL TRUST (#996, R11). This read used to join a second fact —
+ * a `share_authority` row, principal kind 'device' — because a device could be
+ * answered about: full, readonly, or revoked. It cannot any more. A seat holds
+ * this vault or it does not, and the fact that says so is the KEY: an enrolled
+ * device has a row in `access_device_secret` whose public key matches, and
+ * revoking one deletes that row. Unknown and revoked are the same refusal
+ * because they are now the same fact.
+ */
 const DEVICE_IDENTITY_SQL = `SELECT access_device.device_id AS device_id,
-    owner_party_id, access_device_secret.public_key AS public_key,
-    ${deviceTrustScalarSql("access_device.device_id")} AS trust
+    owner_party_id, access_device_secret.public_key AS public_key
   FROM access_device
   LEFT JOIN access_device_secret
     ON access_device_secret.device_id = access_device.device_id
@@ -46,22 +44,23 @@ function deviceRow(
   vault: DatabaseSync,
   deviceId: string,
   deviceKey: string
-): DeviceRow {
+): DeviceIdentityRow {
   const row = vault.prepare(DEVICE_IDENTITY_SQL).get(deviceId) as
-    | (DeviceIdentityRow & { trust: DeviceTrust | null })
+    | DeviceIdentityRow
     | undefined;
-  if (!row || row.public_key !== deviceKey || row.trust === "revoked") {
+  if (!row || row.public_key !== deviceKey) {
     throw new GatewayError("identity", "unknown caller");
   }
-  // NULL is "no answer at all", never `revoked`.
-  return { ...row, trust: row.trust ?? undefined };
+  return row;
 }
 
 /** v0 key-equality; real request signatures change only this function. */
 export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
   if (cred.kind === "agent") {
-    // An autonomous agent principal rides an enrolled device's key.
-    const device = deviceRow(vault, cred.deviceId, cred.deviceKey);
+    // An autonomous agent principal rides an enrolled device's key. The call
+    // is the CHECK — it throws on a seat this vault does not know — and the
+    // row it returns is no longer needed for anything else (#996, R11).
+    deviceRow(vault, cred.deviceId, cred.deviceKey);
     const row = vault
       .prepare(
         `SELECT access_agent.agent_id AS agent_id, party_id, status,
@@ -83,7 +82,7 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
       principalId: enrollmentKey,
       provAgentKind: "ai_agent",
       partyId: row.party_id,
-      mayAct: device.trust === "full",
+      mayAct: true,
       ...(cred.scopeClamp ? { scopeClamp: cred.scopeClamp } : {}),
       ...(cred.onBehalfOfOwner
         ? { onBehalfOfOwner: cred.onBehalfOfOwner }
@@ -109,6 +108,6 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
     ...(cred.scopeClamp ? { scopeClamp: cred.scopeClamp } : {}),
     provAgentKind: cred.surface === undefined ? "owner" : "app",
     partyId: device.owner_party_id,
-    mayAct: device.trust === "full",
+    mayAct: true,
   };
 }

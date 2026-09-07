@@ -5548,3 +5548,74 @@ loosened or stubbed to get past it; the seat-store e2e exit condition is
 - **The e2e exit condition is reported owed, not approximated.** A gate that
   cannot run in this environment is not evidence, and making it pass here would
   have meant changing something that is not broken.
+## Wave 8 — correction to the W6-D3 row above
+
+**The shell's locker door already exists**, and the previous section's seam named it as missing. Appended rather than edited, because this file is append-only.
+
+The door is `packages/client/src/locker/locker-kit-door.ts`, installed on `window.centraid.locker` and typed as `CentraidLockerDoor` in `packages/blueprints/types/centraid.d.ts:677` (`reveal({ rowId, entity?, columns? })` → a revealed value or a typed refusal — `locked`, `not_enrolled`, `stale_key`, `not_found`, `unavailable` — plus `state()` and `subscribeLock()`). The mobile side is `apps/mobile/src/apps/locker/locker-door.ts`, and it is consumed today by `packages/blueprints/apps/locker/app-root.tsx` and `session.ts`. W6 deleted the gateway's `reveal` **arm**, not the door.
+
+**What is genuinely missing is the bridge, and it is not small.** W6-D3 puts browser fill through that door over "the extension's existing local bridge" — but the Companion has no bridge to the shell. It reaches the **gateway** over the peer transport (`apps/extension/src/transport.ts`'s `pairOverIroh`, then `companionJson` / `appRead` / `appWrite` against gateway routes), and the door is a **client** surface inside the shell's own process. Wiring them needs a shell-side listener the product does not have — native messaging, or a localhost bridge — plus its origin binding and its gesture proof. That is a wave, so it stays a seam, now with the right paths:
+
+- the door, as it stands: `packages/client/src/locker/locker-kit-door.ts` · `packages/blueprints/types/centraid.d.ts` · `apps/mobile/src/apps/locker/locker-door.ts`
+- the missing half: a shell-side listener under `packages/client/src/react/shell/`, and its client in `apps/extension/src/transport.ts` / `apps/extension/src/worker-core.ts`
+- unchanged by that wave: `packages/blueprints/apps/locker/queries/autofill-item.ts` keeps returning the match plus its stated reason on seats with no shell, and `autofill-candidates` stays ungated.
+
+## Wave 8 — the authority-plane diet: `device` leaves, and the Companion tier with it
+
+Rulings R11 and R17, red-first on the deny matrix.
+
+### The gate, stated first
+
+`authz-deny-matrix.test.ts` enumerates principals on the **wire**. It gained the enumeration it was missing — the principals the plane will answer **about** — because a deny matrix blind to a whole class of principal is the #890 shape again: nothing enumerated the surface, so nothing could notice a hole in it. The new case asserts the vocabulary is exactly `person`, `circle`, `harness`, `automation`; it failed before the diet, on `device`. A second case asserts no route name offers a companion tier.
+
+### What went, and why each
+
+- **`device` out of `principal_kind` and `NON_ENTITY_PRINCIPAL_KINDS`.** Three kinds across four CHECK values (R17). The `granted_by IS NOT NULL OR principal_kind IN ('harness','device')` exemption narrows to `harness` alone: a device answer was the other row nobody had to have answered.
+- **`device-trust.ts`, deleted.** `full`/`readonly`/`revoked` was a standing answer per seat. Enrollment is full trust (R11): `identity.ts` no longer joins a second fact, and `mayAct` is true for a seat that authenticated. **Unknown and revoked are now the same refusal because they are the same fact** — revoking a seat DELETEs its `access_device_secret` row, so the key check is the check. `content-keys.ts`'s revoke does that; its `assertPairedDevice` turns a LEFT JOIN into a JOIN, which is the same statement said honestly.
+- **`companion-surfaces.ts`, `companion-access.ts`, `device_surface_projection`, the `attenuated` flag, `COMPANION_GRANTS_HEADER`, `companionHandlerAllowed`, `companion-grants.ts`, `grantProfile` on the wire** — the confined tier, whole. It was row-level scoping in a second place, and **row-level scoping exists in exactly one place in the system: the closure of a shared subject.** The extension keeps a local module preference, renamed `modules` from `grantProfile` because it is no longer a grant and a field named for one invites the next reader to put a permission in it — the same trap as `vault_links.permissions_json` two sections above.
+- **`/_vault/apps`, `/_vault/blocking` and `/_vault/notifications` lost their second body shape.** Each answered a narrower JSON to a confined companion. One caller, one body.
+
+### The decision inside the diet, named rather than buried
+
+**An egress "always allow" was a `device` answer keyed by the caller id, so the same member had to answer again on every seat.** With `device` gone the options were (a) drop the answer — owner-direct needs none — or (b) key it to the member. This wave took **(b)**: `egressPrincipalKind` returns `person` for the non-automation half and the principal id is the acting owner's party. It keeps a real consent moment that (a) would have deleted, and it fixes a per-seat re-ask nobody chose. **Open for the owner**: if egress consent is meant to be per-seat, this is the line to reverse, and it is one function.
+
+### Every file this commit touches
+
+- `packages/vault/src/schema/authority.ts` — the CHECK to four values; `NON_ENTITY_PRINCIPAL_KINDS`; the `granted_by` exemption; the header
+- `packages/vault/src/grant/device-trust.ts` — **deleted**
+- `packages/vault/src/grant/companion-surfaces.ts` — **deleted**
+- `packages/vault/src/grant/egress-authority.ts` — `person` for the owner's half, keyed to the member; `egressPrincipalId`
+- `packages/vault/src/grant/egress-authority.test.ts` — the person answer, and that a second seat needs no second answer
+- `packages/vault/src/gateway/identity.ts` — the trust join deleted; the key IS the check
+- `packages/vault/src/blob/content-keys.ts` — revoke deletes the key row; `enrollPairedDevice` loses `trust`
+- `packages/vault/src/bootstrap.ts` · `packages/vault/src/host.ts` — `enrollDevice` loses `trust`; recovery finds an enrolled owner seat, not a full-trust answer
+- `packages/vault/src/commands/outbox.ts` — the owner party on both egress keys
+- `packages/vault/src/index.ts` — companion exports out; `PRINCIPAL_ENTITY_KINDS` / `NON_ENTITY_PRINCIPAL_KINDS` exported for the deny matrix
+- `packages/vault/src/gateway/gateway.contract.test.ts` · `packages/vault/src/gateway/sealed.test.ts` · `packages/vault/src/commands/share.test.ts` · `packages/vault/src/blob/content-keys.test.ts` · `packages/vault/src/blob/stream-ingress.test.ts` — rewritten to the property that replaces each
+- `packages/vault/tests/golden/issue-929/vault.db.gz` · `packages/vault/tests/golden/issue-929/manifest.json` — **re-frozen** on the new baseline, in this commit
+- `packages/server/src/serve/companion-access.ts` · `companion-access.test.ts` · `packages/server/src/routes/companion-grants.ts` · `companion-grants.test.ts` · `packages/server/src/engine/http/internal-headers.ts` · `internal-headers.test.ts` — **deleted**
+- `packages/server/src/serve/gateway-schema.ts` — `attenuated` and `device_surface_projection` out
+- `packages/server/src/serve/enrollment-store.ts` — the flag, the projection table's four methods, `EnrollInput.surfaces`
+- `packages/server/src/serve/build-gateway.ts` · `packages/server/src/engine/runtime.ts` · `packages/server/src/engine/index.ts` · `packages/server/src/engine/http/http-server.ts` — the header and its gate
+- `packages/server/src/routes/vault-routes.ts` — the three second bodies
+- `packages/server/src/routes/devices-routes.ts` · `packages/server/src/serve/pairing-store.ts` · `packages/tunnel/src/gateway-endpoint.ts` · `packages/server/src/cli/endpoint-host.ts` — `grantProfile` off the wire and out of pairing
+- `packages/server/src/serve/authz-deny-matrix.test.ts` — the two new cases (the exit gate)
+- `packages/server/src/serve/device-plane.test.ts` · `packages/server/src/routes/enrich-search-routes.test.ts` — rewritten to what is left
+- `packages/client/src/access-lens.ts` · `access-lens.test.ts` — four kinds, three groups; `deviceStandings` and `deviceReachLabel` deleted
+- `packages/client/src/gateway-client-devices.ts` · `packages/client/src/react/screens/DeviceRow.tsx` — the Companion line
+- `apps/extension/src/types.ts` · `companion-api.ts` · `transport.ts` · `content.ts` · `popup.ts` · `companion-api.test.ts` — `grantProfile` → `modules`, a local preference
+- `SECURITY.md` — L2 to three kinds across four values, the threat table row, and the two lines that still said "trust tier"
+- `receipts/issue-996-one-vault-every-seat.md` — this section and the correction above
+
+### The eight the list above named loosely, by full path
+
+The file list in the previous section wrote several paths in shorthand (`· access-lens.test.ts` beside its sibling). Spelled out, so a reviewer diffing the change set finds every one of them named:
+
+- `apps/extension/src/companion-api.test.ts` — the pairing fixture's `grantProfile` → `modules`
+- `apps/extension/src/content.ts` — the locker-module check reads the local preference
+- `apps/extension/src/popup.ts` — the paused-module list reads it too
+- `packages/client/src/access-lens.test.ts` — three groups, and a `device` row is no longer one of them
+- `packages/server/src/serve/vault-context.ts` — `companionSurfaces` off the request scope
+- `packages/server/src/serve/gateway-db.test.ts` — `device_surface_projection` out of the vaultless schema list
+- `packages/server/src/serve/vault-quarantine.test.ts` — the egress key carries the owner party
+- `packages/server/src/backup/recover.integration.test.ts` — the same

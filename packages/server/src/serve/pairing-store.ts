@@ -110,7 +110,6 @@ export class PairingTicketStore {
       label: string;
       platform?: string;
       rememberDevice?: boolean;
-      grantProfile?: string[];
     },
     beforeEnroll?: () => void
   ): DeviceEnrollment[] | undefined {
@@ -131,9 +130,6 @@ export class PairingTicketStore {
         ...(input.rememberDevice === undefined
           ? {}
           : { rememberDevice: input.rememberDevice }),
-        ...(input.grantProfile === undefined
-          ? {}
-          : { grantProfile: input.grantProfile }),
       });
     });
   }

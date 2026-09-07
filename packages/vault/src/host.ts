@@ -24,26 +24,20 @@ export function recoverVaultBootstrap(db: VaultDb): HostBootstrap | undefined {
 
   const device = db.vault
     .prepare(
-      // Full trust is an authority answer (#883), so the owner's recovery
-      // device joins the device-kind row that carries it.
+      // ENROLLMENT IS FULL TRUST (#996, R11). This used to join a
+      // `share_authority` row of principal kind 'device' with verb 'edit',
+      // because full trust was an answer the member gave per seat. It is the
+      // enrollment itself now: a seat with a live key row holds this vault.
       `SELECT d.device_id AS device_id, s.public_key AS public_key
          FROM access_device d
          JOIN access_device_secret s ON s.device_id = d.device_id
-         JOIN share_authority a
-           ON a.principal_kind = 'device' AND a.principal_id = d.device_id
-          AND a.subject_type = 'core.vault' AND a.subject_id = ''
-          AND a.revoked_at IS NULL AND a.decision = 'granted'
-          AND (a.expires_at IS NULL OR a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-          AND a.verb = 'edit'
         WHERE d.owner_party_id = ? ORDER BY d.enrolled_at LIMIT 1`
     )
     .get(vaultRow.self_party_id) as
     | { device_id: string; public_key: string }
     | undefined;
   if (!device) {
-    throw new Error(
-      "vault exists but has no full-trust owner device to recover"
-    );
+    throw new Error("vault exists but has no enrolled owner device to recover");
   }
   const concepts: Record<string, string> = {};
   const rows = db.vault

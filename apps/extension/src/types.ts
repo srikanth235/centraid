@@ -17,7 +17,13 @@ export interface PairingState {
   readonly vaults: readonly CompanionVault[];
   readonly pairedAt: string;
   readonly relayUrls?: readonly string[];
-  readonly grantProfile: readonly CompanionModule[];
+  /**
+   * WHICH MODULES THIS COMPANION USES — a local preference, not a grant
+   * (#996, R11). It was `grantProfile` and it travelled to the gateway, which
+   * stored it as authority rows; enrollment is full trust now, so the field
+   * neither travels nor is answered about, and the name says so.
+   */
+  readonly modules: readonly CompanionModule[];
 }
 
 export const COMPANION_MODULE_CATALOG = [

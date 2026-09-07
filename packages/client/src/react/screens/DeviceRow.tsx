@@ -265,14 +265,6 @@ export function DeviceRowDetail({
         What it holds · {replicaClause(device)}
       </p>
 
-      {device.grantProfile === undefined ? null : (
-        <p className={styles.detailNote}>
-          {device.grantProfile.length > 0
-            ? `Companion · ${device.grantProfile.join(" · ")}`
-            : "Companion · no modules"}
-        </p>
-      )}
-
       {onUpdateCompute ? (
         <label className={styles.computeToggle}>
           <input

@@ -30,9 +30,12 @@ function vault(): { db: ReturnType<typeof openVaultDb>; owner: string } {
   return { db: fixture.db, owner: fixture.boot.ownerPartyId };
 }
 
+const OWNER_PARTY = "party-egress-owner";
+
 const KEY = {
   actorId: "photos/digest",
   actorKind: "ai_agent",
+  ownerPartyId: OWNER_PARTY,
   verb: "gmail.send",
   target: "ada@example.com",
 } as const;
@@ -44,10 +47,14 @@ describe("egress answers in the one authority plane", () => {
     expect(listEgressAuthorities(db.vault)).toStrictEqual([]);
   });
 
-  test("an automation actor mints an automation principal; the owner's surfaces mint a device one", () => {
+  // THE OWNER'S HALF IS A PERSON (#996, R17). It was a `device` principal
+  // keyed by the caller id, so "always allow this to send there" was answered
+  // once per SEAT and the same member had to answer again on their phone.
+  test("an automation actor mints an automation principal; the owner's own surfaces mint a person one, keyed to the member", () => {
     const { db, owner } = vault();
     const agent = recordEgressAuthority(db.vault, {
       ...KEY,
+      ownerPartyId: owner,
       grantedBy: owner,
       now: "2026-09-04T00:00:00.000Z",
     });
@@ -55,6 +62,7 @@ describe("egress answers in the one authority plane", () => {
       ...KEY,
       actorId: "docs",
       actorKind: "app",
+      ownerPartyId: owner,
       grantedBy: owner,
       now: "2026-09-04T00:00:01.000Z",
     });
@@ -62,10 +70,23 @@ describe("egress answers in the one authority plane", () => {
       listEgressAuthorities(db.vault).map((row) => [row.authorityId, row])
     );
     expect(byId.get(agent)?.principalKind).toBe("automation");
-    expect(byId.get(surface)?.principalKind).toBe("device");
-    expect(egressPrincipalKind("owner")).toBe("device");
+    expect(byId.get(agent)?.actorId).toBe(KEY.actorId);
+    expect(byId.get(surface)?.principalKind).toBe("person");
+    // The member, not the seat that carried the send.
+    expect(byId.get(surface)?.actorId).toBe(owner);
+    expect(egressPrincipalKind("owner")).toBe("person");
     expect(byId.get(agent)?.target).toBe(KEY.target);
     expect(byId.get(agent)?.verb).toBe(KEY.verb);
+
+    // The SAME member on a second seat needs no second answer.
+    expect(
+      liveEgressAuthorityId(db.vault, {
+        ...KEY,
+        actorId: "docs-on-the-phone",
+        actorKind: "app",
+        ownerPartyId: owner,
+      })
+    ).toBe(surface);
   });
 
   test("the triple is registered for both principals", () => {
@@ -80,11 +101,13 @@ describe("egress answers in the one authority plane", () => {
     const { db, owner } = vault();
     const first = recordEgressAuthority(db.vault, {
       ...KEY,
+      ownerPartyId: owner,
       grantedBy: owner,
       now: "2026-09-04T00:00:00.000Z",
     });
     const again = recordEgressAuthority(db.vault, {
       ...KEY,
+      ownerPartyId: owner,
       grantedBy: owner,
       now: "2026-09-04T00:01:00.000Z",
     });
@@ -96,6 +119,7 @@ describe("egress answers in the one authority plane", () => {
     const { db, owner } = vault();
     const first = recordEgressAuthority(db.vault, {
       ...KEY,
+      ownerPartyId: owner,
       grantedBy: owner,
       now: "2026-09-04T00:00:00.000Z",
     });
@@ -104,6 +128,7 @@ describe("egress answers in the one authority plane", () => {
     expect(liveEgressAuthorityId(db.vault, KEY)).toBeUndefined();
     const second = recordEgressAuthority(db.vault, {
       ...KEY,
+      ownerPartyId: owner,
       grantedBy: owner,
       now: "2026-09-04T00:03:00.000Z",
     });
@@ -118,11 +143,13 @@ describe("egress answers in the one authority plane", () => {
     const { db, owner } = vault();
     recordEgressAuthority(db.vault, {
       ...KEY,
+      ownerPartyId: owner,
       grantedBy: owner,
       now: "2026-09-04T00:00:00.000Z",
     });
     recordEgressAuthority(db.vault, {
       ...KEY,
+      ownerPartyId: owner,
       target: "grace@example.com",
       grantedBy: owner,
       now: "2026-09-04T00:00:01.000Z",

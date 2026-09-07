@@ -316,11 +316,13 @@ export {
   type EgressAuthorityKey,
   type EgressAuthorityRecord,
 } from "./grant/egress-authority.js";
+// THE PRINCIPAL VOCABULARY IS PUBLIC (#996, R17): the deny matrix in
+// `packages/server` enumerates the kinds the authority plane will answer about,
+// and a matrix that cannot see a class of principal cannot notice a hole in it.
 export {
-  listCompanionSurfaces,
-  readCompanionSurfaces,
-  setCompanionSurfaces,
-} from "./grant/companion-surfaces.js";
+  NON_ENTITY_PRINCIPAL_KINDS,
+  PRINCIPAL_ENTITY_KINDS,
+} from "./schema/authority.js";
 export {
   closeObsoleteScopeRequest,
   getOpenScopeRequest,

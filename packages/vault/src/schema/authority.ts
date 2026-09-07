@@ -5,9 +5,10 @@ import {
 } from "./updated-at.js";
 
 // The one authority plane (#883 V-table): every standing answer about who may
-// do what — person, circle, harness, or the member's own device — is a row in
-// `share_authority`. App-strategy machinery, gateway-side enrollment
-// attenuation and runtime provider consent stay out of it (V-split).
+// do what — an audience (person or circle), an automation, or a harness — is a
+// row in `share_authority`. THREE KINDS ACROSS FOUR CHECK VALUES (#996, R17),
+// and those are the product's three consent moments. App-strategy machinery,
+// device enrollment and runtime provider consent stay out of it (V-split).
 
 // Polymorphic BOTH ways, so neither pair can carry a SQL foreign key. The
 // trigger on `core_entity` that revokes a purged subject's answers writes to
@@ -24,10 +25,9 @@ import {
  * a live answer whose audience no longer exists, which is exactly what the
  * trigger says must not happen.
  *
- * The three kinds NOT here are not rows: a `harness` principal is an engine
- * class (its ids are a closed vocabulary, see the CHECK below), a `device`
- * lives in the access plane, which is machinery rather than an ontology pack
- * and so has no `core_entity` row to purge, and an `automation` is named by
+ * The two kinds NOT here are not rows: a `harness` principal is an engine
+ * class (its ids are a closed vocabulary, see the CHECK below) and an
+ * `automation` is named by
  * its MANIFEST REF (`<app_id>/<automation_id>`, `automation/manifest/ref.ts`)
  * — a compiled manifest, not a row of any table in this file; the closest
  * thing it has to storage is `automation_state`, keyed by that same ref with
@@ -43,7 +43,6 @@ export const PRINCIPAL_ENTITY_KINDS: ReadonlyMap<string, string> = new Map([
 /** Principal kinds whose id is not an entity id — see the map above. */
 export const NON_ENTITY_PRINCIPAL_KINDS: ReadonlySet<string> = new Set([
   "harness",
-  "device",
   "automation",
 ]);
 
@@ -117,18 +116,24 @@ CREATE TABLE share_authority (
   -- a wave early is what lets that wave land without a schema change. The
   -- 'app' kind is deliberately NOT here — first-party apps are not principals
   -- (#928 A1), and a third-party door would be a new answer, not a new value.
+  -- 'device' LEFT this vocabulary (#996, R17). Enrollment is full trust
+  -- (R11): a seat either holds this vault or it does not, and that is
+  -- \`access_device\`'s answer, not a standing one the member gave. Keeping it
+  -- here made "which surfaces may this seat reach" expressible in the same
+  -- table as "who may see this album", and row-level scoping exists in exactly
+  -- one place in the system -- the closure of a shared subject.
   principal_kind TEXT NOT NULL CHECK (principal_kind IN
-    ('person','circle','harness','device','automation')),
+    ('person','circle','harness','automation')),
   principal_id   TEXT NOT NULL,
   subject_type   TEXT NOT NULL,
   -- '' where the subject is the whole of something the principal is already
-  -- scoped to: this vault, for a device; every scope, for a vault-wide egress
+  -- scoped to: every scope, for a vault-wide egress
   -- answer. Same empty-string argument as enrich_policy_rule.scope_ref — a NULL
   -- would let one vault-wide answer be recorded twice under the live index.
   subject_id     TEXT NOT NULL,
   -- Per (principal_kind x subject_type) vocabulary, not one global union:
-  -- 'view'/'edit' for a share and for a device's reach over its vault, the
-  -- enrichment capability for an egress answer. The registry that closes those
+  -- 'view'/'edit' for a share, the enrichment capability for an egress
+  -- answer. The registry that closes those
   -- triples is ruling V-registry's, and lands with the share.* command pack.
   verb           TEXT NOT NULL CHECK (length(verb) BETWEEN 1 AND 64),
   duration       TEXT NOT NULL CHECK (duration IN ('standing','until-date')),
@@ -158,7 +163,7 @@ CREATE TABLE share_authority (
   -- 'automation' is deliberately NOT exempted: the owner APPROVES an
   -- automation's manifest, so there is always a party who answered, and a row
   -- minted without one would be an automation that granted itself (#928 A3).
-  CHECK (granted_by IS NOT NULL OR principal_kind IN ('harness','device')),
+  CHECK (granted_by IS NOT NULL OR principal_kind = 'harness'),
   -- The one principal whose id is a closed vocabulary rather than a row id:
   -- a harness principal is an ENGINE CLASS, and an egress class outside the
   -- three enrich-gate.ts knows is unrepresentable here exactly as it was

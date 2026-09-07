@@ -12,7 +12,6 @@ import {
 import type { DatabaseSync } from "node:sqlite";
 
 import { VaultBlobAuthorizationError } from "../errors.js";
-import { readDeviceTrust, setDeviceTrust } from "../grant/device-trust.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { assertSha } from "./store.js";
 
@@ -74,14 +73,17 @@ export class BlobContentKeyRegistry {
     const row = this.db
       .prepare(
         `SELECT d.device_id AS device_id FROM access_device d
-          LEFT JOIN access_device_secret s ON s.device_id = d.device_id
+          JOIN access_device_secret s ON s.device_id = d.device_id
           WHERE d.device_id = ? OR s.public_key = ?
           LIMIT 1`
       )
       .get(identity, identity) as { device_id: string } | undefined;
-    // Unknown and revoked are different facts, read separately so neither is
-    // inferred from the other (#883).
-    if (!row || readDeviceTrust(this.db, row.device_id) === "revoked") {
+    // ENROLLMENT IS FULL TRUST (#996, R11). Unknown and revoked used to be
+    // read as two facts — an identity row plus a 'device' authority answer —
+    // so that neither was inferred from the other. There is no such answer
+    // now: revoking a seat DELETES its key row, so the join IS the check, and
+    // the two facts are one.
+    if (!row) {
       throw new VaultBlobAuthorizationError(
         `unknown or revoked paired device ${identity}`
       );
@@ -95,7 +97,6 @@ export class BlobContentKeyRegistry {
     ownerPartyId: string;
     name: string;
     platform?: string;
-    trust: "full" | "readonly";
   }): string {
     const existing = this.db
       .prepare(
@@ -110,12 +111,6 @@ export class BlobContentKeyRegistry {
             WHERE device_id = ?`
         )
         .run(input.name, input.platform ?? null, existing.device_id);
-      setDeviceTrust(this.db, {
-        deviceId: existing.device_id,
-        ownerPartyId: input.ownerPartyId,
-        trust: input.trust,
-        now,
-      });
       return existing.device_id;
     }
     const deviceId = uuidv7();
@@ -139,12 +134,6 @@ export class BlobContentKeyRegistry {
          VALUES (?, ?, NULL)`
       )
       .run(deviceId, input.identity);
-    setDeviceTrust(this.db, {
-      deviceId,
-      ownerPartyId: input.ownerPartyId,
-      trust: input.trust,
-      now,
-    });
     return deviceId;
   }
 
@@ -253,12 +242,13 @@ export class BlobContentKeyRegistry {
     let revoked = 0;
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      setDeviceTrust(this.db, {
-        deviceId: row.device_id,
-        ownerPartyId: row.owner_party_id,
-        trust: "revoked",
-        now: nowIso(),
-      });
+      // REVOKING A SEAT TAKES ITS KEY (#996, R11). It used to write a
+      // 'declined' authority row about the device; there is no device
+      // principal now, and the register is the answer — no key row, no
+      // identity, which is what `gateway/identity.ts` reads.
+      this.db
+        .prepare("DELETE FROM access_device_secret WHERE device_id = ?")
+        .run(row.device_id);
       for (const device of devices) {
         const current = this.deviceWrapState(device.device_id);
         const next = {

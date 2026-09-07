@@ -17,20 +17,30 @@ import { uuidv7 } from "../ids.js";
 
 export const EGRESS_SUBJECT_TYPE = "egress";
 
-export type EgressPrincipalKind = "automation" | "device";
+export type EgressPrincipalKind = "automation" | "person";
 
 /**
  * `outbox_item.actor_kind` is `identity.provAgentKind`, whose three values are
  * `owner`, `app` and `ai_agent`. Only the last is an automation; the other two
- * reach the outbox on the acting owner's device credential.
+ * reach the outbox on the acting owner's own credential.
+ *
+ * THE NON-AUTOMATION HALF IS A PERSON, NOT A DEVICE (#996, R17). It was
+ * `device`, keyed by the caller id — so "always allow this to send there" was
+ * answered once per SEAT, and the same owner had to answer again on their
+ * phone. The member who answered is a person and the answer is theirs, so it
+ * is keyed to their party and holds on every seat they own. `device` has left
+ * the principal vocabulary with the tier that needed it.
  */
 export function egressPrincipalKind(actorKind: string): EgressPrincipalKind {
-  return actorKind === "ai_agent" ? "automation" : "device";
+  return actorKind === "ai_agent" ? "automation" : "person";
 }
 
 export interface EgressAuthorityKey {
   actorId: string;
   actorKind: string;
+  /** The owner this act is attributable to — the principal id for a person
+   *  answer, so one member answers once rather than once per seat. */
+  ownerPartyId: string;
   /** Semantic verb, one half of the standing key. */
   verb: string;
   /** Semantic destination, the other half. */
@@ -62,6 +72,11 @@ const EGRESS_SELECT = `SELECT authority_id, principal_kind, principal_id, verb,
   FROM share_authority
   WHERE subject_type = '${EGRESS_SUBJECT_TYPE}' AND decision = 'granted'`;
 
+/** Who the answer is ABOUT: the automation itself, or the member. */
+function egressPrincipalId(key: EgressAuthorityKey): string {
+  return key.actorKind === "ai_agent" ? key.actorId : key.ownerPartyId;
+}
+
 function toRecord(row: EgressRow): EgressAuthorityRecord {
   return {
     authorityId: row.authority_id,
@@ -87,7 +102,7 @@ export function liveEgressAuthorityId(
     )
     .get(
       egressPrincipalKind(key.actorKind),
-      key.actorId,
+      egressPrincipalId(key),
       key.verb,
       key.target
     ) as { authority_id: string } | undefined;
@@ -122,7 +137,7 @@ export function recordEgressAuthority(
   ).run(
     authorityId,
     egressPrincipalKind(input.actorKind),
-    input.actorId,
+    egressPrincipalId(input),
     input.target,
     input.verb,
     input.now,

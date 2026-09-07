@@ -61,7 +61,6 @@ import {
   ASSISTANT_APP_ID,
   AUTHED_DEVICE_HEADER,
   AUTHED_PLANE_HEADER,
-  COMPANION_GRANTS_HEADER,
   ConversationHistoryStore,
   AutomationTriggerStore,
   Dispatcher,
@@ -245,7 +244,6 @@ import type { AssistOAuthConfig } from "./assist-oauth.js";
 import { pollProviderEventSource } from "./automation-event-sources.js";
 import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
 import { createBrokerHealthProbe } from "./broker-health.js";
-import { companionAccess } from "./companion-access.js";
 import { ConnectionBroker } from "./connection-broker.js";
 import type { DataPlaneHttpOptions } from "./data-plane-handoff.js";
 import { defaultLogger } from "./default-logger.js";
@@ -4341,7 +4339,6 @@ export async function buildGateway(
     // A proved device enrollment scopes what may be addressed; the header
     // picks within it, and no identity is a HARD refusal (#289). Loopback
     // embeds use the persisted host enrollment, not wildcard reach.
-    delete req.headers[COMPANION_GRANTS_HEADER];
     const rawHeader = req.headers[VAULT_HEADER];
     const requested = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
     const deviceKey = effectiveDeviceAccess?.deviceKeyFor(req);
@@ -4399,31 +4396,6 @@ export async function buildGateway(
       });
     }
     const enrollment = enrollmentStore.get(deviceKey, vaultId);
-    const access = companionAccess({
-      attenuated: enrollment?.attenuated === true,
-      projected:
-        enrollment?.attenuated === true
-          ? enrollmentStore.projectedSurfaces(deviceKey, vaultId)
-          : undefined,
-      req,
-      enrollmentId: enrollment?.enrollmentId ?? "",
-    });
-    if (access.kind === "unreadable")
-      return sendJson(res, 403, {
-        error: "companion_attenuation_unavailable",
-        message:
-          "this Companion device's surface answer has not been read from the vault yet",
-      });
-    if (access.kind === "refused")
-      return sendJson(res, 403, {
-        error: "companion_profile",
-        message:
-          "this Companion device is not granted access to that gateway surface",
-      });
-    const companionSurfaces =
-      access.kind === "allowed" ? access.surfaces : undefined;
-    if (companionSurfaces !== undefined)
-      req.headers[COMPANION_GRANTS_HEADER] = companionSurfaces.join(",");
     return runWithVaultContext(
       {
         vaultId,
@@ -4434,7 +4406,6 @@ export async function buildGateway(
         ...(enrollment
           ? { ownerId: enrollment.ownerId, ownsVault: !enrollment.revoked }
           : {}),
-        ...(companionSurfaces === undefined ? {} : { companionSurfaces }),
       },
       () => dispatchChain(req, res)
     );

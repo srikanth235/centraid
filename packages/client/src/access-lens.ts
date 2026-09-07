@@ -40,24 +40,27 @@ export interface AccessRequest {
   requestedAt: string;
 }
 
+/**
+ * THREE KINDS ACROSS FOUR VALUES (#996, R17). `device` left: enrollment is
+ * full trust (R11), so a seat either holds the vault or it does not, and that
+ * is the devices screen's answer rather than a standing one drawn here.
+ */
 export type AccessPrincipalKind =
   | "person"
   | "circle"
   | "harness"
-  | "device"
   | "automation";
 
 const PRINCIPAL_KINDS: readonly AccessPrincipalKind[] = [
   "person",
   "circle",
   "harness",
-  "device",
   "automation",
 ];
 
 /** Ruling V-dashboard: `person` and `circle` are ONE group — one question. */
 export interface AccessGroup {
-  id: "audiences" | "harnesses" | "devices" | "automations";
+  id: "audiences" | "harnesses" | "automations";
   title: string;
   locus: GrantLocus;
   answers: AccessAnswer[];
@@ -95,12 +98,6 @@ const GROUPS: readonly {
     title: "Automations",
     locus: "local",
     kinds: ["automation"],
-  },
-  {
-    id: "devices",
-    title: "Your devices",
-    locus: "boundary",
-    kinds: ["device"],
   },
 ];
 
@@ -240,34 +237,6 @@ export function parseAccessAnswers(
     const at = used?.get(answer.authorityId);
     return [at === undefined ? answer : { ...answer, lastUsedAt: at }];
   });
-}
-
-/** A device's subject is the whole vault, so `subject_id` is empty. */
-export const DEVICE_SUBJECT_TYPE = "core.vault";
-
-export function deviceStandings(
-  answers: readonly AccessAnswer[]
-): Map<string, AccessAnswer> {
-  const byDevice = new Map<string, AccessAnswer>();
-  for (const answer of answers) {
-    if (answer.principalKind !== "device" || !isStanding(answer)) continue;
-    if (answer.subjectType !== DEVICE_SUBJECT_TYPE) continue;
-    // A refusal outranks a grant: a device the member cut off must never read
-    // back as one that can reach in.
-    const held = byDevice.get(answer.principalId);
-    if (held && held.decision === "declined") continue;
-    byDevice.set(answer.principalId, answer);
-  }
-  return byDevice;
-}
-
-/** `undefined` is "no answer here" — never drawn as a refusal. */
-export function deviceReachLabel(
-  answer: AccessAnswer | undefined
-): string | undefined {
-  if (!answer) return undefined;
-  if (answer.decision === "declined") return "Refused at the door";
-  return answer.verb === "edit" ? "Can read and write" : "Can read";
 }
 
 function isStanding(answer: AccessAnswer): boolean {

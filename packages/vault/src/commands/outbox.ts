@@ -164,6 +164,7 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
   const authorityId = liveEgressAuthorityId(ctx.db, {
     actorId: ctx.identity.callerId,
     actorKind: ctx.identity.provAgentKind,
+    ownerPartyId: ownerPartyId(ctx),
     verb: input.verb,
     target: input.target,
   });
@@ -294,6 +295,7 @@ function decideItem(ctx: HandlerCtx): Record<string, unknown> {
     const minted = recordEgressAuthority(ctx.db, {
       actorId: item.actor_id,
       actorKind: item.actor_kind,
+      ownerPartyId: ownerPartyId(ctx),
       verb: item.verb,
       target: item.target,
       grantedBy: ownerPartyId(ctx),

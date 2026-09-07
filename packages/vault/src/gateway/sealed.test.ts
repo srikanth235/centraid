@@ -313,9 +313,12 @@ describe("sealed", () => {
     ).toThrow(/deny/u);
   });
 
-  test("a readonly device browses placeholders but never reveals", () => {
+  // Was "a readonly device": there is no readonly seat any more (#996, R11),
+  // and the property this proved never depended on one — the refusal is the
+  // SCHEMA's and arrives before any answer about the caller is consulted.
+  test("a second enrolled seat browses placeholders but never reveals", () => {
     const itemId = addLogin();
-    const viewer = enrollDevice(db, boot.ownerPartyId, "kiosk", "readonly");
+    const viewer = enrollDevice(db, boot.ownerPartyId, "kiosk");
     const cred: Credential = {
       kind: "device",
       deviceId: viewer.deviceId,
@@ -326,8 +329,7 @@ describe("sealed", () => {
       where: [{ column: "item_id", op: "eq", value: itemId }],
     });
     expect(read.rows[0]?.password).toBe(SEALED_PLACEHOLDER);
-    // The refusal is the SCHEMA's now, and it arrives before the device's
-    // grant is consulted — a readonly viewer and the owner get the same
+    // The refusal is the SCHEMA's now — this seat and the owner get the same
     // answer, which is the point of the key not being here.
     expect(() =>
       gw.reveal(cred, {

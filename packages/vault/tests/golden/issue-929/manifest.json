@@ -2,7 +2,7 @@
   "label": "issue-929",
   "frozenAt": "2026-01-01T00:00:00.000Z",
   "ontologyVersion": "1.0",
-  "userVersion": 6,
+  "userVersion": 7,
   "tables": {
     "access_device": {
       "columns": [
@@ -16,7 +16,7 @@
       "primaryKey": "device_id",
       "rows": 1,
       "digests": {
-        "01a07b89-0df6-769b-b17f-5581f934f471": "3718be3990c3dd84"
+        "01a07c99-7949-7651-9cab-dddd528495d2": "6fa0f4ee6b83773f"
       }
     },
     "access_device_secret": {
@@ -24,7 +24,7 @@
       "primaryKey": "device_id",
       "rows": 1,
       "digests": {
-        "01a07b89-0df6-769b-b17f-5581f934f471": "6db0d64a573fd6f5"
+        "01a07c99-7949-7651-9cab-dddd528495d2": "d2f51db29b1c4d58"
       }
     },
     "core_concept": {
@@ -46,21 +46,21 @@
       "primaryKey": "concept_id",
       "rows": 15,
       "digests": {
-        "01a07b89-0ddb-7578-b6be-0d46e3f1040e": "f6b93366b8f03296",
-        "01a07b89-0ddc-75fd-ae9f-65ac4442e533": "a12d4c953ae31abe",
-        "01a07b89-0dde-75be-b531-acffac8b36c6": "53591f767308436d",
-        "01a07b89-0ddf-72d0-8078-5ff94a1e4c1b": "6cf26351f46f54bf",
-        "01a07b89-0de1-7445-97af-f6412347e8f8": "f9d37e4f83673587",
-        "01a07b89-0de2-71fc-84f3-60dfd8e4f3ce": "ce435358f148b0cc",
-        "01a07b89-0de4-767d-9d27-228c9ef2b9ae": "cbf487c174bde1ec",
-        "01a07b89-0de5-7318-81ff-92450b623439": "c3c37c3e9919b04f",
-        "01a07b89-0de7-77d9-9edc-f9c1cc59ced5": "261be21c6f3ceb28",
-        "01a07b89-0de8-728d-88fb-75c966ff6a83": "57b3ce607d6e6fed",
-        "01a07b89-0de9-75de-919a-4ed2948a5eea": "ce51d728e6e689f4",
-        "01a07b89-0deb-7419-ad3c-83f1bac53067": "25d252b07a4ba72f",
-        "01a07b89-0dec-719a-a5c7-de97a23d8a84": "588490640093dd79",
-        "01a07b89-0ded-716b-ba09-23ce16f56019": "39381457ecc4a0b7",
-        "01a07b89-0dee-77df-9b0f-83c3378a73ac": "90658302cd8154a7"
+        "01a07c99-7913-77cb-a779-c4358729d4e8": "7dbf74d67a2924a0",
+        "01a07c99-7917-757a-a467-18a601a9504e": "bb26a43955cd45b9",
+        "01a07c99-7919-753d-88ba-f0722271840e": "5b188d111a9d1850",
+        "01a07c99-791d-7559-b482-21f0a346c108": "f4557743fe9db845",
+        "01a07c99-7921-73be-9086-fdd86e7074b3": "b3d7be6b3a1f514b",
+        "01a07c99-7925-76ef-832c-e09cdec15123": "f19e518e64fe5c22",
+        "01a07c99-7929-76c9-b0e9-32f1bab1fb5d": "16893cd1dbdc9a90",
+        "01a07c99-792d-7388-b83b-01d75acf5e4c": "45c8c02e97a3db0e",
+        "01a07c99-792f-718b-90a3-ab9e0f845ea4": "357637e7c57818c2",
+        "01a07c99-7931-75fa-9817-8ea7f5527a46": "a0c5b49c71f0f39a",
+        "01a07c99-7934-751e-8491-747b4b5c1286": "6731b1edb2cd0535",
+        "01a07c99-7935-776b-832d-f378915c49e6": "7a2f860d2f7e6955",
+        "01a07c99-7937-731d-b1d4-0075faa81416": "8d416ab62846e687",
+        "01a07c99-793a-7479-81a6-073026f31a37": "9ad617bc7720e150",
+        "01a07c99-793d-7558-96c9-c3c94109a2fc": "6abfc655486b6c25"
       }
     },
     "core_concept_scheme": {
@@ -75,12 +75,12 @@
       "primaryKey": "scheme_id",
       "rows": 6,
       "digests": {
-        "01a07b89-0dd0-70fc-9d24-6dde0e7f570e": "9dc87277d1fea437",
-        "01a07b89-0dd4-76f7-a8ad-413871862ce1": "3348fb57525c8256",
-        "01a07b89-0dd5-72bb-8401-dbd073b29cf4": "22be73992a319269",
-        "01a07b89-0dd7-705f-99ff-970bbd467ba6": "f158085abbb7ad3b",
-        "01a07b89-0dd8-737e-85ca-ee777ec959af": "9f85da2ef916b6b3",
-        "01a07b89-0dd9-72fc-be43-a08c0b2ac5b8": "6e1bf56febce3361"
+        "01a07c99-78ff-76a5-b24a-396e204916ed": "e2ef0b90e75f1b88",
+        "01a07c99-7905-74e4-b9be-d12deb702955": "30a53a378661ff40",
+        "01a07c99-7909-7659-a426-854419948dcb": "56c8632b315222cc",
+        "01a07c99-790d-741d-af07-05d4fdb35208": "d0936da436eb691a",
+        "01a07c99-790f-7025-b176-fd0d8dccb409": "6f614fbf6a91a5d2",
+        "01a07c99-7911-73e9-8e57-7335720f89aa": "be5032578122bbbd"
       }
     },
     "core_content_item": {
@@ -101,11 +101,11 @@
       "primaryKey": "content_id",
       "rows": 5,
       "digests": {
-        "07ba6103-9196-7f85-8271-33489e323840": "2ef16530d067a11c",
-        "66a1972f-596d-7738-8a3c-63d1132f3df7": "7b38c4428a59df7d",
-        "a210139b-b628-7592-82ec-d7aacf47468d": "cf683762ba38c842",
-        "b1557230-c0e7-7255-84ce-a45ee7bf198e": "14aae897f43e8c28",
-        "cb625ee7-d35e-7668-81ea-64aa001547c1": "200a6734d98a401c"
+        "07ba6103-9196-7f85-8271-33489e323840": "61fdc089c316576c",
+        "66a1972f-596d-7738-8a3c-63d1132f3df7": "132d7cf2a1960e7d",
+        "a210139b-b628-7592-82ec-d7aacf47468d": "3f9f380e4d0ea813",
+        "b1557230-c0e7-7255-84ce-a45ee7bf198e": "fe71a299ca93df11",
+        "cb625ee7-d35e-7668-81ea-64aa001547c1": "d2b70d82438a621b"
       }
     },
     "core_content_representation": {
@@ -124,11 +124,11 @@
       "primaryKey": "representation_id",
       "rows": 5,
       "digests": {
-        "0289261d-f491-7460-8714-2b2651a726ef": "bd26a9bc08b34c0b",
-        "2f9a358a-2807-7a16-8500-9e527f712450": "213d9ccb846616e8",
-        "51b7f0b8-a5ed-76b1-8776-55311a9b2677": "7e83022f77ddff64",
-        "c1bac236-83fc-724a-82bd-82a02933fa5b": "ae984395c8befac1",
-        "e3d92af7-5e6f-7638-8825-0eb56e6b1bca": "4e18748e990efd3d"
+        "0289261d-f491-7460-8714-2b2651a726ef": "8b95f683ea207997",
+        "2f9a358a-2807-7a16-8500-9e527f712450": "79a2340f502b3934",
+        "51b7f0b8-a5ed-76b1-8776-55311a9b2677": "a5e7e8840f86d345",
+        "c1bac236-83fc-724a-82bd-82a02933fa5b": "f5827c6b3e973949",
+        "e3d92af7-5e6f-7638-8825-0eb56e6b1bca": "78d20ef21e747c35"
       }
     },
     "core_document": {
@@ -156,30 +156,30 @@
       "primaryKey": "entity_id",
       "rows": 40,
       "digests": {
-        "01a07b89-0dd0-70fc-9d24-6dde0e7f570e": "0591ce69356547b3",
-        "01a07b89-0dd4-76f7-a8ad-413871862ce1": "9cbf21b32bc85d21",
-        "01a07b89-0dd5-72bb-8401-dbd073b29cf4": "e29ea8f953435d28",
-        "01a07b89-0dd7-705f-99ff-970bbd467ba6": "32ac25fd80527806",
-        "01a07b89-0dd8-737e-85ca-ee777ec959af": "5d396053038c94b2",
-        "01a07b89-0dd9-72fc-be43-a08c0b2ac5b8": "4927a14c3e79c933",
-        "01a07b89-0ddb-7578-b6be-0d46e3f1040e": "3ce7bdc690e91c46",
-        "01a07b89-0ddc-75fd-ae9f-65ac4442e533": "6780eafe643f4115",
-        "01a07b89-0dde-75be-b531-acffac8b36c6": "489504bfd41e7097",
-        "01a07b89-0ddf-72d0-8078-5ff94a1e4c1b": "d349d39ac89e7522",
-        "01a07b89-0de1-7445-97af-f6412347e8f8": "137d1cfec71a1640",
-        "01a07b89-0de2-71fc-84f3-60dfd8e4f3ce": "a89d8f1c712acda7",
-        "01a07b89-0de4-767d-9d27-228c9ef2b9ae": "2eca9c357ccedede",
-        "01a07b89-0de5-7318-81ff-92450b623439": "65a239bd252200fa",
-        "01a07b89-0de7-77d9-9edc-f9c1cc59ced5": "b9d3b79fda1a9d5a",
-        "01a07b89-0de8-728d-88fb-75c966ff6a83": "340bfd29c69c6a41",
-        "01a07b89-0de9-75de-919a-4ed2948a5eea": "953ea01566be59f2",
-        "01a07b89-0deb-7419-ad3c-83f1bac53067": "8e45313064f6f670",
-        "01a07b89-0dec-719a-a5c7-de97a23d8a84": "17dbf2060f29b9df",
-        "01a07b89-0ded-716b-ba09-23ce16f56019": "573b53c7963baa61",
-        "01a07b89-0dee-77df-9b0f-83c3378a73ac": "098886e96c33253e",
-        "01a07b89-0def-718f-9864-f37868ceb952": "a0eea6922fa542e0",
-        "01a07b89-0df1-7258-8320-61b0fba43ae5": "291989ceb48ec4d5",
-        "01a07b89-0df4-767a-8165-3a72b6a78042": "17ab420c69e21347",
+        "01a07c99-78ff-76a5-b24a-396e204916ed": "4e5bca7b2ed3c153",
+        "01a07c99-7905-74e4-b9be-d12deb702955": "fdeaa936f74ad649",
+        "01a07c99-7909-7659-a426-854419948dcb": "30ad4b6f2777aada",
+        "01a07c99-790d-741d-af07-05d4fdb35208": "a2e8ded32a4e461c",
+        "01a07c99-790f-7025-b176-fd0d8dccb409": "a0e3e27f3d2e8292",
+        "01a07c99-7911-73e9-8e57-7335720f89aa": "4deffaa6a7f36f2f",
+        "01a07c99-7913-77cb-a779-c4358729d4e8": "f23d36ed6e128ea6",
+        "01a07c99-7917-757a-a467-18a601a9504e": "273f86c19ce3622f",
+        "01a07c99-7919-753d-88ba-f0722271840e": "beb2c7b71cba95a6",
+        "01a07c99-791d-7559-b482-21f0a346c108": "adfb1b4be0c635f7",
+        "01a07c99-7921-73be-9086-fdd86e7074b3": "4592d26255b90f15",
+        "01a07c99-7925-76ef-832c-e09cdec15123": "7dd2cc5c47743656",
+        "01a07c99-7929-76c9-b0e9-32f1bab1fb5d": "4a935afb5a4be5f9",
+        "01a07c99-792d-7388-b83b-01d75acf5e4c": "a916c190e3cec805",
+        "01a07c99-792f-718b-90a3-ab9e0f845ea4": "ce7a35836efd3428",
+        "01a07c99-7931-75fa-9817-8ea7f5527a46": "3a3cc51d888ef490",
+        "01a07c99-7934-751e-8491-747b4b5c1286": "46f9626d712a15c6",
+        "01a07c99-7935-776b-832d-f378915c49e6": "623b1dd497efad5f",
+        "01a07c99-7937-731d-b1d4-0075faa81416": "0ba10296fa3080ff",
+        "01a07c99-793a-7479-81a6-073026f31a37": "c64f2e870d875b10",
+        "01a07c99-793d-7558-96c9-c3c94109a2fc": "e2c5db6b2eec0a21",
+        "01a07c99-7941-751d-8277-138842c2e22a": "2f78046dd0d5111d",
+        "01a07c99-7943-74fa-9b29-088e821c31e7": "d8f3075fa33121ac",
+        "01a07c99-7946-75b8-a449-e0d12044f927": "7a715255940ea42e",
         "0289261d-f491-7460-8714-2b2651a726ef": "5de0cfab46718917",
         "07ba6103-9196-7f85-8271-33489e323840": "912a4878f07532bb",
         "2f9a358a-2807-7a16-8500-9e527f712450": "66385d36fe59d12d",
@@ -275,7 +275,7 @@
       "primaryKey": "link_id",
       "rows": 1,
       "digests": {
-        "5b818965-455e-7ef6-842f-243ef584c6a7": "39797457821625b7"
+        "5b818965-455e-7ef6-842f-243ef584c6a7": "e62952fddf6882e0"
       }
     },
     "core_party": {
@@ -295,7 +295,7 @@
       "primaryKey": "party_id",
       "rows": 1,
       "digests": {
-        "01a07b89-0def-718f-9864-f37868ceb952": "30829d3f805c32a9"
+        "01a07c99-7941-751d-8277-138842c2e22a": "1b30181359b33e14"
       }
     },
     "core_vault": {
@@ -313,7 +313,7 @@
       "primaryKey": "vault_id",
       "rows": 1,
       "digests": {
-        "01a07b89-0df1-7258-8320-61b0fba43ae5": "58bc943702481463"
+        "01a07c99-7943-74fa-9b29-088e821c31e7": "1b6ec113681becb1"
       }
     },
     "enrich_policy": {
@@ -321,8 +321,8 @@
       "primaryKey": "domain",
       "rows": 2,
       "digests": {
-        "docs": "53ed8c95b86fa9cf",
-        "photos": "61012c2046c5cd17"
+        "docs": "4bc83ed776ced59f",
+        "photos": "fe17385ef3cb2f57"
       }
     },
     "knowledge_note": {
@@ -343,8 +343,8 @@
       "primaryKey": "note_id",
       "rows": 2,
       "digests": {
-        "6db8be44-8ae7-7d63-8703-6227abe1ec70": "761fda569872d416",
-        "c3dd9f89-daa9-755d-803e-4f8597d9e96d": "43d81493b23120f6"
+        "6db8be44-8ae7-7d63-8703-6227abe1ec70": "e80e03c5f96e077e",
+        "c3dd9f89-daa9-755d-803e-4f8597d9e96d": "38293774221ca885"
       }
     },
     "locker_key": {
@@ -352,7 +352,7 @@
       "primaryKey": "key_id",
       "rows": 1,
       "digests": {
-        "133ebbac-c409-4290-afd1-3bb2983129e3": "9061b025eacdd850"
+        "e3ac5ab0-eb3b-4cab-bd6a-d1f6cf88c0e2": "59ae2ea0897b8924"
       }
     },
     "replica_change": {
@@ -369,52 +369,51 @@
         "seq"
       ],
       "primaryKey": "seq",
-      "rows": 44,
+      "rows": 43,
       "digests": {
-        "1": "57b7b8060c3eeca1",
-        "2": "5abd21d2ee279a68",
-        "3": "bafe0d07b1df8399",
-        "4": "b8a0744092727433",
-        "5": "591db920dd72dfd2",
-        "6": "c209425840dd17da",
-        "7": "5f0acf8648e87438",
-        "8": "3a6422d9af6ab115",
-        "9": "5318b3289cbf1b3b",
-        "10": "634447924abc3864",
-        "11": "de34521a65a068b6",
-        "12": "09969573828a400f",
-        "13": "fe3d20eb8e46375b",
-        "14": "37b102b143c7a1a1",
-        "15": "b5171ad7c87f22cb",
-        "16": "e0bad52ccf5bb5be",
-        "17": "cded7f6617ffcea5",
-        "18": "be1c7d4970190779",
-        "19": "0b6704ea76f5ad33",
-        "20": "2c6c7bad5a940f83",
-        "21": "1568ff2766399714",
-        "22": "c12f3e23b06a76ef",
-        "23": "eba8c00ad894ee67",
-        "24": "6f18159971cbb1fc",
-        "25": "4ab4ca268a20617d",
-        "26": "185e37198c92f4a4",
-        "27": "0528d2970ca3cea0",
-        "28": "0859e9186f2f384c",
-        "29": "da821cbe33019a66",
-        "30": "61ad2ec7139f748e",
-        "31": "eed442ea391f50d1",
-        "32": "cb6c9d8b7d7bd200",
-        "33": "f62514a522fba082",
-        "34": "89c8a1bb2205e8ae",
-        "35": "f5345b215f4288c4",
-        "36": "e06f6a572630d00e",
-        "37": "18cccfbb2892bf77",
-        "38": "c0574fb3465dfc39",
-        "39": "2049b200e0fa004e",
-        "40": "fd5ae76ae7b5df1a",
-        "41": "1b583dc44b474310",
-        "42": "8fb1034a0150662a",
-        "43": "8455301d59cde7f2",
-        "44": "10845158169cc0d6"
+        "1": "1221cce037278c13",
+        "2": "e6839170829f53a7",
+        "3": "b81aae22432768ce",
+        "4": "02aa50d73c95d2b9",
+        "5": "66b95a3db5c05407",
+        "6": "8f40ef7796bd58cd",
+        "7": "a21e0719460db5cd",
+        "8": "c28a3bbf62105761",
+        "9": "1542821b610cf597",
+        "10": "413d8a8dfa8fd3a5",
+        "11": "1300ff3ed4886f2e",
+        "12": "baea762b88a1f67f",
+        "13": "3a3fa4ea44ef8214",
+        "14": "b1eb3f64822dbef8",
+        "15": "160eeba1191e9aa1",
+        "16": "ab5c9e70d4fb347f",
+        "17": "47251388edc3da09",
+        "18": "ce825181fa243c5c",
+        "19": "f33c98a4c3efe345",
+        "20": "69142c5557160b1e",
+        "21": "c0ac379e51f9ae3c",
+        "22": "b20e290f8fc216da",
+        "23": "2a924c07b6843e65",
+        "24": "89b487a0329043e9",
+        "25": "2da74a6a9059fd02",
+        "26": "aceba9db2f12bed3",
+        "27": "505badb9ac90217a",
+        "28": "1a285338b2d6b928",
+        "29": "b6e38d581bd4e291",
+        "30": "32b634a5c75e1c01",
+        "31": "5eed7c0f914f6b2c",
+        "32": "406bdbb1fabdd6de",
+        "33": "9dbbe56f45ccdbdf",
+        "34": "a5584a3ee1a7e99b",
+        "35": "0f75cefbbb9e1dd6",
+        "36": "85e20616d392a5bc",
+        "37": "5f50aced81df317a",
+        "38": "aae5b8fbd0fa21a7",
+        "39": "e65d6b1beb50ebae",
+        "40": "7084f241521eb12c",
+        "41": "4ee1efc56ecceee4",
+        "42": "b922a7f33a4cf346",
+        "43": "bfc5c504123cd75c"
       }
     },
     "schedule_calendar": {
@@ -431,30 +430,7 @@
       "primaryKey": "calendar_id",
       "rows": 1,
       "digests": {
-        "01a07b89-0df4-767a-8165-3a72b6a78042": "1b73052772243a33"
-      }
-    },
-    "share_authority": {
-      "columns": [
-        "authority_id",
-        "decision",
-        "duration",
-        "expires_at",
-        "granted_at",
-        "granted_by",
-        "principal_id",
-        "principal_kind",
-        "receipt_id",
-        "revoked_at",
-        "revoked_reason",
-        "subject_id",
-        "subject_type",
-        "verb"
-      ],
-      "primaryKey": "authority_id",
-      "rows": 1,
-      "digests": {
-        "01a07b89-0df8-71bb-ba94-30b57f4fbcf8": "1eb10e98ea97b0b5"
+        "01a07c99-7946-75b8-a449-e0d12044f927": "e68e00cd63d6de62"
       }
     }
   }

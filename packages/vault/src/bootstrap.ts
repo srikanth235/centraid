@@ -5,7 +5,6 @@ import { randomBytes } from "node:crypto";
 
 import type { VaultDb } from "./db.js";
 import type { FilterClause, Risk } from "./gateway/types.js";
-import { setDeviceTrust } from "./grant/device-trust.js";
 import { nowIso, uuidv7 } from "./ids.js";
 
 export interface BootstrapResult {
@@ -173,11 +172,16 @@ export function bootstrapVault(
   };
 }
 
+/**
+ * ENROLLMENT IS FULL TRUST (#996, R11). There was a `trust` parameter here,
+ * written next door as a `share_authority` row of principal kind 'device'. A
+ * seat either holds this vault or it does not: what it may reach is the
+ * owner's reach, and revoking it takes its key rather than narrowing an answer.
+ */
 export function enrollDevice(
   db: VaultDb,
   ownerPartyId: string,
-  name: string,
-  trust: "full" | "readonly" = "full"
+  name: string
 ): { deviceId: string; deviceKey: string } {
   const deviceId = uuidv7();
   const deviceKey = randomBytes(32).toString("hex");
@@ -197,7 +201,6 @@ export function enrollDevice(
        VALUES (?, ?, NULL)`
     )
     .run(deviceId, deviceKey);
-  setDeviceTrust(db.vault, { deviceId, ownerPartyId, trust, now });
   return { deviceId, deviceKey };
 }
 

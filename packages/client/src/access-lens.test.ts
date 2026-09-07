@@ -70,10 +70,10 @@ describe("the Access lens", () => {
               }),
               row({
                 authority_id: "a4",
-                principal_kind: "device",
-                subject_type: "core.vault",
-                subject_id: "",
-                verb: "edit",
+                principal_kind: "automation",
+                subject_type: "agent.pack",
+                subject_id: "media",
+                verb: "read",
               }),
             ],
           });
@@ -95,13 +95,12 @@ describe("the Access lens", () => {
     ).toStrictEqual([
       ["audiences", 2],
       ["harnesses", 1],
-      ["automations", 0],
-      ["devices", 1],
+      ["automations", 1],
     ]);
-    // The promise each group can keep is the vault's sentence, verbatim.
-    expect(lens.loci.boundary).toBe(
-      "this device is refused at the door from now on; anything already on it stays on it"
-    );
+    // THREE KINDS, THREE GROUPS (#996, R17): a `device` row is no longer one
+    // of them, and a seat's reach is the devices screen's answer, not a
+    // standing one drawn here.
+    expect(lens.groups.map((group) => group.id)).not.toContain("devices");
   });
 
   // WHEN AN ANSWER WAS LAST USED, AND WHAT IS STILL WAITING (#928). Both ride
@@ -182,16 +181,16 @@ describe("the Access lens", () => {
       {
         read: (_appId, request) =>
           request.entity === ACCESS_ENTITY
-            ? Promise.resolve({ rows: [row({ principal_kind: "device" })] })
+            ? Promise.resolve({ rows: [row({ principal_kind: "harness" })] })
             : Promise.reject(new Error("not in this replica")),
       },
       REGISTRY
     );
     expect(lens.status).toBe("ready");
     if (lens.status !== "ready") return;
-    const devices = lens.groups.find((group) => group.id === "devices");
-    expect(devices?.answers).toHaveLength(1);
-    expect(devices?.answers[0]?.lastUsedAt).toBeNull();
+    const harnesses = lens.groups.find((group) => group.id === "harnesses");
+    expect(harnesses?.answers).toHaveLength(1);
+    expect(harnesses?.answers[0]?.lastUsedAt).toBeNull();
     expect(lens.requests).toStrictEqual([]);
   });
 

@@ -7,6 +7,10 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { PEER_REPLICA_PATHS, ROUTES } from "@centraid/core/protocol";
 import type { RouteName } from "@centraid/core/protocol";
 import { tempDir } from "@centraid/test-kit/temp-dir";
+import {
+  NON_ENTITY_PRINCIPAL_KINDS,
+  PRINCIPAL_ENTITY_KINDS,
+} from "@centraid/vault";
 
 import type { GatewayPaths } from "../paths.js";
 import { EnrollmentStore } from "./enrollment-store.js";
@@ -283,6 +287,43 @@ describe("authz deny matrix (generated from ROUTES)", () => {
       origin.vault.close();
       audience.vault.close();
     });
+  });
+
+  /**
+   * THREE KINDS, FOUR CHECK VALUES (#996, R17). The matrix above enumerates
+   * principals on the WIRE; this enumerates the principals the authority plane
+   * will answer ABOUT, because a deny matrix that cannot see a whole class of
+   * principal is the #890 shape again — nothing enumerated the surface, so
+   * nothing could notice a hole in it.
+   *
+   * `device` is not one of them. Enrollment is full trust (R11): a seat either
+   * holds the vault or it does not, and that is the enrollment register's
+   * answer, not a standing authority the member gave. A `device` principal
+   * kind made "which surfaces may this seat reach" expressible in the same
+   * table as "who may see this album", and row-level scoping exists in exactly
+   * one place in the system — the closure of a shared subject.
+   *
+   * The three kinds are the product's three consent moments: an AUDIENCE
+   * (`person` and `circle` — one question, two shapes), an AUTOMATION, and a
+   * HARNESS.
+   */
+  test("the authority plane admits three kinds across four CHECK values", () => {
+    expect(
+      [
+        ...PRINCIPAL_ENTITY_KINDS.keys(),
+        ...NON_ENTITY_PRINCIPAL_KINDS,
+      ].toSorted()
+    ).toStrictEqual(["automation", "circle", "harness", "person"]);
+  });
+
+  test("no gateway surface offers a companion tier", async () => {
+    // R11: the confined Companion tier is gone, so there is no door that hands
+    // a device a narrower reach than "enrolled". A route that answers one is a
+    // tier by another name.
+    const named = Object.keys(ROUTES).filter((name) =>
+      /companion|surface|attenuat/iu.test(name)
+    );
+    expect(named).toStrictEqual([]);
   });
 
   test("every DELIBERATELY_PUBLIC entry names a real route and states why", () => {
