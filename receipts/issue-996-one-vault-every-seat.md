@@ -3150,3 +3150,53 @@ bun run lint:path-filters    # ok
 bun run format:check         # clean
 bash .governance/run.sh      # 22/22
 ```
+
+### Why the vec build step failed, and what it does now
+
+Run 34092275488 (job 101648094884, `macos-26`) reached `Build vec.xcframework`
+and died in one second on `v0.1.7-alpha.2 vendored no sqlite3ext.h — the
+submodule did not clone`. Everything before it — setup, Xcode 26.4 select, the
+React Native / ExpoModulesJSI assert, the CocoaPods assert — passed, and the
+guard did its job: it named the missing file rather than letting clang fail
+later with something less legible.
+
+The guard was right and the assumption behind it was wrong, in two ways.
+`asg017/sqlite-vec` has **no `vendor/` directory and no submodules at all** —
+its `scripts/vendor.sh` downloads a SQLite amalgamation into one at build time,
+so `--recurse-submodules` had nothing to fetch. And `sqlite-vec.h` is
+**generated** from `sqlite-vec.h.tmpl` by upstream's Makefile through
+`envsubst`, which macOS runners do not carry; a clone alone cannot compile.
+
+`build-sqlite-vec-ios.sh` now does both jobs itself. It renders the header with
+six `sed` substitutions — `VERSION` from the tag's own `VERSION` file, `DATE`
+and `SOURCE` from the cloned commit, so one tag always renders one header — and
+asserts the result carries `v0.1.7-alpha.2`. For `sqlite3ext.h` it prefers the
+platform SDKs' own copy (no network, and a header inside the sysroot is already
+on the quoted-include path), falling back to the same pinned amalgamation
+upstream's `vendor.sh` uses, with `SQLITE_EXTENSION_INIT1` asserted in whatever
+it unzips. The log says which source it took.
+
+**`node_modules/expo-sqlite/vendor/*/sqlite3.h` is deliberately not that
+source**, though it sits right there and would need no network at all: Expo
+renames the entire public API to `exsqlite3_*` in it, and stock extension source
+does not compile against a renamed header (`unknown type name 'sqlite3_vtab';
+did you mean 'exsqlite3_vtab'?`). The rename is invisible to a loadable
+extension, which reaches SQLite through the `sqlite3_api_routines` pointer it is
+handed rather than by linking symbols — so stock headers are both correct and
+the only ones that work. Expo's Android `vec.so` is built from stock source the
+same way.
+
+Verified here as far as a Linux container can: the script's source-preparation
+block was run verbatim against a real clone of the tag, and the `sqlite-vec.c`
+it produced compiles clean and exports `sqlite3_vec_init`.
+
+```
+bash -n apps/mobile/scripts/build-sqlite-vec-ios.sh   # syntax ok
+bunx vitest run --root apps/mobile scripts/sqlite-vec-version.test.mjs
+cc -fPIC -shared -O2 -o vec.so <clone>/sqlite-vec.c   # 0 errors, exports sqlite3_vec_init
+bun run lint:workflow-pins && bun run format:check
+bash .governance/run.sh
+```
+
+The arch flags, the xcframework packaging and the simulator link still need
+macOS; the next dispatch is what turns them into evidence.
