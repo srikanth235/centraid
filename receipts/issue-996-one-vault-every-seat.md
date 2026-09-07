@@ -81,7 +81,7 @@ bun run format:check
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-06 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-07 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 
 ## Wave 0a — rulings, drift rows, and the two corrected sentences
 
@@ -1511,3 +1511,220 @@ window answering unknown-recover without a second execution.
 - **A one-line SQL comment cost a build.** `expires_at`'s comment used
   backticks inside a template literal; the schema is authored as a TS template,
   so it terminated the literal.
+
+## Wave 2 — the applier and the bootstrap
+
+The gateway has served the file and the log since wave 1. This is the other end
+of both: the seat that takes them.
+
+### The wire, moved to where two programs can share it
+
+`packages/core/src/protocol/seat-log.ts` (new) carries `SeatLogRowWire`,
+`SeatLogPageWire`, `SeatRebootstrapRequiredWire`, `SeatSnapshotHead`, the three
+snapshot header names and `SEAT_LOG_MAX_PAGE`. Wave 1's door hand-shaped this
+JSON and the seat would have had to hand-parse it; `seat-routes.ts` now
+declares the same three types on its answers, so the two ends compile against
+one object instead of agreeing by comment. No behaviour changed on the door —
+the diff is types and three header constants.
+
+The wire is deliberately not the storage shape: `commit_seq` → `commitSeq`,
+`pk_json` → `pk`, no per-row `epoch` (the page carries it once, and wave 1's
+door refuses to ship a row that disagrees), and `indirect` / `deferred` omitted
+when false. A seat reads millions of these on a catch-up.
+
+### The applier, in four rules
+
+`packages/client/src/replica/seat/applier.ts`:
+
+1. **One commit, one transaction, cursor included.** `seat_state.applied_seq`
+   moves in the same transaction as the rows it names, so a crash leaves a
+   commit boundary the next attempt resumes from. This is why wave 1's log door
+   never pages mid-commit — the two halves of that invariant are now both real.
+2. **`INSERT … ON CONFLICT DO UPDATE`**, from wave 1's `applyRowSql`. Never
+   REPLACE: it deletes first and fires delete triggers only under
+   `recursive_triggers`, which on a seat — whose only surviving triggers are FTS
+   sync — desynchronises the index from the rows it indexes, silently.
+3. **Idempotent by seq.** A row at or below the cursor is dropped before it is
+   bound. The test is a delete followed by the SAME page redelivered: "an upsert
+   that happens to be harmless" is not harmless there, it resurrects the row.
+4. **Foreign keys off** (`SEAT_OPEN_PRAGMAS`). A page can carry a child before
+   the commit that carries its parent; enforcing here would reject rows the
+   gateway accepted.
+
+And one refusal: a row whose `schema_epoch` is not the file's is checked
+**before the first transaction opens**, and refuses the page WHOLE. Applying
+the rows in front of the drifted one and then stopping leaves the seat at a
+cursor its file no longer matches — exactly the state re-bootstrap exists to
+avoid. `SeatDriftError` carries `recovery: "rebootstrap"` rather than making
+every caller infer it.
+
+A metered seat (`deferOverThreshold`) skips a commit the gateway marked over
+the byte threshold, records the FIRST such seq in `seat_state.deferred_from`
+for wave 2's byte policy, and **still moves the cursor** — which is what keeps
+the tail draining behind a span the seat declined to take.
+
+### `seat_state`, and why the seat needs a table of its own
+
+`packages/client/src/replica/seat/state.ts`. The snapshot already carries
+`replica_meta` with the epoch and the position the file stands at, so this
+restates none of it. What it holds is true of THIS seat and no other copy:
+`applied_seq` / `applied_commit_seq`, `gateway_watermark` (the head as of the
+last page — the seat-level watermark that replaces per-read `coverage`, R8),
+`deferred_from`, and the additive `ddl_version`. Created after the snapshot
+lands, so the gateway has no such table and cannot capture it back over itself.
+
+### The bootstrap is a resumable download, and the room check comes first
+
+`packages/client/src/replica/seat/bootstrap.ts`. Two seams — a
+`SeatSnapshotTransport` and a `SeatBootstrapStaging` — because the resume logic
+is the part that is actually subtle and it is tested once against a real
+filesystem rather than three times against three mocks.
+
+- **Resume is by byte range, pinned to the ETag.** The door's artifact is a
+  pure function of its log position, so "the same file" is checkable. A staged
+  prefix whose marker does not match is a DISCARD, never a resume: splicing two
+  artifacts produces a database that gunzips and fails an integrity check hours
+  later. A body that ends short of the declared size is refused rather than
+  installed.
+- **Room for both files, before the first byte.** A re-bootstrap holds the
+  current file, the staged artifact and the expanded copy at once.
+  `SEAT_SNAPSHOT_EXPANSION = 8` against a measured 7.1 (64.4 MB of SQLite to
+  8.86 MB gzip-6 at year-3): the check has to be wrong in the safe direction.
+  An absent `freeBytes` estimate is "the host will not say", never "no room" —
+  refusing on it would make the seat unusable in every browser without
+  `navigator.storage.estimate`.
+- **FTS rebuilt after the copy.** The snapshot pipeline drops most of the
+  schema out from under the shadow tables and then VACUUMs; the seat is the
+  first process to write to the file. `rebuildSeatFtsIndexes` finds every fts5
+  table from `sqlite_schema` — the seat has no entity registry — and re-derives
+  it, so a broken index fails here instead of on the member's first search.
+
+### The applier runs off the JS thread
+
+`worker-core.ts` is the whole worker minus its host: `openDatabase`, `staging`
+and `transport` are injected, so the browser (OPFS + sqlite-wasm, wave 2
+commit 4) and the suites (`node:fs` + `node:sqlite`) run the SAME program. The
+message boundary (`worker-protocol.ts`) is one message per PAGE, never per row
+or per commit: per-row would spend more time in `postMessage` than in SQLite,
+and per-commit would put the transaction boundary under the scheduler. Change
+notices go the other way unsolicited — a seat also applies while nobody is
+waiting on it.
+
+`bootstrap` releases the handle BEFORE the install and reopens after: no host
+lets a file be replaced under an open connection, and the one that tolerates it
+keeps the deleted inode alive, so the seat would go on reading the file it just
+replaced. There is a test for exactly that.
+
+### The seat's driver is its own
+
+`SeatSqliteDriver` binds `string | number | null | bigint | Uint8Array`. The
+old store's union is the first three, which was right for a projection of
+JSON-shaped rows; a seat holds `vault.db` whole, so BLOBs and integers past
+2^53 are on its write path — `row-json.ts` exists for exactly those — and
+widening the old union would push both types into every driver on three
+platforms for a value none of them is handed today. `NodeSeatDriver` returns
+plain objects because the other two do; a driver whose rows behave differently
+from its siblings' is a difference every caller then has to know about.
+
+### Same SQL, two files
+
+`tests/quality/seat-replay-parity.test.ts` is the convergence gate, and it
+lives in `tests/quality` because it is the one test that needs BOTH halves —
+`@centraid/vault` to build and capture, `@centraid/client` to bootstrap and
+apply — and neither package depends on the other, deliberately.
+
+- **The 0e ontology fixture**: the sanitised snapshot through the real
+  bootstrap, every comparable table compared row for row, then THREE real
+  commits on the gateway (an insert, an update of a row the snapshot already
+  carries, a delete), the tail applied, and parity asserted again. Then the
+  same page a second time: 0 applied, every row counted duplicate, parity
+  unchanged. The comparable set is read from the SEAT's own schema — the seat's
+  tables ARE the gateway's minus the private ones, so asking the file is asking
+  the thing the invariant is about.
+- **The year-3 vault**: the declared phone volume, table for table.
+
+### Two reds this wave found, both fixed here
+
+- **The year-3 fixture cache was serving a pre-#996 artifact.**
+  `year3FixtureCacheKey` mixes in `VAULT_MIGRATIONS.length`, and #996's waves 0b
+  and 1 rewrote the BASELINE without adding a rung — a pre-1.0 vault is created
+  from the baseline, not laddered up to it — so the key did not move and a
+  directory built on 5 September was handed to code that could no longer open
+  it (`core.content_representation is an entity with a composite primary key`).
+  `YEAR3_FIXTURE_VERSION` is 4, which is the lever the file already documents
+  for exactly this, and the comment on `year3FixtureCacheKey` now says what the
+  ladder length does not cover.
+- **Year-3 notes were not searchable.** Once the cache rebuilt,
+  `year3-vault.test.ts`'s note needle found nothing: the seeder writes
+  `core_content_item` and the representation row directly, and wave 1 moved the
+  FTS decode to a `core_content_text` row that only `setRepresentation` writes.
+  The seeder now writes that row too, before the note and its representation —
+  the representation's own FTS trigger reads it. `test-kit` cannot CALL
+  `setRepresentation`; it deliberately does not depend on the vault.
+
+### The measurement
+
+Golden year-3 vault, `node:sqlite`, this machine:
+
+| | |
+| --- | --- |
+| gateway `vault.db` | 112,377,856 bytes |
+| sanitised snapshot | 64,356,352 bytes |
+| snapshot build (`VACUUM INTO`, sanitise, `VACUUM`) | 2,829 ms |
+| artifact on the wire (gzip-6) | 8,861,481 bytes — a ratio of 7.26 |
+| bootstrap: stage, gunzip, install, FTS rebuild, `seat_state` | 606 ms |
+| entities in the seat file | 89,339 |
+
+The apply rate on wasm is measured in this wave's web commit, where a wasm
+handle exists.
+
+### Every file this commit touches
+
+- `packages/core/src/protocol/seat-log.ts` (new) · `packages/core/src/protocol/index.ts` — the wire both ends compile against
+- `packages/server/src/routes/seat-routes.ts` — the door's answers are typed by it; the three header names are constants now
+- `packages/client/src/replica/seat/applier.ts` (new) — the four rules and the drift gate
+- `packages/client/src/replica/seat/bootstrap.ts` (new) — resume by range, the room check, the FTS rebuild
+- `packages/client/src/replica/seat/state.ts` (new) — `seat_state` and its DDL
+- `packages/client/src/replica/seat/driver.ts` (new) — `SeatSqliteDriver`, `SeatBindValue`, `SEAT_OPEN_PRAGMAS`
+- `packages/client/src/replica/seat/worker-core.ts` (new) · `worker-protocol.ts` (new) — the worker minus its host
+- `packages/client/src/replica/seat/http-snapshot-transport.ts` (new) — `If-Range`, the ETag pin, the three headers
+- `packages/client/src/replica/seat/node-seat-driver.ts` (new) · `node-staging.ts` (new) — the desktop seat's two halves, and the suites'
+- `packages/client/src/replica/seat/wasm-seat-driver.ts` (new) — the browser seat's write path
+- `packages/client/src/replica/seat/seat-drift-error.ts` · `seat-snapshot-moved-error.ts` · `seat-bootstrap-no-room-error.ts` · `seat-worker-not-open-error.ts` (all new) — one class per file, the repo's rule
+- `packages/client/src/replica/seat/index.ts` (new) · `packages/client/package.json` — the `@centraid/client/replica/seat` subpath; host-specific entries deliberately not re-exported
+- `packages/client/src/replica/seat/applier.test.ts` · `bootstrap.test.ts` · `worker-core.test.ts` (all new)
+- `tests/quality/seat-replay-parity.test.ts` (new) — the convergence gate over both corpora
+- `packages/test-kit/src/year3-fixture-cache.ts` · `year3-distributions.ts` · `year3-vault.test.ts` — the two reds above
+
+### Gates
+
+```
+cd packages/core     && bun run test   # 19 files, 302 passed
+cd packages/client   && bun run test   # 276 files, 2503 passed
+cd packages/test-kit && bun run test   # 5 files, 62 passed
+cd packages/server   && bun run test   # 390 files, 3486 passed; 2 files red, environmental
+bunx vitest run --config vitest.quality.config.ts tests/quality/seat-replay-parity.test.ts   # 2 passed
+bun run governance                     # 22 directives
+bun run check:push:static              # 4/4, stamped on the committed tree
+```
+
+The two red server files are the same environmental pair wave 1 named:
+`src/acp/backends/acp/launch.test.ts` (sandbox/root detection) and
+`src/serve/gateway-db-lock.integration.test.ts` (needs a real `sqlite3`).
+
+### Decisions — wave 2, applier and bootstrap
+
+- **The drift gate refuses the page, not the row.** The first version stopped
+  at the drifted row and kept what it had applied. That is a cursor that names
+  a file the seat no longer has; refusing whole is the only state the next
+  attempt can reason about.
+- **A separate driver interface rather than a wider one.** The two stores live
+  side by side until wave 5. Widening `ReplicaBindValue` reaches four drivers
+  across three platforms for types the old store is never handed.
+- **`node:sqlite` will not read an integer past 2^53 as a number**, which is
+  the loss `{i: "…"}` exists to prevent — so the applier's wide-integer test
+  reads the column back as TEXT and compares digits. The seat's READ path will
+  meet this again in wave 4; the write path is proven here.
+- **The room check counts the file being replaced.** Counting only the new one
+  passes on a phone that then runs out of space during the swap, which is the
+  failure the check exists to prevent.
