@@ -17,7 +17,7 @@ import {
 } from "../vault-change-feed.js";
 import { createReplicaCoordinator } from "./coordinator-web.js";
 import type { ReplicaWebCoordinatorOptions } from "./coordinator-web.js";
-import { ReplicaProtocolError } from "./errors.js";
+import { OnlineOnlyError, ReplicaProtocolError } from "./errors.js";
 import type {
   PendingIntentReplacement,
   PendingIntentRevisionTarget,
@@ -283,11 +283,17 @@ export class ReplicaShellSession {
   /**
    * ONE PAGE OF ONE APP HANDLER (#996 wave 4, R8).
    *
-   * The app read path, and the only one: plain SQL over this seat's own copy of
-   * the vault, keyset-paged, with the outbox's pending rows drawn over it. It
-   * does NOT fall back to the gateway — a seat that cannot answer has no file,
-   * which is a state the surface shows rather than a state to paper over with a
-   * network read whose rows would then disagree with the next page.
+   * The app read path: plain SQL over this seat's own copy of the vault,
+   * keyset-paged, with the outbox's pending rows drawn over it.
+   *
+   * A SEAT WITH NO FILE IS ONLINE-ONLY, NOT BROKEN (W4-D2, R9). The browser
+   * that turned "Keep an offline copy" off has nowhere to run the statement,
+   * and the answer is not a second read vocabulary for it: the whole handler
+   * runs on the gateway instead, through the paged door, which serves the SAME
+   * statement under the caller's principal. So this refuses with the code the
+   * inline runner already falls back on, and the fallback re-runs the QUERY
+   * rather than this one page — a page answered here and the next page answered
+   * there would be two walks of two different orderings.
    */
   async page<Row extends object>(
     query: PageQuery<Row>,
@@ -296,7 +302,8 @@ export class ReplicaShellSession {
   ): Promise<Page<Row>> {
     this.assertOpen();
     const seat = await this.seat();
-    if (!seat) throw new ReplicaProtocolError("This seat holds no vault copy");
+    if (!seat)
+      throw new OnlineOnlyError("this seat holds no copy of the vault");
     return seatWorkerPage<Row>(seat, query, request, overlay);
   }
 

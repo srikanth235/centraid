@@ -78,7 +78,11 @@ interface InlineCommonsShareResult extends Record<string, unknown> {
 
 export type InlineScopeSession = Pick<
   ReplicaShellSession,
-  "read" | "search" | "write" | "subscribe"
+  // `page` is the app read path (#996 wave 4). It is picked here rather than
+  // left optional so an app's handler reaches the seat's own file through the
+  // same binding its reads use; on a seat with no file it refuses ONLINE_ONLY
+  // and the whole query re-runs on the gateway's paged door (W4-D2).
+  "read" | "search" | "write" | "subscribe" | "page"
 > &
   Partial<
     Pick<ReplicaShellSession, "discardPendingWrite" | "retryPendingWrite">

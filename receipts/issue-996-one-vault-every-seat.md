@@ -5982,3 +5982,59 @@ row.
   answer is rows that look right.
 - **The assembler is one function for three ends.** Two assemblers are two
   keyset dialects, and the one that drifts drifts silently.
+
+## Wave 4 — the shell's binding grows the app read path (#996)
+
+### One line of type, and the seam is live
+
+`ctx.vault.page` existed on both ends and reached neither: `InlineScopeSession`
+picked `read | search | write | subscribe` off the shell session, so
+`buildInlineCtx`'s `session.page` branch was never taken and every app's
+handler saw the online-only stub. `page` is now picked with the rest — the same
+binding an app's reads travel on, rather than a second one to keep in step.
+
+### A seat with no file is online-only, not broken (W4-D2, R9)
+
+`ReplicaShellSession.page` refused with `ReplicaProtocolError`, which the inline
+runner does not fall back on, so the browser that turned "Keep an offline copy"
+off would have seen the handler throw. It refuses with `OnlineOnlyError` now,
+which is in `FALLBACK_CODES`, and the fallback re-runs **the whole query** on
+the gateway — where the paged door serves the same statement. Re-running the
+query rather than the one page is the point: a page answered on the seat and the
+next page answered on the gateway would be two walks of two orderings, and the
+disagreement would show up only at a boundary.
+
+### Red first
+
+Two cases in `centraid-inline.test.ts`, a pair:
+
+- a seat holding the file answers `ctx.vault.page` locally, cursor included,
+  with `doFetch` never called — this failed before the `Pick` changed, because
+  the ctx had no `page` to call;
+- a seat holding no file re-runs the query on `/centraid/tasks/queries/board`
+  and returns the door's rows — this failed before the error class changed.
+
+### Gates
+
+- `bunx vitest run packages/client/src/react/blueprints/centraid-inline.test.ts`
+  — 27 passed; with `inline-change-feed.test.ts`, 30 passed.
+- `bun run --cwd packages/client typecheck` — clean.
+- `bun run check:push:static` — below.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/client/src/react/blueprints/centraid-inline.ts`
+- `packages/client/src/react/blueprints/centraid-inline.test.ts`
+- `packages/client/src/react/blueprints/inline-change-feed.test.ts`
+- `packages/client/src/replica/shell-session.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the binding
+
+- **The fallback re-runs the query, never the page.** Two ends answering
+  alternate pages of one walk is a bug you only see at a boundary.
+- **"No file" is a seat's standing choice, so it refuses like one.** An error
+  code the runner does not know is an app crash for a member who chose a
+  supported configuration.

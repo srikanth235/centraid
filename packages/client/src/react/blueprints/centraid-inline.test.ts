@@ -6,6 +6,7 @@ import { lockerPendingProjection } from "@centraid/blueprints/apps/locker/pendin
 import { ROUTES } from "@centraid/core/protocol";
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
+import { OnlineOnlyError } from "../../replica/errors.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import {
   installInlineCentraid,
@@ -53,6 +54,9 @@ function fakeSession(overrides?: Partial<Session>): Session & {
       cursor: { epoch: "e", seq: 1 },
       dependency: { shapeId: "s", entity: "x" },
     })),
+    // The app read path (#996 wave 4). A seat holding the file answers here;
+    // the seat with no file refuses ONLINE_ONLY, which is a case below.
+    page: (async () => ({ rows: [] })) as Session["page"],
     search: vi.fn<Session["search"]>(async () => ({
       rows: [],
       cursor: { epoch: "e", seq: 1 },
@@ -661,6 +665,119 @@ describe(installInlineCentraid, () => {
       query: "board",
     });
     expect(res.open).toStrictEqual(["from-gateway"]);
+    expect(doFetch).toHaveBeenCalledWith(
+      "https://gw.test",
+      "/centraid/tasks/queries/board",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("answers ctx.vault.page from the seat's own file, with no network", async () => {
+    // The positive half of the pair below: the binding an app's reads use now
+    // carries `page`, so a seat holding the vault answers the handler locally.
+    const page = vi.fn<
+      () => Promise<{
+        rows: { task_id: string }[];
+        next: { sortKey: string; pk: string };
+      }>
+    >(async () => ({
+      rows: [{ task_id: "t-2" }, { task_id: "t-1" }],
+      next: { sortKey: "t-1", pk: "t-1" },
+    }));
+    const session = fakeSession({ page: page as unknown as Session["page"] });
+    const queries: InlineAppModule["queries"] = {
+      board: {
+        default: async ({ ctx }) =>
+          (await (
+            ctx as {
+              vault: {
+                page: (request: unknown) => Promise<{ rows: unknown[] }>;
+              };
+            }
+          ).vault.page({
+            query: {
+              name: "tasks.board",
+              select: "task_id",
+              from: "schedule_task",
+              order: {
+                sortColumn: "task_id",
+                pkColumn: "task_id",
+                descending: true,
+              },
+            },
+            limit: 20,
+          })) as unknown,
+      },
+    };
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries,
+      target,
+      isOnline: () => true,
+    });
+    const res = await client(target).read<{
+      rows: { task_id: string }[];
+      next?: { pk: string };
+    }>({ query: "board" });
+    expect(res.rows.map((row) => row.task_id)).toStrictEqual(["t-2", "t-1"]);
+    expect(res.next).toStrictEqual({ sortKey: "t-1", pk: "t-1" });
+    expect(page).toHaveBeenCalledOnce();
+    expect(doFetch).not.toHaveBeenCalled();
+  });
+
+  it("re-runs the whole query on the gateway when the seat holds no file", async () => {
+    // W4-D2 AND R9. `ctx.vault.page` on a seat with no copy of the vault is not
+    // an error the app has to handle and not a second read vocabulary: the
+    // handler runs on the gateway instead, through the paged door, which serves
+    // the SAME statement. The fallback re-runs the QUERY rather than the one
+    // page — a page answered on the seat and the next answered on the gateway
+    // would be two walks of two orderings.
+    doFetch.mockResolvedValue(new Response("{}"));
+    readJson.mockResolvedValue({ open: ["from-the-door"] });
+    const session = fakeSession({
+      page: (() =>
+        Promise.reject(
+          new OnlineOnlyError("this seat holds no copy of the vault")
+        )) as Session["page"],
+    });
+    const queries: InlineAppModule["queries"] = {
+      board: {
+        default: async ({ ctx }) =>
+          (await (
+            ctx as {
+              vault: {
+                page: (request: unknown) => Promise<{ rows: unknown[] }>;
+              };
+            }
+          ).vault.page({
+            query: {
+              name: "tasks.board",
+              select: "task_id",
+              from: "schedule_task",
+              order: {
+                sortColumn: "task_id",
+                pkColumn: "task_id",
+                descending: true,
+              },
+            },
+            limit: 20,
+          })) as unknown,
+      },
+    };
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries,
+      target,
+      isOnline: () => true,
+    });
+    const res = await client(target).read<{ open: unknown[] }>({
+      query: "board",
+    });
+    expect(res.open).toStrictEqual(["from-the-door"]);
     expect(doFetch).toHaveBeenCalledWith(
       "https://gw.test",
       "/centraid/tasks/queries/board",
