@@ -4323,3 +4323,99 @@ browser wasm driver through a client barrel.** Its only replica subpath is
 - **The screen is not switched over in this commit.** The seat store is not on
   the phone's read path until W4/W5; wiring a screen to a driver the phone does
   not open would be a third path beside the two that exist.
+
+## Wave 3 — one OpenSSL, because SQLCipher is an OpenSSL consumer
+
+Enabling `expo.sqlite.useSQLCipher` on Android (commit 3) broke the release
+build: `:app:mergeReleaseNativeLibs` died on "2 files found with path
+lib/x86_64/libcrypto.so". It built at `bcf17bd3f` and not after, and the cause
+is mine.
+
+### What actually collided
+
+Both modules link OpenSSL from the SAME Maven artifact at DIFFERENT versions:
+
+| module | declaration |
+| --- | --- |
+| `react-native-quick-crypto` | `implementation 'io.github.ronickg:openssl:3.6.2-1'` |
+| `expo-sqlite` (only under `useSQLCipher`) | `compileOnly 'io.github.ronickg:openssl:3.3.2-1'` |
+
+SQLCipher IS an OpenSSL consumer — expo-sqlite's Android build adds
+`-DSQLCIPHER_CRYPTO_OPENSSL` when the flag is on — so turning encryption on
+made it the second one in this app. Unforced, both resolve and both are
+packaged.
+
+### Option (1) was checked first and does not hold
+
+Deleting `react-native-quick-crypto` would take its OpenSSL with it, and it is
+the better answer where it is available. It is not available here, for two
+reasons that are both about capability rather than taste:
+
+- **Streaming SHA-256 over camera assets.** `native-digest.ts` builds an
+  incremental hash (`createHash("sha256")`, `update`, `digestHex`) because the
+  upload queue addresses multi-gigabyte videos by content. `expo-crypto` offers
+  one-shot `digest`/`digestStringAsync` only; the equivalent is loading the
+  whole asset into memory to hash it.
+- **WebCrypto `subtle`.** `installQuickCrypto()` in `apps/mobile/index.ts`
+  supplies Hermes with AES-GCM and HMAC. W6's unlock boundary is AES-256-GCM +
+  PBKDF2 and `webCryptoUploadCrypto()` wants the same surface; Hermes has no
+  WebCrypto and `expo-crypto` does not provide `subtle`.
+
+So this is option (2): both consumers link ONE OpenSSL.
+
+### The fix, and why it is not a `pickFirst`
+
+`apps/mobile/android/build.gradle` forces
+`io.github.ronickg:openssl:3.6.2-1` for every configuration. A `pickFirst` on
+`libcrypto.so` would keep TWO OpenSSL builds in the tree and bind SQLCipher to
+whichever the merger happened to reach first — and a SQLCipher linked against
+an OpenSSL it was not compiled against is a silent data-corruption path, not a
+packaging warning. Forcing resolves it before anything is packaged: one
+library, and every consumer compiled against the headers of the one it gets.
+
+**Newest wins, and the direction is the argument.** OpenSSL 3.x is ABI-stable
+within its major line, so code compiled against 3.3 headers runs against the
+3.6 library; the reverse is not guaranteed. The forced version is therefore the
+newest any consumer asks for, and the test holds it to that rather than to a
+literal.
+
+### Red first, and it stays red for the next arrival
+
+`seat-native-build-config.test.ts` grows three cases that read the real
+dependency graph — every `node_modules/*/android/build.gradle` that names the
+OpenSSL artifact:
+
+- more than one consumer still exists, so the force is load-bearing rather than
+  dead weight (if it ever drops to one, the test says to remove it);
+- the app's `build.gradle` forces exactly one version, and it is the newest any
+  consumer asks for — a third module wanting something newer fails here;
+- neither gradle file answers this with a `pickFirst` on `libcrypto.so`.
+
+The middle case was written first and failed on the missing force, which is how
+the fix was arrived at rather than guessed.
+
+### Not verified locally, and what would verify it
+
+`./gradlew :app:mergeReleaseNativeLibs` cannot run in this container: there is
+no Android SDK and Gradle cannot resolve its own plugins offline
+(`org.gradle.toolchains.foojay-resolver-convention` is unresolvable). **The
+proof is the emulator gate on the next push.** What IS established here is the
+collision's cause, both declarations by file and version, and that one
+resolution now covers both.
+
+### Every file this commit touches
+
+- `apps/mobile/android/build.gradle`
+- `apps/mobile/src/lib/replica/seat-native-build-config.test.ts`
+- `apps/mobile/native-fingerprints.json` — refreshed after the gradle change: android `df5d7e6f…` → `6a0bd966…`
+
+### Decisions — wave 3, the OpenSSL collision
+
+- **Force, not exclude, and not `pickFirst`.** The two symptom fixes leave two
+  OpenSSLs in the artifact and make the pairing arbitrary. The failure mode
+  they hide is corruption of an encrypted vault file, which is the one class of
+  bug this wave can least afford to make quiet.
+- **quick-crypto stays, and the reason is written down.** It is the only
+  provider of a streaming hash and of WebCrypto `subtle` on Hermes. If either
+  gains a platform provider, deleting it is the better fix and the first test
+  case will point at it.
