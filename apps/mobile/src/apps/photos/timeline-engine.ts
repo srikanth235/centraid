@@ -14,6 +14,7 @@ import { authHeader } from "../../lib/gateway";
 import type { MobileReplicaSession } from "../../lib/replica/native-session";
 import { pinnedThumbnailUri } from "../../lib/replica/thumbnail-pack";
 import { UploadQueue } from "../../lib/upload/native-queue";
+import { onUploadQueueChanged } from "../../lib/upload/upload-notifications";
 import { capturedAtIso, durationSeconds } from "./device-media";
 import { mergePhotoAssets, sectionPhotoAssets } from "./timeline-model";
 import type { BackupState, PhotoAsset, PhotoSection } from "./timeline-model";
@@ -38,10 +39,6 @@ interface UploadEntry {
   state: string;
   receipt?: Record<string, unknown>;
 }
-
-/** Poll rate while the queue has work; slow rate when it is settled. */
-const ACTIVE_UPLOAD_POLL_MS = 4_000;
-const IDLE_UPLOAD_POLL_MS = 30_000;
 
 /** Debounce merged-timeline recomputes during the device walk; page one paints immediately. */
 const WALK_RECOMPUTE_DEBOUNCE_MS = 250;
@@ -94,11 +91,10 @@ class PhotoTimelineEngine {
   #gatewayBase?: string;
   #generation = 0;
   #unsubscribe?: () => void;
-  #pollTimer?: ReturnType<typeof setInterval>;
+  #unsubscribeUploads?: () => void;
   #appStateSub?: { remove: () => void };
   #queue?: UploadQueue;
   #queueBase?: string;
-  #uploadsInFlight = false;
   #recomputeTimer?: ReturnType<typeof setTimeout>;
   #reading = false;
   #readAgain = false;
@@ -136,36 +132,24 @@ class PhotoTimelineEngine {
   acquire(): () => void {
     this.#refs += 1;
     if (this.#refs === 1) {
+      // THE QUEUE ANNOUNCES ITSELF (#996 wave 3): `enqueue` and `drain` fire
+      // `notifyUploadQueueChanged`, so the badges flip when a row actually
+      // moves rather than up to four seconds later.
+      this.#unsubscribeUploads ??= onUploadQueueChanged(() =>
+        this.refreshUploads()
+      );
+      // Foregrounding stays a trigger, and it is not a poll in disguise: the
+      // background pass drains in its own task and its notices do not reach a
+      // torn-down listener, so the first thing a returning screen owes the
+      // member is one re-read.
       this.#appStateSub ??= AppState.addEventListener("change", (state) => {
-        if (state === "active") {
-          this.refreshUploads();
-          this.startUploadPoll();
-        } else this.stopUploadPoll();
+        if (state === "active") this.refreshUploads();
       });
-      if (AppState.currentState === "active") this.startUploadPoll();
     }
     return () => {
       this.#refs -= 1;
       if (this.#refs <= 0) this.teardown();
     };
-  }
-
-  /**
-   * Flip queued → backed-up badges without a remount by polling the queue's
-   * own SQLite database. Handle stays open while any screen is mounted, an
-   * idle queue drops to a slow poll, nothing polls in the background.
-   */
-  private startUploadPoll(): void {
-    if (this.#pollTimer || this.#refs === 0) return;
-    this.#pollTimer = setInterval(
-      () => this.refreshUploads(),
-      this.#uploadsInFlight ? ACTIVE_UPLOAD_POLL_MS : IDLE_UPLOAD_POLL_MS
-    );
-  }
-
-  private stopUploadPoll(): void {
-    if (this.#pollTimer) clearInterval(this.#pollTimer);
-    this.#pollTimer = undefined;
   }
 
   setSession(
@@ -225,15 +209,6 @@ class PhotoTimelineEngine {
         this.closeUploadQueue();
         return;
       }
-    }
-    const inFlight = [...next.values()].some(
-      (entry) => entry.state !== "settled"
-    );
-    if (inFlight !== this.#uploadsInFlight) {
-      this.#uploadsInFlight = inFlight;
-      // Poll interval derives from this flag; re-arm at the new rate.
-      this.stopUploadPoll();
-      this.startUploadPoll();
     }
     const signature = [...next.entries()]
       .map(
@@ -588,11 +563,11 @@ class PhotoTimelineEngine {
     this.#refs = 0;
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
-    this.stopUploadPoll();
+    this.#unsubscribeUploads?.();
+    this.#unsubscribeUploads = undefined;
     this.#appStateSub?.remove();
     this.#appStateSub = undefined;
     this.closeUploadQueue();
-    this.#uploadsInFlight = false;
     if (this.#recomputeTimer) clearTimeout(this.#recomputeTimer);
     this.#recomputeTimer = undefined;
     this.#generation += 1;

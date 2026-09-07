@@ -3727,6 +3727,187 @@ bash .governance/run.sh
 bun run check:push:static
 ```
 
+## Wave 3 — bytes, custody, and a queue that says when it moved
+
+Three of this commit's four subjects are one sentence from R7 taken seriously:
+**"backed up" means the gateway's CAS holds the sha, verified; a seat's
+presence claim is never by itself the durability answer.**
+
+### Two states, plus a cache bit
+
+`custody-durability.ts` (split out of `custody-status.ts`, see below) folds the
+rollup's five custody states into the two a member can act on. Four of the five
+say the same thing in four ways — the gateway's own disk has it (`local-only`),
+the remote tier has it (`remote-only`), both do (`replicated`), both will and
+the push is queued (`pending-offsite`) — and the Backup screen printed all four
+as separate rows with separate sentences. `missing` is the one state that says
+the bytes are in neither tier, and it is the only honest "not backed up".
+
+`local-unproven` is NOT a sixth state and is no longer rendered: it counts SHAs
+where the states count ITEMS (`custody-rollup.ts` says "never sum"), and it is
+the arithmetic complement of `freeable` over the local set. `freeable` is the
+cache bit — what this vault could RELEASE — which is a different question from
+whether anything is at risk, and it now reads as one line rather than as a
+sixth row in a column of durability.
+
+### "Backup is complete" needed the gateway's half of the claim
+
+`backupVerdict` returned `complete` for an empty, readable device queue. That
+is this phone saying it has nothing left to send; it is not the gateway saying
+it has the bytes. The verdict now takes the custody rollup and needs both, and
+it gains a fifth answer for the case in between:
+
+- `unverified` — the queue is empty and the rollup has not been read (offline,
+  or a gateway that would not answer). Reading that as `complete` puts "Backup
+  is complete" on screen on the strength of a claim nobody checked; reading it
+  as `failing` calls a tunnel outage an integrity gap.
+- `failing` with an empty queue — the phone sent everything it had and the
+  bytes are in neither tier. Different title, different sentence: the member
+  has to act somewhere other than this screen.
+
+`custody-status.ts` split in two for it. The fold and the two states are pure;
+the read is not — it reaches for `lib/gateway`, which reaches React Native, and
+the verdict is tested on the node tier where that graph does not load. The
+transport keeps the old module name and re-exports the arithmetic, so no caller
+moved.
+
+### The phone's byte policy is wave 2's rule, not a second copy of it
+
+`planContentEviction` chose candidates by `!entry.pinned`. It now asks
+`seatByteEvictable` — wave 2's function, the one the fetch path already uses —
+so the two paths cannot drift. Three things survive the LRU and none is a
+heuristic: a pin, a capture this phone made (it may be the only copy anywhere
+until the gateway verifies it), and bytes a queued intent names (R25 — the
+gateway executes an attachment-dependent intent only once those hashes are
+verified, so evicting them makes the member's own work unsendable from the one
+device that has it).
+
+`capturedHere` and `referencedByPendingIntent` arrive through a
+`ContentProtections` SEAM rather than a lookup the content store does: whether
+this phone captured a content id is the upload queue's fact and whether a
+queued intent needs its hash is the outbox's, and a store answering either from
+its own filenames would be guessing. Absent, both read false — exactly today's
+behaviour, pins and nothing else. **Wiring the two predicates is commit 4's**
+("staged captures protected from eviction while pending work references them").
+
+A `thumb` reaching the planner throws rather than being planned around: a
+caller that put a replicated row in the file cache has confused two things, and
+answering politely lets the confusion reach a screen.
+
+### The upload poll is gone; the writer announces
+
+The Photos timeline polled the upload queue's SQLite every 4 s while anything
+was in flight and every 30 s when settled, because the queue had no way to say
+it had moved. That is the shape wave 2 replaced everywhere else — the applier
+sends its notices unsolicited and nobody asks it whether it has applied
+anything lately.
+
+`upload-notifications.ts` is the same idea for the device's own outbox, fired
+from the only honest place: `UploadQueue.enqueue` and `.drain` are the two
+calls that move a row. `drain` announces in a `finally`, because a pass that
+threw part-way still moved rows and a badge left on the old answer is the
+failure this replaces. The notice carries NO payload — the reader re-reads and
+diffs its own signature, and a notice carrying rows would be a second, staler
+copy of the answer.
+
+Foregrounding stays a trigger and is not a poll in disguise: the background
+pass drains in its own task and its notices do not reach a torn-down listener,
+so the first thing a returning screen owes the member is one re-read.
+
+### Both native projects, now that the iOS half is here
+
+`seat-native-build-config.test.ts` covers `ios/Podfile.properties.json` as well
+as `android/gradle.properties`, in the two forms the plugin writes (a gradle
+`k=v` line, a JSON string). Commit 2 could only hold the Android half; the
+merge of the macOS CI slice brought the iOS keys, so the test holds both.
+
+### What this commit does NOT contain
+
+**The Photos timeline is still `timeline-engine.ts`'s in-memory fold.** The
+contract asks for it as keyset-paged SQL over the seat store with day and month
+buckets as a `GROUP BY` over an indexed column. That is not here, and none of
+the work above stands in for it: the merge-and-section path
+(`timeline-model.ts`, `timeline-engine.ts`, `timeline-rows.ts`, ~1,100 lines
+plus the 10k/50k scale fixtures) is untouched. It is the precondition for the
+`mobile/scroll@year3-photos` and day-grouping device rows.
+
+### The emulator gate's red — root-caused in the seat core, not here
+
+CI `mobile-device-gate` run 34100138773 (head 39a0bfcf3 — wave 2's seat store
+plus this wave's commit 1, without commit 2) reads fine and cannot write: a
+note saved on the phone never appears in the phone's own list
+(`tests/agent-e2e-mobile/flows/notes-library.mjs`, `notes-row-first`).
+
+**The cause is in the shared seat core and belongs to the log lane.**
+`SeatWorkerCore.apply` never passes `onCommitInTransaction` to
+`applySeatLogPage`, so the overlay-clearing hook has no production caller at
+all and an executed intent parks at `awaiting-change` for ever. The row is
+written; nothing ever retires its overlay or admits it to the list. That is one
+missing argument in `packages/client/src/replica/seat/worker-core.ts`, and it
+is fixed on `w996/log`, not forked here — a mobile-side workaround would be a
+second answer to a question the core already owns.
+
+**My first reading of this was wrong and is recorded as wrong.** I judged it
+"not the seat applier or the overlay core" on the argument that the phone does
+not run the seat store at that head. The log lane read the code rather than the
+wave plan and found the missing caller. The lesson is the cheap one: a claim
+about which plane a failure is on is a claim about the code, and the wave plan
+is not evidence for it.
+
+### One ordering error of mine that the same gate would have caught
+
+Commit 1 flipped `driver.journalMode` from `DELETE` to `WAL`. The DELETE
+declaration existed for exactly one reason, which its own comment stated: a
+per-vault writer and a gateway-scoped multi-ATTACH reader shared one file. That
+reader is deleted in commit 2 — so commit 1 IN ISOLATION is the pair the
+declaration was written to prevent, and 39a0bfcf3 is that isolation. The merged
+head has both and is consistent.
+
+It is not the notes failure (a two-connection ATTACH probe on `node:sqlite`
+sees the committed row under both modes —
+`…/scratchpad/wal-attach-probe.mjs`), and it should have been in commit 2 with
+the deletion it depends on. So this commit makes the dependency structural
+rather than commented: the driver module no longer exports ANY way to open a
+second handle on a seat file — `openMountedReplicaReaderDriver` went with the
+plane — and a test pins that the only remaining opener is
+`openNativeReplicaDriver`. The unsafe pair now has no second half to assemble.
+
+### Every file this commit touches
+
+- `apps/mobile/src/lib/replica/expo-sqlite-driver.ts` — the dead second-handle opener goes; the WAL note says what it depends on
+- `apps/mobile/src/lib/replica/expo-sqlite-driver.test.ts` — the structural pin
+- `apps/mobile/src/kit/storage/custody-durability.ts` (new) — the fold and the two states, with no transport in it
+- `apps/mobile/src/kit/storage/custody-durability.test.ts` (new)
+- `apps/mobile/src/kit/storage/custody-status.ts` — the read, and nothing else
+- `apps/mobile/src/kit/storage/custody-status.test.ts`
+- `apps/mobile/src/kit/transfer/backup-verdict.ts` — `unverified`, and `complete` over the gateway's own answer
+- `apps/mobile/src/kit/transfer/backup-verdict.test.ts`
+- `apps/mobile/src/screens/BackupHealth.tsx` — the rollup reaches the verdict
+- `apps/mobile/src/screens/BackupHealth.custody.tsx` — five rows become two, plus the cache line
+- `apps/mobile/src/kit/fetch-gate/eviction.ts` — the LRU asks `seatByteEvictable`
+- `apps/mobile/src/kit/fetch-gate/eviction.test.ts`
+- `apps/mobile/src/kit/fetch-gate/content-store.ts` — `ContentProtections`, the seam commit 4 fills
+- `apps/mobile/src/lib/upload/upload-notifications.ts` (new)
+- `apps/mobile/src/lib/upload/upload-notifications.test.ts` (new)
+- `apps/mobile/src/lib/upload/native-queue.ts` — `enqueue` and `drain` announce
+- `apps/mobile/src/apps/photos/timeline-engine.ts` — the two timers go
+- `apps/mobile/src/lib/replica/seat-native-build-config.test.ts` — the iOS half
+
+### Decisions — wave 3, bytes and custody
+
+- **`unverified` is a fifth verdict, not a silent `complete`.** The alternative
+  is a screen that says "Backup is complete" whenever the gateway is out of
+  reach, which is exactly when a member is least able to check.
+- **`local-only` counts as backed up.** It reads as a warning and used to be
+  drawn as one, but R7's sentence is about the gateway's CAS, and the gateway's
+  own disk is that. Off-site replication is the gateway's question and has its
+  own screen; conflating the two is what produced five rows in the first place.
+- **The protections are a seam, not a lookup.** A content store that decided
+  "this was captured here" from its own directory listing would be inventing a
+  fact two other subsystems already hold.
+- **The Photos timeline is named as missing rather than partially rewritten.**
+  A keyset page over a bucket table this commit did not build would be a third
+  path beside the two that exist.
 ### The header the extension is compiled against is the whole extension
 
 Supersedes the SDK-header paragraph in "Why the vec build step failed" above:
