@@ -9,6 +9,8 @@ import type {
   GatewayDeviceTicketInput,
   GatewayLink,
 } from "../../gateway-client.js";
+import { seatWatermarkLine } from "../../replica/seat/watermark.js";
+import type { SeatWatermark } from "../../replica/seat/watermark.js";
 import type { OpsState } from "../shell/opsBar.js";
 import type { OwnerScope } from "../shell/ownerScope.js";
 import { accessRegistryReader } from "../shell/routes/settingsAccessData.js";
@@ -73,8 +75,12 @@ export interface HouseholdScreenProps {
   sharing?: SharingCardProps;
   /** One section of the merged Vault surface: no frame, no publishing. */
   embedded?: boolean;
-  /** `null` until the census answers — omit the clause, never guess. */
-  records?: number | null;
+  /**
+   * How current the seats are (#996, R8) — the clause that replaced the
+   * census record count. `undefined` until a seat reports; the clause is
+   * omitted rather than guessed.
+   */
+  seatWatermark?: SeatWatermark | undefined;
   onReport?: (report: HouseholdReport) => void;
   collapsed?: boolean;
   onToggle?: () => void;
@@ -319,8 +325,12 @@ export default function HouseholdScreen(
     [roster.others, roster.self]
   );
   const custody = useMemo(
-    () => custodyLine(custodyCounts(everyDevice), props.records ?? null),
-    [everyDevice, props.records]
+    () =>
+      custodyLine(
+        custodyCounts(everyDevice),
+        seatWatermarkLine(props.seatWatermark)
+      ),
+    [everyDevice, props.seatWatermark]
   );
 
   const { embedded = false, onReport } = props;

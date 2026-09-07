@@ -1,198 +1,170 @@
 /**
- * THE GOLDEN PHONE REPLICA (#927 P4).
+ * THE GOLDEN SEAT FILE (#927 P4, rewired by #996 wave 2).
  *
  * The vault half of the golden artifact is `year3-vault.ts`. This is the other
- * half: the SQLite file a phone holds after a FULL bootstrap of that vault,
- * plus the outbox of pending intents the converge journey needs (N ∈ 1, 10,
- * 40 — the three volumes #927's journey table names).
+ * half: the SQLite file a phone holds after bootstrapping that vault, plus the
+ * outbox of pending intents the converge journey needs (N ∈ 1, 10, 40).
  *
- * NEVER A HAND-BUILT REPLICA. Every row here arrives through the real
- * bootstrap path — `packages/vault/src/replica/snapshot.ts#readReplicaRows`
- * produces the pages, `packages/client/src/replica/store-core.ts`'s
- * `ReplicaSqliteStore.bootstrap` applies them, and the outbox is written
- * through the phone's own `SqliteIntentStore`. A fixture that hand-writes
- * `replica_row` would agree with itself and with nothing else: it would
- * survive a change to the apply path that breaks every phone.
+ * WHAT CHANGED, AND WHY IT HAD TO. Until #996 a replica was a SLICE: per-app
+ * shapes walked with `readReplicaRows` and applied into a `replica_row`
+ * projection, and this module built the snapshot that walk produced. Under
+ * ruling R1 a seat holds `vault.db` WHOLE, so a fixture still shaped like a
+ * slice would let a wave exit green on the wrong volume — the review sweep
+ * filed it as F5. The artifact is now what a real seat has: the gateway's
+ * SANITISED FILE, copied, with a tail of real log rows applied on top.
+ *
+ * THE RULE THAT DID NOT CHANGE: NEVER A HAND-BUILT REPLICA. Every byte arrives
+ * through the real path — `buildSeatSnapshot` on the gateway side,
+ * `bootstrapSeatFile` and `applySeatLogPage` on the seat side, and the seat's
+ * own outbox for the intents. A fixture that wrote its own tables would agree
+ * with itself and with nothing else, and would survive a change to the apply
+ * path that breaks every phone.
  *
  * `@centraid/test-kit` deliberately does not depend on `@centraid/vault` or
- * `@centraid/client` (see `year3FixtureCacheKey`), so those three seams are
+ * `@centraid/client` (see `year3FixtureCacheKey`), so those seams are
  * INJECTED. `tests/helpers/factories.ts` wires the real ones; the kit's own
  * suite wires them too, which is what keeps the shapes below honest.
  */
 import { createHash } from "node:crypto";
 
 import { seededRandom } from "./random.js";
-import type { Year3Distributions } from "./year3-vault.js";
-
-export const YEAR3_REPLICA_PROTOCOL_VERSION = 1 as const;
-export const YEAR3_REPLICA_APP_ID = "_golden";
-export const YEAR3_REPLICA_SHAPE_ID = "golden-year3";
 
 /** The converge journey's three volumes (#927, journey table). */
 export const YEAR3_PENDING_INTENT_VOLUMES = [1, 10, 40] as const;
 export type Year3PendingIntentVolume =
   (typeof YEAR3_PENDING_INTENT_VOLUMES)[number];
 
+/** What a seat's file contains (#996, OQ-2). The golden artifact is `full`. */
+export type Year3SeatContents = "full" | "rows-minus-fts";
+
+/** The sanitised snapshot the gateway built, as the fixture sees it. */
+export interface Year3SeatSnapshot {
+  /** Where the artifact was written. */
+  readonly path: string;
+  /** The log position the copy stands at; the tail starts here. */
+  readonly seq: number;
+  readonly epoch: string;
+  readonly schemaEpoch: number;
+  readonly bytes: number;
+}
+
+/** One page of the gateway log, as the fixture hands it to the applier. */
+export interface Year3SeatLogPage {
+  readonly rows: readonly unknown[];
+  readonly watermark: number;
+}
+
+/** The seat file, once installed. */
+export interface Year3SeatFile {
+  /** `applySeatLogPage`, bound to this file. Returns rows applied. */
+  readonly apply: (page: Year3SeatLogPage) => number;
+  /** The phone's own outbox — never a table this fixture invented. */
+  readonly queue: (intent: Year3PendingIntent) => void;
+  /** Tables in the file, excluding SQLite's own. */
+  readonly tables: () => number;
+  /** Where the seat's applied cursor stands. */
+  readonly cursor: () => number;
+  readonly close: () => void;
+}
+
 /**
- * Entities the golden replica mirrors, in walk order. These are the logical
- * names of the daily-use path the journeys drive: the people a screen shows,
- * the photos it renders, the notes it searches, and the content items both
- * hang their bytes off. Order is part of the artifact — it decides which rows
- * a capped walk keeps.
+ * The three seams the builder needs, all on the far side of a package
+ * boundary this package will not cross.
  */
-export const YEAR3_REPLICA_ENTITIES = [
-  "core.party",
-  "media.asset",
-  "core.content_item",
-  "knowledge.note",
-  "schedule.task",
-] as const;
-
-export interface Year3ReplicaSourceRow {
-  readonly rowId: string;
-  readonly values: Record<string, unknown>;
-  readonly rowVersion?: number;
-  /** Oversized or binary values the gateway defers rather than ships. */
-  readonly deferredColumns: readonly string[];
-}
-
-export interface Year3ReplicaSourcePage {
-  readonly entity: string;
-  readonly columns: readonly string[];
-  readonly sealedColumns: readonly string[];
-  readonly rows: readonly Year3ReplicaSourceRow[];
-  readonly nextAfter?: string;
-  readonly hasMore: boolean;
-}
-
-/** The vault side of the bootstrap, bound to one open golden vault. */
-export interface Year3ReplicaSource {
-  readonly vaultId: string;
-  readonly schemaEpoch: string;
-  readonly cursor: { readonly epoch: string; readonly seq: number };
-  /** `readReplicaRows`, bound to the golden vault's handle. */
-  readonly readRows: (
-    entity: string,
-    options: { after?: string; limit: number }
-  ) => Year3ReplicaSourcePage;
-  /** The entity's single primary-key column, from the vault's own table info. */
-  readonly primaryKeyOf: (entity: string) => string;
-}
-
-export interface Year3ReplicaEntitySchema {
-  entity: string;
-  primaryKey: string;
-  columns: string[];
-  hasUnavailableFields?: boolean;
-}
-
-export interface Year3ReplicaSnapshotRow {
-  shapeId: string;
-  entity: string;
-  rowId: string;
-  values: Record<string, unknown>;
-  rowVersion?: number;
-  oversizedFields?: string[];
-}
-
-/** Structurally the client's `ReplicaSnapshot`; typed here so the kit stays
- *  free of a `@centraid/client` dependency. */
-export interface Year3ReplicaSnapshot {
-  protocolVersion: typeof YEAR3_REPLICA_PROTOCOL_VERSION;
-  vaultId: string;
-  schemaEpoch: string;
-  shapes: {
-    shapeId: string;
-    appId: string;
-    entities: Year3ReplicaEntitySchema[];
-  }[];
-  cursor: { epoch: string; seq: number };
-  rows: Year3ReplicaSnapshotRow[];
-}
-
-export interface Year3ReplicaSnapshotOptions {
-  /** Defaults to {@link YEAR3_REPLICA_ENTITIES}. */
-  readonly entities?: readonly string[];
+export interface Year3SeatSeams {
+  /** `buildSeatSnapshot(vault, destination)`. */
+  readonly snapshot: (destination: string) => Year3SeatSnapshot;
   /**
-   * Hard ceiling on mirrored rows — the declared year-3 phone volume
-   * (`Year3Distributions.replicaRows`). A walk that exhausts the source before
-   * the ceiling stops there: a bootstrap holds what the vault has.
+   * Commits made on the GATEWAY after the snapshot, read back as log rows.
+   *
+   * A snapshot alone proves the copy; only a tail applied on top proves the
+   * log, and the converge journey is about the log.
    */
-  readonly maxRows: number;
-  /** Page size of the walk. The gateway's own bootstrap window is 5,000. */
-  readonly pageLimit?: number;
+  readonly tail: (since: number) => Year3SeatLogPage;
+  /** `bootstrapSeatFile` over the local artifact, then open it. */
+  readonly install: (snapshot: Year3SeatSnapshot) => Promise<Year3SeatFile>;
+}
+
+export interface Year3SeatBuildOptions {
+  readonly pendingIntents: number;
+  /** Deterministic in the fixture seed, like every other part of the golden set. */
+  readonly seed: number;
+  readonly hashPayload: (intent: {
+    appId: string;
+    action: string;
+    input: Record<string, unknown>;
+  }) => Promise<string>;
+}
+
+/** What the built artifact knows about itself. */
+export interface Year3SeatFacts {
+  readonly snapshotBytes: number;
+  readonly snapshotSeq: number;
+  readonly tailRows: number;
+  readonly cursor: number;
+  readonly tables: number;
+  readonly pendingIntents: number;
+  readonly contents: Year3SeatContents;
 }
 
 /**
- * Walk the golden vault through the vault's own replica reader and assemble
- * the bootstrap snapshot a phone receives.
+ * Build the golden seat file: snapshot copy, then log tail, then the outbox.
  *
- * The shape catalog is derived from what the READER answers, never from a
- * hand-written column list: `readReplicaRows` already removes the columns a
- * replica may not hold, so the catalog is the vault's own answer to "what does
- * a replica see", and a schema change reaches the fixture without an edit
- * here.
+ * IN THAT ORDER, AND THE ORDER IS THE POINT. A seat that only ever sees a
+ * snapshot has never exercised the applier; a fixture assembled the other way
+ * round would queue intents into a file that is about to be replaced.
  */
-export function buildYear3ReplicaSnapshot(
-  source: Year3ReplicaSource,
-  options: Year3ReplicaSnapshotOptions
-): Year3ReplicaSnapshot {
-  const entities = options.entities ?? YEAR3_REPLICA_ENTITIES;
-  const pageLimit = options.pageLimit ?? 5_000;
-  const schemas: Year3ReplicaEntitySchema[] = [];
-  const rows: Year3ReplicaSnapshotRow[] = [];
-  for (const entity of entities) {
-    if (rows.length >= options.maxRows) break;
-    const primaryKey = source.primaryKeyOf(entity);
-    let after: string | undefined;
-    let schema: Year3ReplicaEntitySchema | undefined;
-    for (;;) {
-      const page = source.readRows(entity, {
-        ...(after === undefined ? {} : { after }),
-        limit: Math.min(pageLimit, options.maxRows - rows.length),
-      });
-      schema ??= {
-        entity,
-        primaryKey,
-        columns: [...page.columns],
-        ...(page.sealedColumns.length > 0
-          ? { hasUnavailableFields: true }
-          : {}),
-      };
-      for (const row of page.rows) {
-        rows.push({
-          shapeId: YEAR3_REPLICA_SHAPE_ID,
-          entity,
-          rowId: row.rowId,
-          values: { ...row.values },
-          ...(row.rowVersion === undefined
-            ? {}
-            : { rowVersion: row.rowVersion }),
-          ...(row.deferredColumns.length > 0
-            ? { oversizedFields: [...row.deferredColumns] }
-            : {}),
-        });
-      }
-      if (!page.hasMore || page.nextAfter === undefined) break;
-      if (rows.length >= options.maxRows) break;
-      after = page.nextAfter;
-    }
-    if (schema) schemas.push(schema);
+export async function buildYear3SeatReplica(
+  seams: Year3SeatSeams,
+  destination: string,
+  options: Year3SeatBuildOptions
+): Promise<Year3SeatFacts> {
+  const snapshot = seams.snapshot(destination);
+  const file = await seams.install(snapshot);
+  try {
+    const page = seams.tail(snapshot.seq);
+    const tailRows = page.rows.length > 0 ? file.apply(page) : 0;
+    const intents = await year3PendingIntents(
+      options.pendingIntents,
+      options.hashPayload,
+      options.seed
+    );
+    for (const intent of intents) file.queue(intent);
+    const facts: Year3SeatFacts = {
+      snapshotBytes: snapshot.bytes,
+      snapshotSeq: snapshot.seq,
+      tailRows,
+      cursor: file.cursor(),
+      tables: file.tables(),
+      pendingIntents: intents.length,
+      contents: "full",
+    };
+    assertYear3SeatNotHandBuilt(facts);
+    return facts;
+  } finally {
+    file.close();
   }
-  return {
-    protocolVersion: YEAR3_REPLICA_PROTOCOL_VERSION,
-    vaultId: source.vaultId,
-    schemaEpoch: source.schemaEpoch,
-    shapes: [
-      {
-        shapeId: YEAR3_REPLICA_SHAPE_ID,
-        appId: YEAR3_REPLICA_APP_ID,
-        entities: schemas,
-      },
-    ],
-    cursor: { epoch: source.cursor.epoch, seq: source.cursor.seq },
-    rows,
-  };
+}
+
+/**
+ * The rule, as an assertion rather than a comment.
+ *
+ * A seat file carries the GATEWAY's schema, so it has scores of tables and a
+ * cursor at or past the snapshot's position. A hand-built fixture — one
+ * table, a cursor of zero — fails here, at build time, rather than by quietly
+ * passing a parity test that was only ever comparing itself.
+ */
+export function assertYear3SeatNotHandBuilt(facts: Year3SeatFacts): void {
+  if (facts.tables < 20) {
+    throw new Error(
+      `golden seat: ${facts.tables} tables — this is not a copy of the gateway's file`
+    );
+  }
+  if (facts.cursor < facts.snapshotSeq) {
+    throw new Error(
+      `golden seat: cursor ${facts.cursor} is behind the snapshot at ${facts.snapshotSeq}`
+    );
+  }
 }
 
 export interface Year3PendingIntent {
@@ -260,25 +232,20 @@ export async function year3PendingIntents(
 }
 
 /**
- * Content address of one golden replica. Distinct from the vault's key by the
- * pending-intent count and the mirrored entity list: two replicas built from
- * the same vault with different outboxes are different artifacts.
+ * Content address of one golden seat file.
+ *
+ * Distinct from the vault's key by the pending-intent count and by what the
+ * file CONTAINS: two seats built from the same vault with different outboxes
+ * are different artifacts, and so are a full seat and one whose search index
+ * was dropped for a browser quota (OQ-2). The entity list that used to be part
+ * of this key is gone with the slice — a seat holds the whole file.
  */
 export function year3ReplicaCacheKey(
   vaultKey: string,
   pendingIntents: number,
-  entities: readonly string[] = YEAR3_REPLICA_ENTITIES
+  contents: Year3SeatContents = "full"
 ): string {
   return createHash("sha256")
-    .update(
-      JSON.stringify({ vaultKey, pendingIntents, entities: [...entities] })
-    )
+    .update(JSON.stringify({ vaultKey, pendingIntents, contents }))
     .digest("hex");
-}
-
-/** Declared distributions the replica half consumes. */
-export function year3ReplicaRowCeiling(
-  distributions: Year3Distributions
-): number {
-  return distributions.replicaRows;
 }

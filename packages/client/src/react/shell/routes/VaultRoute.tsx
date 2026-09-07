@@ -104,7 +104,6 @@ export default function VaultRoute({
           embedded
           collapsed={closed.lives === true}
           onReport={setRoster}
-          records={census?.records ?? null}
           onToggle={() => toggle("lives")}
         />
       </div>

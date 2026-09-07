@@ -1686,13 +1686,18 @@ handle exists.
 - `packages/client/src/replica/seat/bootstrap.ts` (new) — resume by range, the room check, the FTS rebuild
 - `packages/client/src/replica/seat/state.ts` (new) — `seat_state` and its DDL
 - `packages/client/src/replica/seat/driver.ts` (new) — `SeatSqliteDriver`, `SeatBindValue`, `SEAT_OPEN_PRAGMAS`
-- `packages/client/src/replica/seat/worker-core.ts` (new) · `worker-protocol.ts` (new) — the worker minus its host
+- `packages/client/src/replica/seat/worker-core.ts` (new) — the worker minus its host
+- `packages/client/src/replica/seat/worker-protocol.ts` (new) — one message per page, and change notices the other way
 - `packages/client/src/replica/seat/http-snapshot-transport.ts` (new) — `If-Range`, the ETag pin, the three headers
-- `packages/client/src/replica/seat/node-seat-driver.ts` (new) · `node-staging.ts` (new) — the desktop seat's two halves, and the suites'
+- `packages/client/src/replica/seat/node-seat-driver.ts` (new) — the desktop seat's handle, and the suites'
+- `packages/client/src/replica/seat/node-staging.ts` (new) — the part file, its ETag marker, and the rename
 - `packages/client/src/replica/seat/wasm-seat-driver.ts` (new) — the browser seat's write path
-- `packages/client/src/replica/seat/seat-drift-error.ts` · `seat-snapshot-moved-error.ts` · `seat-bootstrap-no-room-error.ts` · `seat-worker-not-open-error.ts` (all new) — one class per file, the repo's rule
+- `packages/client/src/replica/seat/seat-drift-error.ts` (new) — the refusal that names re-bootstrap
+- `packages/client/src/replica/seat/seat-snapshot-moved-error.ts` (new) — a resume that is not the same file
+- `packages/client/src/replica/seat/seat-bootstrap-no-room-error.ts` (new) — the room check's refusal
+- `packages/client/src/replica/seat/seat-worker-not-open-error.ts` (new) — one class per file, the repo's rule
 - `packages/client/src/replica/seat/index.ts` (new) · `packages/client/package.json` — the `@centraid/client/replica/seat` subpath; host-specific entries deliberately not re-exported
-- `packages/client/src/replica/seat/applier.test.ts` · `bootstrap.test.ts` · `worker-core.test.ts` (all new)
+- `packages/client/src/replica/seat/applier.test.ts` (new) · `packages/client/src/replica/seat/bootstrap.test.ts` (new) · `packages/client/src/replica/seat/worker-core.test.ts` (new)
 - `tests/quality/seat-replay-parity.test.ts` (new) — the convergence gate over both corpora
 - `packages/test-kit/src/year3-fixture-cache.ts` · `year3-distributions.ts` · `year3-vault.test.ts` — the two reds above
 
@@ -1728,3 +1733,199 @@ The two red server files are the same environmental pair wave 1 named:
 - **The room check counts the file being replaced.** Counting only the new one
   passes on a phone that then runs out of space during the swap, which is the
   failure the check exists to prevent.
+
+## Wave 2 — bytes, seat state, and the fixture that had to stop being a slice
+
+The applier and the bootstrap gave a seat the vault's ROWS. This commit is
+about everything else it holds: the files it keeps, the work it has queued, how
+current it is, and what survives a repair.
+
+### Bytes: the thumb is a row, and only the files are negotiable
+
+`packages/client/src/replica/seat/byte-policy.ts` answers one question per
+blob — hold, cache, or fetch when someone looks — under one of three policies
+(desktop everything; phone what it captured plus an LRU with pins; PWA on
+demand). It **refuses to answer about a thumb**: a ~2 KB inline thumb is a row
+in a 1:1 side table (R7's WhatsApp pattern), it arrives with every other row,
+and a caller asking the byte policy about one has confused a row with a file —
+answering politely lets that confusion reach a screen that waits on a fetch
+which never needed to happen.
+
+Two things override the policy and neither is a preference. A **pin** is an
+instruction, and a cache that evicts what someone asked it to keep is a
+surprise, not a cache. A **capture a pending intent needs** (R25) is the
+member's own queued work: the gateway runs an attachment-dependent intent only
+once those bytes are uploaded and verified, so evicting them makes the work
+unsendable from the one seat that has it. `seatByteEvictable` states the
+inverse as its own function, because the fetch path and the eviction path have
+different callers and must not each re-derive the rule.
+
+### `seat_blob_presence`, and why a purge is a handshake
+
+`packages/client/src/replica/seat/blob-presence.ts`. One row per blob this seat
+holds, on the seat's own file, outside the replicated schema — the gateway has
+no such table, so a commit can never carry it back over the seat's own answer.
+
+- **A seat's claim is never the durability answer** (R7). "Backed up" means the
+  gateway's CAS holds the sha, verified. This table answers only "do I have it,
+  and have I said so"; conflating the two is how a member deletes the last copy
+  of a photo because three devices said yes.
+- **The row survives the purge, and survives the acknowledgement.** A tombstone
+  marks it and returns the bytes for the caller to delete; the row stays,
+  because "I have forgotten about this blob" and "I never had it" must not be
+  the same answer — without the acknowledgement the gateway cannot tell "every
+  seat has dropped it" from "one seat has been offline for a month", and those
+  call for opposite answers when the member asks whether the thing is gone.
+- **Re-recording a condemned blob does not clear its tombstone.** A re-download
+  of bytes the gateway purged is a bug to see, not a state to overwrite.
+- **A tombstone beats a pin**, and the eviction candidate list excludes pins,
+  captures and condemned rows IN SQL rather than filtering afterwards: a list
+  that briefly contains a protected sha is a list someone eventually acts on.
+
+### The storage probe (OQ-2), and the step wave 1 deferred
+
+`packages/client/src/replica/seat/storage-probe.ts`. OQ-2 was settled as "rows
+minus FTS on Safari, full on Chromium, decided by a storage-estimate probe at
+bootstrap **rather than by a hard-coded browser check**", and this is the
+probe: quota minus usage against the expanded file plus headroom (20%, floored
+at 32 MB — a percentage of a small vault is not room for a WAL and a
+re-bootstrap). An **absent** estimate answers `full`: refusing to hold the index
+because a browser declined to guess would make every such browser a worse seat
+for no measured reason. And it **refuses** rather than inventing a third
+contents when even the rows do not fit — remote-only is a decision for the
+member and the shell.
+
+`reduceSeatToRowsMinusFts` drops the shadow tables **and the sync triggers
+together**. That pairing is the whole point: wave 1 declined to drop the FTS
+tables in the snapshot pipeline precisely because the 57 retained triggers then
+fail on the seat's first write with `no such table: main.fts_…` — "a separate
+decision with a seat-side rebuild step attached". This is that step, and the
+test asserts the file still takes a write afterwards.
+
+`seat_state` gains `contents`, written after the drop and never before: a file
+that says `rows-minus-fts` while the tables are still there sends every search
+to the gateway for nothing, and one that says `full` after the drop sends every
+search into a table that is not there.
+
+### The carry-over: before the swap, or the member's work is gone
+
+`packages/client/src/replica/seat/carry-over.ts` and
+`packages/client/src/replica/seat/outbox.ts`.
+
+A re-bootstrap replaces the file with a copy of the gateway's — correct for
+every row in it, and catastrophic for the three things the gateway has never
+heard of: the queued intents, the blobs this seat holds, and the pins. So
+`SeatWorkerCore.bootstrap` reads the carry-over out of the OLD file while it is
+still the file, installs, and writes it into the new one. "After" is a window
+in which a crash loses a queue that cannot be re-fetched from anywhere, unlike
+every row in the file.
+
+`created_order` is carried **verbatim**. Intents drain in the order they were
+made (R23); a repair that renumbers them re-orders the member's work. It is an
+explicit monotonic column rather than a timestamp because two intents made in
+the same millisecond on a phone are ordinary, and a device clock decides
+neither canonical nor local order.
+
+An absent table is an empty carry-over, never an error: a first bootstrap has
+no old file, and throwing there turns "nothing to save" into a failed repair.
+
+### The seat watermark replaces per-read `coverage`
+
+`packages/client/src/replica/seat/watermark.ts`. Two numbers and a flag: the
+applied cursor (what this file contains), the gateway's head as of the last
+page (what exists), and whether a deferred span is owed — which is **behind in
+a different way**, because waiting will not fix it and the member has to be
+told so rather than shown a distance that never shrinks.
+
+`custodyLine` (`packages/client/src/react/screens/vault-custody.ts`) takes that
+line instead of the census record count. Not a re-sourcing: under R1 every
+enrolled seat holds the whole vault, so "how many records" is the same number
+everywhere and says nothing about THIS machine — and census dies in wave 5
+anyway. `holdsReplica` and the offline-copy switch **stay** (F4, re-judged):
+R9 keeps a remote-only client and a shared browser still needs the choice.
+
+### The golden replica stops being a slice (F5)
+
+`packages/test-kit/src/year3-replica.ts` built its artifact by walking
+per-app shapes with `readReplicaRows` into a `replica_row` projection. Under R1
+that is the wrong volume, and W2's parity work and W3's device exit both
+measure against it — a fixture shaped like a slice would let a wave exit green
+on the wrong thing. It is now `buildYear3SeatReplica`: the gateway's sanitised
+snapshot, installed through the real `bootstrapSeatFile`, with a tail of REAL
+commits applied through `applySeatLogPage`, and the outbox in the seat's own
+table. `YEAR3_REPLICA_ENTITIES`, `buildYear3ReplicaSnapshot`, the shape ids and
+the row ceiling are gone with the slice.
+
+**The rule is now an assertion, not a comment.** `assertYear3SeatNotHandBuilt`
+fails at BUILD time on a file with too few tables or a cursor behind the
+snapshot — a hand-built fixture agrees with itself, and would otherwise pass a
+parity test that was only ever comparing it to itself.
+
+`tests/journeys.json`: `year3-household` ("5 mounted vaults = 10 SQLite
+handles") is retired — it named a MOUNT PLANE, and a volume in this ledger
+names how much VAULT a measurement is taken over. Its only entry goes with it;
+`tests/scale/multi-vault-footprint.scale.test.ts` keeps its rig row and loses
+nothing, because its ceilings were always `DEFAULT_VAULT_FOOTPRINT` asserted in
+the rig body rather than read from the ledger. `year3-replica` is redefined as
+the whole vault. And `1000-commits` — the volume wave 1's `gateway/log-apply`
+row names — is declared, which it was not: `journey-ledger` was red on this
+branch before this commit.
+
+### Two more reds fixed rather than walked past
+
+- `packages/blueprints/apps/_shared/representation-reads.ts` carried **two raw
+  NUL bytes** (wave 0b), which makes git classify the file as binary and every
+  diff in it unreviewable. `\0` in the template literal is the same value.
+  `scripts:test` was red on this branch before this commit.
+- The wave-1 file list in this receipt named several files only by basename
+  after a `·`, which `receipt-per-issue` cannot match. Every file is a full
+  path now.
+
+### Every file this commit touches
+
+- `packages/client/src/replica/seat/byte-policy.ts` (new) — the three policies and the two overrides
+- `packages/client/src/replica/seat/blob-presence.ts` (new) — the seat's byte ledger, tombstones, acknowledgement, the LRU's candidates
+- `packages/client/src/replica/seat/storage-probe.ts` (new) — OQ-2's probe and the rows-minus-FTS reduction
+- `packages/client/src/replica/seat/outbox.ts` (new) — `seat_outbox`, where the outbox shares the seat's file
+- `packages/client/src/replica/seat/carry-over.ts` (new) — what survives a re-bootstrap, read before the swap
+- `packages/client/src/replica/seat/watermark.ts` (new) — the seat-level number that replaces per-read `coverage`
+- `packages/client/src/replica/seat/state.ts` — `contents`, and `setSeatContents`
+- `packages/client/src/replica/seat/worker-core.ts` — the carry-over in the bootstrap sequence
+- `packages/client/src/replica/seat/index.ts` — the new surface, and the barrel suppression the module now needs
+- `packages/client/src/replica/seat/bytes.test.ts` (new) — the policy, the purge handshake, the probe, the reduction
+- `packages/client/src/replica/seat/carry-over.test.ts` (new) — a re-bootstrap with a pending intent in the outbox; the watermark's copy
+- `packages/client/src/react/screens/vault-custody.ts` · `packages/client/src/react/screens/vault-custody.test.ts` — the watermark clause
+- `packages/client/src/react/screens/HouseholdScreen.tsx` · `packages/client/src/react/screens/HouseholdScreen.test.tsx` · `packages/client/src/react/shell/routes/HouseholdRoute.tsx` · `packages/client/src/react/shell/routes/VaultRoute.tsx` — `records` becomes `seatWatermark`
+- `packages/test-kit/src/year3-replica.ts` · `packages/test-kit/src/year3-replica.test.ts` — the seat file, and the rule as an assertion
+- `tests/helpers/factories.ts` — the golden replica built through the seat path
+- `tests/journeys.json` — `year3-household` retired, `year3-replica` redefined, `1000-commits` declared
+- `packages/blueprints/apps/_shared/representation-reads.ts` — the two NUL bytes
+
+### Gates
+
+```
+cd packages/client     && bun run test   # 278 files, 2521 passed
+cd packages/test-kit   && bun run test   # 5 files, 61 passed
+cd packages/blueprints && bun run test   # 213 files, 7083 passed, 2 expected fail
+bunx vitest run --config vitest.quality.config.ts tests/quality/seat-replay-parity.test.ts
+node scripts/lint-journey-ledger.mjs     # ok
+bun run scripts:test                     # 675 tests, 675 pass
+bun run governance
+bun run check:push:static                # stamped on the committed tree
+```
+
+### Decisions — wave 2, bytes and seat state
+
+- **The seat's driver, not `ReplicaBindValue`, and the seat's own tables, not
+  the old store's.** Pre-1.0 means no compatibility shims between the two
+  stores; the old one is deleted in wave 5 and gets nothing from this commit.
+- **`seat_outbox` lands here rather than with the chain.** The carry-over test
+  the brief asks for needs a pending intent in the outbox, so the table is part
+  of "seat state". The chain that drives it is the next commit.
+- **The custody screen takes a `SeatWatermark`, not a string.** The copy is one
+  function (`seatWatermarkLine`) so the deferred-span wording cannot drift
+  between the roster row and the drill-in.
+- **A rig may have no ledger entry.** Retiring a volume retires its entries; the
+  footprint rig's ceilings never came from the ledger, so the honest record is
+  an empty `entries` with a `_noEntries` note saying why — not a re-labelled
+  volume that would keep the row alive by renaming it.

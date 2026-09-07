@@ -22,6 +22,7 @@
 // rather than a cursor that has run ahead of the rows it names.
 
 import type { SeatSqliteDriver } from "./driver.js";
+import type { SeatContents } from "./storage-probe.js";
 
 /**
  * Created on the seat file after the snapshot lands, never shipped by the
@@ -48,6 +49,13 @@ CREATE TABLE IF NOT EXISTS seat_state (
   -- The first seq of the oldest span this seat SKIPPED because its commit
   -- crossed the defer threshold. NULL when nothing is owed.
   deferred_from      INTEGER,
+  -- WHAT THIS FILE CONTAINS (#996, R15 / OQ-2). 'full' is the vault; on a
+  -- browser whose quota will not hold the search index, 'rows-minus-fts' is
+  -- the vault with the index dropped and search answered online. It is a
+  -- property of the FILE, not of the browser, because the file is what
+  -- outlives the decision.
+  contents           TEXT NOT NULL DEFAULT 'full'
+    CHECK (contents IN ('full', 'rows-minus-fts')),
   updated_at         TEXT NOT NULL
 ) STRICT;
 `;
@@ -61,6 +69,7 @@ export interface SeatState {
   readonly appliedCommitSeq: number;
   readonly gatewayWatermark: number;
   readonly deferredFrom: number | undefined;
+  readonly contents: SeatContents;
 }
 
 interface SeatStateSql {
@@ -72,6 +81,7 @@ interface SeatStateSql {
   applied_commit_seq: number;
   gateway_watermark: number;
   deferred_from: number | null;
+  contents: SeatContents;
 }
 
 export class SeatStateMissingError extends Error {
@@ -83,7 +93,7 @@ export class SeatStateMissingError extends Error {
 }
 
 const SELECT = `SELECT vault_id, epoch, schema_epoch, ddl_version, applied_seq,
-       applied_commit_seq, gateway_watermark, deferred_from
+       applied_commit_seq, gateway_watermark, deferred_from, contents
   FROM seat_state WHERE singleton = 1`;
 
 export function readSeatState(driver: SeatSqliteDriver): SeatState {
@@ -98,6 +108,7 @@ export function readSeatState(driver: SeatSqliteDriver): SeatState {
     appliedCommitSeq: row.applied_commit_seq,
     gatewayWatermark: row.gateway_watermark,
     deferredFrom: row.deferred_from ?? undefined,
+    contents: row.contents,
   };
 }
 
@@ -125,6 +136,7 @@ export function initSeatState(
     ddlVersion?: number;
     appliedSeq: number;
     gatewayWatermark?: number;
+    contents?: SeatContents;
     now?: string;
   }
 ): void {
@@ -132,8 +144,9 @@ export function initSeatState(
   driver.run(
     `INSERT INTO seat_state (
        singleton, vault_id, epoch, schema_epoch, ddl_version, applied_seq,
-       applied_commit_seq, gateway_watermark, deferred_from, updated_at)
-     VALUES (1, ?, ?, ?, ?, ?, 0, ?, NULL, ?)
+       applied_commit_seq, gateway_watermark, deferred_from, contents,
+       updated_at)
+     VALUES (1, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?)
      ON CONFLICT (singleton) DO UPDATE SET
        vault_id = excluded.vault_id,
        epoch = excluded.epoch,
@@ -143,6 +156,7 @@ export function initSeatState(
        applied_commit_seq = excluded.applied_commit_seq,
        gateway_watermark = excluded.gateway_watermark,
        deferred_from = NULL,
+       contents = excluded.contents,
        updated_at = excluded.updated_at`,
     [
       init.vaultId,
@@ -151,7 +165,27 @@ export function initSeatState(
       init.ddlVersion ?? 0,
       init.appliedSeq,
       init.gatewayWatermark ?? init.appliedSeq,
+      init.contents ?? "full",
       init.now ?? new Date().toISOString(),
     ]
+  );
+}
+
+/**
+ * Record that this file no longer carries the search index (OQ-2).
+ *
+ * Written after the drop, never before: a file that says `rows-minus-fts`
+ * while the tables are still there sends every search to the gateway for
+ * nothing, and one that says `full` after the drop sends every search into a
+ * table that is not there.
+ */
+export function setSeatContents(
+  driver: SeatSqliteDriver,
+  contents: SeatContents,
+  now = new Date().toISOString()
+): void {
+  driver.run(
+    `UPDATE seat_state SET contents = ?, updated_at = ? WHERE singleton = 1`,
+    [contents, now]
   );
 }

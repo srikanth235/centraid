@@ -176,7 +176,13 @@ describe("HouseholdScreen suite", () => {
         ...roster(),
         embedded: true,
         onReport: (report) => reports.push(report),
-        records: 41_208,
+        seatWatermark: {
+          applied: 900,
+          head: 1_204,
+          behind: 304,
+          deferredPending: false,
+          contents: "full" as const,
+        },
       });
       expect(el.textContent).toContain("Where it lives");
       // ONE PUBLISHER. Two channels behind one bar is two answers the bar can
@@ -186,20 +192,20 @@ describe("HouseholdScreen suite", () => {
       const last = reports.at(-1) as { custody: string; state: string };
       expect(last.state).toBe("ready");
       expect(last.custody).toBe(
-        "41,208 records · 2 machines hold a full copy · 2 devices enrolled"
+        "304 changes behind · 2 machines hold a full copy · 2 devices enrolled"
       );
     });
 
-    it("omits the record clause when the census has not answered", async () => {
+    it("omits the currency clause when no seat has reported", async () => {
       const reports: { custody: string }[] = [];
       await mount({
         ...roster(),
         embedded: true,
         onReport: (report) => reports.push(report),
-        records: null,
+        seatWatermark: undefined,
       });
-      // An old gateway that cannot report a census must not cost the page the
-      // two numbers it does know, and must not make it guess the third.
+      // A seat that has not reported must not cost the page the two numbers
+      // it does know, and must not make it guess the third.
       const custody = reports.at(-1)?.custody ?? "";
       expect(custody).toBe("2 machines hold a full copy · 2 devices enrolled");
       expect(custody).not.toContain("records");

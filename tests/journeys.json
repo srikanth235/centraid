@@ -23,8 +23,8 @@
   "volumes": {
     "year3": "The golden year-3 artifact: ~27,600 domain rows (5,000 parties, 10,000 photos, 200 conversations x 12 turns, 1,000 notes, 1,096 events, 12 grantees, 365 receipt days). packages/test-kit/src/year3-vault.ts.",
     "year3-photos": "90,000 photo assets, 3,000 near-duplicate families — the Photos library profile.",
-    "year3-replica": "50,000 replica rows on a phone (docs/mobile-offline.md).",
-    "year3-household": "5 mounted vaults = 10 SQLite handles on one gateway.",
+    "1000-commits": "1,000 captured gateway commits = 10,000 log rows (5 statements per commit, each producing its own row plus the membership trigger's `core_entity` row). The unit a seat's catch-up is denominated in: R5 gives a seat one transaction per COMMIT with its cursor inside it, so commits — not rows — are what an apply rate is bound by. packages/vault/src/replica/apply.ts.",
+    "year3-replica": "The whole year-3 vault on a phone: the gateway's sanitised `vault.db` — its schema, its rows, minus the private tables — plus a tail of real log rows and an outbox of 1, 10 or 40 pending intents. Redefined by #996 wave 2 from \"50,000 replica rows\": under ruling R1 a seat holds the file whole, so a row ceiling is not a volume any more. packages/test-kit/src/year3-replica.ts.",
     "year3-10gib": "10 GiB of CAS bytes across 4 MiB objects + 95,640 FK-checked rows.",
     "empty": "A FRESH VAULT. A bundle or transport ratchet only: it cannot catch an O(vault-size) regression, and an entry that stays here is an admission, not a budget.",
     "build-artifact": "Bytes on disk after a build; independent of vault size.",
@@ -505,35 +505,6 @@
             "observedForeignKeyCheckMs": 21.2,
             "observedIntegrityCheckMs": 784.9,
             "note": "MEASURED, and the answer is reassuring: foreign_key_check — the O(rows) full-table walk that packages/backup/src/wal-restore.ts runs inside every restore, and the suspected year-3 cliff — costs 21 ms at year-3 row volume. integrity_check is 37x more expensive at 785 ms, and BOTH together are ~1.5% of the 55 s restore. The honesty check in the restore path is not the thing to optimise. Ceiling is generous on purpose: it fences a genuine cliff (a missing parent index turning the walk quadratic), not runner jitter."
-          }
-        }
-      }
-    },
-    "gateway/footprint/year3-household/ci-linux-x64-4c": {
-      "surface": "gateway",
-      "journey": "footprint",
-      "volume": "year3-household",
-      "hardware": "ci-linux-x64-4c",
-      "spans": ["vault.open"],
-      "consumers": ["tests/scale/multi-vault-footprint.scale.test.ts"],
-      "tolerancePercent": 20,
-      "metrics": {
-        "fiveVaultFootprint": {
-          "status": "measured",
-          "probe": "tests/scale/multi-vault-footprint.scale.test.ts",
-          "maxSummedPageCacheBytes": 32768000,
-          "maxSummedMmapBytes": 134217728,
-          "minPerFileCacheBytes": 524288,
-          "_provenance": {
-            "at": "2026-07-31",
-            "host": "darwin arm64",
-            "observedSummedPageCacheBytes": 32768000,
-            "observedSummedMmapBytes": 134217720,
-            "observedSmallestPerFileCacheBytes": 3276800,
-            "observedPageCacheIfStillPerFile": 163840000,
-            "observedRssPerAdditionalVaultBytes": 10104832,
-            "note": "MEASURED. The reservations are now FLAT in vault count: five vaults under one host budget reserve 32,768,000 B of page cache — exactly one default vault's worth — where the pre-#659 per-file constants would have reserved 163,840,000 B, a 5x reduction. Every one of the 10 handles still gets 3.28 MB, well above the 512 KiB floor. THE CAVEAT THAT MATTERS: reservations are not residency. Each additional mounted vault still costs ~10.1 MB of RSS at idle (connection state + bootstrap DDL, not the page cache, which SQLite fills lazily), so resident memory is still linear in vault count even though the budget is not. Measured on idle, freshly bootstrapped vaults that were never read — treat 10.1 MB as a floor.",
-            "headroom": "none — the ceilings ARE the host totals (DEFAULT_VAULT_FOOTPRINT), not observed + slack"
           }
         }
       }
@@ -1785,9 +1756,10 @@
     },
     "tests/scale/multi-vault-footprint.scale.test.ts": {
       "lane": "scale",
-      "volume": "5 mounted vaults = 10 SQLite handles (year-3 household: Personal auto-founded per #603, plus one shared or personal vault per additional member) under ONE host footprint budget",
+      "volume": "5 mounted vaults = 10 SQLite handles (Personal auto-founded per #603, plus one shared or personal vault per additional member) under ONE host footprint budget",
       "_noBudgetMs": "Not a duration rig. The ceilings are the host footprint totals themselves, read from DEFAULT_VAULT_FOOTPRINT, and the drift series is summed page cache in bytes rather than wall clock.",
-      "entries": ["gateway/footprint/year3-household/ci-linux-x64-4c"]
+      "_noEntries": "The `year3-household` volume was retired by #996 wave 2 (review sweep F5): it named a MOUNT PLANE — five vaults, ten handles — and a volume in this ledger names how much VAULT a measurement is taken over. This rig's ceilings were never read from the ledger anyway; they are DEFAULT_VAULT_FOOTPRINT, asserted in the rig body, which is why retiring the volume costs the rig nothing. The mount-plane footprint measurement itself stands.",
+      "entries": []
     },
     "tests/scale/composite-load.scale.test.ts": {
       "lane": "scale",

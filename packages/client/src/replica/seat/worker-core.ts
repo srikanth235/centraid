@@ -20,6 +20,8 @@ import type {
   SeatBootstrapStaging,
   SeatSnapshotTransport,
 } from "./bootstrap.js";
+import { readSeatCarryOver, writeSeatCarryOver } from "./carry-over.js";
+import type { SeatCarryOver } from "./carry-over.js";
 import type { SeatSqliteDriver } from "./driver.js";
 import { openSeatFile } from "./driver.js";
 import { SeatDriftError } from "./seat-drift-error.js";
@@ -107,6 +109,13 @@ export class SeatWorkerCore {
   ): Promise<SeatBootstrapResult> {
     const open = this.#open;
     if (!open) throw new SeatWorkerNotOpenError();
+    // THE CARRY-OVER COMES OUT BEFORE THE SWAP, NOT AFTER (R23). The queued
+    // intents, the held blobs and the pins exist nowhere but this file; a
+    // window in which a crash loses them is a repair that destroys the
+    // member's work, and unlike every row here, none of it can be re-fetched.
+    const carried: SeatCarryOver | undefined = this.#driver
+      ? readSeatCarryOver(this.#driver)
+      : undefined;
     // The handle is released BEFORE the install: a file cannot be replaced
     // underneath an open SQLite connection on any of the three hosts, and the
     // one that tolerates it does so by keeping the deleted inode alive, which
@@ -129,6 +138,7 @@ export class SeatWorkerCore {
     });
     const driver = await this.host.openDatabase(open);
     openSeatFile(driver);
+    if (carried) writeSeatCarryOver(driver, carried);
     this.#driver = driver;
     return result;
   }
