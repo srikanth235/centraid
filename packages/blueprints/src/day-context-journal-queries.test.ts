@@ -28,6 +28,17 @@ function ctxOf(
   return {
     calls,
     vault: {
+      // A statement names the physical table; the fixtures are keyed by
+      // entity, so `core_tag` finds `core.tag` (#996 wave 4). One page, no
+      // cursor: the fixtures are small and the walk stops at their end.
+      page: async ({ query }: { query: { from: string } }) => {
+        const table = query.from.trim().split(/\s+/u)[0] ?? query.from;
+        return {
+          rows: (rowsByEntity[table] ??
+            rowsByEntity[table.replace("_", ".")] ??
+            []) as Record<string, unknown>[],
+        };
+      },
       read: async (request: ReadCall) => {
         calls.push(request);
         return { rows: rowsByEntity[request.entity] ?? [] };
@@ -214,9 +225,13 @@ describe("Agenda day-context (#834 R-daycontext)", () => {
       "../apps/agenda/queries/day-context.ts"
     );
     const ctx = ctxOf({});
-    ctx.vault.read = async () => {
+    const deny = async () => {
       throw Object.assign(new Error("no grant"), { code: "VAULT_ACCESS" });
     };
+    // Both doors: the search that finds the notes and the paged marker walk
+    // that decides which of them are journal entries (#996 wave 4).
+    ctx.vault.read = deny;
+    ctx.vault.page = deny;
     const result = await dayContext({
       input: { from: "2026-03-01", to: "2026-03-31" },
       ctx,
@@ -360,9 +375,13 @@ describe("Notes journal exclusion (#834 R-journal)", () => {
       ...rows,
       "search:knowledge.note": rows["knowledge.note"],
     });
-    ctx.vault.read = async () => {
+    const deny = async () => {
       throw Object.assign(new Error("no grant"), { code: "VAULT_ACCESS" });
     };
+    // Both doors: the search that finds the notes and the paged marker walk
+    // that decides which of them are journal entries (#996 wave 4).
+    ctx.vault.read = deny;
+    ctx.vault.page = deny;
     const result = await linkTargets({ input: { term: "coffee" }, ctx });
     expect(
       result.targets.filter(

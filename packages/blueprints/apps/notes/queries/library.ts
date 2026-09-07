@@ -204,7 +204,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           entity: "core.collection",
         }),
         // Rides this Promise.all so the exclusion costs no extra round trip.
-        readJournalNoteIds(ctx.vault),
+        readJournalNoteIds(ctx),
       ]);
     const byId = new Map<string, NoteRow>();
     for (const n of [

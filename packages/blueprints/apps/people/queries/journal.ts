@@ -56,7 +56,7 @@ function decodeText(uri: string | undefined): string {
 export default async function journalHandler({ ctx }: HandlerArgs) {
   try {
     const [journalNoteIds, concepts, activityLinks] = await Promise.all([
-      readJournalNoteIds(ctx.vault),
+      readJournalNoteIds(ctx),
       ctx.vault.read({
         acceptTruncation: true,
         entity: "core.concept",

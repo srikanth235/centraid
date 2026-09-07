@@ -49,11 +49,9 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
     // Owner-curated and small, so unbounded; they bound the rest.
-    const [concepts, schemes] = await Promise.all(
-      conceptTaxonomyReads(ctx.vault)
-    );
-    const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
-    const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
+    const [concepts, schemes] = await Promise.all(conceptTaxonomyReads(ctx));
+    const conceptRows = concepts as unknown as ConceptRow[];
+    const schemeRows = schemes as unknown as SchemeRow[];
 
     const scheme = findScheme(schemeRows, FOLDER_SCHEME_URI);
     const schemeConcepts = conceptsInScheme(conceptRows, scheme);

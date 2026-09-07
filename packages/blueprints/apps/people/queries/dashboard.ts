@@ -101,11 +101,11 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         orderBy: { column: "created_at", dir: "desc" },
         limit: window,
       }),
-      ...conceptTaxonomyReads(ctx.vault),
+      ...conceptTaxonomyReads(ctx),
     ]);
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
-    const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
-    const schemeRows = (schemes.rows ?? []) as unknown as RawScheme[];
+    const conceptRows = concepts as unknown as RawConcept[];
+    const schemeRows = schemes as unknown as RawScheme[];
     const partyIds = profileRows.map((p) => p.party_id);
     if (partyIds.length === 0) {
       return {

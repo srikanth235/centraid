@@ -105,11 +105,11 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         orderBy: { column: "created_at", dir: "desc" },
         limit: window + 1,
       }),
-      ...conceptTaxonomyReads(ctx.vault),
+      ...conceptTaxonomyReads(ctx),
     ]);
 
-    const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
-    const schemeRows = (schemes.rows ?? []) as unknown as RawScheme[];
+    const conceptRows = concepts as unknown as RawConcept[];
+    const schemeRows = schemes as unknown as RawScheme[];
 
     // Lists are owner-curated SKOS concepts — small and unbounded.
     const listConcepts = conceptsInScheme(

@@ -12,6 +12,7 @@
 // not read as a bug; it reads as "nobody is linked", which is worse.
 import { describe, expect, it, vi } from "vitest";
 
+import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
 import dashboardHandler from "./dashboard.ts";
 import peopleHandler from "./people.ts";
 import personHandler from "./person.ts";
@@ -66,7 +67,11 @@ function ctxOf(shareDenied: boolean) {
       });
     return { rows: ROWS[entity] ?? [] };
   });
-  return { ctx: { vault: { read } } as unknown as HandlerArgs["ctx"], read };
+  const { page } = pagedFixture(ROWS);
+  return {
+    ctx: { vault: { page, read } } as unknown as HandlerArgs["ctx"],
+    read,
+  };
 }
 
 describe("People roster link chips (#821)", () => {

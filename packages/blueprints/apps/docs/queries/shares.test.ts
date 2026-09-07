@@ -20,6 +20,7 @@ import {
   FOLDER_SCHEME_URI,
   ROOT_FOLDER_NOTATION,
 } from "../../_shared/concept-scheme-kit.ts";
+import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
 import driveHandler from "./drive.ts";
 import searchHandler from "./search.ts";
 
@@ -184,7 +185,13 @@ function ctxOf(shareDenied: boolean) {
       });
     return { rows: ROWS[entity] ?? [] };
   });
-  return { ctx: { vault: { read, search: read } } as unknown as never, read };
+  // The taxonomy pair is paged since #996 wave 4; it is not a share entity,
+  // so the denial case leaves it answering normally.
+  const { page } = pagedFixture(ROWS);
+  return {
+    ctx: { vault: { page, read, search: read } } as unknown as never,
+    read,
+  };
 }
 
 const rowFor = (documents: Row[], id: string): SharedWith[] | null => {

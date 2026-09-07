@@ -1,6 +1,7 @@
 // The roster window must not drop people with no notice.
 import { describe, expect, it, vi } from "vitest";
 
+import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
 import { STATUS } from "../people-copy.ts";
 import peopleHandler from "./people.ts";
 
@@ -30,7 +31,11 @@ function ctxOf(rows: Array<Record<string, unknown>>) {
     if (request.entity === "core.party") return { rows: parties };
     return { rows: [] };
   });
-  return { ctx: { vault: { read } } as unknown as HandlerArgs["ctx"], read };
+  const { page } = pagedFixture({ "core.party": parties });
+  return {
+    ctx: { vault: { page, read } } as unknown as HandlerArgs["ctx"],
+    read,
+  };
 }
 
 describe("the roster is not silently capped at 200 rows", () => {

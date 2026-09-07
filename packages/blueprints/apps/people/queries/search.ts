@@ -126,14 +126,14 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           { column: "target_id", op: "in", value: order },
         ],
       }),
-      ...conceptTaxonomyReads(ctx.vault),
+      ...conceptTaxonomyReads(ctx),
     ]);
 
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
     const partyRows = (parties.rows ?? []) as unknown as RawParty[];
     const tagRows = (tags.rows ?? []) as unknown as RawTag[];
-    const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
-    const schemeRows = (schemes.rows ?? []) as unknown as RawScheme[];
+    const conceptRows = concepts as unknown as RawConcept[];
+    const schemeRows = schemes as unknown as RawScheme[];
 
     const profileByParty = new Map<string, RawProfile>(
       profileRows.map((p) => [p.party_id, p] as const)

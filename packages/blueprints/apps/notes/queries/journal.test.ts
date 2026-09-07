@@ -18,13 +18,38 @@ interface ReadCall {
   limit?: number;
 }
 
+/** One paged statement, as the handler wrote it (#996 wave 4). */
+interface Statement {
+  name: string;
+  select: string;
+  from: string;
+  where?: string;
+  bind?: readonly (string | number | null)[];
+  order: { sortColumn: string; pkColumn: string; descending: boolean };
+}
+
 function ctxOf(
   rowsByEntity: Record<string, unknown[]>,
-  calls: ReadCall[] = []
+  calls: ReadCall[] = [],
+  statements: Statement[] = []
 ) {
   return {
     calls,
+    statements,
     vault: {
+      // The marker walk is paged since #996 wave 4: a statement names the
+      // physical table, and these fixtures are keyed by entity, so the first
+      // underscore becomes the dot. One page, no cursor — the fixtures end.
+      page: async (request: { query: Statement; limit: number }) => {
+        statements.push(request.query);
+        const table = request.query.from.trim().split(/\s+/u)[0] ?? "";
+        return {
+          rows: (rowsByEntity[table.replace("_", ".")] ?? []) as Record<
+            string,
+            unknown
+          >[],
+        };
+      },
       read: async (request: ReadCall) => {
         calls.push(request);
         return { rows: rowsByEntity[request.entity] ?? [] };
@@ -142,7 +167,8 @@ describe("the Journal place", () => {
 
   test("every read is bounded — by an eq, an in, or a limit", async () => {
     const calls: ReadCall[] = [];
-    const ctx = ctxOf(vaultRows(), calls);
+    const statements: Statement[] = [];
+    const ctx = ctxOf(vaultRows(), calls, statements);
     await journalHandler({ input: { limit: 50 }, ctx } as never);
     expect(calls.length).toBeGreaterThan(0);
     for (const call of calls) {
@@ -151,24 +177,35 @@ describe("the Journal place", () => {
         typeof call.limit === "number";
       expect(bounded, `${call.entity} read is unbounded`).toBe(true);
     }
+    // A page is bounded by construction — `limit` is required — so what is
+    // worth asserting is that its cursor can be read: the order's two columns
+    // are both projected, or the walk cannot continue past the first page.
+    expect(statements.length).toBeGreaterThan(0);
+    for (const statement of statements) {
+      expect(statement.select).toContain(statement.order.sortColumn);
+      expect(statement.select).toContain(statement.order.pkColumn);
+    }
   });
 
   test("a vault where nobody has journalled answers empty without walking tags", async () => {
-    const calls: ReadCall[] = [];
-    const ctx = ctxOf({ "core.concept_scheme": [], "core.concept": [] }, calls);
+    const statements: Statement[] = [];
+    const ctx = ctxOf(
+      { "core.concept_scheme": [], "core.concept": [] },
+      [],
+      statements
+    );
     const answer = await journalHandler({ input: {}, ctx } as never);
     expect(answer.entries).toStrictEqual([]);
-    expect(calls.map((call) => call.entity)).not.toContain("core.tag");
+    expect(statements.map((statement) => statement.from)).not.toContain(
+      "core_tag"
+    );
   });
 
   test("a denial is a value with a receipt, never a throw", async () => {
-    const ctx = {
-      vault: {
-        read: async () => {
-          throw Object.assign(new Error("no consent"), { code: "denied" });
-        },
-      },
+    const deny = async () => {
+      throw Object.assign(new Error("no consent"), { code: "denied" });
     };
+    const ctx = { vault: { page: deny, read: deny } };
     const answer = await journalHandler({ input: {}, ctx } as never);
     expect(answer.entries).toStrictEqual([]);
     expect(answer.vaultDenied).toStrictEqual({

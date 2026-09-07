@@ -225,7 +225,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           { column: "target_id", op: "eq", value: partyId },
         ],
       }),
-      ...conceptTaxonomyReads(ctx.vault),
+      ...conceptTaxonomyReads(ctx),
       ctx.vault.read({ acceptTruncation: true, entity: "core.vault" }),
       // Null when the sharing plane is unreadable — never a thrown denial.
       readPersonShareLinks(ctx.vault, partyId),
@@ -248,8 +248,8 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         all.findIndex((x) => x.obligation_id === row.obligation_id) === index
     );
     const tagRows = (tags.rows ?? []) as unknown as RawTag[];
-    const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
-    const schemeRows = (schemes.rows ?? []) as unknown as RawScheme[];
+    const conceptRows = concepts as unknown as RawConcept[];
+    const schemeRows = schemes as unknown as RawScheme[];
     const ownerPartyId = String((vault.rows ?? [])[0]?.self_party_id ?? "");
 
     const relationLinks = outgoing.filter(

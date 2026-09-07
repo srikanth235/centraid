@@ -157,7 +157,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         where: [{ column: "deleted_at", op: "is-null" }],
         limit: 100,
       }),
-      readJournalNoteIds(ctx.vault),
+      readJournalNoteIds(ctx),
     ]);
     // Journal entries drop out of the ranked hits before anything is joined
     // to them (#834 R-journal), so no journal body is decoded or previewed.

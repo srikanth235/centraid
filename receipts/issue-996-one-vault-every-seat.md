@@ -6571,3 +6571,86 @@ empty set asks for nothing at all; a refusal renders without a type.
 - **The keyset's second axis is the table's own primary key, not the id the
   caller filtered on.** A cursor on a non-unique column stops on the first
   duplicate and calls it the end.
+
+## Wave 4c — the taxonomy pair and the journal marker are pages (#996)
+
+### Two helpers, eight handlers, one bound
+
+`conceptTaxonomyReads` and `readJournalNoteIds` are the reads that OPEN eight
+query handlers across Docs, Notes and People: read the vault's whole concept
+vocabulary, read its schemes, resolve tags into shelves — and, for Notes and
+People, work out which notes are journal entries so they can be excluded from
+every other projection. Both said `acceptTruncation: true`, which meant "stop
+wherever the reader's default happens to be, and do not say so".
+
+A vault's vocabulary is the thing that BOUNDS the rest of these queries. It is
+owner-curated and small, so the honest replacement is a walk that states its own
+ceiling and throws at it (`readPages`, 4,000 rows), not a flag that hands back a
+short taxonomy: a missing concept does not read as an error downstream, it reads
+as an untagged note, and a journal entry the marker walk missed does not read as
+an error either — it reads as an ordinary note, on a surface that exists to keep
+journal entries off it.
+
+Both helpers now take `ctx` rather than `ctx.vault`, because a paged read is
+made through the ctx's own door; the eleven call sites move with them.
+
+### The fixtures speak both spellings
+
+A statement names the PHYSICAL table (`core_concept`); every existing handler
+fixture is keyed by ENTITY (`core.concept`). Restating ~40 fixture maps in the
+new spelling would be the change nobody reviews, so the two are bridged in one
+place — `paged-ctx.test-fixtures.ts`, and the same two lines in the two ctx
+builders that predate it. The page served is always the LAST one: a fixture map
+is small, and a handler that walked twice over it would be walking a set it
+never bounded.
+
+`journal.test.ts`'s boundedness case keeps its old claim for the reads that
+remain and gains the one a page can still get wrong: the order's two columns are
+both projected, or the cursor cannot be read off the row.
+
+### Gates
+
+- `bunx vitest run --root packages/blueprints apps/docs/queries apps/people/queries`
+  — 5 files, 23 passed.
+- `bun run --cwd packages/blueprints test` — 215 files, 7,081 passed, 2
+  expected-fail.
+- `bun run --cwd packages/blueprints typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/blueprints/apps/_shared/paged-ctx.test-fixtures.ts`
+
+**Changed:**
+
+- `packages/blueprints/apps/_shared/journal-scheme.ts`
+- `packages/blueprints/apps/_shared/taxonomy-reads.ts`
+- `packages/blueprints/apps/docs/queries/drive.ts`
+- `packages/blueprints/apps/docs/queries/search.ts`
+- `packages/blueprints/apps/docs/queries/shared-origin.test.ts`
+- `packages/blueprints/apps/docs/queries/shares.test.ts`
+- `packages/blueprints/apps/notes/queries/journal.test.ts`
+- `packages/blueprints/apps/notes/queries/journal.ts`
+- `packages/blueprints/apps/notes/queries/library.ts`
+- `packages/blueprints/apps/notes/queries/link-targets.ts`
+- `packages/blueprints/apps/notes/queries/search.ts`
+- `packages/blueprints/apps/people/queries/dashboard.ts`
+- `packages/blueprints/apps/people/queries/journal.ts`
+- `packages/blueprints/apps/people/queries/people-roster.test.ts`
+- `packages/blueprints/apps/people/queries/people.ts`
+- `packages/blueprints/apps/people/queries/person.ts`
+- `packages/blueprints/apps/people/queries/search.ts`
+- `packages/blueprints/apps/people/queries/share-links.test.ts`
+- `packages/blueprints/src/day-context-journal-queries.test.ts`
+- `packages/blueprints/src/query-handler-ctx.test-fixtures.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the shared pair
+
+- **A helper takes the ctx, not the vault.** The paged door is reached through
+  `ctx.vault.page`, and a helper handed a bare `VaultApi` cannot carry an
+  overlay or a work-counter name.
+- **One bridge between the two spellings, in the fixtures.** The alternative is
+  every fixture map rewritten in a diff nobody can read, to assert nothing new.

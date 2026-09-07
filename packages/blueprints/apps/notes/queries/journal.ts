@@ -71,7 +71,7 @@ function checkOf(body: string): { total: number; done: number } {
 export default async function journalHandler({ input, ctx }: HandlerArgs) {
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
-    const journalNoteIds = await readJournalNoteIds(ctx.vault);
+    const journalNoteIds = await readJournalNoteIds(ctx);
     if (journalNoteIds.size === 0)
       return { entries: [], truncated: false, window };
 

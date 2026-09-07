@@ -67,11 +67,11 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           { column: "target_id", op: "in", value: documentIds },
         ],
       }),
-      ...conceptTaxonomyReads(ctx.vault),
+      ...conceptTaxonomyReads(ctx),
     ]);
     const tagRows = (tags.rows ?? []) as unknown as TagRow[];
-    const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
-    const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
+    const conceptRows = concepts as unknown as ConceptRow[];
+    const schemeRows = schemes as unknown as SchemeRow[];
     // Free-form labels (#352) reuse ./_shared.ts's helper; a small bounded
     // read over the same matched ids.
     const tagsByDoc = await readLabelsByDocument({
