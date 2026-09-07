@@ -79,6 +79,12 @@ Minting a share is not one of those offline writes. `tally.group` is v1's one ed
 
 `share_subscription.cursor_seq`, keyed `(shape_id, audience_vault_id)`, is how far this vault has ingested one shape, alongside the physical replica cursor. Ten shared Tally groups in one vault therefore mean one vault cursor plus ten shape cursors, not eleven sync engines. The vault cursor transports the resulting row changes; each origin orders its own shape independently. A late join or a restore starts from a bootstrap at the origin's current epoch and follows changes from there; a changed `cursor_epoch` is a re-bootstrap, never a silently extended floor.
 
+### The chain, and where its numbers come from
+
+Five changes made offline against one row execute in order, once each, when the radio returns ([#996](https://github.com/srikanth235/centraid/issues/996) R23). The edges are derived on the seat from what the outbox minted, the held dependents say "Waiting on an earlier change" rather than "failed", and a conflict raised by a second writer stops the head of the chain with both versions on the row and Retry/Discard beside it.
+
+Four intervals of that arc are measured on node against the production session and a real file — `mobile/durable-save`, `mobile/pending-render`, `mobile/restart-recovery` and `mobile/reconnect-drain` in `tests/journeys.json`, all at `none/ci-linux-x64-4c`. Every one is a LOWER BOUND on the phone: no network RTT, no flash, no render. The phone's own numbers are the `device-fixture/ci-android-emu` rows, which are `unmeasured` and name the Android airplane flow as their probe.
+
 ## Background work and push privacy
 
 The Expo background task maps to BGTaskScheduler on iOS and WorkManager on Android. It runs the same pull, intent, placement, and upload queues as the foreground and calls the same metered/battery upload policy. Platform timing is opportunistic; correctness always comes from the durable outboxes and the next foreground pull.

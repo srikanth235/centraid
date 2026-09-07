@@ -4708,3 +4708,100 @@ the member's work.
 - **`capturedHere` is left unsupplied on purpose.** Wiring a predicate over a
   store that does not hold captures would be a protection that reads true and
   guards nothing.
+
+## Wave 3 — the chain's four clocks, and the words at the end of it
+
+### The arc nothing joined up
+
+Every piece of the offline chain had a home — the outbox in
+`sqlite-intent-store.ts`, the edges and the badge in `offline-chain.ts`, the
+states in `pendingChanges()`, the words in `kit/replica/pending-copy.ts` — and
+nothing ran the ARC, which is where the seams are.
+`offline-chain-journey.test.ts` runs it on one real file through the production
+session: five changes with no radio, kill and relaunch, radio back, and a
+second writer who got to the row first. It asserts the rows and their order off
+the durable outbox after the relaunch, then the conflict on the HEAD of the
+chain with both versions on it and the Retry/Discard the sheet offers for it.
+
+`toPendingChanges` had to move to `pending-change-rows.ts` to make that
+possible, and the split is worth stating: the mapper is pure, and it was
+sitting behind `pending-changes.ts`'s `AppState` import, so asking "what would
+the sheet draw" required React Native to be loadable. A journey that runs the
+real session on node cannot ask that question through a device runtime.
+
+### Four clocks, measured where they can be measured
+
+`tests/scale/mobile-offline-chain.scale.test.ts` times one arc four times over,
+on the production session and a real file:
+
+| row (`.../none/ci-linux-x64-4c`) | observed | ceiling |
+| --- | --- | --- |
+| `mobile/durable-save` | 19.7 / 8.6 / 5.5 ms | 100 ms |
+| `mobile/pending-render` | 0.7 / 0.6 / 0.6 ms | 25 ms |
+| `mobile/restart-recovery` | 1.9 / 1.5 / 1.6 ms | 50 ms |
+| `mobile/reconnect-drain` | 51.3 / 37.4 / 22.3 ms | 250 ms |
+
+Every one is a LOWER BOUND and the ledger says so on each row: the gateway is
+an in-process fetch double, `node:sqlite` on a container filesystem stands in
+for flash, and nothing renders. The ceilings are ~5x the slowest of three
+samples, on the precedent `mobile/converge` set, and are to be tightened once
+nightly samples exist — never raised.
+
+Two of the four needed their scope decided rather than assumed.
+`durable-save` is the SLOWEST of the five writes, not their sum: the member
+feels one tap, not a batch. `reconnect-drain` stops at ACKNOWLEDGEMENT, because
+an executed intent's row clears when the applied cursor reaches its
+`commit_seq` (R24) and that interval is `mobile/converge`'s — folding it in
+would double-count it and hide which half moved.
+
+### The device rung, named rather than implied
+
+The four `.../device-fixture/ci-android-emu` rows are `unmeasured` with the
+Android airplane flow as their probe. The flow drives ONE offline write today;
+the chain, the second relaunch inside it and the second-writer conflict are
+asserted on node and are NOT in the Maestro arc, because adding them costs
+launches against that lane's 8-minute suite budget and nothing in this repo can
+measure that cost without an emulator. `native-v0-resilience.md` now says
+exactly what the device rung has to add. Evidence for those rows is the CI
+`mobile-device-gate` emulator lane, not a phone on a desk.
+
+### One stale row fixed on the way past
+
+`mobile/search/year3-replica/dev-darwin-arm64` named
+`apps/mobile/src/lib/replica/multi-vault-reader.test.ts` as its consumer — a
+file wave 3 deleted with the mount plane — so `scripts/lint-journey-ledger.mjs`
+was red on this branch. The consumer is now the surviving screen-read rig and
+the metric is `projected` with a `_basis`: its numbers were observed against a
+mechanism that no longer exists. The ceilings are KEPT, not raised — one open
+file does strictly less work than four attached ones for the same page, so the
+old number bounds the new one from above — and the row says it must return to
+`measured` on a real seat-store run. `native-v0-resilience.md` named the same
+deleted file and now names its successors.
+
+### Every file this commit touches
+
+**New:**
+
+- `apps/mobile/src/kit/replica/pending-change-rows.ts`
+- `apps/mobile/src/lib/replica/offline-chain-journey.test.ts`
+- `tests/scale/mobile-offline-chain.scale.test.ts`
+
+**Changed:**
+
+- `apps/mobile/src/kit/replica/pending-changes.ts`
+- `docs/mobile-offline.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+- `tests/agent-e2e-mobile/flows/native-v0-resilience.md`
+- `tests/journeys.json`
+
+### Decisions — the chain's numbers
+
+- **Four rows, not one.** A single "offline chain" ceiling would hide which of
+  save, draw, relaunch and drain moved, which is the only thing a regression
+  needs to say.
+- **The seat-side rows are lower bounds and are labelled as such.** Promoting
+  one to "the phone's number" is the exact move the ledger's own vocabulary
+  exists to prevent.
+- **The device rung stays a row, not a promise.** An `unmeasured` entry naming
+  its probe and its missing steps is an answer; deleting the row would make the
+  gap invisible.

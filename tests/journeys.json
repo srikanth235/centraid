@@ -57,7 +57,11 @@
     "stress-recovery": "Not a journey — the first ordinary request after the knee.",
     "photo-sweep": "Not a journey — the perceptual-hash sweep over the library.",
     "first-paint-work": "Not a journey — the WORK a screen's first paint costs, in the product's own counters.",
-    "read-cost": "Not a journey — what one gateway READ costs in bytes it writes: audit band and write-ahead log."
+    "read-cost": "Not a journey — what one gateway READ costs in bytes it writes: audit band and write-ahead log.",
+    "durable-save": "A change made with no radio to the phone saying it is saved on this device.",
+    "pending-render": "A queued outbox to the pending rows and badges the screen draws for it.",
+    "restart-recovery": "The app is killed and relaunched offline; pending work is on screen again.",
+    "reconnect-drain": "The radio returns to an empty outbox, every queued change executed in order."
   },
   "entries": {
     "approvedDeviation": "#927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`, which the ratchet reads as ten removals plus ten additions. Every number is carried across BYTE-IDENTICAL — largestContentfulPaint 1200 ms, interactionToNextPaint 120 ms, cumulativeLayoutShift 0.1, and the eight unmeasured rows' `_intendedCeilingMs: null` — so not one ceiling widens; only the address moves. The move is a measurement, not a relabel: `@centraid/test-kit` gained a `dist` build in this same change set, so `apps/web/tests/e2e/server.ts` seeds the shared year-3 generator's golden daily-path profile instead of eight demo routes plus 2,000 Atlas rows, and all three vitals were re-observed there (LCP 484/516/524 ms against the unchanged 1200 ceiling, INP 24 ms, CLS 0). The `gateway/*` rows keep `seeded-demo`; they are seeded by `bench-journeys.mjs`, not by this harness.",
@@ -238,12 +242,12 @@
       "volume": "year3-replica",
       "hardware": "dev-darwin-arm64",
       "spans": ["replica.read", "replica.search"],
-      "consumers": ["apps/mobile/src/lib/replica/multi-vault-reader.test.ts"],
+      "consumers": ["tests/scale/mobile-screen-reads.scale.test.ts"],
       "tolerancePercent": 20,
       "metrics": {
-        "mountedReplicaReadWithOutbox": {
-          "status": "measured",
-          "probe": "CENTRAID_PERF_EVIDENCE=1 bun run --cwd apps/mobile test -- src/lib/replica/multi-vault-reader.test.ts — production MultiVaultReplicaReader performs a 5,000-row ordered read and federated FTS search while enumerating and composing the durable SQLite outboxes",
+        "seatReplicaReadWithOutbox": {
+          "status": "projected",
+          "probe": "CENTRAID_PERF_EVIDENCE=1 bun run test:scale -- tests/scale/mobile-screen-reads.scale.test.ts — the seat's own 10,000-row one-file ordered read and FTS search with the durable SQLite outbox composed in. The reader these numbers were taken against (MultiVaultReplicaReader) was deleted with the mount plane in #996 wave 3, so its probe command no longer exists and the consumer named here is the surviving screen-read rig.",
           "maxColdMs": 1000,
           "maxSearchMs": 100,
           "_provenance": {
@@ -254,7 +258,8 @@
             "observedProjectionBytes": 22622208,
             "note": "MEASURED. The fixture includes the outbox volume in both timed requests; the read plan fetches the bounded canonical page plus only mutation-addressed canonical row ids.",
             "headroom": "cold observed + 28%; search ceiling retained from the existing product budget"
-          }
+          },
+          "_basis": "The 2026-08-11 measurement of the DELETED mounted reader at the same volume. One open file does strictly less work than four attached ones for the same page, so the mounted number bounds the seat's from above and the ceilings are kept rather than raised. NOT observed on the seat store — re-measure on the screen-read rig and return this row to `measured`; until then it is arithmetic on a mechanism that is gone."
         }
       }
     },
@@ -279,7 +284,7 @@
             "observedAndroidShippedBytes": 8313794,
             "observedLargestChunkBytes": 8168314,
             "observedLargestChunk": "_expo/static/js/<platform>/index-*.hbc (Hermes bytecode)",
-            "note": "MEASURED on the CI artifact this consumer weighs. A 2026-07-31 darwin worktree export observed a 6,355,198 B chunk and the close pass tightened the ceiling to 6,355,198 \u00d7 1.08 = 6,863,614; CI's Hermes chunk is 8,147,138 B (iOS) / 8,168,314 B (Android), so that observation was not this job's artifact. The ceiling stays at the previous 8,220,000 B, which still clears 8,168,314. Tightening it to the CI observation + 8% would be 8,821,779 and is a widen vs the number already on main \u2014 not taken here.",
+            "note": "MEASURED on the CI artifact this consumer weighs. A 2026-07-31 darwin worktree export observed a 6,355,198 B chunk and the close pass tightened the ceiling to 6,355,198 × 1.08 = 6,863,614; CI's Hermes chunk is 8,147,138 B (iOS) / 8,168,314 B (Android), so that observation was not this job's artifact. The ceiling stays at the previous 8,220,000 B, which still clears 8,168,314. Tightening it to the CI observation + 8% would be 8,821,779 and is a widen vs the number already on main — not taken here.",
             "headroom": "8,220,000 against CI largest chunk 8,168,314 (0.6%); 12 MiB total against 8,313,794 shipped (51%)"
           }
         }
@@ -296,7 +301,7 @@
       "metrics": {
         "installMs": {
           "status": "measured",
-          "probe": "tests/quality/seat-replay-parity.test.ts \u2014 the gateway's sanitised snapshot through `bootstrapSeatFile`: stage the compressed artifact in chunks, gunzip, rename into place, rebuild every FTS index, write `seat_state`. OUT of the span: building the snapshot on the gateway (`gateway/snapshot/year3`, wave 1) and the network, which is the transport's.",
+          "probe": "tests/quality/seat-replay-parity.test.ts — the gateway's sanitised snapshot through `bootstrapSeatFile`: stage the compressed artifact in chunks, gunzip, rename into place, rebuild every FTS index, write `seat_state`. OUT of the span: building the snapshot on the gateway (`gateway/snapshot/year3`, wave 1) and the network, which is the transport's.",
           "ceilingMs": 4000,
           "_provenance": {
             "at": "2026-09-07",
@@ -326,7 +331,7 @@
       "metrics": {
         "rowsPerSecond": {
           "status": "measured",
-          "probe": "packages/client/src/replica/seat/wasm-apply.test.ts \u2014 `applySeatLogPage` over 10,000 log rows on `@sqlite.org/sqlite-wasm` 3.53.0, the browser seat's own build, at three commit shapes. IN the span: one transaction per commit with the cursor inside it, the per-row upsert, and the FTS sync triggers a seat retains.",
+          "probe": "packages/client/src/replica/seat/wasm-apply.test.ts — `applySeatLogPage` over 10,000 log rows on `@sqlite.org/sqlite-wasm` 3.53.0, the browser seat's own build, at three commit shapes. IN the span: one transaction per commit with the cursor inside it, the per-row upsert, and the FTS sync triggers a seat retains.",
           "floorRowsPerSecond": 6000,
           "_provenance": {
             "at": "2026-09-07",
@@ -354,7 +359,7 @@
       "metrics": {
         "applyMs": {
           "status": "measured",
-          "probe": "packages/vault/src/replica/apply.ts \u2014 `applyReplicaLog` over 1,000 captured commits (10,000 log rows: 5 statements per commit, each producing its own row plus the membership trigger's `core_entity` row). IN the span: one transaction per commit with the cursor inside it, the per-row upsert, and the FTS sync triggers the seat retains. OUT of it: capture, the log read and transfer, reported separately in provenance.",
+          "probe": "packages/vault/src/replica/apply.ts — `applyReplicaLog` over 1,000 captured commits (10,000 log rows: 5 statements per commit, each producing its own row plus the membership trigger's `core_entity` row). IN the span: one transaction per commit with the cursor inside it, the per-row upsert, and the FTS sync triggers the seat retains. OUT of it: capture, the log read and transfer, reported separately in provenance.",
           "ceilingMs": 6000,
           "_provenance": {
             "at": "2026-09-06",
@@ -366,7 +371,7 @@
             "logRows": 10000,
             "rowsPerSecond": 2578,
             "commitsPerSecond": 258,
-            "note": "MEASURED. The rate is TRANSACTION-BOUND, not row-bound: 3.9 ms per commit against 0.39 ms per row, because R5 requires one transaction per commit with the cursor in it and 1,000 commits is 1,000 durable boundaries. That is the cost of the property \u2014 a seat that batches commits into one transaction is faster and cannot answer 'which commits have I applied' after a crash. Capture is 2.5 ms per commit for the whole session set, which reproduces the pre-wave spike's ~2 ms and is what makes one-session-per-table affordable. THE HONEST CAVEAT: five statements per commit is a small commit; a bulk producer chunking to the 2,000-row bound pays the transaction cost once per 2,000 rows and lands far closer to the row rate.",
+            "note": "MEASURED. The rate is TRANSACTION-BOUND, not row-bound: 3.9 ms per commit against 0.39 ms per row, because R5 requires one transaction per commit with the cursor in it and 1,000 commits is 1,000 durable boundaries. That is the cost of the property — a seat that batches commits into one transaction is faster and cannot answer 'which commits have I applied' after a crash. Capture is 2.5 ms per commit for the whole session set, which reproduces the pre-wave spike's ~2 ms and is what makes one-session-per-table affordable. THE HONEST CAVEAT: five statements per commit is a small commit; a bulk producer chunking to the 2,000-row bound pays the transaction cost once per 2,000 rows and lands far closer to the row rate.",
             "headroom": "~1.5x the single observed run. One run on a shared container is thin evidence for a ceiling; it is here so a regression in the per-commit boundary has something to fail against, and it should be re-seeded from a quiet lane."
           }
         }
@@ -412,7 +417,7 @@
       "metrics": {
         "reconnectToFresh": {
           "status": "measured",
-          "probe": "tests/scale/replica-reconnect.scale.test.ts — times the reconnect REQUEST to the frame that carries every missed change. IN the span: connection setup, cursor parse, and the log tail from the resume cursor to the watermark (#996, W1 review F5 \u2014 what this used to call a \"shape rebuild\" is the gateway reading `replica_log` from the seat's seq; there is no per-app shape to rebuild). OUT of it: how long the owner was away, which is unbounded and is not the gateway's to own. Page ONE's watermark is used as the resume cursor because that is what the bootstrap continuation token pins the client's later delta to.",
+          "probe": "tests/scale/replica-reconnect.scale.test.ts — times the reconnect REQUEST to the frame that carries every missed change. IN the span: connection setup, cursor parse, and the log tail from the resume cursor to the watermark (#996, W1 review F5 — what this used to call a \"shape rebuild\" is the gateway reading `replica_log` from the seat's seq; there is no per-app shape to rebuild). OUT of it: how long the owner was away, which is unbounded and is not the gateway's to own. Page ONE's watermark is used as the resume cursor because that is what the bootstrap continuation token pins the client's later delta to.",
           "ceilingMs": 250,
           "_provenance": {
             "at": "2026-08-28",
@@ -926,7 +931,7 @@
         },
         "tapToVisualResponse": {
           "status": "measured",
-          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — the warm tap\u2192usable-screen probe: the palette is already open, the click on the app row starts the clock, and the clock stops when the app is TAKEABLE — `inline-app-view` visible, the `Loading Tasks…` fallback gone, and `window.centraid` installed. Attach is reported beside it on the same run.",
+          "probe": "apps/web/tests/e2e/perf-waterfall.spec.ts — the warm tap→usable-screen probe: the palette is already open, the click on the app row starts the clock, and the clock stops when the app is TAKEABLE — `inline-app-view` visible, the `Loading Tasks…` fallback gone, and `window.centraid` installed. Attach is reported beside it on the same run.",
           "ceilingMs": 600,
           "_provenance": {
             "at": "2026-09-04",
@@ -1459,9 +1464,9 @@
       "metrics": {
         "writeToVisualResponse": {
           "status": "unmeasured",
-          "probe": "tests/agent-e2e-mobile/flows/notes-library.mjs \u2014 drives a write and its own echo on a simulator; the year-3 replica behind it is @centraid/test-kit's goldenYear3Replica",
+          "probe": "tests/agent-e2e-mobile/flows/notes-library.mjs — drives a write and its own echo on a simulator; the year-3 replica behind it is @centraid/test-kit's goldenYear3Replica",
           "_intendedCeilingMs": null,
-          "_reason": "NO PHONE IN THIS CONTAINER, and the existing `mobile/own-echo/none/ci-ios-sim` row is the EMPTY-replica case \u2014 the whole point of #922's replica reads is what an own echo costs when the store is full, which no `none` volume can say. Declared at `year3-replica` so the gap is a row rather than an absence; the number needs the device rung on a macOS runner."
+          "_reason": "NO PHONE IN THIS CONTAINER, and the existing `mobile/own-echo/none/ci-ios-sim` row is the EMPTY-replica case — the whole point of #922's replica reads is what an own echo costs when the store is full, which no `none` volume can say. Declared at `year3-replica` so the gap is a row rather than an absence; the number needs the device rung on a macOS runner."
         }
       }
     },
@@ -1476,9 +1481,9 @@
       "metrics": {
         "tapToVisualResponse": {
           "status": "unmeasured",
-          "probe": "tests/agent-e2e-mobile/flows/home-loads.mjs \u2014 app-to-app switch on a simulator over a year-3 replica",
+          "probe": "tests/agent-e2e-mobile/flows/home-loads.mjs — app-to-app switch on a simulator over a year-3 replica",
           "_intendedCeilingMs": null,
-          "_reason": "Same reason as the own-echo row beside it: no phone here, and the `none`-volume twin measures a switch with nothing to read. #922 E-lane's wins are read-path wins, so a warm switch stated at an empty replica cannot show one. No #922 ceiling is tightened on this row \u2014 a win with no measurement is not a win."
+          "_reason": "Same reason as the own-echo row beside it: no phone here, and the `none`-volume twin measures a switch with nothing to read. #922 E-lane's wins are read-path wins, so a warm switch stated at an empty replica cannot show one. No #922 ceiling is tightened on this row — a win with no measurement is not a win."
         }
       }
     },
@@ -1493,14 +1498,14 @@
       "metrics": {
         "snapshotToDurable": {
           "status": "measured",
-          "probe": "tests/perf/backup-restore.perf.test.ts \u2014 createSnapshot over the golden year-3 vault into a LocalBackupProvider",
+          "probe": "tests/perf/backup-restore.perf.test.ts — createSnapshot over the golden year-3 vault into a LocalBackupProvider",
           "ceilingMs": 3200,
           "_provenance": {
             "at": "2026-09-05",
             "host": "linux x64 development container, 4 cores / 15 GB, shared with sibling agents",
             "observedMs": 1056.3,
             "observedSpreadMs": "998.7 / 1050.2 / 1056.3 over three consecutive runs",
-            "note": "MEASURED. The golden year-3 vault is 105,603,072 B of vault.db (the ROW axis; tests/scale/restore-10gib.scale.test.ts keeps the 10 GiB BYTE axis under `year3-10gib`). Successor to four rigs the #927 rig diet deleted for citing no ledger entry. The work-counter delta over both calls is ZERO and that zero is the real gate \u2014 neither path opens the vault through the instrumented statement layer, so a backup that started reading rows to decide what to copy fails on the first run.",
+            "note": "MEASURED. The golden year-3 vault is 105,603,072 B of vault.db (the ROW axis; tests/scale/restore-10gib.scale.test.ts keeps the 10 GiB BYTE axis under `year3-10gib`). Successor to four rigs the #927 rig diet deleted for citing no ledger entry. The work-counter delta over both calls is ZERO and that zero is the real gate — neither path opens the vault through the instrumented statement layer, so a backup that started reading rows to decide what to copy fails on the first run.",
             "headroom": "~3x slowest observed (three samples, single contended host)"
           }
         }
@@ -1517,14 +1522,14 @@
       "metrics": {
         "snapshotToUsableVault": {
           "status": "measured",
-          "probe": "tests/perf/backup-restore.perf.test.ts \u2014 restoreSnapshot of that snapshot into a fresh directory, integrity pragmas included",
+          "probe": "tests/perf/backup-restore.perf.test.ts — restoreSnapshot of that snapshot into a fresh directory, integrity pragmas included",
           "ceilingMs": 5200,
           "_provenance": {
             "at": "2026-09-05",
             "host": "linux x64 development container, 4 cores / 15 GB, shared with sibling agents",
             "observedMs": 1712.3,
             "observedSpreadMs": "1640.4 / 1678.7 / 1712.3 over three consecutive runs",
-            "note": "MEASURED, at the ROW axis. `gateway/restore/year3-10gib/dev-darwin-arm64` is the BYTE axis and is not superseded: the two fence different terms \u2014 that one the copy, this one the per-row integrity work a year-3 shaped file pays. Restore costs ~1.6x its own backup here.",
+            "note": "MEASURED, at the ROW axis. `gateway/restore/year3-10gib/dev-darwin-arm64` is the BYTE axis and is not superseded: the two fence different terms — that one the copy, this one the per-row integrity work a year-3 shaped file pays. Restore costs ~1.6x its own backup here.",
             "headroom": "~3x slowest observed (three samples, single contended host)"
           }
         }
@@ -1541,7 +1546,7 @@
       "metrics": {
         "grantToVisible": {
           "status": "unmeasured",
-          "probe": "tests/agent-e2e-mobile/flows/sharing-reach.mjs \u2014 drives the share sheet on a simulator; the audience-side read it would time needs the shared-album seed of gateway/share/shared-album/ci-linux-x64-4c behind it",
+          "probe": "tests/agent-e2e-mobile/flows/sharing-reach.mjs — drives the share sheet on a simulator; the audience-side read it would time needs the shared-album seed of gateway/share/shared-album/ci-linux-x64-4c behind it",
           "_intendedCeilingMs": null,
           "_reason": "NO PHONE IN THIS CONTAINER, and the device rung is where this number lives: tests/agent-e2e-mobile drives an iOS simulator on a macOS runner. The gateway twin of this row (gateway/share/shared-album/ci-linux-x64-4c) is measured and carries the engine term; what is missing here is only the phone's own paint, which cannot be honestly estimated from a linux container. Declared so the hole is visible rather than absent."
         }
@@ -1762,13 +1767,173 @@
           }
         }
       }
+    },
+    "mobile/durable-save/none/ci-linux-x64-4c": {
+      "surface": "mobile",
+      "journey": "durable-save",
+      "volume": "none",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["replica.enqueue", "replica.outbox.write"],
+      "consumers": ["tests/scale/mobile-offline-chain.scale.test.ts"],
+      "tolerancePercent": 25,
+      "metrics": {
+        "durableSave": {
+          "status": "measured",
+          "probe": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/mobile-offline-chain.scale.test.ts (also `bun run test:scale`) — drives the PRODUCTION createNativeReplicaSession over a real file: bootstrap, radio off, the acceptance row's five-intent chain, `pendingChanges`, close and reopen the same file, radio on, drain.",
+          "ceilingMs": 100,
+          "_provenance": {
+            "at": "2026-09-07",
+            "host": "linux x64 development container (4 cores), Node SQLite driver under the production native session",
+            "observedMs": 19.7,
+            "observedSpreadMs": "19.7 / 8.6 / 5.5 over three consecutive runs",
+            "note": "The SLOWEST of the five chained writes, which is the one the member could feel: tap to the answer `write()` gives with no radio — the projection, the chain derivation over the outbox, and the durable INSERT. EXCLUDED: React render, device flash (node:sqlite on a container filesystem here, SQLCipher on flash there) and any network at all, since there is none in this journey by definition. So it is a lower bound on the phone's number and can never become the phone's ceiling; `mobile/durable-save/device-fixture/ci-android-emu` is where that one lands. The ceiling is ~5x the slowest of three samples because a shared CI runner is materially slower than this host and three samples cannot bound its jitter; TIGHTEN once ~10 nightly samples exist.",
+            "headroom": "~5x slowest observed (three samples, single host)"
+          }
+        }
+      }
+    },
+    "mobile/durable-save/device-fixture/ci-android-emu": {
+      "surface": "mobile",
+      "journey": "durable-save",
+      "volume": "device-fixture",
+      "hardware": "ci-android-emu",
+      "spans": ["replica.enqueue", "replica.outbox.write"],
+      "consumers": ["tests/agent-e2e-mobile/flows/native-v0-resilience.mjs"],
+      "tolerancePercent": 25,
+      "metrics": {
+        "durableSave": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs — the Android airplane arc on the `mobile-device-gate` emulator lane, extended in #996 wave 3 to the task chain (create, rename twice, due date, complete), a force-stop and relaunch while still offline, and the second-writer conflict. DEVICE-PENDING: the flow asserts the STATES today and times nothing. The number needs a run that stamps the four spans on the emulator; the sibling `none/ci-linux-x64-4c` row is the seat-side lower bound and is NOT this row's answer — Hermes, SQLCipher on flash and a real render are all absent from it.",
+          "_reason": "NO PHONE IN THIS CONTAINER. An emulator's millisecond bounds the experience from below and can never become a ceiling (see the `device-android-low-end` note); this row exists so the gap is a row rather than an absence."
+        }
+      }
+    },
+    "mobile/pending-render/none/ci-linux-x64-4c": {
+      "surface": "mobile",
+      "journey": "pending-render",
+      "volume": "none",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["replica.outbox.read", "replica.overlay"],
+      "consumers": ["tests/scale/mobile-offline-chain.scale.test.ts"],
+      "tolerancePercent": 25,
+      "metrics": {
+        "pendingRender": {
+          "status": "measured",
+          "probe": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/mobile-offline-chain.scale.test.ts (also `bun run test:scale`) — drives the PRODUCTION createNativeReplicaSession over a real file: bootstrap, radio off, the acceptance row's five-intent chain, `pendingChanges`, close and reopen the same file, radio on, drain.",
+          "ceilingMs": 25,
+          "_provenance": {
+            "at": "2026-09-07",
+            "host": "linux x64 development container (4 cores), Node SQLite driver under the production native session",
+            "observedMs": 0.7,
+            "observedSpreadMs": "0.7 / 0.6 / 0.6 over three consecutive runs",
+            "note": "The outbox to the pending list a screen draws: five intents read back, `chainHolds` evaluated on the seat (the badge has to be right in airplane mode, where the gateway's verdict does not exist) and the badge copy resolved. EXCLUDED: the React render of that list. The ceiling is ~5x the slowest of three samples because a shared CI runner is materially slower than this host and three samples cannot bound its jitter; TIGHTEN once ~10 nightly samples exist.",
+            "headroom": "~5x slowest observed (three samples, single host)"
+          }
+        }
+      }
+    },
+    "mobile/pending-render/device-fixture/ci-android-emu": {
+      "surface": "mobile",
+      "journey": "pending-render",
+      "volume": "device-fixture",
+      "hardware": "ci-android-emu",
+      "spans": ["replica.outbox.read", "replica.overlay"],
+      "consumers": ["tests/agent-e2e-mobile/flows/native-v0-resilience.mjs"],
+      "tolerancePercent": 25,
+      "metrics": {
+        "pendingRender": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs — the Android airplane arc on the `mobile-device-gate` emulator lane, extended in #996 wave 3 to the task chain (create, rename twice, due date, complete), a force-stop and relaunch while still offline, and the second-writer conflict. DEVICE-PENDING: the flow asserts the STATES today and times nothing. The number needs a run that stamps the four spans on the emulator; the sibling `none/ci-linux-x64-4c` row is the seat-side lower bound and is NOT this row's answer — Hermes, SQLCipher on flash and a real render are all absent from it.",
+          "_reason": "NO PHONE IN THIS CONTAINER. An emulator's millisecond bounds the experience from below and can never become a ceiling (see the `device-android-low-end` note); this row exists so the gap is a row rather than an absence."
+        }
+      }
+    },
+    "mobile/restart-recovery/none/ci-linux-x64-4c": {
+      "surface": "mobile",
+      "journey": "restart-recovery",
+      "volume": "none",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["replica.open", "replica.outbox.read", "replica.overlay"],
+      "consumers": ["tests/scale/mobile-offline-chain.scale.test.ts"],
+      "tolerancePercent": 25,
+      "metrics": {
+        "restartRecovery": {
+          "status": "measured",
+          "probe": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/mobile-offline-chain.scale.test.ts (also `bun run test:scale`) — drives the PRODUCTION createNativeReplicaSession over a real file: bootstrap, radio off, the acceptance row's five-intent chain, `pendingChanges`, close and reopen the same file, radio on, drain.",
+          "ceilingMs": 50,
+          "_provenance": {
+            "at": "2026-09-07",
+            "host": "linux x64 development container (4 cores), Node SQLite driver under the production native session",
+            "observedMs": 1.9,
+            "observedSpreadMs": "1.9 / 1.5 / 1.6 over three consecutive runs",
+            "note": "Kill and relaunch, still offline: a new driver over the SAME file — which is what a process restart is on this seat — through session open, `recoverSending`, and the pending list coming back with the same five intent ids in the same order. EXCLUDED: app launch, JS bundle parse and the first frame, which are `mobile/cold-open`'s. The ceiling is ~5x the slowest of three samples because a shared CI runner is materially slower than this host and three samples cannot bound its jitter; TIGHTEN once ~10 nightly samples exist.",
+            "headroom": "~5x slowest observed (three samples, single host)"
+          }
+        }
+      }
+    },
+    "mobile/restart-recovery/device-fixture/ci-android-emu": {
+      "surface": "mobile",
+      "journey": "restart-recovery",
+      "volume": "device-fixture",
+      "hardware": "ci-android-emu",
+      "spans": ["replica.open", "replica.outbox.read", "replica.overlay"],
+      "consumers": ["tests/agent-e2e-mobile/flows/native-v0-resilience.mjs"],
+      "tolerancePercent": 25,
+      "metrics": {
+        "restartRecovery": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs — the Android airplane arc on the `mobile-device-gate` emulator lane, extended in #996 wave 3 to the task chain (create, rename twice, due date, complete), a force-stop and relaunch while still offline, and the second-writer conflict. DEVICE-PENDING: the flow asserts the STATES today and times nothing. The number needs a run that stamps the four spans on the emulator; the sibling `none/ci-linux-x64-4c` row is the seat-side lower bound and is NOT this row's answer — Hermes, SQLCipher on flash and a real render are all absent from it.",
+          "_reason": "NO PHONE IN THIS CONTAINER. An emulator's millisecond bounds the experience from below and can never become a ceiling (see the `device-android-low-end` note); this row exists so the gap is a row rather than an absence."
+        }
+      }
+    },
+    "mobile/reconnect-drain/none/ci-linux-x64-4c": {
+      "surface": "mobile",
+      "journey": "reconnect-drain",
+      "volume": "none",
+      "hardware": "ci-linux-x64-4c",
+      "spans": ["replica.drain", "replica.intent.post", "replica.apply"],
+      "consumers": ["tests/scale/mobile-offline-chain.scale.test.ts"],
+      "tolerancePercent": 25,
+      "metrics": {
+        "reconnectDrain": {
+          "status": "measured",
+          "probe": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/mobile-offline-chain.scale.test.ts (also `bun run test:scale`) — drives the PRODUCTION createNativeReplicaSession over a real file: bootstrap, radio off, the acceptance row's five-intent chain, `pendingChanges`, close and reopen the same file, radio on, drain.",
+          "ceilingMs": 250,
+          "_provenance": {
+            "at": "2026-09-07",
+            "host": "linux x64 development container (4 cores), Node SQLite driver under the production native session",
+            "observedMs": 51.3,
+            "observedSpreadMs": "51.3 / 37.4 / 22.3 over three consecutive runs",
+            "note": "The radio returns to nothing left unsent: claim, post and settle five chained intents in outbox order against an in-process gateway that answers the intent it was sent. THE CLOCK STOPS AT ACKNOWLEDGEMENT. An executed intent's pending row clears when the applied cursor reaches its `commit_seq` (R24), and that interval belongs to `mobile/converge`, measured against a real delta — folding it in here would double-count it and hide which half moved. EXCLUDED: network RTT (the gateway is an in-process fetch double). The ceiling is ~5x the slowest of three samples because a shared CI runner is materially slower than this host and three samples cannot bound its jitter; TIGHTEN once ~10 nightly samples exist.",
+            "headroom": "~5x slowest observed (three samples, single host)"
+          }
+        }
+      }
+    },
+    "mobile/reconnect-drain/device-fixture/ci-android-emu": {
+      "surface": "mobile",
+      "journey": "reconnect-drain",
+      "volume": "device-fixture",
+      "hardware": "ci-android-emu",
+      "spans": ["replica.drain", "replica.intent.post", "replica.apply"],
+      "consumers": ["tests/agent-e2e-mobile/flows/native-v0-resilience.mjs"],
+      "tolerancePercent": 25,
+      "metrics": {
+        "reconnectDrain": {
+          "status": "unmeasured",
+          "probe": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs — the Android airplane arc on the `mobile-device-gate` emulator lane, extended in #996 wave 3 to the task chain (create, rename twice, due date, complete), a force-stop and relaunch while still offline, and the second-writer conflict. DEVICE-PENDING: the flow asserts the STATES today and times nothing. The number needs a run that stamps the four spans on the emulator; the sibling `none/ci-linux-x64-4c` row is the seat-side lower bound and is NOT this row's answer — Hermes, SQLCipher on flash and a real render are all absent from it.",
+          "_reason": "NO PHONE IN THIS CONTAINER. An emulator's millisecond bounds the experience from below and can never become a ceiling (see the `device-android-low-end` note); this row exists so the gap is a row rather than an absence."
+        }
+      }
     }
   },
   "rigs": {
     "approvedDeviation": "#927 RIG DIET removes the thirty rigs that cited no entry in this ledger, and their budgetMs/budgetsMs numbers with them (maintainer approval 2026-09-05, recorded in receipts/issue-927-perf-infra.md). Every number deleted here belonged to a rig deleted in the same change set: a rig fencing no journey was fencing a machine cost with no vault owner above it. NO SURVIVING RIG'S CEILING MOVES. `tests/scale/large-vault` (now cited) and `tests/perf/work-counters` (it times nothing) were excluded from the diet and keep their rows. This key is reserved rather than a rig path — see scripts/test-report/journey-rigs.mjs.",
     "tests/perf/backup-restore.perf.test.ts": {
       "lane": "perf",
-      "volume": "The golden year-3 vault (packages/test-kit, ~27,600 domain rows / 105,603,072 B vault.db) \u2014 one snapshot and one restore, work-counted rather than sampled",
+      "volume": "The golden year-3 vault (packages/test-kit, ~27,600 domain rows / 105,603,072 B vault.db) — one snapshot and one restore, work-counted rather than sampled",
       "_noBudgetMs": "Deliberate. The ceilings this rig asserts are `snapshotToDurable` and `snapshotToUsableVault` on the two ledger entries it feeds; an absolute duration ceiling here would fence the golden-vault copy, which is setup. The work-counter delta (zero statements) is the gate.",
       "entries": [
         "gateway/backup/year3/ci-linux-x64-4c",
