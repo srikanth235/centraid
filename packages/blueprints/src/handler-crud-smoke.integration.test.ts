@@ -215,6 +215,13 @@ function declaredCommands(source: string): string[] {
   return [...found];
 }
 
+/** The one universal seeded record, served identically by both read doors. */
+const SEEDED_VAULT = {
+  vault_id: "seed-vault",
+  self_party_id: "seed-owner",
+  base_currency: "USD",
+};
+
 function scopedSeededCtx(manifest: AppJson) {
   const calls: VaultCall[] = [];
   const violations: string[] = [];
@@ -276,25 +283,22 @@ function scopedSeededCtx(manifest: AppJson) {
               "read"
             );
           }
-          return { rows: [] };
+          // The ONE seeded record, on this door too: `core.vault` is what every
+          // "who am I" projection resolves the owner through, and a page that
+          // answered empty where the declarative read answered the row would
+          // make a converted handler look like a regression.
+          return {
+            rows: input.query.from.trim().startsWith("core_vault")
+              ? [SEEDED_VAULT]
+              : [],
+          };
         },
         read: async (input: { entity: string; purpose?: string }) => {
           checkPurpose(input);
           check("read", input.entity, "read");
           // core.vault is the one universal seeded record. Other projections
           // intentionally exercise their honest empty-state branch.
-          return {
-            rows:
-              input.entity === "core.vault"
-                ? [
-                    {
-                      vault_id: "seed-vault",
-                      self_party_id: "seed-owner",
-                      base_currency: "USD",
-                    },
-                  ]
-                : [],
-          };
+          return { rows: input.entity === "core.vault" ? [SEEDED_VAULT] : [] };
         },
         search: async (input: {
           entities?: string[];

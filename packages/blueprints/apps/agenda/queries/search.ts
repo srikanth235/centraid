@@ -1,3 +1,4 @@
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import {
   ownerKey,
   readRepresentations,
@@ -34,7 +35,13 @@ interface RawContent {
   byte_size?: number;
   [k: string]: unknown;
 }
+interface RawEventExt {
+  event_ext_id: string;
+  event_id: string;
+  [k: string]: unknown;
+}
 interface RawAttendee {
+  attendee_id: string;
   event_id: string;
   party_id: string;
   partstat: string;
@@ -157,43 +164,84 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     if (hits.length === 0) return { events: [] };
     const eventIds = hits.map((e) => e.event_id);
     // Joins are `in`-bounded by the matched ids (#337 drives `is_you`).
-    const [exts, attachments, attendeesRes, vaultRes] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "schedule.event_ext",
-        where: [{ column: "event_id", op: "in", value: eventIds }],
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.attachment",
-        where: [
-          { column: "target_type", op: "eq", value: "core.event" },
-          { column: "target_id", op: "in", value: eventIds },
-        ],
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "schedule.attendee",
-        where: [{ column: "event_id", op: "in", value: eventIds }],
-      }),
-      ctx.vault.read({ acceptTruncation: true, entity: "core.vault" }),
-    ]);
-    const attendeeRows = (attendeesRes.rows ?? []) as unknown as RawAttendee[];
-    const mePartyId =
-      ((vaultRes.rows ?? [])[0]?.self_party_id as string | undefined) ?? null;
+    const eventIn = inList("event_id", eventIds);
+    const targetIn = inList("target_id", eventIds);
+    const [extRows, attachmentRows, attendeeRows, vaultRows] =
+      await Promise.all([
+        readPages<RawEventExt>(ctx, {
+          name: "agenda.search.eventExt",
+          select:
+            "event_ext_id, event_id, calendar_id, busy, conferencing_uri, reminders_json, travel_buffer_min",
+          from: "schedule_event_ext",
+          where: eventIn.sql,
+          bind: eventIn.bind,
+          order: {
+            sortColumn: "event_ext_id",
+            pkColumn: "event_ext_id",
+            descending: false,
+          },
+        }),
+        readPages<RawAttachment>(ctx, {
+          name: "agenda.search.attachments",
+          select:
+            "attachment_id, target_type, target_id, content_id, role, is_primary",
+          from: "core_attachment",
+          where: `target_type = ? AND ${targetIn.sql}`,
+          bind: ["core.event", ...targetIn.bind],
+          order: {
+            sortColumn: "attachment_id",
+            pkColumn: "attachment_id",
+            descending: false,
+          },
+        }),
+        readPages<RawAttendee>(ctx, {
+          name: "agenda.search.attendees",
+          select: "attendee_id, event_id, party_id, partstat, role",
+          from: "schedule_attendee",
+          where: eventIn.sql,
+          bind: eventIn.bind,
+          order: {
+            sortColumn: "attendee_id",
+            pkColumn: "attendee_id",
+            descending: false,
+          },
+        }),
+        readPages<{ vault_id: string; self_party_id?: string | null }>(ctx, {
+          name: "agenda.search.vault",
+          select: "vault_id, self_party_id",
+          from: "core_vault",
+          order: {
+            sortColumn: "vault_id",
+            pkColumn: "vault_id",
+            descending: false,
+          },
+        }),
+      ]);
+    const mePartyId = vaultRows[0]?.self_party_id ?? null;
     const attendeePartyIds = [
       ...new Set(attendeeRows.map((a) => a.party_id)),
     ].filter(Boolean);
-    const partiesRes =
-      attendeePartyIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.party",
-            where: [{ column: "party_id", op: "in", value: attendeePartyIds }],
-          })
-        : { rows: [] };
+    const partyIn =
+      attendeePartyIds.length > 0 ? inList("party_id", attendeePartyIds) : null;
+    const partyRows = partyIn
+      ? await readPages<{ party_id: string; display_name?: string | null }>(
+          ctx,
+          {
+            name: "agenda.search.parties",
+            select: "party_id, display_name",
+            from: "core_party",
+            where: partyIn.sql,
+            bind: partyIn.bind,
+            order: {
+              sortColumn: "party_id",
+              pkColumn: "party_id",
+              descending: false,
+            },
+          }
+        )
+      : [];
     const partyNameById = new Map<string, unknown>(
-      (partiesRes.rows ?? []).map((p) => [p.party_id as string, p.display_name])
+      partyRows.map((p) => [p.party_id, p.display_name])
     );
     const guestsByEvent = attendeesByEvent(
       attendeeRows,
@@ -201,27 +249,30 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       mePartyId
     );
     // One bounded pull covers only referenced bytes.
-    const attachmentRows = (attachments.rows ??
-      []) as unknown as RawAttachment[];
     const contentIds = [
       ...new Set(attachmentRows.map((a) => a.content_id)),
     ].filter(Boolean);
-    const contents =
-      contentIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.content_item",
-            where: [{ column: "content_id", op: "in", value: contentIds }],
-          })
-        : { rows: [] };
+    const contentIn =
+      contentIds.length > 0 ? inList("content_id", contentIds) : null;
+    const contentRows = contentIn
+      ? await readPages<RawContent>(ctx, {
+          name: "agenda.search.contents",
+          select: "content_id, content_uri, byte_size",
+          from: "core_content_item",
+          where: contentIn.sql,
+          bind: contentIn.bind,
+          order: {
+            sortColumn: "content_id",
+            pkColumn: "content_id",
+            descending: false,
+          },
+        })
+      : [];
     // Bytes carry no media type since #996 (R20(b)) — the attachment's own
     // representation says what it reads them as.
     const representations = await readRepresentations({ ctx, contentIds });
     const contentById = new Map<string, RawContent>(
-      ((contents.rows ?? []) as unknown as RawContent[]).map((c) => [
-        c.content_id,
-        c,
-      ])
+      contentRows.map((c) => [c.content_id, c])
     );
     const attByEvent = attachmentsBySubject(
       "core.event",
@@ -230,7 +281,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       representations
     );
     const calByEvent = new Map<string, unknown>(
-      (exts.rows ?? []).map((x) => [x.event_id as string, x.calendar_id])
+      extRows.map((x) => [x.event_id, x.calendar_id])
     );
     // Vault order is rank order (best match first) — keep it.
     const events = hits.map(({ _snippet, ...e }) => ({

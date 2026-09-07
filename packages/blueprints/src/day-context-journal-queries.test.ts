@@ -14,6 +14,15 @@ interface ReadCall {
   limit?: number;
 }
 
+/** One paged statement, plus the window the handler asked for (#996 wave 4). */
+interface PagedCall {
+  name: string;
+  from: string;
+  where?: string;
+  bind?: unknown[];
+  limit: number;
+}
+
 /**
  * A mock ctx.vault returning fixture rows keyed by entity, recording every
  * read so the boundedness contract can be asserted rather than assumed. The
@@ -23,15 +32,24 @@ interface ReadCall {
  */
 function ctxOf(
   rowsByEntity: Record<string, unknown[]>,
-  calls: ReadCall[] = []
+  calls: ReadCall[] = [],
+  statements: PagedCall[] = []
 ) {
   return {
     calls,
+    statements,
     vault: {
       // A statement names the physical table; the fixtures are keyed by
       // entity, so `core_tag` finds `core.tag` (#996 wave 4). One page, no
       // cursor: the fixtures are small and the walk stops at their end.
-      page: async ({ query }: { query: { from: string } }) => {
+      page: async ({
+        query,
+        limit,
+      }: {
+        query: { from: string; where?: string; bind?: unknown[]; name: string };
+        limit: number;
+      }) => {
+        statements.push({ ...query, limit });
         const table = query.from.trim().split(/\s+/u)[0] ?? query.from;
         return {
           rows: (rowsByEntity[table] ??
@@ -192,32 +210,35 @@ describe("Agenda day-context (#834 R-daycontext)", () => {
     const { default: dayContext } = await importQuery(
       "../apps/agenda/queries/day-context.ts"
     );
-    const calls: ReadCall[] = [];
-    const ctx = ctxOf(dayContextRows(), calls);
+    const statements: PagedCall[] = [];
+    const ctx = ctxOf(dayContextRows(), [], statements);
     await dayContext({ input: { from: "2026-03-01", to: "2026-03-31" }, ctx });
-    const bounded = (call: ReadCall) =>
-      typeof call.limit === "number" ||
-      (call.where ?? []).some((clause) => ["eq", "in"].includes(clause.op));
-    expect(calls.map((call) => call.entity)).toContain("schedule.task");
-    expect(calls.filter((call) => !bounded(call))).toStrictEqual([]);
-    const tasks = calls.find((call) => call.entity === "schedule.task");
-    expect(tasks?.limit).toBeGreaterThan(0);
+    // A page's window is required by its type since #996 wave 4, so what this
+    // still has to say is that the due-task shelf IS one of these reads and
+    // that its window is a number somebody chose.
+    expect(statements.map((statement) => statement.from)).toContain(
+      "schedule_task"
+    );
+    expect(
+      statements.filter((statement) => !(statement.limit > 0))
+    ).toStrictEqual([]);
   });
 
   it("caps an over-long range instead of reading it", async () => {
     const { default: dayContext } = await importQuery(
       "../apps/agenda/queries/day-context.ts"
     );
-    const calls: ReadCall[] = [];
-    const ctx = ctxOf(dayContextRows(), calls);
+    const statements: PagedCall[] = [];
+    const ctx = ctxOf(dayContextRows(), [], statements);
     await dayContext({ input: { from: "2026-01-01", to: "2099-01-01" }, ctx });
-    const upper = calls
-      .find((call) => call.entity === "schedule.task")
-      ?.where?.find(
-        (clause) => clause.column === "due_at" && clause.op === "lt"
-      )?.value;
+    // The half-open upper bound is the statement's LAST bind: the predicate is
+    // `status IN (…) AND due_at >= ? AND due_at < ?`, and the binds follow the
+    // text.
+    const tasks = statements.find(
+      (statement) => statement.from === "schedule_task"
+    );
     // 400 days past 2026-01-01, plus the exclusive day after it.
-    expect(upper).toBe("2027-02-06");
+    expect(tasks?.bind?.at(-1)).toBe("2027-02-06");
   });
 
   it("answers the same shape empty with vaultDenied on a denial", async () => {

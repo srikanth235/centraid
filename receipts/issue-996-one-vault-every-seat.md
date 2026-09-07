@@ -6805,3 +6805,57 @@ filters on — it had been passing on a row that named no note.
   degenerate cursor is the honest shape: there is no second page.
 - **"Is this read bounded?" is not a question a paged handler can fail.** The
   test that asked it now asks the one that survives: can the cursor be read?
+
+## Wave 4f — Agenda: the calendar's two windows, and every join off them (#996)
+
+### The window that anchors a series is a page like any other
+
+`upcoming` takes two: the date range, and the recurring ANCHORS, which start
+years before the range and would be dropped by its lower bound. Both are pages
+with the window the handler already had (`EVENT_WINDOW_CAP`,
+`RECURRING_ANCHOR_CAP`); what changed is that the range predicate is spliced
+into the statement instead of assembled as `VaultWhere` objects, and that the
+ten joins behind them — event extensions, attachments, attendees, the owner's
+own party, the recurrence exceptions, the attendee parties, the bytes — are
+walks over sets the two windows already bounded.
+
+`day-context`'s three caps (`PARTY_CAP`, `TASK_CAP`, `TAG_CAP`) survive as page
+windows. The 400-day range clamp is unchanged and still tested, now through the
+statement's last bind rather than a `where` clause object: the predicate is
+`status IN (…) AND due_at >= ? AND due_at < ?` and the binds follow the text.
+
+### The seeded seam had one record and only one door
+
+`handler-crud-smoke.integration.test.ts` seeds exactly one row — `core.vault`,
+which is what every "who am I" projection resolves the owner through — and
+served it on the declarative read only. A converted handler then looked like a
+regression (`$.me is null`) when it was the harness that had two doors and one
+answer. `SEEDED_VAULT` is now served by both.
+
+### Gates
+
+- `bunx vitest run --root packages/blueprints src/day-context-journal-queries.test.ts src/handler-crud-smoke.integration.test.ts`
+  — 188 passed.
+- `bun run --cwd packages/blueprints test` — 215 files, 7,102 passed, 2
+  expected-fail.
+- `bun run --cwd packages/blueprints typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/blueprints/apps/agenda/queries/day-context.ts`
+- `packages/blueprints/apps/agenda/queries/parties.ts`
+- `packages/blueprints/apps/agenda/queries/search.ts`
+- `packages/blueprints/apps/agenda/queries/upcoming.ts`
+- `packages/blueprints/src/day-context-journal-queries.test.ts`
+- `packages/blueprints/src/handler-crud-smoke.integration.test.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — Agenda
+
+- **A cap the handler already had becomes the page's window**, unchanged. This
+  wave removes reads with no stated bound, not bounds somebody chose.
+- **A test harness with two read doors must answer the same on both**, or every
+  conversion reads as a regression in it.

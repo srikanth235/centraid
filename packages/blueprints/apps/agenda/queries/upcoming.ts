@@ -1,3 +1,4 @@
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import {
   ownerKey,
   readRepresentations,
@@ -8,6 +9,12 @@ import type { RepresentationIndex } from "../../_shared/representation-reads.ts"
 // `{ from, to }` optional (default: today forward); events fetched from
 // BEFORE `from` so multi-day spans arrive — the filter below re-applies the
 // true lower bound.
+
+/** One `core.event` row, as both of this handler's windows project it. */
+const EVENT_COLUMNS =
+  "event_id, ical_uid, summary, description, dtstart, dtend, start_tz, " +
+  "end_tz, recurrence_semantics, rrule, rrule_support, status, " +
+  "location_place_id, organizer_party_id, sequence, created_at, updated_at";
 
 interface RawEvent {
   event_id: string;
@@ -368,120 +375,192 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
       : new Date(fromMs - SPAN_BUFFER_MS).toISOString();
     // A recurring series anchors years in the past, so the dtstart>=fromLower
     // filter would drop it; fetch separately, merge before the range check.
-    const where: VaultWhere[] = [
-      { column: "status", op: "ne", value: "cancelled" },
-      { column: "dtstart", op: "gte", value: fromLower },
-    ];
-    if (to) where.push({ column: "dtstart", op: "lt", value: to });
-    const [events, recurring, calendars] = await Promise.all([
-      ctx.vault.read({
-        entity: "core.event",
-        where,
-        orderBy: { column: "dtstart", dir: "asc" },
+    // THE TWO WINDOWS ARE PAGES (#996 wave 4, R8), and the range predicate is
+    // spliced into the statement rather than built as clause objects.
+    const rangeWhere = to
+      ? "status <> ? AND dtstart >= ? AND dtstart < ?"
+      : "status <> ? AND dtstart >= ?";
+    const rangeBind = to
+      ? ["cancelled", fromLower, to]
+      : ["cancelled", fromLower];
+    const [events, recurring, calendarRows] = await Promise.all([
+      ctx.vault.page<RawEvent>({
+        query: {
+          name: "agenda.upcoming.window",
+          select: EVENT_COLUMNS,
+          from: "core_event",
+          where: rangeWhere,
+          bind: rangeBind,
+          order: {
+            sortColumn: "dtstart",
+            pkColumn: "event_id",
+            descending: false,
+          },
+        },
         limit: EVENT_WINDOW_CAP,
       }),
-      ctx.vault.read({
-        entity: "core.event",
-        where: [
-          { column: "status", op: "ne", value: "cancelled" },
-          { column: "rrule", op: "not-null" },
-        ],
-        orderBy: { column: "dtstart", dir: "desc" },
+      ctx.vault.page<RawEvent>({
+        query: {
+          name: "agenda.upcoming.recurringAnchors",
+          select: EVENT_COLUMNS,
+          from: "core_event",
+          where: "status <> ? AND rrule IS NOT NULL",
+          bind: ["cancelled"],
+          order: {
+            sortColumn: "dtstart",
+            pkColumn: "event_id",
+            descending: true,
+          },
+        },
         limit: RECURRING_ANCHOR_CAP,
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "schedule.calendar",
+      // The member's own calendars: owner-curated and small.
+      readPages<Record<string, unknown>>(ctx, {
+        name: "agenda.upcoming.calendars",
+        select:
+          "calendar_id, owner_party_id, name, color, default_tz, visibility",
+        from: "schedule_calendar",
+        order: {
+          sortColumn: "calendar_id",
+          pkColumn: "calendar_id",
+          descending: false,
+        },
       }),
     ]);
     const windowedById = new Map<string, RawEvent>(
-      ((events.rows ?? []) as unknown as RawEvent[]).map((e) => [e.event_id, e])
+      events.rows.map((e) => [e.event_id, e])
     );
-    for (const e of (recurring.rows ?? []) as unknown as RawEvent[])
-      windowedById.set(e.event_id, e);
+    for (const e of recurring.rows) windowedById.set(e.event_id, e);
     const windowed = [...windowedById.values()];
     if (windowed.length === 0) {
-      return { events: [], calendars: calendars.rows ?? [] };
+      return { events: [], calendars: calendarRows };
     }
     const eventIds = windowed.map((e) => e.event_id);
     // Every join is `in`-bounded by the windowed events (#264). The owner's own
     // party comes from core.vault so a guest that IS you gets RSVP controls (#337).
-    const [exts, attachments, attendeesRes, vaultRes, exceptionsRes] =
+    const eventIn = inList("event_id", eventIds);
+    const targetIn = inList("target_id", eventIds);
+    const [extRows, attachmentRows, attendeeRows, vaultRows, exceptionRows] =
       await Promise.all([
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "schedule.event_ext",
-          where: [{ column: "event_id", op: "in", value: eventIds }],
+        readPages<Record<string, unknown>>(ctx, {
+          name: "agenda.upcoming.eventExt",
+          select:
+            "event_ext_id, event_id, calendar_id, busy, conferencing_uri, reminders_json, travel_buffer_min",
+          from: "schedule_event_ext",
+          where: eventIn.sql,
+          bind: eventIn.bind,
+          order: {
+            sortColumn: "event_ext_id",
+            pkColumn: "event_ext_id",
+            descending: false,
+          },
         }),
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.attachment",
-          where: [
-            { column: "target_type", op: "eq", value: "core.event" },
-            { column: "target_id", op: "in", value: eventIds },
-          ],
+        readPages<RawAttachment>(ctx, {
+          name: "agenda.upcoming.attachments",
+          select:
+            "attachment_id, target_type, target_id, content_id, role, is_primary",
+          from: "core_attachment",
+          where: `target_type = ? AND ${targetIn.sql}`,
+          bind: ["core.event", ...targetIn.bind],
+          order: {
+            sortColumn: "attachment_id",
+            pkColumn: "attachment_id",
+            descending: false,
+          },
         }),
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "schedule.attendee",
-          where: [{ column: "event_id", op: "in", value: eventIds }],
+        readPages<RawAttendee>(ctx, {
+          name: "agenda.upcoming.attendees",
+          select: "attendee_id, event_id, party_id, partstat, role",
+          from: "schedule_attendee",
+          where: eventIn.sql,
+          bind: eventIn.bind,
+          order: {
+            sortColumn: "attendee_id",
+            pkColumn: "attendee_id",
+            descending: false,
+          },
         }),
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.vault",
+        readPages<{ vault_id: string; self_party_id?: string | null }>(ctx, {
+          name: "agenda.upcoming.vault",
+          select: "vault_id, self_party_id",
+          from: "core_vault",
+          order: {
+            sortColumn: "vault_id",
+            pkColumn: "vault_id",
+            descending: false,
+          },
         }),
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "schedule.recurrence_exception",
-          where: [
-            { column: "target_type", op: "eq", value: "core.event" },
-            { column: "target_id", op: "in", value: eventIds },
-          ],
+        // The occurrence key is stored as the series-local wall clock (R21);
+        // `occurrenceExceptionsOf` reads the column, no handler names it.
+        readPages<StoredRecurrenceException>(ctx, {
+          name: "agenda.upcoming.exceptions",
+          select:
+            "exception_id, target_type, target_id, original_start_local, recurrence_semantics, scope, action, override_json",
+          from: "schedule_recurrence_exception",
+          where: `target_type = ? AND ${targetIn.sql}`,
+          bind: ["core.event", ...targetIn.bind],
+          order: {
+            sortColumn: "exception_id",
+            pkColumn: "exception_id",
+            descending: false,
+          },
         }),
       ]);
-    const attendeeRows = (attendeesRes.rows ?? []) as unknown as RawAttendee[];
-    const mePartyId =
-      ((vaultRes.rows ?? [])[0]?.self_party_id as string | undefined) ?? null;
+    const mePartyId = vaultRows[0]?.self_party_id ?? null;
     const attendeePartyIds = [
       ...new Set(attendeeRows.map((a) => a.party_id)),
     ].filter(Boolean);
-    const partiesRes =
-      attendeePartyIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.party",
-            where: [{ column: "party_id", op: "in", value: attendeePartyIds }],
-          })
-        : { rows: [] };
+    const partyIn =
+      attendeePartyIds.length > 0 ? inList("party_id", attendeePartyIds) : null;
+    const partyRows = partyIn
+      ? await readPages<{ party_id: string; display_name?: string | null }>(
+          ctx,
+          {
+            name: "agenda.upcoming.parties",
+            select: "party_id, display_name",
+            from: "core_party",
+            where: partyIn.sql,
+            bind: partyIn.bind,
+            order: {
+              sortColumn: "party_id",
+              pkColumn: "party_id",
+              descending: false,
+            },
+          }
+        )
+      : [];
     const partyNameById = new Map<string, unknown>(
-      (partiesRes.rows ?? []).map((p) => [p.party_id as string, p.display_name])
+      partyRows.map((p) => [p.party_id, p.display_name])
     );
     const guestsByEvent = attendeesByEvent(
       attendeeRows,
       partyNameById,
       mePartyId
     );
-    const attachmentRows = (attachments.rows ??
-      []) as unknown as RawAttachment[];
     const contentIds = [
       ...new Set(attachmentRows.map((a) => a.content_id)),
     ].filter(Boolean);
-    const contents =
-      contentIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.content_item",
-            where: [{ column: "content_id", op: "in", value: contentIds }],
-          })
-        : { rows: [] };
+    const contentIn =
+      contentIds.length > 0 ? inList("content_id", contentIds) : null;
+    const contentRows = contentIn
+      ? await readPages<RawContent>(ctx, {
+          name: "agenda.upcoming.contents",
+          select: "content_id, content_uri, byte_size",
+          from: "core_content_item",
+          where: contentIn.sql,
+          bind: contentIn.bind,
+          order: {
+            sortColumn: "content_id",
+            pkColumn: "content_id",
+            descending: false,
+          },
+        })
+      : [];
     // Bytes carry no media type since #996 (R20(b)) — the attachment's own
     // representation says what it reads them as.
     const representations = await readRepresentations({ ctx, contentIds });
     const contentById = new Map<string, RawContent>(
-      ((contents.rows ?? []) as unknown as RawContent[]).map((c) => [
-        c.content_id,
-        c,
-      ])
+      contentRows.map((c) => [c.content_id, c])
     );
     const attByEvent = attachmentsBySubject(
       "core.event",
@@ -490,7 +569,7 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
       representations
     );
     const extByEvent = new Map<string, Record<string, unknown>>(
-      (exts.rows ?? []).map((x) => [x.event_id as string, x])
+      extRows.map((x) => [x.event_id as string, x])
     );
     const enriched: EventRow[] = windowed.map((e) => {
       const ext = extByEvent.get(e.event_id);
@@ -521,7 +600,7 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
             fromLower,
             expandTo,
             timeApi,
-            (exceptionsRes.rows ?? []) as unknown as StoredRecurrenceException[]
+            exceptionRows
           )
         : enriched.map((event) => ({
             ...event,
@@ -539,7 +618,7 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
       .toSorted((a, b) => String(a.dtstart).localeCompare(String(b.dtstart)));
     return {
       events: rows,
-      calendars: calendars.rows ?? [],
+      calendars: calendarRows,
     };
   } catch (error) {
     const e = error as { code?: string; message?: string };
