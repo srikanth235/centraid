@@ -15,7 +15,6 @@ import type {
   SeatBootstrapProgress,
   SeatBootstrapResult,
 } from "./bootstrap.js";
-import type { SeatBindValue } from "./driver.js";
 import { SeatDriftError } from "./seat-drift-error.js";
 import type { SeatState } from "./state.js";
 import type {
@@ -23,6 +22,7 @@ import type {
   SeatWorkerApplyOptions,
   SeatWorkerBootstrapOptions,
   SeatWorkerOpenOptions,
+  SeatWorkerQuery,
   SeatWorkerRequest,
   SeatWorkerResponse,
   SerializedSeatError,
@@ -104,14 +104,16 @@ export class SeatWorkerClient {
     return this.call("apply", options) as Promise<SeatApplySummary>;
   }
 
-  query<T extends object>(
-    sql: string,
-    bind?: readonly SeatBindValue[]
-  ): Promise<T[]> {
-    return this.call("query", {
-      sql,
-      ...(bind === undefined ? {} : { bind }),
-    }) as Promise<T[]>;
+  /**
+   * One read, forwarded whole.
+   *
+   * The request object rather than loose arguments because it carries the
+   * OVERLAY (R23–R25), and an overlay that a signature can drop is an overlay
+   * that gets dropped: the rows still come back, with the member's own pending
+   * write missing and nothing to say so.
+   */
+  query<T extends object>(request: SeatWorkerQuery): Promise<T[]> {
+    return this.call("query", request) as Promise<T[]>;
   }
 
   async close(): Promise<void> {

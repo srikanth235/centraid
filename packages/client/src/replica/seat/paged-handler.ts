@@ -62,6 +62,42 @@ export interface SeatPageQuery<Row extends object> {
   keyOf: (row: Row) => PageCursor;
 }
 
+/** A handler's statement, assembled: the text and the binds, in order. */
+export interface SeatPageStatement {
+  sql: string;
+  bind: SeatBindValue[];
+}
+
+/**
+ * Assemble one handler's statement for one request.
+ *
+ * SEPARATE FROM RUNNING IT because there are two ends that must run the SAME
+ * statement: the seat's own in-process read (`seatPage`, below) and the
+ * shell's read across the worker boundary (`seat-page-reader.ts`). Two
+ * assemblers would be two keyset dialects, and the one that drifted would drift
+ * silently — the rows still come back, just the wrong ones at a page boundary.
+ */
+export function seatPageStatement<Row extends object>(
+  query: SeatPageQuery<Row>,
+  request: PageRequest
+): SeatPageStatement {
+  const { sortColumn, pkColumn, descending } = query.order;
+  const direction = descending ? "DESC" : "ASC";
+  const comparison = descending ? "<" : ">";
+  const keyset = request.after
+    ? `AND (${sortColumn}, ${pkColumn}) ${comparison} (?, ?)`
+    : "";
+  const bind: SeatBindValue[] = [...(query.bind ?? [])];
+  if (request.after) bind.push(request.after.sortKey, request.after.pk);
+  bind.push(probeLimit(request));
+  return {
+    sql: `${query.sql(keyset)}
+      ORDER BY ${sortColumn} ${direction}, ${pkColumn} ${direction}
+      LIMIT ?`,
+    bind,
+  };
+}
+
 /**
  * Run one handler's statement and return one page.
  *
@@ -76,22 +112,22 @@ export function seatPage<Row extends object>(
   query: SeatPageQuery<Row>,
   request: PageRequest
 ): Page<Row> {
-  const { sortColumn, pkColumn, descending } = query.order;
-  const direction = descending ? "DESC" : "ASC";
-  const comparison = descending ? "<" : ">";
-  const keyset = request.after
-    ? `AND (${sortColumn}, ${pkColumn}) ${comparison} (?, ?)`
-    : "";
-  const bind: SeatBindValue[] = [...(query.bind ?? [])];
-  if (request.after) bind.push(request.after.sortKey, request.after.pk);
-  bind.push(probeLimit(request));
-  const rows = driver.all<Row>(
-    `${query.sql(keyset)}
-      ORDER BY ${sortColumn} ${direction}, ${pkColumn} ${direction}
-      LIMIT ?`,
-    bind
-  );
-  bumpClientWorkCounter("statements");
-  bumpClientWorkCounter("rowsScanned", rows.length);
+  const statement = seatPageStatement(query, request);
+  const rows = driver.all<Row>(statement.sql, statement.bind);
+  countSeatPageWork(rows.length);
   return pageOf(rows, request, query.keyOf);
+}
+
+/**
+ * The work one paged read spent, counted for EVERY handler on either end of
+ * the worker boundary.
+ *
+ * R8's gate is measured work per handler at year-3 scale, and a gate a handler
+ * opts into is a gate the one handler that regresses will have skipped. The
+ * probe row is counted: the seat really did visit it, even though nobody saw
+ * it.
+ */
+export function countSeatPageWork(rowsVisited: number): void {
+  bumpClientWorkCounter("statements");
+  bumpClientWorkCounter("rowsScanned", rowsVisited);
 }

@@ -5158,3 +5158,96 @@ not weight-gated.
 - **A barrel re-export is a bundle decision, not a tidiness one.** On a surface
   that is over its weight ceiling, the door a module is reached through is
   product code.
+
+## Wave 4 — one statement, two ends (#996)
+
+The root's scope note re-points the shell's read path onto the seat worker's
+`query()` seam. This commit builds the engine that seam runs on; the per-app
+handlers and the five wiring files are named at the end as what is left.
+
+### One assembler, because two would be two keyset dialects
+
+`seatPageStatement` is split out of `seatPage`. Two ends have to run the SAME
+statement — the seat's own in-process read and the shell's read across the
+worker boundary — and two assemblers would drift silently: the rows still come
+back, just the wrong ones at a page boundary. `seat-page-reader.ts` is now the
+async end and contributes nothing but the `await`; the probe row is dropped and
+the cursor derived on the shell side, so the worker keeps returning rows and
+nothing else. A second result shape across that boundary would be a second thing
+to keep in step for a fact the rows already carry.
+
+`countSeatPageWork` is likewise shared, so the R8 measured-work row is recorded
+for a handler whichever end runs it.
+
+### The overlay stopped being droppable
+
+`SeatWorkerClient.query(sql, bind)` took loose arguments and had no parameter for
+the overlay at all — the seam it forwards to (`worker-protocol.ts`) has carried
+`overlay` since wave 2, and the main-thread client silently could not send it.
+Every read through it was therefore the canonical read: the gateway's rows, with
+the member's own unsettled write missing and nothing on the result to say so,
+which is exactly the failure R23–R25 exist to prevent and exactly the one the
+emulator gate found on the phone. It now takes the request object whole.
+
+`SeatQueryPort` is the structural one-method port the reader depends on rather
+than the class: `SeatWorkerClient` is typed against `MessageEvent` and
+`ErrorEvent`, which a React Native typecheck does not have.
+
+### Gates
+
+- `bunx vitest run packages/client/src/replica/seat/seat-page-reader.test.ts` — 6 passed (red first: the module did not exist).
+- `bunx vitest run packages/client/src/replica/seat/` — 9 files, 66 passed.
+- `bun run --cwd packages/client typecheck` — clean.
+- `bun run --cwd packages/client test`, `bun run check:push:static`, `bun run governance` — below.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/client/src/replica/seat/seat-page-reader.ts`
+- `packages/client/src/replica/seat/seat-page-reader.test.ts`
+
+**Changed:**
+
+- `packages/client/src/replica/seat/paged-handler.ts`
+- `packages/client/src/replica/seat/seat-worker-client.ts`
+- `packages/client/src/replica/seat/index.ts`
+- `docs/blueprint-seats.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the seam
+
+- **The statement is assembled once and run twice.** A keyset that differs
+  between the seat's own read and the shell's is wrong only at page boundaries,
+  which is where nobody looks.
+- **An overlay a signature can omit is an overlay that gets omitted.** It
+  travels in the request object, with the read, or the member loses their own
+  write with no error anywhere.
+- **The worker returns rows.** Every extra field on that boundary is a second
+  contract; "is there another page" is already in the rows.
+
+### What is NOT done in this wave, stated plainly
+
+The read-path work the brief and the root's scope note describe is far larger
+than what is above, and none of the following should be read as done:
+
+- **The eight apps are not converted.** `packages/blueprints/apps/*/queries/`
+  is ~11,600 lines of declarative reads and still holds all 199
+  `acceptTruncation` sites. No app handler exists yet.
+- **The five wiring files are untouched**: `replica/shell-session.ts`,
+  `replica/coordinator.ts`, `replica/coordinator-web.ts`,
+  `react/blueprints/centraid-inline.ts`,
+  `react/shell/routes/InlineAppRoute.tsx`. The coordinator is still built over
+  `ReplicaWorkerClient` (the old store); nothing in the shell reaches
+  `SeatWorkerClient.query` yet — `useSeatWatermark.ts` is the seat's only
+  consumer and it reads the watermark, not rows.
+- **The flag-OFF path has no answer.** With the seat store off there is no local
+  file to run SQL against, so "no app may call `vault.read`" needs the gateway
+  running the same paged handlers (review sweep F2, narrowed) before an app can
+  be converted without breaking the default seat.
+- **Not started**: the tripwire test, the plan snapshots, deleting
+  `vault.scopes` / `app-entity-tripwire.ts` / `app-manifest-reads.test.ts`, the
+  wide-column side tables, the Tally OQ-12 match-review surface and
+  `tally_nudge.as_of_minor`, and the deletion of `acceptTruncation` /
+  `UNBOUNDED_READ` / `truncated` / `appliedLimit` from `read-plan.ts`,
+  `replica/types.ts`, `centraid.d.ts` and the protocol.
