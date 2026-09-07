@@ -81,12 +81,32 @@ describe("the door answers", () => {
         ...(after ? { after } : {}),
       });
       for (const row of page.rows) seen.push(row.task_id as string);
-      const last = page.rows.at(-1);
-      if (page.rows.length < 3 || !last) break;
-      after = { sortKey: last.task_id as string, pk: last.task_id as string };
+      expect(page.rows.length).toBeLessThanOrEqual(3);
+      if (!page.next) break;
+      after = page.next;
     }
     expect(seen).toHaveLength(7);
     expect(new Set(seen).size).toBe(7);
+  });
+
+  it("drops the probe row and names where to continue", () => {
+    // The statement asks for one row more than the window. That row is what
+    // separates "the window filled" from "the rows ended", and a handler that
+    // received it would report a full set as a short one — which is the
+    // announcement `truncated` used to make, and got wrong.
+    seedTasks(25);
+    const page = vault.gateway.page(vault.owner, TASKS, { limit: 20 });
+    expect(page.rows).toHaveLength(20);
+    expect(page.next).toStrictEqual({
+      sortKey: "task_019",
+      pk: "task_019",
+    });
+    const last = vault.gateway.page(vault.owner, TASKS, {
+      limit: 20,
+      after: page.next!,
+    });
+    expect(last.rows).toHaveLength(5);
+    expect(last.next).toBeUndefined();
   });
 
   it("honours the handler's own predicate and its binds", () => {

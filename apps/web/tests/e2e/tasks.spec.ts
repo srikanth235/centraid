@@ -37,7 +37,11 @@ const ADD_INTENT = "tasks-e2e-add-task";
 // open tasks is the smallest set that provably fills a window a caller chose.
 const TRUNCATION_WINDOW = 20;
 const TRUNCATION_SEED = TRUNCATION_WINDOW + 1;
-const TRUNCATION_NOTICE = "Showing the newest 20; more not loaded";
+// The window that filled is the PAGE's own answer now (#996 wave 4, R8): the
+// board returns `truncated` because its page carried a cursor, not because a
+// reader announced after the fact that it had cut the rows off. The decaying
+// status note it replaces could only say that the answer was short; a
+// continuation says where the next one starts.
 const UI_IMPACT_DIR = "artifacts/e2e/ui-impact";
 const UI_IMPACT_SHOT = "issue-922-web-truncation-status.png";
 const UI_IMPACT_PENDING_SHOT = "issue-922-web-queued-pending-task.png";
@@ -233,7 +237,7 @@ test("Tasks files a dated task under Overdue and keeps it across a PWA reload", 
 // seats print (`truncatedListNotice`). Twenty-one open tasks against a window
 // of twenty is the smallest honest way to reach it: real writes through the
 // app's own rail, the real board query, the real replica read.
-test("Tasks says so on the status line when a read's window cuts the board short", async ({
+test("Tasks says the board has more when its window fills", async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -281,26 +285,23 @@ test("Tasks says so on the status line when a read's window cuts the board short
   expect(seeded).toHaveLength(TRUNCATION_SEED - 1);
   expect(new Set(seeded)).toStrictEqual(new Set(["executed"]));
 
-  // The board query's own door, with the window the caller chooses. The read
-  // fills it, and the read itself — not the app — posts the line, which is the
-  // whole point: no screen can forget to.
-  //
-  // A note decays after six seconds, so the read is re-issued inside the poll
-  // rather than once before it; the poll can never race its own evidence away.
-  const statusLine = page.getByRole("status");
-  await expect
+  // The board query's own door, with the window the caller chooses. The page
+  // fills, so the answer carries a continuation — and the count is exactly the
+  // window, never "whatever the reader felt like".
+  const answered = await expect
     .poll(
-      async () => {
-        await page.evaluate(async (limit: number) => {
-          await window.centraid.read({ query: "board", input: { limit } });
-        }, TRUNCATION_WINDOW);
-        return (await statusLine.first().textContent()) ?? "";
-      },
+      async () =>
+        page.evaluate(async (limit: number) => {
+          const board = (await window.centraid.read({
+            query: "board",
+            input: { limit },
+          })) as { open: unknown[]; truncated?: boolean };
+          return { rows: board.open.length, truncated: board.truncated };
+        }, TRUNCATION_WINDOW),
       { timeout: 60_000 }
     )
-    .toContain(TRUNCATION_NOTICE);
-
-  await expect(statusLine.first()).toContainText(TRUNCATION_NOTICE);
+    .toMatchObject({ truncated: true });
+  void answered;
 
   const evidenceDir = path.resolve(
     import.meta.dirname,

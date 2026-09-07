@@ -1182,6 +1182,94 @@ describe("shell-session", () => {
   // This is a STRUCTURAL guard, not a behavioural one: a windowed-bootstrap
   // fixture does not exist yet, so this pins the shape of the call site until
   // one does.
+  describe("opening waits for readable, not for converged (#996 wave 4)", () => {
+    /*
+     * THE BUG THIS PINS. `start` awaited the whole bootstrap walk, and every
+     * app in the shell suspends on the session lease behind it
+     * (`InlineAppMount`). On a year-3 vault that walk is dozens of
+     * five-thousand-row pages, so every first-party app sat on "Loading …"
+     * until the last one landed — which is what the entire web e2e suite was
+     * failing on. Page one is the newest era: once it is applied and the
+     * catalog is loaded, a screen can paint, and the rest of the walk is a
+     * background convergence like any delta.
+     */
+    function windowedPage(next: string | null, rows: unknown[] = []) {
+      return new Response(
+        JSON.stringify({
+          protocolVersion: 1,
+          vaultId: "vault",
+          schemaEpoch: 2,
+          shapes,
+          cursor: { epoch: "e", seq: 1 },
+          rows,
+          complete: next === null,
+          ...(next === null ? {} : { next }),
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
+
+    test("start resolves once page one is applied, with the walk still running", async () => {
+      let releaseSecondPage: (() => void) | undefined;
+      const secondPage = new Promise<void>((resolve) => {
+        releaseSecondPage = resolve;
+      });
+      const applied: number[] = [];
+      const coordinator = fakeCoordinator({
+        bootstrapBegin: vi
+          .fn<NonNullable<ShellReplicaCoordinator["bootstrapBegin"]>>()
+          .mockResolvedValue(undefined),
+        bootstrapPage: vi
+          .fn<NonNullable<ShellReplicaCoordinator["bootstrapPage"]>>()
+          .mockImplementation(async (rows) => {
+            applied.push(rows.length);
+          }),
+        bootstrapPreview: vi
+          .fn<NonNullable<ShellReplicaCoordinator["bootstrapPreview"]>>()
+          .mockResolvedValue(undefined),
+        bootstrapCommit: vi
+          .fn<NonNullable<ShellReplicaCoordinator["bootstrapCommit"]>>()
+          .mockResolvedValue({ epoch: "e", seq: 1 }),
+        applyChanges: vi
+          .fn<NonNullable<ShellReplicaCoordinator["applyChanges"]>>()
+          .mockResolvedValue({ epoch: "e", seq: 1 }),
+        pendingIntents: vi
+          .fn<NonNullable<ShellReplicaCoordinator["pendingIntents"]>>()
+          .mockResolvedValue([]),
+      });
+      const fetcher = vi
+        .fn<ReplicaFetcher>()
+        .mockImplementation(async (_baseUrl, pathname) => {
+          if (!pathname.includes("bootstrap")) return windowedPage(null);
+          if (fetcher.mock.calls.length === 1)
+            return windowedPage("page-two-token", [{ shapeId: "shape-todos" }]);
+          // Page two never lands until the test lets it.
+          await secondPage;
+          return windowedPage(null);
+        });
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        coordinator,
+        { fetcher, eventTarget: new EventTarget(), isOnline: () => true }
+      );
+
+      const started = session.start({
+        mode: "memory",
+        cursor: null,
+        schemaEpoch: null,
+        coverage: "partial",
+        durability: "memory",
+      });
+      // The claim: this settles while page two is still outstanding. Before
+      // the fix it could not, and the test times out rather than failing fast.
+      await expect(started).resolves.toBe(session);
+      expect(applied).toStrictEqual([1]);
+
+      releaseSecondPage?.();
+      await session.close();
+    });
+  });
+
   describe("windowed bootstrap target", () => {
     test("passes coordinator methods wrapped, never as detached references", () => {
       const source = readFileSync(

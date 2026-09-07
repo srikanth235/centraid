@@ -6252,3 +6252,136 @@ not.
   reported.** The same twenty on a clean base worktree is what turns "my change
   broke the e2e" into "the branch arrived red", and only one of those is
   actionable by the next worker.
+
+## Wave 4 — why every app said "Loading …", and the four things it was (#996)
+
+The whole web e2e suite was failing on one symptom — `Loading Docs…`,
+`Loading People…`, for all seven first-party apps — and it was FOUR bugs on the
+shell read path, each hidden behind the one in front of it. Each was found by
+instrumenting the real browser run, not by reading, and each is fixed here.
+
+### 1. Opening a session waited for the whole bootstrap walk
+
+`ReplicaShellSession.start` awaited `bootstrapWhenReachable()`, and
+`InlineAppMount` suspends on the session lease behind it. On the e2e vault that
+walk is dozens of 5,000-row pages, so no app ever mounted at all.
+
+The walk already knows when the vault is READABLE: `onFirstPage` fires once page
+one — the newest era, the rows a screen paints first — is applied and the
+catalog is loaded. Opening waits for that; the rest converges in the background
+like any delta. **A bootstrap that FAILS still fails the open** (#922 E3): the
+readable promise takes the walk's rejection when the walk rejects before page
+one, because `start` awaiting the walk is what hands the replica worker's OPFS
+handles back, and a session that opened anyway would leave a worker for the next
+open to fight.
+
+Red first in `shell-session.test.ts`: a windowed walk whose second page never
+lands, asserting `start` resolves with page one applied. Without the fix the
+test does not fail — it times out, which is the bug exactly.
+
+### 2. A seat was handed out before the vault had arrived in it
+
+With apps mounting, every screen said `SQLITE_ERROR: no such table:
+schedule_task`. `WebSeat.open` opens the FILE; `sync` is what fetches the
+snapshot and tails the log, and `SessionSeat` never called it. So the first app
+read ran against an empty SQLite file.
+
+A seat is a copy, and a copy that has not arrived is not a seat: `SessionSeat`
+syncs before handing one out, and a sync that fails is **no seat** — the read
+path then refuses ONLINE_ONLY and the whole query runs on the gateway's paged
+door (W4-D2), which is a working screen instead of a broken one. The half-open
+file hands its handles back rather than keeping them.
+
+### 3. Every handler catches, so a seat refusal never reached the fallback
+
+With no seat, screens showed "Tasks cannot read this vault". Blueprint handlers
+catch their own vault failures and return `{ vaultDenied }`, so a refusal that
+only rejects inside `ctx.vault.page` is swallowed there and `readIn` never sees
+a throwable — no fallback, a dead app. The shell's `page` now marks the
+online-only guard, which is what makes `runInlineQueryCore` re-raise past the
+handler's own catch with the code the runner falls back on.
+
+### 4. The gateway's paged door handed back its probe row
+
+`Gateway.page` returned the raw `limit + 1` rows and no cursor, so a full window
+reported itself as a short one — the same wrong announcement `truncated` used to
+make. It builds the page: probe dropped, cursor derived. Pinned by a new case in
+`paged-door.test.ts` (25 rows, window 20, then the continuation).
+
+### And two Tasks corrections the browser found
+
+- **The board's window ordered by `task_id` DESC**, on the assumption that a
+  task id is a UUIDv7 and therefore in creation order. Nothing in the vault
+  enforces that; the year-3 fixture's `year3-…` ids sort above every UUIDv7, so
+  the newest task was never on the newest page. `created_at` is the sort key and
+  `task_id` the tiebreak — which is what a keyset wants anyway, a degenerate
+  `(task_id, task_id)` key having no second axis at all.
+- **The seat tails with the session.** A copy nobody catches up is a screen
+  showing yesterday. It rides `sync()` and a settled write rather than a timer
+  of its own, fire-and-forget, because a seat that cannot reach the gateway is a
+  slightly older copy and not an error.
+
+### The truncation status line is replaced, not weakened
+
+`tasks.spec.ts`'s "says so on the status line when a read's window cuts the
+board short" tested the notice this wave deletes. It is now "says the board has
+more when its window fills", asserting the page's own answer — a cursor exists
+or it does not — which is the thing that replaced it. The UI-impact screenshot
+is still taken.
+
+### Measured
+
+`bun run --cwd apps/web e2e`, on the repo's pinned Node with the config's
+`CENTRAID_E2E_CHROMIUM` hook:
+
+| tree | failed | passed |
+| --- | --- | --- |
+| branch head `2d5038634` (inherited) | 20 | 30 |
+| after fix 1 | 12 | 38 |
+| Tasks specs after fixes 1–4 + the two corrections | 1 | 5 |
+
+The remaining Tasks case is `tasks.spec.ts:325` (queued delete / minted pending
+add): the board paints three rows where the vault has thousands, which is the
+overlay path over a seat, and it is the next thing to chase. Docs, Notes,
+Agenda, People and the two perf waterfalls are still red and are the apps this
+wave has not converted yet — they read through the old coordinator.
+
+### Gates
+
+- `bunx vitest run packages/client/src/replica/shell-session.test.ts
+  packages/client/src/replica/rebootstrap-loop.test.ts` — 30 passed.
+- `bunx vitest run packages/client/src/replica/seat/session-seat.test.ts` — 10.
+- `bunx vitest run packages/vault/src/gateway/paged-door.test.ts` — 12.
+- `bun run --cwd packages/vault test` — 209 files, 1,742 passed.
+- `bun run --cwd packages/client test` — 291 files, 2,636 passed.
+- typecheck: client, vault, server, web — clean.
+- `bun run check:push:static` — below.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/client/src/replica/shell-session.ts`
+- `packages/client/src/replica/shell-session.test.ts`
+- `packages/client/src/replica/seat/session-seat.ts`
+- `packages/client/src/replica/seat/session-seat.test.ts`
+- `packages/client/src/react/blueprints/inlineQueryCtx.ts`
+- `packages/client/src/react/blueprints/inlineQueryCtx.test.ts`
+- `packages/client/src/react/blueprints/centraid-inline.test.ts`
+- `packages/vault/src/gateway/gateway.ts`
+- `packages/vault/src/gateway/paged-door.test.ts`
+- `packages/server/src/engine/worker/runner.ts`
+- `packages/blueprints/apps/tasks/queries/board.ts`
+- `apps/web/tests/e2e/tasks.spec.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the read path
+
+- **Readable is not converged, and an open should wait for the first.** Waiting
+  for the last is how a walk's length became a blank screen.
+- **A seat that has not been filled is not a seat.** Handing out an empty file
+  turns a fallback into a SQL error on the member's screen.
+- **A handler's own `catch` is not a place a fallback can be signalled from.**
+  The guard is the channel that survives it.
+- **The probe row is the host's on BOTH ends.** One end dropping it and the
+  other not is a full page that reports itself short.

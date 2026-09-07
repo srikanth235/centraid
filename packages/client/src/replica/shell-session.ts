@@ -218,6 +218,13 @@ export class ReplicaShellSession {
   #pollTimer: ReturnType<typeof setInterval> | undefined;
   #catalog: ReplicaShape[] = [];
   #bootstrapPromise: Promise<void> | undefined;
+  /**
+   * Resolved the moment the vault is READABLE — page one applied — rather than
+   * when the whole walk converges (#996 wave 4). See `bootstrapReadable`.
+   */
+  #readable: (() => void) | undefined;
+  /** Its sibling: a walk that fails before page one fails the open (#922 E3). */
+  #bootstrapUnreadable: ((error: unknown) => void) | undefined;
   #bootstrapAbort: AbortController | undefined;
   #bootstrapRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #bootstrapRetryAttempt = 0;
@@ -320,7 +327,7 @@ export class ReplicaShellSession {
       status.coverage === "partial" ||
       (status.cursor === null && status.coverage !== "complete")
     ) {
-      if (this.#isOnline()) await this.bootstrapWhenReachable();
+      if (this.#isOnline()) await this.bootstrapReadable();
       else this.#catalog = await this.coordinator.catalog();
     }
     void this.flushIntents();
@@ -536,6 +543,14 @@ export class ReplicaShellSession {
    */
   async sync(): Promise<void> {
     this.assertOpen();
+    // THE SEAT TAILS WITH THE SESSION (#996 wave 4). A seat is a copy, and a
+    // copy nobody catches up is a screen showing yesterday: the member writes,
+    // the gateway commits, and the board — which reads the seat — still shows
+    // the answer the snapshot was taken at. It rides the session's own sync
+    // rather than a timer of its own, so there is one schedule to reason about,
+    // and it is fire-and-forget because a seat that could not reach the gateway
+    // is a slightly older copy and not an error to raise here.
+    void this.#seat.sync().catch(() => undefined);
     if (!this.#hasCursor) {
       await this.bootstrapWhenReachable();
       return;
@@ -637,6 +652,50 @@ export class ReplicaShellSession {
     void this.bootstrapWhenReachable();
   }
 
+  /**
+   * OPENING A SESSION WAITS FOR READABLE, NOT FOR CONVERGED (#996 wave 4).
+   *
+   * `start` used to await the whole bootstrap walk, and every app in the shell
+   * is downstream of it: `InlineAppMount` suspends on the session lease, so
+   * until the last page of the walk landed, every first-party app sat on
+   * "Loading …". On a year-3 vault that is dozens of five-thousand-row pages —
+   * the app never appeared at all, which is what the whole web e2e suite was
+   * failing on.
+   *
+   * The walk already knows when the vault is readable: `onFirstPage` fires once
+   * page one is applied and the catalog is loaded, which is the newest era —
+   * the rows a screen paints first. That is what opening waits for. The rest of
+   * the walk continues in the background and the change feed carries its
+   * results in, exactly as a delta does.
+   *
+   * A bootstrap that FAILS still fails the open (#922 E3): `start` awaiting the
+   * walk is what hands the replica worker's handles back when a bootstrap
+   * cannot complete, and a session that opened anyway would leave a worker
+   * holding OPFS access handles that the next open then fights over. So the
+   * readable promise takes the walk's rejection when the walk rejects BEFORE
+   * page one landed — "not converged yet" lets the open through, "could not
+   * start" does not.
+   */
+  private bootstrapReadable(): Promise<void> {
+    const readable = new Promise<void>((resolve, reject) => {
+      this.#readable = resolve;
+      this.#bootstrapUnreadable = reject;
+    });
+    const settle = (error?: unknown): void => {
+      const resolve = this.#readable;
+      const fail = this.#bootstrapUnreadable;
+      this.#readable = undefined;
+      this.#bootstrapUnreadable = undefined;
+      if (error !== undefined && fail) fail(error);
+      else resolve?.();
+    };
+    void this.bootstrapWhenReachable().then(
+      () => settle(),
+      (error: unknown) => settle(error ?? new Error("bootstrap failed"))
+    );
+    return readable;
+  }
+
   private async bootstrapWhenReachable(): Promise<void> {
     if (this.#bootstrapPromise || this.#closed || !this.#isOnline())
       return this.#bootstrapPromise;
@@ -647,6 +706,14 @@ export class ReplicaShellSession {
       if (!this.#closed) void this.bootstrapWhenReachable();
     });
     return this.#bootstrapPromise;
+  }
+
+  /** Let an open that is waiting for readability proceed. Idempotent. */
+  private markReadable(): void {
+    const resolve = this.#readable;
+    this.#readable = undefined;
+    this.#bootstrapUnreadable = undefined;
+    resolve?.();
   }
 
   private async bootstrap(): Promise<void> {
@@ -680,6 +747,9 @@ export class ReplicaShellSession {
         await this.coordinator.bootstrap(snapshot);
         this.#hasCursor = true;
         this.#catalog = await this.coordinator.catalog();
+        // The unwindowed path has one page, so readable and converged are the
+        // same moment.
+        this.markReadable();
         for (const outcome of exactOutcomes)
           this.resolveAdmissionWaiter(outcome.intentId, outcome);
         this.#bootstrapRetryAttempt = 0;
@@ -729,6 +799,9 @@ export class ReplicaShellSession {
         },
         onFirstPage: async () => {
           this.#catalog = await this.coordinator.catalog();
+          // The newest era is applied and the catalog is loaded: a screen can
+          // paint. Opening the session stops waiting HERE (`bootstrapReadable`).
+          this.markReadable();
         },
       });
       this.#hasCursor = true;
@@ -874,6 +947,12 @@ export class ReplicaShellSession {
     const waiters = this.#admissionWaiters.get(intentId);
     if (!waiters) return;
     this.#admissionWaiters.delete(intentId);
+    // A SETTLED WRITE IS A REASON TO CATCH THE SEAT UP (#996 wave 4). The
+    // gateway has committed; the seat is the copy every app reads, and a copy
+    // that has not tailed shows the member their own write missing. Not
+    // awaited: the answer to the write is the outcome, not the tail.
+    if (result.status === "executed")
+      void this.#seat.sync().catch(() => undefined);
     for (const waiter of waiters) waiter.resolve(structuredClone(result));
   }
 

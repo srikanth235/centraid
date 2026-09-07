@@ -6,6 +6,7 @@ import {
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import boardQuery from "@centraid/blueprints/apps/tasks/queries/board";
+import searchQuery from "@centraid/blueprints/apps/tasks/queries/search";
 import { seededRandom } from "@centraid/test-kit/random";
 
 import { OnlineOnlyGuard } from "../../replica/errors.js";
@@ -55,11 +56,21 @@ const OPEN_TASKS = [
   },
 ];
 
-/** A replica-session double: seeded open tasks; everything else empty. */
+/**
+ * A replica-session double: seeded open tasks; everything else empty.
+ *
+ * It answers PAGES now (#996 wave 4). The board's reads are statements-as-data
+ * through `ctx.vault.page`, keyed by the handler name the statement carries, so
+ * a double that only knew `read` would leave the board on the online-only stub
+ * — which is the one thing this test exists to prove does not happen.
+ */
 function seededSession(
   overrides?: Partial<InlineReplicaSession>
 ): InlineReplicaSession {
   return {
+    page: (async (query: { name: string }) => ({
+      rows: query.name === "tasks.board.open" ? OPEN_TASKS : [],
+    })) as unknown as NonNullable<InlineReplicaSession["page"]>,
     async read(
       _appId: string,
       request: ShellReplicaReadRequest
@@ -149,8 +160,13 @@ describe("inlineQueryCtx", () => {
   });
 
   it("marks the online-only guard when a query reads an undisclosed field", async () => {
+    // THE BOARD NO LONGER PROVES THIS, AND THAT IS THE POINT (#996 wave 4, R8).
+    // Its rows come off the seat's own file with every column present, so
+    // there is nothing on that path for the mask to withhold. The guard is
+    // still exactly as live for a handler that READS, and Tasks' search is one:
+    // the ranked hits arrive as envelopes, and the handler touches `.title`.
     const undisclosed = seededSession({
-      async read(): Promise<ReplicaReadWireResult> {
+      async search(): Promise<ReplicaSearchWireResult> {
         return {
           rows: [
             envelope(
@@ -163,12 +179,10 @@ describe("inlineQueryCtx", () => {
         };
       },
     });
-    // board reads `.title`/`.due_at` which are undisclosed here → guard fires →
-    // runInlineQuery rejects with the fallback code.
     await expect(
       runInlineQuery(
-        { default: boardQuery },
-        { session: undisclosed, appId: "tasks", input: {} }
+        { default: searchQuery },
+        { session: undisclosed, appId: "tasks", input: { term: "ferry" } }
       )
     ).rejects.toMatchObject({ code: "ONLINE_ONLY" });
   });

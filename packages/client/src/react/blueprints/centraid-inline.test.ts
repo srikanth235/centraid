@@ -727,6 +727,62 @@ describe(installInlineCentraid, () => {
     expect(doFetch).not.toHaveBeenCalled();
   });
 
+  it("falls back even when the handler catches its own vault failure", async () => {
+    // EVERY BLUEPRINT HANDLER CATCHES. The board's own `catch` turns a vault
+    // failure into `{ vaultDenied }` — a "cannot read this vault" screen — so a
+    // seat refusal that only rejects inside the handler is swallowed there and
+    // the query never falls back. The guard is what carries it past that catch.
+    doFetch.mockResolvedValue(new Response("{}"));
+    readJson.mockResolvedValue({ open: ["from-the-door"] });
+    const session = fakeSession({
+      page: (() =>
+        Promise.reject(
+          new OnlineOnlyError("this seat holds no copy of the vault")
+        )) as Session["page"],
+    });
+    const queries: InlineAppModule["queries"] = {
+      board: {
+        default: async ({ ctx }) => {
+          try {
+            return (await (
+              ctx as {
+                vault: {
+                  page: (request: unknown) => Promise<{ rows: unknown[] }>;
+                };
+              }
+            ).vault.page({
+              query: {
+                name: "tasks.board",
+                select: "task_id",
+                from: "schedule_task",
+                order: {
+                  sortColumn: "task_id",
+                  pkColumn: "task_id",
+                  descending: true,
+                },
+              },
+              limit: 20,
+            })) as unknown;
+          } catch {
+            return { open: [], vaultDenied: { message: "swallowed" } };
+          }
+        },
+      },
+    };
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries,
+      target,
+      isOnline: () => true,
+    });
+    const res = await client(target).read<{ open: unknown[] }>({
+      query: "board",
+    });
+    expect(res.open).toStrictEqual(["from-the-door"]);
+  });
+
   it("re-runs the whole query on the gateway when the seat holds no file", async () => {
     // W4-D2 AND R9. `ctx.vault.page` on a seat with no copy of the vault is not
     // an error the app has to handle and not a second read vocabulary: the

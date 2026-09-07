@@ -1,7 +1,6 @@
 /**
  * Task board as a bounded window, never a whole-table pull (#262): newest
- * open tasks by task_id (UUIDv7 creation order, caller-sized window, default
- * 500) plus the 50 most recently closed — exactly what the logbook shows;
+ * open tasks by `created_at` (caller-sized window, default 500) plus the 50 most recently closed — exactly what the logbook shows;
  * beyond the window use FTS or grow it (`truncated` offers that). Open tasks
  * sort due-first, then priority (higher more urgent, 0 unset), then title,
  * subtasks nested; unfinished children of a completed or released parent
@@ -171,8 +170,16 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
         from: "schedule_task",
         where: "status IN (?, ?)",
         bind: [...OPEN_STATUSES],
+        // NEWEST BY CREATION, AND THE COLUMN THAT SAYS SO (#996 wave 4). This
+        // window was `task_id DESC`, on the assumption that a task id is a
+        // UUIDv7 and therefore already in creation order. Nothing in the vault
+        // enforces that — an imported or generated id sorts wherever its text
+        // sorts — and when it is false the newest task is not on the newest
+        // page, which is silent. `created_at` is the sort key and the primary
+        // key is the tiebreak, which is what a keyset wants anyway: a degenerate
+        // key of `(task_id, task_id)` carries no second axis at all.
         order: {
-          sortColumn: "task_id",
+          sortColumn: "created_at",
           pkColumn: "task_id",
           descending: true,
         },

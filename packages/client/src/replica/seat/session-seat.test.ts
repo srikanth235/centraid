@@ -17,7 +17,9 @@
 //      naive memoisation opens twice before either promise settles;
 //   2. closing the session closes the seat, once;
 //   3. a session with nothing to copy — no vault, no gateway — opens nothing at
-//      all rather than opening and discarding.
+//      all rather than opening and discarding;
+//   4. a seat is not handed out until the vault has actually arrived in it, and
+//      a copy that could not be fetched is "no seat" rather than an empty file.
 
 import { describe, expect, it } from "vitest";
 
@@ -42,9 +44,13 @@ const CURRENT: SeatWatermark = {
   contents: "full",
 };
 
-function opener(): {
+function opener(
+  sync: () => Promise<SeatWatermark | undefined> = () =>
+    Promise.resolve(CURRENT)
+): {
   opened: WebSeatOptions[];
   closed: number;
+  syncs: number;
   open: (options: WebSeatOptions) => Promise<{
     sync: () => Promise<SeatWatermark | undefined>;
     close: () => Promise<void>;
@@ -54,10 +60,14 @@ function opener(): {
   const state = {
     opened: [] as WebSeatOptions[],
     closed: 0,
+    syncs: 0,
     open: (options: WebSeatOptions) => {
       state.opened.push(options);
       return Promise.resolve({
-        sync: () => Promise.resolve(CURRENT),
+        sync: () => {
+          state.syncs += 1;
+          return sync();
+        },
         close: () => {
           state.closed += 1;
           return Promise.resolve();
@@ -70,6 +80,27 @@ function opener(): {
 }
 
 describe("the session's one seat", () => {
+  it("does not hand out a seat whose file has not been filled yet", async () => {
+    // The file opens on a browser that has never held this vault, and it is
+    // EMPTY: no `seat_state`, none of the vault's tables. Handing that out is
+    // what put `no such table: schedule_task` on every app screen.
+    const host = opener();
+    const seat = new SessionSeat(AUTH, host.open);
+    const handle = await seat.open();
+    expect(handle).toBeDefined();
+    expect(host.syncs).toBe(1);
+    expect(seat.watermark()).toStrictEqual(CURRENT);
+  });
+
+  it("is no seat at all when the copy could not be fetched", async () => {
+    const host = opener(() => Promise.reject(new Error("gateway unreachable")));
+    const seat = new SessionSeat(AUTH, host.open);
+    await expect(seat.open()).resolves.toBeUndefined();
+    // The half-open file hands its handles back rather than keeping them: the
+    // next open would fight the same OPFS files (#922 E3).
+    expect(host.closed).toBe(1);
+  });
+
   it("opens once for two consumers that ask at the same moment", async () => {
     const host = opener();
     const seat = new SessionSeat(AUTH, host.open);

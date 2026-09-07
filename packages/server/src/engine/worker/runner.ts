@@ -72,6 +72,9 @@ interface VaultCallMessage {
   type: "vault";
   id: number;
   op:
+    // One page of one handler's statement-as-data (#996 W4-D2). The gateway
+    // serves it through the paged door for a seat that holds no vault file.
+    | "page"
     | "read"
     | "search"
     | "invoke"
@@ -165,6 +168,18 @@ function vaultCall(
 }
 
 const vault = {
+  /**
+   * ONE PAGE OF THIS HANDLER'S OWN STATEMENT (#996 wave 4, W4-D2).
+   *
+   * The same call a seat holding the vault file answers locally. Here it
+   * crosses to the parent, which runs it through the paged door under this
+   * app's credential — `evaluateAccess`, the R17 field mask and the manifest
+   * row filters applied. No SQL is executed in this thread and none could be:
+   * the statement is data on the way out and rows on the way back.
+   */
+  page(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall("page", request);
+  },
   read(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("read", request);
   },

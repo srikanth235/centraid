@@ -3,8 +3,8 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { pageStatement } from "@centraid/core/page";
-import type { PageQuery, PageRequest } from "@centraid/core/page";
+import { pageCursorOf, pageOf, pageStatement } from "@centraid/core/page";
+import type { Page, PageQuery, PageRequest } from "@centraid/core/page";
 
 import { refreshCustodyRollup } from "../blob/custody-rollup.js";
 import { refreshCustodyState } from "../blob/custody.js";
@@ -628,16 +628,26 @@ export class Gateway {
     cred: Credential,
     query: PageQuery,
     request: PageRequest
-  ): { rows: Record<string, unknown>[]; receiptId?: string } {
+  ): Page<Record<string, unknown>> & { receiptId?: string } {
     const identity = this.identify(cred);
     const plan = planPagedDoor(this.db.vault, identity, query, nowIso());
     const statement = pageStatement(query, request, {
       sql: plan.where,
       bind: plan.bind,
     });
-    const rows = this.db.vault
+    const fetched = this.db.vault
       .prepare(statement.sql)
       .all(...statement.bind) as Record<string, unknown>[];
+    // THE PROBE ROW IS THE HOST'S, ON THIS SIDE TOO. The statement asked for
+    // one row more than the window; that row is what separates "the window
+    // filled" from "the rows ended", and it must be dropped here rather than
+    // handed to a handler — a handler that received `limit + 1` rows and no
+    // cursor would report a full set as a short one, which is exactly the
+    // announcement `truncated` used to make and got wrong.
+    const page = pageOf(fetched, request, (row) =>
+      pageCursorOf(row, query.order)
+    );
+    const rows = page.rows;
     const receiptId = skipsAllowReceipt(identity)
       ? undefined
       : writeAuthorityReceipt(this.db, {
@@ -649,7 +659,7 @@ export class Gateway {
           decision: "allow",
           detail: { handler: query.name, rowCount: rows.length },
         });
-    return { rows, ...(receiptId === undefined ? {} : { receiptId }) };
+    return { ...page, ...(receiptId === undefined ? {} : { receiptId }) };
   }
 
   /**

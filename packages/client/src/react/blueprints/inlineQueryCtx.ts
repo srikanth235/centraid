@@ -16,7 +16,7 @@ import type {
 // The ctx itself is seat-neutral and lives with the replica engine, so the
 // phone imports the SAME builder through `@centraid/client/replica/native`
 // (#922). Only the read/search closures below are the shell's.
-import { OnlineOnlyGuard } from "../../replica/errors.js";
+import { OnlineOnlyError, OnlineOnlyGuard } from "../../replica/errors.js";
 import {
   buildInlineCtxCore,
   guardedRow,
@@ -231,16 +231,30 @@ export function buildInlineCtx(
                   ...(request.after ? { after: request.after } : {}),
                 },
                 request.overlay
-              ).then((page) => {
-                for (const row of page.rows) {
-                  const marker = pageRowMarker(
-                    row as Record<string, unknown>,
-                    request.query.order.pkColumn
-                  );
-                  if (marker) pendingRows.push(marker);
-                }
-                return page;
-              }),
+              )
+                .catch((error: unknown) => {
+                  // A SEAT WITH NO COPY IS AN ONLINE-ONLY RUN, NOT AN APP ERROR
+                  // (#996 wave 4, W4-D2 / R9). Handlers catch their own vault
+                  // failures and turn them into a "cannot read this vault"
+                  // screen, so a refusal that only rejects HERE is swallowed
+                  // there and the query never falls back — the member sees a
+                  // dead app instead of the same handler answered by the
+                  // gateway's paged door. Marking the guard is what makes
+                  // `runInlineQueryCore` re-raise it past the handler's own
+                  // catch, with the code the inline runner falls back on.
+                  if (error instanceof OnlineOnlyError) throw guard.mark(error);
+                  throw error;
+                })
+                .then((page) => {
+                  for (const row of page.rows) {
+                    const marker = pageRowMarker(
+                      row as Record<string, unknown>,
+                      request.query.order.pkColumn
+                    );
+                    if (marker) pendingRows.push(marker);
+                  }
+                  return page;
+                }),
           }
         : {}),
       ...(signal ? { signal } : {}),

@@ -134,6 +134,29 @@ export class SessionSeat {
         await seat.close().catch(() => undefined);
         return undefined;
       }
+      // A SEAT IS A COPY, AND A COPY THAT HAS NOT ARRIVED IS NOT A SEAT
+      // (#996 wave 4). Opening the file only opens the FILE: on a browser that
+      // has never held this vault it is empty, with no `seat_state` and none of
+      // the vault's tables, and the first app read against it does not come
+      // back empty — it comes back `no such table: schedule_task`, which is
+      // what every first-party app was showing. `sync` is what fetches the
+      // snapshot and tails the log, so a seat is handed out only once it has.
+      //
+      // A sync that FAILS is "no seat", not an error: an unpaired browser, an
+      // older gateway, a member offline before the first copy. The read path
+      // then refuses ONLINE_ONLY and the whole query runs on the gateway's
+      // paged door (W4-D2), which is a working screen rather than a broken one.
+      try {
+        this.#watermark = await seat.sync();
+      } catch {
+        this.#watermark = undefined;
+      }
+      if (this.#watermark === undefined) {
+        // Hand the handles back: a worker left holding this file's OPFS access
+        // handles is what the next open would fight over (#922 E3).
+        await seat.close().catch(() => undefined);
+        return undefined;
+      }
       this.#held = seat;
       return seat;
     } catch {
