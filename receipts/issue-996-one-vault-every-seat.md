@@ -3421,3 +3421,64 @@ nm -u bad.so  | grep -c sqlite3_    # 74
 bun run lint:workflow-pins && bun run format:check
 bash .governance/run.sh
 ```
+
+## CI fix — executed intents settle on both stores
+
+The `verify` lane was red with 10 failures across
+`tests/quality/network-chaos.integration.test.ts` and
+`tests/quality/offline-reconnect.integration.test.ts`: after
+`applyOutcomes([executed outcome])` the intent was still in `queue.pending()`,
+`awaiting-change`, holding a `commitSeq`. Not a test problem — a product
+regression, and the one the quality lane exists to catch.
+
+Since wave 1 every executed answer carries `commit_seq`, and wave 2 taught
+`packages/client/src/replica/intent-settlement.ts` to park the overlay at
+`awaiting-change` until the seat's applied cursor reaches that number. That is
+R24 and it is right for the SEAT store, whose outbox shares the seat's file and
+whose applier calls `clearSeatOverlaysAtCommit` inside the transaction carrying
+the commit. It is wrong for the OLD store — `packages/client/src/replica/intent-store.ts`
+and `packages/client/src/replica/sqlite-store.ts`, still the shipped read path
+on today's web and phone until wave 5 — which has no such cursor and nothing
+that will ever call `settleAtCommitSeq`. There the pending badge stayed lit
+forever on a write the gateway had already executed.
+
+The fix asks whether a CURSOR WILL BE DRIVEN for this queue, defaulted from the
+store — because that, not the answer, is what differs:
+
+- `packages/client/src/replica/intent-record-store.ts` — `IntentRecordStore`
+  gains `settlesByCommitSeq?: boolean`. Absent is the safe reading, so a store
+  claims it only when it means it.
+- `packages/client/src/replica/seat/seat-intent-store.ts` — `SeatIntentStore`
+  declares it. No other store does, and none can.
+- `packages/client/src/replica/intents.ts` — `IntentQueueOptions` gains
+  `settlesByCommitSeq`, defaulting to the store's declaration. It is a fact
+  about the WIRING: `packages/client/src/replica/offline-chain.contract.test.ts`
+  drives `settleAtCommitSeq` by hand over all three outboxes, and that contract
+  is about how the CHAIN behaves given a cursor — not about which hosts have
+  one wired. Its `queueOver` helper opts in; not one of its assertions moved.
+- `packages/client/src/replica/intent-settlement.ts` — the `commit_seq` branch
+  is taken only when that flag is set. Everything else falls through to the
+  #929 signals it already had: `answeredVersions` against `holdsVersion`, else
+  the ordinary settle. R24's invariant — an executed answer clears its overlay
+  in the transaction that carries its commit — is unchanged on the seat store,
+  and the old store keeps the behaviour it shipped.
+
+Red-first: `packages/client/src/replica/intent-settlement.test.ts`, three cases
+over both store kinds — the seat store parks and is cleared by its cursor (and
+not by an earlier one), the old store settles at once, and the old store still
+waits on answered versions it does not hold. Two of the three fail on the tree
+before this commit.
+
+No test assertion was changed; both quality harnesses pass unmodified.
+
+```
+bunx vitest run -c vitest.quality.config.ts tests/quality/offline-reconnect.integration.test.ts \
+                                            tests/quality/network-chaos.integration.test.ts   # 12 passed
+bunx vitest run packages/client/src/replica/intent-settlement.test.ts \
+                packages/client/src/replica/offline-chain.contract.test.ts                    # 46 passed
+```
+
+The other four `verify` failures in this lane — `work-counters.ts`'s
+`core_content_item.media_type`, the `host-sync-bytes-per-pass` ledger row, the
+three U4 copy strings, and a `recover.integration` ECONNRESET — are NOT in this
+commit: they were moved to the end-of-PR CI pass.

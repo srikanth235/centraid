@@ -58,6 +58,17 @@ export interface IntentQueueOptions {
   digest?: ReplicaDigest;
   /** Retract a store's alert (native writes one) for a predecessor startup retires. */
   onSupersededRetired?: (intentId: string) => void;
+  /**
+   * Will something CALL `settleAtCommitSeq` for this queue (#996, R24)?
+   *
+   * It is a fact about the WIRING, not about the answer: every executed answer
+   * has carried `commit_seq` since wave 1, so a queue that parks on it without
+   * a cursor driver behind it holds `awaiting-change` forever — the pending
+   * badge that never clears. Defaults to the store's own declaration, which
+   * only the seat store makes; a host that drives the cursor over another
+   * outbox says so here.
+   */
+  settlesByCommitSeq?: boolean;
 }
 
 export function presentPendingIntentFacts(
@@ -94,6 +105,7 @@ export class IntentQueue {
   readonly #idFactory: ReplicaIdFactory;
   readonly #digest: ReplicaDigest;
   readonly #onSupersededRetired: ((intentId: string) => void) | undefined;
+  readonly #settlesByCommitSeq: boolean;
   readonly #mirror: OutboxMirror;
   /** The mirrored store: every write through it invalidates the overlay. */
   private readonly store: IntentRecordStore;
@@ -104,6 +116,8 @@ export class IntentQueue {
     this.#idFactory = options.idFactory ?? webCryptoIdFactory;
     this.#digest = options.digest ?? webCryptoDigest;
     this.#onSupersededRetired = options.onSupersededRetired;
+    this.#settlesByCommitSeq =
+      options.settlesByCommitSeq ?? store.settlesByCommitSeq === true;
   }
 
   /**
@@ -198,7 +212,12 @@ export class IntentQueue {
     outcomes: IntentOutcome[],
     holdsVersion?: HeldVersionProbe
   ): Promise<ReplicaIntent[]> {
-    return applyIntentOutcomes(this.store, outcomes, holdsVersion);
+    return applyIntentOutcomes(
+      this.store,
+      outcomes,
+      holdsVersion,
+      this.#settlesByCommitSeq
+    );
   }
 
   /**
