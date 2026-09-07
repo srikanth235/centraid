@@ -662,6 +662,58 @@ interface CentraidClient {
   ) => Promise<StagedBlob>;
   /** Native haptics bridge (mobile shell only; feature-detected). */
   haptic?: Record<string, (() => void) | undefined>;
+  /**
+   * THE LOCKER DOOR (#996, rulings R13 and W6-D2). Feature-detected: a host
+   * that cannot unseal locally does not offer it.
+   *
+   * An app gets the PLAINTEXT OF ONE ROW PER RECEIPT and never the vault key.
+   * `K` lives on the shell side of this bridge, behind the member's unlock —
+   * an app surface that could read it could also exfiltrate it, and no receipt
+   * would record that, because nothing was revealed. There is no `unlock()`
+   * here for the same reason a locked `reveal` returns an answer instead of
+   * prompting: a door that can raise the passphrase prompt is a door that can
+   * be used to phish it. Screens render the SHELL's lock surface off `state()`
+   * and `subscribeLock()` rather than drawing their own.
+   */
+  locker?: CentraidLockerDoor;
+}
+
+/** Why a Locker reveal was refused. Typed, because "failed" is not renderable. */
+type CentraidLockerRefusalReason =
+  | "locked"
+  | "not_enrolled"
+  | "stale_key"
+  | "not_found"
+  | "unavailable";
+
+interface CentraidLockerRevealed {
+  readonly ok: true;
+  readonly rowId: string;
+  /** Column → plaintext, for the columns that held ciphertext. */
+  readonly values: Readonly<Record<string, string>>;
+  readonly receiptId?: string;
+}
+
+interface CentraidLockerRefused {
+  readonly ok: false;
+  readonly reason: CentraidLockerRefusalReason;
+  readonly message: string;
+}
+
+interface CentraidLockerState {
+  readonly status: "locked" | "unlocked";
+  /** Milliseconds until this session ends; 0 when locked. */
+  readonly remainingMs: number;
+}
+
+interface CentraidLockerDoor {
+  reveal: (opts: {
+    rowId: string;
+    entity?: string;
+    columns?: readonly string[];
+  }) => Promise<CentraidLockerRevealed | CentraidLockerRefused>;
+  state: () => CentraidLockerState;
+  subscribeLock: (listener: (state: CentraidLockerState) => void) => () => void;
 }
 
 /** The staging receipt the blob door returns for one contribution. */
