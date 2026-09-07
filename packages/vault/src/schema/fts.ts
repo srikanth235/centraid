@@ -514,24 +514,6 @@ function backfillStatement(spec: FtsEntitySpec): string {
 SELECT ${valuesOf(spec, "b")} FROM ${base} b${liveGuardOf(spec, "b")};`;
 }
 
-/**
- * The three sync triggers for one entity, and nothing else — no shadow table,
- * no backfill.
- *
- * A table RE-CUT (SQLite's twelve-step rebuild, the only way to drop a
- * constraint) takes the base table's triggers down with it while the fts5
- * shadow and its rows survive, so the rung that rebuilds a searchable table
- * has to put them back. It emits them from the same generator `entityDdl`
- * uses, because the text is what `golden-vault.test.ts` compares: a hand-typed
- * copy would be a second spelling of one contract, drifting the first time a
- * spec changes.
- */
-export function ftsSyncTriggersFor(entity: string): string {
-  const spec = SPEC_BY_ENTITY.get(entity);
-  if (!spec) throw new Error(`not a searchable entity: ${entity}`);
-  return triggerDdl(spec);
-}
-
 function triggerDdl(spec: FtsEntitySpec): string {
   const base = physical(spec.entity);
   const fts = `fts_${base}`;

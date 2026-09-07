@@ -34,7 +34,11 @@
 // All tables STRICT; PKs are TEXT UUIDv7; money is fixed-scale INTEGER minor
 // units; timestamps are TEXT ISO-8601 UTC — the core spine's conventions.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 const PEOPLE_PROFILE_COLUMNS = `
   profile_id        TEXT PRIMARY KEY,
@@ -62,7 +66,7 @@ const PEOPLE_PROFILE_COLUMNS = `
   met               TEXT,
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   -- Trash (#630 P5): trashing the profile hides the person from the People
   -- projection while the canonical party, its links and its Tally
   -- participation stay, so restore is lossless until the sweep purges.
@@ -92,7 +96,7 @@ CREATE TABLE people_important_date (
   reminder_on INTEGER NOT NULL CHECK (reminder_on IN (0,1)),
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   -- Trash pair + guard (issue #441 A4).
   deleted_at  TEXT,
   purge_at    TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),

@@ -34,7 +34,11 @@
 // All tables STRICT; PKs are TEXT UUIDv7; timestamps are TEXT ISO-8601 UTC —
 // the core spine's conventions.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 export const LOCKER_DDL = `
 CREATE TABLE locker_item (
@@ -83,7 +87,7 @@ CREATE TABLE locker_item (
   password_set_at TEXT,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   -- archive (#872, GAPS §3.3 #9): "keep forever, hide from lists", the
   -- opposite end of trash's 30-day countdown. Deliberately EXCLUSIVE with
   -- deleted_at rather than orthogonal: an item is live, archived, or trashed,
@@ -146,7 +150,7 @@ CREATE TABLE locker_auth_credential (
   verifier      BLOB NOT NULL,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
+  ${ROW_VERSION_COLUMN}
 ) STRICT;
 CREATE INDEX locker_auth_credential_kind_idx
   ON locker_auth_credential(kind);
@@ -182,7 +186,7 @@ CREATE TABLE locker_item_field (
   position     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   CHECK (kind = 'sealed' OR value_sealed IS NULL),
   CHECK (kind <> 'sealed' OR value_text IS NULL),
   FOREIGN KEY (field_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
@@ -233,7 +237,7 @@ CREATE TABLE locker_item_passkey (
   private_key   TEXT,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
+  ${ROW_VERSION_COLUMN}
 ) STRICT;
 CREATE INDEX locker_item_passkey_rp_idx ON locker_item_passkey(rp_id);
 ${touchUpdatedAt("locker_item_passkey", "item_id")}

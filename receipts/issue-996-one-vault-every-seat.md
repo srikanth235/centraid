@@ -4959,3 +4959,80 @@ passing.
   says so, and the difference is a stranded intent.
 - **Promise-chain shape is behaviour on a re-entrant drain.** A `.finally`
   added for tidiness moved a reset by one microtask and cost eight journeys.
+
+## Wave 4 — the barrel says what is consumed, and the row-version column has one spelling (#996)
+
+`bun run knip` was red on fifteen exports left behind by wave 0c and 0b. The CI
+`static` job is the gate; nothing in this wave's read path consumes any of them,
+so each one was answered on its merits rather than being parked in a config.
+
+**`ROW_VERSION_COLUMN` — consumed, not deleted.** R6's column was declared once
+in `schema/updated-at.ts` and then hand-typed sixty-seven more times across
+seventeen schema modules. That is not a spare constant; it is one commitment
+with sixty-eight chances to drift, and the drift is silent — a table that spells
+the CHECK differently still opens, and the intent conflict check then compares a
+version some writers bump and others do not. Every site now interpolates the
+constant. The substitution is byte-for-byte: `golden-vault.test.ts` compares
+`sqlite_master` text object by object against corpora frozen by past releases,
+and it is green, which is the only proof that mattered here.
+
+**`ftsSyncTriggersFor` — deleted.** Its docstring named its consumer: the rung
+that re-cuts a searchable table has to put the triggers back. No such rung
+exists on this branch — the two re-cuts in the ladder are over
+`share_delivery_config` and the purge trigger, neither searchable — so the
+function was a wrapper around `triggerDdl` that nothing called. `triggerDdl`
+stays; it is what `entityDdl` emits from. Pre-1.0: the rung that needs it will
+re-add four lines, and until then it is a promise nothing keeps.
+
+**The operations barrel — trimmed to its consumers.** `operations/index.ts`
+re-exported the whole layer while only `commands/{people,tasks,schedule-projects,atlas}.ts`
+and `vault/src/index.ts` import from it. The eleven re-exports nobody imported
+(`assertContentWrite`, `CONTENT_WRITE_CONDITIONS`, `assertImportantDateWrite`,
+`IMPORTANT_DATE_CONDITIONS`, `assertTaskWrite`, `taskImage`,
+`TASK_WRITE_CONDITIONS`, and the types `CanonicalWriteOp`, `ContentWriteDraft`,
+`ImportantDateDraft`, `TaskLifecycleContext`, `TaskLifecycleResult`,
+`OperationCondition`) are gone from the barrel. No implementation was deleted:
+`canonical-write.ts`, `registry.ts` and `task-lifecycle.ts` still import them
+directly, which is what the invariant boundary actually runs on. `TaskWriteDraft`
+stays exported because it appears in `taskWriteConditions`'s own signature.
+
+### Gates
+
+- `bun run knip` — green (was 9 unused exports + 6 unused exported types).
+- `bun run --cwd packages/vault test` — 209 files, 1,742 passed, 2 skipped.
+- `bun run check:push:static` — 4/4 (format:check, lint, turbo:lint, typecheck:affected).
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/vault/src/operations/index.ts`
+- `packages/vault/src/schema/authority.ts`
+- `packages/vault/src/schema/blob-transfer.ts`
+- `packages/vault/src/schema/blob.ts`
+- `packages/vault/src/schema/core-side-tables.ts`
+- `packages/vault/src/schema/core.ts`
+- `packages/vault/src/schema/domains-locker.ts`
+- `packages/vault/src/schema/domains-people.ts`
+- `packages/vault/src/schema/domains-schedule.ts`
+- `packages/vault/src/schema/domains-social-knowledge-media.ts`
+- `packages/vault/src/schema/domains-tally.ts`
+- `packages/vault/src/schema/enrich.ts`
+- `packages/vault/src/schema/entity-revisions.ts`
+- `packages/vault/src/schema/ext.ts`
+- `packages/vault/src/schema/fts.ts`
+- `packages/vault/src/schema/replica.ts`
+- `packages/vault/src/schema/subscription.ts`
+- `packages/vault/src/schema/sync.ts`
+- `packages/vault/src/schema/time-organize.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the orphan sweep
+
+- **An orphan export is answered three ways, and "ignore it" is not one.**
+  Consume it where the consumption is a real single-definition win, delete it
+  where its named consumer does not exist, or trim the barrel that invented it.
+- **A schema constant is only safe to inline when a text gate proves it.** The
+  golden corpora compare DDL text, so the substitution is provable rather than
+  argued; without that gate this would have been a rewrite of eighteen frozen
+  files on faith.

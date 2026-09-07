@@ -3,7 +3,11 @@
 // generates the per-entity triggers from the logical registry, which keeps this
 // DDL free of primary-key names and covers live ext tables.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 /**
  * Build-time replica contract epoch, deliberately independent of PRAGMA
@@ -233,7 +237,7 @@ CREATE TABLE IF NOT EXISTS replica_intent_outcome (
   expires_at    TEXT,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
+  ${ROW_VERSION_COLUMN}
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_replica_intent_device_status
   ON replica_intent_outcome(device_id, status, updated_at);

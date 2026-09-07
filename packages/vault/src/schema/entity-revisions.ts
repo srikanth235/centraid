@@ -12,7 +12,11 @@
 // declared in the registry (`revisions: { retain }` in `entity-catalog.ts`),
 // not decided by whichever sweep happens to run.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 export const ENTITY_REVISIONS_DDL = `
 CREATE TABLE core_entity_revision (
@@ -59,7 +63,7 @@ CREATE TABLE core_entity_revision (
   parent_revision_id TEXT
     REFERENCES core_entity_revision(revision_id) ON DELETE SET NULL,
   updated_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (revision_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 -- "Which versions named these bytes" is what the blob door and the purge sweep

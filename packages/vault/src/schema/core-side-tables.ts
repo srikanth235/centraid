@@ -7,7 +7,11 @@
 // them is shared. The spine itself is `core.ts`; `migrate.ts` applies all
 // three in order.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 // Standoff anchor for inline references (#282). An anchor is a LOCATOR
 // for an existing core.link judgment, not a second judgment (rule 10): it
@@ -24,7 +28,7 @@ CREATE TABLE core_link_anchor (
   selector_json TEXT NOT NULL CHECK (json_valid(selector_json)),
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (anchor_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 ${touchUpdatedAt("core_link_anchor", "anchor_id")}
@@ -65,7 +69,7 @@ CREATE TABLE core_content_text (
   byte_size   INTEGER NOT NULL CHECK (byte_size >= 0),
   created_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
+  ${ROW_VERSION_COLUMN}
 ) STRICT;
 ${touchUpdatedAt("core_content_text", "content_id")}
 `;

@@ -4,7 +4,11 @@
 // `people.profile` field and a reachable address is a
 // `social.contact_channel`, so the card had nothing of its own left to say.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 export const SOCIAL_DDL = `
 CREATE TABLE social_circle (
@@ -14,7 +18,7 @@ CREATE TABLE social_circle (
   kind           TEXT NOT NULL CHECK (kind IN ('family','friends','work','custom')),
   created_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   UNIQUE (owner_party_id, name),
   FOREIGN KEY (circle_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
@@ -25,7 +29,7 @@ CREATE TABLE social_circle_member (
   party_id  TEXT NOT NULL REFERENCES core_party(party_id),
   added_at  TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   UNIQUE (circle_id, party_id),
   FOREIGN KEY (member_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
@@ -46,7 +50,7 @@ CREATE TABLE social_thread (
   -- blob_custody_state is rebuilt. It is therefore never a source of truth.
   last_message_at TEXT,
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (thread_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
@@ -59,7 +63,7 @@ CREATE TABLE social_thread_participant (
   muted     INTEGER NOT NULL CHECK (muted IN (0,1)),
   last_read_at TEXT,
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   UNIQUE (thread_id, party_id),
   CHECK (party_id IS NOT NULL OR handle IS NOT NULL),
   FOREIGN KEY (tp_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
@@ -78,7 +82,7 @@ CREATE TABLE social_message (
   external_id     TEXT UNIQUE,
   created_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   CHECK (sender_party_id IS NOT NULL OR sender_handle IS NOT NULL),
   FOREIGN KEY (message_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
@@ -112,7 +116,7 @@ CREATE TABLE knowledge_note (
   pinned          INTEGER NOT NULL CHECK (pinned IN (0,1)),
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   -- Trash (issue #308 A6): delete is reversible — the soft-delete pair, with
   -- real deletion deferred to the lifecycle sweep's purge window. The FTS
   -- spec's deletedColumn guard keeps trashed notes out of the index. The guard
@@ -137,7 +141,7 @@ CREATE TABLE knowledge_annotation (
   body_text       TEXT NOT NULL,
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (annotation_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
   FOREIGN KEY (target_type, target_id)
     REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
@@ -198,7 +202,7 @@ CREATE TABLE media_asset (
   purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   created_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   -- Archived and trashed are different answers, and a row claiming both is
   -- neither (#916).
   CHECK (archived_at IS NULL OR deleted_at IS NULL),
@@ -235,7 +239,7 @@ CREATE TABLE media_face_region (
                           CHECK (review_state IN ('proposed','confirmed','rejected','dismissed')),
   created_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   -- ONE SOURCE OF TRUTH, STRUCTURALLY. "confirmed" is already derivable from
   -- confirmed_by_party_id, so the two facts are pinned to each other here
   -- rather than left to agree by convention: a writer cannot mark a region

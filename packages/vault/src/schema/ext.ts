@@ -1,4 +1,8 @@
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 // The ext band (#286): app-declared extension tables that live
 // INSIDE vault.db — physical `ext_<app>_<table>` — for shapes the canonical
@@ -409,7 +413,7 @@ CREATE TABLE access_app_ext (
   status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retained')),
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   PRIMARY KEY (app_id, band, table_name)
 ) STRICT;
 ${touchUpdatedAt("access_app_ext", ["app_id", "band", "table_name"])}

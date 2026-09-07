@@ -1,7 +1,11 @@
 // Durable time semantics and the organizational spine (#630), for Agenda,
 // Tasks, People and Tally.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 export const TIME_ORGANIZE_DDL = `
 -- \`core_event.end_tz\` and \`.recurrence_semantics\` moved into CORE_DDL
@@ -18,7 +22,7 @@ CREATE TABLE schedule_project (
   archived_at    TEXT,
   created_at     TEXT NOT NULL,
   updated_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (project_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
@@ -29,7 +33,7 @@ CREATE TABLE schedule_section (
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (section_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
@@ -109,7 +113,7 @@ CREATE TABLE schedule_recurrence_exception (
   ),
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   UNIQUE (target_type, target_id, original_start_local, scope),
   FOREIGN KEY (exception_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
   FOREIGN KEY (target_type, target_id)
@@ -124,7 +128,7 @@ CREATE TABLE schedule_recurrence_exception_attendee (
   party_id     TEXT NOT NULL REFERENCES core_party(party_id),
   created_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   PRIMARY KEY (exception_id, party_id)
 ) STRICT;
 CREATE INDEX schedule_recurrence_exception_attendee_party_idx
@@ -141,7 +145,7 @@ CREATE TABLE social_contact_channel (
   provenance_json  TEXT CHECK (provenance_json IS NULL OR json_valid(provenance_json)),
   created_at       TEXT NOT NULL,
   updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   UNIQUE (party_id, kind, normalized_value),
   FOREIGN KEY (channel_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
@@ -193,7 +197,7 @@ CREATE TABLE tally_recurring_expense (
   last_materialized_start TEXT,
   created_at             TEXT NOT NULL,
   updated_at             TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (template_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 -- Mirrors \`tally_expense_split\` column for column, because it is the same
@@ -209,7 +213,7 @@ CREATE TABLE tally_recurring_expense_split (
   share_minor  INTEGER NOT NULL CHECK (share_minor >= 0),
   created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   PRIMARY KEY (template_id, party_id)
 ) STRICT;
 CREATE INDEX tally_recurring_expense_split_party_idx

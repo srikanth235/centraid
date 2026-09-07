@@ -38,7 +38,11 @@ import {
   ftsRefreshStatement,
   truncateForIndex,
 } from "./fts.js";
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 /** Body of a document's FTS row: extracted text, transcript, inline text.
  *  The inline branch reads `core_content_text`, written at representation
@@ -353,7 +357,7 @@ CREATE TABLE core_content_derivative (
   text_content  TEXT,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   UNIQUE (content_id, variant),
   CHECK ((variant IN ('thumb','preview','poster')) = (sha256 IS NOT NULL)),
   CHECK ((variant IN ('text','transcript','embedding','phash','thumbhash')) = (text_content IS NOT NULL)),

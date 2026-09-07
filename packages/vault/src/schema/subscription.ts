@@ -11,7 +11,11 @@
 // row — one the origin had to mint, the audience had to store, and the peer
 // route had to parse back into a grant before it could authorize anything.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 export const SHARE_SUBSCRIPTION_DDL = `
 -- ONE ROW PER (grant, audience vault), on BOTH seats. The origin holds one per
@@ -42,7 +46,7 @@ CREATE TABLE share_subscription (
   removed_at        TEXT,
   detail            TEXT,
   updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   PRIMARY KEY (authority_id, audience_vault_id)
 ) STRICT;
 

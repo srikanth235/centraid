@@ -64,7 +64,11 @@
 // be BOUND to an already-imported one via tally.bind_txn (the Studio
 // paid_txn_id pattern: bind, don't duplicate, when the bank already knows).
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 // No `tally_expense_receipt` (#883, ruling O-attach): a receipt is the
 // `role='receipt'` `core_attachment` on the expense, on the one attachment
@@ -87,7 +91,7 @@ CREATE TABLE tally_expense_line_item (
   sort_order   INTEGER NOT NULL CHECK (sort_order >= 0),
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (line_item_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
@@ -97,7 +101,7 @@ CREATE TABLE tally_expense_line_allocation (
   share_minor  INTEGER NOT NULL CHECK (share_minor >= 0),
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   PRIMARY KEY (line_item_id, party_id)
 ) STRICT;
 
@@ -117,7 +121,7 @@ CREATE TABLE tally_friend (
   party_id     TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (friend_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
@@ -144,7 +148,7 @@ CREATE TABLE tally_group (
   currency   TEXT NOT NULL CHECK (length(currency) = 3),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (group_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
@@ -180,7 +184,7 @@ CREATE TABLE tally_expense (
   txn_id       TEXT REFERENCES core_transaction(txn_id),
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   -- Trash pair + guard (issue #441 A4). tally_expense_split cascades on purge.
   deleted_at   TEXT,
   purge_at     TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
@@ -193,7 +197,7 @@ CREATE TABLE tally_expense_split (
   share_minor INTEGER NOT NULL CHECK (share_minor >= 0),
   created_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   PRIMARY KEY (expense_id, party_id)
 ) STRICT;
 
@@ -207,7 +211,7 @@ CREATE TABLE tally_expense_payer (
   paid_minor  INTEGER NOT NULL CHECK (paid_minor >= 0),
   created_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   PRIMARY KEY (expense_id, party_id)
 ) STRICT;
 
@@ -226,7 +230,7 @@ CREATE TABLE tally_nudge (
   prepared_at  TEXT NOT NULL,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (nudge_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
@@ -244,7 +248,7 @@ CREATE TABLE tally_settlement (
   txn_id        TEXT REFERENCES core_transaction(txn_id),
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   -- Trash pair + guard (issue #441 A4).
   deleted_at    TEXT,
   purge_at      TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
@@ -272,7 +276,7 @@ CREATE TABLE tally_obligation (
   settled_at    TEXT,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   deleted_at    TEXT,
   purge_at      TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   CHECK (from_party <> to_party),

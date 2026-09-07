@@ -6,7 +6,11 @@
 // `schedule.availability_rule` with them: no surface produced a row, and the
 // measurement spine only health reached (`core.observation`) went too.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+import {
+  ROW_VERSION_COLUMN,
+  UPDATED_AT_DEFAULT,
+  touchUpdatedAt,
+} from "./updated-at.js";
 
 export const SCHEDULE_DDL = `
 CREATE TABLE schedule_calendar (
@@ -32,7 +36,7 @@ CREATE TABLE schedule_event_ext (
   travel_buffer_min INTEGER CHECK (travel_buffer_min >= 0),
   created_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (event_ext_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_event_ext_calendar ON schedule_event_ext(calendar_id);
@@ -46,7 +50,7 @@ CREATE TABLE schedule_attendee (
   responded_at TEXT,
   created_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   UNIQUE (event_id, party_id),
   FOREIGN KEY (attendee_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
@@ -125,7 +129,7 @@ CREATE TABLE schedule_task (
   purge_at       TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   created_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   updated_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  ${ROW_VERSION_COLUMN},
   FOREIGN KEY (task_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_task_owner_party ON schedule_task(owner_party_id);

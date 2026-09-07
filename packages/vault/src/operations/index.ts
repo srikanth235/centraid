@@ -16,38 +16,19 @@ export {
   OPERATION_OF_TABLE,
   type CanonicalRefusal,
   type CanonicalWrite,
-  type CanonicalWriteOp,
 } from "./canonical-write.js";
-export {
-  assertContentWrite,
-  CONTENT_WRITE_CONDITIONS,
-  type ContentWriteDraft,
-} from "./content-write.js";
-export {
-  assertImportantDateWrite,
-  IMPORTANT_DATE_CONDITIONS,
-  type ImportantDateDraft,
-} from "./important-date-write.js";
 export { domainOperation, DOMAIN_OPERATIONS } from "./registry.js";
 export {
   cancelTask,
   completeTask,
   reopenTask,
   SUCCESSOR_INHERITS_SERIES_LINKS_SQL,
-  type TaskLifecycleContext,
-  type TaskLifecycleResult,
 } from "./task-lifecycle.js";
-export {
-  assertTaskWrite,
-  taskImage,
-  TASK_WRITE_CONDITIONS,
-  type TaskWriteDraft,
-} from "./task-write.js";
+export { type TaskWriteDraft } from "./task-write.js";
 export {
   OperationRefusalError,
   type DomainOperation,
   type OfflineDeclaration,
-  type OperationCondition,
   type ReadSetEntry,
 } from "./types.js";
 
