@@ -19,6 +19,7 @@ export * from "./seat-drift-error.js";
 export * from "./seat-snapshot-moved-error.js";
 export * from "./seat-worker-not-open-error.js";
 export * from "./outbox.js";
+export * from "./seat-intent-store.js";
 export * from "./state.js";
 export * from "./storage-probe.js";
 export * from "./watermark.js";

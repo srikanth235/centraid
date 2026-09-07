@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
+import { applySeatLogPage } from "./applier.js";
 import {
   createSeatBlobPresence,
   readSeatBlob,
@@ -26,7 +27,12 @@ import {
   createSeatOutbox,
   readSeatOutbox,
 } from "./outbox.js";
-import { readSeatState } from "./state.js";
+import {
+  clearSeatOverlaysAtCommit,
+  SeatIntentStore,
+  seatOverlayClearingHook,
+} from "./seat-intent-store.js";
+import { initSeatState, readSeatState } from "./state.js";
 import { seatWatermark, seatWatermarkLine } from "./watermark.js";
 import { SeatWorkerCore } from "./worker-core.js";
 
@@ -249,5 +255,113 @@ describe("the seat watermark", () => {
     });
     expect(watermark.behind).toBe(0);
     expect(watermark.head).toBe(50);
+  });
+});
+
+describe("the overlay clears in the transaction that carries its commit", () => {
+  it("settles inside the applier's own transaction, not after it", () => {
+    const driver = new NodeSeatDriver();
+    openSeatFile(driver);
+    driver.exec(`
+      CREATE TABLE note (note_id TEXT PRIMARY KEY, title TEXT NOT NULL) STRICT;
+    `);
+    initSeatState(driver, {
+      vaultId: "vault-1",
+      epoch: "e1",
+      schemaEpoch: 2,
+      appliedSeq: 10,
+    });
+    const store = SeatIntentStore.create(driver);
+    driver.run(
+      `INSERT INTO seat_outbox (intent_id, created_order, app_id, action,
+         input_json, payload_hash, state, attempts, depends_on_json,
+         base_versions_json, optimistic_json, commit_seq, waiting_on_json,
+         needs_blobs_json, enqueued_at, updated_at, record_json)
+       VALUES ('i-1', 1, 'notes', 'notes.create_note', '{}', 'h', 'awaiting-change',
+               1, NULL, NULL, NULL, 7, NULL, NULL, '2026-01-01T00:00:00.000Z',
+               '2026-01-01T00:00:00.000Z', ?)`,
+      [
+        JSON.stringify({
+          intentId: "i-1",
+          createdOrder: 1,
+          appId: "notes",
+          action: "notes.create_note",
+          input: {},
+          payloadHash: "h",
+          state: "awaiting-change",
+          attempts: 1,
+          optimistic: [],
+          commitSeq: 7,
+        }),
+      ]
+    );
+
+    const seen: number[] = [];
+    const result = applySeatLogPage(
+      driver,
+      {
+        vaultId: "vault-1",
+        epoch: "e1",
+        schemaEpoch: 2,
+        ddlVersion: 0,
+        floor: 0,
+        watermark: 11,
+        next: 11,
+        hasMore: false,
+        rows: [
+          {
+            seq: 11,
+            commitSeq: 7,
+            schemaEpoch: 2,
+            ddlVersion: 0,
+            table: "note",
+            op: "insert",
+            pk: ["n1"],
+            row: { note_id: "n1", title: "the row the intent made" },
+            producer: "gateway",
+            committedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      },
+      {
+        onCommitInTransaction: (commitSeq) => {
+          seen.push(commitSeq);
+          seatOverlayClearingHook(driver)(commitSeq);
+        },
+      }
+    );
+
+    expect(result.applied).toBe(1);
+    expect(seen).toStrictEqual([7]);
+    // The row landed and the overlay went, together.
+    expect(driver.all(`SELECT note_id FROM note`)).toStrictEqual([
+      { note_id: "n1" },
+    ]);
+    expect(readSeatOutbox(driver)).toStrictEqual([]);
+    expect(
+      driver.all<{ intent_id: string }>(
+        `SELECT intent_id FROM seat_outbox_settled`
+      )
+    ).toStrictEqual([{ intent_id: "i-1" }]);
+    void store;
+    driver.close();
+  });
+
+  it("leaves an overlay whose commit the cursor has not reached", () => {
+    const driver = new NodeSeatDriver();
+    openSeatFile(driver);
+    SeatIntentStore.create(driver);
+    addSeatOutboxIntent(driver, {
+      intentId: "i-2",
+      appId: "notes",
+      action: "notes.create_note",
+      input: {},
+      payloadHash: "h2",
+      state: "awaiting-change",
+      commitSeq: 99,
+    });
+    expect(clearSeatOverlaysAtCommit(driver, 98)).toStrictEqual([]);
+    expect(clearSeatOverlaysAtCommit(driver, 99)).toStrictEqual(["i-2"]);
+    driver.close();
   });
 });

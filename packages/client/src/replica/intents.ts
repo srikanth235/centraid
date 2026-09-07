@@ -22,11 +22,24 @@ import type {
   PendingIntentRevisionTarget,
 } from "./intent-revision.js";
 import {
+  applyInIntentOrder,
+  applyIntentOutcomes,
+  settleAnsweredIntents,
+  settleIntentsAtCommitSeq,
+} from "./intent-settlement.js";
+import type { HeldVersionProbe } from "./intent-settlement.js";
+import {
   OVERLAY_STATES,
   actionableAttention,
-  intentVerdict,
   retainedAttention,
 } from "./intent-verdict.js";
+import {
+  chainBaseVersions,
+  chainDependencies,
+  mintedRowIndex,
+  substitutePredecessorReferences,
+  supersededByInput,
+} from "./offline-chain.js";
 import { mirrorOutbox } from "./outbox-mirror.js";
 import type { OutboxMirror } from "./outbox-mirror.js";
 import { intentPayloadHash } from "./payload-hash.js";
@@ -39,20 +52,6 @@ import type {
   ReplicaValue,
 } from "./types.js";
 
-/**
- * Intent transitions share one durable queue; preserve outcome order instead
- * of racing state reads and writes for the same optimistic overlay.
- */
-function applyInIntentOrder<T>(
-  values: Iterable<T>,
-  apply: (value: T) => void | PromiseLike<void>
-): Promise<void> {
-  return Array.from(values).reduce<Promise<void>>(
-    (sequence, value) => sequence.then(() => apply(value)),
-    Promise.resolve()
-  );
-}
-
 export interface IntentQueueOptions {
   idFactory?: ReplicaIdFactory;
   /** RN Hermes has no `crypto.subtle`; native hosts inject an expo-crypto digest. */
@@ -60,13 +59,6 @@ export interface IntentQueueOptions {
   /** Retract a store's alert (native writes one) for a predecessor startup retires. */
   onSupersededRetired?: (intentId: string) => void;
 }
-
-/**
- * "Does this replica already hold origin version V of that row?" Only the seat
- * can answer; a seat that cannot is treated as holding nothing, so an answer
- * without a probe waits rather than clearing early.
- */
-export type HeldVersionProbe = (version: ReplicaBaseVersion) => boolean;
 
 export function presentPendingIntentFacts(
   intent: ReplicaIntent
@@ -81,14 +73,6 @@ export function presentPendingIntentFacts(
     ...(intent.attempts === undefined ? {} : { attempts: intent.attempts }),
     ...(intent.enqueuedAt ? { enqueuedAt: intent.enqueuedAt } : {}),
   });
-}
-
-function heldEverywhere(
-  answered: readonly ReplicaBaseVersion[],
-  holdsVersion: HeldVersionProbe | undefined
-): boolean {
-  if (!holdsVersion) return false;
-  return answered.every((version) => holdsVersion(version));
 }
 
 /** What the member reads when a revoked share expires their queued write. */
@@ -122,15 +106,48 @@ export class IntentQueue {
     this.#onSupersededRetired = options.onSupersededRetired;
   }
 
+  /**
+   * THE CHAIN IS DERIVED HERE, ONCE, BEFORE THE HASH (#996, R23).
+   *
+   * Three things happen in one place because they have to agree: the edges are
+   * read off the outbox (never declared by an app, never inferred from a
+   * value's shape), the row ids a predecessor's projection INVENTED become
+   * `{"$intent": …}` references the gateway resolves from the durable outcome,
+   * and the base set drops the rows those predecessors have not produced yet —
+   * a version the seat never observed is not a precondition, and inventing one
+   * is how a chain conflicts with itself on its own first run.
+   *
+   * The hash then covers the FINAL payload, `dependsOn` included, which is
+   * what `expectedPayloadHash` verifies the id against.
+   */
   async enqueue(input: EnqueueIntentInput): Promise<ReplicaIntent> {
     const intentId = input.intentId ?? this.#idFactory();
-    const payloadHash = await intentPayloadHash(input, this.#digest);
+    const minted = mintedRowIndex(
+      await this.store.list(),
+      new Set([intentId, ...supersededByInput(input)])
+    );
+    const dependsOn = chainDependencies(input.input, minted);
+    const chained =
+      dependsOn.length === 0
+        ? input
+        : {
+            ...input,
+            input: substitutePredecessorReferences(input.input, minted),
+            ...(input.baseVersions
+              ? { baseVersions: chainBaseVersions(input.baseVersions, minted) }
+              : {}),
+          };
+    const payloadHash = await intentPayloadHash(
+      { ...chained, dependsOn },
+      this.#digest
+    );
     return this.store.add({
       intentId,
       payloadHash,
-      appId: input.appId,
-      action: input.action,
-      input: input.input,
+      appId: chained.appId,
+      action: chained.action,
+      input: chained.input,
+      ...(dependsOn.length > 0 ? { dependsOn } : {}),
       state: "queued",
       attempts: 0,
       // One stamp for every rail; `add` returns the existing record, so a
@@ -139,7 +156,7 @@ export class IntentQueue {
       optimistic: input.optimistic ?? [],
       dependencies: input.dependencies ?? [],
       ...(input.stewardLabel ? { stewardLabel: input.stewardLabel } : {}),
-      ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
+      ...(chained.baseVersions ? { baseVersions: chained.baseVersions } : {}),
     });
   }
 
@@ -169,73 +186,6 @@ export class IntentQueue {
   }
 
   /**
-   * G1 (#929): an `executed` answer that names ORIGIN ROW VERSIONS settles the
-   * pending row only once this replica HOLDS them. Until then the intent stays
-   * `awaiting-change` — the state the outbox already has for "the gateway said
-   * yes, the row has not arrived" — so the badge clears when the member can
-   * actually see their own change, not one round trip earlier.
-   *
-   * `holdsVersion` is injected because only the seat can answer it: on an
-   * audience it reads the subscription's shape lineage, and a seat that cannot
-   * answer passes nothing and settles as before.
-   */
-  async applyOutcomes(
-    outcomes: IntentOutcome[],
-    holdsVersion?: HeldVersionProbe
-  ): Promise<ReplicaIntent[]> {
-    const updated: ReplicaIntent[] = [];
-    await applyInIntentOrder(outcomes, async (outcome) => {
-      const existing = await this.store.get(outcome.intentId);
-      if (!existing || !OVERLAY_STATES.has(existing.state)) return;
-      if (
-        outcome.status === "executed" &&
-        outcome.answeredVersions &&
-        outcome.answeredVersions.length > 0 &&
-        !heldEverywhere(outcome.answeredVersions, holdsVersion)
-      ) {
-        updated.push(
-          await this.store.transition(outcome.intentId, [...OVERLAY_STATES], {
-            state: "awaiting-change",
-            answeredVersions: outcome.answeredVersions,
-            reason: undefined,
-          })
-        );
-        return;
-      }
-      // A conflict is a state of its own, and a conflict whose BASE ROW IS
-      // GONE is a third one (#922 G5): the member's remedy differs, so the
-      // verdict must too. The outbox `state` column is unconstrained TEXT, so
-      // widening the vocabulary needs no migration on either store.
-      const verdict = intentVerdict(outcome);
-      const patch = {
-        ...verdict,
-        reason: outcome.reason,
-        output: outcome.output,
-        ...(outcome.conflict ? { conflict: outcome.conflict } : {}),
-        ...(outcome.waitingOn ? { waitingOn: outcome.waitingOn } : {}),
-      };
-      // Executed is the only settled state: the unchanged outbox contract
-      // journals it and scrubs its input. Attention outcomes remain ordinary
-      // outbox transitions, so their existing optimistic projection survives
-      // restart without changing any store schema or implementation.
-      updated.push(
-        outcome.status === "executed"
-          ? await this.store.settle(
-              outcome.intentId,
-              [...OVERLAY_STATES],
-              patch
-            )
-          : await this.store.transition(
-              outcome.intentId,
-              [...OVERLAY_STATES],
-              patch
-            )
-      );
-    });
-    return updated;
-  }
-
-  /**
    * The overlay every replica read composes over. It comes from the mirror,
    * so an empty outbox costs no IndexedDB work per read (#922 C1).
    */
@@ -243,27 +193,25 @@ export class IntentQueue {
     return this.#mirror.pending([...OVERLAY_STATES]);
   }
 
-  /**
-   * Settle the answers this replica has now caught up to (G1). Called after a
-   * change batch applies: an `awaiting-change` intent whose answered versions
-   * have arrived is executed, and the outbox journals it as it always did.
-   */
-  async settleAnswered(
-    holdsVersion: HeldVersionProbe
+  /** An answer, read against the queue. See `intent-settlement.ts`. */
+  applyOutcomes(
+    outcomes: IntentOutcome[],
+    holdsVersion?: HeldVersionProbe
   ): Promise<ReplicaIntent[]> {
-    const waiting = await this.store.list(["awaiting-change"]);
-    const settled: ReplicaIntent[] = [];
-    await applyInIntentOrder(waiting, async (intent) => {
-      const answered = intent.answeredVersions ?? [];
-      if (answered.length === 0) return;
-      if (!heldEverywhere(answered, holdsVersion)) return;
-      settled.push(
-        await this.store.settle(intent.intentId, ["awaiting-change"], {
-          state: "executed",
-        })
-      );
-    });
-    return settled;
+    return applyIntentOutcomes(this.store, outcomes, holdsVersion);
+  }
+
+  /**
+   * Settle every answer this seat's applied cursor has now reached (#996,
+   * R24). Called with the commit position the applier just committed.
+   */
+  settleAtCommitSeq(cursorCommitSeq: number): Promise<ReplicaIntent[]> {
+    return settleIntentsAtCommitSeq(this.store, cursorCommitSeq);
+  }
+
+  /** The pre-#996 half of the same question, by row version (#929 G1). */
+  settleAnswered(holdsVersion: HeldVersionProbe): Promise<ReplicaIntent[]> {
+    return settleAnsweredIntents(this.store, holdsVersion);
   }
 
   /**

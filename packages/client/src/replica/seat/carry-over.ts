@@ -139,6 +139,10 @@ export function writeSeatCarryOver(
         needsBlobs: intent.needsBlobs,
         enqueuedAt: intent.enqueuedAt,
         updatedAt: intent.updatedAt,
+        // The record VERBATIM, not rebuilt from the columns: the columns are
+        // what the queue sorts and filters on, and re-deriving the record from
+        // them would silently drop every field they do not carry.
+        record: intent.record,
       });
     }
     for (const blob of carried.blobs) {

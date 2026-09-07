@@ -131,6 +131,14 @@ export interface IntentOutcome {
    * clears before the row it wrote arrives, which is the defect this closes.
    */
   answeredVersions?: ReplicaBaseVersion[];
+  /**
+   * THE CANONICAL COMMIT POSITION AN `executed` ANSWER LANDED AT (#996, R24).
+   * Supersedes `answeredVersions` as the thing the overlay waits on: a
+   * position is one number the seat can compare against its own applied
+   * cursor, where a version set is a per-row question a seat holding the whole
+   * file no longer needs to ask row by row.
+   */
+  commitSeq?: number;
   /** Structured refusal detail; #928 fills it, the shape is fixed now. */
   denial?: ReplicaDenial;
   reason?: string;
@@ -354,6 +362,22 @@ export interface ReplicaIntent {
   waitingOn?: ReplicaWaitingOn;
   /** Carried from an `executed` answer until the replica holds them (G1). */
   answeredVersions?: ReplicaBaseVersion[];
+  /**
+   * THE CHAIN'S EDGES (#996, R23). Intent ids this one may not run before,
+   * derived by the seat from the row ids its own outbox minted — never
+   * declared by an app and never inferred from a value. Part of the payload
+   * hash on the wire, because an intent whose predecessors were rewritten in
+   * flight is a different intent.
+   */
+  dependsOn?: string[];
+  /**
+   * THE CANONICAL POSITION THE GATEWAY COMMITTED THIS AT (#996, R24). Present
+   * once the outcome is `executed`; the pending overlay is held until the
+   * seat's applied cursor reaches it, and cleared in the transaction that
+   * advances that cursor. `executed` alone is the gateway's fact, not this
+   * seat's.
+   */
+  commitSeq?: number;
   /** SHA-256 of canonical {appId, action, input, baseVersions}; daemon verifies id reuse. */
   payloadHash: string;
   appId: string;

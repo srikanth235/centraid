@@ -83,6 +83,20 @@ export interface SeatApplyOptions {
   readonly deferOverThreshold?: boolean;
   /** Called once per applied batch, after the last commit is durable. */
   readonly onChange?: (notice: SeatChangeNotice) => void;
+  /**
+   * CALLED INSIDE THE TRANSACTION THAT ADVANCES THE CURSOR (#996, R24).
+   *
+   * Where the outbox shares this file, an executed intent's overlay must clear
+   * in the SAME transaction that carries its `commit_seq` — otherwise there is
+   * a window in which the rows have landed and the pending row is still drawn
+   * over them, and a crash inside that window leaves an overlay nothing will
+   * ever clear. The hook runs after the commit's rows and before COMMIT, so
+   * whatever it writes is atomic with them.
+   *
+   * It must not throw for anything recoverable: a throw here rolls the
+   * COMMIT'S ROWS back, not just the bookkeeping.
+   */
+  readonly onCommitInTransaction?: (commitSeq: number) => void;
   readonly now?: () => string;
 }
 
@@ -256,6 +270,7 @@ export function applySeatLogPage(
       }
       cursor = group.lastSeq;
       commitSeqs.push(group.commitSeq);
+      options.onCommitInTransaction?.(group.commitSeq);
       driver.run(
         `UPDATE seat_state SET applied_seq = ?, applied_commit_seq = ?,
                 ddl_version = ?, gateway_watermark = ?, deferred_from = ?,

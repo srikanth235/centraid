@@ -4,6 +4,8 @@ import {
   ReplicaProtocolError,
   ReplicaRebootstrapRequiredError,
 } from "./errors.js";
+import { chainRecoveryFromExpiredOutcome } from "./offline-chain.js";
+import { ReplicaIntentRecoveryError } from "./replica-intent-recovery-error.js";
 import type { RebootstrapReason } from "./replica-rebootstrap-error.js";
 import type {
   IntentOutcome,
@@ -328,6 +330,12 @@ export async function postReplicaIntent(
         input: intent.input,
         payloadHash: intent.payloadHash,
         ...(intent.baseVersions ? { baseVersions: intent.baseVersions } : {}),
+        // THE CHAIN GOES ON THE WIRE (#996, R23). It is part of the payload
+        // hash the gateway verifies the id against, so an intent that derived
+        // edges and did not send them is refused — correctly.
+        ...(intent.dependsOn && intent.dependsOn.length > 0
+          ? { dependsOn: intent.dependsOn }
+          : {}),
       }),
     }
   );
@@ -386,6 +394,11 @@ async function readReplicaJson<T>(
     typeof body === "object" &&
     (response.status === 409 || response.status === 410)
   ) {
+    // NOT EVERY 409 IS ABOUT THE COPY. Two are about one queued write, and
+    // answering them with a re-bootstrap would replace a whole vault to
+    // resolve a question about one task.
+    const recovery = intentRecoveryFrom(body);
+    if (recovery) throw recovery;
     throw new ReplicaRebootstrapRequiredError(rebootstrapReason(body));
   }
   const serverCode =
@@ -501,6 +514,36 @@ function validateOutcomes(outcomes: IntentOutcome[] | undefined): void {
   for (const outcome of outcomes) parseOutcome(outcome, false);
 }
 
+const INTENT_RECOVERY_ERRORS = new Set([
+  "replica_intent_outcome_expired",
+  "replica_intent_payload_mismatch",
+]);
+
+function intentRecoveryFrom(
+  body: object
+): ReplicaIntentRecoveryError | undefined {
+  const shaped = body as {
+    error?: unknown;
+    intentId?: unknown;
+    reason?: unknown;
+    recovery?: unknown;
+  };
+  if (
+    typeof shaped.error !== "string" ||
+    !INTENT_RECOVERY_ERRORS.has(shaped.error)
+  )
+    return undefined;
+  return new ReplicaIntentRecoveryError(
+    typeof shaped.intentId === "string" ? shaped.intentId : "unknown",
+    shaped.error,
+    chainRecoveryFromExpiredOutcome({
+      error: "replica_intent_outcome_expired",
+      recovery: "resubmit-as-new-intent",
+      ...(typeof shaped.reason === "string" ? { reason: shaped.reason } : {}),
+    })
+  );
+}
+
 function parseOutcome(
   value: unknown,
   allowInFlight: boolean
@@ -525,6 +568,17 @@ function parseOutcome(
   ) {
     throw new ReplicaProtocolError(
       "Replica intent outcome has an unknown status"
+    );
+  }
+  if (
+    candidate.commitSeq !== undefined &&
+    (!Number.isSafeInteger(candidate.commitSeq) ||
+      Number(candidate.commitSeq) < 1)
+  ) {
+    // R24: the position the overlay waits on. A malformed one would either
+    // clear a badge that should still be showing or hold one forever.
+    throw new ReplicaProtocolError(
+      "Replica intent outcome commit position is malformed"
     );
   }
   if (candidate.reason !== undefined && typeof candidate.reason !== "string") {

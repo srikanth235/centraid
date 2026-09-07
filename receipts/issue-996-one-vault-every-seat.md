@@ -1929,3 +1929,157 @@ bun run check:push:static                # stamped on the committed tree
   footprint rig's ceilings never came from the ledger, so the honest record is
   an empty `entries` with a `_noEntries` note saying why — not a re-labelled
   volume that would keep the row alive by renaming it.
+
+## Wave 2 — the outbox chain
+
+Five intents queued in airplane mode, four of which name a row the first has
+not made yet. This commit is the seat's half of making that work: the gateway
+already decides WHEN each may run (wave 1's `replicaDependencyVerdict`) and
+WHICH row a placeholder means (`resolvePredecessorReferences`); what was
+missing is everything only the seat can know — what it queued, and how far it
+has applied.
+
+### The edges are derived, never declared and never guessed
+
+`packages/client/src/replica/offline-chain.ts`. An edge exists when an intent's
+input NAMES a row id another unsettled intent's projection MINTED. Both facts
+are already in the outbox: `namedRowIds` reads the first, the optimistic
+mutations are the second. An app declares nothing (R23) and nothing is inferred
+from the shape of a value (R20).
+
+- **Only upserts mint.** A delete names a row that already exists canonically,
+  so a later intent naming it is not waiting for this one to MAKE it; an edge
+  there would serialise two unrelated writes behind each other.
+- **A revision is not a dependent of what it retires.** The first version of
+  this made an intent depend on the intent it had just superseded — a chain
+  that can never drain. `supersededByInput` reads the supersession markers the
+  replacement already carries, and `mintedRowIndex` excludes them along with
+  the intent's own id. `intents.contract.test.ts` caught it.
+- **Only a SYNTHETIC id becomes a reference.** When an app supplies the row id,
+  the create writes that id and every later intent may name it directly;
+  substituting there would replace a correct value with an indirection. When
+  the projection invented the id for display, the gateway has never seen it and
+  never will, so the wire carries `{"$intent": …, "table": …}`.
+- **The base set drops what a predecessor has not produced.** A row the create
+  has not made has no version to observe, and inventing one — 0, or the
+  projection's optimistic guess — is how a chain conflicts with itself on its
+  own first run. R23 forbids seat-side rebasing for a reason the seat cannot
+  see: three outboxes each rebasing locally is three rebases the gateway cannot
+  tell from an observed version.
+
+### `dependsOn` was in the server's hash and not in the seat's
+
+Wave 1 put `dependsOn` into `expectedPayloadHash` on the gateway. The client's
+`intentPayloadHash` did not have it, so every chained intent this commit
+derives would have been refused for a mismatched id. Fixed here, with the
+comment on each side naming the other. `postReplicaIntent` sends the field.
+
+### The overlay clears at the commit, in the transaction that carries it
+
+`executed` is the gateway's fact, not this seat's: the answer can arrive before
+the rows. So an executed outcome carrying `commitSeq` parks the intent at
+`awaiting-change` — the state the outbox already had for exactly this — and
+`IntentQueue.settleAtCommitSeq` settles it when the applied cursor reaches the
+position.
+
+Where the outbox shares the seat's file, "when" is stronger than that:
+`seatOverlayClearingHook` is handed to `applySeatLogPage` as
+`onCommitInTransaction` and runs after the commit's rows and before COMMIT, so
+the pending row and the canonical rows it was drawn over become visible in the
+same instant. That is why the applier grew an in-transaction hook at all. Every
+asynchronous alternative has a window, and a crash inside it leaves an overlay
+nothing will clear.
+
+`commitSeq` supersedes `answeredVersions` for a seat that holds the whole file:
+one number against one number, instead of a per-row question a seat under R1
+no longer needs to ask row by row. The old path stays for the shaped route
+until wave 5 deletes it.
+
+### `SeatIntentStore` — the third outbox, and the reason there is one
+
+`packages/client/src/replica/seat/seat-intent-store.ts` satisfies the same
+`IntentRecordStore` the memory and IndexedDB stores do, over `seat_outbox`.
+Not a third implementation of the same thing: it is the one that shares a
+DATABASE with the rows the intents are about, which is what makes the
+transaction above expressible at all. The record is stored as JSON beside its
+indexed columns — the columns are what the queue orders, filters and clears on;
+the intent's shape belongs to the shared core and must not be re-columnised
+here every time it grows a field.
+
+### A 409 about one intent is not a 409 about the copy
+
+Every 409 on the replica plane used to mean re-bootstrap. Two do not:
+`replica_intent_outcome_expired` and `replica_intent_payload_mismatch` are
+facts about one queued write, and answering them by replacing the whole vault
+would throw away a copy to resolve a question about one task — and lose the
+outbox's own decision doing it. `ReplicaIntentRecoveryError` carries
+`chainRecoveryFromExpiredOutcome`'s answer instead: **recover**, mint a new
+intent against a freshly observed base. Never a silent retry — the retained
+outcome is what made a retry idempotent, and once it is gone a re-send could
+duplicate a payment.
+
+### The contract, over all three outboxes
+
+`packages/client/src/replica/offline-chain.contract.test.ts` runs the same
+scenarios against the in-memory, IndexedDB and SQLite outboxes — one contract,
+not three suites, because the difference that matters (a store that can share a
+transaction with the replica versus one that cannot) is exactly the difference
+that would otherwise hide a divergence. 43 cases, including every scenario the
+issue names: ordering; held dependents and their badge copy; predecessor
+references; another writer's unrelated note still draining while the chain is
+held; a lost acknowledgement replaying the retained outcome; acknowledgement
+before delta and delta before acknowledgement converging; a rejected creation
+abandoning its dependents by name with nothing sent; an accepted deletion
+reconciling to absence; a restart rebuilding one completed task with the final
+values from the outbox alone; an intent admitted during re-bootstrap
+preparation; and a snapshot that already holds an unacknowledged intent
+settling rather than re-running it.
+
+### Every file this commit touches
+
+- `packages/client/src/replica/offline-chain.ts` (new) — the whole seat-side chain
+- `packages/client/src/replica/offline-chain.contract.test.ts` (new) — the contract, three backends
+- `packages/client/src/replica/seat/seat-intent-store.ts` (new) — the outbox in the seat's file, and the in-transaction clear
+- `packages/client/src/replica/replica-intent-recovery-error.ts` (new) — the 409 that is not a re-bootstrap
+- `packages/client/src/replica/intents.ts` — the chain derived at admission; the queue delegates settlement
+- `packages/client/src/replica/intent-settlement.ts` (new) — `applyIntentOutcomes`, `settleIntentsAtCommitSeq`, `settleAnsweredIntents`, split out at the source cap
+- `packages/client/src/replica/payload-hash.ts` — `dependsOn` in the hash, matching the gateway
+- `packages/client/src/replica/types.ts` — `dependsOn` and `commitSeq` on the intent and the outcome
+- `packages/client/src/replica/shell-transport.ts` — `dependsOn` on the wire, `commitSeq` validated, the recovery 409
+- `packages/client/src/replica/seat/applier.ts` — `onCommitInTransaction`
+- `packages/client/src/replica/seat/outbox.ts` — the full state vocabulary, and `record_json`
+- `packages/client/src/replica/seat/carry-over.ts` · `packages/client/src/replica/seat/carry-over.test.ts` — the record carried verbatim; the in-transaction clear under test
+- `packages/client/src/replica/seat/index.ts` · `packages/client/src/replica/index.ts` — the new surface
+
+### Gates
+
+```
+cd packages/client && bun run test   # 279 files, 2566 passed
+cd apps/mobile     && bun run test   # 286 files, 2438 passed
+bun run governance
+bun run check:push:static            # stamped on the committed tree
+```
+
+### Decisions — wave 2, the outbox chain
+
+- **The chain is derived at ADMISSION, not at send.** It has to be: it is part
+  of the payload hash, so an intent whose edges were computed later would be a
+  different intent than the one that was saved.
+- **`mintedRowIndex` reads `store.list()` on every enqueue.** A scan per
+  admission, not per read. It is the honest implementation of "derived from the
+  outbox"; if it ever shows up in a measurement, the fix is an index in the
+  store, not a cached guess in the caller.
+- **The seat's SQLite outbox rather than the phone's.**
+  `apps/mobile`'s `SqliteIntentStore` is the OLD store's outbox and is wave 3/5
+  work; `SeatIntentStore` is the one #996's transaction argument needs, and it
+  lives in `packages/client` so the contract test needs no cross-package
+  import.
+- **`awaiting-change` was already the right state.** R24's "executed with the
+  commit still arriving" is the state the outbox has had since #929; only what
+  it waits ON changed.
+- **`intents.ts` split at the cap rather than waived.** The additions took it to
+  678 lines against a 625 limit, and `repo-hygiene` said so. Settlement is the
+  reading of an ANSWER against the queue's rows, which is a different concern
+  from the queue's own state machine — the same split `intent-chain.ts` made on
+  the gateway side in wave 1, for the same reason. The queue delegates; no
+  behaviour moved with the text.
