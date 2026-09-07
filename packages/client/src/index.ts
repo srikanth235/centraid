@@ -5,5 +5,8 @@ export * from "./gateway-client.js";
 export * from "./storage-metrics.js";
 export * from "./gateway-client-core.js";
 export * from "./locker/locker-key-door.js";
+export * from "./locker/locker-secret.js";
+export * from "./locker/locker-unlock.js";
+export * from "./locker/wrapped-key-store.js";
 export * from "./replica/index.js";
 export * from "./vault-change-feed.js";

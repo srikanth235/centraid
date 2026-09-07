@@ -3371,3 +3371,41 @@ bun run lint && bun run format:check && bun run lint:types
 bash .governance/run.sh
 bun run check:push:static
 ```
+
+## Wave 6 — the unlock boundary on each seat
+
+R13 says the sentence this commit is built around: **storage is not authorization**. A non-extractable WebCrypto key stops export, not use by app code running on the page. Electron's `safeStorage` encrypts at rest and prompts for nothing. IndexedDB is readable by the origin that wrote it. Each of those makes `K` harder to carry away and none of them makes a person prove they are present — so shipping one as if it were a boundary is how the gateway's permit gets deleted in exchange for nothing.
+
+**The phone already had the boundary; it was guarding the wrong thing.** `locker-device-auth.ts` held a device secret whose only job was to buy a permit, after which the gateway decrypted and sent back plaintext. The same store, under the same `requireAuthentication` / `WHEN_PASSCODE_SET_THIS_DEVICE_ONLY` options, now holds `K` — and the reveal happens on the device. The keychain will not return the item without Face ID, Touch ID or the passcode; the item does not exist on a device with no passcode and does not travel in a backup. Session cache with the gate's own five minutes, because a prompt per field is a prompt nobody reads, and `lockLocker()` rides `clearSecureCache()` so one gesture drops every decrypted credential the app holds rather than this one and whatever else remembered to listen.
+
+**Desktop and PWA get one boundary, not two.** Per R-A3, Touch ID is deferred — `promptTouchID` needs a signed, entitled macOS build — so both seats get the `KNOWS` half: one local passphrase, PBKDF2-SHA-256 (600k rounds) over it, AES-GCM around `K`, and the wrapped blob is all that is ever at rest. `LockerSession` is shared; only the store differs — IndexedDB on the PWA, `safeStorage`-backed main-process storage on the desktop. The desktop bridge deliberately has no `getLockerVaultKey()`: the renderer unwraps, main never holds `K`, and a test asserts the interface's exact method set so adding one fails rather than passes review.
+
+**The clock is checked, not scheduled.** A `setTimeout` in a backgrounded tab, a suspended Electron window or a React Native app in the background may fire minutes late or never, and a session that expires only when a timer says so is a session that does not expire. `unlocked` compares the clock on every ask; `key()` locks as a side effect of finding itself expired, so a caller cannot ask twice and get two answers.
+
+**Nothing at rest is an oracle.** The wrapped blob carries no verifier: the only way to test a guess is to do the derivation, and salt and nonce are per wrap, so two enrolments of one vault are not comparable at rest either. A test asserts the blob's exact field set and that neither the passphrase nor the key appears in it.
+
+**The two envelopes are held equal by test, not by care.** `locker-secret.ts` is a second implementation of `locker-key-plane.ts`'s wire form, which is the shape that drifts. So `locker-secret.test.ts` encrypts with the gateway's node:crypto and decrypts with the seat's WebCrypto, and then the other way, over the same AAD — including a non-ASCII secret, which is where a `TextEncoder`/`Buffer` mismatch would show.
+
+**A stale `key_id` is refused with the message.** On the seat, before the intent is posted, where the plaintext is still in hand and "re-enter this secret" is an answer the owner can act on. `assertLiveLockerKeyId` in the vault is the gateway's own copy of the check, exported and tested; **its call site on the Locker write path is not wired yet** and lands with commit 4's rewrite of those commands.
+
+### Files
+
+- `packages/client/src/locker/locker-unlock.ts` · `locker-unlock.test.ts` — the PIN wrap, the session, the numbers carried over from the gate
+- `packages/client/src/locker/locker-secret.ts` · `locker-secret.test.ts` — local reveal, the AAD, the stale-key refusal, and the two implementations held equal
+- `packages/client/src/locker/wrapped-key-store.ts` · `wrapped-key-store.test.ts` — IndexedDB for the PWA, the desktop bridge, and a memory store for tests
+- `packages/client/src/index.ts` — their exports
+- `apps/mobile/src/apps/locker/locker-device-auth.ts` · `locker-device-auth.test.ts` — `K` behind the OS prompt, the session cache, `lockLocker()`
+- `apps/desktop/src/main/gateway-secrets.ts` — `lockerWrappedKeys` beside `gatewayWrappingKeys`; the wrapped blob only, and no way to ask main for `K`
+
+### Gates
+
+```
+bunx vitest run packages/client/src/locker                                  # 4 files, 23 passed
+cd apps/mobile && bunx vitest run src/apps/locker/locker-device-auth.test.ts  # 9 passed
+bunx tsc -p apps/desktop --noEmit                                           # clean
+bun run check:push:static                                                   # stamped on the committed tree
+```
+
+### What this commit does NOT do
+
+The Locker blueprint's screens still drive the gateway's permit flow: `app-root.tsx`, `session.ts`, `route-acts.ts` and `PermitGate.tsx` are unchanged, and `Lock.tsx` is not yet wired to `LockerSession`. The boundary is built, tested and demonstrated on each seat's code path — which is what the wave's ordering requires before the deletions — but the screens adopt it in commit 4, together with the permit's removal. Naming this here rather than letting the file list imply otherwise.
