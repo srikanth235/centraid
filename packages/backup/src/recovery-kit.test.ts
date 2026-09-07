@@ -175,6 +175,53 @@ describe("recovery-kit", () => {
     ).not.toBe(recoveryKitFingerprint(base));
   });
 
+  test("Locker keys round-trip, and a missing one changes the fingerprint", async () => {
+    // #996, R13 as corrected: the kit is the ONLY artefact that carries
+    // Locker key material, and a rotation puts two live key files on disk at
+    // once — so the kit carries a SET, and losing a member of it is a
+    // capability difference the fingerprint has to show.
+    const keyring = await createKeyring(await tempFile("keyring.json"));
+    const lockerKeys = [
+      { keyId: "k-old", key: Buffer.alloc(32, 4).toString("base64") },
+      { keyId: "k-new", key: Buffer.alloc(32, 5).toString("base64") },
+    ];
+    const base = {
+      version: 1 as const,
+      kind: "centraid-recovery-kit" as const,
+      createdAt: new Date(0).toISOString(),
+      keyring,
+      targets: [
+        {
+          provider: "https://home.example",
+          targetId: "t-1",
+          vaultId: "v-1",
+          label: "ab12",
+          sealKey: Buffer.alloc(32, 9).toString("base64"),
+          identitySeed: Buffer.alloc(32, 8).toString("base64"),
+          lockerKeys,
+        },
+      ],
+    };
+    const wrapped = wrapRecoveryKit(base, "correct horse battery staple");
+    expect(JSON.stringify(wrapped)).not.toContain(lockerKeys[0]!.key);
+    expect(
+      parseRecoveryKit(wrapped, "correct horse battery staple")
+    ).toStrictEqual(base);
+    // Order is not a capability difference; membership is.
+    expect(
+      recoveryKitFingerprint({
+        ...base,
+        targets: [{ ...base.targets[0]!, lockerKeys: lockerKeys.toReversed() }],
+      })
+    ).toBe(recoveryKitFingerprint(base));
+    expect(
+      recoveryKitFingerprint({
+        ...base,
+        targets: [{ ...base.targets[0]!, lockerKeys: [lockerKeys[0]!] }],
+      })
+    ).not.toBe(recoveryKitFingerprint(base));
+  });
+
   // The document validator runs on the way IN to a wrapped kit (and again on
   // the decrypted plaintext), so `wrapRecoveryKit` is where these refusals are
   // observable from outside the module.
@@ -182,6 +229,28 @@ describe("recovery-kit", () => {
     (document: unknown): (() => unknown) =>
     () =>
       wrapRecoveryKit(document as never, "correct horse battery staple");
+
+  test("rejects a Locker key entry with no id or no material", async () => {
+    const keyring = await createKeyring(await tempFile("keyring.json"));
+    const target = {
+      provider: "https://home.example",
+      targetId: "t-1",
+      vaultId: "v-1",
+      label: "ab12",
+    };
+    const kitWith = (lockerKeys: unknown[]) => ({
+      version: 1,
+      kind: "centraid-recovery-kit",
+      createdAt: "one",
+      keyring,
+      targets: [{ ...target, lockerKeys }],
+    });
+    expect(wrap(kitWith([{ key: "AAAA" }]))).toThrow(/lockerKeys\[0\]/u);
+    expect(wrap(kitWith([{ keyId: "k-1" }]))).toThrow(/lockerKeys\[0\]/u);
+    expect(wrap(kitWith([{ keyId: "", key: "AAAA" }]))).toThrow(
+      /lockerKeys\[0\]/u
+    );
+  });
 
   test("rejects a document that is not a centraid recovery kit", () => {
     expect(wrap({ kind: "something-else", version: 1 })).toThrow(

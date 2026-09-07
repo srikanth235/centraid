@@ -39,11 +39,15 @@ export const ROUTES = {
   vaultSeatSnapshot: `${VAULT_PLANE_PREFIX}/seat/snapshot`,
   /** The log tail by seq: `?since=<seq>&limit=<n>`, never half a commit. */
   vaultSeatLog: `${VAULT_PLANE_PREFIX}/seat/log`,
-  // THE LOCKER KEY (#996, ruling R13). Contract only in this wave — W6 lands
-  // the key plane behind it. Named here now because the capability map is what
-  // a seat gates on, and a seat that cannot tell "this gateway has no locker
-  // key door" from "this gateway is old" cannot decide whether an unreadable
-  // secret is a bug or a boundary.
+  // THE LOCKER KEY (#996, ruling R13). SERVED now: an enrolled device row asks
+  // this door for `K` after it has paired, and never before. The QR pairing
+  // ticket carries no key and is not allowed to — it is read off a screen by a
+  // camera, survives in a photo roll, and is validated before any device exists
+  // to be the principal, so a key that rode it would be a key no revocation
+  // reaches. A named door rather than a bare 404 for the older reason too: a
+  // seat that cannot tell "this gateway has no locker key door" from "this
+  // gateway is old" cannot decide whether an unreadable secret is a bug or a
+  // boundary.
   vaultSeatLockerKey: `${VAULT_PLANE_PREFIX}/seat/locker-key`,
   vaultReplicaChanges: `${VAULT_PLANE_PREFIX}/changes`,
   vaultReplicaIntents: `${VAULT_PLANE_PREFIX}/replica/intents`,

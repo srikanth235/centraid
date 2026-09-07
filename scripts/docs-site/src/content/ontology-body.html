@@ -1056,6 +1056,7 @@ cols:[
 ['archived_at','TEXT (iso8601)','','', 'Archive shelf: keep forever, hide from lists, no purge date. Exclusive with trash — CHECK(archived_at IS NULL OR deleted_at IS NULL) (#872).'],
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live. Keeps the row and its star so restore is lossless.'],
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion, ~30 days out like Docs; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL) (#441 A4).'],
+['key_id','TEXT','','', 'Which Locker key this row&rsquo;s ciphertext is under (#996, ruling R13). Bound into the AEAD additional data as well as stored here, so a ciphertext cannot be replayed under a key it was not sealed with; a write carrying a key that is no longer live is refused with &ldquo;re-enter this secret&rdquo;. No foreign key: which key a gateway holds is host custody, and locker_key is private.'],
 ]},
 { n:'item_address', std:'—', p:'One additional web address a login answers to, with its own match policy (#872). The item’s url and url_match_policy stay the primary address; this sidecar is strictly additional.',
 cols:[
@@ -1085,6 +1086,7 @@ cols:[
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation.'],
 ['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
+['key_id','TEXT','','', 'Which Locker key this row&rsquo;s ciphertext is under (#996, ruling R13). Bound into the AEAD additional data as well as stored here, so a ciphertext cannot be replayed under a key it was not sealed with; a write carrying a key that is no longer live is refused with &ldquo;re-enter this secret&rdquo;. No foreign key: which key a gateway holds is host custody, and locker_key is private.'],
 ]},
 { n:'item_passkey', std:'WebAuthn credential metadata (storage only)', p:'The passkey slot beside a login — storage only (#872): credential metadata plain and browsable, key material sealed. No WebAuthn ceremony lives here. One passkey per item; the PK is the item.',
 cols:[
@@ -1098,6 +1100,7 @@ cols:[
 ['created_at','TEXT (iso8601)','NN','', 'When the passkey was made.'],
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation.'],
 ['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
+['key_id','TEXT','','', 'Which Locker key this row&rsquo;s ciphertext is under (#996, ruling R13). Bound into the AEAD additional data as well as stored here, so a ciphertext cannot be replayed under a key it was not sealed with; a write carrying a key that is no longer live is refused with &ldquo;re-enter this secret&rdquo;. No foreign key: which key a gateway holds is host custody, and locker_key is private.'],
 ]},
 ],
 },

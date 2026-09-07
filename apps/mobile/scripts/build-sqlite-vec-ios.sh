@@ -33,10 +33,22 @@
 #   * there is no `vendor/` in the repository at all — upstream's
 #     `scripts/vendor.sh` downloads a SQLite amalgamation into it at build time,
 #     and `--recurse-submodules` cannot clone a directory that is not a
-#     submodule. The extension needs `sqlite3ext.h`, so this resolves it: the
-#     platform SDK's own copy when the SDK has one (no network, and the exact
-#     headers the phone's dynamic linker will meet), else the same pinned
-#     amalgamation upstream uses.
+#     submodule. This vendors the same amalgamation, and it is the ONLY source
+#     of `sqlite3ext.h` here.
+#
+# THE SDK'S OWN sqlite3ext.h IS NOT AN ALTERNATIVE, and trying it cost a run
+# (34099041334): the arm64 link failed with `Undefined symbols for architecture
+# arm64` for every plain `_sqlite3_*` call — bind_int, value_text, vtab_in,
+# value_nochange, vmprintf. `sqlite3ext.h` is not just declarations: under
+# `SQLITE_EXTENSION_INIT1` it `#define`s every `sqlite3_*` name to
+# `sqlite3_api->…`, so a loadable extension calls the host through the routine
+# struct it is handed. Compiled against a header where that block is not in
+# effect, sqlite-vec calls the symbols directly — which does not link, and would
+# be worse if it did: expo-sqlite loads this through `exsqlite3_load_extension`
+# against a SQLCipher build whose entire API is renamed `exsqlite3_*`
+# (`ios/SQLiteModule.swift:569-573`), so a direct `sqlite3_bind_int` would
+# resolve to some other SQLite or to nothing. The api struct is the only way in.
+# Upstream's release workflow compiles with `-Ivendor/` for exactly this reason.
 #
 # `node_modules/expo-sqlite/vendor/*/sqlite3.h` is deliberately NOT that source,
 # even though it sits right there: Expo renames the whole public API to
@@ -54,9 +66,14 @@ set -euo pipefail
 # scripts/sqlite-vec-version.test.mjs goes red until the two agree again.
 TAG="v0.1.7-alpha.2"
 REPO="https://github.com/asg017/sqlite-vec.git"
-# The same amalgamation upstream's scripts/vendor.sh pins, used only when the
-# platform SDKs carry no sqlite3ext.h of their own.
-AMALGAMATION="https://www.sqlite.org/2024/sqlite-amalgamation-3450300.zip"
+# The extension headers, always vendored. Pinned to 3.49.1 — `SEAT_SQLITE_FLOOR`
+# in packages/vault/src/schema/replica.ts:58, the SQLCipher build the phone
+# actually runs. The `sqlite3_api_routines` layout is defined by the HOST that
+# fills it in, so an extension compiled against a header at or below the host's
+# version reads fields the host really wrote; above it, the extension would
+# expect entries the host never filled. Upstream pins 3.45.3, which would also
+# be safe — this pin says out loud which host it is safe against.
+AMALGAMATION="https://www.sqlite.org/2025/sqlite-amalgamation-3490100.zip"
 
 mobile_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 repo_root="$(cd "$mobile_root/../.." && pwd)"
@@ -130,33 +147,23 @@ grep -q "SQLITE_VEC_VERSION \"v$version\"" "$src/sqlite-vec.h" || {
   exit 1
 }
 
-# `sqlite3ext.h`, from the SDK when it has one and from upstream's own pinned
-# amalgamation when it does not. `header_flags` is empty in the first case: a
-# header inside the sysroot is already on the quoted-include search path.
-header_flags=()
-sdk_headers=1
-for sdk in iphoneos iphonesimulator; do
-  sysroot="$(xcrun --sdk "$sdk" --show-sdk-path)"
-  [ -f "$sysroot/usr/include/sqlite3ext.h" ] || sdk_headers=0
-done
-if [ "$sdk_headers" = "1" ]; then
-  echo "build-sqlite-vec-ios: using the SDK's own sqlite3ext.h"
-else
-  echo "build-sqlite-vec-ios: no sqlite3ext.h in the SDKs; vendoring $AMALGAMATION"
-  curl --fail --silent --show-error --location \
-    -o "$work/amalgamation.zip" "$AMALGAMATION"
-  unzip -q -o "$work/amalgamation.zip" -d "$work/amalgamation"
-  vendor="$(dirname "$(find "$work/amalgamation" -name sqlite3ext.h | head -1)")"
-  test -n "$vendor" -a -f "$vendor/sqlite3.h" || {
-    echo "build-sqlite-vec-ios: the amalgamation carried no sqlite3ext.h/sqlite3.h" >&2
-    exit 1
-  }
-  grep -q "SQLITE_EXTENSION_INIT1" "$vendor/sqlite3ext.h" || {
-    echo "build-sqlite-vec-ios: $vendor/sqlite3ext.h is not the extension header" >&2
-    exit 1
-  }
-  header_flags=(-I"$vendor")
-fi
+# `sqlite3ext.h` and `sqlite3.h`, vendored the way upstream's own release build
+# vendors them. One path, no fallback ordering: the header is what routes every
+# call through the api struct, so "whichever header we found" is not a detail a
+# build gets to vary.
+echo "build-sqlite-vec-ios: vendoring $AMALGAMATION"
+curl --fail --silent --show-error --location \
+  -o "$work/amalgamation.zip" "$AMALGAMATION"
+unzip -q -o "$work/amalgamation.zip" -d "$work/amalgamation"
+vendor="$(dirname "$(find "$work/amalgamation" -name sqlite3ext.h | head -1)")"
+test -n "$vendor" -a -f "$vendor/sqlite3.h" || {
+  echo "build-sqlite-vec-ios: the amalgamation carried no sqlite3ext.h/sqlite3.h" >&2
+  exit 1
+}
+grep -q "SQLITE_EXTENSION_INIT1" "$vendor/sqlite3ext.h" || {
+  echo "build-sqlite-vec-ios: $vendor/sqlite3ext.h is not the extension header" >&2
+  exit 1
+}
 
 # One flat framework per platform, each a lipo of that platform's slices, at
 # the deterministic path `$work/<sdk>/vec.framework`. Deliberately NOT called in
@@ -180,7 +187,7 @@ build_framework() {
       -dynamiclib \
       -fPIC \
       -O2 \
-      "${header_flags[@]+"${header_flags[@]}"}" \
+      -I"$vendor" \
       -I"$src" \
       -install_name "@rpath/vec.framework/vec" \
       -o "$slice" \
@@ -211,6 +218,14 @@ PLIST
     echo "build-sqlite-vec-ios: $sdk slice does not export sqlite3_vec_init" >&2
     exit 1
   }
+  # AND NOTHING MAY BE LEFT UNDEFINED. Every `sqlite3_*` call has to have been
+  # rewritten to `sqlite3_api->…` by the header; an undefined `_sqlite3_…` here
+  # means it was not, which is the run-34099041334 failure and, if it ever did
+  # link, an extension calling a SQLite that is not the one loading it.
+  if nm -u "$out/vec" | grep -E "(^|[[:space:]])_sqlite3_" >&2; then
+    echo "build-sqlite-vec-ios: $sdk slice calls SQLite directly (undefined _sqlite3_* above) — sqlite3ext.h did not reroute through sqlite3_api" >&2
+    exit 1
+  fi
 }
 
 build_framework iphoneos -mios-version-min arm64

@@ -104,6 +104,7 @@ export {
   SEAT_SNAPSHOT_EPOCH_HEADER,
   SEAT_SNAPSHOT_SCHEMA_EPOCH_HEADER,
   SEAT_SNAPSHOT_SEQ_HEADER,
+  type SeatLockerKeyWire,
   type SeatLogOp,
   type SeatLogPageWire,
   type SeatLogRowWire,

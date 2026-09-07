@@ -22,7 +22,7 @@ import type {
   RecoveryKitTarget,
   SnapshotRow,
 } from "@centraid/backup";
-import { KeyStore } from "@centraid/vault";
+import { KeyStore, lockerKeyFileName } from "@centraid/vault";
 import type { RemoteTier } from "@centraid/vault";
 
 import { GatewayDatabase } from "../serve/gateway-db.js";
@@ -310,6 +310,28 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       );
     }
     keyStore.import(`${target.vaultId}.identity`, identitySeed);
+    // THE LOCKER KEYS (#996, R13). Restoring ciphertext without its key file
+    // is refused WITH THE REASON rather than adopted and discovered at the
+    // first reveal: a restore that hands back an unopenable Locker is the
+    // placebo restore FORMAT.md warns about, and the honest answer at this
+    // point is that this kit cannot restore this vault.
+    if (!Array.isArray(target.lockerKeys) || target.lockerKeys.length === 0) {
+      throw new Error(
+        `recover: the recovery-kit target for vault "${target.vaultId}" carries no Locker key file — its Locker secrets are encrypted under a key only the kit can carry, and restoring the ciphertext without it would hand back a vault whose secrets never open`
+      );
+    }
+    for (const entry of target.lockerKeys) {
+      const lockerKey = Buffer.from(entry.key, "base64");
+      if (lockerKey.length !== 32) {
+        throw new Error(
+          `recover: the recovery-kit target for vault "${target.vaultId}" has an invalid Locker key (${entry.keyId})`
+        );
+      }
+      keyStore.import(
+        lockerKeyFileName(target.vaultId, entry.keyId),
+        lockerKey
+      );
+    }
 
     emit("adopting");
     await fs.rename(restoreWorkDir, finalDir);

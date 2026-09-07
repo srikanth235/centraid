@@ -18,6 +18,8 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   currentReplicaLogState,
+  lockerKeyFileName,
+  lockerKeyFilesInCustody,
   recordEgressAuthority,
   sealAad,
   unsealValue,
@@ -463,6 +465,18 @@ describe("backup", () => {
     if (!restoredSealKey) throw new Error("source seal key missing");
     const adoptedKeyStore = daemonKeyStore(path.join(freshRoot, "keys"));
     adoptedKeyStore.import(`${h.vaultId}.sealkey`, restoredSealKey);
+    // The Locker key files travel with the DEK (#996, R13): the restored file
+    // names the key its ciphertext is under, and opening it without that file
+    // is custody loss the mount refuses rather than papers over.
+    for (const entry of lockerKeyFilesInCustody({
+      store: sourceKeys,
+      vaultId: h.vaultId,
+    })) {
+      adoptedKeyStore.import(
+        lockerKeyFileName(h.vaultId, entry.keyId),
+        entry.key
+      );
+    }
     await fs.mkdir(path.join(adoptedDir, "code"), { recursive: true });
     await run(
       [

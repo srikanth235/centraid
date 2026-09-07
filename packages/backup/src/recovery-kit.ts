@@ -68,7 +68,31 @@ function validateTarget(value: unknown, index: number): RecoveryKitTarget {
     ...(typeof value["identitySeed"] === "string"
       ? { identitySeed: value["identitySeed"] }
       : {}),
+    ...(Array.isArray(value["lockerKeys"])
+      ? { lockerKeys: validateLockerKeys(value["lockerKeys"], index) }
+      : {}),
   };
+}
+
+/** Locker key files (#996, R13): every entry needs both an id and material. */
+function validateLockerKeys(
+  value: unknown[],
+  index: number
+): { keyId: string; key: string }[] {
+  return value.map((entry, position) => {
+    if (
+      !isRecord(entry) ||
+      typeof entry["keyId"] !== "string" ||
+      entry["keyId"].length === 0 ||
+      typeof entry["key"] !== "string" ||
+      entry["key"].length === 0
+    ) {
+      throw new Error(
+        `recovery kit: target ${index} lockerKeys[${position}] needs a "keyId" and a "key"`
+      );
+    }
+    return { keyId: entry["keyId"], key: entry["key"] };
+  });
 }
 
 /** Parse + validate an already-JSON-parsed kit; throws descriptively. */
@@ -140,6 +164,16 @@ export function recoveryKitFingerprint(document: RecoveryKitDocument): string {
               .update(Buffer.from(target.identitySeed, "base64"))
               .digest("hex")
           : null,
+        // Which Locker keys the kit can restore IS a capability difference:
+        // a kit that lost one restores a vault whose secrets do not open.
+        lockerKeyHashes: [...(target.lockerKeys ?? [])]
+          .sort((a, b) => a.keyId.localeCompare(b.keyId))
+          .map((entry) => ({
+            keyId: entry.keyId,
+            keyHash: createHash("sha256")
+              .update(Buffer.from(entry.key, "base64"))
+              .digest("hex"),
+          })),
       })),
   };
   return createHash("sha256").update(canonicalJson(preimage)).digest("hex");
