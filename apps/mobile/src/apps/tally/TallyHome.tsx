@@ -164,25 +164,25 @@ export default function TallyHome({
         navigation.navigate("Settings", { screen: "Approvals" });
         return;
       }
-      // The outbox's own doors are addressed by VAULT as well as by intent —
-      // this phone holds several — so the row is looked back up in the source
-      // it was folded from rather than the vault being guessed at.
+      // One vault, one outbox, so the intent id alone addresses the row — but
+      // it is still looked up, because a row the poll drew may have settled
+      // between the draw and the tap.
       const change = pending.find((entry) => entry.id === row.intentId);
       if (!session || !change) return;
       if (verb === "cancel") {
         void session
-          .cancelPendingChange(change.id, change.vaultId, change.kind)
+          .cancelPendingChange(change.id)
           .then(() => postStatus(COMPOSE_OUTCOMES.cancelled));
         return;
       }
       if (verb === "retry") {
         void session
-          .retryPendingWrite(change.id, change.vaultId)
+          .retryPendingWrite(change.id)
           .then(() => postStatus(COMPOSE_OUTCOMES.retried));
         return;
       }
       void session
-        .discardPendingWrite(change.id, change.vaultId)
+        .discardPendingWrite(change.id)
         .then(() => postStatus(COMPOSE_OUTCOMES.discarded));
     },
     [navigation, pending, replica.session]

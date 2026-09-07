@@ -87,8 +87,6 @@ const INFO = {
     backupWal: true,
     assistOAuth: false,
     automationTurns: true,
-    multiVaultReplica: true,
-    crossVaultPlacements: true,
   },
 };
 

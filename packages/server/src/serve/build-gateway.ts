@@ -3634,8 +3634,6 @@ export async function buildGateway(
           backupWal: options.backup?.enabled === true,
           assistOAuth: Boolean(options.assistOAuth),
           automationTurns: experimental.automations,
-          multiVaultReplica: true,
-          crossVaultPlacements: true,
           automations: experimental.automations,
           connectors: experimental.connectors,
         },

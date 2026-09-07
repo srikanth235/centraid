@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 
-import { MAX_MULTIPLEX_REPLICA_SCOPES } from "@centraid/core/protocol";
+import { MAX_REPLICA_FEED_MOUNTS } from "@centraid/core/protocol";
 import { AUTHED_DEVICE_HEADER, SseStream } from "@centraid/server/engine";
 import {
   currentReplicaLogState,
@@ -297,11 +297,9 @@ function parseMounts(raw: string | null): MountRequest[] {
   if (
     !Array.isArray(parsed) ||
     parsed.length === 0 ||
-    parsed.length > MAX_MULTIPLEX_REPLICA_SCOPES
+    parsed.length > MAX_REPLICA_FEED_MOUNTS
   ) {
-    throw new Error(
-      `mounts must contain 1..${MAX_MULTIPLEX_REPLICA_SCOPES} scopes`
-    );
+    throw new Error(`mounts must contain 1..${MAX_REPLICA_FEED_MOUNTS} vaults`);
   }
   const seen = new Set<string>();
   return parsed.map((value) => {

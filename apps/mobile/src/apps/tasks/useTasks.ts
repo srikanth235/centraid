@@ -111,14 +111,16 @@ export function useTasksWrite(
 ): TasksWrite {
   const { session } = useReplica();
   return useCallback(
-    async (action, input, scopeId) => {
+    // `_scopeId` is the project picker's vault, and it is no longer a write
+    // TARGET (#996 wave 3): a seat opens one file. The signature keeps it
+    // because the callers still choose a project, and dropping the argument
+    // would move that choice's plumbing into this wave.
+    async (action, input, _scopeId) => {
       if (!session) return undefined;
       try {
         const request = { action, input };
-        const result =
-          scopeId && session.writeTo
-            ? await session.writeTo(scopeId, APP_ID, request)
-            : await session.write(APP_ID, request);
+        // One open vault, so one write target (#996 wave 3).
+        const result = await session.write(APP_ID, request);
         if (
           !surfaceWriteOutcome(result, {
             onParked: () =>

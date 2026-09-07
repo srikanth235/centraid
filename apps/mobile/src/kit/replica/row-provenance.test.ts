@@ -41,17 +41,16 @@ describe(rowCanWrite, () => {
 });
 
 describe(rowScopeLabels, () => {
-  it("returns every source carrying the row", () => {
-    expect(
-      rowScopeLabels({ __centraidScopeLabels: ["Home", "Studio"] })
-    ).toStrictEqual(["Home", "Studio"]);
+  it("returns the one source carrying the row", () => {
+    expect(rowScopeLabels({ __centraidScopeLabel: "Home" })).toStrictEqual([
+      "Home",
+    ]);
   });
 
   it("answers empty where the plane said nothing, and drops non-strings", () => {
     expect(rowScopeLabels({})).toStrictEqual([]);
-    expect(
-      rowScopeLabels({ __centraidScopeLabels: ["Home", 7] })
-    ).toStrictEqual(["Home"]);
+    expect(rowScopeLabels({ __centraidScopeLabel: 7 })).toStrictEqual([]);
+    expect(rowScopeLabels({ __centraidScopeLabel: "" })).toStrictEqual([]);
   });
 });
 

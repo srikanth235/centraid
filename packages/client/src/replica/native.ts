@@ -20,6 +20,10 @@ export * from "./key.js";
 export * from "./live-query.js";
 export * from "./live-query-registry.js";
 export * from "./memory-intent-store.js";
+// The offline chain (#996, R23–R25): the phone derives its own edges, holds and
+// restart projection from the outbox, because the badge has to be right in
+// airplane mode where the gateway's verdict does not exist yet.
+export * from "./offline-chain.js";
 export * from "./payload-hash.js";
 export * from "./query.js";
 // The read grammar's compiler: public here because the native seat composes it

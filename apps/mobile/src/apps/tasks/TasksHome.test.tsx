@@ -31,7 +31,7 @@ import type { Task } from "@centraid/blueprints/apps/tasks/types";
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import { resolveTheme } from "../../kit/theme";
-import { REPLICA_CAN_WRITE } from "../../lib/replica/multi-vault-provenance";
+import { REPLICA_CAN_WRITE } from "../../lib/replica/vault-source";
 import TaskRow from "./TaskRow";
 import { TASKS_BAND_DESTINATIONS } from "./tasks-band";
 import { flattenGroups, groupsFor, windowItems } from "./tasks-groups";

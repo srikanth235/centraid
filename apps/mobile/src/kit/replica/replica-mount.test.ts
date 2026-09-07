@@ -108,7 +108,7 @@ const {
 } = await import("./replica-mount");
 
 type MountedScope = Awaited<
-  ReturnType<typeof import("./replica-mount").mountedScopes>
+  ReturnType<typeof import("./replica-mount").vaultScopes>
 >[number];
 
 function mounted(vaultId: string, databaseName: string): MountedScope {
@@ -145,8 +145,7 @@ const info = {
     backupWal: true,
     assistOAuth: true,
     automationTurns: true,
-    multiVaultReplica: true,
-    crossVaultPlacements: true,
+    seatReplica: true,
   },
 };
 

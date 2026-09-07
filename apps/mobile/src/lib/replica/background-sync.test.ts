@@ -61,12 +61,6 @@ const createNativeReplicaSession = vi.fn<
 // The device outboxes, in the order the pass drained them: a stage that ran
 // twice, ran out of order, or ran past the budget shows up here as state.
 const outboxStages: string[] = [];
-const facade = {
-  flushPlacements: vi.fn<() => Promise<void>>(async () => {
-    outboxStages.push("placements");
-  }),
-  close: vi.fn<() => Promise<void>>(async () => undefined),
-};
 const drainUploadQueueInBackground = vi.fn<() => Promise<void>>(async () => {
   outboxStages.push("uploads");
 });
@@ -149,16 +143,6 @@ vi.mock(import("./mobile-gateway-compatibility") as Promise<unknown>, () => ({
 }));
 // Constructor FUNCTIONS, not classes and not arrows: `new` on a function that
 // returns an object yields that object, and these modules are only ever `new`ed.
-vi.mock(import("./multi-vault-reader") as Promise<unknown>, () => ({
-  MultiVaultReplicaReader: function MultiVaultReplicaReader() {
-    return {};
-  },
-}));
-vi.mock(import("./multi-vault-session") as Promise<unknown>, () => ({
-  MultiVaultReplicaSession: function MultiVaultReplicaSession() {
-    return { flushPlacements: facade.flushPlacements, close: facade.close };
-  },
-}));
 vi.mock(import("./native-change-feed") as Promise<unknown>, () => ({
   NativeVaultChangeFeed: function NativeVaultChangeFeed() {
     return { setActive: () => undefined };
@@ -174,11 +158,7 @@ vi.mock(import("./native-session") as Promise<unknown>, () => ({
 }));
 vi.mock(import("./expo-sqlite-driver") as Promise<unknown>, () => ({
   openNativeReplicaDriver: async () => ({ close: () => undefined }),
-  openMountedReplicaReaderDriver: async () => ({ close: () => undefined }),
   nativeReplicaDatabasePath: async () => "/replica/db.sqlite3",
-}));
-vi.mock(import("./placement-transport") as Promise<unknown>, () => ({
-  postPlacement: async () => undefined,
 }));
 
 const {
@@ -220,7 +200,9 @@ describe("background replica sync", () => {
     ]);
     expect(outcome.timedOut).toBe(false);
     // The whole point: placements and uploads still drained, once each.
-    expect(outboxStages).toStrictEqual(["placements", "uploads"]);
+    // ONE outbox now (#996 wave 3): the placement outbox went with the
+    // cross-vault placement plane it served.
+    expect(outboxStages).toStrictEqual(["uploads"]);
   });
 
   test("gives the headless session the platform's connectivity answer", async () => {

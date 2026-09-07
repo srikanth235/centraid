@@ -2954,3 +2954,275 @@ bun run check:push:static              # 4/4, stamped on the committed tree
   invented checksum is worse than one that is honestly out of date, and
   `pod install` rewrites the whole file anyway. The gap is stated above rather
   than papered over.
+
+## Wave 3 — the mount plane goes, and the outbox is the surface
+
+A seat opens ONE file (R12). Everything below follows from that sentence, and
+most of it is deletion: 5,583 lines of a plane that existed to answer a
+question one open file cannot ask.
+
+### What the reader actually was, and why commit 4 folded into this one
+
+`MultiVaultReplicaReader` and `MultiVaultReplicaSession` were not only the read
+plane. They also owned the **pending overlay** (`PendingChangeStatus`,
+`pendingChanges`, `dismissPendingChange`), `share`, `pullScopes` / `status()` /
+`revokeScope`, and the whole cross-vault **placement** outbox. Deleting the read
+plane therefore deletes the machinery the sync-and-conflict surface stands on —
+which was scheduled for this wave's LAST commit. Landing a stopgap outbox here
+and replacing it two commits later would have meant writing that surface twice,
+so the coordinator folded it: this commit publishes `NativeReplicaSession`
+directly and reads the pending surface off wave 2's shared chain
+(`offline-chain.ts` + `seat-intent-store.ts`).
+
+### One open file, and the switcher over the rest
+
+`ReplicaProvider.tsx` keys the mount on the `(gateway, vault)` PAIR. Switching
+vaults IS the remount: the key moves, `built` no longer matches, and consumers
+read `ready: false` before any read can land on a closing session — the
+retraction the old code did by hand with a nonce and a one-attempt anti-spin
+guard. `vaultScopes` (was `mountedScopes`) returns every vault the gateway
+granted, UNSLICED, because what a member may switch to is bounded by the grant
+and not by how many databases a reader could attach.
+
+Revocation gets simpler in the same move: a vault this seat is not holding open
+has no handle, so reclaiming it is a file deletion and nothing else.
+
+### The row still says which vault, because eighteen screens ask
+
+`lib/replica/vault-source.ts` keeps three of the six provenance columns —
+`__centraidScopeId`, `__centraidScopeLabel`, `__centraidCanWrite` — and drops
+the three ARRAY badges with the question they answered. `NativeReplicaSession`
+stamps them on every row it returns, so `row-provenance.ts` and its eighteen
+callers are unchanged. Moving "may I write here" to a context flag would have
+made every one of those screens reach for a hook to answer a question about
+data it already holds. The rowId is no longer prefixed with the vault: two
+files could hand back the same row id, one cannot, and a prefixed id is one the
+write path then has to strip back off.
+
+### The pending surface, over one outbox
+
+- `PendingChangeStatus` is `IntentState` and nothing more. It used to be that
+  union PLUS the placement outbox's own `in-flight`, because the phone had two
+  outboxes.
+- `PendingChangeActions` lost `vaultId` and `kind` from all four verbs: the
+  intent id alone addresses the row.
+- `pendingChanges()` carries `heldBadge` — `chainHolds` + `chainBadgeCopy` from
+  wave 2, computed ON THE SEAT because the badge has to be right in airplane
+  mode, where the gateway's verdict does not exist and will not for hours. A
+  held dependent draws "Waiting on an earlier change" instead of "waiting to
+  send": nothing is wrong with it, and it releases when the change in front of
+  it lands.
+- `retained` replaces the `attempts !== undefined` tell for which rows may be
+  retried or discarded; an attention remnant keeps only Dismiss.
+- `pendingProjection()` exposes `reconstructPendingProjection` for the restart
+  case commit 4's journey exercises.
+
+### Placements go; a share is an HTTP call
+
+`crossVaultPlacements` is deleted, so the placement plane goes with it: the
+placement half of `placement-transport.ts`, the lightbox's Copy/Move-to-another-
+vault sheet, `placementLine`'s six sentences and their test. What survives is
+`commons-transport.ts` — three gateway calls with no outbox behind them — and
+`ShareSheet` calls `postCommons` directly. A share is a predicate the gateway
+compiles (wave 7), not something this phone queues, and it was never a session
+verb for any reason other than the facade being where the code sat.
+
+The lightbox's "Copy" is now only "keep this shared photo in my vault"; an item
+with no commons offer has nothing to copy INTO, and says so.
+
+### The wall gates on the doors it needs
+
+`supportsMobileOfflineGateway` reads `seatReplica` instead of two words
+describing a deleted mechanism (F1). The key is OPTIONAL on the wire, which is
+exactly right: absence is what a gateway older than the doors says, and it
+reads as off — the update wall, not a phone that mounts and then finds no file
+to fetch.
+
+### The protocol bump, and the one number that survives the cap
+
+`GATEWAY_PROTOCOL_VERSION` / `GATEWAY_MIN_PROTOCOL_VERSION` → 4. Dropping two
+REQUIRED keys from a structural capability map is a wire change either end
+would otherwise read as malformed; the honest answer to a peer on the other
+side is the update wall, not a shim that pretends a deleted mechanism is there.
+
+`MAX_MULTIPLEX_REPLICA_SCOPES` → `MAX_REPLICA_FEED_MOUNTS`. It was one
+agreement covering two budgets — the mounts a radio carries and the files the
+phone attaches into one reader — and only the first still exists. It is kept
+rather than dropped because an unbounded mount list is a subscription the
+CALLER sizes and the gateway pays for.
+
+### The tests that were about the plane, and what replaced them
+
+`VaultReadPlane` (`lib/replica/vault-read-plane.ts`) is the seam the deleted
+reader was for the lanes that hold a store and no session — the airplane-mode
+journeys and the read-parity oracles. It adds two things to
+`ReplicaSqliteStore`: the appId → shapeId resolution and the vault stamp.
+
+- `home-tile-reads.test.ts` pinned "one composed statement whose UNION ALL arms
+  are the attached vaults". One arm now, so what it pins is the claim that
+  always mattered: the tile does not pay for the entity to draw its newest N.
+  The fixture seeds 700 days into one file rather than 500 into each of four,
+  because a page that ends where the window ends would otherwise pass for a
+  page that filled it. The recording driver moved from `allAsync` to `all`: the
+  seat's store is synchronous by construction.
+- `mobile-screen-reads.scale.test.ts` seeds 10,000 rows in one file for the
+  same reason — the window is 5,000, and two vaults of 5,000 used to be what
+  made a filled page provable.
+- `PendingRestartJourney.test.tsx` mounts what the provider now mounts, which
+  is the session and nothing over it.
+- `VaultsSwitcher.test.tsx`'s cap disclosure is gone with the cap.
+- `pending-write-visibility.test.ts` needed a longer `waitFor`: the mounted
+  reader projected a catalog-less intent AT READ TIME, so its row appeared the
+  instant the catalog did. The seat draws its stored projection instead, which
+  `backfillDeferredProjections` writes once page one lands — a durable
+  transition on the outbox the drain is also working, so it can lose a race and
+  be retried. The claim is that it arrives, not that it arrives first.
+### The flags were inert on Android, and nothing here runs `expo prebuild`
+
+`app.config.ts`'s plugin block is what a prebuild would READ; the committed
+`android/` and `ios/` projects are what gets compiled, and no lane in this repo
+regenerates them. `apps/mobile/android/gradle.properties` carried no
+`expo.sqlite.*` key at all — so `useSQLCipher`, `enableFTS` and
+`withSQLiteVecExtension` did nothing, and Android would have shipped the
+vendored 3.50.3 with no SQLCipher and no fts5. The phone would have quietly
+stopped being the 3.49.1 seat the whole floor is cut to fit, and commit 1's
+`seat-sqlite-floor.test.ts` would still have passed, because it reads the
+plugin block.
+
+The three keys are in `gradle.properties` now, spelled exactly as
+`withSQLite.js`'s `updateAndroidBuildPropertyIfNeeded` spells them, and
+`seat-native-build-config.test.ts` holds them equal to the plugin block so they
+cannot go inert again. It covers ANDROID only: `ios/Podfile.properties.json` is
+the same three keys on the other side and belongs to the macOS CI slice, which
+is the lane that can run `pod install` and prove the link — asserting a file
+another branch is writing would fail on this one. **The iOS half is not covered
+by any test on this branch.** The Android emulator gate's `assembleRelease` is
+what proves SQLCipher actually links.
+
+### One red this branch was carrying
+
+`DocsHome.test.tsx`'s Shared-shelf fixture still wrote `shape_id` on the
+`share.subscription` and `share.subscription_lineage` rows. Wave 7 re-keyed
+both tables to `authority_id` (R10 — `share_subscription`'s primary key is
+`(authority_id, audience_vault_id)` now), and `docs-projection-shares.ts:90`
+reads `authority_id`, so every arrival read as unowned and the shelf drew
+nothing. Commit 1's report called this pre-existing on the base tree; it is —
+the base tree is this branch, and the merge of wave 7 is where it came in. The
+fixture is fixed; the assertion is untouched.
+
+### Every file this commit touches
+
+The full list, one path per line, grouped by what happened to it.
+
+**Deleted — the mount plane, the placement plane, and the tests that were about them:**
+
+- `apps/mobile/src/apps/photos/placement-status-copy.test.ts`
+- `apps/mobile/src/lib/replica/mounted-read-plan.pushdown.test.ts`
+- `apps/mobile/src/lib/replica/mounted-read-plan.test.ts`
+- `apps/mobile/src/lib/replica/mounted-read-scoping.ts`
+- `apps/mobile/src/lib/replica/multi-vault-provenance.ts`
+- `apps/mobile/src/lib/replica/multi-vault-read-parity.test.ts`
+- `apps/mobile/src/lib/replica/multi-vault-reader.test.ts`
+- `apps/mobile/src/lib/replica/multi-vault-reader.ts`
+- `apps/mobile/src/lib/replica/multi-vault-session.test.ts`
+- `apps/mobile/src/lib/replica/multi-vault-session.ts`
+- `apps/mobile/src/lib/replica/placement-transport.test.ts`
+- `apps/mobile/src/lib/replica/placement-transport.ts`
+- `apps/mobile/src/lib/replica/reader-statement-budget.test.ts`
+- `tests/quality/replica-scope-cap-parity.test.ts`
+
+**New:**
+
+- `apps/mobile/src/lib/replica/commons-transport.ts`
+- `apps/mobile/src/lib/replica/seat-native-build-config.test.ts`
+- `apps/mobile/src/lib/replica/vault-read-plane.ts`
+- `apps/mobile/src/lib/replica/vault-source.ts`
+
+**Changed:**
+
+- `apps/desktop/tests/e2e/fixtures.ts`
+- `apps/mobile/android/gradle.properties`
+- `apps/mobile/native-fingerprints.json`
+- `apps/mobile/src/apps/docs/DocsHome.test.tsx`
+- `apps/mobile/src/apps/docs/docs-copy.ts`
+- `apps/mobile/src/apps/docs/docs-projection.test.ts`
+- `apps/mobile/src/apps/locker/locker-airplane.test.ts`
+- `apps/mobile/src/apps/notes/NotesHome.tsx`
+- `apps/mobile/src/apps/people/people-model.test.ts`
+- `apps/mobile/src/apps/photos/AlbumDetail.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightbox.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightboxToolbar.tsx`
+- `apps/mobile/src/apps/photos/photos-pending.test.ts`
+- `apps/mobile/src/apps/photos/photos-vaults.ts`
+- `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx`
+- `apps/mobile/src/apps/tally/TallyHome.tsx`
+- `apps/mobile/src/apps/tally/tally-airplane.test.ts`
+- `apps/mobile/src/apps/tasks/TasksHome.test.tsx`
+- `apps/mobile/src/apps/tasks/useTasks.ts`
+- `apps/mobile/src/kit/replica/PendingChangesSheet.tsx`
+- `apps/mobile/src/kit/replica/ReplicaProvider.test.tsx`
+- `apps/mobile/src/kit/replica/ReplicaProvider.tsx`
+- `apps/mobile/src/kit/replica/ReplicaStatusBar.test.tsx`
+- `apps/mobile/src/kit/replica/pending-changes.ts`
+- `apps/mobile/src/kit/replica/pending-copy.ts`
+- `apps/mobile/src/kit/replica/replica-context.ts`
+- `apps/mobile/src/kit/replica/replica-mount.test.ts`
+- `apps/mobile/src/kit/replica/replica-mount.ts`
+- `apps/mobile/src/kit/replica/row-provenance.test.ts`
+- `apps/mobile/src/kit/replica/row-provenance.ts`
+- `apps/mobile/src/kit/share/ShareSheet.test.tsx`
+- `apps/mobile/src/kit/share/ShareSheet.tsx`
+- `apps/mobile/src/lib/replica/background-scopes.ts`
+- `apps/mobile/src/lib/replica/background-sync.test.ts`
+- `apps/mobile/src/lib/replica/background-sync.ts`
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts`
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.ts`
+- `apps/mobile/src/lib/replica/mobile-gateway-compatibility-core.ts`
+- `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts`
+- `apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts`
+- `apps/mobile/src/lib/replica/mobile-gateway-skew.test.ts`
+- `apps/mobile/src/lib/replica/native-session.ts`
+- `apps/mobile/src/lib/replica/offline-budgets.ts`
+- `apps/mobile/src/lib/replica/pending-write-visibility.test.ts`
+- `apps/mobile/src/lib/upload/followup.test.ts`
+- `apps/mobile/src/lib/upload/followup.ts`
+- `apps/mobile/src/screens/home/VaultsSwitcher.test.tsx`
+- `apps/mobile/src/screens/home/VaultsSwitcher.tsx`
+- `apps/mobile/src/screens/home/home-tile-reads.test.ts`
+- `docs/mobile-offline.md`
+- `docs/protocol.md`
+- `packages/cli/src/cli.contract.test.ts`
+- `packages/client/src/gateway-client-contract-fixtures.ts`
+- `packages/client/src/react/shell/routes/AutomationViewRoute.test.tsx`
+- `packages/client/src/replica/native.ts`
+- `packages/core/src/protocol/capabilities.test.ts`
+- `packages/core/src/protocol/capabilities.ts`
+- `packages/core/src/protocol/handshake.test.ts`
+- `packages/core/src/protocol/index.ts`
+- `packages/core/src/protocol/routes.ts`
+- `packages/core/src/protocol/version.ts`
+- `packages/server/src/routes/multiplex-replica-routes.ts`
+- `packages/server/src/serve/build-gateway.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+- `scripts/fuzz/corpus/protocol-handshake/accepted.json`
+- `scripts/fuzz/corpus/protocol-handshake/minimal.json`
+- `scripts/fuzz/corpus/protocol-handshake/skewed.json`
+- `tests/integration-mobile/locker-rows-parity.integration.test.ts`
+- `tests/integration-mobile/tally-balance-parity.integration.test.ts`
+- `tests/scale/mobile-screen-reads.scale.test.ts`
+
+### Decisions — wave 3, the mount plane
+
+- **Commit 4's outbox surface folded into commit 2, and the reason is the
+  find.** The reader OWNED the pending overlay, so the plane could not be
+  deleted without taking the sync-and-conflict surface with it. The choice was
+  a stopgap that gets thrown away or one commit; the coordinator ruled one.
+- **The row keeps its source stamp.** The alternative — `canWrite` as a context
+  flag — is fewer moving parts in the abstract and eighteen screens reaching
+  for a hook in practice.
+- **`MAX_REPLICA_FEED_MOUNTS` is a rename, not a survival of the cap.** The cap
+  bounded ATTACHed databases; this bounds one SSE subscription's mounts.
+  Deleting it outright would have left the route sized by its caller.
+- **A share routes through the ordinary HTTP call, not the session.** Wave 7
+  made a share a predicate; it was a session verb only because the facade was
+  where the code happened to sit.

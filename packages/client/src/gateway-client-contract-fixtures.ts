@@ -99,8 +99,6 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
         backupWal: true,
         assistOAuth: true,
         automationTurns: true,
-        multiVaultReplica: true,
-        crossVaultPlacements: true,
       },
     });
   if (path.includes("/web-session"))

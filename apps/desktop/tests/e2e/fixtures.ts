@@ -323,8 +323,6 @@ async function route(
         backupWal: false,
         assistOAuth: false,
         automationTurns: true,
-        multiVaultReplica: true,
-        crossVaultPlacements: true,
         automations: true,
         connectors: true,
       },

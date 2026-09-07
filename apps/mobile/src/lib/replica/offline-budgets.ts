@@ -1,5 +1,13 @@
-/** Not a local budget: the gateway caps a subscription here too (#880). */
-export { MAX_MULTIPLEX_REPLICA_SCOPES as MAX_MOUNTED_NATIVE_SCOPES } from "@centraid/core/protocol";
+/**
+ * Mounts the BACKGROUND pass keeps current in one radio (#880, #996 wave 3).
+ *
+ * Not a local budget: the gateway caps a subscription at the same number, and
+ * the phone attaches the same N — one wire agreement, not two. It is no longer
+ * a READ cap: a seat opens one file, and the vault switcher offers every vault
+ * the gateway granted. What it still bounds is how many of those files one
+ * background pass keeps in step.
+ */
+export { MAX_REPLICA_FEED_MOUNTS as MAX_BACKGROUND_FEED_MOUNTS } from "@centraid/core/protocol";
 
 export const MOBILE_REPLICA_BOOTSTRAP_WINDOW = 5_000;
 
