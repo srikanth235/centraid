@@ -33,6 +33,7 @@ import {
   LOCKER_AUTH_DDL,
   LOCKER_DDL,
   LOCKER_FIELD_DDL,
+  LOCKER_KEY_DDL,
   LOCKER_PASSKEY_DDL,
 } from "./domains-locker.js";
 import { PEOPLE_DDL } from "./domains-people.js";
@@ -200,6 +201,15 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // own rung or it reaches nothing. `CREATE TABLE IF NOT EXISTS` because a
   // fresh file already created them on rung 1.
   SHARE_AUTHORITY_ASK_DDL,
+  // RUNG SIX (#996, ruling R13) — the Locker key plane. `locker_key` and the
+  // `key_id` column on the three tables that hold ciphertext. Its own rung,
+  // not an addition to the frozen baseline, for the reason rung five gives:
+  // a file that has climbed a rung never climbs it again, so a shape change
+  // made after the #929 freeze is a new rung or it reaches nothing. It is
+  // pure DDL — minting `K` and encrypting existing plaintext are the key
+  // plane's job on open, not a rung's, because a rewrite over every secret is
+  // exactly what the batched-rewrite primitive below exists for.
+  LOCKER_KEY_DDL,
 ];
 
 /**

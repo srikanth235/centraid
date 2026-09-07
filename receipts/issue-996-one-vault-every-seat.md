@@ -2783,3 +2783,57 @@ apps/web e2e (chromium, flag ON vs OFF)  # 30 passed / 20 failed, identical sets
   is not "it passed" — it could not, here — but "the failure set is identical
   with the flag on and off", which is a claim this container CAN establish and
   which is the one the exit criterion is really about.
+
+## Wave 6 — the key plane (R13)
+
+Locker v0 begins where its boundary does. Until this commit a Locker secret was plaintext the **gateway** could produce: ciphertext at rest under the vault DEK, opened by the gateway on a permit the gateway itself minted after checking a verifier it also held. That is a boundary the holder of the process walks through. The key plane replaces it: one random `K` per vault, minted at **founding** into the gateway's `keys/` directory, secrets stored as `lk1:<base64(nonce‖ct‖tag)>` under AES-256-GCM with AAD `<rowId>‖<keyId>`, and `key_id` on the row saying which key opens it. The gateway holds `K` so it can serve it to an enrolled seat and rotate it — never so it can decrypt on a caller's behalf.
+
+Four decisions this commit makes, each because the alternative was worse:
+
+- **`locker_key` is private and `key_id` carries no foreign key.** The first draft registered `locker.key` as an ontology entity so the reference would be a real FK. That was wrong twice: a registered entity is a `core_entity` supertype member, which would have mutated the FROZEN rung-one baseline text (`core_entity_kind`'s generated INSERT list) and left every existing file without the new kind row; and an FK from replicated `locker_item` into it would have broken the one property `private-tables.ts` exists to keep. Which key a host holds is host custody — the `credential` class — and a seat never asks the file which key is live. It holds `K` and its id from the key door, and "may I open this row" is `row.key_id === my key id`.
+- **The nonce rides inside the value's envelope, the key id is a row column.** `locker_item` has five secret columns; one nonce column could serve one of them. The key id is per ROW because rotation rewrites a row's secrets together, and it is stored as a column **as well as** bound into the AAD — so a ciphertext cannot be replayed under a key it was not sealed with, which a bare blob column would have permitted.
+- **Founding, not first need.** #298 spent a ruling on what the seal key's lazy mint cost: a window in which "is this the right key" had no answer. The plane has no such window — `liveLockerKeyId` is non-null for the life of the vault, and a missing file is unambiguously custody loss rather than possibly a fresh vault.
+- **Retire before insert, inside one transaction.** `locker_key_live_idx` is a partial unique index over the PREDICATE `retired_at IS NULL`, not over the column — SQLite treats NULLs as distinct, so indexing the column would have permitted any number of live rows. It is checked per statement, which is what forced the order and is why "two live keys" is unrepresentable rather than merely unlikely. The test that found this is the stale-`key_id` one.
+
+### Rotation, and the crash between two stores
+
+`keys/` and `vault.db` cannot commit together, so the ORDER is the guarantee: write `K′`; one transaction (retire, insert, re-encrypt every secret, bump every `key_id`); delete the old file. `locker-key-plane.test.ts` interrupts the first window with a fault-injection seam and reopens the vault: the database is untouched, the live key still opens every secret, and the sweep removes the orphan `K′` no row named. The second window is reproduced by putting the retired file back: the database is the sole authority, and the sweep needs no memory of where the crash happened. Ciphertext is never under two keys in either.
+
+### The kit carries the keys; the snapshot never does
+
+`recoveryKitTarget.lockerKeys` is a **list**, not a key. A rotation writes `K′` to disk before the vault names it, so a kit written in that window carrying only the live id restores ciphertext that stops opening the moment the rotation completes — the placebo restore in its sharpest form. `recover()` refuses a target with no Locker key file, with the reason, **before** adopting. Membership of that list is part of `recoveryKitFingerprint`; order is not.
+
+### Files
+
+- `packages/vault/src/gateway/locker-key-plane.ts` — the plane: founding, the wire form and AAD, `assertLiveLockerKeyId`, rotation, the sweep, the kit's key set
+- `packages/vault/src/gateway/locker-key-plane.test.ts` — 10 tests, including both crash windows
+- `packages/vault/src/schema/domains-locker.ts` — `LOCKER_KEY_DDL` (rung six)
+- `packages/vault/src/schema/migrate.ts` · `migrate.test.ts` — rung six; `user_version` 5 → 6
+- `packages/vault/src/schema/private-tables.ts` · `local-tables.ts` — `locker_key` declared, twice, for its two different readers
+- `packages/vault/src/db.ts` — `lockerKey()` / `lockerCustody()` on `VaultDb`: founded on first ask, swept beside it, and re-resolved after a rotation
+- `packages/vault/src/bootstrap.ts` — founding, where the vault is founded
+- `packages/vault/src/index.ts` — the plane's exports
+- `packages/server/src/routes/vault-routes.ts` · `packages/server/src/serve/erase-recovery.ts` — erase destroys `K` with the DEK, on both the direct and the crash-resumed path
+- `packages/server/src/routes/replica-shape-parity.test.ts` — `locker`'s shape id, re-taken for `key_id`
+- `packages/server/src/engine/stores/gateway-db.test.ts` — the ledger band's rung count
+- `packages/server/src/backup/backup.integration.test.ts` — an adopt carries the Locker key files with the DEK
+- `packages/backup/src/engine.ts` · `recovery-kit.ts` · `recovery-kit.test.ts` — `lockerKeys` on the target, validated and fingerprinted
+- `packages/server/src/backup/backup-recovery-kit.ts` — the kit fills it from custody
+- `packages/server/src/backup/recover.ts` — restore refuses without a key file
+- `docs/recovery/backup-restore.md` — the key `K` section, rung six, and the two new invariant rows
+- `scripts/docs-site/src/content/ontology-body.html` — `key_id` on the three Locker tables
+
+### Gates
+
+```
+bunx vitest run packages/vault/src     # 208 files, 1685 passed, 2 skipped
+bunx vitest run packages/backup/src    # 229 files, 2025 passed, 28 skipped (with vault)
+bunx vitest run packages/server/src    # 381 files passed; 7 failed, all environmental
+bun run check:push:static              # stamped on the committed tree
+```
+
+The seven: `IS_SANDBOX=yes` in this container where `acp/launch.test.ts` expects `1` (2); no `sqlite3` binary for `gateway-db-lock.integration.test.ts` (1); and a host disk at 98% (822 MB free), which `VaultBlobBackpressureError` and `ENOSPC` report in `recover.integration.test.ts`, `vault-plane-maintenance.test.ts` and `vault-registry-footprint.test.ts` (4). None touches the key plane; all seven fail the same way on the tree this commit was cut from.
+
+### A decision the tests made, not the design
+
+`K` is named for the vault's own id (`core_vault.vault_id`), never for `path.basename(vaultDir)`. The first draft used the directory name — the spelling `sealKeyFileFor` uses — and three suites said why that is wrong: `vault-registry.test.ts` copies a vault directory under a new name and expects the DUPLICATE-ID error, `backup.integration.test.ts` adopts a restored directory, and `seal-custody.test.ts` renames one. The DEK survives all three only because a vault that has never sealed may mint a fresh key; `K` has no such escape, so the name has to follow the vault. That in turn is why founding happens in `bootstrapVault` rather than at the top of `openVaultDb`: the id is not in the file until the vault exists.

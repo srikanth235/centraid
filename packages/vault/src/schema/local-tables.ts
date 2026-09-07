@@ -92,4 +92,9 @@ export const LOCAL_TABLES: ReadonlyMap<string, string> = new Map([
     "locker_auth_credential",
     "this installation's unlock credential, by ruling",
   ],
+  // The Locker key plane's id register (#996, R13). Which key `K` currently
+  // is, and when this host retired the one before, is a fact about THIS
+  // gateway's custody — the key material itself never touches the file, and a
+  // seat learns which key it holds from the key door, not from a row.
+  ["locker_key", "which Locker key this gateway holds, and its predecessors"],
 ]);

@@ -72,6 +72,12 @@ export const PRIVATE_TABLES: readonly PrivateTableDeclaration[] = [
     reason: "this installation's unlock credential",
   },
   {
+    table: "locker_key",
+    kind: "credential",
+    reason:
+      "which Locker key this gateway holds, and when it retired the one before",
+  },
+  {
     table: "sync_connection_credential",
     kind: "credential",
     reason: "a third-party connection's stored secret",
