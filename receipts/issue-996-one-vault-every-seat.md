@@ -2837,3 +2837,36 @@ The seven: `IS_SANDBOX=yes` in this container where `acp/launch.test.ts` expects
 ### A decision the tests made, not the design
 
 `K` is named for the vault's own id (`core_vault.vault_id`), never for `path.basename(vaultDir)`. The first draft used the directory name — the spelling `sealKeyFileFor` uses — and three suites said why that is wrong: `vault-registry.test.ts` copies a vault directory under a new name and expects the DUPLICATE-ID error, `backup.integration.test.ts` adopts a restored directory, and `seal-custody.test.ts` renames one. The DEK survives all three only because a vault that has never sealed may mint a fresh key; `K` has no such escape, so the name has to follow the vault. That in turn is why founding happens in `bootstrapVault` rather than at the top of `openVaultDb`: the id is not in the file until the vault exists.
+
+## Wave 6 — enrollment hands `K`; the door serves it
+
+Wave 1 declared `/_vault/seat/locker-key` and had it authenticate and then refuse, so a seat could tell "this gateway has no key plane" from "this gateway is older than the door". It serves now, and the shape of what it serves is the ruling.
+
+**The principal is the device row.** `resolveReplicaAccess` — the same resolution the snapshot and log doors use — has already refused an unenrolled or revoked device by the time the handler runs, and that is the whole authorization question here: an enrolment covers the vault, and `K` opens the vault's Locker. There is no narrower principal to consult and no per-row question to ask.
+
+**The pairing ticket does not carry `K`, and this is why.** The ticket is a base64url payload a camera reads off a screen. It is seen by whatever is pointed at that screen, it survives the glance in a photo roll, and it is validated **before any device exists to be the principal** — there is nothing yet to name, nothing to check a revocation tombstone against, nothing to refuse. A vault key handed out that way is handed to the room, and revoking the device afterwards reaches none of the copies. Fetching it afterwards costs one authenticated request and buys a principal the gateway can name. `seat-routes.test.ts` pins both halves: a revoked device is refused, and the ticket codec's payload is asserted key-shaped by its exact field set, so adding `K` to it would fail a test rather than pass a review.
+
+**`Cache-Control: no-store`.** A proxy or a service worker holding `K` is a second copy of the key in a place nothing revokes.
+
+**The seat's half keeps nothing.** `fetchLockerVaultKey` returns bytes and holds no module-level cache — a cache there would be a fourth copy of the key that no lock covers, and a test asserts two asks are two requests. It refuses an algorithm it does not implement rather than guessing, because decrypting under the wrong construction is silent where refusing is loud, and it refuses a key that is not 32 bytes. What the caller does with the bytes is the unlock boundary, and that is the next commit's subject, not this module's.
+
+**The foreign-device receipt stamp.** A reveal receipt is a device intent the gateway stamps, and with the seat decrypting locally the receipt is the only record of who looked. So `replica-intent-route.ts` takes the device from `context.access.deviceId` and a body-supplied `deviceId` reaches nothing: the outcome row is the session's principal's, and the forged name resolves to no outcome at all. If the payload could name the device, "which seat revealed this secret" would be a claim rather than evidence — forgeable by the one party the trail exists to hold to account.
+
+### Files
+
+- `packages/core/src/protocol/seat-log.ts` · `packages/core/src/protocol/index.ts` — `SeatLockerKeyWire`; `keyId` is as load-bearing as `key`
+- `packages/core/src/protocol/routes.ts` — the door's comment, now that it serves
+- `packages/server/src/routes/seat-routes.ts` — the key door
+- `packages/server/src/routes/seat-routes.test.ts` — served to the enrolled row, refused to the revoked one, and the ticket's field set
+- `packages/client/src/locker/locker-key-door.ts` · `locker-key-door.test.ts` — the seat's half: fetch, refuse, keep nothing
+- `packages/client/src/index.ts` — its export
+- `packages/server/src/routes/replica-intent-attribution.test.ts` — the foreign-device stamp
+
+### Gates
+
+```
+bunx vitest run packages/server/src/routes/seat-routes.test.ts                    # 11 passed
+bunx vitest run packages/server/src/routes/replica-intent-attribution.test.ts     # 5 passed
+bunx vitest run packages/client/src/locker                                        # 5 passed
+bun run check:push:static                                                         # stamped on the committed tree
+```

@@ -44,6 +44,7 @@ import {
   SEAT_SNAPSHOT_SEQ_HEADER,
 } from "@centraid/core/protocol";
 import type {
+  SeatLockerKeyWire,
   SeatLogPageWire,
   SeatLogRowWire,
   SeatRebootstrapRequiredWire,
@@ -239,16 +240,31 @@ export function makeSeatRouteHandler(
     }
 
     if (url.pathname === SEAT_LOCKER_KEY_PATH) {
-      // CONTRACT ONLY UNTIL WAVE 6 (#996, R13). The route exists and
-      // authenticates so a seat can tell "this gateway holds no locker key"
-      // apart from "this gateway is older than the door" — the two call for
-      // different answers on the phone, and a 404 on an unrouted path cannot
-      // distinguish them.
-      return sendJson(res, 404, {
-        error: "seat_locker_key_unavailable",
-        message:
-          "this gateway has no locker key plane yet; the door is declared and not yet served",
-      });
+      // THE KEY DOOR (#996, R13). The PRINCIPAL IS THE DEVICE ROW, resolved
+      // exactly as the other two doors resolve it — `resolveReplicaAccess`
+      // above has already refused an unenrolled or revoked device, which is
+      // the whole authorization question here. There is no narrower one: an
+      // enrolment covers the vault, and `K` opens the vault's Locker.
+      //
+      // WHY THIS AND NOT THE PAIRING TICKET. The QR ticket is a base64url
+      // payload read off a screen by a camera; it is seen by whatever is
+      // pointed at that screen, it survives in a photo roll, and it is
+      // validated BEFORE any device exists to be a principal. A vault key
+      // handed out that way is handed to the room. Fetching it afterwards
+      // costs one authenticated request and buys a principal the gateway can
+      // name, check against a revocation tombstone, and refuse.
+      //
+      // NO-STORE, on purpose: a proxy or a service worker holding `K` is a
+      // second copy of the key in a place nothing revokes.
+      const { keyId, key } = plane.db.lockerKey();
+      res.setHeader("Cache-Control", "no-store");
+      const answer: SeatLockerKeyWire = {
+        vaultId,
+        keyId,
+        key: key.toString("base64"),
+        algorithm: "aes-256-gcm",
+      };
+      return sendJson(res, 200, answer);
     }
 
     if (url.pathname === SEAT_LOG_PATH) {
