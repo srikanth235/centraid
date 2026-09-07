@@ -27,6 +27,7 @@ import {
   parseNativeStateArgs,
   validateFingerprints,
   validateIosModuleLockCompleteness,
+  validateLockedNodeModulePods,
   validateModulePlatformShape,
   validatePodLock,
   validateReactNativePaths,
@@ -41,12 +42,14 @@ export {
   externalSourcePodNames,
   formatStatusReport,
   formatWriteSummary,
+  lockedNodeModulePackages,
   lockSectionBody,
   moduleLockDelta,
   parseNativeStateArgs,
   podVersions,
   validateFingerprints,
   validateIosModuleLockCompleteness,
+  validateLockedNodeModulePods,
   validateModulePlatformShape,
   validatePodLock,
   validateReactNativePaths,
@@ -145,6 +148,41 @@ async function dirExists(dir) {
 }
 
 /**
+ * The dependency half of the L1 recipe, read from the tree rather than from the
+ * pod lock: every package `bun.lock` resolves, and every apps/mobile dependency
+ * that autolinks an iOS pod. validateLockedNodeModulePods matches both against
+ * the pod lock's EXTERNAL SOURCES. `bun.lock` is the presence oracle because
+ * an uninstalled package can outlive its removal as a directory; the Expo
+ * module configs are read from disk because only the installed package says
+ * whether it has a native Apple side.
+ */
+export async function discoverNodeModulePodPackages() {
+  const nodeModules = path.join(repoRoot, "node_modules");
+  const bunLock = await readFile(path.join(repoRoot, "bun.lock"), "utf8");
+  const resolvedPackages = [
+    ...bunLock.matchAll(/^ {4}"(?<pkg>[^"]+)": \[/gmu),
+  ].map((match) => match.groups?.pkg ?? "");
+  const manifest = await readJson(path.join(mobileRoot, "package.json"));
+  const iosAutolinkedPackages = (
+    await Promise.all(
+      Object.keys(manifest.dependencies ?? {}).map(async (pkg) => {
+        const config = await readOptionalJson(
+          path.join(nodeModules, pkg, "expo-module.config.json")
+        );
+        const platforms = Array.isArray(config?.platforms)
+          ? config.platforms
+          : [];
+        // Expo SDK 57 writes "apple"; older module configs write "ios".
+        return platforms.includes("ios") || platforms.includes("apple")
+          ? pkg
+          : null;
+      })
+    )
+  ).filter((pkg) => pkg !== null);
+  return { resolvedPackages, iosAutolinkedPackages };
+}
+
+/**
  * Collect L1–L3 errors (recipe + coherence + paths). Does not touch fingerprints.
  */
 export async function collectRecipeErrors(inputs) {
@@ -158,6 +196,8 @@ export async function collectRecipeErrors(inputs) {
     modulePlatforms,
     podsRoot,
     expectedReactNativePath,
+    resolvedPackages,
+    iosAutolinkedPackages,
   } = inputs;
 
   const errors = [
@@ -180,6 +220,11 @@ export async function collectRecipeErrors(inputs) {
     );
   }
   errors.push(
+    ...validateLockedNodeModulePods({
+      lock,
+      resolvedPackages,
+      iosAutolinkedPackages,
+    }),
     ...validatePodLock({
       lock,
       expoVersion,
@@ -239,9 +284,13 @@ export async function verifyNativeState(options = {}) {
     loadLocalModulePlatforms(),
   ]);
 
+  const { resolvedPackages, iosAutolinkedPackages } =
+    await discoverNodeModulePodPackages();
   const recipeErrors = await collectRecipeErrors({
     lock,
     project,
+    resolvedPackages,
+    iosAutolinkedPackages,
     expoVersion: expoPackage.version,
     reactNativeVersion: reactNativePackage.version,
     hermesTags: [hermesTag, hermesV1Tag].filter(Boolean),
@@ -341,6 +390,16 @@ export async function verifyNativeState(options = {}) {
 
 async function readJson(file) {
   return JSON.parse(await readFile(file, "utf8"));
+}
+
+async function readOptionalJson(file) {
+  try {
+    return JSON.parse(await readFile(file, "utf8"));
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ENOENT")
+      return null;
+    throw error;
+  }
 }
 
 async function readOptionalLine(file) {

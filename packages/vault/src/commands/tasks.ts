@@ -11,6 +11,7 @@ import {
   completeTask,
   cancelTask,
   reopenTask,
+  SUCCESSOR_INHERITS_SERIES_LINKS_SQL,
   taskWriteConditions,
 } from "../operations/index.js";
 import { MINTED_ID_PROPERTY, mintedIdIsFree } from "./minted-id.js";
@@ -223,13 +224,7 @@ const SET_TASK_STATUS: CommandDefinition = {
     },
     {
       name: "successor_inherits_the_series_links",
-      sql: `SELECT (CASE WHEN :next_task_id IS NULL THEN 1
-                    ELSE ((SELECT count(*) FROM core_link
-                            WHERE from_type = 'schedule.task' AND from_id = :next_task_id
-                              AND valid_to IS NULL)
-                          >= (SELECT count(*) FROM core_link
-                               WHERE from_type = 'schedule.task' AND from_id = :task_id
-                                 AND valid_to IS NULL)) END) AS n`,
+      sql: SUCCESSOR_INHERITS_SERIES_LINKS_SQL,
       column: "n",
       op: "eq",
       value: 1,

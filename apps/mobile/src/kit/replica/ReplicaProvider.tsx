@@ -19,6 +19,10 @@ import {
   syncNotifications,
 } from "../../lib/notifications-core";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
+import {
+  openMountedReplicaReaderDriver,
+  openNativeReplicaDriver,
+} from "../../lib/replica/expo-sqlite-driver";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "../../lib/replica/mobile-gateway-compatibility-core";
 import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
@@ -32,10 +36,6 @@ import { NativeMultiplexChangeFeed } from "../../lib/replica/native-multiplex-ch
 import { createNativeReplicaSession } from "../../lib/replica/native-session";
 import type { NativeReplicaSession } from "../../lib/replica/native-session";
 import { MOBILE_REPLICA_BOOTSTRAP_WINDOW } from "../../lib/replica/offline-budgets";
-import {
-  openMountedReplicaReaderDriver,
-  openNativeReplicaDriver,
-} from "../../lib/replica/op-sqlite-driver";
 import {
   postCommons,
   postPlacement,

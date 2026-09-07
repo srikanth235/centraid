@@ -192,9 +192,13 @@ describe("enrich-publishers", () => {
     );
     // The KEY is the identity and preserves the script; the slug is a display
     // notation and is allowed to collide, which is why it carries a suffix.
-    expect(concepts.map((c) => c.normalized_key).toSorted()).toStrictEqual(
-      labels.map((l) => conceptKey(l)).toSorted()
-    );
+    // Sorted by code unit on both sides — the keys preserve the script, so a
+    // locale collation would order the two lists differently.
+    const byCodeUnit = (a: string | null, b: string | null): number =>
+      String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
+    expect(
+      concepts.map((c) => c.normalized_key).toSorted(byCodeUnit)
+    ).toStrictEqual(labels.map((l) => conceptKey(l)).toSorted(byCodeUnit));
     expect(concepts.map((c) => c.notation)).toStrictEqual([
       "untitled",
       "untitled-2",

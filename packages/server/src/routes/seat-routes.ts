@@ -46,7 +46,6 @@ import {
 import type {
   SeatLockerKeyWire,
   SeatLogPageWire,
-  SeatLogRowWire,
   SeatRebootstrapRequiredWire,
 } from "@centraid/core/protocol";
 import {
@@ -54,8 +53,8 @@ import {
   readReplicaLog,
   replicaLogState,
   ReplicaLogRebootstrapRequiredError,
+  seatLogRowWire,
 } from "@centraid/vault";
-import type { ReplicaLogRow } from "@centraid/vault";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
@@ -191,23 +190,6 @@ export function parseByteRange(
   return { start, end: Math.min(end, size - 1) };
 }
 
-function logRowWire(row: ReplicaLogRow): SeatLogRowWire {
-  return {
-    seq: row.seq,
-    commitSeq: row.commitSeq,
-    schemaEpoch: row.schemaEpoch,
-    ddlVersion: row.ddlVersion,
-    table: row.table,
-    op: row.op,
-    pk: row.primaryKey,
-    ...(row.row === null ? {} : { row: row.row }),
-    ...(row.indirect ? { indirect: true } : {}),
-    ...(row.deferred ? { deferred: true } : {}),
-    producer: row.producer,
-    committedAt: row.committedAt,
-  };
-}
-
 export function makeSeatRouteHandler(
   vaults: VaultRegistry,
   options: SeatRouteOptions = {}
@@ -331,7 +313,7 @@ export function makeSeatRouteHandler(
         watermark: page.watermark.seq,
         next: page.next.seq,
         hasMore: page.hasMore,
-        rows: page.rows.map(logRowWire),
+        rows: page.rows.map(seatLogRowWire),
       };
       return sendJson(res, 200, body);
     }

@@ -67,7 +67,8 @@ export interface SeatBlobRow {
   readonly purgeAckIntentId: string | undefined;
 }
 
-interface BlobSql {
+/** One presence row as SQLite hands it over. */
+export interface SeatBlobSqlRow {
   sha: string;
   kind: "preview" | "original";
   byte_size: number;
@@ -79,10 +80,12 @@ interface BlobSql {
   purge_ack_intent_id: string | null;
 }
 
-const COLUMNS = `sha, kind, byte_size, captured_here, pinned, last_used_at,
+/** The presence columns, in the order {@link seatBlobRow} reads them. */
+export const SEAT_BLOB_COLUMNS = `sha, kind, byte_size, captured_here, pinned, last_used_at,
        claim_intent_id, purge_seq, purge_ack_intent_id`;
 
-function shape(row: BlobSql): SeatBlobRow {
+/** That row in the seat's own vocabulary. */
+export function seatBlobRow(row: SeatBlobSqlRow): SeatBlobRow {
   return {
     sha: row.sha,
     kind: row.kind,
@@ -161,11 +164,11 @@ export function readSeatBlob(
   driver: SeatSqliteDriver,
   sha: string
 ): SeatBlobRow | undefined {
-  const row = driver.all<BlobSql>(
-    `SELECT ${COLUMNS} FROM seat_blob_presence WHERE sha = ?`,
+  const row = driver.all<SeatBlobSqlRow>(
+    `SELECT ${SEAT_BLOB_COLUMNS} FROM seat_blob_presence WHERE sha = ?`,
     [sha]
   )[0];
-  return row ? shape(row) : undefined;
+  return row ? seatBlobRow(row) : undefined;
 }
 
 /** Blobs this seat holds and has not yet told the gateway about. */
@@ -174,13 +177,13 @@ export function unclaimedSeatBlobs(
   limit = 500
 ): SeatBlobRow[] {
   return driver
-    .all<BlobSql>(
-      `SELECT ${COLUMNS} FROM seat_blob_presence
+    .all<SeatBlobSqlRow>(
+      `SELECT ${SEAT_BLOB_COLUMNS} FROM seat_blob_presence
         WHERE claim_intent_id IS NULL AND purge_seq IS NULL
         ORDER BY last_used_at LIMIT ?`,
       [limit]
     )
-    .map(shape);
+    .map(seatBlobRow);
 }
 
 export function noteSeatBlobClaimed(
@@ -230,13 +233,13 @@ export function unacknowledgedSeatPurges(
   limit = 500
 ): SeatBlobRow[] {
   return driver
-    .all<BlobSql>(
-      `SELECT ${COLUMNS} FROM seat_blob_presence
+    .all<SeatBlobSqlRow>(
+      `SELECT ${SEAT_BLOB_COLUMNS} FROM seat_blob_presence
         WHERE purge_seq IS NOT NULL AND purge_ack_intent_id IS NULL
         ORDER BY purge_seq LIMIT ?`,
       [limit]
     )
-    .map(shape);
+    .map(seatBlobRow);
 }
 
 export function noteSeatPurgeAcknowledged(
@@ -266,12 +269,12 @@ export function seatEvictionCandidates(
   protectedShas: readonly string[] = []
 ): SeatBlobRow[] {
   const rows = driver
-    .all<BlobSql>(
-      `SELECT ${COLUMNS} FROM seat_blob_presence
+    .all<SeatBlobSqlRow>(
+      `SELECT ${SEAT_BLOB_COLUMNS} FROM seat_blob_presence
         WHERE pinned = 0 AND captured_here = 0 AND purge_seq IS NULL
         ORDER BY last_used_at`
     )
-    .map(shape);
+    .map(seatBlobRow);
   const guarded = new Set(protectedShas);
   const chosen: SeatBlobRow[] = [];
   let freed = 0;

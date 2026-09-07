@@ -35,7 +35,7 @@ type HashModule = typeof import("../../lib/replica/native-hash");
 type MultiplexModule =
   typeof import("../../lib/replica/native-multiplex-change-feed");
 type NativeSessionModule = typeof import("../../lib/replica/native-session");
-type DriverModule = typeof import("../../lib/replica/op-sqlite-driver");
+type DriverModule = typeof import("../../lib/replica/expo-sqlite-driver");
 type PlacementModule = typeof import("../../lib/replica/placement-transport");
 type ThumbnailModule = typeof import("../../lib/replica/thumbnail-pack");
 type UploadPolicyModule = typeof import("../../lib/upload/native-policy");
@@ -250,7 +250,7 @@ vi.mock(
 );
 
 vi.mock(
-  import("../../lib/replica/op-sqlite-driver"),
+  import("../../lib/replica/expo-sqlite-driver"),
   () =>
     ({
       openMountedReplicaReaderDriver: () => {

@@ -1,7 +1,4 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { gzipSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
@@ -13,7 +10,6 @@ import {
   readSeatBlob,
   recordSeatBlob,
 } from "./blob-presence.js";
-import type { SeatSnapshotTransport } from "./bootstrap.js";
 import {
   readSeatCarryOver,
   shasPendingIntentsNeed,
@@ -28,6 +24,10 @@ import {
   readSeatOutbox,
 } from "./outbox.js";
 import {
+  seatArtifact,
+  seatArtifactTransport,
+} from "./seat-artifact.test-fixtures.js";
+import {
   clearSeatOverlaysAtCommit,
   SeatIntentStore,
   seatOverlayClearingHook,
@@ -36,35 +36,6 @@ import { initSeatState, readSeatState } from "./state.js";
 import { seatWatermark, seatWatermarkLine } from "./watermark.js";
 import { SeatWorkerCore } from "./worker-core.js";
 
-function artifact(root: string): Uint8Array {
-  const source = path.join(root, "source.db");
-  const db = new DatabaseSync(source);
-  db.exec(`
-    CREATE TABLE note (note_id TEXT PRIMARY KEY, title TEXT NOT NULL) STRICT;
-    INSERT INTO note VALUES ('n1', 'from the gateway');
-  `);
-  db.close();
-  return gzipSync(readFileSync(source));
-}
-
-function transport(bytes: Uint8Array, seq: number): SeatSnapshotTransport {
-  return {
-    head: () =>
-      Promise.resolve({
-        etag: `"e1-${seq}"`,
-        bytes: bytes.byteLength,
-        seq,
-        epoch: "e1",
-        schemaEpoch: 2,
-      }),
-    range: (start: number) => ({
-      async *[Symbol.asyncIterator]() {
-        yield bytes.subarray(start);
-      },
-    }),
-  };
-}
-
 const OPEN = {
   vaultId: "vault-1",
   dbName: "/seat.db",
@@ -72,7 +43,7 @@ const OPEN = {
 } as const;
 
 function worker(root: string): SeatWorkerCore {
-  const bytes = artifact(root);
+  const bytes = seatArtifact(root);
   return new SeatWorkerCore({
     openDatabase: () => new NodeSeatDriver(path.join(root, "seat.db")),
     staging: () =>
@@ -80,7 +51,7 @@ function worker(root: string): SeatWorkerCore {
         directory: path.join(root, "staging"),
         databasePath: path.join(root, "seat.db"),
       }),
-    transport: () => transport(bytes, 7),
+    transport: () => seatArtifactTransport(bytes, 7),
   });
 }
 

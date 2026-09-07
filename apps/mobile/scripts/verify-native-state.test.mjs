@@ -31,7 +31,9 @@ import {
   parseNativeStateArgs,
   podVersions,
   validateFingerprints,
+  lockedNodeModulePackages,
   validateIosModuleLockCompleteness,
+  validateLockedNodeModulePods,
   validateModulePlatformShape,
   validatePodLock,
   validateReactNativePaths,
@@ -129,6 +131,48 @@ EXTERNAL SOURCES:
     const remediated = attachRemediation(errors);
     expect(remediated.at(-1)).toMatch(/fix the native recipe first/u);
     expect(remediated.at(-1)).not.toMatch(/--write`$/u);
+  });
+
+  // #996 wave 3 swapped op-sqlite for expo-sqlite and could not regenerate the
+  // lock (that needs macOS). The version checks above saw nothing: neither half
+  // of the drift is a version, so the gate was green on a lock that cannot link.
+  test("L1 fails on a lock whose node_modules pods no longer match the tree", () => {
+    const lock = `EXTERNAL SOURCES:
+  CentraidTunnel:
+    :path: "../modules/centraid-tunnel/ios"
+  ExpoCamera:
+    :path: "../../../node_modules/expo-camera/ios"
+  op-sqlite:
+    :path: "../../../node_modules/@op-engineering/op-sqlite"
+
+SPEC CHECKSUMS:
+`;
+    expect(lockedNodeModulePackages(lock)).toEqual([
+      "@op-engineering/op-sqlite",
+      "expo-camera",
+    ]);
+    const errors = validateLockedNodeModulePods({
+      lock,
+      resolvedPackages: ["expo-camera", "expo-sqlite"],
+      iosAutolinkedPackages: ["expo-camera", "expo-sqlite"],
+    });
+    expect(errors).toEqual([
+      "L1 recipe stale: Podfile.lock sources a pod from node_modules/@op-engineering/op-sqlite, which bun.lock no longer resolves (cd apps/mobile/ios && pod install  # macOS only; Linux CI can verify but not repair the lock; fix the native recipe first (complete Podfile.lock / module configs), then re-run verify; do not run --write until L1–L3 pass)",
+      "L1 recipe stale: dependency expo-sqlite autolinks an iOS pod that Podfile.lock does not carry (cd apps/mobile/ios && pod install  # macOS only; Linux CI can verify but not repair the lock; fix the native recipe first (complete Podfile.lock / module configs), then re-run verify; do not run --write until L1–L3 pass)",
+    ]);
+    // The lock `pod install` will write: op-sqlite gone, ExpoSQLite present.
+    expect(
+      validateLockedNodeModulePods({
+        lock: `EXTERNAL SOURCES:
+  ExpoCamera:
+    :path: "../../../node_modules/expo-camera/ios"
+  ExpoSQLite:
+    :path: "../../../node_modules/expo-sqlite/ios"
+`,
+        resolvedPackages: ["expo-camera", "expo-sqlite"],
+        iosAutolinkedPackages: ["expo-camera", "expo-sqlite"],
+      })
+    ).toEqual([]);
   });
 
   test("L1 Android shape fails when a platform directory is undeclared", () => {
