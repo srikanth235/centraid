@@ -6184,3 +6184,71 @@ the phone and are convertible now.
 - **A conversion that breaks a seat is not a conversion.** The shared
   representation read is one edit and eight apps wide; it waits for the phone's
   ctx rather than landing behind a broken Tally.
+
+## Wave 4 — the web e2e exit condition, measured (#996)
+
+### It runs here now, and it is red BEFORE this wave's commits
+
+The previous W4 section reported `bun run --cwd apps/web e2e` as unrunnable in
+this environment. It runs: the repo's pinned Node (24.4.1) plus the config's own
+`CENTRAID_E2E_CHROMIUM` hook at the image's Chromium — no committed browser
+path, no local override, nothing skipped:
+
+```
+PATH=/opt/nvm/versions/node/v24.4.1/bin:$PATH \
+CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium bun run --cwd apps/web e2e
+```
+
+**20 failed, 30 passed (6.0m)** — and the SAME 20, byte for byte, on branch head
+`2d5038634` in a clean detached worktree, built and installed from scratch,
+before any of this wave's four commits (`diff` over the two sorted failure lists
+is empty). So the seat-store e2e exit is red on the branch it was handed to this
+wave on, and nothing here caused it.
+
+### What is actually broken, because it is upstream of every app conversion
+
+Every failure is one symptom: **the inline app route never resolves**. `Loading
+People…`, `Loading Docs…`, `Loading Tasks…` and so on stay on screen for the
+full ten-second wait, for **all seven** first-party apps including the six this
+wave has not touched. The accessibility sweep, the per-app journeys, the
+offline-reconnect and offline-search journeys, both perf waterfalls and both
+renderer-leak soaks are all downstream of an app screen that paints.
+
+This is the gap the W4-D1 commit named and left open in its own receipt — "the
+five wiring files are untouched… the coordinator is still built over
+`ReplicaWorkerClient`; nothing in the shell reaches `SeatWorkerClient.query`" —
+now measured. `seatStoreEnabled` became unconditional in that commit; the shell's
+read path did not move with it. **The apps cannot be converted app-by-app past
+this**: a converted handler renders into a route that never resolves, so a green
+unit suite proves nothing about the screen.
+
+The five files are `replica/shell-session.ts`, `replica/coordinator.ts`,
+`replica/coordinator-web.ts`, `react/blueprints/centraid-inline.ts` and
+`react/shell/routes/InlineAppRoute.tsx`. Two of them are now partly done — the
+session has `page` and the binding carries it (above) — and the coordinator is
+not.
+
+### Gates
+
+- `bun run typecheck` — 25/25 tasks successful.
+- `bun run knip` — one unused export, `DEVICE_OFFER` in
+  `apps/mobile/src/apps/locker/locker-seat-copy.ts:30`, which arrived with the
+  locker lane and is not this wave's.
+- `bun run governance < /dev/null` — 21 passed, 1 failed:
+  `commit-issue-receipt-match` on `bcf17bd3f`, the known pre-existing violation.
+- `bun run check:push:static` — 4/4 on every committed tree.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the exit condition
+
+- **A gate that was called unrunnable is worth trying again with the pinned
+  toolchain.** It ran on the first attempt once Node matched `engines`.
+- **A red gate is measured against the tree it was inherited on before it is
+  reported.** The same twenty on a clean base worktree is what turns "my change
+  broke the e2e" into "the branch arrived red", and only one of those is
+  actionable by the next worker.
