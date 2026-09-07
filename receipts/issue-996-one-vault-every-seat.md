@@ -5099,3 +5099,43 @@ passing.
   says so, and the difference is a stranded intent.
 - **Promise-chain shape is behaviour on a re-entrant drain.** A `.finally`
   added for tidiness moved a reset by one microtask and cost eight journeys.
+
+## Wave 8 — open question 7: a link is a channel, so it stops carrying a bag
+
+### The answer to "what consumes `permissions`" is: nothing
+
+`vault_links.permissions_json` was read in exactly one place (`vault-link-row.ts:141`, `toLink`), and every reader downstream of it reached for one key — `commonsPartyIds`, a `vaultId → partyId` map. That is not a permission. It is **who each side of the link is**, which is link identity, and since [#903](https://github.com/srikanth235/centraid/issues/903) a link is a **channel** and not a permission slip (R17). So the column goes, and what it actually held gets a column that says so: `party_ids_json`, parsed to `Record<string, string>` by `parsePartyIds`, which is where the narrowing lives.
+
+**It was also writable by the far side, which is the part worth stating.** Both hello handlers — the server's `/link/redeem` and the client's `redeemLinkTicket` — spread the peer's inbound `permissions` object into this gateway's row verbatim. Nothing read the extra keys, and "nothing reads it yet" is the only reason that was not a hole; a column named `permissions` on a row a peer can write is an invitation for the next reader to find a permission there. The peer's hello now contributes exactly one fact — the party id for its own vault — and a value that is not a party id does not survive the parse.
+
+**The wire field went with the column, both directions.** An earlier draft kept `permissions` on the redeem *response* for peer compatibility. Pre-1.0 there are no compatibility paths, and the field was dead on arrival in any case: `redeemLinkTicket` never reads `body.permissions`, and the `redeem` handler never reads `body.partyIds` (it takes `ownerPartyId`). Both are deleted, and `RedeemLinkTicketDeps.partyIds` with them — no caller ever passed it.
+
+Red first: `peer-plane.test.ts` sends a hello carrying both spellings of the old bag plus `{ admin: true }` and a `commonsPartyIds` entry claiming a party id for the *local* vault, and asserts the stored row is `{ [PEER_VAULT]: "party_priya" }` and the reply has neither field. It failed on the reply's `permissions` before the deletion.
+
+### Ruling W6-D3 — the Companion fills through the shell's door, and never holds `K`
+
+Recorded here at the root's direction, closing the blocking question W6 left in *The Companion, which this breaks, said plainly*.
+
+The Companion browser extension is a **client of the desktop shell**. It never holds `K` and never holds a permit. Browser fill goes through the shell's locker door — `window.centraid.locker.reveal({ rowId })`, its receipt awaited, a typed `locked` refusal when the seat's unlock boundary has not been crossed — carried over the extension's existing local bridge, **one row's plaintext per fill**. `autofill-item.ts` keeps returning the match plus the stated reason on seats with no shell, which is what W6 left it doing, and `autofill-candidates` stays ungated.
+
+**The wiring is a named seam, not wave-8 work**, because the door does not exist yet: W6 deleted the gateway's locker reveal arm and put no `locker.reveal` on the kit surface in its place. Building it touches `packages/client/src/replica/inline-query-ctx-core.ts` and `packages/blueprints/types/centraid.d.ts` (the door on the kit surface), `packages/client/src/react/shell/` (the unlock boundary the door awaits), `apps/extension/src/companion-api.ts` and `apps/extension/src/worker-core.ts` (the bridge call and its `locked` arm), and `packages/server/src/serve/companion-access.ts` (which no longer serves plaintext). That is a wave of its own.
+
+### Every file this commit touches
+
+- `packages/server/src/serve/gateway-schema.ts` — `vault_links.permissions_json` **deleted**; `party_ids_json` in its place, with why
+- `packages/server/src/serve/vault-link-row.ts` — `VaultLink.permissions` / `LinkedPeer.permissions` / `PeerLinkInput.permissions` → `partyIds`; `VaultLinkRow.permissions_json` → `party_ids_json`; new `parsePartyIds`; `partyIdForLinkedVault` and `peerViewOf` read the map directly
+- `packages/server/src/serve/vault-links-store.ts` — the three writes and the `recordCommonsParties` upsert on the new column
+- `packages/server/src/serve/peer-link-client.ts` — `RedeemLinkTicketDeps.permissions` **deleted** (no caller); the `partyIds` hello field **deleted** (no reader); the far side's bag no longer spread into storage
+- `packages/server/src/routes/peer-plane.ts` — the inbound spread **deleted**; the `permissions` response field **deleted**
+- `packages/server/src/routes/peer-plane.test.ts` — the red-first case above
+- `receipts/issue-996-one-vault-every-seat.md` — this section
+
+### Gates
+
+```
+bunx vitest run packages/server/src/routes/peer-plane.test.ts \
+  packages/server/src/serve/peer-link-ceremony.test.ts \
+  packages/server/src/serve/vault-links-store.test.ts \
+  packages/server/src/serve/vault-plane-links.test.ts \
+  packages/server/src/routes/vault-links-ticket-routes.test.ts   # 5 files, 63 passed
+```

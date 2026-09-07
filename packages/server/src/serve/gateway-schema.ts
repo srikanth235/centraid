@@ -285,7 +285,21 @@ export function installGatewaySchema(db: DatabaseSync): void {
       vault_b TEXT NOT NULL,
       approved_by_a TEXT,
       approved_by_b TEXT,
-      permissions_json TEXT NOT NULL DEFAULT '{}',
+      /*
+       * WHO EACH SIDE IS, not what either may do (#996, ruling R17, open
+       * question 7). This was permissions_json, an open bag, and the answer to
+       * "what consumes permissions" turned out to be: nothing. The only key
+       * ever read out of it was commonsPartyIds -- a vaultId to partyId map,
+       * which is link IDENTITY. Since #903 a link is a CHANNEL and not a
+       * permission slip, so a column called permissions on it was an
+       * invitation for the next reader to put a permission there.
+       *
+       * It was also writable by the far side: both hello handlers spread the
+       * peer's inbound permissions object into this column verbatim. Nothing
+       * read the extra keys, which is the only reason that was not a hole --
+       * and "nothing reads it yet" is not a property worth keeping.
+       */
+      party_ids_json TEXT NOT NULL DEFAULT '{}',
       revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
       created_at TEXT NOT NULL,
       UNIQUE (vault_a, vault_b),

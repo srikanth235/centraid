@@ -195,7 +195,7 @@ export class VaultLinksStore {
       this.gatewayDatabase.run(
         `INSERT INTO vault_links (
            link_id, vault_a, vault_b, approved_by_a, approved_by_b,
-           permissions_json, created_at
+           party_ids_json, created_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         linkId,
         a,
@@ -205,10 +205,8 @@ export class VaultLinksStore {
         JSON.stringify(
           input.fromPartyId && input.toPartyId
             ? {
-                commonsPartyIds: {
-                  [input.fromVaultId]: input.fromPartyId,
-                  [input.toVaultId]: input.toPartyId,
-                },
+                [input.fromVaultId]: input.fromPartyId,
+                [input.toVaultId]: input.toPartyId,
               }
             : {}
         ),
@@ -289,19 +287,19 @@ export class VaultLinksStore {
     this.gatewayDatabase.run(
       `INSERT INTO vault_links (
          link_id, vault_a, vault_b, approved_by_a, approved_by_b,
-         permissions_json, revoked, created_at
+         party_ids_json, revoked, created_at
        ) VALUES (?, ?, ?, ?, ?, ?, 0, ?)
        ON CONFLICT (vault_a, vault_b) DO UPDATE SET
          approved_by_a = excluded.approved_by_a,
          approved_by_b = excluded.approved_by_b,
-         permissions_json = excluded.permissions_json,
+         party_ids_json = excluded.party_ids_json,
          revoked = 0`,
       randomUUID(),
       a,
       b,
       localIsA ? localApproval : peerApproval,
       localIsA ? peerApproval : localApproval,
-      JSON.stringify(input.permissions ?? {}),
+      JSON.stringify(input.partyIds ?? {}),
       now
     );
     return this.peerForVault(input.peerVaultId, input.localVaultId);
@@ -315,22 +313,14 @@ export class VaultLinksStore {
   }): LinkedPeer | undefined {
     const link = this.findPair(input.localVaultId, input.peerVaultId);
     if (!link || link.revoked) return undefined;
-    const existing =
-      typeof link.permissions["commonsPartyIds"] === "object" &&
-      link.permissions["commonsPartyIds"] !== null
-        ? (link.permissions["commonsPartyIds"] as Record<string, unknown>)
-        : {};
-    const permissions = {
-      ...link.permissions,
-      commonsPartyIds: {
-        ...existing,
-        [input.localVaultId]: input.localPartyId,
-        [input.peerVaultId]: input.peerPartyId,
-      },
+    const partyIds = {
+      ...link.partyIds,
+      [input.localVaultId]: input.localPartyId,
+      [input.peerVaultId]: input.peerPartyId,
     };
     this.gatewayDatabase.run(
-      "UPDATE vault_links SET permissions_json = ? WHERE link_id = ?",
-      JSON.stringify(permissions),
+      "UPDATE vault_links SET party_ids_json = ? WHERE link_id = ?",
+      JSON.stringify(partyIds),
       link.linkId
     );
     this.announce(this.get(link.linkId), "parties");
@@ -354,9 +344,7 @@ export class VaultLinksStore {
           peerPublicKey: input.peerPublicKey,
           peerLabel: input.peerLabel,
           route: input.route,
-          ...(input.permissions === undefined
-            ? {}
-            : { permissions: input.permissions }),
+          ...(input.partyIds === undefined ? {} : { partyIds: input.partyIds }),
         },
         { local: claimed.createdAt, peer: new Date().toISOString() }
       );
