@@ -165,21 +165,18 @@ describe("the Journal place", () => {
     expect(untitled["body"]).toBeUndefined();
   });
 
-  test("every read is bounded — by an eq, an in, or a limit", async () => {
+  test("reaches the vault only through pages, and every cursor is readable", async () => {
     const calls: ReadCall[] = [];
     const statements: Statement[] = [];
     const ctx = ctxOf(vaultRows(), calls, statements);
     await journalHandler({ input: { limit: 50 }, ctx } as never);
-    expect(calls.length).toBeGreaterThan(0);
-    for (const call of calls) {
-      const bounded =
-        (call.where ?? []).some((clause) => ["eq", "in"].includes(clause.op)) ||
-        typeof call.limit === "number";
-      expect(bounded, `${call.entity} read is unbounded`).toBe(true);
-    }
-    // A page is bounded by construction — `limit` is required — so what is
-    // worth asserting is that its cursor can be read: the order's two columns
-    // are both projected, or the walk cannot continue past the first page.
+    // The declarative read is GONE from this handler (#996 wave 4, R8): a
+    // surviving one is a read with no stated window, which is the whole of
+    // what this wave removes.
+    expect(calls).toStrictEqual([]);
+    // A page's window is required by its type, so what is left to get wrong is
+    // the cursor: the order's two columns must both be projected, or the walk
+    // cannot continue past the first page.
     expect(statements.length).toBeGreaterThan(0);
     for (const statement of statements) {
       expect(statement.select).toContain(statement.order.sortColumn);

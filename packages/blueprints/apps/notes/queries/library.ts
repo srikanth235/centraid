@@ -8,6 +8,7 @@
  */
 
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import {
   ownerKey,
   readRepresentations,
@@ -34,6 +35,7 @@ interface CollectionRow {
 }
 
 interface PlacementRow {
+  entry_id: string;
   target_id: string;
   collection_id: string;
 }
@@ -67,6 +69,7 @@ interface ConceptRow {
 }
 
 interface AnchorRow {
+  anchor_id: string;
   link_id: string;
   selector_json: string;
 }
@@ -170,52 +173,90 @@ function attachmentsBySubject(
   return bySubject;
 }
 
+/** One note row, as all three of the library's windows project it. */
+const NOTE_COLUMNS =
+  "note_id, title, format, pinned, body_content_id, created_at, " +
+  "updated_at, deleted_at, purge_at";
+
+/** The pinned and trash shelves are what the screen shows, so that is the read. */
+const SHELF_ROWS = 200;
+
 export default async function libraryHandler({ input, ctx }: HandlerArgs) {
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
     // Pinned notes ride beside the window: a pin survives the note aging out.
-    const [recent, pinnedNotes, trashedNotes, notebooks, journalNoteIds] =
+    const [recent, pinnedNotes, trashedNotes, notebookRows, journalNoteIds] =
       await Promise.all([
-        ctx.vault.read({
-          entity: "knowledge.note",
-          // Trashed notes (#308: delete is reversible) stay out of the library.
-          where: [{ column: "deleted_at", op: "is-null" }],
-          orderBy: { column: "updated_at", dir: "desc" },
+        // THE THREE SHELVES ARE THE SCREEN, SO THEY ARE PAGES (#996 wave 4).
+        // Trashed notes (#308: delete is reversible) stay out of the library.
+        ctx.vault.page<NoteRow>({
+          query: {
+            name: "notes.library.recent",
+            select: NOTE_COLUMNS,
+            from: "knowledge_note",
+            where: "deleted_at IS NULL",
+            order: {
+              sortColumn: "updated_at",
+              pkColumn: "note_id",
+              descending: true,
+            },
+          },
           limit: window,
         }),
-        ctx.vault.read({
-          entity: "knowledge.note",
-          where: [
-            { column: "pinned", op: "eq", value: 1 },
-            { column: "deleted_at", op: "is-null" },
-          ],
-          orderBy: { column: "updated_at", dir: "desc" },
-          limit: 200,
+        ctx.vault.page<NoteRow>({
+          query: {
+            name: "notes.library.pinned",
+            select: NOTE_COLUMNS,
+            from: "knowledge_note",
+            where: "pinned = ? AND deleted_at IS NULL",
+            bind: [1],
+            order: {
+              sortColumn: "updated_at",
+              pkColumn: "note_id",
+              descending: true,
+            },
+          },
+          limit: SHELF_ROWS,
         }),
-        ctx.vault.read({
-          entity: "knowledge.note",
-          where: [{ column: "deleted_at", op: "not-null" }],
-          orderBy: { column: "deleted_at", dir: "desc" },
-          limit: 200,
+        ctx.vault.page<NoteRow>({
+          query: {
+            name: "notes.library.trash",
+            select: NOTE_COLUMNS,
+            from: "knowledge_note",
+            where: "deleted_at IS NOT NULL",
+            order: {
+              sortColumn: "deleted_at",
+              pkColumn: "note_id",
+              descending: true,
+            },
+          },
+          limit: SHELF_ROWS,
         }),
-        // Notebooks are collections (#274) — the one curation mechanism.
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.collection",
+        // Notebooks are collections (#274) — the one curation mechanism. Owner-
+        // curated and small, so a walk with a stated ceiling, not a window.
+        readPages<CollectionRow>(ctx, {
+          name: "notes.library.notebooks",
+          select: "collection_id, name, sort_order",
+          from: "core_collection",
+          order: {
+            sortColumn: "sort_order",
+            pkColumn: "collection_id",
+            descending: false,
+          },
         }),
         // Rides this Promise.all so the exclusion costs no extra round trip.
         readJournalNoteIds(ctx),
       ]);
     const byId = new Map<string, NoteRow>();
     for (const n of [
-      ...((recent.rows ?? []) as unknown as NoteRow[]),
-      ...((pinnedNotes.rows ?? []) as unknown as NoteRow[]),
-      ...((trashedNotes.rows ?? []) as unknown as NoteRow[]),
+      ...recent.rows,
+      ...pinnedNotes.rows,
+      ...trashedNotes.rows,
     ]) {
       byId.set(n.note_id, n);
     }
     // A collection may also hold photos and documents; this surface renders notes.
-    const books = ((notebooks.rows ?? []) as unknown as CollectionRow[])
+    const books = notebookRows
       .map((c) => ({
         notebook_id: c.collection_id,
         name: c.name,
@@ -239,72 +280,99 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     const noteIds = windowed.map((n) => n.note_id);
 
     // Joins stay `in`-bounded by the window (#272).
-    const [placements, attachments, links, backlinks, tags] = await Promise.all(
-      [
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.collection_entry",
-          where: [
-            { column: "target_type", op: "eq", value: "knowledge.note" },
-            { column: "target_id", op: "in", value: noteIds },
-          ],
+    const targetIn = inList("target_id", noteIds);
+    const fromIn = inList("from_id", noteIds);
+    const toIn = inList("to_id", noteIds);
+    const [placementRows, attachmentRows, linkRows, backlinkRows, tags] =
+      await Promise.all([
+        readPages<PlacementRow>(ctx, {
+          name: "notes.library.placements",
+          select: "entry_id, target_type, target_id, collection_id",
+          from: "core_collection_entry",
+          where: `target_type = ? AND ${targetIn.sql}`,
+          bind: ["knowledge.note", ...targetIn.bind],
+          order: {
+            sortColumn: "entry_id",
+            pkColumn: "entry_id",
+            descending: false,
+          },
         }),
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.attachment",
-          where: [
-            { column: "target_type", op: "eq", value: "knowledge.note" },
-            { column: "target_id", op: "in", value: noteIds },
-          ],
+        readPages<AttachmentRow>(ctx, {
+          name: "notes.library.attachments",
+          select:
+            "attachment_id, target_type, target_id, content_id, role, is_primary",
+          from: "core_attachment",
+          where: `target_type = ? AND ${targetIn.sql}`,
+          bind: ["knowledge.note", ...targetIn.bind],
+          order: {
+            sortColumn: "attachment_id",
+            pkColumn: "attachment_id",
+            descending: false,
+          },
         }),
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.link",
-          where: [
-            { column: "from_type", op: "eq", value: "knowledge.note" },
-            { column: "from_id", op: "in", value: noteIds },
-            { column: "valid_to", op: "is-null" },
-          ],
+        readPages<LinkRow>(ctx, {
+          name: "notes.library.links",
+          select: "link_id, from_type, from_id, to_type, to_id",
+          from: "core_link",
+          where: `from_type = ? AND ${fromIn.sql} AND valid_to IS NULL`,
+          bind: ["knowledge.note", ...fromIn.bind],
+          order: {
+            sortColumn: "link_id",
+            pkColumn: "link_id",
+            descending: false,
+          },
         }),
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.link",
-          where: [
-            { column: "to_type", op: "eq", value: "knowledge.note" },
-            { column: "to_id", op: "in", value: noteIds },
-            { column: "valid_to", op: "is-null" },
-          ],
+        readPages<LinkRow>(ctx, {
+          name: "notes.library.backlinks",
+          select: "link_id, from_type, from_id, to_type, to_id",
+          from: "core_link",
+          where: `to_type = ? AND ${toIn.sql} AND valid_to IS NULL`,
+          bind: ["knowledge.note", ...toIn.bind],
+          order: {
+            sortColumn: "link_id",
+            pkColumn: "link_id",
+            descending: false,
+          },
         }),
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.tag",
-          where: [
-            { column: "target_type", op: "eq", value: "knowledge.note" },
-            { column: "target_id", op: "in", value: noteIds },
-          ],
+        readPages<TagRow>(ctx, {
+          name: "notes.library.tags",
+          select: "tag_id, target_type, target_id, concept_id",
+          from: "core_tag",
+          where: `target_type = ? AND ${targetIn.sql}`,
+          bind: ["knowledge.note", ...targetIn.bind],
+          order: {
+            sortColumn: "tag_id",
+            pkColumn: "tag_id",
+            descending: false,
+          },
         }),
-      ]
-    );
+      ]);
     // Re-narrowed in memory: tag→concept→chip is where a journal-only concept
     // would leak back in, so the exclusion is enforced here, not trusted (#834).
     const survivingIds = new Set(noteIds);
-    const tagRows = ((tags.rows ?? []) as unknown as TagRow[]).filter((t) =>
-      survivingIds.has(t.target_id)
-    );
+    const tagRows = tags.filter((t) => survivingIds.has(t.target_id));
     const conceptIds = [...new Set(tagRows.map((t) => t.concept_id))];
-    const concepts =
-      conceptIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.concept",
-            where: [{ column: "concept_id", op: "in", value: conceptIds }],
-          })
-        : { rows: [] };
+    const conceptIn =
+      conceptIds.length > 0 ? inList("concept_id", conceptIds) : null;
+    const concepts = conceptIn
+      ? await readPages<ConceptRow>(ctx, {
+          name: "notes.library.concepts",
+          select: "concept_id, pref_label",
+          from: "core_concept",
+          where: conceptIn.sql,
+          bind: conceptIn.bind,
+          order: {
+            sortColumn: "concept_id",
+            pkColumn: "concept_id",
+            descending: false,
+          },
+        })
+      : [];
     // Same re-narrowing one link on: a read may answer wider than it was asked.
     const wantedConcepts = new Set(conceptIds);
-    const conceptRows = (
-      (concepts.rows ?? []) as unknown as ConceptRow[]
-    ).filter((c) => wantedConcepts.has(c.concept_id));
+    const conceptRows = concepts.filter((c) =>
+      wantedConcepts.has(c.concept_id)
+    );
     const labelByConcept = new Map(
       conceptRows.map((c) => [c.concept_id, c.pref_label])
     );
@@ -326,8 +394,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       .toSorted((a, b) => a.label.localeCompare(b.label));
 
     // Resolvable-if-linked: no media/finance read scopes are needed here.
-    const linkRows = (links.rows ?? []) as unknown as LinkRow[];
-    const backlinkRows = (backlinks.rows ?? []) as unknown as LinkRow[];
     const uniqueRefs = [
       ...new Map(
         [
@@ -340,23 +406,31 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       ).values(),
     ];
     // Standoff anchors (#282): ship the selector; resolving it is presentation.
-    const [resolved, anchors] = await Promise.all([
+    const anchorIn =
+      linkRows.length > 0
+        ? inList(
+            "link_id",
+            linkRows.map((l) => l.link_id)
+          )
+        : null;
+    const [resolved, anchorRows] = await Promise.all([
       uniqueRefs.length > 0
         ? ctx.vault.resolve({ refs: uniqueRefs })
         : Promise.resolve({ cards: [] as Array<Record<string, unknown>> }),
-      linkRows.length > 0
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.link_anchor",
-            where: [
-              {
-                column: "link_id",
-                op: "in",
-                value: linkRows.map((l) => l.link_id),
-              },
-            ],
+      anchorIn
+        ? readPages<AnchorRow>(ctx, {
+            name: "notes.library.anchors",
+            select: "anchor_id, link_id, selector_json",
+            from: "core_link_anchor",
+            where: anchorIn.sql,
+            bind: anchorIn.bind,
+            order: {
+              sortColumn: "anchor_id",
+              pkColumn: "anchor_id",
+              descending: false,
+            },
           })
-        : Promise.resolve({ rows: [] }),
+        : Promise.resolve([] as AnchorRow[]),
     ]);
     const cardByRef = new Map(
       ((resolved.cards ?? []) as unknown as CardRow[]).map((c) => [
@@ -365,7 +439,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       ])
     );
     const selectorByLink = new Map<string, unknown>();
-    for (const a of (anchors.rows ?? []) as unknown as AnchorRow[]) {
+    for (const a of anchorRows) {
       try {
         selectorByLink.set(a.link_id, JSON.parse(a.selector_json));
       } catch {
@@ -403,29 +477,30 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         },
       });
     }
-    const attachmentRows = (attachments.rows ??
-      []) as unknown as AttachmentRow[];
     const contentIds = [
       ...new Set([
         ...windowed.map((n) => n.body_content_id),
         ...attachmentRows.map((a) => a.content_id),
       ]),
     ].filter((id): id is string => Boolean(id));
-    const contents =
-      contentIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.content_item",
-            where: [{ column: "content_id", op: "in", value: contentIds }],
-          })
-        : { rows: [] };
+    const contentIn =
+      contentIds.length > 0 ? inList("content_id", contentIds) : null;
+    const contents = contentIn
+      ? await readPages<ContentRow>(ctx, {
+          name: "notes.library.contents",
+          select: "content_id, content_uri, byte_size",
+          from: "core_content_item",
+          where: contentIn.sql,
+          bind: contentIn.bind,
+          order: {
+            sortColumn: "content_id",
+            pkColumn: "content_id",
+            descending: false,
+          },
+        })
+      : [];
 
-    const contentById = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
-        c.content_id,
-        c,
-      ])
-    );
+    const contentById = new Map(contents.map((c) => [c.content_id, c]));
     const representations = await readRepresentations({ ctx, contentIds });
     const attByNote = attachmentsBySubject(
       "knowledge.note",
@@ -437,7 +512,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       books.map((nb) => [nb.notebook_id, nb.name])
     );
     const notebooksByNote = new Map<string, string[]>();
-    for (const p of (placements.rows ?? []) as unknown as PlacementRow[]) {
+    for (const p of placementRows) {
       if (!notebooksByNote.has(p.target_id))
         notebooksByNote.set(p.target_id, []);
       notebooksByNote.get(p.target_id)!.push(p.collection_id);
@@ -477,8 +552,9 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
 
     // Measured PRE-exclusion on purpose (#834): the window is what the vault
     // returned, so `notes` may hold fewer rows than `window` while this is true.
-    const truncated =
-      ((recent.rows ?? []) as unknown as NoteRow[]).length >= window;
+    // The page's own cursor says it, rather than a row count that cannot tell a
+    // window that filled exactly from one that ran out (#996 wave 4).
+    const truncated = recent.next !== undefined;
     return {
       notes: rows.filter((row) => row.deleted_at == null),
       trash: rows.filter((row) => row.deleted_at != null),

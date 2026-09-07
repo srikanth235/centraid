@@ -10,6 +10,7 @@
  */
 import { describe, expect, test } from "vitest";
 
+import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
 import noteHistory from "./history.ts";
 
 interface ReadCall {
@@ -20,8 +21,10 @@ interface ReadCall {
 /** Fixtures keyed by entity; `where` is deliberately not applied, so a handler
  *  that trusted the read instead of resolving the relation itself fails here. */
 function ctxOf(rowsByEntity: Record<string, unknown[]>) {
+  const { page } = pagedFixture(rowsByEntity);
   return {
     vault: {
+      page,
       read: async (request: ReadCall) => ({
         rows: rowsByEntity[request.entity] ?? [],
       }),
@@ -38,6 +41,7 @@ const body = (text: string): string =>
 const ROWS = {
   "knowledge.note": [
     {
+      note_id: "note-1",
       body_content_id: "content-new",
       current_revision_id: "rev-2",
       created_at: "2026-01-01T00:00:00Z",

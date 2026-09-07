@@ -1,3 +1,4 @@
+import { readById } from "../../_shared/paged-reads.ts";
 import { decodeNoteBody } from "../note-body.ts";
 
 /**
@@ -12,23 +13,35 @@ export default async function noteHandler({ input, ctx }: HandlerArgs) {
   const noteId = String(input?.note_id ?? "").trim();
   if (!noteId) return { note_id: noteId, body: "" };
   try {
-    const notes = await ctx.vault.read({
-      entity: "knowledge.note",
-      where: [{ column: "note_id", op: "eq", value: noteId }],
-      limit: 1,
-    });
-    const note = (notes.rows ?? [])[0];
+    // ONE ROW, ASKED FOR AS ONE ROW (#996 wave 4, R8).
+    const note = await readById<{
+      note_id: string;
+      body_content_id?: string | null;
+      format?: string | null;
+    }>(
+      ctx,
+      {
+        name: "notes.note.row",
+        select: "note_id, body_content_id, format",
+        from: "knowledge_note",
+        idColumn: "note_id",
+      },
+      noteId
+    );
     if (!note) return { note_id: noteId, body: "", format: null };
-    const contents = note.body_content_id
-      ? await ctx.vault.read({
-          entity: "core.content_item",
-          where: [
-            { column: "content_id", op: "eq", value: note.body_content_id },
-          ],
-          limit: 1,
-        })
-      : { rows: [] };
-    const body = decodeNoteBody((contents.rows ?? [])[0]?.content_uri);
+    const content = note.body_content_id
+      ? await readById<{ content_id: string; content_uri?: string | null }>(
+          ctx,
+          {
+            name: "notes.note.body",
+            select: "content_id, content_uri",
+            from: "core_content_item",
+            idColumn: "content_id",
+          },
+          note.body_content_id
+        )
+      : undefined;
+    const body = decodeNoteBody(content?.content_uri);
     return { note_id: noteId, body, format: note.format };
   } catch (error) {
     const e = error as { code?: string; message?: string };

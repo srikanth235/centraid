@@ -15,6 +15,7 @@
  */
 
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import {
   ownerKey,
   readRepresentations,
@@ -49,6 +50,7 @@ interface ContentRow {
 }
 
 interface PlacementRow {
+  entry_id: string;
   target_id: string;
   collection_id: string;
 }
@@ -166,49 +168,72 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     );
     if (hits.length === 0) return { notes: [] };
     const noteIds = hits.map((n) => n.note_id);
-    const [placements, notebooks, attachments] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.collection_entry",
-        where: [
-          { column: "target_type", op: "eq", value: "knowledge.note" },
-          { column: "target_id", op: "in", value: noteIds },
-        ],
+    // Every join is `in`-bounded by the ranked hits, so each is walked to the
+    // end of that set rather than taking one window of it (#996 wave 4, R8).
+    const hitIn = inList("target_id", noteIds);
+    const [placementRows, notebookRows, attachmentRows] = await Promise.all([
+      readPages<PlacementRow>(ctx, {
+        name: "notes.search.placements",
+        select: "entry_id, target_type, target_id, collection_id",
+        from: "core_collection_entry",
+        where: `target_type = ? AND ${hitIn.sql}`,
+        bind: ["knowledge.note", ...hitIn.bind],
+        order: {
+          sortColumn: "entry_id",
+          pkColumn: "entry_id",
+          descending: false,
+        },
       }),
-      // Notebooks are collections (#274) — the one curation mechanism.
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.collection",
+      // Notebooks are collections (#274) — the one curation mechanism. Owner-
+      // curated and small, hence a walk with a stated ceiling.
+      readPages<CollectionRow>(ctx, {
+        name: "notes.search.notebooks",
+        select: "collection_id, name",
+        from: "core_collection",
+        order: {
+          sortColumn: "collection_id",
+          pkColumn: "collection_id",
+          descending: false,
+        },
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.attachment",
-        where: [
-          { column: "target_type", op: "eq", value: "knowledge.note" },
-          { column: "target_id", op: "in", value: noteIds },
-        ],
+      readPages<AttachmentRow>(ctx, {
+        name: "notes.search.attachments",
+        select:
+          "attachment_id, target_type, target_id, content_id, role, is_primary",
+        from: "core_attachment",
+        where: `target_type = ? AND ${hitIn.sql}`,
+        bind: ["knowledge.note", ...hitIn.bind],
+        order: {
+          sortColumn: "attachment_id",
+          pkColumn: "attachment_id",
+          descending: false,
+        },
       }),
     ]);
     // One bounded pull covers both the note bodies and any attachment bytes.
-    const attachmentRows = (attachments.rows ??
-      []) as unknown as AttachmentRow[];
     const contentIds = [
       ...new Set([
         ...hits.map((n) => n.body_content_id),
         ...attachmentRows.map((a) => a.content_id),
       ]),
     ].filter((id): id is string => Boolean(id));
-    const contents = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.content_item",
-      where: [{ column: "content_id", op: "in", value: contentIds }],
-    });
-    const contentById = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
-        c.content_id,
-        c,
-      ])
-    );
+    const contentIn =
+      contentIds.length > 0 ? inList("content_id", contentIds) : null;
+    const contents = contentIn
+      ? await readPages<ContentRow>(ctx, {
+          name: "notes.search.contents",
+          select: "content_id, content_uri, byte_size",
+          from: "core_content_item",
+          where: contentIn.sql,
+          bind: contentIn.bind,
+          order: {
+            sortColumn: "content_id",
+            pkColumn: "content_id",
+            descending: false,
+          },
+        })
+      : [];
+    const contentById = new Map(contents.map((c) => [c.content_id, c]));
     const representations = await readRepresentations({ ctx, contentIds });
     const attByNote = attachmentsBySubject(
       "knowledge.note",
@@ -217,13 +242,10 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       representations
     );
     const nameByNotebook = new Map(
-      ((notebooks.rows ?? []) as unknown as CollectionRow[]).map((nb) => [
-        nb.collection_id,
-        nb.name,
-      ])
+      notebookRows.map((nb) => [nb.collection_id, nb.name])
     );
     const notebooksByNote = new Map<string, string[]>();
-    for (const p of (placements.rows ?? []) as unknown as PlacementRow[]) {
+    for (const p of placementRows) {
       if (!notebooksByNote.has(p.target_id))
         notebooksByNote.set(p.target_id, []);
       notebooksByNote.get(p.target_id)!.push(p.collection_id);

@@ -7,6 +7,7 @@
 // identical bodies shared one history and a restore could not be told from the
 // edit it undid.
 
+import { inList, readById, readPages } from "../../_shared/paged-reads.ts";
 import {
   ownerKey,
   readRepresentations,
@@ -17,6 +18,7 @@ import { noteVersionChain } from "../version-chain.ts";
 const MAX_CHAIN_STEPS = 500;
 
 interface NoteRow {
+  note_id: string;
   body_content_id: string;
   current_revision_id?: string | null;
   created_at: string;
@@ -32,38 +34,60 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
   const noteId = String(input?.note_id ?? "");
   if (!noteId) return { versions: [] };
   try {
-    const notes = await ctx.vault.read({
-      entity: "knowledge.note",
-      where: [{ column: "note_id", op: "eq", value: noteId }],
-      limit: 1,
-    });
-    const note = ((notes.rows ?? []) as unknown as NoteRow[])[0];
+    const note = await readById<NoteRow>(
+      ctx,
+      {
+        name: "notes.history.note",
+        select: "note_id, body_content_id, current_revision_id, created_at",
+        from: "knowledge_note",
+        idColumn: "note_id",
+      },
+      noteId
+    );
     if (!note) return { versions: [] };
 
-    const revisions = await ctx.vault.read({
-      entity: "core.entity_revision",
-      where: [
-        { column: "entity_type", op: "eq", value: "knowledge.note" },
-        { column: "entity_id", op: "eq", value: noteId },
-      ],
-      orderBy: { column: "recorded_at", dir: "desc" },
+    // The chain's own length is the window: `MAX_CHAIN_STEPS` caps a malformed
+    // chain, and a well-formed one terminates on a null parent long before it.
+    const revisions = await ctx.vault.page<Record<string, unknown>>({
+      query: {
+        name: "notes.history.revisions",
+        select:
+          "revision_id, entity_type, entity_id, content_id, parent_revision_id, recorded_at",
+        from: "core_entity_revision",
+        where: "entity_type = ? AND entity_id = ?",
+        bind: ["knowledge.note", noteId],
+        order: {
+          sortColumn: "recorded_at",
+          pkColumn: "revision_id",
+          descending: true,
+        },
+      },
       limit: MAX_CHAIN_STEPS,
     });
     // One spelling of the walk, shared with the phone (`version-chain.ts`).
     const walked = noteVersionChain({
       headContentId: note.body_content_id,
       currentRevisionId: note.current_revision_id ?? null,
-      revisions: (revisions.rows ?? []) as never,
+      revisions: revisions.rows as never,
       noteId,
     });
     const chain = [...walked.contentIds];
     const assertedAt = walked.assertedAt;
 
-    const [contents, representations] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.content_item",
-        where: [{ column: "content_id", op: "in", value: chain }],
+    const chainIn = inList("content_id", chain);
+    const [contentRows, representations] = await Promise.all([
+      // Bounded by the chain the walk produced, so walked to the end of it.
+      readPages<ContentRow>(ctx, {
+        name: "notes.history.contents",
+        select: "content_id, content_uri, created_at",
+        from: "core_content_item",
+        where: chainIn.sql,
+        bind: chainIn.bind,
+        order: {
+          sortColumn: "content_id",
+          pkColumn: "content_id",
+          descending: false,
+        },
       }),
       // Bytes carry no media type since #996 (R20(b)). A superseded version
       // has no representation of its own — the note's moved with the head —
@@ -72,12 +96,7 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
     ]);
     const noteMediaType =
       representations.byOwner.get(ownerKey("knowledge.note", noteId)) ?? null;
-    const byId = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((row) => [
-        row.content_id,
-        row,
-      ])
-    );
+    const byId = new Map(contentRows.map((row) => [row.content_id, row]));
     return {
       versions: chain.map((contentId, index) => {
         const content = byId.get(contentId);

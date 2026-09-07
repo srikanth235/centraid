@@ -73,6 +73,37 @@ interface PagingCtx {
 }
 
 /**
+ * THE ROW A SCREEN WAS OPENED ON.
+ *
+ * Half the reads in these apps are "the one row this id names", and written out
+ * as a page each is eleven lines of order clause for a set whose size is one.
+ * The window is 1 and the ORDER BY is the primary key, so the cursor is
+ * degenerate ON PURPOSE here: there is no second page to reach.
+ */
+export async function readById<Row extends object>(
+  ctx: PagingCtx,
+  spec: { name: string; select: string; from: string; idColumn: string },
+  id: string
+): Promise<Row | undefined> {
+  const answer = await ctx.vault.page<Row>({
+    query: {
+      name: spec.name,
+      select: spec.select,
+      from: spec.from,
+      where: `${spec.idColumn} = ?`,
+      bind: [id],
+      order: {
+        sortColumn: spec.idColumn,
+        pkColumn: spec.idColumn,
+        descending: false,
+      },
+    },
+    limit: 1,
+  });
+  return answer.rows[0];
+}
+
+/**
  * Walk a handler's pages to the end of a bounded set.
  *
  * The cap THROWS. Returning what it had would be the truncation flag again:

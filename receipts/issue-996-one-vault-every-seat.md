@@ -6739,3 +6739,69 @@ they had been passing on rows that named no entity at all.
   stops at the first duplicate and reports a short list as a whole one.
 - **The fixture honours the predicate, or says it could not.** A silent
   non-filter turns a denied read into a populated screen.
+
+## Wave 4e — Notes: three shelves, six joins, no declarative read left (#996)
+
+### The library's shelves are what the screen shows
+
+`recent`, `pinned` and `trash` are three pages sized by what the surface draws,
+and everything after them — placements, attachments, links, backlinks, tags,
+concepts, anchors and bodies — is `in`-bounded by the ids those pages returned
+and walked to the end of that set. Nine of those joins carried
+`acceptTruncation`; not one named the number it depended on, and a note losing
+its backlinks or its notebook name to a window nobody chose is a wrong screen,
+not a slow one.
+
+`truncated` is the recent page's own cursor. It stays measured PRE-exclusion, as
+#834 requires: the window is what the vault returned, so `notes` may hold fewer
+rows than `window` while `truncated` is true — the cursor just makes the claim
+exact instead of `length >= window`, which cannot tell a window that filled
+exactly from one that ran out.
+
+### `readById`, because half the reads are one row
+
+The note editor's on-open pull, the history's head note and the docs history's
+document are all "the one row this id names", and written out as pages they were
+eleven lines of order clause for a set of size one. `readById` states the window
+as 1 and orders on the primary key: the cursor is degenerate ON PURPOSE, because
+there is no second page to reach.
+
+### The Journal place has no `ctx.vault.read` at all
+
+Its test says so directly now — `expect(calls).toStrictEqual([])` — rather than
+asking whether each read was bounded by an eq, an in or a limit. That question
+belonged to a vocabulary where a read could be unbounded; a page's window is
+part of its type. What a page can still get wrong is its CURSOR, so that is what
+is asserted: the order's two columns are both projected.
+
+`notes/queries/history.test.ts`'s note fixture grew the `note_id` the statement
+filters on — it had been passing on a row that named no note.
+
+### Gates
+
+- `bunx vitest run --root packages/blueprints apps/notes/queries` — 8 passed.
+- `bun run --cwd packages/blueprints test` — 215 files, 7,102 passed, 2
+  expected-fail.
+- `bun run --cwd packages/blueprints typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/blueprints/apps/_shared/paged-reads.ts`
+- `packages/blueprints/apps/notes/queries/history.test.ts`
+- `packages/blueprints/apps/notes/queries/history.ts`
+- `packages/blueprints/apps/notes/queries/journal.test.ts`
+- `packages/blueprints/apps/notes/queries/journal.ts`
+- `packages/blueprints/apps/notes/queries/library.ts`
+- `packages/blueprints/apps/notes/queries/note.ts`
+- `packages/blueprints/apps/notes/queries/search.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — Notes
+
+- **A one-row read is a page with a window of one**, not a special door. The
+  degenerate cursor is the honest shape: there is no second page.
+- **"Is this read bounded?" is not a question a paged handler can fail.** The
+  test that asked it now asks the one that survives: can the cursor be read?
