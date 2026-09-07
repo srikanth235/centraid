@@ -1,3 +1,4 @@
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 /**
  * The People shelf's roster (§5). Confirmed people and unconfirmed proposals
  * stay in SEPARATE arrays (#711): a proposal is evidence, not an identity, and
@@ -8,6 +9,9 @@
  */
 import { groupPeopleFaces } from "../../_shared/people-counts.ts";
 import { srcOf } from "./_shared.ts";
+
+/** The picker offers this many names. */
+const PARTY_ROWS = 500;
 
 interface RawRegion {
   region_id: string;
@@ -57,24 +61,51 @@ interface ProposalGroup {
 export default async function people({ ctx }: HandlerArgs) {
   try {
     const [regionsResult, partiesResult, clustersResult] = await Promise.all([
-      ctx.vault.read({
-        entity: "media.face_region",
+      ctx.vault.page<RawRegion>({
+        query: {
+          name: "photos.people.regions",
+          select:
+            "region_id, asset_id, bbox_json, party_id, confidence, confirmed_by_party_id, review_state",
+          from: "media_face_region",
+          order: {
+            sortColumn: "region_id",
+            pkColumn: "region_id",
+            descending: false,
+          },
+        },
         limit: REGION_LIMIT,
       }),
-      ctx.vault.read({
-        entity: "core.party",
-        orderBy: { column: "display_name", dir: "asc" },
-        limit: 500,
+      ctx.vault.page<RawParty>({
+        query: {
+          name: "photos.people.parties",
+          select: "party_id, display_name, kind",
+          from: "core_party",
+          order: {
+            sortColumn: "display_name",
+            pkColumn: "party_id",
+            descending: false,
+          },
+        },
+        limit: PARTY_ROWS,
       }),
-      ctx.vault.read({
-        entity: "media.face_cluster",
+      ctx.vault.page<RawCluster>({
+        query: {
+          name: "photos.people.clusters",
+          select: "region_id, cluster_id, computed_at",
+          from: "media_face_cluster",
+          order: {
+            sortColumn: "region_id",
+            pkColumn: "region_id",
+            descending: false,
+          },
+        },
         limit: REGION_LIMIT,
       }),
     ]);
-    const regions = (regionsResult.rows ?? []) as unknown as RawRegion[];
-    const clusters = (clustersResult.rows ?? []) as unknown as RawCluster[];
+    const regions = regionsResult.rows;
+    const clusters = clustersResult.rows;
     const nameOf = new Map(
-      ((partiesResult.rows ?? []) as unknown as RawParty[])
+      partiesResult.rows
         .filter((party) => party.kind === "person")
         .map((party) => [party.party_id, party.display_name] as const)
     );
@@ -121,31 +152,41 @@ export default async function people({ ctx }: HandlerArgs) {
       ),
     ];
     const assetsResult = coverAssetIds.length
-      ? await ctx.vault.read({
-          entity: "media.asset",
-          where: [{ column: "asset_id", op: "in", value: coverAssetIds }],
-          limit: coverAssetIds.length,
+      ? await readPages<RawAsset>(ctx, {
+          name: "photos.people.coverAssets",
+          select: "asset_id, content_id, kind, title, captured_at",
+          from: "media_asset",
+          where: inList("asset_id", coverAssetIds).sql,
+          bind: inList("asset_id", coverAssetIds).bind,
+          order: {
+            sortColumn: "asset_id",
+            pkColumn: "asset_id",
+            descending: false,
+          },
         })
-      : { rows: [] };
+      : [];
     const assetById = new Map(
-      ((assetsResult.rows ?? []) as unknown as RawAsset[]).map(
-        (a) => [a.asset_id, a] as const
-      )
+      assetsResult.map((a) => [a.asset_id, a] as const)
     );
     const contentIds = [
       ...new Set([...assetById.values()].map((a) => a.content_id)),
     ];
     const contentsResult = contentIds.length
-      ? await ctx.vault.read({
-          acceptTruncation: true,
-          entity: "core.content_item",
-          where: [{ column: "content_id", op: "in", value: contentIds }],
+      ? await readPages<RawContent>(ctx, {
+          name: "photos.people.contents",
+          select: "content_id, content_uri, byte_size",
+          from: "core_content_item",
+          where: inList("content_id", contentIds).sql,
+          bind: inList("content_id", contentIds).bind,
+          order: {
+            sortColumn: "content_id",
+            pkColumn: "content_id",
+            descending: false,
+          },
         })
-      : { rows: [] };
+      : [];
     const contentById = new Map(
-      ((contentsResult.rows ?? []) as unknown as RawContent[]).map(
-        (c) => [c.content_id, c] as const
-      )
+      contentsResult.map((c) => [c.content_id, c] as const)
     );
 
     const proposals = coverGroups.map(([key, group]) => {

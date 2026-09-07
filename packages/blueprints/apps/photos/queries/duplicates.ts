@@ -1,3 +1,4 @@
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 /**
  * Near-duplicate clusters over the live library (#352 phase 3/4 —
  * closing #299's deferred "duplicates shelf").
@@ -20,6 +21,9 @@ import {
   readRepresentations,
 } from "../../_shared/representation-reads.ts";
 import { srcOf } from "./_shared.ts";
+
+/** How many clustered fingerprints the review surface considers. */
+const CLUSTER_ROWS = 4000;
 
 interface RawPhash {
   cluster_id: string;
@@ -46,12 +50,21 @@ interface RawContent {
 
 export default async function duplicatesHandler({ ctx }: HandlerArgs) {
   try {
-    const phashRows = await ctx.vault.read({
-      entity: "media.asset_phash",
-      where: [{ column: "cluster_id", op: "not-null" }],
-      limit: 4000,
+    const phashPage = await ctx.vault.page<RawPhash>({
+      query: {
+        name: "photos.duplicates.phashes",
+        select: "asset_id, phash, cluster_id, computed_at",
+        from: "media_asset_phash",
+        where: "cluster_id IS NOT NULL",
+        order: {
+          sortColumn: "cluster_id",
+          pkColumn: "asset_id",
+          descending: false,
+        },
+      },
+      limit: CLUSTER_ROWS,
     });
-    const rows = (phashRows.rows ?? []) as unknown as RawPhash[];
+    const rows = phashPage.rows;
     if (rows.length === 0) return { clusters: [] };
 
     const assetIdsByCluster = new Map<string, string[]>();
@@ -65,19 +78,21 @@ export default async function duplicatesHandler({ ctx }: HandlerArgs) {
     // Only LIVE assets ride into a cluster card — a trashed member of an
     // old cluster is not something to offer trashing again. Clusters left
     // with fewer than 2 live members are dropped entirely below.
-    const assetsResult = await ctx.vault.read({
-      entity: "media.asset",
-      where: [
-        { column: "asset_id", op: "in", value: allAssetIds },
-        { column: "deleted_at", op: "is-null" },
-      ],
-      limit: 4000,
+    const assetIn = inList("asset_id", allAssetIds);
+    const assetRows = await readPages<RawAsset>(ctx, {
+      name: "photos.duplicates.assets",
+      select:
+        "asset_id, content_id, kind, title, captured_at, width, height, deleted_at",
+      from: "media_asset",
+      where: `${assetIn.sql} AND deleted_at IS NULL`,
+      bind: assetIn.bind,
+      order: {
+        sortColumn: "asset_id",
+        pkColumn: "asset_id",
+        descending: false,
+      },
     });
-    const assetById = new Map(
-      ((assetsResult.rows ?? []) as unknown as RawAsset[]).map(
-        (a) => [a.asset_id, a] as const
-      )
-    );
+    const assetById = new Map(assetRows.map((a) => [a.asset_id, a] as const));
 
     const contentIds = [
       ...new Set(
@@ -86,16 +101,21 @@ export default async function duplicatesHandler({ ctx }: HandlerArgs) {
     ];
     const contents =
       contentIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.content_item",
-            where: [{ column: "content_id", op: "in", value: contentIds }],
+        ? await readPages<RawContent>(ctx, {
+            name: "photos.duplicates.contents",
+            select: "content_id, content_uri, byte_size",
+            from: "core_content_item",
+            where: inList("content_id", contentIds).sql,
+            bind: inList("content_id", contentIds).bind,
+            order: {
+              sortColumn: "content_id",
+              pkColumn: "content_id",
+              descending: false,
+            },
           })
-        : { rows: [] };
+        : [];
     const contentById = new Map(
-      ((contents.rows ?? []) as unknown as RawContent[]).map(
-        (c) => [c.content_id, c] as const
-      )
+      contents.map((c) => [c.content_id, c] as const)
     );
     // Bytes carry no media type since #996 (R20(b)); the asset's own title is
     // on the asset row.

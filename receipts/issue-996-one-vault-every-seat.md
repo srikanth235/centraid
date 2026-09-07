@@ -6925,3 +6925,56 @@ produces `next` exactly when a row was left behind.
   both answers.
 - **A test fixture that cannot page cannot test paging.** Ordering, cursor and
   window are now honoured, so a window claim is a claim about the handler.
+
+## Wave 4h — Photos: nine handlers, and every cap given a name (#996)
+
+### The windows were always there; they had no names
+
+`4000`, `500`, `300`, `200`, `50` sat inline in the face queue, the people
+shelf, the duplicate review, the trash shelf and the per-photo face rail. Each
+is now a named constant beside the handler that spends it — `REGION_ROWS`,
+`PARTY_ROWS`, `MATCH_ROWS`, `SHELF_ROWS`, `FACES_PER_PHOTO` — and each is a
+page's window rather than a read's cap, so the answer carries a cursor instead
+of ending wherever the number fell.
+
+The library's `truncated` is that cursor now, not `liveRows.length >= window`.
+
+### The memory member walk is keyed on the pair
+
+`media_memory_member` orders on `ordinal`, and `ordinal` deliberately TIES —
+two photos taken in the same second share one, because an arbitrary tiebreak
+deciding which photo "comes first" is a worse answer than a tie. A keyset on it
+alone stops at the first tie and calls the memory finished, so the walk uses the
+table's own key, `(memory_id, asset_id)`.
+
+`enrichment-status` is a `readById` on `enrich_policy`'s own primary key, which
+is what "the photos domain's tier" always was.
+
+### Gates
+
+- `bun run --cwd packages/blueprints test` — 215 files, 7,102 passed, 2
+  expected-fail.
+- `bun run --cwd packages/blueprints typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/blueprints/apps/photos/queries/_shared.ts`
+- `packages/blueprints/apps/photos/queries/duplicates.ts`
+- `packages/blueprints/apps/photos/queries/enrichment-status.ts`
+- `packages/blueprints/apps/photos/queries/face-queue.ts`
+- `packages/blueprints/apps/photos/queries/faces.ts`
+- `packages/blueprints/apps/photos/queries/library.ts`
+- `packages/blueprints/apps/photos/queries/people.ts`
+- `packages/blueprints/apps/photos/queries/search.ts`
+- `packages/blueprints/apps/photos/queries/storage.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — Photos
+
+- **A number inline in a read is a bound nobody chose.** Every one of these is
+  now named where it is spent.
+- **A column that ties is not a cursor.** `ordinal` is the memory's display
+  order and shares values on purpose; the keyset is the table's own key.
