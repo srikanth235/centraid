@@ -4078,3 +4078,139 @@ bash .governance/run.sh    # the simulated commit passes; only bcf17bd3f is flag
 bun run lint:workflow-pins # 24 workflows clean
 bun run format:check       # clean
 ```
+
+## Wave 3 — the timeline is a page, not a fold
+
+A phone holding a year-3 vault cannot fold its media table in memory to draw
+one screen. `sectionPhotoAssets` did exactly that: read `media.asset` whole,
+group by local day in JavaScript, hand back every section. At the volume this
+wave is cut to that is tens of thousands of rows to draw twenty, every time,
+and no memoisation above it changes what SQLite was asked for.
+
+`apps/mobile/src/apps/photos/timeline-page.ts` is the replacement, written
+red-first against a seat-shaped fixture of 19,712 assets over three years.
+
+### Keyset, and the measurement that changed the design
+
+`LIMIT n OFFSET k` makes SQLite walk and discard `k` rows, so page 100 costs a
+hundred pages. The key is `(captured_at, asset_id)` as a ROW VALUE —
+`(a, b) < (?, ?)` — which SQLite turns into an index seek rather than the
+`a < ? OR (a = ? AND b < ?)` an optimiser has to be talked into. Row values are
+3.15, twenty releases under the floor.
+
+**The first draft keyed on the local-day EXPRESSION** so that one index could
+serve both the page and the month aggregate. `EXPLAIN QUERY PLAN` answered
+`SCAN media_asset USING INDEX …`, not `SEARCH`: SQLite will not turn a
+row-value range over an expression index into a seek, so every page walked the
+index from the top. Measured on 60,000 rows
+(`…/scratchpad/keyset-depth.mjs`): **33 µs at the newest page, 4,324 µs at the
+oldest** — the offset cost this module exists to delete, wearing a
+returned-row count that looked perfectly cheap. On plain columns the same query
+is `SEARCH media_asset USING INDEX seat_media_timeline_idx (captured_at>? AND
+(captured_at,asset_id)<(?,?))` and flat with depth: 59 µs / 15 µs / 60 µs at
+depths 0, 30,000 and 60,000.
+
+So there are TWO indexes, both the seat's own and both partial on the
+timeline's exact predicate: the page seeks `seat_media_timeline_idx`, the
+scrubber aggregates `seat_media_local_day_idx`, and neither pretends to be the
+other. A returned-row assertion alone could not have seen this, which is why
+the test asserts the PLAN as well.
+
+### Buckets are a GROUP BY over an indexed expression, never a second table
+
+`timelineBuckets` returns one row per month — 36 rows for three years, not
+19,712 — because the aggregate walks the day index. A `timeline_day` rollup
+table would be the other way to get that number and would be a second truth
+about the same rows, kept in step by triggers the seat does not have and would
+have to invent: the seat's only surviving triggers are FTS sync. **A seat may
+add an INDEX to its own copy. It may not add a table.**
+
+### The day is the capture-local one, and a page can split it
+
+`captured_at` is a UTC instant and `tz_offset_min` is the zone the shutter
+fired in (#419). A photo taken at 23:30 in Tokyo and one taken at the same
+instant in London are different days to the people who took them. The day is
+computed in SQL — `substr(datetime(captured_at, (coalesce(tz_offset_min,0) ||
+' minutes')), 1, 10)`, `||` rather than `concat()` because `concat()` is 3.44
+and the floor is 3.49.1 — so a section header cannot disagree with its rows.
+
+Ordering by `captured_at` means two rows of one local day can be separated by a
+row from another when the offsets differ: a flight, or a zone change. The
+slicer folds those back together rather than emitting a second header for a day
+already on screen, and there is a test for exactly that shape.
+
+### What is still to come, and why it is not here
+
+The Photos SCREENS still read `timeline-engine.ts`. That is deliberate rather
+than unfinished: `timelinePage` takes a `SeatSqliteDriver`, and the phone does
+not open a seat file until W4/W5 wires the seat store onto it. Pointing the
+screen at this module now would mean pointing it at a store the phone has not
+got. The mechanism, its indexes and its cost are proven here; the swap lands
+with the store.
+
+### One regression fixed beside it: the web seat's Tally totals
+
+CI burn-in flagged `tally-balance-parity.integration.test.ts` failing 3/3:
+`web.owe_total_minor + web.owed_total_minor` was `NaN` while `expense_count`
+was 40 and `friends` had length 3.
+
+**The read was right and the test's local type was three waves stale.** R22
+removed `owe_total_minor` / `owed_total_minor` and `friends[].net_minor` from
+the dashboard — a bare minor-unit integer cannot be rendered as a balance,
+because a bag of USD 100 and EUR 100 has no single number — and the handler
+returns `Valuation`s and per-currency `Money` bags. The test's own `Dashboard`
+interface still declared the old fields, so the guard read
+`undefined + undefined`.
+
+It failed loudly only because `NaN > 0` is false. Written `>= 0` the same guard
+would have passed over an empty payload indefinitely — the guard existed to
+stop the comparison being vacuous and had itself become vacuous.
+
+**And the second test in the file was worse, because it was green.** "Every
+friend's net agrees" compared `friend.net_minor`, which the same ruling
+removed: both seats returned `undefined`, `toStrictEqual` agreed about it, and
+its own non-vacuity guard passed on `undefined !== 0`. It was agreement about
+nothing, in the test whose whole job is to prove the two seats agree about
+something — and only fixing the interface made the compiler say so. It compares
+the per-currency `Money` bags now, and its guard asks for a non-zero amount
+inside one. The interface
+now matches what the query returns, the guard reads the `Valuation` the same
+way `tally-airplane.test.ts` reads it, and the case the burn-in asked for is
+pinned directly: `phone.owe`/`phone.owed` and the per-friend balance bags
+compared to the web seat's by SHAPE, not by a total that a dropped currency
+component or a bigint-versus-number driver difference would survive.
+
+### Bundle weight
+
+`bun run perf:app-weight -- --surface mobile` on this tree: **ios largest chunk
+8,259,045 B, android 8,279,799 B** against the 8,220,000 B ceiling — already
+over at `6654a6901` (8,257,168 / 8,278,154) and NOT raised here. This wave's
+delta is +1,877 B ios / +1,645 B android, all of it commit 3's product code:
+`custodyDurability` and `notifyUploadQueueChanged` are both in the Hermes
+bundle. `seat_media_timeline_idx` is NOT — `timeline-page.ts` has no product
+importer yet, so Metro drops it and this commit adds nothing.
+
+Checked while in the import graph, as asked: **`apps/mobile` does not reach the
+browser wasm driver through a client barrel.** Its only replica subpath is
+`@centraid/client/replica/native`, and `native.ts` exports neither
+`seat-worker.js` nor `sqlite-store.js` — the two paths to `wasm-seat-driver` /
+`wasm-statement-cache`. There is no import to cut.
+
+### Every file this commit touches
+
+- `apps/mobile/src/apps/photos/timeline-page.ts` (new)
+- `apps/mobile/src/apps/photos/timeline-page.test.ts` (new)
+- `tests/integration-mobile/tally-balance-parity.integration.test.ts`
+
+### Decisions — wave 3, the timeline page
+
+- **Two indexes, not one.** One index led by the day expression would serve
+  both queries and serve the page badly; the measurement above is the whole
+  argument, and it is in the module's own comment so the next reader does not
+  re-derive it.
+- **The plan is asserted, not just the row count.** The failure that got
+  through the row-count assertion was a full ordered index walk returning 41
+  rows. A test that cannot see that is not holding the claim it says it is.
+- **The screen is not switched over in this commit.** The seat store is not on
+  the phone's read path until W4/W5; wiring a screen to a driver the phone does
+  not open would be a third path beside the two that exist.
