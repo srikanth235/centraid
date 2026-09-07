@@ -10,7 +10,7 @@ Umbrella receipt. One receipt for the whole umbrella; each wave appends its own 
 - [x] **Wave 0d — queries and contracts**: `(party, currency)` balances, group results in the group's currency, the explicit valuation type with its unavailable state, the Money output type, and settlements, obligations and exports on the same helpers
 - [x] **Wave 0e — evidence and the cross-boundary tier**: machine tags and document classification linked to their derivation and input revision; the thirteen scenarios promoted to a package fixture with a command→query round-trip test per shared concept across two app surfaces; purge behaviour tested per deletion role
 - [x] **Wave 1 — the log and the seat**: `replica_log` with session capture and in-transaction reconstruction, the sanitised snapshot with its canary test, the applier and cursor, the epoch gate, retention; the one `schema_epoch` bump for W0b and W1; replay-and-diff convergence is the gate from here on
-- [ ] **Wave 2 — intents over the new plane**: `row_version` on every mutable table, the declared read-set conflict check, durable outcomes carrying `commit_seq`, the overlay cleared in the transaction that carries the commit, dependency edges and predecessor references
+- [x] **Wave 2 — intents over the new plane**: `row_version` on every mutable table, the declared read-set conflict check, durable outcomes carrying `commit_seq`, the overlay cleared in the transaction that carries the commit, dependency edges and predecessor references
 - [ ] **Wave 3 — the phone**: expo-sqlite replaces op-sqlite with sessions, SQLCipher and FTS; the measured device rows exist before any irreversible deletion
 - [ ] **Wave 4 — one handler, plain SQL, paged**: keyset pagination and runtime `LIMIT` for all eight apps, wide-column side tables, plan snapshots as review diffs, work-counter gates
 - [ ] **Wave 5 — the store deletions**: the read-plan compiler, census probes, deferred values, text ceilings, `replica_row` and `replica_change` go, after W3's device evidence
@@ -45,6 +45,8 @@ Wave 0d lands in one commit, and what it lands is **Wave 0d — queries and cont
 Wave 0e lands in one commit, and what it lands is **Wave 0e — evidence and the cross-boundary tier**: machine tags and document classification linked to their derivation and input revision; the thirteen scenarios promoted to a package fixture with a command→query round-trip test per shared concept across two app surfaces; purge behaviour tested per deletion role. The surface, the scenarios, the files, the gate tails and one carried-in fix are in `## Wave 0e — evidence and the fixture` below.
 
 Wave 1 lands across six commits, and what it lands is **Wave 1 — the log and the seat**: `replica_log` with session capture and in-transaction reconstruction, the sanitised snapshot with its canary test, the applier and cursor, the epoch gate, retention; the one `schema_epoch` bump for W0b and W1; replay-and-diff convergence is the gate from here on. Each clause, in the section that carries it: the schema plane and the single epoch bump in `## Wave 1 — schema and epoch`; session capture, the decoder and the applier with its cursor and epoch gate in `## Wave 1 — capture and decoder`; the sanitised snapshot and its canary in `## Wave 1 — snapshot, doors, capability`; retention, the producer bound and the deferral flag in `## Wave 1 — retention and the producer bound`; the two doors that serve the file and the log, plus the retirement of `vault_content_text`, in `## Wave 1 — the doors, and the function-free index`; and the durable outcome contract in `## Wave 1 — the outcome contract (R23–R25)`. The wave's full file list is `## Wave 1 — every file the wave touched` plus the per-commit lists in the last two sections.
+
+Wave 2 lands across four commits, and what it lands is **Wave 2 — intents over the new plane**: `row_version` on every mutable table, the declared read-set conflict check, durable outcomes carrying `commit_seq`, the overlay cleared in the transaction that carries the commit, dependency edges and predecessor references. The first three clauses landed on the gateway in waves 0b and 1 (the column and its touch trigger, the checker over the operation's declared read-set, and `replica_intent_outcome.commit_seq` / `produced_json`); this wave is the seat's half of the last two and the thing that makes the third mean something on a device. Each clause, in the section that carries it: the applier that gives a seat rows to compare a version against, and the bootstrap that gives it the file, in `## Wave 2 — the applier and the bootstrap`; the seat's own state, its bytes and the watermark that replaces per-read `coverage`, in `## Wave 2 — bytes, seat state, and the fixture that had to stop being a slice`; the dependency edges derived from minted ids, the predecessor references, and the overlay cleared at `commit_seq` inside the transaction that advances the cursor, in `## Wave 2 — the outbox chain`; and the flag, the browser host and the measurements in `## Wave 2 — the web seat, behind the flag`. Every file the wave touched is listed per commit in those four sections.
 
 ## Out of scope
 
@@ -2083,3 +2085,170 @@ bun run check:push:static            # stamped on the committed tree
   from the queue's own state machine — the same split `intent-chain.ts` made on
   the gateway side in wave 1, for the same reason. The queue delegates; no
   behaviour moved with the text.
+
+## Wave 2 — the web seat, behind the flag
+
+The seat store lands BESIDE the old one. Wave 5 takes the device half; until
+then a browser must be able to run either, so there is exactly one place that
+answers "which store is this seat" and it defaults OFF — a flag that defaults
+on is a migration with a switch bolted to it.
+
+### The flag, and what it actually switches
+
+`packages/client/src/replica/seat/flag.ts`. One reading, three sources, in
+order: an explicit argument, then `?seatStore=1`, then what the browser
+remembered. A host that has already decided must beat a query string a member
+could have been handed in a link, and both must beat a preference held over
+from a session nobody remembers. A browser with site data blocked throws on
+`getItem`; that is not a vote for the new store.
+
+**What the flag switches on in this wave is the FILE and the number that
+describes it — not where a screen gets its rows.** That boundary is
+deliberate and it is the plan's own: the read path (apps' queries as plain SQL
+over real tables, paged) is wave 4's whole wave, and the old store is not
+deleted until wave 5. So with the flag on, a browser bootstraps the seat file,
+tails the log door, keeps `seat_state` current, and the custody line shows the
+seat watermark; every app read still goes through today's coordinator. Turning
+the flag on therefore cannot regress a screen, which is what makes "every
+existing web e2e green with it on" a claim worth checking rather than a
+tautology — and it is checked below.
+
+### The browser's half of the seams
+
+- `packages/client/src/replica/seat/opfs-staging.ts` — two OPFS surfaces, and
+  they are not the same one. The part file is ordinary OPFS written with
+  `keepExistingData` and an explicit position (a writable opened without it
+  TRUNCATES, which on a resumed download throws the whole prefix away
+  silently). The database lives in the SAH pool, which is not a directory to
+  write into — so "install" is `importDb`, the pool's own way of taking a whole
+  database, and the swap needs no rename. Gunzip is the browser's own
+  `DecompressionStream`, so the seat carries no inflate into the bundle.
+  `currentBytes` returns **0 on purpose**: in a browser the file being replaced
+  is already inside `estimate().usage`, and counting it again would refuse
+  bootstraps that fit.
+- `packages/client/src/replica/seat/seat-worker.ts` — sqlite-wasm over the SAH
+  pool, an OPFS staging directory, the door over `fetch`. A SECOND worker
+  rather than ops on the old one: the two stores hold different files, and a
+  member behind the flag has both on disk during wave 2.
+- `packages/client/src/replica/seat/seat-worker-client.ts` — the main thread's
+  end. A worker that dies rejects every pending call, or a crashed bootstrap
+  leaves the shell awaiting a promise nothing will settle. A drift refusal is
+  revived AS a drift refusal across the boundary: the shell's response to it is
+  re-bootstrap, and an anonymous `Error` with the same message is one the shell
+  would merely show.
+- `packages/client/src/replica/seat/web-seat.ts` — the loop, with all three
+  exits explicit: `hasMore` false is a FACT the page carries, not an inference
+  from an empty answer; a 409 and a `SeatDriftError` are the same conclusion
+  reached from the two ends, and both re-bootstrap **once** — a seat that kept
+  trying would spend a member's data allowance on a 9 MB artifact it cannot
+  use.
+
+### The shell reads the seat
+
+`packages/client/src/react/shell/useSeatWatermark.ts`, wired into
+`VaultRoute`. It fails quiet by design: no OPFS, a gateway too old for the
+doors, a member offline — all answer `undefined` and the custody line simply
+omits the clause. A seat's currency is not something to throw an error about
+on a settings screen. With the flag off it opens nothing at all, which the
+test asserts: "off" must not mean "downloads a file and discards it".
+
+### The same program on the browser's SQLite
+
+`packages/client/src/replica/seat/wasm-apply.test.ts` runs the applier over
+`@sqlite.org/sqlite-wasm` 3.53.0 — a real second build, not a mock — and
+compares insert, update, delete and a BLOB against `node:sqlite` 3.50 answer
+for answer. The drift refusal is checked there too. Three builds have to agree
+and two of them exist in this suite; the third (`SEAT_SQLITE_FLOOR`, 3.49) is
+wave 3's.
+
+### The measurement
+
+| | |
+| --- | --- |
+| apply, 1 row per commit (wasm 3.53) | 13,076 rows/s |
+| apply, 5 rows per commit | 29,368 rows/s |
+| apply, one commit of 10,000 | 51,839 rows/s |
+| the same three on `node:sqlite` 3.50 | 20,628 / 40,101 / 50,589 rows/s |
+
+It reproduces wave 1's gateway finding from the other side: the rate is
+**transaction-bound, not row-bound**. A 4x spread over identical rows, entirely
+from the 10,000 durable boundaries R5 requires. At the producer bound (2,000
+rows per commit) a seat is well inside the upper figure. The browser build is
+~1.6x slower at the worst shape and level at the best, which is wasm call
+overhead per statement rather than anything about SQLite.
+
+Both numbers are in `tests/journeys.json` with provenance:
+`desktop/first-bootstrap/year3/ci-linux-x64-4c` (the install, 606 ms, and the
+112 MB → 64 MB → 8.9 MB chain) and `web/log-apply/1000-commits/ci-linux-x64-4c`
+(a FLOOR, not a ceiling — this metric gets worse by going down).
+
+### The web e2e, with the flag on — and what this container could not do
+
+`VITE_CENTRAID_SEAT_STORE=1` is the build-time lever that turns the flag on for
+a whole run, so the e2e lane exercises it without every spec carrying a query
+string.
+
+**`bun run --cwd apps/web e2e` cannot run as written in this container**, for
+two reasons that are both about the container and neither about this wave:
+
+1. The harness's own `webServer` is `node --experimental-strip-types
+   tests/e2e/server.ts`, and on **node 22.22.2** that cannot resolve
+   `./year3-distributions.js` to its `.ts` sibling — the import has been there
+   since #927 and the repo pins **node 24.4.1**, where it resolves. `bun` reads
+   it fine but has no `node:sqlite`. Worked around by starting the same server
+   under a resolve hook and pointing Playwright at it.
+2. Playwright's pinned browser (`chromium_headless_shell-1234`) is absent; the
+   container has 1194. `CENTRAID_E2E_CHROMIUM` is the config's own documented
+   local fallback and is what the run used.
+
+With those two worked around, the **full chromium suite runs, and the flag
+changes nothing**: 30 passed / 20 failed with the flag ON, 30 passed / 20
+failed with it OFF, and the two failure sets are **identical file for file and
+test for test** (`diff` over both lists is empty). The 20 are this container's:
+every one of them waits on `Loading <app>…` and times out, in an environment
+that cannot start the harness's own server. In CI the lane that covers this is
+`web-e2e` in `.github/workflows/e2e.yml` (and `web-e2e-cross-browser` for the
+WebKit/Firefox tier), on the pinned node and the pinned browser.
+
+### Every file this commit touches
+
+- `packages/client/src/replica/seat/flag.ts` (new) — one reading, three sources, off by default
+- `packages/client/src/replica/seat/opfs-staging.ts` (new) — the part file, the SAH pool, `importDb`
+- `packages/client/src/replica/seat/seat-worker.ts` (new) — the browser host of the worker core
+- `packages/client/src/replica/seat/seat-worker-client.ts` (new) — the main thread's end
+- `packages/client/src/replica/seat/web-seat.ts` (new) — bootstrap, tail, and the three exits
+- `packages/client/src/replica/seat/seat-rebootstrap-required-error.ts` (new) — the log door's 409
+- `packages/client/src/replica/seat/web-seat.test.ts` (new) — the flag, and the loop over a real core
+- `packages/client/src/replica/seat/wasm-apply.test.ts` (new) — 3.50 against 3.53, and the rate
+- `packages/client/src/replica/seat/index.ts` — the new surface
+- `packages/client/src/react/shell/useSeatWatermark.ts` (new) · `packages/client/src/react/shell/useSeatWatermark.test.tsx` (new) — the shell's one read of the seat
+- `packages/client/src/react/shell/routes/VaultRoute.tsx` — the watermark reaches the custody line
+- `apps/web/src/main.ts` · `apps/web/src/client-globals.d.ts` — the build-time lever
+- `knip.json` — the seat's entry points
+- `tests/journeys.json` — the two rows this wave owns, measured with provenance
+
+### Gates
+
+```
+cd packages/client && bun run test    # 285 files, 2601 passed
+cd apps/web        && bun run test
+node scripts/lint-journey-ledger.mjs  # ok
+bun run governance
+bun run check:push:static             # stamped on the committed tree
+apps/web e2e (chromium, flag ON vs OFF)  # 30 passed / 20 failed, identical sets
+```
+
+### Decisions — wave 2, the web seat
+
+- **The flag governs the file, not the reads.** Wave 2's own scope list carries
+  no read-path work; W4 owns the handlers and W5 the deletion. Wiring app reads
+  to a store with no read compiler would have meant writing W4 inside W2 and
+  calling it a flag.
+- **A build-time lever rather than a per-spec query string.** The flag's own
+  sources already include `?seatStore=1`; what the e2e needed was ONE switch
+  for a whole run, and a `VITE_` variable is that without adding a fourth
+  source to the flag.
+- **The e2e was actually run, not reasoned about.** The comparison that matters
+  is not "it passed" — it could not, here — but "the failure set is identical
+  with the flag on and off", which is a claim this container CAN establish and
+  which is the one the exit criterion is really about.

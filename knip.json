@@ -72,7 +72,11 @@
       "entry": [
         "src/index.ts",
         "src/replica/index.ts",
-        "src/replica/sqlite-worker.ts"
+        "src/replica/sqlite-worker.ts",
+        "src/replica/seat/index.ts",
+        "src/replica/seat/seat-worker.ts",
+        "src/replica/seat/node-seat-driver.ts",
+        "src/replica/seat/node-staging.ts"
       ],
       "project": ["src/**/*.{ts,tsx}"]
     },

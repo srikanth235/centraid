@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 
+import type { WebSeatOptions } from "../../../replica/seat/web-seat.js";
 import type { AtlasReport } from "../../screens/AtlasScreen.js";
 import type { HouseholdReport } from "../../screens/HouseholdScreen.js";
 import { sectionsStartCollapsed } from "../../screens/vault-sections.js";
@@ -13,6 +14,7 @@ import {
   publishRouteSignals,
   publishRouteVerbs,
 } from "../routeVitals.js";
+import { seatOptionsFromHost, useSeatWatermark } from "../useSeatWatermark.js";
 import AtlasRoute from "./AtlasRoute.js";
 import HouseholdRoute from "./HouseholdRoute.js";
 
@@ -44,6 +46,20 @@ export default function VaultRoute({
   const { navigate } = useShellActions();
   const [census, setCensus] = useState<AtlasReport | null>(null);
   const [roster, setRoster] = useState<HouseholdReport | null>(null);
+  // THE SEAT, BEHIND THE FLAG (#996, wave 2). Resolved once from the gateway
+  // auth the host already holds; `undefined` before the browser is paired,
+  // and the hook does nothing at all while the flag is off.
+  const [seat, setSeat] = useState<WebSeatOptions | undefined>();
+  useEffect(() => {
+    let live = true;
+    void seatOptionsFromHost().then((options) => {
+      if (live) setSeat(options);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  const seatWatermark = useSeatWatermark(seat ? { seat } : {});
   const [closed, setClosed] = useState<Record<string, boolean>>(() => {
     const start = sectionsStartCollapsed();
     return { holds: start, lives: start, reach: start };
@@ -104,6 +120,7 @@ export default function VaultRoute({
           embedded
           collapsed={closed.lives === true}
           onReport={setRoster}
+          {...(seatWatermark === undefined ? {} : { seatWatermark })}
           onToggle={() => toggle("lives")}
         />
       </div>
