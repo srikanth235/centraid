@@ -25,6 +25,7 @@ export * from "./seat-worker-not-open-error.js";
 export * from "./outbox.js";
 export * from "./paged-handler.js";
 export * from "./seat-page-reader.js";
+export * from "./session-seat.js";
 export * from "./read-overlay.js";
 export * from "./seat-intent-store.js";
 export * from "./state.js";

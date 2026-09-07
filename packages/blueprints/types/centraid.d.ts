@@ -125,7 +125,42 @@ interface VaultResolveResult {
  * worker boundary to the host, which holds the app's vault credential and
  * enforces consent — always `await`. Mirrors app-engine's `ScopedVault`.
  */
+/**
+ * ONE PAGE OF ONE HANDLER'S SQL (#996 wave 4, R8).
+ *
+ * `limit` is required, so a handler that declares no window does not compile —
+ * that is the whole of what replaces `acceptTruncation`. The answer carries a
+ * cursor rather than a `truncated` flag: one says where to carry on, the other
+ * only that the answer was cut.
+ */
+interface VaultPageRequest {
+  /** The handler's statement, its ORDER BY columns, and its key function. */
+  query: {
+    name: string;
+    sql: (keyset: string) => string;
+    bind?: readonly (string | number | null)[];
+    order: { sortColumn: string; pkColumn: string; descending: boolean };
+    keyOf: (row: never) => { sortKey: string; pk: string };
+  };
+  limit: number;
+  after?: { sortKey: string; pk: string };
+  /**
+   * Draw the outbox's pending rows over this page (R23–R25). A list a member
+   * reads their own writes from passes it; a read measuring the file does not.
+   */
+  overlay?: { entity: string; rowIdColumn: string };
+}
+
+interface VaultPageResult<Row = Record<string, unknown>> {
+  rows: Row[];
+  /** Absent when the rows ended: the walk stops, it does not wrap. */
+  next?: { sortKey: string; pk: string };
+}
+
 interface VaultApi {
+  page: <Row = Record<string, unknown>>(
+    request: VaultPageRequest
+  ) => Promise<VaultPageResult<Row>>;
   read: (request: VaultReadRequest) => Promise<VaultReadResult>;
   search: (request: VaultSearchRequest) => Promise<VaultSearchResult>;
   invoke: (request: VaultInvokeRequest) => Promise<VaultOutcome>;

@@ -1,4 +1,5 @@
 import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { Page, PageCursor } from "@centraid/core/page";
 /**
  * The ONE inline-query `ctx`, for every seat that holds a replica (#922).
  *
@@ -34,6 +35,8 @@ import {
 } from "@centraid/core/time";
 
 import type { OnlineOnlyGuard } from "./online-only-guard.js";
+import type { SeatPageQuery } from "./seat/paged-handler.js";
+import type { SeatReadOverlay } from "./seat/read-overlay.js";
 import type { ReplicaRowEnvelope } from "./types.js";
 
 /**
@@ -115,6 +118,26 @@ export interface InlineCtxReads<Read, Search> {
   read: (request: Read) => Promise<InlineRowsResult>;
   search: (request: Search) => Promise<InlineRowsResult>;
 }
+
+/**
+ * `ctx.vault.page` — one page of one handler's plain SQL over this seat's own
+ * copy of the vault (#996 wave 4, R8).
+ *
+ * The window is the request and the answer carries a cursor, so there is no
+ * flag to forward and nothing for a seat to announce: a handler that wants the
+ * next page asks for it. `overlay` is how a list read shows the member their
+ * own unsettled write (R23–R25); a read that is measuring the file omits it.
+ */
+export interface InlinePageRequest<Row extends object> {
+  query: SeatPageQuery<Row>;
+  limit: number;
+  after?: PageCursor;
+  overlay?: SeatReadOverlay;
+}
+
+export type InlinePage = <Row extends object>(
+  request: InlinePageRequest<Row>
+) => Promise<Page<Row>>;
 
 /**
  * A replica session's wire surface, as both seats already expose it. The
@@ -215,6 +238,8 @@ const INLINE_CTX_TIME = {
 
 export interface InlineCtxCoreOptions<Read, Search> {
   reads: InlineCtxReads<Read, Search>;
+  /** Absent on a seat with no local file: `ctx.vault.page` is then online-only. */
+  page?: InlinePage;
   signal?: AbortSignal;
 }
 
@@ -249,6 +274,7 @@ export function buildInlineCtxCore<Read, Search>(
     vault: {
       read: options.reads.read,
       search: options.reads.search,
+      page: options.page ?? effect("page"),
       resolve: (): Promise<{ cards: unknown[] }> =>
         Promise.resolve({ cards: [] }),
       invoke: (request: { optional?: boolean }): Promise<unknown> =>

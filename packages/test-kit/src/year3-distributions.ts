@@ -20,13 +20,16 @@
  * writers are mirrored rather than imported; the column lists are held honest
  * by `year3-vault.test.ts` running them against a real bootstrapped schema.
  */
-import { seededRandom } from "./random.js";
-import { YEAR3_NOTE_NEEDLE, YEAR3_NOTE_NEEDLE_INDEX } from "./year3-shape.js";
+import { seededRandom } from "@centraid/test-kit/random";
+import {
+  YEAR3_NOTE_NEEDLE,
+  YEAR3_NOTE_NEEDLE_INDEX,
+} from "@centraid/test-kit/year3-shape";
 import type {
   Year3Distributions,
   Year3VaultProfile,
   Year3VaultTarget,
-} from "./year3-shape.js";
+} from "@centraid/test-kit/year3-shape";
 
 export interface Year3SeedContext {
   readonly at: (index: number) => string;

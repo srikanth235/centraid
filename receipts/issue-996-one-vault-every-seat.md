@@ -5682,3 +5682,120 @@ The four commits this worker landed are the page type, the host, the shared
 statement/overlay seam, and the flag's deletion; everything under "What is NOT
 done in this wave" earlier in this receipt still stands, minus the flag-OFF path,
 which W4-D1 removed as a requirement.
+
+## Wave 4 — the session owns the seat, and the read path arrives through it (#996)
+
+### One file, one applier (red first)
+
+`session-seat.test.ts` was written before `session-seat.ts` existed, and the
+first assertion is the one the obvious wiring fails: **two consumers asking in
+the same tick get one seat.** A memo installed after the first `await` opens
+twice — the watermark line mounting while an app's first read runs is exactly
+that tick — and the second open loses the race for the OPFS access handles. The
+promise is stored synchronously.
+
+Ownership moved to `ReplicaShellSession`, which is already the thing refcounted
+per (gateway, vault). `seatOptionsFromHost()` — which read the host's global
+`CentraidApi` — is now `seatOptionsFor(auth)` over the `GatewayAuth` the session
+already holds; the host global is not a second source of the same fact.
+`useSeatWatermark` asks the session and, notably, **no longer closes anything on
+unmount**: a route's teardown must not take the read path down with the custody
+line. Its test says so.
+
+A failed open is remembered as failed for the life of the session rather than
+retried per read: a read path that re-attempts a broken open on every keystroke
+is how a quiet failure becomes a loud one.
+
+### The coordinator did NOT get a seat
+
+The scope note expected `coordinator.ts` / `coordinator-web.ts` to change. They
+did not, and should not: the coordinator is constructed per session and the seat
+is the session's, so `ReplicaShellSession.page()` reaches it directly. Putting a
+`SeatWorkerClient` in the coordinator would have been the second owner this
+whole commit exists to prevent. `InlineAppRoute.tsx` needed no change either —
+it hands the session to the inline client, and `page` rides on it structurally.
+Three of the five named files were the right ones; two were not, and the reason
+is worth keeping.
+
+### The door
+
+- `ReplicaShellSession.page(query, request, overlay)` — plain SQL over this
+  seat's own copy, keyset-paged. **It does not fall back to the gateway.** A
+  seat with no file is a state the surface shows; answering from the network
+  would hand back rows that the next page then disagrees with.
+- `ctx.vault.page` joins `read`/`search` on `buildInlineCtxCore`, supplied by
+  the shell in `inlineQueryCtx.ts` and declared for app authors in
+  `packages/blueprints/types/centraid.d.ts` (`VaultPageRequest.limit` required).
+- A page's rows are rows: nothing to mask with `guardedRow` — the seat holds
+  every column, which is R8's point — but they still carry pending provenance,
+  because the worker drew the outbox over them. `pageRowMarker` takes the
+  identity field from the handler's declared primary key instead of guessing
+  over every `*_id` column, because a page states its key.
+
+### The web e2e server was broken, and it was this umbrella that broke it
+
+`bun run --cwd apps/web e2e` could not start its server: `year3-vault.ts` was
+split into `year3-distributions.ts` / `year3-shape.ts` in wave 2 (`35b0a9923`),
+and the new sibling imports are written `./year3-distributions.js`. The server
+runs under `node --experimental-strip-types`, which resolves specifiers
+literally — there is no `.js` on disk — so every run died before a spec loaded.
+Reproduced in isolation on both Node 22.22.2 and 24.4.1; it is not a Node
+version. Fixed by making the three modules package subpaths and having the
+package self-reference them (`@centraid/test-kit/year3-shape`), which node
+resolves through `exports` to the real `.ts` file and tsc resolves the same way.
+No tsconfig was loosened and the `.js`-specifier convention is untouched
+everywhere else.
+
+**The suite still cannot run here**, one step further along: the image carries
+Playwright browser build 1194 and the repo pins `playwright ~1.62.0`, which
+wants build 1234; `npx playwright install chromium` fails to download through
+the proxy. Every spec fails identically with `browserType.launch: Executable
+doesn't exist at /opt/pw-browsers/chromium_headless_shell-1234/…`. Downgrading
+the pin to match the image would be changing the toolchain to make a gate pass,
+so it was not done. **The seat-store e2e exit condition is still owed** and now
+needs only a runner with matching browsers.
+
+### Gates
+
+- `bunx vitest run packages/client/src/replica/seat/session-seat.test.ts` — 8 passed (red first).
+- `bun run --cwd packages/client test` — 291 files, 2,630 passed.
+- `bun run --cwd packages/blueprints test` — 213 files, 7,076 passed, 2 expected-fail.
+- `bun run --cwd apps/web test` — 11 files, 65 passed.
+- `bun run --cwd packages/test-kit test` — 5 files, 61 passed.
+- `bun run --cwd packages/blueprints typecheck`, `bun run --cwd packages/client typecheck` — clean.
+- `bun run check:push:static` — below.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/client/src/replica/seat/session-seat.ts`
+- `packages/client/src/replica/seat/session-seat.test.ts`
+
+**Changed:**
+
+- `packages/client/src/replica/shell-session.ts`
+- `packages/client/src/replica/seat/web-seat.ts`
+- `packages/client/src/replica/seat/index.ts`
+- `packages/client/src/replica/inline-query-ctx-core.ts`
+- `packages/client/src/react/blueprints/inlineQueryCtx.ts`
+- `packages/client/src/react/shell/useSeatWatermark.ts`
+- `packages/client/src/react/shell/useSeatWatermark.test.tsx`
+- `packages/client/src/react/shell/routes/VaultRoute.tsx`
+- `packages/blueprints/types/centraid.d.ts`
+- `packages/test-kit/package.json`
+- `packages/test-kit/src/year3-vault.ts`
+- `packages/test-kit/src/year3-distributions.ts`
+- `packages/test-kit/src/year3-fixture-cache.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — ownership
+
+- **The seat belongs to whatever is already scoped per file.** That is the
+  session, not the screen that happened to need it first and not the
+  coordinator that the plan guessed.
+- **A memo that is installed after an await is not a memo.** The race is the
+  case, not the edge case.
+- **A screen does not close what it did not open.**
+- **A read path with no seat refuses; it does not go to the network.** Two
+  sources for one list is how a cursor stops meaning anything.

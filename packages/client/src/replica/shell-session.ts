@@ -1,3 +1,5 @@
+import type { Page, PageRequest } from "@centraid/core/page";
+
 // governance: allow-repo-hygiene file-size-limit (#406) shell session keeps replica ownership, lifecycle teardown, and intent drain in one auditable boundary
 import {
   auth,
@@ -20,6 +22,12 @@ import type {
   PendingIntentReplacement,
   PendingIntentRevisionTarget,
 } from "./intent-revision.js";
+import type { SeatPageQuery } from "./seat/paged-handler.js";
+import type { SeatReadOverlay } from "./seat/read-overlay.js";
+import { seatWorkerPage } from "./seat/seat-page-reader.js";
+import { SessionSeat } from "./seat/session-seat.js";
+import type { SeatOpener, SessionSeatHandle } from "./seat/session-seat.js";
+import type { SeatWatermark } from "./seat/watermark.js";
 import {
   fetchReplicaBootstrap,
   fetchReplicaChanges,
@@ -183,6 +191,8 @@ export interface ReplicaShellSessionOptions {
   inventory?: ReplicaIdentityInventory;
   onAuthorizationRevoked?: (session: ReplicaShellSession) => void;
   pollIntervalMs?: number;
+  /** Injected so a suite can drive the session's seat without a worker. */
+  seatOpener?: SeatOpener;
 }
 
 export interface OpenReplicaShellSessionOptions extends ReplicaShellSessionOptions {
@@ -228,6 +238,13 @@ export class ReplicaShellSession {
   #releaseAdmissionRegistrationBarrier: (() => void) | undefined;
   #hasCursor = false;
   #closed = false;
+  /**
+   * THE SESSION OWNS THE SEAT (#996 wave 4). One file, one applier, one set of
+   * OPFS access handles — see `seat/session-seat.ts`. Every consumer (the
+   * watermark line, and from this wave the read path) asks the session; nothing
+   * else opens a `WebSeat`.
+   */
+  readonly #seat: SessionSeat;
 
   constructor(
     readonly gatewayAuth: GatewayAuth,
@@ -243,6 +260,45 @@ export class ReplicaShellSession {
     this.#inventory = options.inventory;
     this.#onAuthorizationRevoked = options.onAuthorizationRevoked;
     this.#pollIntervalMs = options.pollIntervalMs;
+    this.#seat = new SessionSeat(
+      gatewayAuth,
+      ...(options.seatOpener ? [options.seatOpener] : [])
+    );
+  }
+
+  /** The session's one seat, opened on first ask. `undefined` means none. */
+  seat(): Promise<SessionSeatHandle | undefined> {
+    return this.#seat.open();
+  }
+
+  /** Catch the seat up and report how current it is. Quiet on failure. */
+  syncSeat(): Promise<SeatWatermark | undefined> {
+    return this.#seat.sync();
+  }
+
+  /** How current this seat is, or `undefined` before it has said. */
+  seatWatermark(): SeatWatermark | undefined {
+    return this.#seat.watermark();
+  }
+
+  /**
+   * ONE PAGE OF ONE APP HANDLER (#996 wave 4, R8).
+   *
+   * The app read path, and the only one: plain SQL over this seat's own copy of
+   * the vault, keyset-paged, with the outbox's pending rows drawn over it. It
+   * does NOT fall back to the gateway — a seat that cannot answer has no file,
+   * which is a state the surface shows rather than a state to paper over with a
+   * network read whose rows would then disagree with the next page.
+   */
+  async page<Row extends object>(
+    query: SeatPageQuery<Row>,
+    request: PageRequest,
+    overlay?: SeatReadOverlay
+  ): Promise<Page<Row>> {
+    this.assertOpen();
+    const seat = await this.seat();
+    if (!seat) throw new ReplicaProtocolError("This seat holds no vault copy");
+    return seatWorkerPage<Row>(seat, query, request, overlay);
   }
 
   async start(status: ReplicaStatus): Promise<this> {
@@ -512,6 +568,7 @@ export class ReplicaShellSession {
       new ReplicaProtocolError("Replica session closed")
     );
     this.detach();
+    await this.#seat.close();
     await this.coordinator.close();
   }
 

@@ -16,7 +16,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { Year3VaultProfile } from "./year3-shape.js";
+import type { Year3VaultProfile } from "@centraid/test-kit/year3-shape";
 
 /**
  * 3 — the golden artifact (#927 P4). Version 1 declared row COUNTS only;

@@ -38,6 +38,7 @@ import type {
 import type { SeatState } from "./state.js";
 import { seatWatermark } from "./watermark.js";
 import type { SeatWatermark } from "./watermark.js";
+import type { SeatWorkerQuery } from "./worker-protocol.js";
 
 /** How many log rows to ask for at a time. The door's ceiling is 10,000. */
 const PAGE = 1_000;
@@ -129,6 +130,17 @@ export class WebSeat {
     return this.watermark();
   }
   /* oxlint-enable no-await-in-loop */
+
+  /**
+   * One read against this seat's file (#996 wave 4).
+   *
+   * Forwarded whole — the request object carries the overlay a list read needs
+   * to show a member their own unsettled write (R23–R25), and a signature that
+   * can drop it is one that will.
+   */
+  query<T extends object>(request: SeatWorkerQuery): Promise<T[]> {
+    return this.client.query<T>(request);
+  }
 
   close(): Promise<void> {
     return this.client.close();

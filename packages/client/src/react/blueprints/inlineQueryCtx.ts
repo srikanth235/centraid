@@ -6,6 +6,7 @@ import {
 import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 import type { InlineQueryModule } from "@centraid/blueprints/apps/inline-types";
+import type { Page, PageCursor, PageRequest } from "@centraid/core/page";
 
 // The ctx itself is seat-neutral and lives with the replica engine, so the
 // phone imports the SAME builder through `@centraid/client/replica/native`
@@ -19,6 +20,8 @@ import {
 } from "../../replica/inline-query-ctx-core.js";
 import type { InlineWireResult } from "../../replica/inline-query-ctx-core.js";
 import { assertBoundedReplicaRead } from "../../replica/read-plan.js";
+import type { SeatPageQuery } from "../../replica/seat/paged-handler.js";
+import type { SeatReadOverlay } from "../../replica/seat/read-overlay.js";
 import type {
   ShellReplicaReadRequest,
   ShellReplicaSearchRequest,
@@ -41,6 +44,12 @@ export interface InlineReplicaSession {
     appId: string,
     request: ShellReplicaSearchRequest
   ) => Promise<ReplicaSearchWireResult>;
+  /** The paged read path (#996 wave 4). Absent on a session with no seat. */
+  page?: <Row extends object>(
+    query: SeatPageQuery<Row>,
+    request: PageRequest,
+    overlay?: SeatReadOverlay
+  ) => Promise<Page<Row>>;
 }
 
 // Pending identity is shell-owned and rides the row as an enumerable symbol:
@@ -75,6 +84,25 @@ function pendingMarker(
   );
   if (identityFields.length === 0) return undefined;
   return { rowId: envelope.rowId, identityFields, intentId };
+}
+
+/**
+ * A page row's pending provenance.
+ *
+ * The seat's worker drew the outbox over these rows, so a row the member is
+ * still waiting on carries its intent key like any other (#922 G3). The
+ * identity field is the handler's own primary key rather than a guess over
+ * every `*_id` column: a page states its key, so there is nothing to infer.
+ */
+function pageRowMarker(
+  row: Record<string, unknown>,
+  pkColumn: string
+): PendingRowMarker | undefined {
+  const intentId = pendingRowIntentId(row);
+  if (intentId === undefined) return undefined;
+  const rowId = row[pkColumn];
+  if (typeof rowId !== "string") return undefined;
+  return { rowId, identityFields: [pkColumn], intentId };
 }
 
 function carriedPendingMarker(
@@ -179,6 +207,38 @@ export function buildInlineCtx(
           },
         }
       ),
+      ...(session.page
+        ? {
+            // A PAGE'S ROWS ARE ROWS. They come off the seat's own file with
+            // every column present — there is nothing for `guardedRow` to
+            // mask, which is the point of R8 — but they still carry pending
+            // provenance, because the worker drew the outbox over them and the
+            // member's own unsettled write must be traceable to its intent.
+            page: <Row extends object>(request: {
+              query: SeatPageQuery<Row>;
+              limit: number;
+              after?: PageCursor;
+              overlay?: SeatReadOverlay;
+            }): Promise<Page<Row>> =>
+              session.page!<Row>(
+                request.query,
+                {
+                  limit: request.limit,
+                  ...(request.after ? { after: request.after } : {}),
+                },
+                request.overlay
+              ).then((page) => {
+                for (const row of page.rows) {
+                  const marker = pageRowMarker(
+                    row as Record<string, unknown>,
+                    request.query.order.pkColumn
+                  );
+                  if (marker) pendingRows.push(marker);
+                }
+                return page;
+              }),
+          }
+        : {}),
       ...(signal ? { signal } : {}),
     },
     guard

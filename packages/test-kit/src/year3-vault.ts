@@ -1,21 +1,21 @@
 import { createHash } from "node:crypto";
 
-import { seedYear3Distributions } from "./year3-distributions.js";
+import { seedYear3Distributions } from "@centraid/test-kit/year3-distributions";
 import {
   YEAR3_CONTACT_NEEDLE,
   YEAR3_CONTACT_NEEDLE_INDEX,
   YEAR3_DISTRIBUTIONS,
-} from "./year3-shape.js";
+} from "@centraid/test-kit/year3-shape";
 import type {
   Year3SeedCounts,
   Year3VaultProfile,
   Year3VaultTarget,
-} from "./year3-shape.js";
+} from "@centraid/test-kit/year3-shape";
 
 // One public subpath: `./year3-vault` stays the whole vocabulary's front door,
 // so splitting the module changed no import anywhere else in the tree.
-export * from "./year3-fixture-cache.js";
-export * from "./year3-shape.js";
+export * from "@centraid/test-kit/year3-fixture-cache";
+export * from "@centraid/test-kit/year3-shape";
 
 /** The one seed every golden artifact is generated from. */
 export const YEAR3_DEFAULT_SEED = 679_003;
