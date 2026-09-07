@@ -6,7 +6,12 @@ import {
 import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 import type { InlineQueryModule } from "@centraid/blueprints/apps/inline-types";
-import type { Page, PageCursor, PageRequest } from "@centraid/core/page";
+import type {
+  Page,
+  PageCursor,
+  PageQuery,
+  PageRequest,
+} from "@centraid/core/page";
 
 // The ctx itself is seat-neutral and lives with the replica engine, so the
 // phone imports the SAME builder through `@centraid/client/replica/native`
@@ -20,7 +25,6 @@ import {
 } from "../../replica/inline-query-ctx-core.js";
 import type { InlineWireResult } from "../../replica/inline-query-ctx-core.js";
 import { assertBoundedReplicaRead } from "../../replica/read-plan.js";
-import type { SeatPageQuery } from "../../replica/seat/paged-handler.js";
 import type { SeatReadOverlay } from "../../replica/seat/read-overlay.js";
 import type {
   ShellReplicaReadRequest,
@@ -46,7 +50,7 @@ export interface InlineReplicaSession {
   ) => Promise<ReplicaSearchWireResult>;
   /** The paged read path (#996 wave 4). Absent on a session with no seat. */
   page?: <Row extends object>(
-    query: SeatPageQuery<Row>,
+    query: PageQuery<Row>,
     request: PageRequest,
     overlay?: SeatReadOverlay
   ) => Promise<Page<Row>>;
@@ -215,7 +219,7 @@ export function buildInlineCtx(
             // provenance, because the worker drew the outbox over them and the
             // member's own unsettled write must be traceable to its intent.
             page: <Row extends object>(request: {
-              query: SeatPageQuery<Row>;
+              query: PageQuery<Row>;
               limit: number;
               after?: PageCursor;
               overlay?: SeatReadOverlay;

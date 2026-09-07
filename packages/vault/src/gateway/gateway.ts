@@ -3,6 +3,9 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { pageStatement } from "@centraid/core/page";
+import type { PageQuery, PageRequest } from "@centraid/core/page";
+
 import { refreshCustodyRollup } from "../blob/custody-rollup.js";
 import { refreshCustodyState } from "../blob/custody.js";
 import type { ReconcileResult } from "../blob/custody.js";
@@ -122,6 +125,7 @@ import {
   scalarPrimaryKeyColumn,
 } from "./filters.js";
 import { authenticate } from "./identity.js";
+import { planPagedDoor } from "./paged-door.js";
 import { exportVault } from "./portability.js";
 import type { VaultExport } from "./portability.js";
 import { exportPortableVault } from "./portable-export.js";
@@ -601,6 +605,51 @@ export class Gateway {
       ...(receiptId === undefined ? {} : { receiptId }),
       ...(truncated ? { truncated: true, appliedLimit: limit } : {}),
     };
+  }
+
+  /**
+   * ONE PAGE OF ONE APP HANDLER, FOR A SEAT THAT HOLDS NO FILE (#996 wave 4,
+   * ruling W4-D2).
+   *
+   * The same statement-as-data a seat with the file runs on the seat. It never
+   * runs here as raw SQL: `planPagedDoor` resolves the tables it names, takes
+   * an `evaluateAccess` decision on each, refuses any column the R17 field mask
+   * does not carry or that is sealed, and hands back the manifest row filters
+   * of EVERY table, compiled and ANDed. The assembler then splices those in
+   * beside the handler's own predicate, and the keyset, the probe row and the
+   * LIMIT are the host's as they are on the seat.
+   *
+   * This is the whole of R9's second half: a browser that chose to be a remote
+   * client reads through the same handlers as one holding the file, so an app
+   * has exactly one read path and neither seat has an answer the other cannot
+   * give.
+   */
+  page(
+    cred: Credential,
+    query: PageQuery,
+    request: PageRequest
+  ): { rows: Record<string, unknown>[]; receiptId?: string } {
+    const identity = this.identify(cred);
+    const plan = planPagedDoor(this.db.vault, identity, query, nowIso());
+    const statement = pageStatement(query, request, {
+      sql: plan.where,
+      bind: plan.bind,
+    });
+    const rows = this.db.vault
+      .prepare(statement.sql)
+      .all(...statement.bind) as Record<string, unknown>[];
+    const receiptId = skipsAllowReceipt(identity)
+      ? undefined
+      : writeAuthorityReceipt(this.db, {
+          authorityId: plan.tables[0]?.authorityId ?? null,
+          invocationId: null,
+          action: "read",
+          objectType: plan.tables.map((table) => table.entity).join(","),
+          objectId: null,
+          decision: "allow",
+          detail: { handler: query.name, rowCount: rows.length },
+        });
+    return { rows, ...(receiptId === undefined ? {} : { receiptId }) };
   }
 
   /**

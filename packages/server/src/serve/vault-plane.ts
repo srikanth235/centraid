@@ -12,6 +12,7 @@
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
+import type { PageQuery } from "@centraid/core/page";
 import {
   runConversationArchival,
   repriceLedger,
@@ -1633,6 +1634,7 @@ export class VaultPlane {
             throw new Error("invoke is handled by the group-commit queue");
           case "describe":
             return this.gateway.discover(this.ownerCredential);
+          case "page":
           case "parked":
           case "changes":
           case "resolve":
@@ -1738,6 +1740,21 @@ export class VaultPlane {
       }
       return asVaultCallResult(() => {
         switch (call.op) {
+          // THE PAGED DOOR (#996 W4-D2). A seat that holds no vault file reads
+          // through the SAME statement-as-data as one that does; the door runs
+          // it under this credential with `evaluateAccess`, the R17 field mask
+          // and the manifest row filters applied, never bypassed.
+          case "page": {
+            const payload = call.payload as unknown as {
+              query: PageQuery;
+              limit: number;
+              after?: { sortKey: string; pk: string };
+            };
+            return this.gateway.page(cred, payload.query, {
+              limit: payload.limit,
+              ...(payload.after ? { after: payload.after } : {}),
+            });
+          }
           case "read":
             return this.gateway.read(
               cred,
@@ -1859,6 +1876,12 @@ export class VaultPlane {
       return this.coalesceAgentRead(() =>
         asVaultCallResult(() => {
           switch (call.op) {
+            // App handlers page; automations read (#996 W4-D2, review F2).
+            case "page":
+              throw new GatewayError(
+                "access",
+                "the paged door is the apps' read path — automations read"
+              );
             case "read":
               return this.gateway.read(
                 cred,

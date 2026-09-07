@@ -16,7 +16,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { seatPageStatement } from "./paged-handler.js";
+import { pageStatement } from "@centraid/core/page";
+
 import { seatWorkerPage } from "./seat-page-reader.js";
 import type { SeatWorkerQuery } from "./worker-protocol.js";
 
@@ -57,7 +58,7 @@ describe("the shell's paged read over the seat worker", () => {
   it("sends exactly the statement the in-process host would run", async () => {
     const client = fakeClient(rows(3));
     await seatWorkerPage<NoteRow>(client, recent, { limit: 10 });
-    const expected = seatPageStatement(recent, { limit: 10 });
+    const expected = pageStatement(recent, { limit: 10 });
     expect(client.seen[0]?.sql).toBe(expected.sql);
     expect(client.seen[0]?.bind).toStrictEqual(expected.bind);
   });

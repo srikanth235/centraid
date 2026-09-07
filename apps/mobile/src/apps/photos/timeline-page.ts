@@ -49,8 +49,7 @@ import type { SeatSqliteDriver } from "@centraid/client/replica/native";
 // bundle is over its weight ceiling, and a barrel re-export puts every module
 // behind it into the Hermes bundle whether or not a screen reaches it.
 import { seatPage } from "@centraid/client/replica/seat/paged-handler";
-import type { SeatPageQuery } from "@centraid/client/replica/seat/paged-handler";
-import type { Page, PageRequest } from "@centraid/core/page";
+import type { Page, PageQuery, PageRequest } from "@centraid/core/page";
 
 /**
  * The capture-local day, as SQL.
@@ -131,7 +130,7 @@ interface PageRow {
  * counters all come from `seatPage` — this module contributes what is actually
  * the timeline's: which rows, which columns, and which day they belong to.
  */
-const TIMELINE_QUERY: SeatPageQuery<PageRow> = {
+const TIMELINE_QUERY: PageQuery<PageRow> = {
   name: "photos.timeline",
   select: `asset_id, content_id, kind, captured_at, tz_offset_min,
            ${LOCAL_DAY_SQL} AS local_day`,

@@ -1,4 +1,4 @@
-import type { Page, PageRequest } from "@centraid/core/page";
+import type { Page, PageQuery, PageRequest } from "@centraid/core/page";
 
 // governance: allow-repo-hygiene file-size-limit (#406) shell session keeps replica ownership, lifecycle teardown, and intent drain in one auditable boundary
 import {
@@ -22,7 +22,6 @@ import type {
   PendingIntentReplacement,
   PendingIntentRevisionTarget,
 } from "./intent-revision.js";
-import type { SeatPageQuery } from "./seat/paged-handler.js";
 import type { SeatReadOverlay } from "./seat/read-overlay.js";
 import { seatWorkerPage } from "./seat/seat-page-reader.js";
 import { SessionSeat } from "./seat/session-seat.js";
@@ -291,7 +290,7 @@ export class ReplicaShellSession {
    * network read whose rows would then disagree with the next page.
    */
   async page<Row extends object>(
-    query: SeatPageQuery<Row>,
+    query: PageQuery<Row>,
     request: PageRequest,
     overlay?: SeatReadOverlay
   ): Promise<Page<Row>> {

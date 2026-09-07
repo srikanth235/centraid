@@ -5864,3 +5864,121 @@ need it decided to proceed — after W4-D1 the seat is the web read path and the
 served route is only the online fallback — but **Locker's online-only reads are
 the one place it bites**, so Locker's conversion waits on this answer while the
 other seven proceed.
+
+## Wave 4 — the door for the seat that holds no file (#996)
+
+### The ruling, recorded (W4-D2, root, 2026-09-07)
+
+**An app handler's statement never runs on the gateway as raw SQL.** On a seat
+that holds the file, it runs on the seat. For a seat without the file — the
+browser that turned "Keep an offline copy" off, which R9 allows and which is a
+real choice on a shared machine, not a flag position — the gateway serves the
+SAME statement-as-data through a paged door that executes it under the caller's
+principal with `evaluateAccess`, the R17 field mask and the manifest row filters
+applied, never bypassed. `ctx.vault.page` picks seat or door by whether the
+session holds the file. `ctx.vault.read` and the declarative vocabulary die with
+their last caller. Locker reads are seat reads like every other app's; the
+permit tier is deleted.
+
+This **narrows W4-D1**, which said the gateway grows no second host. W4-D1 was
+right about the flag — a host for a store the next wave deletes is throwaway
+work — and wrong about R9: a remote-only seat is not the flag's other position,
+and without this door "no app may call `vault.read`" has no answer for it. Both
+rulings are in `docs/decisions.md` under `## One vault, every seat (#996)`.
+
+### The statement moved to `packages/core`, because three ends run it
+
+`packages/vault` cannot import a client module, and the door must assemble
+BYTE-IDENTICALLY to the seat or the two disagree exactly at a page boundary,
+which is where nobody looks. So `SeatPageQuery`/`seatPageStatement`/
+`seatPageCursor` became `PageQuery`/`pageStatement`/`pageCursorOf` in
+`@centraid/core/page`, and `paged-handler.ts` keeps only the half that is a
+seat's: running the statement against this seat's driver, and counting the work.
+`pageStatement` gained one splice point, `extraWhere`, which no handler can
+reach — it is where the door ANDs in the row filters of every table.
+
+### Why the door is a grammar and not a sanitiser
+
+To apply a field mask the door must know which columns are projected; to apply a
+row filter it must know which tables are read. A string of SQL hides both, and
+escaping quotes answers neither question. So `select`, `from`, `where` and every
+JOIN's `ON` are tokenised against a small grammar — column references,
+placeholders, literals, a fixed operator set and a named function list — and
+anything outside it is REFUSED rather than repaired:
+
+- a second statement, a comment (`;`, `--`, `/*`);
+- a subquery, in the projection or in the FROM;
+- a function the list does not name (SQLite has functions that read files);
+- a table that does not resolve to an entity of this vault;
+- a column no table in the statement has, or one that two joined tables both
+  have and the handler left unqualified — guessed wrong exactly where it
+  matters, and one word fixes it;
+- a column this caller's field mask does not carry, or a sealed column: a page
+  is a read, and plaintext takes `reveal` (#293).
+
+A table whose access decision is `deny` refuses the **whole page** rather than
+being dropped from the join — a join silently missing a table returns rows that
+look like an answer. Row filters are ANDed across every table in the statement,
+so a join is never wider than the reads it is made of.
+
+### Red first
+
+`paged-door.test.ts` is eleven cases over the four ways this goes wrong: it
+answers at all and walks a set once with no gap and no overlap; it refuses what
+a grammar cannot check; it refuses a table it cannot resolve and a table this
+caller's clamp denies **on the far side of a join**; it refuses a masked column
+and a sealed one. The clamp case that matters most is the last: a row filter the
+handler's statement was not written for is spliced in and cuts the answer to one
+row.
+
+### Gates
+
+- `bunx vitest run packages/vault/src/gateway/paged-door.test.ts` — 11 passed.
+- `bun run --cwd packages/{core,vault,client,server}` typecheck, `apps/mobile`
+  typecheck — clean.
+- `bun run --cwd packages/core test` — 20 files, 310 passed.
+- `bun run --cwd packages/vault test` — 209 files, 1,741 passed.
+- `bun run --cwd packages/client test` — 291 files, 2,630 passed.
+- `bun run --cwd packages/server test` — 384 passed, **3 failed**, all
+  environmental and none in the changed files:
+  `serve/gateway-db-lock.integration.test.ts` (SIGKILL plus an external
+  `sqlite3` binary) and two `acp/backends/acp/launch.test.ts` cases that branch
+  on whether the process is root. Nothing was skipped or loosened.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/core/src/page/statement.ts`
+- `packages/core/src/page/window.ts` (the former `page/index.ts`; `index.ts` is
+  now a barrel, because a barrel importing both halves back is a cycle)
+- `packages/vault/src/gateway/paged-door.ts`
+- `packages/vault/src/gateway/paged-door.test.ts`
+
+**Changed:**
+
+- `packages/core/src/page/index.ts`
+- `packages/core/src/page/page.test.ts`
+- `packages/client/src/replica/seat/paged-handler.ts`
+- `packages/client/src/replica/seat/seat-page-reader.ts`
+- `packages/client/src/replica/seat/seat-page-reader.test.ts`
+- `packages/client/src/replica/shell-session.ts`
+- `packages/client/src/replica/inline-query-ctx-core.ts`
+- `packages/client/src/react/blueprints/inlineQueryCtx.ts`
+- `packages/vault/src/gateway/gateway.ts`
+- `packages/server/src/engine/handlers/vault-bridge.ts`
+- `packages/server/src/serve/vault-plane.ts`
+- `apps/mobile/src/apps/photos/timeline-page.ts`
+- `docs/decisions.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the door
+
+- **A statement the door cannot take apart is a statement the door cannot
+  check.** The grammar costs handlers expressiveness; the alternative costs the
+  vault its field mask.
+- **A denied table refuses the page, it does not leave the join.** The second
+  answer is rows that look right.
+- **The assembler is one function for three ends.** Two assemblers are two
+  keyset dialects, and the one that drifts drifts silently.

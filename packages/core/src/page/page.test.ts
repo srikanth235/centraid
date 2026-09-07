@@ -16,8 +16,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { MAX_PAGE_ROWS, pageOf, probeLimit } from "./index.js";
-import type { PageRequest } from "./index.js";
+import { MAX_PAGE_ROWS, pageOf, probeLimit } from "./window.js";
+import type { PageRequest } from "./window.js";
 
 interface Row {
   id: string;

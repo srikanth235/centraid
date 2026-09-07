@@ -1,5 +1,5 @@
 import type { PendingOverlaySidecar } from "@centraid/blueprints/apps/_shared/pending-overlay";
-import type { Page, PageCursor } from "@centraid/core/page";
+import type { Page, PageCursor, PageQuery } from "@centraid/core/page";
 /**
  * The ONE inline-query `ctx`, for every seat that holds a replica (#922).
  *
@@ -35,7 +35,6 @@ import {
 } from "@centraid/core/time";
 
 import type { OnlineOnlyGuard } from "./online-only-guard.js";
-import type { SeatPageQuery } from "./seat/paged-handler.js";
 import type { SeatReadOverlay } from "./seat/read-overlay.js";
 import type { ReplicaRowEnvelope } from "./types.js";
 
@@ -129,7 +128,7 @@ export interface InlineCtxReads<Read, Search> {
  * own unsettled write (R23–R25); a read that is measuring the file omits it.
  */
 export interface InlinePageRequest<Row extends object> {
-  query: SeatPageQuery<Row>;
+  query: PageQuery<Row>;
   limit: number;
   after?: PageCursor;
   overlay?: SeatReadOverlay;
