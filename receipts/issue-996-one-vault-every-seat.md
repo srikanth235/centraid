@@ -3945,3 +3945,32 @@ bash .governance/run.sh    # the simulated commit passes; only bcf17bd3f is flag
 bun run lint:workflow-pins # 24 workflows clean
 bun run format:check       # clean
 ```
+
+## Wave 6 — the wire golden catches up with a version bump it did not make
+
+CI coverage-shard 2 on `6654a6901` failed `wire-conformance.contract.test.ts` — the golden-sync assertion plus the two `gatewayPairResponse` vectors. Regenerated here with the repo's own mechanism (`UPDATE_GOLDEN=1 vitest run wire-conformance`), and the diff read before it was accepted.
+
+**The wire delta, in one line: `protocolVersion` 3 → 4 in the `gatewayPairResponse` vector, and nothing else.** No field was added or removed, no other vector moved, no ALPN and no cap changed, and `jsonByteLength` is unchanged at 212 because the value is one digit either way — the frame bytes differ in exactly one position. That is the whole diff, checked field by field rather than eyeballed.
+
+**Attribution, corrected.** This was assigned to wave 6's commit 2 (`0c009c3da`, the key door) on the assumption that the pair response's shape had changed. It had not. `git show --name-only 0c009c3da` touches no file under `packages/tunnel`, no `version.ts` and nothing in the pair path; its only protocol change is a `SeatLockerKeyWire` **type** and a comment. The constant moved in **`32cf84e39` — "feat(mobile): the mount plane goes; the outbox is the surface (#996)"**, wave 3's commit, which bumped `GATEWAY_PROTOCOL_VERSION` from 3 to 4 without re-freezing the fixture that embeds it. The golden reads the constant rather than a literal precisely so a bump cannot pass unnoticed (#726 Finding 8), and it did its job — it just named the wrong wave.
+
+**And therefore the version constant must NOT move again.** The rule asked about is satisfied: the pair response IS a wire-versioned frame, and its version DID move with the change that altered it. Bumping it here would be a second bump for one wire change — every N-1 client would meet the wall twice, and the second wall would stand for nothing. The fixture is what was behind, so the fixture is what moves.
+
+**One more, not a failure.** `packages/server/src/serve/protocol-join-lane.test.ts` failed in the full-suite run and passes on its own (4/4, 63 s): it drives a real transport and was starved under parallel load. Recorded as a flake rather than fixed, because a timing ceiling raised to make a crowded machine green is a ceiling that no longer means anything.
+
+### Files
+
+- `packages/tunnel/fixtures/wire-golden.json` — the `gatewayPairResponse` vector's `json` and `frameBase64`, re-frozen at `protocolVersion` 4
+
+### Gates
+
+```
+bunx vitest run packages/tunnel/src/wire-conformance.contract.test.ts   # 46 passed
+bunx vitest run packages/server/src/serve/protocol-join-lane.test.ts    # 4 passed, alone
+bun run governance < /dev/null
+bun run check:push:static                                               # stamped on the committed tree
+```
+
+### Inherited, and not mine to fix
+
+`bun run governance` now reports one `commit-issue-receipt-match` violation on **`bcf17bd3fe0a54fb494de659188e5ccf591509a0`** — the iOS lock bot's `Podfile.lock` / `native-fingerprints.json` push, which touches no `receipts/issue-*.md`. It arrived through the merge of the designated branch and is not a wave-6 commit; the directive's own escape hatch (`governance: allow-commit-issue-receipt-match <reason>` in the body) is the fix, and it belongs to whoever owns the bot. Raising it rather than working around it.
