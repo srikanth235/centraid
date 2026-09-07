@@ -101,15 +101,12 @@ CREATE TABLE share_subscription_member (
   entered_seq  INTEGER NOT NULL CHECK (entered_seq >= 0),
   PRIMARY KEY (authority_id, table_name, pk)
 ) STRICT;
--- THIS INDEX HAS NO READER (#996, R10), and it is recorded here rather than
--- dropped quietly. It existed for the reverse question "which live grants
--- claim this row", and that question turned out to be asked by nothing: every
--- read of this table is one grant's (\`readShareMembers\`,
--- \`writeShareMembers\`), and the leave a purged member owes each audience is
--- that grant's own \`before ∖ after\`. The frozen corpus already carries the
--- index, so removing it is a RUNG, not an edit here — a bump of the ladder
--- this CI fix has no business spending. Drop it with the next schema rung.
-CREATE INDEX share_subscription_member_row
-  ON share_subscription_member(table_name, pk);
+-- NO INDEX ON \`(table_name, pk)\`. The reverse question it would serve —
+-- "which live grants claim this row" — is asked by nothing: every read of this
+-- table is one grant's (\`readShareMembers\`, \`writeShareMembers\`), and the
+-- leave a purged member owes each audience is that grant's own
+-- \`before ∖ after\`, computed per grant by \`diffShareClosure\`. An index with
+-- no reader is a write cost on every membership pass and a second answer
+-- waiting to disagree with the first.
 ${touchUpdatedAt("share_subscription", ["authority_id", "audience_vault_id"])}
 `;

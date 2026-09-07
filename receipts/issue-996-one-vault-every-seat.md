@@ -3564,13 +3564,9 @@ Removed: the function and its comment (`packages/vault/src/share/closure-members
 replaced by a note saying why there is no reverse answerer) and its barrel
 re-export (`packages/vault/src/index.ts`).
 
-**Left standing, and named as a finding:** `share_subscription_member_row`
-(`packages/vault/src/schema/subscription.ts`) existed for that one reader and
-now has none. It is NOT dropped here. The frozen corpus already carries it —
-`golden-vault.test.ts`'s schema gate proves it — so removing it is a migration
-RUNG and a bump of `PRAGMA user_version`, which a reachability CI fix has no
-business spending. The DDL says so in place; the next schema rung should drop
-it.
+`share_subscription_member_row` (`packages/vault/src/schema/subscription.ts`)
+existed for that one reader and now has none. It is dropped in the follow-up
+commit below, not here.
 
 Evidence for the deletion: `closure-outputs.test.ts`, "a purged shared row
 leaves for EVERY grant whose member set held it" — two grants over one album,
@@ -4530,4 +4526,38 @@ bunx vitest run packages/client/src/locker   # 5 files, 30 passed
 bunx tsc -p packages/client --noEmit          # clean
 bun run governance < /dev/null
 bun run check:push:static                     # stamped on the committed tree
+## The dead index goes, and the golden corpus is re-frozen with it
+
+The reachability commit left `share_subscription_member_row` standing and filed
+it as a finding, on the reading that the frozen corpus carries the index and
+removing it is therefore a migration rung. That reading is wrong under the
+owner's pre-1.0 rulings: **there are no rungs and no compatibility paths before
+1.0**, and a rung spent carrying a dead index forward is a rung spent making
+the wrong thing survive.
+
+So the index is deleted from the baseline DDL
+(`packages/vault/src/schema/subscription.ts`), where a comment now says why
+there is no index on `(table_name, pk)` at all, and the golden corpus is
+re-frozen in the same commit through the repo's own tooling:
+
+```
+bun run golden-vault:freeze -- --label issue-929
+  # froze issue-929 — 18 table(s), 182 row(s), schema v6 (ontology 1.0)
+```
+
+`packages/vault/tests/golden/issue-929/vault.db.gz` and its `manifest.json` are
+the artefacts. `golden-vault.test.ts`'s schema gate now proves the CURRENT
+baseline: the frozen file and a vault founded by today's code agree, which is
+the whole point of that gate and what a corpus frozen before wave 7 could no
+longer do. The row-id and digest churn in the manifest is the deterministic
+seed re-running against the tree as it stands, not a rewrite of what the corpus
+holds — the row and table counts are unchanged.
+
+Recorded in [docs/decisions.md](../docs/decisions.md) under the #996 rulings,
+beside the v0 stance it follows from.
+
+```
+bunx vitest run packages/vault/src/golden-vault.test.ts \
+                packages/vault/src/schema/migrate.test.ts \
+                packages/vault/src/share/closure-outputs.test.ts   # 31 passed
 ```
