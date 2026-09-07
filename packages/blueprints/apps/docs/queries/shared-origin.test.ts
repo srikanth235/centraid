@@ -136,7 +136,7 @@ function ctxOf({ deniedEntities = new Set<string>() } = {}) {
     const rows = ROWS[entity] ?? [];
     return { rows: where ? rows.filter((r) => matches(r, where)) : rows };
   });
-  const { page } = pagedFixture(ROWS);
+  const { page } = pagedFixture(ROWS, { deniedEntities });
   return {
     ctx: { vault: { page, read, search: read } } as unknown as never,
     read,

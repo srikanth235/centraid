@@ -1044,6 +1044,7 @@
         "print.ts",
         "queries/_shared.ts",
         "queries/activity.ts",
+        "queries/document-origins.ts",
         "queries/drive.ts",
         "queries/history.test.ts",
         "queries/history.ts",

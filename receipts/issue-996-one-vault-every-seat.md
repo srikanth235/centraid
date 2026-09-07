@@ -6654,3 +6654,88 @@ both projected, or the cursor cannot be read off the row.
   overlay or a work-counter name.
 - **One bridge between the two spellings, in the fixtures.** The alternative is
   every fixture map rewritten in a diff nobody can read, to assert nothing new.
+
+## Wave 4d — Docs reads pages, and the fixture stops lying (#996)
+
+### Five handlers, and the one that was two files
+
+Every Docs read is a paged statement now: the drive's filed-documents window,
+its starred, document and content joins; search's tag and content joins; the
+version chain; the activity rail; and the four share/custody/label helpers
+beside them. `shareLimit` is gone — it sized a WINDOW off the caller's id count
+and capped it at 2,000, then took whatever fell inside without saying so, which
+on the drive meant a document quietly losing an audience. `SHARE_FAN_OUT` is a
+stated ceiling of 4,000 rows over sets that are already `in`-bounded by ids the
+caller holds, and it throws rather than shortening.
+
+`drive.ts`'s `truncated` is the page's own cursor. `tagRows.length >= window`
+could not tell a window that filled exactly from one that ran out; a cursor is
+also where to carry on from.
+
+`queries/_shared.ts` went past the 625-line limit once its reads were
+statements, so the origins half moved to `queries/document-origins.ts`. That is
+the right seam anyway: the shares plane and the placement plane are two
+independent denials, and both of them answer `null` — "we cannot see" — rather
+than an empty list.
+
+### The keyset is the table's own key, including when the key is a pair
+
+`share_fulfillment` is keyed on (grant_id, peer_vault_id), because one grant
+reaches several peers. A cursor on `grant_id` alone stops at the first peer and
+calls the delivery list finished, so the ORDER BY is the PAIR — which is also
+the index the table already has. Same for `share_subscription_lineage`
+(authority_id, target_id under a pinned target_type) and `share_subscription`,
+whose second axis is the grant since the audience in this vault's own copy is
+always this vault.
+
+### A fixture that ignores the predicate is a false green
+
+The handler fixtures deliberately did NOT apply a read's `where`: a handler that
+trusted the vault instead of re-narrowing in memory failed there. The mirror
+mistake arrives with pages and is worse — a fixture that ignores the statement's
+predicate hands a handler rows the statement excluded, and a window built out of
+ids it never asked for reads as an answer. It caught exactly that: the shared
+shelf's denial case "passed" while serving `doc-sent` from a read that had been
+denied.
+
+So `pagedFixture` evaluates the small conjunctive grammar the handlers write —
+`col = ?`, the comparisons, `col IN (?, …)`, `col IS [NOT] NULL` — consuming
+binds positionally as SQLite does, and RECORDS any clause outside it as
+`unapplied` rather than pretending. `history.test.ts`'s revision fixtures grew
+the `entity_type`/`entity_id` the vault stores and the statement filters on;
+they had been passing on rows that named no entity at all.
+
+### Gates
+
+- `bunx vitest run --root packages/blueprints apps/docs apps/notes apps/people src/day-context-journal-queries.test.ts src/query-handlers.test.ts`
+  — 33 files, 307 passed.
+- `bun run --cwd packages/blueprints test` — 215 files, 7,100 passed, 2
+  expected-fail.
+- `bun run --cwd packages/blueprints typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/blueprints/apps/docs/queries/document-origins.ts`
+
+**Changed:**
+
+- `packages/blueprints/apps/_shared/paged-ctx.test-fixtures.ts`
+- `packages/blueprints/apps/docs/queries/_shared.ts`
+- `packages/blueprints/apps/docs/queries/activity.ts`
+- `packages/blueprints/apps/docs/queries/drive.ts`
+- `packages/blueprints/apps/docs/queries/history.test.ts`
+- `packages/blueprints/apps/docs/queries/history.ts`
+- `packages/blueprints/apps/docs/queries/search.ts`
+- `packages/blueprints/apps/docs/queries/shared-origin.test.ts`
+- `packages/blueprints/apps/docs/queries/shares.test.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — Docs
+
+- **A pair-keyed table is walked on its pair.** The alternative is a cursor that
+  stops at the first duplicate and reports a short list as a whole one.
+- **The fixture honours the predicate, or says it could not.** A silent
+  non-filter turns a denied read into a populated screen.

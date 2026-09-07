@@ -14,6 +14,7 @@
  */
 import { describe, expect, test } from "vitest";
 
+import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
 import historyHandler from "./history.ts";
 
 interface ReadCall {
@@ -22,10 +23,14 @@ interface ReadCall {
 }
 
 /** Fixtures keyed by entity; `where` is deliberately not applied, so a handler
- *  that trusted the read instead of walking the chain itself fails here. */
+ *  that trusted the read instead of walking the chain itself fails here. That
+ *  is the same claim through the paged door since #996 wave 4: the occurrence
+ *  chain is walked in memory over whatever the page returned. */
 function ctxOf(rowsByEntity: Record<string, unknown[]>) {
+  const { page } = pagedFixture(rowsByEntity);
   return {
     vault: {
+      page,
       read: async (request: ReadCall) => ({
         rows: rowsByEntity[request.entity] ?? [],
       }),
@@ -100,24 +105,32 @@ describe("docs history over revision occurrences", () => {
       "core.entity_revision": [
         {
           revision_id: "rev-4",
+          entity_type: "core.document",
+          entity_id: "doc-1",
           content_id: "content-old",
           parent_revision_id: "rev-3",
           recorded_at: "2026-04-01T00:00:00Z",
         },
         {
           revision_id: "rev-3",
+          entity_type: "core.document",
+          entity_id: "doc-1",
           content_id: "content-new",
           parent_revision_id: "rev-2",
           recorded_at: "2026-03-01T00:00:00Z",
         },
         {
           revision_id: "rev-2",
+          entity_type: "core.document",
+          entity_id: "doc-1",
           content_id: "content-old",
           parent_revision_id: "rev-1",
           recorded_at: "2026-02-01T00:00:00Z",
         },
         {
           revision_id: "rev-1",
+          entity_type: "core.document",
+          entity_id: "doc-1",
           content_id: "content-new",
           parent_revision_id: null,
           recorded_at: "2026-01-01T00:00:00Z",

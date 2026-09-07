@@ -185,9 +185,13 @@ function ctxOf(shareDenied: boolean) {
       });
     return { rows: ROWS[entity] ?? [] };
   });
-  // The taxonomy pair is paged since #996 wave 4; it is not a share entity,
-  // so the denial case leaves it answering normally.
-  const { page } = pagedFixture(ROWS);
+  // Every share read is a page since #996 wave 4, so the denial has to reach
+  // this door too — the taxonomy pair keeps answering, which is the point:
+  // a parked share scope costs the audience column, never the drive.
+  const { page } = pagedFixture(
+    ROWS,
+    shareDenied ? { deniedEntities: SHARE_ENTITIES } : {}
+  );
   return {
     ctx: { vault: { page, read, search: read } } as unknown as never,
     read,

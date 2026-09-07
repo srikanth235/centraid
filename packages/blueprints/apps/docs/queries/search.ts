@@ -16,6 +16,7 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import {
   ownerKey,
   readRepresentations,
@@ -58,18 +59,19 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const hits = (matches.rows ?? []) as unknown as SearchHit[];
     if (hits.length === 0) return { documents: [] };
     const documentIds = hits.map((d) => d.document_id);
-    const [tags, concepts, schemes] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.tag",
-        where: [
-          { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
-          { column: "target_id", op: "in", value: documentIds },
-        ],
+    const matchedIn = inList("target_id", documentIds);
+    const [tagRows, concepts, schemes] = await Promise.all([
+      // Bounded by the hits the search returned, so walked to the end of them.
+      readPages<TagRow>(ctx, {
+        name: "docs.search.tags",
+        select: "tag_id, target_id, concept_id, target_type",
+        from: "core_tag",
+        where: `target_type = ? AND ${matchedIn.sql}`,
+        bind: [DOCUMENT_TARGET_TYPE, ...matchedIn.bind],
+        order: { sortColumn: "tag_id", pkColumn: "tag_id", descending: false },
       }),
       ...conceptTaxonomyReads(ctx),
     ]);
-    const tagRows = (tags.rows ?? []) as unknown as TagRow[];
     const conceptRows = concepts as unknown as ConceptRow[];
     const schemeRows = schemes as unknown as SchemeRow[];
     // Free-form labels (#352) reuse ./_shared.ts's helper; a small bounded
@@ -113,15 +115,22 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
 
     // Bounded by the matched wrappers' current_content_id set, custody too.
     const contentIds = [...new Set(hits.map((d) => d.current_content_id))];
-    const [contents, custodyByContent, sharesByDoc, representations] =
+    const [contentRows, custodyByContent, sharesByDoc, representations] =
       await Promise.all([
         contentIds.length > 0
-          ? ctx.vault.read({
-              acceptTruncation: true,
-              entity: "core.content_item",
-              where: [{ column: "content_id", op: "in", value: contentIds }],
+          ? readPages<ContentRow>(ctx, {
+              name: "docs.search.contents",
+              select: "content_id, byte_size, content_uri",
+              from: "core_content_item",
+              where: inList("content_id", contentIds).sql,
+              bind: inList("content_id", contentIds).bind,
+              order: {
+                sortColumn: "content_id",
+                pkColumn: "content_id",
+                descending: false,
+              },
             })
-          : { rows: [] as Record<string, unknown>[] },
+          : Promise.resolve([] as ContentRow[]),
         readCustodyByContent({ ctx, contentIds }),
         // Shares (#821) bounded by matched documents; same join drive.ts makes.
         readSharesByDocument({
@@ -133,12 +142,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         // The byte row carries no media type since #996 (R20(b)).
         readRepresentations({ ctx, contentIds }),
       ]);
-    const contentById = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
-        c.content_id,
-        c,
-      ])
-    );
+    const contentById = new Map(contentRows.map((c) => [c.content_id, c]));
 
     // Blob-backed bytes serve as same-origin URLs (#296).
     const srcOf = (c: ContentRow | undefined) =>

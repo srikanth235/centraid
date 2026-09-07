@@ -13,6 +13,7 @@
  * one history.
  */
 
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import {
   ownerKey,
   readRepresentations,
@@ -44,32 +45,46 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
   const documentId = String(input?.document_id ?? "");
   if (!documentId) return { versions: [] };
   try {
-    const docRes = await ctx.vault.read({
-      entity: "core.document",
-      where: [{ column: "document_id", op: "eq", value: documentId }],
+    // ONE ROW, ASKED FOR AS ONE ROW (#996 wave 4). A page's window is part of
+    // its type, so the document read says `limit: 1` and means it.
+    const docPage = await ctx.vault.page<DocumentRow>({
+      query: {
+        name: "docs.history.document",
+        select:
+          "document_id, current_content_id, current_revision_id, created_at",
+        from: "core_document",
+        where: "document_id = ?",
+        bind: [documentId],
+        order: {
+          sortColumn: "document_id",
+          pkColumn: "document_id",
+          descending: false,
+        },
+      },
       limit: 1,
     });
-    const doc = ((docRes.rows ?? []) as unknown as DocumentRow[])[0];
+    const doc = docPage.rows[0];
     if (!doc) return { versions: [] };
 
     // Every occurrence of THIS document, newest first. One read: the chain is
     // walked in memory over ids the same read returned, so a long history
     // costs one round trip rather than one per version.
-    const revisions = await ctx.vault.read({
-      entity: "core.entity_revision",
-      where: [
-        { column: "entity_type", op: "eq", value: "core.document" },
-        { column: "entity_id", op: "eq", value: documentId },
-      ],
-      orderBy: { column: "recorded_at", dir: "desc" },
+    const revisions = await ctx.vault.page<RevisionRow>({
+      query: {
+        name: "docs.history.revisions",
+        select: "revision_id, content_id, parent_revision_id, recorded_at",
+        from: "core_entity_revision",
+        where: "entity_type = ? AND entity_id = ?",
+        bind: ["core.document", documentId],
+        order: {
+          sortColumn: "recorded_at",
+          pkColumn: "revision_id",
+          descending: true,
+        },
+      },
       limit: MAX_CHAIN_STEPS,
     });
-    const byId = new Map(
-      ((revisions.rows ?? []) as unknown as RevisionRow[]).map((row) => [
-        row.revision_id,
-        row,
-      ])
-    );
+    const byId = new Map(revisions.rows.map((row) => [row.revision_id, row]));
     const chainIds: string[] = [];
     const assertedAtOf = new Map<string, string>();
     const seen = new Set<string>();
@@ -89,11 +104,21 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
     // version: the bytes it is currently made of. Honest absence, not a hole.
     if (chainIds.length === 0) chainIds.push(doc.current_content_id);
 
-    const [contents, representations] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.content_item",
-        where: [{ column: "content_id", op: "in", value: chainIds }],
+    const contentIn = inList("content_id", chainIds);
+    const [contentRows, representations] = await Promise.all([
+      // Bounded by the chain the walk above produced, so it is walked to the
+      // end of that set rather than taking one window of it.
+      readPages<ContentRow>(ctx, {
+        name: "docs.history.contents",
+        select: "content_id, byte_size, content_uri, created_at",
+        from: "core_content_item",
+        where: contentIn.sql,
+        bind: contentIn.bind,
+        order: {
+          sortColumn: "content_id",
+          pkColumn: "content_id",
+          descending: false,
+        },
       }),
       // Bytes carry no media type since #996 (R20(b)). A SUPERSEDED version
       // has no representation of its own — the document's moved with the head
@@ -104,12 +129,7 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
     const documentMediaType =
       representations.byOwner.get(ownerKey("core.document", doc.document_id)) ??
       null;
-    const contentById = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
-        c.content_id,
-        c,
-      ])
-    );
+    const contentById = new Map(contentRows.map((c) => [c.content_id, c]));
 
     const srcOf = (c: ContentRow | undefined) =>
       typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
