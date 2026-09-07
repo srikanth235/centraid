@@ -3868,3 +3868,80 @@ The five: `IS_SANDBOX=yes` where `acp/launch.test.ts` expects `1` (2), no `sqlit
 ### Still ahead, and why the split
 
 The gate deletion — permits, `PermitGate.tsx`, `AuthPayload`, the `authenticate` op and its four call sites, `locker-auth.ts`, `locker_auth_credential`, and `Lock.tsx` → `LockerSession` — is not in this commit. It is one change, not two: the blueprint's `queries/auth.ts` calls `ctx.vault.authenticate`, so deleting the op without replacing the screens leaves the app broken, and replacing the screens needs something that does not exist yet — **a way for blueprint code to reach `K`**. The blueprint reads through `window.centraid.read`; `LockerSession` holds `K` in `packages/client`; there is no bridge between them, and `gateway.reveal` still unseals server-side, which R13 says must stop. That bridge is a design decision about the app surface, not a mechanical deletion, and it is named here so the next slice starts from it rather than discovering it.
+### The lock lane's commit-back, and what it may write
+
+The lane works: run 34100134506 on 39a0bfcf3 pushed bcf17bd3f, and
+`apps/mobile/ios/Podfile.lock` now carries `ExpoSQLite (57.0.2)` and no
+op-sqlite. Two consequences of a job that pushes.
+
+**The root fetches before every push.** `.github/workflows/mobile-ios-lock.yml`
+commits back to the branch it read on every push that touches a native input, so
+`claude/checkout-remote-main-70f7lb` can move under the root at any moment with
+no local action. A push that did not fetch first is a non-fast-forward at best
+and a lost lock at worst.
+
+**The bot may not write `apps/mobile/native-fingerprints.json`.** CI rejected the
+value it wrote — mobile-smoke on bcf17bd3f reported `ios native fingerprint
+mismatch: committed be5176356574d46073d103d8d731aeb6914565bf, current
+4cdab9719d86b91f5ffbc2267efd1523d38e9326`. The ios hash is platform-dependent,
+proved rather than assumed: creating
+`node_modules/expo-sqlite/ios/vec.xcframework` and recomputing moves it
+(`4cdab9719d…` → `b20d5b4378…`). The macOS lane necessarily has that directory,
+because it builds it, plus the `sqlite3.c`/`sqlite3.h` that
+`ExpoSQLite.podspec`'s `vendor_sqlite_src!` copies into the same module during
+`pod install`. A fingerprint computed after those exist can never equal one an
+ubuntu checker reproduces. So the lane keeps running `ci:native-state --write` —
+that is the fail-closed L1–L3 gate over what `pod install` just produced — and
+`git add`s only `apps/mobile/ios/Podfile.lock`, leaving the refreshed
+fingerprints on the runner's disk. The fingerprint belongs to whoever changes
+native inputs, regenerated on Linux, which is how this merge resolved it:
+`bun run --cwd apps/mobile ci:native-state --write` against the merged tree
+produced ios `4cdab9719d…` / android `df5d7e6f6c…`, the exact value CI computed.
+
+`bun run --cwd apps/mobile ci:versions` is not part of this: ci.yml:972-987 runs
+it `continue-on-error: true` and `exit 0`, writing the Expo pin-skew list to the
+step summary. It is advisory by construction and cannot fail `mobile-smoke`.
+
+```
+bun run --cwd apps/mobile ci:native-state --write   # regenerated on the merged tree
+bun run --cwd apps/mobile ci:native-state           # green: lock, paths, both fingerprints
+```
+
+### The bot's commit is made governance-compliant
+
+CI `governance` (run 34103181691) rejected bcf17bd3f:
+`commit-issue-receipt-match — commit touches no receipts/issue-*.md`. Every
+future commit-back would fail identically, so
+`.github/workflows/mobile-ios-lock.yml`'s commit step now writes a body line
+`governance: allow-commit-issue-receipt-match bot-regenerated lockfile; …`,
+which is the escape the directive itself documents
+(`.governance/packs/governance-kit/audit/directives/commit-issue-receipt-match/check.sh:29-33`,
+reason required — a bare token does not waive). The alternative, having the bot
+append prose to `receipts/issue-996-one-vault-every-seat.md`, is worse: a bot
+writing into an append-only audit artifact is exactly what that artifact exists
+to prevent. The directive itself is untouched.
+
+The other body-reading directives were checked rather than assumed.
+`commit-message-format` wants Conventional Commits plus an issue suffix, which
+the subject `chore(mobile): regenerate ios/Podfile.lock for expo-sqlite (#996)`
+already satisfies. `agent-session-identity` keys on a detected agent runtime and
+skips a plain `git commit` on a runner. `toolchain-config-protection` reads the
+body too, but only for commits touching protected paths, and this one touches
+`apps/mobile/ios/Podfile.lock` alone.
+
+**Proved, not reasoned.** A commit shaped exactly like the bot's — same subject,
+same waiver body, no receipt in its diff — was made locally and
+`bash .governance/run.sh` walked it: it raises no violation. The single
+violation the run reports is bcf17bd3f itself, the already-pushed commit this
+change prevents recurring; its body cannot be edited now that it is merged, so
+it stays red on this branch's history until the branch is squashed or rewritten.
+That is a call for whoever owns the branch, not something a lane commit should
+paper over.
+
+```
+git commit --allow-empty -m "chore(mobile): regenerate ios/Podfile.lock for expo-sqlite (#996)" \
+  -m "governance: allow-commit-issue-receipt-match bot-regenerated lockfile; …"
+bash .governance/run.sh    # the simulated commit passes; only bcf17bd3f is flagged
+bun run lint:workflow-pins # 24 workflows clean
+bun run format:check       # clean
+```
