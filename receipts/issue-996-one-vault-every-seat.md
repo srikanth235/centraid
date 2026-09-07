@@ -4062,6 +4062,54 @@ The Locker blueprint's screens still drive the gateway's permit flow: `app-root.
 | --- | --- |
 | **W6-D1** | **`schema/sealed.ts` STAYS. R13 supersedes the Locker _gate_, not the §293 sealed-column class.** The wave's scope line reads "the sealed registry is deleted", and taken literally that would have deleted the column class with it. It must not: the gate had exactly one consumer and the class has three that the key plane does not touch. What goes is what `K` replaced — permits, the `authenticate` op, `locker-auth.ts`, `PermitGate.tsx`, `AuthPayload` and the permit screens — because no consumer of the gate survives a seat that decrypts locally. What stays is `SEALED_COLUMNS` and the machinery around it, because `sync.connection_credential`'s five broker-token columns, the ext band's per-app declared `sealed` lists, and the journal redaction / error-text scrub (`redactCommandInput`, `scrubSealedText`, `sealedHashToken`) each depend on it and none of them is a Locker reveal. Deleting the class to satisfy a scope line would have turned a gateway that must inject OAuth tokens into a gateway that stores them in the clear. The Locker entries in the registry stay too, for the redaction half: `key_id` and the `lk1:` ciphertext must still be hash-not-value in the append-only journal. Ruled by the coordinator on the finding raised at the close of wave 6 commit 3. |
 
+## Wave 6 — the write path names its key, and the key files stop escaping
+
+Two seams, both named at the close of the last commit, both closed here. No deletions: the gate deletion is still ahead, and this is the rule it will be deleted against.
+
+### `assertLiveLockerKeyId` on the write path
+
+`stampLockerKeyOnWrite` is called from `sealWrites` — the ONE chokepoint every writer passes (`gateway/execution.ts:162`) — so this is the engine's rule rather than each command's convention, which is the same reason the seal sweep lives there. Three cases:
+
+- a row with no `lk1:` ciphertext joins the live key, so the next write has something to compare against rather than a NULL to interpret;
+- a row whose ciphertext is under the live key is stored;
+- a row whose ciphertext is under any other key is **refused** with "re-enter this secret".
+
+The third is what it exists for: an offline seat's intent queued before a rotation and replayed after it. The gateway holds `K′` and the ciphertext is under `K` — and it will not decrypt on the caller's behalf even though it still could, because that is precisely the behaviour the key plane removed. The only repair is the owner typing the secret again, so that is what the message says.
+
+**A NULL `key_id` beside ciphertext is a refusal, not a default.** Stamping the live id over ciphertext whose key nothing names would record a lie that surfaces only at the next reveal — the failure mode #298 spent a ruling on, in a new place. The seat runs the same check before it posts (`locker-secret.ts`), where the plaintext is still in hand; that one is a courtesy to the owner, this one is the rule.
+
+### 118,214 key files in `/tmp`
+
+A test-hygiene bug with a real security shape, found by the coordinator while the disk filled. `/tmp/keys` held **118,214 files** written by test runs — roughly 39k identity seeds, 39k public pins, 38k sealing keys and 1.5k Locker vault keys — real key material for vaults that stopped existing months ago, in a directory no test owned and no cleanup removed.
+
+Nothing was wrong with the key code. `sealKeyFileFor` and `lockerKeyDirFor` both resolve `<dataRoot>/keys` from the vault directory's PARENT, deliberately outside the directory that export, backup and copy gestures move around — that is the property that makes a copied vault ciphertext-only, and it is correct. What was wrong is that `tempDir()` handed back a directory sitting DIRECTLY in the OS temp dir, so "the parent of the vault directory" was `/tmp`.
+
+The fix is in `packages/test-kit/src/temp-dir.ts` and nowhere else: `mkdtemp` still makes the root, but the root is what is TRACKED and removed, and callers get a `work/` directory inside it. Key custody then resolves to `<root>/keys`, inside the tree the existing `afterAll` already owns, and a caller that removes the directory it was given still leaves nothing behind. **No call site changes**, which is what made this the fix rather than one of the alternatives: seven hundred suites cannot each be trusted to remember where their keys went, and a per-suite `afterEach` would have been the same bug waiting for the next suite to be written.
+
+Measured, not assumed: `packages/server/src` end to end, 389 files, `/tmp/keys` delta **0** — before 118,244, after 118,244. Nothing in the repository reads `/tmp/keys` (`grep` finds only the comment in `temp-dir.ts` that explains it), so the directory is safe to delete.
+
+### Files
+
+- `packages/vault/src/gateway/locker-key-plane.ts` — `stampLockerKeyOnWrite`
+- `packages/vault/src/gateway/locker-key-plane.test.ts` — the stamp, the stale refusal, the NULL refusal
+- `packages/vault/src/gateway/execution.ts` — the call, at the chokepoint, before the seal sweep
+- `packages/vault/src/index.ts` — the export
+- `packages/test-kit/src/temp-dir.ts` — the tracked root, and the `work/` directory inside it
+
+### Gates
+
+```
+bunx vitest run packages/vault/src     # 208 files, 1689 passed, 2 skipped
+bunx vitest run packages/server/src    # 383 files passed; 5 failed, none this wave's
+bun run governance < /dev/null         # 22/22
+bun run check:push:static              # stamped on the committed tree
+```
+
+The five: `IS_SANDBOX=yes` where `acp/launch.test.ts` expects `1` (2), no `sqlite3` binary for `gateway-db-lock.integration.test.ts` (1), and two that arrived with the merge of the designated branch and fail identically with this commit's changes stashed — `replica-intent-projected.test.ts` (`route.entity` absent from the forwarded edit) and `protocol-join-lane.test.ts` (`judgeGatewayInfo` answering `ok: false`). Both belong to the wave that landed `projected-edit.ts`; raising them rather than absorbing them.
+
+### Still ahead, and why the split
+
+The gate deletion — permits, `PermitGate.tsx`, `AuthPayload`, the `authenticate` op and its four call sites, `locker-auth.ts`, `locker_auth_credential`, and `Lock.tsx` → `LockerSession` — is not in this commit. It is one change, not two: the blueprint's `queries/auth.ts` calls `ctx.vault.authenticate`, so deleting the op without replacing the screens leaves the app broken, and replacing the screens needs something that does not exist yet — **a way for blueprint code to reach `K`**. The blueprint reads through `window.centraid.read`; `LockerSession` holds `K` in `packages/client`; there is no bridge between them, and `gateway.reveal` still unseals server-side, which R13 says must stop. That bridge is a design decision about the app surface, not a mechanical deletion, and it is named here so the next slice starts from it rather than discovering it.
 ### The lock lane's commit-back, and what it may write
 
 The lane works: run 34100134506 on 39a0bfcf3 pushed bcf17bd3f, and
