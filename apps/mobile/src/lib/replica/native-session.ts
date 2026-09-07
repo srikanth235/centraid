@@ -473,10 +473,18 @@ export class NativeReplicaSession implements MobileReplicaSession {
     // Absent is never empty: a deferred act is durable yet draws nothing, so it
     // says so rather than borrowing the ordinary offline sentence.
     if (deferred) await this.markDeferred(intent);
-    await this.publishProtectedContent();
+    // NOT AWAITED, and that is load-bearing: every await between the enqueue
+    // and the waiter registration below is a window in which the drain can
+    // settle this intent before anything is listening, and the caller's
+    // `write()` then never resolves.
+    void this.publishProtectedContent();
     const settled = terminalResult(intent);
     if (settled) return settled;
     if (!this.#isConnected()) {
+      // Awaited on THIS path only: no waiter is registered here, so there is
+      // no race to widen, and an offline write is exactly the one whose bytes
+      // must be protected before the caller can act on the answer.
+      await this.publishProtectedContent();
       return {
         intentId: intent.intentId,
         status: "queued",
@@ -800,12 +808,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
 
   async flushIntents(): Promise<void> {
     if (this.#closed || !this.#isConnected()) return;
-    if (this.#rebootstrapping) {
-      // Admitted and held, in the member's words. The drain resumes from the
-      // outbox the moment the new copy is in place.
-      this.settleWaitersAsQueued(admissionDuringRebootstrap().reason);
-      return;
-    }
     if (!(await this.#isNetworkWorkAllowed())) {
       // A paused drain must not hang an awaited write(); the intent is durable.
       this.settleWaitersAsQueued(
@@ -818,15 +820,13 @@ export class NativeReplicaSession implements MobileReplicaSession {
       return this.#drainPromise;
     }
     this.#drainRequested = false;
-    this.#drainPromise = this.drainLoop()
-      .finally(() => void this.publishProtectedContent())
-      .finally(() => {
-        this.#drainPromise = undefined;
-        if (this.#drainRequested) {
-          this.#drainRequested = false;
-          void this.flushIntents();
-        }
-      });
+    this.#drainPromise = this.drainLoop().finally(() => {
+      this.#drainPromise = undefined;
+      if (this.#drainRequested) {
+        this.#drainRequested = false;
+        void this.flushIntents();
+      }
+    });
     return this.#drainPromise;
   }
 
@@ -1063,6 +1063,17 @@ export class NativeReplicaSession implements MobileReplicaSession {
       if (this.#closed) return;
       if (!this.#isConnected()) {
         this.settleWaitersAsQueued("waiting for a connection");
+        return;
+      }
+      // QUIESCE, WHICH IS NOT A STOP (R23, `SEAT_REBOOTSTRAP_CUTOVER` step 1).
+      // While the copy is being replaced this claims nothing new — an answer
+      // arriving mid-swap would be reconciled against a file that is about to
+      // go — but an intent ALREADY SENDING keeps its answer, which is why the
+      // check is here and not at the top of `flushIntents`. Cutting the whole
+      // drain would strand a claimed intent in `sending` until the next
+      // process open, and the member would be told nothing at all.
+      if (this.#rebootstrapping) {
+        this.settleWaitersAsQueued(admissionDuringRebootstrap().reason);
         return;
       }
       let intent: ReplicaIntent | undefined;

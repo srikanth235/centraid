@@ -4805,3 +4805,55 @@ deleted file and now names its successors.
 - **The device rung stays a row, not a promise.** An `unmeasured` entry naming
   its probe and its missing steps is an answer; deleting the row would make the
   gap invisible.
+
+## Wave 3 — the hold quiesces, and an extra `.finally` was dropping a drain
+
+Two defects in the previous two commits, both found by
+`bun run test:integration:mobile` against a real gateway, which took the known
+12 failures to 19. Neither was visible to any unit suite.
+
+### A hold at the top of `flushIntents` strands what is already sending
+
+`SEAT_REBOOTSTRAP_CUTOVER`'s first step is "quiesce: stop claiming intents; an
+intent already SENDING keeps its answer", and returning early from
+`flushIntents` does something else: it cuts the whole drain, including the post
+that is already in flight, and leaves that intent in `sending` — a state
+`claimNext` never picks up again, so it waits for the next process open. Seven
+`denied` journeys read exactly that. The check belongs where the claim happens,
+so it is in `drainLoop` now: nothing new is claimed while the copy is being
+replaced, an intent already sending keeps its answer, and an awaited write
+still gets the admission sentence.
+
+### An extra promise link is not free on a re-entrant drain
+
+`#drainPromise = this.drainLoop().finally(publish).finally(reset)` looks
+equivalent to putting the publish inside the existing `finally`. It is not: the
+extra link defers `#drainPromise = undefined` and the `#drainRequested`
+re-entry by a microtask, and a drain requested during the last one is dropped.
+That alone accounted for the remaining failures. The publish is a statement
+inside the existing finally now.
+
+A third, smaller one, found the same way: the publish after an ENQUEUE must not
+be awaited on the online path. Every await between the enqueue and the waiter
+registration widens the window in which the drain settles the intent before
+anything is listening, and the caller's `write()` then never resolves. It is
+awaited only on the offline path, where no waiter exists and where the bytes
+must be protected before the caller can act on the answer.
+
+`bun run test:integration:mobile` is back to the known 12 — the 8 conflict
+cases and 3 parked cases the log lane owns, plus `locker` denied — with 57
+passing.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `apps/mobile/src/lib/replica/native-session.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — quiescing
+
+- **The quiesce is a claim gate, not a drain gate.** The cutover's own wording
+  says so, and the difference is a stranded intent.
+- **Promise-chain shape is behaviour on a re-entrant drain.** A `.finally`
+  added for tidiness moved a reset by one microtask and cost eight journeys.
