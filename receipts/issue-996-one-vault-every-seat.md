@@ -2784,6 +2784,44 @@ apps/web e2e (chromium, flag ON vs OFF)  # 30 passed / 20 failed, identical sets
   with the flag on and off", which is a claim this container CAN establish and
   which is the one the exit criterion is really about.
 
+## Wave 6 — the key plane (R13)
+
+Locker v0 begins where its boundary does. Until this commit a Locker secret was plaintext the **gateway** could produce: ciphertext at rest under the vault DEK, opened by the gateway on a permit the gateway itself minted after checking a verifier it also held. That is a boundary the holder of the process walks through. The key plane replaces it: one random `K` per vault, minted at **founding** into the gateway's `keys/` directory, secrets stored as `lk1:<base64(nonce‖ct‖tag)>` under AES-256-GCM with AAD `<rowId>‖<keyId>`, and `key_id` on the row saying which key opens it. The gateway holds `K` so it can serve it to an enrolled seat and rotate it — never so it can decrypt on a caller's behalf.
+
+Four decisions this commit makes, each because the alternative was worse:
+
+- **`locker_key` is private and `key_id` carries no foreign key.** The first draft registered `locker.key` as an ontology entity so the reference would be a real FK. That was wrong twice: a registered entity is a `core_entity` supertype member, which would have mutated the FROZEN rung-one baseline text (`core_entity_kind`'s generated INSERT list) and left every existing file without the new kind row; and an FK from replicated `locker_item` into it would have broken the one property `private-tables.ts` exists to keep. Which key a host holds is host custody — the `credential` class — and a seat never asks the file which key is live. It holds `K` and its id from the key door, and "may I open this row" is `row.key_id === my key id`.
+- **The nonce rides inside the value's envelope, the key id is a row column.** `locker_item` has five secret columns; one nonce column could serve one of them. The key id is per ROW because rotation rewrites a row's secrets together, and it is stored as a column **as well as** bound into the AAD — so a ciphertext cannot be replayed under a key it was not sealed with, which a bare blob column would have permitted.
+- **Founding, not first need.** #298 spent a ruling on what the seal key's lazy mint cost: a window in which "is this the right key" had no answer. The plane has no such window — `liveLockerKeyId` is non-null for the life of the vault, and a missing file is unambiguously custody loss rather than possibly a fresh vault.
+- **Retire before insert, inside one transaction.** `locker_key_live_idx` is a partial unique index over the PREDICATE `retired_at IS NULL`, not over the column — SQLite treats NULLs as distinct, so indexing the column would have permitted any number of live rows. It is checked per statement, which is what forced the order and is why "two live keys" is unrepresentable rather than merely unlikely. The test that found this is the stale-`key_id` one.
+
+### Rotation, and the crash between two stores
+
+`keys/` and `vault.db` cannot commit together, so the ORDER is the guarantee: write `K′`; one transaction (retire, insert, re-encrypt every secret, bump every `key_id`); delete the old file. `locker-key-plane.test.ts` interrupts the first window with a fault-injection seam and reopens the vault: the database is untouched, the live key still opens every secret, and the sweep removes the orphan `K′` no row named. The second window is reproduced by putting the retired file back: the database is the sole authority, and the sweep needs no memory of where the crash happened. Ciphertext is never under two keys in either.
+
+### The kit carries the keys; the snapshot never does
+
+`recoveryKitTarget.lockerKeys` is a **list**, not a key. A rotation writes `K′` to disk before the vault names it, so a kit written in that window carrying only the live id restores ciphertext that stops opening the moment the rotation completes — the placebo restore in its sharpest form. `recover()` refuses a target with no Locker key file, with the reason, **before** adopting. Membership of that list is part of `recoveryKitFingerprint`; order is not.
+
+### Files
+
+- `packages/vault/src/gateway/locker-key-plane.ts` — the plane: founding, the wire form and AAD, `assertLiveLockerKeyId`, rotation, the sweep, the kit's key set
+- `packages/vault/src/gateway/locker-key-plane.test.ts` — 10 tests, including both crash windows
+- `packages/vault/src/schema/domains-locker.ts` — `LOCKER_KEY_DDL` (rung six)
+- `packages/vault/src/schema/migrate.ts` · `migrate.test.ts` — rung six; `user_version` 5 → 6
+- `packages/vault/src/schema/private-tables.ts` · `local-tables.ts` — `locker_key` declared, twice, for its two different readers
+- `packages/vault/src/db.ts` — `lockerKey()` / `lockerCustody()` on `VaultDb`: founded on first ask, swept beside it, and re-resolved after a rotation
+- `packages/vault/src/bootstrap.ts` — founding, where the vault is founded
+- `packages/vault/src/index.ts` — the plane's exports
+- `packages/server/src/routes/vault-routes.ts` · `packages/server/src/serve/erase-recovery.ts` — erase destroys `K` with the DEK, on both the direct and the crash-resumed path
+- `packages/server/src/routes/replica-shape-parity.test.ts` — `locker`'s shape id, re-taken for `key_id`
+- `packages/server/src/engine/stores/gateway-db.test.ts` — the ledger band's rung count
+- `packages/server/src/backup/backup.integration.test.ts` — an adopt carries the Locker key files with the DEK
+- `packages/backup/src/engine.ts` · `recovery-kit.ts` · `recovery-kit.test.ts` — `lockerKeys` on the target, validated and fingerprinted
+- `packages/server/src/backup/backup-recovery-kit.ts` — the kit fills it from custody
+- `packages/server/src/backup/recover.ts` — restore refuses without a key file
+- `docs/recovery/backup-restore.md` — the key `K` section, rung six, and the two new invariant rows
+- `scripts/docs-site/src/content/ontology-body.html` — `key_id` on the three Locker tables
 ## Wave 3 — the driver swap: expo-sqlite, SQLCipher, and a floor of 3.49.1
 
 op-sqlite is gone. The phone's SQLite is now expo-sqlite built against
@@ -2924,6 +2962,41 @@ ReactNativeDependencies and the Hermes tag, and nothing else.
 ### Gates
 
 ```
+bunx vitest run packages/vault/src     # 208 files, 1685 passed, 2 skipped
+bunx vitest run packages/backup/src    # 229 files, 2025 passed, 28 skipped (with vault)
+bunx vitest run packages/server/src    # 381 files passed; 7 failed, all environmental
+bun run check:push:static              # stamped on the committed tree
+```
+
+The seven: `IS_SANDBOX=yes` in this container where `acp/launch.test.ts` expects `1` (2); no `sqlite3` binary for `gateway-db-lock.integration.test.ts` (1); and a host disk at 98% (822 MB free), which `VaultBlobBackpressureError` and `ENOSPC` report in `recover.integration.test.ts`, `vault-plane-maintenance.test.ts` and `vault-registry-footprint.test.ts` (4). None touches the key plane; all seven fail the same way on the tree this commit was cut from.
+
+### A decision the tests made, not the design
+
+`K` is named for the vault's own id (`core_vault.vault_id`), never for `path.basename(vaultDir)`. The first draft used the directory name — the spelling `sealKeyFileFor` uses — and three suites said why that is wrong: `vault-registry.test.ts` copies a vault directory under a new name and expects the DUPLICATE-ID error, `backup.integration.test.ts` adopts a restored directory, and `seal-custody.test.ts` renames one. The DEK survives all three only because a vault that has never sealed may mint a fresh key; `K` has no such escape, so the name has to follow the vault. That in turn is why founding happens in `bootstrapVault` rather than at the top of `openVaultDb`: the id is not in the file until the vault exists.
+
+## Wave 6 — enrollment hands `K`; the door serves it
+
+Wave 1 declared `/_vault/seat/locker-key` and had it authenticate and then refuse, so a seat could tell "this gateway has no key plane" from "this gateway is older than the door". It serves now, and the shape of what it serves is the ruling.
+
+**The principal is the device row.** `resolveReplicaAccess` — the same resolution the snapshot and log doors use — has already refused an unenrolled or revoked device by the time the handler runs, and that is the whole authorization question here: an enrolment covers the vault, and `K` opens the vault's Locker. There is no narrower principal to consult and no per-row question to ask.
+
+**The pairing ticket does not carry `K`, and this is why.** The ticket is a base64url payload a camera reads off a screen. It is seen by whatever is pointed at that screen, it survives the glance in a photo roll, and it is validated **before any device exists to be the principal** — there is nothing yet to name, nothing to check a revocation tombstone against, nothing to refuse. A vault key handed out that way is handed to the room, and revoking the device afterwards reaches none of the copies. Fetching it afterwards costs one authenticated request and buys a principal the gateway can name. `seat-routes.test.ts` pins both halves: a revoked device is refused, and the ticket codec's payload is asserted key-shaped by its exact field set, so adding `K` to it would fail a test rather than pass a review.
+
+**`Cache-Control: no-store`.** A proxy or a service worker holding `K` is a second copy of the key in a place nothing revokes.
+
+**The seat's half keeps nothing.** `fetchLockerVaultKey` returns bytes and holds no module-level cache — a cache there would be a fourth copy of the key that no lock covers, and a test asserts two asks are two requests. It refuses an algorithm it does not implement rather than guessing, because decrypting under the wrong construction is silent where refusing is loud, and it refuses a key that is not 32 bytes. What the caller does with the bytes is the unlock boundary, and that is the next commit's subject, not this module's.
+
+**The foreign-device receipt stamp.** A reveal receipt is a device intent the gateway stamps, and with the seat decrypting locally the receipt is the only record of who looked. So `replica-intent-route.ts` takes the device from `context.access.deviceId` and a body-supplied `deviceId` reaches nothing: the outcome row is the session's principal's, and the forged name resolves to no outcome at all. If the payload could name the device, "which seat revealed this secret" would be a claim rather than evidence — forgeable by the one party the trail exists to hold to account.
+
+### Files
+
+- `packages/core/src/protocol/seat-log.ts` · `packages/core/src/protocol/index.ts` — `SeatLockerKeyWire`; `keyId` is as load-bearing as `key`
+- `packages/core/src/protocol/routes.ts` — the door's comment, now that it serves
+- `packages/server/src/routes/seat-routes.ts` — the key door
+- `packages/server/src/routes/seat-routes.test.ts` — served to the enrolled row, refused to the revoked one, and the ticket's field set
+- `packages/client/src/locker/locker-key-door.ts` · `locker-key-door.test.ts` — the seat's half: fetch, refuse, keep nothing
+- `packages/client/src/index.ts` — its export
+- `packages/server/src/routes/replica-intent-attribution.test.ts` — the foreign-device stamp
 bunx vitest run --root apps/mobile src/lib/replica src/kit/replica src/lib/upload
                                        # 56 files, 449 passed
 bun run --cwd apps/mobile test         # 287 files, 2448 tests; 1 red
@@ -3287,6 +3360,10 @@ after:  added 31663  duplicated 449 (1.4%)
 ### Gates
 
 ```
+bunx vitest run packages/server/src/routes/seat-routes.test.ts                    # 11 passed
+bunx vitest run packages/server/src/routes/replica-intent-attribution.test.ts     # 5 passed
+bunx vitest run packages/client/src/locker                                        # 5 passed
+bun run check:push:static                                                         # stamped on the committed tree
 bunx vitest run …                     # vault schema/replica/operations/commands, client seat, server seat-routes
 bunx vitest run -c vitest.quality.config.ts tests/quality/seat-replay-parity.test.ts
 bun run --filter @centraid/vault build
@@ -3340,3 +3417,40 @@ nm -u bad.so  | grep -c sqlite3_    # 74
 bun run lint:workflow-pins && bun run format:check
 bash .governance/run.sh
 ```
+## Wave 6 — the unlock boundary on each seat
+
+R13 says the sentence this commit is built around: **storage is not authorization**. A non-extractable WebCrypto key stops export, not use by app code running on the page. Electron's `safeStorage` encrypts at rest and prompts for nothing. IndexedDB is readable by the origin that wrote it. Each of those makes `K` harder to carry away and none of them makes a person prove they are present — so shipping one as if it were a boundary is how the gateway's permit gets deleted in exchange for nothing.
+
+**The phone already had the boundary; it was guarding the wrong thing.** `locker-device-auth.ts` held a device secret whose only job was to buy a permit, after which the gateway decrypted and sent back plaintext. The same store, under the same `requireAuthentication` / `WHEN_PASSCODE_SET_THIS_DEVICE_ONLY` options, now holds `K` — and the reveal happens on the device. The keychain will not return the item without Face ID, Touch ID or the passcode; the item does not exist on a device with no passcode and does not travel in a backup. Session cache with the gate's own five minutes, because a prompt per field is a prompt nobody reads, and `lockLocker()` rides `clearSecureCache()` so one gesture drops every decrypted credential the app holds rather than this one and whatever else remembered to listen.
+
+**Desktop and PWA get one boundary, not two.** Per R-A3, Touch ID is deferred — `promptTouchID` needs a signed, entitled macOS build — so both seats get the `KNOWS` half: one local passphrase, PBKDF2-SHA-256 (600k rounds) over it, AES-GCM around `K`, and the wrapped blob is all that is ever at rest. `LockerSession` is shared; only the store differs — IndexedDB on the PWA, `safeStorage`-backed main-process storage on the desktop. The desktop bridge deliberately has no `getLockerVaultKey()`: the renderer unwraps, main never holds `K`, and a test asserts the interface's exact method set so adding one fails rather than passes review.
+
+**The clock is checked, not scheduled.** A `setTimeout` in a backgrounded tab, a suspended Electron window or a React Native app in the background may fire minutes late or never, and a session that expires only when a timer says so is a session that does not expire. `unlocked` compares the clock on every ask; `key()` locks as a side effect of finding itself expired, so a caller cannot ask twice and get two answers.
+
+**Nothing at rest is an oracle.** The wrapped blob carries no verifier: the only way to test a guess is to do the derivation, and salt and nonce are per wrap, so two enrolments of one vault are not comparable at rest either. A test asserts the blob's exact field set and that neither the passphrase nor the key appears in it.
+
+**The two envelopes are held equal by test, not by care.** `locker-secret.ts` is a second implementation of `locker-key-plane.ts`'s wire form, which is the shape that drifts. So `locker-secret.test.ts` encrypts with the gateway's node:crypto and decrypts with the seat's WebCrypto, and then the other way, over the same AAD — including a non-ASCII secret, which is where a `TextEncoder`/`Buffer` mismatch would show.
+
+**A stale `key_id` is refused with the message.** On the seat, before the intent is posted, where the plaintext is still in hand and "re-enter this secret" is an answer the owner can act on. `assertLiveLockerKeyId` in the vault is the gateway's own copy of the check, exported and tested; **its call site on the Locker write path is not wired yet** and lands with commit 4's rewrite of those commands.
+
+### Files
+
+- `packages/client/src/locker/locker-unlock.ts` · `locker-unlock.test.ts` — the PIN wrap, the session, the numbers carried over from the gate
+- `packages/client/src/locker/locker-secret.ts` · `locker-secret.test.ts` — local reveal, the AAD, the stale-key refusal, and the two implementations held equal
+- `packages/client/src/locker/wrapped-key-store.ts` · `wrapped-key-store.test.ts` — IndexedDB for the PWA, the desktop bridge, and a memory store for tests
+- `packages/client/src/index.ts` — their exports
+- `apps/mobile/src/apps/locker/locker-device-auth.ts` · `locker-device-auth.test.ts` — `K` behind the OS prompt, the session cache, `lockLocker()`
+- `apps/desktop/src/main/gateway-secrets.ts` — `lockerWrappedKeys` beside `gatewayWrappingKeys`; the wrapped blob only, and no way to ask main for `K`
+
+### Gates
+
+```
+bunx vitest run packages/client/src/locker                                  # 4 files, 23 passed
+cd apps/mobile && bunx vitest run src/apps/locker/locker-device-auth.test.ts  # 9 passed
+bunx tsc -p apps/desktop --noEmit                                           # clean
+bun run check:push:static                                                   # stamped on the committed tree
+```
+
+### What this commit does NOT do
+
+The Locker blueprint's screens still drive the gateway's permit flow: `app-root.tsx`, `session.ts`, `route-acts.ts` and `PermitGate.tsx` are unchanged, and `Lock.tsx` is not yet wired to `LockerSession`. The boundary is built, tested and demonstrated on each seat's code path — which is what the wave's ordering requires before the deletions — but the screens adopt it in commit 4, together with the permit's removal. Naming this here rather than letting the file list imply otherwise.

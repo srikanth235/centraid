@@ -53,10 +53,13 @@ const logger = {
 // Re-taken with #996 R6's `row_version`: a shape id is a digest over the
 // composed COLUMNS, and every mutable table gained one. The ids move whenever
 // the replicated column set does — which is exactly what this gate is for.
+// `locker` moved AGAIN with #996 R13: the three Locker tables that hold
+// ciphertext gained `key_id`, so a seat can tell a secret it may open from one
+// the vault has rotated past. No other app's shape touches those tables.
 const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
   agenda: "agenda:e279df85d90abec66a555fd4",
   docs: "docs:3463271306aa9de9eeee6770",
-  locker: "locker:df498eda12016162dc1e9dd6",
+  locker: "locker:c6c018d4d9e8a76c60e99738",
   notes: "notes:f969445530d0b54a5999f95e",
   people: "people:20e089695fca9f55a59937c7",
   photos: "photos:ec39825c59933ed5cbe9b925",

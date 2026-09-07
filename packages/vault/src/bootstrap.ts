@@ -155,6 +155,14 @@ export function bootstrapVault(
     ownerPartyId,
     options.deviceName ?? "first device"
   );
+  // `K` IS MINTED AT VAULT FOUNDING (#996, R13). Here rather than in
+  // `openVaultDb`, because the key is named for the vault and the vault does
+  // not exist until this function has written `core_vault`. Founding it now
+  // rather than at first need is what makes every later question answerable:
+  // the recovery kit always has a key file to carry, and a missing one is
+  // unambiguously custody loss rather than possibly a vault that never had a
+  // secret — the window #298 spent a whole ruling on for the sealed-column DEK.
+  db.lockerKey();
   return {
     vaultId,
     displayName,

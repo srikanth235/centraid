@@ -3,6 +3,7 @@ import type {
   RecoveryKitDocument,
   RecoveryKitTarget,
 } from "@centraid/backup";
+import { lockerKeyFilesInCustody } from "@centraid/vault";
 import type { KeyStore } from "@centraid/vault";
 
 import type { BackupState } from "./backup-state.js";
@@ -21,6 +22,13 @@ function targets(
     // The identity seed rides beside the DEK (#726) — same custody,
     // so `recover()` can restore both from one kit.
     identitySeed: requiredIdentitySeed(keyStore, vaultId).toString("base64"),
+    // EVERY LIVE LOCKER KEY FILE (#996, R13 as corrected). The snapshot never
+    // carries them, so this is the only artefact that can — and it carries
+    // the whole set rather than the one the vault currently names, because a
+    // kit written mid-rotation must survive the rotation completing.
+    lockerKeys: lockerKeyFilesInCustody({ store: keyStore, vaultId }).map(
+      (entry) => ({ keyId: entry.keyId, key: entry.key.toString("base64") })
+    ),
   }));
 }
 

@@ -94,3 +94,30 @@ export interface SeatSnapshotHead {
 
 /** The log door's ceiling on `limit`; a seat asks for more by asking again. */
 export const SEAT_LOG_MAX_PAGE = 10_000;
+
+/**
+ * THE LOCKER KEY DOOR'S ANSWER (#996, ruling R13).
+ *
+ * `K` reaches a seat over the AUTHENTICATED post-pair channel and never
+ * through the QR pairing ticket. The ticket is a base64url payload a camera
+ * reads off a screen; it is seen by whatever is pointed at that screen, it
+ * outlives the glance in a photo roll, and it is validated before any device
+ * exists to be the principal. A vault key handed out that way is a vault key
+ * handed to the room. So the ticket stays what it is — an invitation to
+ * enrol — and the key is fetched afterwards by the enrolled DEVICE ROW, which
+ * is a principal the gateway can name, check against a revocation tombstone,
+ * and refuse.
+ *
+ * `keyId` is as load-bearing as `key`: a seat compares it against the
+ * `key_id` on the row it is about to open or write, and a mismatch is a
+ * rotation it has not caught up with rather than a corrupt secret.
+ */
+export interface SeatLockerKeyWire {
+  readonly vaultId: string;
+  /** Which `locker_key` row this key is. */
+  readonly keyId: string;
+  /** `K`, base64. The only route by which a seat ever receives it. */
+  readonly key: string;
+  /** Named so a future scheme is a new value, never a silent reinterpretation. */
+  readonly algorithm: "aes-256-gcm";
+}

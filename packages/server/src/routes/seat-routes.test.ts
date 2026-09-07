@@ -2,8 +2,9 @@
 //
 // Two doors and a declared third, over a real vault plane: the sanitised file
 // with its ranges and its ETag, the log tail with its bounds and its epoch
-// gate, and the locker-key door that authenticates and then says plainly that
-// it has nothing yet.
+// gate, and the locker-key door that hands `K` to an enrolled device row —
+// and to nothing else, which is the half of R13 the pairing ticket is not
+// allowed to carry.
 
 import crypto from "node:crypto";
 import { promises as fs, readFileSync, writeFileSync } from "node:fs";
@@ -24,6 +25,10 @@ import {
 import { buildOntologyScenarios } from "@centraid/vault/tests/ontology-scenarios";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
+import {
+  encodePairingTicket,
+  parsePairingTicket,
+} from "../serve/pairing-ticket-codec.js";
 import { runWithVaultContext } from "../serve/vault-context.js";
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
@@ -94,6 +99,7 @@ describe("seat-routes", () => {
     plane: VaultPlane;
     handler: ReturnType<typeof makeSeatRouteHandler>;
     unscoped: ReturnType<typeof makeSeatRouteHandler>;
+    enrollments: EnrollmentStore;
     deviceKey: string;
   }> {
     const dir = await tempDir(`seat-routes-${crypto.randomUUID()}-`);
@@ -121,7 +127,7 @@ describe("seat-routes", () => {
       () => fs.rm(dir, { recursive: true, force: true }),
       () => plane.stop()
     );
-    return { plane, handler, unscoped, deviceKey };
+    return { plane, handler, unscoped, enrollments, deviceKey };
   }
 
   function request(
@@ -182,20 +188,59 @@ describe("seat-routes", () => {
     }
   });
 
-  test("the locker-key door authenticates, then says it has nothing yet", async () => {
-    const { handler } = await fixture();
+  test("the locker-key door serves K to the enrolled device row", async () => {
+    const { plane, handler } = await fixture();
     const res = new MockResponse();
     await handler(
       request(SEAT_LOCKER_KEY_PATH),
       res as unknown as ServerResponse
     );
-    // NOT the same 404 an unrouted path gives: a seat has to tell "this
-    // gateway holds no locker key" from "this gateway is older than the door",
-    // and only a named reason does that.
-    expect(res.statusCode).toBe(404);
-    expect(res.json()).toMatchObject({
-      error: "seat_locker_key_unavailable",
+    expect(res.statusCode).toBe(200);
+    const live = plane.db.lockerKey();
+    expect(res.json()).toStrictEqual({
+      vaultId: plane.boot.vaultId,
+      keyId: live.keyId,
+      key: live.key.toString("base64"),
+      algorithm: "aes-256-gcm",
     });
+    // A proxy or a service worker holding `K` would be a second copy of the
+    // key in a place nothing revokes.
+    expect(res.getHeader("cache-control")).toBe("no-store");
+  });
+
+  test("a revoked device is refused the key, and the ticket never carried it", async () => {
+    const { plane, unscoped, enrollments, deviceKey } = await fixture();
+    enrollments.revoke(deviceKey);
+    const res = new MockResponse();
+    await runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey }, () =>
+      unscoped(request(SEAT_LOCKER_KEY_PATH), res as unknown as ServerResponse)
+    );
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ error: "replica_device_not_enrolled" });
+
+    // AND THE OTHER HALF OF R13: the pairing ticket has no room for `K` and is
+    // never given one. Revoking a device would mean nothing if the key had
+    // ridden a QR payload that outlives the glance in a photo roll.
+    const ticket = parsePairingTicket(
+      encodePairingTicket({
+        v: 1,
+        kind: "centraid-gw-pair",
+        gw: "https://home.example",
+        t: "ticket-1",
+        s: "secret-1",
+        vaultName: "Home",
+        exp: 1,
+      })
+    );
+    expect(Object.keys(ticket ?? {}).toSorted()).toStrictEqual([
+      "exp",
+      "gw",
+      "kind",
+      "s",
+      "t",
+      "v",
+      "vaultName",
+    ]);
   });
 
   test("the log door serves whole commits, bounded, with its cursor", async () => {
