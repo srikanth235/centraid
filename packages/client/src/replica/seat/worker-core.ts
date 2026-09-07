@@ -24,7 +24,13 @@ import { readSeatCarryOver, writeSeatCarryOver } from "./carry-over.js";
 import type { SeatCarryOver } from "./carry-over.js";
 import type { SeatSqliteDriver } from "./driver.js";
 import { openSeatFile } from "./driver.js";
+import { createSeatOutbox } from "./outbox.js";
+import { overlaySeatRows, seatPendingMutations } from "./read-overlay.js";
 import { SeatDriftError } from "./seat-drift-error.js";
+import {
+  SeatIntentStore,
+  seatOverlayClearingHook,
+} from "./seat-intent-store.js";
 import { SeatWorkerNotOpenError } from "./seat-worker-not-open-error.js";
 import { readSeatState, seatStatePresent } from "./state.js";
 import type { SeatState } from "./state.js";
@@ -58,11 +64,19 @@ export interface SeatWorkerHost {
 export interface SeatWorkerSink {
   readonly onChange?: (notice: SeatChangeNotice) => void;
   readonly onBootstrapProgress?: (progress: SeatBootstrapProgress) => void;
+  /**
+   * Intents whose overlay this apply cleared (#996, R24). Told separately from
+   * `onChange` because the shell does two different things with them: a
+   * changed table is a re-read, and a cleared intent is a pending badge that
+   * goes and an outbox the drain loop no longer owes anything for.
+   */
+  readonly onOverlaysCleared?: (intentIds: readonly string[]) => void;
 }
 
 export class SeatWorkerCore {
   #driver: SeatSqliteDriver | undefined;
   #open: SeatWorkerOpenOptions | undefined;
+  #outbox: { driver: SeatSqliteDriver; store: SeatIntentStore } | undefined;
 
   constructor(
     private readonly host: SeatWorkerHost,
@@ -99,8 +113,7 @@ export class SeatWorkerCore {
     this.close();
     this.#open = options;
     const driver = await this.host.openDatabase(options);
-    openSeatFile(driver);
-    this.#driver = driver;
+    this.#adopt(driver);
     return seatStatePresent(driver) ? readSeatState(driver) : undefined;
   }
 
@@ -137,10 +150,38 @@ export class SeatWorkerCore {
       onProgress: (progress) => this.sink.onBootstrapProgress?.(progress),
     });
     const driver = await this.host.openDatabase(open);
-    openSeatFile(driver);
+    this.#adopt(driver);
     if (carried) writeSeatCarryOver(driver, carried);
-    this.#driver = driver;
     return result;
+  }
+
+  /**
+   * Take a freshly opened handle: the pragmas, and THE SEAT'S OWN TABLES.
+   *
+   * The outbox is created here rather than by whoever first writes to it,
+   * because a bootstrapped file is a copy of the GATEWAY's and the gateway has
+   * never heard of it — and every read now composes the outbox over its answer
+   * (`query`), so "the table exists once something has queued" would make the
+   * member's first read on a fresh seat throw instead of return nothing.
+   */
+  #adopt(driver: SeatSqliteDriver): void {
+    openSeatFile(driver);
+    createSeatOutbox(driver);
+    this.#driver = driver;
+  }
+
+  /**
+   * The outbox over this seat's file — the queue's durable store, in the same
+   * handle the applier writes through. That sharing is the whole point (R24):
+   * it is what lets an executed answer's overlay clear in the transaction that
+   * carries its commit. Re-opened after a bootstrap, because the file it named
+   * is not there any more.
+   */
+  outbox(): SeatIntentStore {
+    const driver = this.required();
+    if (this.#outbox?.driver !== driver)
+      this.#outbox = { driver, store: SeatIntentStore.create(driver) };
+    return this.#outbox.store;
   }
 
   state(): SeatState | undefined {
@@ -155,12 +196,32 @@ export class SeatWorkerCore {
         ? {}
         : { deferOverThreshold: options.deferOverThreshold }),
       onChange: (notice) => this.sink.onChange?.(notice),
+      // R24, AND THE REASON THE APPLIER HAS AN IN-TRANSACTION HOOK AT ALL. An
+      // executed intent parks on its `commit_seq`; this is what reaches it.
+      // Without it the overlay is never cleared by anything — the pending row
+      // stays drawn over the very rows that settle it, forever.
+      onCommitInTransaction: seatOverlayClearingHook(driver, (intentIds) =>
+        this.sink.onOverlaysCleared?.(intentIds)
+      ),
     });
     return result;
   }
 
+  /**
+   * The seat's read. `overlay` composes the outbox's pending rows over the
+   * answer (`read-overlay.ts`) — without it the member cannot see a write
+   * this file has not yet been told about, which is every write between the
+   * save and the echo.
+   */
   query(request: SeatWorkerQuery): object[] {
-    return this.required().all(request.sql, request.bind ?? []);
+    const driver = this.required();
+    const rows = driver.all(request.sql, request.bind ?? []);
+    if (!request.overlay) return rows;
+    return overlaySeatRows(
+      rows,
+      seatPendingMutations(driver, request.overlay.entity),
+      request.overlay.rowIdColumn
+    );
   }
 
   close(): void {

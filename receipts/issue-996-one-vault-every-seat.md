@@ -4186,4 +4186,51 @@ git commit --allow-empty -m "chore(mobile): regenerate ios/Podfile.lock for expo
 bash .governance/run.sh    # the simulated commit passes; only bcf17bd3f is flagged
 bun run lint:workflow-pins # 24 workflows clean
 bun run format:check       # clean
+
+## CI fix — the phone's own note, before and after the echo
+
+The emulator gate found it: a note saved on the phone never appeared in the
+phone's Notes list on the new (seat) store. Two independent halves, both of
+them capabilities that shipped with no production caller.
+
+**The overlay was never cleared.** `packages/client/src/replica/seat/applier.ts`
+has an `onCommitInTransaction` hook, and `seatOverlayClearingHook` /
+`clearSeatOverlaysAtCommit` (`packages/client/src/replica/seat/seat-intent-store.ts`)
+were written to be handed to it — but the only caller was
+`packages/client/src/replica/seat/carry-over.test.ts`.
+`SeatWorkerCore.apply` passed no hook, so an executed intent parked on its
+`commit_seq` (R24) and nothing on the device ever reached it. Now
+`packages/client/src/replica/seat/worker-core.ts` passes it, and the sink gains
+`onOverlaysCleared` — a changed table is a re-read, a cleared intent is a badge
+that goes, and the shell does different things with the two.
+
+**The read did not compose the overlay at all.** The old store overlays every
+read (`packages/client/src/replica/store-core.ts#overlay`); the seat's read was
+raw SQL over the file, and the file is the GATEWAY's rows — so a write between
+the save and the echo appeared nowhere, which is the visible half of the
+symptom. New `packages/client/src/replica/seat/read-overlay.ts`:
+`seatPendingMutations` reads the pending rows out of `seat_outbox` in the same
+handle, `overlaySeatRows` draws them over the answer, and
+`SeatWorkerQuery.overlay` (`packages/client/src/replica/seat/worker-protocol.ts`)
+names the entity and the row-id column. Bounded by the MUTATIONS, not the
+table, exactly as the old store is. A row that exists only in the outbox is
+APPENDED rather than sorted into place: it is not in the file, so the SQL that
+produced the answer never saw it, and it takes its place when the echo lands.
+Absent `overlay` is the canonical read, and a count or a parity check must stay
+that way.
+
+Two supporting changes fall out: `SeatWorkerCore` creates `seat_outbox` when it
+adopts a handle (`#adopt`) — a bootstrapped file is a copy of the gateway's and
+has never heard of it, and every read now composes the outbox — and
+`SeatWorkerCore.outbox()` hands back the queue's store over the same handle,
+which is the sharing R24 rests on.
+
+Red-first: `packages/client/src/replica/seat/worker-core.test.ts`, "shows the
+member's own note before the echo, and the canonical row after it" — the note
+is in the list before any page carries it, a page carrying a DIFFERENT commit
+leaves the overlay standing, and the page carrying its `commit_seq` clears the
+overlay and returns the file's own row. It fails on the tree before this commit.
+
+```
+bunx vitest run packages/client/src/replica/seat/worker-core.test.ts   # 8 passed
 ```

@@ -20,6 +20,7 @@ import type {
   SeatBootstrapResult,
 } from "./bootstrap.js";
 import type { SeatBindValue } from "./driver.js";
+import type { SeatReadOverlay } from "./read-overlay.js";
 import type { SeatState } from "./state.js";
 
 export interface SeatWorkerOpenOptions {
@@ -46,6 +47,13 @@ export interface SeatWorkerApplyOptions {
 export interface SeatWorkerQuery {
   readonly sql: string;
   readonly bind?: readonly SeatBindValue[];
+  /**
+   * Draw the outbox's pending rows over the answer (#996, R23–R25). Absent is
+   * the CANONICAL read — what this file holds, and nothing the gateway has not
+   * seen. A list a member reads their own writes from passes it; a read that
+   * is measuring the file (a count, a parity check) must not.
+   */
+  readonly overlay?: SeatReadOverlay;
 }
 
 export type SeatWorkerRequest =
