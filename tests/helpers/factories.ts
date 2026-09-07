@@ -7,6 +7,7 @@ import { gzipSync } from "node:zlib";
 import { onTestFinished } from "vitest";
 
 import type { SeatLogRowWire } from "@centraid/core/protocol";
+import { staticSeatSnapshotTransport } from "@centraid/test-kit/seat-snapshot-transport";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 import {
@@ -33,9 +34,10 @@ import {
   readReplicaLog,
   sealAad,
   sealValue,
+  seatLogRowWire,
   VAULT_MIGRATIONS,
 } from "@centraid/vault";
-import type { OpenVaultOptions, ReplicaLogRow, VaultDb } from "@centraid/vault";
+import type { OpenVaultOptions, VaultDb } from "@centraid/vault";
 
 import { intentPayloadHash } from "../../packages/client/src/replica/payload-hash.js";
 import {
@@ -49,28 +51,6 @@ import { NodeSeatDriver } from "../../packages/client/src/replica/seat/node-seat
 import { nodeSeatStaging } from "../../packages/client/src/replica/seat/node-staging.js";
 
 const helpersDir = import.meta.dirname;
-
-/**
- * A log row as the seat door serves it. The door itself is HTTP; the fixture
- * builds its seat file in-process, so it does the same shaping the door does
- * rather than standing a gateway up to fetch two rows through it.
- */
-function seatLogRowWire(row: ReplicaLogRow): SeatLogRowWire {
-  return {
-    seq: row.seq,
-    commitSeq: row.commitSeq,
-    schemaEpoch: row.schemaEpoch,
-    ddlVersion: row.ddlVersion,
-    table: row.table,
-    op: row.op,
-    pk: row.primaryKey,
-    ...(row.row === null ? {} : { row: row.row }),
-    ...(row.indirect ? { indirect: true as const } : {}),
-    ...(row.deferred ? { deferred: true as const } : {}),
-    producer: row.producer,
-    committedAt: row.committedAt,
-  };
-}
 
 /**
  * Resolve a workspace package's TypeScript entry without requiring a prior
@@ -371,21 +351,7 @@ async function buildGoldenReplicaInto(
             level: 6,
           });
           await bootstrapSeatFile({
-            transport: {
-              head: () =>
-                Promise.resolve({
-                  etag: `"${snapshot.epoch}-${snapshot.seq}"`,
-                  bytes: compressed.byteLength,
-                  seq: snapshot.seq,
-                  epoch: snapshot.epoch,
-                  schemaEpoch: snapshot.schemaEpoch,
-                }),
-              range: (start: number) => ({
-                async *[Symbol.asyncIterator]() {
-                  yield compressed.subarray(start);
-                },
-              }),
-            },
+            transport: staticSeatSnapshotTransport(compressed, snapshot),
             staging: nodeSeatStaging({
               directory: path.join(target, "staging"),
               databasePath: seatFile,

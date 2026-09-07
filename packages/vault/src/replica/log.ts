@@ -25,7 +25,7 @@ import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { gzipSync } from "node:zlib";
 
 import { encodeWireValue } from "@centraid/core/protocol";
-import type { WireValue } from "@centraid/core/protocol";
+import type { SeatLogRowWire, WireValue } from "@centraid/core/protocol";
 
 import { replicatedTablesOf } from "../schema/private-tables.js";
 import {
@@ -84,6 +84,32 @@ export interface ReplicaLogRow {
   /** This commit crossed the defer threshold; a metered seat may skip it. */
   readonly deferred: boolean;
   readonly committedAt: string;
+}
+
+/**
+ * A log row as the seat door serves it (#996, R5).
+ *
+ * The door is HTTP, but the shaping is not: the fixtures that build a seat
+ * file in-process and the parity run both have to serve exactly what the door
+ * serves, so the wire form of a row is written once, here, beside the row.
+ * `indirect` and `deferred` are omitted rather than sent false — the wire says
+ * a row is unusual, and says nothing about an ordinary one.
+ */
+export function seatLogRowWire(row: ReplicaLogRow): SeatLogRowWire {
+  return {
+    seq: row.seq,
+    commitSeq: row.commitSeq,
+    schemaEpoch: row.schemaEpoch,
+    ddlVersion: row.ddlVersion,
+    table: row.table,
+    op: row.op,
+    pk: row.primaryKey,
+    ...(row.row === null ? {} : { row: row.row }),
+    ...(row.indirect ? { indirect: true as const } : {}),
+    ...(row.deferred ? { deferred: true as const } : {}),
+    producer: row.producer,
+    committedAt: row.committedAt,
+  };
 }
 
 /** What one capture produced. `rows` is 0 when the commit touched nothing. */

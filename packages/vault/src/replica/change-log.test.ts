@@ -18,6 +18,7 @@ import {
   ReplicaRebootstrapRequiredError,
 } from "./change-log.js";
 import { formatReplicaCursor, parseReplicaCursor } from "./cursor.js";
+import { insertScheme } from "./replica-log.test-fixtures.js";
 
 let db: VaultDb | undefined;
 describe("change-log", () => {
@@ -29,15 +30,6 @@ describe("change-log", () => {
   function open(): VaultDb {
     db = openVaultDb();
     return db;
-  }
-
-  function insertScheme(vault: VaultDb["vault"], id: string, title = id): void {
-    vault
-      .prepare(
-        `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
-       VALUES (?, ?, ?, '1')`
-      )
-      .run(id, `urn:${id}`, title);
   }
 
   test("canonical inserts, updates and deletes append ordered durable operations", () => {

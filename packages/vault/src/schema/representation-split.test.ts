@@ -101,6 +101,25 @@ describe("the representation split (#996, R20(b))", () => {
     return outcome;
   }
 
+  /** The pixel, staged, filed as an asset and given its owner's title. */
+  function titledAsset(): {
+    staged: { sha256: string };
+    asset: { asset_id: string; content_id: string };
+  } {
+    const staged = gw.stageBlob(owner, {
+      bytes: PNG_BYTES,
+      filename: "pixel.png",
+    });
+    const asset = output<{ asset_id: string; content_id: string }>(
+      invoke(owner, "media.add_asset", { staged_sha: staged.sha256 })
+    );
+    invoke(owner, "media.update_asset", {
+      asset_id: asset.asset_id,
+      title: "Kite day",
+    });
+    return { staged, asset };
+  }
+
   test("one byte row, two owners, two readings — and the dedupe survives", () => {
     const asHtml = output<{ document_id: string; content_id: string }>(
       invoke(owner, "core.add_document", {
@@ -178,17 +197,7 @@ describe("the representation split (#996, R20(b))", () => {
   });
 
   test("a generated caption is a derived row; the owner's title survives it; promote is an authored write", () => {
-    const staged = gw.stageBlob(owner, {
-      bytes: PNG_BYTES,
-      filename: "pixel.png",
-    });
-    const asset = output<{ asset_id: string; content_id: string }>(
-      invoke(owner, "media.add_asset", { staged_sha: staged.sha256 })
-    );
-    invoke(owner, "media.update_asset", {
-      asset_id: asset.asset_id,
-      title: "Kite day",
-    });
+    const { asset } = titledAsset();
 
     const titleOf = (): string | null =>
       (
@@ -198,41 +207,29 @@ describe("the representation split (#996, R20(b))", () => {
       ).title;
 
     const caption = (body: string): void => {
+      const rows = [
+        {
+          entity_type: "knowledge.annotation",
+          external_id: `${asset.asset_id}:caption`,
+          payload: {
+            target_type: "media.asset",
+            target_id: asset.asset_id,
+            body,
+          },
+        },
+      ];
       const staged2 = output<{ connection_id: string }>(
         invoke(agent, "sync.stage_rows", {
           kind: "enrichment.vision",
           label: "photos",
-          rows: [
-            {
-              entity_type: "knowledge.annotation",
-              external_id: `${asset.asset_id}:caption`,
-              payload: {
-                target_type: "media.asset",
-                target_id: asset.asset_id,
-                body,
-              },
-            },
-          ],
+          rows,
         })
       );
       invoke(owner, "sync.publish_batch", {
         batch_id: output<{ batch_id: string }>(
           gw.invoke(agent, {
             command: "sync.stage_rows",
-            input: {
-              connection_id: staged2.connection_id,
-              rows: [
-                {
-                  entity_type: "knowledge.annotation",
-                  external_id: `${asset.asset_id}:caption`,
-                  payload: {
-                    target_type: "media.asset",
-                    target_id: asset.asset_id,
-                    body,
-                  },
-                },
-              ],
-            },
+            input: { connection_id: staged2.connection_id, rows },
           })
         ).batch_id,
       });
@@ -272,17 +269,7 @@ describe("the representation split (#996, R20(b))", () => {
   });
 
   test("mint → read door: the door serves the representation's media type", () => {
-    const staged = gw.stageBlob(owner, {
-      bytes: PNG_BYTES,
-      filename: "pixel.png",
-    });
-    const asset = output<{ asset_id: string; content_id: string }>(
-      invoke(owner, "media.add_asset", { staged_sha: staged.sha256 })
-    );
-    invoke(owner, "media.update_asset", {
-      asset_id: asset.asset_id,
-      title: "Kite day",
-    });
+    const { staged, asset } = titledAsset();
 
     const served = resolveServableBlob(db.vault, asset.content_id);
     expect(served.status).toBe("ok");

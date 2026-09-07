@@ -36,149 +36,62 @@ export interface PrivateTableDeclaration {
 }
 
 /**
- * The closed list. Ordered by kind, then by name inside a kind, so a diff of
- * this file reads as a decision rather than as a merge artefact.
+ * The closed list, BY KIND. The kind is a property of the group, so it is
+ * stated once and each table under it carries only its own one-clause reason;
+ * ordered by kind, then by name inside a kind, so a diff of this file reads as
+ * a decision rather than as a merge artefact.
  */
-export const PRIVATE_TABLES: readonly PrivateTableDeclaration[] = [
-  // ---- credentials and key material -------------------------------------
-  {
-    table: "access_agent_secret",
-    kind: "credential",
-    reason: "an enrolled agent's host-side enrollment key",
+const PRIVATE_TABLES_BY_KIND: Readonly<
+  Record<PrivateTableKind, Readonly<Record<string, string>>>
+> = {
+  // credentials and key material
+  credential: {
+    access_agent_secret: "an enrolled agent's host-side enrollment key",
+    access_device_secret:
+      "a device's public key and its gateway-side sync cursor",
+    blob_content_key: "the wrapped per-object content key",
+    blob_device_content_key: "one device's copy of a wrapped object key",
+    blob_device_wrap_key: "one device's key-wrapping salt and epoch",
+    locker_auth_credential: "this installation's unlock credential",
+    sync_connection_credential: "a third-party connection's stored secret",
   },
-  {
-    table: "access_device_secret",
-    kind: "credential",
-    reason: "a device's public key and its gateway-side sync cursor",
+  // the gateway's own job machinery
+  "gateway-job": {
+    blob_access: "last-touch bookkeeping for THIS host's cache eviction",
+    blob_ingress_probe: "head/tail bytes of an upload still in flight",
+    blob_ingress_session: "an upload in flight — resumable on the gateway only",
+    blob_outbox: "the gateway's queue of objects still to be replicated",
+    blob_staging: "bytes staged for a command that has not committed yet",
+    blob_orphan: "when THIS host first saw bytes with no live reference",
+    blob_replica: "which objects THIS host has proven are also remote",
+    conversation_harness_sessions: "a harness process's session handle",
+    enrich_request: "the enrichment queue — work, not data",
+    harness_health: "a harness process's liveness on this host",
+    outbox_item: "the gateway's own delivery queue",
+    replica_intent_outcome: "device-scoped outcome of one submitted intent",
+    replica_invocation_commit: "the commit group one invocation wrote",
+    replica_parked_payload: "a sealed request awaiting the member's answer",
+    sync_connection_health: "a third-party connection's liveness on this host",
+    sync_connection_run: "one poll of a third-party connection",
+    trigger_ingress: "an inbound trigger the gateway has not run yet",
   },
-  {
-    table: "blob_content_key",
-    kind: "credential",
-    reason: "the wrapped per-object content key",
+  // peer-link state
+  "peer-link": {
+    share_delivery_config: "how this host reaches a peer",
+    share_fulfillment: "one delivery attempt against a peer",
+    share_party_vault_binding:
+      "which vault a party is reachable at from this host",
   },
-  {
-    table: "blob_device_content_key",
-    kind: "credential",
-    reason: "one device's copy of a wrapped object key",
-  },
-  {
-    table: "blob_device_wrap_key",
-    kind: "credential",
-    reason: "one device's key-wrapping salt and epoch",
-  },
-  {
-    table: "locker_auth_credential",
-    kind: "credential",
-    reason: "this installation's unlock credential",
-  },
-  {
-    table: "sync_connection_credential",
-    kind: "credential",
-    reason: "a third-party connection's stored secret",
-  },
-  // ---- the gateway's own job machinery -----------------------------------
-  {
-    table: "blob_access",
-    kind: "gateway-job",
-    reason: "last-touch bookkeeping for THIS host's cache eviction",
-  },
-  {
-    table: "blob_ingress_probe",
-    kind: "gateway-job",
-    reason: "head/tail bytes of an upload still in flight",
-  },
-  {
-    table: "blob_ingress_session",
-    kind: "gateway-job",
-    reason: "an upload in flight — resumable on the gateway only",
-  },
-  {
-    table: "blob_outbox",
-    kind: "gateway-job",
-    reason: "the gateway's queue of objects still to be replicated",
-  },
-  {
-    table: "blob_staging",
-    kind: "gateway-job",
-    reason: "bytes staged for a command that has not committed yet",
-  },
-  {
-    table: "blob_orphan",
-    kind: "gateway-job",
-    reason: "when THIS host first saw bytes with no live reference",
-  },
-  {
-    table: "blob_replica",
-    kind: "gateway-job",
-    reason: "which objects THIS host has proven are also remote",
-  },
-  {
-    table: "conversation_harness_sessions",
-    kind: "gateway-job",
-    reason: "a harness process's session handle",
-  },
-  {
-    table: "enrich_request",
-    kind: "gateway-job",
-    reason: "the enrichment queue — work, not data",
-  },
-  {
-    table: "harness_health",
-    kind: "gateway-job",
-    reason: "a harness process's liveness on this host",
-  },
-  {
-    table: "outbox_item",
-    kind: "gateway-job",
-    reason: "the gateway's own delivery queue",
-  },
-  {
-    table: "replica_intent_outcome",
-    kind: "gateway-job",
-    reason: "device-scoped outcome of one submitted intent",
-  },
-  {
-    table: "replica_invocation_commit",
-    kind: "gateway-job",
-    reason: "the commit group one invocation wrote",
-  },
-  {
-    table: "replica_parked_payload",
-    kind: "gateway-job",
-    reason: "a sealed request awaiting the member's answer",
-  },
-  {
-    table: "sync_connection_health",
-    kind: "gateway-job",
-    reason: "a third-party connection's liveness on this host",
-  },
-  {
-    table: "sync_connection_run",
-    kind: "gateway-job",
-    reason: "one poll of a third-party connection",
-  },
-  {
-    table: "trigger_ingress",
-    kind: "gateway-job",
-    reason: "an inbound trigger the gateway has not run yet",
-  },
-  // ---- peer-link state ----------------------------------------------------
-  {
-    table: "share_delivery_config",
-    kind: "peer-link",
-    reason: "how this host reaches a peer",
-  },
-  {
-    table: "share_fulfillment",
-    kind: "peer-link",
-    reason: "one delivery attempt against a peer",
-  },
-  {
-    table: "share_party_vault_binding",
-    kind: "peer-link",
-    reason: "which vault a party is reachable at from this host",
-  },
-];
+};
+
+export const PRIVATE_TABLES: readonly PrivateTableDeclaration[] =
+  Object.entries(PRIVATE_TABLES_BY_KIND).flatMap(([kind, tables]) =>
+    Object.entries(tables).map(([table, reason]) => ({
+      table,
+      kind: kind as PrivateTableKind,
+      reason,
+    }))
+  );
 
 /** The list as a set of names — the form every consumer actually wants. */
 export const PRIVATE_TABLE_NAMES: ReadonlySet<string> = new Set(

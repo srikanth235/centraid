@@ -3200,3 +3200,97 @@ bash .governance/run.sh
 
 The arch flags, the xcframework packaging and the simulator link still need
 macOS; the next dispatch is what turns them into evidence.
+
+## CI fix — duplication
+
+SonarCloud's "Duplication on New Code" gate (≤ 3%) read 3.5% on the wave's PR.
+The owner's per-file breakdown named two files as essentially the whole of it —
+`packages/vault/src/schema/deletion-roles.ts` (504 duplicated lines, 82.2%) and
+`packages/vault/src/schema/private-tables.ts` (137, 50.9%). Neither has a stale
+twin anywhere in the tree: they are duplicates of THEMSELVES. Both were written
+as one object literal per row, so fifty-six and twenty-eight times over the same
+five lines said the same thing with a different string in them.
+
+**A role is a property of the relationship, not of each row that stands in it.**
+Both lists are now declared BY GROUP: the parent, the role, its `ON DELETE` rule
+and who carries it out are stated once, and the references under them carry only
+what is their own — which key it is, and the one line that says why. Same fifty-
+six declarations, same census, same tests; `DELETION_ROLES` and `PRIVATE_TABLES`
+are built from the groups so every consumer and both suites are untouched.
+612 → 279 lines and 268 → 183 lines, and a group whose rule changes is now one
+edit instead of a read of every row under it.
+
+The rest was the waves writing the same block three times:
+
+- **The snapshot door, served from memory** — `packages/test-kit/src/seat-snapshot-transport.ts`
+  (new). The golden replica, the test-kit's own seat fixture and the parity run
+  each spelled out the same `head`/`range` stub; `chunkBytes` is the one thing
+  that differed, so it is the one thing a caller passes. Used by
+  `tests/helpers/factories.ts`, `packages/test-kit/src/year3-replica.test.ts` and
+  `tests/quality/seat-replay-parity.test.ts`.
+- **The log row as the door serves it** — `seatLogRowWire` now lives beside the
+  row in `packages/vault/src/replica/log.ts` and is exported from
+  `packages/vault/src/index.ts`; `packages/server/src/routes/seat-routes.ts`,
+  `tests/helpers/factories.ts` and `tests/quality/seat-replay-parity.test.ts`
+  had a copy each.
+- **One statement cache, two wasm drivers** —
+  `packages/client/src/replica/wasm-statement-cache.ts` (new) is the bind/step/
+  reset/keep-it loop both browser drivers were;
+  `packages/client/src/replica/wasm-sqlite-driver.ts` and
+  `packages/client/src/replica/seat/wasm-seat-driver.ts` now say only how large
+  their handful of statements is.
+- **One seat artifact for the seat suites** —
+  `packages/client/src/replica/seat/seat-artifact.test-fixtures.ts` (new), used
+  by `carry-over.test.ts`, `worker-core.test.ts` and `web-seat.test.ts`;
+  `bootstrap.test.ts` gains an `opener` for the four copies of its `open` seam.
+- **One spelling of a captured commit** —
+  `packages/vault/src/replica/replica-log.test-fixtures.ts` (new): `capturedCommit`,
+  `insertScheme`, `insertOwnerAndDevice`, `tableDigest`, used by
+  `packages/vault/src/replica/log.test.ts`, `log-retention.test.ts`,
+  `change-log.test.ts` and `seat-snapshot.test.ts`.
+- **The presence row is shaped once** — `SEAT_BLOB_COLUMNS`, `SeatBlobSqlRow` and
+  `seatBlobRow` are exported from `packages/client/src/replica/seat/blob-presence.ts`
+  and read by `packages/client/src/replica/seat/carry-over.ts`, which had
+  re-spelled the columns, the row type and the mapping.
+- **Repeated blocks inside one file** —
+  `packages/vault/src/operations/registry.ts` (`ref` and `taskCompletion` for the
+  four read-sets and three postconditions),
+  `packages/vault/src/schema/representation-split.test.ts` (`titledAsset`, and the
+  caption rows built once),
+  `packages/vault/src/commands/people.ts` (`TASK_ID_ONLY_INPUT`,
+  `TASK_STATUS_OUTPUT`), and the successor-links postcondition People and Tasks
+  both assert, now `SUCCESSOR_INHERITS_SERIES_LINKS_SQL` in
+  `packages/vault/src/operations/task-lifecycle.ts` (exported through
+  `packages/vault/src/operations/index.ts`, used by
+  `packages/vault/src/commands/tasks.ts`).
+
+No test and no assertion was removed to reduce lines, and the Sonar
+configuration and its exclusions are untouched.
+
+**`lint:types`** was red for one diagnostic unrelated to the above:
+`packages/vault/src/ingest/enrich-publishers.test.ts` sorted a
+`(string | null)[]` with a bare `toSorted()` (`require-array-sort-compare`).
+Both sides of that comparison now sort by code unit through one explicit
+comparator — a locale collation would order the two lists differently, and the
+keys deliberately preserve their script.
+
+### Numbers
+
+Local estimator (8-line normalised windows over the diff's added lines against
+every tracked file), `6a1b16715..worktree`:
+
+```
+before: added 32398  duplicated 892 (2.8%)
+after:  added 31663  duplicated 449 (1.4%)
+```
+
+### Gates
+
+```
+bunx vitest run …                     # vault schema/replica/operations/commands, client seat, server seat-routes
+bunx vitest run -c vitest.quality.config.ts tests/quality/seat-replay-parity.test.ts
+bun run --filter @centraid/vault build
+bun run lint && bun run format:check && bun run lint:types
+bash .governance/run.sh
+bun run check:push:static
+```

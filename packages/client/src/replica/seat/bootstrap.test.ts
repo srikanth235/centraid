@@ -90,6 +90,15 @@ function staging(root: string): ReturnType<typeof nodeSeatStaging> {
   });
 }
 
+/** The `open` seam, keeping every driver it hands out so the test can close them. */
+function opener(root: string, drivers: NodeSeatDriver[]): () => NodeSeatDriver {
+  return () => {
+    const driver = new NodeSeatDriver(path.join(root, "seat.db"));
+    drivers.push(driver);
+    return driver;
+  };
+}
+
 describe("seat file bootstrap", () => {
   it("downloads, installs, rebuilds FTS and records where the file sits", async () => {
     const root = workspace();
@@ -99,11 +108,7 @@ describe("seat file bootstrap", () => {
       transport: stubTransport(bytes, etag),
       staging: staging(root),
       vaultId: "vault-1",
-      open: () => {
-        const driver = new NodeSeatDriver(path.join(root, "seat.db"));
-        drivers.push(driver);
-        return driver;
-      },
+      open: opener(root, drivers),
     });
     expect(result.seq).toBe(42);
     expect(result.resumedFrom).toBe(0);
@@ -156,11 +161,7 @@ describe("seat file bootstrap", () => {
       transport: second,
       staging: staging(root),
       vaultId: "vault-1",
-      open: () => {
-        const driver = new NodeSeatDriver(path.join(root, "seat.db"));
-        drivers.push(driver);
-        return driver;
-      },
+      open: opener(root, drivers),
     });
     expect(result.resumedFrom).toBe(2_048);
     expect(second.requestedStarts).toStrictEqual([2_048]);
@@ -195,11 +196,7 @@ describe("seat file bootstrap", () => {
       transport: moved,
       staging: staging(root),
       vaultId: "vault-1",
-      open: () => {
-        const driver = new NodeSeatDriver(path.join(root, "seat.db"));
-        drivers.push(driver);
-        return driver;
-      },
+      open: opener(root, drivers),
     });
     expect(result.resumedFrom).toBe(0);
     expect(moved.requestedStarts).toStrictEqual([0]);
@@ -246,11 +243,7 @@ describe("seat file bootstrap", () => {
           Promise.resolve(undefined),
       },
       vaultId: "vault-1",
-      open: () => {
-        const driver = new NodeSeatDriver(path.join(root, "seat.db"));
-        drivers.push(driver);
-        return driver;
-      },
+      open: opener(root, drivers),
     });
     expect(result.seq).toBe(42);
     for (const held of drivers) held.close();

@@ -1,7 +1,4 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { gzipSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
@@ -9,10 +6,13 @@ import type { SeatLogPageWire } from "@centraid/core/protocol";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import type { SeatChangeNotice } from "./applier.js";
-import type { SeatSnapshotTransport } from "./bootstrap.js";
 import { httpSeatSnapshotTransport } from "./http-snapshot-transport.js";
 import { NodeSeatDriver } from "./node-seat-driver.js";
 import { nodeSeatStaging } from "./node-staging.js";
+import {
+  seatArtifact,
+  seatArtifactTransport,
+} from "./seat-artifact.test-fixtures.js";
 import { SeatWorkerNotOpenError } from "./seat-worker-not-open-error.js";
 import { SeatWorkerCore } from "./worker-core.js";
 
@@ -20,41 +20,12 @@ function workspace(): string {
   return tempDirSync("seat-worker-");
 }
 
-function artifact(root: string): Uint8Array {
-  const source = path.join(root, "source.db");
-  const db = new DatabaseSync(source);
-  db.exec(`
-    CREATE TABLE note (note_id TEXT PRIMARY KEY, title TEXT NOT NULL) STRICT;
-    INSERT INTO note VALUES ('n1', 'from the gateway');
-  `);
-  db.close();
-  return gzipSync(readFileSync(source));
-}
-
-function transport(bytes: Uint8Array): SeatSnapshotTransport {
-  return {
-    head: () =>
-      Promise.resolve({
-        etag: '"e1-7"',
-        bytes: bytes.byteLength,
-        seq: 7,
-        epoch: "e1",
-        schemaEpoch: 2,
-      }),
-    range: (start: number) => ({
-      async *[Symbol.asyncIterator]() {
-        yield bytes.subarray(start);
-      },
-    }),
-  };
-}
-
 function core(
   root: string,
   changes: SeatChangeNotice[]
 ): { core: SeatWorkerCore; open: () => void } {
   const drivers: NodeSeatDriver[] = [];
-  const bytes = artifact(root);
+  const bytes = seatArtifact(root);
   const worker = new SeatWorkerCore(
     {
       openDatabase: () => {
@@ -67,7 +38,7 @@ function core(
           directory: path.join(root, "staging"),
           databasePath: path.join(root, "seat.db"),
         }),
-      transport: () => transport(bytes),
+      transport: () => seatArtifactTransport(bytes, 7),
     },
     { onChange: (notice) => changes.push(notice) }
   );
