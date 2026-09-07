@@ -3294,3 +3294,49 @@ bun run lint && bun run format:check && bun run lint:types
 bash .governance/run.sh
 bun run check:push:static
 ```
+
+### The header the extension is compiled against is the whole extension
+
+Supersedes the SDK-header paragraph in "Why the vec build step failed" above:
+that fallback ordering was wrong and run 34099041334 (job 101669007050) proved
+it. The script took the "using the SDK's own sqlite3ext.h" branch and the arm64
+link died with `Undefined symbols for architecture arm64` — `_sqlite3_bind_int`,
+`_sqlite3_value_text`, `_sqlite3_vtab_in`, `_sqlite3_vtab_in_first`,
+`_sqlite3_value_nochange`, `_sqlite3_vmprintf` and the rest.
+
+`sqlite3ext.h` is not a declarations header. Under `SQLITE_EXTENSION_INIT1` it
+`#define`s every `sqlite3_*` name to `sqlite3_api->…`, so a loadable extension
+reaches the host through the routine struct the host hands it at init. Compiled
+against a header where that block is not in effect, `sqlite-vec.c` calls the
+symbols directly. That does not link — and linking would have been the worse
+outcome: expo-sqlite loads this through `exsqlite3_load_extension`
+(`node_modules/expo-sqlite/ios/SQLiteModule.swift:569-573`) against a SQLCipher
+build whose entire API is renamed `exsqlite3_*`, so a direct `sqlite3_bind_int`
+would bind against some other SQLite or nothing at all. Upstream's own release
+workflow compiles with `-Ivendor/` for precisely this reason.
+
+- `apps/mobile/scripts/build-sqlite-vec-ios.sh` — the SDK branch is deleted.
+  There is one header source, always vendored, and the sanity check that it
+  carries `SQLITE_EXTENSION_INIT1` stays.
+- **The pin moves to 3.49.1** (`https://www.sqlite.org/2025/sqlite-amalgamation-3490100.zip`),
+  which is `SEAT_SQLITE_FLOOR` in `packages/vault/src/schema/replica.ts:58` —
+  the SQLCipher build the phone actually runs. The `sqlite3_api_routines` layout
+  is defined by the host that fills it in, so an extension compiled at or below
+  the host's version reads fields the host really wrote; above it, it would
+  expect entries the host never filled. Upstream's 3.45.3 would also be safe;
+  this pin says which host it is safe against.
+- **A new guard makes this class of error self-naming.** After the export check,
+  `nm -u` on each slice must show no `_sqlite3_` entry: every call must have been
+  rewritten to `sqlite3_api->…`, and an undefined one means the header did not
+  do it. Verified discriminating on Linux against the same clone — the correctly
+  compiled shared object has 0 undefined `sqlite3_` symbols and one built with
+  the redirect suppressed has 74, `sqlite3_bind_int` among them, which is the
+  first symbol the runner named.
+
+```
+bash -n apps/mobile/scripts/build-sqlite-vec-ios.sh
+nm -u good.so | grep -c sqlite3_    # 0
+nm -u bad.so  | grep -c sqlite3_    # 74
+bun run lint:workflow-pins && bun run format:check
+bash .governance/run.sh
+```
