@@ -1,18 +1,14 @@
 /*
- * THE ORIGIN'S TAIL DOOR (#996, R10) — beside `composeShareShape`, not
- * instead of it yet.
+ * THE ORIGIN'S DOOR (#996, R10) — the only one a share travels through.
  *
  * A subscriber asks "what changed for this grant since seq N" and gets the
  * three outputs: full images for the rows that entered, the changed columns'
  * rows for the ones that stayed, and a removal for the ones that left. A
  * subscriber with no cursor asks the same question with no `since` and gets
- * every member as an `enter`, which is the closure snapshot R10 keeps —
- * the same walk, read as a set of rows rather than as a shape.
- *
- * TWO DOORS FOR ONE WAVE, DELIBERATELY. The transport that ships is never
- * deleted before its replacement lands: this door and `composeShareShape`
- * stand side by side for exactly one commit, the seat can consume both, and
- * the frame path goes once the year-3 convergence gate passes through here.
+ * every member as an `enter`, which IS the closure snapshot R10 keeps — the
+ * same walk, read as a set of rows rather than as a shape. There is no second
+ * door: the grant-keyed shape composer stood beside this one for exactly one
+ * commit and went when the year-3 convergence gate passed through here.
  *
  * WHAT THIS DOOR CANNOT SERVE it says so about, rather than answering wrongly.
  * A Locker item's sealed columns must be re-sealed under the AUDIENCE DEK,
@@ -29,6 +25,11 @@ import type { ShareClosureOutputs } from "./closure-outputs.js";
 import { commitShareClosureDiff, diffShareClosure } from "./closure-outputs.js";
 import type { BlobManifestEntry, ShareableItemType } from "./closure.js";
 import { readShareClosure } from "./read-closure.js";
+import {
+  assertClosureWithinCeiling,
+  assertSealedColumnsStaySealed,
+  shareClosureSizeBytes,
+} from "./share-ceiling.js";
 
 /** The frame's own version. Pre-release: an unknown one is refused, not read. */
 export const SHARE_TAIL_FORMAT_VERSION = 1;
@@ -51,6 +52,9 @@ export interface ShareTailFrame {
   readonly originRowVersion: number;
   /** Bytes the audience must hold. Originals only — derived bytes never cross. */
   readonly blobs: readonly BlobManifestEntry[];
+  /** What holding this grant costs the audience — the whole closure, not this
+   *  pass, because that is what the ceiling is a statement about. */
+  readonly sizeBytes: number;
 }
 
 export interface ComposeShareTailInput {
@@ -62,6 +66,8 @@ export interface ComposeShareTailInput {
   readonly subjectId: string;
   /** Where the audience is; absent is a new subscriber. */
   readonly since?: ReplicaLogCursor;
+  /** `share_delivery_config`'s ceiling, or the vault-wide default. */
+  readonly maxSizeBytes?: number | null;
 }
 
 /**
@@ -98,6 +104,11 @@ export function composeShareTail(
     ...(input.since === undefined ? {} : { since: input.since }),
   });
   if (!shareOutputsAreApplicable(outputs)) return undefined;
+  // Both properties are judged BEFORE any transport, so an over-ceiling or
+  // unsealed grant dials nobody (`share-ceiling.ts`).
+  assertSealedColumnsStaySealed([...outputs.enter, ...outputs.update]);
+  assertClosureWithinCeiling(input.authorityId, closure, input.maxSizeBytes);
+  const sizeBytes = shareClosureSizeBytes(closure);
   const frame: ShareTailFrame = {
     formatVersion: SHARE_TAIL_FORMAT_VERSION,
     authorityId: input.authorityId,
@@ -108,6 +119,7 @@ export function composeShareTail(
     outputs,
     originRowVersion: outputs.cursor.seq,
     blobs: closure.blobs,
+    sizeBytes,
   };
   return {
     frame,

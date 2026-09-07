@@ -125,28 +125,21 @@ export {
   type ShareClosureOutputs,
   type ShareRowImage,
 } from "./share/closure-outputs.js";
-// A share is a subscription (#929): the origin composes a grant-keyed shape,
-// a transport carries it, and the audience seat ingests it through the same
-// door an authored row takes.
+// A share is a subscription (#929) under a CLOSURE PREDICATE (#996, R10): the
+// origin serves the three outputs since the audience's cursor, a transport
+// carries them, and the audience applies them as rows.
 export {
-  composeShareShape,
-  shareShapeSizeBytes,
-  ShareShapeMaxSizeError,
-  SHARE_SHAPE_DEFAULT_MAX_SIZE_BYTES,
-  SHARE_SHAPE_FORMAT_VERSION,
-  type ComposeShareShapeInput,
-  type ShareShapeFrame,
-  type ShareShapeRowVersion,
-} from "./share/subscription-frame.js";
+  assertSealedColumnsStaySealed,
+  assertShareCeiling,
+  shareClosureSizeBytes,
+  ShareSizeCeilingError,
+  SHARE_DEFAULT_MAX_SIZE_BYTES,
+} from "./share/share-ceiling.js";
 export {
-  ingestShareShape,
   ingestShareTail,
   purgeShareShape,
-  type IngestShareShapeResult,
   type PurgeShareShapeResult,
 } from "./share/subscription-seat.js";
-// The predicate transport's origin door, beside the frame composer for one
-// wave (#996, R10), and the audience's row applier.
 export {
   composeShareTail,
   SHARE_TAIL_FORMAT_VERSION,
@@ -177,12 +170,6 @@ export {
   type MemberIntentEnvelope,
   type MemberIntentVerdict,
 } from "./share/subscription-intent.js";
-export {
-  planShareShapeIngest,
-  shareShapeStructureDigest,
-  type ShapeFieldUpdate,
-  type ShareShapePlan,
-} from "./share/subscription-delta.js";
 export {
   isContainerCommandActable,
   containerRoutesForCommand,
@@ -323,15 +310,13 @@ export {
   type ScopeRequestSummary,
 } from "./grant/authority-request.js";
 // Keeping a grant true is START and STOP over a subscription (#929): the
-// origin composes a grant-keyed shape and a transport carries it, so a
-// co-hosted audience and one on another gateway take the same delivery path.
+// origin serves each audience its three outputs and a transport carries them,
+// so a co-hosted audience and one on another gateway take the same path.
 export {
-  createGrantProjectionMemory,
   shareGrantShapeId,
   startShareSubscription,
   stopShareSubscription,
   NOTHING_DELIVERED_DETAIL,
-  type GrantProjectionMemory,
   type ShareDeliveryOutcome,
   type ShareRemovalOutcome,
   type ShareShapeTransport,

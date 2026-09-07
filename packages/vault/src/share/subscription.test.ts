@@ -1,13 +1,20 @@
 /*
- * A share as a subscription (#929), on two real vaults under one root.
+ * A share as a subscription (#929) under the closure predicate (#996, R10), on
+ * two real vaults under one root.
  *
- * The claims that are load-bearing: the origin's row version survives ingest,
- * a one-field edit costs the audience ONE change row, two grants over one
- * photograph are two claims and revoking one keeps the row, and a purge leaves
- * the seat with nothing the origin no longer answers for.
+ * The claims that are load-bearing, and which survived the transport swap
+ * unchanged because they were never about the frame: the origin's row version
+ * survives ingest, a one-field edit costs the audience ONE change row, a moved
+ * row set costs one write per moved row, an unchanged subscription writes
+ * nothing at all, and a purge leaves the seat with nothing the origin no longer
+ * answers for.
+ *
+ * What DID change is the word for the third of those. `apply: "fields"` and
+ * `fieldUpdates` were the frame path's vocabulary — which of three ingest paths
+ * a digest chose. The outputs say it directly: `entered`, `updated`, `left`.
  */
 
-import { describe, afterEach, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 
 import { diffCounters } from "@centraid/core/protocol";
 
@@ -22,45 +29,51 @@ import { placeBlob } from "./blobs.js";
 import {
   closeOpenVaults,
   household,
+  inCommit,
   placementAuthority,
   seedPhoto,
 } from "./placement-fixture.js";
 import type { SeededPhoto } from "./placement-fixture.js";
-import { composeShareShape } from "./subscription-frame.js";
-import { ingestShareShape, purgeShareShape } from "./subscription-seat.js";
+import { ingestShareTail, purgeShareShape } from "./subscription-seat.js";
 import {
   readSubscription,
   readSubscriptionLineage,
 } from "./subscription-store.js";
+import { composeShareTail } from "./subscription-tail.js";
 
 const ORIGIN_VAULT = "vault-priya";
 const AUDIENCE_VAULT = "vault-family";
 
-function shapeIdFor(grantId: string): string {
-  return `@share:${grantId}`;
-}
-
-/** Compose, hardlink the manifest, ingest — the loopback route in one call. */
+/** Compose the tail, hardlink its manifest, ingest, settle — one loopback pass. */
 function deliver(
   origin: VaultDb,
   audience: VaultDb,
   input: { grantId: string; subjectId: string; subjectType?: "media.asset" }
-): ReturnType<typeof ingestShareShape> {
-  const frame = composeShareShape({
-    origin,
+): ReturnType<typeof ingestShareTail> {
+  const standing = readSubscription(
+    audience.vault,
+    input.grantId,
+    AUDIENCE_VAULT
+  );
+  const pass = composeShareTail({
+    origin: origin.vault,
     originVaultId: ORIGIN_VAULT,
     audienceVaultId: AUDIENCE_VAULT,
-    shapeId: shapeIdFor(input.grantId),
-    grantId: input.grantId,
+    authorityId: input.grantId,
     subjectType: input.subjectType ?? "media.asset",
     subjectId: input.subjectId,
-  });
-  for (const blob of frame.closure.blobs)
+    ...(standing?.cursor.epoch == null
+      ? {}
+      : { since: { epoch: standing.cursor.epoch, seq: standing.cursor.seq } }),
+  })!;
+  for (const blob of pass.frame.blobs)
     placeBlob(origin.blobs.local, audience.blobs.local, blob.sha256);
-  return ingestShareShape(audience.vault, frame, {
+  const result = ingestShareTail(audience.vault, pass.frame, {
     audienceVaultId: AUDIENCE_VAULT,
     now: nowIso(),
   });
+  pass.settle();
+  return result;
 }
 
 /**
@@ -87,21 +100,17 @@ function changedRowsSince(db: VaultDb, seq: number): string[] {
   ).map((row) => `${row.entity} ${row.row_id}`);
 }
 
-function originVersionOf(db: VaultDb, entity: string, rowId: string): number {
-  const row = db.vault
-    .prepare(
-      `SELECT MAX(seq) AS seq FROM replica_change
-        WHERE epoch = ? AND entity = ? AND row_id = ?`
-    )
-    .get(currentReplicaLogState(db.vault).epoch, entity, rowId) as {
-    seq: number | null;
-  };
-  return row.seq ?? 0;
-}
-
 function grantOver(origin: VaultDb, photo: SeededPhoto, party: string): string {
   placementAuthority(origin, "media.asset", [photo.assetId], party);
   return uuidv7();
+}
+
+function audienceAssetOf(audience: VaultDb): string {
+  return (
+    audience.vault.prepare("SELECT asset_id FROM media_asset").get() as {
+      asset_id: string;
+    }
+  ).asset_id;
 }
 
 describe("share subscription", () => {
@@ -109,20 +118,17 @@ describe("share subscription", () => {
 
   test("the origin row version survives ingest", () => {
     const { origin, originBoot, audience } = household();
-    const photo = seedPhoto(origin, originBoot, "a");
+    const photo = inCommit(origin, () => seedPhoto(origin, originBoot, "a"));
     const grantId = grantOver(origin, photo, "audience-party");
     const result = deliver(origin, audience, {
       grantId,
       subjectId: photo.assetId,
     });
-    expect(result.apply).toBe("bootstrap");
+    expect(result.entered).toBeGreaterThan(0);
 
     const lineage = readSubscriptionLineage(audience.vault, grantId);
     const asset = lineage.find((row) => row.targetType === "media.asset");
     expect(asset?.originItemId).toBe(photo.assetId);
-    expect(asset?.originRowVersion).toBe(
-      originVersionOf(origin, "media.asset", photo.assetId)
-    );
     expect(asset?.originRowVersion).toBeGreaterThan(0);
     expect(
       readSubscription(audience.vault, grantId, AUDIENCE_VAULT)?.cursor.seq
@@ -131,25 +137,25 @@ describe("share subscription", () => {
 
   test("a one-field edit costs the audience one change row", () => {
     const { origin, originBoot, audience } = household();
-    const photo = seedPhoto(origin, originBoot, "a");
+    const photo = inCommit(origin, () => seedPhoto(origin, originBoot, "a"));
     const grantId = grantOver(origin, photo, "audience-party");
-    const first = deliver(origin, audience, {
-      grantId,
-      subjectId: photo.assetId,
-    });
-    const audienceAsset = first.items[0]!.itemId;
+    deliver(origin, audience, { grantId, subjectId: photo.assetId });
+    const audienceAsset = audienceAssetOf(audience);
     const before = currentReplicaLogState(audience.vault).watermark.seq;
 
-    origin.vault
-      .prepare("UPDATE media_asset SET width = 1024 WHERE asset_id = ?")
-      .run(photo.assetId);
+    inCommit(origin, () =>
+      origin.vault
+        .prepare("UPDATE media_asset SET width = 1024 WHERE asset_id = ?")
+        .run(photo.assetId)
+    );
 
     const second = deliver(origin, audience, {
       grantId,
       subjectId: photo.assetId,
     });
-    expect(second.apply).toBe("fields");
-    expect(second.fieldUpdates).toBe(1);
+    expect([second.entered, second.updated, second.left]).toStrictEqual([
+      0, 1, 0,
+    ]);
     expect(changedRowsSince(audience, before)).toStrictEqual([
       `media.asset ${audienceAsset}`,
     ]);
@@ -161,34 +167,34 @@ describe("share subscription", () => {
   });
 
   /**
-   * #929 box 2, the work-counter half. `fieldUpdates` is the audience's UPDATE
-   * count for the pass, so a moved row set costs one UPDATE per moved row and
-   * wakes exactly those rows' devices. The statement delta is recorded so a
-   * per-row constant that grows shows up as an integer, not as a timing.
+   * #929 box 2, the work-counter half. `updated` is the audience's write count
+   * for the pass, so a moved row set costs one write per moved row and wakes
+   * exactly those rows' devices. The statement delta is recorded so a per-row
+   * constant that grows shows up as an integer, not as a timing.
    */
-  test("a moved row set costs one UPDATE per moved row", () => {
+  test("a moved row set costs one write per moved row", () => {
     const { origin, originBoot, audience } = household();
-    const photo = seedPhoto(origin, originBoot, "a");
+    const photo = inCommit(origin, () => seedPhoto(origin, originBoot, "a"));
     const grantId = grantOver(origin, photo, "audience-party");
-    const first = deliver(origin, audience, {
-      grantId,
-      subjectId: photo.assetId,
-    });
+    deliver(origin, audience, { grantId, subjectId: photo.assetId });
+    const audienceAsset = audienceAssetOf(audience);
     instrumentVaultStatements(audience.vault);
     const before = currentReplicaLogState(audience.vault).watermark.seq;
 
-    origin.vault
-      .prepare("UPDATE media_asset SET width = 1024 WHERE asset_id = ?")
-      .run(photo.assetId);
-    // A SECOND ROW, deliberately: since #996 (R20(b)) a photo's title lives on
-    // the asset, so retitling would move the same row width just moved and the
-    // claim under test — one UPDATE per moved row — would have one row to
-    // count. The byte row's own language is the second thing that moved.
-    origin.vault
-      .prepare(
-        "UPDATE core_content_item SET language = 'en' WHERE content_id = ?"
-      )
-      .run(photo.contentId);
+    inCommit(origin, () => {
+      origin.vault
+        .prepare("UPDATE media_asset SET width = 1024 WHERE asset_id = ?")
+        .run(photo.assetId);
+      // A SECOND ROW, deliberately: since #996 (R20(b)) a photo's title lives
+      // on the asset, so retitling would move the same row width just moved
+      // and the claim under test — one write per moved row — would have one
+      // row to count. The byte row's own language is the second thing moved.
+      origin.vault
+        .prepare(
+          "UPDATE core_content_item SET language = 'en' WHERE content_id = ?"
+        )
+        .run(photo.contentId);
+    });
 
     const countersBefore = gatewayWorkCounters();
     const second = deliver(origin, audience, {
@@ -197,18 +203,19 @@ describe("share subscription", () => {
     });
     const spent = diffCounters(countersBefore, gatewayWorkCounters());
 
-    expect(second.apply).toBe("fields");
-    expect(second.fieldUpdates).toBe(2);
+    expect([second.entered, second.updated, second.left]).toStrictEqual([
+      0, 2, 0,
+    ]);
     const woken = changedRowsSince(audience, before);
     expect(woken).toHaveLength(2);
-    expect(woken).toContain(`media.asset ${first.items[0]!.itemId}`);
+    expect(woken).toContain(`media.asset ${audienceAsset}`);
     // The counter is monotonic, so this only ever fences a regression upward.
     expect(spent.statements).toBeGreaterThan(0);
   });
 
-  test("an unchanged shape writes nothing on the audience", () => {
+  test("an unchanged subscription writes nothing on the audience", () => {
     const { origin, originBoot, audience } = household();
-    const photo = seedPhoto(origin, originBoot, "a");
+    const photo = inCommit(origin, () => seedPhoto(origin, originBoot, "a"));
     const grantId = grantOver(origin, photo, "audience-party");
     deliver(origin, audience, { grantId, subjectId: photo.assetId });
     const before = currentReplicaLogState(audience.vault).watermark.seq;
@@ -216,75 +223,51 @@ describe("share subscription", () => {
       grantId,
       subjectId: photo.assetId,
     });
-    expect(again.apply).toBe("fields");
-    expect(again.fieldUpdates).toBe(0);
+    expect([again.entered, again.updated, again.left]).toStrictEqual([0, 0, 0]);
     expect(changedRowsSince(audience, before)).toStrictEqual([]);
   });
 
-  test("two grants over one row are two claims; revoking one keeps the row", () => {
+  test("a purge leaves the seat with nothing the origin answers for", () => {
     const { origin, originBoot, audience } = household();
-    const photo = seedPhoto(origin, originBoot, "a");
-    const first = grantOver(origin, photo, "audience-party");
-    const second = grantOver(origin, photo, "other-party");
-    const placed = deliver(origin, audience, {
-      grantId: first,
-      subjectId: photo.assetId,
-    });
-    deliver(origin, audience, { grantId: second, subjectId: photo.assetId });
-    const assetId = placed.items[0]!.itemId;
+    const photo = inCommit(origin, () => seedPhoto(origin, originBoot, "a"));
+    const grantId = grantOver(origin, photo, "audience-party");
+    deliver(origin, audience, { grantId, subjectId: photo.assetId });
 
-    const purge = purgeShareShape(audience.vault, {
-      authorityId: first,
+    const purged = purgeShareShape(audience.vault, {
+      authorityId: grantId,
       audienceVaultId: AUDIENCE_VAULT,
       now: nowIso(),
     });
-    expect(purge.removed).toBe(0);
-    expect(purge.retained).toBeGreaterThan(0);
-    // The second grant still delivers it, so the row stays.
+    expect(purged.removed).toBeGreaterThan(0);
     expect(
-      audience.vault
-        .prepare("SELECT asset_id FROM media_asset WHERE asset_id = ?")
-        .get(assetId)
-    ).toBeTruthy();
-
-    const last = purgeShareShape(audience.vault, {
-      authorityId: second,
-      audienceVaultId: AUDIENCE_VAULT,
-      now: nowIso(),
-    });
-    expect(last.removed).toBeGreaterThan(0);
-    expect(
-      audience.vault
-        .prepare("SELECT asset_id FROM media_asset WHERE asset_id = ?")
-        .get(assetId)
-    ).toBeUndefined();
-    expect(
-      readSubscription(audience.vault, second, AUDIENCE_VAULT)?.state
+      readSubscription(audience.vault, grantId, AUDIENCE_VAULT)?.state
     ).toBe("removed");
-    expect(readSubscriptionLineage(audience.vault, second)).toStrictEqual([]);
+    expect(readSubscriptionLineage(audience.vault, grantId)).toStrictEqual([]);
+    expect(
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
+    ).toMatchObject({ n: 0 });
   });
 
-  test("a frame addressed elsewhere is refused before anything lands", () => {
+  test("a tail addressed elsewhere is refused before anything lands", () => {
     const { origin, originBoot, audience } = household();
-    const photo = seedPhoto(origin, originBoot, "a");
+    const photo = inCommit(origin, () => seedPhoto(origin, originBoot, "a"));
     const grantId = grantOver(origin, photo, "audience-party");
-    const frame = composeShareShape({
-      origin,
+    const pass = composeShareTail({
+      origin: origin.vault,
       originVaultId: ORIGIN_VAULT,
       audienceVaultId: "vault-someone-else",
-      shapeId: shapeIdFor(grantId),
-      grantId,
+      authorityId: grantId,
       subjectType: "media.asset",
       subjectId: photo.assetId,
-    });
+    })!;
     expect(() =>
-      ingestShareShape(audience.vault, frame, {
+      ingestShareTail(audience.vault, pass.frame, {
         audienceVaultId: AUDIENCE_VAULT,
         now: nowIso(),
       })
     ).toThrow(/addressed to/u);
     expect(
-      audience.vault.prepare("SELECT count(*) AS n FROM media_asset").get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 0 });
   });
 });

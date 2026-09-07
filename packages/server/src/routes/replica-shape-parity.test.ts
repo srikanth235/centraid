@@ -55,7 +55,7 @@ const logger = {
 // the replicated column set does — which is exactly what this gate is for.
 const SHIPPED_SHAPE_IDS: Readonly<Record<string, string>> = {
   agenda: "agenda:e279df85d90abec66a555fd4",
-  docs: "docs:87a50441b8d1ef4a62627b92",
+  docs: "docs:3463271306aa9de9eeee6770",
   locker: "locker:df498eda12016162dc1e9dd6",
   notes: "notes:f969445530d0b54a5999f95e",
   people: "people:20e089695fca9f55a59937c7",

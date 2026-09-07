@@ -33,304 +33,31 @@
  * own derived rows, which is what `projection-ingest.ts` enqueues.
  */
 
-import type { DatabaseSync, SQLInputValue } from "node:sqlite";
+import type { DatabaseSync, SQLInputValue, StatementSync } from "node:sqlite";
 
 import { decodeWireValue } from "@centraid/core/protocol";
 
 import { VaultShareError } from "../errors.js";
-import { primaryKeyOf } from "../replica/log.js";
-import { entitySupertypeMembers } from "../schema/entity.js";
+import { prepared } from "../grant/prepared.js";
+import { uuidv7 } from "../ids.js";
+import {
+  divergedClaimCount,
+  stampAudienceVersions,
+} from "./apply-divergence.js";
+import { APPLY_ORDER, SPECS } from "./apply-registry.js";
+import type { RowSpec } from "./apply-registry.js";
+import {
+  entityIdColumn,
+  PHYSICAL_OF_ENTITY,
+  quoted,
+  shapeOf,
+} from "./apply-shape.js";
 import type { ShareMemberRow } from "./closure-members.js";
 import type { ShareClosureOutputs, ShareRowImage } from "./closure-outputs.js";
 import { ownerPartyId } from "./project-household.js";
-import { freeId } from "./sql.js";
 
 /** Columns that are the AUDIENCE vault's own fact about its own row. */
 const LOCAL_COLUMNS: readonly string[] = ["updated_at", "row_version"];
-
-interface RowSpec {
-  /** Logical entity name — `share_subscription_lineage.target_type`. */
-  readonly entity: string;
-  /** Columns naming another row, by the physical table they name. */
-  readonly references?: Readonly<Record<string, string>>;
-  /** Polymorphic id columns, by the column carrying the target's TYPE. */
-  readonly polymorphic?: Readonly<Record<string, string>>;
-  /** Columns naming a graph the audience never holds. */
-  readonly nulled?: readonly string[];
-  /** Columns re-pointed at the audience's own owner party. */
-  readonly audienceOwner?: readonly string[];
-  /** A reference the audience may legitimately not hold: NULL, never refuse. */
-  readonly optionalReferences?: readonly string[];
-  /**
-   * A NATURAL KEY: the audience already holding a row under these columns
-   * means the row is that one. Byte dedupe (`sha256`), an asset's content, an
-   * owner's one reading of its bytes — all the same question.
-   */
-  readonly identity?: readonly string[];
-  /**
-   * Adopt a row the audience already holds under the ORIGIN's own id. Only for
-   * `core_party`, and deliberately: a ledger naming a party the audience
-   * already knows twice is a broken ledger, and an accounting party is not a
-   * principal, so adopting one grants nothing.
-   */
-  readonly adoptByOriginId?: boolean;
-  /** A name that must not collide within one owner's rows. */
-  readonly uniqueWithin?: {
-    readonly column: string;
-    readonly scope: string;
-    readonly suffix: string;
-  };
-}
-
-/**
- * WRITE ORDER, and its exact reverse for `leave`. A referencing row is written
- * after the row it names and deleted before it, which is the whole reason this
- * is a list and not a set: the audience's foreign keys are real.
- *
- * `locker_item` is absent DELIBERATELY, and its absence is what sends a Locker
- * closure down the snapshot path: its sealed columns must be re-sealed under
- * the AUDIENCE DEK, which needs both vault keys in one process
- * (`project-household.ts`), and no row on a wire can carry that.
- */
-const APPLY_ORDER: readonly string[] = [
-  "core_party",
-  "core_content_item",
-  "media_asset",
-  "core_document",
-  "core_content_representation",
-  "core_concept_scheme",
-  "core_concept",
-  "core_collection",
-  "core_collection_entry",
-  "core_tag",
-  "social_circle",
-  "social_circle_member",
-  "tally_group",
-  "tally_expense",
-  "core_attachment",
-  "tally_expense_split",
-  "tally_expense_payer",
-  "tally_settlement",
-  "tally_recurring_expense",
-  "tally_recurring_expense_split",
-  "schedule_recurrence_exception",
-  "tally_expense_line_item",
-  "tally_expense_line_allocation",
-];
-
-const SPECS: ReadonlyMap<string, RowSpec> = new Map<string, RowSpec>([
-  [
-    "core_party",
-    {
-      entity: "core.party",
-      // The avatar names a content item that was never in this closure.
-      nulled: ["avatar_content_id"],
-      adoptByOriginId: true,
-    },
-  ],
-  [
-    "core_content_item",
-    {
-      entity: "core.content_item",
-      nulled: ["creator_party_id", "origin_device_id"],
-      // Byte dedupe survives the boundary: the same photograph shared twice is
-      // one content item in the audience vault.
-      identity: ["sha256"],
-    },
-  ],
-  [
-    "media_asset",
-    {
-      entity: "media.asset",
-      references: { content_id: "core_content_item" },
-      // `source_asset_id` names an ORIGIN asset (#711).
-      nulled: ["place_id", "camera_device_id", "source_asset_id"],
-      identity: ["content_id"],
-    },
-  ],
-  [
-    "core_document",
-    {
-      entity: "core.document",
-      references: { current_content_id: "core_content_item" },
-    },
-  ],
-  [
-    "core_content_representation",
-    {
-      entity: "core.content_representation",
-      references: { content_id: "core_content_item" },
-      polymorphic: { owner_id: "owner_type" },
-      // An owner has exactly ONE reading of its content, by UNIQUE constraint:
-      // two grants over the same photograph must land on the same row.
-      identity: ["owner_type", "owner_id"],
-    },
-  ],
-  ["core_concept_scheme", { entity: "core.concept_scheme" }],
-  [
-    "core_concept",
-    {
-      entity: "core.concept",
-      references: {
-        scheme_id: "core_concept_scheme",
-        broader_concept_id: "core_concept",
-      },
-      optionalReferences: ["broader_concept_id"],
-    },
-  ],
-  [
-    "core_collection",
-    {
-      entity: "core.collection",
-      references: {
-        cover_content_id: "core_content_item",
-        parent_collection_id: "core_collection",
-      },
-      optionalReferences: ["cover_content_id", "parent_collection_id"],
-      audienceOwner: ["owner_party_id"],
-    },
-  ],
-  [
-    "core_collection_entry",
-    {
-      entity: "core.collection_entry",
-      references: { collection_id: "core_collection" },
-      polymorphic: { target_id: "target_type" },
-    },
-  ],
-  [
-    "core_tag",
-    {
-      entity: "core.tag",
-      references: { concept_id: "core_concept" },
-      polymorphic: { target_id: "target_type" },
-      audienceOwner: ["tagged_by_party_id"],
-    },
-  ],
-  [
-    "social_circle",
-    {
-      entity: "social.circle",
-      audienceOwner: ["owner_party_id"],
-      uniqueWithin: {
-        column: "name",
-        scope: "owner_party_id",
-        suffix: " (shared)",
-      },
-    },
-  ],
-  [
-    "social_circle_member",
-    {
-      entity: "social.circle_member",
-      references: { circle_id: "social_circle", party_id: "core_party" },
-    },
-  ],
-  [
-    "tally_group",
-    { entity: "tally.group", references: { circle_id: "social_circle" } },
-  ],
-  [
-    "tally_expense",
-    {
-      entity: "tally.expense",
-      references: { group_id: "tally_group", paid_by: "core_party" },
-      // A transaction row belongs to the origin's own accounts.
-      nulled: ["txn_id"],
-    },
-  ],
-  [
-    "core_attachment",
-    {
-      entity: "core.attachment",
-      references: { content_id: "core_content_item" },
-      polymorphic: { target_id: "target_type" },
-    },
-  ],
-  [
-    "tally_expense_split",
-    {
-      entity: "tally.expense_split",
-      references: { expense_id: "tally_expense", party_id: "core_party" },
-    },
-  ],
-  [
-    "tally_expense_payer",
-    {
-      entity: "tally.expense_payer",
-      references: { expense_id: "tally_expense", party_id: "core_party" },
-    },
-  ],
-  [
-    "tally_settlement",
-    {
-      entity: "tally.settlement",
-      references: {
-        group_id: "tally_group",
-        from_party: "core_party",
-        to_party: "core_party",
-      },
-      nulled: ["txn_id"],
-    },
-  ],
-  [
-    "tally_recurring_expense",
-    {
-      entity: "tally.recurring_expense",
-      references: { group_id: "tally_group", paid_by: "core_party" },
-    },
-  ],
-  [
-    "tally_recurring_expense_split",
-    {
-      entity: "tally.recurring_expense_split",
-      references: {
-        template_id: "tally_recurring_expense",
-        party_id: "core_party",
-      },
-    },
-  ],
-  [
-    "schedule_recurrence_exception",
-    {
-      entity: "schedule.recurrence_exception",
-      polymorphic: { target_id: "target_type" },
-    },
-  ],
-  [
-    "tally_expense_line_item",
-    {
-      entity: "tally.expense_line_item",
-      references: {
-        expense_id: "tally_expense",
-        receipt_id: "core_attachment",
-      },
-      // A line whose receipt did not cross keeps its typed amounts and loses
-      // only the photo pointer.
-      optionalReferences: ["receipt_id"],
-    },
-  ],
-  [
-    "tally_expense_line_allocation",
-    {
-      entity: "tally.expense_line_allocation",
-      references: {
-        line_item_id: "tally_expense_line_item",
-        party_id: "core_party",
-      },
-    },
-  ],
-]);
-
-/** Physical table for a logical entity name — the polymorphic resolution. */
-const PHYSICAL_OF_ENTITY: ReadonlyMap<string, string> = new Map(
-  entitySupertypeMembers()
-);
-
-/** Tables whose ids live in the one `core_entity` namespace. */
-const ENTITY_TABLES: ReadonlySet<string> = new Set(
-  entitySupertypeMembers().map(([, physical]) => physical)
-);
 
 /**
  * True when every table these outputs touch can be applied as rows. A closure
@@ -349,18 +76,36 @@ export function shareOutputsAreApplicable(
   return tables.every((table) => SPECS.has(table));
 }
 
-function quoted(name: string): string {
-  return `"${name.replaceAll('"', '""')}"`;
-}
+/** One prepared upsert per (table, column set), for the same reason. */
+const UPSERTS = new WeakMap<DatabaseSync, Map<string, StatementSync>>();
 
-/** The single-column id of an entity table; `undefined` for anything else. */
-function entityIdColumn(
+function upsertFor(
   audience: DatabaseSync,
-  table: string
-): string | undefined {
-  if (!ENTITY_TABLES.has(table)) return undefined;
-  const key = primaryKeyOf(audience, table);
-  return key.length === 1 ? key[0] : undefined;
+  table: string,
+  names: readonly string[]
+): StatementSync {
+  let perDb = UPSERTS.get(audience);
+  if (!perDb) {
+    perDb = new Map();
+    UPSERTS.set(audience, perDb);
+  }
+  const cacheKey = `${table} ${names.join(",")}`;
+  const held = perDb.get(cacheKey);
+  if (held) return held;
+  const { key, idColumn } = shapeOf(audience, table);
+  const assignable = names.filter(
+    (column) => column !== idColumn && !key.includes(column)
+  );
+  const statement = audience.prepare(
+    `INSERT INTO ${quoted(table)} (${names.map(quoted).join(", ")})
+     VALUES (${names.map(() => "?").join(", ")})
+     ON CONFLICT (${key.map(quoted).join(", ")})
+     DO UPDATE SET ${assignable
+       .map((column) => `${quoted(column)} = excluded.${quoted(column)}`)
+       .join(", ")}`
+  );
+  perDb.set(cacheKey, statement);
+  return statement;
 }
 
 interface Applier {
@@ -369,47 +114,102 @@ interface Applier {
   /** `<entity> <originItemId>` → the AUDIENCE row id. */
   readonly ids: Map<string, string>;
   readonly owner: string;
+  /**
+   * ONE QUERY PER PASS, NOT ONE PER ROW. Both questions `resolveId` asks about
+   * an id — is it taken in this vault's entity namespace, and does some live
+   * subscription already claim it — are asked for every id the pass carries,
+   * up front, in chunks. A bootstrap is 800 rows whose answers are all "no",
+   * and 1,600 round trips to learn that was 2.4x the projector this replaces.
+   */
+  readonly taken: ReadonlySet<string>;
+  readonly claimed: ReadonlySet<string>;
 }
 
 function lineageKey(entity: string, originId: string): string {
   return `${entity} ${originId}`;
 }
 
-function loadLineage(audience: DatabaseSync, authorityId: string): Applier {
+/** `IN (…)` in chunks a prepared statement can hold. */
+function chunked<T>(values: readonly T[], size = 400): T[][] {
+  const out: T[][] = [];
+  for (let at = 0; at < values.length; at += size)
+    out.push(values.slice(at, at + size));
+  return out;
+}
+
+function idsCarriedBy(outputs: ShareClosureOutputs): string[] {
+  const ids = new Set<string>();
+  for (const row of [...outputs.enter, ...outputs.update, ...outputs.leave])
+    ids.add(String((JSON.parse(row.pk) as unknown[])[0]));
+  return [...ids];
+}
+
+function loadLineage(
+  audience: DatabaseSync,
+  authorityId: string,
+  outputs: ShareClosureOutputs
+): Applier {
   const ids = new Map<string, string>();
-  for (const row of audience
-    .prepare(
-      `SELECT target_type, target_id, origin_item_id
-         FROM share_subscription_lineage WHERE authority_id = ?`
-    )
-    .all(authorityId) as unknown as {
+  for (const row of prepared(
+    audience,
+    `SELECT target_type, target_id, origin_item_id
+       FROM share_subscription_lineage WHERE authority_id = ?`
+  ).all(authorityId) as unknown as {
     target_type: string;
     target_id: string;
     origin_item_id: string;
   }[])
     ids.set(lineageKey(row.target_type, row.origin_item_id), row.target_id);
+  const carried = idsCarriedBy(outputs);
+  const taken = new Set<string>();
+  const claimed = new Set<string>();
+  for (const chunk of chunked(carried)) {
+    const slots = chunk.map(() => "?").join(", ");
+    for (const row of prepared(
+      audience,
+      `SELECT entity_id FROM core_entity WHERE entity_id IN (${slots})`
+    ).all(...chunk) as unknown as { entity_id: string }[])
+      taken.add(row.entity_id);
+    for (const row of prepared(
+      audience,
+      `SELECT target_type, target_id FROM share_subscription_lineage
+        WHERE target_id IN (${slots})`
+    ).all(...chunk) as unknown as {
+      target_type: string;
+      target_id: string;
+    }[])
+      claimed.add(lineageKey(row.target_type, row.target_id));
+  }
   return {
     audience,
     authorityId,
     ids,
     owner: ownerPartyId(audience),
+    taken,
+    claimed,
   };
 }
 
 /**
- * The audience id an ORIGIN id stands for, decided in four steps and in this
- * order: LINEAGE, because it is durable and survives a restart; the row's
- * NATURAL KEY, because an audience already holding those bytes or that
- * owner's reading holds that row; a row this or another grant ALREADY
- * PROJECTED under the same origin id, because a projected id is globally
- * unique and a second grant over one photograph must land on it; and only
- * then the origin's own id, reused because reuse is what makes provenance
- * readable, with `freeId` minting on a genuine collision.
+ * The audience id an ORIGIN id stands for.
  *
- * The third step is what keeps `freeId`'s warning honest. An id the audience
- * holds for a row of its OWN is not adopted — a peer cannot name a local row
- * into a share — but one that some live subscription already claims is by
- * definition the projected row this grant is talking about.
+ * LINEAGE first — durable, and it survives a restart. Then the row's NATURAL
+ * KEY, because an audience already holding those bytes or that owner's reading
+ * holds that row. Then ONE question, asked of `core_entity` because entity ids
+ * are one namespace: is this id free here?
+ *
+ *   - FREE — take it. Reusing the origin's uuidv7 is what makes provenance
+ *     readable, and nothing can be colliding with it.
+ *   - TAKEN, and some live subscription claims it — that is the projected row
+ *     this grant is talking about, so a second grant over one photograph lands
+ *     on the first grant's row.
+ *   - TAKEN, and it is the audience's OWN row — mint. A peer cannot name a
+ *     local row into a share (`freeId`'s warning, kept).
+ *
+ * NO PROBE AT ALL in the common case: both id questions are answered from the
+ * two sets `loadLineage` reads once for the whole pass. Only a table with a
+ * NATURAL KEY still asks per row, and only because "does this vault already
+ * hold these bytes" is a question about a column rather than an id.
  */
 function resolveId(
   applier: Applier,
@@ -426,31 +226,19 @@ function resolveId(
     const predicate = spec.identity
       .map((column) => `${quoted(column)} = ?`)
       .join(" AND ");
-    const existing = applier.audience
-      .prepare(
-        `SELECT ${quoted(idColumn)} AS id FROM ${quoted(table)} WHERE ${predicate}`
-      )
-      .get(...spec.identity.map((column) => columns[column] ?? null)) as
+    const existing = prepared(
+      applier.audience,
+      `SELECT ${quoted(idColumn)} AS id FROM ${quoted(table)} WHERE ${predicate}`
+    ).get(...spec.identity.map((column) => columns[column] ?? null)) as
       | { id: string }
       | undefined;
     if (existing) return existing.id;
   }
-  if (spec.adoptByOriginId === true) {
-    const known = applier.audience
-      .prepare(
-        `SELECT ${quoted(idColumn)} AS id FROM ${quoted(table)} WHERE ${quoted(idColumn)} = ?`
-      )
-      .get(originId) as { id: string } | undefined;
-    if (known) return known.id;
-  }
-  const projected = applier.audience
-    .prepare(
-      `SELECT 1 AS present FROM share_subscription_lineage
-        WHERE target_type = ? AND target_id = ? LIMIT 1`
-    )
-    .get(spec.entity, originId);
-  if (projected) return originId;
-  return freeId(applier.audience, table, idColumn, originId);
+  if (!applier.taken.has(originId)) return originId;
+  if (spec.adoptByOriginId === true) return originId;
+  return applier.claimed.has(lineageKey(spec.entity, originId))
+    ? originId
+    : uuidv7();
 }
 
 /** An id already resolved for a row this pass has not reached is not an error
@@ -466,12 +254,7 @@ function referencedId(
   if (held !== undefined) return held;
   const idColumn = entityIdColumn(applier.audience, table);
   if (idColumn === undefined) return originId;
-  const present = applier.audience
-    .prepare(
-      `SELECT ${quoted(idColumn)} AS id FROM ${quoted(table)} WHERE ${quoted(idColumn)} = ?`
-    )
-    .get(originId) as { id: string } | undefined;
-  return present?.id;
+  return applier.taken.has(originId) ? originId : undefined;
 }
 
 /**
@@ -537,13 +320,12 @@ function deconflict(
   if (!rule) return;
   const idColumn = entityIdColumn(applier.audience, table);
   if (idColumn === undefined) return;
-  const held = applier.audience
-    .prepare(
-      `SELECT 1 AS present FROM ${quoted(table)}
-        WHERE ${quoted(rule.scope)} = ? AND ${quoted(rule.column)} = ?
-          AND ${quoted(idColumn)} <> ?`
-    )
-    .get(columns[rule.scope] ?? null, columns[rule.column] ?? null, audienceId);
+  const held = prepared(
+    applier.audience,
+    `SELECT 1 AS present FROM ${quoted(table)}
+      WHERE ${quoted(rule.scope)} = ? AND ${quoted(rule.column)} = ?
+        AND ${quoted(idColumn)} <> ?`
+  ).get(columns[rule.scope] ?? null, columns[rule.column] ?? null, audienceId);
   if (held)
     columns[rule.column] = `${String(columns[rule.column])}${rule.suffix}`;
 }
@@ -557,22 +339,21 @@ function claim(
 ): void {
   applier.ids.set(lineageKey(spec.entity, originId), audienceId);
   if (!PHYSICAL_OF_ENTITY.has(spec.entity)) return;
-  applier.audience
-    .prepare(
-      `INSERT INTO share_subscription_lineage
-         (authority_id, target_type, target_id, origin_item_id, origin_row_version)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT (authority_id, target_type, target_id) DO UPDATE SET
-         origin_item_id = excluded.origin_item_id,
-         origin_row_version = excluded.origin_row_version`
-    )
-    .run(
-      applier.authorityId,
-      spec.entity,
-      audienceId,
-      originId,
-      originRowVersion
-    );
+  prepared(
+    applier.audience,
+    `INSERT INTO share_subscription_lineage
+       (authority_id, target_type, target_id, origin_item_id, origin_row_version)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (authority_id, target_type, target_id) DO UPDATE SET
+       origin_item_id = excluded.origin_item_id,
+       origin_row_version = excluded.origin_row_version`
+  ).run(
+    applier.authorityId,
+    spec.entity,
+    audienceId,
+    originId,
+    originRowVersion
+  );
 }
 
 /** The primary key of one member row, as bindable audience values. */
@@ -583,13 +364,22 @@ function keyValues(member: ShareMemberRow): unknown[] {
 }
 
 function keyPredicate(audience: DatabaseSync, table: string): string {
-  return primaryKeyOf(audience, table)
-    .map((column) => `${quoted(column)} = ?`)
+  return shapeOf(audience, table)
+    .key.map((column) => `${quoted(column)} = ?`)
     .join(" AND ");
 }
 
 export interface ApplyShareOutputsResult {
   readonly authorityId: string;
+  /**
+   * Claimed rows this vault had written behind the origin's back — the
+   * divergence ruling G-view says the next pass must erase them. The applier
+   * REPORTS the count rather than repairing it, because repair needs the
+   * origin's images and this pass carries only what moved: the caller's answer
+   * is a resend, and `ingestShareTail` has already reset the cursor so the
+   * next pass is one.
+   */
+  readonly diverged: number;
   readonly entered: number;
   readonly updated: number;
   /** Rows deleted. A row another live grant still claims is not one. */
@@ -621,21 +411,9 @@ function writeRow(
   if (idColumn !== undefined) columns[idColumn] = audienceId;
   deconflict(applier, row.table, spec, columns, audienceId);
   const names = Object.keys(columns);
-  const assignable = names.filter(
-    (column) =>
-      column !== idColumn &&
-      !primaryKeyOf(applier.audience, row.table).includes(column)
+  upsertFor(applier.audience, row.table, names).run(
+    ...(names.map((column) => columns[column]) as SQLInputValue[])
   );
-  applier.audience
-    .prepare(
-      `INSERT INTO ${quoted(row.table)} (${names.map(quoted).join(", ")})
-       VALUES (${names.map(() => "?").join(", ")})
-       ON CONFLICT (${primaryKeyOf(applier.audience, row.table).map(quoted).join(", ")})
-       DO UPDATE SET ${assignable
-         .map((column) => `${quoted(column)} = excluded.${quoted(column)}`)
-         .join(", ")}`
-    )
-    .run(...(names.map((column) => columns[column]) as SQLInputValue[]));
   claim(applier, spec, originId, audienceId, originRowVersion);
   return "written";
 }
@@ -654,7 +432,10 @@ export function applyShareOutputs(
     throw new VaultShareError(
       `share outputs for ${outputs.authorityId} name a table the row applier cannot place`
     );
-  const applier = loadLineage(audience, outputs.authorityId);
+  // BEFORE anything is written: a row this pass is about to overwrite is not
+  // divergence, but a claimed row it does not touch is.
+  const diverged = divergedClaimCount(audience, outputs.authorityId);
+  const applier = loadLineage(audience, outputs.authorityId, outputs);
   const originRowVersion = input.originRowVersion ?? outputs.cursor.seq;
   let entered = 0;
   let updated = 0;
@@ -672,7 +453,8 @@ export function applyShareOutputs(
 
   // LEAVE, in the exact reverse of the write order: a container's members go
   // before the container, so a foreign key is never left dangling mid-pass.
-  const claimed = audience.prepare(
+  const claimed = prepared(
+    audience,
     `SELECT 1 AS present FROM share_subscription_lineage
       WHERE target_type = ? AND target_id = ? AND authority_id <> ? LIMIT 1`
   );
@@ -688,12 +470,11 @@ export function applyShareOutputs(
     const audienceId =
       applier.ids.get(lineageKey(spec.entity, originId)) ?? originId;
     applier.ids.delete(lineageKey(spec.entity, originId));
-    audience
-      .prepare(
-        `DELETE FROM share_subscription_lineage
-          WHERE authority_id = ? AND target_type = ? AND target_id = ?`
-      )
-      .run(outputs.authorityId, spec.entity, audienceId);
+    prepared(
+      audience,
+      `DELETE FROM share_subscription_lineage
+        WHERE authority_id = ? AND target_type = ? AND target_id = ?`
+    ).run(outputs.authorityId, spec.entity, audienceId);
     if (claimed.get(spec.entity, audienceId, outputs.authorityId)) {
       retained += 1;
       continue;
@@ -701,20 +482,20 @@ export function applyShareOutputs(
     const idColumn = entityIdColumn(audience, member.table);
     const changes =
       idColumn === undefined
-        ? audience
-            .prepare(
-              `DELETE FROM ${quoted(member.table)} WHERE ${keyPredicate(audience, member.table)}`
-            )
-            .run(...(key as SQLInputValue[])).changes
-        : audience
-            .prepare(
-              `DELETE FROM ${quoted(member.table)} WHERE ${quoted(idColumn)} = ?`
-            )
-            .run(audienceId).changes;
+        ? prepared(
+            audience,
+            `DELETE FROM ${quoted(member.table)} WHERE ${keyPredicate(audience, member.table)}`
+          ).run(...(key as SQLInputValue[])).changes
+        : prepared(
+            audience,
+            `DELETE FROM ${quoted(member.table)} WHERE ${quoted(idColumn)} = ?`
+          ).run(audienceId).changes;
     if (Number(changes) > 0) left += 1;
   }
+  stampAudienceVersions(audience, outputs.authorityId);
   return {
     authorityId: outputs.authorityId,
+    diverged,
     entered,
     updated,
     left,

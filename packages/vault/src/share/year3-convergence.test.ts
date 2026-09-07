@@ -217,10 +217,9 @@ describe("wave 7 convergence", () => {
   });
 
   /**
-   * THE GATE COMMIT 3 WAITS ON: every live subscription of the year-3 vault
-   * served THROUGH THE NEW DOOR, applied as rows by the audience, converging
-   * across all three outputs. When this is green the frame path has no claim
-   * left on the tree and `composeShareShape` goes.
+   * THE WAVE'S EXIT GATE: every live subscription of the year-3 vault served
+   * through the origin's door, applied as rows by the audience, converging
+   * across all three outputs. Green is what let the frame path go.
    */
   test("every live subscription converges through the tail door and the row applier", () => {
     const { origin, audience, grants } = seeded();

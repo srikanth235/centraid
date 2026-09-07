@@ -5,9 +5,11 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import {
+  beginReplicaCommit,
   bootstrapVault,
   blobUriFor,
   createShareGrant,
+  endReplicaCommit,
   listFulfillment,
   nowIso,
   openVaultDb,
@@ -24,6 +26,26 @@ import {
 } from "./grant-fulfillment.js";
 import { NoticeStore } from "./notices.js";
 import { SHARE_RECEIVED_NOTICE_KIND } from "./share-notices.js";
+
+/**
+ * An origin edit AS THE GATEWAY MAKES ONE — inside a captured replica commit.
+ * The `update` half of the three outputs is the LOG's (#996, R10), so an edit
+ * written behind the log is one no subscription can see; that is a property of
+ * the transport, and a test that edits outside a commit is testing a write the
+ * product cannot produce.
+ */
+function inCommit(db: VaultDb, body: () => void): void {
+  db.vault.exec("BEGIN IMMEDIATE");
+  const handle = beginReplicaCommit(db.vault);
+  try {
+    body();
+    endReplicaCommit(db.vault, handle);
+    db.vault.exec("COMMIT");
+  } catch (error) {
+    db.vault.exec("ROLLBACK");
+    throw error;
+  }
+}
 
 const ORIGIN_VAULT = "vlt_priya";
 const AUDIENCE_VAULT = "vlt_ravi";
@@ -144,9 +166,11 @@ describe("serve/grant-fulfillment", () => {
     ]);
 
     const later = "2026-08-19T15:00:00.000Z";
-    priya.vault.vault
-      .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
-      .run("Trip plan (final)", documentId);
+    inCommit(priya.vault, () =>
+      priya.vault.vault
+        .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
+        .run("Trip plan (final)", documentId)
+    );
     fulfillGrantsForSubject({
       host,
       originVaultId: ORIGIN_VAULT,
@@ -280,9 +304,11 @@ describe("serve/grant-fulfillment", () => {
     const doorbell = createGrantRefreshDoorbell({ host });
     doorbell.ring(ORIGIN_VAULT);
     expect(audienceTitles(ravi)).toStrictEqual(["Trip plan"]);
-    priya.vault.vault
-      .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
-      .run("Trip plan (final)", documentId);
+    inCommit(priya.vault, () =>
+      priya.vault.vault
+        .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
+        .run("Trip plan (final)", documentId)
+    );
     // Inside the coalescing window a ring only marks work pending, so the
     // direct pass is what proves the edit follows.
     expect(
@@ -431,9 +457,11 @@ describe("serve/grant-fulfillment", () => {
     }
 
     // The filter is a skip, never a stop.
-    world.priya.vault.vault
-      .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
-      .run("Trip plan (final)", world.documentId);
+    inCommit(world.priya.vault, () =>
+      world.priya.vault.vault
+        .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
+        .run("Trip plan (final)", world.documentId)
+    );
     refreshGrantsAfterCommit({
       host: world.host,
       originVaultId: ORIGIN_VAULT,

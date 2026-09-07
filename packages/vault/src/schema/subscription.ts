@@ -35,12 +35,6 @@ CREATE TABLE share_subscription (
   -- does not extend a floor on a subscriber's behalf.
   cursor_epoch      TEXT,
   cursor_seq        INTEGER NOT NULL DEFAULT 0 CHECK (cursor_seq >= 0),
-  -- What the seat last ingested, over everything a field update cannot express
-  -- (which rows, an album's membership, a folder's filing, a Tally sub-graph).
-  -- SUPERSEDED BY THE MEMBER SET below and deleted in the commit the audience
-  -- starts applying the three outputs — a digest can say "something moved", it
-  -- can never say WHAT, which is why it could not answer an enter or a leave.
-  structure_digest  TEXT,
   -- 'removed' is the audience's own acknowledgement that the grant's rows are
   -- gone. The origin's \`share_fulfillment\` vocabulary is untouched.
   state             TEXT NOT NULL CHECK (state IN ('subscribed','removed')),
@@ -62,12 +56,21 @@ CREATE TABLE share_subscription (
 -- the row at ingest. It is what lets a member's phone drop a pending write
 -- only once its replica holds the origin's answered version, so it travels
 -- with the row rather than being re-derived from the audience's own log.
+-- \`audience_row_version\` is THIS vault's \`row_version\` for the row as the
+-- applier last wrote it. It is what makes local divergence detectable: a
+-- projected row is read-only (#996, R10), so a claimed row whose version has
+-- moved past this one was written by something on this side, and the origin's
+-- copy is the answer. Without it the predicate transport would never re-send
+-- an unchanged origin row and a tampered copy would survive every pass —
+-- exactly the divergence the shape composer erased by re-reading everything.
 CREATE TABLE share_subscription_lineage (
   authority_id       TEXT NOT NULL,
   target_type        TEXT NOT NULL,
   target_id          TEXT NOT NULL,
   origin_item_id     TEXT NOT NULL,
   origin_row_version INTEGER NOT NULL CHECK (origin_row_version >= 0),
+  audience_row_version INTEGER NOT NULL DEFAULT 0
+    CHECK (audience_row_version >= 0),
   PRIMARY KEY (authority_id, target_type, target_id),
   FOREIGN KEY (target_type, target_id)
     REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE

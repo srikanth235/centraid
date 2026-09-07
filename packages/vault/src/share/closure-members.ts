@@ -28,6 +28,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { encodeWireValue } from "@centraid/core/protocol";
 
+import { prepared } from "../grant/prepared.js";
 import { primaryKeyOf } from "../replica/log.js";
 import type { WireClosure, WireRow } from "./closure.js";
 
@@ -67,8 +68,28 @@ export function memberPrimaryKey(
 ): string {
   const values = row as Readonly<Record<string, unknown>>;
   return JSON.stringify(
-    primaryKeyOf(vault, table).map((column) => encodeWireValue(values[column]))
+    keyOf(vault, table).map((column) => encodeWireValue(values[column]))
   );
+}
+
+/**
+ * `primaryKeyOf` reads `PRAGMA table_info` every call, and this runs once per
+ * row of the closure — ~800 of them for a 200-photo album. The key of a table
+ * is fixed for the life of a connection, so it is read once per table.
+ */
+const KEYS = new WeakMap<DatabaseSync, Map<string, readonly string[]>>();
+
+function keyOf(vault: DatabaseSync, table: string): readonly string[] {
+  let perDb = KEYS.get(vault);
+  if (!perDb) {
+    perDb = new Map();
+    KEYS.set(vault, perDb);
+  }
+  const held = perDb.get(table);
+  if (held) return held;
+  const key = primaryKeyOf(vault, table);
+  perDb.set(table, key);
+  return key;
 }
 
 /** The owner half of every representation a closure's rows can carry. */
@@ -113,7 +134,8 @@ function addRepresentations(
   vault: DatabaseSync,
   closure: WireClosure
 ): void {
-  const read = vault.prepare(
+  const read = prepared(
+    vault,
     `SELECT representation_id FROM core_content_representation
       WHERE owner_type = ? AND owner_id = ?`
   );
@@ -194,12 +216,11 @@ export function readShareMembers(
   origin: DatabaseSync,
   authorityId: string
 ): Map<string, StoredShareMember> {
-  const rows = origin
-    .prepare(
-      `SELECT table_name, pk, entered_seq FROM share_subscription_member
-        WHERE authority_id = ? ORDER BY table_name, pk`
-    )
-    .all(authorityId) as unknown as {
+  const rows = prepared(
+    origin,
+    `SELECT table_name, pk, entered_seq FROM share_subscription_member
+      WHERE authority_id = ? ORDER BY table_name, pk`
+  ).all(authorityId) as unknown as {
     table_name: string;
     pk: string;
     entered_seq: number;
@@ -223,11 +244,32 @@ export function writeShareMembers(
   origin: DatabaseSync,
   input: { authorityId: string; members: ShareMemberSet; enteredSeq: number }
 ): void {
+  // ONE TRANSACTION, always. A grant's membership is hundreds of rows — 801 for
+  // a 200-photo album — and outside a transaction each one is its own implicit
+  // commit and its own fsync: 627 ms of the share journey's 750 ms ceiling,
+  // spent on durability the caller is about to ask for once anyway.
+  const nested = origin.isTransaction;
+  if (!nested) origin.exec("BEGIN IMMEDIATE");
+  try {
+    writeMembersInTransaction(origin, input);
+    if (!nested) origin.exec("COMMIT");
+  } catch (error) {
+    if (!nested) origin.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function writeMembersInTransaction(
+  origin: DatabaseSync,
+  input: { authorityId: string; members: ShareMemberSet; enteredSeq: number }
+): void {
   const held = readShareMembers(origin, input.authorityId);
-  origin
-    .prepare("DELETE FROM share_subscription_member WHERE authority_id = ?")
-    .run(input.authorityId);
-  const write = origin.prepare(
+  prepared(
+    origin,
+    "DELETE FROM share_subscription_member WHERE authority_id = ?"
+  ).run(input.authorityId);
+  const write = prepared(
+    origin,
     `INSERT INTO share_subscription_member
        (authority_id, table_name, pk, entered_seq)
      VALUES (?, ?, ?, ?)`

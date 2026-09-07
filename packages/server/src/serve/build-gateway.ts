@@ -306,7 +306,7 @@ import type { ResourceMode } from "./resource-mode.js";
 import { RouteLatencyMetrics } from "./route-latency.js";
 import { createSchedulerHealthProbe } from "./scheduler-health.js";
 import { findSequentially, forEachSequentially } from "./sequential.js";
-import { pullShareShape } from "./share-subscriber.js";
+import { pullShareTail } from "./share-subscriber.js";
 import { measureStorageLatency } from "./storage-latency.js";
 import { StorageLimitsStore, evaluateStorageLimit } from "./storage-limits.js";
 import { createStorageQuotaHealthProbe } from "./storage-quota-health.js";
@@ -4154,15 +4154,20 @@ export async function buildGateway(
                 state: "unreachable" as const,
                 detail: `no link from ${input.audienceVaultId} to ${input.originVaultId}`,
               };
-            return pullShareShape({
-              dial,
-              route: link.route,
-              originVaultId: input.originVaultId,
-              audienceVaultId: input.audienceVaultId,
-              shapeId: input.shapeId,
-              seat: input.seat,
-              now: () => new Date().toISOString(),
-            });
+            return (
+              (await pullShareTail({
+                dial,
+                route: link.route,
+                originVaultId: input.originVaultId,
+                audienceVaultId: input.audienceVaultId,
+                shapeId: input.shapeId,
+                seat: input.seat,
+                now: () => new Date().toISOString(),
+              })) ?? {
+                state: "unreachable" as const,
+                detail: "the origin cannot serve this grant as rows",
+              }
+            );
           },
         },
       })

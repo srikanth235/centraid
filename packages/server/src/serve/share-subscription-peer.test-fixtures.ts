@@ -22,7 +22,7 @@ import type { PeerReplicaPullOutcome } from "../routes/peer-replica-route.js";
 import { seedPhoto, transportTo } from "./peer-give.test-fixtures.js";
 import type { Side } from "./peer-give.test-fixtures.js";
 import type { PeerDial } from "./peer-link-client.js";
-import { pullShareShape } from "./share-subscriber.js";
+import { pullShareTail } from "./share-subscriber.js";
 
 export const DOCS_FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
 
@@ -263,7 +263,7 @@ export function wireGoldenPair(
     shapeId: string;
     seat: typeof audience.vault;
   }): Promise<PeerReplicaPullOutcome> =>
-    pullShareShape({
+    (await pullShareTail({
       dial: toOrigin,
       route: { endpointId: origin.endpointId, relayHints: [] },
       originVaultId: input.originVaultId,
@@ -271,7 +271,10 @@ export function wireGoldenPair(
       shapeId: input.shapeId,
       seat: input.seat,
       now: nowIso,
-    });
+    })) ?? {
+      state: "unreachable" as const,
+      detail: "the origin cannot serve this grant as rows",
+    };
   const toAudience: PeerDial = {
     request: transportTo(audience, origin.endpointId, { pullShape }),
     endpointTicketFor: (endpointId) => `ticket-for-${endpointId}`,

@@ -6,10 +6,10 @@ import {
   isShareShapeId,
   judgeSubscriberCredential,
   PEER_REPLICA_BLOB_PATH,
-  PEER_REPLICA_BOOTSTRAP_PATH,
   PEER_REPLICA_CHANGES_PATH,
   PEER_REPLICA_INTENTS_PATH,
   PEER_REPLICA_PATHS,
+  PEER_REPLICA_TAIL_PATH,
   REPLICA_POST_ADMISSION_CONTRACT,
   SHARE_SHAPE_SIGIL,
   shareShapeGrantId,
@@ -39,10 +39,12 @@ describe("the subscriber contract", () => {
     expect(new Set(PEER_REPLICA_PATHS).size).toBe(PEER_REPLICA_PATHS.length);
     expect([...PEER_REPLICA_PATHS].sort()).toStrictEqual(
       [
-        PEER_REPLICA_BOOTSTRAP_PATH,
         PEER_REPLICA_CHANGES_PATH,
         PEER_REPLICA_BLOB_PATH,
         PEER_REPLICA_INTENTS_PATH,
+        // The audience's only pull since #996 (R10): the three outputs since
+        // its cursor. The bootstrap door went with the shape composer.
+        PEER_REPLICA_TAIL_PATH,
       ].sort()
     );
   });

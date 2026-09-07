@@ -28,11 +28,9 @@ import type { VaultLinksStore } from "../serve/vault-links-store.js";
 import { handlePeerReplicaIntent } from "./peer-replica-intent-route.js";
 import {
   handlePeerReplicaBlob,
-  handlePeerReplicaBootstrap,
   handlePeerReplicaChanges,
   handlePeerReplicaTail,
   PEER_REPLICA_BLOB_PATH,
-  PEER_REPLICA_BOOTSTRAP_PATH,
   PEER_REPLICA_CHANGES_PATH,
   PEER_REPLICA_INTENTS_PATH,
   PEER_REPLICA_TAIL_PATH,
@@ -266,8 +264,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     if (deps.replica) {
       const search = (): URLSearchParams =>
         new URL(target, "http://gateway.local").searchParams;
-      if (pathname === PEER_REPLICA_BOOTSTRAP_PATH && method === "GET")
-        return handlePeerReplicaBootstrap(res, peer, search(), deps.replica);
       if (pathname === PEER_REPLICA_BLOB_PATH && method === "GET")
         return handlePeerReplicaBlob(res, peer, search(), deps.replica);
       if (pathname === PEER_REPLICA_CHANGES_PATH && method === "POST")

@@ -21,10 +21,6 @@ const PEER_PLANE_PREFIX = "/centraid/_peer/";
 
 const REPLICA_PREFIX = `${PEER_PLANE_PREFIX}replica/` as const;
 
-/** The audience's first pull: header, shape catalog, rows, cursor. */
-export const PEER_REPLICA_BOOTSTRAP_PATH =
-  `${REPLICA_PREFIX}bootstrap` as const;
-
 /** Incremental pull from a cursor. Same batch the device tier receives. */
 export const PEER_REPLICA_CHANGES_PATH = `${REPLICA_PREFIX}changes` as const;
 
@@ -35,15 +31,15 @@ export const PEER_REPLICA_BLOB_PATH = `${REPLICA_PREFIX}blob` as const;
 export const PEER_REPLICA_INTENTS_PATH = `${REPLICA_PREFIX}intents` as const;
 
 /**
- * THE PREDICATE TRANSPORT'S PULL (#996, R10): the three outputs for one grant
- * since the audience's cursor — enter with a full image, update, leave. It
- * stands BESIDE the bootstrap door for one wave: the shape composer is never
- * deleted before its replacement serves every live subscription.
+ * THE AUDIENCE'S ONLY PULL (#996, R10): the three outputs for one grant since
+ * its cursor — enter with a full image, update, leave. A subscriber with no
+ * cursor asks the same question and gets every member as an `enter`, which is
+ * the closure snapshot; there is no second door, and the bootstrap path that
+ * served a composed shape is gone with the composer.
  */
 export const PEER_REPLICA_TAIL_PATH = `${REPLICA_PREFIX}tail` as const;
 
 export const PEER_REPLICA_PATHS: readonly string[] = Object.freeze([
-  PEER_REPLICA_BOOTSTRAP_PATH,
   PEER_REPLICA_CHANGES_PATH,
   PEER_REPLICA_BLOB_PATH,
   PEER_REPLICA_INTENTS_PATH,

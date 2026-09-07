@@ -20,8 +20,6 @@ export interface SubscriptionRecord {
   originVaultId: string;
   subjectType: string;
   cursor: SubscriptionCursor;
-  /** What the seat last ingested; `null` until it holds the grant's rows. */
-  structureDigest: string | null;
   state: "subscribed" | "removed";
   detail: string | null;
 }
@@ -33,14 +31,13 @@ interface SubscriptionRow {
   subject_type: string;
   cursor_epoch: string | null;
   cursor_seq: number;
-  structure_digest: string | null;
   state: string;
   detail: string | null;
 }
 
 const SUBSCRIPTION_COLUMNS = `authority_id, audience_vault_id,
         origin_vault_id, subject_type, cursor_epoch, cursor_seq,
-        structure_digest, state, detail`;
+        state, detail`;
 
 function toRecord(row: SubscriptionRow): SubscriptionRecord {
   return {
@@ -49,7 +46,6 @@ function toRecord(row: SubscriptionRow): SubscriptionRecord {
     originVaultId: row.origin_vault_id,
     subjectType: row.subject_type,
     cursor: { epoch: row.cursor_epoch, seq: row.cursor_seq },
-    structureDigest: row.structure_digest,
     state: row.state === "removed" ? "removed" : "subscribed",
     detail: row.detail,
   };
@@ -75,7 +71,6 @@ export interface RecordSubscriptionInput {
   originVaultId: string;
   subjectType: string;
   cursor?: { epoch: string; seq: number };
-  structureDigest?: string | null;
   state: "subscribed" | "removed";
   now: string;
   detail?: string | null;
@@ -104,13 +99,11 @@ export function recordSubscription(
   db.prepare(
     `INSERT INTO share_subscription
        (authority_id, audience_vault_id, origin_vault_id, subject_type,
-        cursor_epoch, cursor_seq, structure_digest, state, subscribed_at,
-        removed_at, detail)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        cursor_epoch, cursor_seq, state, subscribed_at, removed_at, detail)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (authority_id, audience_vault_id) DO UPDATE SET
        cursor_epoch = excluded.cursor_epoch,
        cursor_seq = excluded.cursor_seq,
-       structure_digest = excluded.structure_digest,
        state = excluded.state,
        removed_at = excluded.removed_at,
        detail = excluded.detail`
@@ -121,9 +114,6 @@ export function recordSubscription(
     input.subjectType,
     input.cursor?.epoch ?? standing?.cursor.epoch ?? null,
     seq,
-    input.structureDigest === undefined
-      ? (standing?.structureDigest ?? null)
-      : input.structureDigest,
     input.state,
     input.now,
     input.state === "removed" ? input.now : null,

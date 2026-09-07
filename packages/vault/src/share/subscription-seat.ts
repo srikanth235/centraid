@@ -1,13 +1,17 @@
 /*
- * AUDIENCE half of a subscription (#929). A frame lands through the door an
- * authored row takes — `projectShareClosure`, which runs `projection-ingest.ts`
- * per row — and the seat records, in the same transaction, WHICH SHAPE placed
- * each row and WHICH ORIGIN VERSION it stands for (`subscription-store.ts`).
+ * AUDIENCE half of a subscription (#929, rebuilt on the predicate #996 R10).
+ *
+ * TWO DOORS, and only these: a TAIL lands through `apply-outputs.ts`, and a
+ * REVOCATION drops the grant's claims and deletes what nothing else claims.
+ * The shape ingest that used to sit here — bootstrap, re-project or field
+ * updates, decided by a structure digest — is gone with the composer that fed
+ * it: the three outputs already say which rows entered, changed and left, so
+ * there is nothing left for a digest to guess at.
  *
  * The lineage is what makes a purge safe: two grants over one photograph are
  * two lineage rows, so revoking one leaves the row the other still delivers.
  * A row-keyed provenance table could not say that — it names one sender — so
- * removal reads the shape's claims and nothing else.
+ * removal reads the grant's claims and nothing else.
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -16,17 +20,9 @@ import { VaultShareError } from "../errors.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import type { ApplyShareOutputsResult } from "./apply-outputs.js";
 import { applyShareOutputs } from "./apply-outputs.js";
-import type { ProjectedItem, ShareableItemType } from "./closure.js";
+import type { ShareableItemType } from "./closure.js";
 import { shareableItemTypeOfEntity } from "./closure.js";
-import { projectShareClosure } from "./project-closure.js";
 import { deleteProjectedClosure } from "./removal.js";
-import {
-  applyShareShapeFields,
-  planShareShapeIngest,
-  shareShapeStructureDigest,
-} from "./subscription-delta.js";
-import type { ShareShapeFrame } from "./subscription-frame.js";
-import { SHARE_SHAPE_FORMAT_VERSION } from "./subscription-frame.js";
 import type { SubscriptionLineageRow } from "./subscription-store.js";
 import {
   readSubscription,
@@ -35,23 +31,6 @@ import {
 } from "./subscription-store.js";
 import type { ShareTailFrame } from "./subscription-tail.js";
 import { SHARE_TAIL_FORMAT_VERSION } from "./subscription-tail.js";
-
-export interface IngestShareShapeResult {
-  authorityId: string;
-  /** Which path the change earned — the number a work-counter budget reads. */
-  apply: "bootstrap" | "reproject" | "fields";
-  /** The named items; empty on the field path, which re-projects nothing. */
-  items: readonly ProjectedItem[];
-  /** Rows an `UPDATE` touched on the field path. */
-  fieldUpdates: number;
-  /** Rows this shape claims, whether it placed them or deduped onto them. */
-  lineageRows: number;
-  cursor: { epoch: string; seq: number };
-}
-
-function versionKey(entity: string, rowId: string): string {
-  return `${entity} ${rowId}`;
-}
 
 export interface ReleaseShapeRowsResult {
   removed: number;
@@ -114,105 +93,6 @@ function releaseShapeRows(
   return { removed, retained, shas: [...shas] };
 }
 
-/**
- * ONE audience transaction, and only the writes the change earns.
- *
- * The seat holds nothing for the shape → bootstrap. Its structure moved →
- * release this shape's rows and re-project, which is the only path that can
- * follow an album's membership. Otherwise → one `UPDATE` per row whose origin
- * version moved, so a one-field edit is one change row and wakes the devices
- * that hold that row alone.
- */
-export function ingestShareShape(
-  audience: DatabaseSync,
-  frame: ShareShapeFrame,
-  options: { audienceVaultId: string; now: string }
-): IngestShareShapeResult {
-  if (frame.formatVersion !== SHARE_SHAPE_FORMAT_VERSION)
-    throw new VaultShareError(
-      `unsupported share shape format ${String(frame.formatVersion)}`
-    );
-  if (frame.audienceVaultId !== options.audienceVaultId)
-    throw new VaultShareError(
-      `share shape ${frame.shapeId} is addressed to ${frame.audienceVaultId}, not ${options.audienceVaultId}`
-    );
-  const versions = new Map(
-    frame.rowVersions.map((row) => [
-      versionKey(row.entity, row.rowId),
-      row.version,
-    ])
-  );
-  const nested = audience.isTransaction;
-  audience.exec(nested ? "SAVEPOINT ingest_share_shape" : "BEGIN IMMEDIATE");
-  try {
-    const replicaCommit = beginReplicaCommit(audience);
-    const standing = readSubscription(
-      audience,
-      frame.grantId,
-      options.audienceVaultId
-    );
-    const plan = planShareShapeIngest({
-      audience,
-      frame,
-      lineage: readSubscriptionLineage(audience, frame.grantId),
-      heldDigest:
-        standing?.state === "subscribed" ? standing.structureDigest : null,
-    });
-    let items: readonly ProjectedItem[] = [];
-    let applied = 0;
-    let lineageRows = 0;
-    if (plan.apply === "fields") {
-      applied = applyShareShapeFields(audience, plan.updates);
-      const bump = audience.prepare(
-        `UPDATE share_subscription_lineage SET origin_row_version = ?
-          WHERE authority_id = ? AND target_type = ? AND target_id = ?`
-      );
-      for (const update of plan.updates)
-        bump.run(
-          update.originRowVersion,
-          frame.grantId,
-          update.entity,
-          update.rowId
-        );
-      lineageRows = readSubscriptionLineage(audience, frame.grantId).length;
-    } else {
-      if (plan.apply === "reproject") releaseShapeRows(audience, frame.grantId);
-      const projection = projectShareClosure(audience, frame.closure, {
-        // The projection claims its own rows, in its own transaction: a claim
-        // written afterwards could survive a projection that rolled back.
-        grant: { authorityId: frame.grantId, rowVersions: versions },
-        now: () => Date.parse(options.now),
-      });
-      items = projection.items;
-      lineageRows = projection.lineageRows;
-    }
-    recordSubscription(audience, {
-      authorityId: frame.grantId,
-      audienceVaultId: options.audienceVaultId,
-      originVaultId: frame.originVaultId,
-      subjectType: frame.subjectType,
-      cursor: frame.cursor,
-      structureDigest: shareShapeStructureDigest(frame.closure),
-      state: "subscribed",
-      now: options.now,
-    });
-    endReplicaCommit(audience, replicaCommit);
-    audience.exec(nested ? "RELEASE ingest_share_shape" : "COMMIT");
-    return {
-      authorityId: frame.grantId,
-      apply: plan.apply,
-      items,
-      fieldUpdates: applied,
-      lineageRows,
-      cursor: frame.cursor,
-    };
-  } catch (error) {
-    audience.exec(nested ? "ROLLBACK TO ingest_share_shape" : "ROLLBACK");
-    if (nested) audience.exec("RELEASE ingest_share_shape");
-    throw error;
-  }
-}
-
 export interface PurgeShareShapeResult {
   authorityId: string;
   /** Rows deleted. A row another live shape still claims is not one. */
@@ -246,7 +126,6 @@ export function purgeShareShape(
       audienceVaultId: input.audienceVaultId,
       originVaultId: standing?.originVaultId ?? "",
       subjectType: standing?.subjectType ?? "",
-      structureDigest: null,
       state: "removed",
       now: input.now,
     });
@@ -298,7 +177,12 @@ export function ingestShareTail(
       audienceVaultId: options.audienceVaultId,
       originVaultId: frame.originVaultId,
       subjectType: frame.subjectType,
-      cursor: frame.outputs.cursor,
+      // A DIVERGED SEAT DOES NOT ADVANCE ITS CURSOR (ruling G-view, #846). It
+      // wrote a projected row behind the origin's back, so what it holds is no
+      // longer what the origin served: keeping the cursor where it was makes
+      // the origin's next pass a resend, and a resend overwrites the edit. The
+      // pass that detected it still applies — it is not wrong, only short.
+      ...(applied.diverged > 0 ? {} : { cursor: frame.outputs.cursor }),
       state: "subscribed",
       now: options.now,
     });

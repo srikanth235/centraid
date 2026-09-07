@@ -212,10 +212,10 @@ describe("portability", () => {
       .prepare(
         `INSERT INTO share_subscription
            (authority_id, audience_vault_id, origin_vault_id,
-            subject_type, cursor_epoch, cursor_seq, structure_digest, state,
+            subject_type, cursor_epoch, cursor_seq, state,
             subscribed_at, removed_at, detail)
          VALUES (?, 'remote-vault', ?, 'core.document', 'epoch-1', 4,
-                 'digest', 'subscribed', ?, NULL, NULL)`
+                 'subscribed', ?, NULL, NULL)`
       )
       .run(authorityId, boot.vaultId, now);
     db.vault

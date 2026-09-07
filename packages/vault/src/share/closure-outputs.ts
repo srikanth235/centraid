@@ -27,7 +27,7 @@
  * per pass and never stored.
  */
 
-import type { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 import { decodeWireValue, encodeWireRow } from "@centraid/core/protocol";
 import type { WireRowImage, WireValue } from "@centraid/core/protocol";
@@ -82,6 +82,33 @@ function quoted(name: string): string {
 }
 
 /**
+ * ONE PREPARE PER TABLE, not one per row. A bootstrap reads a full image for
+ * every member, and a 200-photo album is ~800 of them: preparing the same
+ * `SELECT *` eight hundred times is most of the pass's cost and none of its
+ * work. Keyed per connection, because a statement belongs to the connection
+ * that prepared it; the schema is fixed for the life of one.
+ */
+const IMAGE_READS = new WeakMap<DatabaseSync, Map<string, StatementSync>>();
+
+function imageRead(origin: DatabaseSync, table: string): StatementSync {
+  let perDb = IMAGE_READS.get(origin);
+  if (!perDb) {
+    perDb = new Map();
+    IMAGE_READS.set(origin, perDb);
+  }
+  const held = perDb.get(table);
+  if (held) return held;
+  const read = origin.prepare(
+    `SELECT * FROM ${quoted(table)} WHERE ` +
+      primaryKeyOf(origin, table)
+        .map((column) => `${quoted(column)} = ?`)
+        .join(" AND ")
+  );
+  perDb.set(table, read);
+  return read;
+}
+
+/**
  * The current image of one member row, read from the origin. `undefined` when
  * the row is gone — which is not an error: a member deleted between the
  * closure read and this read is a LEAVE, and the caller drops it.
@@ -90,16 +117,10 @@ function readRowImage(
   origin: DatabaseSync,
   member: ShareMemberRow
 ): WireRowImage | undefined {
-  const key = primaryKeyOf(origin, member.table);
   const values = JSON.parse(member.pk) as WireValue[];
-  const row = origin
-    .prepare(
-      `SELECT * FROM ${quoted(member.table)} WHERE ` +
-        key.map((column) => `${quoted(column)} = ?`).join(" AND ")
-    )
-    .get(...values.map((value) => decodeWireValue(value))) as
-    | Record<string, unknown>
-    | undefined;
+  const row = imageRead(origin, member.table).get(
+    ...values.map((value) => decodeWireValue(value))
+  ) as Record<string, unknown> | undefined;
   return row === undefined ? undefined : encodeWireRow(row);
 }
 

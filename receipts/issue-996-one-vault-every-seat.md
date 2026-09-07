@@ -1872,3 +1872,178 @@ The two-gateway suites — `share-subscription-peer.test.ts` and
 `share-surface-queries.test.ts` — now run THROUGH the tail door: `pullShareShape`
 tries `pullShareTail` first and falls back only on `snapshot`, so every subject
 type they cover crosses as rows before it ever crosses as a frame.
+
+## Wave 7 — the frame path is deleted
+
+`composeShareShape` is gone, and with it the door that served it, the digest
+that decided what an ingest wrote, and the host-memory cache that decided
+whether to compose at all. The predicate transport is the only way a share
+travels now. What replaced each thing is named beside it below, because R10's
+own rule is that nothing here is deleted without a successor.
+
+### What went, and what answers for it
+
+| Deleted | Successor |
+| --- | --- |
+| `share/subscription-frame.ts` (`composeShareShape`, the frame, its row-version read) | `share/subscription-tail.ts` — the three outputs since a cursor |
+| `share/subscription-delta.ts` (the structure digest, `FIELD_TABLES`, `planShareShapeIngest`, `applyShareShapeFields`) | `share/apply-outputs.ts` — the member-set diff says which rows moved, so nothing has to be guessed from a digest |
+| `share_subscription.structure_digest` | `share_subscription_member`, per R10's "superseded by the member set, not deleted without a successor" |
+| `ingestShareShape` | `ingestShareTail` |
+| `PEER_REPLICA_BOOTSTRAP_PATH` and `handlePeerReplicaBootstrap` | `PEER_REPLICA_TAIL_PATH` — a subscriber with no cursor gets every member as an `enter`, which IS the closure snapshot |
+| `GrantProjectionMemory` and the per-host digest cache | a pass whose three outputs are all empty, read from origin state rather than from a cache a restart empties |
+| the frame's size ceiling and sealed-column check | `share/share-ceiling.ts`, which keeps both and moves the ceiling onto the CLOSURE |
+
+### Three things the deletion nearly took with it, and did not
+
+- **THE CEILING IS A PROPERTY OF THE GRANT, so it is judged once per pass and
+  before any audience is consulted.** Measured on the closure, never on a
+  pass's outputs: an audience that is merely up to date has empty outputs and
+  would sail past a ceiling the grant has never been under. `assertShareCeiling`
+  runs at the top of `startShareSubscription`, which is what keeps "an
+  over-ceiling grant leaves no fulfillment row even when every peer is
+  unreachable" true — a check inside the delivery loop skips exactly that case.
+- **THE SEALED REGISTRY IS STILL A PIPELINE PROPERTY.** The frame checked one
+  hard-coded table; `assertSealedColumnsStaySealed` now checks every row a pass
+  carries, by entity, against `sealedColumnsOf`.
+- **DIVERGENCE IS STILL ERASED (ruling G-view, #846).** The shape composer
+  repaired an audience that had edited a projected row by re-reading and
+  comparing everything, every pass — which is the cost this wave exists to
+  remove, so the property had to be re-earned rather than inherited.
+  `share_subscription_lineage.audience_row_version` records what this vault's
+  row was AT when the applier wrote it; a claimed row whose version has moved
+  past that was written on this side. The seat reports the count, holds its
+  cursor back, and the origin answers with one resend IN THE SAME PASS, so the
+  divergence is erased by the pass that found it. Two statements per claimed
+  table per pass, never one per row. `subscription-sim.test.ts`'s seed 839001
+  holds it, and it is what caught the loss.
+
+### The performance regression this wave nearly shipped
+
+`tests/scale/share-journey.scale.test.ts` measured **3,447 ms** against its
+750 ms ceiling the first time the tail path drove it — 4.6x over. Three causes,
+all found and fixed rather than accommodated by moving the ceiling:
+
+1. **An upsert re-prepared per row.** `upsertFor` was written and then not
+   called: `writeRow` still built the SQL inline. 965 ms of 1,070 in the row
+   loop, and the row loop dropped to 160 ms once it was wired up — against the
+   projector's 473 ms for the same 801-row closure.
+2. **The membership write ran outside a transaction.** 801 inserts, 801
+   implicit commits, 627 ms of fsyncs. `writeShareMembers` opens one.
+3. **The schema was re-read per row.** `primaryKeyOf` runs `PRAGMA table_info`
+   on every call and the applier asked three times per row; cached per table
+   per connection, in `apply-outputs.ts` and `closure-members.ts` alike.
+
+The ledger row `gateway/share/shared-album/ci-linux-x64-4c` carries the number
+under `_closureTailProvenance`: **428.4 ms** (397.7 / 428.4 / 491.0 over three
+runs), against #929's 232.2 ms. **The interval grew and the reason is named
+rather than hidden**: a tail pass also writes the origin's membership, 801 rows
+the frame path did not have, and that is exactly what makes every later pass a
+diff — the second pass over an unmoved album is three empty outputs and no
+writes at all, which the frame path could never reach. The 750 ms ceiling is
+NOT re-seeded.
+
+### Decisions — wave 7, the deletion
+
+- **A Locker grant answers `unsupported`, and that is not a regression.** Its
+  sealed columns must be re-sealed under the audience DEK, which needs both
+  vault keys in one process; the frame path could not do it either — its ingest
+  passed no keys and threw. The door now says so and names the reason. Locker
+  sharing arrives with W6, which is where the key plane does.
+- **One pass per audience, not one composition per grant.** The frame was
+  audience-independent, so one composition could be re-stamped for everyone. A
+  tail is the difference since ONE audience's cursor; re-stamping it onto
+  another would hand the second a set of rows computed against a position it is
+  not at. The cost is one closure walk per audience of a grant, over a roster
+  that is a circle's members.
+- **The origin records its own `share_subscription` row now.** `cursor_seq` on
+  the origin side is what the tail door compares an audience's claimed cursor
+  against, and what the next pass diffs from. It is the meaning the column
+  already had — "the audience's acknowledgement" — finally written by the push
+  path as well as the pull path.
+- **`@share:` survives as a wire credential.** The grant IS the shape in both
+  tables and in every store, but `judgeSubscriberCredential` and the change
+  notice still carry a `shapeId`, and `isShareShapeId` still guards the device
+  plane's namespace while `buildReplicaShapes` lives (W5's). The sigil is
+  resolved to the grant at the door; deleting it is W5's protocol bump, not
+  this one's.
+- **Two tests were edited to write inside a replica commit rather than behind
+  the log.** The `update` half of the three outputs is the LOG's, so an origin
+  edit made outside a captured commit is one no subscription can see. That is a
+  property of the transport, not a gap in it, and a test that edits behind the
+  log is exercising a write the gateway cannot produce.
+
+### Every file this commit touches
+
+- **Deleted**: `packages/vault/src/share/subscription-frame.ts` ·
+  `packages/vault/src/share/subscription-delta.ts`
+- `packages/vault/src/share/share-ceiling.ts` (new) — the ceiling and the
+  sealed check, kept off the frame
+- `packages/vault/src/schema/subscription.ts` — `structure_digest` dropped,
+  `audience_row_version` added to the lineage
+- `packages/vault/src/share/subscription-store.ts` — the digest's reader and
+  writer gone
+- `packages/vault/src/share/subscription-seat.ts` — `ingestShareShape` gone; a
+  diverged seat holds its cursor back
+- `packages/vault/src/share/apply-outputs.ts` — the statement caches and the
+  batched id questions; split at the size rule into
+  `packages/vault/src/share/apply-registry.ts` (the per-table DATA, which
+  changes when a table does), `packages/vault/src/share/apply-shape.ts` (what
+  the applier needs to know about a table, read once per connection) and
+  `packages/vault/src/share/apply-divergence.ts` (the G-view half)
+- `packages/server/src/serve/share-subscription-sweep.ts` — the peer sweep
+  reads the predicate transport's `applied` answer as a delivery, with the
+  three outputs' counts as its work-counter reading
+- `packages/vault/src/share/closure-outputs.ts` ·
+  `packages/vault/src/share/closure-members.ts` · `packages/vault/src/share/sql.ts`
+  — one prepare per table, one key read per table, one transaction for the
+  membership write
+- `packages/vault/src/share/subscription-tail.ts` — the ceiling and sealed
+  check on the pass; `maxSizeBytes`
+- `packages/vault/src/share/subscription-transport.ts` — the loopback delivers
+  tails and reports divergence
+- `packages/vault/src/grant/fulfillment.ts` — one pass per audience, the
+  up-front ceiling, the same-pass resend, the origin-side subscription row, and
+  the projection memory's deletion
+- `packages/vault/src/index.ts` — the deleted exports removed, the new ones added
+- `packages/core/src/protocol/replica-subscription.ts` ·
+  `packages/core/src/protocol/index.ts` ·
+  `packages/core/src/protocol/replica-subscription.test.ts` — the bootstrap path
+  deleted, and the plane's path set is the tail door plus the three that stay
+- `packages/server/src/routes/peer-replica-route.ts` — the bootstrap door and
+  `ingestPulledShape` deleted; the blob door authorizes against the grant's own
+  closure manifest
+- `packages/server/src/routes/peer-plane.ts` — the bootstrap route unmounted
+- `packages/server/src/serve/share-subscriber.ts` — `pullShareShape` deleted;
+  `pullShareTail` is the pull
+- `packages/server/src/serve/build-gateway.ts` ·
+  `packages/server/src/serve/share-subscription-peer.test-fixtures.ts` — the
+  seat's pull re-pointed
+- `packages/server/src/serve/grant-fulfillment.ts` — the projection memory gone
+- `packages/vault/src/share/subscription.test.ts` — rewritten onto the tail,
+  keeping every work-counter claim
+- `packages/vault/src/share/subscription-sim-plane.test-fixtures.ts` ·
+  `packages/vault/src/grant/fulfillment.test.ts` ·
+  `packages/vault/src/grant/fulfillment.roster.test.ts` ·
+  `packages/vault/src/gateway/portability.test.ts` ·
+  `packages/server/src/serve/grant-fulfillment.test.ts` ·
+  `packages/server/src/serve/share-subscription-peer.test.ts` — the outputs'
+  vocabulary, and edits made inside a replica commit
+- `packages/server/src/routes/replica-shape-parity.test.ts` — `docs` re-pinned
+  a second time: `structure_digest` left the subscription and the lineage
+  gained a column, and `docs` is the one app whose shape spans those tables
+- `tests/journeys.json` — `_closureTailProvenance` on the share journey
+- `packages/vault/tests/golden/issue-929/{vault.db.gz,manifest.json}` —
+  re-frozen: the subscription DDL moved again
+
+### Gates
+
+```
+cd packages/vault  && bun run test                      # 208 files, 1726 passed
+cd packages/server && bun run test                      # 390 files; only the 3
+                                                        #   environmental files red
+bunx vitest run --config vitest.scale.config.ts \
+  tests/scale/share-journey.scale.test.ts               # green, 3 consecutive runs
+bash .governance/run.sh                                 # 22/22 directives
+bun run check:push:static                               # stamped on the committed tree
+grep -r composeShareShape packages apps                 # empty
+```

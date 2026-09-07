@@ -1400,6 +1400,15 @@
             "breakdown": "grant written 1.7-4.2 ms, subscription STARTED 218.2-230.1 ms, grantee's own read 0.4 ms",
             "note": "AFTER number (#929). The same rig, the same key, the same interval: only the delivery term changed, from projecting a fulfillment to composing the grant's shape once and carrying it over the loopback transport (startShareSubscription). Delivery is still 98% of the interval and still the only term that scales with the share. THE HOST IS SHARED, and the before number's own note says so: the same rig read 216-237 ms at load average 7.4 and 267-495 ms at 15-16 on the day it was taken, so the 212.1 -> 232.2 ms difference is SMALLER than the spread contention alone produces. Read it as a direction — a subscription pays for a shape (one size check, one structure digest, one lineage row per projected row) where fulfillment paid for a projection — not as a verdict. The ceiling is NOT re-seeded: tighten-only, and three samples on a contended host are not a distribution.",
             "headroom": "unchanged at 750 ms, ~3.2x the slowest after-sample"
+          },
+          "_closureTailProvenance": {
+            "at": "2026-09-07",
+            "host": "linux x64 development container, 4 cores / 15 GB, shared with sibling agents",
+            "observedMs": 428.4,
+            "observedSpreadMs": "397.7 / 428.4 / 491.0 over three consecutive runs",
+            "breakdown": "grant written 1.9-2.7 ms, subscription STARTED 395.3-488.5 ms, grantee's own read 0.5-0.6 ms",
+            "note": "THE CLOSURE-TAIL NUMBER (#996 W7, ruling R10). Same key, same interval, same co-hosted topology as the AFTER above it: what changed underneath is that the origin serves the three outputs and the audience applies them AS ROWS, instead of composing a grant-keyed shape and re-projecting it. The row applier is 160 ms against the projector's 473 ms over the same 801-row closure, and the pass is 428 ms end to end against #929's 232 ms. THE INTERVAL GREW AND THE REASON IS NAMED: a tail pass also writes the origin's membership, 801 rows of `share_subscription_member`, which the frame path did not have and which is exactly what makes every LATER pass a diff instead of a re-projection — the second pass over an unmoved album is three empty outputs and no writes at all, which the frame path could never reach. Two costs were found on the way to this number and fixed rather than shipped: an upsert re-prepared per row (965 ms of 1,070) and a membership write outside a transaction (627 ms of fsyncs).",
+            "headroom": "the 750 ms ceiling stands unchanged, ~1.5x the slowest of three samples; tighten-only, and it is NOT re-seeded upward for this wave"
           }
         },
         "grantToVisibleCrossGateway": {

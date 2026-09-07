@@ -25,11 +25,10 @@ import {
 } from "@centraid/core/protocol";
 import {
   channelForParty,
-  composeShareShape,
   composeShareTail,
-  ingestShareShape,
   ingestShareTail,
   purgeShareShape,
+  readShareClosure,
   readShareGrant,
   readSubscription,
   recordSubscription,
@@ -38,7 +37,6 @@ import {
 import type {
   Credential,
   Gateway as VaultGateway,
-  ShareShapeFrame,
   ShareTailFrame,
   VaultDb,
 } from "@centraid/vault";
@@ -46,7 +44,6 @@ import type {
 import type { PeerIdentity } from "./peer-plane.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
-export const PEER_REPLICA_BOOTSTRAP_PATH = "/centraid/_peer/replica/bootstrap";
 export const PEER_REPLICA_CHANGES_PATH = "/centraid/_peer/replica/changes";
 export const PEER_REPLICA_BLOB_PATH = "/centraid/_peer/replica/blob";
 export const PEER_REPLICA_INTENTS_PATH = "/centraid/_peer/replica/intents";
@@ -72,12 +69,6 @@ export interface PeerReplicaDeps {
 }
 
 export type PeerReplicaPullOutcome =
-  | {
-      state: "ingested";
-      apply: "bootstrap" | "reproject" | "fields";
-      fieldUpdates: number;
-      cursor: { epoch: string; seq: number };
-    }
   | {
       /** The predicate transport (#996, R10): what the three outputs did. */
       state: "applied";
@@ -136,21 +127,6 @@ export function admitAtOrigin(
   return { origin, originVaultId, audienceVaultId, shapeId, grantId };
 }
 
-function frameFor(admission: Admission): ShareShapeFrame {
-  const grant = readShareGrant(admission.origin.vault, admission.grantId);
-  if (!grant) throw new Error(`share grant ${admission.grantId} vanished`);
-  return composeShareShape({
-    origin: admission.origin,
-    originVaultId: admission.originVaultId,
-    audienceVaultId: admission.audienceVaultId,
-    shapeId: admission.shapeId,
-    grantId: admission.grantId,
-    subjectType: grant.subjectType,
-    subjectId: grant.subjectId,
-    maxSizeBytes: grant.maxSizeBytes,
-  });
-}
-
 /**
  * ORIGIN door: THE THREE OUTPUTS since the audience's cursor (#996, R10).
  *
@@ -165,8 +141,10 @@ function frameFor(admission: Admission): ShareShapeFrame {
  * resend an upsert rather than a scrub.
  *
  * A grant this door cannot serve — today only a Locker item, whose sealed
- * columns must be re-sealed under the audience DEK — answers `snapshot`, and
- * the subscriber takes the bootstrap door. It is never answered wrongly.
+ * columns must be re-sealed under the audience DEK inside one process —
+ * answers `unsupported` and names the reason. It is never answered wrongly,
+ * and it was never deliverable over a subscription: the old ingest had no
+ * keys to re-seal with and threw. There is no second door to fall back to.
  */
 export function handlePeerReplicaTail(
   res: ServerResponse,
@@ -198,9 +176,14 @@ export function handlePeerReplicaTail(
     authorityId: admission.grantId,
     subjectType: grant.subjectType,
     subjectId: grant.subjectId,
+    maxSizeBytes: grant.maxSizeBytes,
     ...(acknowledged ? { since: { epoch, seq: claimed } } : {}),
   });
-  if (!pass) return sendJson(res, 200, { state: "snapshot" });
+  if (!pass)
+    return sendJson(res, 200, {
+      state: "unsupported",
+      detail: "this grant's closure cannot be served as rows",
+    });
   // Served, so recorded: the origin now believes this audience holds these
   // rows, and the next request's cursor is what confirms or refutes it.
   pass.settle();
@@ -214,18 +197,6 @@ export function handlePeerReplicaTail(
     now: nowOf(deps),
   });
   return sendJson(res, 200, { state: "tail", frame: pass.frame });
-}
-
-/** ORIGIN door: the whole grant-keyed shape, composed on demand. */
-export function handlePeerReplicaBootstrap(
-  res: ServerResponse,
-  peer: PeerIdentity,
-  params: URLSearchParams,
-  deps: PeerReplicaDeps
-): true {
-  const admission = admitAtOrigin(peer, params, deps);
-  if (!admission) return notFound(res);
-  return sendJson(res, 200, { state: "shape", frame: frameFor(admission) });
 }
 
 /**
@@ -245,9 +216,18 @@ export function handlePeerReplicaBlob(
   const offset = Number(params.get("offset") ?? "0");
   if (!sha256 || !Number.isSafeInteger(offset) || offset < 0)
     return sendJson(res, 400, { state: "bad_request" });
-  const frame = frameFor(admission);
-  const entry = frame.closure.blobs.find((blob) => blob.sha256 === sha256);
-  if (!entry) return notFound(res);
+  // MEMBERSHIP OF THE MANIFEST IS THE AUTHORIZATION, and the manifest is the
+  // grant's own closure: a linked peer cannot name an arbitrary content
+  // address and read the owner's library through the share.
+  const grant = readShareGrant(admission.origin.vault, admission.grantId);
+  if (!grant) return notFound(res);
+  const claimed = readShareClosure(admission.origin.vault, {
+    originVaultId: admission.originVaultId,
+    itemType: grant.subjectType,
+    itemIds: [grant.subjectId],
+    crossOwner: true,
+  }).blobs.some((blob) => blob.sha256 === sha256);
+  if (!claimed) return notFound(res);
   const bytes = admission.origin.blobs.local.getSync(sha256);
   if (!bytes) return notFound(res);
   const chunk = bytes.subarray(offset, offset + PEER_REPLICA_BLOB_CHUNK_BYTES);
@@ -356,24 +336,5 @@ export function ingestPulledTail(
     left: applied.left,
     retained: applied.retained,
     cursor: applied.cursor,
-  };
-}
-
-/** Apply a frame the seat pulled. Kept here so the pull half and the loopback
- *  half agree about what "ingest" means on this seat. */
-export function ingestPulledShape(
-  seat: VaultDb,
-  frame: ShareShapeFrame,
-  input: { audienceVaultId: string; now: string }
-): PeerReplicaPullOutcome {
-  const result = ingestShareShape(seat.vault, frame, {
-    audienceVaultId: input.audienceVaultId,
-    now: input.now,
-  });
-  return {
-    state: "ingested",
-    apply: result.apply,
-    fieldUpdates: result.fieldUpdates,
-    cursor: result.cursor,
   };
 }

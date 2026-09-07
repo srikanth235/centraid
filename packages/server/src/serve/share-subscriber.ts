@@ -10,13 +10,11 @@
 
 import { shareShapeGrantId, subscriberQuery } from "@centraid/core/protocol";
 import { readSubscription } from "@centraid/vault";
-import type { ShareShapeFrame, ShareTailFrame, VaultDb } from "@centraid/vault";
+import type { ShareTailFrame, VaultDb } from "@centraid/vault";
 
 import {
-  ingestPulledShape,
   ingestPulledTail,
   PEER_REPLICA_BLOB_PATH,
-  PEER_REPLICA_BOOTSTRAP_PATH,
   PEER_REPLICA_TAIL_PATH,
 } from "../routes/peer-replica-route.js";
 import type { PeerReplicaPullOutcome } from "../routes/peer-replica-route.js";
@@ -35,25 +33,6 @@ export interface PullShareShapeInput {
 
 function unreachable(detail: string): PeerReplicaPullOutcome {
   return { state: "unreachable", detail };
-}
-
-function frameOf(json: unknown): ShareShapeFrame | undefined {
-  if (json === null || typeof json !== "object") return undefined;
-  const body = json as { state?: unknown; frame?: unknown };
-  if (body.state !== "shape") return undefined;
-  const frame = body.frame;
-  if (frame === null || typeof frame !== "object") return undefined;
-  const candidate = frame as Partial<ShareShapeFrame>;
-  if (
-    typeof candidate.shapeId !== "string" ||
-    typeof candidate.grantId !== "string" ||
-    typeof candidate.originVaultId !== "string" ||
-    typeof candidate.audienceVaultId !== "string" ||
-    candidate.closure === undefined ||
-    !Array.isArray(candidate.rowVersions)
-  )
-    return undefined;
-  return frame as ShareShapeFrame;
 }
 
 /**
@@ -134,10 +113,9 @@ function tailOf(json: unknown): ShareTailFrame | undefined {
  * manifest names, and applies the three outputs — enter, update, leave — as
  * rows, re-keyed through lineage.
  *
- * `undefined` means "this grant is not servable as rows" — the origin said
- * `snapshot`, and the caller falls back to the frame door. That fallback is
- * the transport invariant, not a rung: for one wave the two doors stand side
- * by side, and the frame door goes when the tail serves every subscription.
+ * `undefined` means the origin cannot serve this grant as rows and said so
+ * (`unsupported`). There is no second door to fall back to — the frame path is
+ * deleted — so the caller reports it rather than pretending a delivery.
  */
 export async function pullShareTail(
   input: PullShareShapeInput
@@ -176,8 +154,7 @@ export async function pullShareTail(
   }
   if (response.status !== 200) return undefined;
   const body = response.json as { state?: unknown };
-  // The origin says this grant needs the closure snapshot; take the other door.
-  if (body.state === "snapshot") return undefined;
+  if (body.state === "unsupported") return undefined;
   const frame = tailOf(response.json);
   if (!frame) return unreachable("the origin sent no usable tail");
   if (
@@ -189,52 +166,6 @@ export async function pullShareTail(
   const blobFailure = await pullBlobs(input, frame.blobs);
   if (blobFailure) return unreachable(blobFailure);
   return ingestPulledTail(input.seat, frame, {
-    audienceVaultId: input.audienceVaultId,
-    now: input.now(),
-  });
-}
-
-/** Bootstrap or refresh one shape. `unreachable` never leaves a partial seat:
- *  the ingest is one transaction, and the bytes precede it. */
-export async function pullShareShape(
-  input: PullShareShapeInput
-): Promise<PeerReplicaPullOutcome> {
-  const tail = await pullShareTail(input);
-  if (tail !== undefined) return tail;
-  const endpointTicket = input.dial.endpointTicketFor(
-    input.route.endpointId,
-    input.route.relayHints
-  );
-  const query = subscriberQuery({
-    originVaultId: input.originVaultId,
-    audienceVaultId: input.audienceVaultId,
-    shapeId: input.shapeId,
-  });
-  let response: { status: number; json: unknown };
-  try {
-    response = await input.dial.request({
-      endpointTicket,
-      method: "GET",
-      target: `${PEER_REPLICA_BOOTSTRAP_PATH}?${query}`,
-    });
-  } catch (error) {
-    return unreachable(
-      error instanceof Error ? error.message : "the origin could not be dialled"
-    );
-  }
-  if (response.status !== 200)
-    return unreachable(`the origin answered ${response.status}`);
-  const frame = frameOf(response.json);
-  if (!frame) return unreachable("the origin sent no usable shape");
-  if (
-    frame.shapeId !== input.shapeId ||
-    frame.originVaultId !== input.originVaultId ||
-    frame.audienceVaultId !== input.audienceVaultId
-  )
-    return unreachable("the origin sent a shape this seat did not ask for");
-  const blobFailure = await pullBlobs(input, frame.closure.blobs);
-  if (blobFailure) return unreachable(blobFailure);
-  return ingestPulledShape(input.seat, frame, {
     audienceVaultId: input.audienceVaultId,
     now: input.now(),
   });
