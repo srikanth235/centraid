@@ -23,6 +23,7 @@ import {
   STARRED_NOTATION,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import {
   daysSinceContact,
@@ -32,8 +33,12 @@ import {
 } from "../format.ts";
 import { readLiveBindings } from "./_shared.ts";
 
+/** The recent-activity rail's own size. */
+const RECENT_ACTIVITY_ROWS = 30;
+
 interface RawProfile {
   party_id: string;
+  deleted_at?: string | null;
   created_at: string;
   last_contacted_at?: string | null;
   cadence_days: number;
@@ -59,6 +64,7 @@ interface RawParty {
 }
 
 interface RawTag {
+  tag_id: string;
   concept_id: string;
 }
 
@@ -71,6 +77,7 @@ interface RawDate {
 }
 
 interface RawLink {
+  link_id: string;
   from_id: string;
   to_id: string;
 }
@@ -82,6 +89,7 @@ interface RawActivity {
 }
 
 interface RawAnnotation {
+  annotation_id: string;
   target_id: string;
   body_text: string;
 }
@@ -95,15 +103,24 @@ export default async function dashboard({ ctx }: HandlerArgs) {
   const window = 9_999;
   try {
     const [profiles, concepts, schemes] = await Promise.all([
-      ctx.vault.read({
-        entity: "people.profile",
-        where: [{ column: "deleted_at", op: "is-null" }],
-        orderBy: { column: "created_at", dir: "desc" },
+      ctx.vault.page<RawProfile>({
+        query: {
+          name: "people.dashboard.profiles",
+          select:
+            "party_id, created_at, last_contacted_at, cadence_days, avatar_color, role, deleted_at",
+          from: "people_profile",
+          where: "deleted_at IS NULL",
+          order: {
+            sortColumn: "created_at",
+            pkColumn: "party_id",
+            descending: true,
+          },
+        },
         limit: window,
       }),
       ...conceptTaxonomyReads(ctx),
     ]);
-    const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
+    const profileRows = profiles.rows;
     const conceptRows = concepts as unknown as RawConcept[];
     const schemeRows = schemes as unknown as RawScheme[];
     const partyIds = profileRows.map((p) => p.party_id);
@@ -131,70 +148,103 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         STARRED_NOTATION
       )?.concept_id ?? null;
 
-    const [parties, tags, dates, activityLinks, bindings] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.party",
-        where: [{ column: "party_id", op: "in", value: partyIds }],
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.tag",
-        where: [
-          { column: "target_type", op: "eq", value: "core.party" },
-          { column: "target_id", op: "in", value: partyIds },
-        ],
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "people.important_date",
-        where: [
-          { column: "party_id", op: "in", value: partyIds },
-          { column: "deleted_at", op: "is-null" },
-        ],
-      }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.link",
-        where: [
-          { column: "from_type", op: "eq", value: "core.activity" },
-          { column: "to_type", op: "eq", value: "core.party" },
-          { column: "to_id", op: "in", value: partyIds },
-          { column: "valid_to", op: "is-null" },
-        ],
-      }),
-      // Null means the sharing plane is unreadable, not that nobody is linked.
-      readLiveBindings(ctx.vault, partyIds),
-    ]);
+    // Every decoration is `in`-bounded by the roster the window returned.
+    const partyIn = inList("party_id", partyIds);
+    const targetIn = inList("target_id", partyIds);
+    const toIn = inList("to_id", partyIds);
+    const [partyRows, tagRows, dateRows, linkRows, bindings] =
+      await Promise.all([
+        readPages<RawParty>(ctx, {
+          name: "people.dashboard.parties",
+          select: "party_id, display_name",
+          from: "core_party",
+          where: partyIn.sql,
+          bind: partyIn.bind,
+          order: {
+            sortColumn: "party_id",
+            pkColumn: "party_id",
+            descending: false,
+          },
+        }),
+        readPages<RawTag>(ctx, {
+          name: "people.dashboard.tags",
+          select: "tag_id, target_type, target_id, concept_id",
+          from: "core_tag",
+          where: `target_type = ? AND ${targetIn.sql}`,
+          bind: ["core.party", ...targetIn.bind],
+          order: {
+            sortColumn: "tag_id",
+            pkColumn: "tag_id",
+            descending: false,
+          },
+        }),
+        readPages<RawDate>(ctx, {
+          name: "people.dashboard.importantDates",
+          select: "date_id, party_id, label, month_day, reminder_on",
+          from: "people_important_date",
+          where: `${partyIn.sql} AND deleted_at IS NULL`,
+          bind: partyIn.bind,
+          order: {
+            sortColumn: "date_id",
+            pkColumn: "date_id",
+            descending: false,
+          },
+        }),
+        readPages<RawLink>(ctx, {
+          name: "people.dashboard.activityLinks",
+          select: "link_id, from_type, from_id, to_type, to_id",
+          from: "core_link",
+          where: `from_type = ? AND to_type = ? AND ${toIn.sql} AND valid_to IS NULL`,
+          bind: ["core.activity", "core.party", ...toIn.bind],
+          order: {
+            sortColumn: "link_id",
+            pkColumn: "link_id",
+            descending: false,
+          },
+        }),
+        // Null means the sharing plane is unreadable, not that nobody is linked.
+        readLiveBindings(ctx, partyIds),
+      ]);
 
-    const partyRows = (parties.rows ?? []) as unknown as RawParty[];
-    const tagRows = (tags.rows ?? []) as unknown as RawTag[];
-    const dateRows = (dates.rows ?? []) as unknown as RawDate[];
-    const linkRows = (activityLinks.rows ?? []) as unknown as RawLink[];
     const activityIds = linkRows.map((link) => link.from_id);
-    const [activities, activityAnnotations] = await Promise.all([
-      activityIds.length
-        ? ctx.vault.read({
-            entity: "core.activity",
-            where: [{ column: "activity_id", op: "in", value: activityIds }],
-            orderBy: { column: "started_at", dir: "desc" },
-            limit: 30,
+    const activityIn =
+      activityIds.length > 0 ? inList("activity_id", activityIds) : null;
+    const annotationIn =
+      activityIds.length > 0 ? inList("target_id", activityIds) : null;
+    const [activities, annotationRows] = await Promise.all([
+      activityIn
+        ? ctx.vault.page<RawActivity>({
+            query: {
+              name: "people.dashboard.activities",
+              select: "activity_id, kind_concept_id, started_at",
+              from: "core_activity",
+              where: activityIn.sql,
+              bind: activityIn.bind,
+              order: {
+                sortColumn: "started_at",
+                pkColumn: "activity_id",
+                descending: true,
+              },
+            },
+            limit: RECENT_ACTIVITY_ROWS,
           })
-        : Promise.resolve({ rows: [] }),
-      activityIds.length
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "knowledge.annotation",
-            where: [
-              { column: "target_type", op: "eq", value: "core.activity" },
-              { column: "target_id", op: "in", value: activityIds },
-            ],
+        : Promise.resolve({ rows: [] as RawActivity[] }),
+      annotationIn
+        ? readPages<RawAnnotation>(ctx, {
+            name: "people.dashboard.activityNotes",
+            select: "annotation_id, target_type, target_id, body_text",
+            from: "knowledge_annotation",
+            where: `target_type = ? AND ${annotationIn.sql}`,
+            bind: ["core.activity", ...annotationIn.bind],
+            order: {
+              sortColumn: "annotation_id",
+              pkColumn: "annotation_id",
+              descending: false,
+            },
           })
-        : Promise.resolve({ rows: [] }),
+        : Promise.resolve([] as RawAnnotation[]),
     ]);
-    const activityRows = (activities.rows ?? []) as unknown as RawActivity[];
-    const annotationRows = (activityAnnotations.rows ??
-      []) as unknown as RawAnnotation[];
+    const activityRows = activities.rows;
     const partyByActivity = new Map(
       linkRows.map((link) => [link.from_id, link.to_id])
     );

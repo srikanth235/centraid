@@ -27,11 +27,17 @@ export interface PagedStatement {
   order: { sortColumn: string; pkColumn: string; descending: boolean };
 }
 
+export interface PageCursorish {
+  sortKey: string;
+  pk: string;
+}
+
 export interface PagedFixture {
   page: (request: {
     query: PagedStatement;
     limit: number;
-  }) => Promise<{ rows: Record<string, unknown>[] }>;
+    after?: PageCursorish;
+  }) => Promise<{ rows: Record<string, unknown>[]; next?: PageCursorish }>;
   /** Every statement the handler asked for, in order. */
   statements: PagedStatement[];
   /** Predicates outside the fixture's grammar, so a test can see them. */
@@ -132,6 +138,54 @@ export interface PagedFixtureOptions {
   byHandler?: Record<string, unknown[]>;
 }
 
+/**
+ * THE FIXTURE PAGES FOR REAL.
+ *
+ * Ordering, the keyset and the window are the three things a handler now hands
+ * the host, and a fixture that ignored them could not tell a handler that asked
+ * for 200 rows from one that asked for all of them. So the rows are sorted by
+ * the statement's own two columns, the cursor is applied as the row value
+ * `(sort, pk)` comparison the assembler emits, and `next` appears exactly when
+ * a row was left behind — which is what a handler reads as `truncated`.
+ */
+function pageOfRows(
+  rows: Record<string, unknown>[],
+  query: PagedStatement,
+  limit: number,
+  after?: PageCursorish
+): { rows: Record<string, unknown>[]; next?: PageCursorish } {
+  const { sortColumn, pkColumn, descending } = query.order;
+  const keyOf = (row: Record<string, unknown>): [string, string] => [
+    row[sortColumn] == null ? "" : String(row[sortColumn]),
+    String(row[pkColumn] ?? ""),
+  ];
+  const compare = (
+    a: Record<string, unknown>,
+    b: Record<string, unknown>
+  ): number => {
+    const [as, ap] = keyOf(a);
+    const [bs, bp] = keyOf(b);
+    const order = as < bs ? -1 : as > bs ? 1 : ap < bp ? -1 : ap > bp ? 1 : 0;
+    return descending ? -order : order;
+  };
+  const ordered = [...rows].sort(compare);
+  const past = after
+    ? ordered.filter((row) => {
+        const [sortKey, pk] = keyOf(row);
+        const beyond =
+          sortKey === after.sortKey ? pk > after.pk : sortKey > after.sortKey;
+        return descending
+          ? !beyond && !(sortKey === after.sortKey && pk === after.pk)
+          : beyond;
+      })
+    : ordered;
+  const window = past.slice(0, limit);
+  const last = window.at(-1);
+  if (past.length <= limit || !last) return { rows: window };
+  const [sortKey, pk] = keyOf(last);
+  return { rows: window, next: { sortKey, pk } };
+}
+
 /** A `ctx.vault.page` that answers from entity-keyed fixtures. */
 export function pagedFixture(
   rowsByEntity: Record<string, unknown[]>,
@@ -154,14 +208,17 @@ export function pagedFixture(
         rowsByEntity[table] ??
         rowsByEntity[entity] ??
         []) as Record<string, unknown>[];
-      return {
-        rows: applyWhere(
+      return pageOfRows(
+        applyWhere(
           rows,
           request.query.where,
           request.query.bind ?? [],
           unapplied
         ),
-      };
+        request.query,
+        request.limit,
+        request.after
+      );
     },
   };
 }

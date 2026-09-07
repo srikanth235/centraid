@@ -1,5 +1,5 @@
 // The roster window must not drop people with no notice.
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
 import { STATUS } from "../people-copy.ts";
@@ -18,23 +18,18 @@ function ctxOf(rows: Array<Record<string, unknown>>) {
     party_id: row.party_id,
     display_name: String(row.party_id),
   }));
-  const read = vi.fn<
-    (request: {
-      entity: string;
-      limit?: number;
-    }) => Promise<{ rows: unknown[] }>
-  >(async (request) => {
-    if (request.entity === "people.profile") {
-      const cap = request.limit ?? rows.length;
-      return { rows: rows.slice(0, cap) };
-    }
-    if (request.entity === "core.party") return { rows: parties };
-    return { rows: [] };
+  // The roster is a page since #996 wave 4, and the fixture pages for real:
+  // it sorts by the statement's own two columns, honours the window and
+  // produces a cursor exactly when a row was left behind. That is what makes
+  // "not silently capped" a claim this test can still make — a fixture that
+  // returned everything regardless of `limit` could not tell the two apart.
+  const { page, statements } = pagedFixture({
+    "core.party": parties,
+    "people.profile": rows,
   });
-  const { page } = pagedFixture({ "core.party": parties });
   return {
-    ctx: { vault: { page, read } } as unknown as HandlerArgs["ctx"],
-    read,
+    ctx: { vault: { page } } as unknown as HandlerArgs["ctx"],
+    statements,
   };
 }
 

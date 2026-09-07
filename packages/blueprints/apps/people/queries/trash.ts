@@ -1,3 +1,5 @@
+import { inList, readPages } from "../../_shared/paged-reads.ts";
+
 interface TrashedProfile {
   party_id: string;
   role?: string | null;
@@ -9,30 +11,46 @@ interface Party {
   display_name: string;
 }
 
+/** How many trashed people the shelf shows. */
+const TRASH_ROWS = 500;
+
 /** Secret-free People trash shelf; canonical parties remain intact. */
 export default async function trashPeople({ ctx }: HandlerArgs) {
   try {
-    const profiles = await ctx.vault.read({
-      entity: "people.profile",
-      where: [{ column: "deleted_at", op: "not-null" }],
-      orderBy: { column: "deleted_at", dir: "desc" },
-      limit: 500,
+    // The shelf is what the screen shows, so the read is the shelf's size.
+    const profiles = await ctx.vault.page<TrashedProfile>({
+      query: {
+        name: "people.trash.profiles",
+        select: "party_id, role, deleted_at, purge_at",
+        from: "people_profile",
+        where: "deleted_at IS NOT NULL",
+        order: {
+          sortColumn: "deleted_at",
+          pkColumn: "party_id",
+          descending: true,
+        },
+      },
+      limit: TRASH_ROWS,
     });
-    const rows = (profiles.rows ?? []) as unknown as TrashedProfile[];
+    const rows = profiles.rows;
     const ids = rows.map((row) => row.party_id);
-    const parties =
-      ids.length === 0
-        ? { rows: [] }
-        : await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.party",
-            where: [{ column: "party_id", op: "in", value: ids }],
-          });
+    const partyIn = ids.length === 0 ? null : inList("party_id", ids);
+    const parties = partyIn
+      ? await readPages<Party>(ctx, {
+          name: "people.trash.parties",
+          select: "party_id, display_name",
+          from: "core_party",
+          where: partyIn.sql,
+          bind: partyIn.bind,
+          order: {
+            sortColumn: "party_id",
+            pkColumn: "party_id",
+            descending: false,
+          },
+        })
+      : [];
     const names = new Map(
-      ((parties.rows ?? []) as unknown as Party[]).map((party) => [
-        party.party_id,
-        party.display_name,
-      ])
+      parties.map((party) => [party.party_id, party.display_name])
     );
     return {
       people: rows.map((row) => ({

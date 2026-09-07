@@ -18,11 +18,14 @@ import {
   findScheme,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { inList, readById, readPages } from "../../_shared/paged-reads.ts";
 import { PENDING_OVERLAY_FIELDS } from "../../_shared/pending-overlay.ts";
 import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { readPersonShareLinks } from "./_shared.ts";
 
 interface RawProfile {
+  party_id: string;
+  deleted_at?: string | null;
   role?: string | null;
   nickname?: string | null;
   avatar_color?: string | null;
@@ -68,6 +71,7 @@ interface RawDate {
 
 interface RawNote {
   annotation_id: string;
+  target_type?: string;
   body_text: string;
   created_at: string;
 }
@@ -95,7 +99,29 @@ interface RawInteraction {
 }
 
 interface RawTag {
+  tag_id: string;
   concept_id: string;
+}
+
+/** One roster of parties by id — the same walk from two call sites. */
+function readPartiesById(
+  ctx: HandlerCtx,
+  name: string,
+  ids: readonly string[]
+): Promise<RawParty[]> {
+  const partyIn = inList("party_id", ids);
+  return readPages<RawParty>(ctx, {
+    name,
+    select: "party_id, display_name, kind",
+    from: "core_party",
+    where: partyIn.sql,
+    bind: partyIn.bind,
+    order: {
+      sortColumn: "party_id",
+      pkColumn: "party_id",
+      descending: false,
+    },
+  });
 }
 
 interface RawConcept {
@@ -125,23 +151,36 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
   const partyId = String(input?.party_id ?? "");
   if (!partyId) return { person: null };
   try {
-    const [profiles, parties] = await Promise.all([
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "people.profile",
-        where: [
-          { column: "party_id", op: "eq", value: partyId },
-          { column: "deleted_at", op: "is-null" },
-        ],
+    // The screen is one person, so both of these are one-row pages.
+    const [profilePage, party] = await Promise.all([
+      ctx.vault.page<RawProfile>({
+        query: {
+          name: "people.person.profile",
+          select:
+            "party_id, role, nickname, avatar_color, cadence_days, last_contacted_at, created_at, met, deleted_at",
+          from: "people_profile",
+          where: "party_id = ? AND deleted_at IS NULL",
+          bind: [partyId],
+          order: {
+            sortColumn: "party_id",
+            pkColumn: "party_id",
+            descending: false,
+          },
+        },
+        limit: 1,
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.party",
-        where: [{ column: "party_id", op: "eq", value: partyId }],
-      }),
+      readById<RawParty>(
+        ctx,
+        {
+          name: "people.person.party",
+          select: "party_id, display_name, kind",
+          from: "core_party",
+          idColumn: "party_id",
+        },
+        partyId
+      ),
     ]);
-    const profile = ((profiles.rows ?? []) as unknown as RawProfile[])[0];
-    const party = ((parties.rows ?? []) as unknown as RawParty[])[0];
+    const profile = profilePage.rows[0];
     if (!profile || !party) return { person: null };
 
     const [
@@ -162,95 +201,144 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       // O-contact): reachability has one store, and the read-time fold of
       // legacy `tel`/`email` identifier rows back into this list went with the
       // rung that moved them onto channels.
-      ctx.vault.read({
-        entity: "social.contact_channel",
-        limit: 2000,
+      // ONE PERSON'S CHANNELS, ASKED FOR AS ONE PERSON'S (#996 wave 4). This
+      // read took the WHOLE TABLE with a window of 2,000 — for two reasons at
+      // once: this person's channels, and everyone else's, to find the
+      // duplicates. Both are now asked for by what they are. The second is
+      // below, `in`-bounded by the normalized values this one returned, which
+      // is the set that can possibly collide; a household past 2,000 channels
+      // used to lose both answers silently and in the same read.
+      readPages<RawContactChannel>(ctx, {
+        name: "people.person.channels",
+        select:
+          "channel_id, party_id, kind, label, value, normalized_value, is_preferred, provenance_json",
+        from: "social_contact_channel",
+        where: "party_id = ?",
+        bind: [partyId],
+        order: {
+          sortColumn: "channel_id",
+          pkColumn: "channel_id",
+          descending: false,
+        },
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.link",
-        where: [
-          { column: "from_type", op: "eq", value: "core.party" },
-          { column: "from_id", op: "eq", value: partyId },
-          { column: "valid_to", op: "is-null" },
-        ],
+      readPages<RawLink>(ctx, {
+        name: "people.person.outgoingLinks",
+        select:
+          "link_id, from_type, from_id, to_type, to_id, relation_concept_id, valid_to",
+        from: "core_link",
+        where: "from_type = ? AND from_id = ? AND valid_to IS NULL",
+        bind: ["core.party", partyId],
+        order: {
+          sortColumn: "link_id",
+          pkColumn: "link_id",
+          descending: false,
+        },
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.link",
-        where: [
-          { column: "to_type", op: "eq", value: "core.party" },
-          { column: "to_id", op: "eq", value: partyId },
-          { column: "valid_to", op: "is-null" },
-        ],
+      readPages<RawLink>(ctx, {
+        name: "people.person.incomingLinks",
+        select:
+          "link_id, from_type, from_id, to_type, to_id, relation_concept_id, valid_to",
+        from: "core_link",
+        where: "to_type = ? AND to_id = ? AND valid_to IS NULL",
+        bind: ["core.party", partyId],
+        order: {
+          sortColumn: "link_id",
+          pkColumn: "link_id",
+          descending: false,
+        },
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "people.important_date",
-        where: [
-          { column: "party_id", op: "eq", value: partyId },
-          { column: "deleted_at", op: "is-null" },
-        ],
+      readPages<RawDate>(ctx, {
+        name: "people.person.importantDates",
+        select: "date_id, party_id, label, month_day, reminder_on",
+        from: "people_important_date",
+        where: "party_id = ? AND deleted_at IS NULL",
+        bind: [partyId],
+        order: {
+          sortColumn: "date_id",
+          pkColumn: "date_id",
+          descending: false,
+        },
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "knowledge.annotation",
-        where: [
-          { column: "target_type", op: "eq", value: "core.party" },
-          { column: "target_id", op: "eq", value: partyId },
-        ],
-        orderBy: { column: "created_at", dir: "desc" },
+      readPages<RawNote>(ctx, {
+        name: "people.person.notes",
+        select: "annotation_id, target_type, target_id, body_text, created_at",
+        from: "knowledge_annotation",
+        where: "target_type = ? AND target_id = ?",
+        bind: ["core.party", partyId],
+        order: {
+          sortColumn: "created_at",
+          pkColumn: "annotation_id",
+          descending: true,
+        },
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "tally.obligation",
-        where: [
-          { column: "from_party", op: "eq", value: partyId },
-          { column: "deleted_at", op: "is-null" },
-        ],
+      readPages<RawDebt>(ctx, {
+        name: "people.person.debtsFrom",
+        select:
+          "obligation_id, from_party, to_party, amount_minor, currency, reason, settled_at",
+        from: "tally_obligation",
+        where: "from_party = ? AND deleted_at IS NULL",
+        bind: [partyId],
+        order: {
+          sortColumn: "obligation_id",
+          pkColumn: "obligation_id",
+          descending: false,
+        },
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "tally.obligation",
-        where: [
-          { column: "to_party", op: "eq", value: partyId },
-          { column: "deleted_at", op: "is-null" },
-        ],
+      readPages<RawDebt>(ctx, {
+        name: "people.person.debtsTo",
+        select:
+          "obligation_id, from_party, to_party, amount_minor, currency, reason, settled_at",
+        from: "tally_obligation",
+        where: "to_party = ? AND deleted_at IS NULL",
+        bind: [partyId],
+        order: {
+          sortColumn: "obligation_id",
+          pkColumn: "obligation_id",
+          descending: false,
+        },
       }),
-      ctx.vault.read({
-        acceptTruncation: true,
-        entity: "core.tag",
-        where: [
-          { column: "target_type", op: "eq", value: "core.party" },
-          { column: "target_id", op: "eq", value: partyId },
-        ],
+      readPages<RawTag>(ctx, {
+        name: "people.person.tags",
+        select: "tag_id, target_type, target_id, concept_id",
+        from: "core_tag",
+        where: "target_type = ? AND target_id = ?",
+        bind: ["core.party", partyId],
+        order: {
+          sortColumn: "tag_id",
+          pkColumn: "tag_id",
+          descending: false,
+        },
       }),
       ...conceptTaxonomyReads(ctx),
-      ctx.vault.read({ acceptTruncation: true, entity: "core.vault" }),
+      readPages<{ vault_id: string; self_party_id?: string | null }>(ctx, {
+        name: "people.person.vault",
+        select: "vault_id, self_party_id",
+        from: "core_vault",
+        order: {
+          sortColumn: "vault_id",
+          pkColumn: "vault_id",
+          descending: false,
+        },
+      }),
       // Null when the sharing plane is unreadable — never a thrown denial.
-      readPersonShareLinks(ctx.vault, partyId),
+      readPersonShareLinks(ctx, partyId),
     ]);
 
-    const allChannelRows = (channelRowsResult.rows ??
-      []) as unknown as RawContactChannel[];
-    const channelRows = allChannelRows.filter(
+    const channelRows = channelRowsResult.filter(
       (channel) => channel.party_id === partyId
     );
-    const outgoing = (outgoingLinks.rows ?? []) as unknown as RawLink[];
-    const incoming = (incomingLinks.rows ?? []) as unknown as RawLink[];
-    const dateRows = (dates.rows ?? []) as unknown as RawDate[];
-    const noteRows = (notes.rows ?? []) as unknown as RawNote[];
-    const debtRows = [
-      ...((debtsFrom.rows ?? []) as unknown as RawDebt[]),
-      ...((debtsTo.rows ?? []) as unknown as RawDebt[]),
-    ].filter(
+    const outgoing = outgoingLinks;
+    const incoming = incomingLinks;
+    const dateRows = dates;
+    const noteRows = notes;
+    const debtRows = [...debtsFrom, ...debtsTo].filter(
       (row, index, all) =>
         all.findIndex((x) => x.obligation_id === row.obligation_id) === index
     );
-    const tagRows = (tags.rows ?? []) as unknown as RawTag[];
+    const tagRows = tags;
     const conceptRows = concepts as unknown as RawConcept[];
     const schemeRows = schemes as unknown as RawScheme[];
-    const ownerPartyId = String((vault.rows ?? [])[0]?.self_party_id ?? "");
+    const ownerPartyId = String(vault[0]?.self_party_id ?? "");
 
     const relationLinks = outgoing.filter(
       (link) =>
@@ -285,19 +373,40 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
     const activityIds = incoming
       .filter((link) => link.from_type === "core.activity")
       .map((link) => link.from_id);
-    const duplicatePartyIds = [
-      ...new Set(
-        channelRows.flatMap((channel) =>
-          allChannelRows
-            .filter(
-              (other) =>
-                other.party_id !== partyId &&
-                other.kind === channel.kind &&
-                other.normalized_value === channel.normalized_value
-            )
-            .map((other) => other.party_id)
+    // A COLLISION IS ONLY POSSIBLE ON A VALUE THIS PERSON HOLDS, so the search
+    // for one is bounded by those values rather than by the table.
+    const normalizedValues = [
+      ...new Set(channelRows.map((channel) => channel.normalized_value)),
+    ];
+    const otherChannelRows =
+      normalizedValues.length === 0
+        ? []
+        : await readPages<RawContactChannel>(ctx, {
+            name: "people.person.duplicateChannels",
+            select:
+              "channel_id, party_id, kind, label, value, normalized_value, is_preferred, provenance_json",
+            from: "social_contact_channel",
+            where: `${inList("normalized_value", normalizedValues).sql} AND party_id <> ?`,
+            bind: [
+              ...inList("normalized_value", normalizedValues).bind,
+              partyId,
+            ],
+            order: {
+              sortColumn: "channel_id",
+              pkColumn: "channel_id",
+              descending: false,
+            },
+          });
+    const duplicatesOf = (channel: RawContactChannel): string[] =>
+      otherChannelRows
+        .filter(
+          (other) =>
+            other.kind === channel.kind &&
+            other.normalized_value === channel.normalized_value
         )
-      ),
+        .map((other) => other.party_id);
+    const duplicatePartyIds = [
+      ...new Set(channelRows.flatMap((channel) => duplicatesOf(channel))),
     ];
     const [
       relatedParties,
@@ -307,66 +416,68 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       interactionNotes,
     ] = await Promise.all([
       relationLinks.length > 0
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.party",
-            where: [
-              {
-                column: "party_id",
-                op: "in",
-                value: relationLinks.map((l) => l.to_id),
-              },
-            ],
-          })
-        : Promise.resolve({ rows: [] }),
+        ? readPartiesById(
+            ctx,
+            "people.person.relatedParties",
+            relationLinks.map((l) => l.to_id)
+          )
+        : Promise.resolve([] as RawParty[]),
       duplicatePartyIds.length > 0
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.party",
-            where: [
-              {
-                column: "party_id",
-                op: "in",
-                value: duplicatePartyIds,
-              },
-            ],
-          })
-        : Promise.resolve({ rows: [] }),
+        ? readPartiesById(
+            ctx,
+            "people.person.duplicateParties",
+            duplicatePartyIds
+          )
+        : Promise.resolve([] as RawParty[]),
       taskIds.length > 0
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "schedule.task",
-            where: [{ column: "task_id", op: "in", value: taskIds }],
+        ? readPages<RawTask>(ctx, {
+            name: "people.person.tasks",
+            select: "task_id, title, status",
+            from: "schedule_task",
+            where: inList("task_id", taskIds).sql,
+            bind: inList("task_id", taskIds).bind,
+            order: {
+              sortColumn: "task_id",
+              pkColumn: "task_id",
+              descending: false,
+            },
           })
-        : Promise.resolve({ rows: [] }),
+        : Promise.resolve([] as RawTask[]),
       activityIds.length > 0
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.activity",
-            where: [{ column: "activity_id", op: "in", value: activityIds }],
-            orderBy: { column: "started_at", dir: "desc" },
+        ? readPages<RawInteraction>(ctx, {
+            name: "people.person.interactions",
+            select: "activity_id, kind_concept_id, started_at",
+            from: "core_activity",
+            where: inList("activity_id", activityIds).sql,
+            bind: inList("activity_id", activityIds).bind,
+            order: {
+              sortColumn: "started_at",
+              pkColumn: "activity_id",
+              descending: true,
+            },
           })
-        : Promise.resolve({ rows: [] }),
+        : Promise.resolve([] as RawInteraction[]),
       activityIds.length > 0
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "knowledge.annotation",
-            where: [
-              { column: "target_type", op: "eq", value: "core.activity" },
-              { column: "target_id", op: "in", value: activityIds },
-            ],
+        ? readPages<RawNote & { target_id: string }>(ctx, {
+            name: "people.person.interactionNotes",
+            select:
+              "annotation_id, target_type, target_id, body_text, created_at",
+            from: "knowledge_annotation",
+            where: `target_type = ? AND ${inList("target_id", activityIds).sql}`,
+            bind: ["core.activity", ...inList("target_id", activityIds).bind],
+            order: {
+              sortColumn: "annotation_id",
+              pkColumn: "annotation_id",
+              descending: false,
+            },
           })
-        : Promise.resolve({ rows: [] }),
+        : Promise.resolve([] as Array<RawNote & { target_id: string }>),
     ]);
-    const relatedPartyRows = (relatedParties.rows ??
-      []) as unknown as RawParty[];
-    const duplicatePartyRows = (duplicateParties.rows ??
-      []) as unknown as RawParty[];
-    const taskRows = (tasks.rows ?? []) as unknown as RawTask[];
-    const interactionRows = (interactions.rows ??
-      []) as unknown as RawInteraction[];
-    const interactionNoteRows = (interactionNotes.rows ??
-      []) as unknown as Array<RawNote & { target_id: string }>;
+    const relatedPartyRows = relatedParties;
+    const duplicatePartyRows = duplicateParties;
+    const taskRows = tasks;
+    const interactionRows = interactions;
+    const interactionNoteRows = interactionNotes;
 
     const listConceptIds = new Set<string>(
       conceptsInScheme(
@@ -412,14 +523,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           a.channel_id.localeCompare(b.channel_id)
       )
       .map((channel) => {
-        const duplicateIds = allChannelRows
-          .filter(
-            (other) =>
-              other.party_id !== partyId &&
-              other.kind === channel.kind &&
-              other.normalized_value === channel.normalized_value
-          )
-          .map((other) => other.party_id);
+        const duplicateIds = duplicatesOf(channel);
         let provenance: Record<string, unknown> | null = null;
         try {
           provenance = channel.provenance_json
@@ -438,7 +542,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           provenance,
           duplicate_party_ids: duplicateIds,
           duplicate_names: duplicateIds.map(
-            (id) => duplicateNameById.get(id) ?? id
+            (id: string) => duplicateNameById.get(id) ?? id
           ),
         };
       });

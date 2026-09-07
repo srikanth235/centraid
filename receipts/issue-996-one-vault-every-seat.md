@@ -6859,3 +6859,69 @@ answer. `SEEDED_VAULT` is now served by both.
   wave removes reads with no stated bound, not bounds somebody chose.
 - **A test harness with two read doors must answer the same on both**, or every
   conversion reads as a regression in it.
+
+## Wave 4g — People: two reads that were reading the wrong thing (#996)
+
+### The roster's probe row was the handler's; it is the host's
+
+`people.ts` asked for `window + 1` rows and sliced the extra off to decide
+`truncated`. That is the probe row, hand-rolled — and it only ever produced a
+boolean. The page's probe is the host's on both ends, and its cursor says not
+just that there is more but where to carry on from.
+
+### A person's contact channels were the WHOLE table
+
+`person.ts` read `social.contact_channel` with `limit: 2000` and no predicate,
+then filtered in memory — for two reasons at once: this person's channels, and
+everybody else's, to find duplicate phone numbers and addresses. A household
+past 2,000 channels lost BOTH answers in the same read and said nothing. Now
+each is asked for by what it is: `party_id = ?`, and then the duplicate search
+`in`-bounded by the normalized values this person actually holds, which is the
+only set that can collide.
+
+The remaining thirty-odd reads across the roster, the dashboard, search, the
+person sheet, the journal, the trash shelf and the history rail are walks over
+sets the screen's own window bounded. `readLiveBindings` and
+`readPersonShareLinks` take the ctx rather than a bare `VaultApi`.
+
+### The fixture pages for real now
+
+Ordering, the keyset and the window are what a handler hands the host, and a
+fixture that ignored them could not tell a handler asking for 200 rows from one
+asking for all of them — which is exactly the claim
+`people-roster.test.ts` makes. `pagedFixture` sorts by the statement's own two
+columns, applies the cursor as the row-value comparison the assembler emits, and
+produces `next` exactly when a row was left behind.
+
+### Gates
+
+- `bunx vitest run --root packages/blueprints apps/people` — 6 files, all pass.
+- `bun run --cwd packages/blueprints test` — 215 files, 7,102 passed, 2
+  expected-fail.
+- `bun run --cwd packages/blueprints typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/blueprints/apps/_shared/paged-ctx.test-fixtures.ts`
+- `packages/blueprints/apps/people/queries/_shared.ts`
+- `packages/blueprints/apps/people/queries/dashboard.ts`
+- `packages/blueprints/apps/people/queries/history.ts`
+- `packages/blueprints/apps/people/queries/journal.ts`
+- `packages/blueprints/apps/people/queries/people-roster.test.ts`
+- `packages/blueprints/apps/people/queries/people.ts`
+- `packages/blueprints/apps/people/queries/person.ts`
+- `packages/blueprints/apps/people/queries/search.ts`
+- `packages/blueprints/apps/people/queries/share-links.test.ts`
+- `packages/blueprints/apps/people/queries/trash.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — People
+
+- **A read that serves two questions is two reads.** The channel read hid a
+  whole-table scan behind a per-person screen, and its window silently capped
+  both answers.
+- **A test fixture that cannot page cannot test paging.** Ordering, cursor and
+  window are now honoured, so a window claim is a claim about the handler.
