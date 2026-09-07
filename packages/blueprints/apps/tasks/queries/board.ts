@@ -19,7 +19,7 @@ import { nestTaskFamilies } from "../when.ts";
 
 /*
  * EVERY READ ON THIS BOARD IS A PAGE (#996 wave 4, R8). The declarative
- * vocabulary this replaces let each of these say `acceptTruncation: true` and
+ * vocabulary this replaces let each of these say "accept truncation" and
  * take whatever window the reader happened to have; there were ten of them in
  * this one file, and not one named the number it was relying on.
  *
@@ -197,7 +197,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       overlay: TASK_OVERLAY,
     });
     // The project and section lists are the board's own chrome: small, and
-    // read whole. `readPages` states the ceiling the old `acceptTruncation`
+    // read whole. `readPages` states the ceiling the old truncation flag
     // left to whatever the reader's default happened to be.
     const projectRows = await readPages<RawProject>(ctx, {
       name: "tasks.board.projects",

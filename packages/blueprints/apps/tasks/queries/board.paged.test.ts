@@ -1,7 +1,7 @@
 // THE BOARD IS PAGED, AND THERE IS NO OTHER WAY IN (#996 wave 4, R8, W4-D2).
 //
 // The board had ten declarative reads and eight of them said
-// `acceptTruncation: true` — the flag that meant "stop wherever you like, and
+// "accept truncation" — the flag that meant "stop wherever you like, and
 // do not tell me where". The claims here are the ones that replaces:
 //
 //   1. the handler reaches the vault ONLY through `ctx.vault.page`. A single

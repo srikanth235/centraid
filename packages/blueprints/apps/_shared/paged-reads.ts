@@ -18,7 +18,7 @@
  *   emitting `IN ()`, which SQLite parses and which matches nothing in a way
  *   that reads like a filter rather than a mistake.
  *
- * WHY THIS IS NOT `acceptTruncation` WITH EXTRA STEPS. The flag declared that
+ * WHY THIS IS NOT THE TRUNCATION FLAG WITH EXTRA STEPS. The flag declared that
  * the caller did not care where the answer stopped. A walk states where it
  * stops (`fanOutPages` × `pageSize` rows), states it at the call site, and
  * throws rather than returning a short answer that looks whole.
@@ -75,7 +75,7 @@ interface PagingCtx {
 /**
  * Walk a handler's pages to the end of a bounded set.
  *
- * The cap THROWS. Returning what it had would be `acceptTruncation` again:
+ * The cap THROWS. Returning what it had would be the truncation flag again:
  * a short answer that reads as a whole one, with the app deciding what to do
  * about a fact it was never told.
  */

@@ -6126,3 +6126,61 @@ behaviour bug would hide it in a diff about windows. It is filed separately.
   is the flag this wave is deleting, wearing a different name.
 - **A conversion commit changes windows, not behaviour.** The `recurrence_tz`
   mismatch is carried across unchanged and filed, not folded in.
+
+## Wave 4 — Tasks search, and the mobile seam that stops the sweep (#996)
+
+### Tasks is done: neither of its two handlers reads
+
+`queries/search.ts`'s two remaining unbounded reads — the attachments of the
+matched tasks and their bytes — are `readPages` walks over the match set, the
+same shape the board's joins take. `grep -rn "ctx.vault.read"
+packages/blueprints/apps/tasks` is empty.
+
+### The blocker, named: the phone's inline ctx has no `page`
+
+`readRepresentations` in `apps/_shared/representation-reads.ts` is the one read
+EVERY app makes, and converting it is the obvious next step — it was converted
+here and **reverted**, because it would have broken Tally and Locker on the
+phone. Why, precisely:
+
+- `buildNativeInlineCtx` (`apps/mobile/src/lib/replica/inline-query-ctx.native.ts:88`)
+  builds `NativeInlineQuerySession` out of `read` and `search` only, so
+  `ctx.vault.page` there is the online-only stub;
+- the phone holds TWO stores today. `MobileReplicaSession`
+  (`apps/mobile/src/lib/replica/native-session.ts:95`) runs on
+  `ReplicaSqliteDriver` — the OLD store, whose file is `replica_row` /
+  `payload_json` and has no `core_content_representation` to select from — while
+  the seat store's `SeatSqliteDriver` is what `apps/mobile/src/apps/photos/timeline-page.ts`
+  pages against and holds the vault's real tables;
+- so wiring `page` on the phone is not one method: it is handing the inline ctx
+  the SEAT's handle rather than the old store's, which is the mobile half of the
+  W5 cutover, not a line in an app conversion.
+
+**Until that lands, an app that runs through `runNativeInlineQuery` (Tally,
+Locker) cannot be converted, and neither can any `_shared` read those two
+reach.** Tasks, Docs, Notes, Agenda, People and Photos do not go through it on
+the phone and are convertible now.
+
+### Gates
+
+- `bunx vitest run packages/blueprints/apps/tasks
+  packages/blueprints/src/handler-crud-smoke.integration.test.ts` — 491 passed.
+- `bun run --cwd packages/blueprints typecheck` — clean.
+- `bun run check:push:static` — below.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `packages/blueprints/apps/tasks/queries/search.ts`
+- `packages/blueprints/apps/tasks/queries/board.ts` (the flag's name out of the
+  prose, so the tripwire this wave adds greps for a token that is really gone)
+- `packages/blueprints/apps/tasks/queries/board.paged.test.ts`
+- `packages/blueprints/apps/_shared/paged-reads.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the sweep's order
+
+- **A conversion that breaks a seat is not a conversion.** The shared
+  representation read is one edit and eight apps wide; it waits for the phone's
+  ctx rather than landing behind a broken Tally.

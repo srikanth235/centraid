@@ -1,3 +1,4 @@
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import {
   ownerKey,
   readRepresentations,
@@ -61,29 +62,38 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const taskIds = hits.map((t) => t.task_id);
     // Attachments only for the matched tasks — the join stays as narrow as
     // the match set, never a whole-table pull.
-    const attachments = await ctx.vault.read({
-      acceptTruncation: true,
-      entity: "core.attachment",
-      where: [
-        { column: "target_type", op: "eq", value: "schedule.task" },
-        { column: "target_id", op: "in", value: taskIds },
-      ],
+    const attachmentRows = await readPages<RawAttachment>(ctx, {
+      name: "tasks.search.attachments",
+      select:
+        "attachment_id, target_type, target_id, content_id, role, is_primary",
+      from: "core_attachment",
+      where: `target_type = ? AND ${inList("target_id", taskIds).sql}`,
+      bind: ["schedule.task", ...taskIds],
+      order: {
+        sortColumn: "attachment_id",
+        pkColumn: "attachment_id",
+        descending: false,
+      },
     });
-    const attachmentRows = (attachments.rows ??
-      []) as unknown as RawAttachment[];
     const contentIds = [...new Set(attachmentRows.map((a) => a.content_id))];
-    const contents =
+    const contentRows =
       contentIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.content_item",
-            where: [{ column: "content_id", op: "in", value: contentIds }],
+        ? await readPages<RawContent>(ctx, {
+            name: "tasks.search.contents",
+            select: "content_id, content_uri, byte_size",
+            from: "core_content_item",
+            where: inList("content_id", contentIds).sql,
+            bind: [...contentIds],
+            order: {
+              sortColumn: "content_id",
+              pkColumn: "content_id",
+              descending: false,
+            },
           })
-        : { rows: [] };
+        : [];
     // Bytes carry no media type since #996 (R20(b)) — the attachment's own
     // representation says what it reads them as.
     const representations = await readRepresentations({ ctx, contentIds });
-    const contentRows = (contents.rows ?? []) as unknown as RawContent[];
     const contentById = new Map(contentRows.map((c) => [c.content_id, c]));
     // Blob-backed bytes serve as same-origin URLs (#296).
     const srcOf = (c: RawContent | undefined): string | undefined =>
