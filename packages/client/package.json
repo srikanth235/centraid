@@ -12,6 +12,7 @@
     "./replica/native": "./src/replica/native.ts",
     "./replica/seat": "./src/replica/seat/index.ts",
     "./replica/seat/paged-handler": "./src/replica/seat/paged-handler.ts",
+    "./replica/seat/gunzip": "./src/replica/seat/gunzip.ts",
     "./replica/intent-invalidations": "./src/replica/intent-invalidations.ts",
     "./capture": "./src/capture.ts",
     "./home-copy": "./src/home-copy.ts",

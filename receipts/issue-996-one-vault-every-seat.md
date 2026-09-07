@@ -6385,3 +6385,134 @@ wave has not converted yet — they read through the old coordinator.
   The guard is the channel that survives it.
 - **The probe row is the host's on BOTH ends.** One end dropping it and the
   other not is a full page that reports itself short.
+
+## Wave 4b — the phone sits on the seat store, and `ctx.vault.page` is real there (#996)
+
+### The loop was the browser's; it is nobody's now
+
+`WebSeat` held the bootstrap-and-tail loop — the exit conditions that ARE the
+seat's correctness story (`hasMore` false is caught up, a 409 and a
+`SeatDriftError` are the same conclusion reached from two sides, one
+re-bootstrap per sync, offline is never an error). Three seats run that, so it
+is `SeatLoop` over a `SeatChannel`, and the two hosts differ in the channel and
+in nothing else:
+
+- the browser's channel posts to a Worker (`SeatWorkerClient`), because the
+  applier walks hundreds of thousands of rows and must not do it on the thread
+  that paints;
+- the phone's is `inProcessSeatChannel` — RN has no Worker and expo-sqlite's
+  handle is native and synchronous, so the call IS the channel. What it adds is
+  the one property the message boundary was giving for free: **a synchronous
+  throw becomes a rejection**, or drift recovery would work on one host and not
+  the other.
+
+`WebSeat` is now the browser's assembly and 54 lines.
+
+### The phone's seat: `ExpoSeatDriver` had no consumer, and now it is one
+
+`NativeSeat` (`apps/mobile/src/lib/replica/native-seat.ts`) is the driver, the
+staging, the snapshot door and the loop: `SeatWorkerCore` is the store on the
+phone exactly as it is in the browser's worker, so the carry-over before the
+swap (outbox, pins, held blobs), the epoch gate and the in-transaction overlay
+clearing are the same code, not the same idea. The file is
+`centraid-seat-<stem>.sqlite3` beside — never over — the old store's, which is
+what lets the read path move one screen at a time with no migration.
+
+`openSyncedNativeSeat` keeps the browser's rule: **a copy that has not arrived
+is not a seat.** A bootstrap that fails hands the handle back and answers
+`undefined`, and the read path then refuses ONLINE_ONLY and the query runs whole
+on the gateway's paged door (W4-D2).
+
+### Gunzip, because Hermes has no zlib
+
+The snapshot door serves `application/gzip` as a BODY, not as a transfer
+encoding (`seat-routes.ts:129`), and deliberately — `Content-Encoding` would let
+a proxy decompress underneath the seat and then a byte range means two different
+things at the two ends, which is how a resume splices two artifacts into one
+file that expands and is quietly corrupt. That decision is what makes the
+download resumable, and it is also why the phone must expand the artifact
+itself.
+
+**Owner decision, taken and continued past (no third-party inflate).**
+`gunzip.ts` is RFC 1951 plus the RFC 1952 container, ~230 lines over three
+files, pinned by a round trip against `node:zlib`'s own output at every
+compression level, over incompressible bytes (stored blocks), over an empty
+artifact, over 40 pseudo-random shapes, and with the optional header fields the
+container allows. A dependency would have put someone else's inflate in the one
+path where being wrong produces a database that opens.
+
+### The blocker the last commit named is gone
+
+`NativeInlineQuerySession` grows `page`, and `seatReadPlane(session, seat)`
+composes the session's rows with the seat's pages — two objects because they are
+two FILES until W5. `ReplicaProvider` opens the seat BEHIND the mount, never in
+front of it: the first bootstrap is the whole vault over whatever connection the
+phone has, and a member who tapped an icon must not wait for it. Until it lands,
+`ctx.vault.page` is the online-only stub and every screen behaves as before.
+
+The import is lazy for the reason `native-hash`'s is: a static one drags
+expo-sqlite and expo-file-system into every suite that mounts the provider.
+
+### Red first
+
+- `packages/client/src/replica/seat/seat-loop.test.ts` — the PHONE's assembly
+  with `node:sqlite` where expo-sqlite goes: bootstrap, tail to the head, read
+  the applied row off the file; one re-bootstrap on a 409 and no more; the
+  core's synchronous refusal arriving as a rejection.
+- `apps/mobile/src/lib/replica/seat-read-plane.test.ts` — a handler's
+  `ctx.vault.page` reaches the seat with its window and overlay (this failed
+  before: the ctx had no `page` and the stub rejected), and a phone with no seat
+  refuses online-only rather than reaching for the old store's file.
+- `packages/client/src/replica/seat/gunzip.test.ts` — six cases against zlib.
+
+### Gates
+
+- `bunx vitest run packages/client/src/replica/seat/{gunzip,seat-loop}.test.ts`
+  — 9 passed.
+- `bun run --cwd apps/mobile test` — 288 files, 2,431 passed.
+- `bun run --cwd packages/client test` — 293 files, 2,645 passed.
+- `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile lint` —
+  clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/client/src/replica/seat/seat-channel.ts`
+- `packages/client/src/replica/seat/seat-loop.ts`
+- `packages/client/src/replica/seat/seat-loop.test.ts`
+- `packages/client/src/replica/seat/in-process-channel.ts`
+- `packages/client/src/replica/seat/gunzip.ts`
+- `packages/client/src/replica/seat/gunzip-bits.ts`
+- `packages/client/src/replica/seat/gunzip-output.ts`
+- `packages/client/src/replica/seat/gunzip.test.ts`
+- `apps/mobile/src/lib/replica/native-seat.ts`
+- `apps/mobile/src/lib/replica/expo-seat-staging.ts`
+- `apps/mobile/src/lib/replica/seat-read-plane.test.ts`
+
+**Changed:**
+
+- `packages/client/src/replica/seat/web-seat.ts`
+- `packages/client/src/replica/seat/index.ts`
+- `packages/client/src/replica/native.ts`
+- `packages/client/package.json`
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.ts`
+- `apps/mobile/src/kit/replica/ReplicaProvider.tsx`
+- `apps/mobile/src/kit/replica/replica-context.ts`
+- `apps/mobile/src/apps/tally/useTallyVault.ts`
+- `apps/mobile/src/apps/locker/useLockerVault.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the phone's seat
+
+- **The loop belongs to no host.** Two copies of "when is a seat caught up" is
+  one copy that drifts, and the drift is invisible until a phone is a day
+  behind.
+- **A direct call must reject the way a message does.** Otherwise the recovery
+  written for one host silently does not run on the other.
+- **The seat arrives behind the mount.** A first bootstrap is the whole vault;
+  putting it in front of a tapped icon is a broken app, and behind it is a phone
+  that gets better a minute later.
+- **The one path where being wrong is silent gets no dependency.** A wrong
+  inflate is a database that opens.

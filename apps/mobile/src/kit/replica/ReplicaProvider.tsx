@@ -13,7 +13,7 @@ import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { coalesceWork } from "../../lib/coalesce";
 import type { CoalescedWork } from "../../lib/coalesce";
 import { scheduleDailyBriefNotification } from "../../lib/daily-brief";
-import { resolveGatewayBase } from "../../lib/gateway";
+import { authHeader, resolveGatewayBase } from "../../lib/gateway";
 import {
   syncDueNotifications,
   syncNotifications,
@@ -150,6 +150,7 @@ export function ReplicaProvider({
     if (!hydrated || gatewayKey === "loading") return undefined;
     let cancelled = false;
     let session: NativeReplicaSession | undefined;
+    let seat: { close: () => Promise<void> } | undefined;
     let multiplex: NativeMultiplexChangeFeed | undefined;
     let networkSubscription: { remove: () => void } | undefined;
     let reachabilityWork: CoalescedWork | undefined;
@@ -367,6 +368,37 @@ export function ReplicaProvider({
         });
         looseDrivers.splice(looseDrivers.indexOf(driver), 1);
         openDriver = driver;
+        // THE SEAT ARRIVES BEHIND THE MOUNT, NEVER IN FRONT OF IT (#996 wave
+        // 4b). Its first bootstrap is the whole vault file — tens of megabytes
+        // over whatever connection the phone has — and a member who tapped an
+        // icon must not wait for it. Until it lands, `ctx.vault.page` is the
+        // online-only stub and every screen behaves exactly as it did before.
+        if (storageLocation !== undefined) {
+          // Imported lazily, like `native-hash`: a static import would drag
+          // expo-sqlite and expo-file-system into every suite that mounts this
+          // provider, and the seat is opened at most once per mount anyway.
+          void import("../../lib/replica/native-seat")
+            .then(({ openSyncedNativeSeat }) =>
+              openSyncedNativeSeat({
+                gatewayId: identity.gatewayId,
+                vaultId: openScope.vaultId,
+                baseUrl: identity.auth.baseUrl,
+                headers: authHeader(),
+                storageLocation,
+                digest: nativeReplicaDigest,
+              })
+            )
+            .then((opened) => {
+              if (!opened) return;
+              if (cancelled) {
+                void opened.close().catch(() => undefined);
+                return;
+              }
+              seat = opened;
+              publish((value) => ({ ...value, seat: opened }));
+            })
+            .catch(() => undefined);
+        }
         if (revokedScopeIds.has(openScope.vaultId)) {
           await session.purge();
           reclaimRevokedReplica(openScope);
@@ -569,6 +601,7 @@ export function ReplicaProvider({
       void flushFreshness();
       networkSubscription?.remove();
       void session?.close();
+      void seat?.close().catch(() => undefined);
       multiplex?.close();
       for (const driver of looseDrivers) driver.close();
     };

@@ -10,6 +10,7 @@
 
 import type { ReplicaCoverage } from "@centraid/client/replica/native";
 
+import type { NativeSeatPagePort } from "../../lib/replica/inline-query-ctx.native";
 import type {
   MobileCompatibilityDisposition,
   MobileGatewayFeatures,
@@ -43,6 +44,13 @@ export interface ReplicaContextValue {
    * mounted sessions; a seat opens one file, so it is that file's session.
    */
   session?: NativeReplicaSession;
+  /**
+   * THE SEAT'S PAGED READ (#996 wave 4b), when the phone's copy of `vault.db`
+   * has arrived. Separate from `session` because it is a separate FILE until
+   * W5 deletes the old store, and absent means "no copy yet", which the read
+   * path answers online-only rather than by reaching for the other file.
+   */
+  seat?: NativeSeatPagePort;
   gatewayBase?: string;
   /** Visible VaultLink filter / write target; the session's own vault. */
   vaultId?: string;

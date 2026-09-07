@@ -27,6 +27,7 @@ import {
   runInlineQueryCore,
 } from "@centraid/client/replica/native";
 import type {
+  InlinePage,
   InlineQueryRunnable,
   ReplicaReadWireResult,
   ReplicaRowEnvelope,
@@ -67,7 +68,17 @@ export function withoutScopeProvenance(
   };
 }
 
-/** What a handler needs from the phone: the mounted read plane, nothing else. */
+/**
+ * What a handler needs from the phone: the read plane, and — since #996 wave
+ * 4b — the SEAT's own paged read.
+ *
+ * `page` is optional for one reason and it is not compatibility: a phone that
+ * has not finished copying the vault has no seat, and `ctx.vault.page` is then
+ * the core's online-only stub, which is the same answer a browser that turned
+ * "Keep an offline copy" off gives (W4-D2, R9). It is never the old store's
+ * handle: that file is `replica_row`/`payload_json` and a handler's plain SQL
+ * over the vault's real tables cannot run on it at all.
+ */
 export interface NativeInlineQuerySession {
   read: (
     appId: string,
@@ -77,6 +88,33 @@ export interface NativeInlineQuerySession {
     appId: string,
     request: NativeSearchRequest
   ) => Promise<ReplicaSearchWireResult>;
+  page?: InlinePage;
+}
+
+/** The seat's one contribution to a read plane: a page over its own file. */
+export interface NativeSeatPagePort {
+  page: InlinePage;
+}
+
+/**
+ * The read plane a handler actually runs on: the session's rows, the seat's
+ * pages.
+ *
+ * They are separate objects because they are separate FILES until W5 — the
+ * session's is the old store's, the seat's is `vault.db` — and composing them
+ * here rather than inside the session keeps that seam visible at the one place
+ * a screen hands a plane over.
+ */
+export function seatReadPlane(
+  session: NativeInlineQuerySession,
+  seat: NativeSeatPagePort | undefined
+): NativeInlineQuerySession {
+  if (!seat) return session;
+  return {
+    read: (appId, request) => session.read(appId, request),
+    search: (appId, request) => session.search(appId, request),
+    page: seat.page,
+  };
 }
 
 export interface NativeInlineCtxOptions {
@@ -101,6 +139,7 @@ export function buildNativeInlineCtx(
           sidecar
         )
       ),
+      ...(session.page ? { page: session.page } : {}),
       ...(signal ? { signal } : {}),
     },
     guard
