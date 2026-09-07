@@ -6516,3 +6516,58 @@ expo-sqlite and expo-file-system into every suite that mounts the provider.
   that gets better a minute later.
 - **The one path where being wrong is silent gets no dependency.** A wrong
   inflate is a database that opens.
+
+## Wave 4b — the read every app makes is a page now (#996)
+
+### One edit, eight apps wide, and it was blocked on the phone
+
+`readRepresentations` (`apps/_shared/representation-reads.ts`) is what fills in
+a row's `media_type` — Docs, Notes, Photos, Locker, Tally, People and Agenda all
+call it — and it said `acceptTruncation: true`. On a vault with enough
+representations the answer stopped somewhere and the rows came back with no
+type, which renders as "unknown kind" rather than as an error. Wave 4 converted
+it and REVERTED, because Tally and Locker run through `runNativeInlineQuery` and
+the phone's ctx had no `page`. It does now, so this lands.
+
+It is a `readPages` walk over the caller's OWN bounded set (the content ids of
+the rows its window returned), `in`-bounded by `inList`, with the keyset's
+second axis `representation_id` and not `content_id`: `content_id` is not unique
+in this table — one sha read as `text/html` by a document and `text/plain` by a
+note is exactly the row it exists for (`schema/core.ts:313-338`) — and a cursor
+keyed on it would stall on the pair.
+
+A consent denial is still not an error: the caller renders without a type.
+
+### Red first
+
+`representation-reads.paged.test.ts`, four cases: the index is built from pages
+alone (the fake ctx has NO `read`, so a survivor is a `TypeError`); the walk
+crosses page boundaries of the bounded set rather than taking one window; an
+empty set asks for nothing at all; a refusal renders without a type.
+
+### Gates
+
+- `bunx vitest run packages/blueprints/apps/_shared/representation-reads.paged.test.ts`
+  — 4 passed.
+- `bun run --cwd packages/blueprints test` — 214 files, 7,090 passed, 2
+  expected-fail.
+- `bun run --cwd apps/mobile test` — 288 files, 2,431 passed.
+- `bun run --cwd packages/blueprints typecheck` — clean.
+- `bun run check:push:static` — 4/4.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/blueprints/apps/_shared/representation-reads.paged.test.ts`
+
+**Changed:**
+
+- `packages/blueprints/apps/_shared/representation-reads.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the shared read
+
+- **The keyset's second axis is the table's own primary key, not the id the
+  caller filtered on.** A cursor on a non-unique column stops on the first
+  duplicate and calls it the end.

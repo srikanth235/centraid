@@ -14,9 +14,17 @@
  * takes the oldest reading of them.
  */
 
-const REPRESENTATION_ENTITY = "core.content_representation";
+import { inList, readPages } from "./paged-reads.ts";
+
+/**
+ * The PHYSICAL table, because a page is plain SQL over the seat's own copy of
+ * `vault.db` and over the gateway's file (W4-D2) — the same statement on both,
+ * with the entity recovered from `<schema>_<table>` for the scope check.
+ */
+const REPRESENTATION_TABLE = "core_content_representation";
 
 interface RawRepresentation {
+  representation_id: string;
   content_id: string;
   owner_type?: string | null;
   owner_id?: string | null;
@@ -50,15 +58,27 @@ export async function readRepresentations(args: {
   contentIds: readonly string[];
 }): Promise<RepresentationIndex> {
   if (args.contentIds.length === 0) return EMPTY_REPRESENTATIONS;
+  // A join over a set the CALLER already bounded — the content ids of the rows
+  // its own window returned — so it is walked to the end rather than windowed
+  // again. `representation_id` is the keyset's second axis because
+  // `content_id` is not unique here: one sha read as two things by two owners
+  // is exactly the row this table exists for.
+  const ids = inList("content_id", args.contentIds);
   let rows: RawRepresentation[];
   try {
-    const res = await args.ctx.vault.read({
-      acceptTruncation: true,
-      entity: REPRESENTATION_ENTITY,
-      where: [{ column: "content_id", op: "in", value: [...args.contentIds] }],
-      orderBy: { column: "created_at", dir: "asc" },
+    rows = await readPages<RawRepresentation>(args.ctx, {
+      name: "_shared/representations",
+      select:
+        "representation_id, content_id, owner_type, owner_id, media_type, created_at",
+      from: REPRESENTATION_TABLE,
+      where: ids.sql,
+      bind: ids.bind,
+      order: {
+        sortColumn: "created_at",
+        pkColumn: "representation_id",
+        descending: false,
+      },
     });
-    rows = (res.rows ?? []) as unknown as RawRepresentation[];
   } catch {
     return EMPTY_REPRESENTATIONS;
   }
