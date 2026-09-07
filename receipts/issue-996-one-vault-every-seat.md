@@ -3150,3 +3150,86 @@ bun run lint:path-filters    # ok
 bun run format:check         # clean
 bash .governance/run.sh      # 22/22
 ```
+
+## CI fix — share reachability
+
+`check:reachability` (#750's sharing-plane rule, `scripts/check-share-reachability.mjs`)
+went red on PR #1002: two wave 7 capabilities had no production caller. The
+rule's remedy is to wire the capability or remove it; `share-reachability.json`
+is for documented exceptions and neither of these is one.
+
+**`forwardProjectedEdit` — wired, because the hole it left is a data-loss bug.**
+It shipped as a question nothing asked, so an `edit`-grant member editing a row
+their vault holds through a subscription had it written LOCALLY, into a row the
+origin owns, which the next pass's `update` overwrites without telling anyone.
+R10 says a projected row is read-only in the audience vault and an edit is
+forwarded to the origin, where it becomes an ordinary intent and comes back
+through the share. That path now exists end to end:
+
+- `packages/vault/src/share/apply-outputs.ts` — `ProjectedEditRoute` gains
+  `entity`. The caller has to name the row's type in the envelope it sends, and
+  re-deriving it from the id would be a second answer to a question lineage has
+  already answered.
+- `packages/server/src/serve/projected-edit.ts` (new) — `projectedEditTarget`
+  asks lineage about every row the intent's DECLARED READ-SET names, and
+  `forwardOverPeer` carries the intent to the origin as the member intent the
+  origin's door (`peer-replica-intent-route.ts`) already verifies and executes.
+  The envelope names the ORIGIN's id and `origin_row_version`, out of lineage:
+  the audience's copy can be under a different id entirely (a deduped
+  photograph, a colliding uuid), and the origin holds no row under that one.
+  A refusal is a denial, not a retry — the origin judged the grant, the
+  signature or the payload, and asking again would spin the outbox forever.
+- `packages/server/src/routes/replica-intent-route.ts` — the branch sits BEFORE
+  the chain verdict and the conflict check, because both are questions about
+  THIS vault's rows: a projected row's local `row_version` is the applier's own
+  stamp, not anything the member composed against, and the origin re-asks both
+  against the copy that counts. The answer recorded is the ORIGIN's status,
+  reason and `commit_seq`.
+- `packages/vault/src/replica/intents.ts` — `RecordReplicaIntentOutcomeInput`
+  gains `commitSeq`, `COALESCE`d on update. A local execution never passes it
+  (`gateway/execution.ts` stamps it inside the canonical transaction, the only
+  place that knows it); a forwarded one must, or the seat waits for a commit
+  that never happened in the vault that owns the row.
+- `packages/server/src/routes/replica-routes.ts`,
+  `packages/server/src/serve/build-gateway.ts` — the host supplies the
+  forwarder, exactly as it supplies `pullShape`: which link reaches the origin
+  is the host's fact and the route never learns an address. No dial or no link
+  is a fact about REACH, so the intent stays `sending` and is answered
+  in-flight rather than written here.
+
+Red-first: `packages/server/src/routes/replica-intent-projected.test.ts`, two
+cases — the intent reaches the origin and settles with the origin's outcome and
+`commit_seq` while the local dispatcher is never called, and an unreachable
+origin leaves the row `sending` instead of landing the write locally. Both fail
+on the wave 7 tree (verified by neutralising the branch: 2 failed).
+
+**`shareGrantsClaimingRow` — deleted, because `closure-outputs.ts` already
+derives leaves without it.** Its stated production use was the leave/purge path,
+and that path does not need a reverse index: `diffShareClosure` computes `leave`
+as `before ∖ after` over ONE grant's own member set, and which grants get a pass
+is decided by the subject wake families in `grant/authority-registry.ts`, not by
+row claims. `core_entity_revoke_on_purge` keying on the subject is exactly why
+the per-grant diff is the answer — the grant survives the purge of a member and
+keeps delivering, and each grant's own subtraction scrubs the audience's copy.
+A second answerer over the same membership could only agree or be wrong.
+
+Removed: the function and its comment (`packages/vault/src/share/closure-members.ts`,
+replaced by a note saying why there is no reverse answerer) and its barrel
+re-export (`packages/vault/src/index.ts`).
+
+**Left standing, and named as a finding:** `share_subscription_member_row`
+(`packages/vault/src/schema/subscription.ts`) existed for that one reader and
+now has none. It is NOT dropped here. The frozen corpus already carries it —
+`golden-vault.test.ts`'s schema gate proves it — so removing it is a migration
+RUNG and a bump of `PRAGMA user_version`, which a reachability CI fix has no
+business spending. The DDL says so in place; the next schema rung should drop
+it.
+
+Evidence for the deletion: `closure-outputs.test.ts`, "a purged shared row
+leaves for EVERY grant whose member set held it" — two grants over one album,
+the photograph purged by deleting its `core_entity` row, and each grant's pass
+produces the `media_asset` leave and drops the member while the keeper stays.
+
+```
+bun run check:reachability        # ok (292 capabilities across 19 module globs)
+```

@@ -27,6 +27,7 @@ import type {
 import { unrefTimer } from "../lib/unref-timer.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
+import type { ProjectedEditForwarder } from "../serve/projected-edit.js";
 import { vaultContext } from "../serve/vault-context.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import {
@@ -319,6 +320,10 @@ function collectNewestVisibleRows(
 export interface ReplicaRouteOptions {
   enrollments?: EnrollmentStore;
   dispatchIntent: ReplicaIntentDispatcher;
+  /** How an edit of a projected row reaches its origin (#996, R10). Absent on
+   *  a host with no peer plane; the route then answers in-flight rather than
+   *  writing another vault's row locally. */
+  forwardProjectedEdit?: ProjectedEditForwarder;
   pollIntervalMs?: number;
   heartbeatMs?: number;
   /** Authenticated-DoS bounds; overrides are used by focused route tests. */
@@ -1305,6 +1310,9 @@ export function makeReplicaRouteHandler(
       plane,
       access,
       dispatch: options.dispatchIntent,
+      ...(options.forwardProjectedEdit === undefined
+        ? {}
+        : { forwardProjectedEdit: options.forwardProjectedEdit }),
     });
   };
 }

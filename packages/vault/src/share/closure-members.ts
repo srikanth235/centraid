@@ -283,21 +283,13 @@ function writeMembersInTransaction(
     );
 }
 
-/**
- * Which live grants claim this row — the reverse question the index exists
- * for, asked by the purge sweep and by every leave output.
+/*
+ * THERE IS NO REVERSE "WHICH GRANTS CLAIM THIS ROW" ANSWERER, on purpose
+ * (#996, R10). It reads like the question a purge needs — a purged member
+ * revokes nothing, because `core_entity_revoke_on_purge` keys on a grant's
+ * SUBJECT — but the leave it has to produce is already `before ∖ after` for
+ * each grant's own pass, and per-grant is the only reading that stays right
+ * when two grants hold the same photograph. A second answerer over the same
+ * membership could only agree or be wrong. See `closure-outputs.test.ts`,
+ * "a purged shared row leaves for EVERY grant whose member set held it".
  */
-export function shareGrantsClaimingRow(
-  origin: DatabaseSync,
-  table: string,
-  pk: string
-): string[] {
-  return (
-    origin
-      .prepare(
-        `SELECT authority_id FROM share_subscription_member
-          WHERE table_name = ? AND pk = ? ORDER BY authority_id`
-      )
-      .all(table, pk) as unknown as { authority_id: string }[]
-  ).map((row) => row.authority_id);
-}
