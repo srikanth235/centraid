@@ -23,7 +23,6 @@ import {
   LOCKER_SHELVES,
   MORE_SHELVES,
   SEARCH,
-  SETUP,
   TRASH,
   WATCH,
   backRow,
@@ -40,7 +39,6 @@ import {
 import type { ShelfId } from "./shelves.ts";
 
 const ROUTES = [
-  "locker/setup",
   "locker/lock",
   "locker",
   "locker/item",
@@ -55,11 +53,13 @@ const ROUTES = [
   "locker/fill",
 ];
 
-const OPEN = { setup: false, locked: false, denied: false, refused: false };
+const OPEN = { locked: false, denied: false, refused: false };
 
-describe("the thirteen routes", () => {
-  it("names exactly the thirteen the spec draws", () => {
-    expect(LOCKER_SHELVES).toHaveLength(13);
+describe("the twelve routes", () => {
+  it("names exactly the twelve the spec draws", () => {
+    // Twelve, not thirteen: `locker/setup` went with the passphrase this app
+    // no longer collects (#996, W6-D2) — enrolment is the shell's.
+    expect(LOCKER_SHELVES).toHaveLength(12);
     expect(LOCKER_SHELVES.map((shelf) => shelfRoute(shelf.id))).toStrictEqual(
       ROUTES
     );
@@ -122,7 +122,7 @@ describe("what a route offers", () => {
     }
   );
 
-  it.each([SETUP, LOCK, ITEM, EDIT, EXPORT])(
+  it.each([LOCK, ITEM, EDIT, EXPORT])(
     "%s is a single subject and draws no rail",
     (shelf) => {
       expect(showsRail(shelf)).toBe(false);
@@ -149,7 +149,7 @@ describe("the back row is named for what the member was doing", () => {
     }
   );
 
-  it.each([SETUP, LOCK, null as ShelfId])("%s has no back row", (shelf) => {
+  it.each([LOCK, null as ShelfId])("%s has no back row", (shelf) => {
     expect(backRow(shelf)).toBeNull();
   });
 });
@@ -163,13 +163,13 @@ describe("every route above the list is drawn", () => {
   );
 
   it("leaves the list, one item and the two gates to the orchestrator", () => {
-    for (const shelf of [null as ShelfId, ITEM, SETUP, LOCK]) {
+    for (const shelf of [null as ShelfId, ITEM, LOCK]) {
       expect(isRoutedScreen(shelf)).toBe(false);
     }
   });
 
   it("draws all thirteen between them, with none left over", () => {
-    const orchestrated = new Set<ShelfId>([null, ITEM, SETUP, LOCK]);
+    const orchestrated = new Set<ShelfId>([null, ITEM, LOCK]);
     const drawn = LOCKER_SHELVES.filter(
       (shelf) => isRoutedScreen(shelf.id) || orchestrated.has(shelf.id)
     );
@@ -188,7 +188,6 @@ describe("every route above the list is drawn", () => {
 
 describe("a gate withdraws the spine rather than dimming it", () => {
   it.each([
-    ["setup", { ...OPEN, setup: true }],
     ["locked", { ...OPEN, locked: true }],
     ["denied", { ...OPEN, denied: true }],
     ["refused", { ...OPEN, refused: true }],
@@ -201,12 +200,10 @@ describe("a gate withdraws the spine rather than dimming it", () => {
   });
 
   it("forces the gate's own route, whatever was last asked for", () => {
-    expect(gatedShelf({ ...OPEN, setup: true }, TRASH)).toBe(SETUP);
+    // One gate now, not two (#996, W6-D2): the first-run route went with the
+    // passphrase this app no longer collects, so a locked Locker is on Lock
+    // and there is nothing that outranks it.
     expect(gatedShelf({ ...OPEN, locked: true }, TRASH)).toBe(LOCK);
-    // First run outranks Lock: there is no session to lock without a passphrase.
-    expect(gatedShelf({ ...OPEN, setup: true, locked: true }, null)).toBe(
-      SETUP
-    );
     expect(gatedShelf(OPEN, TRASH)).toBe(TRASH);
   });
 });

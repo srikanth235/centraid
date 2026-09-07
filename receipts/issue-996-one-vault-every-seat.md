@@ -4252,3 +4252,61 @@ bunx tsc -p packages/client --noEmit          # clean
 bun run governance < /dev/null
 bun run check:push:static                     # stamped on the committed tree
 ```
+
+## Wave 6 — the seats adopt the door; the permit goes
+
+The first half of the W6-D2 deletions: every screen on every seat now reveals through the shell's door, and the permit plane it replaced is gone. The gateway's `authenticate` op still exists after this commit and has no caller left — it is deleted next, which is the wave's own ordering: boundary first, gate last.
+
+### The permit was three things, and each ends differently
+
+- **The confirmation** is gone outright. `confirmPermit` / `confirmLockerPermit` collected a passphrase to buy a token; there is no token to buy, and an app collecting a passphrase is the thing W6-D2 exists to stop.
+- **The token** is gone with the read it bought. `openWithPermit` sent `auth_session` + `item_token` and took plaintext off the answer; `queries/item.ts` unseals nothing now, for any caller, and a stale client still sending those inputs gets metadata rather than plaintext or an error.
+- **The thirty seconds** stays. It moved to `reveal.ts` as `REVEAL_LIFE_MS`, because the reason for it was never the token's lifetime — it was the shoulder standing behind the member — and a value still takes itself off the screen whether or not anyone looked.
+
+### Opening an item is free now
+
+`openGate` opened a permit; it opens the item. The pane is metadata and ciphertext, so it paints while the Locker is locked, and every secret on it stays hidden until asked for by name. One fewer prompt, and the one that remains is about a value rather than about a screen — which is also why the first-run route and the `setup` gate are gone from `shelves.ts`: thirteen routes became twelve, and "no passphrase yet" is not a question an app that collects no passphrase can ask.
+
+### Two inversions, said out loud
+
+- **The access history is no longer behind the lock.** It used to refuse without a session. It carries no secret value, it is the record of who looked, and with the gateway no longer decrypting it is the ONLY evidence a reveal happened — so hiding it behind the boundary it audits would mean a member cannot ask "what was read on this device" without first unlocking the thing they are worried about.
+- **`autofill-candidates` no longer refuses while locked.** Its gate read "a paired device could otherwise map every login's item_id + url while locked", which was true of a device that had to ASK the gateway to enumerate. A seat holds `vault.db` whole (R1) and those columns are plaintext there by design — that is what lets a locked Locker list and search offline — so the enumeration it refused is a local read now and refusing it here refuses nothing. **Open question for the coordinator**: the Companion is a browser extension, holds no vault, and was the other caller. Its candidate list needs a gate on the Companion's own side; naming it rather than assuming the seat argument covers it.
+
+### The phone's door
+
+There is no bridge to cross on the phone — the RN app IS the shell — so `locker-door.ts` joins commit 3's two halves directly: `K` behind `requireAuthentication`, and `@centraid/client/locker`'s AES-GCM envelope. `unlockLockerDoor` is separate from `revealLockerRow` on purpose: a reveal writes a receipt, and unlocking opens no secret, so conflating them would put a row in the audit trail saying someone looked at something when nobody did. `LockerWall` lost its passphrase field and its first-run mode; a test asserts there is no `input` on that screen at all.
+
+### Suites rewritten, not stripped
+
+Every user-visible state the permit suites proved is proved through the new path: locked (the wall collects nothing, the door reads nothing and records nothing), revealed (the door's plaintext lands in the bag, one field, with its countdown), refused (`stale_key` shows "re-enter this secret" and does NOT lock — a rotation is not a lock), and the receipt (awaited before the plaintext, on both seats). `permits.test.ts` became `reveal.test.ts`, keeping the clock and dropping the token arithmetic that has nothing left to compute.
+
+### Files
+
+- `packages/blueprints/apps/locker/app-root.tsx` — `reveal` through the door, `openItemDetail`, the lock subscription; `submitPassphrase` / `ask` / `confirmPermit` / `openWithPermit` gone
+- `packages/blueprints/apps/locker/session.ts` — `afterLockState` replaces `afterStatus` / `afterUnlock` / `refusalText`; no token, no `configured`, no `busy`
+- `packages/blueprints/apps/locker/session.test.ts` — the phases off the door, and that the state holds no credential in any of them
+- `packages/blueprints/apps/locker/reveal.ts` · `reveal.test.ts` — the surviving clock and the sidecar ADDRESS (replacing `permits.ts` · `permits.test.ts`)
+- `packages/blueprints/apps/locker/components/Lock.tsx` — a sentence, not a field; `locked` and `unavailable` are different facts
+- `packages/blueprints/apps/locker/components/Confirm.tsx` — the plain "are you sure" lifted out of `PermitGate.tsx`
+- `packages/blueprints/apps/locker/shelves.ts` · `routes.test.ts` — twelve routes; the `setup` gate goes
+- `packages/blueprints/apps/locker/view-copy.ts` — `LOCK_UNAVAILABLE_BODY`, `REVEAL_NO_DOOR`, `CONFIRM_CANCEL`; the passphrase strings go
+- `packages/blueprints/apps/locker/queries/item.ts` — unseals nothing, for any caller
+- `packages/blueprints/apps/locker/queries/access.ts` · `autofill-candidates.ts` — no session check
+- `packages/blueprints/apps/locker/app.json` — the `auth` query and the permit inputs
+- `packages/blueprints/apps/locker/surface-acts.ts` · `field-model.ts` · `components/Fields.tsx` · `states.test.tsx` · `queries-reveal-access.test.ts` — the door's flow
+- `packages/blueprints/src/app-boot-harness.ts` · `query-handlers.test.ts` · `app-entity-tripwire.ts` · `app-entity-tripwire.test.ts` — the harness offers the door; the phone's three door files are registered
+- `packages/client/src/locker/index.ts` · `packages/client/src/index.ts` · `packages/client/package.json` — the `@centraid/client/locker` subpath the phone imports without the web shell
+- `apps/mobile/src/apps/locker/locker-door.ts` — the phone's door
+- `apps/mobile/src/apps/locker/locker-store.ts` · `locker-gateway.ts` · `locker-surfaces.ts` — the store reveals through it; `lockerAuth` goes, `lockerRevealReceipt` arrives
+- `apps/mobile/src/apps/locker/LockerWall.tsx` · `LockerScreen.tsx` · `LockerItemScreen.tsx` · `LockerItemsView.tsx` · `LockerHome.tsx` · `LockerFields.tsx` · `locker-seat-copy.ts` — no passphrase, no enrol offer, no permit overlay
+- `apps/mobile/src/apps/locker/locker-store.test.ts` · `locker-surfaces.test.ts` · `LockerWall.test.tsx` · `LockerFields.test.tsx` · `LockerItemsView.test.tsx` · `locker-airplane.test.ts` · `locker-export.test.ts` — rewritten to the door's flow
+
+### Gates
+
+```
+bunx vitest run packages/blueprints packages/client/src   # 501 files, 9674 passed
+bunx vitest run src/apps/locker --root apps/mobile        # 16 files, 123 passed
+bunx tsc -p apps/mobile --noEmit                          # clean
+bun run governance < /dev/null
+bun run check:push:static                                 # stamped on the committed tree
+```

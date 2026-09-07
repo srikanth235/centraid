@@ -83,8 +83,6 @@ export function useSurfaceActs(input: SurfaceActsInput): SurfaceActs {
 
   const handleLoadAccess = useCallback(
     async (itemId: string | null): Promise<void> => {
-      const token = bagRef.current.sessionToken;
-      if (!token) return;
       try {
         const payload = await window.centraid.read<{
           entries?: LockerAccessEntry[];
@@ -94,10 +92,10 @@ export function useSurfaceActs(input: SurfaceActsInput): SurfaceActs {
           vaultDenied?: unknown;
         }>({
           query: "access",
-          input: {
-            auth_session: token,
-            ...(itemId ? { item_id: itemId } : {}),
-          },
+          // No session token: the access history is the app grant's to read
+          // (#928), and with the unlock boundary on the seat there is no
+          // gateway session to name (#996, W6-D2).
+          input: itemId ? { item_id: itemId } : {},
         });
         // A denial or an authentication refusal is NOT an empty history: an
         // audit surface that drew "nothing" over a read that never ran would

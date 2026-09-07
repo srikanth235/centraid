@@ -72,23 +72,28 @@ describe("Locker Companion queries (#462)", () => {
     expect(JSON.stringify(result)).not.toContain("«sealed»");
   });
 
-  it("refuses candidate enumeration while Locker is locked", async () => {
+  it("enumerates candidates without asking an authentication plane (#996, W6-D2)", async () => {
+    // IT USED TO REFUSE WHILE LOCKED, and the reason it no longer does is
+    // worth stating: the gate read "a paired device could otherwise map every
+    // login's item_id + url while locked", which was true of a device that had
+    // to ASK the gateway to enumerate. A seat holds `vault.db` whole (R1) and
+    // those columns are plaintext there by design, so the enumeration this
+    // gate refused is a local read now and refusing it here refuses nothing.
+    // The Companion — a browser extension, which holds no vault — is gated on
+    // its own side; raised as an open question in the wave-6 receipt.
     const { default: candidates } = await importQuery(
       "../apps/locker/queries/autofill-candidates.ts"
     );
     const ctx = ctxOf({ "locker.item": [] });
-    ctx.vault.authenticate = async () => ({
-      ok: true,
-      configured: true,
-      authenticated: false,
-      unlocked: false,
-    });
+    let asked = false;
+    ctx.vault.authenticate = async () => {
+      asked = true;
+      return {};
+    };
     const result = await candidates({ ctx });
-    expect(result).toMatchObject({
-      candidates: [],
-      authRequired: true,
-      configured: true,
-    });
+    expect(result).toMatchObject({ candidates: [] });
+    expect(result.authRequired).toBeUndefined();
+    expect(asked).toBe(false);
   });
 
   it("reveals password with page context and asks only for a TOTP derivative", async () => {

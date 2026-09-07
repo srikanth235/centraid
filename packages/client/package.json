@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./locker": "./src/locker/index.ts",
     "./access-lens": "./src/access-lens.ts",
     "./boot": "./src/react/boot.tsx",
     "./replica": "./src/replica/index.ts",

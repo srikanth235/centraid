@@ -234,10 +234,26 @@ export const INDIRECT_ENTITY_READS: Readonly<Record<string, IndirectEntry>> = {
       "locker.item_passkey",
     ],
   },
-  // `entity: sidecar.entity`, constrained to the `SIDECAR_COLUMNS` keys — the
-  // sealed rows a Locker permit may be spent on (#873).
+  // `entity: "locker.item"` on the one read this query makes. It unseals
+  // nothing now (#996, W6-D2) — the entity travelled through a variable while
+  // `sidecar.entity` chose which row to reveal, and that choice is the shell
+  // door's.
   "packages/blueprints/apps/locker/queries/item.ts": {
+    entities: ["locker.item"],
+  },
+  // THE PHONE'S LOCKER DOOR (#996, ruling W6-D2). Three files, one path: the
+  // store resolves which row an ask names out of the detail it holds, the door
+  // decrypts it with `K`, and the gateway module posts the reveal receipt. The
+  // entity travels as `request.entity` the whole way, so none of them holds a
+  // literal to scan — and the set is the same three the sealed sidecars are.
+  "apps/mobile/src/apps/locker/locker-door.ts": {
     entities: ["locker.item", "locker.item_field", "locker.item_passkey"],
+  },
+  "apps/mobile/src/apps/locker/locker-gateway.ts": {
+    via: "apps/mobile/src/apps/locker/locker-door.ts",
+  },
+  "apps/mobile/src/apps/locker/locker-store.ts": {
+    via: "apps/mobile/src/apps/locker/locker-door.ts",
   },
   // The link-target table: `NOTE_TARGET_ENTITY` plus the six other kinds. This
   // is the one file that HOLDS the literals, so the sweep guards it, and a kind

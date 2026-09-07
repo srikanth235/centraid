@@ -1,73 +1,69 @@
-// THE THREE WALLS (README-Locker §1, §6; FLOWS.md "First run", "Unlock").
+// THE TWO WALLS (README-Locker §1, §6; FLOWS.md "Unlock").
 //
-// One field, one verb, and a sentence about what a session is. Both gates are
-// the same shape because they are the same question asked at two moments, and
-// both state the boundary IN WORDS — §7 forbids a lock icon standing in for a
-// sentence, so there is no key glyph on either.
+// A VERB, NOT A FIELD (#996, ruling W6-D2). This screen used to carry a
+// passphrase box and three modes, because the app owned the boundary: it
+// collected a secret and a gateway checked it. Both halves moved. `K` lives in
+// this device's keychain behind `requireAuthentication`, so unlocking is Face
+// ID, Touch ID or the device passcode — a thing the OS asks and this app never
+// sees. A passphrase box here would be an app collecting a credential it must
+// never hold, with nothing on this side to check it against.
 //
-// NOTHING IS BROWSABLE BEHIND ANY OF THEM. `LockerScreen.tsx` withdraws the
-// band and every list while one of these stands (`shelves.suppressesNavigation`),
-// and this is what stands in their place.
+// FIRST RUN IS GONE with it: "no passphrase yet" was a question for the app
+// that stored one. A device receives `K` when it enrols, and there is no gate
+// here that could stand in for that.
 //
-// THE THIRD WALL IS DENIAL, and it is not a failure: a revoked grant is a
+// The boundary is still stated IN WORDS — §7 forbids a lock icon standing in
+// for a sentence, so there is no key glyph. NOTHING IS BROWSABLE BEHIND
+// EITHER: `LockerScreen.tsx` withdraws the band and every list while one of
+// these stands (`shelves.suppressesNavigation`).
+//
+// THE SECOND WALL IS DENIAL, and it is not a failure: a revoked grant is a
 // receipt, a scope, and the fact that nothing was deleted (§4, "Denied vs.
 // refused"). It offers no retry, because there is nothing here to retry.
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import {
-  CREATE_PASSPHRASE,
   DENIED_BODY,
   DENIED_SCOPE,
   DENIED_TITLE,
   LOCK_BODY,
   LOCK_FACTS,
-  LOCK_PLACEHOLDER,
-  PASSPHRASE_MINIMUM,
-  PASSPHRASE_TOO_SHORT,
-  SETUP_BODY,
-  SETUP_PLACEHOLDER,
-  UNLOCK,
 } from "@centraid/blueprints/apps/locker/view-copy";
 
 import Button from "../../kit/components/Button";
-import { Text, TextInput } from "../../kit/components/NativeText";
+import { Text } from "../../kit/components/NativeText";
 import { TEST_IDS } from "../../kit/test-ids";
-import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
+import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { DEVICE_NOTE, DEVICE_REVOKE, DEVICE_UNLOCK } from "./locker-seat-copy";
+import { DEVICE_FORGET, DEVICE_NOTE, DEVICE_UNLOCK } from "./locker-seat-copy";
 
-/** The gates' own headings. `Lock.tsx` draws the same two words on the web. */
-const SETUP_TITLE = "Choose a passphrase";
+/** The gate's own heading. `Lock.tsx` draws the same word on the web. */
 const LOCK_TITLE = "Locked";
 
 export interface LockerWallProps {
-  mode: "setup" | "lock" | "denied";
+  mode: "lock" | "denied";
   /** A request is in flight. The commit says so by being unavailable, never
    *  by a spinner — this app has no spinner anywhere. */
   busy: boolean;
-  /** The host's refusal, in its own words, backoff sentence included. */
+  /** The door's refusal, in its own words. */
   error: string;
-  /** A device credential is enrolled, so there is a second way in. */
-  deviceEnrolled: boolean;
-  onSubmit: (secret: string) => void;
-  onDeviceUnlock: () => void;
-  onRevokeDevice: () => void;
+  /** Unlock: asks the OS to prove the member is present. */
+  onUnlock: () => void;
+  /** Forget `K` on this device — the revoke gesture's local half (R13). */
+  onForgetKey: () => void;
 }
 
 export default function LockerWall({
   mode,
   busy,
   error,
-  deviceEnrolled,
-  onSubmit,
-  onDeviceUnlock,
-  onRevokeDevice,
+  onUnlock,
+  onForgetKey,
 }: LockerWallProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [secret, setSecret] = useState("");
 
   if (mode === "denied") {
     return (
@@ -86,20 +82,6 @@ export default function LockerWall({
     );
   }
 
-  const setup = mode === "setup";
-  // The twelve-character rule is enforced HERE, in front of the member, rather
-  // than by a round trip that comes back refused.
-  const tooShort =
-    setup && secret.length > 0 && secret.length < PASSPHRASE_MINIMUM;
-  const ready =
-    !busy && (setup ? secret.length >= PASSPHRASE_MINIMUM : secret.length > 0);
-
-  const submit = (): void => {
-    if (!ready) return;
-    onSubmit(secret);
-    setSecret("");
-  };
-
   return (
     <ScrollView
       contentContainerStyle={styles.page}
@@ -107,33 +89,10 @@ export default function LockerWall({
       testID={TEST_IDS.locker.gate}
     >
       <Text accessibilityRole="header" style={styles.title}>
-        {setup ? SETUP_TITLE : LOCK_TITLE}
+        {LOCK_TITLE}
       </Text>
-      <Text style={styles.body}>{setup ? SETUP_BODY : LOCK_BODY}</Text>
+      <Text style={styles.body}>{LOCK_BODY}</Text>
 
-      <TextInput
-        accessibilityLabel={setup ? SETUP_PLACEHOLDER : LOCK_PLACEHOLDER}
-        // An RN TextInput's accessibilityLabel never reaches the iOS a11y tree
-        // (README "Known caveats"), so this field had NO selector at all — the
-        // reason the passphrase-floor journey is still an unowned gap.
-        testID={TEST_IDS.locker.gateField}
-        autoCapitalize="none"
-        autoComplete={setup ? "new-password" : "current-password"}
-        autoCorrect={false}
-        onChangeText={setSecret}
-        onSubmitEditing={submit}
-        placeholder={setup ? SETUP_PLACEHOLDER : LOCK_PLACEHOLDER}
-        placeholderTextColor={colors.textFaint}
-        secureTextEntry
-        style={styles.input}
-        value={secret}
-      />
-
-      {tooShort ? (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {PASSPHRASE_TOO_SHORT}
-        </Text>
-      ) : null}
       {error ? (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}
@@ -142,44 +101,31 @@ export default function LockerWall({
 
       <View style={styles.acts}>
         <Button
-          disabled={!ready}
-          label={setup ? CREATE_PASSPHRASE : UNLOCK}
-          onPress={submit}
+          disabled={busy}
+          label={DEVICE_UNLOCK}
+          onPress={onUnlock}
           testID={TEST_IDS.locker.gateSubmit}
           variant="primary"
         />
-        {!setup && deviceEnrolled ? (
-          <Button
-            disabled={busy}
-            label={DEVICE_UNLOCK}
-            onPress={onDeviceUnlock}
-          />
-        ) : null}
       </View>
 
-      {setup ? null : (
-        <>
-          <View style={styles.facts}>
-            {LOCK_FACTS.map(([key, value]) => (
-              <View key={key} style={styles.fact}>
-                <Text style={styles.factKey}>{key}</Text>
-                <Text style={styles.factValue}>{value}</Text>
-              </View>
-            ))}
+      <View style={styles.facts}>
+        {LOCK_FACTS.map(([key, value]) => (
+          <View key={key} style={styles.fact}>
+            <Text style={styles.factKey}>{key}</Text>
+            <Text style={styles.factValue}>{value}</Text>
           </View>
-          {deviceEnrolled ? (
-            <View style={styles.deviceRow}>
-              <Text style={styles.body}>{DEVICE_NOTE}</Text>
-              <Button
-                disabled={busy}
-                label={DEVICE_REVOKE}
-                onPress={onRevokeDevice}
-                variant="destructive"
-              />
-            </View>
-          ) : null}
-        </>
-      )}
+        ))}
+      </View>
+      <View style={styles.deviceRow}>
+        <Text style={styles.body}>{DEVICE_NOTE}</Text>
+        <Button
+          disabled={busy}
+          label={DEVICE_FORGET}
+          onPress={onForgetKey}
+          variant="destructive"
+        />
+      </View>
     </ScrollView>
   );
 }
@@ -204,17 +150,6 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing[2],
       marginTop: spacing[5],
       paddingTop: spacing[4],
-    },
-    input: {
-      ...t("body"),
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderRadius: radii.md,
-      borderWidth: borders.hairline,
-      color: colors.text,
-      marginTop: spacing[5],
-      minHeight: 44,
-      paddingHorizontal: spacing[3],
     },
     page: { gap: spacing[3], padding: spacing[4] },
     title: { ...t("title"), color: colors.text },
