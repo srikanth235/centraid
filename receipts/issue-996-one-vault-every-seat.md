@@ -4728,3 +4728,344 @@ bunx vitest run packages/server/src       # 384 passed; environmental failures o
 bun run governance < /dev/null
 bun run check:push:static                 # stamped on the committed tree
 ```
+## CI fix — the declared-writes gate reads the whole registry again
+
+`bun run lint:engine-conformance` was red in the `gates` lane:
+
+```
+packages/vault/src/schema/entity-catalog.ts: read 47 entity names —
+  the declared-writes gate is anchored on this registry and has gone vacuous
+```
+
+Wave 1's `3adb7ef6c` split the catalog for the file-size rule:
+`packages/vault/src/schema/entity-catalog.ts` now spreads
+`...VAULT_DOMAIN_ENTITIES` out of
+`packages/vault/src/schema/entity-catalog-domains.ts`. `vaultEntityNames` in
+`scripts/lint-engine-conformance.mjs` is a text scan of ONE file and cannot see
+through a spread, so it read 47 names where the registry holds 96 — the eight
+app schemas were simply invisible.
+
+The anti-vacuity floor (90) and the anchor (`core.content_item`) are what caught
+it, and neither moved. The SCANNER is what was wrong:
+
+- `vaultEntityNames` now delegates to `collectEntityNames`, which walks a
+  registry constant and, on a `...IDENT` at the level a schema key sits,
+  resolves `IDENT` through the file's own relative imports (`.js` → `.ts`) and
+  recurses with the same depth walk. `seen` breaks a cycle.
+- An unresolvable spread THROWS, and `checkDeclaredWrites` turns the throw into
+  a finding. Skipping one silently is precisely how a text scanner goes vacuous
+  behind its own guard: the count stays plausible, and every `writes:` naming a
+  domain table passes unchecked. This is the failure mode that produced the
+  bug, so it is now loud by construction rather than by a floor happening to
+  sit above the under-count.
+
+Three new cases, in a new suite —
+`scripts/lint-engine-conformance-registry.test.mjs`, which also takes the
+existing "read whole, not partially" case over the real tree (unchanged, and
+now seeing 96). Its own file because
+`scripts/lint-engine-conformance.test.mjs` holds the engine gate's cases while
+these are the scanner underneath one engine, and because the additions put that
+file over the 625-line hygiene limit — the limit is the right answer there, not
+a waiver. The three: a registry composed across two files is read whole
+(including a label containing braces, which the brace walk must not count as
+structure); a spread whose name has no import fails with the reason; and a
+spread naming a file that is not there fails the same way. `package.json`'s
+`scripts:test` names the new file — the list is explicit, so a suite it does
+not name never runs.
+
+```
+bun run lint:engine-conformance   # ok
+bun run scripts:test              # 678 tests, 678 pass
+```
+
+## CI fix — a row version against a log sequence
+
+`tests/integration-mobile/conflict.integration.test.ts` was red for all eight
+apps with `expected 2 to be greater than 432`: the gateway answered
+`expectedVersion: 432` beside `actualVersion: 2`. Neither number was wrong for
+what it measured. They measured different things.
+
+R6 moved the version of a row to the row's own `row_version` column, and
+`packages/server/src/routes/replica-intent-shape.ts#currentRowVersion` reads it
+— the consuming half, correct and documented. The PRODUCING half was never
+moved: `packages/vault/src/replica/snapshot.ts` answered `MAX(seq)` over
+`replica_change` as every row's `rowVersion`, in `latestRowVersions` (the
+bootstrap and change-projection path) and again in `readReplicaRow`'s own
+inline copy. So a seat stored a LOG POSITION as its row's version, sent it back
+as an intent's base version, and the gateway compared it against `row_version`.
+Every offline edit of a row the projector had ever touched came back
+conflicted; the number the pending sheet printed was a transport position.
+
+Both now read the row's column, through one answerer — `readReplicaRow`'s
+inline query is gone.
+
+Two consequences in `replica-intent-shape.ts`'s OPAQUE-shape path, where a wire
+row id is an HMAC and the canonical id has to be recovered by hashing
+candidates. It narrowed those candidates with `seq = base.version` — reading
+the base version as a log position, so once the version became `row_version` it
+matched the wrong row or none. There is nothing to narrow with; it takes every
+row of the entity, as the version-zero branch always did. And when no candidate
+hashes to the wire id — the row is deleted or was never there — it answered the
+entity's MAX log seq, reporting "the row is at version 431" to a member; it
+answers `0` now, which is what `currentRowVersion` answers for the same fact
+and in the same units as `expectedVersion`. The projector stays the fallback for an entity with no
+`row_version` column (the append-only bands) and for a composite key, whose
+`rowId` is a JSON tuple no single-column `WHERE` can match. That is the same
+fallback `currentRowVersion` keeps, for the same two reasons.
+
+Red-first: `packages/vault/src/replica/snapshot.test.ts`, "a row's version is
+its own column, not its position in the log" — five unrelated commits first, so
+the log seq and the row version genuinely disagree (7 against 1), asserted
+before the row is read. The existing "attaches the current canonical row
+version" case could not have caught this: with two log rows and `row_version`
+2, the two answers coincide.
+
+**The four related failures in the same suite family were the same defect.**
+The `locker` case answering `conflict` where `denied` was owed, and the three
+`parked` cases, all pass unchanged once the units agree — a spurious conflict
+verdict pre-empted the verdict each was asserting. The whole
+`test:integration:mobile` suite is green (11 files, 69 tests); nothing was
+absorbed and no other defect is hiding under them.
+
+```
+bunx vitest run -c tests/integration-mobile/vitest.config.ts   # 11 files, 69 passed
+```
+
+## Wave 3 — the queue survives the repair, and the bytes it needs survive the cache
+
+Two rules that wave 2 wrote down and nothing enforced. Both were live defects
+on this branch, and the tests that name them were red before the code moved.
+
+### A seam nobody supplied answers `false`
+
+`planContentEviction` has refused to evict bytes a queued intent needs since
+wave 2, and `storedContentEntries` takes that answer as a callback so the byte
+store cannot guess it from its own filenames. Nothing ever passed one:
+`ensureOfflineContent` called the sweep as `enforceOfflineContentBudget(budget)`
+with no second argument, so every entry read `referencedByPendingIntent: false`
+and the LRU was free to delete the one copy of bytes the member's own queued
+write is waiting on. The rule was a comment.
+
+`kit/fetch-gate/protections.ts` is the registry the seam needed. A REGISTRY,
+not an import, because the session imports the fetch gate to hand bytes to a
+write and the reverse edge would close a cycle: the session registers when it
+opens and withdraws when it closes, and an unregistered store protects pins and
+nothing else — the behaviour before the policy landed, stated rather than
+stumbled into.
+
+`lib/replica/pending-content-refs.ts` is the supplier, and the outbox is its
+only source: an intent's input NAMES the rows it is about (`namedRowIds`, the
+same reading the chain derives its edges from), so the ids the unsettled outbox
+names are the content this queue is still working on. Nothing is inferred from
+a filename or the shape of a string, and an id stops being protected the moment
+its intent settles. The set is a SNAPSHOT because it has to be — the eviction
+sweep is synchronous and the outbox is not — so the seat pushes on every move
+of the queue and the sweep reads the last push. A stale snapshot over-keeps for
+one pass; it can never over-evict.
+
+`capturedHere` stays unsupplied and that is deliberate, not an oversight: what
+this phone captured lives in the upload queue's own staging (`localUri`, its
+own database), never in the downloaded-original cache this sweep walks, so a
+predicate here would answer a question about bytes that are not in the store.
+The capture's protection is the byte policy's `hold` verdict, which is where a
+capture's bytes actually are.
+
+### A repair that drained straight through itself
+
+`admissionDuringRebootstrap()` says the pair — admit, do not send — and
+`flushIntents` did neither half. It claimed and posted intents during a
+re-bootstrap, so an outcome could arrive to be reconciled against a copy about
+to be replaced; and an AWAITED `write()` during one had no answer at all, since
+its waiter was only ever settled by the drain that should not have run. The
+member watching a repair they did not ask for got a spinner.
+
+`#rebootstrapping` is set in `requireBootstrap` BEFORE the refetch is
+scheduled — the window this closes is the one between deciding to replace the
+copy and starting to — and cleared in the bootstrap's `finally`, which then
+flushes. `flushIntents` settles waiters as queued with
+`admissionDuringRebootstrap().reason` and returns. The write is saved, in as
+many words, and sends after.
+
+The outbox itself needed no change to survive the repair: it is its own table
+in the shared file and `wipe()` clears the replica tables in place. The suite
+pins that as an invariant rather than leaving it true by accident, over the
+acceptance row's own chain — create, rename twice, due date, complete — with
+`created_order` 1..5 and the five inputs verbatim. Renumbering a queue reorders
+the member's work.
+
+### Every file this commit touches
+
+**New:**
+
+- `apps/mobile/src/kit/fetch-gate/protections.ts`
+- `apps/mobile/src/kit/fetch-gate/protections.test.ts`
+- `apps/mobile/src/lib/replica/native-session-rebootstrap.test.ts`
+- `apps/mobile/src/lib/replica/pending-content-refs.ts`
+
+**Changed:**
+
+- `apps/mobile/src/kit/fetch-gate/download.ts`
+- `apps/mobile/src/lib/replica/native-session.ts`
+- `docs/mobile-offline.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the hold and the protection
+
+- **Admitted and held, never refused.** A repair the member did not ask for
+  must not make "saved" untrue. The only correct pair is admit + hold, and the
+  reason sentence is the module's, not a second wording on the phone.
+- **The registry, not an import.** The session already imports the fetch gate;
+  the supplier edge has to run the other way, and a session's answer must die
+  with the session or it pins bytes nothing needs, forever.
+- **`capturedHere` is left unsupplied on purpose.** Wiring a predicate over a
+  store that does not hold captures would be a protection that reads true and
+  guards nothing.
+
+## Wave 3 — the chain's four clocks, and the words at the end of it
+
+### The arc nothing joined up
+
+Every piece of the offline chain had a home — the outbox in
+`sqlite-intent-store.ts`, the edges and the badge in `offline-chain.ts`, the
+states in `pendingChanges()`, the words in `kit/replica/pending-copy.ts` — and
+nothing ran the ARC, which is where the seams are.
+`offline-chain-journey.test.ts` runs it on one real file through the production
+session: five changes with no radio, kill and relaunch, radio back, and a
+second writer who got to the row first. It asserts the rows and their order off
+the durable outbox after the relaunch, then the conflict on the HEAD of the
+chain with both versions on it and the Retry/Discard the sheet offers for it.
+
+`toPendingChanges` had to move to `pending-change-rows.ts` to make that
+possible, and the split is worth stating: the mapper is pure, and it was
+sitting behind `pending-changes.ts`'s `AppState` import, so asking "what would
+the sheet draw" required React Native to be loadable. A journey that runs the
+real session on node cannot ask that question through a device runtime.
+
+### Four clocks, measured where they can be measured
+
+`tests/scale/mobile-offline-chain.scale.test.ts` times one arc four times over,
+on the production session and a real file:
+
+| row (`.../none/ci-linux-x64-4c`) | observed | ceiling |
+| --- | --- | --- |
+| `mobile/durable-save` | 19.7 / 8.6 / 5.5 ms | 100 ms |
+| `mobile/pending-render` | 0.7 / 0.6 / 0.6 ms | 25 ms |
+| `mobile/restart-recovery` | 1.9 / 1.5 / 1.6 ms | 50 ms |
+| `mobile/reconnect-drain` | 51.3 / 37.4 / 22.3 ms | 250 ms |
+
+Every one is a LOWER BOUND and the ledger says so on each row: the gateway is
+an in-process fetch double, `node:sqlite` on a container filesystem stands in
+for flash, and nothing renders. The ceilings are ~5x the slowest of three
+samples, on the precedent `mobile/converge` set, and are to be tightened once
+nightly samples exist — never raised.
+
+Two of the four needed their scope decided rather than assumed.
+`durable-save` is the SLOWEST of the five writes, not their sum: the member
+feels one tap, not a batch. `reconnect-drain` stops at ACKNOWLEDGEMENT, because
+an executed intent's row clears when the applied cursor reaches its
+`commit_seq` (R24) and that interval is `mobile/converge`'s — folding it in
+would double-count it and hide which half moved.
+
+### The device rung, named rather than implied
+
+The four `.../device-fixture/ci-android-emu` rows are `unmeasured` with the
+Android airplane flow as their probe. The flow drives ONE offline write today;
+the chain, the second relaunch inside it and the second-writer conflict are
+asserted on node and are NOT in the Maestro arc, because adding them costs
+launches against that lane's 8-minute suite budget and nothing in this repo can
+measure that cost without an emulator. `native-v0-resilience.md` now says
+exactly what the device rung has to add. Evidence for those rows is the CI
+`mobile-device-gate` emulator lane, not a phone on a desk.
+
+### One stale row fixed on the way past
+
+`mobile/search/year3-replica/dev-darwin-arm64` named
+`apps/mobile/src/lib/replica/multi-vault-reader.test.ts` as its consumer — a
+file wave 3 deleted with the mount plane — so `scripts/lint-journey-ledger.mjs`
+was red on this branch. The consumer is now the surviving screen-read rig and
+the metric is `projected` with a `_basis`: its numbers were observed against a
+mechanism that no longer exists. The ceilings are KEPT, not raised — one open
+file does strictly less work than four attached ones for the same page, so the
+old number bounds the new one from above — and the row says it must return to
+`measured` on a real seat-store run. `native-v0-resilience.md` named the same
+deleted file and now names its successors.
+
+### Every file this commit touches
+
+**New:**
+
+- `apps/mobile/src/kit/replica/pending-change-rows.ts`
+- `apps/mobile/src/lib/replica/offline-chain-journey.test.ts`
+- `tests/scale/mobile-offline-chain.scale.test.ts`
+
+**Changed:**
+
+- `apps/mobile/src/kit/replica/pending-changes.ts`
+- `docs/mobile-offline.md`
+- `receipts/issue-996-one-vault-every-seat.md`
+- `tests/agent-e2e-mobile/flows/native-v0-resilience.md`
+- `tests/journeys.json`
+
+### Decisions — the chain's numbers
+
+- **Four rows, not one.** A single "offline chain" ceiling would hide which of
+  save, draw, relaunch and drain moved, which is the only thing a regression
+  needs to say.
+- **The seat-side rows are lower bounds and are labelled as such.** Promoting
+  one to "the phone's number" is the exact move the ledger's own vocabulary
+  exists to prevent.
+- **The device rung stays a row, not a promise.** An `unmeasured` entry naming
+  its probe and its missing steps is an answer; deleting the row would make the
+  gap invisible.
+
+## Wave 3 — the hold quiesces, and an extra `.finally` was dropping a drain
+
+Two defects in the previous two commits, both found by
+`bun run test:integration:mobile` against a real gateway, which took the known
+12 failures to 19. Neither was visible to any unit suite.
+
+### A hold at the top of `flushIntents` strands what is already sending
+
+`SEAT_REBOOTSTRAP_CUTOVER`'s first step is "quiesce: stop claiming intents; an
+intent already SENDING keeps its answer", and returning early from
+`flushIntents` does something else: it cuts the whole drain, including the post
+that is already in flight, and leaves that intent in `sending` — a state
+`claimNext` never picks up again, so it waits for the next process open. Seven
+`denied` journeys read exactly that. The check belongs where the claim happens,
+so it is in `drainLoop` now: nothing new is claimed while the copy is being
+replaced, an intent already sending keeps its answer, and an awaited write
+still gets the admission sentence.
+
+### An extra promise link is not free on a re-entrant drain
+
+`#drainPromise = this.drainLoop().finally(publish).finally(reset)` looks
+equivalent to putting the publish inside the existing `finally`. It is not: the
+extra link defers `#drainPromise = undefined` and the `#drainRequested`
+re-entry by a microtask, and a drain requested during the last one is dropped.
+That alone accounted for the remaining failures. The publish is a statement
+inside the existing finally now.
+
+A third, smaller one, found the same way: the publish after an ENQUEUE must not
+be awaited on the online path. Every await between the enqueue and the waiter
+registration widens the window in which the drain settles the intent before
+anything is listening, and the caller's `write()` then never resolves. It is
+awaited only on the offline path, where no waiter exists and where the bytes
+must be protected before the caller can act on the answer.
+
+`bun run test:integration:mobile` is back to the known 12 — the 8 conflict
+cases and 3 parked cases the log lane owns, plus `locker` denied — with 57
+passing.
+
+### Every file this commit touches
+
+**Changed:**
+
+- `apps/mobile/src/lib/replica/native-session.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — quiescing
+
+- **The quiesce is a claim gate, not a drain gate.** The cutover's own wording
+  says so, and the difference is a stranded intent.
+- **Promise-chain shape is behaviour on a re-entrant drain.** A `.finally`
+  added for tidiness moved a reset by one microtask and cost eight journeys.

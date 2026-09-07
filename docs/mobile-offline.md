@@ -61,6 +61,14 @@ Ordinary writes stay in each replica's durable intent outbox. A first-open write
 
 Replay is idempotent. A crash can leave a completed target and pending source removal, but cannot delete the source before the target exists. Queued changes may be cancelled. Permission denial, terminal failure, and parked retries remain visible until dismissed.
 
+### A re-bootstrap keeps the queue, and holds it
+
+A re-bootstrap replaces what the gateway gave this seat. The queued intents, their order and the bytes they need are the three things the gateway has never heard of, so they survive it: the outbox is its own table in the shared file, `created_order` is carried verbatim (renumbering the queue would reorder the member's work), and the overlay is rebuilt from that outbox rather than from component state.
+
+While the repair runs, a write is **admitted and held** ([#996](https://github.com/srikanth235/centraid/issues/996) R23): refusing would make "saved" untrue during a repair nobody asked for and nobody can see, and sending would let an outcome be reconciled against a copy that is about to be replaced. The member is told the change is saved and will send after; the drain resumes from the outbox the moment the new copy is in place.
+
+Bytes a queued intent still needs are not evictable (R25). The seat publishes the content ids its unsettled outbox names to the offline byte store on every move of the queue, and the LRU sweep reads that answer alongside the pins — so the one copy of what a pending write is waiting on cannot be deleted to make room for a cache. A closed seat withdraws its answer; nothing is inferred from a filename.
+
 ### Shared-container writes and cursors
 
 A shared container is not mounted as a special borrowed scope. Its domain rows and blobs are real residents of each joined member vault, so the ordinary per-vault replica, backup, search, and attachment paths cover them. The phone still has exactly one physical replica cursor for that vault even when the vault subscribes to many shapes.
@@ -70,6 +78,12 @@ Offline writes into a shared container use the ordinary durable replica outbox �
 Minting a share is not one of those offline writes. `tally.group` is v1's one edit-capable subject, so the phone's single producer is the share row on a Tally group: it opens the share sheet when the gateway is reachable and WITHHOLDS the verb with its own sentence when it is not — an unreachable gateway is a different screen from a refused grant, and neither is an empty ledger.
 
 `share_subscription.cursor_seq`, keyed `(shape_id, audience_vault_id)`, is how far this vault has ingested one shape, alongside the physical replica cursor. Ten shared Tally groups in one vault therefore mean one vault cursor plus ten shape cursors, not eleven sync engines. The vault cursor transports the resulting row changes; each origin orders its own shape independently. A late join or a restore starts from a bootstrap at the origin's current epoch and follows changes from there; a changed `cursor_epoch` is a re-bootstrap, never a silently extended floor.
+
+### The chain, and where its numbers come from
+
+Five changes made offline against one row execute in order, once each, when the radio returns ([#996](https://github.com/srikanth235/centraid/issues/996) R23). The edges are derived on the seat from what the outbox minted, the held dependents say "Waiting on an earlier change" rather than "failed", and a conflict raised by a second writer stops the head of the chain with both versions on the row and Retry/Discard beside it.
+
+Four intervals of that arc are measured on node against the production session and a real file — `mobile/durable-save`, `mobile/pending-render`, `mobile/restart-recovery` and `mobile/reconnect-drain` in `tests/journeys.json`, all at `none/ci-linux-x64-4c`. Every one is a LOWER BOUND on the phone: no network RTT, no flash, no render. The phone's own numbers are the `device-fixture/ci-android-emu` rows, which are `unmeasured` and name the Android airplane flow as their probe.
 
 ## Background work and push privacy
 

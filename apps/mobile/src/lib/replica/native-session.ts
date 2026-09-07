@@ -7,6 +7,7 @@ import {
   fetchReplicaIntentOutcomes,
   runWindowedBootstrap,
   GatewayClientError,
+  admissionDuringRebootstrap,
   chainBadgeCopy,
   chainHolds,
   IntentQueue,
@@ -50,6 +51,10 @@ import { backoffSchedule } from "../backoff";
 import type { BackoffSchedule } from "../backoff";
 import { MobileIntentIds } from "./mobile-intent-id";
 import { NativeReplicaStore } from "./native-replica-store";
+import {
+  forgetPendingContentRefs,
+  publishPendingContentRefs,
+} from "./pending-content-refs";
 import { isReplicaStorageFullError } from "./replica-storage-error";
 import { noteResyncVerdict } from "./resync-notice";
 import { SqliteIntentStore } from "./sqlite-intent-store";
@@ -209,6 +214,16 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #bootstrapWindow: number | undefined;
   readonly #progressiveBootstrap: boolean;
   readonly #intentStore: SqliteIntentStore;
+  /**
+   * A re-bootstrap is being prepared or is running (#996 R23/R25).
+   *
+   * `admissionDuringRebootstrap` is the rule: a write is ADMITTED — refusing
+   * would make "saved" untrue during a repair the member did not ask for and
+   * cannot see — and it is NOT SENT, because the cursor is about to move
+   * discontinuously and an outcome arriving mid-swap would be reconciled
+   * against a copy that no longer exists.
+   */
+  #rebootstrapping = false;
   readonly #intentIds: MobileIntentIds;
   readonly #onBootstrapProgress:
     | CreateNativeReplicaSessionOptions["onBootstrapProgress"]
@@ -302,6 +317,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   async start(): Promise<this> {
     const status = await this.#coordinator.status();
     await this.#coordinator.recoverSending();
+    await this.publishProtectedContent();
     this.#hasCursor = status.cursor !== null;
     if (status.cursor) {
       this.#catalog = await this.#coordinator.catalog();
@@ -457,9 +473,18 @@ export class NativeReplicaSession implements MobileReplicaSession {
     // Absent is never empty: a deferred act is durable yet draws nothing, so it
     // says so rather than borrowing the ordinary offline sentence.
     if (deferred) await this.markDeferred(intent);
+    // NOT AWAITED, and that is load-bearing: every await between the enqueue
+    // and the waiter registration below is a window in which the drain can
+    // settle this intent before anything is listening, and the caller's
+    // `write()` then never resolves.
+    void this.publishProtectedContent();
     const settled = terminalResult(intent);
     if (settled) return settled;
     if (!this.#isConnected()) {
+      // Awaited on THIS path only: no waiter is registered here, so there is
+      // no race to widen, and an offline write is exactly the one whose bytes
+      // must be protected before the caller can act on the answer.
+      await this.publishProtectedContent();
       return {
         intentId: intent.intentId,
         status: "queued",
@@ -860,8 +885,21 @@ export class NativeReplicaSession implements MobileReplicaSession {
     if (detail !== undefined)
       noteResyncVerdict(detail, this.#gatewayAuth.vaultId);
     this.#hasCursor = false;
-    if (!this.#closed)
-      void this.bootstrapWhenReachable().catch(() => undefined);
+    // Set BEFORE the refetch is scheduled, not inside it: the window this
+    // closes is the one between deciding to replace the copy and starting to.
+    this.#rebootstrapping = true;
+    if (this.#closed) {
+      // Nothing will run, so nothing may stay held: a closed session that left
+      // the flag up would hand a reopened one a queue it never drains.
+      this.#rebootstrapping = false;
+      return;
+    }
+    void this.bootstrapWhenReachable()
+      .catch(() => undefined)
+      .finally(() => {
+        this.#rebootstrapping = false;
+        void this.flushIntents();
+      });
   }
 
   async close(): Promise<void> {
@@ -877,6 +915,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.rejectWaiters(new ReplicaProtocolError("Replica session closed"));
     this.#bootstrapAbort?.abort();
     await this.#bootstrapPromise?.catch(() => undefined);
+    forgetPendingContentRefs();
     await this.#coordinator.close();
   }
 
@@ -894,6 +933,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.rejectWaiters(new ReplicaProtocolError("Replica scope was revoked"));
     this.#bootstrapAbort?.abort();
     await this.#bootstrapPromise?.catch(() => undefined);
+    forgetPendingContentRefs();
     await this.#coordinator.purge();
   }
 
@@ -1025,6 +1065,17 @@ export class NativeReplicaSession implements MobileReplicaSession {
         this.settleWaitersAsQueued("waiting for a connection");
         return;
       }
+      // QUIESCE, WHICH IS NOT A STOP (R23, `SEAT_REBOOTSTRAP_CUTOVER` step 1).
+      // While the copy is being replaced this claims nothing new — an answer
+      // arriving mid-swap would be reconciled against a file that is about to
+      // go — but an intent ALREADY SENDING keeps its answer, which is why the
+      // check is here and not at the top of `flushIntents`. Cutting the whole
+      // drain would strand a claimed intent in `sending` until the next
+      // process open, and the member would be told nothing at all.
+      if (this.#rebootstrapping) {
+        this.settleWaitersAsQueued(admissionDuringRebootstrap().reason);
+        return;
+      }
       let intent: ReplicaIntent | undefined;
       try {
         intent = await this.#coordinator.claimNextIntent();
@@ -1124,6 +1175,22 @@ export class NativeReplicaSession implements MobileReplicaSession {
   }
 
   /** A durable admission is an honest settlement; an unresolved promise is not. */
+  /**
+   * Tell the byte store which content ids this queue still needs (R25).
+   *
+   * Pushed rather than pulled: the eviction sweep is synchronous and the
+   * outbox is not, so the seat publishes on every move of the queue and the
+   * sweep reads the last publication.
+   */
+  private async publishProtectedContent(): Promise<void> {
+    try {
+      publishPendingContentRefs(await this.#coordinator.pendingIntents());
+    } catch {
+      // A store that cannot be read protects nothing NEW; the previous answer
+      // stands, which is the safe direction — it over-keeps, never over-evicts.
+    }
+  }
+
   private settleWaitersAsQueued(reason: string): void {
     for (const intentId of Array.from(this.#waiters.keys()))
       this.resolveWaiter(intentId, { intentId, status: "queued", reason });
