@@ -4531,3 +4531,60 @@ bunx tsc -p packages/client --noEmit          # clean
 bun run governance < /dev/null
 bun run check:push:static                     # stamped on the committed tree
 ```
+
+## Wave 3 — the pending projections still wrote a title the schema had moved
+
+`bun run test:integration:mobile` was red on sixteen cases with
+`ReplicaProtocolError: Unknown column "title" on core.content_item`, thrown by
+`validateOptimisticMutation` before any write left the phone.
+
+R20(b) moved the AUTHORED title off `core_content_item` onto the owning row —
+`core.document.title`, `knowledge_note.title`, `media_asset.title` — because a
+content row is keyed by its bytes: two assets sharing a sha shared one caption,
+and a generated caption overwrote the owner's own words. The column is gone,
+and so is `media_type`. Two pending projections still wrote both.
+
+Both were writing it TWICE, which is what makes this the mirror the ruling
+deleted rather than a rename anyone missed: `docs` already set
+`core.document.title` two lines above, and `notes` already set the note's title
+through `NOTE_FIELDS`. What the `core.content_item` upsert is FOR is minting
+the row the document or note points at, so it exists in the overlay before the
+gateway answers — and `content_id` is all that takes.
+
+No compatibility path and no fallback: the column does not exist, and a
+projection that wrote to it optimistically would have drawn a title on a row
+that could never carry one.
+
+### Verification
+
+```
+bun run test:integration:mobile   # 16 failures → 12; every `Unknown column
+                                  # "title"` case green
+```
+
+### The twelve that remain are a different defect, and not this lane's
+
+`conflict.integration.test.ts` fails for all eight apps on
+`expect(actualVersion).toBeGreaterThan(expectedVersion)` with numbers two
+orders of magnitude apart — `expected 2 to be greater than 432`,
+`expected 3 to be greater than 447`. The two sides are not the same quantity.
+`packages/server/src/routes/replica-intent-shape.ts:278-279` answers
+`expectedVersion: base.version` beside `actualVersion: entityMax.seq ?? 0` — a
+row version against a log sequence. The umbrella's own acceptance row says
+"every mutable table has `row_version`, bumped by its touch trigger; **the
+gateway's conflict check compares the column**", so the sequence is the wrong
+side of that comparison. `locker`'s denied case (`conflict` where `denied` is
+owed) and three `parked` cases are the rest. All of it is the gateway's intent
+plane, not seats+apps, and it is reported rather than absorbed.
+
+### Every file this commit touches
+
+- `packages/blueprints/apps/docs/pending-projection.ts`
+- `packages/blueprints/apps/notes/pending-projection.ts`
+
+### Decisions — wave 3, the pending title
+
+- **The content row keeps only its id.** Reaching for another column to carry
+  the optimistic title — `content_uri`, a synthetic field — would rebuild the
+  mirror under a different name. The owning row has the title; the overlay
+  reads it there.
