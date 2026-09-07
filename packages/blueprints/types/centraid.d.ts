@@ -139,7 +139,6 @@ interface VaultApi {
   /** Plaintext of one entity's sealed columns — receipted per item (#293). */
   reveal: (request: Record<string, unknown>) => Promise<unknown>;
   /** Locker-only user-presence authentication; sessions stay host-memory-only (#630). */
-  authenticate: (request: Record<string, unknown>) => Promise<unknown>;
   /** Size-bounded derivative content fetch. */
   content: (request: Record<string, unknown>) => Promise<unknown>;
 }

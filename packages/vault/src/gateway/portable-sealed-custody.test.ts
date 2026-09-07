@@ -31,6 +31,7 @@ import {
 } from "../schema/sealed.js";
 import { createGateway } from "./gateway.js";
 import type { Gateway } from "./gateway.js";
+import { unsealCell } from "./owner-vault.test-fixtures.js";
 import { importVaultExport } from "./portability.js";
 import { importPortableVault, verifyPortableVault } from "./portable-export.js";
 import type { Credential } from "./types.js";
@@ -135,14 +136,13 @@ describe("portable export sealed custody", () => {
     const reopened = openVaultDb({ dir: targetDir });
     target = reopened;
     expect(sealKeyFingerprint(reopened.sealKey)).toBe(targetFingerprint);
-    const reopenedGateway = createGateway(reopened);
-    registerLockerCommands(reopenedGateway);
-    const revealed = reopenedGateway.reveal(credentialFor(sourceBoot), {
-      entity: "locker.item",
-      entityId: itemId,
-      columns: ["password"],
-    });
-    expect(revealed.values["password"]).toBe(SECRET);
+    // Read the cell with the TARGET's own key (#996, W6-D2 — the door refuses
+    // a locker row now). What this test is about is unchanged: the import
+    // re-sealed the secret under the target's DEK, so the target opens it and
+    // the source's key has nothing to do with it.
+    expect(unsealCell(reopened, "locker_item", "password", itemId)).toBe(
+      SECRET
+    );
   });
 
   test("no plaintext secret survives anywhere in the artifact", async () => {

@@ -21,14 +21,6 @@ export {
   type AppliedVaultFootprint,
 } from "./vault-footprint.js";
 export {
-  LockerAuthentication,
-  LOCKER_ITEM_PERMIT_MS,
-  LOCKER_PRIMARY_CREDENTIAL_ID,
-  LOCKER_SESSION_TIMEOUT_MS,
-  type LockerAuthRequest,
-  type LockerAuthResult,
-} from "./gateway/locker-auth.js";
-export {
   LOCKER_CIPHERTEXT_PREFIX,
   LOCKER_ENCRYPTED_COLUMNS,
   LOCKER_KEY_BYTES,

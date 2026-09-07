@@ -13,7 +13,6 @@ export type VaultOp =
   | "changes"
   | "resolve"
   | "reveal"
-  | "authenticate"
   | "content";
 
 export interface VaultCall {

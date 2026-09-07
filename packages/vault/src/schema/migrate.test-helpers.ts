@@ -30,7 +30,6 @@ export const EDITABLE_DOMAIN_TABLES = [
   "locker_item",
   "locker_item_field",
   "locker_item_passkey",
-  "locker_auth_credential",
   "people_profile",
   "people_important_date",
   "schedule_project",

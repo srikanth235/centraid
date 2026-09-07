@@ -52,7 +52,6 @@ const PRIVATE_TABLES_BY_KIND: Readonly<
     blob_content_key: "the wrapped per-object content key",
     blob_device_content_key: "one device's copy of a wrapped object key",
     blob_device_wrap_key: "one device's key-wrapping salt and epoch",
-    locker_auth_credential: "this installation's unlock credential",
     locker_key:
       "which Locker key this gateway holds, and when it retired the one before",
     sync_connection_credential: "a third-party connection's stored secret",

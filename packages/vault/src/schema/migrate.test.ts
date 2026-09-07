@@ -145,15 +145,14 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("SIX rungs: the baseline, #929's three, #928's ask tables and #996's key plane, and a fresh vault stops at user_version 6", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(6);
+  test("SEVEN rungs: the baseline, #929's three, #928's ask tables and #996's key plane and unlock-credential drop, and a fresh vault stops at user_version 7", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(7);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(6);
+    expect(version.user_version).toBe(7);
     for (const table of [
-      "locker_auth_credential",
       "locker_key",
       "core_entity",
       "core_entity_revision",
@@ -196,6 +195,11 @@ describe("schema/migrate", () => {
       "enrich_consent",
       "consent_app",
       "locker_item_history",
+      // The gateway-side unlock verifier (#996, rungs seven / W6-D2): the
+      // gateway no longer unseals a Locker row, so nothing checks a
+      // passphrase here and a verifier nothing verifies against is a standing
+      // offer to whoever finds the file.
+      "locker_auth_credential",
       "social_contact_card",
       "tally_expense_receipt",
       "core_observation",
@@ -233,7 +237,7 @@ describe("schema/migrate", () => {
     expect(
       (raw.prepare("PRAGMA user_version").get() as { user_version: number })
         .user_version
-    ).toBe(6);
+    ).toBe(7);
     expect(
       raw
         .prepare(
@@ -265,7 +269,7 @@ describe("schema/migrate", () => {
     const version = raw.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(6);
+    expect(version.user_version).toBe(7);
     for (const table of ["share_authority_request", "share_authority_use"]) {
       expect(
         raw
@@ -279,20 +283,33 @@ describe("schema/migrate", () => {
     raw.close();
   });
 
-  test("the composed rung includes Locker authentication columns", () => {
-    const db = openVaultDb();
-    expect(columnNames(db.vault, "locker_auth_credential")).toStrictEqual(
-      expect.arrayContaining([
-        "credential_id",
-        "kind",
-        "label",
-        "salt",
-        "verifier",
-        "created_at",
-        "updated_at",
-      ])
-    );
-    db.close();
+  test("rung seven takes the unlock verifier off a file that already had one", () => {
+    // #996, W6-D2. A file frozen with `locker_auth_credential` must LOSE it —
+    // the passphrase was never stored, so nothing recoverable goes, and a
+    // scrypt verifier that nothing verifies against is not dormant, it is a
+    // standing offer to whoever finds the file.
+    const raw = new DatabaseSync(":memory:");
+    raw.exec(VAULT_MIGRATIONS[0] ?? "");
+    expect(
+      raw
+        .prepare(
+          `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'locker_auth_credential'`
+        )
+        .get()
+    ).toBeTruthy();
+    raw.exec("PRAGMA user_version = 6");
+    migrate(raw, VAULT_MIGRATIONS);
+    for (const type of ["table", "index", "trigger"]) {
+      expect(
+        raw
+          .prepare(
+            `SELECT 1 FROM sqlite_master WHERE type = ? AND name LIKE 'locker_auth_credential%'`
+          )
+          .get(type),
+        type
+      ).toBeUndefined();
+    }
+    raw.close();
   });
 
   test("the composed rung includes People profile lifecycle columns", () => {
@@ -535,10 +552,10 @@ describe("schema/migrate", () => {
     first.close();
 
     const vaultFile = path.join(dir, "vault.db");
-    expect(userVersionOf(vaultFile)).toBe(6);
+    expect(userVersionOf(vaultFile)).toBe(7);
 
     const second = openVaultDb({ dir });
-    expect(userVersionOf(vaultFile)).toBe(6);
+    expect(userVersionOf(vaultFile)).toBe(7);
     expect(shapeOf(second)).toBe(before);
     second.close();
   });

@@ -615,12 +615,18 @@ describe("outbox-executor", () => {
     });
     expect(added.status).toBe("executed");
     const itemId = (added as { output: { item_id: string } }).output.item_id;
-    plane.gateway.reveal(plane.ownerCredential, {
-      entity: "locker.item",
-      entityId: itemId,
-      columns: ["password"],
-      context: { kind: "fill", origin: "https://example.test" },
-    });
+    // The reveal is REFUSED now (#996, W6-D2) — the gateway does not unseal a
+    // Locker row — and the refusal is receipted like the allowance was, which
+    // is what this test is actually about: the review feed carries the act,
+    // its origin context and its actor, and never the value.
+    expect(() =>
+      plane.gateway.reveal(plane.ownerCredential, {
+        entity: "locker.item",
+        entityId: itemId,
+        columns: ["password"],
+        context: { kind: "fill", origin: "https://example.test" },
+      })
+    ).toThrow(/does not unseal locker rows/u);
     const fills = plane
       .reviewFeed(20)
       .filter((entry) => entry.action === "reveal");

@@ -4676,3 +4676,55 @@ plane, not seats+apps, and it is reported rather than absorbed.
   the optimistic title — `content_uri`, a synthetic field — would rebuild the
   mirror under a different name. The owning row has the title; the overlay
   reads it there.
+
+## Wave 6 — the gate goes
+
+The second half of the W6-D2 deletions, and the last of the wave's ordering: the boundary was demonstrated on each seat, the screens adopted it, and only now does the gate it replaced come out.
+
+### What went
+
+`locker-auth.ts` (604 lines: the scrypt-over-HMAC verifier, the memory sessions, the one-shot item permits), `LockerAuthentication` and its two gateway methods, the `authenticate` vault op and its four call sites (`vault-plane.ts`, `vault-bridge.ts`, `runner.ts`, `inline-query-ctx-core.ts`), the op's declaration on the kit surface, and `locker_auth_credential` as **rung seven**.
+
+**The table is a rung, not a JS pass**, and dropping it is not housekeeping: a scrypt verifier that nothing verifies against is not dormant, it is a standing offer to whoever finds the file. Nothing recoverable goes with it — the passphrase itself was never stored.
+
+### What did NOT go, and why
+
+**`gateway.reveal` stays; its LOCKER ARM does not.** The ruling's words are "the server never unseals a Locker ROW for a client again", and that is narrower than deleting the door — deliberately. Under [W6-D1](#decisions--wave-6-what-the-gate-deletion-covers) the §293 sealed-column class still carries `sync.connection_credential`'s five broker-token columns and the ext band's declared lists, and the broker must still be able to inject a token it is holding for the member. So `reveal` refuses the `locker` **schema**, before any row is read, for every principal including the owner on their own device. If the answer were "it depends", the boundary would be an authorization question again rather than a place the key is not.
+
+### The Companion, which this breaks, said plainly
+
+`autofill-item.ts` asked the gateway to unseal a password for an origin-matched login. It cannot any more, and it cannot decrypt locally either: the Companion is a browser extension, it holds no vault, and it must not be handed `K` — a surface that could read the key could exfiltrate it, with no receipt, because nothing was revealed. The handler now returns the MATCH and a stated reason rather than a blank answer, because "here is the login, the value needs a device that holds the key" and "this page does not match" are different facts.
+
+**Open question, blocking, for the coordinator**: browser fill needs a host that already holds `K` behind the member's unlock — the desktop shell is the obvious candidate — and wiring that is a product decision, not a mechanical deletion. The same question covers `autofill-candidates`, whose unlock gate went for the seat-side reason given in the previous section.
+
+### Suites: what each rewritten test still proves
+
+`locker-sidecar-reveal.test.ts` proved the permit's arithmetic — one shot, the owning item's token, a trashed item's sidecars, and no existence oracle. Every one was a rule about who may make the gateway produce plaintext, and the gateway does not produce it. The file now proves the property that replaces all of them (the owner is refused, a sidecar is refused identically, a missing row refuses identically so there is still no oracle, the refusal is receipted and carries no value) plus the half W6-D1 keeps: `sync.connection_credential` still reveals.
+
+`sealed.test.ts`, `seal-custody.test.ts` and `portable-sealed-custody.test.ts` used `gw.reveal` as a convenient way to look inside a sealed cell while proving something else — that a reseal rotated every cell, that an interrupted rotation heals, that a `«sealed»` round-trip did not overwrite the secret, that a staged CSV published ciphertext, that a portable import re-sealed under the TARGET's key. Those claims are about WHAT IS IN THE CELL, so they now read it with `unsealCell` (`owner-vault.test-fixtures.ts`) and survive the door's refusal instead of being deleted with it. The reseal test gained an assertion it was missing: the OLD key no longer opens the rotated cell.
+
+`vault-plane-app-bridge.test.ts` proved the permit's expiry, that an `authenticate` answer was settled rather than a promise, and that the op was Locker-only. One property replaces them: the bridge refuses the schema for the one caller that held the reveal scope, and the op is gone from the bridge entirely — asserted through the bridge rather than off the type, because a runtime arm left behind after a type was narrowed is exactly what a deletion misses.
+
+### Files
+
+- `packages/vault/src/gateway/locker-auth.ts` · `locker-auth.test.ts` — deleted
+- `packages/vault/src/gateway/gateway.ts` — the locker arm of `reveal`; `authenticateLocker`, `authorizeLockerReveal`, `enforceLockerReveal`, `lockerOwningItemId`, `LOCKER_SIDECAR_ENTITIES`
+- `packages/vault/src/index.ts` — the plane's exports
+- `packages/vault/src/schema/domains-locker.ts` · `migrate.ts` · `migrate.test.ts` — `LOCKER_AUTH_DROP_DDL` as rung seven; `user_version` 6 → 7
+- `packages/vault/src/schema/private-tables.ts` · `local-tables.ts` · `migrate.test-helpers.ts` — the table leaves every register
+- `packages/vault/src/gateway/owner-vault.test-fixtures.ts` — `unsealCell`
+- `packages/vault/src/gateway/locker-sidecar-reveal.test.ts` · `sealed.test.ts` · `seal-custody.test.ts` · `portable-sealed-custody.test.ts` — rewritten to the refusal and to direct cell reads
+- `packages/server/src/serve/vault-plane.ts` · `engine/handlers/vault-bridge.ts` · `engine/worker/runner.ts` — the `authenticate` op and its arms
+- `packages/server/src/serve/vault-plane-app-bridge.test.ts` · `packages/server/src/backup/backup.integration.test.ts` · `packages/server/src/serve/vault-plane-wal.test.ts` · `packages/server/src/serve/outbox-executor.test.ts` · `packages/server/src/engine/stores/gateway-db.test.ts` — rewritten to the refusal, to direct cell reads, and to rung seven
+- `packages/client/src/replica/inline-query-ctx-core.ts` · `packages/blueprints/types/centraid.d.ts` — the op leaves the kit surface
+- `packages/blueprints/apps/locker/queries/autofill-item.ts` · `packages/blueprints/src/query-handlers.test.ts` — the Companion refusal, with its reason
+
+### Gates
+
+```
+bunx vitest run packages/vault/src        # 207 files, 1676 passed, 2 skipped
+bunx vitest run packages/blueprints       # 213 files, 7066 passed
+bunx vitest run packages/server/src       # 384 passed; environmental failures only
+bun run governance < /dev/null
+bun run check:push:static                 # stamped on the committed tree
+```
