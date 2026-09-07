@@ -257,6 +257,27 @@ function scopedSeededCtx(manifest: AppJson) {
             output: { id: `seed-${input.command.replaceAll(".", "-")}` },
           };
         },
+        // THE PAGED READ PATH (#996 wave 4, R8). A page is a read, so it is
+        // attributed to a scope exactly like one; the statement names PHYSICAL
+        // tables, because the same statement runs on a seat's own file and on
+        // the gateway's paged door (W4-D2), so the entity is recovered from the
+        // `<schema>_<table>` name every vault table is built from.
+        page: async (input: { query: { from: string; purpose?: string } }) => {
+          checkPurpose(input.query);
+          for (const table of input.query.from.split(
+            /\s+(?:left\s+|inner\s+|cross\s+)?join\s+|\s+on\s+.*/iu
+          )) {
+            const name = table.trim().split(/\s+/u)[0];
+            if (!name || !/^[a-z][a-z0-9_]*_[a-z]/u.test(name)) continue;
+            const cut = name.indexOf("_");
+            check(
+              "read",
+              `${name.slice(0, cut)}.${name.slice(cut + 1)}`,
+              "read"
+            );
+          }
+          return { rows: [] };
+        },
         read: async (input: { entity: string; purpose?: string }) => {
           checkPurpose(input);
           check("read", input.entity, "read");

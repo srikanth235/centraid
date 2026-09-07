@@ -199,6 +199,7 @@
         "pending-projection.ts",
         "projects.test.ts",
         "projects.ts",
+        "queries/board.paged.test.ts",
         "queries/board.ts",
         "queries/search.ts",
         "quick-add.test.ts",

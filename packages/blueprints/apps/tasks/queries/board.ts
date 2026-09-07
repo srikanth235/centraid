@@ -9,12 +9,39 @@
  * tasks form the logbook. Everything comes from the vault — no rows of its
  * own; consent denial is first-class, receipt included.
  */
+import { inList, readPages } from "../../_shared/paged-reads.ts";
 import {
   ownerKey,
   readRepresentations,
 } from "../../_shared/representation-reads.ts";
 import type { RepresentationIndex } from "../../_shared/representation-reads.ts";
 import { nestTaskFamilies } from "../when.ts";
+
+/*
+ * EVERY READ ON THIS BOARD IS A PAGE (#996 wave 4, R8). The declarative
+ * vocabulary this replaces let each of these say `acceptTruncation: true` and
+ * take whatever window the reader happened to have; there were ten of them in
+ * this one file, and not one named the number it was relying on.
+ *
+ * The two reads that are the SCREEN — the open window and the logbook — take
+ * one page each, sized by the caller. Everything else is a join over the set
+ * those two returned: bounded by the window, so it is walked to the end with
+ * `readPages`, which states its ceiling and throws rather than quietly
+ * stopping. `from` names the physical table because a statement runs unchanged
+ * on the seat's own file and on the gateway's paged door (W4-D2).
+ */
+
+/** The logbook is what the screen shows, so the read is the screen's size. */
+const LOGBOOK_ROWS = 50;
+
+/** One task row, as both task reads project it. */
+const TASK_COLUMNS =
+  "task_id, parent_task_id, project_id, section_id, status, title, " +
+  "description, priority, due_at, completed_at, effort_min, rrule, tz, " +
+  "recurrence_anchor, series_id, sort_order, created_at, updated_at";
+
+/** The board draws the member's own unsettled task writes over its rows. */
+const TASK_OVERLAY = { entity: "schedule.task", rowIdColumn: "task_id" };
 
 /** Raw schedule.task row as the vault projects it (unread columns ride the index signature). */
 interface RawTask {
@@ -131,36 +158,70 @@ const CLOSED_STATUSES = ["completed", "cancelled"];
 
 export default async function boardHandler({ input, ctx }: HandlerArgs) {
   const OPEN = new Set(OPEN_STATUSES);
-  const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
+  // THE WINDOW IS A PAGE (#996 wave 4, R8). The old ceiling was 2,000 rows and
+  // was never the reader's real one; the host's measured ceiling is
+  // `MAX_PAGE_ROWS`, and asking past it was always answered with fewer rows and
+  // no way to continue. `truncated` now carries a real continuation.
+  const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 500);
   try {
-    const [openResult, closedResult, projectsResult, sectionsResult] =
-      await Promise.all([
-        ctx.vault.read({
-          entity: "schedule.task",
-          where: [{ column: "status", op: "in", value: OPEN_STATUSES }],
-          orderBy: { column: "task_id", dir: "desc" },
-          limit: window,
-        }),
-        ctx.vault.read({
-          entity: "schedule.task",
-          where: [{ column: "status", op: "in", value: CLOSED_STATUSES }],
-          orderBy: { column: "completed_at", dir: "desc" },
-          limit: 50,
-        }),
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "schedule.project",
-          where: [{ column: "archived_at", op: "is-null" }],
-          orderBy: { column: "sort_order", dir: "asc" },
-        }),
-        ctx.vault.read({
-          acceptTruncation: true,
-          entity: "schedule.section",
-          orderBy: { column: "sort_order", dir: "asc" },
-        }),
-      ]);
-    const openRows = (openResult.rows ?? []) as unknown as RawTask[];
-    const closedRows = (closedResult.rows ?? []) as unknown as RawTask[];
+    const openTasks = await ctx.vault.page<RawTask>({
+      query: {
+        name: "tasks.board.open",
+        select: TASK_COLUMNS,
+        from: "schedule_task",
+        where: "status IN (?, ?)",
+        bind: [...OPEN_STATUSES],
+        order: {
+          sortColumn: "task_id",
+          pkColumn: "task_id",
+          descending: true,
+        },
+      },
+      limit: window,
+      overlay: TASK_OVERLAY,
+    });
+    const closedTasks = await ctx.vault.page<RawTask>({
+      query: {
+        name: "tasks.board.logbook",
+        select: TASK_COLUMNS,
+        from: "schedule_task",
+        where: "status IN (?, ?)",
+        bind: [...CLOSED_STATUSES],
+        order: {
+          sortColumn: "completed_at",
+          pkColumn: "task_id",
+          descending: true,
+        },
+      },
+      limit: LOGBOOK_ROWS,
+      overlay: TASK_OVERLAY,
+    });
+    // The project and section lists are the board's own chrome: small, and
+    // read whole. `readPages` states the ceiling the old `acceptTruncation`
+    // left to whatever the reader's default happened to be.
+    const projectRows = await readPages<RawProject>(ctx, {
+      name: "tasks.board.projects",
+      select: "project_id, name, area, color, sort_order",
+      from: "schedule_project",
+      where: "archived_at IS NULL",
+      order: {
+        sortColumn: "sort_order",
+        pkColumn: "project_id",
+        descending: false,
+      },
+    });
+    const sectionRows = await readPages<RawSection>(ctx, {
+      name: "tasks.board.sections",
+      select: "section_id, project_id, name, sort_order",
+      from: "schedule_section",
+      order: {
+        sortColumn: "sort_order",
+        pkColumn: "section_id",
+        descending: false,
+      },
+    });
+    const openRows = openTasks.rows;
+    const closedRows = closedTasks.rows;
     const byId = new Map<string, RawTask>();
     for (const t of [...openRows, ...closedRows]) {
       byId.set(t.task_id, t);
@@ -176,12 +237,19 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       ),
     ];
     if (missingParentIds.length > 0) {
-      const parents = await ctx.vault.read({
-        acceptTruncation: true,
-        entity: "schedule.task",
-        where: [{ column: "task_id", op: "in", value: missingParentIds }],
-      });
-      for (const t of (parents.rows ?? []) as unknown as RawTask[])
+      const parentIn = inList("task_id", missingParentIds);
+      for (const t of await readPages<RawTask>(ctx, {
+        name: "tasks.board.parents",
+        select: TASK_COLUMNS,
+        from: "schedule_task",
+        where: parentIn.sql,
+        bind: parentIn.bind,
+        order: {
+          sortColumn: "task_id",
+          pkColumn: "task_id",
+          descending: false,
+        },
+      }))
         byId.set(t.task_id, t);
     }
 
@@ -192,46 +260,62 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       .filter((t) => !t.parent_task_id)
       .map((t) => t.task_id);
     if (topLevelIds.length > 0) {
-      const children = await ctx.vault.read({
-        acceptTruncation: true,
-        entity: "schedule.task",
-        where: [{ column: "parent_task_id", op: "in", value: topLevelIds }],
-      });
-      for (const t of (children.rows ?? []) as unknown as RawTask[])
+      const childIn = inList("parent_task_id", topLevelIds);
+      for (const t of await readPages<RawTask>(ctx, {
+        name: "tasks.board.children",
+        select: TASK_COLUMNS,
+        from: "schedule_task",
+        where: childIn.sql,
+        bind: childIn.bind,
+        order: {
+          sortColumn: "task_id",
+          pkColumn: "task_id",
+          descending: false,
+        },
+      }))
         byId.set(t.task_id, t);
     }
     const rows = [...byId.values()];
     const taskIds = rows.map((t) => t.task_id);
 
-    // Joins are `in`-bounded by the fetched set.
-    const attachments =
+    // Joins are `in`-bounded by the fetched set, and walked to the end of it.
+    const attachmentRows =
       taskIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.attachment",
-            where: [
-              { column: "target_type", op: "eq", value: "schedule.task" },
-              { column: "target_id", op: "in", value: taskIds },
-            ],
+        ? await readPages<RawAttachment>(ctx, {
+            name: "tasks.board.attachments",
+            select:
+              "attachment_id, target_type, target_id, content_id, role, is_primary",
+            from: "core_attachment",
+            where: `target_type = ? AND ${inList("target_id", taskIds).sql}`,
+            bind: ["schedule.task", ...taskIds],
+            order: {
+              sortColumn: "attachment_id",
+              pkColumn: "attachment_id",
+              descending: false,
+            },
           })
-        : { rows: [] };
-    const attachmentRows = (attachments.rows ??
-      []) as unknown as RawAttachment[];
+        : [];
     const contentIds = [
       ...new Set(attachmentRows.map((a) => a.content_id)),
     ].filter(Boolean);
-    const contents =
+    const contentRows =
       contentIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.content_item",
-            where: [{ column: "content_id", op: "in", value: contentIds }],
+        ? await readPages<RawContent>(ctx, {
+            name: "tasks.board.contents",
+            select: "content_id, content_uri, byte_size",
+            from: "core_content_item",
+            where: inList("content_id", contentIds).sql,
+            bind: [...contentIds],
+            order: {
+              sortColumn: "content_id",
+              pkColumn: "content_id",
+              descending: false,
+            },
           })
-        : { rows: [] };
+        : [];
     // Bytes carry no media type since #996 (R20(b)) — the attachment's own
     // representation says what it reads them as.
     const representations = await readRepresentations({ ctx, contentIds });
-    const contentRows = (contents.rows ?? []) as unknown as RawContent[];
     const contentById = new Map(contentRows.map((c) => [c.content_id, c]));
     const attByTask = attachmentsBySubject(
       "schedule.task",
@@ -242,43 +326,52 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
 
     // Cross-references (#272, #282): @-mentioned entities resolve via live
     // links + anchors; cards resolvable-if-linked.
-    const links =
+    const linkRows =
       taskIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.link",
-            where: [
-              { column: "from_type", op: "eq", value: "schedule.task" },
-              { column: "from_id", op: "in", value: taskIds },
-              { column: "valid_to", op: "is-null" },
-            ],
+        ? await readPages<RawLink>(ctx, {
+            name: "tasks.board.links",
+            select: "link_id, from_id, to_type, to_id",
+            from: "core_link",
+            where: `from_type = ? AND valid_to IS NULL AND ${inList("from_id", taskIds).sql}`,
+            bind: ["schedule.task", ...taskIds],
+            order: {
+              sortColumn: "link_id",
+              pkColumn: "link_id",
+              descending: false,
+            },
           })
-        : { rows: [] };
-    const tags =
+        : [];
+    const tagRows =
       taskIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.tag",
-            where: [
-              { column: "target_type", op: "eq", value: "schedule.task" },
-              { column: "target_id", op: "in", value: taskIds },
-            ],
+        ? await readPages<RawTag>(ctx, {
+            name: "tasks.board.tags",
+            select: "tag_id, target_id, concept_id",
+            from: "core_tag",
+            where: `target_type = ? AND ${inList("target_id", taskIds).sql}`,
+            bind: ["schedule.task", ...taskIds],
+            order: {
+              sortColumn: "tag_id",
+              pkColumn: "tag_id",
+              descending: false,
+            },
           })
-        : { rows: [] };
-    const tagRows = (tags.rows ?? []) as unknown as RawTag[];
+        : [];
     const tagConceptIds = [...new Set(tagRows.map((t) => t.concept_id))];
-    const tagConcepts =
+    const tagConceptRows =
       tagConceptIds.length > 0
-        ? await ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.concept",
-            where: [{ column: "concept_id", op: "in", value: tagConceptIds }],
+        ? await readPages<{ concept_id: string; pref_label: string }>(ctx, {
+            name: "tasks.board.tag-concepts",
+            select: "concept_id, pref_label",
+            from: "core_concept",
+            where: inList("concept_id", tagConceptIds).sql,
+            bind: [...tagConceptIds],
+            order: {
+              sortColumn: "concept_id",
+              pkColumn: "concept_id",
+              descending: false,
+            },
           })
-        : { rows: [] };
-    const tagConceptRows = (tagConcepts.rows ?? []) as unknown as Array<{
-      concept_id: string;
-      pref_label: string;
-    }>;
+        : [];
     const tagLabelByConcept = new Map(
       tagConceptRows.map((c) => [c.concept_id, c.pref_label])
     );
@@ -298,7 +391,6 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       .map(([concept_id, label]) => ({ concept_id, label }))
       .toSorted((a, b) => a.label.localeCompare(b.label));
 
-    const linkRows = (links.rows ?? []) as unknown as RawLink[];
     const uniqueRefs = [
       ...new Map(
         linkRows.map((l) => [
@@ -307,23 +399,27 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
         ])
       ).values(),
     ];
-    const [resolved, anchors] = await Promise.all([
+    const [resolved, anchorRows] = await Promise.all([
       uniqueRefs.length > 0
         ? ctx.vault.resolve({ refs: uniqueRefs })
         : Promise.resolve({ cards: [] as Array<Record<string, unknown>> }),
       linkRows.length > 0
-        ? ctx.vault.read({
-            acceptTruncation: true,
-            entity: "core.link_anchor",
-            where: [
-              {
-                column: "link_id",
-                op: "in",
-                value: linkRows.map((l) => l.link_id),
-              },
-            ],
+        ? readPages<{ link_id: string; selector_json: string }>(ctx, {
+            name: "tasks.board.link-anchors",
+            select: "anchor_id, link_id, selector_json",
+            from: "core_link_anchor",
+            where: inList(
+              "link_id",
+              linkRows.map((l) => l.link_id)
+            ).sql,
+            bind: linkRows.map((l) => l.link_id),
+            order: {
+              sortColumn: "anchor_id",
+              pkColumn: "anchor_id",
+              descending: false,
+            },
           })
-        : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
+        : Promise.resolve([] as { link_id: string; selector_json: string }[]),
     ]);
     const cardByRef = new Map(
       (resolved.cards ?? []).map((c) => [
@@ -331,10 +427,6 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
         c,
       ])
     );
-    const anchorRows = (anchors.rows ?? []) as unknown as Array<{
-      link_id: string;
-      selector_json: string;
-    }>;
     const selectorByLink = new Map<string, unknown>();
     for (const a of anchorRows) {
       try {
@@ -429,14 +521,17 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       .slice(0, 50);
 
     // Counts describe what was fetched, not the whole table; `truncated`
-    // tells the UI to offer "Show more".
+    // tells the UI to offer "Show more". It is the PAGE's own answer now —
+    // a cursor exists or it does not — rather than the guess the old read left
+    // it as (`openRows.length >= window`, which cannot tell a window that
+    // filled exactly from one that ran out).
     const openCount = rows.filter((t) => OPEN.has(t.status)).length;
-    const truncated = openRows.length >= window;
+    const truncated = openTasks.next !== undefined;
     return {
       open,
       logbook,
-      projects: (projectsResult.rows ?? []) as unknown as RawProject[],
-      sections: (sectionsResult.rows ?? []) as unknown as RawSection[],
+      projects: projectRows,
+      sections: sectionRows,
       tags: allTags,
       counts: { open: openCount, closed: rows.length - openCount },
       truncated,

@@ -568,14 +568,14 @@
   "queries": [
     {
       "name": "board",
-      "description": "The task board as a bounded window (newest open tasks by creation, caller-sized, families kept whole; the logbook read is capped at its visible 50 most recently closed), each row carrying its tags (`[{tag_id, concept_id, label}]`), plus the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull; `truncated` says more open tasks exist beyond the window.",
+      "description": "The task board as a bounded window (newest open tasks by creation, caller-sized, families kept whole; the logbook read is capped at its visible 50 most recently closed), each row carrying its tags (`[{tag_id, concept_id, label}]`), plus the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull; every read is a keyset page (#996 R8) and `truncated` is the open page's own cursor — it exists or it does not — rather than a guess from the row count.",
       "input": {
         "type": "object",
         "properties": {
           "limit": {
             "type": "integer",
             "minimum": 20,
-            "maximum": 2000
+            "maximum": 500
           }
         },
         "additionalProperties": false

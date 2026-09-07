@@ -6038,3 +6038,91 @@ Two cases in `centraid-inline.test.ts`, a pair:
 - **"No file" is a seat's standing choice, so it refuses like one.** An error
   code the runner does not know is an app crash for a member who chose a
   supported configuration.
+
+## Wave 4 — the first app: Tasks reads only pages (#996)
+
+### Ten declarative reads, eight of them unbounded, gone
+
+`tasks/queries/board.ts` had ten `ctx.vault.read` calls and eight said
+`acceptTruncation: true`. Every one is now a statement-as-data through
+`ctx.vault.page`, and the file has no `ctx.vault.read` left. The shape it
+returns is unchanged; what changed is that each read states its window.
+
+Two of the ten are the SCREEN and take one page each: the open window (caller
+sized) and the logbook (its visible fifty). The other eight are joins over the
+set those two returned — bounded by the window, not by the table — so they are
+walked to the end with `readPages`.
+
+### `readPages` and `inList`, in `_shared/paged-reads.ts`
+
+- **`readPages` states its ceiling and THROWS at it.** Returning what it had
+  would be `acceptTruncation` again: a short answer that reads as a whole one,
+  with the app never told. The default fan-out is 500 rows × 8 pages, and a
+  handler that hits it is asking a question about a set it did not bound.
+- **`inList` builds placeholders and binds together**, so they cannot drift, and
+  refuses an empty set rather than emitting `IN ()` — which SQLite parses, and
+  which then reads like a filter rather than a mistake.
+
+### `truncated` is the page's own answer now
+
+It was `openRows.length >= window`, which cannot tell a window that filled
+exactly from one that ran out; it is `openTasks.next !== undefined`, a cursor
+that exists or does not. The board's window ceiling drops from 2,000 to
+`MAX_PAGE_ROWS` in `app.json` too — the old maximum was never the reader's real
+one, and asking past it was answered with fewer rows and no way to continue.
+
+### The smoke harness attributes a page to a scope
+
+`handler-crud-smoke.integration.test.ts` runs every handler against a
+scope-enforcing seam and asserts it exercised the vault; it went red because
+`page` was not a method it knew, which is exactly right. The seam now checks a
+page like a read: the statement names PHYSICAL tables (the same statement runs
+on a seat's file and on the gateway's door), so the entity is recovered from the
+`<schema>_<table>` name and checked against the manifest. This is also the proof
+that a page's scope attribution works, which the manifest-scope deletion later
+in this wave depends on.
+
+### Red first
+
+`board.paged.test.ts`, four cases: the handler reaches the vault only through
+`ctx.vault.page` (the fake ctx has NO `read`, so a survivor is a `TypeError`
+rather than a quiet pass); every statement carries a window and orders on two
+columns it also selects; each join is `in`-bounded by the window's own task
+ids; `truncated` follows the cursor in both directions.
+
+### Not fixed here, on purpose
+
+`board.ts` reads `task.recurrence_tz` and the column is `schedule_task.tz`
+(`schema/time-organize.ts:54`), so the recurrence time zone has never reached
+`collapseMissedOccurrences`. The new statement selects `tz`, which keeps that
+behaviour EXACTLY as it was — a conversion commit that silently fixed a
+behaviour bug would hide it in a diff about windows. It is filed separately.
+
+### Gates
+
+- `bunx vitest run packages/blueprints/apps/tasks/queries/board.paged.test.ts`
+  — 4 passed.
+- `bun run --cwd packages/blueprints test` — 214 files, 7,084 passed.
+- `bun run --cwd packages/blueprints typecheck` — clean.
+- `bun run check:push:static` — below.
+
+### Every file this commit touches
+
+**Added:**
+
+- `packages/blueprints/apps/_shared/paged-reads.ts`
+- `packages/blueprints/apps/tasks/queries/board.paged.test.ts`
+
+**Changed:**
+
+- `packages/blueprints/apps/tasks/queries/board.ts`
+- `packages/blueprints/apps/tasks/app.json`
+- `packages/blueprints/src/handler-crud-smoke.integration.test.ts`
+- `receipts/issue-996-one-vault-every-seat.md`
+
+### Decisions — the first app
+
+- **A fan-out throws at its ceiling.** A short answer that reads as a whole one
+  is the flag this wave is deleting, wearing a different name.
+- **A conversion commit changes windows, not behaviour.** The `recurrence_tz`
+  mismatch is carried across unchanged and filed, not folded in.
