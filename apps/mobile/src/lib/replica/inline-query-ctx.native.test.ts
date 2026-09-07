@@ -32,7 +32,7 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import dashboardQuery from "../../../../../packages/blueprints/apps/tally/queries/dashboard.ts";
 import type { NativeInlineQuerySession } from "./inline-query-ctx.native";
 import { runNativeInlineQuery } from "./inline-query-ctx.native";
-import { MultiVaultReplicaReader } from "./multi-vault-reader";
+import { NativeReplicaStore } from "./native-replica-store";
 import { NodeSqliteDriver } from "./node-sqlite-driver";
 import {
   OWNER,
@@ -41,6 +41,7 @@ import {
   seedEntities,
   seedScope,
 } from "./tally-ledger.test-fixtures";
+import { VaultReadPlane } from "./vault-read-plane";
 
 /**
  * The reference read plane: the SAME fixture rows, filtered in JavaScript
@@ -101,15 +102,15 @@ function provenanceKeys(value: unknown): string[] {
   );
 }
 
-let open: MultiVaultReplicaReader | undefined;
+let open: VaultReadPlane | undefined;
 
-function mountedReader(): MultiVaultReplicaReader {
+function seatReader(): VaultReadPlane {
   const root = tempDirSync("centraid-inline-query-spike-");
   const databaseName = path.join(root, "personal.db");
   seedScope(databaseName);
-  open = new MultiVaultReplicaReader(
-    new NodeSqliteDriver(path.join(root, "mounted.db")),
-    [{ vaultId: VAULT_ID, label: "Personal", canWrite: true, databaseName }]
+  open = new VaultReadPlane(
+    NativeReplicaStore.create(new NodeSqliteDriver(databaseName), VAULT_ID),
+    { vaultId: VAULT_ID, label: "Personal", canWrite: true }
   );
   return open;
 }
@@ -136,7 +137,7 @@ describe("Metro-loadable queries/*.ts spike (#922 wave 1 ruling (i))", () => {
   });
 
   test("Tally's dashboard handler runs on the native replica session", async () => {
-    const reader = mountedReader();
+    const reader = seatReader();
     const session = {
       read: reader.read.bind(reader),
       search: reader.search.bind(reader),
@@ -166,7 +167,7 @@ describe("Metro-loadable queries/*.ts spike (#922 wave 1 ruling (i))", () => {
   });
 
   test("replica-backed and row-array ctx produce identical output", async () => {
-    const reader = mountedReader();
+    const reader = seatReader();
     const session = {
       read: reader.read.bind(reader),
       search: reader.search.bind(reader),

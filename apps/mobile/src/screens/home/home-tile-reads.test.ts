@@ -1,9 +1,14 @@
-// Home cold start (#880, #883 D1). Nine reads fire at open, three of them "the
-// newest N". These hold the tile reads against the real reader over a
-// four-scope fixture and read the SQL back off the driver, pinning the SHAPE of
-// the work: one composed statement per read that orders and limits the union of
-// every attached vault, a pushed `IN` on body lookups, and a page that crosses
-// the driver at `limit`, not `limit x scopes`.
+// Home cold start (#880, #883 D1, narrowed by #996 wave 3). Nine reads fire at
+// open, three of them "the newest N". These hold the tile reads against the
+// real store and read the SQL back off the driver, pinning the SHAPE of the
+// work: one composed statement per read that orders and limits INSIDE SQLite,
+// a pushed `IN` on body lookups, and a page that crosses the driver at
+// `limit + 1` — the answer plus the one probe row that makes truncation
+// visible.
+//
+// The union arms are gone with the mount plane. A seat opens ONE file, so
+// there is one arm, and the claim that survives is the one that always
+// mattered: the tile does not pay for the entity to draw its newest N.
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -13,8 +18,9 @@ import { ReplicaSqliteStore } from "@centraid/client/replica/native";
 import type { ReplicaBindValue } from "@centraid/client/replica/native";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
+import { NativeReplicaStore } from "../../lib/replica/native-replica-store";
 import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
+import { VaultReadPlane } from "../../lib/replica/vault-read-plane";
 import {
   HOME_ORDERED_TILE_READS,
   HOME_TILE_LIMITS,
@@ -22,10 +28,14 @@ import {
   idFilter,
 } from "./home-tile-reads";
 
-/** Days per scope. Four scopes × one row per day is the whole library. */
-const DAYS = 500;
+/** Days in the fixture; one row per day per entity is the whole library. */
+// PAST THE LARGEST TILE LIMIT (500). The fixture used to seed 500 days into
+// each of four vaults and page across their union, so every tile's window sat
+// well inside the library; one open file has to hold that much on its own, or
+// a page that ends where the window ends would pass for a page that filled it.
+const DAYS = 700;
 const DAY_MS = 86_400_000;
-const SCOPES = ["personal", "family", "school", "club"] as const;
+const VAULT_ID = "personal";
 
 const SHAPES = [
   {
@@ -110,11 +120,15 @@ function stamp(day: number): string {
 class RecordingDriver extends NodeSqliteDriver {
   readonly reads: Array<{ sql: string; rows: number }> = [];
 
-  override async allAsync<T extends object>(
+  // SYNCHRONOUS `all`, not `allAsync`. The mounted reader took the driver's
+  // off-thread read; the seat's store is synchronous by construction (#996
+  // wave 3 — its whole correctness argument is one transaction per commit),
+  // so the statements it issues arrive here.
+  override all<T extends object>(
     sql: string,
     bind: readonly ReplicaBindValue[] = []
-  ): Promise<T[]> {
-    const rows = await super.allAsync<T>(sql, bind);
+  ): T[] {
+    const rows = super.all<T>(sql, bind);
     this.reads.push({ sql, rows: rows.length });
     return rows;
   }
@@ -223,20 +237,22 @@ function seedScope(file: string, vaultId: string): void {
 
 interface Household {
   driver: RecordingDriver;
-  reader: MultiVaultReplicaReader;
+  reader: VaultReadPlane;
 }
 
 function household(): Household {
   const root = tempDirSync("centraid-home-tiles-");
-  const scopes = SCOPES.map((vaultId) => ({
-    vaultId,
-    label: vaultId,
-    canWrite: vaultId === "personal",
-    databaseName: path.join(root, `${vaultId}.db`),
-  }));
-  for (const scope of scopes) seedScope(scope.databaseName, scope.vaultId);
-  const driver = new RecordingDriver(path.join(root, "mounted.db"));
-  return { driver, reader: new MultiVaultReplicaReader(driver, scopes) };
+  const databaseName = path.join(root, `${VAULT_ID}.db`);
+  seedScope(databaseName, VAULT_ID);
+  const driver = new RecordingDriver(databaseName);
+  return {
+    driver,
+    reader: new VaultReadPlane(NativeReplicaStore.create(driver, VAULT_ID), {
+      vaultId: VAULT_ID,
+      label: "Personal",
+      canWrite: true,
+    }),
+  };
 }
 
 /** The composed page: the one statement a read compiles its grammar into. */
@@ -298,18 +314,15 @@ describe("Home tile reads", () => {
     expect(paged.sql).toContain(
       `ORDER BY (verdict = 0) ASC, json_extract(payload_json, '$.${tile.column}') DESC`
     );
-    // The refusal guards still span EVERY attached vault, but they ride their
-    // OWN statement (#922 C3): as `OVER ()` window columns on this one they
-    // forced SQLite to materialize the whole union before returning a row, so
-    // neither the limit nor an index could bound the work.
+    // The refusal guards ride their OWN statement (#922 C3): as `OVER ()`
+    // window columns on this one they forced SQLite to materialize the whole
+    // entity before returning a row, so neither the limit nor an index could
+    // bound the work.
     expect(paged.sql).not.toContain("OVER ()");
     const census = censusReads(driver);
     expect(census).toHaveLength(1);
     expect(census[0]).toContain("order_oversized");
     expect(census[0]).toContain("order_straddle");
-    expect(census[0]).toContain("UNION ALL");
-    // One arm per attached vault, one page across their union.
-    expect(paged.sql.match(/UNION ALL/gu)).toHaveLength(SCOPES.length - 1);
     expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(1);
     // The page is the answer, plus ONE probe row and no more: the statement
     // over-fetches by exactly one so a filled window can be told apart from a
@@ -319,16 +332,16 @@ describe("Home tile reads", () => {
     expect(paged.rows).toBe(tile.limit + 1);
 
     expect(page.rows).toHaveLength(tile.limit);
-    // Four scopes share one day sequence, so the global newest `limit` rows
-    // are exactly the newest `limit / 4` days of all four.
+    // One row per day, so the newest `limit` rows are exactly the newest
+    // `limit` days.
     const oldest = page.rows
       .map((row) => String(row.values[tile.column]))
       .sort()[0];
-    expect(oldest).toBe(stamp(DAYS - tile.limit / SCOPES.length));
+    expect(oldest).toBe(stamp(DAYS - tile.limit));
     reader.close();
   });
 
-  test("an unordered tile read is one bounded page over the union", async () => {
+  test("an unordered tile read is one bounded page", async () => {
     const { driver, reader } = household();
 
     const page = await reader.read("tasks", HOME_TILE_READS.tasks);
@@ -341,10 +354,10 @@ describe("Home tile reads", () => {
     reader.close();
   });
 
-  // `core.content_item` carries `sha256`, so no limit may be carried into a
-  // cross-scope read of it: the collapse runs after the statement and could
-  // drop the duplicate supplying a source badge. Tiles fetch bodies by id
-  // instead, bounded by the pushed predicate.
+  // Tiles fetch bodies by id, bounded by the pushed predicate — never by
+  // asking for the entity and slicing. The cross-scope content-hash collapse
+  // that used to forbid a limit here went with the mount plane; the pushdown
+  // is what actually keeps the read cheap, and it is what this holds.
   test("the document body lookup costs the ids it asks for", async () => {
     const { driver, reader } = household();
     const ids = Array.from({ length: 12 }, (_, index) =>
@@ -360,13 +373,8 @@ describe("Home tile reads", () => {
 
     const paged = onePage(driver);
     expect(paged.sql).toContain("json_extract(payload_json, '$.content_id')");
-    // The read still says it could not carry the caller's limit, rather than
-    // quietly costing the entity (`mounted-read-scoping.ts`).
-    expect(page.degraded?.map((entry) => entry.fallback)).toStrictEqual([
-      "content-hash-badges",
-    ]);
-    // One scope holds these ids; the other three answer with nothing. The
-    // whole entity is 2,000 rows.
+    // The predicate is what bounds the read: twelve ids cost twelve rows out
+    // of an entity of 2,000.
     expect(paged.rows).toBe(ids.length);
     expect(page.rows).toHaveLength(ids.length);
     reader.close();

@@ -5,14 +5,13 @@
 // contract on infrastructure iOS CI can actually run.
 //
 // It is a JOURNEY, not a component test: nothing about the outbox is faked.
-// One real `node:sqlite` file on disk carries a real `NativeReplicaSession`,
-// a real `MultiVaultReplicaReader` and the exact `MultiVaultReplicaSession`
-// facade `ReplicaProvider.tsx` mounts. The rendered Tally cover records the
+// One real `node:sqlite` file on disk carries the exact `NativeReplicaSession`
+// `ReplicaProvider.tsx` mounts — since #996 wave 3 that IS what it mounts, one
+// open file and no facade over it. The rendered Tally cover records the
 // expense through `TallyAddScreen` and reads it back through `TallyHome`'s
-// Waiting place; the restart closes every handle, drops the process-memory
-// read plane, and rebuilds all three over the same file — which is what a
-// killed app does and what `multi-vault-reader.test.ts`'s own restart
-// companion does one layer below the interface.
+// Waiting place; the restart closes the handle, drops the process-memory read
+// plane, and rebuilds the session over the same file — which is what a killed
+// app does.
 //
 // FOUR CLAIMS, and the reason each one is here:
 //
@@ -27,7 +26,8 @@
 //     re-minted twin. After the restart the outbox is the only thing left: the
 //     store's payload died with the process and the dashboard read cannot land
 //     offline, so the row can have come from nowhere else.
-//  4. THE PENDING EXPENSE ITSELF SURVIVES, THROUGH THE PRODUCTION READER.
+//  4. THE PENDING EXPENSE ITSELF SURVIVES, THROUGH THE PRODUCTION READ PATH —
+//     the session's own, overlay and all.
 //     The row Waiting draws is an outbox row; the EXPENSE is an optimistic
 //     projection, and it is the mounted reader's overlay that carries it. The
 //     phone draws no surface over that read (Tally's reads are gateway RPCs —
@@ -56,11 +56,11 @@ import { ReplicaSqliteStore } from "@centraid/client/replica/native";
 import { EMPTY_BAG, valuate } from "@centraid/core/money";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
-import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
-import { MultiVaultReplicaSession } from "../../lib/replica/multi-vault-session";
-import type { NativeChangeFeed } from "../../lib/replica/native-session";
 import { createNativeReplicaSession } from "../../lib/replica/native-session";
+import type {
+  NativeChangeFeed,
+  NativeReplicaSession,
+} from "../../lib/replica/native-session";
 import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
 
 // The shared block stub, plus the one primitive it does not wire: it forwards
@@ -282,8 +282,7 @@ let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 let workspace = "";
 let replicaFile = "";
-let readerSerial = 0;
-let facade: MultiVaultReplicaSession | undefined;
+let facade: NativeReplicaSession | undefined;
 
 function seedReplica(): void {
   const store = new ReplicaSqliteStore(
@@ -310,22 +309,16 @@ function seedReplica(): void {
 }
 
 /**
- * One process's worth of session, reader and facade over the file on disk.
+ * One process's worth of session over the file on disk.
  *
  * Every door is the offline one: the fetcher REJECTS rather than resolving an
  * empty answer, so a write that reached the network would fail loudly instead
  * of passing as queued, and `isConnected` is false for the whole journey.
  */
-async function mountProcess(): Promise<MultiVaultReplicaSession> {
-  readerSerial += 1;
-  const scope: MountedReplicaScope = {
-    vaultId: VAULT,
-    label: "Personal",
-    canWrite: true,
-    databaseName: replicaFile,
-  };
+async function mountProcess(): Promise<NativeReplicaSession> {
   let minted = 0;
-  const native = await createNativeReplicaSession({
+  return createNativeReplicaSession({
+    scope: { vaultId: VAULT, label: "Personal", canWrite: true },
     gatewayAuth: {
       baseUrl: "http://127.0.0.1:1",
       gatewayId: "offline-gateway",
@@ -338,20 +331,6 @@ async function mountProcess(): Promise<MultiVaultReplicaSession> {
     isConnected: () => false,
     digest: () => Promise.resolve("digest"),
     idFactory: () => `intent-${(minted += 1)}`,
-  });
-  const reader = new MultiVaultReplicaReader(
-    new NodeSqliteDriver(path.join(workspace, `reader-${readerSerial}.db`)),
-    [scope]
-  );
-  return new MultiVaultReplicaSession({
-    reader,
-    sessions: new Map([[VAULT, native]]),
-    scopes: [scope],
-    focusedVaultId: () => VAULT,
-    createId: () => `placement-${readerSerial}`,
-    sendPlacement: () =>
-      Promise.reject(new Error("the offline journey must not place")),
-    isConnected: () => false,
   });
 }
 
@@ -463,7 +442,6 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
   beforeEach(async () => {
     workspace = tempDirSync("centraid-tally-restart-");
     replicaFile = path.join(workspace, `${VAULT}.db`);
-    readerSerial = 0;
     seedReplica();
     posted.length = 0;
     resetTallyVault();
@@ -523,7 +501,7 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     unmount();
 
     // THE RESTART. Every handle closes, the process-memory read plane goes
-    // with it, and session, reader and facade are rebuilt over the same file —
+    // with it, and the session is rebuilt over the same file —
     // which is all a killed app leaves behind.
     await restartProcess();
 
@@ -542,22 +520,22 @@ describe("a Tally expense recorded with the gateway out of reach", () => {
     // would draw an identical row over a different durable id, and the vault
     // would eventually apply two expenses for one press.
     const after = await facade!.pendingChanges();
-    expect(after.map((change) => change.id)).toStrictEqual(
-      before.map((change) => change.id)
+    expect(after.map((change) => change.intentId)).toStrictEqual(
+      before.map((change) => change.intentId)
     );
     expect(after[0]).toMatchObject({
-      label: "tally: add-expense",
+      appId: "tally",
+      action: "add-expense",
       status: "queued",
-      vaultId: VAULT,
     });
   });
 
-  it("recovers the pending expense itself through the mounted reader", async () => {
+  it("recovers the pending expense itself through the session's read path", async () => {
     await recordExpense();
     unmount();
     await restartProcess();
 
-    // The reader the app mounts, over the file the killed process left. The
+    // The session the app mounts, over the file the killed process left. The
     // expense is an OPTIMISTIC projection, so the overlay is what carries it —
     // description, queued status and the vault it belongs to.
     const found = await facade!.read("tally", {

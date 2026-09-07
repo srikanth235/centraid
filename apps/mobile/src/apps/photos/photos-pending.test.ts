@@ -6,11 +6,10 @@ import { photosPendingLine } from "./photos-pending";
 
 const change = (over: Partial<PendingChange> = {}): PendingChange => ({
   id: "intent-1",
-  vaultId: "v1",
   vaultLabel: "Home",
   status: "queued",
   label: "photos: favorite-asset",
-  kind: "replica",
+  retained: true,
   ...over,
 });
 

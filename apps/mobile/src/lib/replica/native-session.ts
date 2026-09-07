@@ -7,6 +7,8 @@ import {
   fetchReplicaIntentOutcomes,
   runWindowedBootstrap,
   GatewayClientError,
+  chainBadgeCopy,
+  chainHolds,
   IntentQueue,
   postReplicaCheckpoint,
   postReplicaIntent,
@@ -14,6 +16,7 @@ import {
   ReplicaProtocolError,
   ReplicaTransportError,
   prepareReplicaWrite,
+  reconstructPendingProjection,
   VAULT_HEADER,
 } from "@centraid/client/replica/native";
 import type {
@@ -21,6 +24,7 @@ import type {
   GatewayAuth,
   IntentOutcome,
   IntentState,
+  OptimisticMutation,
   ReplicaChangeFeedAdapter,
   ReplicaCursor,
   ReplicaBaseVersion,
@@ -45,12 +49,13 @@ import { appActionPath } from "@centraid/core/protocol";
 import { backoffSchedule } from "../backoff";
 import type { BackoffSchedule } from "../backoff";
 import { MobileIntentIds } from "./mobile-intent-id";
-import type { MountedReadResult } from "./mounted-read-scoping";
 import { NativeReplicaStore } from "./native-replica-store";
 import { isReplicaStorageFullError } from "./replica-storage-error";
 import { noteResyncVerdict } from "./resync-notice";
 import { SqliteIntentStore } from "./sqlite-intent-store";
 import type { NativeIntentAttention } from "./sqlite-intent-store";
+import { stampVaultSourceRows } from "./vault-source";
+import type { VaultSource } from "./vault-source";
 import { waitingOnLabel } from "./waiting-on";
 import type { MountedOrigin } from "./waiting-on";
 
@@ -83,11 +88,10 @@ export type NativeWriteResult =
   | { intentId: string; status: "queued" | "in-flight"; reason?: string };
 
 export interface MobileReplicaSession {
-  /** `MountedReadResult` widens the wire result with what a degraded read cost. */
   read: (
     appId: string,
     request: NativeReadRequest
-  ) => Promise<MountedReadResult>;
+  ) => Promise<ReplicaReadWireResult>;
   search: (
     appId: string,
     request: NativeSearchRequest
@@ -97,11 +101,6 @@ export interface MobileReplicaSession {
     intentId: string,
     revision: ReplicaValue
   ) => Promise<NativeWriteResult | undefined>;
-  writeTo?: (
-    vaultId: string,
-    appId: string,
-    input: NativeWriteInput
-  ) => Promise<NativeWriteResult>;
   subscribe: (
     appId: string,
     listener: (invalidations: readonly ReplicaInvalidation[]) => void
@@ -128,8 +127,15 @@ export interface CreateNativeReplicaSessionOptions {
   /** Non-streaming transport to the tunnel loopback proxy (`http://127.0.0.1:<port>`). */
   fetcher: ReplicaFetcher;
   changeFeed: NativeChangeFeed;
-  /** Injected, never constructed here, so this module never imports op-sqlite. */
+  /** Injected, never constructed here, so this module never imports expo-sqlite. */
   driver: ReplicaSqliteDriver;
+  /**
+   * The one vault this session holds (#996 wave 3). Every row it hands back is
+   * stamped with it, because "which vault, and may I write there" is what the
+   * screens ask about a row — it just has one answer now that a seat opens one
+   * file. Absent leaves rows unstamped, which reads as writable.
+   */
+  scope?: VaultSource;
   appState?: AppStateLike;
   isConnected?: () => boolean;
   isNetworkWorkAllowed?: () => Promise<boolean>;
@@ -160,7 +166,7 @@ export interface CreateNativeReplicaSessionOptions {
   onGatewayOutcome?: (reachable: boolean) => void;
   /**
    * Who a queued write into THIS vault may wait for. Set only where
-   * `MountedReplicaScope.personal === false`; absent means the member's own
+   * `ReplicaVaultScope.personal === false`; absent means the member's own
    * vault, where a write waits for nobody and naming an owner would be
    * fiction.
    */
@@ -208,6 +214,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     | CreateNativeReplicaSessionOptions["onBootstrapProgress"]
     | undefined;
   readonly #waitingOnLabel: string | undefined;
+  readonly #scope: VaultSource | undefined;
   readonly #onGatewayOutcome: ((reachable: boolean) => void) | undefined;
   #previewReady:
     | { resolve: () => void; reject: (error: unknown) => void }
@@ -242,6 +249,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       | "onBootstrapProgress"
       | "onGatewayOutcome"
       | "origin"
+      | "scope"
     > & { idFactory: ReplicaIdFactory }
   ) {
     this.#coordinator = coordinator;
@@ -274,6 +282,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#waitingOnLabel = options.origin
       ? waitingOnLabel(options.origin.displayName)
       : undefined;
+    this.#scope = options.scope;
   }
 
   get coordinator(): ReplicaCoordinator {
@@ -341,7 +350,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
   ): Promise<ReplicaReadWireResult> {
     this.assertOpen();
     const shapeId = this.resolveShapeId(appId, request.entity, request.shapeId);
-    return this.#coordinator.readWire({ ...request, shapeId });
+    const result = await this.#coordinator.readWire({ ...request, shapeId });
+    return this.#scope ? stampVaultSourceRows(result, this.#scope) : result;
   }
 
   async search(
@@ -350,7 +360,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
   ): Promise<ReplicaSearchWireResult> {
     this.assertOpen();
     const shapeId = this.resolveShapeId(appId, request.entity, request.shapeId);
-    return this.#coordinator.searchWire({ ...request, shapeId });
+    const result = await this.#coordinator.searchWire({ ...request, shapeId });
+    return this.#scope ? stampVaultSourceRows(result, this.#scope) : result;
   }
 
   async write(
@@ -588,6 +599,25 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return this.#coordinator.status();
   }
 
+  /** The one vault this session holds, or `undefined` for an unscoped test session. */
+  scope(): VaultSource | undefined {
+    return this.#scope;
+  }
+
+  /**
+   * The overlay a restart rebuilds, in outbox order (R23).
+   *
+   * Derived from the durable outbox rather than held in component state,
+   * because a projection that lives in a component is one that vanishes with
+   * the process — which is exactly the moment a member most needs to see that
+   * the work they did offline is still there.
+   */
+  async pendingProjection(): Promise<OptimisticMutation[]> {
+    return reconstructPendingProjection(
+      await this.#coordinator.pendingIntents()
+    );
+  }
+
   /** `attempts` and `enqueuedAt` are what separate "sending" from "stuck". */
   async pendingChanges(): Promise<
     Array<
@@ -602,11 +632,21 @@ export class NativeReplicaSession implements MobileReplicaSession {
           /** Conflict only: the two versions the overlay copy prints. */
           expectedVersion?: number;
           actualVersion?: number;
+          /**
+           * A dependent nothing is wrong with, held behind an earlier change
+           * (R23). Computed HERE and not on the gateway, because the badge has
+           * to be right in airplane mode, where no verdict exists and will not
+           * for hours.
+           */
+          heldBadge?: string;
         }
       | NativeIntentAttention
     >
   > {
     const pending = await this.#coordinator.pendingIntents();
+    const badges = new Map(
+      chainHolds(pending).map((hold) => [hold.intentId, chainBadgeCopy(hold)])
+    );
     const enqueuedTimes = this.#intentStore.enqueuedTimes();
     const retained = pending.flatMap((intent) => {
       const enqueuedAt = enqueuedTimes.get(intent.intentId);
@@ -628,6 +668,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
                     expectedVersion: intent.conflict.expectedVersion,
                     actualVersion: intent.conflict.actualVersion,
                   }
+                : {}),
+              ...(badges.has(intent.intentId)
+                ? { heldBadge: badges.get(intent.intentId) }
                 : {}),
             },
           ];
@@ -698,6 +741,15 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return this.replacementAdmission(replacement);
   }
 
+  /**
+   * The pending sheet's fourth verb, by the name the sheet uses. It is
+   * `dismissAttention` under a word a member would recognise: what is being
+   * dismissed is the remnant a settled write left behind, not the write.
+   */
+  dismissPendingChange(intentId: string): void {
+    this.dismissAttention(intentId);
+  }
+
   dismissAttention(intentId: string): void {
     this.#intentStore.dismissAttention(intentId);
   }
@@ -751,6 +803,26 @@ export class NativeReplicaSession implements MobileReplicaSession {
       }
     });
     return this.#drainPromise;
+  }
+
+  /**
+   * The pass the UI reads: did this pull LAND, and if not, was it the transfer
+   * rules that stopped it?
+   *
+   * `pullNow` answers `false` for a blocked pull and a silent gateway alike,
+   * and a caller that cannot tell them apart renders "Updated just now" over a
+   * pull that never happened. The mount plane asked this question once for
+   * four sessions; a seat asks it for its one.
+   */
+  async pullForeground(): Promise<{ landed: boolean; policyBlocked: boolean }> {
+    if (!(await this.#isRowSyncAllowed()))
+      return { landed: false, policyBlocked: true };
+    // `pullNow`'s own boolean answers a NARROWER question — "did this pass
+    // obtain anything" — and a pass that ran and found nothing new is a landed
+    // pass, not a silent gateway. Only a throw is the other answer, and the
+    // caller reads that as the pull not landing.
+    await this.pullNow();
+    return { landed: true, policyBlocked: false };
   }
 
   /** Force a foreground delta pull immediately (e.g. on manual refresh). */
@@ -1150,7 +1222,7 @@ export async function createNativeReplicaSession(
       ).catch(() => undefined);
     },
     onRebootstrapRequired: (detail) => session?.requireBootstrap(detail),
-    // The op-sqlite taxonomy, not the normalized-name default: the driver
+    // The driver's own taxonomy, not the normalized-name default: it
     // raises the platform's own SQLITE_FULL/ENOSPC shapes, and only this
     // classifier recognises all of them (./replica-storage-error).
     isStorageFull: isReplicaStorageFullError,

@@ -26,6 +26,7 @@ import {
   sharedWithOutcome,
 } from "@centraid/blueprints/apps/_shared/shared-copy";
 
+import { postCommons } from "../../lib/replica/commons-transport";
 import { listLinks } from "../../lib/replica/links-transport";
 import type { GatewayLink } from "../../lib/replica/links-transport";
 import AnchoredMenu from "../components/AnchoredMenu";
@@ -204,9 +205,15 @@ export default function ShareSheet({
       return;
     setBusy(true);
     try {
+      // Sharing needs a gateway, and it is an HTTP call rather than a
+      // session verb (#996 wave 3): a share is a predicate the gateway
+      // compiles, not something this phone queues.
+      if (!replica.gatewayBase)
+        throw new Error("Sharing needs a gateway connection.");
+      const baseUrl = replica.gatewayBase;
       await Promise.all(
         itemIds.map((containerId) =>
-          replica.session!.share({
+          postCommons(baseUrl, {
             sourceVaultId,
             containerType: itemType,
             containerId,

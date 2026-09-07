@@ -12,8 +12,8 @@
  *
  *   web    `runInlineQuery` over `ReplicaSqliteStore` — the shell's builder,
  *          the shell's read plane.
- *   phone  `runNativeInlineQuery` over `MultiVaultReplicaReader` — the seat's
- *          builder, the mounted multi-vault plane that decorates every row
+ *   phone  `runNativeInlineQuery` over `VaultReadPlane` — the seat's builder
+ *          over its one open file, stamping the vault on every row
  *          with `__centraid*` provenance and then strips it before the handler
  *          sees it.
  *
@@ -34,8 +34,9 @@ import {
   VAULT_ID,
   seedScope,
 } from "../../apps/mobile/src/lib/replica/locker-vault.test-fixtures";
-import { MultiVaultReplicaReader } from "../../apps/mobile/src/lib/replica/multi-vault-reader";
+import { NativeReplicaStore } from "../../apps/mobile/src/lib/replica/native-replica-store";
 import { NodeSqliteDriver } from "../../apps/mobile/src/lib/replica/node-sqlite-driver";
+import { VaultReadPlane } from "../../apps/mobile/src/lib/replica/vault-read-plane";
 import { ReplicaSqliteStore } from "../../packages/client/src/replica/store-core";
 import { tempDirSync } from "../../packages/test-kit/src/temp-dir";
 
@@ -151,12 +152,11 @@ function webSession(databaseName: string): InlineReplicaSession {
   };
 }
 
-/** The phone's read plane: the mounted reader over the same database. */
-function phoneSession(databaseName: string): MultiVaultReplicaReader {
-  const root = tempDirSync("centraid-locker-parity-mounted-");
-  const reader = new MultiVaultReplicaReader(
-    new NodeSqliteDriver(path.join(root, "mounted.db")),
-    [{ vaultId: VAULT_ID, label: "Personal", canWrite: true, databaseName }]
+/** The phone's read plane: the seat's own, over the same database. */
+function phoneSession(databaseName: string): VaultReadPlane {
+  const reader = new VaultReadPlane(
+    NativeReplicaStore.create(new NodeSqliteDriver(databaseName), VAULT_ID),
+    { vaultId: VAULT_ID, label: "Personal", canWrite: true }
   );
   closers.push(() => reader.close());
   return reader;

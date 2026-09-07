@@ -11,7 +11,7 @@
  * on this seat goes through — is replaced by one that THROWS from every door,
  * so a read that reached for the network would fail loudly rather than quietly
  * succeeding against a test double. The read plane is a real replica database
- * seeded with the locker fixture, opened through the same mounted reader the
+ * seeded with the locker fixture, opened through the same read seam the
  * provider builds on a device.
  */
 import path from "node:path";
@@ -27,8 +27,9 @@ import {
   VAULT_ID,
   seedScope,
 } from "../../lib/replica/locker-vault.test-fixtures";
-import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
+import { NativeReplicaStore } from "../../lib/replica/native-replica-store";
 import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
+import { VaultReadPlane } from "../../lib/replica/vault-read-plane";
 import {
   attachLockerReadPlane,
   lockerItems,
@@ -49,7 +50,7 @@ vi.mock(import("../../lib/gateway"), () => {
   });
 });
 
-let reader: MultiVaultReplicaReader | undefined;
+let reader: VaultReadPlane | undefined;
 
 const titles = (rows: ReadonlyArray<{ title: string }> = []): string[] =>
   rows.map((row) => row.title);
@@ -59,9 +60,9 @@ describe("Locker on a plane", () => {
     const root = tempDirSync("centraid-locker-airplane-");
     const databaseName = path.join(root, "personal.db");
     seedScope(databaseName);
-    reader = new MultiVaultReplicaReader(
-      new NodeSqliteDriver(path.join(root, "mounted.db")),
-      [{ vaultId: VAULT_ID, label: "Personal", canWrite: true, databaseName }]
+    reader = new VaultReadPlane(
+      NativeReplicaStore.create(new NodeSqliteDriver(databaseName), VAULT_ID),
+      { vaultId: VAULT_ID, label: "Personal", canWrite: true }
     );
     attachLockerReadPlane({
       read: reader.read.bind(reader),

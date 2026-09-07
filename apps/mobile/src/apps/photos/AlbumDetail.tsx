@@ -25,11 +25,11 @@ import {
 } from "../../kit/replica/write-outcome";
 import GrantSheet from "../../kit/share/GrantSheet";
 import { useTheme } from "../../kit/theme";
-import type { NativeWriteResult } from "../../lib/replica/native-session";
 import {
   listCommonsResidents,
   retainCommonsItem,
-} from "../../lib/replica/placement-transport";
+} from "../../lib/replica/commons-transport";
+import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
 import { makeStyles } from "./AlbumDetail.styles";

@@ -16,9 +16,8 @@ import { nativeReplicaDatabasePath } from "../../lib/replica/expo-sqlite-driver"
 import { fetchWithinReplyDeadline } from "../../lib/replica/gateway-deadline";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import type { MobileGatewayFeatures } from "../../lib/replica/mobile-gateway-compatibility-core";
-import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
-import { MAX_MOUNTED_NATIVE_SCOPES } from "../../lib/replica/offline-budgets";
+import type { ReplicaVaultScope } from "../../lib/replica/vault-source";
 import { LAST_BASE, noteActiveIdentity } from "../../lib/vault-links";
 import type { VaultLink } from "../../lib/vault-links";
 import { Store } from "../../storage";
@@ -180,13 +179,21 @@ export async function refreshCachedScopes(
   }
 }
 
-/** Refresh BEFORE the read, never instead of it. A scope granted mid-session
- *  reaches the mounted four only when the provider re-plans the mount —
- *  activating it does that; otherwise it waits for the next launch. */
-export async function mountedScopes(
+/**
+ * Every vault this phone holds a replica FILE for — the switcher's whole list.
+ *
+ * NOT SLICED (#996 wave 3). It used to return the mounted four, because four
+ * databases were attached into one reader and the cap was a real budget. A
+ * seat opens ONE file, so what a member may switch TO is bounded by what the
+ * gateway granted, not by how many the phone could hold open at once.
+ *
+ * Refresh BEFORE the read, never instead of it: a scope granted mid-session
+ * reaches this list on the next call, and the active one is always in it.
+ */
+export async function vaultScopes(
   identity: Awaited<ReturnType<typeof resolveIdentity>>,
   storageLocation?: string
-): Promise<MountedReplicaScope[]> {
+): Promise<ReplicaVaultScope[]> {
   const key = `centraid:replica-scopes:${identity.gatewayId}`;
   if (identity.online) {
     await refreshCachedScopes(identity.gatewayId, identity.auth.baseUrl);
@@ -207,7 +214,7 @@ export async function mountedScopes(
     ordered.unshift({ vaultId: active, label: "Current", canWrite: true });
   }
   return Promise.all(
-    ordered.slice(0, MAX_MOUNTED_NATIVE_SCOPES).map(async (scope) => ({
+    ordered.map(async (scope) => ({
       ...scope,
       databaseName: await nativeReplicaDatabasePath(
         { gatewayId: identity.gatewayId, vaultId: scope.vaultId },
@@ -226,7 +233,7 @@ export function freshnessKey(gatewayId: string, vaultId: string): string {
 
 export async function loadFreshness(
   gatewayId: string,
-  scopes: readonly MountedReplicaScope[]
+  scopes: readonly ReplicaVaultScope[]
 ): Promise<Map<string, string>> {
   const rows = await Promise.all(
     scopes.map(
@@ -283,7 +290,7 @@ function replicaFileHasData(databaseName: string): boolean {
  */
 export async function discardRestoredReplicaCache(
   gatewayId: string,
-  scopes: readonly MountedReplicaScope[],
+  scopes: readonly ReplicaVaultScope[],
   hasReplicaData: (databaseName: string) => boolean = replicaFileHasData
 ): Promise<string[]> {
   const cleared = await Promise.all(

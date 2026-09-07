@@ -68,9 +68,17 @@ export const ROUTES = {
 
 export type RouteName = keyof typeof ROUTES;
 
-/** Mounts one `gatewayReplicaChanges` subscription accepts (#880). The phone
- *  attaches the same N — one wire agreement, not two budgets. */
-export const MAX_MULTIPLEX_REPLICA_SCOPES = 4;
+/**
+ * Mounts one `gatewayReplicaChanges` subscription accepts (#880).
+ *
+ * It was `MAX_MULTIPLEX_REPLICA_SCOPES` and it was ONE agreement covering two
+ * budgets: the mounts a radio carried and the replica files the phone attached
+ * into a single reader. #996 wave 3 deleted the second — a seat opens ONE file
+ * — so the number now bounds only what it is named for. It is kept rather than
+ * dropped because an unbounded mount list is a subscription a caller sizes,
+ * and the fan-out behind it is the gateway's to pay for.
+ */
+export const MAX_REPLICA_FEED_MOUNTS = 4;
 
 export function vaultConnectionPath(encodedConnectionId: string): string {
   return `${ROUTES.vaultConnections}/${encodedConnectionId}`;
