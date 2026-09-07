@@ -4216,3 +4216,39 @@ bun run check:push:static                                               # stampe
 ### Inherited, and not mine to fix
 
 `bun run governance` now reports one `commit-issue-receipt-match` violation on **`bcf17bd3fe0a54fb494de659188e5ccf591509a0`** — the iOS lock bot's `Podfile.lock` / `native-fingerprints.json` push, which touches no `receipts/issue-*.md`. It arrived through the merge of the designated branch and is not a wave-6 commit; the directive's own escape hatch (`governance: allow-commit-issue-receipt-match <reason>` in the body) is the fix, and it belongs to whoever owns the bot. Raising it rather than working around it.
+
+## Wave 6 — `window.centraid.locker`, the door the app talks to
+
+The bridge the last section said did not exist. Ruled by the coordinator as **W6-D2** and recorded below; the blueprint's adoption and the gate's deletion follow it.
+
+### Decisions
+
+| Id | Current decision |
+| --- | --- |
+| **W6-D2** | **Blueprint code never holds `K`. The bridge is a shell kit door, `window.centraid.locker`, owned by `packages/client` and sitting on the kit surface beside `read`.** R13 puts the unseal on the seat; this says which part of the seat. The SHELL holds `K` behind the member's unlock, and an app gets the **plaintext of one row per receipt** — never the key. The reason is what an app surface can do with a key it can read: one `fetch` in a blueprint and the vault key is on someone else's server, with **no receipt recording it, because nothing was revealed**. Three methods and no fourth: `reveal({ rowId })` unseals locally and writes the reveal receipt through the same receipt/intent path `gateway.reveal` used, so the audit trail does not change shape; `state()` and `subscribeLock()` so screens render the shell's Lock surface instead of drawing their own. There is **no seal door and no `unlock()`** — writes stay intents carrying the secret over the tunnel and the gateway's `sealWrites` stamps the live key (`stampLockerKeyOnWrite`, `27628612e`), and a locked `reveal` returns a typed refusal rather than prompting, because a door that can raise the passphrase prompt is a door that can be used to phish it. Mobile gets the same door over the RN bridge, backed by commit 3's `K`-behind-biometrics path. What this ruling then licenses, and nothing more: the `authenticate` op and its four call sites, `queries/auth.ts`, `locker-auth.ts`, `PermitGate`, `AuthPayload`, the permit screens, and the `gateway.reveal` door go — the server never unseals a Locker row for a client again. Connector credentials are the sealed-column class under [W6-D1](#decisions--wave-6-what-the-gate-deletion-covers) and are untouched. |
+
+### Two orderings the door keeps
+
+**The receipt before the plaintext.** `gateway.reveal` wrote its journal row inside the transaction that produced the value. The boundary moved; the ordering must not. `recordReveal` is awaited after a successful decryption and **before** the values are returned, so a reveal whose receipt could not be written is a reveal that did not happen — with the gateway no longer decrypting, that receipt is the only record that anyone looked.
+
+**Locked is an answer, not an exception.** `reveal` on a locked session reads nothing, records nothing, and returns `{ ok: false, reason: "locked" }`. The app renders the shell's lock surface; the member unlocks there. The door never prompts, so it cannot be borrowed to collect a passphrase.
+
+The lock state is **polled, not pushed**: the thing that most often changes the answer is the clock, and nothing fires an event when a session expires. Two field reads a second, and only while something is subscribed.
+
+Transports are injected — `readRow` and `recordReveal` — because the web shell, the Electron renderer and the React Native bridge reach the vault and the intent queue differently, and this module is the one piece all three must agree on. It owns the rule and none of the plumbing.
+
+### Files
+
+- `packages/client/src/locker/locker-kit-door.ts` — the door
+- `packages/client/src/locker/locker-kit-door.test.ts` — plaintext without the key, locked answers without reading, receipt-before-plaintext, the stale-key refusal, the polled lock state
+- `packages/client/src/index.ts` — its export
+- `packages/blueprints/types/centraid.d.ts` — `locker?: CentraidLockerDoor` on `CentraidClient`, feature-detected, with the refusal and state types beside it
+
+### Gates
+
+```
+bunx vitest run packages/client/src/locker   # 5 files, 30 passed
+bunx tsc -p packages/client --noEmit          # clean
+bun run governance < /dev/null
+bun run check:push:static                     # stamped on the committed tree
+```
