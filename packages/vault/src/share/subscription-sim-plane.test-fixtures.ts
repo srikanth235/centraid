@@ -214,7 +214,7 @@ export function projectedAlbumId(slot: ShareSlot): string | undefined {
   const row = slot.audience.db.vault
     .prepare(
       `SELECT l.target_id FROM share_subscription_lineage l
-         JOIN share_subscription s ON s.shape_id = l.shape_id
+         JOIN share_subscription s ON s.authority_id = l.authority_id
         WHERE l.target_type = 'core.collection' AND s.origin_vault_id = ?
           AND l.origin_item_id = ?`
     )
@@ -238,7 +238,7 @@ export function projectionRowCount(slot: ShareSlot): number {
     slot.audience.db.vault
       .prepare(
         `SELECT COUNT(*) AS n FROM share_subscription_lineage l
-           JOIN share_subscription s ON s.shape_id = l.shape_id
+           JOIN share_subscription s ON s.authority_id = l.authority_id
           WHERE l.target_type = 'core.collection' AND s.origin_vault_id = ?
             AND l.origin_item_id = ?`
       )

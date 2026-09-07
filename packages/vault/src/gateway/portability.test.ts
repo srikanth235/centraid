@@ -207,24 +207,24 @@ describe("portability", () => {
       state: "delivered",
       updatedAt: now,
     });
-    const shapeId = `@share:${grant.grantId}`;
+    const authorityId = grant.grantId;
     db.vault
       .prepare(
         `INSERT INTO share_subscription
-           (shape_id, audience_vault_id, grant_id, origin_vault_id,
+           (authority_id, audience_vault_id, origin_vault_id,
             subject_type, cursor_epoch, cursor_seq, structure_digest, state,
             subscribed_at, removed_at, detail)
-         VALUES (?, 'remote-vault', ?, ?, 'core.document', 'epoch-1', 4,
+         VALUES (?, 'remote-vault', ?, 'core.document', 'epoch-1', 4,
                  'digest', 'subscribed', ?, NULL, NULL)`
       )
-      .run(shapeId, grant.grantId, boot.vaultId, now);
+      .run(authorityId, boot.vaultId, now);
     db.vault
       .prepare(
         `INSERT INTO share_subscription_lineage
-           (shape_id, target_type, target_id, origin_item_id, origin_row_version)
+           (authority_id, target_type, target_id, origin_item_id, origin_row_version)
          VALUES (?, 'core.document', ?, ?, 7)`
       )
-      .run(shapeId, documentId, documentId);
+      .run(authorityId, documentId, documentId);
 
     const { artifact } = gw.exportVault(owner);
     const shareEntities = [

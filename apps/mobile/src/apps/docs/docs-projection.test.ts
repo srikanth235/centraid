@@ -205,7 +205,7 @@ describe(projectDrive, () => {
         origins: {
           subscriptions: [
             {
-              shape_id: "shape-alice",
+              authority_id: "grant-alice",
               origin_vault_id: "vault-alice",
               state: "subscribed",
               subscribed_at: "2026-05-01T09:42:06.358Z",
@@ -213,7 +213,7 @@ describe(projectDrive, () => {
           ],
           lineage: [
             {
-              shape_id: "shape-alice",
+              authority_id: "grant-alice",
               target_type: "core.document",
               target_id: "doc-lease",
               origin_item_id: "doc-far-away",
@@ -250,13 +250,13 @@ describe(projectDrive, () => {
 describe(originsByDocument, () => {
   const AT = "2026-05-01T09:42:06.358Z";
   const subscription = {
-    shape_id: "shape-alice",
+    authority_id: "grant-alice",
     origin_vault_id: "vault-alice",
     state: "subscribed",
     subscribed_at: AT,
   };
   const claim = {
-    shape_id: "shape-alice",
+    authority_id: "grant-alice",
     target_type: "core.document",
     target_id: "doc-1",
     origin_item_id: "doc-far-away",

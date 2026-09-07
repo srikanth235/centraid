@@ -575,17 +575,25 @@ export const VAULT_ENTITIES: EntityRegistry = {
     authority_use: { label: "Answer last used", lifecycle: "machinery" },
     delivery_config: { label: "Delivery limits", lifecycle: "machinery" },
     fulfillment: { label: "Delivery state", lifecycle: "machinery" },
-    // The subscription seat (#929): which grant-keyed shapes this vault holds
-    // rows for, how far it has ingested, and which rows each shape placed. A
-    // restore without them hands back a copy no revoke can reach.
+    // The subscription seat (#929): which grants this vault holds rows for,
+    // how far it has ingested, and which rows each grant placed. A restore
+    // without them hands back a copy no revoke can reach.
     subscription: { label: "Subscriptions", lifecycle: "machinery" },
     subscription_lineage: {
       label: "Subscription lineage",
       lifecycle: "machinery",
-      // Its key CARRIES its pointer — `(shape_id, target_type, target_id)`,
+      // Its key CARRIES its pointer — `(authority_id, target_type, target_id)`,
       // with a composite foreign key into the supertype — so a claim cannot
       // outlive the row it names; it names a target, it is not one (#916).
       projectionOf: "core.entity",
+    },
+    // The ORIGIN's membership state (#996, R10): what each grant's closure
+    // held when it was last served. Rebuildable from the predicate, and still
+    // in the walk — `entered_seq` is not, and it is what tells a re-entered
+    // row from one the audience has held since the subscription began.
+    subscription_member: {
+      label: "Subscription membership",
+      lifecycle: "machinery",
     },
   },
   notifications: { notice: { label: "Notices", lifecycle: "machinery" } },

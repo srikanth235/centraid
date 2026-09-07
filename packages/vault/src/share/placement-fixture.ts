@@ -240,3 +240,70 @@ export function unplaceProjection(
   const live = liveBlobShas(db);
   return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
 }
+
+/**
+ * A shared album, written the way `media.create_album` writes one — the entity
+ * row included, since that registration is what a collection's foreign keys
+ * and the entity sweeps both stand on.
+ */
+export function seedAlbum(
+  db: VaultDb,
+  boot: BootstrapResult,
+  name: string
+): string {
+  const collectionId = uuidv7();
+  const now = nowIso();
+  db.vault
+    .prepare(
+      "INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES (?, 'core.collection', ?)"
+    )
+    .run(collectionId, now);
+  db.vault
+    .prepare(
+      `INSERT INTO core_collection
+         (collection_id, owner_party_id, name, cover_content_id,
+          parent_collection_id, sort_order, created_at)
+       VALUES (?, ?, ?, NULL, NULL, 1, ?)`
+    )
+    .run(collectionId, boot.ownerPartyId, name, now);
+  return collectionId;
+}
+
+/** One photograph filed into an album. Returns the entry row's id. */
+export function addToAlbum(
+  db: VaultDb,
+  collectionId: string,
+  target: { type: ShareableItemType; id: string },
+  position = 1
+): string {
+  const entryId = uuidv7();
+  const now = nowIso();
+  db.vault
+    .prepare(
+      "INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES (?, 'core.collection_entry', ?)"
+    )
+    .run(entryId, now);
+  db.vault
+    .prepare(
+      `INSERT INTO core_collection_entry
+         (entry_id, collection_id, target_type, target_id, position, added_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(entryId, collectionId, target.type, target.id, position, now);
+  return entryId;
+}
+
+/** Runs `body` as one captured replica commit, the way a command does. */
+export function inCommit<T>(db: VaultDb, body: () => T): T {
+  db.vault.exec("BEGIN IMMEDIATE");
+  const handle = beginReplicaCommit(db.vault);
+  try {
+    const result = body();
+    endReplicaCommit(db.vault, handle);
+    db.vault.exec("COMMIT");
+    return result;
+  } catch (error) {
+    db.vault.exec("ROLLBACK");
+    throw error;
+  }
+}

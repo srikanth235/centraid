@@ -10,7 +10,6 @@ import { setRepresentation } from "../schema/representation.js";
 import { CLOSURE_FORMAT_VERSION, shareOriginEntityType } from "./closure.js";
 import type {
   ContentItemRow,
-  DerivativeRow,
   DocumentRow,
   MediaAssetRow,
   ProjectedItem,
@@ -100,40 +99,6 @@ function projectContentItems(
       deduped: existing !== undefined,
       contentId,
     });
-  }
-}
-
-function projectDerivatives(
-  audience: DatabaseSync,
-  derivatives: readonly DerivativeRow[],
-  into: Projected
-): void {
-  const held = audience.prepare(
-    "SELECT 1 AS present FROM core_content_derivative WHERE content_id = ? AND variant = ?"
-  );
-  const write = audience.prepare(
-    `INSERT INTO core_content_derivative
-       (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  for (const row of derivatives) {
-    const contentId = contentOf(into, row.content_id);
-    if (held.get(contentId, row.variant)) continue;
-    write.run(
-      freeId(
-        audience,
-        "core_content_derivative",
-        "derivative_id",
-        row.derivative_id
-      ),
-      contentId,
-      row.variant,
-      row.sha256,
-      row.media_type,
-      row.byte_size,
-      row.text_content,
-      row.created_at
-    );
   }
 }
 
@@ -444,7 +409,6 @@ function projectRows(
     closure.rows.contentItems.map((row) => [row.content_id, row.media_type])
   );
   projectContentItems(audience, closure.rows.contentItems, into);
-  projectDerivatives(audience, closure.rows.derivatives, into);
   projectMediaAssets(audience, closure.rows.mediaAssets, into, mediaTypes);
   projectDocuments(audience, closure.rows.documents, into, mediaTypes);
   projectDocsFolders(audience, closure.rows.docsFolders, into);
@@ -487,7 +451,7 @@ function resolve(into: Projected, item: WireItem): ProjectedItem {
 }
 
 /**
- * A LINEAGE CLAIM FOR EVERY PROJECTED ROW, KEYED BY THE SHAPE (#929).
+ * A LINEAGE CLAIM FOR EVERY PROJECTED ROW, KEYED BY THE GRANT (#929, #996).
  *
  * Every row the projection wrote is claimed, not only the top-level items —
  * the album, the folder. Stamping the items alone was the revoke evasion
@@ -495,26 +459,26 @@ function resolve(into: Projected, item: WireItem): ProjectedItem {
  * removed its collection entry, so removal's walk over LIVE membership found
  * nothing to sweep, and the asset and its content survived to be restored.
  *
- * SHAPE-KEYED, so two grants over one photograph are two claims and the second
+ * GRANT-KEYED, so two grants over one photograph are two claims and the second
  * one keeps the row when the first is revoked. That is the whole reason a
  * row-keyed provenance table, which names one sender, could not stay.
  *
  * A PLACEMENT CLAIMS NOTHING. Same-owner placement is a MOVE between the
- * owner's own vaults: the item ends up as the owner's own row, with no shape
+ * owner's own vaults: the item ends up as the owner's own row, with no grant
  * to end and no sender to name, so a lineage row would assert a subscription
  * that does not exist (#928 A6).
  */
 function recordLineage(
   audience: DatabaseSync,
-  shape: ShareShapeClaim,
+  grant: ShareGrantClaim,
   projected: Projected,
   items: readonly ProjectedItem[]
 ): number {
   const write = audience.prepare(
     `INSERT INTO share_subscription_lineage
-       (shape_id, target_type, target_id, origin_item_id, origin_row_version)
+       (authority_id, target_type, target_id, origin_item_id, origin_row_version)
      VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (shape_id, target_type, target_id) DO UPDATE SET
+     ON CONFLICT (authority_id, target_type, target_id) DO UPDATE SET
        origin_item_id = excluded.origin_item_id,
        origin_row_version = excluded.origin_row_version`
   );
@@ -526,11 +490,11 @@ function recordLineage(
   ): void => {
     const entity = shareOriginEntityType(itemType);
     write.run(
-      shape.shapeId,
+      grant.authorityId,
       entity,
       itemId,
       originItemId,
-      shape.rowVersions.get(`${entity} ${originItemId}`) ?? 0
+      grant.rowVersions.get(`${entity} ${originItemId}`) ?? 0
     );
     claimed.add(`${entity} ${itemId}`);
   };
@@ -544,17 +508,18 @@ function recordLineage(
 }
 
 /**
- * The subscription a projection is being ingested FOR. Absent on the placement
- * path, which claims nothing — see `recordLineage`.
+ * The subscription a projection is being ingested FOR — the GRANT, since the
+ * grant is the shape (#996, R10). Absent on the placement path, which claims
+ * nothing — see `recordLineage`.
  */
-export interface ShareShapeClaim {
-  shapeId: string;
+export interface ShareGrantClaim {
+  authorityId: string;
   /** `<entity> <originItemId>` → the origin's replica change sequence. */
   rowVersions: ReadonlyMap<string, number>;
 }
 
 export interface ProjectShareClosureOptions {
-  shape?: ShareShapeClaim;
+  grant?: ShareGrantClaim;
   now?: () => number;
   keys?: { origin: Buffer; audience: Buffer };
 }
@@ -578,8 +543,8 @@ export function projectShareClosure(
     replicaCommit = beginReplicaCommit(audience);
     const projected = projectRows(audience, closure, options.keys);
     const items = closure.items.map((item) => resolve(projected, item));
-    const lineageRows = options.shape
-      ? recordLineage(audience, options.shape, projected, items)
+    const lineageRows = options.grant
+      ? recordLineage(audience, options.grant, projected, items)
       : 0;
     runProjectionIngest(audience, [...projected.values()], {
       now: new Date(sharedAt).toISOString(),

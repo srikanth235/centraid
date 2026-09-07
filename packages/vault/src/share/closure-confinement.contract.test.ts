@@ -56,14 +56,10 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
       shared.assetId,
     ]);
     expect(contentTitles(closure)).toStrictEqual(["Photo shared"]);
-    expect(closure.rows.derivatives.map((row) => row.content_id)).toStrictEqual(
-      [shared.contentId]
-    );
     // The bytes are the part that cannot be taken back once handed over: the
-    // manifest names this photograph's original and thumb, and no other's.
-    expect(shasOf(closure)).toStrictEqual(
-      [shared.sha256, shared.thumbSha].toSorted()
-    );
+    // manifest names this photograph's ORIGINAL and nothing else. The thumb is
+    // a derived row (#996, R10) and the audience renders its own.
+    expect(shasOf(closure)).toStrictEqual([shared.sha256]);
     for (const other of [withheld, alsoWithheld]) {
       expect(shasOf(closure)).not.toContain(other.sha256);
       expect(shasOf(closure)).not.toContain(other.thumbSha);
@@ -112,9 +108,7 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
       inside.assetId,
     ]);
     expect(contentTitles(closure)).toStrictEqual(["Photo inside"]);
-    expect(shasOf(closure)).toStrictEqual(
-      [inside.sha256, inside.thumbSha].toSorted()
-    );
+    expect(shasOf(closure)).toStrictEqual([inside.sha256]);
   });
 
   test("[law:share-closure-confinement] a Docs folder carries its subtree, not a sibling folder's documents", () => {

@@ -61,7 +61,7 @@ export function loopbackShareTransport(
     },
     remove: (removal): ShareRemovalOutcome => {
       const result = purgeShareShape(seat.vault, {
-        shapeId: removal.shapeId,
+        authorityId: removal.authorityId,
         audienceVaultId: removal.audienceVaultId,
         now: input.now(),
       });

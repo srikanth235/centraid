@@ -165,13 +165,13 @@ export interface SharedMember {
 }
 
 interface SubscriptionRow {
-  shape_id: string;
+  authority_id: string;
   origin_vault_id: string;
   subscribed_at?: string | null;
 }
 
 interface LineageRow {
-  shape_id: string;
+  authority_id: string;
   target_type: string;
   target_id: string;
 }
@@ -537,19 +537,21 @@ export async function readOriginsByDocument({
     const subscriptionRows = (subscriptions.rows ??
       []) as unknown as SubscriptionRow[];
     if (subscriptionRows.length === 0) return new Map();
-    const shapeIds = [...new Set(subscriptionRows.map((s) => s.shape_id))];
+    const authorityIds = [
+      ...new Set(subscriptionRows.map((s) => s.authority_id)),
+    ];
     const lineage = await ctx.vault.read({
       acceptTruncation: true,
       entity: "share.subscription_lineage",
       where: [
         { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
-        { column: "shape_id", op: "in", value: shapeIds },
+        { column: "authority_id", op: "in", value: authorityIds },
       ],
       limit,
     });
     const lineageRows = (lineage.rows ?? []) as unknown as LineageRow[];
     if (lineageRows.length === 0) return new Map();
-    const shapeById = new Map(subscriptionRows.map((s) => [s.shape_id, s]));
+    const byGrant = new Map(subscriptionRows.map((s) => [s.authority_id, s]));
 
     // A LOST NAME IS NOT A LOST ARRIVAL: only a denied placement is unknown.
     const { partyByVault, nameByParty } = await readSenderNames({
@@ -559,7 +561,7 @@ export async function readOriginsByDocument({
 
     return new Map(
       lineageRows.flatMap((row) => {
-        const subscription = shapeById.get(row.shape_id);
+        const subscription = byGrant.get(row.authority_id);
         if (!subscription) return [];
         const partyId = partyByVault.get(subscription.origin_vault_id) ?? null;
         return [

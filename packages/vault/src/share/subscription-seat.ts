@@ -33,7 +33,7 @@ import {
 } from "./subscription-store.js";
 
 export interface IngestShareShapeResult {
-  shapeId: string;
+  authorityId: string;
   /** Which path the change earned — the number a work-counter budget reads. */
   apply: "bootstrap" | "reproject" | "fields";
   /** The named items; empty on the field path, which re-projects nothing. */
@@ -80,14 +80,14 @@ function removalRank(claim: SubscriptionLineageRow): number {
  */
 function releaseShapeRows(
   audience: DatabaseSync,
-  shapeId: string
+  authorityId: string
 ): ReleaseShapeRowsResult {
-  const claims = readSubscriptionLineage(audience, shapeId).sort(
+  const claims = readSubscriptionLineage(audience, authorityId).sort(
     (left, right) => removalRank(left) - removalRank(right)
   );
   audience
-    .prepare("DELETE FROM share_subscription_lineage WHERE shape_id = ?")
-    .run(shapeId);
+    .prepare("DELETE FROM share_subscription_lineage WHERE authority_id = ?")
+    .run(authorityId);
   const stillClaimed = audience.prepare(
     `SELECT 1 AS present FROM share_subscription_lineage
       WHERE target_type = ? AND target_id = ? LIMIT 1`
@@ -144,13 +144,13 @@ export function ingestShareShape(
     const replicaCommit = beginReplicaCommit(audience);
     const standing = readSubscription(
       audience,
-      frame.shapeId,
+      frame.grantId,
       options.audienceVaultId
     );
     const plan = planShareShapeIngest({
       audience,
       frame,
-      lineage: readSubscriptionLineage(audience, frame.shapeId),
+      lineage: readSubscriptionLineage(audience, frame.grantId),
       heldDigest:
         standing?.state === "subscribed" ? standing.structureDigest : null,
     });
@@ -161,31 +161,30 @@ export function ingestShareShape(
       applied = applyShareShapeFields(audience, plan.updates);
       const bump = audience.prepare(
         `UPDATE share_subscription_lineage SET origin_row_version = ?
-          WHERE shape_id = ? AND target_type = ? AND target_id = ?`
+          WHERE authority_id = ? AND target_type = ? AND target_id = ?`
       );
       for (const update of plan.updates)
         bump.run(
           update.originRowVersion,
-          frame.shapeId,
+          frame.grantId,
           update.entity,
           update.rowId
         );
-      lineageRows = readSubscriptionLineage(audience, frame.shapeId).length;
+      lineageRows = readSubscriptionLineage(audience, frame.grantId).length;
     } else {
-      if (plan.apply === "reproject") releaseShapeRows(audience, frame.shapeId);
+      if (plan.apply === "reproject") releaseShapeRows(audience, frame.grantId);
       const projection = projectShareClosure(audience, frame.closure, {
         // The projection claims its own rows, in its own transaction: a claim
         // written afterwards could survive a projection that rolled back.
-        shape: { shapeId: frame.shapeId, rowVersions: versions },
+        grant: { authorityId: frame.grantId, rowVersions: versions },
         now: () => Date.parse(options.now),
       });
       items = projection.items;
       lineageRows = projection.lineageRows;
     }
     recordSubscription(audience, {
-      shapeId: frame.shapeId,
+      authorityId: frame.grantId,
       audienceVaultId: options.audienceVaultId,
-      grantId: frame.grantId,
       originVaultId: frame.originVaultId,
       subjectType: frame.subjectType,
       cursor: frame.cursor,
@@ -196,7 +195,7 @@ export function ingestShareShape(
     endReplicaCommit(audience, replicaCommit);
     audience.exec(nested ? "RELEASE ingest_share_shape" : "COMMIT");
     return {
-      shapeId: frame.shapeId,
+      authorityId: frame.grantId,
       apply: plan.apply,
       items,
       fieldUpdates: applied,
@@ -211,7 +210,7 @@ export function ingestShareShape(
 }
 
 export interface PurgeShareShapeResult {
-  shapeId: string;
+  authorityId: string;
   /** Rows deleted. A row another live shape still claims is not one. */
   removed: number;
   /** Rows released by this shape and kept for another. */
@@ -226,7 +225,7 @@ export interface PurgeShareShapeResult {
  */
 export function purgeShareShape(
   audience: DatabaseSync,
-  input: { shapeId: string; audienceVaultId: string; now: string }
+  input: { authorityId: string; audienceVaultId: string; now: string }
 ): PurgeShareShapeResult {
   const nested = audience.isTransaction;
   audience.exec(nested ? "SAVEPOINT purge_share_shape" : "BEGIN IMMEDIATE");
@@ -234,14 +233,13 @@ export function purgeShareShape(
     const replicaCommit = beginReplicaCommit(audience);
     const standing = readSubscription(
       audience,
-      input.shapeId,
+      input.authorityId,
       input.audienceVaultId
     );
-    const released = releaseShapeRows(audience, input.shapeId);
+    const released = releaseShapeRows(audience, input.authorityId);
     recordSubscription(audience, {
-      shapeId: input.shapeId,
+      authorityId: input.authorityId,
       audienceVaultId: input.audienceVaultId,
-      grantId: standing?.grantId ?? input.shapeId,
       originVaultId: standing?.originVaultId ?? "",
       subjectType: standing?.subjectType ?? "",
       structureDigest: null,
@@ -250,7 +248,7 @@ export function purgeShareShape(
     });
     endReplicaCommit(audience, replicaCommit);
     audience.exec(nested ? "RELEASE purge_share_shape" : "COMMIT");
-    return { shapeId: input.shapeId, ...released };
+    return { authorityId: input.authorityId, ...released };
   } catch (error) {
     audience.exec(nested ? "ROLLBACK TO purge_share_shape" : "ROLLBACK");
     if (nested) audience.exec("RELEASE purge_share_shape");

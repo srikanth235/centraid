@@ -233,8 +233,10 @@ export async function handlePeerReplicaChanges(
   const seat = deps.vaultFor(notice.audienceVaultId);
   if (!seat) return notFound(res);
   if (notice.revoked) {
+    const grantId = shareShapeGrantId(notice.shapeId);
+    if (!grantId) return notFound(res);
     const purged = purgeShareShape(seat.vault, {
-      shapeId: notice.shapeId,
+      authorityId: grantId,
       audienceVaultId: notice.audienceVaultId,
       now: nowOf(deps),
     });

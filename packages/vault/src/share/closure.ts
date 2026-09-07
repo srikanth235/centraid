@@ -1,7 +1,7 @@
 // Share closure contract (#599 decision 11, #726): readShareClosure(origin) →
 // WireClosure → projectShareClosure(audience), sharing no db handle — so
 // WireClosure must stay plain JSON (no Buffers, handles, functions).
-// STRUCTURAL ONLY: item + content item + derivatives, never tags, links,
+// STRUCTURAL ONLY: item + content item, never derivatives, tags, links,
 // annotations or enrichment; the audience derives its own via
 // projection-ingest.ts. Cross-vault FKs (party/device/place/camera) project
 // NULL — which vault a row came from is the SUBSCRIPTION's answer
@@ -80,18 +80,6 @@ export interface ContentItemRow {
   created_at: string;
 }
 
-/** `content_id` is required: derivatives pool across the whole closure. */
-export interface DerivativeRow {
-  derivative_id: string;
-  content_id: string;
-  variant: string;
-  sha256: string | null;
-  media_type: string;
-  byte_size: number;
-  text_content: string | null;
-  created_at: string;
-}
-
 export interface MediaAssetRow {
   asset_id: string;
   content_id: string;
@@ -150,10 +138,15 @@ export interface WireTallyGroup {
   lineAllocations: WireRow[];
 }
 
-/** Deduped across the closure: each content item and derivative appears ONCE. */
+/**
+ * Deduped across the closure: each content item appears ONCE.
+ *
+ * THERE IS NO `derivatives` (#996, R10). Derived rows never project — the
+ * caption, the OCR text, the transcript, the embedding and the thumbnail are
+ * the receiving vault's own work under its own egress answers (R18).
+ */
 export interface WireRows {
   contentItems: ContentItemRow[];
-  derivatives: DerivativeRow[];
   mediaAssets: MediaAssetRow[];
   documents: DocumentRow[];
   docsFolders: WireDocsFolder[];

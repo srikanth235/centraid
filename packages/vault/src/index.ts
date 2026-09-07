@@ -102,6 +102,29 @@ export {
   type ProjectionIngestHook,
   type ProjectionIngestContext,
 } from "./share/projection-ingest.js";
+// SHARING IS THE SAME LOG UNDER A CLOSURE PREDICATE (#996, R10). The grant's
+// membership is explicit state on the origin, and the difference between two
+// member sets — plus the log for what merely changed — is the three outputs.
+export {
+  memberKey,
+  memberPrimaryKey,
+  readShareMembers,
+  shareClosureMembers,
+  shareGrantsClaimingRow,
+  writeShareMembers,
+  SHARE_DERIVED_TABLES,
+  type ShareMemberRow,
+  type ShareMemberSet,
+  type StoredShareMember,
+} from "./share/closure-members.js";
+export {
+  commitShareClosureDiff,
+  diffShareClosure,
+  shareOutputsAreEmpty,
+  type DiffShareClosureInput,
+  type ShareClosureOutputs,
+  type ShareRowImage,
+} from "./share/closure-outputs.js";
 // A share is a subscription (#929): the origin composes a grant-keyed shape,
 // a transport carries it, and the audience seat ingests it through the same
 // door an authored row takes.

@@ -117,10 +117,7 @@ describe("share subscription", () => {
     });
     expect(result.apply).toBe("bootstrap");
 
-    const lineage = readSubscriptionLineage(
-      audience.vault,
-      shapeIdFor(grantId)
-    );
+    const lineage = readSubscriptionLineage(audience.vault, grantId);
     const asset = lineage.find((row) => row.targetType === "media.asset");
     expect(asset?.originItemId).toBe(photo.assetId);
     expect(asset?.originRowVersion).toBe(
@@ -128,8 +125,7 @@ describe("share subscription", () => {
     );
     expect(asset?.originRowVersion).toBeGreaterThan(0);
     expect(
-      readSubscription(audience.vault, shapeIdFor(grantId), AUDIENCE_VAULT)
-        ?.cursor.seq
+      readSubscription(audience.vault, grantId, AUDIENCE_VAULT)?.cursor.seq
     ).toBeGreaterThan(0);
   });
 
@@ -238,7 +234,7 @@ describe("share subscription", () => {
     const assetId = placed.items[0]!.itemId;
 
     const purge = purgeShareShape(audience.vault, {
-      shapeId: shapeIdFor(first),
+      authorityId: first,
       audienceVaultId: AUDIENCE_VAULT,
       now: nowIso(),
     });
@@ -252,7 +248,7 @@ describe("share subscription", () => {
     ).toBeTruthy();
 
     const last = purgeShareShape(audience.vault, {
-      shapeId: shapeIdFor(second),
+      authorityId: second,
       audienceVaultId: AUDIENCE_VAULT,
       now: nowIso(),
     });
@@ -263,12 +259,9 @@ describe("share subscription", () => {
         .get(assetId)
     ).toBeUndefined();
     expect(
-      readSubscription(audience.vault, shapeIdFor(second), AUDIENCE_VAULT)
-        ?.state
+      readSubscription(audience.vault, second, AUDIENCE_VAULT)?.state
     ).toBe("removed");
-    expect(
-      readSubscriptionLineage(audience.vault, shapeIdFor(second))
-    ).toStrictEqual([]);
+    expect(readSubscriptionLineage(audience.vault, second)).toStrictEqual([]);
   });
 
   test("a frame addressed elsewhere is refused before anything lands", () => {

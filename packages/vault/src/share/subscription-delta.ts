@@ -125,9 +125,6 @@ export function shareShapeStructureDigest(closure: WireClosure): string {
       .map((item) => `${item.itemType} ${item.itemId}`)
       .sort(),
     contentItems: closure.rows.contentItems.map((row) => row.content_id).sort(),
-    derivatives: closure.rows.derivatives
-      .map((row) => `${row.content_id} ${row.variant} ${row.sha256 ?? ""}`)
-      .sort(),
     mediaAssets: closure.rows.mediaAssets
       .map((row) => `${row.asset_id} ${row.content_id}`)
       .sort(),

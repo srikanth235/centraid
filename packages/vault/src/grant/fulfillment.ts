@@ -49,7 +49,8 @@ export interface ShareShapeTransport {
   route: ShareTransportRoute;
   deliver: (frame: ShareShapeFrame) => ShareDeliveryOutcome;
   remove: (input: {
-    shapeId: string;
+    /** The GRANT (#996, R10): the grant is the shape. */
+    authorityId: string;
     audienceVaultId: string;
   }) => ShareRemovalOutcome;
 }
@@ -420,7 +421,10 @@ export function stopShareSubscription(
     });
     const transport = input.transportFor(row.peerVaultId);
     const answer: ShareRemovalOutcome = transport
-      ? transport.remove({ shapeId, audienceVaultId: row.peerVaultId })
+      ? transport.remove({
+          authorityId: grant.grantId,
+          audienceVaultId: row.peerVaultId,
+        })
       : {
           outcome: "unreachable",
           detail: `removal sent to ${row.peerVaultId}; the peer has not acknowledged it`,

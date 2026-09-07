@@ -75,7 +75,13 @@ describe("placement suite", () => {
     expect(projected.creator_party_id).toBeNull();
     expect(projected.origin_device_id).toBeNull();
     expect(projected.camera_device_id).toBeNull();
-    // The thumb rides along, so the merged grid paints without a re-derive.
+    // THE THUMB DOES NOT RIDE ALONG (#996, R10). A derived row never
+    // projects, on this path too: a placement is a move between the owner's
+    // own vaults, and the receiving vault has the bytes and the owner's own
+    // egress answers, so it re-derives rather than being handed a reading.
+    // The alternative — derivatives on the same-owner edge only — makes "no
+    // derived table in a closure" conditional, and a conditional structural
+    // property is one a reviewer has to check rather than one that holds.
     expect(
       plainSqliteRows(
         audience.vault
@@ -84,12 +90,21 @@ describe("placement suite", () => {
           )
           .all()
       )
-    ).toStrictEqual([{ sha256: photo.thumbSha }]);
-    // Both blobs are readable from the audience vault's own CAS.
+    ).toStrictEqual([]);
+    // The ORIGINAL is readable from the audience vault's own CAS; the thumb's
+    // bytes never crossed, so the enrichment request is what stands for it.
     expect(audience.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
-    expect(audience.blobs.getSync(photo.thumbSha)).toStrictEqual(
-      photo.thumbBytes
-    );
+    expect(audience.blobs.hasSync(photo.thumbSha)).toBe(false);
+    expect(
+      plainSqliteRow(
+        audience.vault
+          .prepare(
+            `SELECT COUNT(*) AS n FROM enrich_request
+              WHERE reason = 'projected' AND contribution_variant = 'thumb'`
+          )
+          .get()
+      )
+    ).toStrictEqual({ n: 1 });
 
     // A PLACEMENT CLAIMS NOTHING (#929): it is a move between the owner's own
     // vaults, so no shape claims the row and the seat records no lineage.
@@ -165,8 +180,8 @@ describe("placement suite", () => {
       authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
 
-    expect(result.blobs.map((b) => b.mode)).toStrictEqual(["linked", "linked"]);
-    for (const sha of [photo.sha256, photo.thumbSha]) {
+    expect(result.blobs.map((b) => b.mode)).toStrictEqual(["linked"]);
+    for (const sha of [photo.sha256]) {
       const from = statSync(casPath(origin, sha));
       const to = statSync(casPath(audience, sha));
       // ONE inode with TWO directory entries: zero bytes copied, and the
@@ -194,11 +209,8 @@ describe("placement suite", () => {
       authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
 
-    expect(result.blobs.map((b) => b.mode)).toStrictEqual(["copied", "copied"]);
-    for (const [sha, bytes] of [
-      [photo.sha256, photo.bytes],
-      [photo.thumbSha, photo.thumbBytes],
-    ] as const) {
+    expect(result.blobs.map((b) => b.mode)).toStrictEqual(["copied"]);
+    for (const [sha, bytes] of [[photo.sha256, photo.bytes]] as const) {
       const from = statSync(casPath(origin, sha));
       const to = statSync(casPath(audience, sha));
       expect(to.ino).not.toBe(from.ino); // a separate inode — bytes were copied
@@ -266,6 +278,7 @@ describe("placement suite", () => {
     ).toStrictEqual({
       n: 1,
     });
+    // No derived row on either pass (#996, R10) — and none to duplicate.
     expect(
       plainSqliteRow(
         audience.vault
@@ -273,13 +286,10 @@ describe("placement suite", () => {
           .get()
       )
     ).toStrictEqual({
-      n: 1,
+      n: 0,
     });
     // Re-sharing never re-places bytes it already has.
-    expect(bySid.blobs.map((b) => b.mode)).toStrictEqual([
-      "present",
-      "present",
-    ]);
+    expect(bySid.blobs.map((b) => b.mode)).toStrictEqual(["present"]);
   });
 
   test("documents project their current content and can move after target commit", () => {

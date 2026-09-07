@@ -81,7 +81,7 @@ bun run format:check
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-06 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+| 2026-09-07 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
 
 ## Wave 0a — rulings, drift rows, and the two corrected sentences
 
@@ -1511,3 +1511,185 @@ window answering unknown-recover without a second execution.
 - **A one-line SQL comment cost a build.** `expires_at`'s comment used
   backticks inside a template literal; the schema is authored as a TS template,
   so it terminated the literal.
+
+## Wave 7 — the closure predicate, the member set, and the three outputs
+
+A share stops being a *composed shape* and becomes what R10 says it is: **the
+same log under a closure predicate, with membership as explicit state**. This
+commit lands the predicate, the state, and the three outputs the difference
+between two member sets produces. The transport that ships is untouched and
+green — `composeShareShape` still serves every subscription — because the
+invariant this wave is written under is that the share transport is never
+deleted before its replacement lands.
+
+### The grant is the shape
+
+`shape_id` is gone from both subscription tables; the key is `authority_id`,
+and `share_authority` **is** the grant. The `@share:<grantId>` sigil was a
+second name for one row — one the origin minted, the audience stored, and the
+peer route parsed back into a grant before it could authorize anything — so
+`share_subscription`'s primary key is now `(authority_id, audience_vault_id)`,
+`share_subscription_lineage`'s is `(authority_id, target_type, target_id)`, and
+the separate `grant_id` column and its index are deleted. The sigil survives
+exactly where it is still a wire value (the subscriber query, the change
+notice); `peer-replica-route.ts` maps it to the grant at the door.
+
+### Membership, on the origin
+
+`share_subscription_member(authority_id, table_name, pk, entered_seq)`, primary
+key on the triple, plus `INDEX (table_name, pk)` for the reverse question —
+"which live grants claim this row" — that the closure diff, the purge sweep and
+every leave output all ask.
+
+- **`table_name` and `pk` are the LOG's own key.** `pk` is `replica_log.pk_json`
+  — the key values in declared order, JSON-encoded — so a member row and a log
+  row join by string equality, and a composite key (a collection entry, a
+  circle member, an expense split) needs no second column and no parsing.
+- **`entered_seq` is why a reconnect after retention expiry is cheap.** A
+  retained row KEEPS its `entered_seq` across a pass; only a genuinely
+  re-entered row gets a new one. Without it a resent row cannot be told from
+  one the audience has held since the subscription began, and the only safe
+  answer would be a re-bootstrap.
+
+### The three outputs, and where each one can come from
+
+`diffShareClosure` (`packages/vault/src/share/closure-outputs.ts`) is read-only
+over the origin and returns `enter` / `update` / `leave` plus the cursor they
+stand for. `commitShareClosureDiff` is a separate call, so a caller may compute
+the outputs, fail to deliver them, and retry against the same `before` set
+rather than against an audience state it only assumed.
+
+- **`enter` is the member-set diff, never the log.** Measured on this tree: an
+  existing photograph added to a shared album writes **two** log rows — the
+  collection entry and its supertype registration — and **four** rows enter the
+  audience's copy (the entry, the asset, its content item, its representation).
+  `closure-outputs.test.ts` asserts both numbers side by side, because that gap
+  is the whole reason membership has to be stored.
+- **`update` is the log's, coalesced by `(table, pk)`.** One
+  `UPDATE media_asset` produces two log rows — the write and the
+  `touch_updated_at` bump that follows it — so without the coalesce every field
+  edit crosses the boundary twice.
+- **`leave` is the diff in reverse, for rows that did not themselves change.**
+  Removing a photograph from a shared album deletes one entry row and says
+  nothing about the four rows the audience must now scrub. And purging a shared
+  *member* revokes nothing — `core_entity_revoke_on_purge` keys on a grant's
+  **subject** — so `leave` is the only thing that reaches the audience's copy in
+  the member case.
+- **A cursor below the floor or in another epoch is a `resend`, not a
+  re-bootstrap**: every member goes out as an `enter`, and `entered_seq` makes
+  that an upsert on rows the audience already holds.
+
+### Derived rows never project — as a TABLE rule
+
+`SHARE_DERIVED_TABLES` names `core_content_derivative` and `core_content_text`,
+and `readShareClosure` no longer pools either. Excluding the table by name
+rather than the rows by variant is what makes "no vault-private reference can
+leak" a property of the schema instead of a property of a reviewer checking each
+new variant. `project-closure.ts`'s `projectDerivatives` — the walk that wrote a
+generated caption, an OCR pass, a transcript, an embedding and a thumbnail
+**into the audience vault** — is deleted, and derived bytes leave the blob
+manifest with it (three photographs are three blobs, never six).
+
+What replaces it is `projection-ingest.ts`: a projected asset enqueues `thumb`,
+`embedding` and `phash` as the RECIPIENT's own work, a projected document
+enqueues `text` and `embedding`, and captions and faces stay unqueued because
+they are consent-gated and a projection must never manufacture an owner's
+consent. That is R18 in machinery rather than in prose.
+
+### Decisions — wave 7, the predicate
+
+- **The member set is derived from `readShareClosure`'s result, not from a
+  second walk.** R10 makes the closure the snapshot builder for a new
+  subscriber; deriving membership from the same walk is what makes the snapshot
+  and the diff incapable of disagreeing. The predicate is then one rule applied
+  to that result — physical table plus log key, minus the derived tables, plus
+  the owners' representation rows.
+- **A representation IS a member; a caption is not.** Under R20(b) the owner's
+  reading of its bytes is authored metadata, so it enters and leaves with the
+  row it describes; a generated caption is a `knowledge_annotation`, which the
+  closure has never walked. The spike measured `core_content_representation` as
+  the one table the predicate claims and the old transport flattened into a wire
+  field; the member set makes it a row, which is what lets an `enter` carry it
+  and a `leave` remove it.
+- **Derived rows are excluded on the SAME-OWNER placement edge too.** A
+  placement is the owner moving their own item between their own vaults, and
+  the receiving vault has both the bytes and the same owner's egress answers,
+  so it re-derives. Excluding derivatives only on the cross-owner edge would
+  have kept the thumb on a placement at the price of making "no derived table
+  in a closure" conditional — and a conditional structural property is one a
+  reviewer has to check rather than one that holds. Four placement tests moved
+  to the new rule rather than being exempted from it.
+- **`structure_digest` is still on the table, and its deletion is the commit
+  the audience starts applying the outputs.** It is superseded by the member
+  set, not deleted without a successor (R10's own words); deleting it here would
+  leave `planShareShapeIngest` — the only thing deciding re-projection today —
+  with no answer at all for the two commits before its replacement is wired up.
+  Same boundary rule as wave 1's schema commit: old mechanisms are deleted in
+  the commit their replacement lands.
+
+### Every file this commit touches
+
+- `packages/vault/src/share/closure-members.ts` (new) — the predicate, the
+  member key, the stored set and the reverse lookup
+- `packages/vault/src/share/closure-outputs.ts` (new) — `diffShareClosure`,
+  `commitShareClosureDiff`, the coalesce
+- `packages/vault/src/share/closure-outputs.test.ts` (new) — the red-first
+  derived-row case and the four output cases
+- `packages/vault/src/share/year3-convergence.test.ts` (new) — the exit
+  criterion over `seedYear3Vault`'s live grants, the spike's seeding promoted
+  into a real fixture
+- `packages/vault/src/schema/subscription.ts` — `authority_id` in both tables,
+  `grant_id` and its index gone, `share_subscription_member` added
+- `packages/vault/src/schema/entity-catalog.ts` · `entity-refs.ts` — the new
+  table registered, the lineage note re-keyed
+- `packages/vault/src/share/read-closure.ts` · `closure.ts` — derivatives leave
+  the closure, `DerivativeRow` and `WireRows.derivatives` deleted
+- `packages/vault/src/share/project-closure.ts` — `projectDerivatives` deleted,
+  `ShareShapeClaim` → `ShareGrantClaim` keyed by `authorityId`
+- `packages/vault/src/share/projection-ingest.ts` — the recipient's own
+  enrichment, per target kind
+- `packages/vault/src/share/subscription-store.ts` · `subscription-seat.ts` ·
+  `subscription-delta.ts` · `subscription-frame.ts` · `subscription-transport.ts`
+  — the rename, and the digest's derivative half
+- `packages/vault/src/grant/fulfillment.ts` — `ShareShapeTransport.remove` takes
+  the grant
+- `packages/vault/src/index.ts` — the two new modules exported
+- `packages/server/src/routes/peer-replica-route.ts` — the sigil resolved to a
+  grant at the door
+- `packages/blueprints/apps/docs/queries/_shared.ts` ·
+  `apps/mobile/src/apps/docs/docs-projection-shares.ts` — the readers follow the
+  column
+- `packages/vault/src/share/placement-fixture.ts` — `seedAlbum`, `addToAlbum`,
+  `inCommit`
+- `packages/vault/src/share/{placement,placement-lifecycle,closure-split,closure-confinement.contract,subscription}.test.ts`
+  · `subscription-sim-plane.test-fixtures.ts` ·
+  `packages/vault/src/blob/local-orphan-sweep.test.ts` ·
+  `packages/vault/src/gateway/portability.test.ts` ·
+  `apps/mobile/src/apps/docs/docs-projection.test.ts` — the new rule and the new
+  key
+- `packages/server/src/routes/replica-shape-parity.test.ts` — the `docs` shape
+  id re-pinned, and why: `docs` is the one bundled app whose replica shape spans
+  the two subscription tables, so re-keying them to `authority_id` moves its
+  digest and its devices re-bootstrap once. The other seven ids do not move,
+  which is what the file is for.
+- `packages/vault/tests/golden/issue-929/{vault.db.gz,manifest.json}` —
+  re-frozen: the subscription DDL moved
+- `scripts/docs-site/src/content/ontology-body.html` — the new table drawn, and
+  the fulfilment walkthrough no longer says derivatives cross
+
+### Gates
+
+```
+cd packages/vault      && bun run test        # 207 files, 1719 passed, 2 skipped
+cd packages/blueprints && bun run test        # 213 files, 7083 passed
+cd packages/server     && bun run test        # 390 files, 3484 passed; 3 files red,
+                                              #   all environmental (acp/launch x2,
+                                              #   gateway-db-lock needs a real sqlite3)
+cd packages/vault      && bun run typecheck   # clean
+cd packages/server     && bun run typecheck   # clean
+cd packages/blueprints && bun run typecheck   # clean
+cd packages/client     && bun run typecheck   # clean
+cd packages/core       && bun run typecheck   # clean
+cd apps/mobile         && bun run typecheck   # clean
+bun run golden-vault:freeze -- --label issue-929   # 17 tables, 181 rows, schema v5
+```

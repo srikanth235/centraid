@@ -111,8 +111,6 @@ function closureRowIds(closure: WireClosure): Map<string, string[]> {
   };
   for (const row of closure.rows.contentItems)
     add("core.content_item", row.content_id);
-  for (const row of closure.rows.derivatives)
-    add("core.content_derivative", row.derivative_id);
   for (const row of closure.rows.mediaAssets) add("media.asset", row.asset_id);
   for (const row of closure.rows.documents)
     add("core.document", row.document_id);
