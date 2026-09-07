@@ -4667,3 +4667,56 @@ not name never runs.
 bun run lint:engine-conformance   # ok
 bun run scripts:test              # 678 tests, 678 pass
 ```
+
+## CI fix — a row version against a log sequence
+
+`tests/integration-mobile/conflict.integration.test.ts` was red for all eight
+apps with `expected 2 to be greater than 432`: the gateway answered
+`expectedVersion: 432` beside `actualVersion: 2`. Neither number was wrong for
+what it measured. They measured different things.
+
+R6 moved the version of a row to the row's own `row_version` column, and
+`packages/server/src/routes/replica-intent-shape.ts#currentRowVersion` reads it
+— the consuming half, correct and documented. The PRODUCING half was never
+moved: `packages/vault/src/replica/snapshot.ts` answered `MAX(seq)` over
+`replica_change` as every row's `rowVersion`, in `latestRowVersions` (the
+bootstrap and change-projection path) and again in `readReplicaRow`'s own
+inline copy. So a seat stored a LOG POSITION as its row's version, sent it back
+as an intent's base version, and the gateway compared it against `row_version`.
+Every offline edit of a row the projector had ever touched came back
+conflicted; the number the pending sheet printed was a transport position.
+
+Both now read the row's column, through one answerer — `readReplicaRow`'s
+inline query is gone.
+
+Two consequences in `replica-intent-shape.ts`'s OPAQUE-shape path, where a wire
+row id is an HMAC and the canonical id has to be recovered by hashing
+candidates. It narrowed those candidates with `seq = base.version` — reading
+the base version as a log position, so once the version became `row_version` it
+matched the wrong row or none. There is nothing to narrow with; it takes every
+row of the entity, as the version-zero branch always did. And when no candidate
+hashes to the wire id — the row is deleted or was never there — it answered the
+entity's MAX log seq, reporting "the row is at version 431" to a member; it
+answers `0` now, which is what `currentRowVersion` answers for the same fact
+and in the same units as `expectedVersion`. The projector stays the fallback for an entity with no
+`row_version` column (the append-only bands) and for a composite key, whose
+`rowId` is a JSON tuple no single-column `WHERE` can match. That is the same
+fallback `currentRowVersion` keeps, for the same two reasons.
+
+Red-first: `packages/vault/src/replica/snapshot.test.ts`, "a row's version is
+its own column, not its position in the log" — five unrelated commits first, so
+the log seq and the row version genuinely disagree (7 against 1), asserted
+before the row is read. The existing "attaches the current canonical row
+version" case could not have caught this: with two log rows and `row_version`
+2, the two answers coincide.
+
+**The four related failures in the same suite family were the same defect.**
+The `locker` case answering `conflict` where `denied` was owed, and the three
+`parked` cases, all pass unchanged once the units agree — a spurious conflict
+verdict pre-empted the verdict each was asserting. The whole
+`test:integration:mobile` suite is green (11 files, 69 tests); nothing was
+absorbed and no other defect is hiding under them.
+
+```
+bunx vitest run -c tests/integration-mobile/vitest.config.ts   # 11 files, 69 passed
+```

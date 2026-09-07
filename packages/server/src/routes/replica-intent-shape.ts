@@ -234,20 +234,19 @@ export function currentConflict(
         REPLICA_SYNTHETIC_PRIMARY_KEY
     );
     if (opaqueShapes.length > 0) {
-      const candidates =
-        base.version > 0
-          ? (vault
-              .prepare(
-                `SELECT row_id FROM replica_change
-                  WHERE epoch = ? AND entity = ? AND seq = ?`
-              )
-              .all(epoch, base.entity, base.version) as { row_id: string }[])
-          : (vault
-              .prepare(
-                `SELECT DISTINCT row_id FROM replica_change
-                  WHERE epoch = ? AND entity = ?`
-              )
-              .all(epoch, base.entity) as { row_id: string }[]);
+      // EVERY ROW OF THE ENTITY, NEVER "the row the log touched at seq N"
+      // (#996, R6). This used to narrow the candidates with
+      // `seq = base.version`, which read the base version as a LOG POSITION —
+      // and a base version is the row's `row_version` column now, so the
+      // narrowing matched the wrong row or none at all. There is nothing to
+      // narrow with: the wire id is an HMAC, and the only way back to the
+      // canonical id is to hash the candidates.
+      const candidates = vault
+        .prepare(
+          `SELECT DISTINCT row_id FROM replica_change
+            WHERE epoch = ? AND entity = ?`
+        )
+        .all(epoch, base.entity) as { row_id: string }[];
       let resolved = false;
       for (const shape of opaqueShapes) {
         const match = candidates.find(
@@ -263,12 +262,12 @@ export function currentConflict(
         }
       }
       if (!resolved && candidates.length > 0) {
-        const entityMax = vault
-          .prepare(
-            `SELECT MAX(seq) AS seq FROM replica_change
-              WHERE epoch = ? AND entity = ?`
-          )
-          .get(epoch, base.entity) as { seq: number | null };
+        // NO CANDIDATE HASHES TO THIS WIRE ID: the row this intent names is
+        // not in the shape — deleted, or never there. Zero, which is what
+        // `currentRowVersion` answers for the same fact, and in the same units
+        // as `expectedVersion`. It used to answer the entity's MAX log seq: a
+        // transport position, larger than any row version, reported to the
+        // member as "the row is at version 431".
         return {
           ...(resolvedShapeId === undefined
             ? {}
@@ -276,7 +275,7 @@ export function currentConflict(
           entity: base.entity,
           rowId: base.rowId,
           expectedVersion: base.version,
-          actualVersion: entityMax.seq ?? 0,
+          actualVersion: 0,
         };
       }
       // A version-zero row with no matching current-epoch change is a valid

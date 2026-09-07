@@ -121,6 +121,68 @@ describe("snapshot", () => {
     ).toMatchObject({ rowId: "scheme-versioned", rowVersion: 2 });
   });
 
+  /*
+   * THE VERSION IS THE ROW'S COLUMN, NOT THE LOG'S POSITION (#996, R6).
+   *
+   * Red-first: with unrelated commits ahead of it, `MAX(seq)` over
+   * `replica_change` and `row_version` are different numbers, and the old
+   * answer was the log's. A seat stored that as its row's version and sent it
+   * back as an intent's base version, while the gateway's conflict check read
+   * `row_version` — so every offline edit of a row the projector had touched
+   * came back conflicted, comparing a log seq against a row version.
+   */
+  test("a row's version is its own column, not its position in the log", () => {
+    db = openVaultDb();
+    const owner = "party-owner";
+    db.vault
+      .prepare(
+        "INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES (?, 'core.party', 't')"
+      )
+      .run(owner);
+    db.vault
+      .prepare(
+        `INSERT INTO core_party (party_id, kind, display_name, created_at)
+         VALUES (?, 'person', 'Owner', 't')`
+      )
+      .run(owner);
+    const task = (id: string): void => {
+      db!.vault
+        .prepare(
+          "INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES (?, 'schedule.task', 't')"
+        )
+        .run(id);
+      db!.vault
+        .prepare(
+          `INSERT INTO schedule_task (task_id, owner_party_id, title, status, priority)
+           VALUES (?, ?, 'Once', 'needs-action', 5)`
+        )
+        .run(id, owner);
+    };
+    // Traffic FIRST, so the log is well past 1 before this row exists.
+    for (let n = 0; n < 5; n++) task(`task-noise-${n}`);
+    task("task-late");
+
+    const logSeq = (
+      db.vault
+        .prepare(
+          `SELECT MAX(seq) AS seq FROM replica_change
+            WHERE entity = 'schedule.task' AND row_id = 'task-late'`
+        )
+        .get() as { seq: number }
+    ).seq;
+    // The two really do disagree here, or this test proves nothing.
+    expect(logSeq).toBeGreaterThan(1);
+
+    expect(
+      readReplicaRow(db.vault, "schedule.task", "task-late")
+    ).toMatchObject({ rowVersion: 1 });
+    expect(
+      readReplicaRows(db.vault, "schedule.task").rows.find(
+        (row) => row.rowId === "task-late"
+      )
+    ).toMatchObject({ rowVersion: 1 });
+  });
+
   test("snapshot reader returns rows pinned to the same reported watermark", () => {
     db = openVaultDb();
     db.vault
